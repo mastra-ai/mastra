@@ -132,7 +132,7 @@ export class MastraDocsAgent extends AbstractAgent {
             onToolCallPart(streamPart) {
               console.log(
                 "onToolCallPart",
-                JSON.stringify(streamPart, null, 2),
+                // JSON.stringify(streamPart, null, 2),
               );
               // End any in-progress text message before starting a tool call
               if (currentMessageId !== undefined) {
@@ -170,7 +170,7 @@ export class MastraDocsAgent extends AbstractAgent {
             onToolResultPart(streamPart) {
               console.log(
                 "onToolResultPart",
-                JSON.stringify(streamPart, null, 2),
+                // JSON.stringify(streamPart, null, 2),
               );
 
               // End any in-progress text message before adding tool result

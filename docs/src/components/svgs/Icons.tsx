@@ -100,3 +100,37 @@ export const JarvisIcon = (
     />
   </svg>
 );
+
+export const PaperIcon = ({ className }: { className?: string }) => (
+  <svg
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+  >
+    <path
+      d="M4.95019 15.6001C4.95019 17.5052 6.49486 19.0494 8.3999 19.0498L15.5981 19.0498C17.5035 19.0498 19.0479 17.5055 19.0479 15.6001L19.0479 8.40332C19.0479 6.49794 17.5035 4.95215 15.5981 4.95215L12.0532 4.95215L12.0532 12.0552L4.95019 12.0552L4.95019 15.6001ZM9.95264 6.4375L6.43555 9.95459L9.95264 9.95459L9.95264 6.4375ZM2.85107 10.5698L10.5679 2.85303L15.5981 2.85303C18.6633 2.85303 21.1484 5.33814 21.1484 8.40332L21.1484 15.6001C21.1484 18.6653 18.6633 21.1504 15.5981 21.1504L8.3999 21.1504C5.33506 21.15 2.85107 18.665 2.85107 15.6001L2.85107 10.5698Z"
+      fill="#939393"
+    />
+  </svg>
+);
+
+export const ArrowLeftIcon = ({ className }: { className?: string }) => (
+  <svg
+    width="8"
+    height="12"
+    viewBox="0 0 8 12"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+  >
+    <path
+      d="M6.89844 0.902344L1.79844 6.00293L6.89638 11.1008"
+      stroke="currentColor"
+      strokeWidth="1.56775"
+      strokeLinecap="round"
+    />
+  </svg>
+);

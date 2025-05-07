@@ -57,23 +57,23 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
   return (
     <>
       <div className="flex items-center gap-2">
-        <Button onClick={open} variant="ghost" className="">
-          Search
-        </Button>
+        <Button onClick={open} size="sm" variant="ghost" className="flex items-center gap-6 cursor-pointer bg-surface-3 text-icons-6">
+          <span className="text-sm">Search</span>
         <Shortcut />
+        </Button>
       </div>
       <Dialog
         open={isOpen}
         as="div"
-        className="relative z-10 w-[660px] focus:outline-none"
+        className="relative z-1000 focus:outline-none"
         onClose={close}
       >
-        <DialogBackdrop className="fixed inset-0 delay-[0ms] duration-300 ease-out bg-black/50" />
+        <DialogBackdrop className="fixed inset-0 delay-[0ms] duration-300 ease-out bg-black/70" />
         <div className="fixed inset-0 z-10 w-screen overflow-y-auto">
           <div className="flex items-start pt-[200px] justify-center min-h-full p-4">
             <DialogPanel
               transition
-              className="w-full h-fit max-w-[660px] mx-auto rounded-xl bg-surface-4 duration-300 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0"
+              className="w-full border-[0.5px] border-borders-2 h-fit max-w-[550px] mx-auto rounded-xl bg-surface-4 duration-300 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0"
             >
               <DialogTitle as="h3" className="sr-only">
                 Search
@@ -89,7 +89,7 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
                     />
                     <hr className="w-full my-2 text-borders-1" />
                     <Button
-                      className="w-full flex items-center font-medium justify-between gap-2 cursor-pointer text-[18px] h-14 pl-4 pr-3 bg-surface-5 text-accent-green bg-[url('/bloom-2.png')] bg-cover bg-right"
+                      className="w-full flex items-center font-medium justify-between gap-2 cursor-pointer text-base h-10 pl-4 pr-3 bg-surface-5 text-accent-green bg-[url('/bloom-2.png')] bg-cover bg-right"
                       variant="ghost"
                       onClick={() => setIsAgentMode(true)}
                     >
@@ -97,7 +97,7 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
                         <span>{JarvisIcon}</span>
                         <span>Ask Docs Agent</span>
                       </div>
-                      <span className="flex items-center h-8 px-3 text-base font-medium rounded-sm bg-tag-green-2 text-accent-green justify-self-end">
+                      <span className="flex items-center h-8 px-3 text-sm font-medium rounded-sm bg-tag-green-2 text-accent-green justify-self-end">
                         experimental
                       </span>
                     </Button>
@@ -116,7 +116,7 @@ function Shortcut() {
   return (
     <kbd
       className={cn(
-        "x:absolute x:my-1.5 x:select-none x:pointer-events-none x:end-1.5 x:transition-all",
+        "x:my-1.5 x:select-none x:pointer-events-none x:end-1.5 x:transition-all",
         "x:h-5 x:rounded x:bg-nextra-bg x:px-1.5 x:font-mono x:text-[11px] x:font-medium x:text-gray-600 x:dark:text-gray-400",
         "x:border nextra-border",
         "x:contrast-more:text-current",
