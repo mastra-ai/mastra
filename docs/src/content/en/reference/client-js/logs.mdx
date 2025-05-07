@@ -1,6 +1,19 @@
+---
+title: Mastra Client Logs API
+description: Learn how to access and query system logs and debugging information in Mastra using the client-js SDK.
+---
+
 # Logs API
 
 The Logs API provides methods to access and query system logs and debugging information in Mastra.
+
+## Initialize Mastra Client
+
+```typescript
+import { MastraClient } from "@mastra/client-js";
+
+const client = new MastraClient();
+```
 
 ## Getting Logs
 
@@ -21,4 +34,3 @@ const runLogs = await client.getLogForRun({
   runId: "run-1",
   transportId: "transport-1",
 });
-```

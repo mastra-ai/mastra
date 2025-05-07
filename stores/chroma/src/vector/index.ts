@@ -111,7 +111,6 @@ export class ChromaVector extends MastraVector {
 
   async createIndex(...args: ParamsToArgs<CreateIndexParams>): Promise<void> {
     const params = this.normalizeArgs<CreateIndexParams>('createIndex', args);
-
     const { indexName, dimension, metric = 'cosine' } = params;
 
     if (!Number.isInteger(dimension) || dimension <= 0) {
@@ -121,13 +120,24 @@ export class ChromaVector extends MastraVector {
     if (!['cosine', 'l2', 'ip'].includes(hnswSpace)) {
       throw new Error(`Invalid metric: "${metric}". Must be one of: cosine, euclidean, dotproduct`);
     }
-    await this.client.createCollection({
-      name: indexName,
-      metadata: {
-        dimension,
-        'hnsw:space': this.HnswSpaceMap[metric],
-      },
-    });
+    try {
+      await this.client.createCollection({
+        name: indexName,
+        metadata: {
+          dimension,
+          'hnsw:space': hnswSpace,
+        },
+      });
+    } catch (error: any) {
+      // Check for 'already exists' error
+      const message = error?.message || error?.toString();
+      if (message && message.toLowerCase().includes('already exists')) {
+        // Fetch collection info and check dimension
+        await this.validateExistingIndex(indexName, dimension, metric);
+        return;
+      }
+      throw error;
+    }
   }
 
   transformFilter(filter?: VectorFilter) {
