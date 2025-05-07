@@ -57,7 +57,7 @@ const result = await workflow.startAsync({
 Resume a suspended vNext workflow step and await full run result:
 
 ```typescript
-const run = createRun({runId: prevRunId})
+const run = workflow.createRun()
 
 const result = await workflow.resumeAsync({
   runId: run.runId,
@@ -73,7 +73,7 @@ Watch vNext workflow transitions
 ```typescript
 try{
   // Get workflow instance
-  const workflow = client.getWorkflow("workflow-id");
+  const workflow = client.getVNextWorkflow("workflow-id");
 
   // Create a workflow run
   const run = workflow.createRun()
@@ -107,8 +107,11 @@ Resume vNext workflow run and watch vNext workflow step transitions
 
 ```typescript
 try{
+  // Get workflow instance
+  const workflow = client.getVNextWorkflow("workflow-id");
+
   //To resume a workflow run, when a step is suspended
-  const run = createRun({runId: prevRunId})
+  const run = workflow.createRun({runId: prevRunId})
 
   //Watch run
    workflow.watch({runId: run.runId},(record)=>{
