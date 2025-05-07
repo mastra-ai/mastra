@@ -11,4 +11,12 @@ export const mastra = new Mastra({
     myMcpServer,
     myMcpServerTwo,
   },
+  serverMiddleware: [
+    {
+      handler: (c, next) => {
+        console.log('Middleware called');
+        return next();
+      },
+    },
+  ],
 });
