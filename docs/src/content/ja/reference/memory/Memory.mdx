@@ -1,8 +1,8 @@
 # Memory クラスリファレンス
 
-`Memory` クラスは、Mastra における会話履歴とスレッドベースのメッセージストレージを管理するための堅牢なシステムを提供します。これにより、会話の永続的な保存、セマンティック検索機能、および効率的なメッセージの取得が可能になります。デフォルトでは、LibSQL をストレージとベクトル検索に使用し、FastEmbed を埋め込みに使用します。
+`Memory` クラスは、Mastraで会話履歴とスレッドベースのメッセージストレージを管理するための堅牢なシステムを提供します。会話の永続的な保存、セマンティック検索機能、効率的なメッセージ取得を可能にします。デフォルトでは、ストレージとベクトル検索にLibSQLを使用し、埋め込みにFastEmbedを使用します。
 
-## 基本的な使用法
+## 基本的な使い方
 
 ```typescript copy showLineNumbers
 import { Memory } from "@mastra/memory";
@@ -67,13 +67,13 @@ const agent = new Agent({
 
 ### ワーキングメモリ
 
-ワーキングメモリ機能により、エージェントは会話間で永続的な情報を維持することができます。有効にすると、Memoryクラスはテキストストリームタグまたはツールコールを通じて、ワーキングメモリの更新を自動的に管理します。
+ワーキングメモリ機能により、エージェントは会話全体で永続的な情報を維持することができます。有効にすると、Memoryクラスはテキストストリームタグまたはツールコールを通じて、ワーキングメモリの更新を自動的に管理します。
 
-ワーキングメモリの更新を処理するには、次の2つのモードがあります：
+ワーキングメモリの更新を処理するには、2つのモードがあります：
 
-1. **text-stream**（デフォルト）：エージェントはMarkdownを含むXMLタグ（`<working_memory># User \n ## Preferences...</working_memory>`）を使用して、応答に直接ワーキングメモリの更新を含めます。これらのタグは自動的に処理され、表示される出力からは削除されます。
+1. **text-stream**（デフォルト）：エージェントはMarkdownを含むXMLタグ（`<working_memory># User \n ## Preferences...</working_memory>`）を使用して、直接レスポンスにワーキングメモリの更新を含めます。これらのタグは自動的に処理され、表示される出力からは削除されます。
 
-2. **tool-call**：エージェントはワーキングメモリを更新するための専用ツールを使用します。このモードは、text-streamモードがデータストリーミングと互換性がないため、`toDataStream()`を使用する場合に使用すべきです。さらに、このモードはメモリ更新に対するより明示的な制御を提供し、テキストタグの管理よりもツールの使用が得意なエージェントと連携する場合に好まれることがあります。
+2. **tool-call**：エージェントはワーキングメモリを更新するための専用ツールを使用します。このモードは`toDataStream()`と連携する場合に使用すべきです。なぜならtext-streamモードはデータストリーミングと互換性がないためです。さらに、このモードはメモリ更新に対するより明示的な制御を提供し、テキストタグの管理よりもツールの使用が得意なエージェントと連携する場合に好まれることがあります。
 
 設定例：
 
@@ -93,22 +93,48 @@ const memory = new Memory({
 
 ### embedder
 
-デフォルトでは、Memoryは`bge-small-en-v1.5`モデルを使用したFastEmbedを使用し、パフォーマンスとモデルサイズ（約130MB）のバランスが良好です。異なるモデルやプロバイダーを使用したい場合にのみ、embedderを指定する必要があります。
+`semanticRecall`が有効になっている場合、埋め込みモデルが必要です。
 
-ローカルエンベディングがサポートされていない環境では、APIベースのエンベッダーを使用できます：
+一つのオプションは`@mastra/fastembed`を使用することです。これは[FastEmbed](https://github.com/Anush008/fastembed-js)を使用したオンデバイス/ローカルの埋め込みモデルを提供します。このモデルはローカルで実行され、APIキーやネットワークリクエストを必要としません。
 
-```typescript {6}
+使用するには、まずパッケージをインストールします：
+
+```bash npm2yarn copy
+npm install @mastra/fastembed
+```
+
+次に、`Memory`インスタンスで設定します：
+
+```typescript {2,7}
 import { Memory } from "@mastra/memory";
-import { openai } from "@ai-sdk/openai";
+import { fastembed } from "@mastra/fastembed";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   memory: new Memory({
-    embedder: openai.embedding("text-embedding-3-small"), // ネットワークリクエストを追加
+    embedder: fastembed,
+    // ... その他のメモリ設定
   }),
 });
 ```
 
-MastraはOpenAI、Google、Mistral、Cohereなどのオプションを含む[Vercel AI SDK](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings)を通じて多くのエンベディングモデルをサポートしています。
+プロジェクトをデプロイする場所によっては、FastEmbedの大きな内部依存関係のため、プロジェクトがデプロイできない場合があることに注意してください。
+
+あるいは、OpenAIのようなAPIベースの埋め込みツール（この問題がない）を使用することもできます：
+
+```typescript {2,7}
+import { Memory } from "@mastra/memory";
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  memory: new Memory({
+    embedder: openai.embedding("text-embedding-3-small"),
+  }),
+});
+```
+
+Mastraは[Vercel AI SDK](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings)を通じて、OpenAI、Google、Mistral、Cohereなどのオプションを含む多くの埋め込みモデルをサポートしています。
 
 ## パラメータ
 
@@ -182,7 +208,7 @@ MastraはOpenAI、Google、Mistral、Cohereなどのオプションを含む[Ver
       name: "workingMemory",
       type: "{ enabled: boolean; template?: string; use?: 'text-stream' | 'tool-call' }",
       description:
-        "会話間でユーザー情報を永続的に保存できるワーキングメモリ機能の設定。'use'設定は、ワーキングメモリの更新がテキストストリームタグまたはツール呼び出しのどちらで処理されるかを決定します。ワーキングメモリはMarkdown形式を使用して、継続的に関連する情報を構造化して保存します。",
+        "会話間でユーザー情報を永続的に保存できるワーキングメモリ機能の設定。'use'設定は、ワーキングメモリの更新がテキストストリームタグを通じて処理されるか、ツール呼び出しを通じて処理されるかを決定します。ワーキングメモリはマークダウン形式を使用して、継続的に関連する情報を構造化して保存します。",
       isOptional: true,
       defaultValue:
         "{ enabled: false, template: '# User Information\\n- **First Name**:\\n- **Last Name**:\\n...', use: 'text-stream' }",

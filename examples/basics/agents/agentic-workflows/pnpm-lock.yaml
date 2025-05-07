@@ -21,7 +21,7 @@ importers:
         specifier: latest
         version: 4.3.9(react@19.1.0)(zod@3.24.3)
       zod:
-        specifier: ^3.24.2
+        specifier: ^3.24.3
         version: 3.24.3
 
 packages:

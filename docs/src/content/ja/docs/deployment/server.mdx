@@ -176,66 +176,51 @@ registerApiRoute("/my-custom-route", {
 
 #### CORSサポート
 
-```typescript copy
-{
-  handler: async (c, next) => {
-    // CORSヘッダーを追加
-    c.header("Access-Control-Allow-Origin", "*");
-    c.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-    c.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+## デプロイメント
 
-    // プリフライトリクエストを処理
-    if (c.req.method === "OPTIONS") {
-      return new Response(null, { status: 204 });
-    }
+Mastraは標準的なNode.jsサーバーにビルドされるため、Node.jsアプリケーションを実行するあらゆるプラットフォームにデプロイできます：
 
-    await next();
-  };
-}
+- クラウドVM（AWS EC2、DigitalOcean Droplets、GCP Compute Engine）
+- コンテナプラットフォーム（Docker、Kubernetes）
+- Platform as a Service（Heroku、Railway）
+- 自己ホスト型サーバー
+
+### ビルド
+
+アプリケーションをビルドします：
+
+```bash copy
+# 現在のディレクトリからビルド
+mastra build
+
+# またはディレクトリを指定
+mastra build --dir ./my-project
 ```
 
-#### リクエストログ
+ビルドプロセス：
 
-```typescript copy
-{
-  handler: async (c, next) => {
-    const start = Date.now();
-    await next();
-    const duration = Date.now() - start;
-    console.log(`${c.req.method} ${c.req.url} - ${duration}ms`);
-  };
-}
+1. エントリーファイル（`src/mastra/index.ts`または`src/mastra/index.js`）を特定
+2. `.mastra`出力ディレクトリを作成
+3. ツリーシェイキングとソースマップを使用してRollupでコードをバンドル
+4. [Hono](https://hono.dev) HTTPサーバーを生成
+
+すべてのオプションについては[`mastra build`](/reference/cli/build)を参照してください。
+
+### サーバーの実行
+
+HTTPサーバーを起動します：
+
+```bash copy
+node .mastra/output/index.mjs
 ```
 
-### 特別なMastraヘッダー
+### ビルド出力用のテレメトリを有効にする
 
-Mastra Cloudと統合する場合やカスタムクライアントを構築する場合、クライアントが自分自身を識別し特定の機能を有効にするために送信する特別なヘッダーがあります。サーバーミドルウェアはこれらのヘッダーをチェックして動作をカスタマイズできます：
+ビルド出力のインストルメンテーションを次のように読み込みます：
 
-```typescript copy
-{
-  handler: async (c, next) => {
-    // 受信リクエストでMastra固有のヘッダーをチェック
-    const isFromMastraCloud = c.req.header("x-mastra-cloud") === "true";
-    const clientType = c.req.header("x-mastra-client-type"); // 例: 'js', 'python'
-    const isDevPlayground = c.req.header("x-mastra-dev-playground") === "true";
-
-    // クライアント情報に基づいて動作をカスタマイズ
-    if (isFromMastraCloud) {
-      // Mastra Cloudリクエストの特別な処理
-    }
-
-    await next();
-  };
-}
+```bash copy
+node --import=./.mastra/output/instrumentation.mjs  .mastra/output/index.mjs
 ```
-
-これらのヘッダーの目的は次の通りです：
-
-- `x-mastra-cloud`: リクエストがMastra Cloudから来ていることを示す
-- `x-mastra-client-type`: クライアントSDKのタイプを指定（例: 'js', 'python'）
-- `x-mastra-dev-playground`: リクエストが開発プレイグラウンドからのものであることを示す
-
-これらのヘッダーをミドルウェアで使用して、クライアント固有のロジックを実装したり、特定の環境でのみ機能を有効にしたりできます。
 
 ## デプロイメント
 
@@ -275,8 +260,3 @@ HTTPサーバーを起動します：
 node .mastra/output/index.mjs
 ```
 
-## サーバーレスデプロイ
-
-Mastraは、Cloudflare Workers、Vercel、およびNetlifyでのサーバーレスデプロイもサポートしています。
-
-セットアップ手順については、[サーバーレスデプロイ](/docs/deployment/deployment)ガイドをご覧ください。
