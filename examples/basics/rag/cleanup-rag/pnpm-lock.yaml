@@ -30,7 +30,7 @@ importers:
         version: 4.3.9(react@19.1.0)(zod@3.24.3)
     devDependencies:
       dotenv:
-        specifier: ^16.4.7
+        specifier: ^16.5.0
         version: 16.5.0
 
 packages:

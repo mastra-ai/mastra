@@ -33,7 +33,7 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.5",
+    "@microsoft/api-extractor": "^7.52.7",
     "@types/node": "^22.13.1",
     "@types/ws": "^8.18.1",
     "eslint": "^9.25.1",

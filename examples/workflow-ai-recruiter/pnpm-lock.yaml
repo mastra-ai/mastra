@@ -26,8 +26,8 @@ importers:
         version: link:../../packages/cli
     devDependencies:
       '@types/node':
-        specifier: ^20.17.27
-        version: 20.17.30
+        specifier: ^20.17.32
+        version: 20.17.37
       tsx:
         specifier: ^4.19.3
         version: 4.19.3
@@ -229,8 +229,8 @@ packages:
   '@types/diff-match-patch@1.0.36':
     resolution: {integrity: sha512-xFdR6tkm0MWvBfO8xXCSsinYxHcqkQUlcHeSpMC2ukzOb6lwQAfDmW+Qt0AvlGd8HpsS28qKsB+oPeJn9I39jg==}
 
-  '@types/node@20.17.30':
-    resolution: {integrity: sha512-7zf4YyHA+jvBNfVrk2Gtvs6x7E8V+YDW05bNfG2XkWDJfYRXrTiP/DsB2zSYTaHX0bGIujTBQdMVAhb+j7mwpg==}
+  '@types/node@20.17.37':
+    resolution: {integrity: sha512-+XPEBN3Bkgu4Lk1zIqmoXZssB6jzL31Sdi2pUfOtpVvyrmBKUrZc6m4aCS+osqC5zgQroONCroEVgoznnErzpw==}
 
   ai@4.3.9:
     resolution: {integrity: sha512-P2RpV65sWIPdUlA4f1pcJ11pB0N1YmqPVLEmC4j8WuBwKY0L3q9vGhYPh0Iv+spKHKyn0wUbMfas+7Z6nTfS0g==}
@@ -439,7 +439,7 @@ snapshots:
 
   '@types/diff-match-patch@1.0.36': {}
 
-  '@types/node@20.17.30':
+  '@types/node@20.17.37':
     dependencies:
       undici-types: 6.19.8
 

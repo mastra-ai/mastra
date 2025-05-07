@@ -4,7 +4,7 @@
   "type": "module",
   "devDependencies": {
     "@changesets/cli": "^2.29.3",
-    "@types/node": "^20.17.24",
+    "@types/node": "^20.17.32",
     "husky": "^9.1.7",
     "lint-staged": "^15.5.0",
     "npm-run-all2": "^7.0.2",

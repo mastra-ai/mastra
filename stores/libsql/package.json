@@ -32,7 +32,7 @@
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.5",
+    "@microsoft/api-extractor": "^7.52.7",
     "@types/node": "^20.17.32",
     "eslint": "^9.25.1",
     "tsup": "^8.4.0",

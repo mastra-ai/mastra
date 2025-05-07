@@ -31,7 +31,7 @@ importers:
         version: link:../../stores/upstash
     devDependencies:
       dotenv:
-        specifier: ^16.4.7
+        specifier: ^16.5.0
         version: 16.5.0
       tsx:
         specifier: ^4.19.3

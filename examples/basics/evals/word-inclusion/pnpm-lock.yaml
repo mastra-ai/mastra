@@ -20,7 +20,7 @@ importers:
         version: link:../../../../packages/evals
     devDependencies:
       dotenv:
-        specifier: ^16.4.7
+        specifier: ^16.5.0
         version: 16.5.0
 
 packages:
