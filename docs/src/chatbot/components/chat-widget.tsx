@@ -18,7 +18,11 @@ const DocsChat: React.FC<{
 }> = ({ setIsAgentMode, searchQuery }) => {
   return (
     <CopilotKit
-      runtimeUrl={process.env.NODE_ENV === "production" ? "/docs/api/copilotkit" : "/api/copilotkit"}
+      runtimeUrl={
+        process.env.NODE_ENV === "production"
+          ? "/docs/api/copilotkit"
+          : "/api/copilotkit"
+      }
       showDevConsole={false}
       // agent lock to the relevant agent
       agent="docsAgent"
@@ -44,7 +48,7 @@ export function CustomChatInterface({
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    console.log({searchQuery})
+    console.log({ searchQuery });
     if (searchQuery === "") return;
     appendMessage(new TextMessage({ content: searchQuery, role: Role.User }));
   }, [searchQuery]);
@@ -145,12 +149,14 @@ export function CustomChatInterface({
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
+                if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  if (inputValue.trim() !== '') {
+                  if (inputValue.trim() !== "") {
                     // Submit the form on Enter
-                    appendMessage(new TextMessage({ content: inputValue, role: Role.User }));
-                    setInputValue('');
+                    appendMessage(
+                      new TextMessage({ content: inputValue, role: Role.User }),
+                    );
+                    setInputValue("");
                   }
                 }
                 // Shift+Enter will create a new line (default behavior)
@@ -165,7 +171,11 @@ export function CustomChatInterface({
               disabled={isLoading || inputValue.trim() === ""}
               className="relative self-end p-2 rounded-full cursor-pointer bg-surface-5 ring-borders-2 ring"
             >
-              {isLoading ? <Spinner /> : <ArrowUp className="w-4 h-4 text-accent-green" />}
+              {isLoading ? (
+                <Spinner />
+              ) : (
+                <ArrowUp className="w-4 h-4 text-accent-green" />
+              )}
             </Button>
           </div>
         </form>

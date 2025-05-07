@@ -1,10 +1,10 @@
 "use client";
 
 import {
-	Combobox,
-	ComboboxInput,
-	ComboboxOption,
-	ComboboxOptions,
+  Combobox,
+  ComboboxInput,
+  ComboboxOption,
+  ComboboxOptions,
 } from "@headlessui/react";
 import cn from "clsx";
 import { Search } from "lucide-react";
@@ -12,11 +12,11 @@ import { addBasePath } from "next/dist/client/add-base-path";
 import NextLink from "next/link";
 import { useRouter } from "next/navigation";
 import type {
-	FC,
-	FocusEventHandler,
-	ReactElement,
-	ReactNode,
-	SyntheticEvent,
+  FC,
+  FocusEventHandler,
+  ReactElement,
+  ReactNode,
+  SyntheticEvent,
 } from "react";
 import { useDeferredValue, useEffect, useRef, useState } from "react";
 import { InformationIcon } from "./svgs/information-icon";
@@ -102,7 +102,7 @@ type SearchProps = {
   isAgentMode?: boolean;
   setIsSearching?: (isSearching: boolean) => void;
   onUseAgent: ({ searchQuery }: { searchQuery: string }) => void;
-	closeModal: () => void;
+  closeModal: () => void;
 };
 
 const DEV_SEARCH_NOTICE = (
@@ -137,7 +137,7 @@ export const CustomSearch: FC<SearchProps> = ({
   searchOptions,
   setIsSearching,
   onUseAgent,
-	closeModal,
+  closeModal,
 }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<ReactElement | string>("");
@@ -267,7 +267,12 @@ export const CustomSearch: FC<SearchProps> = ({
           placeholder={placeholder}
           autoFocus
         />
-        {!!search && <AgentBadge title="Ask Magent" onClick={() => onUseAgent({ searchQuery: search })} />}
+        {!!search && (
+          <AgentBadge
+            title="Ask Magent"
+            onClick={() => onUseAgent({ searchQuery: search })}
+          />
+        )}
       </div>
       <ScrollArea className="max-h-[500px]">
         <ComboboxOptions
@@ -293,7 +298,7 @@ export const CustomSearch: FC<SearchProps> = ({
                 ]
               : // headlessui adds max-height as style, use !important to override
                 // "x:md:max-h-[min(calc(100vh-5rem),400px)]!",
-            "x:w-full x:md:w-[576px]",
+                "x:w-full x:md:w-[576px]",
           )}
         >
           {error ? (
@@ -311,7 +316,11 @@ export const CustomSearch: FC<SearchProps> = ({
             </>
           ) : results.length ? (
             results.map((searchResult) => (
-              <Result key={searchResult.url} data={searchResult} closeModal={closeModal} />
+              <Result
+                key={searchResult.url}
+                data={searchResult}
+                closeModal={closeModal}
+              />
             ))
           ) : (
             deferredSearch && emptyResult
@@ -322,7 +331,10 @@ export const CustomSearch: FC<SearchProps> = ({
   );
 };
 
-const Result: FC<{ data: PagefindResult, closeModal: () => void }> = ({ data, closeModal }) => {
+const Result: FC<{ data: PagefindResult; closeModal: () => void }> = ({
+  data,
+  closeModal,
+}) => {
   return (
     <>
       <div
@@ -339,9 +351,9 @@ const Result: FC<{ data: PagefindResult, closeModal: () => void }> = ({ data, cl
           as={NextLink}
           value={subResult}
           href={subResult.url}
-					onClick={() => {
-						closeModal();
-					}}
+          onClick={() => {
+            closeModal();
+          }}
           className={({ focus }) =>
             cn(
               "x:mx-2.5 x:break-words x:rounded-md",
@@ -369,17 +381,23 @@ const Result: FC<{ data: PagefindResult, closeModal: () => void }> = ({ data, cl
   );
 };
 
-function AgentBadge({ title, onClick }: { title: string, onClick: () => void }) {
+function AgentBadge({
+  title,
+  onClick,
+}: {
+  title: string;
+  onClick: () => void;
+}) {
   return (
     <Button
       variant="ghost"
-			size="sm"
+      size="sm"
       className="flex items-center gap-2 px-2 py-1 text-xs font-medium rounded-sm cursor-pointer bg-surface-5 text-accent-green whitespace-nowrap"
       onClick={onClick}
     >
       <span className="relative w-3 h-3">
-				<JarvisIcon className="w-full h-full" />
-			</span>
+        <JarvisIcon className="w-full h-full" />
+      </span>
       <span className="">{title}</span>
     </Button>
   );

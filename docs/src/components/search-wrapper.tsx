@@ -79,7 +79,7 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
         as="div"
         className="relative z-1000 focus:outline-none"
         onClose={close}
-				unmount={false}
+        unmount={false}
       >
         <DialogBackdrop className="fixed inset-0 delay-[0ms] duration-300 ease-out bg-black/50 backdrop-blur-md" />
         <div className="fixed inset-0 z-10 w-screen overflow-y-auto">
@@ -92,19 +92,19 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
                 Search
               </DialogTitle>
               <div className="w-full">
-                <div className={isAgentMode ? 'block' : 'hidden'}>
+                <div className={isAgentMode ? "block" : "hidden"}>
                   <DocsChat
                     setIsAgentMode={setIsAgentMode}
                     searchQuery={searchQuery}
                   />
                 </div>
-                <div className={isAgentMode ? 'hidden' : 'block p-[10px]'}>
+                <div className={isAgentMode ? "hidden" : "block p-[10px]"}>
                   <CustomSearch
                     placeholder={getSearchPlaceholder(locale)}
                     isAgentMode={isAgentMode}
                     setIsSearching={setIsSearching}
                     onUseAgent={handleUseAgent}
-										closeModal={close}
+                    closeModal={close}
                   />
                   {!isSearching && (
                     <>
