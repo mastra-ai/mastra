@@ -450,7 +450,7 @@ export class NewWorkflow<
           id: mappingStep.id,
           description: mappingStep.description,
           component: (mappingStep as SerializedStep).component,
-          stepFlow: (mappingStep as SerializedStep).stepFlow,
+          serializedStepFlow: (mappingStep as SerializedStep).serializedStepFlow,
         },
       });
       return this as unknown as NewWorkflow<TSteps, TWorkflowId, TInput, TOutput, any>;
