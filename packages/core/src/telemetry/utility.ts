@@ -12,7 +12,6 @@ export function hasActiveTelemetry(tracerName: string = 'default-tracer'): boole
 
 export function getBaggageValues(ctx: Context) {
   const currentBaggage = propagation.getBaggage(ctx);
-  console.log('currentBaggage', currentBaggage);
   const requestId = currentBaggage?.getEntry('http.request_id')?.value;
   const componentName = currentBaggage?.getEntry('componentName')?.value;
   const runId = currentBaggage?.getEntry('runId')?.value;
