@@ -114,10 +114,11 @@ export class Telemetry {
   }
 
   static setBaggage(baggage: Record<string, BaggageEntry>, ctx: Context = otlpContext.active()) {
+    const currentBaggage = Object.fromEntries(propagation.getBaggage(ctx)?.getAllEntries() ?? []);
     const newCtx = propagation.setBaggage(
       ctx,
       propagation.createBaggage({
-        ...Object.fromEntries(propagation.getBaggage(ctx)?.getAllEntries() ?? []),
+        ...currentBaggage,
         ...baggage,
       }),
     );
