@@ -280,7 +280,6 @@ describe('makeCoreTool', () => {
       mockOptions,
     );
 
-
     // Test the schema behavior instead of structure
     expect(() => coreTool.parameters.parse({})).not.toThrow();
     expect(() => coreTool.parameters.parse({ extra: 'field' })).not.toThrow();
@@ -304,10 +303,7 @@ it('should log correctly for Vercel tool execution', async () => {
 
   await coreTool.execute?.({ name: 'test' }, { toolCallId: 'test-id', messages: [] });
 
-  expect(debugSpy).toHaveBeenCalledWith(
-    '[Agent:testAgent] - Executing tool testTool',
-    expect.any(Object)
-  );
+  expect(debugSpy).toHaveBeenCalledWith('[Agent:testAgent] - Executing tool testTool', expect.any(Object));
 
   debugSpy.mockRestore();
 });
