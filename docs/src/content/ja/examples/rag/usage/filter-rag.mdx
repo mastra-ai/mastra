@@ -28,7 +28,7 @@ import { GithubLink } from "@/components/github-link";
 
 ## セットアップ
 
-### 環境セットアップ
+### 環境設定
 
 環境変数を設定してください：
 
@@ -45,14 +45,14 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 import { openai } from '@ai-sdk/openai';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
-import { PgVector } from '@mastra/pg';
-import { createVectorQueryTool, MDocument, PGVECTOR_PROMPT } from '@mastra/rag';
+import { PgVector, PGVECTOR_PROMPT } from '@mastra/pg';
+import { createVectorQueryTool, MDocument } from '@mastra/rag';
 import { embedMany } from 'ai';
 ```
 
 ## ベクトルクエリツールの作成
 
-@mastra/rag からインポートされた createVectorQueryTool を使用して、メタデータフィルタリングを可能にするツールを作成できます：
+@mastra/ragからインポートされたcreateVectorQueryToolを使用して、メタデータフィルタリングを可能にするツールを作成できます。各ベクトルストアには、サポートされているフィルター演算子と構文を定義する独自のプロンプトがあります：
 
 ```typescript copy showLineNumbers{9} filename="index.ts"
 const vectorQueryTool = createVectorQueryTool({
@@ -61,8 +61,15 @@ const vectorQueryTool = createVectorQueryTool({
   indexName: "embeddings",
   model: openai.embedding('text-embedding-3-small'),
   enableFilter: true,
+  filterPrompt: PGVECTOR_PROMPT // Use the prompt for your vector store
 });
 ```
+
+各プロンプトには以下が含まれます：
+- サポートされている演算子（比較、配列、論理、要素）
+- 各演算子の使用例
+- ストア固有の制限とルール
+- 複雑なクエリの例
 
 ## ドキュメント処理
 

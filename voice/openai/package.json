@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-openai",
-  "version": "0.1.17-alpha.5",
+  "version": "0.1.17",
   "description": "Mastra OpenAI speech integration",
   "type": "module",
   "files": [
@@ -31,7 +31,7 @@
   "dependencies": {
     "@mastra/core": "workspace:^",
     "openai": "^4.89.0",
-    "zod": "^3.24.2"
+    "zod": "^3.24.3"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

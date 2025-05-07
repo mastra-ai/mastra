@@ -1,0 +1,55 @@
+---
+title: "ツール概要 | ツール & MCP | Mastra ドキュメント"
+description: Mastraにおけるツールの概念、エージェントへの追加方法、効果的なツール設計のベストプラクティスを理解しましょう。
+---
+
+# ツール概要
+
+ツールは、エージェントが特定のタスクを実行したり外部情報にアクセスしたりするために実行できる関数です。これらは単純なテキスト生成を超えてエージェントの能力を拡張し、API、データベース、または他のシステムとの対話を可能にします。
+
+各ツールは通常、以下を定義します：
+
+- **入力：** ツールの実行に必要な情報（多くの場合、Zodを使用した`inputSchema`で定義）。
+- **出力：** ツールが返すデータの構造（`outputSchema`で定義）。
+- **実行ロジック：** ツールのアクションを実行するコード。
+- **説明：** エージェントがツールの機能と使用タイミングを理解するのに役立つテキスト。
+
+## ツールの作成
+
+Mastraでは、`@mastra/core/tools`パッケージの[`createTool`](/reference/tools/create-tool)関数を使用してツールを作成します。
+
+```typescript filename="src/mastra/tools/weatherInfo.ts" copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+const getWeatherInfo = async (city: string) => {
+  // Replace with an actual API call to a weather service
+  console.log(`Fetching weather for ${city}...`);
+  // Example data structure
+  return { temperature: 20, conditions: "Sunny" };
+};
+
+export const weatherTool = createTool({
+  id: "Get Weather Information",
+  description: `Fetches the current weather information for a given city`,
+  inputSchema: z.object({
+    city: z.string().describe("City name"),
+  }),
+  outputSchema: z.object({
+    temperature: z.number(),
+    conditions: z.string(),
+  }),
+  execute: async ({ context: { city } }) => {
+    console.log("Using tool to fetch weather information for", city);
+    return await getWeatherInfo(city);
+  },
+});
+```
+
+この例では、都市の入力スキーマ、天気データの出力スキーマ、およびツールのロジックを含む`execute`関数を持つ`weatherTool`を定義しています。
+
+ツールを作成する際は、ツールの説明をシンプルに保ち、ツールが**何を**するのか、**いつ**使用するのかに焦点を当て、その主な使用例を強調してください。技術的な詳細はパラメータスキーマに含め、エージェントがツールを正しく使用する_方法_について、わかりやすい名前、明確な説明、デフォルト値の説明などで案内します。
+
+## エージェントへのツールの追加
+
+ツールをエージェントが利用できるようにするには、エージェントの定義でそれらを設定します。エージェントのシステムプロンプトで利用可能なツールとその一般的な目的に言及することも、ツールの使用を改善することができます。詳細な手順と例については、[エージェントでのツールとMCPの使用](/docs/agents/using-tools-and-mcp#add-tools-to-an-agent)のガイドを参照してください。

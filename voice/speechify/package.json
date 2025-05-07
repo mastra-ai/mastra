@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-speechify",
-  "version": "0.1.16-alpha.5",
+  "version": "0.1.16",
   "description": "Mastra Speechify voice integration",
   "type": "module",
   "files": [
@@ -31,7 +31,7 @@
   "dependencies": {
     "@mastra/core": "workspace:^",
     "@speechify/api-sdk": "^2.4.1",
-    "zod": "^3.24.2"
+    "zod": "^3.24.3"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

@@ -40,7 +40,7 @@ importers:
         specifier: ^4.6.2
         version: 4.19.3
       zod:
-        specifier: ^3.22.4
+        specifier: ^3.24.3
         version: 3.24.3
 
 packages:

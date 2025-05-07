@@ -8,5 +8,4 @@ const meta = {
   telemetry: "テレメトリ API",
   "error-handling": "エラーハンドリング",
 };
-
 export default meta;
