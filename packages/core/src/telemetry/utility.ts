@@ -10,6 +10,11 @@ export function hasActiveTelemetry(tracerName: string = 'default-tracer'): boole
   }
 }
 
+/**
+ * Get baggage values from context
+ * @param ctx The context to get baggage values from
+ * @returns
+ */
 export function getBaggageValues(ctx: Context) {
   const currentBaggage = propagation.getBaggage(ctx);
   const requestId = currentBaggage?.getEntry('http.request_id')?.value;
