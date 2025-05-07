@@ -471,18 +471,6 @@ export const contructNodesAndEdges = ({
   return { nodes: layoutedNodes, edges: layoutedEdges };
 };
 
-type NewStepType = NewStep<string, any, any, any, any> &
-  (
-    | {
-        component: 'WORKFLOW';
-        stepFlow: StepFlowEntry[];
-      }
-    | {
-        component?: never;
-        stepFlow?: never;
-      }
-  );
-
 const getStepNodeAndEdge = ({
   stepFlow,
   xIndex,
@@ -490,6 +478,7 @@ const getStepNodeAndEdge = ({
   prevNodeIds,
   nextStepFlow,
   condition,
+  allPrevNodeIds,
 }: {
   stepFlow: SerializedStepFlowEntry;
   xIndex: number;
@@ -497,20 +486,30 @@ const getStepNodeAndEdge = ({
   prevNodeIds: string[];
   nextStepFlow?: SerializedStepFlowEntry;
   condition?: { id: string; fn: string };
+  allPrevNodeIds: string[];
 }): { nodes: Node[]; edges: Edge[]; nextPrevNodeIds: string[] } => {
   let nextNodeIds: string[] = [];
   if (nextStepFlow?.type === 'step' || nextStepFlow?.type === 'foreach' || nextStepFlow?.type === 'loop') {
-    nextNodeIds = [nextStepFlow?.step.id];
+    const nextStepId = allPrevNodeIds?.includes(nextStepFlow.step.id)
+      ? `${nextStepFlow.step.id}-${yIndex + 1}`
+      : nextStepFlow.step.id;
+    nextNodeIds = [nextStepId];
   }
   if (nextStepFlow?.type === 'parallel') {
-    nextNodeIds = nextStepFlow?.steps.map(step => (step as { type: 'step'; step: { id: string } }).step.id) || [];
+    nextNodeIds =
+      nextStepFlow?.steps.map(step => {
+        const stepId = (step as { type: 'step'; step: { id: string } }).step.id;
+        const nextStepId = allPrevNodeIds?.includes(stepId) ? `${stepId}-${yIndex + 1}` : stepId;
+        return nextStepId;
+      }) || [];
   }
   if (nextStepFlow?.type === 'conditional') {
     nextNodeIds = nextStepFlow?.serializedConditions.map(cond => cond.id) || [];
   }
 
   if (stepFlow.type === 'step' || stepFlow.type === 'foreach') {
-    const hasGraph = (stepFlow.step as NewStepType).component === 'WORKFLOW';
+    const hasGraph = stepFlow.step.component === 'WORKFLOW';
+    const nodeId = allPrevNodeIds?.includes(stepFlow.step.id) ? `${stepFlow.step.id}-${yIndex}` : stepFlow.step.id;
     const nodes = [
       ...(condition
         ? [
@@ -529,7 +528,7 @@ const getStepNodeAndEdge = ({
           ]
         : []),
       {
-        id: stepFlow.step.id,
+        id: nodeId,
         position: { x: xIndex * 300, y: (yIndex + (condition ? 1 : 0)) * 100 },
         type: hasGraph ? 'nested-node' : 'default-node',
         data: {
@@ -537,7 +536,7 @@ const getStepNodeAndEdge = ({
           description: stepFlow.step.description,
           withoutTopHandle: condition ? false : !prevNodeIds.length,
           withoutBottomHandle: !nextNodeIds.length,
-          stepGraph: hasGraph ? (stepFlow.step as NewStepType).stepFlow : undefined,
+          stepGraph: hasGraph ? stepFlow.step.serializedStepFlow : undefined,
         },
       },
     ];
@@ -553,33 +552,33 @@ const getStepNodeAndEdge = ({
                 ...defaultEdgeOptions,
               })),
               {
-                id: `e${condition.id}-${stepFlow.step.id}`,
+                id: `e${condition.id}-${nodeId}`,
                 source: condition.id,
-                target: stepFlow.step.id,
+                target: nodeId,
                 ...defaultEdgeOptions,
               },
             ]
           : prevNodeIds.map(prevNodeId => ({
-              id: `e${prevNodeId}-${stepFlow.step.id}`,
+              id: `e${prevNodeId}-${nodeId}`,
               source: prevNodeId,
-              target: stepFlow.step.id,
+              target: nodeId,
               ...defaultEdgeOptions,
             }))),
       ...(!nextNodeIds.length
         ? []
         : nextNodeIds.map(nextNodeId => ({
-            id: `e${stepFlow.step.id}-${nextNodeId}`,
-            source: stepFlow.step.id,
+            id: `e${nodeId}-${nextNodeId}`,
+            source: nodeId,
             target: nextNodeId,
             ...defaultEdgeOptions,
           }))),
     ];
-    return { nodes, edges, nextPrevNodeIds: [stepFlow.step.id] };
+    return { nodes, edges, nextPrevNodeIds: [nodeId] };
   }
 
   if (stepFlow.type === 'loop') {
     const { step: _step, serializedCondition, loopType } = stepFlow;
-    const hasGraph = (_step as NewStepType).component === 'WORKFLOW';
+    const hasGraph = _step.component === 'WORKFLOW';
     const nodes = [
       {
         id: _step.id,
@@ -590,7 +589,7 @@ const getStepNodeAndEdge = ({
           description: _step.description,
           withoutTopHandle: !prevNodeIds.length,
           withoutBottomHandle: false,
-          stepGraph: hasGraph ? (_step as NewStepType).stepFlow : undefined,
+          stepGraph: hasGraph ? _step.serializedStepFlow : undefined,
         },
       },
       {
@@ -645,6 +644,7 @@ const getStepNodeAndEdge = ({
         yIndex,
         prevNodeIds,
         nextStepFlow,
+        allPrevNodeIds,
       });
       nodes.push(..._nodes);
       edges.push(..._edges);
@@ -664,12 +664,17 @@ const getStepNodeAndEdge = ({
         prevNodeIds,
         nextStepFlow,
         condition: stepFlow.serializedConditions[index],
+        allPrevNodeIds,
       });
       nodes.push(..._nodes);
       edges.push(..._edges);
     });
 
-    return { nodes, edges, nextPrevNodeIds: nodes.map(node => node.id) };
+    return {
+      nodes,
+      edges,
+      nextPrevNodeIds: nodes.filter(({ type }) => type !== 'condition-node').map(node => node.id),
+    };
   }
 
   return { nodes: [], edges: [], nextPrevNodeIds: [] };
@@ -692,6 +697,7 @@ export const constructVNextNodesAndEdges = ({
   let edges: Edge[] = [];
 
   let prevNodeIds: string[] = [];
+  let allPrevNodeIds: string[] = [];
 
   for (let index = 0; index < stepGraph.length; index++) {
     const {
@@ -704,10 +710,12 @@ export const constructVNextNodesAndEdges = ({
       yIndex: index,
       prevNodeIds,
       nextStepFlow: index === stepGraph.length - 1 ? undefined : stepGraph[index + 1],
+      allPrevNodeIds,
     });
     nodes.push(..._nodes);
     edges.push(..._edges);
     prevNodeIds = nextPrevNodeIds;
+    allPrevNodeIds.push(...prevNodeIds);
   }
 
   const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(nodes, edges);
