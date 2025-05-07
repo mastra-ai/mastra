@@ -62,7 +62,13 @@ export class OpenSearchVector extends MastraVector {
           },
         },
       });
-    } catch (error) {
+    } catch (error: any) {
+      const message = error?.message || error?.toString();
+      if (message && message.toLowerCase().includes('already exists')) {
+        // Fetch collection info and check dimension
+        await this.validateExistingIndex(indexName, dimension, metric);
+        return;
+      }
       console.error(`Failed to create index ${indexName}:`, error);
       throw error;
     }
@@ -213,7 +219,9 @@ export class OpenSearchVector extends MastraVector {
       // Check if this is a filter translation error
       if (
         error instanceof Error &&
-        (error.message.includes('Unsupported operator') || error.message.includes('$not operator cannot be empty'))
+        (error.message.includes('no such index') ||
+          error.message.includes('Unsupported operator') ||
+          error.message.includes('$not operator cannot be empty'))
       ) {
         throw error; // Re-throw filter validation errors
       }
