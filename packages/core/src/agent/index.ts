@@ -488,18 +488,18 @@ export class Agent<
   }
 
   private getResponseMessages({
-    response,
+    messages,
     threadId,
     resourceId,
     now,
   }: {
-    response: any; // why??
+    messages: (CoreMessage | CoreAssistantMessage)[];
     threadId: string;
     resourceId: string;
     now: number;
   }) {
-    if (!response.messages) return [];
-    const messagesArray = Array.isArray(response.messages) ? response.messages : [response.messages];
+    if (!messages) return [];
+    const messagesArray = Array.isArray(messages) ? messages : [messages];
 
     return this.sanitizeResponseMessages(messagesArray).map((message: CoreMessage | CoreAssistantMessage, index) => {
       const messageId = randomUUID();
@@ -991,9 +991,8 @@ export class Agent<
         if (memory && resourceId && thread) {
           try {
             const userMessage = this.getMostRecentUserMessage(messages);
-            const newMessages = userMessage ? [userMessage] : messages;
             const now = Date.now();
-            const threadMessages = this.sanitizeResponseMessages(ensureAllMessagesAreCoreMessages(newMessages)).map(
+            const threadMessages = this.sanitizeResponseMessages(ensureAllMessagesAreCoreMessages(messages)).map(
               (u, index) => {
                 return {
                   id: this.getMemory()?.generateId()!,
@@ -1028,21 +1027,36 @@ export class Agent<
                 title,
               });
             })();
+            let responseMessages = result.response.messages;
+            if (!responseMessages && result.object) {
+              responseMessages = [
+                {
+                  role: 'assistant',
+                  content: [
+                    {
+                      type: 'text',
+                      text: outputText,
+                    },
+                  ],
+                },
+              ];
+            }
             await memory.saveMessages({
               messages: [
                 ...threadMessages,
                 ...this.getResponseMessages({
                   threadId,
                   resourceId,
-                  response: result.response,
+                  messages: responseMessages,
                   now: dateResponseMessagesFrom,
                 }),
               ],
               memoryConfig,
             });
           } catch (e) {
+            const message = e instanceof Error ? e.message : JSON.stringify(e);
             this.logger.error('Error saving response', {
-              error: e,
+              error: message,
               runId,
               result: resToLog,
               threadId,
