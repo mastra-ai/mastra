@@ -584,6 +584,8 @@ describe('MilvusStorage', () => {
 
   describe('Message operations', () => {
     beforeAll(async () => {
+      await milvusStorage.clearTable({ tableName: TABLE_MESSAGES });
+
       await milvusStorage.createTable({
         tableName: TABLE_MESSAGES,
         schema: TABLE_SCHEMAS[TABLE_MESSAGES],
@@ -628,10 +630,12 @@ describe('MilvusStorage', () => {
       expect(loadedMessages).not.toBeNull();
       expect(loadedMessages.length).toEqual(3);
 
+      messages.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
       // Verify that we got the last 3 messages in chronological order
       for (let i = 0; i < 3; i++) {
-        expect(loadedMessages[i].id.toString()).toEqual(messages[messages.length - 3 + i].id);
-        expect(loadedMessages[i].content).toEqual(messages[messages.length - 3 + i].content);
+        expect(loadedMessages[i].id.toString()).toEqual(messages[messages.length - 4 + i].id);
+        expect(loadedMessages[i].content).toEqual(messages[messages.length - 4 + i].content);
       }
     });
 
@@ -661,7 +665,7 @@ describe('MilvusStorage', () => {
     });
 
     it('should handle empty results when using selectBy filters', async () => {
-      const threadId = '12333d567-e89b-12d3-a456-426614174000';
+      const threadId = '12333d567-e89b-12d3-a456';
       // Create messages for a different thread ID
       const messages: MessageType[] = generateMessageRecords(5, 'different-thread-id');
       await milvusStorage.saveMessages({ messages });

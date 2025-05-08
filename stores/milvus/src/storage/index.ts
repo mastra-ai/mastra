@@ -426,20 +426,28 @@ export class MilvusStorage extends MastraStorage {
         throw new Error('Error status code: ' + response.status.reason);
       }
 
+      // Handle empty response properly
+      if (!response.data || response.data.length === 0) {
+        return [];
+      }
+
+      // Convert timestamps to Date objects consistently
       const messages = response.data.map(message => ({
         id: message.id,
         threadId: message.thread_id,
         content: message.content,
         role: message.role,
-        createdAt: new Date(Number(message.createdAt)),
+        createdAt:
+          typeof message.createdAt === 'number' ? new Date(message.createdAt) : new Date(Number(message.createdAt)),
         type: message.type,
         resourceId: message.resourceId,
       }));
 
-      // Sort the records chronologically
+      // Sort the records chronologically - ensure we're comparing timestamps consistently
       let records = messages.sort((a: MessageType, b: MessageType) => {
-        const dateA = new Date(a.createdAt).getTime();
-        const dateB = new Date(b.createdAt).getTime();
+        // Ensure we're comparing numbers (timestamps)
+        const dateA = a.createdAt instanceof Date ? a.createdAt.getTime() : Number(a.createdAt);
+        const dateB = b.createdAt instanceof Date ? b.createdAt.getTime() : Number(b.createdAt);
         return dateA - dateB; // Ascending order
       });
 
@@ -453,12 +461,13 @@ export class MilvusStorage extends MastraStorage {
         records = records.slice(-selectBy.last);
       }
 
+      // Return the records with consistent Date objects
       return records.map(message => ({
         id: message.id,
         threadId: message.threadId,
         content: message.content,
         role: message.role,
-        createdAt: new Date(Number(message.createdAt)),
+        createdAt: message.createdAt instanceof Date ? message.createdAt : new Date(Number(message.createdAt)),
         type: message.type,
         resourceId: message.resourceId,
       })) as MessageType[];
