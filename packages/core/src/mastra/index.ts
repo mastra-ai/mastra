@@ -2,7 +2,7 @@ import type { Agent } from '../agent';
 import type { MastraDeployer } from '../deployer';
 import { LogLevel, createLogger, noopLogger } from '../logger';
 import type { Logger } from '../logger';
-import type { MastraMCPServer } from '../mcp';
+import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory/memory';
 import type { AgentNetwork } from '../network';
 import type { ServerConfig } from '../server/types';
@@ -24,7 +24,7 @@ export interface Config<
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends Logger = Logger,
   TNetworks extends Record<string, AgentNetwork> = Record<string, AgentNetwork>,
-  TMCPServers extends Record<string, MastraMCPServer> = Record<string, MastraMCPServer>,
+  TMCPServers extends Record<string, MCPServerBase> = Record<string, MCPServerBase>,
 > {
   agents?: TAgents;
   networks?: TNetworks;
@@ -65,7 +65,7 @@ export class Mastra<
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends Logger = Logger,
   TNetworks extends Record<string, AgentNetwork> = Record<string, AgentNetwork>,
-  TMCPServers extends Record<string, MastraMCPServer> = Record<string, MastraMCPServer>,
+  TMCPServers extends Record<string, MCPServerBase> = Record<string, MCPServerBase>,
 > {
   #vectors?: TVectors;
   #agents: TAgents;
@@ -607,13 +607,13 @@ Do:
    * @param serverId - The ID of the MCP server to retrieve
    * @returns The MCP server with the specified ID, or undefined if not found
    */
-  public getMCPServer(serverId: string): MastraMCPServer | undefined {
+  public getMCPServer(serverId: string): MCPServerBase | undefined {
     return this.#mcpServers?.[serverId];
   }
 
   /**
    * Get all registered MCP servers as a Record, with keys being their IDs.
-   * @returns Record of MCP server IDs to MastraMCPServer instances, or undefined if none.
+   * @returns Record of MCP server IDs to MCPServerBase instances, or undefined if none.
    */
   public getMCPServers(): TMCPServers | undefined {
     return this.#mcpServers;

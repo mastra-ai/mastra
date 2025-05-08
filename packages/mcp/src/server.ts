@@ -1,7 +1,8 @@
 import { randomUUID } from 'crypto';
+import type * as http from 'node:http';
 import { isVercelTool, isZodType, resolveSerializedZodOutput } from '@mastra/core';
 import type { ToolsInput } from '@mastra/core/agent';
-import { MastraMCPServer } from '@mastra/core/mcp';
+import { MCPServerBase } from '@mastra/core/mcp';
 import type { MCPServerSSEOptions, ConvertedTool } from '@mastra/core/mcp';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
@@ -13,7 +14,7 @@ import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
-export class MCPServer extends MastraMCPServer {
+export class MCPServer extends MCPServerBase {
   private server: Server;
   private stdioTransport?: StdioServerTransport;
   private sseTransport?: SSEServerTransport;
@@ -50,7 +51,6 @@ export class MCPServer extends MastraMCPServer {
     super({ name, version, tools });
 
     this.server = new Server({ name, version }, { capabilities: { tools: {}, logging: { enabled: true } } });
-    this.convertedTools = this.convertTools(tools);
 
     this.logger.info(
       `Initialized MCPServer '${name}' v${version} with tools: ${Object.keys(this.convertedTools).join(', ')}`,
@@ -85,7 +85,7 @@ export class MCPServer extends MastraMCPServer {
           zodSchema = toolInstance.parameters;
           inputSchema = zodToJsonSchema(zodSchema);
         } else if (typeof toolInstance.parameters === 'object') {
-          zodSchema = resolveSerializedZodOutput(jsonSchemaToZod(toolInstance.parameters));
+          zodSchema = resolveSerializedZodOutput(jsonSchemaToZod(toolInstance.parameters as any));
           inputSchema = toolInstance.parameters;
         } else {
           zodSchema = z.object({});
@@ -239,7 +239,7 @@ export class MCPServer extends MastraMCPServer {
    * @param res HTTP response (must support .write/.end)
    * @param options Optional options to pass to the transport (e.g. sessionIdGenerator)
    */
-  async startHTTP({
+  public async startHTTP({
     url,
     httpPath,
     req,
@@ -248,8 +248,8 @@ export class MCPServer extends MastraMCPServer {
   }: {
     url: URL;
     httpPath: string;
-    req: any;
-    res: any;
+    req: http.IncomingMessage;
+    res: http.ServerResponse<http.IncomingMessage>;
     options?: StreamableHTTPServerTransportOptions;
   }) {
     if (url.pathname === httpPath) {
@@ -273,8 +273,8 @@ export class MCPServer extends MastraMCPServer {
       }
 
       this.server.onclose = async () => {
-        await this.server.close();
         this.streamableHTTPTransport = undefined;
+        await this.server.close();
       };
 
       res.on('close', () => {
@@ -286,7 +286,7 @@ export class MCPServer extends MastraMCPServer {
     }
   }
 
-  public async handlePostMessage(req: any, res: any) {
+  public async handlePostMessage(req: http.IncomingMessage, res: http.ServerResponse<http.IncomingMessage>) {
     if (!this.sseTransport) {
       res.writeHead(503);
       res.end('SSE connection not established');
@@ -295,14 +295,20 @@ export class MCPServer extends MastraMCPServer {
     await this.sseTransport.handlePostMessage(req, res);
   }
 
-  public async connectSSE({ messagePath, res }: { messagePath: string; res: any }) {
+  public async connectSSE({
+    messagePath,
+    res,
+  }: {
+    messagePath: string;
+    res: http.ServerResponse<http.IncomingMessage>;
+  }) {
     this.logger.debug('Received SSE connection');
     this.sseTransport = new SSEServerTransport(messagePath, res);
     await this.server.connect(this.sseTransport);
 
     this.server.onclose = async () => {
-      await this.server.close();
       this.sseTransport = undefined;
+      await this.server.close();
     };
 
     res.on('close', () => {

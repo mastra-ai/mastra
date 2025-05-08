@@ -1114,6 +1114,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
   // MCP server routes
   app.post(
     '/api/servers/:serverId/mcp',
+    bodyLimit(bodyLimitOptions),
     describeRoute({
       description: 'Send a message to an MCP server',
       tags: ['mcp'],
