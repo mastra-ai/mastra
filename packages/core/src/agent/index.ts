@@ -1054,9 +1054,9 @@ export class Agent<
               memoryConfig,
             });
           } catch (e) {
-            console.error(e);
+            const message = e instanceof Error ? e.message : JSON.stringify(e);
             this.logger.error('Error saving response', {
-              error: e,
+              error: message,
               runId,
               result: resToLog,
               threadId,
