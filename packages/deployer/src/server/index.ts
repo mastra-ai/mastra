@@ -362,7 +362,13 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
       },
       responses: {
         200: {
-          description: 'Agent response',
+          description: 'A2A response',
+        },
+        400: {
+          description: 'Missing or invalid request parameters',
+        },
+        404: {
+          description: 'Agent not found',
         },
       },
     }),

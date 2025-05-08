@@ -61,11 +61,11 @@ export async function getAgentExecutionHandler(c: Context) {
             await stream.write(JSON.stringify(chunk) + '\x1E');
           }
         } catch (err) {
-          console.log(err);
+          logger.error('Error in tasks/sendSubscribe stream: ' + err?.message);
         }
       },
       async err => {
-        logger.error('Error in watch stream: ' + err?.message);
+        logger.error('Error in tasks/sendSubscribe stream: ' + err?.message);
       },
     );
   }
