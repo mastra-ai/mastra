@@ -64,12 +64,20 @@
     "@mastra/voice-openai-realtime": "0.2.2",
     "@mastra/voice-playai": "0.1.16",
     "@mastra/voice-sarvam": "0.1.11",
-    "@mastra/voice-speechify": "0.1.16"
+    "@mastra/voice-speechify": "0.1.16",
+    "@mastra/inngest": "0.0.1"
   },
   "changesets": [
+    "afraid-boats-live",
+    "better-actors-hammer",
+    "full-bobcats-doubt",
     "happy-plums-serve",
+    "lazy-clouds-arrive",
+    "proud-guests-breathe",
     "quiet-lights-carry",
+    "shy-mangos-drum",
     "slimy-monkeys-stand",
+    "social-buttons-decide",
     "vast-regions-enjoy"
   ]
 }
