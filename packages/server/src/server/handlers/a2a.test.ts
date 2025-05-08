@@ -252,22 +252,14 @@ describe('A2A Handler', () => {
       // Should save failed state
       const task = await mockTaskStore.load({ agentId, taskId });
       expect(task?.task.status.state).toBe('failed');
+      // @ts-expect-error - error is not always available but we know it is
+      result.error.data.stack = result.error?.data.stack.split('\n')[0];
       expect(result).toMatchInlineSnapshot(`
         {
           "error": {
             "code": -32603,
             "data": {
-              "stack": "Error: Agent failed!
-            at /Users/ward/projects/mastra/mastra-oss/packages/server/src/server/handlers/a2a.test.ts:241:44
-            at file:///Users/ward/projects/mastra/mastra-oss/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:146:14
-            at file:///Users/ward/projects/mastra/mastra-oss/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:11
-            at runWithTimeout (file:///Users/ward/projects/mastra/mastra-oss/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:39:7)
-            at runTest (file:///Users/ward/projects/mastra/mastra-oss/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1056:17)
-            at processTicksAndRejections (node:internal/process/task_queues:105:5)
-            at runSuite (file:///Users/ward/projects/mastra/mastra-oss/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
-            at runSuite (file:///Users/ward/projects/mastra/mastra-oss/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
-            at runSuite (file:///Users/ward/projects/mastra/mastra-oss/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
-            at runFiles (file:///Users/ward/projects/mastra/mastra-oss/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1262:5)",
+              "stack": "Error: Agent failed!",
             },
             "message": "Agent failed!",
           },
