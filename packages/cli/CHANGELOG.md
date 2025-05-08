@@ -1,5 +1,18 @@
 # mastra
 
+## 0.6.2-alpha.1
+
+### Patch Changes
+
+- 62c9e7d: Fix disappearing tool calls in streaming
+- Updated dependencies [e450778]
+- Updated dependencies [8902157]
+- Updated dependencies [ca0dc88]
+- Updated dependencies [9cd1a46]
+- Updated dependencies [70dbf51]
+  - @mastra/core@0.9.3-alpha.1
+  - @mastra/deployer@0.3.3-alpha.1
+
 ## 0.6.2-alpha.0
 
 ### Patch Changes

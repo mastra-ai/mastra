@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { subscribe } from '@inngest/realtime';
-import type { Mastra } from '@mastra/core';
+import type { Mastra, WorkflowRun } from '@mastra/core';
 import { RuntimeContext } from '@mastra/core/di';
 import { NewWorkflow, createStep, Run, DefaultExecutionEngine, cloneStep } from '@mastra/core/workflows/vNext';
 import type {
@@ -54,6 +54,7 @@ export class InngestRun<
         attempts?: number;
         delay?: number;
       };
+      cleanup?: () => void;
     },
     inngest: Inngest,
   ) {
@@ -90,6 +91,19 @@ export class InngestRun<
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
+    await this.#mastra.getStorage()?.persistWorkflowSnapshot({
+      workflowName: this.workflowId,
+      runId: this.runId,
+      snapshot: {
+        runId: this.runId,
+        value: {},
+        context: {} as any,
+        activePaths: [],
+        suspendedPaths: {},
+        timestamp: Date.now(),
+      },
+    });
+
     const eventOutput = await this.inngest.send({
       name: `workflow.${this.workflowId}`,
       data: {
@@ -107,6 +121,8 @@ export class InngestRun<
     if (result.status === 'failed') {
       result.error = new Error(result.error);
     }
+
+    this.cleanup?.();
     return result;
   }
 
@@ -197,6 +213,36 @@ export class InngestWorkflow<
     this.inngest = inngest;
   }
 
+  async getWorkflowRuns(args?: {
+    fromDate?: Date;
+    toDate?: Date;
+    limit?: number;
+    offset?: number;
+    resourceId?: string;
+  }) {
+    const storage = this.#mastra?.getStorage();
+    if (!storage) {
+      this.logger.debug('Cannot get workflow runs. Mastra engine is not initialized');
+      return { runs: [], total: 0 };
+    }
+
+    return storage.getWorkflowRuns({ workflowName: this.id, ...(args ?? {}) });
+  }
+
+  async getWorkflowRunById(runId: string): Promise<WorkflowRun | null> {
+    const storage = this.#mastra?.getStorage();
+    if (!storage) {
+      this.logger.debug('Cannot get workflow runs. Mastra engine is not initialized');
+      return null;
+    }
+    const run = await storage.getWorkflowRunById({ runId, workflowName: this.id });
+
+    return (
+      run ??
+      (this.runs.get(runId) ? ({ ...this.runs.get(runId), workflowName: this.id } as unknown as WorkflowRun) : null)
+    );
+  }
+
   __registerMastra(mastra: Mastra) {
     this.#mastra = mastra;
     this.executionEngine.__registerMastra(mastra);
@@ -224,17 +270,23 @@ export class InngestWorkflow<
     const runIdToUse = options?.runId || randomUUID();
 
     // Return a new Run instance with object parameters
-    return new InngestRun(
-      {
-        workflowId: this.id,
-        runId: runIdToUse,
-        executionEngine: this.executionEngine,
-        executionGraph: this.executionGraph,
-        mastra: this.#mastra,
-        retryConfig: this.retryConfig,
-      },
-      this.inngest,
-    );
+    const run: Run<TSteps, TInput, TOutput> =
+      this.runs.get(runIdToUse) ??
+      new InngestRun(
+        {
+          workflowId: this.id,
+          runId: runIdToUse,
+          executionEngine: this.executionEngine,
+          executionGraph: this.executionGraph,
+          mastra: this.#mastra,
+          retryConfig: this.retryConfig,
+          cleanup: () => this.runs.delete(runIdToUse),
+        },
+        this.inngest,
+      );
+
+    this.runs.set(runIdToUse, run);
+    return run;
   }
 
   getFunction() {

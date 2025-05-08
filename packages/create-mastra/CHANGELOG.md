@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.3.2-alpha.1
+
+### Patch Changes
+
+- 62c9e7d: Fix disappearing tool calls in streaming
+
 ## 0.3.2-alpha.0
 
 ### Patch Changes
