@@ -1096,6 +1096,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
               type: 'object',
               properties: {
                 data: { type: 'object' },
+                runtimeContext: { type: 'object' },
               },
               required: ['data'],
             },
@@ -2221,6 +2222,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
               type: 'object',
               properties: {
                 data: { type: 'object' },
+                runtimeContext: { type: 'object' },
               },
               required: ['data'],
             },

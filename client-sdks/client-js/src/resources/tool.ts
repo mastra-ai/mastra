@@ -1,3 +1,4 @@
+import type { RuntimeContext } from '@mastra/core/di';
 import type { GetToolResponse, ClientOptions } from '../types';
 
 import { BaseResource } from './base';
@@ -23,21 +24,21 @@ export class Tool extends BaseResource {
    * @param params - Parameters required for tool execution
    * @returns Promise containing the tool execution results
    */
-  execute(params: { data: any; runId?: string; runtimeContext?: Record<string, any> }): Promise<any> {
+  execute(params: { data: any; runId?: string; runtimeContext?: RuntimeContext }): Promise<any> {
     const url = new URLSearchParams();
 
     if (params.runId) {
       url.set('runId', params.runId);
     }
 
-    const processedParams = {
+    const body = {
       data: params.data,
       runtimeContext: params.runtimeContext ? Object.fromEntries(params.runtimeContext.entries()) : undefined,
     };
 
     return this.request(`/api/tools/${this.toolId}/execute?${url.toString()}`, {
       method: 'POST',
-      body: processedParams,
+      body,
     });
   }
 }
