@@ -1,13 +1,13 @@
 import type { Message, TaskContext, TaskAndHistory, Task, TaskState, TaskStatus, Artifact } from '@mastra/core/a2a';
-import { A2AError } from '@mastra/core/a2a';
+import type { Logger } from '@mastra/core/logger';
 import { activeCancellations } from './store';
 import type { InMemoryTaskStore } from './store';
 
-function isTaskStatusUpdate(update: any): update is Omit<TaskStatus, 'timestamp'> {
+function isTaskStatusUpdate(update: TaskStatus | Artifact): update is Omit<TaskStatus, 'timestamp'> {
   return 'state' in update && !('parts' in update);
 }
 
-function isArtifactUpdate(update: any): update is Artifact {
+function isArtifactUpdate(update: TaskStatus | Artifact): update is Artifact {
   return 'parts' in update;
 }
 
@@ -15,8 +15,8 @@ export function applyUpdateToTaskAndHistory(
   current: TaskAndHistory,
   update: Omit<TaskStatus, 'timestamp'> | Artifact,
 ): TaskAndHistory {
-  let newTask = { ...current.task }; // Shallow copy task
-  let newHistory = [...current.history]; // Shallow copy history
+  let newTask = structuredClone(current.task);
+  let newHistory = structuredClone(current.history);
 
   if (isTaskStatusUpdate(update)) {
     // Merge status update
@@ -25,6 +25,7 @@ export function applyUpdateToTaskAndHistory(
       ...update, // Apply updates
       timestamp: new Date().toISOString(),
     };
+
     // If the update includes an agent message, add it to history
     if (update.message?.role === 'agent') {
       newHistory.push(update.message);
@@ -89,84 +90,75 @@ export async function loadOrCreateTaskAndHistory({
   message,
   sessionId,
   metadata,
+  logger,
 }: {
   agentId: string;
   taskId: string;
   taskStore: InMemoryTaskStore;
   message: Message;
-  sessionId?: string | null; // Allow null
-  metadata?: Record<string, unknown> | null; // Allow null
+  sessionId?: string | null;
+  metadata?: Record<string, unknown> | null;
+  logger?: Logger;
 }): Promise<TaskAndHistory> {
-  let data = await taskStore.load({ agentId, taskId });
-  let needsSave = false;
+  const data = await taskStore.load({ agentId, taskId });
 
+  // Create new task if none exists
   if (!data) {
-    // Create new task and history
     const initialTask: Task = {
       id: taskId,
-      sessionId: sessionId ?? undefined, // Store undefined if null
+      sessionId: sessionId,
       status: {
-        state: 'submitted', // Start as submitted
+        state: 'submitted',
         timestamp: new Date().toISOString(),
-        message: null, // Initial user message goes only to history for now
+        message: null,
       },
       artifacts: [],
-      metadata: metadata ?? undefined, // Store undefined if null
+      metadata: metadata,
     };
-    const initialHistory: Message[] = [message]; // History starts with user message
-    data = { task: initialTask, history: initialHistory };
-    needsSave = true; // Mark for saving
-    console.log(`[Task ${taskId}] Created new task and history.`);
-  } else {
-    console.log(`[Task ${taskId}] Loaded existing task and history.`);
-    // Add current user message to history
-    // Make a copy before potentially modifying
-    data = { task: data.task, history: [...data.history, message] };
-    needsSave = true; // History updated, mark for saving
 
-    // Handle state transitions for existing tasks
-    const finalStates: TaskState[] = ['completed', 'failed', 'canceled'];
-    if (finalStates.includes(data.task.status.state)) {
-      console.warn(
-        `[Task ${taskId}] Received message for task already in final state ${data.task.status.state}. Handling as new submission (keeping history).`,
-      );
-      // Option 1: Reset state to 'submitted' (keeps history, effectively restarts)
-      const resetUpdate: Omit<TaskStatus, 'timestamp'> = {
-        state: 'submitted',
-        message: null, // Clear old agent message
-      };
-      data = applyUpdateToTaskAndHistory(data, resetUpdate);
-      // needsSave is already true
+    const initialData = {
+      task: initialTask,
+      history: [message],
+    };
 
-      // Option 2: Throw error (stricter)
-      // throw A2AError.invalidRequest(`Task ${taskId} is already in a final state.`);
-    } else if (data.task.status.state === 'input-required') {
-      console.log(`[Task ${taskId}] Received message while 'input-required', changing state to 'working'.`);
-      // If it was waiting for input, update state to 'working'
-      const workingUpdate: Omit<TaskStatus, 'timestamp'> = {
-        state: 'working',
-      };
-      data = applyUpdateToTaskAndHistory(data, workingUpdate);
-      // needsSave is already true
-    } else if (data.task.status.state === 'working') {
-      // If already working, maybe warn but allow? Or force back to submitted?
-      console.warn(`[Task ${taskId}] Received message while already 'working'. Proceeding.`);
-      // No state change needed, but history was updated, so needsSave is true.
-    }
-    // If 'submitted', receiving another message might be odd, but proceed.
+    logger?.info(`[Task ${taskId}] Created new task and history.`);
+    await taskStore.save({ agentId, data: initialData });
+
+    return initialData;
   }
 
-  if (!data) {
-    throw A2AError.internalError(`Task ${taskId} data not found.`);
+  // Handle existing task
+  logger?.info(`[Task ${taskId}] Loaded existing task and history.`);
+
+  // Add message to history and prepare updated data
+  let updatedData = {
+    task: data.task,
+    history: [...data.history, message],
+  };
+
+  // Handle state transitions
+  const { status } = data.task;
+  const finalStates: TaskState[] = ['completed', 'failed', 'canceled'];
+
+  if (finalStates.includes(status.state)) {
+    logger?.warn(`[Task ${taskId}] Received message for task in final state ${status.state}. Restarting.`);
+    updatedData = applyUpdateToTaskAndHistory(updatedData, {
+      state: 'submitted',
+      message: null,
+    });
+  } else if (status.state === 'input-required') {
+    logger?.info(`[Task ${taskId}] Changing state from 'input-required' to 'working'.`);
+    updatedData = applyUpdateToTaskAndHistory(updatedData, { state: 'working' });
+  } else if (status.state === 'working') {
+    logger?.warn(`[Task ${taskId}] Received message while already 'working'. Proceeding.`);
   }
 
-  // Save if created or modified before returning
-  if (needsSave) {
-    await taskStore.save({ agentId, data });
-  }
+  await taskStore.save({ agentId, data: updatedData });
 
-  // Return copies to prevent mutation by caller before handler runs
-  return { task: { ...data.task }, history: [...data.history] };
+  return {
+    task: { ...updatedData.task },
+    history: [...updatedData.history],
+  };
 }
 
 export function createTaskContext({
@@ -176,13 +168,13 @@ export function createTaskContext({
 }: {
   task: Task;
   userMessage: Message;
-  history: Message[]; // Add history parameter
+  history: Message[];
+  activeCancellations: Set<string>;
 }): TaskContext {
   return {
-    task: { ...task }, // Pass a copy
-    userMessage: userMessage,
-    history: [...history], // Pass a copy of the history
+    task: structuredClone(task),
+    userMessage,
+    history: structuredClone(history),
     isCancelled: () => activeCancellations.has(task.id),
-    // taskStore is removed
   };
 }

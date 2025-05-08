@@ -2,11 +2,17 @@ import type { TaskAndHistory } from '@mastra/core/a2a';
 
 export class InMemoryTaskStore {
   private store: Map<string, TaskAndHistory> = new Map();
+  public activeCancellations = new Set<string>();
 
   async load({ agentId, taskId }: { agentId: string; taskId: string }): Promise<TaskAndHistory | null> {
     const entry = this.store.get(`${agentId}-${taskId}`);
+
+    if (!entry) {
+      return null;
+    }
+
     // Return copies to prevent external mutation
-    return entry ? { task: { ...entry.task }, history: [...entry.history] } : null;
+    return { task: { ...entry.task }, history: [...entry.history] };
   }
 
   async save({ agentId, data }: { agentId: string; data: TaskAndHistory }): Promise<void> {
@@ -17,7 +23,3 @@ export class InMemoryTaskStore {
     });
   }
 }
-
-export const inMemoryTaskStore = new InMemoryTaskStore();
-
-export const activeCancellations = new Set<string>();

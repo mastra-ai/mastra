@@ -1,49 +1,64 @@
-import { Readable } from 'node:stream';
-import type { CoreMessage } from '@mastra/core';
 import { A2AError } from '@mastra/core/a2a';
-import type {
-  TaskSendParams,
-  TaskQueryParams,
-  TaskIdParams,
-  AgentCard,
-  JSONRPCError,
-  JSONRPCResponse,
-  TaskStatus,
-  TaskState,
-  Task,
-} from '@mastra/core/a2a';
+import type { TaskSendParams, TaskQueryParams, TaskIdParams, AgentCard, TaskStatus, TaskState } from '@mastra/core/a2a';
 import type { Agent } from '@mastra/core/agent';
+import type { Logger } from '@mastra/core/logger';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
-import { activeCancellations, inMemoryTaskStore } from '../a2a/store';
-import type { InMemoryTaskStore } from '../a2a/store';
+import { z } from 'zod';
+import { convertToCoreMessage, normalizeError, createSuccessResponse, createErrorResponse } from '../a2a/protocol';
+import { InMemoryTaskStore } from '../a2a/store';
 import { applyUpdateToTaskAndHistory, createTaskContext, loadOrCreateTaskAndHistory } from '../a2a/tasks';
 import type { Context } from '../types';
+
+const taskSendParamsSchema = z.object({
+  id: z.string().min(1, 'Invalid or missing task ID (params.id).'),
+  message: z.object({
+    parts: z.array(
+      z.object({
+        type: z.enum(['text']),
+        text: z.string(),
+      }),
+    ),
+  }),
+});
 
 export async function getAgentCardByIdHandler({
   mastra,
   agentId,
+  executionUrl = `/a2a/${agentId}`,
+  provider = {
+    organization: 'Mastra',
+    url: 'https://mastra.ai',
+  },
+  version = '1.0',
   runtimeContext,
-}: Context & { runtimeContext: RuntimeContext; agentId: string }): Promise<AgentCard> {
+}: Context & {
+  runtimeContext: RuntimeContext;
+  agentId: keyof ReturnType<typeof mastra.getAgents>;
+  executionUrl?: string;
+  version?: string;
+  provider?: {
+    organization: string;
+    url: string;
+  };
+}): Promise<AgentCard> {
   const agent = mastra.getAgent(agentId);
 
   if (!agent) {
     throw new Error(`Agent with ID ${agentId} not found`);
   }
 
-  const instructions = await agent.getInstructions({ runtimeContext });
-  const tools = await agent.getTools({ runtimeContext });
+  const [instructions, tools] = await Promise.all([
+    agent.getInstructions({ runtimeContext }),
+    agent.getTools({ runtimeContext }),
+  ]);
 
   // Extract agent information to create the AgentCard
   const agentCard: AgentCard = {
     name: agent.id || agentId,
     description: instructions,
-    url: `/a2a/${agentId}`,
-    //TODO
-    provider: {
-      organization: 'Mastra',
-      url: 'https://mastra.ai',
-    },
-    version: '1.0',
+    url: executionUrl,
+    provider,
+    version,
     capabilities: {
       streaming: true, // All agents support streaming
       pushNotifications: false,
@@ -64,86 +79,36 @@ export async function getAgentCardByIdHandler({
   return agentCard;
 }
 
-function createErrorResponse(id: number | string | null, error: JSONRPCError<unknown>): JSONRPCResponse<null, unknown> {
-  // For errors, ID should be the same as request ID, or null if that couldn't be determined
-  return {
-    jsonrpc: '2.0',
-    id: id, // Can be null if request ID was invalid/missing
-    error: error,
-  };
-}
-
-function normalizeError(error: any, reqId: number | string | null, taskId?: string): JSONRPCResponse<null, unknown> {
-  let a2aError: A2AError;
-  if (error instanceof A2AError) {
-    a2aError = error;
-  } else if (error instanceof Error) {
-    // Generic JS error
-    a2aError = A2AError.internalError(error.message, { stack: error.stack });
-  } else {
-    // Unknown error type
-    a2aError = A2AError.internalError('An unknown error occurred.', error);
-  }
-
-  // Ensure Task ID context is present if possible
-  if (taskId && !a2aError.taskId) {
-    a2aError.taskId = taskId;
-  }
-
-  console.error(`Error processing request (Task: ${a2aError.taskId ?? 'N/A'}, ReqID: ${reqId ?? 'N/A'}):`, a2aError);
-
-  return createErrorResponse(reqId, a2aError.toJSONRPCError());
-}
-
-function createSuccessResponse<T>(id: number | string | null, result: T): JSONRPCResponse<T> {
-  if (id === null) {
-    // This shouldn't happen for methods that expect a response, but safeguard
-    throw A2AError.internalError('Cannot create success response for null ID.');
-  }
-  return {
-    jsonrpc: '2.0',
-    id: id,
-    result: result,
-  };
-}
-
-function sendJsonResponse<T>(reqId: number | string | null, result: T) {
-  if (reqId === null) {
-    console.warn('Attempted to send JSON response for a request with null ID.');
-    // Should this be an error? Or just log and ignore?
-    // For 'tasks/send' etc., ID should always be present.
-    return;
-  }
-  return createSuccessResponse(reqId, result);
-}
-
 function validateTaskSendParams(params: TaskSendParams) {
-  if (!params || typeof params !== 'object') {
-    throw A2AError.invalidParams('Missing or invalid params object.');
-  }
-  if (typeof params.id !== 'string' || params.id === '') {
-    throw A2AError.invalidParams('Invalid or missing task ID (params.id).');
-  }
-  if (!params.message || typeof params.message !== 'object' || !Array.isArray(params.message.parts)) {
-    throw A2AError.invalidParams('Invalid or missing message object (params.message).');
+  try {
+    taskSendParamsSchema.parse(params);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw A2AError.invalidParams((error as z.ZodError).errors[0].message);
+    }
+
+    throw error;
   }
 }
 
-async function handleTaskSend({
+export async function handleTaskSend({
   requestId,
   params,
-  agentId,
   taskStore,
   agent,
+  logger,
+  runtimeContext,
 }: {
   requestId: string;
   params: TaskSendParams;
-  agentId: string;
   taskStore: InMemoryTaskStore;
   agent: Agent;
+  logger?: Logger;
+  runtimeContext: RuntimeContext;
 }) {
   validateTaskSendParams(params);
 
+  const agentId = agent.id;
   const { id: taskId, message, sessionId, metadata } = params;
 
   // Load or create task AND history
@@ -161,14 +126,17 @@ async function handleTaskSend({
     task: currentData.task,
     userMessage: message,
     history: currentData.history,
+    activeCancellations: taskStore.activeCancellations,
   });
 
   try {
-    const { text } = await agent.generate(message as unknown as CoreMessage[]);
+    const { text } = await agent.generate([convertToCoreMessage(message)], {
+      runId: taskId,
+      runtimeContext,
+    });
 
     currentData = applyUpdateToTaskAndHistory(currentData, {
       state: 'completed',
-
       message: {
         role: 'agent',
         parts: [
@@ -179,6 +147,7 @@ async function handleTaskSend({
         ],
       },
     });
+
     await taskStore.save({ agentId, data: currentData });
     context.task = currentData.task;
   } catch (handlerError) {
@@ -196,20 +165,22 @@ async function handleTaskSend({
       },
     };
     currentData = applyUpdateToTaskAndHistory(currentData, failureStatusUpdate);
+
     try {
       await taskStore.save({ agentId, data: currentData });
     } catch (saveError) {
-      console.error(`Failed to save task ${taskId} after handler error:`, saveError);
-      // Still throw the original handler error
+      // @ts-expect-error saveError is an unknown error
+      logger?.error(`Failed to save task ${taskId} after handler error:`, saveError?.message);
     }
-    throw normalizeError(handlerError, requestId, taskId); // Rethrow original error
+
+    return normalizeError(handlerError, requestId, taskId, logger); // Rethrow original error
   }
 
   // The loop finished, send the final task state
-  return sendJsonResponse(requestId, currentData.task);
+  return createSuccessResponse(requestId, currentData.task);
 }
 
-async function handleTaskGet({
+export async function handleTaskGet({
   requestId,
   taskStore,
   agentId,
@@ -222,21 +193,27 @@ async function handleTaskGet({
 }) {
   const task = await taskStore.load({ agentId, taskId });
 
-  return sendJsonResponse(requestId, task);
+  if (!task) {
+    throw A2AError.taskNotFound(taskId);
+  }
+
+  return createSuccessResponse(requestId, task);
 }
 
-async function* handleTaskSendSubscribe({
+export async function* handleTaskSendSubscribe({
   requestId,
   params,
-  agentId,
   taskStore,
   agent,
+  logger,
+  runtimeContext,
 }: {
   requestId: string;
   params: TaskSendParams;
-  agentId: string;
   taskStore: InMemoryTaskStore;
   agent: Agent;
+  logger?: Logger;
+  runtimeContext: RuntimeContext;
 }) {
   yield createSuccessResponse(requestId, {
     state: 'working',
@@ -246,25 +223,39 @@ async function* handleTaskSendSubscribe({
     },
   });
 
-  yield await handleTaskSend({
-    requestId,
-    params,
-    agentId,
-    taskStore,
-    agent,
-  });
+  let result;
+  try {
+    result = await handleTaskSend({
+      requestId,
+      params,
+      taskStore,
+      agent,
+      runtimeContext,
+      logger,
+    });
+  } catch (err) {
+    if (!(err instanceof A2AError)) {
+      throw err;
+    }
+
+    result = createErrorResponse(requestId, err.toJSONRPCError());
+  }
+
+  yield result;
 }
 
-async function handleTaskCancel({
+export async function handleTaskCancel({
   requestId,
   taskStore,
   agentId,
   taskId,
+  logger,
 }: {
   requestId: string;
   taskStore: InMemoryTaskStore;
   agentId: string;
   taskId: string;
+  logger?: Logger;
 }) {
   // Load task and history
   let data = await taskStore.load({
@@ -280,12 +271,12 @@ async function handleTaskCancel({
   const finalStates: TaskState[] = ['completed', 'failed', 'canceled'];
 
   if (finalStates.includes(data.task.status.state)) {
-    console.log(`Task ${taskId} already in final state ${data.task.status.state}, cannot cancel.`);
-    return sendJsonResponse(requestId, data.task);
+    logger?.info(`Task ${taskId} already in final state ${data.task.status.state}, cannot cancel.`);
+    return createSuccessResponse(requestId, data.task);
   }
 
   // Signal cancellation
-  activeCancellations.add(taskId);
+  taskStore.activeCancellations.add(taskId);
 
   // Apply 'canceled' state update
   const cancelUpdate: Omit<TaskStatus, 'timestamp'> = {
@@ -302,10 +293,10 @@ async function handleTaskCancel({
   await taskStore.save({ agentId, data });
 
   // Remove from active cancellations *after* saving
-  activeCancellations.delete(taskId);
+  taskStore.activeCancellations.delete(taskId);
 
   // Return the updated task object
-  return sendJsonResponse(requestId, data.task);
+  return createSuccessResponse(requestId, data.task);
 }
 
 export async function getAgentExecutionHandler({
@@ -315,15 +306,18 @@ export async function getAgentExecutionHandler({
   runtimeContext,
   method,
   params,
+  taskStore = new InMemoryTaskStore(),
+  logger,
 }: Context & {
   requestId: string;
   runtimeContext: RuntimeContext;
   agentId: string;
   method: 'tasks/send' | 'tasks/sendSubscribe' | 'tasks/get' | 'tasks/cancel';
   params: TaskSendParams | TaskQueryParams | TaskIdParams;
+  taskStore?: InMemoryTaskStore;
+  logger?: Logger;
 }): Promise<any> {
   const agent = mastra.getAgent(agentId);
-  console.log({ agent, runtimeContext, method, params });
 
   let taskId: string | undefined; // For error context
 
@@ -338,26 +332,26 @@ export async function getAgentExecutionHandler({
         const result = await handleTaskSend({
           requestId,
           params: params as TaskSendParams,
-          agentId,
-          taskStore: inMemoryTaskStore,
+          taskStore,
           agent,
+          runtimeContext,
         });
         return result;
       }
       case 'tasks/sendSubscribe':
         const result = await handleTaskSendSubscribe({
           requestId,
-          taskStore: inMemoryTaskStore,
-          agentId,
+          taskStore,
           params: params as TaskSendParams,
           agent,
+          runtimeContext,
         });
         return result;
 
       case 'tasks/get': {
         const result = await handleTaskGet({
           requestId,
-          taskStore: inMemoryTaskStore,
+          taskStore,
           agentId,
           taskId,
         });
@@ -367,7 +361,7 @@ export async function getAgentExecutionHandler({
       case 'tasks/cancel': {
         const result = await handleTaskCancel({
           requestId,
-          taskStore: inMemoryTaskStore,
+          taskStore,
           agentId,
           taskId,
         });
@@ -381,6 +375,7 @@ export async function getAgentExecutionHandler({
     if (error instanceof A2AError && taskId && !error.taskId) {
       error.taskId = taskId; // Add task ID context if missing
     }
-    return normalizeError(error, requestId, taskId);
+
+    return normalizeError(error, requestId, taskId, logger);
   }
 }
