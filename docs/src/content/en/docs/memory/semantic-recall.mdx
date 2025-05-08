@@ -87,15 +87,39 @@ const agent = new Agent({
 
 ### Embedder configuration
 
-Semantic recall relies an [embedding model](/reference/memory/Memory#embedder) to convert messages into embeddings. By default Mastra uses FastEmbed but you can specify another [embedding model](https://sdk.vercel.ai/image/ai-sdk-core/embeddings).
+Semantic recall relies on an [embedding model](/reference/memory/Memory#embedder) to convert messages into embeddings. You can specify any [embedding model](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings) compatible with the AI SDK.
 
-```ts {7}
+To use FastEmbed (a local embedding model), install `@mastra/fastembed`:
+
+```bash npm2yarn copy
+npm install @mastra/fastembed
+```
+
+Then configure it in your memory:
+
+```ts {3,8}
+import { Memory } from "@mastra/memory";
+import { Agent } from "@mastra/core/agent";
+import { fastembed } from "@mastra/fastembed";
+
+const agent = new Agent({
+  memory: new Memory({
+    // ... other memory options
+    embedder: fastembed,
+  }),
+});
+```
+
+Alternatively, use a different provider like OpenAI:
+
+```ts {3,8}
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 
 const agent = new Agent({
   memory: new Memory({
+    // ... other memory options
     embedder: openai.embedding("text-embedding-3-small"),
   }),
 });

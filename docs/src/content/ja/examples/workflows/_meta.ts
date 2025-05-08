@@ -9,5 +9,4 @@ const meta = {
   "cyclical-dependencies": "循環依存関係",
   "workflow-variables": "ワークフロー変数",
 };
-
 export default meta;

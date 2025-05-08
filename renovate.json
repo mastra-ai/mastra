@@ -25,6 +25,10 @@
       "enabled": false
     },
     {
+      "matchDatasources": ["npm"],
+      "minimumReleaseAge": "3 days"
+    },
+    {
       "groupName": "examples",
       "commitMessageTopic": "examples",
       "groupSlug": "examples-minor",
@@ -867,6 +871,38 @@
       "groupName": "Mastra cloudflare-d1",
       "commitMessageTopic": "Mastra cloudflare-d1",
       "matchFileNames": ["stores/cloudflare-d1/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true,
+      "dependencyDashboardApproval": true
+    },
+    {
+      "groupName": "Mastra couchbase",
+      "commitMessageTopic": "Mastra couchbase",
+      "matchFileNames": ["stores/couchbase/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema"
+      ],
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra couchbase",
+      "commitMessageTopic": "Mastra couchbase",
+      "matchFileNames": ["stores/couchbase/package.json"],
       "matchUpdateTypes": ["major"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "enabled": true,

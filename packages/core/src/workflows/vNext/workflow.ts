@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import EventEmitter from 'events';
 import { z } from 'zod';
-import type { Mastra } from '../..';
+import type { Mastra, WorkflowRun } from '../..';
 import type { MastraPrimitives } from '../../action';
 import { Agent } from '../../agent';
 import { MastraBase } from '../../base';
@@ -20,6 +20,7 @@ import type {
   ExtractSchemaFromStep,
   PathsToStringProps,
   ZodPathType,
+  DynamicMapping,
 } from './types';
 
 export type StepFlowEntry =
@@ -51,7 +52,7 @@ export type StepFlowEntry =
 
 export type SerializedStep = Pick<Step, 'id' | 'description'> & {
   component?: string;
-  stepFlow?: SerializedStepFlowEntry[];
+  serializedStepFlow?: SerializedStepFlowEntry[];
 };
 
 export type SerializedStepFlowEntry =
@@ -405,7 +406,7 @@ export class NewWorkflow<
         id: step.id,
         description: step.description,
         component: (step as SerializedStep).component,
-        stepFlow: (step as SerializedStep).stepFlow,
+        serializedStepFlow: (step as SerializedStep).serializedStepFlow,
       },
     });
     this.steps[step.id] = step;
@@ -417,7 +418,7 @@ export class NewWorkflow<
     TMapping extends {
       [K in keyof TMapping]:
         | {
-            step: TSteps[number];
+            step: TSteps[number] | TSteps[number][];
             path: PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TSteps[number], 'outputSchema'>>> | '.';
           }
         | { value: any; schema: z.ZodTypeAny }
@@ -428,15 +429,40 @@ export class NewWorkflow<
         | {
             runtimeContextPath: string;
             schema: z.ZodTypeAny;
-          };
+          }
+        | DynamicMapping<TPrevSchema, z.ZodTypeAny>;
     },
-  >(mappingConfig: TMapping) {
+  >(mappingConfig: TMapping | ExecuteFunction<z.infer<TPrevSchema>, any, any, any>) {
     // Create an implicit step that handles the mapping
+    if (typeof mappingConfig === 'function') {
+      // @ts-ignore
+      const mappingStep: any = createStep({
+        id: `mapping_${randomUUID()}`,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        execute: mappingConfig,
+      });
+
+      this.stepFlow.push({ type: 'step', step: mappingStep as any });
+      this.serializedStepFlow.push({
+        type: 'step',
+        step: {
+          id: mappingStep.id,
+          description: mappingStep.description,
+          component: (mappingStep as SerializedStep).component,
+          serializedStepFlow: (mappingStep as SerializedStep).serializedStepFlow,
+        },
+      });
+      return this as unknown as NewWorkflow<TSteps, TWorkflowId, TInput, TOutput, any>;
+    }
+
     const mappingStep: any = createStep({
       id: `mapping_${randomUUID()}`,
       inputSchema: z.object({}),
       outputSchema: z.object({}),
-      execute: async ({ getStepResult, getInitData, runtimeContext }) => {
+      execute: async ctx => {
+        const { getStepResult, getInitData, runtimeContext } = ctx;
+
         const result: Record<string, any> = {};
         for (const [key, mapping] of Object.entries(mappingConfig)) {
           const m: any = mapping;
@@ -446,12 +472,20 @@ export class NewWorkflow<
             continue;
           }
 
+          if (m.fn !== undefined) {
+            result[key] = await m.fn(ctx);
+            continue;
+          }
+
           if (m.runtimeContextPath) {
             result[key] = runtimeContext.get(m.runtimeContextPath);
             continue;
           }
 
-          const stepResult = m.initData ? getInitData() : getStepResult(m.step);
+          const stepResult = m.initData
+            ? getInitData()
+            : getStepResult(Array.isArray(m.step) ? m.step.find((s: any) => getStepResult(s)) : m.step);
+
           if (m.path === '.') {
             result[key] = stepResult;
             continue;
@@ -489,7 +523,7 @@ export class NewWorkflow<
             ? TMapping[K]['path'] extends '.'
               ? TMapping[K]['initData']['inputSchema']
               : ZodPathType<TMapping[K]['initData']['inputSchema'], TMapping[K]['path']>
-            : TMapping[K] extends { value: any; schema: z.ZodTypeAny }
+            : TMapping[K] extends { schema: z.ZodTypeAny }
               ? TMapping[K]['schema']
               : TMapping[K] extends { runtimeContextPath: string; schema: z.ZodTypeAny }
                 ? TMapping[K]['schema']
@@ -506,7 +540,7 @@ export class NewWorkflow<
         id: mappingStep.id,
         description: mappingStep.description,
         component: (mappingStep as SerializedStep).component,
-        stepFlow: (mappingStep as SerializedStep).stepFlow,
+        serializedStepFlow: (mappingStep as SerializedStep).serializedStepFlow,
       },
     });
     return this as unknown as NewWorkflow<TSteps, TWorkflowId, TInput, TOutput, MappedOutputSchema>;
@@ -523,7 +557,7 @@ export class NewWorkflow<
           id: step.id,
           description: step.description,
           component: (step as SerializedStep).component,
-          stepFlow: (step as SerializedStep).stepFlow,
+          serializedStepFlow: (step as SerializedStep).serializedStepFlow,
         },
       })),
     });
@@ -565,7 +599,7 @@ export class NewWorkflow<
           id: step.id,
           description: step.description,
           component: (step as SerializedStep).component,
-          stepFlow: (step as SerializedStep).stepFlow,
+          serializedStepFlow: (step as SerializedStep).serializedStepFlow,
         },
       })),
       serializedConditions: steps.map(([cond, _step]) => ({ id: `${_step.id}-condition`, fn: cond.toString() })),
@@ -613,7 +647,7 @@ export class NewWorkflow<
         id: step.id,
         description: step.description,
         component: (step as SerializedStep).component,
-        stepFlow: (step as SerializedStep).stepFlow,
+        serializedStepFlow: (step as SerializedStep).serializedStepFlow,
       },
       serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
       loopType: 'dowhile',
@@ -639,7 +673,7 @@ export class NewWorkflow<
         id: step.id,
         description: step.description,
         component: (step as SerializedStep).component,
-        stepFlow: (step as SerializedStep).stepFlow,
+        serializedStepFlow: (step as SerializedStep).serializedStepFlow,
       },
       serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
       loopType: 'dountil',
@@ -668,7 +702,7 @@ export class NewWorkflow<
         id: (step as SerializedStep).id,
         description: (step as SerializedStep).description,
         component: (step as SerializedStep).component,
-        stepFlow: (step as SerializedStep).stepFlow,
+        serializedStepFlow: (step as SerializedStep).serializedStepFlow,
       },
       opts: opts ?? { concurrency: 1 },
     });
@@ -802,9 +836,18 @@ export class NewWorkflow<
     return storage.getWorkflowRuns({ workflowName: this.id, ...(args ?? {}) });
   }
 
-  async getWorkflowRun(runId: string) {
-    const runs = await this.getWorkflowRuns();
-    return runs?.runs.find(r => r.runId === runId) || this.#runs.get(runId);
+  async getWorkflowRunById(runId: string) {
+    const storage = this.#mastra?.getStorage();
+    if (!storage) {
+      this.logger.debug('Cannot get workflow runs. Mastra engine is not initialized');
+      return null;
+    }
+    const run = await storage.getWorkflowRunById({ runId, workflowName: this.id });
+
+    return (
+      run ??
+      (this.#runs.get(runId) ? ({ ...this.#runs.get(runId), workflowName: this.id } as unknown as WorkflowRun) : null)
+    );
   }
 }
 

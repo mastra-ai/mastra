@@ -1,5 +1,98 @@
 # @mastra/dane
 
+## 0.0.19-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [526c570]
+- Updated dependencies [b5d2de0]
+- Updated dependencies [644f8ad]
+  - @mastra/core@0.9.3-alpha.0
+  - @mastra/github@1.1.22-alpha.0
+  - @mastra/mcp@0.4.3-alpha.0
+  - @mastra/memory@0.3.3-alpha.0
+  - @mastra/rag@0.1.22-alpha.0
+  - @mastra/libsql@0.0.3-alpha.0
+  - @mastra/upstash@0.3.3-alpha.0
+
+## 0.0.18
+
+### Patch Changes
+
+- 2cf3b8f: dependencies updates:
+  - Updated dependency [`zod@^3.24.3` ↗︎](https://www.npmjs.com/package/zod/v/3.24.3) (from `^3.24.2`, in `dependencies`)
+- Updated dependencies [2cf3b8f]
+- Updated dependencies [2cf3b8f]
+- Updated dependencies [2cf3b8f]
+- Updated dependencies [6052aa6]
+- Updated dependencies [967b41c]
+- Updated dependencies [3d2fb5c]
+- Updated dependencies [67e14dd]
+- Updated dependencies [544767d]
+- Updated dependencies [26738f4]
+- Updated dependencies [4155f47]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [b804723]
+- Updated dependencies [8bb9b4d]
+- Updated dependencies [8607972]
+- Updated dependencies [ccef9f9]
+- Updated dependencies [0097d50]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [17826a9]
+- Updated dependencies [7d8b7c7]
+- Updated dependencies [fba031f]
+- Updated dependencies [3a5f1e1]
+- Updated dependencies [51e6923]
+- Updated dependencies [8398d89]
+  - @mastra/github@1.1.21
+  - @mastra/memory@0.3.2
+  - @mastra/rag@0.1.21
+  - @mastra/core@0.9.2
+  - @mastra/mcp@0.4.2
+  - @mastra/upstash@0.3.2
+  - @mastra/libsql@0.0.2
+
+## 0.0.18-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [6052aa6]
+- Updated dependencies [67e14dd]
+- Updated dependencies [7d8b7c7]
+- Updated dependencies [3a5f1e1]
+- Updated dependencies [8398d89]
+  - @mastra/core@0.9.2-alpha.6
+  - @mastra/memory@0.3.2-alpha.7
+  - @mastra/github@1.1.21-alpha.6
+  - @mastra/mcp@0.4.2-alpha.6
+  - @mastra/rag@0.1.21-alpha.6
+  - @mastra/libsql@0.0.2-alpha.6
+  - @mastra/upstash@0.3.2-alpha.6
+
+## 0.0.18-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [544767d]
+  - @mastra/memory@0.3.2-alpha.6
+
+## 0.0.18-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [3d2fb5c]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [8607972]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [fba031f]
+  - @mastra/core@0.9.2-alpha.5
+  - @mastra/github@1.1.21-alpha.5
+  - @mastra/mcp@0.4.2-alpha.5
+  - @mastra/memory@0.3.2-alpha.5
+  - @mastra/rag@0.1.21-alpha.5
+  - @mastra/libsql@0.0.2-alpha.5
+  - @mastra/upstash@0.3.2-alpha.5
+
 ## 0.0.18-alpha.4
 
 ### Patch Changes

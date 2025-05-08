@@ -1,5 +1,5 @@
 import type { z } from 'zod';
-import type { NewStep } from './step';
+import type { ExecuteFunction, NewStep } from './step';
 
 export type StepSuccess<T> = {
   status: 'success';
@@ -20,6 +20,11 @@ export type StepResult<T> = StepSuccess<T> | StepFailure | StepSuspended<T>;
 
 export type StepsRecord<T extends readonly NewStep<any, any, any>[]> = {
   [K in T[number]['id']]: Extract<T[number], { id: K }>;
+};
+
+export type DynamicMapping<TPrevSchema extends z.ZodTypeAny, TSchemaOut extends z.ZodTypeAny> = {
+  fn: ExecuteFunction<z.infer<TPrevSchema>, z.infer<TSchemaOut>, any, any>;
+  schema: TSchemaOut;
 };
 
 export type PathsToStringProps<T> = T extends object

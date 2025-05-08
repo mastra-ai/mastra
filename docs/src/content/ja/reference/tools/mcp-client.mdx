@@ -5,7 +5,9 @@ description: MCPClientのAPIリファレンス - 複数のModel Context Protocol
 
 # MCPClient
 
-`MCPClient`クラスは、Mastraアプリケーションで複数のMCPサーバー接続とそのツールを管理する方法を提供します。接続のライフサイクル、ツールの名前空間管理を処理し、設定されたすべてのサーバーにわたるツールへの便利なアクセスを提供します。
+`MCPClient`クラスは、Mastraアプリケーションで複数のMCPサーバー接続とそのツールを管理する方法を提供します。接続のライフサイクル、ツールの名前空間管理を処理し、設定されたすべてのサーバーにわたるツールへのアクセスを提供します。
+
+このクラスは非推奨の[`MastraMCPClient`](/reference/tools/client)に代わるものです。
 
 ## コンストラクタ
 
@@ -125,8 +127,8 @@ constructor({
 
 ### getTools()
 
-設定されたすべてのサーバーからすべてのツールを取得し、ツール名はサーバー名で名前空間化されます（`serverName_toolName`の形式）。これにより競合を防ぎます。
-Agentの定義に渡すことを目的としています。
+設定されたすべてのサーバーからすべてのツールを取得し、ツール名はサーバー名で名前空間化されます（`serverName_toolName`の形式）。これは競合を防ぐためです。
+Agentの定義に渡すことを意図しています。
 
 ```ts
 new Agent({ tools: await mcp.getTools() });
@@ -135,7 +137,7 @@ new Agent({ tools: await mcp.getTools() });
 ### getToolsets()
 
 名前空間化されたツール名（`serverName.toolName`の形式）をそのツール実装にマッピングするオブジェクトを返します。
-generateまたはstreamメソッドに動的に渡すことを目的としています。
+generateまたはstreamメソッドに動的に渡すことを意図しています。
 
 ```typescript
 const res = await agent.stream(prompt, {
@@ -176,13 +178,13 @@ const mcp = new MCPClient({
       url: new URL("http://localhost:8080/sse"),∂
     },
   },
-  timeout: 30000, // グローバルな30秒タイムアウト
+  timeout: 30000, // Global 30s timeout
 });
 
-// すべてのツールにアクセスできるエージェントを作成
+// Create an agent with access to all tools
 const agent = new Agent({
   name: "Multi-tool Agent",
-  instructions: "複数のツールサーバーにアクセスできます。",
+  instructions: "You have access to multiple tool servers.",
   model: openai("gpt-4"),
   tools: await mcp.getTools(),
 });
@@ -195,14 +197,14 @@ import { Agent } from "@mastra/core/agent";
 import { MCPClient } from "@mastra/mcp";
 import { openai } from "@ai-sdk/openai";
 
-// まず、ツールなしでエージェントを作成
+// Create the agent first, without any tools
 const agent = new Agent({
   name: "Multi-tool Agent",
-  instructions: "株価と天気を確認するのを手伝います。",
+  instructions: "You help users check stocks and weather.",
   model: openai("gpt-4"),
 });
 
-// 後で、ユーザー固有の設定でMCPを構成
+// Later, configure MCP with user-specific settings
 const mcp = new MCPClient({
   servers: {
     stockPrice: {
@@ -211,7 +213,7 @@ const mcp = new MCPClient({
       env: {
         API_KEY: "user-123-api-key",
       },
-      timeout: 20000, // サーバー固有のタイムアウト
+      timeout: 20000, // Server-specific timeout
     },
     weather: {
       url: new URL("http://localhost:8080/sse"),
@@ -224,9 +226,9 @@ const mcp = new MCPClient({
   },
 });
 
-// すべてのツールセットをstream()またはgenerate()に渡す
+// Pass all toolsets to stream() or generate()
 const response = await agent.stream(
-  "AAPLの調子はどうですか？また、天気はどうですか？",
+  "How is AAPL doing and what is the weather?",
   {
     toolsets: await mcp.getToolsets(),
   },

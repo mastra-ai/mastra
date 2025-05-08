@@ -18,16 +18,82 @@
   --tag-blue: 211,69%,49%;
   --tag-green: 143,97%,54%;
   --tag-purple: 286,38%,52%;
-
+  --color-icons-2: hsla(0, 0%, 44%, 1);
+  --color-icons-3: hsla(0, 0%, 58%, 1);
+  --color-icons-4: hsla(0, 0%, 66%, 1);
+  --color-icons-6: hsla(0, 0%, 100%, 1);
+  --color-surface-1: hsla(0, 0%, 100%, 1);
+  --color-surface-2: hsla(0, 0%, 95%, 1);
+  --color-surface-3: hsla(0, 0%, 8%, 1);
+  --color-surface-4: hsla(0, 0%, 10%, 1);
+  --color-surface-5: hsla(0, 0%, 18%, 0.9);
+  --color-borders-1: hsla(0, 0%, 19%, 1);
+  --color-borders-2: hsla(0, 0%, 26%, 1);
+  --color-accent-green: hsla(143, 97%, 54%, 1);
+  --color-tag-green-2: hsla(142, 30%, 15%, 1);
 }
 
 :root {
   --nextra-navbar-height: 60px;
   --nextra-content-width: 1220px;
+  --copilot-kit-primary-color: var(--tag-green);
 }
 
 body:is(html[class~="dark"] *){
   background: var(--primary-bg);
+}
+
+.copilotKitWindow {
+  background: var(--copilot-kit-background-color);
+}
+
+#scroll-area-viewport > div {
+  display: block!important;
+}
+
+.copilotKitMarkdown p {
+  font-size: 13px!important;
+}
+
+.copilotKitMarkdown hr {
+  margin-block: 16px!important;
+  color: var(--color-borders-1)!important;
+}
+
+.copilotKitMarkdown a {
+  color: var(--color-accent-green)!important;
+}
+
+.copilotKitMarkdown {
+  max-width: 100%!important;
+}
+
+button.copilotKitCodeBlockToolbarButton {
+  padding-inline: 8px!important;
+  cursor: pointer!important;
+}
+
+div .copilotKitPopup {
+  z-index: 1000;
+}
+
+#custom-chat-input {
+  /* hide scroll bar */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+#custom-chat-input::-webkit-scrollbar {
+  display: none;
+}
+
+.poweredBy {
+  background: var(--copilot-kit-background-color);
+}
+
+div .copilotKitInputContainer {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
 }
 
 

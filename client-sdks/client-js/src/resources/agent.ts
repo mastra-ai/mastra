@@ -126,6 +126,7 @@ export class Agent extends BaseResource {
         params.experimental_output instanceof ZodSchema
           ? zodToJsonSchema(params.experimental_output)
           : params.experimental_output,
+      runtimeContext: params.runtimeContext ? Object.fromEntries(params.runtimeContext.entries()) : undefined,
     };
 
     return this.request(`/api/agents/${this.agentId}/generate`, {
@@ -153,6 +154,7 @@ export class Agent extends BaseResource {
         params.experimental_output instanceof ZodSchema
           ? zodToJsonSchema(params.experimental_output)
           : params.experimental_output,
+      runtimeContext: params.runtimeContext ? Object.fromEntries(params.runtimeContext.entries()) : undefined,
     };
 
     const response: Response & {
