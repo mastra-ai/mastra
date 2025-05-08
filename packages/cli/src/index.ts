@@ -69,7 +69,7 @@ program
           await create({
             components: ['agents', 'tools', 'workflows'],
             llmProvider: 'openai',
-            addExample: false,
+            addExample: true,
             timeout,
             mcpServer: args.mcp,
           });
@@ -123,7 +123,7 @@ program
             directory: 'src/',
             components: ['agents', 'tools', 'workflows'],
             llmProvider: 'openai',
-            addExample: false,
+            addExample: true,
             configureEditorWithDocsMCP: args.mcp,
           });
           return;
