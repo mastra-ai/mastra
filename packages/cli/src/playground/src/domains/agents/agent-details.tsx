@@ -6,7 +6,7 @@ import { Slider } from '@/components/ui/slider';
 
 import { useAgent } from '@/hooks/use-agents';
 import { AgentContext } from '@mastra/playground-ui';
-import { useContext, useState } from 'react';
+import { useContext } from 'react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';

@@ -16,7 +16,7 @@ import { Text } from '@/components/ui/text';
 import { useExecuteWorkflow, useWatchWorkflow, useResumeWorkflow, useVNextWorkflow } from '@/hooks/use-workflows';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { toast } from 'sonner';
-import { usePlaygroundStore } from '@mastra/playground-ui';
+import { usePlaygroundStore } from '@/store/playground-store';
 interface SuspendedStep {
   stepId: string;
   runId: string;
