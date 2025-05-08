@@ -32,7 +32,7 @@ describe('Workflow', () => {
 
       expect(() => workflow.createRun()).toThrowError(
         'Execution flow of workflow is not defined.'
-      )
+      );
     });
 
     it('should execute a single step workflow successfully', async () => {
