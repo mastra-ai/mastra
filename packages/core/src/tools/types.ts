@@ -26,6 +26,24 @@ export type CoreTool = {
     }
 );
 
+// Duplicate of CoreTool but with parameters as Schema to make it easier to work with internally
+export type InternalCoreTool = {
+  id?: string;
+  description?: string;
+  parameters: Schema;
+  execute?: (params: any, options: ToolExecutionOptions) => Promise<any>;
+} & (
+  | {
+      type?: 'function' | undefined;
+      id?: string;
+    }
+  | {
+      type: 'provider-defined';
+      id: `${string}.${string}`;
+      args: Record<string, unknown>;
+    }
+);
+
 export interface ToolExecutionContext<TSchemaIn extends z.ZodSchema | undefined = undefined>
   extends IExecutionContext<TSchemaIn> {
   mastra?: MastraUnion;

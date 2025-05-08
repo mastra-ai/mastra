@@ -2,6 +2,7 @@ import type * as http from 'node:http';
 import type { ToolsInput } from '../agent';
 import { MastraBase } from '../base';
 import { RegisteredLogger } from '../logger';
+import type { Mastra } from '../mastra';
 import type { ConvertedTool, MCPServerConfig, MCPServerSSEOptions } from './types';
 
 export * from './types';
@@ -26,6 +27,8 @@ export abstract class MCPServerBase extends MastraBase {
    */
   public readonly convertedTools: Record<string, ConvertedTool>;
 
+  public mastra: Mastra | undefined;
+
   /**
    * Get a read-only view of the registered tools (for testing/introspection).
    */
@@ -35,6 +38,9 @@ export abstract class MCPServerBase extends MastraBase {
 
   public abstract convertTools(tools: ToolsInput): Record<string, ConvertedTool>;
 
+  __registerMastra(mastra: Mastra): void {
+    this.mastra = mastra;
+  }
   /**
    * Constructor for the MCPServerBase
    * @param config Configuration options for the MCP server

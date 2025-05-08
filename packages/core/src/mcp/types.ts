@@ -1,8 +1,6 @@
 import type * as http from 'node:http';
-import type { JSONSchema7Type } from 'json-schema';
-import type { ZodSchema } from 'zod';
 import type { ToolsInput } from '../agent';
-import type { CoreTool } from '../tools';
+import type { InternalCoreTool } from '../tools';
 
 /**
  * Configuration options for an MCP server
@@ -27,9 +25,8 @@ export interface MCPServerConfig {
 export type ConvertedTool = {
   name: string;
   description?: string;
-  inputSchema: JSONSchema7Type;
-  zodSchema: ZodSchema;
-  execute: CoreTool['execute'];
+  parameters: InternalCoreTool['parameters'];
+  execute: InternalCoreTool['execute'];
 };
 
 /**

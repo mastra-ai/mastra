@@ -26,7 +26,7 @@ import {
 import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import { getLogsByRunIdHandler, getLogsHandler, getLogTransports } from './handlers/logs';
-import { getMcpServerMessageHandler } from './handlers/mcp';
+import { getMcpServerMessageHandler, handleMcpServerSseRoutes } from './handlers/mcp';
 import {
   createThreadHandler,
   deleteThreadHandler,
@@ -1116,7 +1116,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
     '/api/servers/:serverId/mcp',
     bodyLimit(bodyLimitOptions),
     describeRoute({
-      description: 'Send a message to an MCP server',
+      description: 'Send a message to an MCP server using Streamable HTTP',
       tags: ['mcp'],
       parameters: [
         {
@@ -1126,9 +1126,12 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
           schema: { type: 'string' },
         },
       ],
+      requestBody: {
+        content: { 'application/json': { schema: { type: 'object' } } },
+      },
       responses: {
         200: {
-          description: 'Streamable HTTP connection established',
+          description: 'Streamable HTTP connection processed',
         },
         404: {
           description: 'MCP server not found',
@@ -1136,6 +1139,71 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
       },
     }),
     getMcpServerMessageHandler,
+  );
+
+  // New MCP server routes for SSE
+  const mcpSseBasePath = '/api/servers/:serverId/sse';
+  const mcpSseMessagePath = '/api/servers/:serverId/messages';
+
+  // Route for establishing SSE connection
+  app.get(
+    mcpSseBasePath,
+    describeRoute({
+      description: 'Establish an MCP Server-Sent Events (SSE) connection with a server instance.',
+      tags: ['mcp', 'sse'],
+      parameters: [
+        {
+          name: 'serverId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+          description: 'The ID of the MCP server instance.',
+        },
+      ],
+      responses: {
+        200: {
+          description:
+            'SSE connection established. The client will receive events over this connection. (Content-Type: text/event-stream)',
+        },
+        404: { description: 'MCP server instance not found.' },
+        500: { description: 'Internal server error establishing SSE connection.' },
+      },
+    }),
+    handleMcpServerSseRoutes,
+  );
+
+  // Route for POSTing messages over an established SSE connection
+  app.post(
+    mcpSseMessagePath,
+    bodyLimit(bodyLimitOptions), // Apply body limit for messages
+    describeRoute({
+      description: 'Send a message to an MCP server over an established SSE connection.',
+      tags: ['mcp', 'sse'],
+      parameters: [
+        {
+          name: 'serverId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+          description: 'The ID of the MCP server instance.',
+        },
+      ],
+      requestBody: {
+        description: 'JSON-RPC message to send to the MCP server.',
+        required: true,
+        content: { 'application/json': { schema: { type: 'object' } } }, // MCP messages are typically JSON
+      },
+      responses: {
+        200: {
+          description:
+            'Message received and is being processed by the MCP server. The actual result or error will be sent as an SSE event over the established connection.',
+        },
+        400: { description: 'Bad request (e.g., invalid JSON payload or missing body).' },
+        404: { description: 'MCP server instance not found or SSE connection path incorrect.' },
+        503: { description: 'SSE connection not established with this server, or server unable to process message.' },
+      },
+    }),
+    handleMcpServerSseRoutes,
   );
 
   // Memory routes

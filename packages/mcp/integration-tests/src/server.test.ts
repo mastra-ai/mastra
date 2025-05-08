@@ -113,4 +113,40 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
     const expectedToolResult = 15;
     expect(JSON.parse(toolOutput.text)).toEqual(expectedToolResult);
   }, 25000);
+
+  it('should allow a client to call a tool via Mastra MCP SSE endpoints (Subprocess)', async () => {
+    const sseUrl = new URL(`http://localhost:${port}/api/servers/${mcpServerId}/sse`);
+
+    // Configure MCPClient for SSE transport
+    const sseClient = new MCPClient({
+      servers: {
+        [mcpServerId]: {
+          url: sseUrl, // URL for establishing SSE connection
+        },
+      },
+    });
+
+    const toolCallPayloadParams = { num1: 10, num2: 5, operation: 'add' };
+
+    // Get tools (this will connect the client internally if not already connected)
+    const tools = await sseClient.getTools();
+
+    const toolName = `${mcpServerId}_${testToolId}`;
+    const tool = tools[toolName];
+    expect(tool, `Tool '${toolName}' should be available via SSE client`).toBeDefined();
+
+    // Execute the tool
+    const result = await tool.execute({ context: toolCallPayloadParams });
+
+    expect(result).toBeDefined();
+    expect(result.isError).toBe(false);
+    expect(result.content).toBeInstanceOf(Array);
+    expect(result.content.length).toBeGreaterThan(0);
+
+    const toolOutput = result.content[0];
+    expect(toolOutput.type).toBe('text');
+
+    const expectedToolResult = 15; // 10 + 5
+    expect(JSON.parse(toolOutput.text)).toEqual(expectedToolResult);
+  }, 25000);
 });

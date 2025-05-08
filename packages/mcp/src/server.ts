@@ -1,18 +1,18 @@
 import { randomUUID } from 'crypto';
 import type * as http from 'node:http';
-import { isVercelTool, isZodType, resolveSerializedZodOutput } from '@mastra/core';
+import type { InternalCoreTool } from '@mastra/core';
+import { makeCoreTool } from '@mastra/core';
 import type { ToolsInput } from '@mastra/core/agent';
 import { MCPServerBase } from '@mastra/core/mcp';
 import type { MCPServerSSEOptions, ConvertedTool } from '@mastra/core/mcp';
+import { RuntimeContext } from '@mastra/core/runtime-context';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { StreamableHTTPServerTransportOptions } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
 
 export class MCPServer extends MCPServerBase {
   private server: Server;
@@ -68,48 +68,32 @@ export class MCPServer extends MCPServerBase {
   convertTools(tools: ToolsInput): Record<string, ConvertedTool> {
     const convertedTools: Record<string, ConvertedTool> = {};
     for (const toolName of Object.keys(tools)) {
-      let inputSchema: any;
-      let zodSchema: z.ZodTypeAny;
       const toolInstance = tools[toolName];
       if (!toolInstance) {
         this.logger.warn(`Tool instance for '${toolName}' is undefined. Skipping.`);
         continue;
       }
+
       if (typeof toolInstance.execute !== 'function') {
         this.logger.warn(`Tool '${toolName}' does not have a valid execute function. Skipping.`);
         continue;
       }
-      // Vercel tools: .parameters is either Zod or JSON schema
-      if (isVercelTool(toolInstance)) {
-        if (isZodType(toolInstance.parameters)) {
-          zodSchema = toolInstance.parameters;
-          inputSchema = zodToJsonSchema(zodSchema);
-        } else if (typeof toolInstance.parameters === 'object') {
-          zodSchema = resolveSerializedZodOutput(jsonSchemaToZod(toolInstance.parameters as any));
-          inputSchema = toolInstance.parameters;
-        } else {
-          zodSchema = z.object({});
-          inputSchema = zodToJsonSchema(zodSchema);
-        }
-      } else {
-        // Mastra tools: .inputSchema is always Zod
-        zodSchema = toolInstance?.inputSchema ?? z.object({});
-        inputSchema = zodToJsonSchema(zodSchema);
-      }
 
-      // Wrap execute to support both signatures (typed, returns Promise<any>)
-      const execute: (args: any, execOptions?: any) => Promise<any> = async (args, execOptions) => {
-        if (isVercelTool(toolInstance)) {
-          return (await toolInstance.execute?.(args, execOptions)) ?? undefined;
-        }
-        return (await toolInstance.execute?.({ context: args }, execOptions)) ?? undefined;
+      const options = {
+        name: toolName,
+        runtimeContext: new RuntimeContext(),
+        mastra: this.mastra,
+        logger: this.logger,
+        description: toolInstance?.description,
       };
+
+      const coreTool = makeCoreTool(toolInstance, options) as InternalCoreTool;
+
       convertedTools[toolName] = {
         name: toolName,
-        description: toolInstance?.description,
-        inputSchema,
-        zodSchema,
-        execute,
+        description: coreTool.description,
+        parameters: coreTool.parameters,
+        execute: coreTool.execute,
       };
       this.logger.info(`Registered tool: '${toolName}' [${toolInstance?.description || 'No description'}]`);
     }
@@ -127,7 +111,7 @@ export class MCPServer extends MCPServerBase {
         tools: Object.values(this.convertedTools).map(tool => ({
           name: tool.name,
           description: tool.description,
-          inputSchema: tool.inputSchema,
+          inputSchema: tool.parameters.jsonSchema,
         })),
       };
     });
@@ -148,9 +132,28 @@ export class MCPServer extends MCPServerBase {
             isError: true,
           };
         }
+
         this.logger.debug(`CallTool: Invoking '${request.params.name}' with arguments:`, request.params.arguments);
-        const args = tool.zodSchema.parse(request.params.arguments ?? {});
-        const result = await tool.execute(args, request.params);
+
+        const validation = tool.parameters.validate?.(request.params.arguments ?? {});
+        if (validation && !validation.success) {
+          this.logger.warn(`CallTool: Invalid tool arguments for '${request.params.name}'`, {
+            errors: validation.error,
+          });
+          return {
+            content: [{ type: 'text', text: `Invalid tool arguments: ${JSON.stringify(validation.error)}` }],
+            isError: true,
+          };
+        }
+        if (!tool.execute) {
+          this.logger.warn(`CallTool: Tool '${request.params.name}' does not have an execute function.`);
+          return {
+            content: [{ type: 'text', text: `Tool '${request.params.name}' does not have an execute function.` }],
+            isError: true,
+          };
+        }
+
+        const result = await tool.execute(validation?.value, { messages: [], toolCallId: '' });
         const duration = Date.now() - startTime;
         this.logger.info(`Tool '${request.params.name}' executed successfully in ${duration}ms.`);
         return {

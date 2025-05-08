@@ -196,6 +196,8 @@ export class Mastra<
         if (this.#telemetry) {
           server.__setTelemetry(this.#telemetry);
         }
+
+        server.__registerMastra(this);
       });
     }
 
