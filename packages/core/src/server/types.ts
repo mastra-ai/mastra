@@ -61,4 +61,9 @@ export type ServerConfig = {
      */
     openAPIDocs?: boolean;
   };
+  /**
+   * Body size limit for the server
+   * @default 4.5mb
+   */
+  bodySizeLimit?: number;
 };
