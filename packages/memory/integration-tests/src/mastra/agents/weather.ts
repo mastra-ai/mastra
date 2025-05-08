@@ -4,14 +4,27 @@ import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { z } from 'zod';
 import { weatherTool } from '../tools/weather';
+import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 
-const memory = new Memory({
+export const memory = new Memory({
   options: {
     workingMemory: {
       enabled: true,
       use: 'tool-call',
     },
+    lastMessages: 10,
+    threads: {
+      generateTitle: false,
+    },
+    semanticRecall: true,
   },
+  storage: new LibSQLStore({
+    url: 'file:memory.db', // relative path from bundled .mastra/output dir
+  }),
+  vector: new LibSQLVector({
+    connectionUrl: 'file:memory.db', // relative path from bundled .mastra/output dir
+  }),
+  embedder: openai.embedding('text-embedding-3-small'),
 });
 
 export const weatherAgent = new Agent({
