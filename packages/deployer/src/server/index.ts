@@ -4,16 +4,17 @@ import { join } from 'path/posix';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
-import { Telemetry } from '@mastra/core';
 import type { Mastra } from '@mastra/core';
+import { Telemetry } from '@mastra/core';
 import { RuntimeContext } from '@mastra/core/runtime-context';
-import { Hono } from 'hono';
 import type { Context, MiddlewareHandler } from 'hono';
+import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { timeout } from 'hono/timeout';
 import { describeRoute, openAPISpecs } from 'hono-openapi';
+import { getAgentCardByIdHandler, getAgentExecutionHandler } from './handlers/a2a';
 import {
   generateHandler,
   getAgentByIdHandler,
@@ -37,42 +38,41 @@ import {
   updateThreadHandler,
 } from './handlers/memory';
 import {
+  generateHandler as generateNetworkHandler,
   getNetworkByIdHandler,
   getNetworksHandler,
-  generateHandler as generateNetworkHandler,
   streamGenerateHandler as streamGenerateNetworkHandler,
 } from './handlers/network';
 import { generateSystemPromptHandler } from './handlers/prompt';
 import { rootHandler } from './handlers/root';
 import { getTelemetryHandler, storeTelemetryHandler } from './handlers/telemetry';
 import { executeAgentToolHandler, executeToolHandler, getToolByIdHandler, getToolsHandler } from './handlers/tools';
-import { upsertVectors, createIndex, queryVectors, listIndexes, describeIndex, deleteIndex } from './handlers/vector';
+import { createIndex, deleteIndex, describeIndex, listIndexes, queryVectors, upsertVectors } from './handlers/vector';
 import {
-  startVNextWorkflowRunHandler,
-  resumeAsyncVNextWorkflowHandler,
-  startAsyncVNextWorkflowHandler,
-  getVNextWorkflowByIdHandler,
-  getVNextWorkflowsHandler,
-  resumeVNextWorkflowHandler,
-  watchVNextWorkflowHandler,
   createVNextWorkflowRunHandler,
+  getVNextWorkflowByIdHandler,
   getVNextWorkflowRunsHandler,
+  getVNextWorkflowsHandler,
+  resumeAsyncVNextWorkflowHandler,
+  resumeVNextWorkflowHandler,
+  startAsyncVNextWorkflowHandler,
+  startVNextWorkflowRunHandler,
+  watchVNextWorkflowHandler,
 } from './handlers/vNextWorkflows.js';
-import { getSpeakersHandler, speakHandler, listenHandler } from './handlers/voice';
+import { getSpeakersHandler, listenHandler, speakHandler } from './handlers/voice';
 import {
-  startWorkflowRunHandler,
-  resumeAsyncWorkflowHandler,
-  startAsyncWorkflowHandler,
-  getWorkflowByIdHandler,
-  getWorkflowsHandler,
-  resumeWorkflowHandler,
-  watchWorkflowHandler,
   createRunHandler,
+  getWorkflowByIdHandler,
   getWorkflowRunsHandler,
+  getWorkflowsHandler,
+  resumeAsyncWorkflowHandler,
+  resumeWorkflowHandler,
+  startAsyncWorkflowHandler,
+  startWorkflowRunHandler,
+  watchWorkflowHandler,
 } from './handlers/workflows.js';
 import type { ServerBundleOptions } from './types';
 import { html } from './welcome.js';
-import { getAgentCardByIdHandler, getAgentExecutionHandler } from './handlers/a2a';
 
 type Bindings = {};
 

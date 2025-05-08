@@ -28,7 +28,7 @@ export async function getAgentExecutionHandler(c: Context) {
   const mastra: Mastra = c.get('mastra');
   const agentId = c.req.param('agentId');
   const runtimeContext: RuntimeContext = c.get('runtimeContext');
-
+  const logger = mastra.getLogger();
   const body = await c.req.json();
 
   // Validate the method is one of the allowed A2A methods
@@ -43,6 +43,7 @@ export async function getAgentExecutionHandler(c: Context) {
     requestId: randomUUID(),
     method: body.method as 'tasks/send' | 'tasks/sendSubscribe' | 'tasks/get' | 'tasks/cancel',
     params: body.params as TaskSendParams | TaskQueryParams | TaskIdParams,
+    logger,
   });
 
   if (body.method === 'tasks/sendSubscribe') {
@@ -64,7 +65,7 @@ export async function getAgentExecutionHandler(c: Context) {
         }
       },
       async err => {
-        // logger.error('Error in watch stream: ' + err?.message);
+        logger.error('Error in watch stream: ' + err?.message);
       },
     );
   }
