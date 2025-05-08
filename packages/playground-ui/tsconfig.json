@@ -15,6 +15,7 @@
     "declaration": true,
     "outDir": "dist",
     "baseUrl": ".",
+    "rootDir": ".",
     "paths": {
       "@/*": ["./src/*"],
       "react": ["./node_modules/@types/react"]
