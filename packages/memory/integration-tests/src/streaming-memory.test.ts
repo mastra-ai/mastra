@@ -8,6 +8,7 @@ import type { AiMessageType } from '@mastra/core';
 import { ensureAllMessagesAreCoreMessages } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
+import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import type { Message } from 'ai';
@@ -15,7 +16,6 @@ import { JSDOM } from 'jsdom';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { z } from 'zod';
 import { memory, weatherAgent } from './mastra/agents/weather';
-import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 
 // Helper to find an available port
 async function getAvailablePort(): Promise<number> {
