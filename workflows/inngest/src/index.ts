@@ -1,31 +1,24 @@
-import {
-  NewWorkflow,
-  type NewStep as Step,
-  DefaultExecutionEngine,
-  Run,
-  cloneStep,
-} from '@mastra/core/workflows/vNext';
+import { randomUUID } from 'crypto';
+import { subscribe } from '@inngest/realtime';
+import type { Mastra } from '@mastra/core';
+import { RuntimeContext } from '@mastra/core/di';
+import { NewWorkflow, createStep, Run, DefaultExecutionEngine, cloneStep } from '@mastra/core/workflows/vNext';
 import type {
   ExecuteFunction,
   ExecutionContext,
   ExecutionEngine,
   ExecutionGraph,
   NewStep,
+  NewStep as Step,
   NewWorkflowConfig,
   StepFlowEntry,
   StepResult,
   WorkflowResult,
 } from '@mastra/core/workflows/vNext';
-import { type Span } from '@opentelemetry/api';
-import { Inngest, type BaseContext } from 'inngest';
-import { subscribe } from '@inngest/realtime';
+import type { Span } from '@opentelemetry/api';
+import type { Inngest, BaseContext } from 'inngest';
 import { serve as inngestServe } from 'inngest/hono';
-import { type Mastra } from '@mastra/core';
 import type { z } from 'zod';
-import { RuntimeContext } from '@mastra/core/di';
-import { randomUUID } from 'crypto';
-
-import { createStep } from '@mastra/core/workflows/vNext';
 
 export function serve({ mastra, inngest }: { mastra: Mastra; inngest: Inngest }): ReturnType<typeof inngestServe> {
   const wfs = mastra.vnext_getWorkflows();
@@ -93,7 +86,6 @@ export class InngestRun<
 
   async start({
     inputData,
-    runtimeContext,
   }: {
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
@@ -176,9 +168,13 @@ export class InngestRun<
     );
 
     return () => {
-      streamPromise.then((stream: any) => {
-        stream.cancel();
-      });
+      streamPromise
+        .then((stream: any) => {
+          stream.cancel();
+        })
+        .catch(err => {
+          console.error(err);
+        });
     };
   }
 }
@@ -853,7 +849,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               return result ? index : null;
               // eslint-disable-next-line @typescript-eslint/no-unused-vars
             } catch (e: unknown) {
-              e;
               return null;
             }
           }),

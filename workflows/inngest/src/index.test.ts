@@ -1,22 +1,21 @@
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Inngest } from 'inngest';
-import { realtimeMiddleware } from '@inngest/realtime';
-
+import { randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { $ } from 'execa';
 import { openai } from '@ai-sdk/openai';
-import { z } from 'zod';
-import { createTool, Mastra, Telemetry } from '@mastra/core';
-import { createHonoServer } from '@mastra/deployer/server';
-import { Agent } from '@mastra/core/agent';
-import { DefaultStorage } from '@mastra/core/storage/libsql';
-import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
-import { init, serve as inngestServe } from './index';
+import { realtimeMiddleware } from '@inngest/realtime';
+import { createTool, Mastra, Telemetry } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/runtime-context';
+import { DefaultStorage } from '@mastra/core/storage/libsql';
+import { createHonoServer } from '@mastra/deployer/server';
+import { $ } from 'execa';
 import getPort from 'get-port';
-import { randomUUID } from 'crypto';
+import { Inngest } from 'inngest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { z } from 'zod';
+import { init, serve as inngestServe } from './index';
 
 interface LocalTestContext {
   inngestPort: number;
@@ -24,7 +23,7 @@ interface LocalTestContext {
   containerName: string;
 }
 
-describe('MastraInngestWorkflow', ctx => {
+describe('MastraInngestWorkflow', () => {
   beforeEach<LocalTestContext>(async ctx => {
     const inngestPort = await getPort();
     const handlerPort = await getPort();
@@ -2696,7 +2695,7 @@ describe('MastraInngestWorkflow', ctx => {
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
       });
 
-      const { createWorkflow, createStep } = init(inngest);
+      const { createWorkflow } = init(inngest);
 
       const workflow = createWorkflow({
         id: 'test-workflow',
@@ -3065,7 +3064,7 @@ describe('MastraInngestWorkflow', ctx => {
         .mockImplementationOnce(async ({ suspend }) => {
           await suspend();
         })
-        .mockImplementationOnce(({ resumeData }) => {
+        .mockImplementationOnce(() => {
           return { improvedOutput: 'human intervention output' };
         });
       const explainResponseAction = vi.fn().mockResolvedValue({
@@ -4605,7 +4604,7 @@ describe('MastraInngestWorkflow', ctx => {
 
         const { createWorkflow, createStep } = init(inngest);
 
-        const start = vi.fn().mockImplementation(async ({ inputData, resume }) => {
+        const start = vi.fn().mockImplementation(async ({ inputData }) => {
           // Get the current value (either from trigger or previous increment)
           const currentValue = inputData.startValue || 0;
 
@@ -5063,16 +5062,6 @@ describe('MastraInngestWorkflow', ctx => {
 
       const run = counterWorkflow.createRun();
       const result = await run.start({ inputData: { startValue: 0 } });
-
-      const runs = await mastra?.getStorage()?.getWorkflowRuns();
-      if (runs) {
-        for (const run of runs.runs) {
-          const snapshot = await mastra?.getStorage()?.loadWorkflowSnapshot({
-            workflowName: run.workflowName,
-            runId: run.runId,
-          });
-        }
-      }
 
       expect(passthroughStep.execute).toHaveBeenCalledTimes(2);
       expect(result.steps['nested-workflow-c']).toMatchObject({
