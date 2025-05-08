@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  '@mastra/core': link:../../packages/core
+  mastra: link:../../packages/cli
+  '@mastra/client-js': link:../../client-sdks/client-js
+
 importers:
 
   .:
