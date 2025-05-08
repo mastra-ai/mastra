@@ -745,6 +745,9 @@ export class NewWorkflow<
    * @returns A Run instance that can be used to execute the workflow
    */
   createRun(options?: { runId?: string }): Run<TSteps, TInput, TOutput> {
+    if (this.stepFlow.length === 0) {
+      throw new Error('Execution flow of workflow is not defined.');
+    }
     const runIdToUse = options?.runId || randomUUID();
 
     // Return a new Run instance with object parameters
