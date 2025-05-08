@@ -31,7 +31,7 @@ describe('Workflow', () => {
       });
 
       expect(() => workflow.createRun()).toThrowError(
-        'Execution flow of workflow is not defined.'
+        'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.'
       );
     });
 
@@ -56,7 +56,7 @@ describe('Workflow', () => {
       workflow.then(step1);
 
       expect(() => workflow.createRun()).toThrowError(
-        'Execution graph of workflow is not defined. Please commit the workflow before executing.'
+        'Uncommitted step flow changes detected. Call .commit() to register the steps.'
       );
     });
 
