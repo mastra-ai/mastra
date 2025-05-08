@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-added an optional `bodyLimit` to server config so that users can pass custom bodylimit size in mb. If not, it defaults to 4.5 mb
+added an optional `bodySizeLimit` to server config so that users can pass custom bodylimit size in mb. If not, it defaults to 4.5 mb
