@@ -54,6 +54,7 @@ export class InngestRun<
         attempts?: number;
         delay?: number;
       };
+      cleanup?: () => void;
     },
     inngest: Inngest,
   ) {
@@ -107,6 +108,8 @@ export class InngestRun<
     if (result.status === 'failed') {
       result.error = new Error(result.error);
     }
+
+    this.cleanup?.();
     return result;
   }
 
@@ -224,7 +227,7 @@ export class InngestWorkflow<
     const runIdToUse = options?.runId || randomUUID();
 
     // Return a new Run instance with object parameters
-    return new InngestRun(
+    const run: Run<TSteps, TInput, TOutput> = new InngestRun(
       {
         workflowId: this.id,
         runId: runIdToUse,
@@ -232,9 +235,13 @@ export class InngestWorkflow<
         executionGraph: this.executionGraph,
         mastra: this.#mastra,
         retryConfig: this.retryConfig,
+        cleanup: () => this.runs.delete(runIdToUse),
       },
       this.inngest,
     );
+
+    this.runs.set(runIdToUse, run);
+    return run;
   }
 
   getFunction() {

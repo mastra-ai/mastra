@@ -368,6 +368,10 @@ export class NewWorkflow<
     this.#runs = new Map();
   }
 
+  get runs() {
+    return this.#runs;
+  }
+
   get mastra() {
     return this.#mastra;
   }
