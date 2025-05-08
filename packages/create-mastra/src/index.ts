@@ -56,7 +56,7 @@ program
       await create({
         components: ['agents', 'tools', 'workflows'],
         llmProvider: 'openai',
-        addExample: false,
+        addExample: true,
         createVersionTag,
         timeout,
         mcpServer: args.mcp,
