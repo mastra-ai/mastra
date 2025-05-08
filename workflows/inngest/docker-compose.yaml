@@ -1,0 +1,10 @@
+version: '3'
+
+services:
+  inngest:
+    image: inngest/inngest
+    command: inngest dev -u http://host.docker.internal:3000/api/inngest --poll-interval=1
+    ports:
+      - '8288:8288'
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'

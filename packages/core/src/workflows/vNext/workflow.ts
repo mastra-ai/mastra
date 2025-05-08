@@ -368,6 +368,10 @@ export class NewWorkflow<
     this.#runs = new Map();
   }
 
+  get runs() {
+    return this.#runs;
+  }
+
   get mastra() {
     return this.#mastra;
   }
@@ -745,6 +749,12 @@ export class NewWorkflow<
    * @returns A Run instance that can be used to execute the workflow
    */
   createRun(options?: { runId?: string }): Run<TSteps, TInput, TOutput> {
+    if (this.stepFlow.length === 0) {
+      throw new Error('Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.');
+    }
+    if (!this.executionGraph.steps) {
+      throw new Error('Uncommitted step flow changes detected. Call .commit() to register the steps.');
+    }
     const runIdToUse = options?.runId || randomUUID();
 
     // Return a new Run instance with object parameters
@@ -784,7 +794,7 @@ export class NewWorkflow<
       resumePayload: any;
       runId?: string;
     };
-    emitter: EventEmitter;
+    emitter: { emit: (event: string, data: any) => void };
     mastra: Mastra;
   }): Promise<z.infer<TOutput>> {
     this.__registerMastra(mastra);
@@ -936,7 +946,12 @@ export class Run<
       runId: this.runId,
       graph: this.executionGraph,
       input: inputData,
-      emitter: this.emitter,
+      emitter: {
+        emit: (event: string, data: any) => {
+          this.emitter.emit(event, data);
+          return Promise.resolve();
+        },
+      },
       retryConfig: this.retryConfig,
       runtimeContext: runtimeContext ?? new RuntimeContext(),
     });
@@ -1014,7 +1029,12 @@ export class Run<
         // @ts-ignore
         resumePath: snapshot?.suspendedPaths?.[steps?.[0]] as any,
       },
-      emitter: this.emitter,
+      emitter: {
+        emit: (event: string, data: any) => {
+          this.emitter.emit(event, data);
+          return Promise.resolve();
+        },
+      },
       runtimeContext: params.runtimeContext ?? new RuntimeContext(),
     });
   }
