@@ -1,15 +1,24 @@
 import type { Handler, MiddlewareHandler } from 'hono';
 import type { cors } from 'hono/cors';
 import type { DescribeRouteOptions } from 'hono-openapi';
-export type Methods = 'GET' | 'POST' | 'PUT' | 'DELETE';
+import type { Mastra } from '..';
+export type Methods = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'ALL';
 
-export type ApiRoute = {
-  path: string;
-  method: Methods;
-  handler: Handler;
-  middleware?: MiddlewareHandler | MiddlewareHandler[];
-  openapi?: DescribeRouteOptions;
-};
+export type ApiRoute =
+  | {
+      path: string;
+      method: Methods;
+      handler: Handler;
+      middleware?: MiddlewareHandler | MiddlewareHandler[];
+      openapi?: DescribeRouteOptions;
+    }
+  | {
+      path: string;
+      method: Methods;
+      createHandler: ({ mastra }: { mastra: Mastra }) => Promise<Handler>;
+      middleware?: MiddlewareHandler | MiddlewareHandler[];
+      openapi?: DescribeRouteOptions;
+    };
 
 type Middleware = MiddlewareHandler | { path: string; handler: MiddlewareHandler };
 

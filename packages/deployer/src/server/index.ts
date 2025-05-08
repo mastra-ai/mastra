@@ -210,14 +210,18 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
         middlewares.push(describeRoute(route.openapi));
       }
 
+      const handler = 'handler' in route ? route.handler : await route.createHandler({ mastra });
+
       if (route.method === 'GET') {
-        app.get(route.path, ...middlewares, route.handler);
+        app.get(route.path, ...middlewares, handler);
       } else if (route.method === 'POST') {
-        app.post(route.path, ...middlewares, route.handler);
+        app.post(route.path, ...middlewares, handler);
       } else if (route.method === 'PUT') {
-        app.put(route.path, ...middlewares, route.handler);
+        app.put(route.path, ...middlewares, handler);
       } else if (route.method === 'DELETE') {
-        app.delete(route.path, ...middlewares, route.handler);
+        app.delete(route.path, ...middlewares, handler);
+      } else if (route.method === 'ALL') {
+        app.all(route.path, ...middlewares, handler);
       }
     }
   }

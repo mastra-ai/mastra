@@ -784,7 +784,7 @@ export class NewWorkflow<
       resumePayload: any;
       runId?: string;
     };
-    emitter: EventEmitter;
+    emitter: { emit: (event: string, data: any) => void };
     mastra: Mastra;
   }): Promise<z.infer<TOutput>> {
     this.__registerMastra(mastra);
@@ -936,7 +936,12 @@ export class Run<
       runId: this.runId,
       graph: this.executionGraph,
       input: inputData,
-      emitter: this.emitter,
+      emitter: {
+        emit: (event: string, data: any) => {
+          this.emitter.emit(event, data);
+          return Promise.resolve();
+        },
+      },
       retryConfig: this.retryConfig,
       runtimeContext: runtimeContext ?? new RuntimeContext(),
     });
@@ -1014,7 +1019,12 @@ export class Run<
         // @ts-ignore
         resumePath: snapshot?.suspendedPaths?.[steps?.[0]] as any,
       },
-      emitter: this.emitter,
+      emitter: {
+        emit: (event: string, data: any) => {
+          this.emitter.emit(event, data);
+          return Promise.resolve();
+        },
+      },
       runtimeContext: params.runtimeContext ?? new RuntimeContext(),
     });
   }
