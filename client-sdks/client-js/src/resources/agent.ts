@@ -122,10 +122,11 @@ export class Agent extends BaseResource {
   ): Promise<GenerateReturn<T>> {
     const processedParams = {
       ...params,
-      output: params.output instanceof ZodSchema ? zodToJsonSchema(params.output) : params.output,
+      output:
+        params.output instanceof ZodSchema ? zodToJsonSchema(params.output, { $refStrategy: 'none' }) : params.output,
       experimental_output:
         params.experimental_output instanceof ZodSchema
-          ? zodToJsonSchema(params.experimental_output)
+          ? zodToJsonSchema(params.experimental_output, { $refStrategy: 'none' })
           : params.experimental_output,
     };
 
