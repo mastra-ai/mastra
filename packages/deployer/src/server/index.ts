@@ -175,7 +175,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
   }
 
   const bodyLimitOptions = {
-    maxSize: 4.5 * 1024 * 1024, // 4.5 MB,
+    maxSize: server?.bodySizeLimit ?? 4.5 * 1024 * 1024, // 4.5 MB,
     onError: (c: Context) => c.json({ error: 'Request body too large' }, 413),
   };
 
