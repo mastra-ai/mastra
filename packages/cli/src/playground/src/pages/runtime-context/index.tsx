@@ -23,11 +23,11 @@ export default function RuntimeContext() {
   return (
     <div className="h-full flex flex-col">
       <Header>
-        <HeaderTitle>Runtime Context (JSON)</HeaderTitle>
+        <HeaderTitle>Runtime Context</HeaderTitle>
       </Header>
       <div className="flex-1 p-6 space-y-4">
         <div className="space-y-2">
-          <Label className="text-mastra-el-3 text-sm">Runtime Context</Label>
+          <Label className="text-mastra-el-3 text-sm">Runtime Context (JSON)</Label>
           <Textarea
             className="min-h-[400px] font-mono text-sm"
             value={runtimeContextValue}
