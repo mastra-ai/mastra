@@ -32,5 +32,9 @@ jobs:
       - name: Build @mastra/mcp
         run: pnpm turbo --filter="./packages/mcp" --filter "mastra" build
 
+      - name: Install integration tests dependencies
+        run: pnpm install --ignore-workspace
+        working-directory: ./packages/mcp/integration-tests
+
       - name: Run MCP tests
         run: pnpm run test:mcp
