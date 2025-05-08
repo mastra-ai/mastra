@@ -325,10 +325,10 @@ describe('Memory Streaming Tests', () => {
         semanticRecall: true,
       },
       storage: new LibSQLStore({
-        url: 'file:memory-agent.db', // relative path from bundled .mastra/output dir
+        url: 'file:mastra-agent.db', // relative path from bundled .mastra/output dir
       }),
       vector: new LibSQLVector({
-        connectionUrl: 'file:memory-agent.db', // relative path from bundled .mastra/output dir
+        connectionUrl: 'file:mastra-agent.db', // relative path from bundled .mastra/output dir
       }),
       embedder: openai.embedding('text-embedding-3-small'),
     });

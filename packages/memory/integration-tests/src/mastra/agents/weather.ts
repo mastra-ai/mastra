@@ -19,10 +19,10 @@ export const memory = new Memory({
     semanticRecall: true,
   },
   storage: new LibSQLStore({
-    url: 'file:memory.db', // relative path from bundled .mastra/output dir
+    url: 'file:mastra.db', // relative path from bundled .mastra/output dir
   }),
   vector: new LibSQLVector({
-    connectionUrl: 'file:memory.db', // relative path from bundled .mastra/output dir
+    connectionUrl: 'file:mastra.db', // relative path from bundled .mastra/output dir
   }),
   embedder: openai.embedding('text-embedding-3-small'),
 });
