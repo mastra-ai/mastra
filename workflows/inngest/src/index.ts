@@ -91,6 +91,19 @@ export class InngestRun<
     inputData?: z.infer<TInput>;
     runtimeContext?: RuntimeContext;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
+    await this.#mastra.getStorage()?.persistWorkflowSnapshot({
+      workflowName: this.workflowId,
+      runId: this.runId,
+      snapshot: {
+        runId: this.runId,
+        value: {},
+        context: {} as any,
+        activePaths: [],
+        suspendedPaths: {},
+        timestamp: Date.now(),
+      },
+    });
+
     const eventOutput = await this.inngest.send({
       name: `workflow.${this.workflowId}`,
       data: {
