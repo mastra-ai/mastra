@@ -7,6 +7,6 @@ export const mastra = new Mastra({
     test: weatherAgent,
   },
   storage: new LibSQLStore({
-    url: 'file:../mastra.db',
+    url: 'file:mastra.db',
   }),
 });
