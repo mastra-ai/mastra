@@ -248,10 +248,12 @@ export class InngestWorkflow<
         executionGraph: this.executionGraph,
         mastra: this.#mastra,
         retryConfig: this.retryConfig,
+        cleanup: () => this.runs.delete(runIdToUse),
       },
       this.inngest,
     );
 
+    this.runs.set(runIdToUse, run);
     return run;
   }
 
