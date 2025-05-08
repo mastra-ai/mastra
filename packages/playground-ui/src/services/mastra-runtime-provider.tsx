@@ -213,8 +213,8 @@ export function MastraRuntimeProvider({
 
         let content = '';
         let assistantMessageAdded = false;
-        let assitantToolCallAddedForUpdater = false;
-        let assitantToolCallAddedForContent = false;
+        let assistantToolCallAddedForUpdater = false;
+        let assistantToolCallAddedForContent = false;
 
         function updater() {
           setMessages(currentConversation => {
@@ -225,15 +225,15 @@ export function MastraRuntimeProvider({
 
             if (!assistantMessageAdded) {
               assistantMessageAdded = true;
-              if (assitantToolCallAddedForUpdater) {
-                assitantToolCallAddedForUpdater = false;
+              if (assistantToolCallAddedForUpdater) {
+                assistantToolCallAddedForUpdater = false;
               }
               return [...currentConversation, message];
             }
 
-            if (assitantToolCallAddedForUpdater) {
+            if (assistantToolCallAddedForUpdater) {
               // add as new message item in messages array if tool call was added
-              assitantToolCallAddedForUpdater = false;
+              assistantToolCallAddedForUpdater = false;
               return [...currentConversation, message];
             }
             return [...currentConversation.slice(0, -1), message];
@@ -242,9 +242,9 @@ export function MastraRuntimeProvider({
 
         await response.processDataStream({
           onTextPart(value) {
-            if (assitantToolCallAddedForContent) {
+            if (assistantToolCallAddedForContent) {
               // start new content value to add as next message item in messages array
-              assitantToolCallAddedForContent = false;
+              assistantToolCallAddedForContent = false;
               content = value;
             } else {
               content += value;
@@ -285,8 +285,8 @@ export function MastraRuntimeProvider({
                       ],
                 };
 
-                assitantToolCallAddedForUpdater = true;
-                assitantToolCallAddedForContent = true;
+                assistantToolCallAddedForUpdater = true;
+                assistantToolCallAddedForContent = true;
 
                 // Replace the last message with the updated one
                 return [...currentConversation.slice(0, -1), updatedMessage];
@@ -305,8 +305,8 @@ export function MastraRuntimeProvider({
                   },
                 ],
               };
-              assitantToolCallAddedForUpdater = true;
-              assitantToolCallAddedForContent = true;
+              assistantToolCallAddedForUpdater = true;
+              assistantToolCallAddedForContent = true;
               return [...currentConversation, newMessage];
             });
           },
