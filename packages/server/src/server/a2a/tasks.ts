@@ -1,6 +1,5 @@
 import type { Message, TaskContext, TaskAndHistory, Task, TaskState, TaskStatus, Artifact } from '@mastra/core/a2a';
 import type { Logger } from '@mastra/core/logger';
-import { activeCancellations } from './store';
 import type { InMemoryTaskStore } from './store';
 
 function isTaskStatusUpdate(update: TaskStatus | Artifact): update is Omit<TaskStatus, 'timestamp'> {
@@ -165,6 +164,7 @@ export function createTaskContext({
   task,
   userMessage,
   history,
+  activeCancellations,
 }: {
   task: Task;
   userMessage: Message;

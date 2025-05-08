@@ -84,7 +84,7 @@ function validateTaskSendParams(params: TaskSendParams) {
     taskSendParamsSchema.parse(params);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      throw A2AError.invalidParams((error as z.ZodError).errors[0].message);
+      throw A2AError.invalidParams((error as z.ZodError).errors[0]!.message);
     }
 
     throw error;
