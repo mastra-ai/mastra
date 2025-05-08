@@ -748,6 +748,9 @@ export class NewWorkflow<
     if (this.stepFlow.length === 0) {
       throw new Error('Execution flow of workflow is not defined.');
     }
+    if (!this.executionGraph.steps || this.executionGraph.steps.length === 0) {
+      throw new Error('Execution graph of workflow is not defined. Please commit the workflow before executing.');
+    }
     const runIdToUse = options?.runId || randomUUID();
 
     // Return a new Run instance with object parameters
