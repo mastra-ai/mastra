@@ -110,7 +110,7 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
                     <>
                       <hr className="w-full my-2 text-borders-1" />
                       <Button
-                        className="w-full flex items-center font-medium justify-between gap-2 cursor-pointer text-base h-10 pl-4 pr-3 bg-surface-5 text-accent-green bg-[url('/bloom-2.png')] bg-cover bg-right"
+                        className="w-full flex items-center font-medium justify-between gap-2 cursor-pointer text-base h-10 pl-4 pr-3 bg-surface-5 text-accent-green bg-[url('/image/bloom-2.png')] bg-cover bg-right"
                         variant="ghost"
                         onClick={() => setIsAgentMode(true)}
                       >
