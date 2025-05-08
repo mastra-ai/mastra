@@ -232,6 +232,7 @@ export function MastraRuntimeProvider({
             }
 
             if (assitantToolCallAddedForUpdater) {
+              // add as new message item in messages array if tool call was added
               assitantToolCallAddedForUpdater = false;
               return [...currentConversation, message];
             }
