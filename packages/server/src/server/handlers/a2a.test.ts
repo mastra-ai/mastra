@@ -259,15 +259,15 @@ describe('A2A Handler', () => {
             "data": {
               "stack": "Error: Agent failed!
             at /Users/ward/projects/mastra/mastra-oss/packages/server/src/server/handlers/a2a.test.ts:241:44
-            at file:///Users/ward/projects/mastra/mastra-oss/node_modules/.pnpm/@vitest+runner@3.1.2/node_modules/@vitest/runner/dist/index.js:103:11
-            at file:///Users/ward/projects/mastra/mastra-oss/node_modules/.pnpm/@vitest+runner@3.1.2/node_modules/@vitest/runner/dist/index.js:596:26
-            at file:///Users/ward/projects/mastra/mastra-oss/node_modules/.pnpm/@vitest+runner@3.1.2/node_modules/@vitest/runner/dist/index.js:879:20
-            at new Promise (<anonymous>)
-            at runWithTimeout (file:///Users/ward/projects/mastra/mastra-oss/node_modules/.pnpm/@vitest+runner@3.1.2/node_modules/@vitest/runner/dist/index.js:852:10)
-            at runTest (file:///Users/ward/projects/mastra/mastra-oss/node_modules/.pnpm/@vitest+runner@3.1.2/node_modules/@vitest/runner/dist/index.js:1360:12)
+            at file:///Users/ward/projects/mastra/mastra-oss/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:146:14
+            at file:///Users/ward/projects/mastra/mastra-oss/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:11
+            at runWithTimeout (file:///Users/ward/projects/mastra/mastra-oss/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:39:7)
+            at runTest (file:///Users/ward/projects/mastra/mastra-oss/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1056:17)
             at processTicksAndRejections (node:internal/process/task_queues:105:5)
-            at runSuite (file:///Users/ward/projects/mastra/mastra-oss/node_modules/.pnpm/@vitest+runner@3.1.2/node_modules/@vitest/runner/dist/index.js:1507:8)
-            at runSuite (file:///Users/ward/projects/mastra/mastra-oss/node_modules/.pnpm/@vitest+runner@3.1.2/node_modules/@vitest/runner/dist/index.js:1507:8)",
+            at runSuite (file:///Users/ward/projects/mastra/mastra-oss/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+            at runSuite (file:///Users/ward/projects/mastra/mastra-oss/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+            at runSuite (file:///Users/ward/projects/mastra/mastra-oss/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+            at runFiles (file:///Users/ward/projects/mastra/mastra-oss/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1262:5)",
             },
             "message": "Agent failed!",
           },
