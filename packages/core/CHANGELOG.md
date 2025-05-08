@@ -1,5 +1,15 @@
 # @mastra/core
 
+## 0.9.3-alpha.1
+
+### Patch Changes
+
+- e450778: vnext: Inngest playground fixes
+- 8902157: added an optional `bodySizeLimit` to server config so that users can pass custom bodylimit size in mb. If not, it defaults to 4.5 mb
+- ca0dc88: fix: filter out excessive logs when getting LLM for agents
+- 9cd1a46: [MASTRA-3338] update naming scheme for embedding index based on vector store rules and added duplicate index checks
+- 70dbf51: [MASTRA-2452] updated setBaggage for tracing
+
 ## 0.9.3-alpha.0
 
 ### Patch Changes

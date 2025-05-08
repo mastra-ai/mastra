@@ -8,13 +8,14 @@ import type { AiMessageType } from '@mastra/core';
 import { ensureAllMessagesAreCoreMessages } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
+import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import type { Message } from 'ai';
 import { JSDOM } from 'jsdom';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { z } from 'zod';
-import { weatherAgent } from './mastra/agents/weather';
+import { memory, weatherAgent } from './mastra/agents/weather';
 
 // Helper to find an available port
 async function getAvailablePort(): Promise<number> {
@@ -41,33 +42,18 @@ global.navigator = dom.window.navigator;
 global.fetch = global.fetch || fetch;
 
 describe('Memory Streaming Tests', () => {
+  // Create test tools
+  const weatherTool = createTool({
+    id: 'get_weather',
+    description: 'Get the weather for a given location',
+    inputSchema: z.object({
+      postalCode: z.string().describe('The location to get the weather for'),
+    }),
+    execute: async ({ context: { postalCode } }) => {
+      return `The weather in ${postalCode} is sunny. It is currently 70 degrees and feels like 65 degrees.`;
+    },
+  });
   it('should handle multiple tool calls in memory thread history', async () => {
-    const memory = new Memory({
-      options: {
-        workingMemory: {
-          enabled: true,
-          use: 'tool-call',
-        },
-        lastMessages: 10,
-        threads: {
-          generateTitle: false,
-        },
-        semanticRecall: true,
-      },
-    });
-
-    // Create test tools
-    const weatherTool = createTool({
-      id: 'get_weather',
-      description: 'Get the weather for a given location',
-      inputSchema: z.object({
-        postalCode: z.string().describe('The location to get the weather for'),
-      }),
-      execute: async ({ context: { postalCode } }) => {
-        return `The weather in ${postalCode} is sunny. It is currently 70 degrees and feels like 65 degrees.`;
-      },
-    });
-
     // Create agent with memory and tools
     const agent = new Agent({
       name: 'test',
@@ -322,6 +308,102 @@ describe('Memory Streaming Tests', () => {
         message: 'whats in my clipboard now?',
         responseContains: [clipboard],
       });
+    });
+  });
+  describe('Agent memory message persistence', () => {
+    // making a separate memory for agent to avoid conflicts with other tests
+    const memory = new Memory({
+      options: {
+        workingMemory: {
+          enabled: true,
+          use: 'tool-call',
+        },
+        lastMessages: 10,
+        threads: {
+          generateTitle: false,
+        },
+        semanticRecall: true,
+      },
+      storage: new LibSQLStore({
+        url: 'file:mastra-agent.db', // relative path from bundled .mastra/output dir
+      }),
+      vector: new LibSQLVector({
+        connectionUrl: 'file:mastra-agent.db', // relative path from bundled .mastra/output dir
+      }),
+      embedder: openai.embedding('text-embedding-3-small'),
+    });
+    const agent = new Agent({
+      name: 'test',
+      instructions:
+        'You are a weather agent. When asked about weather in any city, use the get_weather tool with the city name as the postal code.',
+      model: openai('gpt-4o'),
+      memory,
+      tools: { get_weather: weatherTool },
+    });
+    it('should save all user messages (not just the most recent)', async () => {
+      const threadId = randomUUID();
+      const resourceId = 'all-user-messages';
+
+      // Send multiple user messages
+      await agent.generate(
+        [
+          { role: 'user', content: 'First message' },
+          { role: 'user', content: 'Second message' },
+        ],
+        {
+          threadId,
+          resourceId,
+        },
+      );
+
+      // Fetch messages from memory
+      const { messages, uiMessages } = await agent.getMemory()!.query({ threadId });
+      const userMessages = messages.filter((m: any) => m.role === 'user').map((m: any) => m.content);
+      const userUiMessages = uiMessages.filter((m: any) => m.role === 'user').map((m: any) => m.content);
+
+      expect(userMessages).toEqual(expect.arrayContaining(['First message', 'Second message']));
+      expect(userUiMessages).toEqual(expect.arrayContaining(['First message', 'Second message']));
+    });
+
+    it('should save assistant responses for both text and object output modes', async () => {
+      const threadId = randomUUID();
+      const resourceId = 'assistant-responses';
+      // 1. Text mode
+      await agent.generate([{ role: 'user', content: 'What is 2+2?' }], {
+        threadId,
+        resourceId,
+      });
+
+      // 2. Object/output mode
+      await agent.generate([{ role: 'user', content: 'Give me JSON' }], {
+        threadId,
+        resourceId,
+        output: z.object({
+          result: z.string(),
+        }),
+      });
+
+      // Fetch messages from memory
+      const { messages, uiMessages } = await agent.getMemory()!.query({ threadId });
+      const userMessages = messages.filter((m: any) => m.role === 'user').map((m: any) => m.content);
+      const userUiMessages = uiMessages.filter((m: any) => m.role === 'user').map((m: any) => m.content);
+      const assistantMessages = messages.filter((m: any) => m.role === 'assistant').map((m: any) => m.content);
+      const assistantUiMessages = uiMessages.filter((m: any) => m.role === 'assistant').map((m: any) => m.content);
+      expect(userMessages).toEqual(expect.arrayContaining(['What is 2+2?', 'Give me JSON']));
+      expect(userUiMessages).toEqual(expect.arrayContaining(['What is 2+2?', 'Give me JSON']));
+      function flattenAssistantMessages(messages: any[]) {
+        return messages.flatMap(msg =>
+          Array.isArray(msg) ? msg.map(part => (typeof part === 'object' && part.text ? part.text : part)) : msg,
+        );
+      }
+
+      expect(flattenAssistantMessages(assistantMessages)).toEqual(
+        expect.arrayContaining([expect.stringContaining('2 + 2'), expect.stringContaining('"result"')]),
+      );
+
+      expect(flattenAssistantMessages(assistantUiMessages)).toEqual(
+        expect.arrayContaining([expect.stringContaining('2 + 2'), expect.stringContaining('"result"')]),
+      );
     });
   });
 });
