@@ -12,6 +12,16 @@ The Inngest runtime is horizontally scalable, with watching and eventing working
 
 ## Usage
 
+### Running inngest dev server
+
+```bash
+docker run --rm -p 8288:8288 \
+  inngest/inngest \
+  inngest dev -u http://host.docker.internal:4111/inngest/api
+```
+
+### Example
+
 ```ts
 import { init } from '@mastra/inngest';
 import { Inngest, serve as inngestServe } from 'inngest';
@@ -97,6 +107,7 @@ export const mastra = new Mastra({
     incrementWorkflow,
   },
   server: {
+    host: '0.0.0.0',
     apiRoutes: [
       {
         path: '/inngest/api', // this needs to match the path in inngest dev server (or production) config
