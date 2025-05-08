@@ -4,5 +4,4 @@ const meta = {
   "vector-databases": "ベクターデータベース",
   retrieval: "検索",
 };
-
 export default meta;

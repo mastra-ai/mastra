@@ -10,6 +10,7 @@ import { deploy } from './commands/deploy/index';
 import { dev } from './commands/dev/dev';
 import { init } from './commands/init/init';
 import { checkAndInstallCoreDeps, checkPkgJson, interactivePrompt } from './commands/init/utils';
+import { lint } from './commands/lint';
 import { DepsService } from './services/service.deps';
 import { logger } from './utils/logger';
 
@@ -139,6 +140,23 @@ program
   });
 
 program
+  .command('lint')
+  .description('Lint your Mastra project')
+  .option('-d, --dir <path>', 'Path to your Mastra folder')
+  .option('-r, --root <path>', 'Path to your root folder')
+  .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
+  .action(async args => {
+    await analytics.trackCommandExecution({
+      command: 'lint',
+      args,
+      execution: async () => {
+        await lint({ dir: args.dir, root: args.root, tools: args.tools ? args.tools.split(',') : [] });
+      },
+      origin,
+    });
+  });
+
+program
   .command('dev')
   .description('Start mastra server')
   .option('-d, --dir <dir>', 'Path to your mastra folder')
@@ -168,7 +186,8 @@ program
 program
   .command('build')
   .description('Build your Mastra project')
-  .option('-d, --dir <path>', 'Path to directory')
+  .option('-d, --dir <path>', 'Path to your Mastra Folder')
+  .option('-r, --root <path>', 'Path to your root folder')
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
   .action(async args => {
     await analytics.trackCommandExecution({
@@ -176,8 +195,9 @@ program
       args,
       execution: async () => {
         await build({
-          dir: args.dir,
-          tools: args.tools ? args.tools.split(',') : [],
+          dir: args?.dir,
+          root: args?.root,
+          tools: args?.tools ? args.tools.split(',') : [],
         });
       },
       origin,

@@ -284,4 +284,12 @@ export abstract class Bundler extends MastraBundler {
     await this.installDependencies(outputDirectory);
     this.logger.info('Done installing dependencies');
   }
+
+  async lint(_entryFile: string, _outputDirectory: string, toolsPaths: string[]): Promise<void> {
+    const toolsInputOptions = await this.getToolsInputOptions(toolsPaths);
+    const toolsLength = Object.keys(toolsInputOptions).length;
+    if (toolsLength > 0) {
+      this.logger.info(`Found ${toolsLength} ${toolsLength === 1 ? 'tool' : 'tools'}`);
+    }
+  }
 }

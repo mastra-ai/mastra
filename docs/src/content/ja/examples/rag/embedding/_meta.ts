@@ -4,5 +4,4 @@ const meta = {
   "embed-text-with-cohere": "Cohereでテキストを埋め込む",
   "metadata-extraction": "メタデータ抽出",
 };
-
 export default meta;

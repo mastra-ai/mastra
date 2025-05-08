@@ -1,7 +1,7 @@
-import { it, describe, expect, beforeAll, afterAll } from 'vitest';
+import { it, describe, expect, beforeAll, afterAll, inject } from 'vitest';
 import { rollup } from 'rollup';
 import { join } from 'path';
-import { setupMonorepo } from './setup';
+import { setupMonorepo } from './prepare';
 import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import getPort from 'get-port';
@@ -9,14 +9,20 @@ import { execa } from 'execa';
 
 const timeout = 5 * 60 * 1000;
 
-describe('tsconfig paths', () => {
+describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
   let fixturePath: string;
 
-  beforeAll(async () => {
-    fixturePath = await mkdtemp(join(tmpdir(), 'mastra-monorepo-test-'));
-    console.log('fixturePath', fixturePath);
-    await setupMonorepo(fixturePath);
-  }, 60 * 1000);
+  beforeAll(
+    async () => {
+      const tag = inject('tag');
+      const registry = inject('registry');
+
+      fixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-test-${pkgManager}-`));
+      process.env.npm_config_registry = registry;
+      await setupMonorepo(fixturePath, tag, pkgManager);
+    },
+    10 * 60 * 1000,
+  );
 
   afterAll(async () => {
     try {
@@ -26,23 +32,25 @@ describe('tsconfig paths', () => {
     } catch {}
   });
 
-  it('should resolve paths', async () => {
-    const inputFile = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'index.mjs');
-    const bundle = await rollup({
-      logLevel: 'silent',
-      input: inputFile,
-    });
+  describe('tsconfig paths', () => {
+    it('should resolve paths', async () => {
+      const inputFile = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'index.mjs');
+      const bundle = await rollup({
+        logLevel: 'silent',
+        input: inputFile,
+      });
 
-    const result = await bundle.generate({
-      format: 'esm',
-    });
-    let hasMappedPkg = false;
-    for (const output of Object.values(result.output)) {
-      // @ts-expect-error - dont want to narrow the type
-      hasMappedPkg = hasMappedPkg || output.imports?.includes('@/agents');
-    }
+      const result = await bundle.generate({
+        format: 'esm',
+      });
+      let hasMappedPkg = false;
+      for (const output of Object.values(result.output)) {
+        // @ts-expect-error - dont want to narrow the type
+        hasMappedPkg = hasMappedPkg || output.imports?.includes('@/agents');
+      }
 
-    expect(hasMappedPkg).toBeFalsy();
+      expect(hasMappedPkg).toBeFalsy();
+    });
   });
 
   function runApiTests(port: number) {

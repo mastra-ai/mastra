@@ -1,0 +1,21 @@
+---
+title: Auth Middleware
+---
+
+```typescript showLineNumbers
+{
+  handler: async (c, next) => {
+    const authHeader = c.req.header('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return new Response('Unauthorized', { status: 401 });
+    }
+
+    const token = authHeader.split(' ')[1];
+    // Validate token here
+
+    await next();
+  },
+  path: '/api/*',
+}
+```
+
