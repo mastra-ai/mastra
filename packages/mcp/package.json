@@ -21,7 +21,8 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
     "build:watch": "pnpm build --watch",
-    "test": "vitest run",
+    "test:integration": "cd integration-tests && pnpm test:mcp",
+    "test": "pnpm test:integration && vitest run",
     "lint": "eslint ."
   },
   "keywords": [],
