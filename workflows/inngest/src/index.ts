@@ -240,22 +240,18 @@ export class InngestWorkflow<
     const runIdToUse = options?.runId || randomUUID();
 
     // Return a new Run instance with object parameters
-    const run: Run<TSteps, TInput, TOutput> =
-      this.runs.get(runIdToUse) ??
-      new InngestRun(
-        {
-          workflowId: this.id,
-          runId: runIdToUse,
-          executionEngine: this.executionEngine,
-          executionGraph: this.executionGraph,
-          mastra: this.#mastra,
-          retryConfig: this.retryConfig,
-          cleanup: () => this.runs.delete(runIdToUse),
-        },
-        this.inngest,
-      );
+    const run: Run<TSteps, TInput, TOutput> = new InngestRun(
+      {
+        workflowId: this.id,
+        runId: runIdToUse,
+        executionEngine: this.executionEngine,
+        executionGraph: this.executionGraph,
+        mastra: this.#mastra,
+        retryConfig: this.retryConfig,
+      },
+      this.inngest,
+    );
 
-    this.runs.set(runIdToUse, run);
     return run;
   }
 
