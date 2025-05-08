@@ -66,17 +66,18 @@ export class AGUIAdapter extends AbstractAgent {
         })
         .then(response => {
           let currentMessageId: string | undefined = undefined;
+          let isInTextMessage = false;
           return response.processDataStream({
             onTextPart: text => {
               if (currentMessageId === undefined) {
                 currentMessageId = generateUUID();
-
                 const message: TextMessageStartEvent = {
                   type: EventType.TEXT_MESSAGE_START,
                   messageId: currentMessageId,
                   role: 'assistant',
                 };
                 subscriber.next(message);
+                isInTextMessage = true;
               }
 
               const message: TextMessageContentEvent = {
@@ -86,14 +87,14 @@ export class AGUIAdapter extends AbstractAgent {
               };
               subscriber.next(message);
             },
-            onFinishMessagePart: message => {
-              console.log('onFinishMessagePart', message);
+            onFinishMessagePart: () => {
               if (currentMessageId !== undefined) {
                 const message: TextMessageEndEvent = {
                   type: EventType.TEXT_MESSAGE_END,
                   messageId: currentMessageId,
                 };
                 subscriber.next(message);
+                isInTextMessage = false;
               }
               // Emit run finished event
               subscriber.next({
@@ -107,6 +108,15 @@ export class AGUIAdapter extends AbstractAgent {
             },
             onToolCallPart(streamPart) {
               const parentMessageId = currentMessageId || generateUUID();
+              if (isInTextMessage) {
+                const message: TextMessageEndEvent = {
+                  type: EventType.TEXT_MESSAGE_END,
+                  messageId: parentMessageId,
+                };
+                subscriber.next(message);
+                isInTextMessage = false;
+              }
+
               subscriber.next({
                 type: EventType.TOOL_CALL_START,
                 toolCallId: streamPart.toolCallId,
@@ -130,7 +140,7 @@ export class AGUIAdapter extends AbstractAgent {
           });
         })
         .catch(error => {
-          console.log('error', error);
+          console.error('error', error);
           // Handle error
           subscriber.error(error);
         });
