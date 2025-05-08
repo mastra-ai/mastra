@@ -1,5 +1,18 @@
 # @mastra/playground-ui
 
+## 5.0.3-alpha.0
+
+### Patch Changes
+
+- b5d2de0: In vNext workflow serializedStepGraph, return only serializedStepFlow for steps created from a workflow
+  allow viewing inner nested workflows in a multi-layered nested vnext workflow on the playground
+- d2dfc37: Fix autoform number form default value
+- Updated dependencies [526c570]
+- Updated dependencies [b5d2de0]
+- Updated dependencies [644f8ad]
+  - @mastra/client-js@0.1.21-alpha.0
+  - @mastra/core@0.9.3-alpha.0
+
 ## 5.0.2
 
 ### Patch Changes

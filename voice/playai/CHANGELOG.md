@@ -1,5 +1,14 @@
 # @mastra/voice-playai
 
+## 0.1.17-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [526c570]
+- Updated dependencies [b5d2de0]
+- Updated dependencies [644f8ad]
+  - @mastra/core@0.9.3-alpha.0
+
 ## 0.1.16
 
 ### Patch Changes

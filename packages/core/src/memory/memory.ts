@@ -466,7 +466,10 @@ Do:
     const defaultDimensions = 1536;
     const isDefault = dimensions === defaultDimensions;
     const usedDimensions = dimensions ?? defaultDimensions;
-    const indexName = isDefault ? 'memory_messages' : `memory_messages_${usedDimensions}`;
+    const separator = this.vector?.indexSeparator ?? '_';
+    const indexName = isDefault
+      ? `memory${separator}messages`
+      : `memory${separator}messages${separator}${usedDimensions}`;
 
     if (typeof this.vector === `undefined`) {
       throw new Error(`Tried to create embedding index but no vector db is attached to this Memory instance.`);

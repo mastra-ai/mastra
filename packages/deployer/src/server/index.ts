@@ -121,7 +121,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
       span.updateName(`${c.req.method} ${c.req.path}`);
 
       const newCtx = Telemetry.setBaggage({
-        'http.request_id': requestId,
+        'http.request_id': { value: requestId },
       });
 
       await new Promise(resolve => {

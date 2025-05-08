@@ -66,5 +66,10 @@
     "@mastra/voice-sarvam": "0.1.11",
     "@mastra/voice-speechify": "0.1.16"
   },
-  "changesets": []
+  "changesets": [
+    "happy-plums-serve",
+    "quiet-lights-carry",
+    "slimy-monkeys-stand",
+    "vast-regions-enjoy"
+  ]
 }
