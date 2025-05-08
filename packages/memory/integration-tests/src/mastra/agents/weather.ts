@@ -1,17 +1,30 @@
 import { openai } from '@ai-sdk/openai';
 import { createTool } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
+import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { z } from 'zod';
 import { weatherTool } from '../tools/weather';
 
-const memory = new Memory({
+export const memory = new Memory({
   options: {
     workingMemory: {
       enabled: true,
       use: 'tool-call',
     },
+    lastMessages: 10,
+    threads: {
+      generateTitle: false,
+    },
+    semanticRecall: true,
   },
+  storage: new LibSQLStore({
+    url: 'file:mastra.db', // relative path from bundled .mastra/output dir
+  }),
+  vector: new LibSQLVector({
+    connectionUrl: 'file:mastra.db', // relative path from bundled .mastra/output dir
+  }),
+  embedder: openai.embedding('text-embedding-3-small'),
 });
 
 export const weatherAgent = new Agent({
