@@ -1499,7 +1499,10 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
                   oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
                 },
                 resumeData: { type: 'object' },
-                runtimeContext: { type: 'object' },
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the workflow execution',
+                },
               },
               required: ['step'],
             },
@@ -1541,7 +1544,10 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
                   oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
                 },
                 resumeData: { type: 'object' },
-                runtimeContext: { type: 'object' },
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the workflow execution',
+                },
               },
               required: ['step'],
             },
@@ -1609,7 +1615,10 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                runtimeContext: { type: 'object' },
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the workflow execution',
+                },
               },
             },
           },
@@ -1654,7 +1663,10 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                runtimeContext: { type: 'object' },
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the workflow execution',
+                },
               },
             },
           },
@@ -2534,7 +2546,7 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
       const host = serverOptions?.host ?? 'localhost';
       logger.info(` Mastra API running on port http://${host}:${port}/api`);
       if (options?.isDev) {
-        logger.info(`� Open API documentation available at http://${host}:${port}/openapi.json`);
+        logger.info(`🔗 Open API documentation available at http://${host}:${port}/openapi.json`);
       }
       if (options?.isDev) {
         logger.info(`🧪 Swagger UI available at http://${host}:${port}/swagger-ui`);
