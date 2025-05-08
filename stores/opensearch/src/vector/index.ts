@@ -87,9 +87,9 @@ export class OpenSearchVector extends MastraVector {
         .filter((index: string | undefined) => index !== undefined);
 
       return indexes;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to list indexes:', error);
-      return [];
+      throw new Error(`Failed to list indexes: ${error.message}`);
     }
   }
 
@@ -213,19 +213,9 @@ export class OpenSearchVector extends MastraVector {
       });
 
       return results;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to query vectors:', error);
-
-      // Check if this is a filter translation error
-      if (
-        error instanceof Error &&
-        (error.message.includes('no such index') ||
-          error.message.includes('Unsupported operator') ||
-          error.message.includes('$not operator cannot be empty'))
-      ) {
-        throw error; // Re-throw filter validation errors
-      }
-      return [];
+      throw new Error(`Failed to query vectors for index ${indexName}: ${error.message}`);
     }
   }
 
