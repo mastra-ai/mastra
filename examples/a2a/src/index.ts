@@ -1,5 +1,4 @@
 import { MastraClient } from '@mastra/client-js';
-import { z } from 'zod';
 
 // Initialize the Mastra client
 const client = new MastraClient({
