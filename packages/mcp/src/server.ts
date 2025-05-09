@@ -377,7 +377,8 @@ export class MCPServer extends MCPServerBase {
     while (true) {
       // This will keep the connection alive
       // You can also await for a promise that never resolves
-      this.logger.debug('Active Hono SSE Transports:', { transports: this.sseHonoTransports?.keys() });
+      const sessionIds = Array.from(this.sseHonoTransports?.keys() || []);
+      this.logger.debug('Active Hono SSE sessions:', { sessionIds });
       stream.write(':keep-alive\n\n');
       await stream.sleep(60_000);
     }
