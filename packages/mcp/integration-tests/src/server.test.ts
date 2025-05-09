@@ -32,12 +32,9 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
       'pnpm',
       [
         path.resolve(import.meta.dirname, `..`, `..`, `..`, `cli`, `dist`, `index.js`),
-        // `mastra`,
         'dev',
         '--port',
         port.toString(),
-        `-d`,
-        path.resolve(import.meta.dirname, `mastra`),
       ],
       {
         stdio: 'pipe',
