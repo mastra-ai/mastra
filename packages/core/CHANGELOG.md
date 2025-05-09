@@ -1,5 +1,12 @@
 # @mastra/core
 
+## 0.9.4-alpha.0
+
+### Patch Changes
+
+- daf942f: [MASTRA-3367] updated createthread when using generatetitle to perserve thread metadata
+- 0b8b868: Added A2A support + streaming
+
 ## 0.9.3
 
 ### Patch Changes
