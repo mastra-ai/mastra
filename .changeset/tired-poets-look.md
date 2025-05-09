@@ -1,7 +1,8 @@
 ---
 '@mastra/client-js': patch
+'@mastra/deployer': patch
 '@mastra/server': patch
 '@mastra/core': patch
 ---
 
-expose agent runtimeContext from clientSDK
+Added A2A support + streaming

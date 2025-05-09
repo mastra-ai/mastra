@@ -47,6 +47,7 @@ program
   .option('-n, --no-example', 'Do not include example code')
   .option('-t, --timeout [timeout]', 'Configurable timeout for package installation, defaults to 60000 ms')
   .option('-d, --dir <directory>', 'Target directory for Mastra source code (default: src/)')
+  .option('-m, --mcp <mcp>', 'MCP Server for code editor (cursor, cursor-global, windsurf, vscode)')
   .action(async (projectNameArg, args) => {
     // Unify: use argument if present, else option
     const projectName = projectNameArg || args.projectName;
@@ -55,9 +56,10 @@ program
       await create({
         components: ['agents', 'tools', 'workflows'],
         llmProvider: 'openai',
-        addExample: false,
+        addExample: true,
         createVersionTag,
         timeout,
+        mcpServer: args.mcp,
       });
       return;
     }
@@ -71,6 +73,7 @@ program
       timeout,
       projectName,
       directory: args.dir,
+      mcpServer: args.mcp,
     });
   });
 
