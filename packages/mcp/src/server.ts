@@ -4,20 +4,23 @@ import type { InternalCoreTool } from '@mastra/core';
 import { makeCoreTool } from '@mastra/core';
 import type { ToolsInput } from '@mastra/core/agent';
 import { MCPServerBase } from '@mastra/core/mcp';
-import type { MCPServerSSEOptions, ConvertedTool } from '@mastra/core/mcp';
+import type { MCPServerSSEOptions, ConvertedTool, MCPServerHonoSSEOptions } from '@mastra/core/mcp';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { StreamableHTTPServerTransportOptions } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { streamSSE } from 'hono/streaming';
 import { SSETransport } from 'hono-mcp-server-sse-transport';
 import { z } from 'zod';
 
 export class MCPServer extends MCPServerBase {
   private server: Server;
   private stdioTransport?: StdioServerTransport;
-  private sseTransports: Map<string, SSETransport>;
+  private sseTransport?: SSEServerTransport;
+  private sseHonoTransports?: Map<string, SSETransport>;
   private streamableHTTPTransport?: StreamableHTTPServerTransport;
 
   /**
@@ -30,8 +33,15 @@ export class MCPServer extends MCPServerBase {
   /**
    * Get the current SSE transport.
    */
-  public getSseTransport(sessionId: string): SSETransport | undefined {
-    return this.sseTransports?.get(sessionId);
+  public getSseTransport(): SSEServerTransport | undefined {
+    return this.sseTransport;
+  }
+
+  /**
+   * Get the current SSE Hono transport.
+   */
+  public getSseHonoTransport(sessionId: string): SSETransport | undefined {
+    return this.sseHonoTransports?.get(sessionId);
   }
 
   /**
@@ -56,7 +66,7 @@ export class MCPServer extends MCPServerBase {
       `Initialized MCPServer '${name}' v${version} with tools: ${Object.keys(this.convertedTools).join(', ')}`,
     );
 
-    this.sseTransports = new Map();
+    this.sseHonoTransports = new Map();
     this.registerListToolsHandler();
     this.registerCallToolHandler();
   }
@@ -212,40 +222,59 @@ export class MCPServer extends MCPServerBase {
    * @param req Incoming HTTP request
    * @param res HTTP response (must support .write/.end)
    */
-  public async startSSE({ url, ssePath, messagePath, stream, context }: MCPServerSSEOptions) {
+  public async startSSE({ url, ssePath, messagePath, req, res }: MCPServerSSEOptions): Promise<void> {
     if (url.pathname === ssePath) {
-      return stream(context, async (s: any) => {
-        await this.connectSSE({
+      await this.connectSSE({
+        messagePath,
+        res,
+      });
+    } else if (url.pathname === messagePath) {
+      this.logger.debug('Received message');
+      if (!this.sseTransport) {
+        res.writeHead(503);
+        res.end('SSE connection not established');
+        return;
+      }
+      await this.sseTransport.handlePostMessage(req, res);
+    } else {
+      this.logger.debug('Unknown path:', { path: url.pathname });
+      res.writeHead(404);
+      res.end();
+    }
+  }
+
+  /**
+   * Handles MCP-over-SSE protocol for user-provided HTTP servers.
+   * Call this from your HTTP server for both the SSE and message endpoints.
+   *
+   * @param url Parsed URL of the incoming request
+   * @param ssePath Path for establishing the SSE connection (e.g. '/sse')
+   * @param messagePath Path for POSTing client messages (e.g. '/message')
+   * @param context Incoming Hono context
+   */
+  public async startHonoSSE({ url, ssePath, messagePath, context }: MCPServerHonoSSEOptions) {
+    if (url.pathname === ssePath) {
+      return streamSSE(context, async stream => {
+        await this.connectHonoSSE({
           messagePath,
-          stream: s,
+          stream,
         });
       });
     } else if (url.pathname === messagePath) {
       this.logger.debug('Received message');
-      if (!this.sseTransports) {
-        stream.write('SSE connection not established');
-        stream.end();
-        return;
-      }
       const sessionId = context.req.query('sessionId');
-      console.log('sessionId from query', sessionId);
+      this.logger.debug('Received message for sessionId', { sessionId });
       if (!sessionId) {
-        stream.write('Missing sessionId');
-        stream.end();
-        return;
+        return context.text('No sessionId provided', 400);
       }
-      const sseTransport = this.sseTransports.get(sessionId);
-      if (!sseTransport) {
-        stream.write('SSE connection not established');
-        stream.end();
-        return;
+      console.log('SSE Transports:', this.sseHonoTransports?.keys());
+      if (!this.sseHonoTransports?.has(sessionId)) {
+        return context.text(`No transport found for sessionId ${sessionId}`, 400);
       }
-      return await sseTransport.handlePostMessage(context);
+      return await this.sseHonoTransports.get(sessionId)!.handlePostMessage(context);
     } else {
       this.logger.debug('Unknown path:', { path: url.pathname });
-      stream.write('Unknown path');
-      stream.end();
-      return;
+      return context.text('Unknown path', 404);
     }
   }
 
@@ -306,22 +335,43 @@ export class MCPServer extends MCPServerBase {
     }
   }
 
-  public async connectSSE({ messagePath, stream }: { messagePath: string; stream: any }) {
+  public async connectSSE({
+    messagePath,
+    res,
+  }: {
+    messagePath: string;
+    res: http.ServerResponse<http.IncomingMessage>;
+  }) {
+    this.logger.debug('Received SSE connection');
+    this.sseTransport = new SSEServerTransport(messagePath, res);
+    await this.server.connect(this.sseTransport);
+
+    this.server.onclose = async () => {
+      this.sseTransport = undefined;
+      await this.server.close();
+    };
+
+    res.on('close', () => {
+      this.sseTransport = undefined;
+    });
+  }
+
+  public async connectHonoSSE({ messagePath, stream }: { messagePath: string; stream: any }) {
     this.logger.debug('Received SSE connection');
     const sseTransport = new SSETransport(messagePath, stream);
-    console.log('SSE Transport created with sessionId:', sseTransport.sessionId);
-    this.sseTransports.set(sseTransport.sessionId, sseTransport);
+    const sessionId = sseTransport.sessionId;
+    this.logger.debug('SSE Transport created with sessionId:', { sessionId });
+    this.sseHonoTransports?.set(sessionId, sseTransport);
 
     stream.onAbort(() => {
-      this.sseTransports.delete(sseTransport.sessionId);
+      this.logger.debug('SSE Transport aborted with sessionId:', { sessionId });
+      this.sseHonoTransports?.delete(sessionId);
     });
 
-    console.log('Connecting to MCP server');
     await this.server.connect(sseTransport);
-
-    console.log('Connected to MCP server');
     this.server.onclose = async () => {
-      console.log('MCP server connection closed');
+      this.logger.debug('SSE Transport closed with sessionId:', { sessionId });
+      this.sseHonoTransports?.delete(sessionId);
       await this.server.close();
     };
 
@@ -341,11 +391,16 @@ export class MCPServer extends MCPServerBase {
         await this.stdioTransport.close?.();
         this.stdioTransport = undefined;
       }
-      if (this.sseTransports) {
-        for (const sseTransport of this.sseTransports.values()) {
-          await sseTransport.close?.();
+      if (this.sseTransport) {
+        await this.sseTransport.close?.();
+        this.sseTransport = undefined;
+      }
+      if (this.sseHonoTransports) {
+        for (const transport of this.sseHonoTransports.values()) {
+          await transport.close?.();
         }
-        this.sseTransports.clear();
+        this.sseHonoTransports.clear();
+        this.sseHonoTransports = undefined;
       }
       if (this.streamableHTTPTransport) {
         await this.streamableHTTPTransport.close?.();

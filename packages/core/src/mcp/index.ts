@@ -1,9 +1,14 @@
-import type * as http from 'node:http';
 import type { ToolsInput } from '../agent';
 import { MastraBase } from '../base';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import type { ConvertedTool, MCPServerConfig, MCPServerSSEOptions } from './types';
+import type {
+  ConvertedTool,
+  MCPServerConfig,
+  MCPServerHonoSSEOptions,
+  MCPServerHTTPOptions,
+  MCPServerSSEOptions,
+} from './types';
 
 export * from './types';
 
@@ -65,13 +70,18 @@ export abstract class MCPServerBase extends MastraBase {
    */
   public abstract startSSE(options: MCPServerSSEOptions): Promise<void>;
 
-  public abstract startHTTP(options: {
-    url: URL;
-    httpPath: string;
-    req: http.IncomingMessage;
-    res: http.ServerResponse<http.IncomingMessage>;
-    options?: any; // Consider typing StreamableHTTPServerTransportOptions from @modelcontextprotocol/sdk if possible
-  }): Promise<void>;
+  /**
+   * Start the MCP server using Hono SSE transport
+   * Used for Hono servers
+   * @param options Options for the SSE transport
+   */
+  public abstract startHonoSSE(options: MCPServerHonoSSEOptions): Promise<Response | undefined>;
+
+  /**
+   * Start the MCP server using HTTP transport
+   * @param options Options for the HTTP transport
+   */
+  public abstract startHTTP(options: MCPServerHTTPOptions): Promise<void>;
 
   /**
    * Close the MCP server and all its connections
