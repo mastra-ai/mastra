@@ -7,6 +7,7 @@ import { Memory } from '@mastra/memory';
 import type { ToolCallPart } from 'ai';
 import dotenv from 'dotenv';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import { LibSQLVector } from '@mastra/libsql';
 
 const resourceId = 'test-resource';
 let messageCounter = 0;
@@ -54,6 +55,7 @@ describe('Working Memory Tests', () => {
 - **Location**: 
 - **Interests**: 
 `,
+          use: 'tool-call',
         },
         lastMessages: 10,
         semanticRecall: {
@@ -64,6 +66,15 @@ describe('Working Memory Tests', () => {
           generateTitle: false,
         },
       },
+      storage: new DefaultStorage({
+        config: {
+          url: 'file:test.db',
+        },
+      }),
+      vector: new LibSQLVector({
+        connectionUrl: 'file:test.db', // relative path from bundled .mastra/output dir
+      }),
+      embedder: openai.embedding('text-embedding-3-small'),
     });
 
     // Reset message counter
@@ -309,6 +320,10 @@ describe('Working Memory Tests', () => {
           url: 'file:test.db',
         },
       }),
+      vector: new LibSQLVector({
+        connectionUrl: 'file:test.db', // relative path from bundled .mastra/output dir
+      }),
+      embedder: openai.embedding('text-embedding-3-small'),
       options: {
         workingMemory: {
           enabled: false,
@@ -316,6 +331,7 @@ describe('Working Memory Tests', () => {
 - **First Name**: 
 - **Last Name**:
 `,
+          use: 'tool-call',
         },
         lastMessages: 10,
         semanticRecall: {
@@ -365,6 +381,10 @@ describe('Working Memory Tests', () => {
           url: 'file:test.db',
         },
       }),
+      vector: new LibSQLVector({
+        connectionUrl: 'file:test.db', // relative path from bundled .mastra/output dir
+      }),
+      embedder: openai.embedding('text-embedding-3-small'),
       options: {
         workingMemory: {
           enabled: true,
@@ -417,6 +437,10 @@ describe('Working Memory Tests', () => {
           url: 'file:test.db',
         },
       }),
+      vector: new LibSQLVector({
+        connectionUrl: 'file:test.db', // relative path from bundled .mastra/output dir
+      }),
+      embedder: openai.embedding('text-embedding-3-small'),
       options: {
         workingMemory: {
           enabled: true,
@@ -470,6 +494,10 @@ describe('Working Memory Tests', () => {
           url: 'file:test.db',
         },
       }),
+      vector: new LibSQLVector({
+        connectionUrl: 'file:test.db', // relative path from bundled .mastra/output dir
+      }),
+      embedder: openai.embedding('text-embedding-3-small'),
       options: {
         workingMemory: {
           enabled: true,
@@ -514,6 +542,10 @@ describe('Working Memory Tests', () => {
           url: 'file:test.db',
         },
       }),
+      vector: new LibSQLVector({
+        connectionUrl: 'file:test.db', // relative path from bundled .mastra/output dir
+      }),
+      embedder: openai.embedding('text-embedding-3-small'),
       options: {
         workingMemory: {
           enabled: true,
