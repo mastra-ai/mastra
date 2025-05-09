@@ -68,7 +68,7 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
           variant="ghost"
           className="flex items-center text-sm font-normal justify-between w-full gap-6 cursor-pointer border-[0.5px] border-borders-1 text-icons-3"
         >
-          <span className="text-sm">Search or ask..</span>
+          <span className="text-sm">Search or ask AI..</span>
           <Shortcut />
         </Button>
       </div>
@@ -84,7 +84,7 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
           <div className="flex items-start pt-[200px] justify-center min-h-full p-4">
             <DialogPanel
               transition
-              className="w-full border-[0.5px] border-borders-2 h-fit max-w-[550px] mx-auto rounded-xl bg-surface-4 duration-300 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0"
+              className="w-full border-[0.5px] border-borders-2 h-fit max-w-[660px] mx-auto rounded-xl bg-surface-4 duration-300 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0"
             >
               <DialogTitle as="h3" className="sr-only">
                 Search

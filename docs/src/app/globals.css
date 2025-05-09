@@ -34,6 +34,10 @@
   --color-tag-green-2: hsla(142, 30%, 15%, 1);
 }
 
+#use-ai-text {
+  color: var(--color-icons-5);
+}
+
 :root {
   --nextra-navbar-height: 60px;
   --nextra-content-width: 1220px;

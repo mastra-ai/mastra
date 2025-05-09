@@ -130,8 +130,8 @@ export const CustomSearch: FC<SearchProps> = ({
   className,
   emptyResult = "No results found.",
   errorText = "Failed to load search index.",
-  loading = "Loading…",
-  placeholder = "Search or ask..",
+  // loading = "Loading…",
+  placeholder = "Search or ask AI..",
   searchOptions,
   setIsSearching,
   onUseAgent,
@@ -141,6 +141,7 @@ export const CustomSearch: FC<SearchProps> = ({
   const [error, setError] = useState<ReactElement | string>("");
   const [results, setResults] = useState<PagefindResult[]>([]);
   const [search, setSearch] = useState("");
+  const [isFocused, setIsFocused] = useState(false);
   // https://github.com/shuding/nextra/pull/3514
   // defer pagefind results update for prioritizing user input state
   const deferredSearch = useDeferredValue(search);
@@ -214,7 +215,6 @@ export const CustomSearch: FC<SearchProps> = ({
   };
 
   const handleSelect = (searchResult: PagefindResult | null) => {
-    console.log(searchResult);
     if (!searchResult) return;
     if (searchResult.url === "use-ai") {
       onUseAgent({ searchQuery: `Tell me about ${search}` });
@@ -236,14 +236,20 @@ export const CustomSearch: FC<SearchProps> = ({
     setSearch("");
   };
 
-  const isSearchEmpty = !search || !results.length;
+  const handleBlur = () => {
+    setIsFocused(false);
+    closeModal();
+  };
+
+  const isSearchEmpty = !search;
+
 
   return (
     <Combobox onChange={handleSelect}>
       <div
         className={cn(
           className,
-          "w-full p-4 py-5 flex items-center gap-[14px]",
+          "w-full p-4 py-[10px] flex items-center gap-[14px]",
         )}
       >
         <span className="relative" onClick={() => inputRef.current.focus()}>
@@ -255,33 +261,37 @@ export const CustomSearch: FC<SearchProps> = ({
           className={() =>
             cn(
               "x:[&::-webkit-search-cancel-button]:appearance-none",
-              "outline-none caret-accent-green text-icons-6 focus:outline-none w-full placeholder:text-icons-4 placeholder:text-base placeholder:font-normal",
+              "outline-none caret-accent-green text-icons-6 focus:outline-none w-full placeholder:text-icons-4 placeholder:text-lg placeholder:font-normal",
             )
           }
           autoComplete="off"
           type="search"
+          autoFocus
           onChange={handleChange}
           value={search}
           placeholder={placeholder}
-          autoFocus
+          onBlur={handleBlur}
         />
       </div>
       <div
         className={cn(
           "relative max-h-[500px] overflow-hidden",
-          isSearchLoading || isSearchEmpty ? "h-fit" : "h-[500px]",
+          isSearchLoading || isSearchEmpty || !isFocused
+            ? "h-fit"
+            : "h-[500px]",
         )}
       >
         <ScrollArea className="h-full">
           <ComboboxOptions
             transition
+            static
             modal={false}
-            // anchor="bottom"
+            unmount={false}
             className={cn(
               "x:motion-reduce:transition-none",
               // From https://headlessui.com/react/combobox#adding-transitions
               "x:origin-top x:transition x:duration-200 x:ease-out x:data-closed:scale-95 x:data-closed:opacity-0 x:empty:invisible",
-              error || isSearchLoading
+              error || (isSearchLoading && !isSearchEmpty)
                 ? [
                     "x:md:min-h-28 x:grow x:flex x:justify-center x:text-sm x:gap-2 x:px-8",
                     error
@@ -301,13 +311,12 @@ export const CustomSearch: FC<SearchProps> = ({
                   {error}
                 </div>
               </>
-            ) : isSearchLoading ? (
+            ) : isSearchLoading && !isSearchEmpty ? (
               <>
                 <SpinnerIcon
                   height="20"
                   className="x:shrink-0 x:animate-spin"
                 />
-                {loading}
               </>
             ) : results.length ? (
               <div>
@@ -320,7 +329,7 @@ export const CustomSearch: FC<SearchProps> = ({
                           focus ? "bg-surface-5" : "bg-surface-4",
                         )
                       }
-                      value={{url: "use-ai"}}
+                      value={{ url: "use-ai" }}
                       key="use-ai"
                     >
                       <div className="flex items-center gap-2">
@@ -328,7 +337,7 @@ export const CustomSearch: FC<SearchProps> = ({
                           <JarvisIcon className="w-6 h-6 shrink-0" />
                         </span>
                         <span className="flex flex-col text-lg font-medium text-left text-icons-5">
-                          <span className="text-icons-5!">
+                          <span id="use-ai-text" className="text-icons-5">
                             Tell me about{" "}
                             <span className="text-accent-green">{search}</span>
                           </span>
@@ -343,11 +352,7 @@ export const CustomSearch: FC<SearchProps> = ({
                     </ComboboxOption>
                   </div>
                   {results.map((searchResult) => (
-                    <Result
-                      key={searchResult.url}
-                      data={searchResult}
-                      closeModal={closeModal}
-                    />
+                    <Result key={searchResult.url} data={searchResult} />
                   ))}
                 </div>
               </div>
@@ -363,9 +368,7 @@ export const CustomSearch: FC<SearchProps> = ({
 
 const Result: FC<{
   data: PagefindResult;
-  closeModal: () => void;
-}> = ({ data, closeModal }) => {
-  const router = useRouter();
+}> = ({ data }) => {
   return (
     <>
       {data.sub_results.map((subResult) => (
@@ -381,14 +384,14 @@ const Result: FC<{
         >
           <div className="flex gap-[14px] items-center">
             <BookIcon className="w-5 h-5 text-icons-3" />
-            <span className="text-lg font-medium text-icons-6">
+            <span className="text-lg font-medium truncate text-icons-6">
               {subResult.title}
             </span>
           </div>
           <div className="ml-2 flex items-center gap-[14px] truncate border-l-2 border-borders-2 pl-4">
             <BurgerIcon className="w-4 h-4 shrink-0 text-icons-3" />
             <div
-              className="text-lg font-normal text-icons-3 [&_mark]:text-accent-green [&_mark]:bg-transparent"
+              className="text-lg font-normal truncate text-icons-3 [&_mark]:text-accent-green [&_mark]:bg-transparent"
               dangerouslySetInnerHTML={{ __html: subResult.excerpt }}
             />
           </div>

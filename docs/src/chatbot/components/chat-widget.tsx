@@ -48,7 +48,7 @@ export function CustomChatInterface({
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    console.log({ searchQuery });
+    console.log("appending message", {searchQuery});
     if (searchQuery === "") return;
     appendMessage(new TextMessage({ content: searchQuery, role: Role.User }));
   }, [searchQuery]);
