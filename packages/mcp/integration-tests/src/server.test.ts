@@ -31,8 +31,8 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
     mastraServer = spawn(
       'pnpm',
       [
-        // path.resolve(import.meta.dirname, `..`, `..`, `..`, `cli`, `dist`, `index.js`),
-        `mastra`,
+        path.resolve(import.meta.dirname, `..`, `..`, `..`, `cli`, `dist`, `index.js`),
+        // `mastra`,
         'dev',
         '--port',
         port.toString(),
