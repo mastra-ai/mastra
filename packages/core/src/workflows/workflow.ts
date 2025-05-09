@@ -924,7 +924,6 @@ export class Workflow<
       onStepTransition: this.#onStepTransition,
       resultMapping: this.resultMapping,
       onFinish: () => {
-        console.log('workflow finished and run deleted for run=', run.runId);
         this.#runs.delete(run.runId);
       },
       events,

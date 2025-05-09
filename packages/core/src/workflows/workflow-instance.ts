@@ -165,17 +165,10 @@ export class WorkflowInstance<
       >,
     ) => void,
   ): () => void {
-    console.log('watchinggggggggg');
-    this.#onStepTransition.add(props => {
-      console.log('call on transition');
-      onTransition(props);
-    });
+    this.#onStepTransition.add(onTransition);
 
     return () => {
-      this.#onStepTransition.delete(props => {
-        console.log('call on transition');
-        onTransition(props);
-      });
+      this.#onStepTransition.delete(onTransition);
     };
   }
 

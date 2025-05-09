@@ -247,18 +247,12 @@ export async function watchWorkflowHandler({
 
     const newRun = workflow.createRun({ runId });
 
-    console.log('new run id from createRun==', newRun.runId);
-
     let unwatch: () => void;
     let asyncRef: NodeJS.Immediate | null = null;
-    console.log('watch stream started==');
     const stream = new ReadableStream<string>({
       start(controller) {
-        console.log('start stream');
         unwatch = newRun.watch(({ activePaths, runId, timestamp, results }) => {
-          console.log('watch stream running==', runId);
           const activePathsObj = Object.fromEntries(activePaths);
-          console.log('activePathsObj===', activePathsObj);
           controller.enqueue(JSON.stringify({ activePaths: activePathsObj, runId, timestamp, results }));
 
           if (asyncRef) {
@@ -268,9 +262,6 @@ export async function watchWorkflowHandler({
 
           // a run is finished if we cannot retrieve it anymore
           asyncRef = setImmediate(() => {
-            // const allActivePathNotRunning = Object.values(activePathsObj).every(path => path.status !== 'running');
-            // console.log('allActivePathNotRunning==', allActivePathNotRunning);
-
             if (!workflow.getMemoryRun(runId)) {
               controller.close();
               unwatch?.();
@@ -279,16 +270,12 @@ export async function watchWorkflowHandler({
         });
       },
       cancel() {
-        console.log('steam cancelled');
         unwatch?.();
       },
     });
 
-    console.log('got stream to return');
-
     return stream;
   } catch (error) {
-    console.log('error watching workflow===', error);
     return handleError(error, 'Error watching workflow');
   }
 }

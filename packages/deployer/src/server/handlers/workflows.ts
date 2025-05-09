@@ -129,7 +129,6 @@ export function watchWorkflowHandler(c: Context) {
             workflowId,
             runId,
           });
-          console.log('watch stream result in deployer==', result);
           stream.onAbort(() => {
             if (!result.locked) {
               return result.cancel();
