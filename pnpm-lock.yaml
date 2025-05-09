@@ -274,7 +274,7 @@ importers:
         version: 12.1.0
       dotenv:
         specifier: ^16.4.7
-        version: 16.4.7
+        version: 16.5.0
       drizzle-kit:
         specifier: ^0.30.5
         version: 0.30.5
@@ -602,8 +602,8 @@ importers:
         specifier: ^12.1.0
         version: 12.1.0
       dotenv:
-        specifier: ^16.4.7
-        version: 16.4.7
+        specifier: ^16.5.0
+        version: 16.5.0
       execa:
         specifier: ^9.5.2
         version: 9.5.2
@@ -977,8 +977,8 @@ importers:
         specifier: ^3.6.0
         version: 3.6.0
       dotenv:
-        specifier: ^16.4.7
-        version: 16.4.7
+        specifier: ^16.5.0
+        version: 16.5.0
       fastembed:
         specifier: ^1.14.4
         version: 1.14.4
@@ -1183,8 +1183,8 @@ importers:
         specifier: ^2.0.3
         version: 2.0.4
       dotenv:
-        specifier: ^16.4.7
-        version: 16.4.7
+        specifier: ^16.5.0
+        version: 16.5.0
       esbuild:
         specifier: ^0.25.1
         version: 0.25.1
@@ -1324,7 +1324,7 @@ importers:
         version: 4.3.15(react@19.1.0)(zod@3.24.4)
       dotenv:
         specifier: ^16.4.7
-        version: 16.4.7
+        version: 16.5.0
       eslint:
         specifier: ^9.23.0
         version: 9.25.1(jiti@2.4.2)
@@ -1712,7 +1712,7 @@ importers:
         version: link:../../../stores/upstash
       dotenv:
         specifier: ^16.4.7
-        version: 16.4.7
+        version: 16.5.0
       zod:
         specifier: ^3.24.2
         version: 3.24.3
@@ -2021,7 +2021,7 @@ importers:
         version: 4.3.15(react@19.1.0)(zod@3.24.4)
       dotenv:
         specifier: ^16.4.7
-        version: 16.4.7
+        version: 16.5.0
       eslint:
         specifier: ^9.23.0
         version: 9.25.1(jiti@2.4.2)
@@ -2518,7 +2518,7 @@ importers:
         version: 20.17.32
       dotenv:
         specifier: ^16.4.7
-        version: 16.4.7
+        version: 16.5.0
       eslint:
         specifier: ^9.23.0
         version: 9.25.1(jiti@2.4.2)
@@ -2558,7 +2558,7 @@ importers:
         version: 20.17.32
       dotenv:
         specifier: ^16.4.7
-        version: 16.4.7
+        version: 16.5.0
       eslint:
         specifier: ^9.23.0
         version: 9.25.1(jiti@2.4.2)
@@ -2783,7 +2783,7 @@ importers:
         version: 20.17.32
       dotenv:
         specifier: ^16.4.7
-        version: 16.4.7
+        version: 16.5.0
       eslint:
         specifier: ^9.23.0
         version: 9.25.1(jiti@2.4.2)
@@ -2848,7 +2848,7 @@ importers:
         version: 20.17.32
       dotenv:
         specifier: ^16.4.7
-        version: 16.4.7
+        version: 16.5.0
       eslint:
         specifier: ^9.23.0
         version: 9.25.1(jiti@2.4.2)
@@ -2885,7 +2885,7 @@ importers:
         version: 20.17.32
       dotenv:
         specifier: ^16.4.7
-        version: 16.4.7
+        version: 16.5.0
       eslint:
         specifier: ^9.23.0
         version: 9.25.1(jiti@2.4.2)
@@ -2919,7 +2919,7 @@ importers:
         version: 20.17.32
       dotenv:
         specifier: ^16.4.7
-        version: 16.4.7
+        version: 16.5.0
       eslint:
         specifier: ^9.23.0
         version: 9.25.1(jiti@2.4.2)
