@@ -130,7 +130,6 @@ export const CustomSearch: FC<SearchProps> = ({
   className,
   emptyResult = "No results found.",
   errorText = "Failed to load search index.",
-  // loading = "Loading…",
   placeholder = "Search or ask AI..",
   searchOptions,
   setIsSearching,
@@ -141,7 +140,6 @@ export const CustomSearch: FC<SearchProps> = ({
   const [error, setError] = useState<ReactElement | string>("");
   const [results, setResults] = useState<PagefindResult[]>([]);
   const [search, setSearch] = useState("");
-  const [isFocused, setIsFocused] = useState(false);
   // https://github.com/shuding/nextra/pull/3514
   // defer pagefind results update for prioritizing user input state
   const deferredSearch = useDeferredValue(search);
@@ -237,7 +235,6 @@ export const CustomSearch: FC<SearchProps> = ({
   };
 
   const handleBlur = () => {
-    setIsFocused(false);
     closeModal();
   };
 
