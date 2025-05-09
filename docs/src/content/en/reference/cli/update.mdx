@@ -1,0 +1,34 @@
+---
+title: 'mastra update'
+description: 'Update your Mastra packages'
+---
+
+The `mastra update` command updates all Mastra packages in your project to either the latest stable or alpha version.
+
+## Usage
+
+```bash
+mastra update [options]
+```
+
+## Options
+
+| Option | Description |
+|--------|-------------|
+| `-a, --alpha` | Update to the latest alpha versions |
+| `-l, --latest` | Update to the latest stable versions |
+| `-r, --root <path>` | Path to your root folder |
+
+## Examples
+
+Update to latest stable version:
+```bash
+mastra update --latest
+```
+
+Update to latest alpha version:
+```bash
+mastra update --alpha
+```
+
+If you have both alpha and stable versions in your project, the command will prompt you to choose which version to update to.

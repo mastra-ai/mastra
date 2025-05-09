@@ -11,6 +11,7 @@ import { dev } from './commands/dev/dev';
 import { init } from './commands/init/init';
 import { checkAndInstallCoreDeps, checkPkgJson, interactivePrompt } from './commands/init/utils';
 import { lint } from './commands/lint';
+import { update } from './commands/update/index';
 import { DepsService } from './services/service.deps';
 import { logger } from './utils/logger';
 
@@ -225,6 +226,29 @@ program
           Then deploy .mastra/output to your target platform.
           `);
         await deploy({ dir: args.dir });
+      },
+      origin,
+    });
+  });
+
+program
+  .command('update')
+  .description('Update your Mastra packages')
+  .option('-a, --alpha', 'Update to the latest alpha versions')
+  .option('-l, --latest', 'Update to the latest versions')
+  .option('-r, --root <root>', 'Path to your root folder')
+  .action(async ({ alpha, latest, root }) => {
+    await analytics.trackCommandExecution({
+      command: 'update',
+      args: { alpha, latest, root },
+      execution: async () => {
+        if (alpha) {
+          await update({ alpha: true, root });
+        } else if (latest) {
+          await update({ latest: true, root });
+        } else {
+          await update({ root });
+        }
       },
       origin,
     });
