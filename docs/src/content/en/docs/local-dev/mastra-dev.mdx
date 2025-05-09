@@ -2,6 +2,7 @@
 title: "Inspecting Agents with `mastra dev` | Mastra Local Dev Docs"
 description: Documentation for the Mastra local development environment for Mastra applications.
 ---
+
 import YouTube from "@/components/youtube";
 
 # Local Development Environment
@@ -19,16 +20,16 @@ mastra dev
 ```
 
 By default, the server runs on localhost at http://localhost:4111. Custom port and host can be configured via the
-mastra server config. 
+mastra server config.
 
 ```typescript
 import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
   server: {
-   port: '4111',
-   host: '0.0.0.0'
-  }
+    port: "4111",
+    host: "0.0.0.0",
+  },
 });
 ```
 
@@ -62,6 +63,7 @@ The Workflow playground helps you visualize and test your workflow implementatio
 - **Workflow Visualization**: Workflow graph visualization.
 
 - **Run Workflows**:
+
   - Trigger test workflow runs with custom input data.
   - Debug workflow logic and conditions.
   - Simulate different execution paths.
@@ -102,16 +104,16 @@ import { Mastra } from "@mastra/core";
 export const mastra = new Mastra({
   server: {
     build: {
-      openAPIDocs: true,  // Enable OpenAPI documentation
+      openAPIDocs: true, // Enable OpenAPI documentation
       // ... other build config options
-    }
-  }
+    },
+  },
 });
 ```
 
 ## Swagger UI
 
-Swagger UI provides an interactive interface for testing your API endpoints at `mastra dev` provides an OpenAPI spec at http://localhost:4111/swagger-ui. 
+Swagger UI provides an interactive interface for testing your API endpoints at `mastra dev` provides an OpenAPI spec at http://localhost:4111/swagger-ui.
 To enable Swagger UI in your Mastra instance, add the following configuration:
 
 ```typescript
@@ -120,11 +122,11 @@ import { Mastra } from "@mastra/core";
 export const mastra = new Mastra({
   server: {
     build: {
-      openAPIDocs: true,  // Enable OpenAPI documentation
-      swaggerUI: true,  // Enable Swagger UI
+      openAPIDocs: true, // Enable OpenAPI documentation
+      swaggerUI: true, // Enable Swagger UI
       // ... other build config options
-    }
-  }
+    },
+  },
 });
 ```
 
@@ -135,6 +137,7 @@ The local development server is designed to run without any external dependencie
 - **Dev Server**: Uses [Hono](https://hono.dev) as the underlying framework to power the [Mastra Server](/docs/deployment/server).
 
 - **In-Memory Storage**: Uses [LibSQL](https://libsql.org/) memory adapters for:
+
   - Agent memory management.
   - Trace storage.
   - Evals storage.
@@ -147,9 +150,9 @@ The local development server is designed to run without any external dependencie
 
 This architecture allows you to start developing immediately without setting up databases or vector stores, while still maintaining production-like behavior in your local environment.
 
-### Model settings 
+### Model settings
 
-The local devleopment server also lets you configure the model settings in Overview > Model Settings. 
+The local devleopment server also lets you configure the model settings in Overview > Model Settings.
 
 You can configure the following settings:
 
@@ -161,7 +164,6 @@ You can configure the following settings:
 - **Max Tokens**: Maximum number of tokens allowed in the model's response. Higher values allow for longer outputs but may increase latency.
 - **Max Steps**: Maximum number of steps a workflow or agent can execute before stopping. Prevents infinite loops and runaway processes.
 - **Max Retries**: Number of times to retry failed API calls or model requests before giving up. Helps handle temporary failures gracefully.
-
 
 ## Summary
 

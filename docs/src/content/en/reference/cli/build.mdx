@@ -64,19 +64,22 @@ mastra build --dir ./my-mastra-project
 ## Output
 
 The command generates a production bundle in the `.mastra` directory, which includes:
+
 - A Hono-based HTTP server with your Mastra agents exposed as endpoints
 - Bundled JavaScript files optimized for production
 - Source maps for debugging
 - Required dependencies
 
 This output is suitable for:
+
 - Deploying to cloud servers (EC2, Digital Ocean)
 - Running in containerized environments
 - Using with container orchestration systems
 
 ## Deployers
-When a Deployer is used, the build output is automatically prepared for the target platform e.g
-- [Vercel Deployer](/reference/deployer/vercel)
-- [Netlify Deployer](/reference/deployer/netlify) 
-- [Cloudflare Deployer](/reference/deployer/cloudflare)
 
+When a Deployer is used, the build output is automatically prepared for the target platform e.g
+
+- [Vercel Deployer](/reference/deployer/vercel)
+- [Netlify Deployer](/reference/deployer/netlify)
+- [Cloudflare Deployer](/reference/deployer/cloudflare)

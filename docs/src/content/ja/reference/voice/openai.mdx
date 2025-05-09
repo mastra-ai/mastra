@@ -10,7 +10,7 @@ MastraのOpenAIVoiceクラスは、OpenAIのモデルを使用してテキスト
 ## 使用例
 
 ```typescript
-import { OpenAIVoice } from '@mastra/voice-openai';
+import { OpenAIVoice } from "@mastra/voice-openai";
 
 // 環境変数を使用してデフォルト設定で初期化
 const voice = new OpenAIVoice();
@@ -18,25 +18,28 @@ const voice = new OpenAIVoice();
 // または特定の設定で初期化
 const voiceWithConfig = new OpenAIVoice({
   speechModel: {
-    name: 'tts-1-hd',
-    apiKey: 'your-openai-api-key'
+    name: "tts-1-hd",
+    apiKey: "your-openai-api-key",
   },
   listeningModel: {
-    name: 'whisper-1',
-    apiKey: 'your-openai-api-key'
+    name: "whisper-1",
+    apiKey: "your-openai-api-key",
   },
-  speaker: 'alloy'  // デフォルトの声
+  speaker: "alloy", // デフォルトの声
 });
 
 // テキストを音声に変換
-const audioStream = await voice.speak('こんにちは、どのようにお手伝いできますか？', {
-  speaker: 'nova',  // デフォルトの声を上書き
-  speed: 1.2  // 音声速度を調整
-});
+const audioStream = await voice.speak(
+  "こんにちは、どのようにお手伝いできますか？",
+  {
+    speaker: "nova", // デフォルトの声を上書き
+    speed: 1.2, // 音声速度を調整
+  },
+);
 
 // 音声をテキストに変換
 const text = await voice.listen(audioStream, {
-  filetype: 'mp3'
+  filetype: "mp3",
 });
 ```
 
@@ -83,7 +86,8 @@ const text = await voice.listen(audioStream, {
     {
       name: "apiKey",
       type: "string",
-      description: "OpenAI APIキー。OPENAI_API_KEY環境変数にフォールバックします。",
+      description:
+        "OpenAI APIキー。OPENAI_API_KEY環境変数にフォールバックします。",
       isOptional: true,
     },
   ]}

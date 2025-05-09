@@ -10,18 +10,18 @@ import { GithubLink } from "@/components/github-link";
 Workflows often need to follow different paths based on some condition.
 This example demonstrates how to use the `branch` construct to create conditional flows within your workflows.
 
-
 ## Define Planning Agent
+
 Define a planning agent which leverages an LLM call to plan activities given a location and corresponding weather conditions.
 
 ```ts showLineNumbers copy filename="agents/planning-agent.ts"
-import { Agent } from '@mastra/core/agent'
-import { openai } from '@ai-sdk/openai'
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
 
-const llm = openai('gpt-4o')
+const llm = openai("gpt-4o");
 
 const planningAgent = new Agent({
-  name: 'planningAgent',
+  name: "planningAgent",
   model: llm,
   instructions: `
         You are a local activities and travel expert who excels at weather-based planning. Analyze the weather data and provide practical activity recommendations.
@@ -64,40 +64,40 @@ const planningAgent = new Agent({
 
         Maintain this exact formatting for consistency, using the emoji and section headers as shown.
       `,
-})
+});
 
-export { planningAgent }
+export { planningAgent };
 ```
 
 ## Define Weather Workflow
+
 Define the weather workflow with 3 steps: one to fetch the weather via a network call, one to plan activities, and another to plan only indoor activities.
 Both using the planning agent.
 
 ```ts showLineNumbers copy filename="workflows/conditional-workflow.ts"
-import { z } from 'zod'
-import { createStep, createWorkflow } from './vNext'
-
+import { z } from "zod";
+import { createStep, createWorkflow } from "./vNext";
 
 function getWeatherCondition(code: number): string {
   const conditions: Record<number, string> = {
-    0: 'Clear sky',
-    1: 'Mainly clear',
-    2: 'Partly cloudy',
-    3: 'Overcast',
-    45: 'Foggy',
-    48: 'Depositing rime fog',
-    51: 'Light drizzle',
-    53: 'Moderate drizzle',
-    55: 'Dense drizzle',
-    61: 'Slight rain',
-    63: 'Moderate rain',
-    65: 'Heavy rain',
-    71: 'Slight snow fall',
-    73: 'Moderate snow fall',
-    75: 'Heavy snow fall',
-    95: 'Thunderstorm',
-  }
-  return conditions[code] || 'Unknown'
+    0: "Clear sky",
+    1: "Mainly clear",
+    2: "Partly cloudy",
+    3: "Overcast",
+    45: "Foggy",
+    48: "Depositing rime fog",
+    51: "Light drizzle",
+    53: "Moderate drizzle",
+    55: "Dense drizzle",
+    61: "Slight rain",
+    63: "Moderate rain",
+    65: "Heavy rain",
+    71: "Slight snow fall",
+    73: "Moderate snow fall",
+    75: "Heavy snow fall",
+    95: "Thunderstorm",
+  };
+  return conditions[code] || "Unknown";
 }
 
 const forecastSchema = z.object({
@@ -107,46 +107,46 @@ const forecastSchema = z.object({
   precipitationChance: z.number(),
   condition: z.string(),
   location: z.string(),
-})
+});
 
 // Fetch weather step
 const fetchWeather = createStep({
-  id: 'fetch-weather',
-  description: 'Fetches weather forecast for a given city',
+  id: "fetch-weather",
+  description: "Fetches weather forecast for a given city",
   inputSchema: z.object({
     city: z.string(),
   }),
   outputSchema: forecastSchema,
   execute: async ({ inputData }) => {
     if (!inputData) {
-      throw new Error('Trigger data not found')
+      throw new Error("Trigger data not found");
     }
 
-    const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(inputData.city)}&count=1`
-    const geocodingResponse = await fetch(geocodingUrl)
+    const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(inputData.city)}&count=1`;
+    const geocodingResponse = await fetch(geocodingUrl);
     const geocodingData = (await geocodingResponse.json()) as {
-      results: { latitude: number; longitude: number; name: string }[]
-    }
+      results: { latitude: number; longitude: number; name: string }[];
+    };
 
     if (!geocodingData.results?.[0]) {
-      throw new Error(`Location '${inputData.city}' not found`)
+      throw new Error(`Location '${inputData.city}' not found`);
     }
 
-    const { latitude, longitude, name } = geocodingData.results[0]
+    const { latitude, longitude, name } = geocodingData.results[0];
 
-    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=precipitation,weathercode&timezone=auto,&hourly=precipitation_probability,temperature_2m`
-    const response = await fetch(weatherUrl)
+    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=precipitation,weathercode&timezone=auto,&hourly=precipitation_probability,temperature_2m`;
+    const response = await fetch(weatherUrl);
     const data = (await response.json()) as {
       current: {
-        time: string
-        precipitation: number
-        weathercode: number
-      }
+        time: string;
+        precipitation: number;
+        weathercode: number;
+      };
       hourly: {
-        precipitation_probability: number[]
-        temperature_2m: number[]
-      }
-    }
+        precipitation_probability: number[];
+        temperature_2m: number[];
+      };
+    };
 
     const forecast = {
       date: new Date().toISOString(),
@@ -156,106 +156,106 @@ const fetchWeather = createStep({
       location: name,
       precipitationChance: data.hourly.precipitation_probability.reduce(
         (acc, curr) => Math.max(acc, curr),
-        0
+        0,
       ),
-    }
+    };
 
-    return forecast
+    return forecast;
   },
-})
+});
 
 // Plan activities indorrs or outdoors
 const planActivities = createStep({
-  id: 'plan-activities',
-  description: 'Suggests activities based on weather conditions',
+  id: "plan-activities",
+  description: "Suggests activities based on weather conditions",
   inputSchema: forecastSchema,
   outputSchema: z.object({
     activities: z.string(),
   }),
   execute: async ({ inputData, mastra }) => {
-    console.log('planActivities')
-    const forecast = inputData
+    console.log("planActivities");
+    const forecast = inputData;
 
     if (!forecast) {
-      throw new Error('Forecast data not found')
+      throw new Error("Forecast data not found");
     }
 
     const prompt = `Based on the following weather forecast for ${forecast.location}, suggest appropriate activities:
       ${JSON.stringify(forecast, null, 2)}
-      `
+      `;
 
-    const agent = mastra?.getAgent('planningAgent')
+    const agent = mastra?.getAgent("planningAgent");
     if (!agent) {
-      throw new Error('Planning agent not found')
+      throw new Error("Planning agent not found");
     }
 
     const response = await agent.stream([
       {
-        role: 'user',
+        role: "user",
         content: prompt,
       },
-    ])
+    ]);
 
-    let activitiesText = ''
+    let activitiesText = "";
 
     for await (const chunk of response.textStream) {
-      process.stdout.write(chunk)
-      activitiesText += chunk
+      process.stdout.write(chunk);
+      activitiesText += chunk;
     }
 
     return {
       activities: activitiesText,
-    }
+    };
   },
-})
+});
 
 // Plan indoor activities only
 const planIndoorActivities = createStep({
-  id: 'plan-indoor-activities',
-  description: 'Suggests indoor activities based on weather conditions',
+  id: "plan-indoor-activities",
+  description: "Suggests indoor activities based on weather conditions",
   inputSchema: forecastSchema,
   outputSchema: z.object({
     activities: z.string(),
   }),
   execute: async ({ inputData, mastra }) => {
-    console.log('planIndoorActivities')
-    const forecast = inputData
+    console.log("planIndoorActivities");
+    const forecast = inputData;
 
     if (!forecast) {
-      throw new Error('Forecast data not found')
+      throw new Error("Forecast data not found");
     }
 
-    const prompt = `In case it rains, plan indoor activities for ${forecast.location} on ${forecast.date}`
+    const prompt = `In case it rains, plan indoor activities for ${forecast.location} on ${forecast.date}`;
 
-    const agent = mastra?.getAgent('planningAgent')
+    const agent = mastra?.getAgent("planningAgent");
     if (!agent) {
-      throw new Error('Planning agent not found')
+      throw new Error("Planning agent not found");
     }
 
     const response = await agent.stream([
       {
-        role: 'user',
+        role: "user",
         content: prompt,
       },
-    ])
+    ]);
 
-    let activitiesText = ''
+    let activitiesText = "";
 
     for await (const chunk of response.textStream) {
-      process.stdout.write(chunk)
-      activitiesText += chunk
+      process.stdout.write(chunk);
+      activitiesText += chunk;
     }
 
     return {
       activities: activitiesText,
-    }
+    };
   },
-})
+});
 
 const weatherWorkflow = createWorkflow({
-  id: 'weather-workflow-step2-if-else',
+  id: "weather-workflow-step2-if-else",
   inputSchema: z.object({
-    city: z.string().describe('The city to get the weather for'),
+    city: z.string().describe("The city to get the weather for"),
   }),
   outputSchema: z.object({
     activities: z.string(),
@@ -265,28 +265,28 @@ const weatherWorkflow = createWorkflow({
   .branch([
     [
       async ({ inputData }) => {
-        return inputData?.precipitationChance > 50
+        return inputData?.precipitationChance > 50;
       },
       planIndoorActivities,
     ],
     [
       async ({ inputData }) => {
-        return inputData?.precipitationChance <= 50
+        return inputData?.precipitationChance <= 50;
       },
       planActivities,
     ],
-  ])
+  ]);
 
-weatherWorkflow.commit()
+weatherWorkflow.commit();
 
-export { weatherWorkflow }
+export { weatherWorkflow };
 ```
 
 ```ts showLineNumbers copy filename="index.ts"
-import { Mastra } from '@mastra/core/mastra'
-import { createLogger } from '@mastra/core/logger'
-import { weatherWorkflow } from './workflows'
-import { planningAgent } from './agents'
+import { Mastra } from "@mastra/core/mastra";
+import { createLogger } from "@mastra/core/logger";
+import { weatherWorkflow } from "./workflows";
+import { planningAgent } from "./agents";
 
 const mastra = new Mastra({
   vnext_workflows: {
@@ -296,23 +296,24 @@ const mastra = new Mastra({
     planningAgent,
   },
   logger: createLogger({
-    name: 'Mastra',
-    level: 'info',
+    name: "Mastra",
+    level: "info",
   }),
-})
+});
 
-export { mastra }
+export { mastra };
 ```
 
 ## Register Agent and Workflow instances with Mastra class
+
 Register the agents and workflow with the mastra instance.
 This is critical for enabling access to the agents within the workflow.
 
 ```ts showLineNumbers copy filename="index.ts"
-import { Mastra } from '@mastra/core/mastra'
-import { createLogger } from '@mastra/core/logger'
-import { weatherWorkflow } from './workflows'
-import { planningAgent } from './agents'
+import { Mastra } from "@mastra/core/mastra";
+import { createLogger } from "@mastra/core/logger";
+import { weatherWorkflow } from "./workflows";
+import { planningAgent } from "./agents";
 
 const mastra = new Mastra({
   vnext_workflows: {
@@ -322,25 +323,26 @@ const mastra = new Mastra({
     planningAgent,
   },
   logger: createLogger({
-    name: 'Mastra',
-    level: 'info',
+    name: "Mastra",
+    level: "info",
   }),
-})
+});
 
-export { mastra }
+export { mastra };
 ```
 
 ## Execute the weather workflow
+
 Here, we'll get the weather workflow from the mastra instance, then create a run and execute the created run with the required inputData.
 
 ```ts showLineNumbers copy filename="exec.ts"
-import { mastra } from "./"
+import { mastra } from "./";
 
-const workflow = mastra.vnext_getWorkflow('weatherWorkflow')
-const run = workflow.createRun()
+const workflow = mastra.vnext_getWorkflow("weatherWorkflow");
+const run = workflow.createRun();
 
-const result = await run.start({ inputData: { city: 'New York' } })
-console.dir(result, { depth: null })
+const result = await run.start({ inputData: { city: "New York" } });
+console.dir(result, { depth: null });
 ```
 
 <br />
@@ -349,6 +351,7 @@ console.dir(result, { depth: null })
 <br />
 <br />
 <GithubLink
-  link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/conditional-branching'}
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/conditional-branching"
+  }
 />
-

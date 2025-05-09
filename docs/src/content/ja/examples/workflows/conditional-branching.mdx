@@ -3,7 +3,7 @@ title: "例：条件分岐（実験的） | ワークフロー | Mastra ドキ�
 description: if/else文を使用してワークフローに条件分岐を作成するためのMastraの使用例。
 ---
 
-import { GithubLink } from '@/components/github-link';
+import { GithubLink } from "@/components/github-link";
 
 # 条件分岐を伴うワークフロー（実験的）
 
@@ -14,14 +14,13 @@ import { GithubLink } from '@/components/github-link';
 この例は、数値に基づいて異なるパスを取るシンプルなワークフローを示しています:
 
 ```ts showLineNumbers copy
-import { Mastra } from '@mastra/core';
-import { Step, Workflow } from '@mastra/core/workflows';
-import { z } from 'zod';
-
+import { Mastra } from "@mastra/core";
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
 
 // 初期値を提供するステップ
 const startStep = new Step({
-  id: 'start',
+  id: "start",
   outputSchema: z.object({
     value: z.number(),
   }),
@@ -34,38 +33,42 @@ const startStep = new Step({
 
 // 高い値を処理するステップ
 const highValueStep = new Step({
-  id: 'highValue',
+  id: "highValue",
   outputSchema: z.object({
     result: z.string(),
   }),
   execute: async ({ context }) => {
-    const value = context.getStepResult<{ value: number }>('start')?.value;
+    const value = context.getStepResult<{ value: number }>("start")?.value;
     return { result: `High value processed: ${value}` };
   },
 });
 
 // 低い値を処理するステップ
 const lowValueStep = new Step({
-  id: 'lowValue',
+  id: "lowValue",
   outputSchema: z.object({
     result: z.string(),
   }),
   execute: async ({ context }) => {
-    const value = context.getStepResult<{ value: number }>('start')?.value;
+    const value = context.getStepResult<{ value: number }>("start")?.value;
     return { result: `Low value processed: ${value}` };
   },
 });
 
 // 結果をまとめる最終ステップ
 const finalStep = new Step({
-  id: 'final',
+  id: "final",
   outputSchema: z.object({
     summary: z.string(),
   }),
   execute: async ({ context }) => {
     // 実行されたどちらかのブランチから結果を取得
-    const highResult = context.getStepResult<{ result: string }>('highValue')?.result;
-    const lowResult = context.getStepResult<{ result: string }>('lowValue')?.result;
+    const highResult = context.getStepResult<{ result: string }>(
+      "highValue",
+    )?.result;
+    const lowResult = context.getStepResult<{ result: string }>(
+      "lowValue",
+    )?.result;
 
     const result = highResult || lowResult;
     return { summary: `Processing complete: ${result}` };
@@ -74,7 +77,7 @@ const finalStep = new Step({
 
 // 条件分岐を持つワークフローを構築
 const conditionalWorkflow = new Workflow({
-  name: 'conditional-workflow',
+  name: "conditional-workflow",
   triggerSchema: z.object({
     inputValue: z.number(),
   }),
@@ -83,7 +86,7 @@ const conditionalWorkflow = new Workflow({
 conditionalWorkflow
   .step(startStep)
   .if(async ({ context }) => {
-    const value = context.getStepResult<{ value: number }>('start')?.value ?? 0;
+    const value = context.getStepResult<{ value: number }>("start")?.value ?? 0;
     return value >= 10; // 条件: 値が10以上
   })
   .then(highValueStep)
@@ -100,14 +103,14 @@ const mastra = new Mastra({
 
 // 使用例
 async function runWorkflow(inputValue: number) {
-  const workflow = mastra.getWorkflow('conditionalWorkflow');
+  const workflow = mastra.getWorkflow("conditionalWorkflow");
   const { start } = workflow.createRun();
 
   const result = await start({
     triggerData: { inputValue },
   });
 
-  console.log('Workflow result:', result.results);
+  console.log("Workflow result:", result.results);
   return result;
 }
 
@@ -116,9 +119,8 @@ const result1 = await runWorkflow(15);
 // 低い値で実行 ("else" ブランチをたどる)
 const result2 = await runWorkflow(5);
 
-console.log('Result 1:', result1);
-console.log('Result 2:', result2);
-
+console.log("Result 1:", result1);
+console.log("Result 2:", result2);
 ```
 
 ## 参照ベースの条件の使用
@@ -130,7 +132,7 @@ console.log('Result 2:', result2);
 conditionalWorkflow
   .step(startStep)
   .if({
-    ref: { step: startStep, path: 'value' },
+    ref: { step: startStep, path: "value" },
     query: { $gte: 10 }, // 条件: 値が10以上
   })
   .then(highValueStep)
@@ -147,5 +149,7 @@ conditionalWorkflow
 <br />
 <br />
 <GithubLink
-  link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/conditional-branching'}
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/conditional-branching"
+  }
 />

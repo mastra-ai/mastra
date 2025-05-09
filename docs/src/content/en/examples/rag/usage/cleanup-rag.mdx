@@ -43,11 +43,15 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 Then, import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="index.ts"
-import { openai } from '@ai-sdk/openai';
+import { openai } from "@ai-sdk/openai";
 import { Mastra } from "@mastra/core";
 import { Agent } from "@mastra/core/agent";
 import { PgVector } from "@mastra/pg";
-import { MDocument, createVectorQueryTool, createDocumentChunkerTool } from "@mastra/rag";
+import {
+  MDocument,
+  createVectorQueryTool,
+  createDocumentChunkerTool,
+} from "@mastra/rag";
 import { embedMany } from "ai";
 ```
 
@@ -61,7 +65,7 @@ Using createVectorQueryTool imported from @mastra/rag, you can create a tool tha
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
-  model: openai.embedding('text-embedding-3-small'),
+  model: openai.embedding("text-embedding-3-small"),
 });
 ```
 
@@ -96,7 +100,7 @@ const ragAgent = new Agent({
     
     Important: When asked to answer a question, please base your answer only on the context provided in the tool. If the context doesn't contain enough information to fully answer the question, please state that explicitly.
     `,
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
   tools: {
     vectorQueryTool,
     documentChunkerTool,
@@ -115,7 +119,7 @@ export const mastra = new Mastra({
   agents: { ragAgent },
   vectors: { pgVector },
 });
-const agent = mastra.getAgent('ragAgent');
+const agent = mastra.getAgent("ragAgent");
 ```
 
 ## Document Processing
@@ -131,8 +135,8 @@ const chunks = await doc.chunk({
 });
 
 const { embeddings } = await embedMany({
-  model: openai.embedding('text-embedding-3-small'),
-  values: chunks.map(chunk => chunk.text),
+  model: openai.embedding("text-embedding-3-small"),
+  values: chunks.map((chunk) => chunk.text),
 });
 
 const vectorStore = mastra.getVector("pgVector");
@@ -154,10 +158,10 @@ Let's try querying the raw data to establish a baseline:
 
 ```typescript copy showLineNumbers{73} filename="index.ts"
 // Generate response using the original embeddings
-const query = 'What are all the technologies mentioned for space exploration?';
+const query = "What are all the technologies mentioned for space exploration?";
 const originalResponse = await agent.generate(query);
-console.log('\nQuery:', query);
-console.log('Response:', originalResponse.text);
+console.log("\nQuery:", query);
+console.log("Response:", originalResponse.text);
 ```
 
 ## Data Optimization
@@ -178,12 +182,12 @@ const updatedChunks = await updatedDoc.chunk({
 });
 
 const { embeddings: cleanedEmbeddings } = await embedMany({
-  model: openai.embedding('text-embedding-3-small'),
-  values: updatedChunks.map(chunk => chunk.text),
+  model: openai.embedding("text-embedding-3-small"),
+  values: updatedChunks.map((chunk) => chunk.text),
 });
 
 // Update the vector store with cleaned embeddings
-await vectorStore.deleteIndex('embeddings');
+await vectorStore.deleteIndex("embeddings");
 await vectorStore.createIndex({
   indexName: "embeddings",
   dimension: 1536,
@@ -203,8 +207,8 @@ Query the data again after cleaning to observe any differences in the response:
 ```typescript copy showLineNumbers{109} filename="index.ts"
 // Query again with cleaned embeddings
 const cleanedResponse = await agent.generate(query);
-console.log('\nQuery:', query);
-console.log('Response:', cleanedResponse.text);
+console.log("\nQuery:", query);
+console.log("Response:", cleanedResponse.text);
 ```
 
 <br />

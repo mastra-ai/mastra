@@ -3,7 +3,7 @@ title: 音声から音声へ
 description: Mastraを使用して音声から音声へのアプリケーションを作成する例。
 ---
 
-import { GithubLink } from '@/components/github-link';
+import { GithubLink } from "@/components/github-link";
 
 # Mastraを使用した通話分析
 
@@ -48,29 +48,29 @@ npm install
 まず、音声機能を持つエージェントを定義します：
 
 ```ts filename="speech-to-speech/call-analysis/src/mastra/agents/index.ts" copy
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
-import { createTool } from '@mastra/core/tools';
-import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime';
-import { z } from 'zod';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { createTool } from "@mastra/core/tools";
+import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
+import { z } from "zod";
 
 // Have the agent do something
 export const speechToSpeechServer = new Agent({
-    name: 'mastra',
-    instructions: 'You are a helpful assistant.',
-    voice: new OpenAIRealtimeVoice(),
-    model: openai('gpt-4o'),
-    tools: {
-        salutationTool: createTool({
-            id: 'salutationTool',
-            description: 'Read the result of the tool',
-            inputSchema: z.object({ name: z.string() }),
-            outputSchema: z.object({ message: z.string() }),
-            execute: async ({ context }) => {
-                return { message: `Hello ${context.name}!` }
-            }
-        })
-    }
+  name: "mastra",
+  instructions: "You are a helpful assistant.",
+  voice: new OpenAIRealtimeVoice(),
+  model: openai("gpt-4o"),
+  tools: {
+    salutationTool: createTool({
+      id: "salutationTool",
+      description: "Read the result of the tool",
+      inputSchema: z.object({ name: z.string() }),
+      outputSchema: z.object({ message: z.string() }),
+      execute: async ({ context }) => {
+        return { message: `Hello ${context.name}!` };
+      },
+    }),
+  },
 });
 ```
 
@@ -79,14 +79,14 @@ export const speechToSpeechServer = new Agent({
 エージェントをMastraに登録します：
 
 ```ts filename="speech-to-speech/call-analysis/src/mastra/index.ts" copy
-import { Mastra } from '@mastra/core';
-import { speechToSpeechServer } from './agents';
+import { Mastra } from "@mastra/core";
+import { speechToSpeechServer } from "./agents";
 
 export const mastra = new Mastra({
-    agents: {
-        speechToSpeechServer,
-    }
-})
+  agents: {
+    speechToSpeechServer,
+  },
+});
 ```
 
 ### 音声ストレージのためのCloudinary統合
@@ -94,18 +94,20 @@ export const mastra = new Mastra({
 録音ファイルを保存するためのCloudinaryをセットアップします：
 
 ```ts filename="speech-to-speech/call-analysis/src/upload.ts" copy
-import { v2 as cloudinary } from 'cloudinary';
+import { v2 as cloudinary } from "cloudinary";
 
 cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
 export async function uploadToCloudinary(path: string) {
-    const response = await cloudinary.uploader.upload(path, { resource_type: 'raw' })
-    console.log(response)
-    return response.url
+  const response = await cloudinary.uploader.upload(path, {
+    resource_type: "raw",
+  });
+  console.log(response);
+  return response.url;
 }
 ```
 
@@ -114,61 +116,70 @@ export async function uploadToCloudinary(path: string) {
 メインアプリケーションは会話フロー、録音、分析統合を調整します：
 
 ```ts filename="speech-to-speech/call-analysis/src/base.ts" copy
-import { Roark } from '@roarkanalytics/sdk';
-import chalk from 'chalk';
+import { Roark } from "@roarkanalytics/sdk";
+import chalk from "chalk";
 
-import { mastra } from './mastra';
-import { createConversation, formatToolInvocations } from './utils';
-import { uploadToCloudinary } from './upload';
-import fs from 'fs';
+import { mastra } from "./mastra";
+import { createConversation, formatToolInvocations } from "./utils";
+import { uploadToCloudinary } from "./upload";
+import fs from "fs";
 
 const client = new Roark({
-    bearerToken: process.env.ROARK_API_KEY
+  bearerToken: process.env.ROARK_API_KEY,
 });
 
 async function speechToSpeechServerExample() {
-    const { start, stop } = createConversation({
-        mastra,
-        recordingPath: './speech-to-speech-server.mp3',
-        providerOptions: {},
-        initialMessage: 'Howdy partner',
-        onConversationEnd: async (props) => {
-            // File upload
-            fs.writeFileSync(props.recordingPath, props.audioBuffer)
-            const url = await uploadToCloudinary(props.recordingPath)
+  const { start, stop } = createConversation({
+    mastra,
+    recordingPath: "./speech-to-speech-server.mp3",
+    providerOptions: {},
+    initialMessage: "Howdy partner",
+    onConversationEnd: async (props) => {
+      // File upload
+      fs.writeFileSync(props.recordingPath, props.audioBuffer);
+      const url = await uploadToCloudinary(props.recordingPath);
 
-            // Send to Roark
-            console.log('Send to Roark', url)
-            const response = await client.callAnalysis.create({
-                recordingUrl: url,
-                startedAt: props.startedAt,
-                callDirection: 'INBOUND',
-                interfaceType: 'PHONE',
-                participants: [
-                    { role: 'AGENT', spokeFirst: props.agent.spokeFirst, name: props.agent.name, phoneNumber: props.agent.phoneNumber },
-                    { role: 'CUSTOMER', name: 'Yujohn Nattrass', phoneNumber: '987654321' },
-                ],
-                properties: props.metadata,
-                toolInvocations: formatToolInvocations(props.toolInvocations),
-            });
+      // Send to Roark
+      console.log("Send to Roark", url);
+      const response = await client.callAnalysis.create({
+        recordingUrl: url,
+        startedAt: props.startedAt,
+        callDirection: "INBOUND",
+        interfaceType: "PHONE",
+        participants: [
+          {
+            role: "AGENT",
+            spokeFirst: props.agent.spokeFirst,
+            name: props.agent.name,
+            phoneNumber: props.agent.phoneNumber,
+          },
+          {
+            role: "CUSTOMER",
+            name: "Yujohn Nattrass",
+            phoneNumber: "987654321",
+          },
+        ],
+        properties: props.metadata,
+        toolInvocations: formatToolInvocations(props.toolInvocations),
+      });
 
-            console.log('Call Recording Posted:', response.data);
-        },
-        onWriting: (ev) => {
-            if (ev.role === 'assistant') {
-                process.stdout.write(chalk.blue(ev.text));
-            }
-        },
-    });
+      console.log("Call Recording Posted:", response.data);
+    },
+    onWriting: (ev) => {
+      if (ev.role === "assistant") {
+        process.stdout.write(chalk.blue(ev.text));
+      }
+    },
+  });
 
-    await start();
+  await start();
 
-    process.on('SIGINT', async (e) => {
-        await stop();
-    })
+  process.on("SIGINT", async (e) => {
+    await stop();
+  });
 }
 
-speechToSpeechServerExample().catch(console.error)
+speechToSpeechServerExample().catch(console.error);
 ```
 
 ## 会話ユーティリティ
@@ -189,6 +200,7 @@ npm run dev
 ```
 
 アプリケーションは以下を行います：
+
 1. Mastraエージェントとのリアルタイム音声会話を開始します
 2. 会話全体を録音します
 3. 会話が終了すると録音をCloudinaryにアップロードします
@@ -206,6 +218,7 @@ npm run dev
 ## カスタマイズ
 
 このサンプルは以下の方法でカスタマイズできます：
+
 - エージェントの指示と機能の修正
 - エージェントが使用する追加ツールの追加
 - 会話の流れや初期メッセージの変更

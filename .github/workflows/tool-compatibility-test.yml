@@ -40,4 +40,4 @@ jobs:
         env:
           NODE_OPTIONS: '--max_old_space_size=8096'
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }} 
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}

@@ -128,6 +128,7 @@ The metric evaluates context positioning through binary relevance assessment and
 ### Scoring Process
 
 1. Evaluates context relevance:
+
    - Assigns binary verdict (yes/no) to each piece
    - Records position in sequence
    - Documents relevance reasoning
@@ -140,7 +141,9 @@ The metric evaluates context positioning through binary relevance assessment and
 Final score: `(weighted_sum / max_possible_sum) * scale`
 
 ### Score interpretation
+
 (0 to scale, default 0-1)
+
 - 1.0: Optimal - most relevant context first
 - 0.7-0.9: Good - relevant context mostly early
 - 0.4-0.6: Mixed - relevant context scattered
@@ -187,4 +190,5 @@ const result = await metric.measure(
 - [Context Precision Metric](./context-precision)
 - [Answer Relevancy Metric](./answer-relevancy)
 - [Completeness Metric](./completeness)
-+ [Context Relevancy Metric](./context-relevancy)
+
+* [Context Relevancy Metric](./context-relevancy)

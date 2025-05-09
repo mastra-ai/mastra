@@ -21,7 +21,7 @@ import { D1Store } from "@mastra/cloudflare-d1";
 // --- Example 1: Using Workers Binding ---
 const storageWorkers = new D1Store({
   binding: D1Database, // D1Database binding provided by the Workers runtime
-  tablePrefix: 'dev_', // Optional: isolate tables per environment
+  tablePrefix: "dev_", // Optional: isolate tables per environment
 });
 
 // --- Example 2: Using REST API ---
@@ -29,7 +29,7 @@ const storageRest = new D1Store({
   accountId: process.env.CLOUDFLARE_ACCOUNT_ID!, // Cloudflare Account ID
   databaseId: process.env.CLOUDFLARE_D1_DATABASE_ID!, // D1 Database ID
   apiToken: process.env.CLOUDFLARE_API_TOKEN!, // Cloudflare API Token
-  tablePrefix: 'dev_', // Optional: isolate tables per environment
+  tablePrefix: "dev_", // Optional: isolate tables per environment
 });
 ```
 
@@ -64,7 +64,8 @@ const storageRest = new D1Store({
     {
       name: "tablePrefix",
       type: "string",
-      description: "Optional prefix for all table names (useful for environment isolation)",
+      description:
+        "Optional prefix for all table names (useful for environment isolation)",
       isOptional: true,
     },
   ]}

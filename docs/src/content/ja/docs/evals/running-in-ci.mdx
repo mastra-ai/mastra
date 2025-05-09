@@ -12,15 +12,15 @@ CIパイプラインでevalsを実行することにより、エージェント�
 ESMモジュールをサポートするテストフレームワークであれば、どれでも対応しています。例えば、[Vitest](https://vitest.dev/)、[Jest](https://jestjs.io/)、または[Mocha](https://mochajs.org/)を使用して、CI/CDパイプラインでevalsを実行することができます。
 
 ```typescript copy showLineNumbers filename="src/mastra/agents/index.test.ts"
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from "vitest";
 import { evaluate } from "@mastra/evals";
 import { ToneConsistencyMetric } from "@mastra/evals/nlp";
-import { myAgent } from './index';
+import { myAgent } from "./index";
 
-describe('My Agent', () => {
-  it('should validate tone consistency', async () => {
+describe("My Agent", () => {
+  it("should validate tone consistency", async () => {
     const metric = new ToneConsistencyMetric();
-    const result = await evaluate(myAgent, 'Hello, world!', metric)
+    const result = await evaluate(myAgent, "Hello, world!", metric);
 
     expect(result.score).toBe(1);
   });
@@ -36,16 +36,16 @@ describe('My Agent', () => {
 CI/CDパイプラインでevalsを実行するために、これらのファイルをプロジェクトに追加してください：
 
 ```typescript copy showLineNumbers filename="globalSetup.ts"
-import { globalSetup } from '@mastra/evals';
+import { globalSetup } from "@mastra/evals";
 
 export default function setup() {
-  globalSetup()
+  globalSetup();
 }
 ```
 
 ```typescript copy showLineNumbers filename="testSetup.ts"
-import { beforeAll } from 'vitest';
-import { attachListeners } from '@mastra/evals';
+import { beforeAll } from "vitest";
+import { attachListeners } from "@mastra/evals";
 
 beforeAll(async () => {
   await attachListeners();
@@ -53,14 +53,14 @@ beforeAll(async () => {
 ```
 
 ```typescript copy showLineNumbers filename="vitest.config.ts"
-import { defineConfig } from 'vitest/config'
+import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    globalSetup: './globalSetup.ts',
-    setupFiles: ['./testSetup.ts'],
+    globalSetup: "./globalSetup.ts",
+    setupFiles: ["./testSetup.ts"],
   },
-})
+});
 ```
 
 ## ストレージ設定
@@ -68,9 +68,9 @@ export default defineConfig({
 Mastra Storageに評価結果を保存し、Mastraダッシュボードで結果を取得するには：
 
 ```typescript copy showLineNumbers filename="testSetup.ts"
-import { beforeAll } from 'vitest';
-import { attachListeners } from '@mastra/evals';
-import { mastra } from './your-mastra-setup';
+import { beforeAll } from "vitest";
+import { attachListeners } from "@mastra/evals";
+import { mastra } from "./your-mastra-setup";
 
 beforeAll(async () => {
   // Store evals in Mastra Storage (requires storage to be enabled)

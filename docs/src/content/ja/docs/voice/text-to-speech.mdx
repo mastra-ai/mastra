@@ -8,7 +8,7 @@ description: Mastraにおけるテキスト読み上げ機能の概要、設定�
 Mastraのテキスト読み上げ（TTS）は、様々なプロバイダーを使用してテキストから音声を合成するための統一APIを提供しています。
 アプリケーションにTTSを組み込むことで、自然な音声インタラクションによるユーザー体験の向上、視覚障害のあるユーザーのためのアクセシビリティの改善、そしてよりエンゲージメントの高いマルチモーダルインターフェースを作成することができます。
 
-TTSは音声アプリケーションの中核コンポーネントです。STT（音声認識）と組み合わせることで、音声インタラクションシステムの基盤を形成します。新しいモデルはSTS（[音声から音声へ](./speech-to-speech)）をサポートしており、リアルタイムのインタラクションに使用できますが、高コスト（$）がかかります。 
+TTSは音声アプリケーションの中核コンポーネントです。STT（音声認識）と組み合わせることで、音声インタラクションシステムの基盤を形成します。新しいモデルはSTS（[音声から音声へ](./speech-to-speech)）をサポートしており、リアルタイムのインタラクションに使用できますが、高コスト（$）がかかります。
 
 ## 設定
 
@@ -22,12 +22,11 @@ Mastraでテキスト読み上げ（TTS）を使用するには、音声プロ�
 
 **注意**: これらのパラメータはすべてオプションです。使用している特定のプロバイダーによって異なる、音声プロバイダーが提供するデフォルト設定を使用することができます。
 
-
 ```typescript
 const voice = new OpenAIVoice({
   speechModel: {
     name: "tts-1-hd",
-    apiKey: process.env.OPENAI_API_KEY
+    apiKey: process.env.OPENAI_API_KEY,
   },
   speaker: "alloy",
 });
@@ -62,20 +61,21 @@ pnpm add @mastra/voice-openai  # OpenAIの例
 TTSの主要なメソッドは、テキストを音声に変換する`speak()`メソッドです。このメソッドはオプションを受け付けることができ、話者やその他のプロバイダー固有のオプションを指定できます。使用方法は次のとおりです：
 
 ```typescript
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { OpenAIVoice } from '@mastra/voice-openai';
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { OpenAIVoice } from "@mastra/voice-openai";
 
 const voice = new OpenAIVoice();
 
 const agent = new Agent({
   name: "Voice Agent",
-  instructions: "You are a voice assistant that can help users with their tasks.",
+  instructions:
+    "You are a voice assistant that can help users with their tasks.",
   model: openai("gpt-4o"),
   voice,
 });
 
-const { text } = await agent.generate('What color is the sky?');
+const { text } = await agent.generate("What color is the sky?");
 
 // Convert text to speech to an Audio Stream
 const readableStream = await voice.speak(text, {
@@ -86,4 +86,5 @@ const readableStream = await voice.speak(text, {
   },
 });
 ```
+
 エージェントに音声を追加する方法については、[エージェントへの音声の追加](../agents/adding-voice.mdx)のドキュメントをご覧ください。

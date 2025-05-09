@@ -18,10 +18,10 @@ const voice = new ElevenLabsVoice();
 // Initialize with custom configuration
 const voice = new ElevenLabsVoice({
   speechModel: {
-    name: 'eleven_multilingual_v2',
-    apiKey: 'your-api-key',
+    name: "eleven_multilingual_v2",
+    apiKey: "your-api-key",
   },
-  speaker: 'custom-speaker-id',
+  speaker: "custom-speaker-id",
 });
 
 // Text-to-Speech
@@ -40,7 +40,7 @@ const speakers = await voice.getSpeakers();
       type: "ElevenLabsVoiceConfig",
       description: "Configuration for text-to-speech functionality.",
       isOptional: true,
-      defaultValue: "{ name: 'eleven_multilingual_v2' }"
+      defaultValue: "{ name: 'eleven_multilingual_v2' }",
     },
     {
       name: "speaker",
@@ -66,7 +66,8 @@ const speakers = await voice.getSpeakers();
     {
       name: "apiKey",
       type: "string",
-      description: "ElevenLabs API key. Falls back to ELEVENLABS_API_KEY environment variable",
+      description:
+        "ElevenLabs API key. Falls back to ELEVENLABS_API_KEY environment variable",
       isOptional: true,
     },
   ]}
@@ -83,7 +84,8 @@ Converts text to speech using the configured speech model and voice.
     {
       name: "input",
       type: "string | NodeJS.ReadableStream",
-      description: "Text to convert to speech. If a stream is provided, it will be converted to text first.",
+      description:
+        "Text to convert to speech. If a stream is provided, it will be converted to text first.",
       isOptional: false,
     },
     {
@@ -132,7 +134,7 @@ Returns an array of available voice options, where each node contains:
       type: "string",
       description: "Gender of the voice",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -202,7 +204,7 @@ The options object supports the following properties:
       type: "AbortSignal",
       description: "Signal to abort the request",
       isOptional: true,
-    }
+    },
   ]}
 />
 

@@ -33,6 +33,7 @@ import { Tabs } from "nextra/components";
 
     pgvector拡張機能を備えたPostgreSQLは、すでにPostgreSQLを使用しているチームにとって、インフラの複雑さを最小限に抑えるための良い解決策です。
     詳細なセットアップ手順とベストプラクティスについては、[公式pgvectorリポジトリ](https://github.com/pgvector/pgvector)を参照してください。
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -50,6 +51,7 @@ import { Tabs } from "nextra/components";
         metadata: chunks.map(chunk => ({ text: chunk.text })),
       });
     ```
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -70,6 +72,7 @@ import { Tabs } from "nextra/components";
         metadata: chunks.map(chunk => ({ text: chunk.text })),
       });
     ```
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -87,6 +90,7 @@ import { Tabs } from "nextra/components";
         metadata: chunks.map(chunk => ({ text: chunk.text })),
       });
     ```
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -108,6 +112,7 @@ import { Tabs } from "nextra/components";
         metadata: chunks.map(chunk => ({ text: chunk.text })),
       });
     ```
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -128,6 +133,7 @@ import { Tabs } from "nextra/components";
         metadata: chunks.map(chunk => ({ text: chunk.text })),
       });
     ```
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -148,6 +154,7 @@ import { Tabs } from "nextra/components";
         metadata: chunks.map(chunk => ({ text: chunk.text })),
       });
     ```
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -168,6 +175,7 @@ import { Tabs } from "nextra/components";
         metadata: chunks.map(chunk => ({ text: chunk.text })),
       });
     ```
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -188,11 +196,9 @@ import { Tabs } from "nextra/components";
         metadata: chunks.map(chunk => ({ text: chunk.text })),
       });
     ```
+
   </Tabs.Tab>
 </Tabs>
-
-
-
 
 ## ベクトルストレージの使用
 
@@ -205,12 +211,13 @@ import { Tabs } from "nextra/components";
 ```ts filename="store-embeddings.ts" showLineNumbers copy
 // Create an index with dimension 1536 (for text-embedding-3-small)
 await store.createIndex({
-  indexName: 'myCollection',
+  indexName: "myCollection",
   dimension: 1536,
 });
 ```
 
 次元サイズは、選択した埋め込みモデルの出力次元と一致する必要があります。一般的な次元サイズは以下の通りです：
+
 - OpenAI text-embedding-3-small: 1536次元（またはカスタム、例えば256）
 - Cohere embed-multilingual-v3: 1024次元
 - Google `text-embedding-004`: 768次元（またはカスタム）
@@ -312,16 +319,17 @@ await store.createIndex({
 ```ts filename="store-embeddings.ts" showLineNumbers copy
 // Store embeddings with their corresponding metadata
 await store.upsert({
-  indexName: 'myCollection',  // index name
-  vectors: embeddings,       // array of embedding vectors
-  metadata: chunks.map(chunk => ({
-    text: chunk.text,  // The original text content
-    id: chunk.id       // Optional unique identifier
-  }))
+  indexName: "myCollection", // index name
+  vectors: embeddings, // array of embedding vectors
+  metadata: chunks.map((chunk) => ({
+    text: chunk.text, // The original text content
+    id: chunk.id, // Optional unique identifier
+  })),
 });
 ```
 
 upsert操作：
+
 - 埋め込みベクトルとそれに対応するメタデータの配列を取ります
 - 同じIDを共有する既存のベクトルを更新します
 - 存在しないベクトルを新規作成します
@@ -344,15 +352,15 @@ await store.upsert({
     // Basic content
     text: chunk.text,
     id: chunk.id,
-    
+
     // Document organization
     source: chunk.source,
     category: chunk.category,
-    
+
     // Temporal metadata
     createdAt: new Date().toISOString(),
     version: "1.0",
-    
+
     // Custom fields
     language: chunk.language,
     author: chunk.author,
@@ -362,6 +370,7 @@ await store.upsert({
 ```
 
 メタデータに関する重要な考慮事項：
+
 - フィールド命名に厳格であること - 「category」と「Category」のような不一致はクエリに影響します
 - フィルタリングやソートに使用する予定のフィールドのみを含める - 余分なフィールドはオーバーヘッドを追加します
 - コンテンツの鮮度を追跡するためのタイムスタンプ（例：「createdAt」、「lastUpdated」）を追加する
@@ -372,4 +381,3 @@ await store.upsert({
 - 大量挿入にはバッチ操作を使用する（upsertメソッドは自動的にバッチ処理を行います）
 - クエリを実行する予定のメタデータのみを保存する
 - 埋め込みの次元数をモデルに合わせる（例：`text-embedding-3-small`の場合は1536）
-

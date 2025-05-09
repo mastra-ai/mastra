@@ -7,14 +7,16 @@
 ```typescript
 import { Memory } from "@mastra/memory";
 
-const memory = new Memory({ /* config */ });
+const memory = new Memory({
+  /* config */
+});
 const thread = await memory.createThread({
   resourceId: "user-123",
   title: "Support Conversation",
   metadata: {
     category: "support",
-    priority: "high"
-  }
+    priority: "high",
+  },
 });
 ```
 
@@ -25,13 +27,15 @@ const thread = await memory.createThread({
     {
       name: "resourceId",
       type: "string",
-      description: "このスレッドが属するリソースの識別子（例：ユーザーID、プロジェクトID）",
+      description:
+        "このスレッドが属するリソースの識別子（例：ユーザーID、プロジェクトID）",
       isOptional: false,
     },
     {
       name: "threadId",
       type: "string",
-      description: "スレッドのオプションのカスタムID。指定されない場合は、自動生成されます。",
+      description:
+        "スレッドのオプションのカスタムID。指定されない場合は、自動生成されます。",
       isOptional: true,
     },
     {

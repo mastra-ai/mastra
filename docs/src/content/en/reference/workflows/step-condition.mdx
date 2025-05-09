@@ -12,31 +12,34 @@ Conditions determine whether a step should execute based on the output of previo
 There are three ways to specify conditions: function, query object, and simple path comparison.
 
 ### 1. Function Condition
+
 ```typescript copy showLineNumbers
 workflow.step(processOrder, {
   when: async ({ context }) => {
-    const auth = context?.getStepResult<{status: string}>("auth");
+    const auth = context?.getStepResult<{ status: string }>("auth");
     return auth?.status === "authenticated";
-  }
+  },
 });
 ```
 
 ### 2. Query Object
+
 ```typescript copy showLineNumbers
 workflow.step(processOrder, {
   when: {
-    ref: { step: 'auth', path: 'status' },
-    query: { $eq: 'authenticated' }
-  }
+    ref: { step: "auth", path: "status" },
+    query: { $eq: "authenticated" },
+  },
 });
 ```
 
 ### 3. Simple Path Comparison
+
 ```typescript copy showLineNumbers
 workflow.step(processOrder, {
   when: {
-    "auth.status": "authenticated"
-  }
+    "auth.status": "authenticated",
+  },
 });
 ```
 
@@ -53,15 +56,16 @@ Based on the type of condition, the workflow runner will try to match the condit
     {
       name: "ref",
       type: "{ stepId: string | 'trigger'; path: string }",
-      description: "Reference to step output value. stepId can be a step ID or 'trigger' for initial data. path specifies location of value in step result",
-      isOptional: false
+      description:
+        "Reference to step output value. stepId can be a step ID or 'trigger' for initial data. path specifies location of value in step result",
+      isOptional: false,
     },
     {
       name: "query",
       type: "Query<any>",
       description: "MongoDB-style query using sift operators ($eq, $gt, etc)",
-      isOptional: false
-    }
+      isOptional: false,
+    },
   ]}
 />
 
@@ -76,53 +80,53 @@ This query syntax allows for readable conditional logic for determining whether 
     {
       name: "$eq",
       type: "any",
-      description: "Equal to value"
+      description: "Equal to value",
     },
     {
       name: "$ne",
       type: "any",
-      description: "Not equal to value"
+      description: "Not equal to value",
     },
     {
       name: "$gt",
       type: "number",
-      description: "Greater than value"
+      description: "Greater than value",
     },
     {
       name: "$gte",
       type: "number",
-      description: "Greater than or equal to value"
+      description: "Greater than or equal to value",
     },
     {
       name: "$lt",
       type: "number",
-      description: "Less than value"
+      description: "Less than value",
     },
     {
       name: "$lte",
       type: "number",
-      description: "Less than or equal to value"
+      description: "Less than or equal to value",
     },
     {
       name: "$in",
       type: "any[]",
-      description: "Value exists in array"
+      description: "Value exists in array",
     },
     {
       name: "$nin",
       type: "any[]",
-      description: "Value does not exist in array"
+      description: "Value does not exist in array",
     },
     {
       name: "and",
       type: "StepCondition[]",
-      description: "Array of conditions that must all be true"
+      description: "Array of conditions that must all be true",
     },
     {
       name: "or",
       type: "StepCondition[]",
-      description: "Array of conditions where at least one must be true"
-    }
+      description: "Array of conditions where at least one must be true",
+    },
   ]}
 />
 

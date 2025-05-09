@@ -15,7 +15,7 @@ The OpenSearchVector class provides vector search using [OpenSearch](https://ope
       name: "url",
       type: "string",
       description: "OpenSearch connection URL (e.g., 'http://localhost:9200')",
-    }
+    },
   ]}
 />
 
@@ -43,7 +43,7 @@ Creates a new index with the specified configuration.
       description: "The distance metric to use for vector similarity",
       defaultValue: "'cosine'",
       isOptional: true,
-    }
+    },
   ]}
 />
 
@@ -63,7 +63,7 @@ Gets information about an index.
       name: "indexName",
       type: "string",
       description: "The name of the index to describe",
-    }
+    },
   ]}
 />
 
@@ -75,7 +75,7 @@ Gets information about an index.
       name: "indexName",
       type: "string",
       description: "The name of the index to delete",
-    }
+    },
   ]}
 />
 
@@ -102,9 +102,10 @@ Gets information about an index.
     {
       name: "ids",
       type: "string[]",
-      description: "Optional array of IDs for the vectors. If not provided, random IDs will be generated",
+      description:
+        "Optional array of IDs for the vectors. If not provided, random IDs will be generated",
       isOptional: true,
-    }
+    },
   ]}
 />
 
@@ -132,9 +133,10 @@ Gets information about an index.
     {
       name: "filter",
       type: "VectorFilter",
-      description: "Optional filter to apply to the query (MongoDB-style query syntax)",
+      description:
+        "Optional filter to apply to the query (MongoDB-style query syntax)",
       isOptional: true,
-    }
+    },
   ]}
 />
 
@@ -170,7 +172,7 @@ Updates a specific vector entry by its ID with new vector data and/or metadata.
       type: "Record<string, any>",
       description: "The new metadata",
       isOptional: true,
-    }
+    },
   ]}
 />
 
@@ -189,7 +191,7 @@ Deletes specific vector entries by their IDs from the index.
       name: "ids",
       type: "string[]",
       description: "Array of vector IDs to delete",
-    }
+    },
   ]}
 />
 

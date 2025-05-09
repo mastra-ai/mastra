@@ -12,12 +12,12 @@ Mastraは、AI SDKの`embed`および`embedMany`関数を使用してテキス�
 `embed` 関数は、単一のテキスト入力に対してベクトル埋め込みを生成します:
 
 ```typescript
-import { embed } from 'ai';
+import { embed } from "ai";
 
 const result = await embed({
-  model: openai.embedding('text-embedding-3-small'),
+  model: openai.embedding("text-embedding-3-small"),
   value: "Your text to embed",
-  maxRetries: 2  // optional, defaults to 2
+  maxRetries: 2, // optional, defaults to 2
 });
 ```
 
@@ -28,32 +28,35 @@ const result = await embed({
     {
       name: "model",
       type: "EmbeddingModel",
-      description: "使用する埋め込みモデル (例: openai.embedding('text-embedding-3-small'))"
+      description:
+        "使用する埋め込みモデル (例: openai.embedding('text-embedding-3-small'))",
     },
     {
       name: "value",
       type: "string | Record<string, any>",
-      description: "埋め込むテキストコンテンツまたはオブジェクト"
+      description: "埋め込むテキストコンテンツまたはオブジェクト",
     },
     {
       name: "maxRetries",
       type: "number",
-      description: "埋め込み呼び出しごとの最大リトライ回数。リトライを無効にするには0に設定します。",
+      description:
+        "埋め込み呼び出しごとの最大リトライ回数。リトライを無効にするには0に設定します。",
       isOptional: true,
-      defaultValue: "2"
+      defaultValue: "2",
     },
     {
       name: "abortSignal",
       type: "AbortSignal",
       description: "リクエストをキャンセルするためのオプションの中止シグナル",
-      isOptional: true
+      isOptional: true,
     },
     {
       name: "headers",
       type: "Record<string, string>",
-      description: "リクエストの追加HTTPヘッダー (HTTPベースのプロバイダーのみ)",
-      isOptional: true
-    }
+      description:
+        "リクエストの追加HTTPヘッダー (HTTPベースのプロバイダーのみ)",
+      isOptional: true,
+    },
   ]}
 />
 
@@ -64,8 +67,8 @@ const result = await embed({
     {
       name: "embedding",
       type: "number[]",
-      description: "入力の埋め込みベクトル"
-    }
+      description: "入力の埋め込みベクトル",
+    },
   ]}
 />
 
@@ -74,12 +77,12 @@ const result = await embed({
 複数のテキストを一度に埋め込むには、`embedMany` 関数を使用します:
 
 ```typescript
-import { embedMany } from 'ai';
+import { embedMany } from "ai";
 
 const result = await embedMany({
-  model: openai.embedding('text-embedding-3-small'),
+  model: openai.embedding("text-embedding-3-small"),
   values: ["First text", "Second text", "Third text"],
-  maxRetries: 2  // optional, defaults to 2
+  maxRetries: 2, // optional, defaults to 2
 });
 ```
 
@@ -90,32 +93,35 @@ const result = await embedMany({
     {
       name: "model",
       type: "EmbeddingModel",
-      description: "使用する埋め込みモデル (例: openai.embedding('text-embedding-3-small'))"
+      description:
+        "使用する埋め込みモデル (例: openai.embedding('text-embedding-3-small'))",
     },
     {
       name: "values",
       type: "string[] | Record<string, any>[]",
-      description: "埋め込むテキストコンテンツまたはオブジェクトの配列"
+      description: "埋め込むテキストコンテンツまたはオブジェクトの配列",
     },
     {
       name: "maxRetries",
       type: "number",
-      description: "埋め込み呼び出しごとの最大リトライ回数。リトライを無効にするには0に設定します。",
+      description:
+        "埋め込み呼び出しごとの最大リトライ回数。リトライを無効にするには0に設定します。",
       isOptional: true,
-      defaultValue: "2"
+      defaultValue: "2",
     },
     {
       name: "abortSignal",
       type: "AbortSignal",
       description: "リクエストをキャンセルするためのオプションの中止シグナル",
-      isOptional: true
+      isOptional: true,
     },
     {
       name: "headers",
       type: "Record<string, string>",
-      description: "リクエストの追加HTTPヘッダー (HTTPベースのプロバイダーのみ)",
-      isOptional: true
-    }
+      description:
+        "リクエストの追加HTTPヘッダー (HTTPベースのプロバイダーのみ)",
+      isOptional: true,
+    },
   ]}
 />
 
@@ -126,35 +132,36 @@ const result = await embedMany({
     {
       name: "embeddings",
       type: "number[][]",
-      description: "入力値に対応する埋め込みベクトルの配列"
-    }
+      description: "入力値に対応する埋め込みベクトルの配列",
+    },
   ]}
 />
 
 ## 使用例
 
 ```typescript
-import { embed, embedMany } from 'ai';
-import { openai } from '@ai-sdk/openai';
+import { embed, embedMany } from "ai";
+import { openai } from "@ai-sdk/openai";
 
 // Single embedding
 const singleResult = await embed({
-  model: openai.embedding('text-embedding-3-small'),
+  model: openai.embedding("text-embedding-3-small"),
   value: "What is the meaning of life?",
 });
 
 // Multiple embeddings
 const multipleResult = await embedMany({
-  model: openai.embedding('text-embedding-3-small'),
+  model: openai.embedding("text-embedding-3-small"),
   values: [
     "First question about life",
     "Second question about universe",
-    "Third question about everything"
+    "Third question about everything",
   ],
 });
 ```
 
 Vercel AI SDKにおける埋め込みの詳細情報については、以下を参照してください:
+
 - [AI SDK 埋め込み概要](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings)
 - [embed()](https://sdk.vercel.ai/docs/reference/ai-sdk-core/embed)
 - [embedMany()](https://sdk.vercel.ai/docs/reference/ai-sdk-core/embed-many)

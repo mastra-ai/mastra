@@ -129,6 +129,7 @@ console.log(result.info.reason); // Explanation of the score
 ## Scoring Details
 
 The metric evaluates instruction alignment through:
+
 - Applicability assessment for each instruction
 - Strict compliance evaluation for applicable instructions
 - Detailed reasoning for all verdicts
@@ -137,6 +138,7 @@ The metric evaluates instruction alignment through:
 ### Instruction Verdicts
 
 Each instruction receives one of three verdicts:
+
 - "yes": Instruction is applicable and completely followed
 - "no": Instruction is applicable but not followed or only partially followed
 - "n/a": Instruction is not applicable to the given context
@@ -144,11 +146,13 @@ Each instruction receives one of three verdicts:
 ### Scoring Process
 
 1. Evaluates instruction applicability:
+
    - Determines if each instruction applies to the context
    - Marks irrelevant instructions as "n/a"
    - Considers domain-specific requirements
 
 2. Assesses compliance for applicable instructions:
+
    - Evaluates each applicable instruction independently
    - Requires complete compliance for "yes" verdict
    - Documents specific reasons for all verdicts
@@ -173,7 +177,9 @@ Final score: `(followed_instructions / applicable_instructions) * scale`
   - Do not affect the final score calculation
 
 ### Score interpretation
+
 (0 to scale, default 0-1)
+
 - 1.0: All applicable instructions followed perfectly
 - 0.7-0.9: Most applicable instructions followed
 - 0.4-0.6: Mixed compliance with applicable instructions

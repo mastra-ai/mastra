@@ -7,14 +7,16 @@ Creates a new conversation thread in the memory system. Each thread represents a
 ```typescript
 import { Memory } from "@mastra/memory";
 
-const memory = new Memory({ /* config */ });
+const memory = new Memory({
+  /* config */
+});
 const thread = await memory.createThread({
   resourceId: "user-123",
   title: "Support Conversation",
   metadata: {
     category: "support",
-    priority: "high"
-  }
+    priority: "high",
+  },
 });
 ```
 
@@ -25,13 +27,15 @@ const thread = await memory.createThread({
     {
       name: "resourceId",
       type: "string",
-      description: "Identifier for the resource this thread belongs to (e.g., user ID, project ID)",
+      description:
+        "Identifier for the resource this thread belongs to (e.g., user ID, project ID)",
       isOptional: false,
     },
     {
       name: "threadId",
       type: "string",
-      description: "Optional custom ID for the thread. If not provided, one will be generated.",
+      description:
+        "Optional custom ID for the thread. If not provided, one will be generated.",
       isOptional: true,
     },
     {

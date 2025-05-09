@@ -15,10 +15,10 @@ import { MDocument } from "@mastra/rag";
 const doc = MDocument.fromText(text);
 const chunks = await doc.chunk({
   extract: {
-    title: true,    // デフォルト設定を使用してタイトルを抽出
-    summary: true,  // デフォルト設定を使用して要約を生成
-    keywords: true  // デフォルト設定を使用してキーワードを抽出
-  }
+    title: true, // デフォルト設定を使用してタイトルを抽出
+    summary: true, // デフォルト設定を使用して要約を生成
+    keywords: true, // デフォルト設定を使用してキーワードを抽出
+  },
 });
 
 // 例の出力:
@@ -76,26 +76,28 @@ const chunks = await doc.chunk({
       name: "llm",
       type: "MastraLanguageModel",
       isOptional: true,
-      description: "タイトル抽出に使用するAI SDK言語モデル"
+      description: "タイトル抽出に使用するAI SDK言語モデル",
     },
     {
       name: "nodes",
       type: "number",
       isOptional: true,
-      description: "抽出するタイトルノードの数"
+      description: "抽出するタイトルノードの数",
     },
     {
       name: "nodeTemplate",
       type: "string",
       isOptional: true,
-      description: "タイトルノード抽出用のカスタムプロンプトテンプレート。{context}プレースホルダーを含む必要があります"
+      description:
+        "タイトルノード抽出用のカスタムプロンプトテンプレート。{context}プレースホルダーを含む必要があります",
     },
     {
       name: "combineTemplate",
       type: "string",
       isOptional: true,
-      description: "タイトルを結合するためのカスタムプロンプトテンプレート。{context}プレースホルダーを含む必要があります"
-    }
+      description:
+        "タイトルを結合するためのカスタムプロンプトテンプレート。{context}プレースホルダーを含む必要があります",
+    },
   ]}
 />
 
@@ -107,20 +109,22 @@ const chunks = await doc.chunk({
       name: "llm",
       type: "MastraLanguageModel",
       isOptional: true,
-      description: "要約抽出に使用するAI SDK言語モデル"
+      description: "要約抽出に使用するAI SDK言語モデル",
     },
     {
       name: "summaries",
       type: "('self' | 'prev' | 'next')[]",
       isOptional: true,
-      description: "生成する要約タイプのリスト。'self'（現在のチャンク）、'prev'（前のチャンク）、または'next'（次のチャンク）のみを含めることができます"
+      description:
+        "生成する要約タイプのリスト。'self'（現在のチャンク）、'prev'（前のチャンク）、または'next'（次のチャンク）のみを含めることができます",
     },
     {
       name: "promptTemplate",
       type: "string",
       isOptional: true,
-      description: "要約生成用のカスタムプロンプトテンプレート。{context}プレースホルダーを含む必要があります"
-    }
+      description:
+        "要約生成用のカスタムプロンプトテンプレート。{context}プレースホルダーを含む必要があります",
+    },
   ]}
 />
 
@@ -132,26 +136,27 @@ const chunks = await doc.chunk({
       name: "llm",
       type: "MastraLanguageModel",
       isOptional: true,
-      description: "質問生成に使用するAI SDK言語モデル"
+      description: "質問生成に使用するAI SDK言語モデル",
     },
     {
       name: "questions",
       type: "number",
       isOptional: true,
-      description: "生成する質問の数"
+      description: "生成する質問の数",
     },
     {
       name: "promptTemplate",
       type: "string",
       isOptional: true,
-      description: "質問生成用のカスタムプロンプトテンプレート。{context}と{numQuestions}の両方のプレースホルダーを含む必要があります"
+      description:
+        "質問生成用のカスタムプロンプトテンプレート。{context}と{numQuestions}の両方のプレースホルダーを含む必要があります",
     },
     {
       name: "embeddingOnly",
       type: "boolean",
       isOptional: true,
-      description: "trueの場合、実際の質問なしで埋め込みのみを生成します"
-    }
+      description: "trueの場合、実際の質問なしで埋め込みのみを生成します",
+    },
   ]}
 />
 
@@ -163,20 +168,21 @@ const chunks = await doc.chunk({
       name: "llm",
       type: "MastraLanguageModel",
       isOptional: true,
-      description: "キーワード抽出に使用するAI SDK言語モデル"
+      description: "キーワード抽出に使用するAI SDK言語モデル",
     },
     {
       name: "keywords",
       type: "number",
       isOptional: true,
-      description: "抽出するキーワードの数"
+      description: "抽出するキーワードの数",
     },
     {
       name: "promptTemplate",
       type: "string",
       isOptional: true,
-      description: "キーワード抽出用のカスタムプロンプトテンプレート。{context}と{maxKeywords}の両方のプレースホルダーを含む必要があります"
-    }
+      description:
+        "キーワード抽出用のカスタムプロンプトテンプレート。{context}と{maxKeywords}の両方のプレースホルダーを含む必要があります",
+    },
   ]}
 />
 
@@ -190,30 +196,30 @@ const chunks = await doc.chunk({
   extract: {
     // Title extraction with custom settings
     title: {
-      nodes: 2,  // Extract 2 title nodes
+      nodes: 2, // Extract 2 title nodes
       nodeTemplate: "Generate a title for this: {context}",
-      combineTemplate: "Combine these titles: {context}"
+      combineTemplate: "Combine these titles: {context}",
     },
 
     // Summary extraction with custom settings
     summary: {
-      summaries: ["self"],  // Generate summaries for current chunk
-      promptTemplate: "Summarize this: {context}"
+      summaries: ["self"], // Generate summaries for current chunk
+      promptTemplate: "Summarize this: {context}",
     },
 
     // Question generation with custom settings
     questions: {
-      questions: 3,  // Generate 3 questions
+      questions: 3, // Generate 3 questions
       promptTemplate: "Generate {numQuestions} questions about: {context}",
-      embeddingOnly: false
+      embeddingOnly: false,
     },
 
     // Keyword extraction with custom settings
     keywords: {
-      keywords: 5,  // Extract 5 keywords
-      promptTemplate: "Extract {maxKeywords} key terms from: {context}"
-    }
-  }
+      keywords: 5, // Extract 5 keywords
+      promptTemplate: "Extract {maxKeywords} key terms from: {context}",
+    },
+  },
 });
 
 // Example output:
@@ -246,4 +252,3 @@ const doc = new MDocument({
 await doc.extractMetadata({ title: true });
 // 最初の2つのチャンクは同じタイトルを共有し、3番目のチャンクには別のタイトルが割り当てられます。
 ```
-

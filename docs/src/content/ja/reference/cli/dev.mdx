@@ -33,6 +33,7 @@ description: エージェント、ツール、ワークフローの開発サー�
 `mastra dev`でサーバーを起動すると、デフォルトで以下のRESTルートが公開されます：
 
 ### システムルート
+
 - **GET `/api`**: APIステータスを取得します。
 
 ### エージェントルート
@@ -76,6 +77,7 @@ description: エージェント、ツール、ワークフローの開発サー�
 - **GET `/api/workflows/:workflowId/watch`**: ワークフローの遷移をリアルタイムで監視します。
 
 ### メモリルート
+
 - **GET `/api/memory/status`**: メモリステータスを取得します。
 - **GET `/api/memory/threads`**: すべてのスレッドを取得します。
 - **GET `/api/memory/threads/:threadId`**: IDでスレッドを取得します。
@@ -86,14 +88,17 @@ description: エージェント、ツール、ワークフローの開発サー�
 - **POST `/api/memory/save-messages`**: メッセージを保存します。
 
 ### テレメトリルート
+
 - **GET `/api/telemetry`**: すべてのトレースを取得します。
 
 ### ログルート
+
 - **GET `/api/logs`**: すべてのログを取得します。
 - **GET `/api/logs/transports`**: すべてのログトランスポートのリスト。
 - **GET `/api/logs/:runId`**: 実行IDでログを取得します。
 
 ### ベクトルルート
+
 - **POST `/api/vector/:vectorName/upsert`**: インデックスにベクトルをアップサートします。
 - **POST `/api/vector/:vectorName/create-index`**: 新しいベクトルインデックスを作成します。
 - **POST `/api/vector/:vectorName/query`**: インデックスからベクトルをクエリします。

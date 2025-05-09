@@ -37,7 +37,7 @@ const chunks = await doc.chunk({
 
 // 3. Generate embeddings; we need to pass the text of each chunk
 const { embeddings } = await embedMany({
-  values: chunks.map(chunk => chunk.text),
+  values: chunks.map((chunk) => chunk.text),
   model: openai.embedding("text-embedding-3-small"),
 });
 

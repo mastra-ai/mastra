@@ -5,11 +5,11 @@ description: Example of using Mastra to improve document retrieval relevance wit
 
 # Reranking with Cohere
 
-When retrieving documents for RAG, initial vector similarity search may miss important semantic matches. 
+When retrieving documents for RAG, initial vector similarity search may miss important semantic matches.
 
 Cohere's reranking service helps improve result relevance by reordering documents using multiple scoring factors.
 
-```typescript 
+```typescript
 import { rerank } from "@mastra/rag";
 
 const results = rerank(
@@ -21,9 +21,9 @@ const results = rerank(
     weights: {
       semantic: 0.4,
       vector: 0.4,
-      position: 0.2
-    }
-  }
+      position: 0.2,
+    },
+  },
 );
 ```
 

@@ -49,16 +49,19 @@ Mastraクラスはアプリケーションの主要なエントリーポイン�
     {
       name: "workflows",
       type: "Record<string, Workflow>",
-      description: "登録するワークフロー。キーがワークフロー名、値がワークフローインスタンスであるキーと値のペアとして構成されます。",
+      description:
+        "登録するワークフロー。キーがワークフロー名、値がワークフローインスタンスであるキーと値のペアとして構成されます。",
       isOptional: true,
       defaultValue: "{}",
     },
     {
       name: "server",
       type: "ServerConfig",
-      description: "ポート、ホスト、タイムアウト、APIルート、ミドルウェア、CORS設定、Swagger UI、APIリクエストログ、OpenAPIドキュメントのビルドオプションを含むサーバー構成。",
+      description:
+        "ポート、ホスト、タイムアウト、APIルート、ミドルウェア、CORS設定、Swagger UI、APIリクエストログ、OpenAPIドキュメントのビルドオプションを含むサーバー構成。",
       isOptional: true,
-      defaultValue: "{ port: 4111, host: localhost,  cors: { origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type'], exposeHeaders: ['Content-Length', 'X-Requested-With'], credentials: false } }",
+      defaultValue:
+        "{ port: 4111, host: localhost,  cors: { origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type'], exposeHeaders: ['Content-Length', 'X-Requested-With'], credentials: false } }",
     },
   ]}
 />
@@ -107,7 +110,7 @@ export const mastra = new Mastra({
       type: "Record<string, Agent>",
       description:
         "登録されているすべてのエージェントをキーと値のオブジェクトとして返します。",
-      example: 'const agents = mastra.getAgents();',
+      example: "const agents = mastra.getAgents();",
     },
     {
       name: "getWorkflow(id, { serialized })",
@@ -121,7 +124,7 @@ export const mastra = new Mastra({
       type: "Record<string, Workflow>",
       description:
         "登録されているすべてのワークフローを返します。serializedオプション（デフォルト：false）は簡略化された表現を返します。",
-      example: 'const workflows = mastra.getWorkflows();',
+      example: "const workflows = mastra.getWorkflows();",
     },
     {
       name: "getVector(name)",
@@ -135,83 +138,78 @@ export const mastra = new Mastra({
       type: "Record<string, MastraVector>",
       description:
         "登録されているすべてのベクトルストアをキーと値のオブジェクトとして返します。",
-      example: 'const vectorStores = mastra.getVectors();',
+      example: "const vectorStores = mastra.getVectors();",
     },
     {
       name: "getDeployer()",
       type: "MastraDeployer | undefined",
       description:
         "設定されているデプロイヤーインスタンスがあれば、それを返します。",
-      example: 'const deployer = mastra.getDeployer();',
+      example: "const deployer = mastra.getDeployer();",
     },
     {
       name: "getStorage()",
       type: "MastraStorage | undefined",
-      description:
-        "設定されているストレージインスタンスを返します。",
-      example: 'const storage = mastra.getStorage();',
+      description: "設定されているストレージインスタンスを返します。",
+      example: "const storage = mastra.getStorage();",
     },
     {
       name: "getMemory()",
       type: "MastraMemory | undefined",
       description:
         "設定されているメモリインスタンスを返します。注意：これは非推奨であり、メモリは直接エージェントに追加すべきです。",
-      example: 'const memory = mastra.getMemory();',
+      example: "const memory = mastra.getMemory();",
     },
     {
       name: "getServer()",
       type: "ServerConfig | undefined",
       description:
         "ポート、タイムアウト、APIルート、ミドルウェア、CORS設定、ビルドオプションを含むサーバー構成を返します。",
-      example: 'const serverConfig = mastra.getServer();',
+      example: "const serverConfig = mastra.getServer();",
     },
     {
       name: "setStorage(storage)",
       type: "void",
-      description:
-        "Mastraインスタンスのストレージインスタンスを設定します。",
-      example: 'mastra.setStorage(new DefaultStorage());',
+      description: "Mastraインスタンスのストレージインスタンスを設定します。",
+      example: "mastra.setStorage(new DefaultStorage());",
     },
     {
       name: "setLogger({ logger })",
       type: "void",
       description:
         "すべてのコンポーネント（エージェント、ワークフローなど）のロガーを設定します。",
-      example: 'mastra.setLogger({ logger: createLogger({ name: "MyLogger" }) });',
+      example:
+        'mastra.setLogger({ logger: createLogger({ name: "MyLogger" }) });',
     },
     {
       name: "setTelemetry(telemetry)",
       type: "void",
-      description:
-        "すべてのコンポーネントのテレメトリ設定を設定します。",
+      description: "すべてのコンポーネントのテレメトリ設定を設定します。",
       example: 'mastra.setTelemetry({ export: { type: "console" } });',
     },
     {
       name: "getLogger()",
       type: "Logger",
-      description:
-        "設定されているロガーインスタンスを取得します。",
-      example: 'const logger = mastra.getLogger();',
+      description: "設定されているロガーインスタンスを取得します。",
+      example: "const logger = mastra.getLogger();",
     },
     {
       name: "getTelemetry()",
       type: "Telemetry | undefined",
-      description:
-        "設定されているテレメトリインスタンスを取得します。",
-      example: 'const telemetry = mastra.getTelemetry();',
+      description: "設定されているテレメトリインスタンスを取得します。",
+      example: "const telemetry = mastra.getTelemetry();",
     },
     {
       name: "getLogsByRunId({ runId, transportId })",
       type: "Promise<any>",
-      description:
-        "特定の実行IDとトランスポートIDのログを取得します。",
-      example: 'const logs = await mastra.getLogsByRunId({ runId: "123", transportId: "456" });',
+      description: "特定の実行IDとトランスポートIDのログを取得します。",
+      example:
+        'const logs = await mastra.getLogsByRunId({ runId: "123", transportId: "456" });',
     },
     {
       name: "getLogs(transportId)",
       type: "Promise<any>",
-      description:
-        "特定のトランスポートIDのすべてのログを取得します。",
+      description: "特定のトランスポートIDのすべてのログを取得します。",
       example: 'const logs = await mastra.getLogs("transportId");',
     },
   ]}

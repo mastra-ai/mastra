@@ -5,15 +5,15 @@ description: Documentation for the rerank function in Mastra, which provides adv
 
 # rerank()
 
-The `rerank()` function provides advanced reranking capabilities for vector search results by combining semantic relevance, vector similarity, and position-based scoring. 
+The `rerank()` function provides advanced reranking capabilities for vector search results by combining semantic relevance, vector similarity, and position-based scoring.
 
 ```typescript
 function rerank(
   results: QueryResult[],
   query: string,
   modelConfig: ModelConfig,
-  options?: RerankerFunctionOptions
-): Promise<RerankResult[]>
+  options?: RerankerFunctionOptions,
+): Promise<RerankResult[]>;
 ```
 
 ## Usage Example
@@ -32,10 +32,10 @@ const rerankedResults = await rerank(
     weights: {
       semantic: 0.5,
       vector: 0.3,
-      position: 0.2
+      position: 0.2,
     },
-    topK: 3
-  }
+    topK: 3,
+  },
 );
 ```
 
@@ -66,7 +66,7 @@ const rerankedResults = await rerank(
       type: "RerankerFunctionOptions",
       description: "Options for the reranking model",
       isOptional: true,
-    }
+    },
   ]}
 />
 
@@ -81,7 +81,8 @@ The rerank function accepts any LanguageModel from the Vercel AI SDK. When using
     {
       name: "weights",
       type: "WeightConfig",
-      description: "Weights for different scoring components (must add up to 1)",
+      description:
+        "Weights for different scoring components (must add up to 1)",
       isOptional: true,
       properties: [
         {
@@ -92,8 +93,8 @@ The rerank function accepts any LanguageModel from the Vercel AI SDK. When using
               description: "Weight for semantic relevance",
               isOptional: true,
               type: "number (default: 0.4)",
-            }
-          ]
+            },
+          ],
         },
         {
           type: "number",
@@ -103,8 +104,8 @@ The rerank function accepts any LanguageModel from the Vercel AI SDK. When using
               description: "Weight for vector similarity",
               isOptional: true,
               type: "number (default: 0.4)",
-            }
-          ]
+            },
+          ],
         },
         {
           type: "number",
@@ -114,9 +115,9 @@ The rerank function accepts any LanguageModel from the Vercel AI SDK. When using
               description: "Weight for position-based scoring",
               isOptional: true,
               type: "number (default: 0.2)",
-            }
-          ]
-        }
+            },
+          ],
+        },
       ],
     },
     {
@@ -131,7 +132,7 @@ The rerank function accepts any LanguageModel from the Vercel AI SDK. When using
       description: "Number of top results to return",
       isOptional: true,
       defaultValue: "3",
-    }
+    },
   ]}
 />
 
@@ -155,7 +156,7 @@ The function returns an array of `RerankResult` objects:
       name: "details",
       type: "ScoringDetails",
       description: "Detailed scoring information",
-    }
+    },
   ]}
 />
 
@@ -190,8 +191,8 @@ The function returns an array of `RerankResult` objects:
             {
               name: "magnitude",
               description: "Magnitude of the query",
-            }
-          ]
+            },
+          ],
         },
         {
           type: "number[]",
@@ -199,11 +200,11 @@ The function returns an array of `RerankResult` objects:
             {
               name: "dominantFeatures",
               description: "Dominant features of the query",
-            }
-          ]
-        }
-      ]
-    }
+            },
+          ],
+        },
+      ],
+    },
   ]}
 />
 

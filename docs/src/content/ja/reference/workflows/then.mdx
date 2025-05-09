@@ -10,10 +10,7 @@ description: ワークフロー内の `.then()` メソッドに関するドキ�
 ## 使用法
 
 ```typescript
-workflow
-  .step(stepOne)
-  .then(stepTwo)
-  .then(stepThree);
+workflow.step(stepOne).then(stepTwo).then(stepThree);
 ```
 
 ## パラメーター
@@ -23,9 +20,10 @@ workflow
     {
       name: "step",
       type: "Step | string",
-      description: "前のステップが完了した後に実行されるべきステップインスタンスまたはステップID",
-      isOptional: false
-    }
+      description:
+        "前のステップが完了した後に実行されるべきステップインスタンスまたはステップID",
+      isOptional: false,
+    },
   ]}
 />
 
@@ -36,14 +34,15 @@ workflow
     {
       name: "workflow",
       type: "Workflow",
-      description: "メソッドチェーンのためのワークフローインスタンス"
-    }
+      description: "メソッドチェーンのためのワークフローインスタンス",
+    },
   ]}
 />
 
 ## 検証
 
 `then`を使用する場合:
+
 - 前のステップはワークフローに存在しなければなりません
 - ステップは循環依存を形成することはできません
 - 各ステップは連続したチェーンに一度だけ現れることができます
@@ -71,4 +70,3 @@ try {
 - [after リファレンス](./after.mdx)
 - [連続ステップの例](../../examples/workflows/sequential-steps.mdx)
 - [制御フローガイド](../../docs/workflows/control-flow.mdx)
-

@@ -4,6 +4,7 @@ description: Documentation for the Summarization Metric in Mastra, which evaluat
 ---
 
 # SummarizationMetric
+
 ,
 The `SummarizationMetric` evaluates how well an LLM's summary captures the original text's content while maintaining factual accuracy. It combines two aspects: alignment (factual correctness) and coverage (inclusion of key information), using the minimum scores to ensure both qualities are necessary for a good summary.
 
@@ -133,7 +134,9 @@ console.log(result.info); // Object containing detailed metrics about the summar
 ## Scoring Details
 
 The metric evaluates summaries through two essential components:
+
 1. **Alignment Score**: Measures factual correctness
+
    - Extracts claims from the summary
    - Verifies each claim against the original text
    - Assigns "yes", "no", or "unsure" verdicts
@@ -146,6 +149,7 @@ The metric evaluates summaries through two essential components:
 ### Scoring Process
 
 1. Calculates alignment score:
+
    - Extracts claims from summary
    - Verifies against source text
    - Computes: `supported_claims / total_claims`
@@ -159,7 +163,9 @@ The metric evaluates summaries through two essential components:
 Final score: `min(alignment_score, coverage_score) * scale`
 
 ### Score interpretation
+
 (0 to scale, default 0-1)
+
 - 1.0: Perfect summary - completely factual and covers all key information
 - 0.7-0.9: Strong summary with minor omissions or slight inaccuracies
 - 0.4-0.6: Moderate quality with significant gaps or inaccuracies

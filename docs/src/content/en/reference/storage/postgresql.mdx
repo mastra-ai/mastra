@@ -10,7 +10,7 @@ The PostgreSQL storage implementation provides a production-ready storage soluti
 ## Installation
 
 ```bash copy
-npm install @mastra/pg@latest 
+npm install @mastra/pg@latest
 ```
 
 ## Usage
@@ -37,10 +37,10 @@ const storage = new PostgresStore({
     {
       name: "schemaName",
       type: "string",
-      description: 
+      description:
         "The name of the schema you want the storage to use. Will use the default schema if not provided.",
       isOptional: true,
-    }
+    },
   ]}
 />
 
@@ -49,36 +49,36 @@ const storage = new PostgresStore({
 You can instantiate `PostgresStore` in the following ways:
 
 ```ts
-import { PostgresStore } from '@mastra/pg';
+import { PostgresStore } from "@mastra/pg";
 
 // Using a connection string only
 const store1 = new PostgresStore({
-  connectionString: 'postgresql://user:password@localhost:5432/mydb',
+  connectionString: "postgresql://user:password@localhost:5432/mydb",
 });
 
 // Using a connection string with a custom schema name
 const store2 = new PostgresStore({
-  connectionString: 'postgresql://user:password@localhost:5432/mydb',
-  schemaName: 'custom_schema', // optional
+  connectionString: "postgresql://user:password@localhost:5432/mydb",
+  schemaName: "custom_schema", // optional
 });
 
 // Using individual connection parameters
 const store4 = new PostgresStore({
-  host: 'localhost',
+  host: "localhost",
   port: 5432,
-  database: 'mydb',
-  user: 'user',
-  password: 'password',
+  database: "mydb",
+  user: "user",
+  password: "password",
 });
 
 // Individual parameters with schemaName
 const store5 = new PostgresStore({
-  host: 'localhost',
+  host: "localhost",
   port: 5432,
-  database: 'mydb',
-  user: 'user',
-  password: 'password',
-  schemaName: 'custom_schema', // optional
+  database: "mydb",
+  user: "user",
+  password: "password",
+  schemaName: "custom_schema", // optional
 });
 ```
 

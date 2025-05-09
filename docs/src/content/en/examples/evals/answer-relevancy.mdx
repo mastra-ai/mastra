@@ -33,8 +33,8 @@ OPENAI_API_KEY=your_api_key_here
 Import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/index.ts"
-import { openai } from '@ai-sdk/openai';
-import { AnswerRelevancyMetric } from '@mastra/evals/llm';
+import { openai } from "@ai-sdk/openai";
+import { AnswerRelevancyMetric } from "@mastra/evals/llm";
 ```
 
 ## Metric Configuration
@@ -42,7 +42,7 @@ import { AnswerRelevancyMetric } from '@mastra/evals/llm';
 Set up the Answer Relevancy metric with custom parameters:
 
 ```typescript copy showLineNumbers{5} filename="src/index.ts"
-const metric = new AnswerRelevancyMetric(openai('gpt-4o-mini'), {
+const metric = new AnswerRelevancyMetric(openai("gpt-4o-mini"), {
   uncertaintyWeight: 0.3, // Weight for 'unsure' verdicts
   scale: 1, // Scale for the final score
 });
@@ -55,16 +55,16 @@ const metric = new AnswerRelevancyMetric(openai('gpt-4o-mini'), {
 Evaluate a highly relevant response:
 
 ```typescript copy showLineNumbers{11} filename="src/index.ts"
-const query1 = 'What are the health benefits of regular exercise?';
+const query1 = "What are the health benefits of regular exercise?";
 const response1 =
-  'Regular exercise improves cardiovascular health, strengthens muscles, boosts metabolism, and enhances mental well-being through the release of endorphins.';
+  "Regular exercise improves cardiovascular health, strengthens muscles, boosts metabolism, and enhances mental well-being through the release of endorphins.";
 
-console.log('Example 1 - High Relevancy:');
-console.log('Query:', query1);
-console.log('Response:', response1);
+console.log("Example 1 - High Relevancy:");
+console.log("Query:", query1);
+console.log("Response:", response1);
 
 const result1 = await metric.measure(query1, response1);
-console.log('Metric Result:', {
+console.log("Metric Result:", {
   score: result1.score,
   reason: result1.info.reason,
 });
@@ -77,16 +77,16 @@ console.log('Metric Result:', {
 Evaluate a partially relevant response:
 
 ```typescript copy showLineNumbers{26} filename="src/index.ts"
-const query2 = 'What should a healthy breakfast include?';
+const query2 = "What should a healthy breakfast include?";
 const response2 =
-  'A nutritious breakfast should include whole grains and protein. However, the timing of your breakfast is just as important - studies show eating within 2 hours of waking optimizes metabolism and energy levels throughout the day.';
+  "A nutritious breakfast should include whole grains and protein. However, the timing of your breakfast is just as important - studies show eating within 2 hours of waking optimizes metabolism and energy levels throughout the day.";
 
-console.log('Example 2 - Partial Relevancy:');
-console.log('Query:', query2);
-console.log('Response:', response2);
+console.log("Example 2 - Partial Relevancy:");
+console.log("Query:", query2);
+console.log("Response:", response2);
 
 const result2 = await metric.measure(query2, response2);
-console.log('Metric Result:', {
+console.log("Metric Result:", {
   score: result2.score,
   reason: result2.info.reason,
 });
@@ -99,16 +99,16 @@ console.log('Metric Result:', {
 Evaluate an irrelevant response:
 
 ```typescript copy showLineNumbers{41} filename="src/index.ts"
-const query3 = 'What are the benefits of meditation?';
+const query3 = "What are the benefits of meditation?";
 const response3 =
-  'The Great Wall of China is over 13,000 miles long and was built during the Ming Dynasty to protect against invasions.';
+  "The Great Wall of China is over 13,000 miles long and was built during the Ming Dynasty to protect against invasions.";
 
-console.log('Example 3 - Low Relevancy:');
-console.log('Query:', query3);
-console.log('Response:', response3);
+console.log("Example 3 - Low Relevancy:");
+console.log("Query:", query3);
+console.log("Response:", response3);
 
 const result3 = await metric.measure(query3, response3);
-console.log('Metric Result:', {
+console.log("Metric Result:", {
   score: result3.score,
   reason: result3.info.reason,
 });
@@ -121,6 +121,7 @@ console.log('Metric Result:', {
 The metric provides:
 
 1. A relevancy score between 0 and 1:
+
    - 1.0: Perfect relevancy - response directly addresses the query
    - 0.7-0.9: High relevancy - response mostly addresses the query
    - 0.4-0.6: Moderate relevancy - response partially addresses the query

@@ -3,7 +3,7 @@ name: Delete Spam Issues
 on:
   # Run on a schedule to batch process spam issues
   schedule:
-    - cron: '*/5 * * * *'  # Run every 5 minutes
+    - cron: '*/5 * * * *' # Run every 5 minutes
   # Also run manually from the Actions tab
   workflow_dispatch:
 
@@ -15,7 +15,7 @@ jobs:
     permissions:
       issues: write
       contents: read
-    
+
     steps:
       - name: Delete spam issues with GraphQL
         uses: actions/github-script@v7
@@ -24,7 +24,7 @@ jobs:
           script: |
             // Helper function to add delay between operations
             const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-            
+
             // Get issue ID
             async function getIssueId(issueNumber) {
               const query = `
@@ -60,7 +60,7 @@ jobs:
                 return null;
               }
             }
-            
+
             // Delete issue using GraphQL
             async function deleteIssue(issueId, issueNumber) {
               if (!issueId) {
@@ -87,7 +87,7 @@ jobs:
                 return false;
               }
             }
-            
+
             // Process all spam-labeled issues
             console.log("Finding all issues labeled as spam...");
               
@@ -100,7 +100,7 @@ jobs:
             let processedCount = 0;
             let successCount = 0;
             let hasMorePages = true;
-            
+
             // Process issues page by page with resilience
             while (hasMorePages && page <= MAX_PAGES) {
               try {
@@ -161,9 +161,9 @@ jobs:
                 break; // Break the loop if we can't process a page
               }
             }
-            
+
             if (hasMorePages && page > MAX_PAGES) {
               console.log(`Pagination limit reached (${MAX_PAGES} pages). Remaining issues will be processed in future runs.`);
             }
-            
+
             console.log(`Summary: Successfully deleted ${successCount} out of ${processedCount} processed spam issues`);

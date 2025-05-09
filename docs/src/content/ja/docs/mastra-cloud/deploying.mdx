@@ -18,11 +18,13 @@ description: Mastraアプリケーション向けのGitHubベースのデプロ�
 Mastra Cloudは、VercelやNetlifyのようなプラットフォームと同様のGitベースのデプロイメントワークフローを使用しています：
 
 1. **GitHubリポジトリのインポート**
+
    - プロジェクトダッシュボードから「Add new」をクリック
    - Mastraアプリケーションを含むリポジトリを選択
    - 目的のリポジトリの横にある「Import」をクリック
 
 2. **デプロイメント設定の構成**
+
    - プロジェクト名を設定（デフォルトはリポジトリ名）
    - デプロイするブランチを選択（通常は`main`）
    - Mastraディレクトリパスを設定（デフォルトは`src/mastra`）
@@ -48,6 +50,7 @@ Mastra Cloudはギット駆動のワークフローに従います：
 各プロジェクトには2つのURLが提供されます：
 
 1. **プロジェクト固有のドメイン**: `https://[project-name].mastra.cloud`
+
    - 例: `https://gray-acoustic-helicopter.mastra.cloud`
 
 2. **デプロイメント固有のドメイン**: `https://[deployment-id].mastra.cloud`

@@ -10,10 +10,7 @@ description: "Mastra ワークフローにおける `.until()` メソッドの�
 ## 使用法
 
 ```typescript
-workflow
-  .step(incrementStep)
-  .until(condition, incrementStep)
-  .then(finalStep);
+workflow.step(incrementStep).until(condition, incrementStep).then(finalStep);
 ```
 
 ## パラメーター
@@ -24,14 +21,14 @@ workflow
       name: "condition",
       type: "Function | ReferenceCondition",
       description: "ループを停止するタイミングを決定する関数または参照条件",
-      isOptional: false
+      isOptional: false,
     },
     {
       name: "step",
       type: "Step",
       description: "条件が満たされるまで繰り返すステップ",
-      isOptional: false
-    }
+      isOptional: false,
+    },
   ]}
 />
 
@@ -45,7 +42,7 @@ workflow
 workflow
   .step(incrementStep)
   .until(async ({ context }) => {
-    const result = context.getStepResult<{ value: number }>('increment');
+    const result = context.getStepResult<{ value: number }>("increment");
     return (result?.value ?? 0) >= 10; // 値が10に達するか超えたら停止
   }, incrementStep)
   .then(finalStep);
@@ -60,10 +57,10 @@ workflow
   .step(incrementStep)
   .until(
     {
-      ref: { step: incrementStep, path: 'value' },
+      ref: { step: incrementStep, path: "value" },
       query: { $gte: 10 }, // 値が10以上になったら停止
     },
-    incrementStep
+    incrementStep,
   )
   .then(finalStep);
 ```
@@ -72,14 +69,14 @@ workflow
 
 参照ベースの条件を使用する場合、次の比較演算子を使用できます：
 
-| 演算子   | 説明             | 例         |
-|----------|-----------------|------------|
-| `$eq`    | 等しい          | `{ $eq: 10 }` |
-| `$ne`    | 等しくない      | `{ $ne: 0 }` |
-| `$gt`    | より大きい      | `{ $gt: 5 }` |
-| `$gte`   | 以上            | `{ $gte: 10 }` |
-| `$lt`    | より小さい      | `{ $lt: 20 }` |
-| `$lte`   | 以下            | `{ $lte: 15 }` |
+| 演算子 | 説明       | 例             |
+| ------ | ---------- | -------------- |
+| `$eq`  | 等しい     | `{ $eq: 10 }`  |
+| `$ne`  | 等しくない | `{ $ne: 0 }`   |
+| `$gt`  | より大きい | `{ $gt: 5 }`   |
+| `$gte` | 以上       | `{ $gte: 10 }` |
+| `$lt`  | より小さい | `{ $lt: 20 }`  |
+| `$lte` | 以下       | `{ $lte: 15 }` |
 
 ## 戻り値
 
@@ -88,29 +85,29 @@ workflow
     {
       name: "workflow",
       type: "Workflow",
-      description: "チェーン用のワークフローインスタンス"
-    }
+      description: "チェーン用のワークフローインスタンス",
+    },
   ]}
 />
 
 ## 例
 
 ```typescript
-import { Workflow, Step } from '@mastra/core';
-import { z } from 'zod';
+import { Workflow, Step } from "@mastra/core";
+import { z } from "zod";
 
 // Create a step that increments a counter
 const incrementStep = new Step({
-  id: 'increment',
-  description: 'カウンターを1増やします',
+  id: "increment",
+  description: "カウンターを1増やします",
   outputSchema: z.object({
     value: z.number(),
   }),
   execute: async ({ context }) => {
     // Get current value from previous execution or start at 0
     const currentValue =
-      context.getStepResult<{ value: number }>('increment')?.value ||
-      context.getStepResult<{ startValue: number }>('trigger')?.startValue ||
+      context.getStepResult<{ value: number }>("increment")?.value ||
+      context.getStepResult<{ startValue: number }>("trigger")?.startValue ||
       0;
 
     // Increment the value
@@ -123,10 +120,12 @@ const incrementStep = new Step({
 
 // Create a final step
 const finalStep = new Step({
-  id: 'final',
-  description: 'ループ完了後の最終ステップ',
+  id: "final",
+  description: "ループ完了後の最終ステップ",
   execute: async ({ context }) => {
-    const finalValue = context.getStepResult<{ value: number }>('increment')?.value;
+    const finalValue = context.getStepResult<{ value: number }>(
+      "increment",
+    )?.value;
     console.log(`ループは最終値: ${finalValue} で完了しました`);
     return { finalValue };
   },
@@ -134,7 +133,7 @@ const finalStep = new Step({
 
 // Create the workflow
 const counterWorkflow = new Workflow({
-  name: 'counter-workflow',
+  name: "counter-workflow",
   triggerSchema: z.object({
     startValue: z.number(),
     targetValue: z.number(),
@@ -146,7 +145,8 @@ counterWorkflow
   .step(incrementStep)
   .until(async ({ context }) => {
     const targetValue = context.triggerData.targetValue;
-    const currentValue = context.getStepResult<{ value: number }>('increment')?.value ?? 0;
+    const currentValue =
+      context.getStepResult<{ value: number }>("increment")?.value ?? 0;
     return currentValue >= targetValue;
   }, incrementStep)
   .then(finalStep)
@@ -154,7 +154,9 @@ counterWorkflow
 
 // Execute the workflow
 const run = counterWorkflow.createRun();
-const result = await run.start({ triggerData: { startValue: 0, targetValue: 5 } });
+const result = await run.start({
+  triggerData: { startValue: 0, targetValue: 5 },
+});
 // Will increment from 0 to 5, then stop and execute finalStep
 ```
 

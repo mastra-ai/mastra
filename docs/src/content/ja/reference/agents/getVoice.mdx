@@ -22,7 +22,8 @@ getVoice({ runtimeContext }: { runtimeContext?: RuntimeContext } = {}): Composit
       name: "runtimeContext",
       type: "RuntimeContext",
       isOptional: true,
-      description: "依存性注入とコンテキスト情報のためのランタイムコンテキスト。提供されない場合は、新しいRuntimeContextインスタンスがデフォルトとなります。",
+      description:
+        "依存性注入とコンテキスト情報のためのランタイムコンテキスト。提供されない場合は、新しいRuntimeContextインスタンスがデフォルトとなります。",
     },
   ]}
 />
@@ -36,6 +37,7 @@ getVoice({ runtimeContext }: { runtimeContext?: RuntimeContext } = {}): Composit
 `getVoice()`メソッドは、エージェントの音声機能にアクセスするために使用されます。これは、直接提供されるか、関数から返される音声プロバイダーを解決します。
 
 音声プロバイダーは以下を可能にします：
+
 - テキストから音声への変換（発話）
 - 音声からテキストへの変換（聴取）
 - 利用可能なスピーカー/音声の取得
@@ -47,7 +49,7 @@ getVoice({ runtimeContext }: { runtimeContext?: RuntimeContext } = {}): Composit
 ```typescript
 import { Agent } from "@mastra/core/agent";
 import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
-import { openai } from '@ai-sdk/openai';
+import { openai } from "@ai-sdk/openai";
 
 // Create an agent with a voice provider
 const agent = new Agent({
@@ -79,12 +81,12 @@ console.log(speakers);
 import { Agent } from "@mastra/core/agent";
 import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
 import { RuntimeContext } from "@mastra/core/runtime-context";
-import { openai } from '@ai-sdk/openai';
+import { openai } from "@ai-sdk/openai";
 
 // Create an agent with a dynamic voice provider
 const agent = new Agent({
   name: "voice-assistant",
-  instructions: ({ runtimeContext }) =>  {
+  instructions: ({ runtimeContext }) => {
     // Dynamic instructions based on runtime context
     const instructions = runtimeContext.get("preferredVoiceInstructions");
     return instructions || "You are a helpful voice assistant.";

@@ -16,7 +16,7 @@ const metric = new CompletenessMetric();
 
 const result = await metric.measure(
   "Explain how photosynthesis works in plants using sunlight, water, and carbon dioxide.",
-  "Plants use sunlight to convert water and carbon dioxide into glucose through photosynthesis."
+  "Plants use sunlight to convert water and carbon dioxide into glucose through photosynthesis.",
 );
 
 console.log(result.score); // Coverage score from 0-1
@@ -38,7 +38,7 @@ console.log(result.info); // Object containing detailed metrics about element co
       type: "string",
       description: "The LLM's response to evaluate for completeness",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -49,7 +49,8 @@ console.log(result.info); // Object containing detailed metrics about element co
     {
       name: "score",
       type: "number",
-      description: "Completeness score (0-1) representing the proportion of input elements covered in the output",
+      description:
+        "Completeness score (0-1) representing the proportion of input elements covered in the output",
     },
     {
       name: "info",
@@ -63,8 +64,8 @@ console.log(result.info); // Object containing detailed metrics about element co
               name: "inputElements",
               type: "string[]",
               description: "Array of key elements extracted from the input",
-            }
-          ]
+            },
+          ],
         },
         {
           type: "string[]",
@@ -73,8 +74,8 @@ console.log(result.info); // Object containing detailed metrics about element co
               name: "outputElements",
               type: "string[]",
               description: "Array of key elements found in the output",
-            }
-          ]
+            },
+          ],
         },
         {
           type: "string[]",
@@ -83,8 +84,8 @@ console.log(result.info); // Object containing detailed metrics about element co
               name: "missingElements",
               type: "string[]",
               description: "Array of input elements not found in the output",
-            }
-          ]
+            },
+          ],
         },
         {
           type: "object",
@@ -93,10 +94,10 @@ console.log(result.info); // Object containing detailed metrics about element co
               name: "elementCounts",
               type: "object",
               description: "Count of elements in input and output",
-            }
-          ]
-        }
-      ]
+            },
+          ],
+        },
+      ],
     },
   ]}
 />
@@ -104,12 +105,14 @@ console.log(result.info); // Object containing detailed metrics about element co
 ## Element Extraction Details
 
 The metric extracts and analyzes several types of elements:
+
 - Nouns: Key objects, concepts, and entities
 - Verbs: Actions and states (converted to infinitive form)
 - Topics: Main subjects and themes
 - Terms: Individual significant words
 
 The extraction process includes:
+
 - Normalization of text (removing diacritics, converting to lowercase)
 - Splitting camelCase words
 - Handling of word boundaries
@@ -123,6 +126,7 @@ The metric evaluates completeness through linguistic element coverage analysis.
 ### Scoring Process
 
 1. Extracts key elements:
+
    - Nouns and named entities
    - Action verbs
    - Topic-specific terms
@@ -135,7 +139,9 @@ The metric evaluates completeness through linguistic element coverage analysis.
 Final score: `(covered_elements / total_input_elements) * scale`
 
 ### Score interpretation
+
 (0 to scale, default 0-1)
+
 - 1.0: Complete coverage - contains all input elements
 - 0.7-0.9: High coverage - includes most key elements
 - 0.4-0.6: Partial coverage - contains some key elements
@@ -151,7 +157,7 @@ const metric = new CompletenessMetric();
 
 const result = await metric.measure(
   "The quick brown fox jumps over the lazy dog",
-  "A brown fox jumped over a dog"
+  "A brown fox jumped over a dog",
 );
 
 // Example output:
@@ -170,5 +176,5 @@ const result = await metric.measure(
 
 - [Answer Relevancy Metric](./answer-relevancy)
 - [Content Similarity Metric](./content-similarity)
-- [Textual Difference Metric](./textual-difference) 
+- [Textual Difference Metric](./textual-difference)
 - [Keyword Coverage Metric](./keyword-coverage)

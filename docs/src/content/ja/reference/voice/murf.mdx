@@ -18,17 +18,17 @@ const voice = new MurfVoice();
 // カスタム設定で初期化
 const voice = new MurfVoice({
   speechModel: {
-    name: 'GEN2',
-    apiKey: 'your-api-key',
+    name: "GEN2",
+    apiKey: "your-api-key",
     properties: {
-      format: 'MP3',
+      format: "MP3",
       rate: 1.0,
       pitch: 1.0,
       sampleRate: 48000,
-      channelType: 'STEREO',
+      channelType: "STEREO",
     },
   },
-  speaker: 'en-US-cooper',
+  speaker: "en-US-cooper",
 });
 
 // デフォルト設定でのテキスト読み上げ
@@ -36,11 +36,11 @@ const audioStream = await voice.speak("Hello, world!");
 
 // カスタムプロパティでのテキスト読み上げ
 const audioStream = await voice.speak("Hello, world!", {
-  speaker: 'en-UK-hazel',
+  speaker: "en-UK-hazel",
   properties: {
-    format: 'WAV',
+    format: "WAV",
     rate: 1.2,
-    style: 'casual',
+    style: "casual",
   },
 });
 
@@ -179,7 +179,8 @@ MurfのAPIを使用してテキストを音声に変換します。
     {
       name: "input",
       type: "string | NodeJS.ReadableStream",
-      description: "音声に変換するテキスト。ストリームが提供された場合、最初にテキストに変換されます。",
+      description:
+        "音声に変換するテキスト。ストリームが提供された場合、最初にテキストに変換されます。",
       isOptional: false,
     },
     {
@@ -234,7 +235,7 @@ MurfのAPIを使用してテキストを音声に変換します。
       type: "string",
       description: "音声の性別",
       isOptional: false,
-    }
+    },
   ]}
 />
 

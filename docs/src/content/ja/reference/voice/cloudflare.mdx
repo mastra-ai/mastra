@@ -10,21 +10,21 @@ MastraのCloudflareVoiceクラスは、Cloudflare Workers AIを使用したテ�
 ## 使用例
 
 ```typescript
-import { CloudflareVoice } from '@mastra/voice-cloudflare';
+import { CloudflareVoice } from "@mastra/voice-cloudflare";
 
 // Initialize with configuration
 const voice = new CloudflareVoice({
   speechModel: {
-    name: '@cf/meta/m2m100-1.2b',
-    apiKey: 'your-cloudflare-api-token',
-    accountId: 'your-cloudflare-account-id'
+    name: "@cf/meta/m2m100-1.2b",
+    apiKey: "your-cloudflare-api-token",
+    accountId: "your-cloudflare-account-id",
   },
-  speaker: 'en-US-1'  // Default voice
+  speaker: "en-US-1", // Default voice
 });
 
 // Convert text to speech
-const audioStream = await voice.speak('Hello, how can I help you?', {
-  speaker: 'en-US-2',  // Override default voice
+const audioStream = await voice.speak("Hello, how can I help you?", {
+  speaker: "en-US-2", // Override default voice
 });
 
 // Get available voices
@@ -68,13 +68,15 @@ console.log(speakers);
     {
       name: "apiKey",
       type: "string",
-      description: "Workers AIアクセス権を持つCloudflare APIトークン。CLOUDFLARE_API_TOKEN環境変数にフォールバックします。",
+      description:
+        "Workers AIアクセス権を持つCloudflare APIトークン。CLOUDFLARE_API_TOKEN環境変数にフォールバックします。",
       isOptional: true,
     },
     {
       name: "accountId",
       type: "string",
-      description: "CloudflareアカウントID。CLOUDFLARE_ACCOUNT_ID環境変数にフォールバックします。",
+      description:
+        "CloudflareアカウントID。CLOUDFLARE_ACCOUNT_ID環境変数にフォールバックします。",
       isOptional: true,
     },
   ]}

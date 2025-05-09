@@ -133,28 +133,28 @@ A workflow's status indicates its current execution state. The possible values a
     {
       name: "CREATED",
       type: "string",
-      description: "Workflow instance has been created but not started"
+      description: "Workflow instance has been created but not started",
     },
     {
       name: "RUNNING",
       type: "string",
-      description: "Workflow is actively executing steps"
+      description: "Workflow is actively executing steps",
     },
     {
       name: "SUSPENDED",
       type: "string",
-      description: "Workflow execution is paused waiting for resume"
+      description: "Workflow execution is paused waiting for resume",
     },
     {
       name: "COMPLETED",
       type: "string",
-      description: "All steps finished executing successfully"
+      description: "All steps finished executing successfully",
     },
     {
       name: "FAILED",
       type: "string",
-      description: "Workflow encountered an error during execution"
-    }
+      description: "Workflow encountered an error during execution",
+    },
   ]}
 />
 
@@ -202,24 +202,25 @@ Steps can access data from previous steps in the workflow through the context ob
 ```typescript showLineNumbers copy
 workflow
   .step({
-    id: 'getData',
+    id: "getData",
     execute: async ({ context }) => {
       return {
-        data: { id: '123', value: 'example' }
+        data: { id: "123", value: "example" },
       };
-    }
+    },
   })
   .step({
-    id: 'processData',
+    id: "processData",
     execute: async ({ context }) => {
       // Access data from previous step through context.steps
       const previousData = context.steps.getData.output.data;
       // Process previousData.id and previousData.value
-    }
+    },
   });
 ```
 
 The context object:
+
 - Contains results from all completed steps in `context.steps`
 - Provides access to step outputs through `context.steps.[stepId].output`
 - Is typed based on step output schemas

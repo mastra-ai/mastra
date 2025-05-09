@@ -131,7 +131,7 @@ const chunks = await doc1.chunk({
 ```typescript copy showLineNumbers{66} filename="index.ts"
 const { embeddings } = await embedMany({
   model: openai.embedding("text-embedding-3-small"),
-  values: chunks.map(chunk => chunk.text),
+  values: chunks.map((chunk) => chunk.text),
 });
 
 const vectorStore = mastra.getVector("pgVector");
@@ -152,20 +152,20 @@ await vectorStore.upsert({
 再ランキングが結果にどのように影響するかを確認するために、さまざまなクエリを試してください:
 
 ```typescript copy showLineNumbers{82} filename="index.ts"
-const queryOne = 'explain technical trading analysis';
+const queryOne = "explain technical trading analysis";
 const answerOne = await agent.generate(queryOne);
-console.log('\nQuery:', queryOne);
-console.log('Response:', answerOne.text);
+console.log("\nQuery:", queryOne);
+console.log("Response:", answerOne.text);
 
-const queryTwo = 'explain trading card valuation';
+const queryTwo = "explain trading card valuation";
 const answerTwo = await agent.generate(queryTwo);
-console.log('\nQuery:', queryTwo);
-console.log('Response:', answerTwo.text);
+console.log("\nQuery:", queryTwo);
+console.log("Response:", answerTwo.text);
 
-const queryThree = 'how do you analyze market resistance';
+const queryThree = "how do you analyze market resistance";
 const answerThree = await agent.generate(queryThree);
-console.log('\nQuery:', queryThree);
-console.log('Response:', answerThree.text);
+console.log("\nQuery:", queryThree);
+console.log("Response:", answerThree.text);
 ```
 
 <br />
@@ -177,4 +177,4 @@ console.log('Response:', answerThree.text);
   link={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/rerank-rag"
   }
-/> 
+/>

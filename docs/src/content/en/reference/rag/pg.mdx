@@ -20,10 +20,10 @@ It provides robust vector similarity search capabilities within your existing Po
     {
       name: "schemaName",
       type: "string",
-      description: 
+      description:
         "The name of the schema you want the vector store to use. Will use the default schema if not provided.",
       isOptional: true,
-    }
+    },
   ]}
 />
 
@@ -32,15 +32,17 @@ It provides robust vector similarity search capabilities within your existing Po
 You can instantiate `PgVector` in two ways:
 
 ```ts
-import { PgVector } from '@mastra/pg';
+import { PgVector } from "@mastra/pg";
 
 // Using a connection string (string form)
-const vectorStore1 = new PgVector('postgresql://user:password@localhost:5432/mydb');
+const vectorStore1 = new PgVector(
+  "postgresql://user:password@localhost:5432/mydb",
+);
 
 // Using a config object (with optional schemaName)
 const vectorStore2 = new PgVector({
-  connectionString: 'postgresql://user:password@localhost:5432/mydb',
-  schemaName: 'custom_schema', // optional
+  connectionString: "postgresql://user:password@localhost:5432/mydb",
+  schemaName: "custom_schema", // optional
 });
 ```
 

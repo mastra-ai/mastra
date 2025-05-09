@@ -33,8 +33,8 @@ OPENAI_API_KEY=your_api_key_here
 Import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/index.ts"
-import { openai } from '@ai-sdk/openai';
-import { SummarizationMetric } from '@mastra/evals/llm';
+import { openai } from "@ai-sdk/openai";
+import { SummarizationMetric } from "@mastra/evals/llm";
 ```
 
 ## Metric Configuration
@@ -42,7 +42,7 @@ import { SummarizationMetric } from '@mastra/evals/llm';
 Set up the Summarization metric with an OpenAI model:
 
 ```typescript copy showLineNumbers{4} filename="src/index.ts"
-const metric = new SummarizationMetric(openai('gpt-4o-mini'));
+const metric = new SummarizationMetric(openai("gpt-4o-mini"));
 ```
 
 ## Example Usage
@@ -59,12 +59,12 @@ the Roadster, was launched in 2008.`;
 const output1 = `Tesla, founded by Martin Eberhard and Marc Tarpenning in 2003, launched its first car, 
 the Roadster, in 2008. Elon Musk joined as the largest investor in 2004 and became CEO in 2008.`;
 
-console.log('Example 1 - High-quality Summary:');
-console.log('Input:', input1);
-console.log('Output:', output1);
+console.log("Example 1 - High-quality Summary:");
+console.log("Input:", input1);
+console.log("Output:", output1);
 
 const result1 = await metric.measure(input1, output1);
-console.log('Metric Result:', {
+console.log("Metric Result:", {
   score: result1.score,
   info: {
     reason: result1.info.reason,
@@ -96,12 +96,12 @@ structured, object-oriented, and functional programming.`;
 const output2 = `Python, created by Guido van Rossum, is a programming language known for its readable 
 code and use of whitespace. It was released in 1991.`;
 
-console.log('Example 2 - Partial Coverage:');
-console.log('Input:', input2);
-console.log('Output:', output2);
+console.log("Example 2 - Partial Coverage:");
+console.log("Input:", input2);
+console.log("Output:", output2);
 
 const result2 = await metric.measure(input2, output2);
-console.log('Metric Result:', {
+console.log("Metric Result:", {
   score: result2.score,
   info: {
     reason: result2.info.reason,
@@ -132,12 +132,12 @@ and no royalties due.`;
 const output3 = `The Internet was created by Tim Berners-Lee at MIT in the early 1990s, and he went 
 on to commercialize the technology through patents.`;
 
-console.log('Example 3 - Inaccurate Summary:');
-console.log('Input:', input3);
-console.log('Output:', output3);
+console.log("Example 3 - Inaccurate Summary:");
+console.log("Input:", input3);
+console.log("Output:", output3);
 
 const result3 = await metric.measure(input3, output3);
-console.log('Metric Result:', {
+console.log("Metric Result:", {
   score: result3.score,
   info: {
     reason: result3.info.reason,
@@ -161,6 +161,7 @@ console.log('Metric Result:', {
 The metric evaluates summaries through two components:
 
 1. Alignment Score (0-1):
+
    - 1.0: Perfect factual accuracy
    - 0.7-0.9: Minor factual discrepancies
    - 0.4-0.6: Some factual errors
@@ -185,4 +186,4 @@ Final score is determined by the minimum of these two scores, ensuring that both
   link={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/summarization"
   }
-/> 
+/>

@@ -10,13 +10,13 @@ description: Mastraのベクタークエリツールに関するドキュメン�
 ## 基本的な使用方法
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
+import { openai } from "@ai-sdk/openai";
 import { createVectorQueryTool } from "@mastra/rag";
 
 const queryTool = createVectorQueryTool({
   vectorStoreName: "pinecone",
   indexName: "docs",
-  model: openai.embedding('text-embedding-3-small'),
+  model: openai.embedding("text-embedding-3-small"),
 });
 ```
 
@@ -27,7 +27,8 @@ const queryTool = createVectorQueryTool({
     {
       name: "vectorStoreName",
       type: "string",
-      description: "クエリを実行するベクトルストアの名前（Mastraで設定済みである必要があります）",
+      description:
+        "クエリを実行するベクトルストアの名前（Mastraで設定済みである必要があります）",
       isOptional: false,
     },
     {
@@ -51,15 +52,17 @@ const queryTool = createVectorQueryTool({
     {
       name: "id",
       type: "string",
-      description: "ツールのカスタムID（デフォルトは'VectorQuery {vectorStoreName} {indexName} Tool'）",
+      description:
+        "ツールのカスタムID（デフォルトは'VectorQuery {vectorStoreName} {indexName} Tool'）",
       isOptional: true,
     },
     {
       name: "description",
       type: "string",
-      description: "ツールのカスタム説明。デフォルトでは：'ユーザーの質問に答えるために必要な情報を見つけるためにナレッジベースにアクセスする'",
+      description:
+        "ツールのカスタム説明。デフォルトでは：'ユーザーの質問に答えるために必要な情報を見つけるためにナレッジベースにアクセスする'",
       isOptional: true,
-    }
+    },
   ]}
 />
 
@@ -84,7 +87,8 @@ const queryTool = createVectorQueryTool({
           parameters: [
             {
               name: "weights",
-              description: "スコアリングコンポーネントの重み（semantic: 0.4, vector: 0.4, position: 0.2）",
+              description:
+                "スコアリングコンポーネントの重み（semantic: 0.4, vector: 0.4, position: 0.2）",
               isOptional: true,
               type: "WeightConfig",
             },
@@ -93,12 +97,12 @@ const queryTool = createVectorQueryTool({
               description: "返す上位結果の数",
               isOptional: true,
               type: "number",
-              defaultValue: "3"
-            }
-          ]
-        }
-      ]
-    }
+              defaultValue: "3",
+            },
+          ],
+        },
+      ],
+    },
   ]}
 />
 
@@ -112,13 +116,14 @@ const queryTool = createVectorQueryTool({
       name: "relevantContext",
       type: "string",
       description: "最も関連性の高いドキュメントチャンクからの結合テキスト",
-    }
+    },
   ]}
 />
 
 ## デフォルトツールの説明
 
 デフォルトの説明は以下に焦点を当てています：
+
 - 保存された知識の中から関連情報を見つける
 - ユーザーの質問に回答する
 - 事実に基づくコンテンツを取得する
@@ -133,7 +138,7 @@ const queryTool = createVectorQueryTool({
 const queryTool = createVectorQueryTool({
   vectorStoreName: "pinecone",
   indexName: "docs",
-  model: openai.embedding('text-embedding-3-small'),
+  model: openai.embedding("text-embedding-3-small"),
   enableFilter: true,
 });
 ```
@@ -149,6 +154,7 @@ const queryTool = createVectorQueryTool({
    ```
 
 このエージェント駆動のアプローチは：
+
 - 自然言語クエリをフィルター仕様に処理します
 - ベクトルストア固有のフィルター構文を実装します
 - クエリ用語をフィルター演算子に変換します
@@ -163,22 +169,23 @@ const queryTool = createVectorQueryTool({
 const queryTool = createVectorQueryTool({
   vectorStoreName: "milvus",
   indexName: "documentation",
-  model: openai.embedding('text-embedding-3-small'),
+  model: openai.embedding("text-embedding-3-small"),
   reranker: {
-    model: openai('gpt-4o-mini'),
+    model: openai("gpt-4o-mini"),
     options: {
       weights: {
-        semantic: 0.5,  // Semantic relevance weight
-        vector: 0.3,    // Vector similarity weight
-        position: 0.2   // Original position weight
+        semantic: 0.5, // Semantic relevance weight
+        vector: 0.3, // Vector similarity weight
+        position: 0.2, // Original position weight
       },
-      topK: 5
-    }
-  }
+      topK: 5,
+    },
+  },
 });
 ```
 
 リランキングは以下を組み合わせることで結果の品質を向上させます：
+
 - 意味的関連性：LLMベースのテキスト類似性スコアリングを使用
 - ベクトル類似性：元のベクトル距離スコア
 - 位置バイアス：元の結果の順序の考慮
@@ -192,8 +199,9 @@ const queryTool = createVectorQueryTool({
 const queryTool = createVectorQueryTool({
   vectorStoreName: "pinecone",
   indexName: "docs",
-  model: openai.embedding('text-embedding-3-small'),
-  description: "Search through document archives to find relevant information for answering questions about company policies and procedures"
+  model: openai.embedding("text-embedding-3-small"),
+  description:
+    "Search through document archives to find relevant information for answering questions about company policies and procedures",
 });
 ```
 
@@ -202,11 +210,12 @@ const queryTool = createVectorQueryTool({
 ## ツールの詳細
 
 このツールは以下の要素で作成されます：
+
 - **ID**: `VectorQuery {vectorStoreName} {indexName} Tool`
 - **入力スキーマ**: queryTextとfilterオブジェクトが必要
 - **出力スキーマ**: relevantContextという文字列を返します
 
 ## 関連
 
-- [rerank()](../rag/rerank) 
-- [createGraphRAGTool](./graph-rag-tool) 
+- [rerank()](../rag/rerank)
+- [createGraphRAGTool](./graph-rag-tool)

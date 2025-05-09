@@ -10,7 +10,7 @@ description: Mastraのchunk関数のドキュメントで、さまざまな戦�
 ## 例
 
 ```typescript
-import { MDocument } from '@mastra/rag';
+import { MDocument } from "@mastra/rag";
 
 const doc = MDocument.fromMarkdown(`
 # Introduction
@@ -28,12 +28,15 @@ const chunks = await doc.chunk();
 
 // Markdown-specific chunking with header extraction
 const chunksWithMetadata = await doc.chunk({
-  strategy: 'markdown',
-  headers: [['#', 'title'], ['##', 'section']],
+  strategy: "markdown",
+  headers: [
+    ["#", "title"],
+    ["##", "section"],
+  ],
   extract: {
     summary: true, // Extract summaries with default settings
-    keywords: true  // Extract keywords with default settings
-  }
+    keywords: true, // Extract keywords with default settings
+  },
 });
 ```
 
@@ -48,7 +51,7 @@ const chunksWithMetadata = await doc.chunk({
       description:
         "使用するチャンク戦略。指定されていない場合、ドキュメントタイプに基づいてデフォルトが設定されます。チャンク戦略に応じて、追加のオプションがあります。デフォルト: .md ファイル → 'markdown', .html/.htm → 'html', .json → 'json', .tex → 'latex', その他 → 'recursive'",
     },
-     {
+    {
       name: "size",
       type: "number",
       isOptional: true,
@@ -67,7 +70,8 @@ const chunksWithMetadata = await doc.chunk({
       type: "string",
       isOptional: true,
       defaultValue: "\\n\\n",
-      description: "分割する文字。テキストコンテンツの場合、デフォルトは二重改行です。",
+      description:
+        "分割する文字。テキストコンテンツの場合、デフォルトは二重改行です。",
     },
     {
       name: "isSeparatorRegex",
@@ -80,14 +84,14 @@ const chunksWithMetadata = await doc.chunk({
       name: "keepSeparator",
       type: "'start' | 'end'",
       isOptional: true,
-      description:
-        "チャンクの開始または終了にセパレータを保持するかどうか",
+      description: "チャンクの開始または終了にセパレータを保持するかどうか",
     },
     {
       name: "extract",
       type: "ExtractParams",
       isOptional: true,
-      description: "メタデータ抽出の設定。詳細は[ExtractParams リファレンス](./extract-params)を参照してください。",
+      description:
+        "メタデータ抽出の設定。詳細は[ExtractParams リファレンス](./extract-params)を参照してください。",
     },
   ]}
 />
@@ -99,26 +103,32 @@ const chunksWithMetadata = await doc.chunk({
 ```typescript showLineNumbers copy
 // HTML戦略の例
 const chunks = await doc.chunk({
-  strategy: 'html',
-  headers: [['h1', 'title'], ['h2', 'subtitle']], // HTML固有のオプション
-  sections: [['div.content', 'main']], // HTML固有のオプション
-  size: 500 // 一般的なオプション
+  strategy: "html",
+  headers: [
+    ["h1", "title"],
+    ["h2", "subtitle"],
+  ], // HTML固有のオプション
+  sections: [["div.content", "main"]], // HTML固有のオプション
+  size: 500, // 一般的なオプション
 });
 
 // Markdown戦略の例
 const chunks = await doc.chunk({
-  strategy: 'markdown',
-  headers: [['#', 'title'], ['##', 'section']], // Markdown固有のオプション
+  strategy: "markdown",
+  headers: [
+    ["#", "title"],
+    ["##", "section"],
+  ], // Markdown固有のオプション
   stripHeaders: true, // Markdown固有のオプション
-  overlap: 50 // 一般的なオプション
+  overlap: 50, // 一般的なオプション
 });
 
 // Token戦略の例
 const chunks = await doc.chunk({
-  strategy: 'token',
-  encodingName: 'gpt2', // Token固有のオプション
-  modelName: 'gpt-3.5-turbo', // Token固有のオプション
-  size: 1000 // 一般的なオプション
+  strategy: "token",
+  encodingName: "gpt2", // Token固有のオプション
+  modelName: "gpt-3.5-turbo", // Token固有のオプション
+  size: 1000, // 一般的なオプション
 });
 ```
 

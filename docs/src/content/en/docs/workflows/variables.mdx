@@ -24,7 +24,7 @@ You can map data between steps using the `variables` property when adding a step
 
 ```typescript showLineNumbers filename="src/mastra/workflows/index.ts" copy
 const workflow = new Workflow({
-  name: 'data-mapping-workflow',
+  name: "data-mapping-workflow",
   triggerSchema: z.object({
     inputData: z.string(),
   }),
@@ -34,21 +34,21 @@ workflow
   .step(step1, {
     variables: {
       // Map trigger data to step input
-      inputData: { step: 'trigger', path: 'inputData' }
-    }
+      inputData: { step: "trigger", path: "inputData" },
+    },
   })
   .then(step2, {
     variables: {
       // Map output from step1 to input for step2
-      previousValue: { step: step1, path: 'outputField' }
-    }
+      previousValue: { step: step1, path: "outputField" },
+    },
   })
   .commit();
 
 // Register the workflow with Mastra
-  export const mastra = new Mastra({
-    workflows: { workflow },
-  });
+export const mastra = new Mastra({
+  workflows: { workflow },
+});
 ```
 
 ### Accessing Nested Properties
@@ -61,8 +61,8 @@ workflow
   .then(step2, {
     variables: {
       // Access a nested property from step1's output
-      nestedValue: { step: step1, path: 'nested.deeply.value' }
-    }
+      nestedValue: { step: step1, path: "nested.deeply.value" },
+    },
   })
   .commit();
 ```
@@ -76,8 +76,8 @@ workflow
   .step(step1, {
     variables: {
       // Map the entire trigger data object
-      triggerData: { step: 'trigger', path: '.' }
-    }
+      triggerData: { step: "trigger", path: "." },
+    },
   })
   .commit();
 ```
@@ -89,7 +89,7 @@ Variables can also be passed to `while` and `until` loops. This is useful for pa
 ```typescript showLineNumbers filename="src/mastra/workflows/loop-variables.ts" copy
 // Step that increments a counter
 const incrementStep = new Step({
-  id: 'increment',
+  id: "increment",
   inputSchema: z.object({
     // Previous value from last iteration
     prevValue: z.number().optional(),
@@ -105,26 +105,24 @@ const incrementStep = new Step({
 });
 
 const workflow = new Workflow({
-  name: 'counter'
+  name: "counter",
 });
 
-workflow
-  .step(incrementStep)
-  .while(
-    async ({ context }) => {
-      // Continue while counter is less than 10
-      const result = context.getStepResult(incrementStep);
-      return (result?.updatedCounter ?? 0) < 10;
+workflow.step(incrementStep).while(
+  async ({ context }) => {
+    // Continue while counter is less than 10
+    const result = context.getStepResult(incrementStep);
+    return (result?.updatedCounter ?? 0) < 10;
+  },
+  incrementStep,
+  {
+    // Pass previous value to next iteration
+    prevValue: {
+      step: incrementStep,
+      path: "updatedCounter",
     },
-    incrementStep,
-    {
-      // Pass previous value to next iteration
-      prevValue: {
-        step: incrementStep,
-        path: 'updatedCounter'
-      }
-    }
-  );
+  },
+);
 ```
 
 ## Variable Resolution
@@ -154,7 +152,7 @@ const processUserInput = new Step({
     const { inputData } = context.inputData;
 
     return {
-      processedData: `Processed: ${inputData}`
+      processedData: `Processed: ${inputData}`,
     };
   },
 });
@@ -171,15 +169,15 @@ const workflow = new Workflow({
 workflow
   .step(processUserInput, {
     variables: {
-      inputData: { step: 'trigger', path: 'inputData' },
-    }
+      inputData: { step: "trigger", path: "inputData" },
+    },
   })
   .commit();
 
-  // Register the workflow with Mastra
-  export const mastra = new Mastra({
-    workflows: { workflow },
-  });
+// Register the workflow with Mastra
+export const mastra = new Mastra({
+  workflows: { workflow },
+});
 ```
 
 ### Mapping Between Steps
@@ -201,8 +199,8 @@ const generateData = new Step({
   execute: async () => {
     return {
       nested: {
-        value: "step1-data"
-      }
+        value: "step1-data",
+      },
     };
   },
 });
@@ -218,7 +216,7 @@ const processData = new Step({
     const { previousValue } = context.inputData;
 
     return {
-      result: `Processed: ${previousValue}`
+      result: `Processed: ${previousValue}`,
     };
   },
 });
@@ -234,15 +232,15 @@ workflow
   .then(processData, {
     variables: {
       // Map the nested.value property from generateData's output
-      previousValue: { step: generateData, path: 'nested.value' },
-    }
+      previousValue: { step: generateData, path: "nested.value" },
+    },
   })
   .commit();
 
-  // Register the workflow with Mastra
-  export const mastra = new Mastra({
-    workflows: { workflow },
-  });
+// Register the workflow with Mastra
+export const mastra = new Mastra({
+  workflows: { workflow },
+});
 ```
 
 ## Type Safety
@@ -270,12 +268,12 @@ const step1 = new Step({
   }),
   execute: async ({ context }) => {
     // TypeScript knows the shape of triggerData
-    const triggerData = context.getStepResult<TriggerType>('trigger');
+    const triggerData = context.getStepResult<TriggerType>("trigger");
 
     return {
       nested: {
-        value: `processed-${triggerData?.inputValue}`
-      }
+        value: `processed-${triggerData?.inputValue}`,
+      },
     };
   },
 });
@@ -288,10 +286,10 @@ const workflow = new Workflow({
 
 workflow.step(step1).commit();
 
-  // Register the workflow with Mastra
-  export const mastra = new Mastra({
-    workflows: { workflow },
-  });
+// Register the workflow with Mastra
+export const mastra = new Mastra({
+  workflows: { workflow },
+});
 ```
 
 ## Best Practices
@@ -306,8 +304,8 @@ workflow.step(step1).commit();
 
 While you can access previous step results directly via `context.steps`, using variable mappings offers several advantages:
 
-| Feature | Variable Mapping | Direct Context Access |
-| ------- | --------------- | --------------------- |
-| Clarity | Explicit data dependencies | Implicit dependencies |
-| Reusability | Steps can be reused with different mappings | Steps are tightly coupled |
-| Type Safety | Better TypeScript integration | Requires manual type assertions |
+| Feature     | Variable Mapping                            | Direct Context Access           |
+| ----------- | ------------------------------------------- | ------------------------------- |
+| Clarity     | Explicit data dependencies                  | Implicit dependencies           |
+| Reusability | Steps can be reused with different mappings | Steps are tightly coupled       |
+| Type Safety | Better TypeScript integration               | Requires manual type assertions |

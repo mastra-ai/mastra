@@ -27,22 +27,22 @@ Mastraには、一時的なエラーによって失敗したステップのた�
 ```typescript
 // ワークフローレベルの再試行設定
 const workflow = new Workflow({
-  name: 'my-workflow',
+  name: "my-workflow",
   retryConfig: {
-    attempts: 3,    // 再試行回数
-    delay: 1000,    // 再試行間の遅延（ミリ秒）
+    attempts: 3, // 再試行回数
+    delay: 1000, // 再試行間の遅延（ミリ秒）
   },
 });
 
 // ステップレベルの再試行設定（ワークフローレベルの設定を上書き）
 const apiStep = new Step({
-  id: 'callApi',
+  id: "callApi",
   execute: async () => {
     // 失敗する可能性のあるAPI呼び出し
   },
   retryConfig: {
-    attempts: 5,    // このステップは最大5回再試行されます
-    delay: 2000,    // 再試行間に2秒の遅延があります
+    attempts: 5, // このステップは最大5回再試行されます
+    delay: 2000, // 再試行間に2秒の遅延があります
   },
 });
 ```
@@ -56,7 +56,7 @@ const apiStep = new Step({
 ```typescript
 // Create a workflow with conditional branching
 const workflow = new Workflow({
-  name: 'error-handling-workflow',
+  name: "error-handling-workflow",
 });
 
 workflow
@@ -64,13 +64,13 @@ workflow
   .then(processDataStep, {
     // Only execute processDataStep if fetchDataStep was successful
     when: ({ context }) => {
-      return context.steps.fetchDataStep?.status === 'success';
+      return context.steps.fetchDataStep?.status === "success";
     },
   })
   .then(fallbackStep, {
     // Execute fallbackStep if fetchDataStep failed
     when: ({ context }) => {
-      return context.steps.fetchDataStep?.status === 'failed';
+      return context.steps.fetchDataStep?.status === "failed";
     },
   })
   .commit();
@@ -90,7 +90,9 @@ watch(async ({ results }) => {
     .map(([stepId]) => stepId);
 
   if (failedSteps.length > 0) {
-    console.error(`ワークフローに失敗したステップがあります: ${failedSteps.join(', ')}`);
+    console.error(
+      `ワークフローに失敗したステップがあります: ${failedSteps.join(", ")}`,
+    );
     // アラートやログ記録などの是正措置を取る
   }
 });
@@ -104,7 +106,7 @@ await start();
 
 ```typescript
 const robustStep = new Step({
-  id: 'robustStep',
+  id: "robustStep",
   execute: async ({ context }) => {
     try {
       // 主な操作を試みる
@@ -112,13 +114,13 @@ const robustStep = new Step({
       return { success: true, data: result };
     } catch (error) {
       // エラーを記録する
-      console.error('操作に失敗しました:', error);
+      console.error("操作に失敗しました:", error);
 
       // 例外を投げる代わりに優雅なフォールバック結果を返す
       return {
         success: false,
         error: error.message,
-        fallbackData: 'デフォルト値'
+        fallbackData: "デフォルト値",
       };
     }
   },
@@ -131,21 +133,21 @@ const robustStep = new Step({
 
 ```typescript
 const finalStep = new Step({
-  id: 'finalStep',
+  id: "finalStep",
   execute: async ({ context }) => {
     // Check results of previous steps
-    const step1Success = context.steps.step1?.status === 'success';
-    const step2Success = context.steps.step2?.status === 'success';
+    const step1Success = context.steps.step1?.status === "success";
+    const step2Success = context.steps.step2?.status === "success";
 
     if (step1Success && step2Success) {
       // All steps succeeded
-      return { status: 'complete', result: 'All operations succeeded' };
+      return { status: "complete", result: "All operations succeeded" };
     } else if (step1Success) {
       // Only step1 succeeded
-      return { status: 'partial', result: 'Partial completion' };
+      return { status: "partial", result: "Partial completion" };
     } else {
       // Critical failure
-      return { status: 'failed', result: 'Critical steps failed' };
+      return { status: "failed", result: "Critical steps failed" };
     }
   },
 });

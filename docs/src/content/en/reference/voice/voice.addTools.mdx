@@ -26,9 +26,13 @@ const weatherTool = createTool({
   }),
   execute: async ({ context }) => {
     // Fetch weather data from an API
-    const response = await fetch(`https://api.weather.com?location=${encodeURIComponent(context.location)}`);
+    const response = await fetch(
+      `https://api.weather.com?location=${encodeURIComponent(context.location)}`,
+    );
     const data = await response.json();
-    return { message: `The current temperature in ${context.location} is ${data.temperature}°F with ${data.conditions}.` };
+    return {
+      message: `The current temperature in ${context.location} is ${data.temperature}°F with ${data.conditions}.`,
+    };
   },
 });
 
@@ -50,15 +54,17 @@ await voice.connect();
 ```
 
 ## Parameters
-<br/>
+
+<br />
 <PropertiesTable
   content={[
     {
       name: "tools",
       type: "ToolsInput",
-      description: "Object containing tool definitions that can be called by the voice model",
+      description:
+        "Object containing tool definitions that can be called by the voice model",
       isOptional: false,
-    }
+    },
   ]}
 />
 

@@ -27,7 +27,7 @@ await voice.connect();
 
 // Register event listener for transcribed text
 voice.on("writing", (event) => {
-  if (event.role === 'user') {
+  if (event.role === "user") {
     process.stdout.write(chalk.green(event.text));
   } else {
     process.stdout.write(chalk.blue(event.text));
@@ -52,21 +52,24 @@ voice.on("error", ({ message, code, details }) => {
 ```
 
 ## Parameters
-<br/>
+
+<br />
 <PropertiesTable
   content={[
     {
       name: "event",
       type: "string",
-      description: "Name of the event to listen for. See the [Voice Events](./voice.events) documentation for a list of available events.",
+      description:
+        "Name of the event to listen for. See the [Voice Events](./voice.events) documentation for a list of available events.",
       isOptional: false,
     },
     {
       name: "callback",
       type: "function",
-      description: "Callback function that will be called when the event occurs. The callback signature depends on the specific event.",
+      description:
+        "Callback function that will be called when the event occurs. The callback signature depends on the specific event.",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -99,9 +102,9 @@ import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
 import Speaker from "@mastra/node-speaker";
 
 const speaker = new Speaker({
-  sampleRate: 24100,  // Audio sample rate in Hz - standard for high-quality audio on MacBook Pro
-  channels: 1,        // Mono audio output (as opposed to stereo which would be 2)
-  bitDepth: 16,       // Bit depth for audio quality - CD quality standard (16-bit resolution)
+  sampleRate: 24100, // Audio sample rate in Hz - standard for high-quality audio on MacBook Pro
+  channels: 1, // Mono audio output (as opposed to stereo which would be 2)
+  bitDepth: 16, // Bit depth for audio quality - CD quality standard (16-bit resolution)
 });
 
 const realtimeVoice = new OpenAIRealtimeVoice();
@@ -114,7 +117,7 @@ await voice.connect();
 
 // This will register the event listener with the OpenAIRealtimeVoice provider
 voice.on("speaker", (stream) => {
-  stream.pipe(speaker)
+  stream.pipe(speaker);
 });
 ```
 

@@ -24,7 +24,7 @@ Mastraワークフローでは、変数は次の方法で使用されます：
 
 ```typescript showLineNumbers filename="src/mastra/workflows/index.ts" copy
 const workflow = new Workflow({
-  name: 'data-mapping-workflow',
+  name: "data-mapping-workflow",
   triggerSchema: z.object({
     inputData: z.string(),
   }),
@@ -34,21 +34,21 @@ workflow
   .step(step1, {
     variables: {
       // トリガーデータをステップ入力にマッピング
-      inputData: { step: 'trigger', path: 'inputData' }
-    }
+      inputData: { step: "trigger", path: "inputData" },
+    },
   })
   .then(step2, {
     variables: {
       // step1の出力をstep2の入力にマッピング
-      previousValue: { step: step1, path: 'outputField' }
-    }
+      previousValue: { step: step1, path: "outputField" },
+    },
   })
   .commit();
 
 // Mastraにワークフローを登録
-  export const mastra = new Mastra({
-    workflows: { workflow },
-  });
+export const mastra = new Mastra({
+  workflows: { workflow },
+});
 ```
 
 ### ネストされたプロパティへのアクセス
@@ -61,8 +61,8 @@ workflow
   .then(step2, {
     variables: {
       // step1の出力からネストされたプロパティにアクセス
-      nestedValue: { step: step1, path: 'nested.deeply.value' }
-    }
+      nestedValue: { step: step1, path: "nested.deeply.value" },
+    },
   })
   .commit();
 ```
@@ -76,8 +76,8 @@ workflow
   .step(step1, {
     variables: {
       // トリガーデータオブジェクト全体をマッピング
-      triggerData: { step: 'trigger', path: '.' }
-    }
+      triggerData: { step: "trigger", path: "." },
+    },
   })
   .commit();
 ```
@@ -89,7 +89,7 @@ workflow
 ```typescript showLineNumbers filename="src/mastra/workflows/loop-variables.ts" copy
 // カウンターをインクリメントするステップ
 const incrementStep = new Step({
-  id: 'increment',
+  id: "increment",
   inputSchema: z.object({
     // 前回のイテレーションからの値
     prevValue: z.number().optional(),
@@ -105,26 +105,24 @@ const incrementStep = new Step({
 });
 
 const workflow = new Workflow({
-  name: 'counter'
+  name: "counter",
 });
 
-workflow
-  .step(incrementStep)
-  .while(
-    async ({ context }) => {
-      // カウンターが10未満の間続行
-      const result = context.getStepResult(incrementStep);
-      return (result?.updatedCounter ?? 0) < 10;
+workflow.step(incrementStep).while(
+  async ({ context }) => {
+    // カウンターが10未満の間続行
+    const result = context.getStepResult(incrementStep);
+    return (result?.updatedCounter ?? 0) < 10;
+  },
+  incrementStep,
+  {
+    // 次のイテレーションに前回の値を渡す
+    prevValue: {
+      step: incrementStep,
+      path: "updatedCounter",
     },
-    incrementStep,
-    {
-      // 次のイテレーションに前回の値を渡す
-      prevValue: {
-        step: incrementStep,
-        path: 'updatedCounter'
-      }
-    }
-  );
+  },
+);
 ```
 
 ## 変数の解決
@@ -154,7 +152,7 @@ const processUserInput = new Step({
     const { inputData } = context.inputData;
 
     return {
-      processedData: `Processed: ${inputData}`
+      processedData: `Processed: ${inputData}`,
     };
   },
 });
@@ -171,15 +169,15 @@ const workflow = new Workflow({
 workflow
   .step(processUserInput, {
     variables: {
-      inputData: { step: 'trigger', path: 'inputData' },
-    }
+      inputData: { step: "trigger", path: "inputData" },
+    },
   })
   .commit();
 
-  // Mastraにワークフローを登録
-  export const mastra = new Mastra({
-    workflows: { workflow },
-  });
+// Mastraにワークフローを登録
+export const mastra = new Mastra({
+  workflows: { workflow },
+});
 ```
 
 ### ステップ間のマッピング
@@ -201,8 +199,8 @@ const generateData = new Step({
   execute: async () => {
     return {
       nested: {
-        value: "step1-data"
-      }
+        value: "step1-data",
+      },
     };
   },
 });
@@ -218,7 +216,7 @@ const processData = new Step({
     const { previousValue } = context.inputData;
 
     return {
-      result: `Processed: ${previousValue}`
+      result: `Processed: ${previousValue}`,
     };
   },
 });
@@ -234,15 +232,15 @@ workflow
   .then(processData, {
     variables: {
       // generateDataの出力からnested.valueプロパティをマッピング
-      previousValue: { step: generateData, path: 'nested.value' },
-    }
+      previousValue: { step: generateData, path: "nested.value" },
+    },
   })
   .commit();
 
-  // Mastraにワークフローを登録
-  export const mastra = new Mastra({
-    workflows: { workflow },
-  });
+// Mastraにワークフローを登録
+export const mastra = new Mastra({
+  workflows: { workflow },
+});
 ```
 
 ## 型の安全性
@@ -270,12 +268,12 @@ const step1 = new Step({
   }),
   execute: async ({ context }) => {
     // TypeScript knows the shape of triggerData
-    const triggerData = context.getStepResult<TriggerType>('trigger');
+    const triggerData = context.getStepResult<TriggerType>("trigger");
 
     return {
       nested: {
-        value: `processed-${triggerData?.inputValue}`
-      }
+        value: `processed-${triggerData?.inputValue}`,
+      },
     };
   },
 });
@@ -288,10 +286,10 @@ const workflow = new Workflow({
 
 workflow.step(step1).commit();
 
-  // Register the workflow with Mastra
-  export const mastra = new Mastra({
-    workflows: { workflow },
-  });
+// Register the workflow with Mastra
+export const mastra = new Mastra({
+  workflows: { workflow },
+});
 ```
 
 ## ベストプラクティス
@@ -306,8 +304,8 @@ workflow.step(step1).commit();
 
 `context.steps`を介して前のステップの結果に直接アクセスすることもできますが、変数マッピングを使用することにはいくつかの利点があります：
 
-| 機能 | 変数マッピング | 直接コンテキストアクセス |
-| ------- | --------------- | --------------------- |
-| 明確さ | 明示的なデータ依存関係 | 暗黙的な依存関係 |
-| 再利用性 | 異なるマッピングでステップを再利用可能 | ステップが密接に結合されている |
-| 型の安全性 | より良いTypeScript統合 | 手動での型アサーションが必要 |
+| 機能       | 変数マッピング                         | 直接コンテキストアクセス       |
+| ---------- | -------------------------------------- | ------------------------------ |
+| 明確さ     | 明示的なデータ依存関係                 | 暗黙的な依存関係               |
+| 再利用性   | 異なるマッピングでステップを再利用可能 | ステップが密接に結合されている |
+| 型の安全性 | より良いTypeScript統合                 | 手動での型アサーションが必要   |

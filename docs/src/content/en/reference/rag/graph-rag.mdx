@@ -14,7 +14,7 @@ import { GraphRAG } from "@mastra/rag";
 
 const graphRag = new GraphRAG({
   dimension: 1536,
-  threshold: 0.7
+  threshold: 0.7,
 });
 
 // Create the graph from chunks and embeddings
@@ -25,7 +25,7 @@ const results = await graphRag.query({
   query: queryEmbedding,
   topK: 10,
   randomWalkSteps: 100,
-  restartProb: 0.15
+  restartProb: 0.15,
 });
 ```
 
@@ -43,10 +43,11 @@ const results = await graphRag.query({
     {
       name: "threshold",
       type: "number",
-      description: "Similarity threshold for creating edges between nodes (0-1)",
+      description:
+        "Similarity threshold for creating edges between nodes (0-1)",
       isOptional: true,
       defaultValue: "0.7",
-    }
+    },
   ]}
 />
 
@@ -61,6 +62,7 @@ createGraph(chunks: GraphChunk[], embeddings: GraphEmbedding[]): void
 ```
 
 #### Parameters
+
 <PropertiesTable
   content={[
     {
@@ -74,7 +76,7 @@ createGraph(chunks: GraphChunk[], embeddings: GraphEmbedding[]): void
       type: "GraphEmbedding[]",
       description: "Array of embeddings corresponding to chunks",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -97,6 +99,7 @@ query({
 ```
 
 #### Parameters
+
 <PropertiesTable
   content={[
     {
@@ -125,11 +128,12 @@ query({
       description: "Probability of restarting walk from query node",
       isOptional: true,
       defaultValue: "0.15",
-    }
+    },
   ]}
 />
 
 #### Returns
+
 Returns an array of `RankedNode` objects, where each node contains:
 
 <PropertiesTable
@@ -153,7 +157,7 @@ Returns an array of `RankedNode` objects, where each node contains:
       name: "score",
       type: "number",
       description: "Combined relevance score from graph traversal",
-    }
+    },
   ]}
 />
 
@@ -162,7 +166,7 @@ Returns an array of `RankedNode` objects, where each node contains:
 ```typescript
 const graphRag = new GraphRAG({
   dimension: 1536,
-  threshold: 0.8  // Stricter similarity threshold
+  threshold: 0.8, // Stricter similarity threshold
 });
 
 // Create graph from chunks and embeddings
@@ -173,7 +177,7 @@ const results = await graphRag.query({
   query: queryEmbedding,
   topK: 5,
   randomWalkSteps: 200,
-  restartProb: 0.2
+  restartProb: 0.2,
 });
 ```
 

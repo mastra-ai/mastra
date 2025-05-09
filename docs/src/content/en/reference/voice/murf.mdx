@@ -18,17 +18,17 @@ const voice = new MurfVoice();
 // Initialize with custom configuration
 const voice = new MurfVoice({
   speechModel: {
-    name: 'GEN2',
-    apiKey: 'your-api-key',
+    name: "GEN2",
+    apiKey: "your-api-key",
     properties: {
-      format: 'MP3',
+      format: "MP3",
       rate: 1.0,
       pitch: 1.0,
       sampleRate: 48000,
-      channelType: 'STEREO',
+      channelType: "STEREO",
     },
   },
-  speaker: 'en-US-cooper',
+  speaker: "en-US-cooper",
 });
 
 // Text-to-Speech with default settings
@@ -36,11 +36,11 @@ const audioStream = await voice.speak("Hello, world!");
 
 // Text-to-Speech with custom properties
 const audioStream = await voice.speak("Hello, world!", {
-  speaker: 'en-UK-hazel',
+  speaker: "en-UK-hazel",
   properties: {
-    format: 'WAV',
+    format: "WAV",
     rate: 1.2,
-    style: 'casual',
+    style: "casual",
   },
 });
 
@@ -83,7 +83,8 @@ const voices = await voice.getSpeakers();
     {
       name: "apiKey",
       type: "string",
-      description: "Murf API key. Falls back to MURF_API_KEY environment variable",
+      description:
+        "Murf API key. Falls back to MURF_API_KEY environment variable",
       isOptional: true,
     },
     {
@@ -179,7 +180,8 @@ Converts text to speech using Murf's API.
     {
       name: "input",
       type: "string | NodeJS.ReadableStream",
-      description: "Text to convert to speech. If a stream is provided, it will be converted to text first.",
+      description:
+        "Text to convert to speech. If a stream is provided, it will be converted to text first.",
       isOptional: false,
     },
     {
@@ -234,7 +236,7 @@ Returns an array of available voice options, where each node contains:
       type: "string",
       description: "Gender of the voice",
       isOptional: false,
-    }
+    },
   ]}
 />
 

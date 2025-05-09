@@ -18,16 +18,17 @@ const voice = new PlayAIVoice();
 // Initialize with default configuration
 const voice = new PlayAIVoice({
   speechModel: {
-    name: 'PlayDialog',
+    name: "PlayDialog",
     apiKey: process.env.PLAYAI_API_KEY,
-    userId: process.env.PLAYAI_USER_ID
+    userId: process.env.PLAYAI_USER_ID,
   },
-  speaker: 'Angelo'  // Default voice
+  speaker: "Angelo", // Default voice
 });
 
 // Convert text to speech with a specific voice
 const audioStream = await voice.speak("Hello, world!", {
-  speaker: 's3://voice-cloning-zero-shot/b27bc13e-996f-4841-b584-4d35801aea98/original/manifest.json' // Dexter voice
+  speaker:
+    "s3://voice-cloning-zero-shot/b27bc13e-996f-4841-b584-4d35801aea98/original/manifest.json", // Dexter voice
 });
 ```
 
@@ -66,13 +67,15 @@ const audioStream = await voice.speak("Hello, world!", {
     {
       name: "apiKey",
       type: "string",
-      description: "PlayAI API key. Falls back to PLAYAI_API_KEY environment variable",
+      description:
+        "PlayAI API key. Falls back to PLAYAI_API_KEY environment variable",
       isOptional: true,
     },
     {
       name: "userId",
       type: "string",
-      description: "PlayAI user ID. Falls back to PLAYAI_USER_ID environment variable",
+      description:
+        "PlayAI user ID. Falls back to PLAYAI_USER_ID environment variable",
       isOptional: true,
     },
   ]}
@@ -89,7 +92,8 @@ Converts text to speech using the configured speech model and voice.
     {
       name: "input",
       type: "string | NodeJS.ReadableStream",
-      description: "Text to convert to speech. If a stream is provided, it will be converted to text first.",
+      description:
+        "Text to convert to speech. If a stream is provided, it will be converted to text first.",
       isOptional: false,
     },
     {

@@ -16,13 +16,13 @@ import { createGraphRAGTool } from "@mastra/rag";
 const graphTool = createGraphRAGTool({
   vectorStoreName: "pinecone",
   indexName: "docs",
-  model: openai.embedding('text-embedding-3-small'),
+  model: openai.embedding("text-embedding-3-small"),
   graphOptions: {
     dimension: 1536,
     threshold: 0.7,
     randomWalkSteps: 100,
-    restartProb: 0.15
-  }
+    restartProb: 0.15,
+  },
 });
 ```
 
@@ -58,9 +58,10 @@ const graphTool = createGraphRAGTool({
     {
       name: "description",
       type: "string",
-      description: "ツールのカスタム説明。デフォルトでは: '知識ベース内の情報間の関係をアクセスして分析し、接続やパターンに関する複雑な質問に答える'",
+      description:
+        "ツールのカスタム説明。デフォルトでは: '知識ベース内の情報間の関係をアクセスして分析し、接続やパターンに関する複雑な質問に答える'",
       isOptional: true,
-    }
+    },
   ]}
 />
 
@@ -95,11 +96,12 @@ const graphTool = createGraphRAGTool({
       description: "クエリノードからランダムウォークを再開する確率",
       isOptional: true,
       defaultValue: "0.15",
-    }
+    },
   ]}
 />
 
 ## 戻り値
+
 このツールは以下のオブジェクトを返します：
 
 <PropertiesTable
@@ -107,14 +109,16 @@ const graphTool = createGraphRAGTool({
     {
       name: "relevantContext",
       type: "string",
-      description: "グラフベースのランキングを使用して取得された、最も関連性の高いドキュメントチャンクからの結合テキスト",
-    }
+      description:
+        "グラフベースのランキングを使用して取得された、最も関連性の高いドキュメントチャンクからの結合テキスト",
+    },
   ]}
 />
 
 ## デフォルトツールの説明
 
 デフォルトの説明は以下に焦点を当てています:
+
 - ドキュメント間の関係を分析する
 - パターンと接続を見つける
 - 複雑なクエリに答える
@@ -125,13 +129,13 @@ const graphTool = createGraphRAGTool({
 const graphTool = createGraphRAGTool({
   vectorStoreName: "pinecone",
   indexName: "docs",
-  model: openai.embedding('text-embedding-3-small'),
+  model: openai.embedding("text-embedding-3-small"),
   graphOptions: {
     dimension: 1536,
-    threshold: 0.8,        // より高い類似性のしきい値
-    randomWalkSteps: 200,  // より多くの探索ステップ
-    restartProb: 0.2      // より高い再開確率
-  }
+    threshold: 0.8, // より高い類似性のしきい値
+    randomWalkSteps: 200, // より多くの探索ステップ
+    restartProb: 0.2, // より高い再開確率
+  },
 });
 ```
 
@@ -141,8 +145,9 @@ const graphTool = createGraphRAGTool({
 const graphTool = createGraphRAGTool({
   vectorStoreName: "pinecone",
   indexName: "docs",
-  model: openai.embedding('text-embedding-3-small'),
-  description: "Analyze document relationships to find complex patterns and connections in our company's historical data"
+  model: openai.embedding("text-embedding-3-small"),
+  description:
+    "Analyze document relationships to find complex patterns and connections in our company's historical data",
 });
 ```
 

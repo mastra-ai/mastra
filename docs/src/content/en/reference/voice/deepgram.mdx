@@ -18,14 +18,14 @@ const voice = new DeepgramVoice();
 // Initialize with custom configuration
 const voice = new DeepgramVoice({
   speechModel: {
-    name: 'aura',
-    apiKey: 'your-api-key',
+    name: "aura",
+    apiKey: "your-api-key",
   },
   listeningModel: {
-    name: 'nova-2',
-    apiKey: 'your-api-key',
+    name: "nova-2",
+    apiKey: "your-api-key",
   },
-  speaker: 'asteria-en',
+  speaker: "asteria-en",
 });
 
 // Text-to-Speech
@@ -44,14 +44,14 @@ const transcript = await voice.listen(audioStream);
       type: "DeepgramVoiceConfig",
       description: "Configuration for text-to-speech functionality.",
       isOptional: true,
-      defaultValue: "{ name: 'aura' }"
+      defaultValue: "{ name: 'aura' }",
     },
     {
       name: "listeningModel",
       type: "DeepgramVoiceConfig",
       description: "Configuration for speech-to-text functionality.",
       isOptional: true,
-      defaultValue: "{ name: 'nova' }"
+      defaultValue: "{ name: 'nova' }",
     },
     {
       name: "speaker",
@@ -76,7 +76,8 @@ const transcript = await voice.listen(audioStream);
     {
       name: "apiKey",
       type: "string",
-      description: "Deepgram API key. Falls back to DEEPGRAM_API_KEY environment variable",
+      description:
+        "Deepgram API key. Falls back to DEEPGRAM_API_KEY environment variable",
       isOptional: true,
     },
     {
@@ -105,7 +106,8 @@ Converts text to speech using the configured speech model and voice.
     {
       name: "input",
       type: "string | NodeJS.ReadableStream",
-      description: "Text to convert to speech. If a stream is provided, it will be converted to text first.",
+      description:
+        "Text to convert to speech. If a stream is provided, it will be converted to text first.",
       isOptional: false,
     },
     {
@@ -159,6 +161,6 @@ Returns a list of available voice options.
       type: "string",
       description: "Unique identifier for the voice",
       isOptional: false,
-    }
+    },
   ]}
 />

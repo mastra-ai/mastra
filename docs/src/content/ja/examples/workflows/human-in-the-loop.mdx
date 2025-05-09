@@ -3,7 +3,7 @@ title: "例：ヒューマン・イン・ザ・ループ | ワークフロー | 
 description: 人間の介入ポイントを含むワークフローを作成するためのMastraの使用例。
 ---
 
-import { GithubLink } from '@/components/github-link';
+import { GithubLink } from "@/components/github-link";
 
 # ヒューマン・イン・ザ・ループ ワークフロー
 
@@ -23,14 +23,14 @@ import { GithubLink } from '@/components/github-link';
 この例では、[Inquirer](https://www.npmjs.com/package/@inquirer/prompts)ライブラリを使用して、ワークフローが一時停止されたときにターミナルから直接ユーザー入力を収集し、真にインタラクティブな人間参加型のエクスペリエンスを作成する方法を示しています。
 
 ```ts showLineNumbers copy
-import { Mastra } from '@mastra/core';
-import { Step, Workflow } from '@mastra/core/workflows';
-import { z } from 'zod';
-import { confirm, input, select } from '@inquirer/prompts';
+import { Mastra } from "@mastra/core";
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
+import { confirm, input, select } from "@inquirer/prompts";
 
 // Step 1: Generate product recommendations
 const generateRecommendations = new Step({
-  id: 'generateRecommendations',
+  id: "generateRecommendations",
   outputSchema: z.object({
     customerName: z.string(),
     recommendations: z.array(
@@ -51,22 +51,22 @@ const generateRecommendations = new Step({
       customerName,
       recommendations: [
         {
-          productId: 'prod-001',
-          productName: 'Premium Widget',
+          productId: "prod-001",
+          productName: "Premium Widget",
           price: 99.99,
-          description: 'Our best-selling premium widget with advanced features',
+          description: "Our best-selling premium widget with advanced features",
         },
         {
-          productId: 'prod-002',
-          productName: 'Basic Widget',
+          productId: "prod-002",
+          productName: "Basic Widget",
           price: 49.99,
-          description: 'Affordable entry-level widget for beginners',
+          description: "Affordable entry-level widget for beginners",
         },
         {
-          productId: 'prod-003',
-          productName: 'Widget Pro Plus',
+          productId: "prod-003",
+          productName: "Widget Pro Plus",
           price: 149.99,
-          description: 'Professional-grade widget with extended warranty',
+          description: "Professional-grade widget with extended warranty",
         },
       ],
     };
@@ -77,7 +77,7 @@ const generateRecommendations = new Step({
 ```ts showLineNumbers copy
 // Step 2: Get human approval and customization for the recommendations
 const reviewRecommendations = new Step({
-  id: 'reviewRecommendations',
+  id: "reviewRecommendations",
   inputSchema: z.object({
     approvedProducts: z.array(z.string()),
     customerNote: z.string().optional(),
@@ -95,8 +95,10 @@ const reviewRecommendations = new Step({
     offerDiscount: z.boolean(),
   }),
   execute: async ({ context, suspend }) => {
-    const { customerName, recommendations } = context.getStepResult(generateRecommendations) || {
-      customerName: '',
+    const { customerName, recommendations } = context.getStepResult(
+      generateRecommendations,
+    ) || {
+      customerName: "",
       recommendations: [],
     };
 
@@ -113,21 +115,24 @@ const reviewRecommendations = new Step({
       await suspend({
         customerName,
         recommendations,
-        message: 'Please review these product recommendations before sending to the customer',
+        message:
+          "Please review these product recommendations before sending to the customer",
       });
 
       // Placeholder return (won't be reached due to suspend)
       return {
         finalRecommendations: [],
-        customerNote: '',
+        customerNote: "",
         offerDiscount: false,
       };
     }
 
     // Process the agent's product selections
     const finalRecommendations = recommendations
-      .filter(product => reviewInput.approvedProducts.includes(product.productId))
-      .map(product => ({
+      .filter((product) =>
+        reviewInput.approvedProducts.includes(product.productId),
+      )
+      .map((product) => ({
         productId: product.productId,
         productName: product.productName,
         price: product.price,
@@ -135,7 +140,7 @@ const reviewRecommendations = new Step({
 
     return {
       finalRecommendations,
-      customerNote: reviewInput.customerNote || '',
+      customerNote: reviewInput.customerNote || "",
       offerDiscount: reviewInput.offerDiscount || false,
     };
   },
@@ -145,38 +150,42 @@ const reviewRecommendations = new Step({
 ```ts showLineNumbers copy
 // Step 3: Send the recommendations to the customer
 const sendRecommendations = new Step({
-  id: 'sendRecommendations',
+  id: "sendRecommendations",
   outputSchema: z.object({
     emailSent: z.boolean(),
     emailContent: z.string(),
   }),
   execute: async ({ context }) => {
-    const { customerName } = context.getStepResult(generateRecommendations) || { customerName: '' };
-    const { finalRecommendations, customerNote, offerDiscount } = context.getStepResult(reviewRecommendations) || {
-      finalRecommendations: [],
-      customerNote: '',
-      offerDiscount: false,
+    const { customerName } = context.getStepResult(generateRecommendations) || {
+      customerName: "",
     };
+    const { finalRecommendations, customerNote, offerDiscount } =
+      context.getStepResult(reviewRecommendations) || {
+        finalRecommendations: [],
+        customerNote: "",
+        offerDiscount: false,
+      };
 
     // Generate email content based on the recommendations
     let emailContent = `Dear ${customerName},\n\nBased on your preferences, we recommend:\n\n`;
 
-    finalRecommendations.forEach(product => {
+    finalRecommendations.forEach((product) => {
       emailContent += `- ${product.productName}: $${product.price.toFixed(2)}\n`;
     });
 
     if (offerDiscount) {
-      emailContent += '\nAs a valued customer, use code SAVE10 for 10% off your next purchase!\n';
+      emailContent +=
+        "\nAs a valued customer, use code SAVE10 for 10% off your next purchase!\n";
     }
 
     if (customerNote) {
       emailContent += `\nPersonal note: ${customerNote}\n`;
     }
 
-    emailContent += '\nThank you for your business,\nThe Sales Team';
+    emailContent += "\nThank you for your business,\nThe Sales Team";
 
     // In a real application, you would send this email
-    console.log('Email content generated:', emailContent);
+    console.log("Email content generated:", emailContent);
 
     return {
       emailSent: true,
@@ -187,17 +196,17 @@ const sendRecommendations = new Step({
 
 // Build the workflow
 const recommendationWorkflow = new Workflow({
-  name: 'product-recommendation-workflow',
+  name: "product-recommendation-workflow",
   triggerSchema: z.object({
     customerName: z.string(),
   }),
 });
 
 recommendationWorkflow
-.step(generateRecommendations)
-.then(reviewRecommendations)
-.then(sendRecommendations)
-.commit();
+  .step(generateRecommendations)
+  .then(reviewRecommendations)
+  .then(sendRecommendations)
+  .commit();
 
 // Register the workflow
 const mastra = new Mastra({
@@ -208,38 +217,43 @@ const mastra = new Mastra({
 ```ts showLineNumbers copy
 // Example of using the workflow with Inquirer prompts
 async function runRecommendationWorkflow() {
-  const registeredWorkflow = mastra.getWorkflow('recommendationWorkflow');
+  const registeredWorkflow = mastra.getWorkflow("recommendationWorkflow");
   const run = registeredWorkflow.createRun();
 
-  console.log('Starting product recommendation workflow...');
+  console.log("Starting product recommendation workflow...");
   const result = await run.start({
     triggerData: {
-      customerName: 'Jane Smith',
+      customerName: "Jane Smith",
     },
   });
 
-  const isReviewStepSuspended = result.activePaths.get('reviewRecommendations')?.status === 'suspended';
+  const isReviewStepSuspended =
+    result.activePaths.get("reviewRecommendations")?.status === "suspended";
 
   // Check if workflow is suspended for human review
   if (isReviewStepSuspended) {
-    const { customerName, recommendations, message } = result.activePaths.get('reviewRecommendations')?.suspendPayload;
+    const { customerName, recommendations, message } = result.activePaths.get(
+      "reviewRecommendations",
+    )?.suspendPayload;
 
-    console.log('\n===================================');
+    console.log("\n===================================");
     console.log(message);
     console.log(`Customer: ${customerName}`);
-    console.log('===================================\n');
+    console.log("===================================\n");
 
     // Use Inquirer to collect input from the sales agent in the terminal
-    console.log('Available product recommendations:');
+    console.log("Available product recommendations:");
     recommendations.forEach((product, index) => {
-      console.log(`${index + 1}. ${product.productName} - $${product.price.toFixed(2)}`);
+      console.log(
+        `${index + 1}. ${product.productName} - $${product.price.toFixed(2)}`,
+      );
       console.log(`   ${product.description}\n`);
     });
 
     // Let the agent select which products to recommend
     const approvedProducts = await checkbox({
-      message: '顧客にお勧めする製品を選択してください：',
-      choices: recommendations.map(product => ({
+      message: "顧客にお勧めする製品を選択してください：",
+      choices: recommendations.map((product) => ({
         name: `${product.productName} ($${product.price.toFixed(2)})`,
         value: product.productId,
       })),
@@ -247,28 +261,28 @@ async function runRecommendationWorkflow() {
 
     // Let the agent add a personal note
     const includeNote = await confirm({
-      message: '個人的なメモを追加しますか？',
+      message: "個人的なメモを追加しますか？",
       default: false,
     });
 
-    let customerNote = '';
+    let customerNote = "";
     if (includeNote) {
       customerNote = await input({
-        message: '顧客へのパーソナライズされたメモを入力してください：',
+        message: "顧客へのパーソナライズされたメモを入力してください：",
       });
     }
 
     // Ask if a discount should be offered
     const offerDiscount = await confirm({
-      message: 'この顧客に10%割引を提供しますか？',
+      message: "この顧客に10%割引を提供しますか？",
       default: false,
     });
 
-    console.log('\nレビューを送信しています...');
+    console.log("\nレビューを送信しています...");
 
     // Resume the workflow with the agent's input
     const resumeResult = await run.resume({
-      stepId: 'reviewRecommendations',
+      stepId: "reviewRecommendations",
       context: {
         approvedProducts,
         customerNote,
@@ -276,11 +290,14 @@ async function runRecommendationWorkflow() {
       },
     });
 
-    console.log('\n===================================');
-    console.log('ワークフローが完了しました！');
-    console.log('メールの内容：');
-    console.log('===================================\n');
-    console.log(resumeResult?.results?.sendRecommendations || 'メールの内容が生成されていません');
+    console.log("\n===================================");
+    console.log("ワークフローが完了しました！");
+    console.log("メールの内容：");
+    console.log("===================================\n");
+    console.log(
+      resumeResult?.results?.sendRecommendations ||
+        "メールの内容が生成されていません",
+    );
 
     return resumeResult;
   }
@@ -297,14 +314,14 @@ runRecommendationWorkflow().catch(console.error);
 この例では、コンテンツモデレーションシステムのような、複数の人間の介入ポイントを必要とするより複雑なワークフローを示しています。
 
 ```ts showLineNumbers copy
-import { Mastra } from '@mastra/core';
-import { Step, Workflow } from '@mastra/core/workflows';
-import { z } from 'zod';
-import { select, input } from '@inquirer/prompts';
+import { Mastra } from "@mastra/core";
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
+import { select, input } from "@inquirer/prompts";
 
 // Step 1: Receive and analyze content
 const analyzeContent = new Step({
-  id: 'analyzeContent',
+  id: "analyzeContent",
   outputSchema: z.object({
     content: z.string(),
     aiAnalysisScore: z.number(),
@@ -315,9 +332,10 @@ const analyzeContent = new Step({
 
     // Simulate AI analysis
     const aiAnalysisScore = simulateContentAnalysis(content);
-    const flaggedCategories = aiAnalysisScore < 0.7
-      ? ['potentially inappropriate', 'needs review']
-      : [];
+    const flaggedCategories =
+      aiAnalysisScore < 0.7
+        ? ["potentially inappropriate", "needs review"]
+        : [];
 
     return {
       content,
@@ -331,15 +349,15 @@ const analyzeContent = new Step({
 ```ts showLineNumbers copy
 // Step 2: Moderate content that needs review
 const moderateContent = new Step({
-  id: 'moderateContent',
+  id: "moderateContent",
   // Define the schema for human input that will be provided when resuming
   inputSchema: z.object({
-    moderatorDecision: z.enum(['approve', 'reject', 'modify']).optional(),
+    moderatorDecision: z.enum(["approve", "reject", "modify"]).optional(),
     moderatorNotes: z.string().optional(),
     modifiedContent: z.string().optional(),
   }),
   outputSchema: z.object({
-    moderationResult: z.enum(['approved', 'rejected', 'modified']),
+    moderationResult: z.enum(["approved", "rejected", "modified"]),
     moderatedContent: z.string(),
     notes: z.string().optional(),
   }),
@@ -354,11 +372,14 @@ const moderateContent = new Step({
     };
 
     // If the AI analysis score is high enough, auto-approve
-    if (analysisResult?.aiAnalysisScore > 0.9 && !analysisResult?.flaggedCategories?.length) {
+    if (
+      analysisResult?.aiAnalysisScore > 0.9 &&
+      !analysisResult?.flaggedCategories?.length
+    ) {
       return {
-        moderationResult: 'approved',
+        moderationResult: "approved",
         moderatedContent: analysisResult.content,
-        notes: 'Auto-approved by system',
+        notes: "Auto-approved by system",
       };
     }
 
@@ -368,44 +389,45 @@ const moderateContent = new Step({
         content: analysisResult?.content,
         aiScore: analysisResult?.aiAnalysisScore,
         flaggedCategories: analysisResult?.flaggedCategories,
-        message: 'Please review this content and make a moderation decision',
+        message: "Please review this content and make a moderation decision",
       });
 
       // Placeholder return
       return {
-        moderationResult: 'approved',
-        moderatedContent: '',
+        moderationResult: "approved",
+        moderatedContent: "",
       };
     }
 
     // Process the moderator's decision
     switch (moderatorInput.decision) {
-      case 'approve':
+      case "approve":
         return {
-          moderationResult: 'approved',
-          moderatedContent: analysisResult?.content || '',
-          notes: moderatorInput.notes || 'Approved by moderator',
+          moderationResult: "approved",
+          moderatedContent: analysisResult?.content || "",
+          notes: moderatorInput.notes || "Approved by moderator",
         };
 
-      case 'reject':
+      case "reject":
         return {
-          moderationResult: 'rejected',
-          moderatedContent: '',
-          notes: moderatorInput.notes || 'Rejected by moderator',
+          moderationResult: "rejected",
+          moderatedContent: "",
+          notes: moderatorInput.notes || "Rejected by moderator",
         };
 
-      case 'modify':
+      case "modify":
         return {
-          moderationResult: 'modified',
-          moderatedContent: moderatorInput.modifiedContent || analysisResult?.content || '',
-          notes: moderatorInput.notes || 'Modified by moderator',
+          moderationResult: "modified",
+          moderatedContent:
+            moderatorInput.modifiedContent || analysisResult?.content || "",
+          notes: moderatorInput.notes || "Modified by moderator",
         };
 
       default:
         return {
-          moderationResult: 'rejected',
-          moderatedContent: '',
-          notes: 'Invalid moderator decision',
+          moderationResult: "rejected",
+          moderatedContent: "",
+          notes: "Invalid moderator decision",
         };
     }
   },
@@ -415,7 +437,7 @@ const moderateContent = new Step({
 ```ts showLineNumbers copy
 // Step 3: Apply moderation actions
 const applyModeration = new Step({
-  id: 'applyModeration',
+  id: "applyModeration",
   outputSchema: z.object({
     finalStatus: z.string(),
     content: z.string().optional(),
@@ -432,37 +454,37 @@ const applyModeration = new Step({
 
     // Create audit log
     const auditLog = {
-      originalContent: analysisResult?.content || '',
-      moderationResult: moderationResult?.moderationResult || 'unknown',
+      originalContent: analysisResult?.content || "",
+      moderationResult: moderationResult?.moderationResult || "unknown",
       aiScore: analysisResult?.aiAnalysisScore || 0,
       timestamp: new Date().toISOString(),
     };
 
     // Apply moderation action
     switch (moderationResult?.moderationResult) {
-      case 'approved':
+      case "approved":
         return {
-          finalStatus: 'Content published',
+          finalStatus: "Content published",
           content: moderationResult.moderatedContent,
           auditLog,
         };
 
-      case 'modified':
+      case "modified":
         return {
-          finalStatus: 'Content modified and published',
+          finalStatus: "Content modified and published",
           content: moderationResult.moderatedContent,
           auditLog,
         };
 
-      case 'rejected':
+      case "rejected":
         return {
-          finalStatus: 'Content rejected',
+          finalStatus: "Content rejected",
           auditLog,
         };
 
       default:
         return {
-          finalStatus: 'Error in moderation process',
+          finalStatus: "Error in moderation process",
           auditLog,
         };
     }
@@ -473,7 +495,7 @@ const applyModeration = new Step({
 ```ts showLineNumbers copy
 // Build the workflow
 const contentModerationWorkflow = new Workflow({
-  name: 'content-moderation-workflow',
+  name: "content-moderation-workflow",
   triggerSchema: z.object({
     content: z.string(),
   }),
@@ -492,62 +514,66 @@ const mastra = new Mastra({
 
 // Example of using the workflow with Inquirer prompts
 async function runModerationDemo() {
-  const registeredWorkflow = mastra.getWorkflow('contentModerationWorkflow');
+  const registeredWorkflow = mastra.getWorkflow("contentModerationWorkflow");
   const run = registeredWorkflow.createRun();
 
   // Start the workflow with content that needs review
-  console.log('Starting content moderation workflow...');
+  console.log("Starting content moderation workflow...");
   const result = await run.start({
     triggerData: {
-      content: 'This is some user-generated content that requires moderation.'
-    }
+      content: "This is some user-generated content that requires moderation.",
+    },
   });
 
-  const isReviewStepSuspended = result.activePaths.get('moderateContent')?.status === 'suspended';
+  const isReviewStepSuspended =
+    result.activePaths.get("moderateContent")?.status === "suspended";
 
   // Check if workflow is suspended
   if (isReviewStepSuspended) {
-    const { content, aiScore, flaggedCategories, message } = result.activePaths.get('moderateContent')?.suspendPayload;
+    const { content, aiScore, flaggedCategories, message } =
+      result.activePaths.get("moderateContent")?.suspendPayload;
 
-    console.log('\n===================================');
+    console.log("\n===================================");
     console.log(message);
-    console.log('===================================\n');
+    console.log("===================================\n");
 
-    console.log('Content to review:');
+    console.log("Content to review:");
     console.log(content);
     console.log(`\nAI Analysis Score: ${aiScore}`);
-    console.log(`Flagged Categories: ${flaggedCategories?.join(', ') || 'None'}\n`);
+    console.log(
+      `Flagged Categories: ${flaggedCategories?.join(", ") || "None"}\n`,
+    );
 
     // Collect moderator decision using Inquirer
     const moderatorDecision = await select({
-      message: 'Select your moderation decision:',
+      message: "Select your moderation decision:",
       choices: [
-        { name: 'Approve content as is', value: 'approve' },
-        { name: 'Reject content completely', value: 'reject' },
-        { name: 'Modify content before publishing', value: 'modify' }
+        { name: "Approve content as is", value: "approve" },
+        { name: "Reject content completely", value: "reject" },
+        { name: "Modify content before publishing", value: "modify" },
       ],
     });
 
     // Collect additional information based on decision
-    let moderatorNotes = '';
-    let modifiedContent = '';
+    let moderatorNotes = "";
+    let modifiedContent = "";
 
     moderatorNotes = await input({
-      message: 'Enter any notes about your decision:',
+      message: "Enter any notes about your decision:",
     });
 
-    if (moderatorDecision === 'modify') {
+    if (moderatorDecision === "modify") {
       modifiedContent = await input({
-        message: 'Enter the modified content:',
+        message: "Enter the modified content:",
         default: content,
       });
     }
 
-    console.log('\nSubmitting your moderation decision...');
+    console.log("\nSubmitting your moderation decision...");
 
     // Resume the workflow with the moderator's input
     const resumeResult = await run.resume({
-      stepId: 'moderateContent',
+      stepId: "moderateContent",
       context: {
         moderatorDecision,
         moderatorNotes,
@@ -555,13 +581,15 @@ async function runModerationDemo() {
       },
     });
 
-    if (resumeResult?.results?.applyModeration?.status === 'success') {
-      console.log('\n===================================');
-      console.log(`Moderation complete: ${resumeResult?.results?.applyModeration?.output.finalStatus}`);
-      console.log('===================================\n');
+    if (resumeResult?.results?.applyModeration?.status === "success") {
+      console.log("\n===================================");
+      console.log(
+        `Moderation complete: ${resumeResult?.results?.applyModeration?.output.finalStatus}`,
+      );
+      console.log("===================================\n");
 
       if (resumeResult?.results?.applyModeration?.output.content) {
-        console.log('Published content:');
+        console.log("Published content:");
         console.log(resumeResult.results.applyModeration.output.content);
       }
     }
@@ -569,7 +597,10 @@ async function runModerationDemo() {
     return resumeResult;
   }
 
-  console.log('Workflow completed without requiring human intervention:', result.results);
+  console.log(
+    "Workflow completed without requiring human intervention:",
+    result.results,
+  );
   return result;
 }
 
@@ -591,83 +622,82 @@ runModerationDemo().catch(console.error);
 2. **サスペンションペイロード** - 一時停止する際に関連データを渡して、人間の意思決定のためのコンテキストを提供します：
 
 ```ts
-   await suspend({
-     messageForHuman: 'このデータを確認してください',
-     data: someImportantData
-   });
+await suspend({
+  messageForHuman: "このデータを確認してください",
+  data: someImportantData,
+});
 ```
 
 3. **ワークフローステータスの確認** - ワークフローを開始した後、返されたステータスを確認して一時停止されているかどうかを確認します：
-   
+
 ```ts
-   const result = await workflow.start({ triggerData });
-   if (result.status === 'suspended' && result.suspendedStepId === 'stepId') {
-     // サスペンションを処理する
-     console.log('ワークフローは入力待ちです:', result.suspendPayload);
-   }
+const result = await workflow.start({ triggerData });
+if (result.status === "suspended" && result.suspendedStepId === "stepId") {
+  // サスペンションを処理する
+  console.log("ワークフローは入力待ちです:", result.suspendPayload);
+}
 ```
 
 4. **インタラクティブなターミナル入力** - Inquirerのようなライブラリを使用してインタラクティブなプロンプトを作成します：
 
 ```ts
-   import { select, input, confirm } from '@inquirer/prompts';
+import { select, input, confirm } from "@inquirer/prompts";
 
-   // ワークフローが一時停止されている場合
-   if (result.status === 'suspended') {
-     // サスペンドペイロードからの情報を表示
-     console.log(result.suspendPayload.message);
+// ワークフローが一時停止されている場合
+if (result.status === "suspended") {
+  // サスペンドペイロードからの情報を表示
+  console.log(result.suspendPayload.message);
 
-     // ユーザー入力をインタラクティブに収集
-     const decision = await select({
-       message: '何をしますか？',
-       choices: [
-         { name: '承認', value: 'approve' },
-         { name: '拒否', value: 'reject' }
-       ]
-     });
+  // ユーザー入力をインタラクティブに収集
+  const decision = await select({
+    message: "何をしますか？",
+    choices: [
+      { name: "承認", value: "approve" },
+      { name: "拒否", value: "reject" },
+    ],
+  });
 
-     // 収集した入力でワークフローを再開
-     await run.resume({
-       stepId: result.suspendedStepId,
-       context: { decision }
-     });
-   }
+  // 収集した入力でワークフローを再開
+  await run.resume({
+    stepId: result.suspendedStepId,
+    context: { decision },
+  });
+}
 ```
 
 5. **ワークフローの再開** - `resume()`メソッドを使用して、人間の入力でワークフローの実行を継続します：
-   
+
 ```ts
-   const resumeResult = await run.resume({
-     stepId: 'suspendedStepId',
-     context: {
-       // このデータは一時停止されたステップにcontext.inputDataとして渡され、
-       // ステップのinputSchemaに準拠している必要があります
-       userDecision: 'approve'
-     },
-   });
+const resumeResult = await run.resume({
+  stepId: "suspendedStepId",
+  context: {
+    // このデータは一時停止されたステップにcontext.inputDataとして渡され、
+    // ステップのinputSchemaに準拠している必要があります
+    userDecision: "approve",
+  },
+});
 ```
 
 6. **人間のデータ用の入力スキーマ** - 人間の入力で再開される可能性のあるステップに入力スキーマを定義して、型の安全性を確保します：
-   
+
 ```ts
-   const myStep = new Step({
-     id: 'myStep',
-     inputSchema: z.object({
-       // このスキーマはresumeのcontextで渡されるデータを検証し、
-       // context.inputDataとして利用可能にします
-       userDecision: z.enum(['approve', 'reject']),
-       userComments: z.string().optional(),
-     }),
-     execute: async ({ context, suspend }) => {
-       // 以前の一時停止からユーザー入力があるかどうかを確認
-       if (context.inputData?.userDecision) {
-         // ユーザーの決定を処理
-         return { result: `ユーザーの決定: ${context.inputData.userDecision}` };
-       }
+const myStep = new Step({
+  id: "myStep",
+  inputSchema: z.object({
+    // このスキーマはresumeのcontextで渡されるデータを検証し、
+    // context.inputDataとして利用可能にします
+    userDecision: z.enum(["approve", "reject"]),
+    userComments: z.string().optional(),
+  }),
+  execute: async ({ context, suspend }) => {
+    // 以前の一時停止からユーザー入力があるかどうかを確認
+    if (context.inputData?.userDecision) {
+      // ユーザーの決定を処理
+      return { result: `ユーザーの決定: ${context.inputData.userDecision}` };
+    }
 
-       // 入力がない場合、人間の判断のために一時停止
-       await suspend();
-     }
-   });
+    // 入力がない場合、人間の判断のために一時停止
+    await suspend();
+  },
+});
 ```
-

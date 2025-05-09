@@ -17,7 +17,7 @@ const approvalStep = new Step({
       await suspend();
     }
     return { approved: true };
-  }
+  },
 });
 ```
 
@@ -29,8 +29,8 @@ const approvalStep = new Step({
       name: "metadata",
       type: "Record<string, any>",
       description: "中断された状態に保存するオプションのデータ",
-      isOptional: true
-    }
+      isOptional: true,
+    },
   ]}
 />
 
@@ -41,8 +41,8 @@ const approvalStep = new Step({
     {
       name: "Promise<void>",
       type: "Promise",
-      description: "ワークフローが正常に一時停止されたときに解決されます"
-    }
+      description: "ワークフローが正常に一時停止されたときに解決されます",
+    },
   ]}
 />
 
@@ -56,10 +56,10 @@ const reviewStep = new Step({
   execute: async ({ context, suspend }) => {
     await suspend({
       reason: "Needs manager approval",
-      requestedBy: context.user
+      requestedBy: context.user,
     });
     return { reviewed: true };
-  }
+  },
 });
 ```
 

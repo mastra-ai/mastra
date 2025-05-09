@@ -3,7 +3,7 @@ title: "Example: Conditional Branching (experimental) | Workflows | Mastra Docs"
 description: Example of using Mastra to create conditional branches in workflows using if/else statements.
 ---
 
-import { GithubLink } from '@/components/github-link';
+import { GithubLink } from "@/components/github-link";
 
 # Workflow with Conditional Branching (experimental)
 
@@ -14,14 +14,13 @@ Workflows often need to follow different paths based on conditions. This example
 This example shows a simple workflow that takes different paths based on a numeric value:
 
 ```ts showLineNumbers copy
-import { Mastra } from '@mastra/core';
-import { Step, Workflow } from '@mastra/core/workflows';
-import { z } from 'zod';
-
+import { Mastra } from "@mastra/core";
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
 
 // Step that provides the initial value
 const startStep = new Step({
-  id: 'start',
+  id: "start",
   outputSchema: z.object({
     value: z.number(),
   }),
@@ -34,38 +33,42 @@ const startStep = new Step({
 
 // Step that handles high values
 const highValueStep = new Step({
-  id: 'highValue',
+  id: "highValue",
   outputSchema: z.object({
     result: z.string(),
   }),
   execute: async ({ context }) => {
-    const value = context.getStepResult<{ value: number }>('start')?.value;
+    const value = context.getStepResult<{ value: number }>("start")?.value;
     return { result: `High value processed: ${value}` };
   },
 });
 
 // Step that handles low values
 const lowValueStep = new Step({
-  id: 'lowValue',
+  id: "lowValue",
   outputSchema: z.object({
     result: z.string(),
   }),
   execute: async ({ context }) => {
-    const value = context.getStepResult<{ value: number }>('start')?.value;
+    const value = context.getStepResult<{ value: number }>("start")?.value;
     return { result: `Low value processed: ${value}` };
   },
 });
 
 // Final step that summarizes the result
 const finalStep = new Step({
-  id: 'final',
+  id: "final",
   outputSchema: z.object({
     summary: z.string(),
   }),
   execute: async ({ context }) => {
     // Get the result from whichever branch executed
-    const highResult = context.getStepResult<{ result: string }>('highValue')?.result;
-    const lowResult = context.getStepResult<{ result: string }>('lowValue')?.result;
+    const highResult = context.getStepResult<{ result: string }>(
+      "highValue",
+    )?.result;
+    const lowResult = context.getStepResult<{ result: string }>(
+      "lowValue",
+    )?.result;
 
     const result = highResult || lowResult;
     return { summary: `Processing complete: ${result}` };
@@ -74,7 +77,7 @@ const finalStep = new Step({
 
 // Build the workflow with conditional branching
 const conditionalWorkflow = new Workflow({
-  name: 'conditional-workflow',
+  name: "conditional-workflow",
   triggerSchema: z.object({
     inputValue: z.number(),
   }),
@@ -83,7 +86,7 @@ const conditionalWorkflow = new Workflow({
 conditionalWorkflow
   .step(startStep)
   .if(async ({ context }) => {
-    const value = context.getStepResult<{ value: number }>('start')?.value ?? 0;
+    const value = context.getStepResult<{ value: number }>("start")?.value ?? 0;
     return value >= 10; // Condition: value is 10 or greater
   })
   .then(highValueStep)
@@ -100,14 +103,14 @@ const mastra = new Mastra({
 
 // Example usage
 async function runWorkflow(inputValue: number) {
-  const workflow = mastra.getWorkflow('conditionalWorkflow');
+  const workflow = mastra.getWorkflow("conditionalWorkflow");
   const { start } = workflow.createRun();
 
   const result = await start({
     triggerData: { inputValue },
   });
 
-  console.log('Workflow result:', result.results);
+  console.log("Workflow result:", result.results);
   return result;
 }
 
@@ -116,9 +119,8 @@ const result1 = await runWorkflow(15);
 // Run with a low value (follows the "else" branch)
 const result2 = await runWorkflow(5);
 
-console.log('Result 1:', result1);
-console.log('Result 2:', result2);
-
+console.log("Result 1:", result1);
+console.log("Result 2:", result2);
 ```
 
 ## Using Reference-Based Conditions
@@ -130,7 +132,7 @@ You can also use reference-based conditions with comparison operators:
 conditionalWorkflow
   .step(startStep)
   .if({
-    ref: { step: startStep, path: 'value' },
+    ref: { step: startStep, path: "value" },
     query: { $gte: 10 }, // Condition: value is 10 or greater
   })
   .then(highValueStep)
@@ -147,5 +149,7 @@ conditionalWorkflow
 <br />
 <br />
 <GithubLink
-  link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/conditional-branching'}
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/conditional-branching"
+  }
 />

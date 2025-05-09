@@ -15,7 +15,7 @@ description: "Mastra ワークフローにおける `.else()` メソッドのド
 workflow
   .step(startStep)
   .if(async ({ context }) => {
-    const value = context.getStepResult<{ value: number }>('start')?.value;
+    const value = context.getStepResult<{ value: number }>("start")?.value;
     return value < 10;
   })
   .then(ifBranchStep)
@@ -35,8 +35,8 @@ workflow
     {
       name: "workflow",
       type: "Workflow",
-      description: "メソッドチェーンのためのワークフローインスタンス"
-    }
+      description: "メソッドチェーンのためのワークフローインスタンス",
+    },
   ]}
 />
 
@@ -54,11 +54,7 @@ workflow
 ```typescript
 try {
   // これはエラーをスローします
-  workflow
-    .step(someStep)
-    .else()
-    .then(anotherStep)
-    .commit();
+  workflow.step(someStep).else().then(anotherStep).commit();
 } catch (error) {
   console.error(error); // "No active condition found"
 }

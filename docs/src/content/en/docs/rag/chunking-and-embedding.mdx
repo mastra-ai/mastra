@@ -55,20 +55,20 @@ import { openai } from "@ai-sdk/openai";
 import { embedMany } from "ai";
 
 const { embeddings } = await embedMany({
-  model: openai.embedding('text-embedding-3-small'),
-  values: chunks.map(chunk => chunk.text),
+  model: openai.embedding("text-embedding-3-small"),
+  values: chunks.map((chunk) => chunk.text),
 });
 ```
 
 ### Using Cohere
 
 ```ts showLineNumbers copy
-import { cohere } from '@ai-sdk/cohere';
-import { embedMany } from 'ai';
+import { cohere } from "@ai-sdk/cohere";
+import { embedMany } from "ai";
 
 const { embeddings } = await embedMany({
-  model: cohere.embedding('embed-english-v3.0'),
-  values: chunks.map(chunk => chunk.text),
+  model: cohere.embedding("embed-english-v3.0"),
+  values: chunks.map((chunk) => chunk.text),
 });
 ```
 
@@ -76,32 +76,35 @@ The embedding functions return vectors, arrays of numbers representing the seman
 
 ### Configuring Embedding Dimensions
 
-Embedding models typically output vectors with a fixed number of dimensions (e.g., 1536 for OpenAI's `text-embedding-3-small`). 
+Embedding models typically output vectors with a fixed number of dimensions (e.g., 1536 for OpenAI's `text-embedding-3-small`).
 Some models support reducing this dimensionality, which can help:
+
 - Decrease storage requirements in vector databases
 - Reduce computational costs for similarity searches
 
 Here are some supported models:
 
 OpenAI (text-embedding-3 models):
-  ```ts
-  const { embeddings } = await embedMany({
-    model: openai.embedding('text-embedding-3-small', {
-      dimensions: 256  // Only supported in text-embedding-3 and later
-    }),
-    values: chunks.map(chunk => chunk.text),
-  });
-  ```
+
+```ts
+const { embeddings } = await embedMany({
+  model: openai.embedding("text-embedding-3-small", {
+    dimensions: 256, // Only supported in text-embedding-3 and later
+  }),
+  values: chunks.map((chunk) => chunk.text),
+});
+```
 
 Google (text-embedding-004):
-  ```ts
-  const { embeddings } = await embedMany({
-    model: google.textEmbeddingModel('text-embedding-004', {
-      outputDimensionality: 256  // Truncates excessive values from the end
-    }),
-    values: chunks.map(chunk => chunk.text),
-  });
-  ```
+
+```ts
+const { embeddings } = await embedMany({
+  model: google.textEmbeddingModel("text-embedding-004", {
+    outputDimensionality: 256, // Truncates excessive values from the end
+  }),
+  values: chunks.map((chunk) => chunk.text),
+});
+```
 
 ### Vector Database Compatibility
 
@@ -133,16 +136,16 @@ const chunks = await doc.chunk({
 
 // Generate embeddings with OpenAI
 const { embeddings: openAIEmbeddings } = await embedMany({
-  model: openai.embedding('text-embedding-3-small'),
-  values: chunks.map(chunk => chunk.text),
+  model: openai.embedding("text-embedding-3-small"),
+  values: chunks.map((chunk) => chunk.text),
 });
 
 // OR
 
 // Generate embeddings with Cohere
 const { embeddings: cohereEmbeddings } = await embedMany({
-  model: cohere.embedding('embed-english-v3.0'),
-  values: chunks.map(chunk => chunk.text),
+  model: cohere.embedding("embed-english-v3.0"),
+  values: chunks.map((chunk) => chunk.text),
 });
 
 // Store embeddings in your vector database
@@ -153,6 +156,7 @@ await vectorStore.upsert({
 ```
 
 ##
+
 For more examples of different chunking strategies and embedding configurations, see:
 
 - [Adjust Chunk Size](/reference/rag/chunk.mdx#adjust-chunk-size)
@@ -160,5 +164,6 @@ For more examples of different chunking strategies and embedding configurations,
 - [Embed Text with Cohere](/reference/rag/embeddings.mdx#using-cohere)
 
 For more details on vector databases and embeddings, see:
+
 - [Vector Databases](./vector-databases.mdx)
 - [Embedding API Reference](/reference/rag/embeddings.mdx)

@@ -14,9 +14,9 @@ The `.after()` method defines explicit dependencies between workflow steps, enab
 ```typescript
 workflow
   .step(stepA)
-    .then(stepB)
-  .after(stepA)  // Create new branch after stepA completes
-    .step(stepC);
+  .then(stepB)
+  .after(stepA) // Create new branch after stepA completes
+  .step(stepC);
 ```
 
 ### Merging Multiple Branches
@@ -24,11 +24,11 @@ workflow
 ```typescript
 workflow
   .step(stepA)
-    .then(stepB)
+  .then(stepB)
   .step(stepC)
-    .then(stepD)
-  .after([stepB, stepD])  // Create a step that depends on multiple steps
-    .step(stepE);
+  .then(stepD)
+  .after([stepB, stepD]) // Create a step that depends on multiple steps
+  .step(stepE);
 ```
 
 ## Parameters
@@ -38,9 +38,10 @@ workflow
     {
       name: "steps",
       type: "Step | Step[]",
-      description: "A single step or array of steps that must complete before continuing",
-      isOptional: false
-    }
+      description:
+        "A single step or array of steps that must complete before continuing",
+      isOptional: false,
+    },
   ]}
 />
 
@@ -51,8 +52,8 @@ workflow
     {
       name: "workflow",
       type: "Workflow",
-      description: "The workflow instance for method chaining"
-    }
+      description: "The workflow instance for method chaining",
+    },
   ]}
 />
 
@@ -64,7 +65,7 @@ workflow
 workflow
   .step(fetchData)
   .then(processData)
-  .after(fetchData)  // Branch after fetchData
+  .after(fetchData) // Branch after fetchData
   .step(logData);
 ```
 
@@ -76,7 +77,7 @@ workflow
   .then(validateUserData)
   .step(fetchProductData)
   .then(validateProductData)
-  .after([validateUserData, validateProductData])  // Wait for both validations to complete
+  .after([validateUserData, validateProductData]) // Wait for both validations to complete
   .step(processOrder);
 ```
 

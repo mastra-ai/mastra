@@ -29,8 +29,8 @@ npm install @mastra/mcp@latest
 
 `MCPClient`クラスは、複数のMCPクライアントを管理することなく、Mastraアプリケーションで複数のツールサーバーを管理する方法を提供します。`MCPConfiguration`内部で使用される`MastraMCPClient`は、サーバー設定に基づいてトランスポートタイプを自動的に検出するようになりました：
 
--   `command`を提供する場合、Stdioトランスポートを使用します。
--   `url`を提供する場合、最初にStreamable HTTPトランスポートを試み、初期接続が失敗した場合はレガシーSSEトランスポートにフォールバックします。
+- `command`を提供する場合、Stdioトランスポートを使用します。
+- `url`を提供する場合、最初にStreamable HTTPトランスポートを試み、初期接続が失敗した場合はレガシーSSEトランスポートにフォールバックします。
 
 以下は設定例です：
 
@@ -234,7 +234,7 @@ const allTools = await mcp.getTools();
 
 // 'news'ツールを除外（ツール名は'serverName_toolName'の形式で名前空間が設定されています）
 const filteredTools = Object.fromEntries(
-  Object.entries(allTools).filter(([toolName]) => toolName !== "myServer_news")
+  Object.entries(allTools).filter(([toolName]) => toolName !== "myServer_news"),
 );
 
 // フィルタリングされたツールのみをエージェントに渡す
@@ -275,8 +275,6 @@ const agent = new Agent({
   tools: { myServer_weather, myServer_stockPrice },
 });
 ```
-
-
 
 この例は、Smitheryドキュメントのクロード統合例から適応されています。
 
@@ -319,4 +317,3 @@ const mcp = new MCPConfiguration({
 ```
 
 この例は、Smitheryドキュメントのクロード統合例から適応されています。
-

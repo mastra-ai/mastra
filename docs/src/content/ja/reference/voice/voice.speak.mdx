@@ -22,16 +22,23 @@ const audioStreamWithDifferentVoice = await voice.speak("再びこんにちは�
   speaker: "nova",
 });
 // プロバイダー固有のオプションを使用
-const audioStreamWithOptions = await voice.speak("オプション付きでこんにちは！", {
-  speaker: "echo",
-  speed: 1.2, // OpenAI固有のオプション
-});
+const audioStreamWithOptions = await voice.speak(
+  "オプション付きでこんにちは！",
+  {
+    speaker: "echo",
+    speed: 1.2, // OpenAI固有のオプション
+  },
+);
 // テキストストリームを入力として使用
 import { Readable } from "stream";
-const textStream = Readable.from(["こんにちは", " ストリーム", " から", " です！"]);
+const textStream = Readable.from([
+  "こんにちは",
+  " ストリーム",
+  " から",
+  " です！",
+]);
 const audioStreamFromTextStream = await voice.speak(textStream);
 ```
-
 
 ## パラメーター
 
@@ -40,7 +47,8 @@ const audioStreamFromTextStream = await voice.speak(textStream);
     {
       name: "input",
       type: "string | NodeJS.ReadableStream",
-      description: "音声に変換するテキスト。文字列またはテキストの読み取り可能なストリームであることができます。",
+      description:
+        "音声に変換するテキスト。文字列またはテキストの読み取り可能なストリームであることができます。",
       isOptional: false,
     },
     {
@@ -52,7 +60,8 @@ const audioStreamFromTextStream = await voice.speak(textStream);
     {
       name: "options.speaker",
       type: "string",
-      description: "この特定のリクエストに使用するボイスID。コンストラクタで設定されたデフォルトのスピーカーを上書きします。",
+      description:
+        "この特定のリクエストに使用するボイスID。コンストラクタで設定されたデフォルトのスピーカーを上書きします。",
       isOptional: true,
     },
   ]}
@@ -79,7 +88,7 @@ const audioStreamFromTextStream = await voice.speak(textStream);
       description: "音声速度の倍率。0.25から4.0の値がサポートされています。",
       isOptional: true,
       defaultValue: "1.0",
-    }
+    },
   ]}
 />
 
@@ -90,7 +99,8 @@ const audioStreamFromTextStream = await voice.speak(textStream);
     {
       name: "options.stability",
       type: "number",
-      description: "音声の安定性。値が高いほど、より安定し、表現力が少ない音声になります。",
+      description:
+        "音声の安定性。値が高いほど、より安定し、表現力が少ない音声になります。",
       isOptional: true,
       defaultValue: "0.5",
     },
@@ -100,7 +110,7 @@ const audioStreamFromTextStream = await voice.speak(textStream);
       description: "音声の明瞭さと元の音声への類似性。",
       isOptional: true,
       defaultValue: "0.75",
-    }
+    },
   ]}
 />
 
@@ -117,10 +127,11 @@ const audioStreamFromTextStream = await voice.speak(textStream);
     {
       name: "options.audioConfig",
       type: "object",
-      description: "Google Cloud Text-to-Speech APIからのオーディオ設定オプション。",
+      description:
+        "Google Cloud Text-to-Speech APIからのオーディオ設定オプション。",
       isOptional: true,
       defaultValue: "{ audioEncoding: 'LINEAR16' }",
-    }
+    },
   ]}
 />
 
@@ -145,7 +156,7 @@ const audioStreamFromTextStream = await voice.speak(textStream);
       type: "'MP3' | 'WAV' | 'FLAC' | 'ALAW' | 'ULAW'",
       description: "出力オーディオフォーマット。",
       isOptional: true,
-    }
+    },
   ]}
 />
 
@@ -161,9 +172,9 @@ import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
 import Speaker from "@mastra/node-speaker";
 
 const speaker = new Speaker({
-  sampleRate: 24100,  // MacBook Proでの高品質オーディオの標準Hzでのオーディオサンプルレート
-  channels: 1,        // モノラルオーディオ出力（ステレオの場合は2）
-  bitDepth: 16,       // オーディオ品質のビット深度 - CD品質の標準（16ビット解像度）
+  sampleRate: 24100, // MacBook Proでの高品質オーディオの標準Hzでのオーディオサンプルレート
+  channels: 1, // モノラルオーディオ出力（ステレオの場合は2）
+  bitDepth: 16, // オーディオ品質のビット深度 - CD品質の標準（16ビット解像度）
 });
 
 const voice = new OpenAIRealtimeVoice();
@@ -171,12 +182,11 @@ await voice.connect();
 // オーディオチャンクのためのイベントリスナーを登録
 voice.on("speaker", (stream) => {
   // オーディオチャンクを処理（例：再生または保存）
-  stream.pipe(speaker)
+  stream.pipe(speaker);
 });
 // これにより、ストリームを返す代わりに「speaking」イベントが発生します
 await voice.speak("こんにちは、これはリアルタイムの音声です！");
 ```
-
 
 ## CompositeVoiceとの使用
 

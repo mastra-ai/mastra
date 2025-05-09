@@ -40,8 +40,7 @@ console.log(result.info.reason); // スコアの説明
     {
       name: "model",
       type: "ModelConfig",
-      description:
-        "コンテキストの位置を評価するために使用されるモデルの設定",
+      description: "コンテキストの位置を評価するために使用されるモデルの設定",
       isOptional: false,
     },
     {
@@ -128,6 +127,7 @@ console.log(result.info.reason); // スコアの説明
 ### スコアリングプロセス
 
 1. コンテキストの関連性を評価:
+
    - 各部分にバイナリ判定（はい/いいえ）を割り当てる
    - シーケンス内の位置を記録する
    - 関連性の理由を文書化する
@@ -140,7 +140,9 @@ console.log(result.info.reason); // スコアの説明
 最終スコア: `(weighted_sum / max_possible_sum) * scale`
 
 ### スコアの解釈
+
 (0 から scale、デフォルト 0-1)
+
 - 1.0: 最適 - 最も関連性の高いコンテキストが最初
 - 0.7-0.9: 良好 - 関連性の高いコンテキストが主に早い段階
 - 0.4-0.6: 混在 - 関連性の高いコンテキストが散在
@@ -186,4 +188,5 @@ const result = await metric.measure(
 - [Context Precision Metric](./context-precision)
 - [Answer Relevancy Metric](./answer-relevancy)
 - [Completeness Metric](./completeness)
-+ [Context Relevancy Metric](./context-relevancy)
+
+* [Context Relevancy Metric](./context-relevancy)

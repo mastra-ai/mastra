@@ -21,21 +21,9 @@ To ensure smooth local development, make sure you have:
 import { Tabs } from "nextra/components";
 
 <Tabs items={["npm", "yarn", "pnpm"]}>
-  <Tabs.Tab>
-```bash copy
-npm install @mastra/client-js@latest
-```
-  </Tabs.Tab>
-  <Tabs.Tab>
-```bash copy
-yarn add @mastra/client-js@latest
-```
-  </Tabs.Tab>
-  <Tabs.Tab>
-```bash copy
-pnpm add @mastra/client-js@latest
-```
-  </Tabs.Tab>
+  <Tabs.Tab>```bash copy npm install @mastra/client-js@latest ```</Tabs.Tab>
+  <Tabs.Tab>```bash copy yarn add @mastra/client-js@latest ```</Tabs.Tab>
+  <Tabs.Tab>```bash copy pnpm add @mastra/client-js@latest ```</Tabs.Tab>
 </Tabs>
 
 ## Initialize Mastra Client
@@ -60,12 +48,13 @@ const client = new MastraClient({
   baseUrl: "http://localhost:4111",
 
   // Optional configurations for development
-  retries: 3,           // Number of retry attempts
-  backoffMs: 300,       // Initial retry backoff time
-  maxBackoffMs: 5000,   // Maximum retry backoff time
-  headers: {            // Custom headers for development
-    "X-Development": "true"
-  }
+  retries: 3, // Number of retry attempts
+  backoffMs: 300, // Initial retry backoff time
+  maxBackoffMs: 5000, // Maximum retry backoff time
+  headers: {
+    // Custom headers for development
+    "X-Development": "true",
+  },
 });
 ```
 
@@ -83,9 +72,9 @@ const response = await agent.generate({
   messages: [
     {
       role: "user",
-      content: "Hello, I'm testing the local development setup!"
-    }
-  ]
+      content: "Hello, I'm testing the local development setup!",
+    },
+  ],
 });
 ```
 
@@ -99,8 +88,8 @@ Mastra client exposes all resources served by the Mastra Server
 - [**Workflows**](/reference/client-js/workflows): Create and manage automated workflows
 - [**Vectors**](/reference/client-js/vectors): Handle vector operations for semantic search and similarity matching
 
-
 ## Best Practices
+
 1. **Error Handling**: Implement proper error handling for development scenarios
 2. **Environment Variables**: Use environment variables for configuration
 3. **Debugging**: Enable detailed logging when needed
@@ -110,11 +99,10 @@ Mastra client exposes all resources served by the Mastra Server
 try {
   const agent = client.getAgent("dev-agent-id");
   const response = await agent.generate({
-    messages: [{ role: "user", content: "Test message" }]
+    messages: [{ role: "user", content: "Test message" }],
   });
   console.log("Response:", response);
 } catch (error) {
   console.error("Development error:", error);
 }
 ```
-

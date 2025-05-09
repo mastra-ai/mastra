@@ -208,6 +208,7 @@ One way to then leverage client-side tool calling is to use the `@ai-sdk/react` 
 client-side tool execution
 
 ## Custom DataStream
+
 In certain scenarios you need to write custom data, message annotations to an agent's dataStream.
 This can be useful for:
 
@@ -217,15 +218,16 @@ This can be useful for:
 Mastra integrates well with AI SDK to make this possible
 
 ### CreateDataStream
+
 The `createDataStream` function allows you to stream additional data to the client
 
-```typescript  copy
-    import { createDataStream } from "ai"
-    import { Agent } from '@mastra/core/agent';
+```typescript copy
+import { createDataStream } from "ai";
+import { Agent } from "@mastra/core/agent";
 
-    export const weatherAgent = new Agent({
-      name: 'Weather Agent',
-      instructions: `
+export const weatherAgent = new Agent({
+  name: "Weather Agent",
+  instructions: `
           You are a helpful weather assistant that provides accurate weather information.
 
           Your primary function is to help users get weather details for specific locations. When responding:
@@ -237,29 +239,30 @@ The `createDataStream` function allows you to stream additional data to the clie
 
           Use the weatherTool to fetch current weather data.
     `,
-      model: openai('gpt-4o'),
-      tools: { weatherTool },
-    });
+  model: openai("gpt-4o"),
+  tools: { weatherTool },
+});
 
-    const stream = createDataStream({
-      async execute(dataStream) {
-        // Write data
-        dataStream.writeData({ value: 'Hello' });
+const stream = createDataStream({
+  async execute(dataStream) {
+    // Write data
+    dataStream.writeData({ value: "Hello" });
 
-        // Write annotation
-        dataStream.writeMessageAnnotation({ type: 'status', value: 'processing' });
-  
-        //mastra agent stream
-        const agentStream = await weatherAgent.stream('What is the weather')
+    // Write annotation
+    dataStream.writeMessageAnnotation({ type: "status", value: "processing" });
 
-        // Merge agent stream
-         agentStream.mergeIntoDataStream(dataStream);
-      },
-      onError: error => `Custom error: ${error.message}`,
-  });
+    //mastra agent stream
+    const agentStream = await weatherAgent.stream("What is the weather");
 
+    // Merge agent stream
+    agentStream.mergeIntoDataStream(dataStream);
+  },
+  onError: (error) => `Custom error: ${error.message}`,
+});
 ```
+
 ### CreateDataStreamResponse
+
 The `createDataStreamResponse` function creates a Response object that streams data to the client
 
 ```typescript filename="app/api/chat/route.ts" copy
@@ -273,25 +276,26 @@ export async function POST(req: Request) {
 
   const response = createDataStreamResponse({
     status: 200,
-    statusText: 'OK',
+    statusText: "OK",
     headers: {
-      'Custom-Header': 'value',
+      "Custom-Header": "value",
     },
     async execute(dataStream) {
       // Write data
-      dataStream.writeData({ value: 'Hello' });
+      dataStream.writeData({ value: "Hello" });
 
       // Write annotation
-      dataStream.writeMessageAnnotation({ type: 'status', value: 'processing' });
+      dataStream.writeMessageAnnotation({
+        type: "status",
+        value: "processing",
+      });
 
       // Merge agent stream
       agentStream.mergeIntoDataStream(dataStream);
     },
-    onError: error => `Custom error: ${error.message}`,
+    onError: (error) => `Custom error: ${error.message}`,
   });
 
-  return response
+  return response;
 }
 ```
-
-

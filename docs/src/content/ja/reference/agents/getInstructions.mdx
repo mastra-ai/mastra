@@ -22,7 +22,8 @@ getInstructions({ runtimeContext }: { runtimeContext?: RuntimeContext } = {}): s
       name: "runtimeContext",
       type: "RuntimeContext",
       isOptional: true,
-      description: "依存性注入とコンテキスト情報のためのランタイムコンテキスト。",
+      description:
+        "依存性注入とコンテキスト情報のためのランタイムコンテキスト。",
     },
   ]}
 />
@@ -36,6 +37,7 @@ getInstructions({ runtimeContext }: { runtimeContext?: RuntimeContext } = {}): s
 `getInstructions()`メソッドは、エージェントの行動を導く指示にアクセスするために使用されます。このメソッドは、文字列として直接提供されるか、関数から返される指示を解決します。
 
 指示はエージェント設定の重要な要素であり、以下を定義します：
+
 - エージェントの役割と個性
 - タスク固有のガイダンス
 - エージェントの行動に対する制約
@@ -47,12 +49,13 @@ getInstructions({ runtimeContext }: { runtimeContext?: RuntimeContext } = {}): s
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
-import { openai } from '@ai-sdk/openai';
+import { openai } from "@ai-sdk/openai";
 
 // 静的な指示でエージェントを作成
 const agent = new Agent({
   name: "assistant",
-  instructions: "You are a helpful assistant that provides concise and accurate information.",
+  instructions:
+    "You are a helpful assistant that provides concise and accurate information.",
   model: openai("gpt-4o"),
 });
 
@@ -66,7 +69,7 @@ console.log(instructions); // "You are a helpful assistant that provides concise
 ```typescript
 import { Agent } from "@mastra/core/agent";
 import { RuntimeContext } from "@mastra/core/runtime-context";
-import { openai } from '@ai-sdk/openai';
+import { openai } from "@ai-sdk/openai";
 
 // 動的な指示でエージェントを作成
 const agent = new Agent({
@@ -75,11 +78,11 @@ const agent = new Agent({
     // ランタイムコンテキストに基づく動的な指示
     const userPreference = runtimeContext.get("userPreference");
     const expertise = runtimeContext.get("expertise") || "general";
-    
+
     if (userPreference === "technical") {
       return `You are a technical assistant specializing in ${expertise}. Provide detailed technical explanations.`;
     }
-    
+
     return `You are a helpful assistant providing easy-to-understand information about ${expertise}.`;
   },
   model: openai("gpt-4o"),

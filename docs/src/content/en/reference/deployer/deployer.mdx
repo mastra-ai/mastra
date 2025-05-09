@@ -15,17 +15,17 @@ import { Deployer } from "@mastra/deployer";
 // Create a custom deployer by extending the abstract Deployer class
 class CustomDeployer extends Deployer {
   constructor() {
-    super({ name: 'custom-deployer' });
+    super({ name: "custom-deployer" });
   }
 
   // Implement the abstract deploy method
   async deploy(outputDirectory: string): Promise<void> {
     // Prepare the output directory
     await this.prepare(outputDirectory);
-    
+
     // Bundle the application
-    await this._bundle('server.ts', 'mastra.ts', outputDirectory);
-    
+    await this._bundle("server.ts", "mastra.ts", outputDirectory);
+
     // Custom deployment logic
     // ...
   }
@@ -60,7 +60,8 @@ class CustomDeployer extends Deployer {
     {
       name: "outputDirectory",
       type: "string",
-      description: "The directory where the bundled and deployment-ready application will be output.",
+      description:
+        "The directory where the bundled and deployment-ready application will be output.",
       isOptional: false,
     },
   ]}
@@ -73,12 +74,14 @@ class CustomDeployer extends Deployer {
     {
       name: "getEnvFiles",
       type: "() => Promise<string[]>",
-      description: "Returns a list of environment files to be used during deployment. By default, it looks for '.env.production' and '.env' files.",
+      description:
+        "Returns a list of environment files to be used during deployment. By default, it looks for '.env.production' and '.env' files.",
     },
     {
       name: "deploy",
       type: "(outputDirectory: string) => Promise<void>",
-      description: "Abstract method that must be implemented by subclasses. Handles the deployment process to the specified output directory.",
+      description:
+        "Abstract method that must be implemented by subclasses. Handles the deployment process to the specified output directory.",
     },
   ]}
 />
@@ -92,22 +95,26 @@ The Deployer class inherits the following key methods from the Bundler class:
     {
       name: "prepare",
       type: "(outputDirectory: string) => Promise<void>",
-      description: "Prepares the output directory by cleaning it and creating necessary subdirectories.",
+      description:
+        "Prepares the output directory by cleaning it and creating necessary subdirectories.",
     },
     {
       name: "writeInstrumentationFile",
       type: "(outputDirectory: string) => Promise<void>",
-      description: "Writes an instrumentation file to the output directory for telemetry purposes.",
+      description:
+        "Writes an instrumentation file to the output directory for telemetry purposes.",
     },
     {
       name: "writePackageJson",
       type: "(outputDirectory: string, dependencies: Map<string, string>) => Promise<void>",
-      description: "Generates a package.json file in the output directory with the specified dependencies.",
+      description:
+        "Generates a package.json file in the output directory with the specified dependencies.",
     },
     {
       name: "_bundle",
       type: "(serverFile: string, mastraEntryFile: string, outputDirectory: string, bundleLocation?: string) => Promise<void>",
-      description: "Bundles the application using the specified server and Mastra entry files.",
+      description:
+        "Bundles the application using the specified server and Mastra entry files.",
     },
   ]}
 />
@@ -156,4 +163,3 @@ The Deployer class extends the Bundler class, establishing a clear relationship 
 2. **Shared Infrastructure**: Both bundling and deployment share common infrastructure like dependency management and file system operations.
 3. **Specialized Deployment Logic**: While bundling focuses on code packaging, deployment adds environment-specific logic for deploying the bundled code.
 4. **Extensibility**: The abstract `deploy` method allows for creating specialized deployers for different target environments.
-

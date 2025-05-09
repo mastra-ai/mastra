@@ -7,7 +7,7 @@ import { GithubLink } from "@/components/github-link";
 
 # Retrieving Top-K Results
 
-After storing embeddings in a vector database, you need to query them to find similar content. 
+After storing embeddings in a vector database, you need to query them to find similar content.
 
 The `query` method returns the most semantically similar chunks to your input embedding, ranked by relevance. The `topK` parameter allows you to specify the number of results to return.
 
@@ -24,7 +24,7 @@ const doc = MDocument.fromText("Your text content...");
 const chunks = await doc.chunk();
 
 const { embeddings } = await embedMany({
-  values: chunks.map(chunk => chunk.text),
+  values: chunks.map((chunk) => chunk.text),
   model: openai.embedding("text-embedding-3-small"),
 });
 

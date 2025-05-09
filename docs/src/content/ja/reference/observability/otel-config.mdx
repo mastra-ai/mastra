@@ -10,20 +10,20 @@ description: OpenTelemetry の計装、トレース、およびエクスポー�
 Mastra 内で `OtelConfig` を使用するには、Mastra を初期化する際に `telemetry` キーの値として渡します。これにより、Mastra はトレースと計装のためにカスタムの OpenTelemetry 設定を使用するように構成されます。
 
 ```typescript showLineNumbers copy
-import { Mastra } from 'mastra';
+import { Mastra } from "mastra";
 
 const otelConfig: OtelConfig = {
-  serviceName: 'my-awesome-service',
+  serviceName: "my-awesome-service",
   enabled: true,
   sampling: {
-    type: 'ratio',
+    type: "ratio",
     probability: 0.5,
   },
   export: {
-    type: 'otlp',
-    endpoint: 'https://otel-collector.example.com/v1/traces',
+    type: "otlp",
+    endpoint: "https://otel-collector.example.com/v1/traces",
     headers: {
-      Authorization: 'Bearer YOUR_TOKEN_HERE',
+      Authorization: "Bearer YOUR_TOKEN_HERE",
     },
   },
 };
@@ -34,85 +34,82 @@ const otelConfig: OtelConfig = {
 <PropertiesTable
   content={[
     {
-      name: 'serviceName',
-      type: 'string',
+      name: "serviceName",
+      type: "string",
       isOptional: true,
-      default: 'default-service',
+      default: "default-service",
       description:
-        'テレメトリバックエンドでサービスを識別するために使用される人間が読める名前。',
+        "テレメトリバックエンドでサービスを識別するために使用される人間が読める名前。",
     },
     {
-      name: 'enabled',
-      type: 'boolean',
+      name: "enabled",
+      type: "boolean",
       isOptional: true,
-      default: 'true',
-      description:
-        'テレメトリの収集とエクスポートが有効かどうか。',
+      default: "true",
+      description: "テレメトリの収集とエクスポートが有効かどうか。",
     },
     {
-      name: 'sampling',
-      type: 'SamplingStrategy',
+      name: "sampling",
+      type: "SamplingStrategy",
       isOptional: true,
       description:
-        'トレースのサンプリング戦略を定義し、どの程度のデータが収集されるかを制御します。',
+        "トレースのサンプリング戦略を定義し、どの程度のデータが収集されるかを制御します。",
       properties: [
         {
-          name: 'type',
+          name: "type",
           type: `'ratio' | 'always_on' | 'always_off' | 'parent_based'`,
-          description:
-            'サンプリング戦略のタイプを指定します。',
+          description: "サンプリング戦略のタイプを指定します。",
         },
         {
-          name: 'probability',
-          type: 'number (0.0 to 1.0)',
+          name: "probability",
+          type: "number (0.0 to 1.0)",
           isOptional: true,
           description:
-            '`ratio` または `parent_based` 戦略の場合、サンプリングの確率を定義します。',
+            "`ratio` または `parent_based` 戦略の場合、サンプリングの確率を定義します。",
         },
         {
-          name: 'root',
-          type: 'object',
+          name: "root",
+          type: "object",
           isOptional: true,
           description:
-            '`parent_based` 戦略の場合、ルートレベルの確率サンプリングを設定します。',
+            "`parent_based` 戦略の場合、ルートレベルの確率サンプリングを設定します。",
           properties: [
             {
-              name: 'probability',
-              type: 'number (0.0 to 1.0)',
+              name: "probability",
+              type: "number (0.0 to 1.0)",
               isOptional: true,
               description:
-                '`parent_based` 戦略におけるルートトレースのサンプリング確率。',
+                "`parent_based` 戦略におけるルートトレースのサンプリング確率。",
             },
           ],
         },
       ],
     },
     {
-      name: 'export',
-      type: 'object',
+      name: "export",
+      type: "object",
       isOptional: true,
-      description:
-        '収集されたテレメトリデータをエクスポートするための設定。',
+      description: "収集されたテレメトリデータをエクスポートするための設定。",
       properties: [
         {
-          name: 'type',
+          name: "type",
           type: `'otlp' | 'console'`,
           description:
-            'エクスポーターのタイプを指定します。外部エクスポーターには `otlp` を、開発には `console` を使用します。',
+            "エクスポーターのタイプを指定します。外部エクスポーターには `otlp` を、開発には `console` を使用します。",
         },
         {
-          name: 'endpoint',
-          type: 'string',
+          name: "endpoint",
+          type: "string",
           isOptional: true,
           description:
-            '`otlp` タイプの場合、トレースを送信する OTLP エンドポイント URL。',
+            "`otlp` タイプの場合、トレースを送信する OTLP エンドポイント URL。",
         },
         {
-          name: 'headers',
-          type: 'Record<string, string>',
+          name: "headers",
+          type: "Record<string, string>",
           isOptional: true,
           description:
-            'OTLP リクエストと共に送信する追加のヘッダー。認証やルーティングに役立ちます。',
+            "OTLP リクエストと共に送信する追加のヘッダー。認証やルーティングに役立ちます。",
         },
       ],
     },

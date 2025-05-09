@@ -21,8 +21,8 @@ const metric = new ContextualRecallMetric(model, {
     "Product features: cloud synchronization capability",
     "Offline mode available for all users",
     "Supports multiple devices simultaneously",
-    "End-to-end encryption for all data"
-  ]
+    "End-to-end encryption for all data",
+  ],
 });
 
 const result = await metric.measure(
@@ -40,7 +40,8 @@ console.log(result.score); // Score from 0-1
     {
       name: "model",
       type: "LanguageModel",
-      description: "Configuration for the model used to evaluate contextual recall",
+      description:
+        "Configuration for the model used to evaluate contextual recall",
       isOptional: false,
     },
     {
@@ -48,7 +49,7 @@ console.log(result.score); // Score from 0-1
       type: "ContextualRecallMetricOptions",
       description: "Configuration options for the metric",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -66,9 +67,10 @@ console.log(result.score); // Score from 0-1
     {
       name: "context",
       type: "string[]",
-      description: "Array of reference documents or pieces of information to check against",
+      description:
+        "Array of reference documents or pieces of information to check against",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -87,7 +89,7 @@ console.log(result.score); // Score from 0-1
       type: "string",
       description: "The LLM's response to evaluate",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -112,11 +114,11 @@ console.log(result.score); // Score from 0-1
               name: "reason",
               type: "string",
               description: "Detailed explanation of the score",
-            }
-          ]
-        }
-      ]
-    }
+            },
+          ],
+        },
+      ],
+    },
   ]}
 />
 
@@ -127,6 +129,7 @@ The metric evaluates recall through comparison of response content against relev
 ### Scoring Process
 
 1. Evaluates information recall:
+
    - Identifies relevant items in context
    - Tracks correctly recalled information
    - Measures completeness of recall
@@ -139,7 +142,9 @@ The metric evaluates recall through comparison of response content against relev
 Final score: `(correctly_recalled_items / total_relevant_items) * scale`
 
 ### Score interpretation
+
 (0 to scale, default 0-1)
+
 - 1.0: Perfect recall - all relevant information included
 - 0.7-0.9: High recall - most relevant information included
 - 0.4-0.6: Moderate recall - some relevant information missed
@@ -155,18 +160,15 @@ import { ContextualRecallMetric } from "@mastra/evals/llm";
 // Configure the model for evaluation
 const model = openai("gpt-4o-mini");
 
-const metric = new ContextualRecallMetric(
-  model,
-  {
-    scale: 100, // Use 0-100 scale instead of 0-1
-    context: [
-      "All data is encrypted at rest and in transit",
-      "Two-factor authentication (2FA) is mandatory",
-      "Regular security audits are performed",
-      "Incident response team available 24/7"
-    ]
-  }
-);
+const metric = new ContextualRecallMetric(model, {
+  scale: 100, // Use 0-100 scale instead of 0-1
+  context: [
+    "All data is encrypted at rest and in transit",
+    "Two-factor authentication (2FA) is mandatory",
+    "Regular security audits are performed",
+    "Incident response team available 24/7",
+  ],
+});
 
 const result = await metric.measure(
   "Summarize the company's security measures",
@@ -177,8 +179,8 @@ const result = await metric.measure(
 // {
 //   score: 50, // Only half of the security measures were mentioned
 //   info: {
-//     reason: "The score is 50 because only half of the security measures were mentioned 
-//           in the response. The response missed the regular security audits and incident 
+//     reason: "The score is 50 because only half of the security measures were mentioned
+//           in the response. The response missed the regular security audits and incident
 //           response team information."
 //   }
 // }
@@ -186,6 +188,6 @@ const result = await metric.measure(
 
 ## Related
 
-+ [Context Relevancy Metric](./context-relevancy) 
-+ [Completeness Metric](./completeness)
-+ [Summarization Metric](./summarization)
+- [Context Relevancy Metric](./context-relevancy)
+- [Completeness Metric](./completeness)
+- [Summarization Metric](./summarization)

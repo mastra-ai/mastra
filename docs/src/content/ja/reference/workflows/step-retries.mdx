@@ -35,10 +35,10 @@ Mastraは、ワークフローステップでの一時的な失敗を処理す�
 
 ```typescript
 const workflow = new Workflow({
-  name: 'my-workflow',
+  name: "my-workflow",
   retryConfig: {
-    attempts: 3,    // 初回試行に加えてのリトライ回数
-    delay: 1000,    // リトライ間の遅延時間（ミリ秒）
+    attempts: 3, // 初回試行に加えてのリトライ回数
+    delay: 1000, // リトライ間の遅延時間（ミリ秒）
   },
 });
 ```
@@ -49,13 +49,13 @@ const workflow = new Workflow({
 
 ```typescript
 const fetchDataStep = new Step({
-  id: 'fetchData',
+  id: "fetchData",
   execute: async () => {
     // 外部APIからデータを取得
   },
   retryConfig: {
-    attempts: 5,    // このステップは最大5回リトライします
-    delay: 2000,    // リトライ間の遅延は2秒です
+    attempts: 5, // このステップは最大5回リトライします
+    delay: 2000, // リトライ間の遅延は2秒です
   },
 });
 ```
@@ -64,10 +64,10 @@ const fetchDataStep = new Step({
 
 `retryConfig` オブジェクトは以下のパラメータをサポートしています:
 
-| パラメータ | 型 | デフォルト | 説明 |
-|-----------|------|---------|-------------|
-| `attempts` | number | 0 | リトライ試行回数（初回試行に加えて） |
-| `delay` | number | 1000 | リトライ間の待機時間（ミリ秒） |
+| パラメータ | 型     | デフォルト | 説明                                 |
+| ---------- | ------ | ---------- | ------------------------------------ |
+| `attempts` | number | 0          | リトライ試行回数（初回試行に加えて） |
+| `delay`    | number | 1000       | リトライ間の待機時間（ミリ秒）       |
 
 ## リトライの仕組み
 
@@ -90,53 +90,50 @@ const fetchDataStep = new Step({
 ### 基本的なリトライの例
 
 ```typescript
-import { Workflow, Step } from '@mastra/core/workflows';
+import { Workflow, Step } from "@mastra/core/workflows";
 
 // 失敗する可能性のあるステップを定義
 const unreliableApiStep = new Step({
-  id: 'callUnreliableApi',
+  id: "callUnreliableApi",
   execute: async () => {
     // 失敗する可能性のあるAPI呼び出しをシミュレート
     const random = Math.random();
     if (random < 0.7) {
-      throw new Error('API call failed');
+      throw new Error("API call failed");
     }
-    return { data: 'API response data' };
+    return { data: "API response data" };
   },
   retryConfig: {
-    attempts: 3,  // 最大3回リトライ
-    delay: 2000,  // 試行間に2秒待機
+    attempts: 3, // 最大3回リトライ
+    delay: 2000, // 試行間に2秒待機
   },
 });
 
 // 信頼性の低いステップを含むワークフローを作成
 const workflow = new Workflow({
-  name: 'retry-demo-workflow',
+  name: "retry-demo-workflow",
 });
 
-workflow
-  .step(unreliableApiStep)
-  .then(processResultStep)
-  .commit();
+workflow.step(unreliableApiStep).then(processResultStep).commit();
 ```
 
 ### ステップオーバーライドによるワークフローレベルのリトライ
 
 ```typescript
-import { Workflow, Step } from '@mastra/core/workflows';
+import { Workflow, Step } from "@mastra/core/workflows";
 
 // デフォルトのリトライ設定を持つワークフローを作成
 const workflow = new Workflow({
-  name: 'multi-retry-workflow',
+  name: "multi-retry-workflow",
   retryConfig: {
-    attempts: 2,  // すべてのステップはデフォルトで2回リトライ
-    delay: 1000,  // 1秒の遅延で
+    attempts: 2, // すべてのステップはデフォルトで2回リトライ
+    delay: 1000, // 1秒の遅延で
   },
 });
 
 // このステップはワークフローのデフォルトのリトライ設定を使用
 const standardStep = new Step({
-  id: 'standardStep',
+  id: "standardStep",
   execute: async () => {
     // 失敗する可能性のある操作
   },
@@ -144,32 +141,28 @@ const standardStep = new Step({
 
 // このステップはワークフローのリトライ設定をオーバーライド
 const criticalStep = new Step({
-  id: 'criticalStep',
+  id: "criticalStep",
   execute: async () => {
     // より多くのリトライ試行が必要な重要な操作
   },
   retryConfig: {
-    attempts: 5,  // 5回のリトライ試行でオーバーライド
-    delay: 5000,  // より長い5秒の遅延
+    attempts: 5, // 5回のリトライ試行でオーバーライド
+    delay: 5000, // より長い5秒の遅延
   },
 });
 
 // このステップはリトライを無効にする
 const noRetryStep = new Step({
-  id: 'noRetryStep',
+  id: "noRetryStep",
   execute: async () => {
     // リトライしないべき操作
   },
   retryConfig: {
-    attempts: 0,  // リトライを明示的に無効化
+    attempts: 0, // リトライを明示的に無効化
   },
 });
 
-workflow
-  .step(standardStep)
-  .then(criticalStep)
-  .then(noRetryStep)
-  .commit();
+workflow.step(standardStep).then(criticalStep).then(noRetryStep).commit();
 ```
 
 ## リトライの監視

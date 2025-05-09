@@ -10,33 +10,33 @@ The AzureVoice class in Mastra provides text-to-speech and speech-to-text capabi
 ## Usage Example
 
 ```typescript
-import { AzureVoice } from '@mastra/voice-azure';
+import { AzureVoice } from "@mastra/voice-azure";
 
 // Initialize with configuration
 const voice = new AzureVoice({
   speechModel: {
-    name: 'neural',
-    apiKey: 'your-azure-speech-api-key',
-    region: 'eastus'
+    name: "neural",
+    apiKey: "your-azure-speech-api-key",
+    region: "eastus",
   },
   listeningModel: {
-    name: 'whisper',
-    apiKey: 'your-azure-speech-api-key',
-    region: 'eastus'
+    name: "whisper",
+    apiKey: "your-azure-speech-api-key",
+    region: "eastus",
   },
-  speaker: 'en-US-JennyNeural'  // Default voice
+  speaker: "en-US-JennyNeural", // Default voice
 });
 
 // Convert text to speech
-const audioStream = await voice.speak('Hello, how can I help you?', {
-  speaker: 'en-US-GuyNeural',  // Override default voice
-  style: 'cheerful'  // Voice style
+const audioStream = await voice.speak("Hello, how can I help you?", {
+  speaker: "en-US-GuyNeural", // Override default voice
+  style: "cheerful", // Voice style
 });
 
 // Convert speech to text
 const text = await voice.listen(audioStream, {
-  filetype: 'wav',
-  language: 'en-US'
+  filetype: "wav",
+  language: "en-US",
 });
 ```
 
@@ -80,13 +80,15 @@ const text = await voice.listen(audioStream, {
     {
       name: "apiKey",
       type: "string",
-      description: "Azure Speech Services API key. Falls back to AZURE_SPEECH_KEY environment variable.",
+      description:
+        "Azure Speech Services API key. Falls back to AZURE_SPEECH_KEY environment variable.",
       isOptional: true,
     },
     {
       name: "region",
       type: "string",
-      description: "Azure region (e.g., 'eastus', 'westeurope'). Falls back to AZURE_SPEECH_REGION environment variable.",
+      description:
+        "Azure region (e.g., 'eastus', 'westeurope'). Falls back to AZURE_SPEECH_REGION environment variable.",
       isOptional: true,
     },
   ]}
@@ -176,7 +178,8 @@ Returns an array of available voice options, where each node contains:
     {
       name: "voiceId",
       type: "string",
-      description: "Unique identifier for the voice (e.g., 'en-US-JennyNeural')",
+      description:
+        "Unique identifier for the voice (e.g., 'en-US-JennyNeural')",
       isOptional: false,
     },
     {

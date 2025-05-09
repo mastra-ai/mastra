@@ -16,7 +16,7 @@ const metric = new TextualDifferenceMetric();
 
 const result = await metric.measure(
   "The quick brown fox",
-  "The fast brown fox"
+  "The fast brown fox",
 );
 
 console.log(result.score); // 0-1の類似度比率
@@ -38,7 +38,7 @@ console.log(result.info); // 詳細な変更メトリクス
       type: "string",
       description: "差異を評価するためのテキスト",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -62,8 +62,8 @@ console.log(result.info); // 詳細な変更メトリクス
               name: "confidence",
               type: "number",
               description: "テキスト間の長さの違いに基づく信頼度スコア (0-1)",
-            }
-          ]
+            },
+          ],
         },
         {
           type: "number",
@@ -72,8 +72,8 @@ console.log(result.info); // 詳細な変更メトリクス
               name: "ratio",
               type: "number",
               description: "テキスト間の生の類似度比率",
-            }
-          ]
+            },
+          ],
         },
         {
           type: "number",
@@ -82,8 +82,8 @@ console.log(result.info); // 詳細な変更メトリクス
               name: "changes",
               type: "number",
               description: "変更操作の数（挿入、削除、置換）",
-            }
-          ]
+            },
+          ],
         },
         {
           type: "number",
@@ -92,10 +92,10 @@ console.log(result.info); // 詳細な変更メトリクス
               name: "lengthDiff",
               type: "number",
               description: "入力と出力の長さの正規化された差 (0-1)",
-            }
-          ]
+            },
+          ],
         },
-      ]
+      ],
     },
   ]}
 />
@@ -103,6 +103,7 @@ console.log(result.info); // 詳細な変更メトリクス
 ## スコアリングの詳細
 
 このメトリックは、いくつかの測定を計算します：
+
 - **類似度比**: テキスト間のシーケンスマッチングに基づく (0-1)
 - **変更**: 一致しない操作の必要数
 - **長さの差**: テキストの長さの正規化された差
@@ -111,6 +112,7 @@ console.log(result.info); // 詳細な変更メトリクス
 ### スコアリングプロセス
 
 1. テキストの違いを分析します：
+
    - 入力と出力の間でシーケンスマッチングを行う
    - 必要な変更操作の数を数える
    - 長さの差を測定する
@@ -123,7 +125,9 @@ console.log(result.info); // 詳細な変更メトリクス
 最終スコア: `(similarity_ratio * confidence) * scale`
 
 ### スコアの解釈
+
 (0からスケールまで、デフォルトは0-1)
+
 - 1.0: 同一のテキスト - 違いなし
 - 0.7-0.9: 小さな違い - 少しの変更が必要
 - 0.4-0.6: 中程度の違い - かなりの変更
@@ -139,7 +143,7 @@ const metric = new TextualDifferenceMetric();
 
 const result = await metric.measure(
   "Hello world! How are you?",
-  "Hello there! How is it going?"
+  "Hello there! How is it going?",
 );
 
 // Example output:

@@ -40,23 +40,22 @@ export const mastra = new Mastra({
 });
 ```
 
-
 ## Custom CORS Config
 
 Mastra allows you to configure CORS (Cross-Origin Resource Sharing) settings for your server.
 
 ```typescript copy showLineNumbers
-import { Mastra } from '@mastra/core';
+import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
   server: {
     cors: {
-      origin: ['https://example.com'], // Allow specific origins or '*' for all
-      allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowHeaders: ['Content-Type', 'Authorization'],
+      origin: ["https://example.com"], // Allow specific origins or '*' for all
+      allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      allowHeaders: ["Content-Type", "Authorization"],
       credentials: false,
-    }
-  }
+    },
+  },
 });
 ```
 

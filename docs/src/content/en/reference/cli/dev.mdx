@@ -33,6 +33,7 @@ The `mastra dev` command starts a development server that exposes REST routes fo
 Starting the server with `mastra dev` exposes a set of REST routes by default:
 
 ### System Routes
+
 - **GET `/api`**: Get API status.
 
 ### Agent Routes
@@ -76,6 +77,7 @@ Workflows are expected to be exported from `src/mastra/workflows` (or the config
 - **GET `/api/workflows/:workflowId/watch`**: Watch workflow transitions in real-time.
 
 ### Memory Routes
+
 - **GET `/api/memory/status`**: Get memory status.
 - **GET `/api/memory/threads`**: Get all threads.
 - **GET `/api/memory/threads/:threadId`**: Get thread by ID.
@@ -86,14 +88,17 @@ Workflows are expected to be exported from `src/mastra/workflows` (or the config
 - **POST `/api/memory/save-messages`**: Save messages.
 
 ### Telemetry Routes
+
 - **GET `/api/telemetry`**: Get all traces.
 
 ### Log Routes
+
 - **GET `/api/logs`**: Get all logs.
 - **GET `/api/logs/transports`**: List of all log transports.
 - **GET `/api/logs/:runId`**: Get logs by run ID.
 
 ### Vector Routes
+
 - **POST `/api/vector/:vectorName/upsert`**: Upsert vectors into an index.
 - **POST `/api/vector/:vectorName/create-index`**: Create a new vector index.
 - **POST `/api/vector/:vectorName/query`**: Query vectors from an index.

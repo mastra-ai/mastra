@@ -128,6 +128,7 @@ The metric evaluates context precision through binary relevance assessment and M
 ### Scoring Process
 
 1. Assigns binary relevance scores:
+
    - Relevant context: 1
    - Irrelevant context: 0
 
@@ -139,7 +140,9 @@ The metric evaluates context precision through binary relevance assessment and M
 Final score: `Mean Average Precision * scale`
 
 ### Score interpretation
+
 (0 to scale, default 0-1)
+
 - 1.0: All relevant context in optimal order
 - 0.7-0.9: Mostly relevant context with good ordering
 - 0.4-0.6: Mixed relevance or suboptimal ordering

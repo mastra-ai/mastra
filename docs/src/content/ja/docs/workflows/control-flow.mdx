@@ -34,13 +34,13 @@ myWorkflow.step(fetchOrderData).then(validateData).then(processOrder);
 ```typescript
 myWorkflow
   .step(stepA)
-    .then(stepB)
-    .then(stepD)
+  .then(stepB)
+  .then(stepD)
   .after(stepA)
-    .step(stepC)
-    .then(stepE)
+  .step(stepC)
+  .then(stepE)
   .after([stepD, stepE])
-    .step(stepF);
+  .step(stepF);
 ```
 
 この例では：
@@ -63,15 +63,17 @@ myWorkflow
   .then(validateProductData)
   // このステップは、validateUserDataとvalidateProductDataの両方が完了した後にのみ実行されます
   .after([validateUserData, validateProductData])
-  .step(processOrder)
+  .step(processOrder);
 ```
 
 この例では：
+
 - `fetchUserData`と`fetchProductData`は並列ブランチで実行されます
 - 各ブランチには独自の検証ステップがあります
 - `processOrder`ステップは、両方の検証ステップが正常に完了した後にのみ実行されます
 
 このパターンは特に以下の場合に役立ちます：
+
 - 並列実行パスの結合
 - ワークフローに同期ポイントを実装する
 - 進行する前にすべての必要なデータが利用可能であることを確認する
@@ -95,7 +97,7 @@ myWorkflow
 
   // このステップは複数のブランチの完了に依存しています
   .after([stepC, stepE, stepG])
-  .step(finalStep)
+  .step(finalStep);
 ```
 
 ## 循環依存とループ
@@ -124,6 +126,7 @@ myWorkflow
 ### 条件ベースのループに`until`を使用する
 
 `until`メソッドは、指定された条件が真になるまでステップを繰り返します。以下の引数を取ります：
+
 1. ループを停止するタイミングを決定する条件
 2. 繰り返すステップ
 3. 繰り返されるステップに渡すオプションの変数
@@ -131,7 +134,7 @@ myWorkflow
 ```typescript
 // ターゲットに達するまでカウンターをインクリメントするステップ
 const incrementStep = new Step({
-  id: 'increment',
+  id: "increment",
   inputSchema: z.object({
     // 現在のカウンター値
     counter: z.number().optional(),
@@ -159,9 +162,9 @@ workflow
       // 現在のカウンターを次の反復に渡す
       counter: {
         step: incrementStep,
-        path: 'updatedCounter'
-      }
-    }
+        path: "updatedCounter",
+      },
+    },
   )
   .then(finalStep);
 ```
@@ -173,16 +176,16 @@ workflow
   .step(incrementStep)
   .until(
     {
-      ref: { step: incrementStep, path: 'updatedCounter' },
+      ref: { step: incrementStep, path: "updatedCounter" },
       query: { $gte: 10 },
     },
     incrementStep,
     {
       counter: {
         step: incrementStep,
-        path: 'updatedCounter'
-      }
-    }
+        path: "updatedCounter",
+      },
+    },
   )
   .then(finalStep);
 ```
@@ -190,6 +193,7 @@ workflow
 ### 条件ベースのループに`while`を使用する
 
 `while`メソッドは、指定された条件が真である限りステップを繰り返します。`until`と同じ引数を取ります：
+
 1. ループを継続するタイミングを決定する条件
 2. 繰り返すステップ
 3. 繰り返されるステップに渡すオプションの変数
@@ -197,7 +201,7 @@ workflow
 ```typescript
 // ターゲット未満の間カウンターをインクリメントするステップ
 const incrementStep = new Step({
-  id: 'increment',
+  id: "increment",
   inputSchema: z.object({
     // 現在のカウンター値
     counter: z.number().optional(),
@@ -225,9 +229,9 @@ workflow
       // 現在のカウンターを次の反復に渡す
       counter: {
         step: incrementStep,
-        path: 'updatedCounter'
-      }
-    }
+        path: "updatedCounter",
+      },
+    },
   )
   .then(finalStep);
 ```
@@ -239,16 +243,16 @@ workflow
   .step(incrementStep)
   .while(
     {
-      ref: { step: incrementStep, path: 'updatedCounter' },
+      ref: { step: incrementStep, path: "updatedCounter" },
       query: { $lt: 10 },
     },
     incrementStep,
     {
       counter: {
         step: incrementStep,
-        path: 'updatedCounter'
-      }
-    }
+        path: "updatedCounter",
+      },
+    },
   )
   .then(finalStep);
 ```
@@ -257,14 +261,14 @@ workflow
 
 参照ベースの条件を使用する場合、以下の比較演算子を使用できます：
 
-| 演算子 | 説明 |
-|----------|-------------|
-| `$eq`    | 等しい    |
-| `$ne`    | 等しくない |
-| `$gt`    | より大きい |
-| `$gte`   | 以上 |
-| `$lt`    | より小さい |
-| `$lte`   | 以下 |
+| 演算子 | 説明       |
+| ------ | ---------- |
+| `$eq`  | 等しい     |
+| `$ne`  | 等しくない |
+| `$gt`  | より大きい |
+| `$gte` | 以上       |
+| `$lt`  | より小さい |
+| `$lte` | 以下       |
 
 ## 条件
 
@@ -354,13 +358,13 @@ import { Step, Workflow } from "@mastra/core/workflows";
 import { z } from "zod";
 
 const fetchUserStep = new Step({
-  id: 'fetchUser',
+  id: "fetchUser",
   outputSchema: z.object({
     name: z.string(),
     userId: z.string(),
   }),
   execute: async ({ context }) => {
-    return { name: 'John Doe', userId: '123' };
+    return { name: "John Doe", userId: "123" };
   },
 });
 
@@ -368,7 +372,9 @@ const analyzeDataStep = new Step({
   id: "analyzeData",
   execute: async ({ context }) => {
     // Type-safe access to previous step result
-    const userData = context.getStepResult<{ name: string, userId: string }>("fetchUser");
+    const userData = context.getStepResult<{ name: string; userId: string }>(
+      "fetchUser",
+    );
 
     if (!userData) {
       return { status: "error", message: "User data not found" };
@@ -376,12 +382,11 @@ const analyzeDataStep = new Step({
 
     return {
       analysis: `Analyzed data for user ${userData.name}`,
-      userId: userData.userId
+      userId: userData.userId,
     };
   },
 });
 ```
-
 
 #### ステップ参照の使用
 
@@ -403,7 +408,7 @@ const fetchUserStep = new Step({
     return {
       userId: "user123",
       name: "John Doe",
-      email: "john@example.com"
+      email: "john@example.com",
     };
   },
 });
@@ -416,7 +421,7 @@ const processUserStep = new Step({
 
     return {
       processed: true,
-      userName: userData?.name
+      userName: userData?.name,
     };
   },
 });
@@ -425,15 +430,8 @@ const workflow = new Workflow({
   name: "user-workflow",
 });
 
-workflow
-  .step(fetchUserStep)
-  .then(processUserStep)
-  .commit();
+workflow.step(fetchUserStep).then(processUserStep).commit();
 ```
-
-
-
-
 
 ### 変数マッピングの使用
 
@@ -456,7 +454,7 @@ const fetchUserStep = new Step({
     return {
       userId: "user123",
       name: "John Doe",
-      email: "john@example.com"
+      email: "john@example.com",
     };
   },
 });
@@ -473,7 +471,7 @@ const sendEmailStep = new Step({
     // Send email logic here
     return {
       status: "sent",
-      to: recipientEmail
+      to: recipientEmail,
     };
   },
 });
@@ -487,9 +485,9 @@ workflow
   .then(sendEmailStep, {
     variables: {
       // Map specific fields from fetchUser to sendEmail inputs
-      recipientEmail: { step: fetchUserStep, path: 'email' },
-      recipientName: { step: fetchUserStep, path: 'name' }
-    }
+      recipientEmail: { step: fetchUserStep, path: "email" },
+      recipientName: { step: fetchUserStep, path: "name" },
+    },
   })
   .commit();
 ```
@@ -506,20 +504,20 @@ import { Step, Workflow } from "@mastra/core/workflows";
 import { z } from "zod";
 
 const processOrderStep = new Step({
-  id: 'processOrder',
+  id: "processOrder",
   execute: async ({ context }) => {
     // Access data from a previous step
-    let userData: { name: string, userId: string };
-    if (context.steps['fetchUser']?.status === 'success') {
+    let userData: { name: string; userId: string };
+    if (context.steps["fetchUser"]?.status === "success") {
       userData = context.steps.fetchUser.output;
     } else {
-      throw new Error('User data not found');
+      throw new Error("User data not found");
     }
 
     return {
-      orderId: 'order123',
+      orderId: "order123",
       userId: userData.userId,
-      status: 'processing',
+      status: "processing",
     };
   },
 });
@@ -528,10 +526,7 @@ const workflow = new Workflow({
   name: "order-workflow",
 });
 
-workflow
-  .step(fetchUserStep)
-  .then(processOrderStep)
-  .commit();
+workflow.step(fetchUserStep).then(processOrderStep).commit();
 ```
 
 ### ワークフローレベルの型安全性
@@ -542,7 +537,6 @@ workflow
 ```typescript showLineNumbers filename="src/mastra/workflows/workflow-typing.ts" copy
 import { Step, Workflow } from "@mastra/core/workflows";
 import { z } from "zod";
-
 
 // Create steps with typed outputs
 const fetchUserStep = new Step({
@@ -556,7 +550,7 @@ const fetchUserStep = new Step({
     return {
       userId: "user123",
       name: "John Doe",
-      email: "john@example.com"
+      email: "john@example.com",
     };
   },
 });
@@ -569,7 +563,7 @@ const processOrderStep = new Step({
 
     return {
       orderId: "order123",
-      status: "processing"
+      status: "processing",
     };
   },
 });
@@ -583,8 +577,8 @@ workflow
   .then(processOrderStep)
   .until(async ({ context }) => {
     // TypeScript knows the shape of userData here
-    const res = context.getStepResult('fetchUser');
-    return res?.userId === '123';
+    const res = context.getStepResult("fetchUser");
+    return res?.userId === "123";
   }, processOrderStep)
   .commit();
 ```
@@ -609,12 +603,12 @@ const processOrderStep = new Step({
   id: "processOrder",
   execute: async ({ context }) => {
     // Access trigger data with type safety
-    const triggerData = context.getStepResult<TriggerType>('trigger');
+    const triggerData = context.getStepResult<TriggerType>("trigger");
 
     return {
       customerId: triggerData?.customerId,
       itemCount: triggerData?.orderItems.length || 0,
-      status: "processing"
+      status: "processing",
     };
   },
 });
@@ -624,9 +618,7 @@ const workflow = new Workflow({
   triggerSchema,
 });
 
-workflow
-  .step(processOrderStep)
-  .commit();
+workflow.step(processOrderStep).commit();
 ```
 
 ### 再開データへのアクセス
@@ -652,7 +644,7 @@ const processOrderStep = new Step({
 
     return {
       orderId,
-      status: "processed"
+      status: "processed",
     };
   },
 });
@@ -661,22 +653,20 @@ const workflow = new Workflow({
   name: "order-workflow",
 });
 
-workflow
-  .step(processOrderStep)
-  .commit();
+workflow.step(processOrderStep).commit();
 
 const run = workflow.createRun();
 const result = await run.start();
 
 const resumedResult = await workflow.resume({
   runId: result.runId,
-  stepId: 'processOrder',
+  stepId: "processOrder",
   inputData: {
-    orderId: '123',
+    orderId: "123",
   },
 });
 
-console.log({resumedResult});
+console.log({ resumedResult });
 ```
 
 ### ワークフローの結果へのアクセス
@@ -697,7 +687,7 @@ const fetchUserStep = new Step({
     return {
       userId: "user123",
       name: "John Doe",
-      email: "john@example.com"
+      email: "john@example.com",
     };
   },
 });
@@ -712,7 +702,7 @@ const processOrderStep = new Step({
     const userData = context.getStepResult(fetchUserStep);
     return {
       orderId: "order123",
-      status: "processing"
+      status: "processing",
     };
   },
 });
@@ -721,44 +711,45 @@ const workflow = new Workflow<[typeof fetchUserStep, typeof processOrderStep]>({
   name: "typed-workflow",
 });
 
-workflow
-  .step(fetchUserStep)
-  .then(processOrderStep)
-  .commit();
+workflow.step(fetchUserStep).then(processOrderStep).commit();
 
 const run = workflow.createRun();
 const result = await run.start();
 
 // 結果はステップ結果の判別共用体です
 // そのためステータスチェックによって絞り込む必要があります
-if (result.results.processOrder.status === 'success') {
+if (result.results.processOrder.status === "success") {
   // TypeScriptは結果の形状を認識します
   const orderId = result.results.processOrder.output.orderId;
-  console.log({orderId});
+  console.log({ orderId });
 }
 
-if (result.results.fetchUser.status === 'success') {
+if (result.results.fetchUser.status === "success") {
   const userId = result.results.fetchUser.output.userId;
-  console.log({userId});
+  console.log({ userId });
 }
 ```
 
 ### データフローのベストプラクティス
 
 1. **型安全性のためにステップ参照でgetStepResultを使用する**
+
    - TypeScriptが正しい型を推論できるようにします
    - コンパイル時に型エラーを検出します
 
 2. **明示的な依存関係のために変数マッピングを使用する**
+
    - データフローを明確で保守しやすくします
    - ステップの依存関係の良いドキュメントを提供します
 
 3. **ステップの出力スキーマを定義する**
+
    - 実行時にデータを検証します
    - `execute`関数の戻り値の型を検証します
    - TypeScriptでの型推論を改善します
 
 4. **欠落データを適切に処理する**
+
    - プロパティにアクセスする前に常にステップ結果が存在するかチェックします
    - オプションデータにフォールバック値を提供します
 
@@ -768,11 +759,10 @@ if (result.results.fetchUser.status === 'success') {
 
 ### データフロー手法の比較
 
-| 手法 | 型安全性 | 明示性 | ユースケース |
-|--------|------------|--------------|----------|
-| getStepResult | 最高 | 高 | 厳格な型要件を持つ複雑なワークフロー |
-| 変数マッピング | 高 | 高 | 依存関係を明確かつ明示的にする必要がある場合 |
-| context.steps | 中 | 低 | シンプルなワークフローでのステップデータへの迅速なアクセス |
+| 手法           | 型安全性 | 明示性 | ユースケース                                               |
+| -------------- | -------- | ------ | ---------------------------------------------------------- |
+| getStepResult  | 最高     | 高     | 厳格な型要件を持つ複雑なワークフロー                       |
+| 変数マッピング | 高       | 高     | 依存関係を明確かつ明示的にする必要がある場合               |
+| context.steps  | 中       | 低     | シンプルなワークフローでのステップデータへの迅速なアクセス |
 
 ユースケースに適したデータフロー手法を選択することで、型安全で保守しやすいワークフローを作成できます。
-

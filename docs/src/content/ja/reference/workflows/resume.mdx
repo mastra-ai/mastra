@@ -14,8 +14,8 @@ await run.resume({
   runId: "abc-123",
   stepId: "stepTwo",
   context: {
-    secondValue: 100
-  }
+    secondValue: 100,
+  },
 });
 ```
 
@@ -27,8 +27,8 @@ await run.resume({
       name: "config",
       type: "object",
       description: "ワークフローを再開するための設定",
-      isOptional: false
-    }
+      isOptional: false,
+    },
   ]}
 />
 
@@ -40,20 +40,21 @@ await run.resume({
       name: "runId",
       type: "string",
       description: "再開するワークフロー実行の一意の識別子",
-      isOptional: false
+      isOptional: false,
     },
     {
       name: "stepId",
       type: "string",
       description: "再開する中断されたステップのID",
-      isOptional: false
+      isOptional: false,
     },
     {
       name: "context",
       type: "Record<string, any>",
-      description: "ステップのinputDataプロパティに注入する新しいコンテキストデータ",
-      isOptional: true
-    }
+      description:
+        "ステップのinputDataプロパティに注入する新しいコンテキストデータ",
+      isOptional: true,
+    },
   ]}
 />
 
@@ -64,8 +65,8 @@ await run.resume({
     {
       name: "Promise<WorkflowResult>",
       type: "object",
-      description: "再開されたワークフロー実行の結果"
-    }
+      description: "再開されたワークフロー実行の結果",
+    },
   ]}
 />
 
@@ -88,20 +89,23 @@ const reviewStep = new Step({
       // これは resume() が呼び出された後に実行されるコードです
       // context.inputData は再開中に提供されたデータを含むようになります
       return {
-        reviewedData: enhanceWithFeedback(initialAnalysis, context.inputData.feedback)
+        reviewedData: enhanceWithFeedback(
+          initialAnalysis,
+          context.inputData.feedback,
+        ),
       };
     }
 
     return { reviewedData: initialAnalysis };
-  }
+  },
 });
 
 const { runId, resume, start } = workflow.createRun();
 
 await start({
   inputData: {
-    data: "some data"
-  }
+    data: "some data",
+  },
 });
 
 // 後で、ワークフローを再開
@@ -110,8 +114,8 @@ const result = await resume({
   stepId: "review",
   context: {
     // このデータは `context.inputData` で利用可能になります
-    feedback: "良さそうですが、セクション3を改善してください"
-  }
+    feedback: "良さそうですが、セクション3を改善してください",
+  },
 });
 ```
 
@@ -134,7 +138,7 @@ try {
   await run.resume({
     runId,
     stepId: "stepTwo",
-    context: newData
+    context: newData,
   });
 } catch (error) {
   if (error.message === "No snapshot found for workflow run") {

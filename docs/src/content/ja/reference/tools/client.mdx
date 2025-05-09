@@ -75,8 +75,8 @@ constructor({
 
 MCPサーバーはこの定義を使用して構成できます。クライアントは提供されたパラメータに基づいて自動的にトランスポートタイプを検出します：
 
--   `command`が提供されている場合、Stdioトランスポートを使用します。
--   `url`が提供されている場合、最初にStreamable HTTPトランスポートを試み、初期接続が失敗した場合はレガシーSSEトランスポートにフォールバックします。
+- `command`が提供されている場合、Stdioトランスポートを使用します。
+- `url`が提供されている場合、最初にStreamable HTTPトランスポートを試み、初期接続が失敗した場合はレガシーSSEトランスポートにフォールバックします。
 
 <br />
 <PropertiesTable
@@ -103,7 +103,8 @@ MCPサーバーはこの定義を使用して構成できます。クライア�
       name: "url",
       type: "URL",
       isOptional: true,
-      description: "HTTPサーバー（Streamable HTTPまたはSSE）の場合：サーバーのURL。",
+      description:
+        "HTTPサーバー（Streamable HTTPまたはSSE）の場合：サーバーのURL。",
     },
     {
       name: "requestInit",
@@ -115,7 +116,8 @@ MCPサーバーはこの定義を使用して構成できます。クライア�
       name: "eventSourceInit",
       type: "EventSourceInit",
       isOptional: true,
-      description: "SSEフォールバックの場合：SSE接続のカスタムフェッチ構成。SSEでカスタムヘッダーを使用する場合に必要です。",
+      description:
+        "SSEフォールバックの場合：SSE接続のカスタムフェッチ構成。SSEでカスタムヘッダーを使用する場合に必要です。",
     },
     {
       name: "logger",
@@ -148,6 +150,7 @@ MCPサーバーはこの定義を使用して構成できます。クライア�
 ### LogHandler
 
 `LogHandler`関数は`LogMessage`オブジェクトをパラメータとして受け取り、voidを返します。`LogMessage`オブジェクトには以下のプロパティがあります。`LoggingLevel`タイプは`debug`、`info`、`warn`、`error`の値を持つ文字列列挙型です。
+
 <br />
 <PropertiesTable
   content={[
@@ -180,11 +183,10 @@ MCPサーバーはこの定義を使用して構成できます。クライア�
   ]}
 />
 
-
-
 ### LogHandler
 
 `LogHandler`関数は`LogMessage`オブジェクトをパラメータとして受け取り、voidを返します。`LogMessage`オブジェクトには以下のプロパティがあります。`LoggingLevel`型は`debug`、`info`、`warn`、`error`の値を持つ文字列列挙型です。
+
 <br />
 <PropertiesTable
   content={[
@@ -242,7 +244,8 @@ MCPサーバーはこの定義を使用して構成できます。クライア�
       name: "url",
       type: "URL",
       isOptional: true,
-      description: "HTTPサーバー（Streamable HTTPまたはSSE）の場合：サーバーのURL。",
+      description:
+        "HTTPサーバー（Streamable HTTPまたはSSE）の場合：サーバーのURL。",
     },
     {
       name: "requestInit",
@@ -254,7 +257,8 @@ MCPサーバーはこの定義を使用して構成できます。クライア�
       name: "eventSourceInit",
       type: "EventSourceInit",
       isOptional: true,
-      description: "SSEフォールバックの場合：SSE接続のカスタムフェッチ構成。SSEでカスタムヘッダーを使用する場合に必要です。",
+      description:
+        "SSEフォールバックの場合：SSE接続のカスタムフェッチ構成。SSEでカスタムヘッダーを使用する場合に必要です。",
     },
     {
       name: "logger",
@@ -287,6 +291,7 @@ MCPサーバーはこの定義を使用して構成できます。クライア�
 ### LogHandler
 
 `LogHandler`関数は`LogMessage`オブジェクトをパラメータとして受け取り、voidを返します。`LogMessage`オブジェクトには以下のプロパティがあります。`LoggingLevel`タイプは`debug`、`info`、`warn`、`error`の値を持つ文字列列挙型です。
+
 <br />
 <PropertiesTable
   content={[
@@ -319,11 +324,10 @@ MCPサーバーはこの定義を使用して構成できます。クライア�
   ]}
 />
 
-
-
 ### LogHandler
 
 `LogHandler`関数は`LogMessage`オブジェクトをパラメータとして受け取り、voidを返します。`LogMessage`オブジェクトには以下のプロパティがあります。`LoggingLevel`型は`debug`、`info`、`warn`、`error`の値を持つ文字列列挙型です。
+
 <br />
 <PropertiesTable
   content={[

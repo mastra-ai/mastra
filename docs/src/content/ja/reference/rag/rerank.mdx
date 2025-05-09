@@ -12,8 +12,8 @@ function rerank(
   results: QueryResult[],
   query: string,
   modelConfig: ModelConfig,
-  options?: RerankerFunctionOptions
-): Promise<RerankResult[]>
+  options?: RerankerFunctionOptions,
+): Promise<RerankResult[]>;
 ```
 
 ## 使用例
@@ -32,10 +32,10 @@ const rerankedResults = await rerank(
     weights: {
       semantic: 0.5,
       vector: 0.3,
-      position: 0.2
+      position: 0.2,
     },
-    topK: 3
-  }
+    topK: 3,
+  },
 );
 ```
 
@@ -66,7 +66,7 @@ const rerankedResults = await rerank(
       type: "RerankerFunctionOptions",
       description: "再ランク付けモデルのオプション",
       isOptional: true,
-    }
+    },
   ]}
 />
 
@@ -81,7 +81,8 @@ rerank関数は、Vercel AI SDKの任意のLanguageModelを受け入れます。
     {
       name: "weights",
       type: "WeightConfig",
-      description: "異なるスコアリングコンポーネントの重み（合計が1になる必要があります）",
+      description:
+        "異なるスコアリングコンポーネントの重み（合計が1になる必要があります）",
       isOptional: true,
       properties: [
         {
@@ -92,8 +93,8 @@ rerank関数は、Vercel AI SDKの任意のLanguageModelを受け入れます。
               description: "セマンティック関連性の重み",
               isOptional: true,
               type: "number (default: 0.4)",
-            }
-          ]
+            },
+          ],
         },
         {
           type: "number",
@@ -103,8 +104,8 @@ rerank関数は、Vercel AI SDKの任意のLanguageModelを受け入れます。
               description: "ベクター類似性の重み",
               isOptional: true,
               type: "number (default: 0.4)",
-            }
-          ]
+            },
+          ],
         },
         {
           type: "number",
@@ -114,9 +115,9 @@ rerank関数は、Vercel AI SDKの任意のLanguageModelを受け入れます。
               description: "位置に基づくスコアリングの重み",
               isOptional: true,
               type: "number (default: 0.2)",
-            }
-          ]
-        }
+            },
+          ],
+        },
       ],
     },
     {
@@ -131,7 +132,7 @@ rerank関数は、Vercel AI SDKの任意のLanguageModelを受け入れます。
       description: "返すトップ結果の数",
       isOptional: true,
       defaultValue: "3",
-    }
+    },
   ]}
 />
 
@@ -155,7 +156,7 @@ rerank関数は、Vercel AI SDKの任意のLanguageModelを受け入れます。
       name: "details",
       type: "ScoringDetails",
       description: "詳細なスコア情報",
-    }
+    },
   ]}
 />
 
@@ -190,8 +191,8 @@ rerank関数は、Vercel AI SDKの任意のLanguageModelを受け入れます。
             {
               name: "magnitude",
               description: "クエリの大きさ",
-            }
-          ]
+            },
+          ],
         },
         {
           type: "number[]",
@@ -199,11 +200,11 @@ rerank関数は、Vercel AI SDKの任意のLanguageModelを受け入れます。
             {
               name: "dominantFeatures",
               description: "クエリの主要な特徴",
-            }
-          ]
-        }
-      ]
-    }
+            },
+          ],
+        },
+      ],
+    },
   ]}
 />
 

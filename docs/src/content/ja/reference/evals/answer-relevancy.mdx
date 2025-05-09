@@ -126,6 +126,7 @@ console.log(result.info.reason); // Explanation of the score
 ### 採点プロセス
 
 1. ステートメント分析：
+
    - 文脈を保持しながら出力を意味のあるステートメントに分解します
    - 各ステートメントをクエリの要件に対して評価します
 
@@ -137,7 +138,9 @@ console.log(result.info.reason); // Explanation of the score
 最終スコア：`((direct + uncertainty * partial) / total_statements) * scale`
 
 ### スコアの解釈
+
 （0からスケールまで、デフォルトは0-1）
+
 - 1.0：完璧な関連性 - 完全かつ正確
 - 0.7-0.9：高い関連性 - 軽微なギャップまたは不正確さ
 - 0.4-0.6：中程度の関連性 - 重大なギャップ
@@ -153,13 +156,10 @@ import { AnswerRelevancyMetric } from "@mastra/evals/llm";
 // Configure the model for evaluation
 const model = openai("gpt-4o-mini");
 
-const metric = new AnswerRelevancyMetric(
-  model,
-  {
-    uncertaintyWeight: 0.5, // Higher weight for uncertain verdicts
-    scale: 5, // Use 0-5 scale instead of 0-1
-  },
-);
+const metric = new AnswerRelevancyMetric(model, {
+  uncertaintyWeight: 0.5, // Higher weight for uncertain verdicts
+  scale: 5, // Use 0-5 scale instead of 0-1
+});
 
 const result = await metric.measure(
   "What are the benefits of exercise?",

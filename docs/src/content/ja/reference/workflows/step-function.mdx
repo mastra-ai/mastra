@@ -13,11 +13,11 @@ description: ワークフロー内の `.step()` メソッドに関するドキ�
 workflow.step({
   id: "stepTwo",
   outputSchema: z.object({
-    result: z.number()
+    result: z.number(),
   }),
   execute: async ({ context }) => {
     return { result: 42 };
-  }
+  },
 });
 ```
 
@@ -28,15 +28,16 @@ workflow.step({
     {
       name: "stepConfig",
       type: "Step | StepDefinition | string",
-      description: "ワークフローに追加するステップインスタンス、設定オブジェクト、またはステップID",
-      isOptional: false
+      description:
+        "ワークフローに追加するステップインスタンス、設定オブジェクト、またはステップID",
+      isOptional: false,
     },
     {
       name: "options",
       type: "StepOptions",
       description: "ステップ実行のためのオプション設定",
-      isOptional: true
-    }
+      isOptional: true,
+    },
   ]}
 />
 
@@ -48,20 +49,20 @@ workflow.step({
       name: "id",
       type: "string",
       description: "ステップの一意の識別子",
-      isOptional: false
+      isOptional: false,
     },
     {
       name: "outputSchema",
       type: "z.ZodSchema",
       description: "ステップ出力を検証するためのスキーマ",
-      isOptional: true
+      isOptional: true,
     },
     {
       name: "execute",
       type: "(params: ExecuteParams) => Promise<any>",
       description: "ステップロジックを含む関数",
-      isOptional: false
-    }
+      isOptional: false,
+    },
   ]}
 />
 
@@ -73,18 +74,19 @@ workflow.step({
       name: "variables",
       type: "Record<string, VariableRef>",
       description: "変数名とそのソース参照のマップ",
-      isOptional: true
+      isOptional: true,
     },
     {
       name: "when",
       type: "StepCondition",
       description: "ステップを実行するために満たすべき条件",
-      isOptional: true
-    }
+      isOptional: true,
+    },
   ]}
 />
 
 ## 関連
+
 - [ステップインスタンスの基本的な使い方](../../docs/workflows/steps.mdx)
 - [ステップクラスリファレンス](./step-class.mdx)
 - [ワークフロークラスリファレンス](./workflow.mdx)

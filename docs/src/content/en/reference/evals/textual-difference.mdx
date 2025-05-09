@@ -16,7 +16,7 @@ const metric = new TextualDifferenceMetric();
 
 const result = await metric.measure(
   "The quick brown fox",
-  "The fast brown fox"
+  "The fast brown fox",
 );
 
 console.log(result.score); // Similarity ratio from 0-1
@@ -38,7 +38,7 @@ console.log(result.info); // Detailed change metrics
       type: "string",
       description: "The text to evaluate for differences",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -61,9 +61,10 @@ console.log(result.info); // Detailed change metrics
             {
               name: "confidence",
               type: "number",
-              description: "Confidence score based on length difference between texts (0-1)",
-            }
-          ]
+              description:
+                "Confidence score based on length difference between texts (0-1)",
+            },
+          ],
         },
         {
           type: "number",
@@ -72,8 +73,8 @@ console.log(result.info); // Detailed change metrics
               name: "ratio",
               type: "number",
               description: "Raw similarity ratio between the texts",
-            }
-          ]
+            },
+          ],
         },
         {
           type: "number",
@@ -81,9 +82,10 @@ console.log(result.info); // Detailed change metrics
             {
               name: "changes",
               type: "number",
-              description: "Number of change operations (insertions, deletions, replacements)",
-            }
-          ]
+              description:
+                "Number of change operations (insertions, deletions, replacements)",
+            },
+          ],
         },
         {
           type: "number",
@@ -91,11 +93,12 @@ console.log(result.info); // Detailed change metrics
             {
               name: "lengthDiff",
               type: "number",
-              description: "Normalized difference in length between input and output (0-1)",
-            }
-          ]
+              description:
+                "Normalized difference in length between input and output (0-1)",
+            },
+          ],
         },
-      ]
+      ],
     },
   ]}
 />
@@ -103,6 +106,7 @@ console.log(result.info); // Detailed change metrics
 ## Scoring Details
 
 The metric calculates several measures:
+
 - **Similarity Ratio**: Based on sequence matching between texts (0-1)
 - **Changes**: Count of non-matching operations needed
 - **Length Difference**: Normalized difference in text lengths
@@ -111,6 +115,7 @@ The metric calculates several measures:
 ### Scoring Process
 
 1. Analyzes textual differences:
+
    - Performs sequence matching between input and output
    - Counts the number of change operations required
    - Measures length differences
@@ -123,7 +128,9 @@ The metric calculates several measures:
 Final score: `(similarity_ratio * confidence) * scale`
 
 ### Score interpretation
+
 (0 to scale, default 0-1)
+
 - 1.0: Identical texts - no differences
 - 0.7-0.9: Minor differences - few changes needed
 - 0.4-0.6: Moderate differences - significant changes
@@ -139,7 +146,7 @@ const metric = new TextualDifferenceMetric();
 
 const result = await metric.measure(
   "Hello world! How are you?",
-  "Hello there! How is it going?"
+  "Hello there! How is it going?",
 );
 
 // Example output:

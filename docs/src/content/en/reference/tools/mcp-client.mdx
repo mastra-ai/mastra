@@ -44,7 +44,8 @@ constructor({
       type: "number",
       isOptional: true,
       defaultValue: "60000",
-      description: "Global timeout value in milliseconds for all servers unless overridden in individual server configs.",
+      description:
+        "Global timeout value in milliseconds for all servers unless overridden in individual server configs.",
     },
   ]}
 />
@@ -53,8 +54,8 @@ constructor({
 
 Each server in the `servers` map is configured using the `MastraMCPServerDefinition` type. The `MastraMCPClient` used internally automatically detects the transport type based on the provided parameters:
 
--   If `command` is provided, it uses the Stdio transport.
--   If `url` is provided, it first attempts to use the Streamable HTTP transport and falls back to the legacy SSE transport if the initial connection fails.
+- If `command` is provided, it uses the Stdio transport.
+- If `url` is provided, it first attempts to use the Streamable HTTP transport and falls back to the legacy SSE transport if the initial connection fails.
 
 <br />
 <PropertiesTable
@@ -75,13 +76,15 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
       name: "env",
       type: "Record<string, string>",
       isOptional: true,
-      description: "For Stdio servers: Environment variables to set for the command.",
+      description:
+        "For Stdio servers: Environment variables to set for the command.",
     },
     {
       name: "url",
       type: "URL",
       isOptional: true,
-      description: "For HTTP servers (Streamable HTTP or SSE): The URL of the server.",
+      description:
+        "For HTTP servers (Streamable HTTP or SSE): The URL of the server.",
     },
     {
       name: "requestInit",
@@ -93,7 +96,8 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
       name: "eventSourceInit",
       type: "EventSourceInit",
       isOptional: true,
-      description: "For SSE fallback: Custom fetch configuration for SSE connections. Required when using custom headers with SSE.",
+      description:
+        "For SSE fallback: Custom fetch configuration for SSE connections. Required when using custom headers with SSE.",
     },
     {
       name: "logger",

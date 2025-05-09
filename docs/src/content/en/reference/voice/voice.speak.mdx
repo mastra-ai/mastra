@@ -32,7 +32,6 @@ const textStream = Readable.from(["Hello", " from", " a", " stream!"]);
 const audioStreamFromTextStream = await voice.speak(textStream);
 ```
 
-
 ## Parameters
 
 <PropertiesTable
@@ -40,7 +39,8 @@ const audioStreamFromTextStream = await voice.speak(textStream);
     {
       name: "input",
       type: "string | NodeJS.ReadableStream",
-      description: "Text to convert to speech. Can be a string or a readable stream of text.",
+      description:
+        "Text to convert to speech. Can be a string or a readable stream of text.",
       isOptional: false,
     },
     {
@@ -52,7 +52,8 @@ const audioStreamFromTextStream = await voice.speak(textStream);
     {
       name: "options.speaker",
       type: "string",
-      description: "Voice ID to use for this specific request. Overrides the default speaker set in the constructor.",
+      description:
+        "Voice ID to use for this specific request. Overrides the default speaker set in the constructor.",
       isOptional: true,
     },
   ]}
@@ -76,10 +77,11 @@ Each voice provider may support additional options specific to their implementat
     {
       name: "options.speed",
       type: "number",
-      description: "Speech speed multiplier. Values between 0.25 and 4.0 are supported.",
+      description:
+        "Speech speed multiplier. Values between 0.25 and 4.0 are supported.",
       isOptional: true,
       defaultValue: "1.0",
-    }
+    },
   ]}
 />
 
@@ -90,7 +92,8 @@ Each voice provider may support additional options specific to their implementat
     {
       name: "options.stability",
       type: "number",
-      description: "Voice stability. Higher values result in more stable, less expressive speech.",
+      description:
+        "Voice stability. Higher values result in more stable, less expressive speech.",
       isOptional: true,
       defaultValue: "0.5",
     },
@@ -100,7 +103,7 @@ Each voice provider may support additional options specific to their implementat
       description: "Voice clarity and similarity to the original voice.",
       isOptional: true,
       defaultValue: "0.75",
-    }
+    },
   ]}
 />
 
@@ -117,10 +120,11 @@ Each voice provider may support additional options specific to their implementat
     {
       name: "options.audioConfig",
       type: "object",
-      description: "Audio configuration options from Google Cloud Text-to-Speech API.",
+      description:
+        "Audio configuration options from Google Cloud Text-to-Speech API.",
       isOptional: true,
       defaultValue: "{ audioEncoding: 'LINEAR16' }",
-    }
+    },
   ]}
 />
 
@@ -145,7 +149,7 @@ Each voice provider may support additional options specific to their implementat
       type: "'MP3' | 'WAV' | 'FLAC' | 'ALAW' | 'ULAW'",
       description: "Output audio format.",
       isOptional: true,
-    }
+    },
   ]}
 />
 
@@ -161,9 +165,9 @@ import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
 import Speaker from "@mastra/node-speaker";
 
 const speaker = new Speaker({
-  sampleRate: 24100,  // Audio sample rate in Hz - standard for high-quality audio on MacBook Pro
-  channels: 1,        // Mono audio output (as opposed to stereo which would be 2)
-  bitDepth: 16,       // Bit depth for audio quality - CD quality standard (16-bit resolution)
+  sampleRate: 24100, // Audio sample rate in Hz - standard for high-quality audio on MacBook Pro
+  channels: 1, // Mono audio output (as opposed to stereo which would be 2)
+  bitDepth: 16, // Bit depth for audio quality - CD quality standard (16-bit resolution)
 });
 
 const voice = new OpenAIRealtimeVoice();
@@ -171,12 +175,11 @@ await voice.connect();
 // Register event listener for audio chunks
 voice.on("speaker", (stream) => {
   // Handle audio chunk (e.g., play it or save it)
-  stream.pipe(speaker)
+  stream.pipe(speaker);
 });
 // This will emit 'speaking' events instead of returning a stream
 await voice.speak("Hello, this is realtime speech!");
 ```
-
 
 ## Using with CompositeVoice
 

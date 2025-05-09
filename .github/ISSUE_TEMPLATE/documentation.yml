@@ -1,7 +1,7 @@
 name: Documentation Improvement
 description: Suggest improvements to Mastra documentation
-title: "[DOCS] "
-labels: ["documentation"]
+title: '[DOCS] '
+labels: ['documentation']
 body:
   - type: markdown
     attributes:

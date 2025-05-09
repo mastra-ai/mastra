@@ -2,27 +2,29 @@
 title: Voice in Mastra | Mastra Docs
 description: Overview of voice capabilities in Mastra, including text-to-speech, speech-to-text, and real-time speech-to-speech interactions.
 ---
+
 import { Tabs } from "nextra/components";
 import { AudioPlayback } from "@/components/audio-playback";
 
 # Voice in Mastra
 
-Mastra's Voice system provides a unified interface for voice interactions, enabling text-to-speech (TTS), speech-to-text (STT), and real-time speech-to-speech (STS) capabilities in your applications. 
+Mastra's Voice system provides a unified interface for voice interactions, enabling text-to-speech (TTS), speech-to-text (STT), and real-time speech-to-speech (STS) capabilities in your applications.
 
 ## Adding Voice to Agents
 
 To learn how to integrate voice capabilities into your agents, check out the [Adding Voice to Agents](../agents/adding-voice.mdx) documentation. This section covers how to use both single and multiple voice providers, as well as real-time interactions.
 
 ```typescript
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
 import { OpenAIVoice } from "@mastra/voice-openai";
 
 // Initialize OpenAI voice for TTS
 
 const voiceAgent = new Agent({
   name: "Voice Agent",
-  instructions: "You are a voice assistant that can help users with their tasks.",
+  instructions:
+    "You are a voice assistant that can help users with their tasks.",
   model: openai("gpt-4o"),
   voice: new OpenAIVoice(),
 });
@@ -32,8 +34,8 @@ You can then use the following voice capabilities:
 
 ### Text to Speech (TTS)
 
-Turn your agent's responses into natural-sounding speech using Mastra's TTS capabilities. 
-Choose from multiple providers like OpenAI, ElevenLabs, and more. 
+Turn your agent's responses into natural-sounding speech using Mastra's TTS capabilities.
+Choose from multiple providers like OpenAI, ElevenLabs, and more.
 
 For detailed configuration options and advanced features, check out our [Text-to-Speech guide](./text-to-speech).
 
@@ -46,22 +48,23 @@ import { OpenAIVoice } from "@mastra/voice-openai";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
-  name: "Voice Agent",
-  instructions: "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
-  voice: new OpenAIVoice(),
+name: "Voice Agent",
+instructions: "You are a voice assistant that can help users with their tasks.",
+model: openai("gpt-4o"),
+voice: new OpenAIVoice(),
 });
 
 const { text } = await voiceAgent.generate('What color is the sky?');
 
 // Convert text to speech to an Audio Stream
 const audioStream = await voiceAgent.voice.speak(text, {
-  speaker: "default", // Optional: specify a speaker
-  responseFormat: "wav", // Optional: specify a response format
+speaker: "default", // Optional: specify a speaker
+responseFormat: "wav", // Optional: specify a response format
 });
 
 playAudio(audioStream);
-```
+
+````
 
 Visit the [OpenAI Voice Reference](/reference/voice/openai) for more information on the OpenAI voice provider.
   </Tabs.Tab>
@@ -87,9 +90,10 @@ const audioStream = await voiceAgent.voice.speak(text, {
 });
 
 playAudio(audioStream);
-```
+````
 
 Visit the [Azure Voice Reference](/reference/voice/azure) for more information on the Azure voice provider.
+
   </Tabs.Tab>
   <Tabs.Tab>
 ```typescript
@@ -99,21 +103,22 @@ import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
-  name: "Voice Agent",
-  instructions: "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
-  voice: new ElevenLabsVoice(),
+name: "Voice Agent",
+instructions: "You are a voice assistant that can help users with their tasks.",
+model: openai("gpt-4o"),
+voice: new ElevenLabsVoice(),
 });
 
 const { text } = await voiceAgent.generate('What color is the sky?');
 
 // Convert text to speech to an Audio Stream
 const audioStream = await voiceAgent.voice.speak(text, {
-  speaker: "default", // Optional: specify a speaker
+speaker: "default", // Optional: specify a speaker
 });
 
 playAudio(audioStream);
-```
+
+````
 
 Visit the [ElevenLabs Voice Reference](/reference/voice/elevenlabs) for more information on the ElevenLabs voice provider.
   </Tabs.Tab>
@@ -139,9 +144,10 @@ const audioStream = await voiceAgent.voice.speak(text, {
 });
 
 playAudio(audioStream);
-```
+````
 
 Visit the [PlayAI Voice Reference](/reference/voice/playai) for more information on the PlayAI voice provider.
+
   </Tabs.Tab>
   <Tabs.Tab>
 ```typescript
@@ -151,21 +157,22 @@ import { GoogleVoice } from "@mastra/voice-google";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
-  name: "Voice Agent",
-  instructions: "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
-  voice: new GoogleVoice(),
+name: "Voice Agent",
+instructions: "You are a voice assistant that can help users with their tasks.",
+model: openai("gpt-4o"),
+voice: new GoogleVoice(),
 });
 
 const { text } = await voiceAgent.generate('What color is the sky?');
 
 // Convert text to speech to an Audio Stream
 const audioStream = await voiceAgent.voice.speak(text, {
-  speaker: "en-US-Studio-O", // Optional: specify a speaker
+speaker: "en-US-Studio-O", // Optional: specify a speaker
 });
 
 playAudio(audioStream);
-```
+
+````
 
 Visit the [Google Voice Reference](/reference/voice/google) for more information on the Google voice provider.
   </Tabs.Tab>
@@ -191,9 +198,10 @@ const audioStream = await voiceAgent.voice.speak(text, {
 });
 
 playAudio(audioStream);
-```
+````
 
 Visit the [Cloudflare Voice Reference](/reference/voice/cloudflare) for more information on the Cloudflare voice provider.
+
   </Tabs.Tab>
   <Tabs.Tab>
 ```typescript
@@ -203,21 +211,22 @@ import { DeepgramVoice } from "@mastra/voice-deepgram";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
-  name: "Voice Agent",
-  instructions: "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
-  voice: new DeepgramVoice(),
+name: "Voice Agent",
+instructions: "You are a voice assistant that can help users with their tasks.",
+model: openai("gpt-4o"),
+voice: new DeepgramVoice(),
 });
 
 const { text } = await voiceAgent.generate('What color is the sky?');
 
 // Convert text to speech to an Audio Stream
 const audioStream = await voiceAgent.voice.speak(text, {
-  speaker: "aura-english-us", // Optional: specify a speaker
+speaker: "aura-english-us", // Optional: specify a speaker
 });
 
 playAudio(audioStream);
-```
+
+````
 
 Visit the [Deepgram Voice Reference](/reference/voice/deepgram) for more information on the Deepgram voice provider.
   </Tabs.Tab>
@@ -243,9 +252,10 @@ const audioStream = await voiceAgent.voice.speak(text, {
 });
 
 playAudio(audioStream);
-```
+````
 
 Visit the [Speechify Voice Reference](/reference/voice/speechify) for more information on the Speechify voice provider.
+
   </Tabs.Tab>
   <Tabs.Tab>
 ```typescript
@@ -255,21 +265,22 @@ import { SarvamVoice } from "@mastra/voice-sarvam";
 import { playAudio } from "@mastra/node-audio";
 
 const voiceAgent = new Agent({
-  name: "Voice Agent",
-  instructions: "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
-  voice: new SarvamVoice(),
+name: "Voice Agent",
+instructions: "You are a voice assistant that can help users with their tasks.",
+model: openai("gpt-4o"),
+voice: new SarvamVoice(),
 });
 
 const { text } = await voiceAgent.generate('What color is the sky?');
 
 // Convert text to speech to an Audio Stream
 const audioStream = await voiceAgent.voice.speak(text, {
-  speaker: "default", // Optional: specify a speaker
+speaker: "default", // Optional: specify a speaker
 });
 
 playAudio(audioStream);
-```
+
+````
 
 Visit the [Sarvam Voice Reference](/reference/voice/sarvam) for more information on the Sarvam voice provider.
   </Tabs.Tab>
@@ -295,9 +306,10 @@ const audioStream = await voiceAgent.voice.speak(text, {
 });
 
 playAudio(audioStream);
-```
+````
 
 Visit the [Murf Voice Reference](/reference/voice/murf) for more information on the Murf voice provider.
+
   </Tabs.Tab>
 </Tabs>
 
@@ -306,7 +318,8 @@ Visit the [Murf Voice Reference](/reference/voice/murf) for more information on 
 Transcribe spoken content using various providers like OpenAI, ElevenLabs, and more. For detailed configuration options and more, check out [Speech to Text](./speech-to-text).
 
 You can download a sample audio file from [here](https://github.com/mastra-ai/realtime-voice-demo/raw/refs/heads/main/how_can_i_help_you.mp3).
-<br/>
+
+<br />
 <AudioPlayback audio="https://github.com/mastra-ai/realtime-voice-demo/raw/refs/heads/main/how_can_i_help_you.mp3" />
 
 <Tabs items={["OpenAI", "Azure", "ElevenLabs", "Google", "Cloudflare", "Deepgram", "Sarvam"]}>
@@ -318,10 +331,10 @@ import { OpenAIVoice } from "@mastra/voice-openai";
 import { createReadStream } from 'fs';
 
 const voiceAgent = new Agent({
-  name: "Voice Agent",
-  instructions: "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
-  voice: new OpenAIVoice(),
+name: "Voice Agent",
+instructions: "You are a voice assistant that can help users with their tasks.",
+model: openai("gpt-4o"),
+voice: new OpenAIVoice(),
 });
 
 // Use an audio file from a URL
@@ -333,7 +346,8 @@ console.log(`User said: ${transcript}`);
 
 // Generate a response based on the transcript
 const { text } = await voiceAgent.generate(transcript);
-```
+
+````
 
 Visit the [OpenAI Voice Reference](/reference/voice/openai) for more information on the OpenAI voice provider.
   </Tabs.Tab>
@@ -361,9 +375,10 @@ console.log(`User said: ${transcript}`);
 
 // Generate a response based on the transcript
 const { text } = await voiceAgent.generate(transcript);
-```
+````
 
 Visit the [Azure Voice Reference](/reference/voice/azure) for more information on the Azure voice provider.
+
   </Tabs.Tab>
   <Tabs.Tab>
 ```typescript
@@ -373,10 +388,10 @@ import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
 import { createReadStream } from 'fs';
 
 const voiceAgent = new Agent({
-  name: "Voice Agent",
-  instructions: "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
-  voice: new ElevenLabsVoice(),
+name: "Voice Agent",
+instructions: "You are a voice assistant that can help users with their tasks.",
+model: openai("gpt-4o"),
+voice: new ElevenLabsVoice(),
 });
 
 // Use an audio file from a URL
@@ -388,7 +403,8 @@ console.log(`User said: ${transcript}`);
 
 // Generate a response based on the transcript
 const { text } = await voiceAgent.generate(transcript);
-```
+
+````
 
 Visit the [ElevenLabs Voice Reference](/reference/voice/elevenlabs) for more information on the ElevenLabs voice provider.
   </Tabs.Tab>
@@ -415,9 +431,10 @@ console.log(`User said: ${transcript}`);
 
 // Generate a response based on the transcript
 const { text } = await voiceAgent.generate(transcript);
-```
+````
 
 Visit the [Google Voice Reference](/reference/voice/google) for more information on the Google voice provider.
+
   </Tabs.Tab>
   <Tabs.Tab>
 ```typescript
@@ -427,10 +444,10 @@ import { CloudflareVoice } from "@mastra/voice-cloudflare";
 import { createReadStream } from 'fs';
 
 const voiceAgent = new Agent({
-  name: "Voice Agent",
-  instructions: "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
-  voice: new CloudflareVoice(),
+name: "Voice Agent",
+instructions: "You are a voice assistant that can help users with their tasks.",
+model: openai("gpt-4o"),
+voice: new CloudflareVoice(),
 });
 
 // Use an audio file from a URL
@@ -442,7 +459,8 @@ console.log(`User said: ${transcript}`);
 
 // Generate a response based on the transcript
 const { text } = await voiceAgent.generate(transcript);
-```
+
+````
 
 Visit the [Cloudflare Voice Reference](/reference/voice/cloudflare) for more information on the Cloudflare voice provider.
   </Tabs.Tab>
@@ -469,9 +487,10 @@ console.log(`User said: ${transcript}`);
 
 // Generate a response based on the transcript
 const { text } = await voiceAgent.generate(transcript);
-```
+````
 
 Visit the [Deepgram Voice Reference](/reference/voice/deepgram) for more information on the Deepgram voice provider.
+
   </Tabs.Tab>
   <Tabs.Tab>
 ```typescript
@@ -481,10 +500,10 @@ import { SarvamVoice } from "@mastra/voice-sarvam";
 import { createReadStream } from 'fs';
 
 const voiceAgent = new Agent({
-  name: "Voice Agent",
-  instructions: "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
-  voice: new SarvamVoice(),
+name: "Voice Agent",
+instructions: "You are a voice assistant that can help users with their tasks.",
+model: openai("gpt-4o"),
+voice: new SarvamVoice(),
 });
 
 // Use an audio file from a URL
@@ -496,7 +515,8 @@ console.log(`User said: ${transcript}`);
 
 // Generate a response based on the transcript
 const { text } = await voiceAgent.generate(transcript);
-```
+
+````
 
 Visit the [Sarvam Voice Reference](/reference/voice/sarvam) for more information on the Sarvam voice provider.
   </Tabs.Tab>
@@ -504,7 +524,7 @@ Visit the [Sarvam Voice Reference](/reference/voice/sarvam) for more information
 
 ### Speech to Speech (STS)
 
-Create conversational experiences with speech-to-speech capabilities. The unified API enables real-time voice interactions between users and AI agents. 
+Create conversational experiences with speech-to-speech capabilities. The unified API enables real-time voice interactions between users and AI agents.
 For detailed configuration options and advanced features, check out [Speech to Speech](./speech-to-speech).
 
 <Tabs items={["OpenAI"]}>
@@ -533,9 +553,10 @@ await voiceAgent.voice.speak('How can I help you today?');
 // Send continuous audio from the microphone
 const micStream = getMicrophoneStream();
 await voiceAgent.voice.send(micStream);
-```
+````
 
 Visit the [OpenAI Voice Reference](/reference/voice/openai-realtime) for more information on the OpenAI voice provider.
+
   </Tabs.Tab>
 </Tabs>
 
@@ -565,6 +586,7 @@ const voice = new OpenAIVoice({
 ```
 
 Visit the [OpenAI Voice Reference](/reference/voice/openai) for more information on the OpenAI voice provider.
+
   </Tabs.Tab>
   <Tabs.Tab>
 ```typescript
@@ -589,6 +611,7 @@ const voice = new AzureVoice({
 ```
 
 Visit the [Azure Voice Reference](/reference/voice/azure) for more information on the Azure voice provider.
+
   </Tabs.Tab>
   <Tabs.Tab>
 ```typescript
@@ -606,6 +629,7 @@ const voice = new ElevenLabsVoice({
 ```
 
 Visit the [ElevenLabs Voice Reference](/reference/voice/elevenlabs) for more information on the ElevenLabs voice provider.
+
   </Tabs.Tab>
   <Tabs.Tab>
 ```typescript
@@ -623,6 +647,7 @@ const voice = new PlayAIVoice({
 ```
 
 Visit the [PlayAI Voice Reference](/reference/voice/playai) for more information on the PlayAI voice provider.
+
   </Tabs.Tab>
   <Tabs.Tab>
 ```typescript
@@ -643,6 +668,7 @@ const voice = new GoogleVoice({
 ```
 
 Visit the [PlayAI Voice Reference](/reference/voice/playai) for more information on the PlayAI voice provider.
+
   </Tabs.Tab>
   <Tabs.Tab>
 ```typescript
@@ -660,6 +686,7 @@ const voice = new CloudflareVoice({
 ```
 
 Visit the [Cloudflare Voice Reference](/reference/voice/cloudflare) for more information on the Cloudflare voice provider.
+
   </Tabs.Tab>
   <Tabs.Tab>
 ```typescript
@@ -680,6 +707,7 @@ const voice = new DeepgramVoice({
 ```
 
 Visit the [Deepgram Voice Reference](/reference/voice/deepgram) for more information on the Deepgram voice provider.
+
   </Tabs.Tab>
   <Tabs.Tab>
 ```typescript
@@ -697,6 +725,7 @@ const voice = new SpeechifyVoice({
 ```
 
 Visit the [Speechify Voice Reference](/reference/voice/speechify) for more information on the Speechify voice provider.
+
   </Tabs.Tab>
   <Tabs.Tab>
 ```typescript
@@ -713,6 +742,7 @@ const voice = new SarvamVoice({
 ```
 
 Visit the [Sarvam Voice Reference](/reference/voice/sarvam) for more information on the Sarvam voice provider.
+
   </Tabs.Tab>
   <Tabs.Tab>
 ```typescript
@@ -729,6 +759,7 @@ const voice = new MurfVoice({
 ```
 
 Visit the [Murf Voice Reference](/reference/voice/murf) for more information on the Murf voice provider.
+
   </Tabs.Tab>
   <Tabs.Tab>
 ```typescript
@@ -749,10 +780,12 @@ const voice = new OpenAIRealtimeVoice({
 ```
 
 For more information on the OpenAI Realtime voice provider, refer to the [OpenAI Realtime Voice Reference](/reference/voice/openai-realtime).
+
   </Tabs.Tab>
 </Tabs>
 
 ### Using Multiple Voice Providers
+
 This example demonstrates how to create and use two different voice providers in Mastra: OpenAI for speech-to-text (STT) and PlayAI for text-to-speech (TTS).
 
 Start by creating instances of the voice providers with any necessary configuration.

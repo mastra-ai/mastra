@@ -18,7 +18,7 @@ import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
 // Initialize voice providers
 const openaiVoice = new OpenAIVoice();
 const elevenLabsVoice = new ElevenLabsVoice({
-  apiKey: process.env.ELEVENLABS_API_KEY
+  apiKey: process.env.ELEVENLABS_API_KEY,
 });
 
 // Get available speakers from OpenAI
@@ -48,8 +48,9 @@ This method does not accept any parameters.
     {
       name: "Promise<Array<{ voiceId: string } & TSpeakerMetadata>>",
       type: "Promise",
-      description: "A promise that resolves to an array of voice options, where each option contains at least a voiceId property and may include additional provider-specific metadata.",
-    }
+      description:
+        "A promise that resolves to an array of voice options, where each option contains at least a voiceId property and may include additional provider-specific metadata.",
+    },
   ]}
 />
 
@@ -70,181 +71,187 @@ Different voice providers return different metadata for their voices:
     />
   </Tabs.Tab>
 
-  <Tabs.Tab label="OpenAI Realtime">
-    <PropertiesTable
-      content={[
-        {
-          name: "voiceId",
-          type: "string",
-          description: "Unique identifier for the voice (e.g., 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer')",
-        }
-      ]}
-    />
-  </Tabs.Tab>
+<Tabs.Tab label="OpenAI Realtime">
+  <PropertiesTable
+    content={[
+      {
+        name: "voiceId",
+        type: "string",
+        description:
+          "Unique identifier for the voice (e.g., 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer')",
+      },
+    ]}
+  />
+</Tabs.Tab>
 
-  <Tabs.Tab label="Deepgram">
-    <PropertiesTable
-      content={[
-        {
-          name: "voiceId",
-          type: "string",
-          description: "Unique identifier for the voice",
-        },
-        {
-          name: "language",
-          type: "string",
-          description: "Language code embedded in the voice ID (e.g., 'en')",
-        }
-      ]}
-    />
-  </Tabs.Tab>
+<Tabs.Tab label="Deepgram">
+  <PropertiesTable
+    content={[
+      {
+        name: "voiceId",
+        type: "string",
+        description: "Unique identifier for the voice",
+      },
+      {
+        name: "language",
+        type: "string",
+        description: "Language code embedded in the voice ID (e.g., 'en')",
+      },
+    ]}
+  />
+</Tabs.Tab>
 
-  <Tabs.Tab label="ElevenLabs">
-    <PropertiesTable
-      content={[
-        {
-          name: "voiceId",
-          type: "string",
-          description: "Unique identifier for the voice",
-        },
-        {
-          name: "name",
-          type: "string",
-          description: "Human-readable name of the voice",
-        },
-        {
-          name: "category",
-          type: "string",
-          description: "Category of the voice (e.g., 'premade', 'cloned')",
-        }
-      ]}
-    />
-  </Tabs.Tab>
+<Tabs.Tab label="ElevenLabs">
+  <PropertiesTable
+    content={[
+      {
+        name: "voiceId",
+        type: "string",
+        description: "Unique identifier for the voice",
+      },
+      {
+        name: "name",
+        type: "string",
+        description: "Human-readable name of the voice",
+      },
+      {
+        name: "category",
+        type: "string",
+        description: "Category of the voice (e.g., 'premade', 'cloned')",
+      },
+    ]}
+  />
+</Tabs.Tab>
 
-  <Tabs.Tab label="Google">
-    <PropertiesTable
-      content={[
-        {
-          name: "voiceId",
-          type: "string",
-          description: "Unique identifier for the voice",
-        },
-        {
-          name: "languageCodes",
-          type: "string[]",
-          description: "Array of language codes supported by the voice (e.g., ['en-US'])",
-        }
-      ]}
-    />
-  </Tabs.Tab>
+<Tabs.Tab label="Google">
+  <PropertiesTable
+    content={[
+      {
+        name: "voiceId",
+        type: "string",
+        description: "Unique identifier for the voice",
+      },
+      {
+        name: "languageCodes",
+        type: "string[]",
+        description:
+          "Array of language codes supported by the voice (e.g., ['en-US'])",
+      },
+    ]}
+  />
+</Tabs.Tab>
 
-  <Tabs.Tab label="Azure">
-    <PropertiesTable
-      content={[
-        {
-          name: "voiceId",
-          type: "string",
-          description: "Unique identifier for the voice",
-        },
-        {
-          name: "language",
-          type: "string",
-          description: "Language code extracted from the voice ID (e.g., 'en')",
-        },
-        {
-          name: "region",
-          type: "string",
-          description: "Region code extracted from the voice ID (e.g., 'US')",
-        }
-      ]}
-    />
-  </Tabs.Tab>
+<Tabs.Tab label="Azure">
+  <PropertiesTable
+    content={[
+      {
+        name: "voiceId",
+        type: "string",
+        description: "Unique identifier for the voice",
+      },
+      {
+        name: "language",
+        type: "string",
+        description: "Language code extracted from the voice ID (e.g., 'en')",
+      },
+      {
+        name: "region",
+        type: "string",
+        description: "Region code extracted from the voice ID (e.g., 'US')",
+      },
+    ]}
+  />
+</Tabs.Tab>
 
-  <Tabs.Tab label="Murf">
-    <PropertiesTable
-      content={[
-        {
-          name: "voiceId",
-          type: "string",
-          description: "Unique identifier for the voice",
-        },
-        {
-          name: "name",
-          type: "string",
-          description: "Name of the voice (same as voiceId)",
-        },
-        {
-          name: "language",
-          type: "string",
-          description: "Language code extracted from the voice ID (e.g., 'en')",
-        },
-        {
-          name: "gender",
-          type: "string",
-          description: "Gender of the voice (always 'neutral' in current implementation)",
-        }
-      ]}
-    />
-  </Tabs.Tab>
+<Tabs.Tab label="Murf">
+  <PropertiesTable
+    content={[
+      {
+        name: "voiceId",
+        type: "string",
+        description: "Unique identifier for the voice",
+      },
+      {
+        name: "name",
+        type: "string",
+        description: "Name of the voice (same as voiceId)",
+      },
+      {
+        name: "language",
+        type: "string",
+        description: "Language code extracted from the voice ID (e.g., 'en')",
+      },
+      {
+        name: "gender",
+        type: "string",
+        description:
+          "Gender of the voice (always 'neutral' in current implementation)",
+      },
+    ]}
+  />
+</Tabs.Tab>
 
-  <Tabs.Tab label="PlayAI">
-    <PropertiesTable
-      content={[
-        {
-          name: "voiceId",
-          type: "string",
-          description: "Unique identifier for the voice (S3 URL to manifest.json)",
-        },
-        {
-          name: "name",
-          type: "string",
-          description: "Human-readable name of the voice (e.g., 'Angelo', 'Arsenio')",
-        },
-        {
-          name: "accent",
-          type: "string",
-          description: "Accent of the voice (e.g., 'US', 'Irish', 'US African American')",
-        },
-        {
-          name: "gender",
-          type: "string",
-          description: "Gender of the voice ('M' or 'F')",
-        },
-        {
-          name: "age",
-          type: "string",
-          description: "Age category of the voice (e.g., 'Young', 'Middle')",
-        },
-        {
-          name: "style",
-          type: "string",
-          description: "Speaking style of the voice (e.g., 'Conversational')",
-        }
-      ]}
-    />
-  </Tabs.Tab>
+<Tabs.Tab label="PlayAI">
+  <PropertiesTable
+    content={[
+      {
+        name: "voiceId",
+        type: "string",
+        description:
+          "Unique identifier for the voice (S3 URL to manifest.json)",
+      },
+      {
+        name: "name",
+        type: "string",
+        description:
+          "Human-readable name of the voice (e.g., 'Angelo', 'Arsenio')",
+      },
+      {
+        name: "accent",
+        type: "string",
+        description:
+          "Accent of the voice (e.g., 'US', 'Irish', 'US African American')",
+      },
+      {
+        name: "gender",
+        type: "string",
+        description: "Gender of the voice ('M' or 'F')",
+      },
+      {
+        name: "age",
+        type: "string",
+        description: "Age category of the voice (e.g., 'Young', 'Middle')",
+      },
+      {
+        name: "style",
+        type: "string",
+        description: "Speaking style of the voice (e.g., 'Conversational')",
+      },
+    ]}
+  />
+</Tabs.Tab>
 
-  <Tabs.Tab label="Speechify">
-    <PropertiesTable
-      content={[
-        {
-          name: "voiceId",
-          type: "string",
-          description: "Unique identifier for the voice",
-        },
-        {
-          name: "name",
-          type: "string",
-          description: "Human-readable name of the voice",
-        },
-        {
-          name: "language",
-          type: "string",
-          description: "Language code of the voice (e.g., 'en-US')",
-        }
-      ]}
-    />
-  </Tabs.Tab>
+<Tabs.Tab label="Speechify">
+  <PropertiesTable
+    content={[
+      {
+        name: "voiceId",
+        type: "string",
+        description: "Unique identifier for the voice",
+      },
+      {
+        name: "name",
+        type: "string",
+        description: "Human-readable name of the voice",
+      },
+      {
+        name: "language",
+        type: "string",
+        description: "Language code of the voice (e.g., 'en-US')",
+      },
+    ]}
+  />
+</Tabs.Tab>
 
   <Tabs.Tab label="Sarvam">
     <PropertiesTable

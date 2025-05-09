@@ -18,33 +18,33 @@ description: "ワークフローステップ内で動的ワークフローを作
 ### 基本的な例
 
 ```typescript
-import { Mastra, Step, Workflow } from '@mastra/core';
-import { z } from 'zod';
+import { Mastra, Step, Workflow } from "@mastra/core";
+import { z } from "zod";
 
 const isMastra = (mastra: any): mastra is Mastra => {
-  return mastra && typeof mastra === 'object' && mastra instanceof Mastra;
+  return mastra && typeof mastra === "object" && mastra instanceof Mastra;
 };
 
 // 動的ワークフローを作成して実行するステップ
 const createDynamicWorkflow = new Step({
-  id: 'createDynamicWorkflow',
+  id: "createDynamicWorkflow",
   outputSchema: z.object({
     dynamicWorkflowResult: z.any(),
   }),
   execute: async ({ context, mastra }) => {
     if (!mastra) {
-      throw new Error('Mastraインスタンスが利用できません');
+      throw new Error("Mastraインスタンスが利用できません");
     }
 
     if (!isMastra(mastra)) {
-      throw new Error('無効なMastraインスタンス');
+      throw new Error("無効なMastraインスタンス");
     }
 
     const inputData = context.triggerData.inputData;
 
     // 新しい動的ワークフローを作成
     const dynamicWorkflow = new Workflow({
-      name: 'dynamic-workflow',
+      name: "dynamic-workflow",
       mastra, // 新しいワークフローにmastraインスタンスを渡す
       triggerSchema: z.object({
         dynamicInput: z.string(),
@@ -53,7 +53,7 @@ const createDynamicWorkflow = new Step({
 
     // 動的ワークフローのステップを定義
     const dynamicStep = new Step({
-      id: 'dynamicStep',
+      id: "dynamicStep",
       execute: async ({ context }) => {
         const dynamicInput = context.triggerData.dynamicInput;
         return {
@@ -75,10 +75,11 @@ const createDynamicWorkflow = new Step({
 
     let dynamicWorkflowResult;
 
-    if (result.results['dynamicStep']?.status === 'success') {
-      dynamicWorkflowResult = result.results['dynamicStep']?.output.processedValue;
+    if (result.results["dynamicStep"]?.status === "success") {
+      dynamicWorkflowResult =
+        result.results["dynamicStep"]?.output.processedValue;
     } else {
-      throw new Error('動的ワークフローが失敗しました');
+      throw new Error("動的ワークフローが失敗しました");
     }
 
     // 動的ワークフローからの結果を返す
@@ -90,7 +91,7 @@ const createDynamicWorkflow = new Step({
 
 // 動的ワークフロークリエーターを使用するメインワークフロー
 const mainWorkflow = new Workflow({
-  name: 'main-workflow',
+  name: "main-workflow",
   triggerSchema: z.object({
     inputData: z.string(),
   }),
@@ -107,7 +108,7 @@ export const mastra = new Mastra({
 const run = mainWorkflow.createRun();
 const result = await run.start({
   triggerData: {
-    inputData: 'test',
+    inputData: "test",
   },
 });
 ```
@@ -117,15 +118,14 @@ const result = await run.start({
 入力パラメータに基づいて異なるワークフローを生成するワークフローファクトリーを作成できます:
 
 ```typescript
-
 const isMastra = (mastra: any): mastra is Mastra => {
-  return mastra && typeof mastra === 'object' && mastra instanceof Mastra;
+  return mastra && typeof mastra === "object" && mastra instanceof Mastra;
 };
 
 const workflowFactory = new Step({
-  id: 'workflowFactory',
+  id: "workflowFactory",
   inputSchema: z.object({
-    workflowType: z.enum(['simple', 'complex']),
+    workflowType: z.enum(["simple", "complex"]),
     inputData: z.string(),
   }),
   outputSchema: z.object({
@@ -133,11 +133,11 @@ const workflowFactory = new Step({
   }),
   execute: async ({ context, mastra }) => {
     if (!mastra) {
-      throw new Error('Mastra instance not available');
+      throw new Error("Mastra instance not available");
     }
 
     if (!isMastra(mastra)) {
-      throw new Error('Invalid Mastra instance');
+      throw new Error("Invalid Mastra instance");
     }
 
     // タイプに基づいて新しい動的ワークフローを作成
@@ -149,10 +149,10 @@ const workflowFactory = new Step({
       }),
     });
 
-    if (context.workflowType === 'simple') {
+    if (context.workflowType === "simple") {
       // 単一ステップのシンプルなワークフロー
       const simpleStep = new Step({
-        id: 'simpleStep',
+        id: "simpleStep",
         execute: async ({ context }) => {
           return {
             result: `シンプルな処理: ${context.triggerData.input}`,
@@ -164,7 +164,7 @@ const workflowFactory = new Step({
     } else {
       // 複数ステップの複雑なワークフロー
       const step1 = new Step({
-        id: 'step1',
+        id: "step1",
         outputSchema: z.object({
           intermediateResult: z.string(),
         }),
@@ -176,7 +176,7 @@ const workflowFactory = new Step({
       });
 
       const step2 = new Step({
-        id: 'step2',
+        id: "step2",
         execute: async ({ context }) => {
           const intermediate = context.getStepResult(step1).intermediateResult;
           return {
@@ -197,15 +197,15 @@ const workflowFactory = new Step({
     });
 
     // ワークフロータイプに基づいて適切な結果を返す
-    if (context.workflowType === 'simple') {
+    if (context.workflowType === "simple") {
       return {
         // @ts-ignore
-        result: result.results['simpleStep']?.output,
+        result: result.results["simpleStep"]?.output,
       };
     } else {
       return {
         // @ts-ignore
-        result: result.results['step2']?.output,
+        result: result.results["step2"]?.output,
       };
     }
   },

@@ -21,10 +21,11 @@ import { GithubLink } from "@/components/github-link";
 5. メタデータフィルターとセマンティック検索を組み合わせてクエリを処理
 
 ユーザーが質問をするとき：
-   - エージェントはクエリを分析して意図を理解
-   - 適切なメタデータフィルターを構築（例：トピック、日付、カテゴリによる）
-   - ベクトルクエリツールを使用して最も関連性の高い情報を見つける
-   - フィルタリングされた結果に基づいて文脈に応じた応答を生成
+
+- エージェントはクエリを分析して意図を理解
+- 適切なメタデータフィルターを構築（例：トピック、日付、カテゴリによる）
+- ベクトルクエリツールを使用して最も関連性の高い情報を見つける
+- フィルタリングされた結果に基づいて文脈に応じた応答を生成
 
 ## セットアップ
 
@@ -42,12 +43,12 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 次に、必要な依存関係をインポートします：
 
 ```typescript copy showLineNumbers filename="index.ts"
-import { openai } from '@ai-sdk/openai';
-import { Mastra } from '@mastra/core';
-import { Agent } from '@mastra/core/agent';
-import { PgVector, PGVECTOR_PROMPT } from '@mastra/pg';
-import { createVectorQueryTool, MDocument } from '@mastra/rag';
-import { embedMany } from 'ai';
+import { openai } from "@ai-sdk/openai";
+import { Mastra } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
+import { PgVector, PGVECTOR_PROMPT } from "@mastra/pg";
+import { createVectorQueryTool, MDocument } from "@mastra/rag";
+import { embedMany } from "ai";
 ```
 
 ## ベクトルクエリツールの作成
@@ -56,16 +57,17 @@ import { embedMany } from 'ai';
 
 ```typescript copy showLineNumbers{9} filename="index.ts"
 const vectorQueryTool = createVectorQueryTool({
-  id: 'vectorQueryTool',
+  id: "vectorQueryTool",
   vectorStoreName: "pgVector",
   indexName: "embeddings",
-  model: openai.embedding('text-embedding-3-small'),
+  model: openai.embedding("text-embedding-3-small"),
   enableFilter: true,
-  filterPrompt: PGVECTOR_PROMPT // Use the prompt for your vector store
+  filterPrompt: PGVECTOR_PROMPT, // Use the prompt for your vector store
 });
 ```
 
 各プロンプトには以下が含まれます：
+
 - サポートされている演算子（比較、配列、論理、要素）
 - 各演算子の使用例
 - ストア固有の制限とルール
@@ -76,15 +78,17 @@ const vectorQueryTool = createVectorQueryTool({
 ドキュメントを作成し、メタデータを含むチャンクに処理します:
 
 ```typescript copy showLineNumbers{17} filename="index.ts"
-const doc = MDocument.fromText(`The Impact of Climate Change on Global Agriculture...`);
+const doc = MDocument.fromText(
+  `The Impact of Climate Change on Global Agriculture...`,
+);
 
 const chunks = await doc.chunk({
-  strategy: 'recursive',
+  strategy: "recursive",
   size: 512,
   overlap: 50,
-  separator: '\n',
+  separator: "\n",
   extract: {
-    keywords: true,  // Extracts keywords from each chunk
+    keywords: true, // Extracts keywords from each chunk
   },
 });
 ```
@@ -99,9 +103,9 @@ const chunkMetadata = chunks?.map((chunk: any, index: number) => ({
   ...chunk.metadata,
   nested: {
     keywords: chunk.metadata.excerptKeywords
-      .replace('KEYWORDS:', '')
-      .split(',')
-      .map(k => k.trim()),
+      .replace("KEYWORDS:", "")
+      .split(",")
+      .map((k) => k.trim()),
     id: index,
   },
 }));
@@ -112,13 +116,14 @@ const chunkMetadata = chunks?.map((chunk: any, index: number) => ({
 エージェントは、ユーザーのクエリを理解し、それを適切なメタデータフィルターに変換するように設定されています。
 
 エージェントには、ベクトルクエリツールと以下を含むシステムプロンプトが必要です：
+
 - 利用可能なフィルターフィールドのメタデータ構造
 - フィルター操作と構文のためのベクトルストアプロンプト
 
 ```typescript copy showLineNumbers{43} filename="index.ts"
 export const ragAgent = new Agent({
-  name: 'RAG Agent',
-  model: openai('gpt-4o-mini'),
+  name: "RAG Agent",
+  model: openai("gpt-4o-mini"),
   instructions: `
   You are a helpful assistant that answers questions based on the provided context. Keep your answers concise and relevant.
 
@@ -145,6 +150,7 @@ export const ragAgent = new Agent({
 ```
 
 エージェントの指示は以下を目的としています：
+
 - ユーザーのクエリを処理してフィルター要件を特定する
 - メタデータ構造を使用して関連情報を見つける
 - vectorQueryToolと提供されたベクトルストアプロンプトを通じて適切なフィルターを適用する
@@ -163,7 +169,7 @@ export const mastra = new Mastra({
   agents: { ragAgent },
   vectors: { pgVector },
 });
-const agent = mastra.getAgent('ragAgent');
+const agent = mastra.getAgent("ragAgent");
 ```
 
 ## 埋め込みの作成と保存
@@ -172,19 +178,19 @@ const agent = mastra.getAgent('ragAgent');
 
 ```typescript copy showLineNumbers{78} filename="index.ts"
 const { embeddings } = await embedMany({
-  model: openai.embedding('text-embedding-3-small'),
-  values: chunks.map(chunk => chunk.text),
+  model: openai.embedding("text-embedding-3-small"),
+  values: chunks.map((chunk) => chunk.text),
 });
 
-const vectorStore = mastra.getVector('pgVector');
+const vectorStore = mastra.getVector("pgVector");
 await vectorStore.createIndex({
-  indexName: 'embeddings',
+  indexName: "embeddings",
   dimension: 1536,
 });
 
 // Store both embeddings and metadata together
 await vectorStore.upsert({
-  indexName: 'embeddings',
+  indexName: "embeddings",
   vectors: embeddings,
   metadata: chunkMetadata,
 });
@@ -197,20 +203,22 @@ await vectorStore.upsert({
 メタデータフィルターを使用して、さまざまなクエリを試してください:
 
 ```typescript copy showLineNumbers{96} filename="index.ts"
-const queryOne = 'What are the adaptation strategies mentioned?';
+const queryOne = "What are the adaptation strategies mentioned?";
 const answerOne = await agent.generate(queryOne);
-console.log('\nQuery:', queryOne);
-console.log('Response:', answerOne.text);
+console.log("\nQuery:", queryOne);
+console.log("Response:", answerOne.text);
 
-const queryTwo = 'Show me recent sections. Check the "nested.id" field and return values that are greater than 2.';
+const queryTwo =
+  'Show me recent sections. Check the "nested.id" field and return values that are greater than 2.';
 const answerTwo = await agent.generate(queryTwo);
-console.log('\nQuery:', queryTwo);
-console.log('Response:', answerTwo.text);
+console.log("\nQuery:", queryTwo);
+console.log("Response:", answerTwo.text);
 
-const queryThree = 'Search the "text" field using regex operator to find sections containing "temperature".';
+const queryThree =
+  'Search the "text" field using regex operator to find sections containing "temperature".';
 const answerThree = await agent.generate(queryThree);
-console.log('\nQuery:', queryThree);
-console.log('Response:', answerThree.text);
+console.log("\nQuery:", queryThree);
+console.log("Response:", answerThree.text);
 ```
 
 <br />

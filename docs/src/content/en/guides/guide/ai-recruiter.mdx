@@ -32,14 +32,14 @@ OPENAI_API_KEY=<your-openai-key>
 You want to extract candidate details from the resume text and classify them as technical or non-technical. This step calls an LLM to parse the resume and return structured JSON, including the name, technical status, specialty, and the original resume text. The code reads resumeText from trigger data, prompts the LLM, and returns organized fields for use in subsequent steps.
 
 ```ts filename="src/mastra/index.ts" copy
-import { Agent } from '@mastra/core/agent';
+import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 
 const recruiter = new Agent({
   name: "Recruiter Agent",
   instructions: `You are a recruiter.`,
   model: openai("gpt-4o-mini"),
-})
+});
 
 const gatherCandidateInfo = new Step({
   id: "gatherCandidateInfo",

@@ -10,14 +10,14 @@ VercelDeployerは、MastraアプリケーションをVercelにデプロイし、
 ## 使用例
 
 ```typescript
-import { Mastra } from '@mastra/core';
-import { VercelDeployer } from '@mastra/deployer-vercel';
+import { Mastra } from "@mastra/core";
+import { VercelDeployer } from "@mastra/deployer-vercel";
 
 const mastra = new Mastra({
   deployer: new VercelDeployer({
-    teamSlug: 'your-team-slug',
-    projectName: 'your-project-name',
-    token: 'your-vercel-token'
+    teamSlug: "your-team-slug",
+    projectName: "your-project-name",
+    token: "your-vercel-token",
   }),
   // ... other Mastra configuration options
 });
@@ -49,7 +49,6 @@ const mastra = new Mastra({
     },
   ]}
 />
-
 
 ### 環境変数
 
@@ -108,6 +107,7 @@ VercelDeployerは自動的に`.mastra/output`に以下の設定を含む`vercel.
 ビルド後、Mastraアプリケーションの`.mastra/output`を以下のいずれかの方法でVercelにデプロイできます：
 
 1. **Vercel CLI**：Vercelの公式CLIツールを使用して直接デプロイ
+
    - CLIをインストール：`npm install -g vercel`
    - 出力ディレクトリに移動：`cd .mastra/output`
    - プレビュー環境にデプロイ：`vercel`

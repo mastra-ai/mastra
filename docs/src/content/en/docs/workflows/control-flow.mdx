@@ -34,13 +34,13 @@ When different outcomes require different paths, branching is helpful. You can a
 ```typescript
 myWorkflow
   .step(stepA)
-    .then(stepB)
-    .then(stepD)
+  .then(stepB)
+  .then(stepD)
   .after(stepA)
-    .step(stepC)
-    .then(stepE)
+  .step(stepC)
+  .then(stepE)
   .after([stepD, stepE])
-    .step(stepF);
+  .step(stepF);
 ```
 
 In this example:
@@ -63,15 +63,17 @@ myWorkflow
   .then(validateProductData)
   // This step will only run after BOTH validateUserData AND validateProductData have completed
   .after([validateUserData, validateProductData])
-  .step(processOrder)
+  .step(processOrder);
 ```
 
 In this example:
+
 - `fetchUserData` and `fetchProductData` run in parallel branches
 - Each branch has its own validation step
 - The `processOrder` step only executes after both validation steps have completed successfully
 
 This pattern is particularly useful for:
+
 - Joining parallel execution paths
 - Implementing synchronization points in your workflow
 - Ensuring all required data is available before proceeding
@@ -95,7 +97,7 @@ myWorkflow
 
   // This step depends on the completion of multiple branches
   .after([stepC, stepE, stepG])
-  .step(finalStep)
+  .step(finalStep);
 ```
 
 ## Cyclical Dependencies and Loops
@@ -124,6 +126,7 @@ While this approach still works, the newer `until` and `while` methods provide a
 ### Using `until` for Condition-Based Loops
 
 The `until` method repeats a step until a specified condition becomes true. It takes these arguments:
+
 1. A condition that determines when to stop looping
 2. The step to repeat
 3. Optional variables to pass to the repeated step
@@ -131,7 +134,7 @@ The `until` method repeats a step until a specified condition becomes true. It t
 ```typescript
 // Step that increments a counter until target is reached
 const incrementStep = new Step({
-  id: 'increment',
+  id: "increment",
   inputSchema: z.object({
     // Current counter value
     counter: z.number().optional(),
@@ -159,9 +162,9 @@ workflow
       // Pass current counter to next iteration
       counter: {
         step: incrementStep,
-        path: 'updatedCounter'
-      }
-    }
+        path: "updatedCounter",
+      },
+    },
   )
   .then(finalStep);
 ```
@@ -173,16 +176,16 @@ workflow
   .step(incrementStep)
   .until(
     {
-      ref: { step: incrementStep, path: 'updatedCounter' },
+      ref: { step: incrementStep, path: "updatedCounter" },
       query: { $gte: 10 },
     },
     incrementStep,
     {
       counter: {
         step: incrementStep,
-        path: 'updatedCounter'
-      }
-    }
+        path: "updatedCounter",
+      },
+    },
   )
   .then(finalStep);
 ```
@@ -190,6 +193,7 @@ workflow
 ### Using `while` for Condition-Based Loops
 
 The `while` method repeats a step as long as a specified condition remains true. It takes the same arguments as `until`:
+
 1. A condition that determines when to continue looping
 2. The step to repeat
 3. Optional variables to pass to the repeated step
@@ -197,7 +201,7 @@ The `while` method repeats a step as long as a specified condition remains true.
 ```typescript
 // Step that increments a counter while below target
 const incrementStep = new Step({
-  id: 'increment',
+  id: "increment",
   inputSchema: z.object({
     // Current counter value
     counter: z.number().optional(),
@@ -225,9 +229,9 @@ workflow
       // Pass current counter to next iteration
       counter: {
         step: incrementStep,
-        path: 'updatedCounter'
-      }
-    }
+        path: "updatedCounter",
+      },
+    },
   )
   .then(finalStep);
 ```
@@ -239,16 +243,16 @@ workflow
   .step(incrementStep)
   .while(
     {
-      ref: { step: incrementStep, path: 'updatedCounter' },
+      ref: { step: incrementStep, path: "updatedCounter" },
       query: { $lt: 10 },
     },
     incrementStep,
     {
       counter: {
         step: incrementStep,
-        path: 'updatedCounter'
-      }
-    }
+        path: "updatedCounter",
+      },
+    },
   )
   .then(finalStep);
 ```
@@ -257,14 +261,14 @@ workflow
 
 When using reference-based conditions, you can use these comparison operators:
 
-| Operator | Description |
-|----------|-------------|
-| `$eq`    | Equal to    |
-| `$ne`    | Not equal to |
-| `$gt`    | Greater than |
+| Operator | Description              |
+| -------- | ------------------------ |
+| `$eq`    | Equal to                 |
+| `$ne`    | Not equal to             |
+| `$gt`    | Greater than             |
 | `$gte`   | Greater than or equal to |
-| `$lt`    | Less than |
-| `$lte`   | Less than or equal to |
+| `$lt`    | Less than                |
+| `$lte`   | Less than or equal to    |
 
 ## Conditions
 
@@ -354,13 +358,13 @@ import { Step, Workflow } from "@mastra/core/workflows";
 import { z } from "zod";
 
 const fetchUserStep = new Step({
-  id: 'fetchUser',
+  id: "fetchUser",
   outputSchema: z.object({
     name: z.string(),
     userId: z.string(),
   }),
   execute: async ({ context }) => {
-    return { name: 'John Doe', userId: '123' };
+    return { name: "John Doe", userId: "123" };
   },
 });
 
@@ -368,7 +372,9 @@ const analyzeDataStep = new Step({
   id: "analyzeData",
   execute: async ({ context }) => {
     // Type-safe access to previous step result
-    const userData = context.getStepResult<{ name: string, userId: string }>("fetchUser");
+    const userData = context.getStepResult<{ name: string; userId: string }>(
+      "fetchUser",
+    );
 
     if (!userData) {
       return { status: "error", message: "User data not found" };
@@ -376,12 +382,11 @@ const analyzeDataStep = new Step({
 
     return {
       analysis: `Analyzed data for user ${userData.name}`,
-      userId: userData.userId
+      userId: userData.userId,
     };
   },
 });
 ```
-
 
 #### Using Step References
 
@@ -403,7 +408,7 @@ const fetchUserStep = new Step({
     return {
       userId: "user123",
       name: "John Doe",
-      email: "john@example.com"
+      email: "john@example.com",
     };
   },
 });
@@ -416,7 +421,7 @@ const processUserStep = new Step({
 
     return {
       processed: true,
-      userName: userData?.name
+      userName: userData?.name,
     };
   },
 });
@@ -425,15 +430,8 @@ const workflow = new Workflow({
   name: "user-workflow",
 });
 
-workflow
-  .step(fetchUserStep)
-  .then(processUserStep)
-  .commit();
+workflow.step(fetchUserStep).then(processUserStep).commit();
 ```
-
-
-
-
 
 ### Using Variable Mapping
 
@@ -456,7 +454,7 @@ const fetchUserStep = new Step({
     return {
       userId: "user123",
       name: "John Doe",
-      email: "john@example.com"
+      email: "john@example.com",
     };
   },
 });
@@ -473,7 +471,7 @@ const sendEmailStep = new Step({
     // Send email logic here
     return {
       status: "sent",
-      to: recipientEmail
+      to: recipientEmail,
     };
   },
 });
@@ -487,9 +485,9 @@ workflow
   .then(sendEmailStep, {
     variables: {
       // Map specific fields from fetchUser to sendEmail inputs
-      recipientEmail: { step: fetchUserStep, path: 'email' },
-      recipientName: { step: fetchUserStep, path: 'name' }
-    }
+      recipientEmail: { step: fetchUserStep, path: "email" },
+      recipientName: { step: fetchUserStep, path: "name" },
+    },
   })
   .commit();
 ```
@@ -506,20 +504,20 @@ import { Step, Workflow } from "@mastra/core/workflows";
 import { z } from "zod";
 
 const processOrderStep = new Step({
-  id: 'processOrder',
+  id: "processOrder",
   execute: async ({ context }) => {
     // Access data from a previous step
-    let userData: { name: string, userId: string };
-    if (context.steps['fetchUser']?.status === 'success') {
+    let userData: { name: string; userId: string };
+    if (context.steps["fetchUser"]?.status === "success") {
       userData = context.steps.fetchUser.output;
     } else {
-      throw new Error('User data not found');
+      throw new Error("User data not found");
     }
 
     return {
-      orderId: 'order123',
+      orderId: "order123",
       userId: userData.userId,
-      status: 'processing',
+      status: "processing",
     };
   },
 });
@@ -528,10 +526,7 @@ const workflow = new Workflow({
   name: "order-workflow",
 });
 
-workflow
-  .step(fetchUserStep)
-  .then(processOrderStep)
-  .commit();
+workflow.step(fetchUserStep).then(processOrderStep).commit();
 ```
 
 ### Workflow-Level Type Safety
@@ -542,7 +537,6 @@ This allows you to get type safety for the context object on conditions, and on 
 ```typescript showLineNumbers filename="src/mastra/workflows/workflow-typing.ts" copy
 import { Step, Workflow } from "@mastra/core/workflows";
 import { z } from "zod";
-
 
 // Create steps with typed outputs
 const fetchUserStep = new Step({
@@ -556,7 +550,7 @@ const fetchUserStep = new Step({
     return {
       userId: "user123",
       name: "John Doe",
-      email: "john@example.com"
+      email: "john@example.com",
     };
   },
 });
@@ -569,7 +563,7 @@ const processOrderStep = new Step({
 
     return {
       orderId: "order123",
-      status: "processing"
+      status: "processing",
     };
   },
 });
@@ -583,8 +577,8 @@ workflow
   .then(processOrderStep)
   .until(async ({ context }) => {
     // TypeScript knows the shape of userData here
-    const res = context.getStepResult('fetchUser');
-    return res?.userId === '123';
+    const res = context.getStepResult("fetchUser");
+    return res?.userId === "123";
   }, processOrderStep)
   .commit();
 ```
@@ -609,12 +603,12 @@ const processOrderStep = new Step({
   id: "processOrder",
   execute: async ({ context }) => {
     // Access trigger data with type safety
-    const triggerData = context.getStepResult<TriggerType>('trigger');
+    const triggerData = context.getStepResult<TriggerType>("trigger");
 
     return {
       customerId: triggerData?.customerId,
       itemCount: triggerData?.orderItems.length || 0,
-      status: "processing"
+      status: "processing",
     };
   },
 });
@@ -624,9 +618,7 @@ const workflow = new Workflow({
   triggerSchema,
 });
 
-workflow
-  .step(processOrderStep)
-  .commit();
+workflow.step(processOrderStep).commit();
 ```
 
 ### Accessing Resume Data
@@ -652,7 +644,7 @@ const processOrderStep = new Step({
 
     return {
       orderId,
-      status: "processed"
+      status: "processed",
     };
   },
 });
@@ -661,22 +653,20 @@ const workflow = new Workflow({
   name: "order-workflow",
 });
 
-workflow
-  .step(processOrderStep)
-  .commit();
+workflow.step(processOrderStep).commit();
 
 const run = workflow.createRun();
 const result = await run.start();
 
 const resumedResult = await workflow.resume({
   runId: result.runId,
-  stepId: 'processOrder',
+  stepId: "processOrder",
   inputData: {
-    orderId: '123',
+    orderId: "123",
   },
 });
 
-console.log({resumedResult});
+console.log({ resumedResult });
 ```
 
 ### Accessing Workflow Results
@@ -697,7 +687,7 @@ const fetchUserStep = new Step({
     return {
       userId: "user123",
       name: "John Doe",
-      email: "john@example.com"
+      email: "john@example.com",
     };
   },
 });
@@ -712,7 +702,7 @@ const processOrderStep = new Step({
     const userData = context.getStepResult(fetchUserStep);
     return {
       orderId: "order123",
-      status: "processing"
+      status: "processing",
     };
   },
 });
@@ -721,44 +711,45 @@ const workflow = new Workflow<[typeof fetchUserStep, typeof processOrderStep]>({
   name: "typed-workflow",
 });
 
-workflow
-  .step(fetchUserStep)
-  .then(processOrderStep)
-  .commit();
+workflow.step(fetchUserStep).then(processOrderStep).commit();
 
 const run = workflow.createRun();
 const result = await run.start();
 
 // The result is a discriminated union of the step results
 // So it needs to be narrowed down via status checks
-if (result.results.processOrder.status === 'success') {
+if (result.results.processOrder.status === "success") {
   // TypeScript will know the shape of the results
   const orderId = result.results.processOrder.output.orderId;
-  console.log({orderId});
+  console.log({ orderId });
 }
 
-if (result.results.fetchUser.status === 'success') {
+if (result.results.fetchUser.status === "success") {
   const userId = result.results.fetchUser.output.userId;
-  console.log({userId});
+  console.log({ userId });
 }
 ```
 
 ### Best Practices for Data Flow
 
 1. **Use getStepResult with Step References for Type Safety**
+
    - Ensures TypeScript can infer the correct types
    - Catches type errors at compile time
 
-2. **Use Variable Mapping for Explicit Dependencies*
+2. \*_Use Variable Mapping for Explicit Dependencies_
+
    - Makes data flow clear and maintainable
    - Provides good documentation of step dependencies
 
 3. **Define Output Schemas for Steps**
+
    - Validates data at runtime
-	 - Validates return type of the `execute` function
+   - Validates return type of the `execute` function
    - Improves type inference in TypeScript
 
 4. **Handle Missing Data Gracefully**
+
    - Always check if step results exist before accessing properties
    - Provide fallback values for optional data
 
@@ -768,11 +759,10 @@ if (result.results.fetchUser.status === 'success') {
 
 ### Comparison of Data Flow Methods
 
-| Method | Type Safety | Explicitness | Use Case |
-|--------|------------|--------------|----------|
-| getStepResult | Highest | High | Complex workflows with strict typing requirements |
-| Variable Mapping | High | High | When dependencies need to be clear and explicit |
-| context.steps | Medium | Low | Quick access to step data in simple workflows |
+| Method           | Type Safety | Explicitness | Use Case                                          |
+| ---------------- | ----------- | ------------ | ------------------------------------------------- |
+| getStepResult    | Highest     | High         | Complex workflows with strict typing requirements |
+| Variable Mapping | High        | High         | When dependencies need to be clear and explicit   |
+| context.steps    | Medium      | Low          | Quick access to step data in simple workflows     |
 
 By choosing the right data flow method for your use case, you can create workflows that are both type-safe and maintainable.
-

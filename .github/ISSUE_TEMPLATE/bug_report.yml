@@ -1,7 +1,7 @@
 name: Bug Report
 description: Report a bug to help us improve Mastra
-title: "[BUG] "
-labels: ["bug"]
+title: '[BUG] '
+labels: ['bug']
 body:
   - type: markdown
     attributes:
@@ -12,7 +12,7 @@ body:
     attributes:
       label: Describe the Bug
       description: A clear and concise description of what the bug is.
-      placeholder: "When trying to use the workflow feature with an agent, the execution fails with an error message..."
+      placeholder: 'When trying to use the workflow feature with an agent, the execution fails with an error message...'
     validations:
       required: true
 
@@ -33,7 +33,7 @@ body:
     attributes:
       label: Expected Behavior
       description: A clear and concise description of what you expected to happen.
-      placeholder: "The workflow should execute successfully and return the expected result."
+      placeholder: 'The workflow should execute successfully and return the expected result.'
     validations:
       required: true
 
@@ -77,7 +77,7 @@ body:
       render: typescript
       placeholder: |
         import { createWorkflow } from "@mastra/core";
-        
+
         // Your code example here
     validations:
       required: false
@@ -87,7 +87,7 @@ body:
       label: Error Logs
       description: If applicable, include any error messages or logs.
       render: shell
-      placeholder: "Error: Failed to execute workflow..."
+      placeholder: 'Error: Failed to execute workflow...'
     validations:
       required: false
 
@@ -95,7 +95,7 @@ body:
     attributes:
       label: Additional Context
       description: Add any other context about the problem here.
-      placeholder: "Any other information that might be relevant to the issue."
+      placeholder: 'Any other information that might be relevant to the issue.'
     validations:
       required: false
 

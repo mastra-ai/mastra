@@ -156,55 +156,69 @@ complexWorkflow
 
   // Third branch (another path from stepOne)
   .after(stepOne)
-  .step(new Step({
-    id: "alternativePath",
-    execute: async ({ context }) => {
-      const stepOneResult = context.getStepResult<{ doubledValue: number }>("stepOne");
-      return {
-        result: (stepOneResult?.doubledValue || 0) * 3
-      }
-    }
-  }))
+  .step(
+    new Step({
+      id: "alternativePath",
+      execute: async ({ context }) => {
+        const stepOneResult = context.getStepResult<{ doubledValue: number }>(
+          "stepOne",
+        );
+        return {
+          result: (stepOneResult?.doubledValue || 0) * 3,
+        };
+      },
+    }),
+  )
 
   // Merge first and second branches
   .after([stepTwo, stepFour])
-  .step(new Step({
-    id: "partialMerge",
-    execute: async ({ context }) => {
-      const stepTwoResult = context.getStepResult<{ isDivisibleByFive: boolean }>("stepTwo");
-      const stepFourResult = context.getStepResult<{ isDivisibleByThree: boolean }>("stepFour");
+  .step(
+    new Step({
+      id: "partialMerge",
+      execute: async ({ context }) => {
+        const stepTwoResult = context.getStepResult<{
+          isDivisibleByFive: boolean;
+        }>("stepTwo");
+        const stepFourResult = context.getStepResult<{
+          isDivisibleByThree: boolean;
+        }>("stepFour");
 
-      return {
-        intermediateResult: "Processed first two branches",
-        branchResults: {
-          branch1: stepTwoResult?.isDivisibleByFive,
-          branch2: stepFourResult?.isDivisibleByThree
-        }
-      }
-    }
-  }))
+        return {
+          intermediateResult: "Processed first two branches",
+          branchResults: {
+            branch1: stepTwoResult?.isDivisibleByFive,
+            branch2: stepFourResult?.isDivisibleByThree,
+          },
+        };
+      },
+    }),
+  )
 
   // Final merge of all branches
   .after(["partialMerge", "alternativePath"])
-  .step(new Step({
-    id: "finalMerge",
-    execute: async ({ context }) => {
-      const partialMergeResult = context.getStepResult<{
-        intermediateResult: string,
-        branchResults: { branch1: boolean, branch2: boolean }
-      }>("partialMerge");
+  .step(
+    new Step({
+      id: "finalMerge",
+      execute: async ({ context }) => {
+        const partialMergeResult = context.getStepResult<{
+          intermediateResult: string;
+          branchResults: { branch1: boolean; branch2: boolean };
+        }>("partialMerge");
 
-      const alternativePathResult = context.getStepResult<{ result: number }>("alternativePath");
+        const alternativePathResult = context.getStepResult<{ result: number }>(
+          "alternativePath",
+        );
 
-      return {
-        finalResult: "All branches processed",
-        combinedData: {
-          fromPartialMerge: partialMergeResult?.branchResults,
-          fromAlternativePath: alternativePathResult?.result
-        }
-      }
-    }
-  }))
+        return {
+          finalResult: "All branches processed",
+          combinedData: {
+            fromPartialMerge: partialMergeResult?.branchResults,
+            fromAlternativePath: alternativePathResult?.result,
+          },
+        };
+      },
+    }),
+  )
   .commit();
 ```
 

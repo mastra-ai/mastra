@@ -10,7 +10,9 @@ import { Callout } from "nextra/components";
 Mastra provides `RuntimeContext`, a system based on dependency injection, that allows you to pass dynamic, request-specific configuration to your tools during execution. This is useful when a tool's behavior needs to change based on user identity, request headers, or other runtime factors, without altering the tool's core code.
 
 <Callout>
-  **Note:** `RuntimeContext` is primarily used for passing data *into* tool executions. It's distinct from agent memory, which handles conversation history and state persistence across multiple calls.
+  **Note:** `RuntimeContext` is primarily used for passing data *into* tool
+  executions. It's distinct from agent memory, which handles conversation
+  history and state persistence across multiple calls.
 </Callout>
 
 ## Basic Usage
@@ -50,7 +52,7 @@ import { z } from "zod";
 // Dummy fetch function
 async function fetchWeather(
   location: string,
-  options: { temperatureUnit: "celsius" | "fahrenheit" }
+  options: { temperatureUnit: "celsius" | "fahrenheit" },
 ): Promise<any> {
   console.log(`Fetching weather for ${location} in ${options.temperatureUnit}`);
   // Replace with actual API call
@@ -73,7 +75,9 @@ export const weatherTool = createTool({
       temperatureUnit,
     });
 
-    return { result: `The temperature is ${weather.temperature}°${temperatureUnit === "celsius" ? "C" : "F"}` };
+    return {
+      result: `The temperature is ${weather.temperature}°${temperatureUnit === "celsius" ? "C" : "F"}`,
+    };
   },
 });
 ```
@@ -104,7 +108,8 @@ export const mastra = new Mastra({
     middleware: [
       async (c, next) => {
         // Get the RuntimeContext instance
-        const runtimeContext = c.get<RuntimeContext<WeatherRuntimeContext>>("runtimeContext");
+        const runtimeContext =
+          c.get<RuntimeContext<WeatherRuntimeContext>>("runtimeContext");
 
         // Get country code from request header
         const country = c.req.header("CF-IPCountry");

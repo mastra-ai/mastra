@@ -3,31 +3,31 @@ title: "Example: Using a Tool/Agent as a Step | Workflows | Mastra Docs"
 description: Example of using Mastra to integrate a tool or an agent as a step in a workflow.
 ---
 
-import { GithubLink } from '@/components/github-link';
+import { GithubLink } from "@/components/github-link";
 
 # Tool/Agent as a Workflow step
 
 This example demonstrates how to create and integrate a tool or an agent as a workflow step.
 Mastra provides a `createStep` helper function which accepts either a step or agent and returns an object which satisfies the Step interface.
 
-
 ## Define Interop Workflow
+
 Defines a workflow which takes an agent and tool as a step.
 
 ```ts showLineNumbers copy filename="workflows/interop-workflow.ts"
-import { createWorkflow, createStep } from '@mastra/core/workflows/vNext'
-import { weatherTool } from '../tools'
-import { weatherReporterAgent } from '../agents'
-import { z } from 'zod'
+import { createWorkflow, createStep } from "@mastra/core/workflows/vNext";
+import { weatherTool } from "../tools";
+import { weatherReporterAgent } from "../agents";
+import { z } from "zod";
 
-const fetchWeather = createStep(weatherTool)
-const reportWeather = createStep(weatherReporterAgent)
+const fetchWeather = createStep(weatherTool);
+const reportWeather = createStep(weatherReporterAgent);
 
 const weatherWorkflow = createWorkflow({
   steps: [fetchWeather, reportWeather],
-  id: 'weather-workflow',
+  id: "weather-workflow",
   inputSchema: z.object({
-    location: z.string().describe('The city to get the weather for'),
+    location: z.string().describe("The city to get the weather for"),
   }),
   outputSchema: z.object({
     text: z.string(),
@@ -36,60 +36,62 @@ const weatherWorkflow = createWorkflow({
   .then(fetchWeather)
   .then(
     createStep({
-      id: 'report-weather',
+      id: "report-weather",
       inputSchema: fetchWeather.outputSchema,
       outputSchema: z.object({
         text: z.string(),
       }),
       execute: async ({ inputData, mastra }) => {
-        const prompt = 'Forecast data: ' + JSON.stringify(inputData)
-        const agent = mastra.getAgent('weatherReporterAgent')
+        const prompt = "Forecast data: " + JSON.stringify(inputData);
+        const agent = mastra.getAgent("weatherReporterAgent");
         const result = await agent.generate([
           {
-            role: 'user',
+            role: "user",
             content: prompt,
           },
-        ])
-        return { text: result.text }
+        ]);
+        return { text: result.text };
       },
-    })
-  )
+    }),
+  );
 
-weatherWorkflow.commit()
+weatherWorkflow.commit();
 
-export { weatherWorkflow }
+export { weatherWorkflow };
 ```
 
 ## Register Workflow instance with Mastra class
+
 Register the workflow with the mastra instance.
 
 ```ts showLineNumbers copy filename="index.ts"
-import { Mastra } from '@mastra/core/mastra'
-import { createLogger } from '@mastra/core/logger'
-import { weatherWorkflow } from './workflows'
+import { Mastra } from "@mastra/core/mastra";
+import { createLogger } from "@mastra/core/logger";
+import { weatherWorkflow } from "./workflows";
 
 const mastra = new Mastra({
   vnext_workflows: {
     weatherWorkflow,
   },
   logger: createLogger({
-    name: 'Mastra',
-    level: 'info',
+    name: "Mastra",
+    level: "info",
   }),
-})
+});
 
-export { mastra }
+export { mastra };
 ```
 
 ## Execute the workflow
+
 Here, we'll get the weather workflow from the mastra instance, then create a run and execute the created run with the required inputData.
 
 ```ts showLineNumbers copy filename="exec.ts"
-import { mastra } from "./"
+import { mastra } from "./";
 
-const workflow = mastra.vnext_getWorkflow('weatherWorkflow')
-const run = workflow.createRun()
+const workflow = mastra.vnext_getWorkflow("weatherWorkflow");
+const run = workflow.createRun();
 
-const result = await run.start({ inputData: { location: "Lagos" } })
-console.dir(result, { depth: null })
+const result = await run.start({ inputData: { location: "Lagos" } });
+console.dir(result, { depth: null });
 ```

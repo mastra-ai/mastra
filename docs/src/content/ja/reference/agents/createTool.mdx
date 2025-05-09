@@ -25,7 +25,7 @@ import { z } from "zod";
 // Helper function to fetch stock data
 const getStockPrice = async (symbol: string) => {
   const response = await fetch(
-    `https://mastra-stock-data.vercel.app/api/stock-data?symbol=${symbol}`
+    `https://mastra-stock-data.vercel.app/api/stock-data?symbol=${symbol}`,
   );
   const data = await response.json();
   return data.prices["4. close"];
@@ -36,24 +36,24 @@ export const stockPriceTool = createTool({
   id: "getStockPrice",
   description: "指定されたティッカーシンボルの現在の株価を取得します",
   inputSchema: z.object({
-    symbol: z.string().describe("株式ティッカーシンボル（例: AAPL, MSFT）")
+    symbol: z.string().describe("株式ティッカーシンボル（例: AAPL, MSFT）"),
   }),
   outputSchema: z.object({
     symbol: z.string(),
     price: z.number(),
     currency: z.string(),
-    timestamp: z.string()
+    timestamp: z.string(),
   }),
   execute: async ({ context }) => {
     const price = await getStockPrice(context.symbol);
-    
+
     return {
       symbol: context.symbol,
       price: parseFloat(price),
       currency: "USD",
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     };
-  }
+  },
 });
 
 // Create a tool that uses the thread context
@@ -61,15 +61,15 @@ export const threadInfoTool = createTool({
   id: "getThreadInfo",
   description: "現在の会話スレッドに関する情報を返します",
   inputSchema: z.object({
-    includeResource: z.boolean().optional().default(false)
+    includeResource: z.boolean().optional().default(false),
   }),
   execute: async ({ context, threadId, resourceId }) => {
     return {
       threadId,
       resourceId: context.includeResource ? resourceId : undefined,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     };
-  }
+  },
 });
 ```
 
@@ -85,19 +85,22 @@ export const threadInfoTool = createTool({
       name: "id",
       type: "string",
       required: true,
-      description: "ツールのユニークな識別子。ツールの機能を説明するものであるべきです。"
+      description:
+        "ツールのユニークな識別子。ツールの機能を説明するものであるべきです。",
     },
     {
       name: "description",
       type: "string",
       required: true,
-      description: "ツールが何をするのか、いつ使用すべきか、どのような入力が必要かの詳細な説明。これにより、AIがツールを効果的に使用する方法を理解するのに役立ちます。"
+      description:
+        "ツールが何をするのか、いつ使用すべきか、どのような入力が必要かの詳細な説明。これにより、AIがツールを効果的に使用する方法を理解するのに役立ちます。",
     },
     {
       name: "execute",
       type: "(context: ToolExecutionContext, options?: any) => Promise<any>",
       required: false,
-      description: "ツールのロジックを実装する非同期関数。実行コンテキストとオプションの設定を受け取ります。",
+      description:
+        "ツールのロジックを実装する非同期関数。実行コンテキストとオプションの設定を受け取ります。",
       properties: [
         {
           type: "ToolExecutionContext",
@@ -105,27 +108,27 @@ export const threadInfoTool = createTool({
             {
               name: "context",
               type: "object",
-              description: "inputSchemaに一致する検証済みの入力データ"
+              description: "inputSchemaに一致する検証済みの入力データ",
             },
             {
               name: "threadId",
               type: "string",
               isOptional: true,
-              description: "会話スレッドの識別子（利用可能な場合）"
+              description: "会話スレッドの識別子（利用可能な場合）",
             },
             {
               name: "resourceId",
               type: "string",
               isOptional: true,
-              description: "ツールと対話するユーザーまたはリソースの識別子"
+              description: "ツールと対話するユーザーまたはリソースの識別子",
             },
             {
               name: "mastra",
               type: "Mastra",
               isOptional: true,
-              description: "Mastraインスタンスへの参照（利用可能な場合）"
+              description: "Mastraインスタンスへの参照（利用可能な場合）",
             },
-          ]
+          ],
         },
         {
           type: "ToolOptions",
@@ -133,34 +136,39 @@ export const threadInfoTool = createTool({
             {
               name: "toolCallId",
               type: "string",
-              description: "ツール呼び出しのID。例えば、ストリームデータと共にツール呼び出し関連情報を送信する際に使用できます。"
+              description:
+                "ツール呼び出しのID。例えば、ストリームデータと共にツール呼び出し関連情報を送信する際に使用できます。",
             },
             {
               name: "messages",
               type: "CoreMessage[]",
-              description: "ツール呼び出しを含む応答を開始するために言語モデルに送信されたメッセージ。メッセージにはシステムプロンプトやツール呼び出しを含むアシスタントの応答は含まれません。"
+              description:
+                "ツール呼び出しを含む応答を開始するために言語モデルに送信されたメッセージ。メッセージにはシステムプロンプトやツール呼び出しを含むアシスタントの応答は含まれません。",
             },
             {
               name: "abortSignal",
               type: "AbortSignal",
               isOptional: true,
-              description: "全体の操作を中止すべきことを示すオプションの中止シグナル。"
+              description:
+                "全体の操作を中止すべきことを示すオプションの中止シグナル。",
             },
-          ]
-        }
-      ]
+          ],
+        },
+      ],
     },
     {
       name: "inputSchema",
       type: "ZodSchema",
       required: false,
-      description: "ツールの入力パラメータを定義し、検証するZodスキーマ。提供されない場合、ツールは任意の入力を受け入れます。"
+      description:
+        "ツールの入力パラメータを定義し、検証するZodスキーマ。提供されない場合、ツールは任意の入力を受け入れます。",
     },
     {
       name: "outputSchema",
       type: "ZodSchema",
       required: false,
-      description: "ツールの出力を定義し、検証するZodスキーマ。ツールが期待される形式でデータを返すことを保証するのに役立ちます。"
+      description:
+        "ツールの出力を定義し、検証するZodスキーマ。ツールが期待される形式でデータを返すことを保証するのに役立ちます。",
     },
   ]}
 />
@@ -172,7 +180,8 @@ export const threadInfoTool = createTool({
     {
       name: "Tool",
       type: "Tool<TSchemaIn, TSchemaOut>",
-      description: "エージェント、ワークフローで使用したり、直接実行したりできるツールインスタンス。",
+      description:
+        "エージェント、ワークフローで使用したり、直接実行したりできるツールインスタンス。",
       properties: [
         {
           type: "Tool",
@@ -180,32 +189,32 @@ export const threadInfoTool = createTool({
             {
               name: "id",
               type: "string",
-              description: "ツールのユニークな識別子"
+              description: "ツールのユニークな識別子",
             },
             {
               name: "description",
               type: "string",
-              description: "ツールの機能の説明"
+              description: "ツールの機能の説明",
             },
             {
               name: "inputSchema",
               type: "ZodSchema | undefined",
-              description: "入力を検証するためのスキーマ"
+              description: "入力を検証するためのスキーマ",
             },
             {
               name: "outputSchema",
               type: "ZodSchema | undefined",
-              description: "出力を検証するためのスキーマ"
+              description: "出力を検証するためのスキーマ",
             },
             {
               name: "execute",
               type: "Function",
-              description: "ツールの実行関数"
-            }
-          ]
-        }
-      ]
-    }
+              description: "ツールの実行関数",
+            },
+          ],
+        },
+      ],
+    },
   ]}
 />
 

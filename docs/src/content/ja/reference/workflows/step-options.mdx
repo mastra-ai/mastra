@@ -12,13 +12,13 @@ description: ワークフロー内のステップオプションに関するド�
 ```typescript
 workflow.step(processOrder, {
   variables: {
-    orderId: { step: 'trigger', path: 'id' },
-    userId: { step: 'auth', path: 'user.id' }
+    orderId: { step: "trigger", path: "id" },
+    userId: { step: "auth", path: "user.id" },
   },
   when: {
-    ref: { step: 'auth', path: 'status' },
-    query: { $eq: 'authenticated' }
-  }
+    ref: { step: "auth", path: "status" },
+    query: { $eq: "authenticated" },
+  },
 });
 ```
 
@@ -30,14 +30,14 @@ workflow.step(processOrder, {
       name: "variables",
       type: "Record<string, VariableRef>",
       description: "ステップ入力変数を他のステップからの値にマップします",
-      isOptional: true
+      isOptional: true,
     },
     {
       name: "when",
       type: "StepCondition",
       description: "ステップ実行のために満たす必要がある条件",
-      isOptional: true
-    }
+      isOptional: true,
+    },
   ]}
 />
 
@@ -49,18 +49,19 @@ workflow.step(processOrder, {
       name: "step",
       type: "string | Step | { id: string }",
       description: "変数値のソースステップ",
-      isOptional: false
+      isOptional: false,
     },
     {
       name: "path",
       type: "string",
       description: "ステップの出力内の値へのパス",
-      isOptional: false
-    }
+      isOptional: false,
+    },
   ]}
 />
 
 ## 関連
+
 - [パス比較](../../docs/workflows/control-flow.mdx)
 - [Step関数リファレンス](./step-function.mdx)
 - [Stepクラスリファレンス](./step-class.mdx)

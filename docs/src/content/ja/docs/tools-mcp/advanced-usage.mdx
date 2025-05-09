@@ -68,7 +68,7 @@ try {
   const result = await promise;
   console.log(result.text);
 } catch (error) {
-  if (error.name === 'AbortError') {
+  if (error.name === "AbortError") {
     console.log("Agent generation was aborted.");
   } else {
     console.error("An error occurred:", error);
@@ -116,8 +116,7 @@ import { mastraTool } from "../tools/mastraTool"; // Mastra createTool tool
 
 export const mixedToolsAgent = new Agent({
   name: "Mixed Tools Agent",
-  instructions:
-    "You can use tools defined in different formats.",
+  instructions: "You can use tools defined in different formats.",
   model: openai("gpt-4o-mini"),
   tools: {
     weatherVercel: vercelWeatherTool,

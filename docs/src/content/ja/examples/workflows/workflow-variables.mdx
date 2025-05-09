@@ -71,7 +71,7 @@ const validateInput = new Step({
     const { email, name, age } = context;
 
     // Simple validation logic
-    const isValid = email.includes('@') && name.length > 0 && age >= 18;
+    const isValid = email.includes("@") && name.length > 0 && age >= 18;
 
     return {
       isValid,
@@ -147,26 +147,26 @@ registrationWorkflow
   // First step gets data from the trigger
   .step(validateInput, {
     variables: {
-      email: { step: 'trigger', path: 'email' },
-      name: { step: 'trigger', path: 'name' },
-      age: { step: 'trigger', path: 'age' },
-    }
+      email: { step: "trigger", path: "email" },
+      name: { step: "trigger", path: "name" },
+      age: { step: "trigger", path: "age" },
+    },
   })
   // Format user data with validated data from previous step
   .then(formatUserData, {
     variables: {
-      validatedData: { step: validateInput, path: 'validatedData' },
+      validatedData: { step: validateInput, path: "validatedData" },
     },
     when: {
-      ref: { step: validateInput, path: 'isValid' },
+      ref: { step: validateInput, path: "isValid" },
       query: { $eq: true },
     },
   })
   // Create profile with data from the format step
   .then(createUserProfile, {
     variables: {
-      userId: { step: formatUserData, path: 'userId' },
-      formattedData: { step: formatUserData, path: 'formattedData' },
+      userId: { step: formatUserData, path: "userId" },
+      formattedData: { step: formatUserData, path: "formattedData" },
     },
   })
   .commit();

@@ -21,6 +21,7 @@ Before you begin, ensure you have:
 ## Serverless Platform Deployers
 
 Platform-specific deployers handle configuration and deployment for:
+
 - **[Cloudflare Workers](/reference/deployer/cloudflare)**
 - **[Vercel](/reference/deployer/vercel)**
 - **[Netlify](/reference/deployer/netlify)**
@@ -44,15 +45,17 @@ npm install @mastra/deployer-netlify@latest
 Configure the deployer in your entry file:
 
 ```typescript copy showLineNumbers
-import { Mastra, createLogger } from '@mastra/core';
-import { CloudflareDeployer } from '@mastra/deployer-cloudflare';
+import { Mastra, createLogger } from "@mastra/core";
+import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
 
 export const mastra = new Mastra({
-  agents: { /* your agents here */ },
-  logger: createLogger({ name: 'MyApp', level: 'debug' }),
+  agents: {
+    /* your agents here */
+  },
+  logger: createLogger({ name: "MyApp", level: "debug" }),
   deployer: new CloudflareDeployer({
-    scope: 'your-cloudflare-scope',
-    projectName: 'your-project-name',
+    scope: "your-cloudflare-scope",
+    projectName: "your-project-name",
     // See complete configuration options in the reference docs
   }),
 });
@@ -66,10 +69,10 @@ Each deployer has specific configuration options. Below are basic examples, but 
 
 ```typescript copy showLineNumbers
 new CloudflareDeployer({
-  scope: 'your-cloudflare-account-id',
-  projectName: 'your-project-name',
+  scope: "your-cloudflare-account-id",
+  projectName: "your-project-name",
   // For complete configuration options, see the reference documentation
-})
+});
 ```
 
 [View Cloudflare Deployer Reference →](/reference/deployer/cloudflare)
@@ -78,11 +81,11 @@ new CloudflareDeployer({
 
 ```typescript copy showLineNumbers
 new VercelDeployer({
-  teamSlug: 'your-vercel-team-slug',
-  projectName: 'your-project-name',
-  token: 'your-vercel-token'
+  teamSlug: "your-vercel-team-slug",
+  projectName: "your-project-name",
+  token: "your-vercel-token",
   // For complete configuration options, see the reference documentation
-})
+});
 ```
 
 [View Vercel Deployer Reference →](/reference/deployer/vercel)
@@ -91,10 +94,10 @@ new VercelDeployer({
 
 ```typescript copy showLineNumbers
 new NetlifyDeployer({
-  scope: 'your-netlify-team-slug',
-  projectName: 'your-project-name',
-  token: 'your-netlify-token'
-})
+  scope: "your-netlify-team-slug",
+  projectName: "your-project-name",
+  token: "your-netlify-token",
+});
 ```
 
 [View Netlify Deployer Reference →](/reference/deployer/netlify)
@@ -121,6 +124,5 @@ npx mastra build
 ```
 
 When a Deployer is used, the build output is automatically prepared for the target platform.
-You can then deploy the build output `.mastra/output` via your platform's (Vercel, netlify, cloudfare e.t.c) 
+You can then deploy the build output `.mastra/output` via your platform's (Vercel, netlify, cloudfare e.t.c)
 CLI/UI.
-

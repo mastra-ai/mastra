@@ -46,7 +46,7 @@ const details = await workflow.details();
 Start a vNext workflow run with triggerData and await full run results:
 
 ```typescript
-const run = workflow.createRun()
+const run = workflow.createRun();
 
 const result = await workflow.startAsync({
   runId: run.runId,
@@ -62,7 +62,7 @@ const result = await workflow.startAsync({
 Resume a suspended vNext workflow step and await full run result:
 
 ```typescript
-const run = workflow.createRun()
+const run = workflow.createRun();
 
 const result = await workflow.resumeAsync({
   runId: run.runId,
@@ -76,76 +76,78 @@ const result = await workflow.resumeAsync({
 Watch vNext workflow transitions
 
 ```typescript
-try{
+try {
   // Get workflow instance
   const workflow = client.getVNextWorkflow("workflow-id");
 
   // Create a workflow run
-  const run = workflow.createRun()
+  const run = workflow.createRun();
 
-  // Watch workflow run 
-     workflow.watch({runId: run.runId},(record)=>{
-       // Every new record is the latest transition state of the workflow run
+  // Watch workflow run
+  workflow.watch({ runId: run.runId }, (record) => {
+    // Every new record is the latest transition state of the workflow run
 
-        console.log({
-          currentStep: record.payload.currentStep,
-          workflowState: record.payload.workflowState,
-          eventTimestamp: record.eventTimestamp,
-          runId: record.runId
-        });
-     });
+    console.log({
+      currentStep: record.payload.currentStep,
+      workflowState: record.payload.workflowState,
+      eventTimestamp: record.eventTimestamp,
+      runId: record.runId,
+    });
+  });
 
   // Start workflow run
-     workflow.start({
-      runId: run.runId,
-      inputData: {
-        city: 'New York',
-      },
-    });
-}catch(e){
+  workflow.start({
+    runId: run.runId,
+    inputData: {
+      city: "New York",
+    },
+  });
+} catch (e) {
   console.error(e);
 }
 ```
+
 ### Resume vNext Workflow
 
 Resume vNext workflow run and watch vNext workflow step transitions
 
 ```typescript
-try{
+try {
   // Get workflow instance
   const workflow = client.getVNextWorkflow("workflow-id");
 
   //To resume a workflow run, when a step is suspended
-  const run = workflow.createRun({runId: prevRunId})
+  const run = workflow.createRun({ runId: prevRunId });
 
   //Watch run
-   workflow.watch({runId: run.runId},(record)=>{
-   // Every new record is the latest transition state of the workflow run
+  workflow.watch({ runId: run.runId }, (record) => {
+    // Every new record is the latest transition state of the workflow run
 
-        console.log({
-          currentStep: record.payload.currentStep,
-          workflowState: record.payload.workflowState,
-          eventTimestamp: record.eventTimestamp,
-          runId: record.runId
-        });
-   })
-
-   //resume run
-   workflow.resume({
-      runId: run.runId,
-      step: "step-id",
-      resumeData: { key: "value" },
+    console.log({
+      currentStep: record.payload.currentStep,
+      workflowState: record.payload.workflowState,
+      eventTimestamp: record.eventTimestamp,
+      runId: record.runId,
     });
-}catch(e){
+  });
+
+  //resume run
+  workflow.resume({
+    runId: run.runId,
+    step: "step-id",
+    resumeData: { key: "value" },
+  });
+} catch (e) {
   console.error(e);
 }
 ```
 
 ### vNext Workflow run result
+
 A vNext workflow run result yields the following:
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `payload` | `{currentStep?: {id: string, status: string, output?: Record<string, any>, payload?: Record<string, any>}, workflowState: {status: string, steps: Record<string, {status: string, output?: Record<string, any>, payload?: Record<string, any>}>}}` | The current step and workflow state of the run |
-| `eventTimestamp` | `Date` | The timestamp of the event |
-| `runId` | `string` | Unique identifier for this workflow run instance |
+| Field            | Type                                                                                                                                                                                                                                               | Description                                      |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `payload`        | `{currentStep?: {id: string, status: string, output?: Record<string, any>, payload?: Record<string, any>}, workflowState: {status: string, steps: Record<string, {status: string, output?: Record<string, any>, payload?: Record<string, any>}>}}` | The current step and workflow state of the run   |
+| `eventTimestamp` | `Date`                                                                                                                                                                                                                                             | The timestamp of the event                       |
+| `runId`          | `string`                                                                                                                                                                                                                                           | Unique identifier for this workflow run instance |

@@ -14,13 +14,10 @@ import { ContentSimilarityMetric } from "@mastra/evals/nlp";
 
 const metric = new ContentSimilarityMetric({
   ignoreCase: true,
-  ignoreWhitespace: true
+  ignoreWhitespace: true,
 });
 
-const result = await metric.measure(
-  "Hello, world!",
-  "hello world"
-);
+const result = await metric.measure("Hello, world!", "hello world");
 
 console.log(result.score); // Similarity score from 0-1
 console.log(result.info); // Detailed similarity metrics
@@ -36,7 +33,7 @@ console.log(result.info); // Detailed similarity metrics
       description: "Configuration options for similarity comparison",
       isOptional: true,
       defaultValue: "{ ignoreCase: true, ignoreWhitespace: true }",
-    }
+    },
   ]}
 />
 
@@ -57,7 +54,7 @@ console.log(result.info); // Detailed similarity metrics
       description: "Whether to normalize whitespace when comparing strings",
       isOptional: true,
       defaultValue: "true",
-    }
+    },
   ]}
 />
 
@@ -76,7 +73,7 @@ console.log(result.info); // Detailed similarity metrics
       type: "string",
       description: "The text to evaluate for similarity",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -87,7 +84,8 @@ console.log(result.info); // Detailed similarity metrics
     {
       name: "score",
       type: "number",
-      description: "Similarity score (0-1) where 1 indicates perfect similarity",
+      description:
+        "Similarity score (0-1) where 1 indicates perfect similarity",
     },
     {
       name: "info",
@@ -101,10 +99,10 @@ console.log(result.info); // Detailed similarity metrics
               name: "similarity",
               type: "number",
               description: "Raw similarity score between the two texts",
-            }
-          ]
-        }
-      ]
+            },
+          ],
+        },
+      ],
     },
   ]}
 />
@@ -116,6 +114,7 @@ The metric evaluates textual similarity through character-level matching and con
 ### Scoring Process
 
 1. Normalizes text:
+
    - Case normalization (if ignoreCase: true)
    - Whitespace normalization (if ignoreWhitespace: true)
 
@@ -128,7 +127,9 @@ The metric evaluates textual similarity through character-level matching and con
 Final score: `similarity_value * scale`
 
 ### Score interpretation
+
 (0 to scale, default 0-1)
+
 - 1.0: Perfect match - identical texts
 - 0.7-0.9: High similarity - mostly matching content
 - 0.4-0.6: Moderate similarity - partial matches
@@ -143,13 +144,10 @@ import { ContentSimilarityMetric } from "@mastra/evals/nlp";
 // Case-sensitive comparison
 const caseSensitiveMetric = new ContentSimilarityMetric({
   ignoreCase: false,
-  ignoreWhitespace: true
+  ignoreWhitespace: true,
 });
 
-const result1 = await caseSensitiveMetric.measure(
-  "Hello World",
-  "hello world"
-); // Lower score due to case difference
+const result1 = await caseSensitiveMetric.measure("Hello World", "hello world"); // Lower score due to case difference
 
 // Example output:
 // {
@@ -160,12 +158,12 @@ const result1 = await caseSensitiveMetric.measure(
 // Strict whitespace comparison
 const strictWhitespaceMetric = new ContentSimilarityMetric({
   ignoreCase: true,
-  ignoreWhitespace: false
+  ignoreWhitespace: false,
 });
 
 const result2 = await strictWhitespaceMetric.measure(
   "Hello   World",
-  "Hello World"
+  "Hello World",
 ); // Lower score due to whitespace difference
 
 // Example output:
@@ -178,6 +176,6 @@ const result2 = await strictWhitespaceMetric.measure(
 ## Related
 
 - [Completeness Metric](./completeness)
-- [Textual Difference Metric](./textual-difference) 
+- [Textual Difference Metric](./textual-difference)
 - [Answer Relevancy Metric](./answer-relevancy)
 - [Keyword Coverage Metric](./keyword-coverage)

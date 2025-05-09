@@ -133,7 +133,9 @@ console.log(result.info); // Object containing detailed metrics about the summar
 ## スコアリングの詳細
 
 このメトリックは、2つの重要なコンポーネントを通じて要約を評価します：
+
 1. **アライメントスコア**: 事実の正確性を測定
+
    - 要約から主張を抽出
    - 各主張を元のテキストと照合
    - 「はい」、「いいえ」、または「不明」の判定を行う
@@ -146,6 +148,7 @@ console.log(result.info); // Object containing detailed metrics about the summar
 ### スコアリングプロセス
 
 1. アライメントスコアを計算：
+
    - 要約から主張を抽出
    - ソーステキストと照合
    - 計算: `supported_claims / total_claims`
@@ -159,7 +162,9 @@ console.log(result.info); // Object containing detailed metrics about the summar
 最終スコア: `min(alignment_score, coverage_score) * scale`
 
 ### スコアの解釈
+
 (0からscaleまで、デフォルトは0-1)
+
 - 1.0: 完璧な要約 - 完全に事実であり、すべての重要な情報をカバー
 - 0.7-0.9: 軽微な省略やわずかな不正確さがある強力な要約
 - 0.4-0.6: 重大なギャップや不正確さがある中程度の品質

@@ -10,7 +10,7 @@ Mastra provides a unified metadata filtering syntax across all vector stores, ba
 ## Basic Example
 
 ```typescript
-import { PgVector } from '@mastra/pg';
+import { PgVector } from "@mastra/pg";
 
 const store = new PgVector(connectionString);
 
@@ -19,10 +19,10 @@ const results = await store.query({
   queryVector: queryVector,
   topK: 10,
   filter: {
-    category: "electronics",  // Simple equality
-    price: { $gt: 100 },     // Numeric comparison
-    tags: { $in: ["sale", "new"] }  // Array membership
-  }
+    category: "electronics", // Simple equality
+    price: { $gt: 100 }, // Numeric comparison
+    tags: { $in: ["sale", "new"] }, // Array membership
+  },
 });
 ```
 
@@ -35,38 +35,38 @@ const results = await store.query({
       name: "$eq",
       description: "Matches values equal to specified value",
       example: "{ age: { $eq: 25 } }",
-      supportedBy: ["All"]
+      supportedBy: ["All"],
     },
     {
       name: "$ne",
       description: "Matches values not equal",
       example: "{ status: { $ne: 'inactive' } }",
-      supportedBy: ["All"]
+      supportedBy: ["All"],
     },
     {
       name: "$gt",
       description: "Greater than",
       example: "{ price: { $gt: 100 } }",
-      supportedBy: ["All"]
+      supportedBy: ["All"],
     },
     {
       name: "$gte",
       description: "Greater than or equal",
       example: "{ rating: { $gte: 4.5 } }",
-      supportedBy: ["All"]
+      supportedBy: ["All"],
     },
     {
       name: "$lt",
       description: "Less than",
       example: "{ stock: { $lt: 20 } }",
-      supportedBy: ["All"]
+      supportedBy: ["All"],
     },
     {
       name: "$lte",
       description: "Less than or equal",
       example: "{ priority: { $lte: 3 } }",
-      supportedBy: ["All"]
-    }
+      supportedBy: ["All"],
+    },
   ]}
 />
 
@@ -77,26 +77,26 @@ const results = await store.query({
       name: "$in",
       description: "Matches any value in array",
       example: '{ category: { $in: ["A", "B"] } }',
-      supportedBy: ["All"]
+      supportedBy: ["All"],
     },
     {
       name: "$nin",
       description: "Matches none of the values",
       example: '{ status: { $nin: ["deleted", "archived"] } }',
-      supportedBy: ["All"]
+      supportedBy: ["All"],
     },
     {
       name: "$all",
       description: "Matches arrays containing all elements",
       example: '{ tags: { $all: ["urgent", "high"] } }',
-      supportedBy: ["Astra", "Pinecone", "Upstash", "MongoDB"]
+      supportedBy: ["Astra", "Pinecone", "Upstash", "MongoDB"],
     },
     {
       name: "$elemMatch",
       description: "Matches array elements meeting criteria",
-      example: '{ scores: { $elemMatch: { $gt: 80 } } }',
-      supportedBy: ["LibSQL", "PgVector", "MongoDB"]
-    }
+      example: "{ scores: { $elemMatch: { $gt: 80 } } }",
+      supportedBy: ["LibSQL", "PgVector", "MongoDB"],
+    },
   ]}
 />
 
@@ -106,27 +106,34 @@ const results = await store.query({
     {
       name: "$and",
       description: "Logical AND",
-      example: '{ $and: [{ price: { $gt: 100 } }, { stock: { $gt: 0 } }] }',
-      supportedBy: ["All except Vectorize"]
+      example: "{ $and: [{ price: { $gt: 100 } }, { stock: { $gt: 0 } }] }",
+      supportedBy: ["All except Vectorize"],
     },
     {
       name: "$or",
       description: "Logical OR",
       example: '{ $or: [{ status: "active" }, { priority: "high" }] }',
-      supportedBy: ["All except Vectorize"]
+      supportedBy: ["All except Vectorize"],
     },
     {
       name: "$not",
       description: "Logical NOT",
-      example: '{ price: { $not: { $lt: 100 } } }',
-      supportedBy: ["Astra", "Qdrant", "Upstash", "PgVector", "LibSQL", "MongoDB"]
+      example: "{ price: { $not: { $lt: 100 } } }",
+      supportedBy: [
+        "Astra",
+        "Qdrant",
+        "Upstash",
+        "PgVector",
+        "LibSQL",
+        "MongoDB",
+      ],
     },
     {
       name: "$nor",
       description: "Logical NOR",
       example: '{ $nor: [{ status: "deleted" }, { archived: true }] }',
-      supportedBy: ["Qdrant", "Upstash", "PgVector", "LibSQL", "MongoDB"]
-    }
+      supportedBy: ["Qdrant", "Upstash", "PgVector", "LibSQL", "MongoDB"],
+    },
   ]}
 />
 
@@ -136,9 +143,9 @@ const results = await store.query({
     {
       name: "$exists",
       description: "Matches documents with field",
-      example: '{ rating: { $exists: true } }',
-      supportedBy: ["All except Vectorize, Chroma"]
-    }
+      example: "{ rating: { $exists: true } }",
+      supportedBy: ["All except Vectorize, Chroma"],
+    },
   ]}
 />
 
@@ -149,60 +156,63 @@ const results = await store.query({
       name: "$contains",
       description: "Text contains substring",
       example: '{ description: { $contains: "sale" } }',
-      supportedBy: ["Upstash", "LibSQL", "PgVector"]
+      supportedBy: ["Upstash", "LibSQL", "PgVector"],
     },
     {
       name: "$regex",
       description: "Regular expression match",
       example: '{ name: { $regex: "^test" } }',
-      supportedBy: ["Qdrant", "PgVector", "Upstash", "MongoDB"]
+      supportedBy: ["Qdrant", "PgVector", "Upstash", "MongoDB"],
     },
     {
       name: "$size",
       description: "Array length check",
-      example: '{ tags: { $size: { $gt: 2 } } }',
-      supportedBy: ["Astra", "LibSQL", "PgVector", "MongoDB"]
+      example: "{ tags: { $size: { $gt: 2 } } }",
+      supportedBy: ["Astra", "LibSQL", "PgVector", "MongoDB"],
     },
     {
       name: "$geo",
       description: "Geospatial query",
       example: '{ location: { $geo: { type: "radius", ... } } }',
-      supportedBy: ["Qdrant"]
+      supportedBy: ["Qdrant"],
     },
     {
       name: "$datetime",
       description: "Datetime range query",
       example: '{ created: { $datetime: { range: { gt: "2024-01-01" } } } }',
-      supportedBy: ["Qdrant"]
+      supportedBy: ["Qdrant"],
     },
     {
       name: "$hasId",
       description: "Vector ID existence check",
       example: '{ $hasId: ["id1", "id2"] }',
-      supportedBy: ["Qdrant"]
+      supportedBy: ["Qdrant"],
     },
     {
       name: "$hasVector",
       description: "Vector existence check",
-      example: '{ $hasVector: true }',
-      supportedBy: ["Qdrant"]
-    }
+      example: "{ $hasVector: true }",
+      supportedBy: ["Qdrant"],
+    },
   ]}
 />
 
 ## Common Rules and Restrictions
 
 1. Field names cannot:
+
    - Contain dots (.) unless referring to nested fields
    - Start with $ or contain null characters
    - Be empty strings
 
 2. Values must be:
+
    - Valid JSON types (string, number, boolean, object, array)
    - Not undefined
    - Properly typed for the operator (e.g., numbers for numeric comparisons)
 
 3. Logical operators:
+
    - Must contain valid conditions
    - Cannot be empty
    - Must be properly nested
@@ -215,6 +225,7 @@ const results = await store.query({
    - Invalid: `{ "field": { "$gt": { "$and": [{...}] } } }`
 
 4. $not operator:
+
    - Must be an object
    - Cannot be empty
    - Can be used at field level or top level
@@ -229,16 +240,19 @@ const results = await store.query({
 ## Store-Specific Notes
 
 ### Astra
+
 - Nested field queries are supported using dot notation
 - Array fields must be explicitly defined as arrays in the metadata
 - Metadata values are case-sensitive
 
 ### ChromaDB
+
 - Where filters only return results where the filtered field exists in metadata
 - Empty metadata fields are not included in filter results
 - Metadata fields must be present for negative matches (e.g., $ne won't match documents missing the field)
 
 ### Cloudflare Vectorize
+
 - Requires explicit metadata indexing before filtering can be used
 - Use `createMetadataIndex()` to index fields you want to filter on
 - Up to 10 metadata indexes per Vectorize index
@@ -251,6 +265,7 @@ const results = await store.query({
 - Range queries may have reduced accuracy with very large datasets (~10M+ vectors)
 
 ### LibSQL
+
 - Supports nested object queries with dot notation
 - Array fields are validated to ensure they contain valid JSON arrays
 - Numeric comparisons maintain proper type handling
@@ -258,6 +273,7 @@ const results = await store.query({
 - Metadata is stored in a JSONB column for efficient querying
 
 ### PgVector
+
 - Full support for PostgreSQL's native JSON querying capabilities
 - Efficient handling of array operations using native array functions
 - Proper type handling for numbers, strings, and booleans
@@ -265,6 +281,7 @@ const results = await store.query({
 - Metadata is stored in a JSONB column for efficient indexing
 
 ### Pinecone
+
 - Metadata field names are limited to 512 characters
 - Numeric values must be within the range of ±1e38
 - Arrays in metadata are limited to 64KB total size
@@ -272,6 +289,7 @@ const results = await store.query({
 - Metadata updates replace the entire metadata object
 
 ### Qdrant
+
 - Supports advanced filtering with nested conditions
 - Payload (metadata) fields must be explicitly indexed for filtering
 - Efficient handling of geo-spatial queries
@@ -280,6 +298,7 @@ const results = await store.query({
 - Datetime values must be in RFC 3339 format
 
 ### Upstash
+
 - 512-character limit for metadata field keys
 - Query size is limited (avoid large IN clauses)
 - No support for null/undefined values in filters
@@ -288,6 +307,7 @@ const results = await store.query({
 - Metadata updates are atomic
 
 ### MongoDB
+
 - Full support for MongoDB/Sift query syntax for metadata filters
 - Supports all standard comparison, array, logical, and element operators
 - Supports nested fields and arrays in metadata
@@ -297,6 +317,7 @@ const results = await store.query({
 - Indexing metadata fields is recommended for optimal performance
 
 ## Related
+
 - [Astra](./astra)
 - [Chroma](./chroma)
 - [Cloudflare Vectorize](./vectorize)

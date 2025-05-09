@@ -44,7 +44,8 @@ constructor({
       type: "number",
       isOptional: true,
       defaultValue: "60000",
-      description: "個々のサーバー設定で上書きされない限り、すべてのサーバーに適用されるグローバルタイムアウト値（ミリ秒）。",
+      description:
+        "個々のサーバー設定で上書きされない限り、すべてのサーバーに適用されるグローバルタイムアウト値（ミリ秒）。",
     },
   ]}
 />
@@ -53,8 +54,8 @@ constructor({
 
 `servers`マップ内の各サーバーは`MastraMCPServerDefinition`タイプを使用して設定されます。内部で使用される`MastraMCPClient`は、提供されたパラメータに基づいてトランスポートタイプを自動的に検出します：
 
--   `command`が提供されている場合、Stdioトランスポートを使用します。
--   `url`が提供されている場合、最初にStreamable HTTPトランスポートを試み、初期接続が失敗した場合はレガシーSSEトランスポートにフォールバックします。
+- `command`が提供されている場合、Stdioトランスポートを使用します。
+- `url`が提供されている場合、最初にStreamable HTTPトランスポートを試み、初期接続が失敗した場合はレガシーSSEトランスポートにフォールバックします。
 
 <br />
 <PropertiesTable
@@ -81,7 +82,8 @@ constructor({
       name: "url",
       type: "URL",
       isOptional: true,
-      description: "HTTPサーバー（Streamable HTTPまたはSSE）用：サーバーのURL。",
+      description:
+        "HTTPサーバー（Streamable HTTPまたはSSE）用：サーバーのURL。",
     },
     {
       name: "requestInit",
@@ -93,7 +95,8 @@ constructor({
       name: "eventSourceInit",
       type: "EventSourceInit",
       isOptional: true,
-      description: "SSEフォールバック用：SSE接続のカスタムフェッチ設定。SSEでカスタムヘッダーを使用する場合に必要です。",
+      description:
+        "SSEフォールバック用：SSE接続のカスタムフェッチ設定。SSEでカスタムヘッダーを使用する場合に必要です。",
     },
     {
       name: "logger",

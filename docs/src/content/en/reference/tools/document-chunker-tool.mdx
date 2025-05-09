@@ -14,7 +14,7 @@ import { createDocumentChunkerTool, MDocument } from "@mastra/rag";
 
 const document = new MDocument({
   text: "Your document content here...",
-  metadata: { source: "user-manual" }
+  metadata: { source: "user-manual" },
 });
 
 const chunker = createDocumentChunkerTool({
@@ -23,8 +23,8 @@ const chunker = createDocumentChunkerTool({
     strategy: "recursive",
     size: 512,
     overlap: 50,
-    separator: "\n"
-  }
+    separator: "\n",
+  },
 });
 
 const { chunks } = await chunker.execute();
@@ -46,7 +46,7 @@ const { chunks } = await chunker.execute();
       description: "Configuration parameters for chunking",
       isOptional: true,
       defaultValue: "Default chunking parameters",
-    }
+    },
   ]}
 />
 
@@ -81,7 +81,7 @@ const { chunks } = await chunker.execute();
       description: "Character(s) to use as chunk separator",
       isOptional: true,
       defaultValue: "'\\n'",
-    }
+    },
   ]}
 />
 
@@ -93,7 +93,7 @@ const { chunks } = await chunker.execute();
       name: "chunks",
       type: "DocumentChunk[]",
       description: "Array of document chunks with their content and metadata",
-    }
+    },
   ]}
 />
 
@@ -104,18 +104,18 @@ const technicalDoc = new MDocument({
   text: longDocumentContent,
   metadata: {
     type: "technical",
-    version: "1.0"
-  }
+    version: "1.0",
+  },
 });
 
 const chunker = createDocumentChunkerTool({
   doc: technicalDoc,
   params: {
     strategy: "recursive",
-    size: 1024,      // Larger chunks
-    overlap: 100,    // More overlap
-    separator: "\n\n" // Split on double newlines
-  }
+    size: 1024, // Larger chunks
+    overlap: 100, // More overlap
+    separator: "\n\n", // Split on double newlines
+  },
 });
 
 const { chunks } = await chunker.execute();
@@ -138,4 +138,4 @@ The chunker is created as a Mastra tool with the following properties:
 ## Related
 
 - [MDocument](../rag/document.mdx)
-- [createVectorQueryTool](./vector-query-tool) 
+- [createVectorQueryTool](./vector-query-tool)

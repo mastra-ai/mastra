@@ -25,14 +25,14 @@ const storageWorkers = new CloudflareStore({
     messages: MESSAGES_KV, // KVNamespace binding for messages table
     // Add other tables as needed
   },
-  keyPrefix: 'dev_', // Optional: isolate keys per environment
+  keyPrefix: "dev_", // Optional: isolate keys per environment
 });
 
 // --- Example 2: Using REST API ---
 const storageRest = new CloudflareStore({
   accountId: process.env.CLOUDFLARE_ACCOUNT_ID!, // Cloudflare Account ID
   apiToken: process.env.CLOUDFLARE_API_TOKEN!, // Cloudflare API Token
-  namespacePrefix: 'dev_', // Optional: isolate namespaces per environment
+  namespacePrefix: "dev_", // Optional: isolate namespaces per environment
 });
 ```
 
@@ -61,13 +61,15 @@ const storageRest = new CloudflareStore({
     {
       name: "namespacePrefix",
       type: "string",
-      description: "Optional prefix for all namespace names (useful for environment isolation)",
+      description:
+        "Optional prefix for all namespace names (useful for environment isolation)",
       isOptional: true,
     },
     {
       name: "keyPrefix",
       type: "string",
-      description: "Optional prefix for all keys (useful for environment isolation)",
+      description:
+        "Optional prefix for all keys (useful for environment isolation)",
       isOptional: true,
     },
   ]}
@@ -85,9 +87,9 @@ The storage implementation handles schema creation and updates automatically. It
 
 ### Consistency & Propagation
 
-Cloudflare KV is an eventually consistent store, meaning that data may not be immediately available across all regions after a write. 
+Cloudflare KV is an eventually consistent store, meaning that data may not be immediately available across all regions after a write.
 
 ### Key Structure & Namespacing
 
-Keys in Cloudflare KV are structured as a combination of a configurable prefix and a table-specific format (e.g., `threads:threadId`). 
+Keys in Cloudflare KV are structured as a combination of a configurable prefix and a table-specific format (e.g., `threads:threadId`).
 For Workers deployments, `keyPrefix` is used to isolate data within a namespace; for REST API deployments, `namespacePrefix` is used to isolate entire namespaces between environments or applications.

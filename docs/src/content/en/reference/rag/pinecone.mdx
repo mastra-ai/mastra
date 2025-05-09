@@ -46,7 +46,8 @@ It provides real-time vector search, with features like hybrid search, metadata 
       type: "'cosine' | 'euclidean' | 'dotproduct'",
       isOptional: true,
       defaultValue: "cosine",
-      description: "Distance metric for similarity search. Use 'dotproduct' if you plan to use hybrid search.",
+      description:
+        "Distance metric for similarity search. Use 'dotproduct' if you plan to use hybrid search.",
     },
   ]}
 />
@@ -69,7 +70,8 @@ It provides real-time vector search, with features like hybrid search, metadata 
       name: "sparseVectors",
       type: "{ indices: number[], values: number[] }[]",
       isOptional: true,
-      description: "Array of sparse vectors for hybrid search. Each vector must have matching indices and values arrays.",
+      description:
+        "Array of sparse vectors for hybrid search. Each vector must have matching indices and values arrays.",
     },
     {
       name: "metadata",
@@ -87,7 +89,8 @@ It provides real-time vector search, with features like hybrid search, metadata 
       name: "namespace",
       type: "string",
       isOptional: true,
-      description: "Optional namespace to store vectors in. Vectors in different namespaces are isolated from each other.",
+      description:
+        "Optional namespace to store vectors in. Vectors in different namespaces are isolated from each other.",
     },
   ]}
 />
@@ -110,7 +113,8 @@ It provides real-time vector search, with features like hybrid search, metadata 
       name: "sparseVector",
       type: "{ indices: number[], values: number[] }",
       isOptional: true,
-      description: "Optional sparse vector for hybrid search. Must have matching indices and values arrays.",
+      description:
+        "Optional sparse vector for hybrid search. Must have matching indices and values arrays.",
     },
     {
       name: "topK",
@@ -136,7 +140,8 @@ It provides real-time vector search, with features like hybrid search, metadata 
       name: "namespace",
       type: "string",
       isOptional: true,
-      description: "Optional namespace to query vectors from. Only returns results from the specified namespace.",
+      description:
+        "Optional namespace to query vectors from. Only returns results from the specified namespace.",
     },
   ]}
 />

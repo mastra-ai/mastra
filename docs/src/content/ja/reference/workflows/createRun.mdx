@@ -34,17 +34,20 @@ const result = await start();
     {
       name: "watch",
       type: "(callback: (record: WorkflowResult) => void) => () => void",
-      description: "ワークフロー実行の各遷移で呼び出されるコールバック関数を受け取る関数",
+      description:
+        "ワークフロー実行の各遷移で呼び出されるコールバック関数を受け取る関数",
     },
     {
       name: "resume",
       type: "({stepId: string, context: Record<string, any>}) => Promise<WorkflowResult>",
-      description: "指定されたステップIDとコンテキストからワークフロー実行を再開する関数",
+      description:
+        "指定されたステップIDとコンテキストからワークフロー実行を再開する関数",
     },
     {
       name: "resumeWithEvent",
       type: "(eventName: string, data: any) => Promise<WorkflowResult>",
-      description: "指定されたイベント名とデータからワークフロー実行を再開する関数",
+      description:
+        "指定されたイベント名とデータからワークフロー実行を再開する関数",
     },
   ]}
 />

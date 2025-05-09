@@ -28,7 +28,8 @@ const workflow = new Workflow({ name: "my-workflow" });
       name: "logger",
       type: "Logger<WorkflowLogMessage>",
       isOptional: true,
-      description: "ワークフロー実行の詳細のためのオプションのロガーインスタンス",
+      description:
+        "ワークフロー実行の詳細のためのオプションのロガーインスタンス",
     },
     {
       name: "steps",
@@ -38,7 +39,8 @@ const workflow = new Workflow({ name: "my-workflow" });
     {
       name: "triggerSchema",
       type: "z.Schema",
-      description: "ワークフロートリガーデータを検証するためのオプションのスキーマ",
+      description:
+        "ワークフロートリガーデータを検証するためのオプションのスキーマ",
     },
   ]}
 />
@@ -133,28 +135,28 @@ await start({
     {
       name: "CREATED",
       type: "string",
-      description: "ワークフローインスタンスが作成されたが、開始されていない"
+      description: "ワークフローインスタンスが作成されたが、開始されていない",
     },
     {
       name: "RUNNING",
       type: "string",
-      description: "ワークフローがステップを積極的に実行している"
+      description: "ワークフローがステップを積極的に実行している",
     },
     {
       name: "SUSPENDED",
       type: "string",
-      description: "ワークフローの実行が一時停止され、再開を待っている"
+      description: "ワークフローの実行が一時停止され、再開を待っている",
     },
     {
       name: "COMPLETED",
       type: "string",
-      description: "すべてのステップが正常に実行完了した"
+      description: "すべてのステップが正常に実行完了した",
     },
     {
       name: "FAILED",
       type: "string",
-      description: "ワークフローが実行中にエラーに遭遇した"
-    }
+      description: "ワークフローが実行中にエラーに遭遇した",
+    },
   ]}
 />
 
@@ -202,24 +204,25 @@ try {
 ```typescript showLineNumbers copy
 workflow
   .step({
-    id: 'getData',
+    id: "getData",
     execute: async ({ context }) => {
       return {
-        data: { id: '123', value: 'example' }
+        data: { id: "123", value: "example" },
       };
-    }
+    },
   })
   .step({
-    id: 'processData',
+    id: "processData",
     execute: async ({ context }) => {
       // コンテキスト.stepsを通じて前のステップからのデータにアクセス
       const previousData = context.steps.getData.output.data;
       // previousData.id と previousData.value を処理
-    }
+    },
   });
 ```
 
 コンテキストオブジェクト:
+
 - `context.steps` に完了したすべてのステップの結果を含む
 - `context.steps.[stepId].output` を通じてステップの出力にアクセスを提供
 - ステップ出力スキーマに基づいて型付けされる

@@ -15,17 +15,17 @@ import { Deployer } from "@mastra/deployer";
 // Create a custom deployer by extending the abstract Deployer class
 class CustomDeployer extends Deployer {
   constructor() {
-    super({ name: 'custom-deployer' });
+    super({ name: "custom-deployer" });
   }
 
   // Implement the abstract deploy method
   async deploy(outputDirectory: string): Promise<void> {
     // Prepare the output directory
     await this.prepare(outputDirectory);
-    
+
     // Bundle the application
-    await this._bundle('server.ts', 'mastra.ts', outputDirectory);
-    
+    await this._bundle("server.ts", "mastra.ts", outputDirectory);
+
     // Custom deployment logic
     // ...
   }
@@ -60,7 +60,8 @@ class CustomDeployer extends Deployer {
     {
       name: "outputDirectory",
       type: "string",
-      description: "バンドルされたデプロイ準備完了のアプリケーションが出力されるディレクトリ。",
+      description:
+        "バンドルされたデプロイ準備完了のアプリケーションが出力されるディレクトリ。",
       isOptional: false,
     },
   ]}
@@ -73,12 +74,14 @@ class CustomDeployer extends Deployer {
     {
       name: "getEnvFiles",
       type: "() => Promise<string[]>",
-      description: "デプロイ中に使用される環境ファイルのリストを返します。デフォルトでは、'.env.production' と '.env' ファイルを探します。",
+      description:
+        "デプロイ中に使用される環境ファイルのリストを返します。デフォルトでは、'.env.production' と '.env' ファイルを探します。",
     },
     {
       name: "deploy",
       type: "(outputDirectory: string) => Promise<void>",
-      description: "サブクラスによって実装されなければならない抽象メソッドです。指定された出力ディレクトリへのデプロイプロセスを処理します。",
+      description:
+        "サブクラスによって実装されなければならない抽象メソッドです。指定された出力ディレクトリへのデプロイプロセスを処理します。",
     },
   ]}
 />
@@ -92,22 +95,26 @@ Deployerクラスは、Bundlerクラスから以下の主要なメソッドを�
     {
       name: "prepare",
       type: "(outputDirectory: string) => Promise<void>",
-      description: "出力ディレクトリをクリーンアップし、必要なサブディレクトリを作成して準備します。",
+      description:
+        "出力ディレクトリをクリーンアップし、必要なサブディレクトリを作成して準備します。",
     },
     {
       name: "writeInstrumentationFile",
       type: "(outputDirectory: string) => Promise<void>",
-      description: "テレメトリ目的のために出力ディレクトリに計測ファイルを書き込みます。",
+      description:
+        "テレメトリ目的のために出力ディレクトリに計測ファイルを書き込みます。",
     },
     {
       name: "writePackageJson",
       type: "(outputDirectory: string, dependencies: Map<string, string>) => Promise<void>",
-      description: "指定された依存関係を含むpackage.jsonファイルを出力ディレクトリに生成します。",
+      description:
+        "指定された依存関係を含むpackage.jsonファイルを出力ディレクトリに生成します。",
     },
     {
       name: "_bundle",
       type: "(serverFile: string, mastraEntryFile: string, outputDirectory: string, bundleLocation?: string) => Promise<void>",
-      description: "指定されたサーバーファイルとMastraエントリーファイルを使用してアプリケーションをバンドルします。",
+      description:
+        "指定されたサーバーファイルとMastraエントリーファイルを使用してアプリケーションをバンドルします。",
     },
   ]}
 />
@@ -156,4 +163,3 @@ DeployerクラスはBundlerクラスを拡張し、バンドルとデプロイ�
 2. **共有インフラストラクチャ**：バンドルとデプロイメントは、依存関係管理やファイルシステム操作などの共通インフラストラクチャを共有します。
 3. **特殊なデプロイメントロジック**：バンドルがコードパッケージングに焦点を当てる一方、デプロイメントはバンドルされたコードをデプロイするための環境固有のロジックを追加します。
 4. **拡張性**：抽象的な`deploy`メソッドにより、異なるターゲット環境向けの特殊なデプロイヤーを作成することができます。
-

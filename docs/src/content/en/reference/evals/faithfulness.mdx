@@ -130,6 +130,7 @@ The metric evaluates faithfulness through claim verification against provided co
 ### Scoring Process
 
 1. Analyzes claims and context:
+
    - Extracts all claims (factual and speculative)
    - Verifies each claim against context
    - Assigns one of three verdicts:
@@ -145,7 +146,9 @@ The metric evaluates faithfulness through claim verification against provided co
 Final score: `(supported_claims / total_claims) * scale`
 
 ### Score interpretation
+
 (0 to scale, default 0-1)
+
 - 1.0: All claims supported by context
 - 0.7-0.9: Most claims supported, few unverifiable
 - 0.4-0.6: Mixed support with some contradictions

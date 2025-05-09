@@ -18,16 +18,17 @@ const voice = new PlayAIVoice();
 // Initialize with default configuration
 const voice = new PlayAIVoice({
   speechModel: {
-    name: 'PlayDialog',
+    name: "PlayDialog",
     apiKey: process.env.PLAYAI_API_KEY,
-    userId: process.env.PLAYAI_USER_ID
+    userId: process.env.PLAYAI_USER_ID,
   },
-  speaker: 'Angelo'  // Default voice
+  speaker: "Angelo", // Default voice
 });
 
 // Convert text to speech with a specific voice
 const audioStream = await voice.speak("Hello, world!", {
-  speaker: 's3://voice-cloning-zero-shot/b27bc13e-996f-4841-b584-4d35801aea98/original/manifest.json' // Dexter voice
+  speaker:
+    "s3://voice-cloning-zero-shot/b27bc13e-996f-4841-b584-4d35801aea98/original/manifest.json", // Dexter voice
 });
 ```
 
@@ -89,7 +90,8 @@ const audioStream = await voice.speak("Hello, world!", {
     {
       name: "input",
       type: "string | NodeJS.ReadableStream",
-      description: "音声に変換するテキスト。ストリームが提供された場合、最初にテキストに変換されます。",
+      description:
+        "音声に変換するテキスト。ストリームが提供された場合、最初にテキストに変換されます。",
       isOptional: false,
     },
     {

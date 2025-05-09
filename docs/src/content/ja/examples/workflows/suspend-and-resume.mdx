@@ -3,7 +3,7 @@ title: "例：一時停止と再開 | ワークフロー | Mastra ドキュメ�
 description: Mastraを使用して実行中にワークフローステップを一時停止および再開する例。
 ---
 
-import { GithubLink } from '@/components/github-link';
+import { GithubLink } from "@/components/github-link";
 
 # サスペンドと再開を使用したワークフロー
 
@@ -12,12 +12,12 @@ import { GithubLink } from '@/components/github-link';
 ## 基本的な例
 
 ```ts showLineNumbers copy
-import { Mastra } from '@mastra/core';
-import { Step, Workflow } from '@mastra/core/workflows';
-import { z } from 'zod';
+import { Mastra } from "@mastra/core";
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
 
 const stepOne = new Step({
-  id: 'stepOne',
+  id: "stepOne",
   outputSchema: z.object({
     doubledValue: z.number(),
   }),
@@ -30,12 +30,11 @@ const stepOne = new Step({
 
 ```ts showLineNumbers copy
 const stepTwo = new Step({
-  id: 'stepTwo',
+  id: "stepTwo",
   outputSchema: z.object({
     incrementedValue: z.number(),
   }),
   execute: async ({ context, suspend }) => {
-
     const secondValue = context.inputData?.secondValue ?? 0;
     const doubledValue = context.getStepResult(stepOne)?.doubledValue ?? 0;
 
@@ -51,45 +50,42 @@ const stepTwo = new Step({
 
 // Build the workflow
 const myWorkflow = new Workflow({
-  name: 'my-workflow',
+  name: "my-workflow",
   triggerSchema: z.object({
     inputValue: z.number(),
   }),
 });
 
 // run workflows in parallel
-myWorkflow
-  .step(stepOne)
-  .then(stepTwo)
-  .commit();
+myWorkflow.step(stepOne).then(stepTwo).commit();
 ```
 
 ```ts showLineNumbers copy
 // Register the workflow
 export const mastra = new Mastra({
   workflows: { registeredWorkflow: myWorkflow },
-})
+});
 
 // Get registered workflow from Mastra
-const registeredWorkflow = mastra.getWorkflow('registeredWorkflow');
+const registeredWorkflow = mastra.getWorkflow("registeredWorkflow");
 const { runId, start } = registeredWorkflow.createRun();
 
 // Start watching the workflow before executing it
 myWorkflow.watch(async ({ context, activePaths }) => {
   for (const _path of activePaths) {
     const stepTwoStatus = context.steps?.stepTwo?.status;
-    if (stepTwoStatus === 'suspended') {
+    if (stepTwoStatus === "suspended") {
       console.log("Workflow suspended, resuming with new value");
 
       // Resume the workflow with new context
       await myWorkflow.resume({
         runId,
-        stepId: 'stepTwo',
+        stepId: "stepTwo",
         context: { secondValue: 100 },
       });
     }
   }
-})
+});
 
 // Start the workflow execution
 await start({ triggerData: { inputValue: 45 } });
@@ -100,13 +96,13 @@ await start({ triggerData: { inputValue: 45 } });
 この例では、async/awaitパターンを使用した複数の中断ポイントを持つより複雑なワークフローを示しています。異なる段階で人間の介入を必要とするコンテンツ生成ワークフローをシミュレートしています。
 
 ```ts showLineNumbers copy
-import { Mastra } from '@mastra/core';
-import { Step, Workflow } from '@mastra/core/workflows';
-import { z } from 'zod';
+import { Mastra } from "@mastra/core";
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
 
 // Step 1: Get user input
 const getUserInput = new Step({
-  id: 'getUserInput',
+  id: "getUserInput",
   execute: async ({ context }) => {
     // In a real application, this might come from a form or API
     return { userInput: context.triggerData.input };
@@ -118,7 +114,7 @@ const getUserInput = new Step({
 ```ts showLineNumbers copy
 // Step 2: Generate content with AI (may suspend for human guidance)
 const promptAgent = new Step({
-  id: 'promptAgent',
+  id: "promptAgent",
   inputSchema: z.object({
     guidance: z.string(),
   }),
@@ -136,7 +132,10 @@ const promptAgent = new Step({
       return { modelOutput: initialDraft.content };
     }
 
-    console.log('Low confidence in generated content, suspending for human guidance', {guidance});
+    console.log(
+      "Low confidence in generated content, suspending for human guidance",
+      { guidance },
+    );
 
     // If confidence is low, suspend for human guidance
     if (!guidance) {
@@ -146,7 +145,7 @@ const promptAgent = new Step({
     }
 
     // This code runs after resume with human guidance
-    console.log('Resumed with human guidance');
+    console.log("Resumed with human guidance");
 
     // Use the human guidance to improve the output
     return {
@@ -160,7 +159,7 @@ const promptAgent = new Step({
 ```ts showLineNumbers copy
 // Step 3: Evaluate the content quality
 const evaluateTone = new Step({
-  id: 'evaluateToneConsistency',
+  id: "evaluateToneConsistency",
   execute: async ({ context }) => {
     const content = context.getStepResult(promptAgent)?.modelOutput;
 
@@ -180,15 +179,14 @@ const evaluateTone = new Step({
 ```ts showLineNumbers copy
 // Step 4: Improve response if needed (may suspend)
 const improveResponse = new Step({
-  id: 'improveResponse',
+  id: "improveResponse",
   inputSchema: z.object({
     improvedContent: z.string(),
     resumeAttempts: z.number(),
   }),
   execute: async ({ context, suspend }) => {
     const content = context.getStepResult(promptAgent)?.modelOutput;
-    const toneScore =
-      context.getStepResult(evaluateTone)?.toneScore.score ?? 0;
+    const toneScore = context.getStepResult(evaluateTone)?.toneScore.score ?? 0;
     const completenessScore =
       context.getStepResult(evaluateTone)?.completenessScore.score ?? 0;
 
@@ -200,21 +198,24 @@ const improveResponse = new Step({
       return { improvedOutput: makeMinorImprovements(content) };
     }
 
-    console.log('Content quality below threshold, suspending for human intervention', {improvedContent, resumeAttempts});
+    console.log(
+      "Content quality below threshold, suspending for human intervention",
+      { improvedContent, resumeAttempts },
+    );
 
     if (!improvedContent) {
       // Suspend with payload containing content and resume attempts
       await suspend({
         content,
         scores: { tone: toneScore, completeness: completenessScore },
-        needsImprovement: toneScore < 0.8 ? 'tone' : 'completeness',
+        needsImprovement: toneScore < 0.8 ? "tone" : "completeness",
         resumeAttempts: resumeAttempts + 1,
       });
-      return { improvedOutput: content ?? '' };
+      return { improvedOutput: content ?? "" };
     }
 
-    console.log('Resumed with human improvements', improvedContent);
-    return { improvedOutput: improvedContent ?? content ?? '' };
+    console.log("Resumed with human improvements", improvedContent);
+    return { improvedOutput: improvedContent ?? content ?? "" };
   },
   outputSchema: z.object({ improvedOutput: z.string() }).optional(),
 });
@@ -223,9 +224,10 @@ const improveResponse = new Step({
 ```ts showLineNumbers copy
 // Step 5: Final evaluation
 const evaluateImproved = new Step({
-  id: 'evaluateImprovedResponse',
+  id: "evaluateImprovedResponse",
   execute: async ({ context }) => {
-    const improvedContent = context.getStepResult(improveResponse)?.improvedOutput;
+    const improvedContent =
+      context.getStepResult(improveResponse)?.improvedOutput;
 
     // Simulate final evaluation
     return {
@@ -241,7 +243,7 @@ const evaluateImproved = new Step({
 
 // Build the workflow
 const contentWorkflow = new Workflow({
-  name: 'content-generation-workflow',
+  name: "content-generation-workflow",
   triggerSchema: z.object({ input: z.string() }),
 });
 
@@ -254,14 +256,14 @@ contentWorkflow
   .commit();
 ```
 
-```ts showLineNumbers copy  
+```ts showLineNumbers copy
 // Register the workflow
 const mastra = new Mastra({
   workflows: { contentWorkflow },
 });
 
 // Helper functions (simulated)
-function generateInitialDraft(input: string = '') {
+function generateInitialDraft(input: string = "") {
   // Simulate AI generating content
   return {
     content: `Generated content based on: ${input}`,
@@ -269,71 +271,75 @@ function generateInitialDraft(input: string = '') {
   };
 }
 
-function enhanceWithGuidance(content: string = '', guidance: string = '') {
+function enhanceWithGuidance(content: string = "", guidance: string = "") {
   return `${content} (Enhanced with guidance: ${guidance})`;
 }
 
-function makeMinorImprovements(content: string = '') {
+function makeMinorImprovements(content: string = "") {
   return `${content} (with minor improvements)`;
 }
 
-function calculateToneScore(_: string = '') {
+function calculateToneScore(_: string = "") {
   return 0.7; // Simulate a score that will trigger suspension
 }
 
-function calculateCompletenessScore(_: string = '') {
+function calculateCompletenessScore(_: string = "") {
   return 0.9;
 }
 
 // Usage example
 async function runWorkflow() {
-  const workflow = mastra.getWorkflow('contentWorkflow');
+  const workflow = mastra.getWorkflow("contentWorkflow");
   const { runId, start } = workflow.createRun();
 
   let finalResult: any;
 
   // Start the workflow
   const initialResult = await start({
-    triggerData: { input: 'Create content about sustainable energy' },
+    triggerData: { input: "Create content about sustainable energy" },
   });
 
-  console.log('Initial workflow state:', initialResult.results);
+  console.log("Initial workflow state:", initialResult.results);
 
-  const promptAgentStepResult = initialResult.activePaths.get('promptAgent');
+  const promptAgentStepResult = initialResult.activePaths.get("promptAgent");
 
   // Check if promptAgent step is suspended
-  if (promptAgentStepResult?.status === 'suspended') {
-    console.log('Workflow suspended at promptAgent step');
-    console.log('Suspension payload:', promptAgentStepResult?.suspendPayload);
+  if (promptAgentStepResult?.status === "suspended") {
+    console.log("Workflow suspended at promptAgent step");
+    console.log("Suspension payload:", promptAgentStepResult?.suspendPayload);
 
     // Resume with human guidance
     const resumeResult1 = await workflow.resume({
       runId,
-      stepId: 'promptAgent',
+      stepId: "promptAgent",
       context: {
-        guidance: 'Focus more on solar and wind energy technologies',
+        guidance: "Focus more on solar and wind energy technologies",
       },
     });
 
-    console.log('Workflow resumed and continued to next steps');
+    console.log("Workflow resumed and continued to next steps");
 
     let improveResponseResumeAttempts = 0;
-    let improveResponseStatus = resumeResult1?.activePaths.get('improveResponse')?.status;
+    let improveResponseStatus =
+      resumeResult1?.activePaths.get("improveResponse")?.status;
 
     // Check if improveResponse step is suspended
-    while (improveResponseStatus === 'suspended') {
-      console.log('Workflow suspended at improveResponse step');
-      console.log('Suspension payload:', resumeResult1?.activePaths.get('improveResponse')?.suspendPayload);
+    while (improveResponseStatus === "suspended") {
+      console.log("Workflow suspended at improveResponse step");
+      console.log(
+        "Suspension payload:",
+        resumeResult1?.activePaths.get("improveResponse")?.suspendPayload,
+      );
 
       const improvedContent =
         improveResponseResumeAttempts < 3
           ? undefined
-          : 'Completely revised content about sustainable energy focusing on solar and wind technologies';
+          : "Completely revised content about sustainable energy focusing on solar and wind technologies";
 
       // Resume with human improvements
       finalResult = await workflow.resume({
         runId,
-        stepId: 'improveResponse',
+        stepId: "improveResponse",
         context: {
           improvedContent,
           resumeAttempts: improveResponseResumeAttempts,
@@ -341,10 +347,12 @@ async function runWorkflow() {
       });
 
       improveResponseResumeAttempts =
-        finalResult?.activePaths.get('improveResponse')?.suspendPayload?.resumeAttempts ?? 0;
-      improveResponseStatus = finalResult?.activePaths.get('improveResponse')?.status;
+        finalResult?.activePaths.get("improveResponse")?.suspendPayload
+          ?.resumeAttempts ?? 0;
+      improveResponseStatus =
+        finalResult?.activePaths.get("improveResponse")?.status;
 
-      console.log('Improved response result:', finalResult?.results);
+      console.log("Improved response result:", finalResult?.results);
     }
   }
   return finalResult;
@@ -352,8 +360,8 @@ async function runWorkflow() {
 
 // Run the workflow
 const result = await runWorkflow();
-console.log('Workflow completed');
-console.log('Final workflow result:', result);
+console.log("Workflow completed");
+console.log("Final workflow result:", result);
 ```
 
 <br />
@@ -362,5 +370,7 @@ console.log('Final workflow result:', result);
 <br />
 <br />
 <GithubLink
-  link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/workflow-with-parallel-steps'}
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/workflow-with-parallel-steps"
+  }
 />

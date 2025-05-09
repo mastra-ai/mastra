@@ -23,13 +23,15 @@ import { anthropic } from "@ai-sdk/anthropic";
 
 const copywriterAgent = new Agent({
   name: "Copywriter",
-  instructions: "あなたはブログ投稿のコピーを書くコピーライターエージェントです。",
+  instructions:
+    "あなたはブログ投稿のコピーを書くコピーライターエージェントです。",
   model: anthropic("claude-3-5-sonnet-20241022"),
 });
 
 const copywriterTool = createTool({
   id: "copywriter-agent",
-  description: "ブログ投稿のコピーを書くためにコピーライターエージェントを呼び出します。",
+  description:
+    "ブログ投稿のコピーを書くためにコピーライターエージェントを呼び出します。",
   inputSchema: z.object({
     topic: z.string().describe("ブログ投稿のトピック"),
   }),
@@ -50,13 +52,15 @@ const copywriterTool = createTool({
 ```ts showLineNumbers copy
 const editorAgent = new Agent({
   name: "Editor",
-  instructions: "あなたはブログ投稿のコピーを編集するエディターエージェントです。",
+  instructions:
+    "あなたはブログ投稿のコピーを編集するエディターエージェントです。",
   model: openai("gpt-4o-mini"),
 });
 
 const editorTool = createTool({
   id: "editor-agent",
-  description: "ブログ投稿のコピーを編集するためにエディターエージェントを呼び出します。",
+  description:
+    "ブログ投稿のコピーを編集するためにエディターエージェントを呼び出します。",
   inputSchema: z.object({
     copy: z.string().describe("ブログ投稿のコピー"),
   }),
@@ -101,4 +105,3 @@ async function main() {
 
 main();
 ```
-
