@@ -1,4 +1,5 @@
 import type { Mastra } from '@mastra/core';
+import type { RuntimeContext } from '@mastra/core/di';
 import {
   getVNextWorkflowsHandler as getOriginalVNextWorkflowsHandler,
   getVNextWorkflowByIdHandler as getOriginalVNextWorkflowByIdHandler,
@@ -68,12 +69,14 @@ export async function startAsyncVNextWorkflowHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const workflowId = c.req.param('workflowId');
-    const { inputData, runtimeContext } = await c.req.json();
+    const runtimeContext: RuntimeContext = c.get('runtimeContext');
+    const { inputData, runtimeContext: runtimeContextFromRequest } = await c.req.json();
     const runId = c.req.query('runId');
 
     const result = await getOriginalStartAsyncVNextWorkflowHandler({
       mastra,
       runtimeContext,
+      runtimeContextFromRequest,
       workflowId,
       runId,
       inputData,
@@ -89,12 +92,14 @@ export async function startVNextWorkflowRunHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const workflowId = c.req.param('workflowId');
-    const { inputData, runtimeContext } = await c.req.json();
+    const runtimeContext: RuntimeContext = c.get('runtimeContext');
+    const { inputData, runtimeContext: runtimeContextFromRequest } = await c.req.json();
     const runId = c.req.query('runId');
 
     await getOriginalStartVNextWorkflowRunHandler({
       mastra,
       runtimeContext,
+      runtimeContextFromRequest,
       workflowId,
       runId,
       inputData,
@@ -153,7 +158,8 @@ export async function resumeAsyncVNextWorkflowHandler(c: Context) {
     const mastra: Mastra = c.get('mastra');
     const workflowId = c.req.param('workflowId');
     const runId = c.req.query('runId');
-    const { step, resumeData, runtimeContext } = await c.req.json();
+    const runtimeContext: RuntimeContext = c.get('runtimeContext');
+    const { step, resumeData, runtimeContext: runtimeContextFromRequest } = await c.req.json();
 
     if (!runId) {
       throw new HTTPException(400, { message: 'runId required to resume workflow' });
@@ -162,6 +168,7 @@ export async function resumeAsyncVNextWorkflowHandler(c: Context) {
     const result = await getOriginalResumeAsyncVNextWorkflowHandler({
       mastra,
       runtimeContext,
+      runtimeContextFromRequest,
       workflowId,
       runId,
       body: { step, resumeData },

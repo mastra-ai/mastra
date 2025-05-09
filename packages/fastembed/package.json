@@ -27,7 +27,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "ai": "^3.0.0",
+    "ai": "^3.4.33",
     "fastembed": "^1.14.4"
   },
   "devDependencies": {

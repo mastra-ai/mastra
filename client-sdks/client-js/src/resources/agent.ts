@@ -14,28 +14,7 @@ import type {
 } from '../types';
 
 import { BaseResource } from './base';
-
-export class AgentTool extends BaseResource {
-  constructor(
-    options: ClientOptions,
-    private agentId: string,
-    private toolId: string,
-  ) {
-    super(options);
-  }
-
-  /**
-   * Executes a specific tool for an agent
-   * @param params - Parameters required for tool execution
-   * @returns Promise containing tool execution results
-   */
-  execute(params: { data: any }): Promise<any> {
-    return this.request(`/api/agents/${this.agentId}/tools/${this.toolId}/execute`, {
-      method: 'POST',
-      body: params,
-    });
-  }
-}
+import type { RuntimeContext } from '@mastra/core/di';
 
 export class AgentVoice extends BaseResource {
   constructor(
@@ -186,6 +165,23 @@ export class Agent extends BaseResource {
    */
   getTool(toolId: string): Promise<GetToolResponse> {
     return this.request(`/api/agents/${this.agentId}/tools/${toolId}`);
+  }
+
+  /**
+   * Executes a tool for the agent
+   * @param toolId - ID of the tool to execute
+   * @param params - Parameters required for tool execution
+   * @returns Promise containing the tool execution results
+   */
+  executeTool(toolId: string, params: { data: any; runtimeContext?: RuntimeContext }): Promise<any> {
+    const body = {
+      data: params.data,
+      runtimeContext: params.runtimeContext ? Object.fromEntries(params.runtimeContext.entries()) : undefined,
+    };
+    return this.request(`/api/agents/${this.agentId}/tools/${toolId}/execute`, {
+      method: 'POST',
+      body,
+    });
   }
 
   /**
