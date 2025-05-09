@@ -176,7 +176,11 @@ export class Telemetry {
           span.setAttribute('http.request_id', requestId);
         }
 
-        if (context.attributes?.componentName) {
+        if (componentName) {
+          span.setAttribute('componentName', componentName);
+          // @ts-ignore
+          span.setAttribute('runId', runId);
+        } else if (context.attributes?.componentName) {
           ctx = propagation.setBaggage(
             ctx,
             propagation.createBaggage({
@@ -187,26 +191,20 @@ export class Telemetry {
               'http.request_id': { value: requestId },
             }),
           );
-        } else {
-          if (componentName) {
-            span.setAttribute('componentName', componentName);
-            // @ts-ignore
-            span.setAttribute('runId', runId);
-          } else if (this && this.name) {
-            span.setAttribute('componentName', this.name);
-            // @ts-ignore
-            span.setAttribute('runId', this.runId);
-            ctx = propagation.setBaggage(
-              ctx,
-              propagation.createBaggage({
-                componentName: { value: this.name },
-                // @ts-ignore
-                runId: { value: this.runId },
-                // @ts-ignore
-                'http.request_id': { value: requestId },
-              }),
-            );
-          }
+        } else if (this && this.name) {
+          span.setAttribute('componentName', this.name);
+          // @ts-ignore
+          span.setAttribute('runId', this.runId);
+          ctx = propagation.setBaggage(
+            ctx,
+            propagation.createBaggage({
+              componentName: { value: this.name },
+              // @ts-ignore
+              runId: { value: this.runId },
+              // @ts-ignore
+              'http.request_id': { value: requestId },
+            }),
+          );
         }
 
         // Record input arguments as span attributes

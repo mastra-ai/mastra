@@ -48,7 +48,7 @@ export async function getTelemetryHandler({ mastra, body }: TelemetryContext) {
       name,
       scope,
       page: Number(page ?? 0),
-      perPage: Number(perPage ?? 100),
+      perPage: Number(perPage ?? 1000),
       attributes,
       fromDate: fromDate ? new Date(fromDate) : undefined,
       toDate: toDate ? new Date(toDate) : undefined,
@@ -72,6 +72,7 @@ export async function storeTelemetryHandler({ mastra, body }: Context & { body: 
     const now = new Date();
 
     const items = body?.resourceSpans?.[0]?.scopeSpans;
+    console.dir(body?.resourceSpans, { depth: null });
     logger.debug('[Telemetry Handler] Received spans:', {
       totalSpans: items?.reduce((acc: number, scope: { spans: any[] }) => acc + scope.spans.length, 0) || 0,
       timestamp: now.toISOString(),

@@ -24,6 +24,7 @@ import type { MemoryConfig } from '../memory/types';
 import type { RuntimeContext } from '../runtime-context';
 import type { ToolAction, VercelTool } from '../tools';
 import type { CompositeVoice } from '../voice';
+import type { NewWorkflow } from '../workflows/vNext';
 
 export type { Message as AiMessageType } from 'ai';
 
@@ -47,6 +48,7 @@ export interface AgentConfig<
   defaultGenerateOptions?: AgentGenerateOptions;
   defaultStreamOptions?: AgentStreamOptions;
   mastra?: Mastra;
+  workflows?: DynamicArgument<Record<string, NewWorkflow>>;
   evals?: TMetrics;
   memory?: MastraMemory;
   voice?: CompositeVoice;

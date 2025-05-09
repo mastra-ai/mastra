@@ -11,6 +11,7 @@
     "@mastra/voice-openai": "latest",
     "@mastra/memory": "latest",
     "@mastra/client-js": "latest",
+    "mastra": "latest",
     "zod": "^3.24.3"
   },
   "pnpm": {
@@ -18,10 +19,12 @@
       "@mastra/core": "link:../../packages/core",
       "@mastra/voice-openai": "link:../../voice/openai",
       "@mastra/memory": "link:../../packages/memory",
-      "@mastra/client-js": "link:../../client-sdks/client-js"
+      "@mastra/client-js": "link:../../client-sdks/client-js",
+      "mastra": "link:../../packages/cli"
     }
   },
   "scripts": {
+    "mastra:dev": "mastra dev",
     "start-deployed": "npx bun src/with-deployed.ts",
     "start": "npx bun src/index.ts"
   },

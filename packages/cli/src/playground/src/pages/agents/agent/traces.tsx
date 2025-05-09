@@ -10,6 +10,8 @@ function AgentTracesContent() {
   const { agent, isLoading: isAgentLoading } = useAgent(agentId!);
   const { traces, firstCallLoading, error } = useTraces(agent?.name || '', '');
 
+  console.log('traces', traces);
+
   if (isAgentLoading) {
     return (
       <div className="p-4">

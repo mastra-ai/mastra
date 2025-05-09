@@ -9,6 +9,7 @@ overrides:
   '@mastra/voice-openai': link:../../voice/openai
   '@mastra/memory': link:../../packages/memory
   '@mastra/client-js': link:../../client-sdks/client-js
+  mastra: link:../../packages/cli
 
 importers:
 
@@ -29,6 +30,9 @@ importers:
       '@mastra/voice-openai':
         specifier: link:../../voice/openai
         version: link:../../voice/openai
+      mastra:
+        specifier: link:../../packages/cli
+        version: link:../../packages/cli
       zod:
         specifier: ^3.24.3
         version: 3.24.3

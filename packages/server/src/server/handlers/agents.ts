@@ -24,6 +24,7 @@ export async function getAgentsHandler({ mastra, runtimeContext }: Context & { r
         const instructions = await agent.getInstructions({ runtimeContext });
         const tools = await agent.getTools({ runtimeContext });
         const llm = await agent.getLLM({ runtimeContext });
+        const workflows = await agent.getWorkflows({ runtimeContext });
 
         const serializedAgentTools = Object.entries(tools || {}).reduce<any>((acc, [key, tool]) => {
           const _tool = tool as any;
@@ -35,11 +36,26 @@ export async function getAgentsHandler({ mastra, runtimeContext }: Context & { r
           return acc;
         }, {});
 
+        let serializedAgentWorkflows = {};
+
+        if ('getWorkflows' in agent) {
+          serializedAgentWorkflows = Object.entries(workflows || {}).reduce<any>((acc, [key, workflow]) => {
+            const _workflow = workflow;
+            return {
+              ...acc,
+              [key]: {
+                name: workflow.name,
+              },
+            };
+          }, {});
+        }
+
         return {
           id,
           name: agent.name,
           instructions,
           tools: serializedAgentTools,
+          workflows: serializedAgentWorkflows,
           provider: llm?.getProvider(),
           modelId: llm?.getModelId(),
         };
@@ -81,6 +97,21 @@ export async function getAgentByIdHandler({
       return acc;
     }, {});
 
+    let serializedAgentWorkflows = {};
+
+    if ('getWorkflows' in agent) {
+      const workflows = await agent.getWorkflows({ runtimeContext });
+
+      serializedAgentWorkflows = Object.entries(workflows || {}).reduce<any>((acc, [key, workflow]) => {
+        return {
+          ...acc,
+          [key]: {
+            name: workflow.name,
+          },
+        };
+      }, {});
+    }
+
     const instructions = await agent.getInstructions({ runtimeContext });
     const llm = await agent.getLLM({ runtimeContext });
 
@@ -88,6 +119,7 @@ export async function getAgentByIdHandler({
       name: agent.name,
       instructions,
       tools: serializedAgentTools,
+      workflows: serializedAgentWorkflows,
       provider: llm?.getProvider(),
       modelId: llm?.getModelId(),
     };

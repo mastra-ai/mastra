@@ -10,6 +10,7 @@ import { handleError } from './error';
 
 interface WorkflowContext extends Context {
   workflowId?: string;
+  runtimeContext?: RuntimeContext;
   runId?: string;
 }
 

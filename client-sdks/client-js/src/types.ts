@@ -42,6 +42,7 @@ export interface GetAgentResponse {
   name: string;
   instructions: string;
   tools: Record<string, GetToolResponse>;
+  workflows: Record<string, GetWorkflowResponse>;
   provider: string;
   modelId: string;
 }

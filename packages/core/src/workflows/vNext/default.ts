@@ -6,6 +6,7 @@ import { ExecutionEngine } from './execution-engine';
 import type { ExecuteFunction, NewStep } from './step';
 import type { StepResult } from './types';
 import type { StepFlowEntry } from './workflow';
+import { getBaggageValues } from '../../telemetry';
 
 export type ExecutionContext = {
   workflowId: string;
@@ -125,8 +126,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       throw new Error('Workflow must have at least one step');
     }
 
+    const ctx = otlpContext.active();
+    const { requestId, componentName, runId: runIdFromBaggage } = getBaggageValues(ctx);
+
     const executionSpan = this.mastra?.getTelemetry()?.tracer.startSpan(`workflow.${workflowId}.execute`, {
-      attributes: { componentName: workflowId, runId },
+      attributes: { componentName: componentName ?? workflowId, runId: runIdFromBaggage ?? runId, requestId },
     });
 
     await this.mastra?.getStorage()?.init();

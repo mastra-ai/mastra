@@ -750,7 +750,9 @@ export class NewWorkflow<
    */
   createRun(options?: { runId?: string }): Run<TSteps, TInput, TOutput> {
     if (this.stepFlow.length === 0) {
-      throw new Error('Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.');
+      throw new Error(
+        'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
+      );
     }
     if (!this.executionGraph.steps) {
       throw new Error('Uncommitted step flow changes detected. Call .commit() to register the steps.');

@@ -33,6 +33,7 @@ import { makeCoreTool, createMastraProxy, ensureToolProperties, ensureAllMessage
 import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import { agentToStep, Step } from '../workflows';
+import type { NewWorkflow } from '../workflows/vNext';
 import type {
   AgentConfig,
   MastraLanguageModel,
@@ -68,6 +69,7 @@ function resoolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T)
     'log',
     'getModel',
     'getInstructions',
+    'getWorkflows',
     'getTools',
     'getLLM',
   ],
@@ -90,6 +92,7 @@ export class Agent<
   metrics: TMetrics;
   evals: TMetrics;
   #voice: CompositeVoice;
+  #workflows?: DynamicArgument<Record<string, NewWorkflow>>;
 
   constructor(config: AgentConfig<TAgentId, TTools, TMetrics>) {
     super({ component: RegisteredLogger.AGENT });
@@ -119,6 +122,10 @@ export class Agent<
         telemetry: config.mastra.getTelemetry(),
         logger: config.mastra.getLogger(),
       });
+    }
+
+    if (config.workflows) {
+      this.#workflows = config.workflows;
     }
 
     if (config.metrics) {
@@ -154,6 +161,25 @@ export class Agent<
 
   public getMemory(): MastraMemory | undefined {
     return this.#memory ?? this.#mastra?.memory;
+  }
+
+  public async getWorkflows({
+    runtimeContext = new RuntimeContext(),
+  }: { runtimeContext?: RuntimeContext } = {}): Promise<Record<string, NewWorkflow>> {
+    let workflowRecord;
+    if (typeof this.#workflows === 'function') {
+      workflowRecord = await Promise.resolve(this.#workflows({ runtimeContext }));
+    } else {
+      workflowRecord = this.#workflows ?? {};
+    }
+
+    Object.entries(workflowRecord || {}).forEach(([_workflowName, workflow]) => {
+      if (this.#mastra) {
+        workflow.__registerMastra(this.#mastra);
+      }
+    });
+
+    return workflowRecord;
   }
 
   get voice() {
@@ -740,10 +766,55 @@ export class Agent<
       );
     }
 
+    let convertedWorkflowTools: Record<string, CoreTool> = {};
+    const workflows = await this.getWorkflows({ runtimeContext });
+    if (Object.keys(workflows).length > 0) {
+      convertedWorkflowTools = Object.entries(workflows).reduce(
+        (memo, [workflowName, workflow]) => {
+          memo[workflowName] = {
+            description: workflow.description || `Workflow: ${workflowName}`,
+            parameters: workflow.inputSchema || { type: 'object', properties: {} },
+            execute: async (args: any) => {
+              try {
+                this.logger.debug(`[Agent:${this.name}] - Executing workflow as tool ${workflowName}`, {
+                  name: workflowName,
+                  description: workflow.description,
+                  args,
+                  runId,
+                  threadId,
+                  resourceId,
+                });
+
+                const run = workflow.createRun();
+
+                const result = await run.start({
+                  inputData: args,
+                  runtimeContext,
+                });
+
+                return result;
+              } catch (err) {
+                this.logger.error(`[Agent:${this.name}] - Failed workflow tool execution`, {
+                  error: err,
+                  runId,
+                  threadId,
+                  resourceId,
+                });
+                throw err;
+              }
+            },
+          };
+          return memo;
+        },
+        {} as Record<string, CoreTool>,
+      );
+    }
+
     // Convert tools from toolsets
     const toolsFromToolsetsConverted: Record<string, CoreTool> = {
       ...converted,
       ...convertedMemoryTools,
+      ...convertedWorkflowTools,
     };
 
     const toolsFromToolsets = Object.values(toolsets || {});

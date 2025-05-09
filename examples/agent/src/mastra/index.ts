@@ -2,16 +2,12 @@ import { Mastra } from '@mastra/core';
 import { createLogger } from '@mastra/core/logger';
 
 import { chefAgent, chefAgentResponses, dynamicAgent } from './agents/index';
+import { myWorkflow } from './workflows';
 
 export const mastra = new Mastra({
   agents: { chefAgent, chefAgentResponses, dynamicAgent },
-  logger: createLogger({ name: 'Chef', level: 'info' }),
-  serverMiddleware: [
-    {
-      handler: (c, next) => {
-        console.log('Middleware called');
-        return next();
-      },
-    },
-  ],
+  logger: createLogger({ name: 'Chef', level: 'debug' }),
+  // vnext_workflows: {
+  //   myWorkflow,
+  // },
 });
