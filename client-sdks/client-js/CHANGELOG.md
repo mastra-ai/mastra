@@ -1,5 +1,15 @@
 # @mastra/client-js
 
+## 0.1.22-alpha.0
+
+### Patch Changes
+
+- cb1f698: Set runtimeContext from playground for agents, tools, workflows
+- 0b8b868: Added A2A support + streaming
+- Updated dependencies [daf942f]
+- Updated dependencies [0b8b868]
+  - @mastra/core@0.9.4-alpha.0
+
 ## 0.1.21
 
 ### Patch Changes

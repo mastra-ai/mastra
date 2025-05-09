@@ -1,5 +1,17 @@
 # mastra
 
+## 0.6.3-alpha.0
+
+### Patch Changes
+
+- 15dc8e4: Use detected package manager in post-create instructions
+- cb1f698: Set runtimeContext from playground for agents, tools, workflows
+- Updated dependencies [cb1f698]
+- Updated dependencies [daf942f]
+- Updated dependencies [0b8b868]
+  - @mastra/deployer@0.3.4-alpha.0
+  - @mastra/core@0.9.4-alpha.0
+
 ## 0.6.2
 
 ### Patch Changes
