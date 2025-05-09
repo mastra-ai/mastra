@@ -111,13 +111,15 @@ export async function startAsyncWorkflowHandler({
       return result;
     }
 
-    const run = workflow.getRun(runId);
+    const run = await workflow.getRun(runId);
 
     if (!run) {
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const result = await run.start({
+    const { start } = workflow.createRun({ runId });
+
+    const result = await start({
       triggerData,
       runtimeContext,
     });
@@ -147,7 +149,7 @@ export async function getWorkflowRunHandler({
       throw new HTTPException(404, { message: 'Workflow not found' });
     }
 
-    const run = workflow.getRun(runId);
+    const run = await workflow.getRun(runId);
 
     if (!run) {
       throw new HTTPException(404, { message: 'Workflow run not found' });
@@ -203,13 +205,15 @@ export async function startWorkflowRunHandler({
     }
 
     const workflow = mastra.getWorkflow(workflowId);
-    const run = workflow.getRun(runId);
+    const run = await workflow.getRun(runId);
 
     if (!run) {
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    await run.start({
+    const { start } = workflow.createRun({ runId });
+
+    await start({
       triggerData,
       runtimeContext,
     });
@@ -235,17 +239,19 @@ export async function watchWorkflowHandler({
     }
 
     const workflow = mastra.getWorkflow(workflowId);
-    const run = workflow.getRun(runId);
+    const run = await workflow.getRun(runId);
 
     if (!run) {
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
+    const { watch } = workflow.createRun({ runId });
+
     let unwatch: () => void;
     let asyncRef: NodeJS.Immediate | null = null;
     const stream = new ReadableStream<string>({
       start(controller) {
-        unwatch = run.watch(({ activePaths, runId, timestamp, results }) => {
+        unwatch = watch(({ activePaths, runId, timestamp, results }) => {
           const activePathsObj = Object.fromEntries(activePaths);
           controller.enqueue(JSON.stringify({ activePaths: activePathsObj, runId, timestamp, results }));
 
@@ -255,8 +261,9 @@ export async function watchWorkflowHandler({
           }
 
           // a run is finished if we cannot retrieve it anymore
-          asyncRef = setImmediate(() => {
-            if (!workflow.getRun(runId)) {
+          asyncRef = setImmediate(async () => {
+            const stillRunning = await workflow.getRun(runId);
+            if (!stillRunning) {
               controller.close();
             }
           });
@@ -290,13 +297,15 @@ export async function resumeAsyncWorkflowHandler({
     }
 
     const workflow = mastra.getWorkflow(workflowId);
-    const run = workflow.getRun(runId);
+    const run = await workflow.getRun(runId);
 
     if (!run) {
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const result = await run.resume({
+    const { resume } = workflow.createRun({ runId });
+
+    const result = await resume({
       stepId: body.stepId,
       context: body.context,
       runtimeContext,
@@ -325,13 +334,15 @@ export async function resumeWorkflowHandler({
     }
 
     const workflow = mastra.getWorkflow(workflowId);
-    const run = workflow.getRun(runId);
+    const run = await workflow.getRun(runId);
 
     if (!run) {
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    await run.resume({
+    const { resume } = workflow.createRun({ runId });
+
+    await resume({
       stepId: body.stepId,
       context: body.context,
       runtimeContext,

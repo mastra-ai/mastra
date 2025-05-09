@@ -945,8 +945,15 @@ export class Workflow<
    * @param runId - ID of the run to retrieve
    * @returns The workflow run instance if found, undefined otherwise
    */
-  getRun(runId: string) {
-    return this.#runs.get(runId);
+  async getRun(runId: string) {
+    const storage = this.#mastra?.getStorage();
+    if (!storage) {
+      this.logger.debug('Cannot get workflow run. Mastra engine is not initialized');
+      return null;
+    }
+    const run = await storage.getWorkflowRunById({ runId, workflowName: this.name });
+
+    return run ?? this.#runs.get(runId);
   }
 
   /**
