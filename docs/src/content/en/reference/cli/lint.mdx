@@ -19,3 +19,14 @@ mastra lint [options]
 | `-r, --root <path>` | Path to your root folder |
 | `-t, --tools <toolsDirs>` | Comma-separated list of paths to tool files to include |
 
+## Advanced usage
+
+### Disable telemetry
+
+To disable CLI analytics while running linting (and other commands) set
+`MASTRA_TELEMETRY_DISABLED=1`:
+
+```bash
+MASTRA_TELEMETRY_DISABLED=1 mastra lint
+```
+

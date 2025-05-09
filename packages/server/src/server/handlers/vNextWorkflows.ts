@@ -1,5 +1,5 @@
 import { ReadableStream } from 'node:stream/web';
-import type { RuntimeContext } from '@mastra/core/di';
+import { RuntimeContext } from '@mastra/core/di';
 import type { WorkflowRuns } from '@mastra/core/storage';
 import type { NewWorkflow, SerializedStepFlowEntry } from '@mastra/core/workflows/vNext';
 import { stringify } from 'superjson';
@@ -157,9 +157,11 @@ export async function startAsyncVNextWorkflowHandler({
   workflowId,
   runId,
   inputData,
+  runtimeContextFromRequest,
 }: Pick<VNextWorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
   inputData?: unknown;
   runtimeContext?: RuntimeContext;
+  runtimeContextFromRequest?: Record<string, unknown>;
 }) {
   try {
     if (!workflowId) {
@@ -172,10 +174,15 @@ export async function startAsyncVNextWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow not found' });
     }
 
+    const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
+      ...Array.from(runtimeContext?.entries() ?? []),
+      ...Array.from(Object.entries(runtimeContextFromRequest ?? {})),
+    ]);
+
     const _run = workflow.createRun({ runId });
     const result = await _run.start({
       inputData,
-      runtimeContext,
+      runtimeContext: finalRuntimeContext,
     });
     return result;
   } catch (error) {
@@ -189,9 +196,11 @@ export async function startVNextWorkflowRunHandler({
   workflowId,
   runId,
   inputData,
+  runtimeContextFromRequest,
 }: Pick<VNextWorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
   inputData?: unknown;
   runtimeContext?: RuntimeContext;
+  runtimeContextFromRequest?: Record<string, unknown>;
 }) {
   try {
     if (!workflowId) {
@@ -209,10 +218,15 @@ export async function startVNextWorkflowRunHandler({
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
+    const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
+      ...Array.from(runtimeContext?.entries() ?? []),
+      ...Array.from(Object.entries(runtimeContextFromRequest ?? {})),
+    ]);
+
     const _run = workflow.createRun({ runId });
     await _run.start({
       inputData,
-      runtimeContext,
+      runtimeContext: finalRuntimeContext,
     });
 
     return { message: 'Workflow run started' };
@@ -282,9 +296,11 @@ export async function resumeAsyncVNextWorkflowHandler({
   runId,
   body,
   runtimeContext,
+  runtimeContextFromRequest,
 }: VNextWorkflowContext & {
   body: { step: string | string[]; resumeData?: unknown };
   runtimeContext?: RuntimeContext;
+  runtimeContextFromRequest?: Record<string, unknown>;
 }) {
   try {
     if (!workflowId) {
@@ -306,12 +322,16 @@ export async function resumeAsyncVNextWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const _run = workflow.createRun({ runId });
+    const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
+      ...Array.from(runtimeContext?.entries() ?? []),
+      ...Array.from(Object.entries(runtimeContextFromRequest ?? {})),
+    ]);
 
+    const _run = workflow.createRun({ runId });
     const result = await _run.resume({
       step: body.step,
       resumeData: body.resumeData,
-      runtimeContext,
+      runtimeContext: finalRuntimeContext,
     });
 
     return result;

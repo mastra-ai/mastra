@@ -1,5 +1,16 @@
 # create-mastra
 
+## 0.3.2
+
+### Patch Changes
+
+- 0db0992: - add new --mcp option to cli
+  - add support for mcp in vscode
+  - include examples with --default flag
+- b5d2de0: In vNext workflow serializedStepGraph, return only serializedStepFlow for steps created from a workflow
+  allow viewing inner nested workflows in a multi-layered nested vnext workflow on the playground
+- 62c9e7d: Fix disappearing tool calls in streaming
+
 ## 0.3.2-alpha.1
 
 ### Patch Changes
