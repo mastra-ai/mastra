@@ -258,11 +258,10 @@ export async function watchWorkflowHandler({
             asyncRef = null;
           }
 
-          // a run is finished if we cannot retrieve it anymore
+          // a run is finished if none of the active paths is currently being executed
           asyncRef = setImmediate(() => {
-            // const memoryRun = workflow.getMemoryRun(runId);
-            const rundDone = Object.values(activePathsObj).some(value => value.status !== 'executing');
-            if (rundDone) {
+            const runDone = Object.values(activePathsObj).every(value => value.status !== 'executing');
+            if (runDone) {
               controller.close();
               unwatch?.();
             }
