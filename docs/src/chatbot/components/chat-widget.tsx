@@ -146,7 +146,6 @@ export function CustomChatInterface({
                     setInputValue("");
                   }
                 }
-                // Shift+Enter will create a new line (default behavior)
               }}
               placeholder="Enter your message..."
               className="border-none shadow-none resize-none text-icons-6 placeholder:text-icons-2 focus-visible:ring-0"
