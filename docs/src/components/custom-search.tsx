@@ -131,7 +131,7 @@ export const CustomSearch: FC<SearchProps> = ({
   emptyResult = "No results found.",
   errorText = "Failed to load search index.",
   loading = "Loading…",
-  placeholder = "Search documentation…",
+  placeholder = "Search or ask..",
   searchOptions,
   setIsSearching,
   onUseAgent,
