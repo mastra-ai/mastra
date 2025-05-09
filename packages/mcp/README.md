@@ -301,6 +301,51 @@ The `MCPClient` class automatically:
 - Handles connection lifecycle and cleanup
 - Provides both flat and grouped access to tools
 
+## Accessing MCP Resources
+
+MCP servers can expose resources - data or content that can be retrieved and used in your application. The `MCPClient` class provides methods to access these resources across multiple servers:
+
+```typescript
+import { MCPClient } from '@mastra/mcp';
+
+const mcp = new MCPClient({
+  servers: {
+    weather: {
+      url: new URL('http://localhost:8080/mcp'),
+    },
+    dataService: {
+      command: 'npx',
+      args: ['tsx', 'data-service.ts'],
+    },
+  },
+});
+
+// Get resources from all connected MCP servers
+const resources = await mcp.getResources();
+
+// Resources are grouped by server name
+console.log(Object.keys(resources)); // ['weather', 'dataService']
+
+// Each server entry contains an array of resources
+if (resources.weather) {
+  // Access resources from the weather server
+  const weatherResources = resources.weather;
+  
+  // Each resource has uri, name, description, and mimeType
+  weatherResources.forEach(resource => {
+    console.log(`${resource.uri}: ${resource.name} (${resource.mimeType})`);
+  });
+  
+  // Find a specific resource by URI
+  const forecast = weatherResources.find(r => r.uri === 'weather://forecast');
+  if (forecast) {
+    console.log(`Found forecast resource: ${forecast.description}`);
+  }
+}
+```
+
+The `getResources()` method handles errors gracefully - if a server fails or doesn't support resources, it will be omitted from the results without causing the entire operation to fail.
+
 ## SSE Authentication and Headers (Legacy Fallback)
 
 When the client falls back to using the legacy SSE (Server-Sent Events) transport and you need to include authentication or custom headers, you need to configure headers in a specific way. The standard `requestInit` headers won't work alone because SSE connections using the browser's `EventSource` API don't support custom headers directly.
