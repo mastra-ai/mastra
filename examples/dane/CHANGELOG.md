@@ -1,5 +1,23 @@
 # @mastra/dane
 
+## 0.0.20-alpha.0
+
+### Patch Changes
+
+- 48b8c2c: dependencies updates:
+  - Updated dependency [`@ai-sdk/anthropic@^1.2.10` ↗︎](https://www.npmjs.com/package/@ai-sdk/anthropic/v/1.2.10) (from `^1.1.15`, in `dependencies`)
+- 981308f: dependencies updates:
+  - Updated dependency [`@ai-sdk/anthropic@^1.2.11` ↗︎](https://www.npmjs.com/package/@ai-sdk/anthropic/v/1.2.11) (from `^1.2.10`, in `dependencies`)
+- Updated dependencies [daf942f]
+- Updated dependencies [0b8b868]
+  - @mastra/core@0.9.4-alpha.0
+  - @mastra/github@1.1.23-alpha.0
+  - @mastra/mcp@0.4.4-alpha.0
+  - @mastra/memory@0.3.4-alpha.0
+  - @mastra/rag@0.1.23-alpha.0
+  - @mastra/libsql@0.0.4-alpha.0
+  - @mastra/upstash@0.3.4-alpha.0
+
 ## 0.0.19
 
 ### Patch Changes

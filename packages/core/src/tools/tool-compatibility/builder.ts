@@ -1,6 +1,11 @@
 import type { ToolExecutionOptions } from 'ai';
+import { jsonSchema } from 'ai';
+import type { JSONSchema7 } from 'json-schema';
 import jsonSchemaToZod from 'json-schema-to-zod';
+import type { ZodSchema, ZodType } from 'zod';
 import { z } from 'zod';
+import type { Targets } from 'zod-to-json-schema';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 import { MastraBase } from '../../base';
 import { RuntimeContext } from '../../runtime-context';
 import { isVercelTool, isZodType, resolveSerializedZodOutput } from '../../utils';
@@ -12,6 +17,7 @@ import { GoogleToolCompat } from './provider-compats/google';
 import { MetaToolCompat } from './provider-compats/meta';
 import { OpenAIToolCompat } from './provider-compats/openai';
 import { OpenAIReasoningToolCompat } from './provider-compats/openai-reasoning';
+
 export type ToolToConvert = VercelTool | ToolAction<any, any, any>;
 export type LogType = 'tool' | 'toolset' | 'client-tool';
 
@@ -24,6 +30,22 @@ interface LogOptions {
 interface LogMessageOptions {
   start: string;
   error: string;
+}
+
+// mirrors https://github.com/vercel/ai/blob/main/packages/ui-utils/src/zod-schema.ts#L21 but with a custom target
+export function convertZodSchemaToAISDKSchema(zodSchema: ZodSchema, target: Targets = 'jsonSchema7') {
+  return jsonSchema(
+    zodToJsonSchema(zodSchema, {
+      $refStrategy: 'none',
+      target,
+    }) as JSONSchema7,
+    {
+      validate: value => {
+        const result = zodSchema.safeParse(value);
+        return result.success ? { success: true, value: result.data } : { success: false, error: result.error };
+      },
+    },
+  );
 }
 
 export function convertVercelToolParameters(tool: VercelTool): z.ZodType {
@@ -73,7 +95,7 @@ export class CoreToolBuilder extends MastraBase {
         id: tool.id,
         args: ('args' in this.originalTool ? this.originalTool.args : {}) as Record<string, unknown>,
         description: tool.description,
-        parameters: this.getParameters(),
+        parameters: convertZodSchemaToAISDKSchema(this.getParameters()),
         execute: this.originalTool.execute
           ? this.createExecute(
               this.originalTool,
@@ -166,9 +188,19 @@ export class CoreToolBuilder extends MastraBase {
         : undefined,
     };
 
+    const parametersObject: { parameters?: ZodType; inputSchema?: ZodType } = {};
+
+    if (isVercelTool(this.originalTool)) {
+      parametersObject.parameters = this.getParameters();
+    } else {
+      parametersObject.inputSchema = this.getParameters();
+    }
+
     const model = this.options.model;
 
-    if (model) {
+    const hasParameters = parametersObject.parameters || parametersObject.inputSchema;
+
+    if (model && hasParameters) {
       for (const compat of [
         new OpenAIReasoningToolCompat(model),
         new OpenAIToolCompat(model),
@@ -178,11 +210,14 @@ export class CoreToolBuilder extends MastraBase {
         new MetaToolCompat(model),
       ]) {
         if (compat.shouldApply()) {
-          return { ...definition, ...compat.process(this.originalTool) };
+          return { ...definition, ...compat.process({ ...this.originalTool, ...parametersObject }) };
         }
       }
     }
 
-    return definition;
+    return {
+      ...definition,
+      parameters: convertZodSchemaToAISDKSchema(this.getParameters()),
+    };
   }
 }

@@ -9,7 +9,6 @@ import {
 import cn from "clsx";
 import { Search } from "lucide-react";
 import { addBasePath } from "next/dist/client/add-base-path";
-import NextLink from "next/link";
 import { useRouter } from "next/navigation";
 import type {
   FC,
@@ -19,11 +18,11 @@ import type {
   SyntheticEvent,
 } from "react";
 import { useDeferredValue, useEffect, useRef, useState } from "react";
+import { JarvisIcon } from "./svgs/Icons";
 import { InformationIcon } from "./svgs/information-icon";
 import { SpinnerIcon } from "./svgs/spinner";
-import { ScrollArea } from "./ui/scroll-area";
-import { JarvisIcon } from "./svgs/Icons";
 import { Button } from "./ui/button";
+import { ScrollArea } from "./ui/scroll-area";
 
 /**
  * Options that can be passed to `pagefind.search()`.
@@ -139,7 +138,7 @@ export const CustomSearch: FC<SearchProps> = ({
   onUseAgent,
   closeModal,
 }) => {
-  const [isLoading, setIsLoading] = useState(true);
+  const [isSearchLoading, setIsSearchLoading] = useState(true);
   const [error, setError] = useState<ReactElement | string>("");
   const [results, setResults] = useState<PagefindResult[]>([]);
   const [search, setSearch] = useState("");
@@ -162,7 +161,7 @@ export const CustomSearch: FC<SearchProps> = ({
         setError("");
         return;
       }
-      setIsLoading(true);
+      setIsSearchLoading(true);
       // @ts-expect-error - allow
       if (!window.pagefind) {
         try {
@@ -176,7 +175,7 @@ export const CustomSearch: FC<SearchProps> = ({
                 : `${error.constructor.name}: ${error.message}`
               : String(error);
           setError(message);
-          setIsLoading(false);
+          setIsSearchLoading(false);
           return;
         }
       }
@@ -189,7 +188,7 @@ export const CustomSearch: FC<SearchProps> = ({
 
       // @ts-expect-error - allow
       const data = await Promise.all(response.results.map((o) => o.data()));
-      setIsLoading(false);
+      setIsSearchLoading(false);
       setError("");
       setResults(
         // @ts-expect-error - allow
@@ -238,6 +237,8 @@ export const CustomSearch: FC<SearchProps> = ({
     setSearch("");
   };
 
+  const isSearchEmpty = !search || !results.length;
+
   return (
     <Combobox onChange={handleSelect}>
       <div
@@ -274,59 +275,63 @@ export const CustomSearch: FC<SearchProps> = ({
           />
         )}
       </div>
-      <ScrollArea className="max-h-[500px]">
-        <ComboboxOptions
-          transition
-          modal={false}
-          // anchor="bottom"
-          className={cn(
-            "nextra-search-results", // for user styling
-            "nextra-scrollbar x:max-md:h-full",
-            // "x:border x:border-gray-200 x:text-gray-100 x:dark:border-neutral-800",
-            // "x:z-30 x:rounded-xl x:py-2.5 x:shadow-xl",
-            // "x:contrast-more:border x:contrast-more:border-gray-900 x:contrast-more:dark:border-gray-50",
-            // "x:backdrop-blur-md x:bg-nextra-bg/70",
-            "x:motion-reduce:transition-none",
-            // From https://headlessui.com/react/combobox#adding-transitions
-            "x:origin-top x:transition x:duration-200 x:ease-out x:data-closed:scale-95 x:data-closed:opacity-0 x:empty:invisible",
-            error || isLoading
-              ? [
-                  "x:md:min-h-28 x:grow x:flex x:justify-center x:text-sm x:gap-2 x:px-8",
-                  error
-                    ? "x:text-red-500 x:items-start"
-                    : "x:text-gray-400 x:items-center",
-                ]
-              : // headlessui adds max-height as style, use !important to override
-                // "x:md:max-h-[min(calc(100vh-5rem),400px)]!",
-                "x:w-full x:md:w-[576px]",
-          )}
-        >
-          {error ? (
-            <>
-              <InformationIcon height="1.25em" className="x:shrink-0" />
-              <div className="x:grid">
-                <b className="x:mb-2">{errorText}</b>
-                {error}
-              </div>
-            </>
-          ) : isLoading ? (
-            <>
-              <SpinnerIcon height="20" className="x:shrink-0 x:animate-spin" />
-              {loading}
-            </>
-          ) : results.length ? (
-            results.map((searchResult) => (
-              <Result
-                key={searchResult.url}
-                data={searchResult}
-                closeModal={closeModal}
-              />
-            ))
-          ) : (
-            deferredSearch && emptyResult
-          )}
-        </ComboboxOptions>
-      </ScrollArea>
+      <div
+        className={cn(
+          "relative max-h-[500px] overflow-hidden",
+          isSearchLoading || isSearchEmpty ? "h-fit" : "h-[500px]",
+        )}
+      >
+        <ScrollArea className="h-full">
+          <ComboboxOptions
+            transition
+            modal={false}
+            // anchor="bottom"
+            className={cn(
+              "x:motion-reduce:transition-none",
+              // From https://headlessui.com/react/combobox#adding-transitions
+              "x:origin-top x:transition x:duration-200 x:ease-out x:data-closed:scale-95 x:data-closed:opacity-0 x:empty:invisible",
+              error || isSearchLoading
+                ? [
+                    "x:md:min-h-28 x:grow x:flex x:justify-center x:text-sm x:gap-2 x:px-8",
+                    error
+                      ? "x:text-red-500 x:items-start"
+                      : "x:text-gray-400 x:items-center",
+                  ]
+                : // headlessui adds max-height as style, use !important to override
+                  "max-h-none!",
+              "x:w-full",
+            )}
+          >
+            {error ? (
+              <>
+                <InformationIcon height="1.25em" className="x:shrink-0" />
+                <div className="x:grid">
+                  <b className="x:mb-2">{errorText}</b>
+                  {error}
+                </div>
+              </>
+            ) : isSearchLoading ? (
+              <>
+                <SpinnerIcon
+                  height="20"
+                  className="x:shrink-0 x:animate-spin"
+                />
+                {loading}
+              </>
+            ) : results.length ? (
+              results.map((searchResult) => (
+                <Result
+                  key={searchResult.url}
+                  data={searchResult}
+                  closeModal={closeModal}
+                />
+              ))
+            ) : (
+              deferredSearch && emptyResult
+            )}
+          </ComboboxOptions>
+        </ScrollArea>
+      </div>
     </Combobox>
   );
 };
@@ -335,6 +340,7 @@ const Result: FC<{ data: PagefindResult; closeModal: () => void }> = ({
   data,
   closeModal,
 }) => {
+  const router = useRouter();
   return (
     <>
       <div
@@ -348,11 +354,12 @@ const Result: FC<{ data: PagefindResult; closeModal: () => void }> = ({
       {data.sub_results.map((subResult) => (
         <ComboboxOption
           key={subResult.url}
-          as={NextLink}
+          // as={NextLink}
           value={subResult}
-          href={subResult.url}
+          // href={subResult.url}
           onClick={() => {
             closeModal();
+            router.push(subResult.url);
           }}
           className={({ focus }) =>
             cn(

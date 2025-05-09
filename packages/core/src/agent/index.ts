@@ -1025,6 +1025,7 @@ export class Agent<
                 resourceId,
                 memoryConfig,
                 title,
+                metadata: thread.metadata,
               });
             })();
             let responseMessages = result.response.messages;
