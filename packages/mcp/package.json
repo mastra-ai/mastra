@@ -21,7 +21,8 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
     "build:watch": "pnpm build --watch",
-    "test": "vitest run",
+    "test:integration": "cd integration-tests && pnpm test:mcp",
+    "test": "pnpm test:integration && vitest run",
     "lint": "eslint ."
   },
   "keywords": [],
@@ -33,7 +34,11 @@
     "date-fns": "^4.1.0",
     "exit-hook": "^4.0.0",
     "fast-deep-equal": "^3.1.3",
+    "json-schema-to-zod": "^2.6.0",
     "uuid": "^11.1.0"
+  },
+  "peerDependencies": {
+    "zod": "^3.0.0"
   },
   "devDependencies": {
     "@ai-sdk/anthropic": "^1.1.15",
@@ -41,7 +46,6 @@
     "@microsoft/api-extractor": "^7.52.5",
     "@types/node": "^20.17.27",
     "eslint": "^9.23.0",
-    "json-schema-to-zod": "^2.6.0",
     "tsup": "^8.4.0",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2",
