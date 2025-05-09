@@ -67,10 +67,6 @@ export function CustomChatInterface({
     setInputValue("");
   };
 
-  const handleNewChat = () => {
-    reset();
-  };
-
   const handleBackToSearch = () => {
     setIsAgentMode(false);
   };

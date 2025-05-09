@@ -9,7 +9,6 @@ import {
 import cn from "clsx";
 import { Search } from "lucide-react";
 import { addBasePath } from "next/dist/client/add-base-path";
-import NextLink from "next/link";
 import { useRouter } from "next/navigation";
 import type {
   FC,
@@ -19,11 +18,11 @@ import type {
   SyntheticEvent,
 } from "react";
 import { useDeferredValue, useEffect, useRef, useState } from "react";
+import { JarvisIcon } from "./svgs/Icons";
 import { InformationIcon } from "./svgs/information-icon";
 import { SpinnerIcon } from "./svgs/spinner";
-import { ScrollArea } from "./ui/scroll-area";
-import { JarvisIcon } from "./svgs/Icons";
 import { Button } from "./ui/button";
+import { ScrollArea } from "./ui/scroll-area";
 
 /**
  * Options that can be passed to `pagefind.search()`.
