@@ -4,9 +4,9 @@ import { config } from 'dotenv';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { Container } from '../di';
 import { TestIntegration } from '../integration/openapi-toolset.mock';
 import { Mastra } from '../mastra';
+import { RuntimeContext } from '../runtime-context';
 import { createTool } from '../tools';
 import { CompositeVoice, MastraVoice } from '../voice';
 
@@ -388,6 +388,56 @@ describe('agent', () => {
     expect(sanitizedMessages).toHaveLength(2);
   });
 
+  it('should preserve empty assistant messages after tool use', () => {
+    const agent = new Agent({
+      name: 'Test agent',
+      instructions: 'Test agent',
+      model: openai('gpt-4o'),
+    });
+
+    // Create an assistant message with a tool call
+    const assistantToolCallMessage = {
+      role: 'assistant' as const,
+      content: [{ type: 'tool-call' as const, toolName: 'testTool', toolCallId: 'tool-1', args: {}, text: 'call' }],
+    };
+
+    // Create a tool message that responds to the tool call
+    const toolMessage = {
+      role: 'tool' as const,
+      content: [
+        { type: 'tool-result' as const, toolName: 'testTool', toolCallId: 'tool-1', text: 'result', result: '' },
+      ],
+    };
+
+    // Create an empty assistant message that follows the tool message
+    const emptyAssistantMessage = {
+      role: 'assistant' as const,
+      content: '', // Empty string content
+    };
+
+    const userMessage = {
+      role: 'user' as const,
+      content: 'Hello',
+    };
+
+    const messages = [assistantToolCallMessage, toolMessage, emptyAssistantMessage, userMessage];
+
+    const sanitizedMessages = agent.sanitizeResponseMessages(messages);
+
+    // The empty assistant message should be preserved even though it has empty content
+    expect(sanitizedMessages).toContainEqual(emptyAssistantMessage);
+
+    // The tool message should be preserved because it has a matching tool call ID
+    expect(sanitizedMessages).toContainEqual(toolMessage);
+
+    // All messages should be preserved
+    expect(sanitizedMessages).toHaveLength(4);
+    expect(sanitizedMessages[0]).toEqual(assistantToolCallMessage);
+    expect(sanitizedMessages[1]).toEqual(toolMessage);
+    expect(sanitizedMessages[2]).toEqual(emptyAssistantMessage);
+    expect(sanitizedMessages[3]).toEqual(userMessage);
+  });
+
   describe('voice capabilities', () => {
     class MockVoice extends MastraVoice {
       async speak(): Promise<NodeJS.ReadableStream> {
@@ -546,30 +596,30 @@ describe('agent', () => {
       expect(vercelExecute).toHaveBeenCalled();
     });
 
-    it('should make container available to tools when injected in generate', async () => {
-      const testContainer = new Container([['test-value', 'container-value']]);
+    it('should make runtimeContext available to tools when injected in generate', async () => {
+      const testRuntimeContext = new RuntimeContext([['test-value', 'runtimeContext-value']]);
       let capturedValue: string | null = null;
 
       const testTool = createTool({
-        id: 'container-test-tool',
-        description: 'A tool that verifies container is available',
+        id: 'runtimeContext-test-tool',
+        description: 'A tool that verifies runtimeContext is available',
         inputSchema: z.object({
           query: z.string(),
         }),
-        execute: ({ container }) => {
-          capturedValue = container.get('test-value')!;
+        execute: ({ runtimeContext }) => {
+          capturedValue = runtimeContext.get('test-value')!;
 
           return Promise.resolve({
             success: true,
-            containerAvailable: !!container,
-            containerValue: capturedValue,
+            runtimeContextAvailable: !!runtimeContext,
+            runtimeContextValue: capturedValue,
           });
         },
       });
 
       const agent = new Agent({
-        name: 'container-test-agent',
-        instructions: 'You are an agent that tests container availability.',
+        name: 'runtimeContext-test-agent',
+        instructions: 'You are an agent that tests runtimeContext availability.',
         model: openai('gpt-4o'),
         tools: { testTool },
       });
@@ -580,42 +630,42 @@ describe('agent', () => {
 
       const testAgent = mastra.getAgent('agent');
 
-      const response = await testAgent.generate('Use the container-test-tool with query "test"', {
+      const response = await testAgent.generate('Use the runtimeContext-test-tool with query "test"', {
         toolChoice: 'required',
-        container: testContainer,
+        runtimeContext: testRuntimeContext,
       });
 
       const toolCall = response.toolResults.find(result => result.toolName === 'testTool');
 
-      expect(toolCall?.result?.containerAvailable).toBe(true);
-      expect(toolCall?.result?.containerValue).toBe('container-value');
-      expect(capturedValue).toBe('container-value');
+      expect(toolCall?.result?.runtimeContextAvailable).toBe(true);
+      expect(toolCall?.result?.runtimeContextValue).toBe('runtimeContext-value');
+      expect(capturedValue).toBe('runtimeContext-value');
     }, 500000);
 
-    it('should make container available to tools when injected in stream', async () => {
-      const testContainer = new Container([['test-value', 'container-value']]);
+    it('should make runtimeContext available to tools when injected in stream', async () => {
+      const testRuntimeContext = new RuntimeContext([['test-value', 'runtimeContext-value']]);
       let capturedValue: string | null = null;
 
       const testTool = createTool({
-        id: 'container-test-tool',
-        description: 'A tool that verifies container is available',
+        id: 'runtimeContext-test-tool',
+        description: 'A tool that verifies runtimeContext is available',
         inputSchema: z.object({
           query: z.string(),
         }),
-        execute: ({ container }) => {
-          capturedValue = container.get('test-value')!;
+        execute: ({ runtimeContext }) => {
+          capturedValue = runtimeContext.get('test-value')!;
 
           return Promise.resolve({
             success: true,
-            containerAvailable: !!container,
-            containerValue: capturedValue,
+            runtimeContextAvailable: !!runtimeContext,
+            runtimeContextValue: capturedValue,
           });
         },
       });
 
       const agent = new Agent({
-        name: 'container-test-agent',
-        instructions: 'You are an agent that tests container availability.',
+        name: 'runtimeContext-test-agent',
+        instructions: 'You are an agent that tests runtimeContext availability.',
         model: openai('gpt-4o'),
         tools: { testTool },
       });
@@ -626,9 +676,9 @@ describe('agent', () => {
 
       const testAgent = mastra.getAgent('agent');
 
-      const stream = await testAgent.stream('Use the container-test-tool with query "test"', {
+      const stream = await testAgent.stream('Use the runtimeContext-test-tool with query "test"', {
         toolChoice: 'required',
-        container: testContainer,
+        runtimeContext: testRuntimeContext,
       });
 
       for await (const _chunk of stream.textStream) {
@@ -637,9 +687,9 @@ describe('agent', () => {
 
       const toolCall = (await stream.toolResults).find(result => result.toolName === 'testTool');
 
-      expect(toolCall?.result?.containerAvailable).toBe(true);
-      expect(toolCall?.result?.containerValue).toBe('container-value');
-      expect(capturedValue).toBe('container-value');
+      expect(toolCall?.result?.runtimeContextAvailable).toBe(true);
+      expect(toolCall?.result?.runtimeContextValue).toBe('runtimeContext-value');
+      expect(capturedValue).toBe('runtimeContext-value');
     }, 500000);
   });
 });

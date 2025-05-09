@@ -1,4 +1,6 @@
-import { Agent, MemoryThread, Tool, Workflow, Vector, BaseResource, Network } from './resources';
+import type { AbstractAgent } from '@ag-ui/client';
+import { AGUIAdapter } from './adapters/agui';
+import { Agent, MemoryThread, Tool, Workflow, Vector, BaseResource, Network, VNextWorkflow } from './resources';
 import type {
   ClientOptions,
   CreateMemoryThreadParams,
@@ -13,8 +15,8 @@ import type {
   GetTelemetryParams,
   GetTelemetryResponse,
   GetToolResponse,
+  GetVNextWorkflowResponse,
   GetWorkflowResponse,
-  RequestOptions,
   SaveMessageToMemoryParams,
   SaveMessageToMemoryResponse,
 } from './types';
@@ -30,6 +32,25 @@ export class MastraClient extends BaseResource {
    */
   public getAgents(): Promise<Record<string, GetAgentResponse>> {
     return this.request('/api/agents');
+  }
+
+  public async getAGUI({ resourceId }: { resourceId: string }): Promise<Record<string, AbstractAgent>> {
+    const agents = await this.getAgents();
+
+    return Object.entries(agents).reduce(
+      (acc, [agentId]) => {
+        const agent = this.getAgent(agentId);
+
+        acc[agentId] = new AGUIAdapter({
+          agentId,
+          agent,
+          resourceId,
+        });
+
+        return acc;
+      },
+      {} as Record<string, AbstractAgent>,
+    );
   }
 
   /**
@@ -123,6 +144,23 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Retrieves all available vNext workflows
+   * @returns Promise containing map of vNext workflow IDs to vNext workflow details
+   */
+  public getVNextWorkflows(): Promise<Record<string, GetVNextWorkflowResponse>> {
+    return this.request('/api/workflows/v-next');
+  }
+
+  /**
+   * Gets a vNext workflow instance by ID
+   * @param workflowId - ID of the vNext workflow to retrieve
+   * @returns vNext Workflow instance
+   */
+  public getVNextWorkflow(workflowId: string) {
+    return new VNextWorkflow(this.options, workflowId);
+  }
+
+  /**
    * Gets a vector instance by name
    * @param vectorName - Name of the vector to retrieve
    * @returns Vector instance
@@ -163,16 +201,8 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing telemetry data
    */
   public getTelemetry(params?: GetTelemetryParams): Promise<GetTelemetryResponse> {
-    const { name, scope, page, perPage, attribute } = params || {};
+    const { name, scope, page, perPage, attribute, fromDate, toDate } = params || {};
     const _attribute = attribute ? Object.entries(attribute).map(([key, value]) => `${key}:${value}`) : [];
-
-    const queryObj = {
-      ...(name ? { name } : {}),
-      ...(scope ? { scope } : {}),
-      ...(page ? { page: String(page) } : {}),
-      ...(perPage ? { perPage: String(perPage) } : {}),
-      ...(_attribute?.length ? { attribute: _attribute } : {}),
-    } as const;
 
     const searchParams = new URLSearchParams();
     if (name) {
@@ -195,6 +225,12 @@ export class MastraClient extends BaseResource {
       } else {
         searchParams.set('attribute', _attribute);
       }
+    }
+    if (fromDate) {
+      searchParams.set('fromDate', fromDate.toISOString());
+    }
+    if (toDate) {
+      searchParams.set('toDate', toDate.toISOString());
     }
 
     if (searchParams.size) {

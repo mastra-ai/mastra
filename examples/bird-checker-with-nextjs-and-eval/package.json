@@ -13,12 +13,12 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "latest",
-    "@mastra/core": "workspace:*",
+    "@mastra/core": "latest",
     "braintrust": "^0.0.168",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.454.0",
-    "next": "15.0.2",
+    "next": "^15.3.1",
     "next-themes": "^0.4.5",
     "nuqs": "^2.4.1",
     "react": "19.0.0-rc-02c0e824-20241028",
@@ -26,7 +26,12 @@
     "sonner": "^1.7.4",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
-    "zod": "^3.24.2"
+    "zod": "^3.24.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core"
+    }
   },
   "devDependencies": {
     "@types/node": "^20.17.24",
@@ -38,5 +43,6 @@
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.2"
   },
-  "version": "0.0.1"
+  "version": "0.0.1",
+  "packageManager": "pnpm@10.10.0+sha512.d615db246fe70f25dcfea6d8d73dee782ce23e2245e3c4f6f888249fb568149318637dca73c2c5c8ef2a4ca0d5657fb9567188bfab47f566d1ee6ce987815c39"
 }

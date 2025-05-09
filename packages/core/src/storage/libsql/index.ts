@@ -1,13 +1,14 @@
 import { join, resolve, isAbsolute } from 'node:path';
 import { createClient } from '@libsql/client';
-import type { Client, InValue } from '@libsql/client';
+import type { Client, InValue, Config as LibSQLConfig } from '@libsql/client';
 import type { MetricResult, TestInfo } from '../../eval';
+import type { Logger } from '../../logger';
 import type { MessageType, StorageThreadType } from '../../memory/types';
 import type { WorkflowRunState } from '../../workflows';
 import { MastraStorage } from '../base';
 import { TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS, TABLE_TRACES, TABLE_WORKFLOW_SNAPSHOT } from '../constants';
 import type { TABLE_NAMES } from '../constants';
-import type { StorageColumn, StorageGetMessagesArg, EvalRow } from '../types';
+import type { StorageColumn, StorageGetMessagesArg, EvalRow, WorkflowRuns, WorkflowRun } from '../types';
 
 function safelyParseJSON(jsonString: string): any {
   try {
@@ -17,9 +18,23 @@ function safelyParseJSON(jsonString: string): any {
   }
 }
 
-export interface LibSQLConfig {
-  url: string;
-  authToken?: string;
+let hasWarned = false;
+function warnDeprecation(logger: Logger) {
+  if (hasWarned) return;
+  hasWarned = true;
+
+  logger?.warn(`The default storage is deprecated, please add any storage to Mastra itself.
+
+In \`src/mastra/index.ts\` add:
+Import { LibSQLStore } from \`@mastra/libsql\`.
+
+export const mastra = new Mastra({
+  // other config
+  storage: new LibSQLStore({
+    url: 'file:../mastra.db',
+  }),
+}
+`);
 }
 
 export class LibSQLStore extends MastraStorage {
@@ -152,6 +167,8 @@ export class LibSQLStore extends MastraStorage {
   }
 
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
+    warnDeprecation(this.logger);
+
     try {
       await this.client.execute(
         this.prepareStatement({
@@ -167,6 +184,8 @@ export class LibSQLStore extends MastraStorage {
 
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
     if (records.length === 0) return;
+
+    warnDeprecation(this.logger);
 
     try {
       const batchStatements = records.map(r => this.prepareStatement({ tableName, record: r }));
@@ -488,6 +507,8 @@ export class LibSQLStore extends MastraStorage {
       perPage,
       attributes,
       filters,
+      fromDate,
+      toDate,
     }: {
       name?: string;
       scope?: string;
@@ -495,6 +516,8 @@ export class LibSQLStore extends MastraStorage {
       perPage: number;
       attributes?: Record<string, string>;
       filters?: Record<string, any>;
+      fromDate?: Date;
+      toDate?: Date;
     } = {
       page: 0,
       perPage: 100,
@@ -523,6 +546,15 @@ export class LibSQLStore extends MastraStorage {
         conditions.push(`${key} = ?`);
       });
     }
+
+    if (fromDate) {
+      conditions.push('createdAt >= ?');
+    }
+
+    if (toDate) {
+      conditions.push('createdAt <= ?');
+    }
+
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     if (name) {
@@ -543,6 +575,14 @@ export class LibSQLStore extends MastraStorage {
       for (const [, value] of Object.entries(filters)) {
         args.push(value);
       }
+    }
+
+    if (fromDate) {
+      args.push(fromDate.toISOString());
+    }
+
+    if (toDate) {
+      args.push(toDate.toISOString());
     }
 
     args.push(limit, offset);
@@ -586,16 +626,7 @@ export class LibSQLStore extends MastraStorage {
     toDate?: Date;
     limit?: number;
     offset?: number;
-  } = {}): Promise<{
-    runs: Array<{
-      workflowName: string;
-      runId: string;
-      snapshot: WorkflowRunState | string;
-      createdAt: Date;
-      updatedAt: Date;
-    }>;
-    total: number;
-  }> {
+  } = {}): Promise<WorkflowRuns> {
     const conditions: string[] = [];
     const args: InValue[] = [];
 
@@ -654,6 +685,60 @@ export class LibSQLStore extends MastraStorage {
 
     // Use runs.length as total when not paginating
     return { runs, total: total || runs.length };
+  }
+
+  async getWorkflowRunById({
+    runId,
+    workflowName,
+  }: {
+    runId: string;
+    workflowName?: string;
+  }): Promise<WorkflowRun | null> {
+    const conditions: string[] = [];
+    const args: (string | number)[] = [];
+
+    if (runId) {
+      conditions.push('run_id = ?');
+      args.push(runId);
+    }
+
+    if (workflowName) {
+      conditions.push('workflow_name = ?');
+      args.push(workflowName);
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const result = await this.client.execute({
+      sql: `SELECT * FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause}`,
+      args,
+    });
+
+    if (!result.rows?.[0]) {
+      return null;
+    }
+
+    return this.parseWorkflowRun(result.rows[0]);
+  }
+
+  private parseWorkflowRun(row: Record<string, any>): WorkflowRun {
+    let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+    if (typeof parsedSnapshot === 'string') {
+      try {
+        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+      } catch (e) {
+        // If parsing fails, return the raw snapshot string
+        console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+      }
+    }
+    return {
+      workflowName: row.workflow_name as string,
+      runId: row.run_id as string,
+      snapshot: parsedSnapshot,
+      resourceId: row.resourceId as string,
+      createdAt: new Date(row.created_at as string),
+      updatedAt: new Date(row.updated_at as string),
+    };
   }
 }
 

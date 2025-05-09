@@ -126,6 +126,8 @@ export function WorkflowTrigger({
 
   const zodInputSchema = triggerSchema ? resolveSerializedZodOutput(jsonSchemaToZod(parse(triggerSchema))) : null;
 
+  const { sanitizedOutput, ...restResult } = result ?? {};
+
   return (
     <ScrollArea className="h-[calc(100vh-126px)] pt-2 px-4 pb-4 text-xs w-full">
       <div className="space-y-4">
@@ -199,7 +201,7 @@ export function WorkflowTrigger({
                         );
 
                       return (
-                        <div key={idx} className="flex flex-col overflow-hidden border">
+                        <div key={idx} className="flex flex-col overflow-hidden rounded-md border">
                           <div className={`flex items-center justify-between p-3`}>
                             <Text variant="secondary" className="text-mastra-el-3" size="xs">
                               {path.charAt(0).toUpperCase() + path.slice(1)}
@@ -266,12 +268,12 @@ export function WorkflowTrigger({
             <div className="flex flex-col gap-2">
               <CopyButton
                 classname="absolute z-40 w-8 h-8 p-0 transition-opacity duration-150 ease-in-out opacity-0 top-4 right-4 group-hover:opacity-100"
-                content={JSON.stringify(result, null, 2)}
+                content={JSON.stringify(restResult, null, 2)}
               />
             </div>
             <CodeBlockDemo
               className="w-full overflow-x-auto"
-              code={result.sanitizedOutput || JSON.stringify(result, null, 2)}
+              code={sanitizedOutput || JSON.stringify(restResult, null, 2)}
               language="json"
             />
           </div>

@@ -47,20 +47,25 @@ For detailed setup instructions, see our [installation guide](/docs/getting-star
 
 ### Install  MastraClient
 
-<Tabs items={["npm", "yarn", "pnpm"]}>
+<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
   <Tabs.Tab>
 ```bash copy
-npm install @mastra/client-js
+npm install @mastra/client-js@latest
 ```
   </Tabs.Tab>
   <Tabs.Tab>
 ```bash copy
-yarn add @mastra/client-js
+yarn add @mastra/client-js@latest 
 ```
   </Tabs.Tab>
   <Tabs.Tab>
 ```bash copy
-pnpm add @mastra/client-js
+pnpm add @mastra/client-js@latest
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```bash copy
+bun add @mastra/client-js@latest
 ```
   </Tabs.Tab>
 </Tabs>
@@ -235,4 +240,4 @@ Mastra provides built-in observability features to help you monitor, debug, and 
 - Logging of prompts, completions, and errors
 - Integration with observability platforms like Langfuse and LangSmith
 
-For detailed setup instructions and configuration options specific to Next.js local development, see our [Next.js Observability Configuration Guide](/docs/deployment/logging-and-tracing#nextjs-configuration).
+For detailed setup instructions and configuration options specific to Next.js local development, see our [Next.js Observability Configuration Guide](/docs/observability/nextjs-tracing).

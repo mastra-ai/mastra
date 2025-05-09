@@ -1,10 +1,14 @@
 import { readFile, readdir, writeFile } from 'fs/promises';
 import { join } from 'path/posix';
 
-const workspace = await readFile('./pnpm-workspace.yaml', 'utf-8');
+let workspace = await readFile('./pnpm-workspace.yaml', 'utf-8');
+
+workspace += '\n- templates/*';
+
 // Parse the YAML content manually
 // Assuming the workspace YAML is simple with packages array
 const packagesMatch = workspace.match(/packages:\s*\n((?:\s*-\s*.+\n?)+)/);
+
 const packages = packagesMatch
   ? packagesMatch[1]
       .split('\n')
@@ -36,7 +40,7 @@ for await (const pkg of packages.filter(pkg => !pkg.startsWith('examples/') && !
 
       listOfPackages.push(...matchingDirs);
     } catch (error) {
-      console.error(`Error reading directories for pattern ${pkg}:`, error);
+      console.warn(`Error reading directories for pattern ${pkg}:`, error);
     }
   } else {
     // If no wildcard, add the package path as is
@@ -48,28 +52,31 @@ const renovateConfig = {
   $schema: 'https://docs.renovatebot.com/renovate-schema.json',
   rangeStrategy: 'bump',
   extends: [
-    'config:recommended',
     ':dependencyDashboard',
     ':disableRateLimiting',
     ':maintainLockFilesWeekly',
     ':semanticCommits',
     ':automergeDisabled',
     ':disablePeerDependencies',
+    ':ignoreModulesAndTests',
+    'replacements:all',
+    'workarounds:typesNodeVersioning',
+    'group:recommended',
   ],
   postUpdateOptions: ['pnpmDedupe'],
   rebaseWhen: 'conflicted',
   major: {
     dependencyDashboardApproval: true,
   },
-  ignorePaths: ['docs/**'],
+  ignorePaths: ['docs/**', 'packages/memory/integration-tests/**', 'explorations/**'],
   packageRules: [
-    {
-      packagePatterns: ['*'],
-      enabled: false,
-    },
     {
       matchDepTypes: ['engines'],
       enabled: false,
+    },
+    {
+      matchDatasources: ['npm'],
+      minimumReleaseAge: '3 days',
     },
     {
       groupName: 'examples',
@@ -125,23 +132,45 @@ const renovateConfig = {
       matchFileNames: ['+(package.json)', '**/package.json'],
       matchUpdateTypes: ['major', 'minor', 'patch'],
       matchDepTypes: ['devDependencies'],
-      matchPackageNames: ['@microsoft/api-extractor', 'tsup', 'rollup'],
+      matchPackageNames: ['@microsoft/api-extractor', 'tsup', 'rollup', '@types/node', 'dotenv'],
+      enabled: true,
+    },
+    {
+      groupName: 'Test tools',
+      commitMessageTopic: 'Test tools',
+      matchFileNames: ['+(package.json)', '**/package.json'],
+      matchUpdateTypes: ['major', 'minor', 'patch'],
+      matchDepTypes: ['devDependencies'],
+      matchPackageNames: ['vitest'],
+      enabled: true,
+    },
+    {
+      groupName: 'Schema',
+      commitMessageTopic: 'Schema',
+      matchFileNames: ['+(package.json)', '**/package.json'],
+      matchPackageNames: ['zod', 'json-schema', 'zod-to-json-schema'],
+      matchUpdateTypes: ['major', 'minor', 'patch'],
+      matchDepTypes: ['dependencies', 'devDependencies'],
+      dependencyDashboardApproval: false,
       enabled: true,
     },
   ],
 };
 
-const excludedPackages = renovateConfig.packageRules
-  .map(rule => rule.matchPackageNames)
-  .flat()
-  .filter(Boolean);
-
-excludedPackages.push('vitest');
-
-// renovateConfig.packageRules.unshift({
-//   matchPackageNames: Array.from(new Set(excludedPackages)),
-//   enabled: false,
-// });
+const ignorePackages = [
+  '@microsoft/api-extractor',
+  'tsup',
+  'rollup',
+  'eslint',
+  'prettier',
+  'typescript',
+  'vitest',
+  '@types/node',
+  'dotenv',
+  'zod',
+  'json-schema',
+  'zod-to-json-schema',
+];
 
 for (const pkg of listOfPackages) {
   const packageJsonPath = `${pkg}/package.json`;
@@ -155,19 +184,21 @@ for (const pkg of listOfPackages) {
     renovateConfig.packageRules.push({
       groupName: packageName,
       commitMessageTopic: `${packageName}`,
-      matchFileNames: [`${pkg}/*/package.json`],
+      matchFileNames: [`${pkg}/package.json`],
       matchUpdateTypes: ['minor', 'patch'],
       matchDepTypes: ['dependencies', 'devDependencies'],
+      matchPackageNames: ['*', ...ignorePackages.map(pkg => `!${pkg}`)], // Match all except ignored packages
       enabled: true,
     });
 
     renovateConfig.packageRules.push({
-      groupName: `major-${packageName}`,
+      groupName: `${packageName}`,
       commitMessageTopic: `${packageName}`,
       matchFileNames: [`${pkg}/package.json`],
       matchUpdateTypes: ['major'],
       matchDepTypes: ['dependencies', 'devDependencies'],
       enabled: true,
+      dependencyDashboardApproval: true,
     });
   } catch (error) {
     console.warn(`Could not read package.json for ${pkg}, using directory name instead`);
@@ -177,6 +208,7 @@ for (const pkg of listOfPackages) {
       matchFileNames: [`${pkg}/package.json`],
       matchUpdateTypes: ['minor', 'patch'],
       matchDepTypes: ['dependencies', 'devDependencies'],
+      matchPackageNames: ['*', ...ignorePackages.map(pkg => `!${pkg}`)], // Match all except ignored packages
       enabled: true,
     });
 
@@ -187,6 +219,7 @@ for (const pkg of listOfPackages) {
       matchUpdateTypes: ['major'],
       matchDepTypes: ['dependencies', 'devDependencies'],
       enabled: true,
+      dependencyDashboardApproval: true,
     });
   }
 }

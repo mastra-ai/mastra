@@ -1,5 +1,421 @@
 # mastra
 
+## 0.6.2
+
+### Patch Changes
+
+- 0db0992: - add new --mcp option to cli
+  - add support for mcp in vscode
+  - include examples with --default flag
+- b5d2de0: In vNext workflow serializedStepGraph, return only serializedStepFlow for steps created from a workflow
+  allow viewing inner nested workflows in a multi-layered nested vnext workflow on the playground
+- 62c9e7d: Fix disappearing tool calls in streaming
+- Updated dependencies [e450778]
+- Updated dependencies [8902157]
+- Updated dependencies [ca0dc88]
+- Updated dependencies [526c570]
+- Updated dependencies [d7a6a33]
+- Updated dependencies [9cd1a46]
+- Updated dependencies [b5d2de0]
+- Updated dependencies [644f8ad]
+- Updated dependencies [70dbf51]
+  - @mastra/core@0.9.3
+  - @mastra/deployer@0.3.3
+
+## 0.6.2-alpha.1
+
+### Patch Changes
+
+- 62c9e7d: Fix disappearing tool calls in streaming
+- Updated dependencies [e450778]
+- Updated dependencies [8902157]
+- Updated dependencies [ca0dc88]
+- Updated dependencies [9cd1a46]
+- Updated dependencies [70dbf51]
+  - @mastra/core@0.9.3-alpha.1
+  - @mastra/deployer@0.3.3-alpha.1
+
+## 0.6.2-alpha.0
+
+### Patch Changes
+
+- b5d2de0: In vNext workflow serializedStepGraph, return only serializedStepFlow for steps created from a workflow
+  allow viewing inner nested workflows in a multi-layered nested vnext workflow on the playground
+- Updated dependencies [526c570]
+- Updated dependencies [b5d2de0]
+- Updated dependencies [644f8ad]
+  - @mastra/core@0.9.3-alpha.0
+  - @mastra/deployer@0.3.3-alpha.0
+
+## 0.6.1
+
+### Patch Changes
+
+- 144fa1b: lift up the traces fetching and allow to pass them down in the TracesTable. It allows passing down mastra client traces OR clickhouse traces
+- 33b84fd: fix showing sig digits in trace / span duration
+- 4155f47: Add parameters to filter workflow runs
+  Add fromDate and toDate to telemetry parameters
+- 8607972: Introduce Mastra lint cli command
+- 2cf3b8f: dependencies updates:
+  - Updated dependency [`zod@^3.24.3` ↗︎](https://www.npmjs.com/package/zod/v/3.24.3) (from `^3.24.2`, in `dependencies`)
+  - Updated dependency [`zod-to-json-schema@^3.24.5` ↗︎](https://www.npmjs.com/package/zod-to-json-schema/v/3.24.5) (from `^3.24.3`, in `dependencies`)
+- 0097d50: Add serializedStepGraph to vNext workflow
+  Return serializedStepGraph from vNext workflow
+  Use serializedStepGraph in vNext workflow graph
+- 5b43dd0: revamp ui for threads
+- 7eeb2bc: Added explicit storage to memory in create-mastra so new projects don't see breaking change warnings
+- 8ea9d17: Pinned Posthog-node which is broken in the most recent version of that package https://github.com/PostHog/posthog-js-lite/issues/491
+- 2429c74: Add get workflow runs api to client-js
+- fba031f: Show traces for vNext workflow
+- b63e712: refactor: Separate fetching traces from within playground-ui components
+- Updated dependencies [2cf3b8f]
+- Updated dependencies [6052aa6]
+- Updated dependencies [967b41c]
+- Updated dependencies [3d2fb5c]
+- Updated dependencies [26738f4]
+- Updated dependencies [4155f47]
+- Updated dependencies [254f5c3]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [b804723]
+- Updated dependencies [8607972]
+- Updated dependencies [a798090]
+- Updated dependencies [ccef9f9]
+- Updated dependencies [0097d50]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [17826a9]
+- Updated dependencies [7d8b7c7]
+- Updated dependencies [fba031f]
+- Updated dependencies [3a5f1e1]
+- Updated dependencies [51e6923]
+- Updated dependencies [8398d89]
+  - @mastra/deployer@0.3.2
+  - @mastra/core@0.9.2
+
+## 0.6.1-alpha.6
+
+### Patch Changes
+
+- 144fa1b: lift up the traces fetching and allow to pass them down in the TracesTable. It allows passing down mastra client traces OR clickhouse traces
+- Updated dependencies [6052aa6]
+- Updated dependencies [a798090]
+- Updated dependencies [7d8b7c7]
+- Updated dependencies [3a5f1e1]
+- Updated dependencies [8398d89]
+  - @mastra/core@0.9.2-alpha.6
+  - @mastra/deployer@0.3.2-alpha.6
+
+## 0.6.1-alpha.5
+
+### Patch Changes
+
+- 8607972: Introduce Mastra lint cli command
+- 7eeb2bc: Added explicit storage to memory in create-mastra so new projects don't see breaking change warnings
+- fba031f: Show traces for vNext workflow
+- Updated dependencies [3d2fb5c]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [8607972]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [fba031f]
+  - @mastra/core@0.9.2-alpha.5
+  - @mastra/deployer@0.3.2-alpha.5
+
+## 0.6.1-alpha.4
+
+### Patch Changes
+
+- 5b43dd0: revamp ui for threads
+- 8ea9d17: Pinned Posthog-node which is broken in the most recent version of that package https://github.com/PostHog/posthog-js-lite/issues/491
+- Updated dependencies [ccef9f9]
+- Updated dependencies [51e6923]
+  - @mastra/core@0.9.2-alpha.4
+  - @mastra/deployer@0.3.2-alpha.4
+
+## 0.6.1-alpha.3
+
+### Patch Changes
+
+- 33b84fd: fix showing sig digits in trace / span duration
+- 4155f47: Add parameters to filter workflow runs
+  Add fromDate and toDate to telemetry parameters
+- b63e712: refactor: Separate fetching traces from within playground-ui components
+- Updated dependencies [967b41c]
+- Updated dependencies [4155f47]
+- Updated dependencies [17826a9]
+  - @mastra/core@0.9.2-alpha.3
+  - @mastra/deployer@0.3.2-alpha.3
+
+## 0.6.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [26738f4]
+  - @mastra/core@0.9.2-alpha.2
+  - @mastra/deployer@0.3.2-alpha.2
+
+## 0.6.1-alpha.1
+
+### Patch Changes
+
+- 2429c74: Add get workflow runs api to client-js
+- Updated dependencies [254f5c3]
+- Updated dependencies [b804723]
+  - @mastra/deployer@0.3.2-alpha.1
+  - @mastra/core@0.9.2-alpha.1
+
+## 0.6.1-alpha.0
+
+### Patch Changes
+
+- 0097d50: Add serializedStepGraph to vNext workflow
+  Return serializedStepGraph from vNext workflow
+  Use serializedStepGraph in vNext workflow graph
+- Updated dependencies [0097d50]
+  - @mastra/core@0.9.2-alpha.0
+  - @mastra/deployer@0.3.2-alpha.0
+
+## 0.6.0
+
+### Minor Changes
+
+- e126a44: improve non-interactive mode of the mastra cli and create-mastra by adding --no-example and --dir flags
+
+### Patch Changes
+
+- 34a76ca: Call workflow cleanup function when closing watch stream controller
+- 0ccb8b4: Fix deployer bundling when custom mastra dir is set
+- 25d3c39: build logs for how to load instrumentation for build output
+- 70124e1: revamp the ui for traces
+- 20275d4: Adding warnings for current implicit Memory default options as they will be changing soon in a breaking change. Also added memory to create-mastra w/ new defaults so new projects don't see these warnings
+- 3b74a74: add badge for failure / successful traces
+- 05806e3: revamp the UI of the chat in playground
+- 926821d: Fix triggerSchema default not showing in workflow ui
+- 0c3c4f4: Playground routing model settings for AgentNetworks
+- 1700eca: fixing overflow on agent traces
+- b50b9b7: Add vNext workflow to client-js
+- 11d4485: Show VNext workflows on the playground
+  Show running status for step in vNext workflowState
+- ca665d3: fix the ui for smaller screen regarding traces
+- 57b25ed: Use resumeSchema to show inputs on the playground for suspended workflows
+- f1d4b7a: Add x-mastra-dev-playground header to all playground requests
+- 5a66ced: add click on trace row
+- 8863033: Fix tools api in local dev api
+- 2d4001d: Add new @msstra/libsql package and use it in create-mastra
+- 5ebe2aa: Adds ability to add a global configuration for cursor for the Mastra docs MCP server during creation of a Mastra project. Allowing all cursor projects to have access to the MCP server.
+- Updated dependencies [e7c2881]
+- Updated dependencies [0ccb8b4]
+- Updated dependencies [92c598d]
+- Updated dependencies [405b63d]
+- Updated dependencies [81fb7f6]
+- Updated dependencies [20275d4]
+- Updated dependencies [7d1892c]
+- Updated dependencies [ebdb781]
+- Updated dependencies [a90a082]
+- Updated dependencies [2d17c73]
+- Updated dependencies [61e92f5]
+- Updated dependencies [35955b0]
+- Updated dependencies [6262bd5]
+- Updated dependencies [c1409ef]
+- Updated dependencies [3e7b69d]
+- Updated dependencies [e4943b8]
+- Updated dependencies [11d4485]
+- Updated dependencies [479f490]
+- Updated dependencies [530ced1]
+- Updated dependencies [c23a81c]
+- Updated dependencies [611aa4a]
+- Updated dependencies [2d4001d]
+- Updated dependencies [c71013a]
+- Updated dependencies [1d3b1cd]
+  - @mastra/deployer@0.3.1
+  - @mastra/core@0.9.1
+
+## 0.6.0-alpha.11
+
+### Patch Changes
+
+- ca665d3: fix the ui for smaller screen regarding traces
+
+## 0.6.0-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [2d17c73]
+  - @mastra/core@0.9.1-alpha.8
+  - @mastra/deployer@0.3.1-alpha.8
+
+## 0.6.0-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [1d3b1cd]
+  - @mastra/core@0.9.1-alpha.7
+  - @mastra/deployer@0.3.1-alpha.7
+
+## 0.6.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [c23a81c]
+  - @mastra/core@0.9.1-alpha.6
+  - @mastra/deployer@0.3.1-alpha.6
+
+## 0.6.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [3e7b69d]
+  - @mastra/core@0.9.1-alpha.5
+  - @mastra/deployer@0.3.1-alpha.5
+
+## 0.6.0-alpha.6
+
+### Patch Changes
+
+- 25d3c39: build logs for how to load instrumentation for build output
+
+## 0.6.0-alpha.5
+
+### Patch Changes
+
+- 3b74a74: add badge for failure / successful traces
+- 5a66ced: add click on trace row
+- Updated dependencies [e4943b8]
+- Updated dependencies [479f490]
+  - @mastra/core@0.9.1-alpha.4
+  - @mastra/deployer@0.3.1-alpha.4
+
+## 0.6.0-alpha.4
+
+### Patch Changes
+
+- 5ebe2aa: Adds ability to add a global configuration for cursor for the Mastra docs MCP server during creation of a Mastra project. Allowing all cursor projects to have access to the MCP server.
+
+## 0.6.0-alpha.3
+
+### Patch Changes
+
+- 34a76ca: Call workflow cleanup function when closing watch stream controller
+- 0c3c4f4: Playground routing model settings for AgentNetworks
+- 1700eca: fixing overflow on agent traces
+- Updated dependencies [6262bd5]
+  - @mastra/deployer@0.3.1-alpha.3
+  - @mastra/core@0.9.1-alpha.3
+
+## 0.6.0-alpha.2
+
+### Patch Changes
+
+- 70124e1: revamp the ui for traces
+- 926821d: Fix triggerSchema default not showing in workflow ui
+- 57b25ed: Use resumeSchema to show inputs on the playground for suspended workflows
+- f1d4b7a: Add x-mastra-dev-playground header to all playground requests
+- Updated dependencies [405b63d]
+- Updated dependencies [61e92f5]
+- Updated dependencies [c71013a]
+  - @mastra/core@0.9.1-alpha.2
+  - @mastra/deployer@0.3.1-alpha.2
+
+## 0.6.0-alpha.1
+
+### Minor Changes
+
+- e126a44: improve non-interactive mode of the mastra cli and create-mastra by adding --no-example and --dir flags
+
+### Patch Changes
+
+- 0ccb8b4: Fix deployer bundling when custom mastra dir is set
+- 20275d4: Adding warnings for current implicit Memory default options as they will be changing soon in a breaking change. Also added memory to create-mastra w/ new defaults so new projects don't see these warnings
+- 05806e3: revamp the UI of the chat in playground
+- b50b9b7: Add vNext workflow to client-js
+- 11d4485: Show VNext workflows on the playground
+  Show running status for step in vNext workflowState
+- 8863033: Fix tools api in local dev api
+- 2d4001d: Add new @msstra/libsql package and use it in create-mastra
+- Updated dependencies [e7c2881]
+- Updated dependencies [0ccb8b4]
+- Updated dependencies [92c598d]
+- Updated dependencies [20275d4]
+- Updated dependencies [7d1892c]
+- Updated dependencies [ebdb781]
+- Updated dependencies [a90a082]
+- Updated dependencies [35955b0]
+- Updated dependencies [c1409ef]
+- Updated dependencies [11d4485]
+- Updated dependencies [530ced1]
+- Updated dependencies [611aa4a]
+- Updated dependencies [2d4001d]
+  - @mastra/deployer@0.3.1-alpha.1
+  - @mastra/core@0.9.1-alpha.1
+
+## 0.5.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [81fb7f6]
+  - @mastra/core@0.9.1-alpha.0
+  - @mastra/deployer@0.3.1-alpha.0
+
+## 0.5.0
+
+### Minor Changes
+
+- fe3ae4d: Remove \_\_ functions in storage and move to storage proxy to make sure init is called
+
+### Patch Changes
+
+- c489535: update --llm options for init command to list all providers
+- 7e92011: Include tools with deployment builds
+- 7184dc5: Add support to pass project path directly to create-mastra and improve tag handling
+- c821402: Fix table layout issue in the Agent Network section of the Playground.
+- 9c26508: Fixed an issue where "mastra dev" wouldn't always print out localhost:4111 logs due to new NODE_ENV fixes
+- 735ead7: Add support for process.env.development
+- 16a8648: Disable swaggerUI, playground for production builds, mastra instance server build config to enable swaggerUI, apiReqLogs, openAPI documentation for prod builds
+- bdbde72: Sync DS components with Cloud
+- Updated dependencies [b9122b0]
+- Updated dependencies [000a6d4]
+- Updated dependencies [08bb78e]
+- Updated dependencies [3527610]
+- Updated dependencies [ed2f549]
+- Updated dependencies [7e92011]
+- Updated dependencies [9ee4293]
+- Updated dependencies [03f3cd0]
+- Updated dependencies [c0f22b4]
+- Updated dependencies [71d9444]
+- Updated dependencies [157c741]
+- Updated dependencies [8a8a73b]
+- Updated dependencies [0a033fa]
+- Updated dependencies [fe3ae4d]
+- Updated dependencies [2538066]
+- Updated dependencies [9c26508]
+- Updated dependencies [63fe16a]
+- Updated dependencies [0f4eae3]
+- Updated dependencies [3f9d151]
+- Updated dependencies [735ead7]
+- Updated dependencies [16a8648]
+- Updated dependencies [6f92295]
+  - @mastra/deployer@0.3.0
+  - @mastra/core@0.9.0
+
+## 0.5.0-alpha.9
+
+### Patch Changes
+
+- c489535: update --llm options for init command to list all providers
+- c821402: Fix table layout issue in the Agent Network section of the Playground.
+- 9c26508: Fixed an issue where "mastra dev" wouldn't always print out localhost:4111 logs due to new NODE_ENV fixes
+- 16a8648: Disable swaggerUI, playground for production builds, mastra instance server build config to enable swaggerUI, apiReqLogs, openAPI documentation for prod builds
+- bdbde72: Sync DS components with Cloud
+- Updated dependencies [b9122b0]
+- Updated dependencies [000a6d4]
+- Updated dependencies [ed2f549]
+- Updated dependencies [c0f22b4]
+- Updated dependencies [0a033fa]
+- Updated dependencies [2538066]
+- Updated dependencies [9c26508]
+- Updated dependencies [0f4eae3]
+- Updated dependencies [16a8648]
+  - @mastra/deployer@0.3.0-alpha.9
+  - @mastra/core@0.9.0-alpha.8
+
 ## 0.5.0-alpha.8
 
 ### Patch Changes

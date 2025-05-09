@@ -15,13 +15,22 @@
   "license": "MIT",
   "dependencies": {
     "@ai-sdk/openai": "latest",
-    "@mastra/core": "workspace:*",
-    "@mastra/memory": "workspace:*",
-    "@mastra/pg": "workspace:*",
-    "@mastra/upstash": "workspace:*"
+    "@mastra/core": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/pg": "latest",
+    "@mastra/upstash": "latest"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/memory": "link:../../packages/memory",
+      "@mastra/pg": "link:../../stores/pg",
+      "@mastra/upstash": "link:../../stores/upstash"
+    }
   },
   "devDependencies": {
     "dotenv": "^16.4.7",
     "tsx": "^4.19.3"
-  }
+  },
+  "packageManager": "pnpm@10.10.0+sha512.d615db246fe70f25dcfea6d8d73dee782ce23e2245e3c4f6f888249fb568149318637dca73c2c5c8ef2a4ca0d5657fb9567188bfab47f566d1ee6ce987815c39"
 }

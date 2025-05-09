@@ -8,6 +8,9 @@ const meta = {
   workflows: {
     title: "Workflows",
   },
+  workflows_vNext: {
+    title: "Workflows (vNext)",
+  },
   rag: {
     title: "RAG",
   },
@@ -19,6 +22,9 @@ const meta = {
   },
   voice: {
     title: "Voice",
+  },
+  deployment: {
+    title: "Deployment",
   },
 };
 

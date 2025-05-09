@@ -31,6 +31,7 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
       env: {
         NODE_ENV: 'production',
         ...Object.fromEntries(env),
+        MASTRA_DEV: 'true',
         PORT: port.toString() || process.env.PORT || '4111',
         MASTRA_DEFAULT_STORAGE_URL: `file:${join(dotMastraPath, '..', 'mastra.db')}`,
       },
@@ -115,7 +116,7 @@ export async function dev({
   tools?: string[];
 }) {
   const rootDir = root || process.cwd();
-  const mastraDir = join(rootDir, dir || 'src/mastra');
+  const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');
   const dotMastraPath = join(rootDir, '.mastra');
 
   const defaultToolsPath = join(mastraDir, 'tools');

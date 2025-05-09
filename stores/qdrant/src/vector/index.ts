@@ -75,14 +75,25 @@ export class QdrantVector extends MastraVector {
     if (!Number.isInteger(dimension) || dimension <= 0) {
       throw new Error('Dimension must be a positive integer');
     }
-    await this.client.createCollection(indexName, {
-      vectors: {
-        // @ts-expect-error
-        size: dimension,
-        // @ts-expect-error
-        distance: DISTANCE_MAPPING[metric],
-      },
-    });
+    if (!DISTANCE_MAPPING[metric]) {
+      throw new Error(`Invalid metric: "${metric}". Must be one of: cosine, euclidean, dotproduct`);
+    }
+    try {
+      await this.client.createCollection(indexName, {
+        vectors: {
+          size: dimension,
+          distance: DISTANCE_MAPPING[metric],
+        },
+      });
+    } catch (error: any) {
+      const message = error?.message || error?.toString();
+      // Qdrant typically returns 409 for existing collection
+      if (error?.status === 409 || (typeof message === 'string' && message.toLowerCase().includes('exists'))) {
+        // Fetch collection info and check dimension
+        await this.validateExistingIndex(indexName, dimension, metric);
+        return;
+      }
+    }
   }
 
   transformFilter(filter?: VectorFilter) {

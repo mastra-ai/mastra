@@ -1,5 +1,256 @@
 # @mastra/core
 
+## 0.9.3
+
+### Patch Changes
+
+- e450778: vnext: Inngest playground fixes
+- 8902157: added an optional `bodySizeLimit` to server config so that users can pass custom bodylimit size in mb. If not, it defaults to 4.5 mb
+- ca0dc88: fix: filter out excessive logs when getting LLM for agents
+- 526c570: expose agent runtimeContext from clientSDK
+- d7a6a33: Allow more user messages to be saved to memory, and fix message saving when using output flag
+- 9cd1a46: [MASTRA-3338] update naming scheme for embedding index based on vector store rules and added duplicate index checks
+- b5d2de0: In vNext workflow serializedStepGraph, return only serializedStepFlow for steps created from a workflow
+  allow viewing inner nested workflows in a multi-layered nested vnext workflow on the playground
+- 644f8ad: Adds a tool compatibility layer to ensure models from various providers work the same way. Models may not be able to support all json schema properties (such as some openai reasoning models), as well as other models support the property but seem to ignore it. The feature allows for a compatibility class for a provider that can be customized to fit the models and make sure they're using the tool schemas properly.
+- 70dbf51: [MASTRA-2452] updated setBaggage for tracing
+
+## 0.9.3-alpha.1
+
+### Patch Changes
+
+- e450778: vnext: Inngest playground fixes
+- 8902157: added an optional `bodySizeLimit` to server config so that users can pass custom bodylimit size in mb. If not, it defaults to 4.5 mb
+- ca0dc88: fix: filter out excessive logs when getting LLM for agents
+- 9cd1a46: [MASTRA-3338] update naming scheme for embedding index based on vector store rules and added duplicate index checks
+- 70dbf51: [MASTRA-2452] updated setBaggage for tracing
+
+## 0.9.3-alpha.0
+
+### Patch Changes
+
+- 526c570: expose agent runtimeContext from clientSDK
+- b5d2de0: In vNext workflow serializedStepGraph, return only serializedStepFlow for steps created from a workflow
+  allow viewing inner nested workflows in a multi-layered nested vnext workflow on the playground
+- 644f8ad: Adds a tool compatibility layer to ensure models from various providers work the same way. Models may not be able to support all json schema properties (such as some openai reasoning models), as well as other models support the property but seem to ignore it. The feature allows for a compatibility class for a provider that can be customized to fit the models and make sure they're using the tool schemas properly.
+
+## 0.9.2
+
+### Patch Changes
+
+- 6052aa6: Add getWorkflowRunById to vNext workflow core and server handler
+- 967b41c: fix: removes new agent getter methods from telemetry
+- 3d2fb5c: Fix commonjs import for vnext workflows
+- 26738f4: Switched from a custom MCP tools schema deserializer to json-schema-to-zod - fixes an issue where MCP tool schemas didn't deserialize properly in Mastra playground. Also added support for testing tools with no input arguments in playground
+- 4155f47: Add parameters to filter workflow runs
+  Add fromDate and toDate to telemetry parameters
+- 7eeb2bc: Add Memory default storage breaking change warning
+- b804723: Fix #3831: keep conversations in tact by keeping empty assistant messages
+- 8607972: Introduce Mastra lint cli command
+- ccef9f9: Fixed a type error when converting tools
+- 0097d50: Add serializedStepGraph to vNext workflow
+  Return serializedStepGraph from vNext workflow
+  Use serializedStepGraph in vNext workflow graph
+- 7eeb2bc: Added explicit storage to memory in create-mastra so new projects don't see breaking change warnings
+- 17826a9: Added a breaking change warning about deprecated working memory "use: 'text-stream'" which is being fully replaced by "use: 'tool-call'"
+- 7d8b7c7: In vnext getworkflowRunById, pick run from this.#runs if it does not exist in storage
+- fba031f: Show traces for vNext workflow
+- 3a5f1e1: Created a new @mastra/fastembed package based on the default embedder in @mastra/core as the default embedder will be removed in a breaking change (May 20th)
+  Added a warning to use the new @mastra/fastembed package instead of the default embedder
+- 51e6923: fix ts errors on default proxy storage
+- 8398d89: vNext: dynamic input mappings
+
+## 0.9.2-alpha.6
+
+### Patch Changes
+
+- 6052aa6: Add getWorkflowRunById to vNext workflow core and server handler
+- 7d8b7c7: In vnext getworkflowRunById, pick run from this.#runs if it does not exist in storage
+- 3a5f1e1: Created a new @mastra/fastembed package based on the default embedder in @mastra/core as the default embedder will be removed in a breaking change (May 20th)
+  Added a warning to use the new @mastra/fastembed package instead of the default embedder
+- 8398d89: vNext: dynamic input mappings
+
+## 0.9.2-alpha.5
+
+### Patch Changes
+
+- 3d2fb5c: Fix commonjs import for vnext workflows
+- 7eeb2bc: Add Memory default storage breaking change warning
+- 8607972: Introduce Mastra lint cli command
+- 7eeb2bc: Added explicit storage to memory in create-mastra so new projects don't see breaking change warnings
+- fba031f: Show traces for vNext workflow
+
+## 0.9.2-alpha.4
+
+### Patch Changes
+
+- ccef9f9: Fixed a type error when converting tools
+- 51e6923: fix ts errors on default proxy storage
+
+## 0.9.2-alpha.3
+
+### Patch Changes
+
+- 967b41c: fix: removes new agent getter methods from telemetry
+- 4155f47: Add parameters to filter workflow runs
+  Add fromDate and toDate to telemetry parameters
+- 17826a9: Added a breaking change warning about deprecated working memory "use: 'text-stream'" which is being fully replaced by "use: 'tool-call'"
+
+## 0.9.2-alpha.2
+
+### Patch Changes
+
+- 26738f4: Switched from a custom MCP tools schema deserializer to json-schema-to-zod - fixes an issue where MCP tool schemas didn't deserialize properly in Mastra playground. Also added support for testing tools with no input arguments in playground
+
+## 0.9.2-alpha.1
+
+### Patch Changes
+
+- b804723: Fix #3831: keep conversations in tact by keeping empty assistant messages
+
+## 0.9.2-alpha.0
+
+### Patch Changes
+
+- 0097d50: Add serializedStepGraph to vNext workflow
+  Return serializedStepGraph from vNext workflow
+  Use serializedStepGraph in vNext workflow graph
+
+## 0.9.1
+
+### Patch Changes
+
+- 405b63d: add ability to clone workflows with different id
+- 81fb7f6: Workflows v2
+- 20275d4: Adding warnings for current implicit Memory default options as they will be changing soon in a breaking change. Also added memory to create-mastra w/ new defaults so new projects don't see these warnings
+- 7d1892c: Return error object directly in vNext workflows
+- a90a082: Rename container to runtimeContext in vNext workflow
+  Add steps accessor for stepFlow in vnext workflow
+  Add getWorkflowRun to vnext workflow
+  Add vnext_getWorkflows() to mastra core
+- 2d17c73: Fix checking for presence of constant value mappings
+- 61e92f5: vNext fix workflow watch cleanup
+- 35955b0: Rename import to runtime-contxt
+- 6262bd5: Mastra server custom host config
+- c1409ef: Add vNextWorkflow handlers and APIs
+  Add stepGraph and steps to vNextWorkflow
+- 3e7b69d: Dynamic agent props
+- e4943b8: Default arrays to string type when transformation JSON schema to zod as per the JSON schema spec.
+- 11d4485: Show VNext workflows on the playground
+  Show running status for step in vNext workflowState
+- 479f490: [MASTRA-3131] Add getWorkflowRunByID and add resourceId as filter for getWorkflowRuns
+- c23a81c: added deprecation warnings for pg and individual args
+- 2d4001d: Add new @msstra/libsql package and use it in create-mastra
+- c71013a: vNeuxt: unset currentStep for workflow status change event
+- 1d3b1cd: Rebump
+
+## 0.9.1-alpha.8
+
+### Patch Changes
+
+- 2d17c73: Fix checking for presence of constant value mappings
+
+## 0.9.1-alpha.7
+
+### Patch Changes
+
+- 1d3b1cd: Rebump
+
+## 0.9.1-alpha.6
+
+### Patch Changes
+
+- c23a81c: added deprecation warnings for pg and individual args
+
+## 0.9.1-alpha.5
+
+### Patch Changes
+
+- 3e7b69d: Dynamic agent props
+
+## 0.9.1-alpha.4
+
+### Patch Changes
+
+- e4943b8: Default arrays to string type when transformation JSON schema to zod as per the JSON schema spec.
+- 479f490: [MASTRA-3131] Add getWorkflowRunByID and add resourceId as filter for getWorkflowRuns
+
+## 0.9.1-alpha.3
+
+### Patch Changes
+
+- 6262bd5: Mastra server custom host config
+
+## 0.9.1-alpha.2
+
+### Patch Changes
+
+- 405b63d: add ability to clone workflows with different id
+- 61e92f5: vNext fix workflow watch cleanup
+- c71013a: vNeuxt: unset currentStep for workflow status change event
+
+## 0.9.1-alpha.1
+
+### Patch Changes
+
+- 20275d4: Adding warnings for current implicit Memory default options as they will be changing soon in a breaking change. Also added memory to create-mastra w/ new defaults so new projects don't see these warnings
+- 7d1892c: Return error object directly in vNext workflows
+- a90a082: Rename container to runtimeContext in vNext workflow
+  Add steps accessor for stepFlow in vnext workflow
+  Add getWorkflowRun to vnext workflow
+  Add vnext_getWorkflows() to mastra core
+- 35955b0: Rename import to runtime-contxt
+- c1409ef: Add vNextWorkflow handlers and APIs
+  Add stepGraph and steps to vNextWorkflow
+- 11d4485: Show VNext workflows on the playground
+  Show running status for step in vNext workflowState
+- 2d4001d: Add new @msstra/libsql package and use it in create-mastra
+
+## 0.9.1-alpha.0
+
+### Patch Changes
+
+- 81fb7f6: Workflows v2
+
+## 0.9.0
+
+### Minor Changes
+
+- fe3ae4d: Remove \_\_ functions in storage and move to storage proxy to make sure init is called
+
+### Patch Changes
+
+- 000a6d4: Fixed an issue where the TokenLimiter message processor was adding new messages into the remembered messages array
+- 08bb78e: Added an extra safety for Memory message ordering
+- ed2f549: Fix exlude methods for batchTraceInsert
+- 7e92011: Include tools with deployment builds
+- 9ee4293: Improve commonjs support
+
+  Add types files in the root directory to make sure typescript can resolve it without an exportsmap
+
+- 03f3cd0: Propagate context to passed in tools
+- c0f22b4: [MASTRA-3130] Metadata Filter Update for PG and Libsql
+- 71d9444: updated savemessage to not use mutation when hiding working memory
+- 157c741: Fix message dupes using processors
+- 8a8a73b: fix container to network sub agent
+- 0a033fa: Adds MCPServer component
+- 9c26508: Fixed an issue where "mastra dev" wouldn't always print out localhost:4111 logs due to new NODE_ENV fixes
+- 0f4eae3: Rename Container into RuntimeContext
+- 16a8648: Disable swaggerUI, playground for production builds, mastra instance server build config to enable swaggerUI, apiReqLogs, openAPI documentation for prod builds
+- 6f92295: Fixed an issue where some user messages and llm messages would have the exact same createdAt date, leading to incorrect message ordering. Added a fix for new messages as well as any that were saved before the fix in the wrong order
+
+## 0.9.0-alpha.8
+
+### Patch Changes
+
+- 000a6d4: Fixed an issue where the TokenLimiter message processor was adding new messages into the remembered messages array
+- ed2f549: Fix exlude methods for batchTraceInsert
+- c0f22b4: [MASTRA-3130] Metadata Filter Update for PG and Libsql
+- 0a033fa: Adds MCPServer component
+- 9c26508: Fixed an issue where "mastra dev" wouldn't always print out localhost:4111 logs due to new NODE_ENV fixes
+- 0f4eae3: Rename Container into RuntimeContext
+- 16a8648: Disable swaggerUI, playground for production builds, mastra instance server build config to enable swaggerUI, apiReqLogs, openAPI documentation for prod builds
+
 ## 0.9.0-alpha.7
 
 ### Patch Changes

@@ -19,10 +19,12 @@ import type {
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 
-import type { MastraLanguageModel, ToolsInput } from '../agent/types';
-import type { Container } from '../di';
+import type { MastraLanguageModel } from '../agent/types';
 import type { Run } from '../run/types';
+import type { RuntimeContext } from '../runtime-context';
 import type { CoreTool } from '../tools/types';
+
+export { createMockModel } from './model/mock';
 
 export type LanguageModel = MastraLanguageModel;
 
@@ -100,14 +102,13 @@ export type DefaultLLMStreamOptions = Omit<StreamTextOptions, MastraCustomLLMOpt
 export type DefaultLLMStreamObjectOptions = Omit<StreamObjectOptions, MastraCustomLLMOptionsKeys>;
 
 type MastraCustomLLMOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
-  tools?: ToolsInput;
-  convertedTools?: Record<string, CoreTool>;
+  tools?: Record<string, CoreTool>;
   onStepFinish?: (step: unknown) => void;
   experimental_output?: Z;
   telemetry?: TelemetrySettings;
   threadId?: string;
   resourceId?: string;
-  container: Container;
+  runtimeContext: RuntimeContext;
 } & Run;
 
 export type LLMTextOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {

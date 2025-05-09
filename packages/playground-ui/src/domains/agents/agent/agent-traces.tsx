@@ -1,45 +1,34 @@
-import { ReactNode, useContext, useState } from 'react';
+import { useContext, useState } from 'react';
 
-import { cn } from '@/lib/utils';
+import { TraceContext } from '@/domains/traces/context/trace-context';
 
-import { TraceContext, TraceProvider } from '@/domains/traces/context/trace-context';
-
-import { useTraces } from '@/hooks/use-traces';
 import { TracesTable } from '../../traces/traces-table';
 import { TracesSidebar } from '@/domains/traces/traces-sidebar';
+import clsx from 'clsx';
+import { RefinedTrace } from '@/domains/traces/types';
 
 export interface AgentTracesProps {
-  agentName: string;
-  baseUrl: string;
-  sidebarChild: ReactNode;
+  className?: string;
+  traces: RefinedTrace[];
+  isLoading: boolean;
+  error: { message: string } | null;
 }
 
-export function AgentTraces({ agentName, baseUrl, sidebarChild }: AgentTracesProps) {
-  return (
-    <TraceProvider>
-      <AgentTracesInner agentName={agentName} baseUrl={baseUrl} sidebarChild={sidebarChild} />
-    </TraceProvider>
-  );
+export function AgentTraces({ className, traces, isLoading, error }: AgentTracesProps) {
+  return <AgentTracesInner className={className} traces={traces} isLoading={isLoading} error={error} />;
 }
 
-function AgentTracesInner({ agentName, baseUrl, sidebarChild }: AgentTracesProps) {
-  const [sidebarWidth, setSidebarWidth] = useState(30);
-  const { traces, firstCallLoading, error } = useTraces(agentName, baseUrl);
+function AgentTracesInner({ className, traces, isLoading, error }: AgentTracesProps) {
+  const [sidebarWidth, setSidebarWidth] = useState(100);
   const { isOpen: open } = useContext(TraceContext);
 
   return (
-    <main className="h-full relative overflow-hidden flex flex-row">
-      <div className="flex-1 block mr-[30%]">
-        <TracesTable traces={traces} isLoading={firstCallLoading} error={error} />
+    <div className={clsx('h-full relative overflow-hidden flex', className)}>
+      <div className="h-full overflow-y-scroll w-full">
+        <TracesTable traces={traces} isLoading={isLoading} error={error} />
       </div>
 
-      <TracesSidebar
-        className={cn(open ? 'grid grid-cols-2 w-[60%]' : 'min-w-[325px]')}
-        width={100 - sidebarWidth}
-        onResize={setSidebarWidth}
-      >
-        {sidebarChild}
-      </TracesSidebar>
-    </main>
+      {open && <TracesSidebar width={sidebarWidth} onResize={setSidebarWidth} />}
+    </div>
   );
 }

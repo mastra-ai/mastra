@@ -10,6 +10,7 @@ import { deploy } from './commands/deploy/index';
 import { dev } from './commands/dev/dev';
 import { init } from './commands/init/init';
 import { checkAndInstallCoreDeps, checkPkgJson, interactivePrompt } from './commands/init/utils';
+import { lint } from './commands/lint';
 import { DepsService } from './services/service.deps';
 import { logger } from './utils/logger';
 
@@ -42,30 +43,36 @@ program
   });
 
 program
-  .command('create')
+  .command('create [project-name]')
   .description('Create a new Mastra project')
   .option('--default', 'Quick start with defaults(src, OpenAI, no examples)')
   .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows)')
   .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, groq, google, or cerebras))')
   .option('-k, --llm-api-key <api-key>', 'API key for the model provider')
   .option('-e, --example', 'Include example code')
+  .option('-n, --no-example', 'Do not include example code')
   .option('-t, --timeout [timeout]', 'Configurable timeout for package installation, defaults to 60000 ms')
+  .option('-d, --dir <directory>', 'Target directory for Mastra source code (default: src/)')
   .option(
     '-p, --project-name <string>',
     'Project name that will be used in package.json and as the project directory name.',
   )
-  .action(async args => {
+  .option('-m, --mcp <editor>', 'MCP Server for code editor (cursor, cursor-global, windsurf, vscode)')
+  .action(async (projectNameArg, args) => {
+    // Unify: use argument if present, else option
+    const projectName = projectNameArg || args.projectName;
     await analytics.trackCommandExecution({
       command: 'create',
-      args,
+      args: { ...args, projectName },
       execution: async () => {
         const timeout = args?.timeout ? (args?.timeout === true ? 60000 : parseInt(args?.timeout, 10)) : undefined;
         if (args.default) {
           await create({
             components: ['agents', 'tools', 'workflows'],
             llmProvider: 'openai',
-            addExample: false,
+            addExample: true,
             timeout,
+            mcpServer: args.mcp,
           });
           return;
         }
@@ -75,7 +82,9 @@ program
           addExample: args.example,
           llmApiKey: args['llm-api-key'],
           timeout,
-          projectName: args.projectName,
+          projectName,
+          directory: args.dir,
+          mcpServer: args.mcp,
         });
       },
       origin,
@@ -88,16 +97,18 @@ program
   .option('--default', 'Quick start with defaults(src, OpenAI, no examples)')
   .option('-d, --dir <directory>', 'Directory for Mastra files to (defaults to src/)')
   .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows)')
-  .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, or groq))')
+  .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, groq, google or cerebras))')
   .option('-k, --llm-api-key <api-key>', 'API key for the model provider')
   .option('-e, --example', 'Include example code')
+  .option('-n, --no-example', 'Do not include example code')
+  .option('-m, --mcp <editor>', 'MCP Server for code editor (cursor, cursor-global, windsurf, vscode)')
   .action(async args => {
     await analytics.trackCommandExecution({
       command: 'init',
       args,
       execution: async () => {
         await checkPkgJson();
-        await checkAndInstallCoreDeps();
+        await checkAndInstallCoreDeps(args?.example || args?.default);
 
         if (!Object.keys(args).length) {
           const result = await interactivePrompt();
@@ -113,7 +124,8 @@ program
             directory: 'src/',
             components: ['agents', 'tools', 'workflows'],
             llmProvider: 'openai',
-            addExample: false,
+            addExample: true,
+            configureEditorWithDocsMCP: args.mcp,
           });
           return;
         }
@@ -125,8 +137,26 @@ program
           llmProvider: args.llm,
           addExample: args.example,
           llmApiKey: args['llm-api-key'],
+          configureEditorWithDocsMCP: args.mcp,
         });
         return;
+      },
+      origin,
+    });
+  });
+
+program
+  .command('lint')
+  .description('Lint your Mastra project')
+  .option('-d, --dir <path>', 'Path to your Mastra folder')
+  .option('-r, --root <path>', 'Path to your root folder')
+  .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
+  .action(async args => {
+    await analytics.trackCommandExecution({
+      command: 'lint',
+      args,
+      execution: async () => {
+        await lint({ dir: args.dir, root: args.root, tools: args.tools ? args.tools.split(',') : [] });
       },
       origin,
     });
@@ -162,14 +192,19 @@ program
 program
   .command('build')
   .description('Build your Mastra project')
-  .option('-d, --dir <path>', 'Path to directory')
+  .option('-d, --dir <path>', 'Path to your Mastra Folder')
+  .option('-r, --root <path>', 'Path to your root folder')
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
   .action(async args => {
     await analytics.trackCommandExecution({
       command: 'mastra build',
       args,
       execution: async () => {
-        await build({ dir: args.dir, tools: args.tools ? args.tools.split(',') : [] });
+        await build({
+          dir: args?.dir,
+          root: args?.root,
+          tools: args?.tools ? args.tools.split(',') : [],
+        });
       },
       origin,
     });

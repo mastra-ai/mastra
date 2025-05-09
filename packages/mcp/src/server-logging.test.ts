@@ -1,8 +1,8 @@
 import { spawn } from 'child_process';
 import path from 'path';
 import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
-import type { LogMessage, LoggingLevel } from './client';
-import { MCPConfiguration } from './configuration';
+import type { LogMessage } from './client';
+import { MCPClient } from './configuration';
 
 // Increase test timeout for server operations
 vi.setConfig({ testTimeout: 80000, hookTimeout: 80000 });
@@ -58,12 +58,12 @@ describe('MCP Server Logging', () => {
     const weatherLogHandler = vi.fn();
     const stockLogHandler = vi.fn();
 
-    const config = new MCPConfiguration({
+    const config = new MCPClient({
       id: 'server-log-test',
       servers: {
         weather: {
           url: new URL('http://localhost:60809/sse'),
-          log: weatherLogHandler,
+          logger: weatherLogHandler,
         },
         stock: {
           command: 'npx',
@@ -71,7 +71,7 @@ describe('MCP Server Logging', () => {
           env: {
             FAKE_CREDS: 'test',
           },
-          log: stockLogHandler,
+          logger: stockLogHandler,
         },
       },
     });
@@ -116,13 +116,13 @@ describe('MCP Server Logging', () => {
     });
 
     // Intentionally use a non-existent command to generate errors
-    const config = new MCPConfiguration({
+    const config = new MCPClient({
       id: 'error-log-test',
       servers: {
         badServer: {
           command: 'nonexistent-command-that-will-fail',
           args: [],
-          log: highSeverityHandler,
+          logger: highSeverityHandler,
         },
       },
     });
@@ -145,16 +145,6 @@ describe('MCP Server Logging', () => {
   });
 
   it('should support console logging patterns', async () => {
-    const _logLevels: LoggingLevel[] = [
-      'debug',
-      'info',
-      'notice',
-      'warning',
-      'error',
-      'critical',
-      'alert',
-      'emergency',
-    ];
     const logMessages: string[] = [];
 
     const consoleLogger = (logMessage: LogMessage) => {
@@ -163,13 +153,13 @@ describe('MCP Server Logging', () => {
       console.log(formatted);
     };
 
-    const config = new MCPConfiguration({
+    const config = new MCPClient({
       id: 'console-log-test',
       servers: {
         echoServer: {
           command: 'echo',
           args: ['test'],
-          log: consoleLogger,
+          logger: consoleLogger,
         },
       },
     });

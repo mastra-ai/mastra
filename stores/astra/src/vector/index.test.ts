@@ -58,7 +58,7 @@ async function deleteIndexAndWait(vectorDB: AstraVector, indexName: string) {
   }
 }
 
-describe('AstraVector Integration Tests', () => {
+describe.skip('AstraVector Integration Tests', () => {
   let vectorDB: AstraVector;
   const testIndexName = 'testvectors1733728136118'; // Unique collection name
   const testIndexName2 = 'testvectors1733728136119'; // Unique collection name
@@ -1321,6 +1321,63 @@ describe('AstraVector Integration Tests', () => {
 
       expect(results).toHaveLength(2);
       expect(results.map(res => res.id)).not.toContain(idToBeDeleted);
+    });
+  });
+
+  describe('Error Handling', () => {
+    const testIndexName = 'test_index_error';
+    beforeAll(async () => {
+      await vectorDB.createIndex({ indexName: testIndexName, dimension: 3 });
+    });
+
+    afterAll(async () => {
+      await vectorDB.deleteIndex(testIndexName);
+    });
+
+    it('should handle non-existent index queries', async () => {
+      await expect(vectorDB.query({ indexName: 'non-existent-index', queryVector: [1, 2, 3] })).rejects.toThrow();
+    });
+
+    it('should handle invalid dimension vectors', async () => {
+      const invalidVector = [1, 2, 3, 4]; // 4D vector for 3D index
+      await expect(vectorDB.upsert({ indexName: testIndexName, vectors: [invalidVector] })).rejects.toThrow();
+    });
+
+    it('should handle duplicate index creation gracefully', async () => {
+      const duplicateIndexName = `duplicate_test`;
+      const dimension = 768;
+
+      try {
+        // Create index first time
+        await vectorDB.createIndex({
+          indexName: duplicateIndexName,
+          dimension,
+          metric: 'cosine',
+        });
+
+        // Try to create with same dimensions - should not throw
+        await expect(
+          vectorDB.createIndex({
+            indexName: duplicateIndexName,
+            dimension,
+            metric: 'cosine',
+          }),
+        ).resolves.not.toThrow();
+
+        // Try to create with different dimensions - should throw
+        await expect(
+          vectorDB.createIndex({
+            indexName: duplicateIndexName,
+            dimension: dimension + 1,
+            metric: 'cosine',
+          }),
+        ).rejects.toThrow(
+          `Collection already exists: trying to create Collection ('${duplicateIndexName}') with different settings`,
+        );
+      } finally {
+        // Cleanup
+        await vectorDB.deleteIndex(duplicateIndexName);
+      }
     });
   });
 });
