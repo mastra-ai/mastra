@@ -124,6 +124,31 @@ To fix this you have three different options:
   }
 
   /**
+   * Get all resources from connected MCP servers
+   * @returns A record of server names to their resource lists
+   */
+  public async getResources() {
+    this.addToInstanceCache();
+    const connectedResources: Record<string, any> = {};
+
+    await Promise.all(
+      Object.entries(this.serverConfigs).map(async ([serverName, serverConfig]) => {
+        try {
+          const client = await this.getConnectedClient(serverName, serverConfig);
+          const resources = await client.resources();
+          connectedResources[serverName] = resources;
+        } catch (e) {
+          this.logger.error(`Error getting resources from server ${serverName}`, {
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
+      })
+    );
+
+    return connectedResources;
+  }
+
+  /**
    * Get the current session IDs for all connected MCP clients using the Streamable HTTP transport.
    * Returns an object mapping server names to their session IDs.
    */
@@ -200,6 +225,8 @@ To fix this you have three different options:
       }),
     );
   }
+
+
 }
 
 /**
