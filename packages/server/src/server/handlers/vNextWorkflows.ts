@@ -1,7 +1,7 @@
 import { ReadableStream } from 'node:stream/web';
 import { RuntimeContext } from '@mastra/core/di';
 import type { WorkflowRuns } from '@mastra/core/storage';
-import type { NewWorkflow } from '@mastra/core/workflows/vNext';
+import type { NewWorkflow, SerializedStepFlowEntry } from '@mastra/core/workflows/vNext';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
 import { HTTPException } from '../http-exception';
@@ -42,7 +42,22 @@ export async function getVNextWorkflowsHandler({ mastra }: VNextWorkflowContext)
   }
 }
 
-export async function getVNextWorkflowByIdHandler({ mastra, workflowId }: VNextWorkflowContext) {
+type SerializedStep = {
+  id: string;
+  description: string;
+  inputSchema: string | undefined;
+  outputSchema: string | undefined;
+  resumeSchema: string | undefined;
+  suspendSchema: string | undefined;
+};
+
+export async function getVNextWorkflowByIdHandler({ mastra, workflowId }: VNextWorkflowContext): Promise<{
+  steps: SerializedStep[];
+  name: string | undefined;
+  stepGraph: SerializedStepFlowEntry[];
+  inputSchema: string | undefined;
+  outputSchema: string | undefined;
+}> {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -68,7 +83,9 @@ export async function getVNextWorkflowByIdHandler({ mastra, workflowId }: VNextW
       }, {}),
       name: workflow.name,
       stepGraph: workflow.serializedStepGraph,
+      // @ts-ignore - ignore infinite recursion
       inputSchema: workflow.inputSchema ? stringify(zodToJsonSchema(workflow.inputSchema)) : undefined,
+      // @ts-ignore - ignore infinite recursion
       outputSchema: workflow.outputSchema ? stringify(zodToJsonSchema(workflow.outputSchema)) : undefined,
     };
   } catch (error) {
