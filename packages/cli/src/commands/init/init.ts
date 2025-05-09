@@ -7,6 +7,7 @@ import { DepsService } from '../../services/service.deps';
 import { getPackageManagerInstallCommand } from '../utils';
 
 import { installMastraDocsMCPServer } from './mcp-docs-server-install';
+import type { Editor } from './mcp-docs-server-install';
 import {
   createComponentsDir,
   createMastraDir,
@@ -35,7 +36,7 @@ export const init = async ({
   llmProvider: LLMProvider;
   addExample: boolean;
   llmApiKey?: string;
-  configureEditorWithDocsMCP?: undefined | 'windsurf' | 'cursor' | 'cursor-global';
+  configureEditorWithDocsMCP?: Editor;
 }) => {
   s.start('Initializing Mastra');
 

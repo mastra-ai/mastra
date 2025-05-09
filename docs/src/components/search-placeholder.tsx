@@ -3,6 +3,6 @@ export function getSearchPlaceholder(locale: string) {
     case "ja":
       return "ドキュメントを検索してください…";
     default:
-      return "Search docs";
+      return "Search...";
   }
 }

@@ -64,6 +64,7 @@ export default async function RootLayout({
           <PostHogProvider>
             <NextraLayout stars={stars} locale={locale} pageMap={pageMap}>
               {children}
+              {/* {<DocsChat />} */}
             </NextraLayout>
           </PostHogProvider>
           <Toaster />

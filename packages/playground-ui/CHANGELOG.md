@@ -1,5 +1,66 @@
 # @mastra/playground-ui
 
+## 5.0.4-alpha.0
+
+### Patch Changes
+
+- cb1f698: Set runtimeContext from playground for agents, tools, workflows
+- Updated dependencies [cb1f698]
+- Updated dependencies [daf942f]
+- Updated dependencies [0b8b868]
+  - @mastra/client-js@0.1.22-alpha.0
+  - @mastra/core@0.9.4-alpha.0
+
+## 5.0.3
+
+### Patch Changes
+
+- b5d2de0: In vNext workflow serializedStepGraph, return only serializedStepFlow for steps created from a workflow
+  allow viewing inner nested workflows in a multi-layered nested vnext workflow on the playground
+- 62c9e7d: Fix disappearing tool calls in streaming
+- d2dfc37: Fix autoform number form default value
+- Updated dependencies [e450778]
+- Updated dependencies [8902157]
+- Updated dependencies [ca0dc88]
+- Updated dependencies [526c570]
+- Updated dependencies [36eb1aa]
+- Updated dependencies [d7a6a33]
+- Updated dependencies [9cd1a46]
+- Updated dependencies [b5d2de0]
+- Updated dependencies [62c9e7d]
+- Updated dependencies [644f8ad]
+- Updated dependencies [70dbf51]
+  - @mastra/core@0.9.3
+  - @mastra/client-js@0.1.21
+
+## 5.0.3-alpha.1
+
+### Patch Changes
+
+- 62c9e7d: Fix disappearing tool calls in streaming
+- Updated dependencies [e450778]
+- Updated dependencies [8902157]
+- Updated dependencies [ca0dc88]
+- Updated dependencies [36eb1aa]
+- Updated dependencies [9cd1a46]
+- Updated dependencies [62c9e7d]
+- Updated dependencies [70dbf51]
+  - @mastra/core@0.9.3-alpha.1
+  - @mastra/client-js@0.1.21-alpha.1
+
+## 5.0.3-alpha.0
+
+### Patch Changes
+
+- b5d2de0: In vNext workflow serializedStepGraph, return only serializedStepFlow for steps created from a workflow
+  allow viewing inner nested workflows in a multi-layered nested vnext workflow on the playground
+- d2dfc37: Fix autoform number form default value
+- Updated dependencies [526c570]
+- Updated dependencies [b5d2de0]
+- Updated dependencies [644f8ad]
+  - @mastra/client-js@0.1.21-alpha.0
+  - @mastra/core@0.9.3-alpha.0
+
 ## 5.0.2
 
 ### Patch Changes
