@@ -3,7 +3,7 @@ import { CopilotKit, useCopilotChat } from "@copilotkit/react-core";
 import { Markdown } from "@copilotkit/react-ui";
 import { Role, TextMessage } from "@copilotkit/runtime-client-gql";
 
-import { ArrowLeftIcon, PaperIcon } from "@/components/svgs/Icons";
+import { ArrowLeftIcon } from "@/components/svgs/Icons";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import Spinner from "@/components/ui/spinner";
@@ -78,7 +78,7 @@ export function CustomChatInterface({
   return (
     <div className="flex flex-col w-full h-[600px]">
       {/* Chat header */}
-      <div className="flex justify-between w-full p-5">
+      <div className="flex w-full p-5">
         <Button
           variant="ghost"
           className="cursor-pointer hover:bg-surface-6 text-icons-3 bg-surface-5"
@@ -87,15 +87,6 @@ export function CustomChatInterface({
         >
           <ArrowLeftIcon className="w-3 h-3" />
           Back to Search
-        </Button>
-        <Button
-          variant="ghost"
-          className="cursor-pointer hover:bg-surface-6 text-icons-3 bg-surface-5"
-          size="slim"
-          onClick={handleNewChat}
-        >
-          <PaperIcon className="w-6 h-6" />
-          New chat
         </Button>
       </div>
 
