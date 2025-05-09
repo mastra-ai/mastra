@@ -12,7 +12,7 @@ export type VercelTool = Tool;
 export type CoreTool = {
   id?: string;
   description?: string;
-  parameters?: ZodSchema | JSONSchema7Type | Schema;
+  parameters: ZodSchema | JSONSchema7Type | Schema;
   execute?: (params: any, options: ToolExecutionOptions) => Promise<any>;
 } & (
   | {

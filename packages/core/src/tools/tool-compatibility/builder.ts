@@ -217,7 +217,7 @@ export class CoreToolBuilder extends MastraBase {
 
     return {
       ...definition,
-      parameters: hasParameters ? convertZodSchemaToAISDKSchema(this.getParameters()) : undefined,
+      parameters: convertZodSchemaToAISDKSchema(this.getParameters()),
     };
   }
 }
