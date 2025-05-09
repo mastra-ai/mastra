@@ -1,7 +1,8 @@
 "use client";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent } from "./ui/card";
 
 export function CardItem({
@@ -33,13 +34,42 @@ export function CardItems({
   titles: string[];
   items: Record<string, Array<{ title: string; href: string }>>;
 }) {
-  const [activeTab, setActiveTab] = useState(titles[0]);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const slugify = (str: string) =>
+    str
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "");
+
+  const listParam = searchParams?.get("list") ?? "";
+  const initialTab = useMemo(() => {
+    const match = titles.find((t) => slugify(t) === slugify(listParam));
+    return match ?? titles[0];
+  }, [listParam, titles]);
+
+  const [activeTab, setActiveTab] = useState(initialTab);
+
+  useEffect(() => {
+    const match = titles.find((t) => slugify(t) === slugify(listParam));
+    if (match && match !== activeTab) {
+      setActiveTab(match);
+    }
+  }, [activeTab, listParam, titles]);
+
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    const params = new URLSearchParams(searchParams?.toString());
+    params.set("list", slugify(tab));
+    router.replace(`?${params.toString()}`);
+  };
   return (
     <div>
       <CardTitle
         titles={titles}
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={handleTabChange}
       />
       <div className="mt-6">
         <CardItem links={items[activeTab] || []} />
