@@ -1,5 +1,20 @@
 # @mastra/core
 
+## 0.9.3
+
+### Patch Changes
+
+- e450778: vnext: Inngest playground fixes
+- 8902157: added an optional `bodySizeLimit` to server config so that users can pass custom bodylimit size in mb. If not, it defaults to 4.5 mb
+- ca0dc88: fix: filter out excessive logs when getting LLM for agents
+- 526c570: expose agent runtimeContext from clientSDK
+- d7a6a33: Allow more user messages to be saved to memory, and fix message saving when using output flag
+- 9cd1a46: [MASTRA-3338] update naming scheme for embedding index based on vector store rules and added duplicate index checks
+- b5d2de0: In vNext workflow serializedStepGraph, return only serializedStepFlow for steps created from a workflow
+  allow viewing inner nested workflows in a multi-layered nested vnext workflow on the playground
+- 644f8ad: Adds a tool compatibility layer to ensure models from various providers work the same way. Models may not be able to support all json schema properties (such as some openai reasoning models), as well as other models support the property but seem to ignore it. The feature allows for a compatibility class for a provider that can be customized to fit the models and make sure they're using the tool schemas properly.
+- 70dbf51: [MASTRA-2452] updated setBaggage for tracing
+
 ## 0.9.3-alpha.1
 
 ### Patch Changes

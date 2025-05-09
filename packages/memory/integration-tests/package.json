@@ -33,6 +33,7 @@
     "@mastra/core": "workspace:*",
     "@mastra/fastembed": "workspace:*",
     "@mastra/memory": "workspace:*",
+    "@mastra/libsql": "workspace:*",
     "@mastra/pg": "workspace:*",
     "@mastra/upstash": "workspace:*",
     "dotenv": "^16.4.7",
