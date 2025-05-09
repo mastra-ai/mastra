@@ -1,5 +1,17 @@
 # @mastra/deployer
 
+## 0.3.4-alpha.1
+
+### Patch Changes
+
+- edf1e88: allows ability to pass McpServer into the mastra class and creates an endpoint /api/servers/:serverId/mcp to POST messages to an MCP server
+- Updated dependencies [ab80e7e]
+- Updated dependencies [6fa1ad1]
+- Updated dependencies [c28d7a0]
+- Updated dependencies [edf1e88]
+  - @mastra/server@2.0.4-alpha.1
+  - @mastra/core@0.9.4-alpha.1
+
 ## 0.3.4-alpha.0
 
 ### Patch Changes

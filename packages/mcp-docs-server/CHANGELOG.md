@@ -1,5 +1,18 @@
 # @mastra/mcp-docs-server
 
+## 0.0.14-alpha.1
+
+### Patch Changes
+
+- ce9435f: Increased the allowed size of loc in the docs MCPs examples tool so that the agents.md example still fits in
+- Updated dependencies [ab80e7e]
+- Updated dependencies [e229660]
+- Updated dependencies [6fa1ad1]
+- Updated dependencies [c28d7a0]
+- Updated dependencies [edf1e88]
+  - @mastra/core@0.9.4-alpha.1
+  - @mastra/mcp@0.5.0-alpha.1
+
 ## 0.0.14-alpha.0
 
 ### Patch Changes
