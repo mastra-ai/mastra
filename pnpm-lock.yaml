@@ -51,7 +51,7 @@ importers:
         version: 0.0.27
       '@ai-sdk/ui-utils':
         specifier: ^1.1.19
-        version: 1.2.11(zod@3.24.3)
+        version: 1.2.11(zod@3.24.4)
       '@mastra/core':
         specifier: workspace:^
         version: link:../../packages/core
@@ -63,10 +63,10 @@ importers:
         version: 7.8.1
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
       zod-to-json-schema:
         specifier: ^3.24.5
-        version: 3.24.5(zod@3.24.3)
+        version: 3.24.5(zod@3.24.4)
     devDependencies:
       '@babel/preset-env':
         specifier: ^7.26.9
@@ -121,7 +121,7 @@ importers:
         version: 4.4.0(@cloudflare/workers-types@4.20250417.0)(bufferutil@4.0.9)(utf-8-validate@6.0.5)
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -167,7 +167,7 @@ importers:
         version: 19.0.3(@azure/cosmos@4.2.0)(@azure/identity@4.8.0)(@swc/core@1.11.10(@swc/helpers@0.5.15))(@types/express@4.17.21)(@types/node@20.17.32)(@upstash/redis@1.34.5)(bufferutil@4.0.9)(encoding@0.1.13)(picomatch@4.0.2)(rollup@4.40.1)(utf-8-validate@6.0.5)
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -234,8 +234,8 @@ importers:
   examples/dane:
     dependencies:
       '@ai-sdk/anthropic':
-        specifier: ^1.2.10
-        version: 1.2.10(zod@3.24.3)
+        specifier: ^1.2.11
+        version: 1.2.11(zod@3.24.4)
       '@inquirer/prompts':
         specifier: ^7.3.3
         version: 7.4.0(@types/node@20.17.32)
@@ -307,7 +307,7 @@ importers:
         version: 5.8.3
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
     devDependencies:
       '@types/node':
         specifier: ^20.17.32
@@ -338,7 +338,7 @@ importers:
         version: 3.15.0
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -402,7 +402,7 @@ importers:
         version: 3.15.0
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -466,7 +466,7 @@ importers:
         version: 2.1.11(@anthropic-ai/sdk@0.32.1(encoding@0.1.13))(@qdrant/js-client-rest@1.13.0(typescript@5.8.3))(@supabase/supabase-js@2.49.3(bufferutil@4.0.9)(utf-8-validate@6.0.5))(@types/jest@29.5.14)(@types/pg@8.11.11)(@types/sqlite3@3.1.11)(encoding@0.1.13)(groq-sdk@0.8.0(encoding@0.1.13))(ollama@0.5.14)(pg@8.14.0)(redis@4.7.0)(sqlite3@5.1.7)
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -509,7 +509,7 @@ importers:
         version: 3.15.0
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
     devDependencies:
       '@jest/globals':
         specifier: ^29.7.0
@@ -642,10 +642,10 @@ importers:
         version: 0.1.2
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
       zod-to-json-schema:
         specifier: ^3.24.5
-        version: 3.24.5(zod@3.24.3)
+        version: 3.24.5(zod@3.24.4)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -969,7 +969,7 @@ importers:
         version: 1.30.0
       ai:
         specifier: ^4.2.2
-        version: 4.3.15(react@19.1.0)(zod@3.24.3)
+        version: 4.3.15(react@19.1.0)(zod@3.24.4)
       cohere-ai:
         specifier: ^7.16.0
         version: 7.16.0(encoding@0.1.13)
@@ -987,7 +987,7 @@ importers:
         version: 4.7.7
       hono-openapi:
         specifier: ^0.4.6
-        version: 0.4.6(hono@4.7.7)(openapi-types@12.1.3)(zod@3.24.3)
+        version: 0.4.6(hono@4.7.7)(openapi-types@12.1.3)(zod@3.24.4)
       json-schema:
         specifier: ^0.4.0
         version: 0.4.0
@@ -1011,11 +1011,11 @@ importers:
         version: 5.19.2
       zod-to-json-schema:
         specifier: ^3.24.5
-        version: 3.24.5(zod@3.24.3)
+        version: 3.24.5(zod@3.24.4)
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^1.3.20
-        version: 1.3.22(zod@3.24.3)
+        version: 1.3.22(zod@3.24.4)
       '@babel/core':
         specifier: ^7.26.10
         version: 7.26.10
@@ -1027,7 +1027,7 @@ importers:
         version: 7.52.5(@types/node@20.17.32)
       '@openrouter/ai-sdk-provider':
         specifier: ^0.4.5
-        version: 0.4.5(zod@3.24.3)
+        version: 0.4.5(zod@3.24.4)
       '@size-limit/preset-small-lib':
         specifier: ^11.2.0
         version: 11.2.0(size-limit@11.2.0)
@@ -1072,7 +1072,7 @@ importers:
         version: 3.1.2(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.17.32)(@vitest/ui@3.0.9)(jiti@2.4.2)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.3)(yaml@2.7.0)
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
 
   packages/create-mastra:
     dependencies:
@@ -1214,7 +1214,7 @@ importers:
         version: 1.5.1(typescript@5.8.3)
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
     devDependencies:
       '@hono/node-server':
         specifier: ^1.13.8
@@ -1248,7 +1248,7 @@ importers:
         version: 9.25.1(jiti@2.4.2)
       hono-openapi:
         specifier: ^0.4.6
-        version: 0.4.6(hono@4.7.7)(openapi-types@12.1.3)(zod@3.24.3)
+        version: 0.4.6(hono@4.7.7)(openapi-types@12.1.3)(zod@3.24.4)
       rollup-plugin-visualizer:
         specifier: ^5.14.0
         version: 5.14.0(rollup@4.40.1)
@@ -1269,7 +1269,7 @@ importers:
         version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.17.32)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
       zod-to-json-schema:
         specifier: ^3.24.5
-        version: 3.24.5(zod@3.24.3)
+        version: 3.24.5(zod@3.24.4)
 
   packages/evals:
     dependencies:
@@ -1296,11 +1296,11 @@ importers:
         version: 4.0.4
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
     devDependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.22(zod@3.24.3)
+        version: 1.3.22(zod@3.24.4)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1321,7 +1321,7 @@ importers:
         version: 4.0.2
       ai:
         specifier: ^4.2.2
-        version: 4.3.15(react@19.1.0)(zod@3.24.3)
+        version: 4.3.15(react@19.1.0)(zod@3.24.4)
       dotenv:
         specifier: ^16.4.7
         version: 16.4.7
@@ -1414,7 +1414,7 @@ importers:
     devDependencies:
       '@ai-sdk/anthropic':
         specifier: ^1.1.15
-        version: 1.2.10(zod@3.24.3)
+        version: 1.2.11(zod@3.24.4)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1444,10 +1444,10 @@ importers:
         version: 3.1.2(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.17.32)(@vitest/ui@3.0.9)(jiti@2.4.2)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.3)(yaml@2.7.0)
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
       zod-to-json-schema:
         specifier: ^3.24.5
-        version: 3.24.5(zod@3.24.3)
+        version: 3.24.5(zod@3.24.4)
 
   packages/mcp-docs-server:
     dependencies:
@@ -1477,10 +1477,10 @@ importers:
         version: 11.1.0
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
       zod-to-json-schema:
         specifier: ^3.24.5
-        version: 3.24.5(zod@3.24.3)
+        version: 3.24.5(zod@3.24.4)
     devDependencies:
       '@hono/node-server':
         specifier: ^1.13.8
@@ -1535,10 +1535,10 @@ importers:
         version: 11.1.0
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
       zod-to-json-schema:
         specifier: ^3.24.5
-        version: 3.24.5(zod@3.24.3)
+        version: 3.24.5(zod@3.24.4)
     devDependencies:
       '@hono/node-server':
         specifier: ^1.13.8
@@ -1587,7 +1587,7 @@ importers:
         version: 1.34.5
       ai:
         specifier: ^4.2.2
-        version: 4.3.15(react@19.1.0)(zod@3.24.3)
+        version: 4.3.15(react@19.1.0)(zod@3.24.4)
       js-tiktoken:
         specifier: ^1.0.19
         version: 1.0.19
@@ -1608,11 +1608,11 @@ importers:
         version: 1.1.0
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^1.3.3
-        version: 1.3.22(zod@3.24.3)
+        version: 1.3.22(zod@3.24.4)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1645,10 +1645,10 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: ^1.3.0
-        version: 1.3.22(zod@3.24.3)
+        version: 1.3.22(zod@3.24.4)
       '@ai-sdk/react':
         specifier: ^1.2.1
-        version: 1.2.12(react@19.1.0)(zod@3.24.3)
+        version: 1.2.12(react@19.1.0)(zod@3.24.4)
       '@mastra/client-js':
         specifier: workspace:*
         version: link:../../../client-sdks/client-js
@@ -1675,7 +1675,7 @@ importers:
         version: 16.4.7
       zod:
         specifier: ^3.24.2
-        version: 3.24.3
+        version: 3.24.4
     devDependencies:
       '@faker-js/faker':
         specifier: ^9.6.0
@@ -1688,7 +1688,7 @@ importers:
         version: 20.17.32
       ai:
         specifier: ^4.2.2
-        version: 4.3.15(react@19.1.0)(zod@3.24.3)
+        version: 4.3.15(react@19.1.0)(zod@3.24.4)
       jsdom:
         specifier: ^26.0.0
         version: 26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)
@@ -1715,7 +1715,7 @@ importers:
     dependencies:
       '@ai-sdk/ui-utils':
         specifier: ^1.1.19
-        version: 1.2.11(zod@3.24.3)
+        version: 1.2.11(zod@3.24.4)
       '@assistant-ui/react':
         specifier: ^0.7.91
         version: 0.7.91(@types/react-dom@19.0.4(@types/react@19.0.10))(@types/react@19.0.10)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(use-sync-external-store@1.4.0(react@19.1.0))
@@ -1730,10 +1730,10 @@ importers:
         version: 2.1.0
       '@autoform/react':
         specifier: ^3.0.0
-        version: 3.0.0(react-hook-form@7.54.2(react@19.1.0))(react@19.1.0)(yup@1.6.1)(zod@3.24.3)
+        version: 3.0.0(react-hook-form@7.54.2(react@19.1.0))(react@19.1.0)(yup@1.6.1)(zod@3.24.4)
       '@autoform/zod':
         specifier: ^2.1.0
-        version: 2.1.0(zod@3.24.3)
+        version: 2.1.0(zod@3.24.4)
       '@codemirror/lang-json':
         specifier: ^6.0.1
         version: 6.0.1
@@ -1889,7 +1889,7 @@ importers:
         version: 10.0.4(react@19.1.0)
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
       zustand:
         specifier: ^5.0.3
         version: 5.0.3(@types/react@19.0.10)(react@19.1.0)(use-sync-external-store@1.4.0(react@19.1.0))
@@ -1959,14 +1959,14 @@ importers:
         version: 2.0.3
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
     devDependencies:
       '@ai-sdk/cohere':
         specifier: latest
-        version: 1.2.10(zod@3.24.3)
+        version: 1.2.10(zod@3.24.4)
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.22(zod@3.24.3)
+        version: 1.3.22(zod@3.24.4)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1978,7 +1978,7 @@ importers:
         version: 20.17.32
       ai:
         specifier: ^4.2.2
-        version: 4.3.15(react@19.1.0)(zod@3.24.3)
+        version: 4.3.15(react@19.1.0)(zod@3.24.4)
       dotenv:
         specifier: ^16.4.7
         version: 16.4.7
@@ -2044,7 +2044,7 @@ importers:
         version: 1.43.1(bufferutil@4.0.9)(utf-8-validate@5.0.10)
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -2078,7 +2078,7 @@ importers:
         version: link:../../packages/core
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -2109,7 +2109,7 @@ importers:
         version: 1.57.0(encoding@0.1.13)
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -2140,7 +2140,7 @@ importers:
         version: link:../../packages/core
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -2174,7 +2174,7 @@ importers:
         version: 8.0.0
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -2208,7 +2208,7 @@ importers:
         version: 1.8.1
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -2236,10 +2236,10 @@ importers:
         version: link:../../packages/core
       openai:
         specifier: ^4.96.0
-        version: 4.96.0(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.3)
+        version: 4.96.0(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.4)
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -2267,7 +2267,7 @@ importers:
         version: link:../../packages/core
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -2298,7 +2298,7 @@ importers:
         version: 0.34.1
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -2332,7 +2332,7 @@ importers:
         version: 2.4.1
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -2934,7 +2934,7 @@ importers:
         version: 4.2.0(encoding@0.1.13)
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
     devDependencies:
       '@cloudflare/workers-types':
         specifier: ^4.20250321.0
@@ -2971,7 +2971,7 @@ importers:
         version: link:../../packages/core
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -3005,7 +3005,7 @@ importers:
         version: 1.57.0(encoding@0.1.13)
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -3042,7 +3042,7 @@ importers:
         version: link:../../packages/core
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -3073,7 +3073,7 @@ importers:
         version: 1.8.1
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -3104,10 +3104,10 @@ importers:
         version: link:../../packages/core
       openai:
         specifier: ^4.89.0
-        version: 4.96.0(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.3)
+        version: 4.96.0(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.4)
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -3178,7 +3178,7 @@ importers:
         version: link:../../packages/core
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -3209,7 +3209,7 @@ importers:
         version: link:../../packages/core
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -3243,7 +3243,7 @@ importers:
         version: 2.4.1
       zod:
         specifier: ^3.24.3
-        version: 3.24.3
+        version: 3.24.4
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -3283,11 +3283,11 @@ importers:
         version: 3.35.1(@vercel/node@5.0.4(@swc/core@1.11.10(@swc/helpers@0.5.15))(encoding@0.1.13)(rollup@4.40.1))(encoding@0.1.13)(express@5.0.1)(fastify@4.29.0)(h3@1.15.1)(hono@4.7.7)(next@15.2.4(@opentelemetry/api@1.9.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(typescript@5.8.3)
       zod:
         specifier: ^3.24.2
-        version: 3.24.3
+        version: 3.24.4
     devDependencies:
       '@ai-sdk/openai':
-        specifier: ^1.3.21
-        version: 1.3.22(zod@3.24.3)
+        specifier: ^1.3.22
+        version: 1.3.22(zod@3.24.4)
       '@hono/node-server':
         specifier: ^1.14.1
         version: 1.14.1(hono@4.7.7)
@@ -3304,8 +3304,8 @@ importers:
         specifier: ^20.17.32
         version: 20.17.32
       ai:
-        specifier: ^4.3.13
-        version: 4.3.15(react@19.1.0)(zod@3.24.3)
+        specifier: ^4.3.15
+        version: 4.3.15(react@19.1.0)(zod@3.24.4)
       eslint:
         specifier: ^9.23.0
         version: 9.25.1(jiti@2.4.2)
@@ -3342,8 +3342,8 @@ packages:
   '@ag-ui/proto@0.0.27':
     resolution: {integrity: sha512-bgF2DGqU+DvcNKF3gOlT97kZmhHNB0lWfjkJQ6ONxMtmWlSVYAE97LCtdTIjXEhnHyqi3QQBQ0BEXJ74q7QMcg==}
 
-  '@ai-sdk/anthropic@1.2.10':
-    resolution: {integrity: sha512-PyE7EC2fPjs9DnzRAHDrPQmcnI2m2Eojr8pfhckOejOlDEh2w7NnSJr1W3qe5hUWzKr+6d7NG1ZKR9fhmpDdEQ==}
+  '@ai-sdk/anthropic@1.2.11':
+    resolution: {integrity: sha512-lZLcEMh8MXY4NVSrN/7DyI2rnid8k7cn/30nMmd3bwJrnIsOuIuuFvY8f0nj+pFcTi6AYK7ujLdqW5dQVz1YQw==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.0.0
@@ -3377,12 +3377,6 @@ packages:
     peerDependenciesMeta:
       zod:
         optional: true
-
-  '@ai-sdk/provider-utils@2.2.7':
-    resolution: {integrity: sha512-kM0xS3GWg3aMChh9zfeM+80vEZfXzR3JEUBdycZLtbRZ2TRT8xOj3WodGHPb06sUK5yD7pAXC/P7ctsi2fvUGQ==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.23.8
 
   '@ai-sdk/provider-utils@2.2.8':
     resolution: {integrity: sha512-fqhG+4sCVv8x7nFzYnFo19ryhAa3w096Kmc3hWxMQfW/TubPOmt3A6tYZhl4mUfQWWQMsuSkLrtjlWuXBVSGQA==}
@@ -13900,10 +13894,12 @@ packages:
 
   libsql@0.4.7:
     resolution: {integrity: sha512-T9eIRCs6b0J1SHKYIvD8+KCJMcWZ900iZyxdnSCdqxN12Z1ijzT+jY5nrk72Jw4B0HGzms2NgpryArlJqvc3Lw==}
+    cpu: [x64, arm64, wasm32]
     os: [darwin, linux, win32]
 
   libsql@0.5.6:
     resolution: {integrity: sha512-k0qHpyU47iWBplT4IJKEcMgUbms8jl9cNGE6aqsdOYmSJjtZIaYkn8f4ku5DzxRHpk1+o4FK7ZwGVCExYboZqQ==}
+    cpu: [x64, arm64, wasm32]
     os: [darwin, linux, win32]
 
   light-my-request@5.14.0:
@@ -18616,9 +18612,6 @@ packages:
   zod@3.22.4:
     resolution: {integrity: sha512-iC+8Io04lddc+mVqQ9AZ7OQ2MrUKGN+oIQyq1vemgt46jwCwLfhq7/pwnBnNXXXZb8VTVLKwp9EDkx+ryxIWmg==}
 
-  zod@3.24.3:
-    resolution: {integrity: sha512-HhY1oqzWCQWuUqvBFnsyrtZRhyPeR7SUGv+C4+MsisMuVfSPx8HpwWqH8tRahSlt6M3PiFAcoeFhZAqIXTxoSg==}
-
   zod@3.24.4:
     resolution: {integrity: sha512-OdqJE9UDRPwWsrHjLN2F8bPxvwJBK22EHLWtanu0LSYr5YqzsaaW3RMgmjwr8Rypg5k+meEJdSPXJZXE/yqOMg==}
 
@@ -18670,12 +18663,12 @@ snapshots:
       rxjs: 7.8.1
       untruncate-json: 0.0.1
       uuid: 11.1.0
-      zod: 3.24.3
+      zod: 3.24.4
 
   '@ag-ui/core@0.0.27':
     dependencies:
       rxjs: 7.8.1
-      zod: 3.24.3
+      zod: 3.24.4
 
   '@ag-ui/encoder@0.0.27':
     dependencies:
@@ -18687,23 +18680,17 @@ snapshots:
       '@ag-ui/core': 0.0.27
       '@bufbuild/protobuf': 2.3.0
 
-  '@ai-sdk/anthropic@1.2.10(zod@3.24.3)':
+  '@ai-sdk/anthropic@1.2.11(zod@3.24.4)':
     dependencies:
       '@ai-sdk/provider': 1.1.3
-      '@ai-sdk/provider-utils': 2.2.7(zod@3.24.3)
-      zod: 3.24.3
+      '@ai-sdk/provider-utils': 2.2.8(zod@3.24.4)
+      zod: 3.24.4
 
-  '@ai-sdk/cohere@1.2.10(zod@3.24.3)':
+  '@ai-sdk/cohere@1.2.10(zod@3.24.4)':
     dependencies:
       '@ai-sdk/provider': 1.1.3
-      '@ai-sdk/provider-utils': 2.2.8(zod@3.24.3)
-      zod: 3.24.3
-
-  '@ai-sdk/openai@1.3.22(zod@3.24.3)':
-    dependencies:
-      '@ai-sdk/provider': 1.1.3
-      '@ai-sdk/provider-utils': 2.2.8(zod@3.24.3)
-      zod: 3.24.3
+      '@ai-sdk/provider-utils': 2.2.8(zod@3.24.4)
+      zod: 3.24.4
 
   '@ai-sdk/openai@1.3.22(zod@3.24.4)':
     dependencies:
@@ -18720,28 +18707,14 @@ snapshots:
     optionalDependencies:
       zod: 3.24.4
 
-  '@ai-sdk/provider-utils@2.1.10(zod@3.24.3)':
+  '@ai-sdk/provider-utils@2.1.10(zod@3.24.4)':
     dependencies:
       '@ai-sdk/provider': 1.0.9
       eventsource-parser: 3.0.0
       nanoid: 3.3.11
       secure-json-parse: 2.7.0
     optionalDependencies:
-      zod: 3.24.3
-
-  '@ai-sdk/provider-utils@2.2.7(zod@3.24.3)':
-    dependencies:
-      '@ai-sdk/provider': 1.1.3
-      nanoid: 3.3.11
-      secure-json-parse: 2.7.0
-      zod: 3.24.3
-
-  '@ai-sdk/provider-utils@2.2.8(zod@3.24.3)':
-    dependencies:
-      '@ai-sdk/provider': 1.1.3
-      nanoid: 3.3.11
-      secure-json-parse: 2.7.0
-      zod: 3.24.3
+      zod: 3.24.4
 
   '@ai-sdk/provider-utils@2.2.8(zod@3.24.4)':
     dependencies:
@@ -18772,15 +18745,15 @@ snapshots:
       react: 19.1.0
       zod: 3.24.4
 
-  '@ai-sdk/react@1.2.12(react@19.1.0)(zod@3.24.3)':
+  '@ai-sdk/react@1.2.12(react@19.1.0)(zod@3.24.4)':
     dependencies:
-      '@ai-sdk/provider-utils': 2.2.8(zod@3.24.3)
-      '@ai-sdk/ui-utils': 1.2.11(zod@3.24.3)
+      '@ai-sdk/provider-utils': 2.2.8(zod@3.24.4)
+      '@ai-sdk/ui-utils': 1.2.11(zod@3.24.4)
       react: 19.1.0
       swr: 2.3.3(react@19.1.0)
       throttleit: 2.1.0
     optionalDependencies:
-      zod: 3.24.3
+      zod: 3.24.4
 
   '@ai-sdk/solid@0.0.54(zod@3.24.4)':
     dependencies:
@@ -18809,12 +18782,12 @@ snapshots:
     optionalDependencies:
       zod: 3.24.4
 
-  '@ai-sdk/ui-utils@1.2.11(zod@3.24.3)':
+  '@ai-sdk/ui-utils@1.2.11(zod@3.24.4)':
     dependencies:
       '@ai-sdk/provider': 1.1.3
-      '@ai-sdk/provider-utils': 2.2.8(zod@3.24.3)
-      zod: 3.24.3
-      zod-to-json-schema: 3.24.5(zod@3.24.3)
+      '@ai-sdk/provider-utils': 2.2.8(zod@3.24.4)
+      zod: 3.24.4
+      zod-to-json-schema: 3.24.5(zod@3.24.4)
 
   '@ai-sdk/vue@0.0.59(vue@3.5.13(typescript@5.8.3))(zod@3.24.4)':
     dependencies:
@@ -18925,8 +18898,8 @@ snapshots:
       react-dom: 19.1.0(react@19.1.0)
       react-textarea-autosize: 8.5.8(@types/react@19.0.10)(react@19.1.0)
       secure-json-parse: 3.0.2
-      zod: 3.24.3
-      zod-to-json-schema: 3.24.5(zod@3.24.3)
+      zod: 3.24.4
+      zod-to-json-schema: 3.24.5(zod@3.24.4)
       zustand: 5.0.3(@types/react@19.0.10)(react@19.1.0)(use-sync-external-store@1.4.0(react@19.1.0))
     optionalDependencies:
       '@types/react': 19.0.10
@@ -18976,11 +18949,11 @@ snapshots:
 
   '@autoform/core@2.1.0': {}
 
-  '@autoform/react@3.0.0(react-hook-form@7.54.2(react@19.1.0))(react@19.1.0)(yup@1.6.1)(zod@3.24.3)':
+  '@autoform/react@3.0.0(react-hook-form@7.54.2(react@19.1.0))(react@19.1.0)(yup@1.6.1)(zod@3.24.4)':
     dependencies:
       '@autoform/core': 2.1.0
       '@autoform/yup': 2.1.0(yup@1.6.1)
-      '@autoform/zod': 2.1.0(zod@3.24.3)
+      '@autoform/zod': 2.1.0(zod@3.24.4)
       '@hookform/resolvers': 3.10.0(react-hook-form@7.54.2(react@19.1.0))
       react: 19.1.0
       react-hook-form: 7.54.2(react@19.1.0)
@@ -18993,10 +18966,10 @@ snapshots:
       '@autoform/core': 2.1.0
       yup: 1.6.1
 
-  '@autoform/zod@2.1.0(zod@3.24.3)':
+  '@autoform/zod@2.1.0(zod@3.24.4)':
     dependencies:
       '@autoform/core': 2.1.0
-      zod: 3.24.3
+      zod: 3.24.4
 
   '@aws-crypto/crc32@3.0.0':
     dependencies:
@@ -21555,7 +21528,7 @@ snapshots:
       debug: 4.4.0(supports-color@8.1.1)
       inngest: 3.35.1(@vercel/node@5.0.4(@swc/core@1.11.10(@swc/helpers@0.5.15))(encoding@0.1.13)(rollup@4.40.1))(encoding@0.1.13)(express@5.0.1)(fastify@4.29.0)(h3@1.15.1)(hono@4.7.7)(next@15.2.4(@opentelemetry/api@1.9.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(typescript@5.8.3)
       react: 19.1.0
-      zod: 3.24.3
+      zod: 3.24.4
     transitivePeerDependencies:
       - '@sveltejs/kit'
       - '@vercel/node'
@@ -22189,8 +22162,8 @@ snapshots:
       express-rate-limit: 7.5.0(express@5.0.1)
       pkce-challenge: 5.0.0
       raw-body: 3.0.0
-      zod: 3.24.3
-      zod-to-json-schema: 3.24.5(zod@3.24.3)
+      zod: 3.24.4
+      zod-to-json-schema: 3.24.5(zod@3.24.4)
     transitivePeerDependencies:
       - supports-color
 
@@ -22773,11 +22746,11 @@ snapshots:
     dependencies:
       '@octokit/openapi-types': 23.0.1
 
-  '@openrouter/ai-sdk-provider@0.4.5(zod@3.24.3)':
+  '@openrouter/ai-sdk-provider@0.4.5(zod@3.24.4)':
     dependencies:
       '@ai-sdk/provider': 1.0.9
-      '@ai-sdk/provider-utils': 2.1.10(zod@3.24.3)
-      zod: 3.24.3
+      '@ai-sdk/provider-utils': 2.1.10(zod@3.24.4)
+      zod: 3.24.4
 
   '@opensearch-project/opensearch@3.5.1':
     dependencies:
@@ -25393,7 +25366,7 @@ snapshots:
       '@types/node': 20.17.32
     optional: true
 
-  '@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1)(typescript@5.8.3)':
+  '@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3))(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3)':
     dependencies:
       '@eslint-community/regexpp': 4.12.1
       '@typescript-eslint/parser': 5.62.0(eslint@8.57.1)(typescript@5.8.3)
@@ -25401,7 +25374,7 @@ snapshots:
       '@typescript-eslint/type-utils': 5.62.0(eslint@8.57.1)(typescript@5.8.3)
       '@typescript-eslint/utils': 5.62.0(eslint@8.57.1)(typescript@5.8.3)
       debug: 4.4.0(supports-color@8.1.1)
-      eslint: 8.57.1
+      eslint: 9.25.1(jiti@2.4.2)
       graphemer: 1.4.0
       ignore: 5.3.2
       natural-compare-lite: 1.4.0
@@ -26316,15 +26289,15 @@ snapshots:
       - solid-js
       - vue
 
-  ai@4.3.15(react@19.1.0)(zod@3.24.3):
+  ai@4.3.15(react@19.1.0)(zod@3.24.4):
     dependencies:
       '@ai-sdk/provider': 1.1.3
-      '@ai-sdk/provider-utils': 2.2.8(zod@3.24.3)
-      '@ai-sdk/react': 1.2.12(react@19.1.0)(zod@3.24.3)
-      '@ai-sdk/ui-utils': 1.2.11(zod@3.24.3)
+      '@ai-sdk/provider-utils': 2.2.8(zod@3.24.4)
+      '@ai-sdk/react': 1.2.12(react@19.1.0)(zod@3.24.4)
+      '@ai-sdk/ui-utils': 1.2.11(zod@3.24.4)
       '@opentelemetry/api': 1.9.0
       jsondiffpatch: 0.6.0
-      zod: 3.24.3
+      zod: 3.24.4
     optionalDependencies:
       react: 19.1.0
 
@@ -28106,7 +28079,7 @@ snapshots:
       '@rollup/plugin-replace': 5.0.7(rollup@3.29.5)
       '@rollup/plugin-terser': 0.4.4(rollup@3.29.5)
       '@types/jest': 29.5.14
-      '@typescript-eslint/eslint-plugin': 5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1)(typescript@5.8.3)
+      '@typescript-eslint/eslint-plugin': 5.62.0(@typescript-eslint/parser@5.62.0(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3))(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3)
       '@typescript-eslint/parser': 5.62.0(eslint@8.57.1)(typescript@5.8.3)
       ansi-escapes: 4.3.2
       asyncro: 3.0.0
@@ -28789,7 +28762,7 @@ snapshots:
       '@typescript-eslint/utils': 5.62.0(eslint@8.57.1)(typescript@5.8.3)
       eslint: 8.57.1
     optionalDependencies:
-      '@typescript-eslint/eslint-plugin': 5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1)(typescript@5.8.3)
+      '@typescript-eslint/eslint-plugin': 5.62.0(@typescript-eslint/parser@5.62.0(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3))(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3)
       jest: 29.7.0(@types/node@20.17.32)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.11.10(@swc/helpers@0.5.15))(@types/node@20.17.32)(typescript@5.8.3))
     transitivePeerDependencies:
       - supports-color
@@ -30229,13 +30202,13 @@ snapshots:
 
   highlightjs-vue@1.0.0: {}
 
-  hono-openapi@0.4.6(hono@4.7.7)(openapi-types@12.1.3)(zod@3.24.3):
+  hono-openapi@0.4.6(hono@4.7.7)(openapi-types@12.1.3)(zod@3.24.4):
     dependencies:
       json-schema-walker: 2.0.0
     optionalDependencies:
       hono: 4.7.7
       openapi-types: 12.1.3
-      zod: 3.24.3
+      zod: 3.24.4
 
   hono@4.7.7: {}
 
@@ -33279,21 +33252,6 @@ snapshots:
     transitivePeerDependencies:
       - encoding
 
-  openai@4.96.0(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.3):
-    dependencies:
-      '@types/node': 20.17.32
-      '@types/node-fetch': 2.6.12
-      abort-controller: 3.0.0
-      agentkeepalive: 4.6.0
-      form-data-encoder: 1.7.2
-      formdata-node: 4.4.1
-      node-fetch: 2.7.0(encoding@0.1.13)
-    optionalDependencies:
-      ws: 8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5)
-      zod: 3.24.3
-    transitivePeerDependencies:
-      - encoding
-
   openai@4.96.0(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.4):
     dependencies:
       '@types/node': 20.17.32
@@ -35931,7 +35889,7 @@ snapshots:
       tslib: 2.8.1
       tsutils: 3.21.0(typescript@5.8.3)
       typescript: 5.8.3
-      zod: 3.24.3
+      zod: 3.24.4
     transitivePeerDependencies:
       - supports-color
 
@@ -37174,10 +37132,6 @@ snapshots:
       compress-commons: 6.0.2
       readable-stream: 4.7.0
 
-  zod-to-json-schema@3.24.5(zod@3.24.3):
-    dependencies:
-      zod: 3.24.3
-
   zod-to-json-schema@3.24.5(zod@3.24.4):
     dependencies:
       zod: 3.24.4
@@ -37185,8 +37139,6 @@ snapshots:
   zod@3.22.3: {}
 
   zod@3.22.4: {}
-
-  zod@3.24.3: {}
 
   zod@3.24.4: {}
 
