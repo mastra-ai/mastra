@@ -17,7 +17,11 @@ export class InMemoryTaskStore {
 
   async save({ agentId, data }: { agentId: string; data: TaskAndHistory }): Promise<void> {
     // Store copies to prevent internal mutation if caller reuses objects
-    this.store.set(`${agentId}-${data.task.id}`, {
+    const key = `${agentId}-${data.task.id}`;
+    if (!data.task.id) {
+      throw new Error('Task ID is required');
+    }
+    this.store.set(key, {
       task: { ...data.task },
       history: [...data.history],
     });
