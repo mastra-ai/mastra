@@ -1,4 +1,4 @@
-import type * as http from 'node:http';
+import type { Context } from 'hono';
 import type { ToolsInput } from '../agent';
 import type { InternalCoreTool } from '../tools';
 
@@ -48,13 +48,7 @@ export interface MCPServerSSEOptions {
    */
   messagePath: string;
 
-  /**
-   * Incoming HTTP request
-   */
-  req: http.IncomingMessage;
+  stream: any;
 
-  /**
-   * HTTP response (must support .write/.end)
-   */
-  res: http.ServerResponse<http.IncomingMessage>;
+  context: Context;
 }
