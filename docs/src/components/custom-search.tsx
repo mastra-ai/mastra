@@ -12,16 +12,14 @@ import { addBasePath } from "next/dist/client/add-base-path";
 import { useRouter } from "next/navigation";
 import type {
   FC,
-  KeyboardEventHandler,
   ReactElement,
   ReactNode,
-  SyntheticEvent,
+  SyntheticEvent
 } from "react";
 import { useDeferredValue, useEffect, useRef, useState } from "react";
 import { BookIcon, BurgerIcon, JarvisIcon } from "./svgs/Icons";
 import { InformationIcon } from "./svgs/information-icon";
 import { SpinnerIcon } from "./svgs/spinner";
-import { Button } from "./ui/button";
 import { ScrollArea } from "./ui/scroll-area";
 
 /**
@@ -216,7 +214,12 @@ export const CustomSearch: FC<SearchProps> = ({
   };
 
   const handleSelect = (searchResult: PagefindResult | null) => {
+    console.log(searchResult);
     if (!searchResult) return;
+    if (searchResult.url === "use-ai") {
+      onUseAgent({ searchQuery: `Tell me about ${search}` });
+      return;
+    }
     // Calling before navigation so selector `html:not(:has(*:focus))` in styles.css will work,
     // and we'll have padding top since input is not focused
     inputRef.current.blur();
@@ -229,13 +232,8 @@ export const CustomSearch: FC<SearchProps> = ({
     } else {
       router.push(searchResult.url);
     }
+    closeModal();
     setSearch("");
-  };
-
-  const handleKeyDown: KeyboardEventHandler<HTMLInputElement> = (event) => {
-    if (event.key === "Enter") {
-      onUseAgent({ searchQuery: `Tell me about ${search}` });
-    }
   };
 
   const isSearchEmpty = !search || !results.length;
@@ -264,7 +262,6 @@ export const CustomSearch: FC<SearchProps> = ({
           type="search"
           onChange={handleChange}
           value={search}
-          onKeyDown={handleKeyDown}
           placeholder={placeholder}
           autoFocus
         />
@@ -316,40 +313,34 @@ export const CustomSearch: FC<SearchProps> = ({
               <div>
                 <div className="mt-3">
                   <div className="border-t-[0.5px] border-borders-1 pt-3">
-                  <ComboboxOption
-                    className={({ focus }) =>
-                      cn(
-                        "w-full flex items-center font-medium justify-between gap-2 cursor-pointer text-base rounded-md px-4 py-2 bg-[url('/image/bloom-2.png')] bg-cover mb-2 bg-right",
-                        focus ? "bg-surface-5" : "bg-surface-4",
-                      )
-                    }
-                    value="ai"
-                    onClick={() => {
-                      closeModal();
-                      onUseAgent({
-                        searchQuery: `Tell me about ${search}`,
-                      });
-                    }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-accent-green shrink-0">
-                        <JarvisIcon className="w-6 h-6 shrink-0" />
-                      </span>
-                      <span className="flex flex-col text-lg font-medium text-left text-icons-5">
-                        <span>
-                          Tell me about{" "}
-                          <span className="text-accent-green">{search}</span>
+                    <ComboboxOption
+                      className={({ focus }) =>
+                        cn(
+                          "w-full flex items-center font-medium justify-between gap-2 cursor-pointer text-base rounded-md px-4 py-2 bg-[url('/image/bloom-2.png')] bg-cover mb-2 bg-right",
+                          focus ? "bg-surface-5" : "bg-surface-4",
+                        )
+                      }
+                      value={{url: "use-ai"}}
+                      key="use-ai"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-accent-green shrink-0">
+                          <JarvisIcon className="w-6 h-6 shrink-0" />
                         </span>
-                        <span className="text-icons-3 text-[15px] text-left font-normal">
-                          Use AI to answer your question
+                        <span className="flex flex-col text-lg font-medium text-left text-icons-5">
+                          <span className="text-icons-5!">
+                            Tell me about{" "}
+                            <span className="text-accent-green">{search}</span>
+                          </span>
+                          <span className="text-icons-3 text-[15px] text-left font-normal">
+                            Use AI to answer your question
+                          </span>
                         </span>
+                      </div>
+                      <span className="flex items-center h-8 px-3 text-sm font-medium rounded-sm bg-tag-green-2 text-accent-green justify-self-end">
+                        experimental
                       </span>
-                    </div>
-                    <span className="flex items-center h-8 px-3 text-sm font-medium rounded-sm bg-tag-green-2 text-accent-green justify-self-end">
-                      experimental
-                    </span>
-                  </ComboboxOption>
-
+                    </ComboboxOption>
                   </div>
                   {results.map((searchResult) => (
                     <Result
@@ -381,10 +372,6 @@ const Result: FC<{
         <ComboboxOption
           key={subResult.url}
           value={subResult}
-          onClick={() => {
-            closeModal();
-            router.push(subResult.url);
-          }}
           className={({ focus }) =>
             cn(
               "flex flex-col gap-3 p-4 rounded-md cursor-pointer",
