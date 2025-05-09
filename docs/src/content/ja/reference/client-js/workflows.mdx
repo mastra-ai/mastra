@@ -2,6 +2,14 @@
 
 ワークフローAPIは、Mastraの自動化されたワークフローを操作および実行するためのメソッドを提供します。
 
+## Mastraクライアントの初期化
+
+```typescript
+import { MastraClient } from "@mastra/client-js";
+
+const client = new MastraClient();
+```
+
 ## すべてのワークフローの取得
 
 利用可能なすべてのワークフローのリストを取得します：
@@ -10,9 +18,9 @@
 const workflows = await client.getWorkflows();
 ```
 
-## 特定のワークフローを操作する
+## 特定のワークフローの操作
 
-特定のワークフローのインスタンスを取得します:
+特定のワークフローのインスタンスを取得します：
 
 ```typescript
 const workflow = client.getWorkflow("workflow-id");
@@ -30,7 +38,7 @@ const details = await workflow.details();
 
 ### ワークフロー実行を非同期で開始
 
-トリガーデータでワークフロー実行を開始し、実行結果を待機します：
+トリガーデータでワークフロー実行を開始し、実行結果を待ちます：
 
 ```typescript
 const {runId} = workflow.createRun()
@@ -46,7 +54,7 @@ const result = await workflow.startAsync({
 
 ### ワークフロー実行を非同期で再開
 
-一時停止されたワークフローステップを再開し、完全な実行結果を待機します：
+一時停止されたワークフローステップを再開し、完全な実行結果を待ちます：
 
 ```typescript
 const {runId} = createRun({runId: prevRunId})

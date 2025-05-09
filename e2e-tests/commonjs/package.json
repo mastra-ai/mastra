@@ -1,9 +1,14 @@
 {
-  "name": "pkg-outputs",
+  "name": "commonjs-e2e-test",
   "version": "0.0.1",
   "private": true,
   "devDependencies": {
     "execa": "^9.5.2",
+    "get-port": "^7.1.0",
+    "globby": "^14.1.0",
+    "npm-cli-login": "^1.0.0",
+    "verdaccio": "^6.1.2",
+    "verdaccio-auth-memory": "^10.2.2",
     "rollup": "^4.40.1",
     "vitest": "^3.1.2"
   },

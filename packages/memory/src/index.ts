@@ -4,6 +4,7 @@ import { MastraMemory } from '@mastra/core/memory';
 import type { MessageType, MemoryConfig, SharedMemoryConfig, StorageThreadType } from '@mastra/core/memory';
 import type { StorageGetMessagesArg } from '@mastra/core/storage';
 import { embedMany } from 'ai';
+import type { TextPart } from 'ai';
 
 import xxhash from 'xxhash-wasm';
 import { updateWorkingMemoryTool } from './tools/working-memory';
@@ -22,6 +23,9 @@ export class Memory extends MastraMemory {
 
     const mergedConfig = this.getMergedThreadConfig({
       workingMemory: config.options?.workingMemory || {
+        // these defaults are now set inside @mastra/core/memory in getMergedThreadConfig.
+        // In a future release we can remove it from this block - for now if we remove it
+        // and someone bumps @mastra/memory without bumping @mastra/core the defaults wouldn't exist yet
         enabled: false,
         template: this.defaultWorkingMemoryTemplate,
       },
@@ -334,9 +338,23 @@ export class Memory extends MastraMemory {
       let indexName: Promise<string>;
       await Promise.all(
         updatedMessages.map(async message => {
-          if (typeof message.content !== `string` || message.content === '') return;
+          let textForEmbedding: string | null = null;
 
-          const { embeddings, chunks, dimension } = await this.embedMessageContent(message.content);
+          if (typeof message.content === 'string' && message.content.trim() !== '') {
+            textForEmbedding = message.content;
+          } else if (Array.isArray(message.content)) {
+            // Extract text from all text parts, concatenate
+            const joined = message.content
+              .filter(part => part && part.type === 'text' && typeof part.text === 'string')
+              .map(part => (part as TextPart).text)
+              .join(' ')
+              .trim();
+            if (joined) textForEmbedding = joined;
+          }
+
+          if (!textForEmbedding) return;
+
+          const { embeddings, chunks, dimension } = await this.embedMessageContent(textForEmbedding);
 
           if (typeof indexName === `undefined`) {
             indexName = this.createEmbeddingIndex(dimension).then(result => result.indexName);

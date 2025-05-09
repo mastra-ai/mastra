@@ -3,5 +3,4 @@ const meta = {
   tracing: "トレース",
   "nextjs-tracing": { title: "Next.js トレース", display: "hidden" },
 };
-
 export default meta;

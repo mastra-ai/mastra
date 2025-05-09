@@ -50,14 +50,14 @@ jobs:
       - name: Setup Node.js 20.x
         uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version: 20.19.1
           cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install
 
       - name: Build vector+store packages
-        run: pnpm turbo build --filter "./stores/*" --filter "mastra" --filter "@mastra/memory"
+        run: pnpm turbo build --filter "./stores/*" --filter "mastra" --filter "@mastra/memory" --filter "@mastra/fastembed"
 
       - name: Run Memory tests
         run: pnpm test:memory

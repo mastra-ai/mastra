@@ -922,12 +922,16 @@ export class D1Store extends MastraStorage {
     page,
     perPage,
     attributes,
+    fromDate,
+    toDate,
   }: {
     name?: string;
     scope?: string;
     page: number;
     perPage: number;
     attributes?: Record<string, string>;
+    fromDate?: Date;
+    toDate?: Date;
   }): Promise<Record<string, any>[]> {
     const fullTableName = this.getTableName(TABLE_TRACES);
 
@@ -947,6 +951,14 @@ export class D1Store extends MastraStorage {
         for (const [key, value] of Object.entries(attributes)) {
           query.jsonLike('attributes', key, value);
         }
+      }
+
+      if (fromDate) {
+        query.andWhere('createdAt >= ?', fromDate instanceof Date ? fromDate.toISOString() : fromDate);
+      }
+
+      if (toDate) {
+        query.andWhere('createdAt <= ?', toDate instanceof Date ? toDate.toISOString() : toDate);
       }
 
       query

@@ -27,7 +27,7 @@ The inputs and outputs of steps that are connected together should match: the in
 
 Steps are run using an `execute` function that receives a context object with inputs from the previous step and/or resume data if the step is being resumed from a suspended state. The `execute` function should return a value that matches its outputSchema.
 
-Primitives such as `.then()`, `.parallel()` and `.branch()` describe the execution flow of workflows, and how tthe steps within them are connected. Running worksflows (whether standalone or as a step), their execution is dictated by their execution flow instead of an `execute` function. The final result of a workflow will always be the result of its last step, which should match the workflow's outputSchema.
+Primitives such as `.then()`, `.parallel()` and `.branch()` describe the execution flow of workflows, and how the steps within them are connected. Running workflows (whether standalone or as a step), their execution is dictated by their execution flow instead of an `execute` function. The final result of a workflow will always be the result of its last step, which should match the workflow's outputSchema.
 
 ## Creating Workflows
 
@@ -99,7 +99,7 @@ const myWorkflow = createWorkflow({
     result: z.string(),
   }),
   steps: [step1, step2, step3], // Declare steps used in this workflow
-});
+}).then(step1).then(step2).then(step3).commit();
 
 const mastra = new Mastra({
   vnext_workflows: {
@@ -119,7 +119,7 @@ const workflow = createWorkflow({
   inputSchema: z.object({}),
   outputSchema: z.object({}),
   steps: [step1, step2], // TypeScript knows these steps exist
-});
+}).then(step1).then(step2).commit();
 
 const result = await workflow.createRun().start({ inputData: {} });
 if (result.status === "success") {

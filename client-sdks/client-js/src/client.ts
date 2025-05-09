@@ -1,4 +1,6 @@
-import { Agent, MemoryThread, Tool, Workflow, Vector, BaseResource, Network, VNextWorkflow } from './resources';
+import type { AbstractAgent } from '@ag-ui/client';
+import { AGUIAdapter } from './adapters/agui';
+import { Agent, MemoryThread, Tool, Workflow, Vector, BaseResource, Network, VNextWorkflow, A2A } from './resources';
 import type {
   ClientOptions,
   CreateMemoryThreadParams,
@@ -30,6 +32,25 @@ export class MastraClient extends BaseResource {
    */
   public getAgents(): Promise<Record<string, GetAgentResponse>> {
     return this.request('/api/agents');
+  }
+
+  public async getAGUI({ resourceId }: { resourceId: string }): Promise<Record<string, AbstractAgent>> {
+    const agents = await this.getAgents();
+
+    return Object.entries(agents).reduce(
+      (acc, [agentId]) => {
+        const agent = this.getAgent(agentId);
+
+        acc[agentId] = new AGUIAdapter({
+          agentId,
+          agent,
+          resourceId,
+        });
+
+        return acc;
+      },
+      {} as Record<string, AbstractAgent>,
+    );
   }
 
   /**
@@ -180,7 +201,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing telemetry data
    */
   public getTelemetry(params?: GetTelemetryParams): Promise<GetTelemetryResponse> {
-    const { name, scope, page, perPage, attribute } = params || {};
+    const { name, scope, page, perPage, attribute, fromDate, toDate } = params || {};
     const _attribute = attribute ? Object.entries(attribute).map(([key, value]) => `${key}:${value}`) : [];
 
     const searchParams = new URLSearchParams();
@@ -205,6 +226,12 @@ export class MastraClient extends BaseResource {
         searchParams.set('attribute', _attribute);
       }
     }
+    if (fromDate) {
+      searchParams.set('fromDate', fromDate.toISOString());
+    }
+    if (toDate) {
+      searchParams.set('toDate', toDate.toISOString());
+    }
 
     if (searchParams.size) {
       return this.request(`/api/telemetry?${searchParams}`);
@@ -228,5 +255,14 @@ export class MastraClient extends BaseResource {
    */
   public getNetwork(networkId: string) {
     return new Network(this.options, networkId);
+  }
+
+  /**
+   * Gets an A2A client for interacting with an agent via the A2A protocol
+   * @param agentId - ID of the agent to interact with
+   * @returns A2A client instance
+   */
+  public getA2A(agentId: string) {
+    return new A2A(this.options, agentId);
   }
 }

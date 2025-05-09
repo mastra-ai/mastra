@@ -1,0 +1,109 @@
+---
+title: "エージェントでのツールの使用 | エージェント | Mastra ドキュメント"
+description: ツールの作成方法、Mastraエージェントへの追加方法、およびMCPサーバーからのツールの統合方法について学びます。
+---
+
+# エージェントでツールを使用する
+
+ツールは、エージェントやワークフローによって実行できる型付き関数です。各ツールには、その入力を定義するスキーマ、ロジックを実装する実行関数、およびオプションで設定された統合へのアクセスがあります。
+
+## ツールの作成
+
+以下はツールを作成する基本的な例です：
+
+```typescript filename="src/mastra/tools/weatherInfo.ts" copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+
+export const weatherInfo = createTool({
+  id: "Get Weather Information",
+  inputSchema: z.object({
+    city: z.string(),
+  }),
+  description: `Fetches the current weather information for a given city`,
+  execute: async ({ context: { city } }) => {
+    // Tool logic here (e.g., API call)
+    console.log("Using tool to fetch weather information for", city);
+    return { temperature: 20, conditions: "Sunny" }; // Example return
+  },
+});
+```
+
+ツールの作成と設計の詳細については、[ツールの概要](/docs/tools-mcp/overview)をご覧ください。
+
+## エージェントにツールを追加する
+
+ツールをエージェントで利用可能にするには、エージェントの設定の `tools` プロパティに追加します。
+
+```typescript filename="src/mastra/agents/weatherAgent.ts" {3,11}
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { weatherInfo } from "../tools/weatherInfo";
+
+export const weatherAgent = new Agent({
+  name: "Weather Agent",
+  instructions:
+    "You are a helpful assistant that provides current weather information. When asked about the weather, use the weather information tool to fetch the data.",
+  model: openai("gpt-4o-mini"),
+  tools: {
+    weatherInfo,
+  },
+});
+```
+
+エージェントを呼び出すと、設定されたツールを指示内容とユーザーのプロンプトに基づいて使用するかどうかを判断できるようになります。
+
+## エージェントにMCPツールを追加する
+
+[Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction)は、AIモデルが外部ツールやリソースを発見し、相互作用するための標準化された方法を提供します。Mastraエージェントをサードパーティが提供するツールを使用するためにMCPサーバーに接続することができます。
+
+MCPの概念やMCPクライアントとサーバーの設定方法の詳細については、[MCP概要](/docs/tools-mcp/mcp-overview)をご覧ください。
+
+### インストール
+
+まず、Mastra MCPパッケージをインストールします：
+
+```bash npm2yarn copy
+npm install @mastra/mcp@latest
+```
+
+### MCPツールの使用
+
+選択肢が多すぎるMCPサーバーレジストリから選ぶのを助けるために、[MCP Registry Registry](https://mastra.ai/mcp-registry-registry)を作成しました。
+
+エージェントで使用したいサーバーが見つかったら、Mastraの`MCPClient`をインポートしてサーバー設定を追加します。
+
+```typescript filename="src/mastra/mcp.ts" {1,7-16}
+import { MCPClient } from "@mastra/mcp";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+
+// Configure MCPClient to connect to your server(s)
+export const mcp = new MCPClient({
+  servers: {
+    filesystem: {
+      command: "npx",
+      args: [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/username/Downloads",
+      ],
+    },
+  },
+});
+```
+
+次に、エージェントをサーバーツールに接続します：
+
+```typescript filename="src/mastra/agents/mcpAgent.ts" {7}
+import { mcp } from "../mcp";
+// Create an agent and add tools from the MCP client
+const agent = new Agent({
+  name: "Agent with MCP Tools",
+  instructions: "You can use tools from connected MCP servers.",
+  model: openai("gpt-4o-mini"),
+  tools: await mcp.getTools(),
+});
+```
+
+`MCPClient`の設定や静的および動的MCPサーバー設定の違いについての詳細は、[MCP概要](/docs/tools-mcp/mcp-overview)をご覧ください。

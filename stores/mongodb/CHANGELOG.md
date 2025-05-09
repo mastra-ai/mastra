@@ -1,5 +1,109 @@
 # @mastra/mongodb
 
+## 0.0.5-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [daf942f]
+- Updated dependencies [0b8b868]
+  - @mastra/core@0.9.4-alpha.0
+
+## 0.0.4
+
+### Patch Changes
+
+- Updated dependencies [e450778]
+- Updated dependencies [8902157]
+- Updated dependencies [ca0dc88]
+- Updated dependencies [526c570]
+- Updated dependencies [d7a6a33]
+- Updated dependencies [9cd1a46]
+- Updated dependencies [b5d2de0]
+- Updated dependencies [644f8ad]
+- Updated dependencies [70dbf51]
+  - @mastra/core@0.9.3
+
+## 0.0.4-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [e450778]
+- Updated dependencies [8902157]
+- Updated dependencies [ca0dc88]
+- Updated dependencies [9cd1a46]
+- Updated dependencies [70dbf51]
+  - @mastra/core@0.9.3-alpha.1
+
+## 0.0.4-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [526c570]
+- Updated dependencies [b5d2de0]
+- Updated dependencies [644f8ad]
+  - @mastra/core@0.9.3-alpha.0
+
+## 0.0.3
+
+### Patch Changes
+
+- Updated dependencies [6052aa6]
+- Updated dependencies [967b41c]
+- Updated dependencies [3d2fb5c]
+- Updated dependencies [26738f4]
+- Updated dependencies [4155f47]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [b804723]
+- Updated dependencies [8607972]
+- Updated dependencies [ccef9f9]
+- Updated dependencies [0097d50]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [17826a9]
+- Updated dependencies [7d8b7c7]
+- Updated dependencies [fba031f]
+- Updated dependencies [3a5f1e1]
+- Updated dependencies [51e6923]
+- Updated dependencies [8398d89]
+  - @mastra/core@0.9.2
+
+## 0.0.3-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [6052aa6]
+- Updated dependencies [7d8b7c7]
+- Updated dependencies [3a5f1e1]
+- Updated dependencies [8398d89]
+  - @mastra/core@0.9.2-alpha.6
+
+## 0.0.3-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [3d2fb5c]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [8607972]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [fba031f]
+  - @mastra/core@0.9.2-alpha.5
+
+## 0.0.3-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [ccef9f9]
+- Updated dependencies [51e6923]
+  - @mastra/core@0.9.2-alpha.4
+
+## 0.0.3-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [967b41c]
+- Updated dependencies [4155f47]
+- Updated dependencies [17826a9]
+  - @mastra/core@0.9.2-alpha.3
+
 ## 0.0.3-alpha.2
 
 ### Patch Changes

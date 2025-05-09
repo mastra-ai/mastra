@@ -1,5 +1,136 @@
 # @mastra/deployer
 
+## 0.3.4-alpha.0
+
+### Patch Changes
+
+- cb1f698: Set runtimeContext from playground for agents, tools, workflows
+- 0b8b868: Added A2A support + streaming
+- Updated dependencies [cb1f698]
+- Updated dependencies [daf942f]
+- Updated dependencies [0b8b868]
+  - @mastra/server@2.0.4-alpha.0
+  - @mastra/core@0.9.4-alpha.0
+
+## 0.3.3
+
+### Patch Changes
+
+- 8902157: added an optional `bodySizeLimit` to server config so that users can pass custom bodylimit size in mb. If not, it defaults to 4.5 mb
+- 70dbf51: [MASTRA-2452] updated setBaggage for tracing
+- Updated dependencies [e450778]
+- Updated dependencies [8902157]
+- Updated dependencies [ca0dc88]
+- Updated dependencies [526c570]
+- Updated dependencies [d7a6a33]
+- Updated dependencies [9cd1a46]
+- Updated dependencies [b5d2de0]
+- Updated dependencies [644f8ad]
+- Updated dependencies [70dbf51]
+  - @mastra/core@0.9.3
+  - @mastra/server@2.0.3
+
+## 0.3.3-alpha.1
+
+### Patch Changes
+
+- 8902157: added an optional `bodySizeLimit` to server config so that users can pass custom bodylimit size in mb. If not, it defaults to 4.5 mb
+- 70dbf51: [MASTRA-2452] updated setBaggage for tracing
+- Updated dependencies [e450778]
+- Updated dependencies [8902157]
+- Updated dependencies [ca0dc88]
+- Updated dependencies [9cd1a46]
+- Updated dependencies [70dbf51]
+  - @mastra/core@0.9.3-alpha.1
+  - @mastra/server@2.0.3-alpha.1
+
+## 0.3.3-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [526c570]
+- Updated dependencies [b5d2de0]
+- Updated dependencies [644f8ad]
+  - @mastra/server@2.0.3-alpha.0
+  - @mastra/core@0.9.3-alpha.0
+
+## 0.3.2
+
+### Patch Changes
+
+- 2cf3b8f: dependencies updates:
+  - Updated dependency [`zod@^3.24.3` ↗︎](https://www.npmjs.com/package/zod/v/3.24.3) (from `^3.24.2`, in `dependencies`)
+- 4155f47: Add parameters to filter workflow runs
+  Add fromDate and toDate to telemetry parameters
+- 254f5c3: Audit, cleanup MastraClient
+- 8607972: Introduce Mastra lint cli command
+- a798090: Do not break on tools not being to import
+- Updated dependencies [6052aa6]
+- Updated dependencies [967b41c]
+- Updated dependencies [3d2fb5c]
+- Updated dependencies [26738f4]
+- Updated dependencies [4155f47]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [b804723]
+- Updated dependencies [8607972]
+- Updated dependencies [ccef9f9]
+- Updated dependencies [0097d50]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [17826a9]
+- Updated dependencies [7d8b7c7]
+- Updated dependencies [fba031f]
+- Updated dependencies [3a5f1e1]
+- Updated dependencies [51e6923]
+- Updated dependencies [8398d89]
+  - @mastra/server@2.0.2
+  - @mastra/core@0.9.2
+
+## 0.3.2-alpha.6
+
+### Patch Changes
+
+- a798090: Do not break on tools not being to import
+- Updated dependencies [6052aa6]
+- Updated dependencies [7d8b7c7]
+- Updated dependencies [3a5f1e1]
+- Updated dependencies [8398d89]
+  - @mastra/server@2.0.2-alpha.6
+  - @mastra/core@0.9.2-alpha.6
+
+## 0.3.2-alpha.5
+
+### Patch Changes
+
+- 8607972: Introduce Mastra lint cli command
+- Updated dependencies [3d2fb5c]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [8607972]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [fba031f]
+  - @mastra/core@0.9.2-alpha.5
+  - @mastra/server@2.0.2-alpha.5
+
+## 0.3.2-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [ccef9f9]
+- Updated dependencies [51e6923]
+  - @mastra/core@0.9.2-alpha.4
+  - @mastra/server@2.0.2-alpha.4
+
+## 0.3.2-alpha.3
+
+### Patch Changes
+
+- 4155f47: Add parameters to filter workflow runs
+  Add fromDate and toDate to telemetry parameters
+- Updated dependencies [967b41c]
+- Updated dependencies [4155f47]
+- Updated dependencies [17826a9]
+  - @mastra/core@0.9.2-alpha.3
+  - @mastra/server@2.0.2-alpha.3
+
 ## 0.3.2-alpha.2
 
 ### Patch Changes

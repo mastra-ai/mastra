@@ -2,7 +2,7 @@ import { createContext, useState } from 'react';
 
 import type { Span, RefinedTrace } from '../types';
 
-type TraceContextType = {
+export type TraceContextType = {
   isOpen: boolean;
   setIsOpen: React.Dispatch<React.SetStateAction<boolean>>;
   trace: Span[] | null;
@@ -20,10 +20,16 @@ type TraceContextType = {
 
 export const TraceContext = createContext<TraceContextType>({} as TraceContextType);
 
-export function TraceProvider({ children }: { children: React.ReactNode }) {
+export function TraceProvider({
+  children,
+  initialTraces,
+}: {
+  children: React.ReactNode;
+  initialTraces?: RefinedTrace[];
+}) {
   const [open, setOpen] = useState(false);
   const [trace, setTrace] = useState<Span[] | null>(null);
-  const [traces, setTraces] = useState<RefinedTrace[]>([]);
+  const [traces, setTraces] = useState<RefinedTrace[]>(initialTraces || []);
   const [currentTraceIndex, setCurrentTraceIndex] = useState(0);
   const [span, setSpan] = useState<Span | null>(null);
 

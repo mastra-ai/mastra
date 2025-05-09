@@ -945,7 +945,25 @@ export class Workflow<
    * @param runId - ID of the run to retrieve
    * @returns The workflow run instance if found, undefined otherwise
    */
-  getRun(runId: string) {
+  async getRun(runId: string) {
+    const inMemoryRun = this.#runs.get(runId);
+    if (inMemoryRun) {
+      return inMemoryRun;
+    }
+    const storage = this.#mastra?.getStorage();
+    if (!storage) {
+      this.logger.debug('Cannot get workflow run. Mastra engine is not initialized');
+      return null;
+    }
+    return await storage.getWorkflowRunById({ runId, workflowName: this.name });
+  }
+
+  /**
+   * Gets a workflow run instance by ID, from memory
+   * @param runId - ID of the run to retrieve
+   * @returns The workflow run instance if found, undefined otherwise
+   */
+  async getMemoryRun(runId: string) {
     return this.#runs.get(runId);
   }
 
@@ -982,14 +1000,20 @@ export class Workflow<
     }
   }
 
-  async getWorkflowRuns() {
+  async getWorkflowRuns(args?: {
+    fromDate?: Date;
+    toDate?: Date;
+    limit?: number;
+    offset?: number;
+    resourceId?: string;
+  }) {
     const storage = this.#mastra?.getStorage();
     if (!storage) {
       this.logger.debug('Cannot get workflow runs. Mastra engine is not initialized');
       return { runs: [], total: 0 };
     }
 
-    return storage.getWorkflowRuns({ workflowName: this.name });
+    return storage.getWorkflowRuns({ workflowName: this.name, ...(args ?? {}) });
   }
 
   getExecutionSpan(runId: string) {

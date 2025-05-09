@@ -16,7 +16,7 @@ import { Text } from '@/components/ui/text';
 import { useExecuteWorkflow, useWatchWorkflow, useResumeWorkflow, useVNextWorkflow } from '@/hooks/use-workflows';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { toast } from 'sonner';
-
+import { usePlaygroundStore } from '@/store/playground-store';
 interface SuspendedStep {
   stepId: string;
   runId: string;
@@ -32,6 +32,7 @@ export function VNextWorkflowTrigger({
   baseUrl: string;
   setRunId?: (runId: string) => void;
 }) {
+  const { runtimeContext } = usePlaygroundStore();
   const { vNextResult, setVNextResult, payload, setPayload } = useContext(WorkflowRunContext);
   const { isLoading, vNextWorkflow } = useVNextWorkflow(workflowId, baseUrl);
   const { createVNextWorkflowRun, startVNextWorkflowRun } = useExecuteWorkflow(baseUrl);
@@ -54,7 +55,7 @@ export function VNextWorkflowTrigger({
 
       watchVNextWorkflow({ workflowId, runId });
 
-      startVNextWorkflowRun({ workflowId, runId, input: data });
+      startVNextWorkflowRun({ workflowId, runId, input: data, runtimeContext });
     } catch (err) {
       setIsRunning(false);
       toast.error('Error executing workflow');
@@ -75,6 +76,7 @@ export function VNextWorkflowTrigger({
       runId,
       resumeData,
       workflowId,
+      runtimeContext,
     });
   };
 

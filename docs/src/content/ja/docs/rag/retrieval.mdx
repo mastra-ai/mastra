@@ -1,41 +1,41 @@
 ---
-title: "検索、セマンティック検索、再ランキング | RAG | Mastra ドキュメント"
-description: Mastra の RAG システムにおける検索プロセス、セマンティック検索、フィルタリング、再ランキングに関するガイド。
+title: "検索、セマンティック検索、リランキング | RAG | Mastra ドキュメント"
+description: Mastraの RAGシステムにおける検索プロセスに関するガイド。セマンティック検索、フィルタリング、リランキングを含みます。
 ---
 
 import { Tabs } from "nextra/components";
 
 ## RAGシステムにおける検索
 
-埋め込みを保存した後、ユーザーのクエリに答えるために関連するチャンクを検索する必要があります。
+埋め込みを保存した後、ユーザークエリに回答するために関連するチャンクを検索する必要があります。
 
 Mastraは、セマンティック検索、フィルタリング、再ランキングをサポートする柔軟な検索オプションを提供します。
 
 ## 検索の仕組み
 
 1. ユーザーのクエリは、ドキュメント埋め込みに使用されるのと同じモデルを使用して埋め込みに変換されます
-2. この埋め込みは、ベクトル類似性を使用して保存された埋め込みと比較されます
+2. この埋め込みはベクトル類似性を使用して保存された埋め込みと比較されます
 3. 最も類似したチャンクが取得され、オプションで以下の処理が可能です：
-  - メタデータでフィルタリング
-  - より良い関連性のために再ランク付け
-  - ナレッジグラフを通じて処理
+  - メタデータによるフィルタリング
+  - より良い関連性のための再ランク付け
+  - ナレッジグラフを通じた処理
 
 ## 基本的な検索
 
-最も簡単なアプローチは直接的なセマンティック検索です。この方法はベクトル類似性を使用して、クエリとセマンティックに類似したチャンクを見つけます：
+最もシンプルなアプローチは直接的な意味検索です。この方法では、ベクトル類似性を使用してクエリに意味的に類似したチャンクを見つけます：
 
 ```ts showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { embed } from "ai";
 import { PgVector } from "@mastra/pg";
 
-// クエリを埋め込みに変換
+// Convert query to embedding
 const { embedding } = await embed({
-  value: "記事の主なポイントは何ですか？",
+  value: "What are the main points in the article?",
   model: openai.embedding('text-embedding-3-small'),
 });
 
-// ベクトルストアをクエリ
+// Query vector store
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING);
 const results = await pgVector.query({
   indexName: "embeddings",
@@ -43,7 +43,7 @@ const results = await pgVector.query({
   topK: 10,
 });
 
-// 結果を表示
+// Display results
 console.log(results);
 ```
 
@@ -52,33 +52,33 @@ console.log(results);
 ```ts showLineNumbers copy
 [
   {
-    text: "気候変動は重大な課題をもたらします...",
+    text: "Climate change poses significant challenges...",
     score: 0.89,
     metadata: { source: "article1.txt" }
   },
   {
-    text: "気温の上昇は作物の収穫量に影響を与えます...",
+    text: "Rising temperatures affect crop yields...",
     score: 0.82,
     metadata: { source: "article1.txt" }
   }
-  // ... さらに多くの結果
+  // ... more results
 ]
 ```
 
-基本的な検索方法の使用例については、[結果を取得する](../../examples/rag/query/retrieve-results.mdx)例を参照してください。
+基本的な検索方法の使用例については、[結果の取得](../../examples/rag/query/retrieve-results.mdx)の例を参照してください。
 
 ## 高度な検索オプション
 
 ### メタデータフィルタリング
 
-メタデータフィールドに基づいて結果をフィルタリングし、検索範囲を絞り込みます。これは、異なるソース、時期、または特定の属性を持つドキュメントがある場合に便利です。Mastraは、すべてのサポートされているベクトルストアで機能する統一されたMongoDBスタイルのクエリ構文を提供します。
+メタデータフィールドに基づいて結果をフィルタリングし、検索範囲を絞り込みます。これは、異なるソース、時間帯、または特定の属性を持つドキュメントがある場合に役立ちます。Mastraは、サポートされているすべてのベクトルストアで動作する統一されたMongoDB形式のクエリ構文を提供しています。
 
-利用可能なオペレーターと構文の詳細については、[メタデータフィルタリファレンス](/reference/rag/metadata-filters)を参照してください。
+利用可能な演算子と構文の詳細については、[メタデータフィルターリファレンス](/reference/rag/metadata-filters)を参照してください。
 
-基本的なフィルタリングの例:
+基本的なフィルタリングの例：
 
 ```ts showLineNumbers copy
-// 単純な等価フィルタ
+// Simple equality filter
 const results = await pgVector.query({
   indexName: "embeddings",
   queryVector: embedding,
@@ -88,7 +88,7 @@ const results = await pgVector.query({
   }
 });
 
-// 数値比較
+// Numeric comparison
 const results = await pgVector.query({
   indexName: "embeddings",
   queryVector: embedding,
@@ -98,7 +98,7 @@ const results = await pgVector.query({
   }
 });
 
-// 複数条件
+// Multiple conditions
 const results = await pgVector.query({
   indexName: "embeddings",
   queryVector: embedding,
@@ -110,7 +110,7 @@ const results = await pgVector.query({
   }
 });
 
-// 配列操作
+// Array operations
 const results = await pgVector.query({
   indexName: "embeddings",
   queryVector: embedding,
@@ -120,7 +120,7 @@ const results = await pgVector.query({
   }
 });
 
-// 論理演算子
+// Logical operators
 const results = await pgVector.query({
   indexName: "embeddings",
   queryVector: embedding,
@@ -136,21 +136,21 @@ const results = await pgVector.query({
     ]
   }
 });
-```
+``` 
 
-メタデータフィルタリングの一般的な使用例:
-- ドキュメントのソースまたはタイプでフィルタリング
-- 日付範囲でフィルタリング
-- 特定のカテゴリまたはタグでフィルタリング
-- 数値範囲（例: 価格、評価）でフィルタリング
-- 複数の条件を組み合わせて正確なクエリを実行
-- ドキュメント属性（例: 言語、著者）でフィルタリング
+メタデータフィルタリングの一般的なユースケース：
+- ドキュメントのソースまたはタイプによるフィルタリング
+- 日付範囲によるフィルタリング
+- 特定のカテゴリやタグによるフィルタリング
+- 数値範囲（例：価格、評価）によるフィルタリング
+- 精密なクエリのための複数の条件の組み合わせ
+- ドキュメント属性（例：言語、著者）によるフィルタリング
 
 メタデータフィルタリングの使用例については、[ハイブリッドベクトル検索](../../examples/rag/query/hybrid-vector-search.mdx)の例を参照してください。
 
 ### ベクトルクエリツール
 
-時には、エージェントにベクトルデータベースを直接クエリする能力を与えたいことがあります。ベクトルクエリツールは、エージェントがユーザーのニーズを理解し、意味検索とオプションのフィルタリングおよび再ランキングを組み合わせて、取得の決定を行うことを可能にします。
+エージェントにベクトルデータベースを直接クエリする能力を与えたい場合があります。ベクトルクエリツールを使用すると、エージェントが検索の決定を担当し、ユーザーのニーズに対するエージェントの理解に基づいて、意味検索とオプションのフィルタリングおよび再ランク付けを組み合わせることができます。
 
 ```ts showLineNumbers copy
 const vectorQueryTool = createVectorQueryTool({
@@ -160,159 +160,183 @@ const vectorQueryTool = createVectorQueryTool({
 });
 ```
 
-ツールを作成する際には、ツールの名前と説明に特に注意を払ってください。これらは、エージェントが取得機能をいつどのように使用するかを理解するのに役立ちます。例えば、「SearchKnowledgeBase」と名付け、「Xトピックに関する関連情報を見つけるためにドキュメントを検索する」と説明することができます。
+ツールを作成する際は、ツールの名前と説明に特に注意してください - これらはエージェントが検索機能をいつどのように使用するかを理解するのに役立ちます。例えば、「SearchKnowledgeBase」と名付け、「Xトピックに関連する情報を見つけるために私たちのドキュメントを検索する」と説明することができます。
 
-これは特に次の場合に役立ちます:
-- エージェントが動的に取得する情報を決定する必要がある場合
-- 取得プロセスが複雑な意思決定を必要とする場合
-- エージェントがコンテキストに基づいて複数の取得戦略を組み合わせたい場合
+これは特に以下の場合に役立ちます：
+- エージェントが取得する情報を動的に決定する必要がある場合
+- 検索プロセスが複雑な意思決定を必要とする場合
+- コンテキストに基づいて複数の検索戦略を組み合わせたい場合
 
 詳細な設定オプションと高度な使用法については、[ベクトルクエリツールリファレンス](/reference/tools/vector-query-tool)を参照してください。
 
 ### ベクトルストアプロンプト
 
 ベクトルストアプロンプトは、各ベクトルデータベース実装のクエリパターンとフィルタリング機能を定義します。
-フィルタリングを実装する際には、これらのプロンプトがエージェントの指示に必要であり、各ベクトルストア実装の有効なオペレーターと構文を指定します。
+フィルタリングを実装する場合、これらのプロンプトは各ベクトルストア実装の有効な演算子と構文を指定するためにエージェントの指示に必要です。
 
-<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare']}>
+<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB']}>
   <Tabs.Tab>
-  ```ts showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { PGVECTOR_PROMPT } from "@mastra/rag";
+    ```ts showLineNumbers copy
+    import { openai } from '@ai-sdk/openai';
+    import { PGVECTOR_PROMPT } from "@mastra/pg";
 
-export const ragAgent = new Agent({
-  name: 'RAG Agent',
-  model: openai('gpt-4o-mini'),
-  instructions: `
-  提供されたコンテキストを使用してクエリを処理します。応答を簡潔で関連性のあるものに構成します。
-  ${PGVECTOR_PROMPT}
-  `,
-  tools: { vectorQueryTool },
-});
-```
+    export const ragAgent = new Agent({
+      name: 'RAG Agent',
+      model: openai('gpt-4o-mini'),
+      instructions: `
+      Process queries using the provided context. Structure responses to be concise and relevant.
+      ${PGVECTOR_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    });
+    ```
+  </Tabs.Tab>
 
-</Tabs.Tab>
-<Tabs.Tab>
-  ```ts filename="vector-store.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { PINECONE_PROMPT } from "@mastra/rag";
+  <Tabs.Tab>
+    ```ts filename="vector-store.ts" showLineNumbers copy
+    import { openai } from '@ai-sdk/openai';
+    import { PINECONE_PROMPT } from "@mastra/pinecone";
 
-export const ragAgent = new Agent({
-  name: 'RAG Agent',
-  model: openai('gpt-4o-mini'),
-  instructions: `
-  提供されたコンテキストを使用してクエリを処理します。応答を簡潔で関連性のあるものに構成します。
-  ${PINECONE_PROMPT}
-  `,
-  tools: { vectorQueryTool },
-});
-```
-</Tabs.Tab>
-<Tabs.Tab>
-  ```ts filename="vector-store.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { QDRANT_PROMPT } from "@mastra/rag";
+    export const ragAgent = new Agent({
+      name: 'RAG Agent',
+      model: openai('gpt-4o-mini'),
+      instructions: `
+      Process queries using the provided context. Structure responses to be concise and relevant.
+      ${PINECONE_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    });
+    ```
+  </Tabs.Tab>
 
-export const ragAgent = new Agent({
-  name: 'RAG Agent',
-  model: openai('gpt-4o-mini'),
-  instructions: `
-  提供されたコンテキストを使用してクエリを処理します。応答を簡潔で関連性のあるものに構成します。
-  ${QDRANT_PROMPT}
-  `,
-  tools: { vectorQueryTool },
-});
-```
-</Tabs.Tab>
-<Tabs.Tab>
-  ```ts filename="vector-store.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { CHROMA_PROMPT } from "@mastra/rag";
+  <Tabs.Tab>
+    ```ts filename="vector-store.ts" showLineNumbers copy
+    import { openai } from '@ai-sdk/openai';
+    import { QDRANT_PROMPT } from "@mastra/qdrant";
 
-export const ragAgent = new Agent({
-  name: 'RAG Agent',
-  model: openai('gpt-4o-mini'),
-  instructions: `
-  提供されたコンテキストを使用してクエリを処理します。応答を簡潔で関連性のあるものに構成します。
-  ${CHROMA_PROMPT}
-  `,
-  tools: { vectorQueryTool },
-});
-```
-</Tabs.Tab>
-<Tabs.Tab>
-  ```ts filename="vector-store.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { ASTRA_PROMPT } from "@mastra/rag";
+    export const ragAgent = new Agent({
+      name: 'RAG Agent',
+      model: openai('gpt-4o-mini'),
+      instructions: `
+      Process queries using the provided context. Structure responses to be concise and relevant.
+      ${QDRANT_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    });
+    ```
+  </Tabs.Tab>
 
-export const ragAgent = new Agent({
-  name: 'RAG Agent',
-  model: openai('gpt-4o-mini'),
-  instructions: `
-  提供されたコンテキストを使用してクエリを処理します。応答を簡潔で関連性のあるものに構成します。
-  ${ASTRA_PROMPT}
-  `,
-  tools: { vectorQueryTool },
-});
-```
-</Tabs.Tab>
-<Tabs.Tab>
-  ```ts filename="vector-store.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { LIBSQL_PROMPT } from "@mastra/rag";
+  <Tabs.Tab>
+    ```ts filename="vector-store.ts" showLineNumbers copy
+    import { openai } from '@ai-sdk/openai';
+    import { CHROMA_PROMPT } from "@mastra/chroma";
 
-export const ragAgent = new Agent({
-  name: 'RAG Agent',
-  model: openai('gpt-4o-mini'),
-  instructions: `
-  提供されたコンテキストを使用してクエリを処理します。応答を簡潔で関連性のあるものに構成します。
-  ${LIBSQL_PROMPT}
-  `,
-  tools: { vectorQueryTool },
-});
-```
-</Tabs.Tab>
-<Tabs.Tab>
-  ```ts filename="vector-store.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { UPSTASH_PROMPT } from "@mastra/rag";
+    export const ragAgent = new Agent({
+      name: 'RAG Agent',
+      model: openai('gpt-4o-mini'),
+      instructions: `
+      Process queries using the provided context. Structure responses to be concise and relevant.
+      ${CHROMA_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    });
+    ```
+  </Tabs.Tab>
 
-export const ragAgent = new Agent({
-  name: 'RAG Agent',
-  model: openai('gpt-4o-mini'),
-  instructions: `
-  提供されたコンテキストを使用してクエリを処理します。応答を簡潔で関連性のあるものに構成します。
-  ${UPSTASH_PROMPT}
-  `,
-  tools: { vectorQueryTool },
-});
-```
-</Tabs.Tab>
-<Tabs.Tab>
-  ```ts filename="vector-store.ts" showLineNumbers copy
-import { openai } from '@ai-sdk/openai';
-import { VECTORIZE_PROMPT } from "@mastra/rag";
+  <Tabs.Tab>
+    ```ts filename="vector-store.ts" showLineNumbers copy
+    import { openai } from '@ai-sdk/openai';
+    import { ASTRA_PROMPT } from "@mastra/astra";
 
-export const ragAgent = new Agent({
-  name: 'RAG Agent',
-  model: openai('gpt-4o-mini'),
-  instructions: `
-  提供されたコンテキストを使用してクエリを処理します。応答を簡潔で関連性のあるものに構成します。
-  ${VECTORIZE_PROMPT}
-  `,
-  tools: { vectorQueryTool },
-});
-```
-</Tabs.Tab>
+    export const ragAgent = new Agent({
+      name: 'RAG Agent',
+      model: openai('gpt-4o-mini'),
+      instructions: `
+      Process queries using the provided context. Structure responses to be concise and relevant.
+      ${ASTRA_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    });
+    ```
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```ts filename="vector-store.ts" showLineNumbers copy
+    import { openai } from '@ai-sdk/openai';
+    import { LIBSQL_PROMPT } from "@mastra/libsql";
+
+    export const ragAgent = new Agent({
+      name: 'RAG Agent',
+      model: openai('gpt-4o-mini'),
+      instructions: `
+      Process queries using the provided context. Structure responses to be concise and relevant.
+      ${LIBSQL_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    });
+    ```
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```ts filename="vector-store.ts" showLineNumbers copy
+    import { openai } from '@ai-sdk/openai';
+    import { UPSTASH_PROMPT } from "@mastra/upstash";
+
+    export const ragAgent = new Agent({
+      name: 'RAG Agent',
+      model: openai('gpt-4o-mini'),
+      instructions: `
+      Process queries using the provided context. Structure responses to be concise and relevant.
+      ${UPSTASH_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    });
+    ```
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```ts filename="vector-store.ts" showLineNumbers copy
+    import { openai } from '@ai-sdk/openai';
+    import { VECTORIZE_PROMPT } from "@mastra/vectorize";
+
+    export const ragAgent = new Agent({
+      name: 'RAG Agent',
+      model: openai('gpt-4o-mini'),
+      instructions: `
+      Process queries using the provided context. Structure responses to be concise and relevant.
+      ${VECTORIZE_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    });
+    ```
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```ts filename="vector-store.ts" showLineNumbers copy
+    import { openai } from '@ai-sdk/openai';
+    import { MONGODB_PROMPT } from "@mastra/mongodb";
+
+    export const ragAgent = new Agent({
+      name: 'RAG Agent',
+      model: openai('gpt-4o-mini'),
+      instructions: `
+      Process queries using the provided context. Structure responses to be concise and relevant.
+      ${MONGODB_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    });
+    ```
+  </Tabs.Tab>
 </Tabs>
+
 
 ### 再ランキング
 
-初期のベクトル類似性検索は、時には微妙な関連性を見逃すことがあります。再ランキングは、より計算コストが高いプロセスですが、より正確なアルゴリズムであり、以下の方法で結果を改善します：
+初期のベクトル類似性検索では、微妙な関連性を見逃すことがあります。再ランキングはより計算コストが高いプロセスですが、より正確なアルゴリズムで結果を改善します：
 
-- 単語の順序と正確な一致を考慮する
-- より洗練された関連性スコアリングを適用する
-- クエリとドキュメント間のクロスアテンションと呼ばれる方法を使用する
+- 単語の順序と完全一致を考慮
+- より洗練された関連性スコアリングを適用
+- クエリとドキュメント間のクロスアテンションと呼ばれる方法を使用
 
 再ランキングの使用方法は次のとおりです：
 
@@ -320,32 +344,32 @@ export const ragAgent = new Agent({
 import { openai } from "@ai-sdk/openai";
 import { rerank } from "@mastra/rag";
 
-// ベクトル検索から初期結果を取得
+// Get initial results from vector search
 const initialResults = await pgVector.query({
   indexName: "embeddings",
   queryVector: queryEmbedding,
   topK: 10,
 });
 
-// 結果を再ランキング
+// Re-rank the results
 const rerankedResults = await rerank(initialResults, query, openai('gpt-4o-mini'));
 ```
 
-> **注意:** 再ランキング中にセマンティックスコアリングが正しく機能するためには、各結果がその`metadata.text`フィールドにテキストコンテンツを含んでいる必要があります。
+> **注意:** 再ランキング中にセマンティックスコアリングが正しく機能するためには、各結果に`metadata.text`フィールドにテキストコンテンツが含まれている必要があります。
 
-再ランキングされた結果は、ベクトル類似性とセマンティックな理解を組み合わせて、検索の質を向上させます。
+再ランキングされた結果は、ベクトル類似性とセマンティック理解を組み合わせて検索品質を向上させます。
 
 再ランキングの詳細については、[rerank()](/reference/rag/rerank)メソッドを参照してください。
 
-再ランキングメソッドの使用例については、[Re-ranking Results](../../examples/rag/rerank/rerank.mdx)の例を参照してください。
+再ランキングメソッドの使用例については、[結果の再ランキング](../../examples/rag/rerank/rerank.mdx)の例を参照してください。
 
 ### グラフベースの検索
 
-複雑な関係を持つドキュメントの場合、グラフベースの検索はチャンク間の接続をたどることができます。これは次のような場合に役立ちます：
+複雑な関係を持つドキュメントの場合、グラフベースの検索はチャンク間の接続をたどることができます。これは以下の場合に役立ちます：
 
 - 情報が複数のドキュメントに分散している
 - ドキュメントが互いに参照している
-- 完全な答えを見つけるために関係をたどる必要がある
+- 完全な回答を見つけるために関係性をたどる必要がある
 
 セットアップ例：
 
@@ -362,4 +386,4 @@ const graphQueryTool = createGraphQueryTool({
 
 グラフベースの検索の詳細については、[GraphRAG](/reference/rag/graph-rag)クラスと[createGraphQueryTool()](/reference/tools/graph-rag-tool)関数を参照してください。
 
-グラフベースの検索メソッドの使用例については、[Graph-based Retrieval](../../examples/rag/usage/graph-rag.mdx)の例を参照してください。
+グラフベースの検索方法の使用例については、[グラフベースの検索](../../examples/rag/usage/graph-rag.mdx)の例を参照してください。
