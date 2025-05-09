@@ -12,10 +12,10 @@ importers:
   .:
     dependencies:
       '@ai-sdk/anthropic':
-        specifier: ^1.2.10
-        version: 1.2.10(zod@3.24.3)
-      '@ai-sdk/react':
         specifier: ^1.2.11
+        version: 1.2.11(zod@3.24.3)
+      '@ai-sdk/react':
+        specifier: ^1.2.12
         version: 1.2.12(react@19.1.0)(zod@3.24.3)
       '@mastra/core':
         specifier: link:../../packages/core
@@ -63,17 +63,11 @@ importers:
 
 packages:
 
-  '@ai-sdk/anthropic@1.2.10':
-    resolution: {integrity: sha512-PyE7EC2fPjs9DnzRAHDrPQmcnI2m2Eojr8pfhckOejOlDEh2w7NnSJr1W3qe5hUWzKr+6d7NG1ZKR9fhmpDdEQ==}
+  '@ai-sdk/anthropic@1.2.11':
+    resolution: {integrity: sha512-lZLcEMh8MXY4NVSrN/7DyI2rnid8k7cn/30nMmd3bwJrnIsOuIuuFvY8f0nj+pFcTi6AYK7ujLdqW5dQVz1YQw==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.0.0
-
-  '@ai-sdk/provider-utils@2.2.7':
-    resolution: {integrity: sha512-kM0xS3GWg3aMChh9zfeM+80vEZfXzR3JEUBdycZLtbRZ2TRT8xOj3WodGHPb06sUK5yD7pAXC/P7ctsi2fvUGQ==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.23.8
 
   '@ai-sdk/provider-utils@2.2.8':
     resolution: {integrity: sha512-fqhG+4sCVv8x7nFzYnFo19ryhAa3w096Kmc3hWxMQfW/TubPOmt3A6tYZhl4mUfQWWQMsuSkLrtjlWuXBVSGQA==}
@@ -1874,17 +1868,10 @@ packages:
 
 snapshots:
 
-  '@ai-sdk/anthropic@1.2.10(zod@3.24.3)':
+  '@ai-sdk/anthropic@1.2.11(zod@3.24.3)':
     dependencies:
       '@ai-sdk/provider': 1.1.3
-      '@ai-sdk/provider-utils': 2.2.7(zod@3.24.3)
-      zod: 3.24.3
-
-  '@ai-sdk/provider-utils@2.2.7(zod@3.24.3)':
-    dependencies:
-      '@ai-sdk/provider': 1.1.3
-      nanoid: 3.3.11
-      secure-json-parse: 2.7.0
+      '@ai-sdk/provider-utils': 2.2.8(zod@3.24.3)
       zod: 3.24.3
 
   '@ai-sdk/provider-utils@2.2.8(zod@3.24.3)':
