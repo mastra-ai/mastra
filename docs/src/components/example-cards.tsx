@@ -57,7 +57,7 @@ export function CardItems({
     if (match && match !== activeTab) {
       setActiveTab(match);
     }
-  }, [activeTab, listParam, titles]);
+  }, [listParam, titles]);
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
