@@ -207,8 +207,10 @@ export function AgentDetails({ agentId }: { agentId: string }) {
           <p className="text-mastra-el-3">Chat Method</p>
           <div className="flex flex-col gap-2 text-mastra-el-5">
             <RadioGroup
+              orientation="horizontal"
               value={chatWithGenerate ? 'generate' : 'stream'}
               onValueChange={value => setChatWithGenerate(value === 'generate')}
+              className="flex flex-row gap-2"
             >
               <div className="flex items-center gap-2">
                 <RadioGroupItem value="generate" id="generate" className="text-mastra-el-3" />

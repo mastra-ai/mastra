@@ -140,8 +140,19 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
   // Add Mastra to context
   app.use('*', function setContext(c, next) {
     const runtimeContext = new RuntimeContext();
+    const proxyRuntimeContext = new Proxy(runtimeContext, {
+      get(target, prop) {
+        if (prop === 'get') {
+          return function (key: string) {
+            const value = target.get(key);
+            return value ?? `<${key}>`;
+          };
+        }
+        return Reflect.get(target, prop);
+      },
+    });
 
-    c.set('runtimeContext', runtimeContext);
+    c.set('runtimeContext', proxyRuntimeContext);
     c.set('mastra', mastra);
     c.set('tools', tools);
     c.set('playground', options.playground === true);
@@ -1096,6 +1107,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
               type: 'object',
               properties: {
                 data: { type: 'object' },
+                runtimeContext: { type: 'object' },
               },
               required: ['data'],
             },
@@ -1499,7 +1511,10 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
                   oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
                 },
                 resumeData: { type: 'object' },
-                runtimeContext: { type: 'object' },
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the workflow execution',
+                },
               },
               required: ['step'],
             },
@@ -1541,7 +1556,10 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
                   oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
                 },
                 resumeData: { type: 'object' },
-                runtimeContext: { type: 'object' },
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the workflow execution',
+                },
               },
               required: ['step'],
             },
@@ -1609,7 +1627,10 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                runtimeContext: { type: 'object' },
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the workflow execution',
+                },
               },
             },
           },
@@ -1654,7 +1675,10 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                runtimeContext: { type: 'object' },
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the workflow execution',
+                },
               },
             },
           },
@@ -2209,6 +2233,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
               type: 'object',
               properties: {
                 data: { type: 'object' },
+                runtimeContext: { type: 'object' },
               },
               required: ['data'],
             },
@@ -2534,7 +2559,7 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
       const host = serverOptions?.host ?? 'localhost';
       logger.info(` Mastra API running on port http://${host}:${port}/api`);
       if (options?.isDev) {
-        logger.info(`� Open API documentation available at http://${host}:${port}/openapi.json`);
+        logger.info(`🔗 Open API documentation available at http://${host}:${port}/openapi.json`);
       }
       if (options?.isDev) {
         logger.info(`🧪 Swagger UI available at http://${host}:${port}/swagger-ui`);

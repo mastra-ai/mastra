@@ -491,7 +491,7 @@ importers:
         version: 5.8.3
       typescript-eslint:
         specifier: ^8.26.1
-        version: 8.31.1(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3)
+        version: 8.32.0(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3)
       vitest:
         specifier: ^3.1.2
         version: 3.1.2(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.17.32)(@vitest/ui@3.0.9)(jiti@2.4.2)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.3)(yaml@2.7.0)
@@ -984,10 +984,10 @@ importers:
         version: 1.14.4
       hono:
         specifier: ^4.5.1
-        version: 4.7.4
+        version: 4.7.7
       hono-openapi:
         specifier: ^0.4.6
-        version: 0.4.6(hono@4.7.4)(openapi-types@12.1.3)(zod@3.24.3)
+        version: 0.4.6(hono@4.7.7)(openapi-types@12.1.3)(zod@3.24.3)
       json-schema:
         specifier: ^0.4.0
         version: 0.4.0
@@ -1015,7 +1015,7 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^1.3.20
-        version: 1.3.20(zod@3.24.3)
+        version: 1.3.22(zod@3.24.3)
       '@babel/core':
         specifier: ^7.26.10
         version: 7.26.10
@@ -1093,7 +1093,7 @@ importers:
         version: 13.0.0
       posthog-node:
         specifier: ^4.10.1
-        version: 4.10.1
+        version: 4.16.0
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -1196,7 +1196,7 @@ importers:
         version: 11.3.0
       hono:
         specifier: ^4.7.4
-        version: 4.7.4
+        version: 4.7.7
       resolve-from:
         specifier: ^5.0.0
         version: 5.0.0
@@ -1218,10 +1218,10 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^1.13.8
-        version: 1.13.8(hono@4.7.4)
+        version: 1.14.1(hono@4.7.7)
       '@hono/swagger-ui':
         specifier: ^0.5.1
-        version: 0.5.1(hono@4.7.4)
+        version: 0.5.1(hono@4.7.7)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1248,7 +1248,7 @@ importers:
         version: 9.25.1(jiti@2.4.2)
       hono-openapi:
         specifier: ^0.4.6
-        version: 0.4.6(hono@4.7.4)(openapi-types@12.1.3)(zod@3.24.3)
+        version: 0.4.6(hono@4.7.7)(openapi-types@12.1.3)(zod@3.24.3)
       rollup-plugin-visualizer:
         specifier: ^5.14.0
         version: 5.14.0(rollup@4.40.1)
@@ -1300,7 +1300,7 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.21(zod@3.24.3)
+        version: 1.3.22(zod@3.24.3)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1484,7 +1484,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^1.13.8
-        version: 1.13.8(hono@4.7.4)
+        version: 1.14.1(hono@4.7.7)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1508,7 +1508,7 @@ importers:
         version: 9.25.1(jiti@2.4.2)
       hono:
         specifier: ^4.7.4
-        version: 4.7.4
+        version: 4.7.7
       tsup:
         specifier: ^8.4.0
         version: 8.4.0(@microsoft/api-extractor@7.52.5(@types/node@20.17.32))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.3)(yaml@2.7.0)
@@ -1542,7 +1542,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^1.13.8
-        version: 1.13.8(hono@4.7.4)
+        version: 1.14.1(hono@4.7.7)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1563,7 +1563,7 @@ importers:
         version: 9.25.1(jiti@2.4.2)
       hono:
         specifier: ^4.7.4
-        version: 4.7.4
+        version: 4.7.7
       tsup:
         specifier: ^8.4.0
         version: 8.4.0(@microsoft/api-extractor@7.52.5(@types/node@20.17.32))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.3)(yaml@2.7.0)
@@ -1612,7 +1612,7 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^1.3.3
-        version: 1.3.20(zod@3.24.3)
+        version: 1.3.22(zod@3.24.3)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1636,7 +1636,7 @@ importers:
         version: 5.8.3
       typescript-eslint:
         specifier: ^8.26.1
-        version: 8.31.1(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3)
+        version: 8.32.0(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3)
       vitest:
         specifier: ^3.1.2
         version: 3.1.2(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.17.32)(@vitest/ui@3.0.9)(jiti@2.4.2)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.3)(yaml@2.7.0)
@@ -1645,7 +1645,7 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: ^1.3.0
-        version: 1.3.20(zod@3.24.3)
+        version: 1.3.22(zod@3.24.3)
       '@ai-sdk/react':
         specifier: ^1.2.1
         version: 1.2.9(react@19.1.0)(zod@3.24.3)
@@ -1963,10 +1963,10 @@ importers:
     devDependencies:
       '@ai-sdk/cohere':
         specifier: latest
-        version: 1.2.9(zod@3.24.3)
+        version: 1.2.10(zod@3.24.3)
       '@ai-sdk/openai':
         specifier: latest
-        version: 1.3.21(zod@3.24.3)
+        version: 1.3.22(zod@3.24.3)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1999,7 +1999,7 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^1.3.2
-        version: 1.3.20(zod@3.24.3)
+        version: 1.3.22(zod@3.24.3)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -3284,7 +3284,7 @@ importers:
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^1.2.1
-        version: 1.3.21(zod@3.24.3)
+        version: 1.3.22(zod@3.24.3)
       '@hono/node-server':
         specifier: ^1.14.1
         version: 1.14.1(hono@4.7.7)
@@ -3345,20 +3345,14 @@ packages:
     peerDependencies:
       zod: ^3.0.0
 
-  '@ai-sdk/cohere@1.2.9':
-    resolution: {integrity: sha512-ENbQT2bDt1FN+DOLkoFT9n+cojLv7zdN5GCaDtkaqJUuRa+6lHqNO4tRvB79Jg8DY03mhDermty9EhJW2zHoTA==}
+  '@ai-sdk/cohere@1.2.10':
+    resolution: {integrity: sha512-OaUwd5xj4bxSO8hdCbX1a5uUlTouU8FcodSuRON6xDSsmjZIvQL4O2G1XzcidxiQVL8JQuA+M0tHZOwGxSL96A==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.0.0
 
-  '@ai-sdk/openai@1.3.20':
-    resolution: {integrity: sha512-/DflUy7ROG9k6n6YTXMBFPbujBKnbGY58f3CwvicLvDar9nDAloVnUWd3LUoOxpSVnX8vtQ7ngxF52SLWO6RwQ==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.0.0
-
-  '@ai-sdk/openai@1.3.21':
-    resolution: {integrity: sha512-ipAhkRKUd2YaMmn7DAklX3N7Ywx/rCsJHVyb0V/lKRqPcc612qAFVbjg+Uve8QYJlbPxgfsM4s9JmCFp6PSdYw==}
+  '@ai-sdk/openai@1.3.22':
+    resolution: {integrity: sha512-QwA+2EkG0QyjVR+7h6FE7iOu2ivNqAVMm9UJZkVxxTk5OIq5fFJDTEI/zICEMuHImTTXR2JjsL6EirJ28Jc4cw==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.0.0
@@ -3383,6 +3377,12 @@ packages:
 
   '@ai-sdk/provider-utils@2.2.7':
     resolution: {integrity: sha512-kM0xS3GWg3aMChh9zfeM+80vEZfXzR3JEUBdycZLtbRZ2TRT8xOj3WodGHPb06sUK5yD7pAXC/P7ctsi2fvUGQ==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.23.8
+
+  '@ai-sdk/provider-utils@2.2.8':
+    resolution: {integrity: sha512-fqhG+4sCVv8x7nFzYnFo19ryhAa3w096Kmc3hWxMQfW/TubPOmt3A6tYZhl4mUfQWWQMsuSkLrtjlWuXBVSGQA==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.23.8
@@ -5888,12 +5888,6 @@ packages:
 
   '@hey-api/client-fetch@0.3.4':
     resolution: {integrity: sha512-2iEXxLNf3HQWPJC04XYaZZSqtx+gLg2dxi8oEgrYDhoBGPlaEgpao73rVjdng0YzlB4YkCkZV8p8VkhVnIaKHQ==}
-
-  '@hono/node-server@1.13.8':
-    resolution: {integrity: sha512-fsn8ucecsAXUoVxrUil0m13kOEq4mkX4/4QozCqmY+HpGfKl74OYSn8JcMA8GnG0ClfdRI4/ZSeG7zhFaVg+wg==}
-    engines: {node: '>=18.14.1'}
-    peerDependencies:
-      hono: ^4
 
   '@hono/node-server@1.14.1':
     resolution: {integrity: sha512-vmbuM+HPinjWzPe7FFPWMMQMsbKE9gDPhaH0FFdqbGpkT5lp++tcWDTxwBl5EgS5y6JVgIaCdjeHRfQ4XRBRjQ==}
@@ -9078,14 +9072,6 @@ packages:
       typescript:
         optional: true
 
-  '@typescript-eslint/eslint-plugin@8.31.1':
-    resolution: {integrity: sha512-oUlH4h1ABavI4F0Xnl8/fOtML/eu8nI2A1nYd+f+55XI0BLu+RIqKoCiZKNo6DtqZBEQm5aNKA20G3Z5w3R6GQ==}
-    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
-    peerDependencies:
-      '@typescript-eslint/parser': ^8.0.0 || ^8.0.0-alpha.0
-      eslint: ^8.57.0 || ^9.0.0
-      typescript: ^5.8.3
-
   '@typescript-eslint/eslint-plugin@8.32.0':
     resolution: {integrity: sha512-/jU9ettcntkBFmWUzzGgsClEi2ZFiikMX5eEQsmxIAWMOn4H3D4rvHssstmAHGVvrYnaMqdWWWg0b5M6IN/MTQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
@@ -9103,13 +9089,6 @@ packages:
     peerDependenciesMeta:
       typescript:
         optional: true
-
-  '@typescript-eslint/parser@8.31.1':
-    resolution: {integrity: sha512-oU/OtYVydhXnumd0BobL9rkJg7wFJ9bFFPmSmB/bf/XWN85hlViji59ko6bSKBXyseT9V8l+CN1nwmlbiN0G7Q==}
-    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
-    peerDependencies:
-      eslint: ^8.57.0 || ^9.0.0
-      typescript: ^5.8.3
 
   '@typescript-eslint/parser@8.32.0':
     resolution: {integrity: sha512-B2MdzyWxCE2+SqiZHAjPphft+/2x2FlO9YBx7eKE1BCb+rqBlQdhtAEhzIEdozHd55DXPmxBdpMygFJjfjjA9A==}
@@ -9139,13 +9118,6 @@ packages:
     peerDependenciesMeta:
       typescript:
         optional: true
-
-  '@typescript-eslint/type-utils@8.31.1':
-    resolution: {integrity: sha512-fNaT/m9n0+dpSp8G/iOQ05GoHYXbxw81x+yvr7TArTuZuCA6VVKbqWYVZrV5dVagpDTtj/O8k5HBEE/p/HM5LA==}
-    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
-    peerDependencies:
-      eslint: ^8.57.0 || ^9.0.0
-      typescript: ^5.8.3
 
   '@typescript-eslint/type-utils@8.32.0':
     resolution: {integrity: sha512-t2vouuYQKEKSLtJaa5bB4jHeha2HJczQ6E5IXPDPgIty9EqcJxpr1QHQ86YyIPwDwxvUmLfP2YADQ5ZY4qddZg==}
@@ -12875,10 +12847,6 @@ packages:
       zod-openapi:
         optional: true
 
-  hono@4.7.4:
-    resolution: {integrity: sha512-Pst8FuGqz3L7tFF+u9Pu70eI0xa5S3LPUmrNd5Jm8nTHze9FxLTK9Kaj5g/k4UcwuJSXTP65SyHOPLrffpcAJg==}
-    engines: {node: '>=16.9.0'}
-
   hono@4.7.7:
     resolution: {integrity: sha512-2PCpQRbN87Crty8/L/7akZN3UyZIAopSoRxCwRbJgUuV1+MHNFHzYFxZTg4v/03cXUm+jce/qa2VSBZpKBm3Qw==}
     engines: {node: '>=16.9.0'}
@@ -15808,10 +15776,6 @@ packages:
       rrweb-snapshot:
         optional: true
 
-  posthog-node@4.10.1:
-    resolution: {integrity: sha512-rEzVszfaOkUFTjEabDcRLJNRqMwTOeU1WpqKgQEDV3x82O4ODifkvkoCERaPxl/ossi1NtqKXBOZ+XnhQ19pNQ==}
-    engines: {node: '>=15.0.0'}
-
   posthog-node@4.16.0:
     resolution: {integrity: sha512-j7t3h8gC2A2GUE8inqshaUuSrP7zLLtwHpP6sv9vePNRhjEqqd7lPzyjEeDWdcW1COmHtQXH19TYbyjGlutNXA==}
     engines: {node: '>=15.0.0'}
@@ -17489,12 +17453,6 @@ packages:
   trough@2.2.0:
     resolution: {integrity: sha512-tmMpK00BjZiUyVyvrBK7knerNgmgvcV/KLVyuma/SC+TQN167GrMRciANTz09+k3zW8L8t60jWO1GpfkZdjTaw==}
 
-  ts-api-utils@2.0.1:
-    resolution: {integrity: sha512-dnlgjFSVetynI8nzgJ+qF62efpglpWRk8isUEWZGWlJYySCTD6aKvbUDu+zbPeDakk3bg5H4XpitHukgfL1m9w==}
-    engines: {node: '>=18.12'}
-    peerDependencies:
-      typescript: ^5.8.3
-
   ts-api-utils@2.1.0:
     resolution: {integrity: sha512-CUgTZL1irw8u29bzrOD/nH85jqyc74D6SshFgujOIA7osm2Rz7dYH77agkx7H4FBNxDq7Cjf+IjaX/8zwFW+ZQ==}
     engines: {node: '>=18.12'}
@@ -17716,13 +17674,6 @@ packages:
 
   typedarray-to-buffer@3.1.5:
     resolution: {integrity: sha512-zdu8XMNEDepKKR+XYOXAVPtWui0ly0NtohUscw+UmaHiAWT8hrV1rr//H6V+0DvJ3OQ19S979M0laLfX8rm82Q==}
-
-  typescript-eslint@8.31.1:
-    resolution: {integrity: sha512-j6DsEotD/fH39qKzXTQRwYYWlt7D+0HmfpOK+DVhwJOFLcdmn92hq3mBb7HlKJHbjjI/gTOqEcc9d6JfpFf/VA==}
-    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
-    peerDependencies:
-      eslint: ^8.57.0 || ^9.0.0
-      typescript: ^5.8.3
 
   typescript-eslint@8.32.0:
     resolution: {integrity: sha512-UMq2kxdXCzinFFPsXc9o2ozIpYCCOiEC46MG3yEh5Vipq6BO27otTtEBZA1fQ66DulEUgE97ucQ/3YY66CPg0A==}
@@ -18767,22 +18718,16 @@ snapshots:
       '@ai-sdk/provider-utils': 2.2.7(zod@3.24.3)
       zod: 3.24.3
 
-  '@ai-sdk/cohere@1.2.9(zod@3.24.3)':
+  '@ai-sdk/cohere@1.2.10(zod@3.24.3)':
     dependencies:
       '@ai-sdk/provider': 1.1.3
-      '@ai-sdk/provider-utils': 2.2.7(zod@3.24.3)
+      '@ai-sdk/provider-utils': 2.2.8(zod@3.24.3)
       zod: 3.24.3
 
-  '@ai-sdk/openai@1.3.20(zod@3.24.3)':
+  '@ai-sdk/openai@1.3.22(zod@3.24.3)':
     dependencies:
       '@ai-sdk/provider': 1.1.3
-      '@ai-sdk/provider-utils': 2.2.7(zod@3.24.3)
-      zod: 3.24.3
-
-  '@ai-sdk/openai@1.3.21(zod@3.24.3)':
-    dependencies:
-      '@ai-sdk/provider': 1.1.3
-      '@ai-sdk/provider-utils': 2.2.7(zod@3.24.3)
+      '@ai-sdk/provider-utils': 2.2.8(zod@3.24.3)
       zod: 3.24.3
 
   '@ai-sdk/provider-utils@1.0.22(zod@3.24.3)':
@@ -18804,6 +18749,13 @@ snapshots:
       zod: 3.24.3
 
   '@ai-sdk/provider-utils@2.2.7(zod@3.24.3)':
+    dependencies:
+      '@ai-sdk/provider': 1.1.3
+      nanoid: 3.3.11
+      secure-json-parse: 2.7.0
+      zod: 3.24.3
+
+  '@ai-sdk/provider-utils@2.2.8(zod@3.24.3)':
     dependencies:
       '@ai-sdk/provider': 1.1.3
       nanoid: 3.3.11
@@ -21489,17 +21441,13 @@ snapshots:
 
   '@hey-api/client-fetch@0.3.4': {}
 
-  '@hono/node-server@1.13.8(hono@4.7.4)':
-    dependencies:
-      hono: 4.7.4
-
   '@hono/node-server@1.14.1(hono@4.7.7)':
     dependencies:
       hono: 4.7.7
 
-  '@hono/swagger-ui@0.5.1(hono@4.7.4)':
+  '@hono/swagger-ui@0.5.1(hono@4.7.7)':
     dependencies:
-      hono: 4.7.4
+      hono: 4.7.7
 
   '@hookform/resolvers@3.10.0(react-hook-form@7.54.2(react@19.1.0))':
     dependencies:
@@ -25481,23 +25429,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@typescript-eslint/eslint-plugin@8.31.1(@typescript-eslint/parser@8.31.1(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3))(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3)':
-    dependencies:
-      '@eslint-community/regexpp': 4.12.1
-      '@typescript-eslint/parser': 8.31.1(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3)
-      '@typescript-eslint/scope-manager': 8.31.1
-      '@typescript-eslint/type-utils': 8.31.1(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3)
-      '@typescript-eslint/utils': 8.31.1(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3)
-      '@typescript-eslint/visitor-keys': 8.31.1
-      eslint: 9.25.1(jiti@2.4.2)
-      graphemer: 1.4.0
-      ignore: 5.3.2
-      natural-compare: 1.4.0
-      ts-api-utils: 2.0.1(typescript@5.8.3)
-      typescript: 5.8.3
-    transitivePeerDependencies:
-      - supports-color
-
   '@typescript-eslint/eslint-plugin@8.32.0(@typescript-eslint/parser@8.32.0(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3))(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3)':
     dependencies:
       '@eslint-community/regexpp': 4.12.1
@@ -25523,18 +25454,6 @@ snapshots:
       debug: 4.4.0(supports-color@8.1.1)
       eslint: 8.57.1
     optionalDependencies:
-      typescript: 5.8.3
-    transitivePeerDependencies:
-      - supports-color
-
-  '@typescript-eslint/parser@8.31.1(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3)':
-    dependencies:
-      '@typescript-eslint/scope-manager': 8.31.1
-      '@typescript-eslint/types': 8.31.1
-      '@typescript-eslint/typescript-estree': 8.31.1(typescript@5.8.3)
-      '@typescript-eslint/visitor-keys': 8.31.1
-      debug: 4.4.0(supports-color@8.1.1)
-      eslint: 9.25.1(jiti@2.4.2)
       typescript: 5.8.3
     transitivePeerDependencies:
       - supports-color
@@ -25574,17 +25493,6 @@ snapshots:
       eslint: 8.57.1
       tsutils: 3.21.0(typescript@5.8.3)
     optionalDependencies:
-      typescript: 5.8.3
-    transitivePeerDependencies:
-      - supports-color
-
-  '@typescript-eslint/type-utils@8.31.1(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3)':
-    dependencies:
-      '@typescript-eslint/typescript-estree': 8.31.1(typescript@5.8.3)
-      '@typescript-eslint/utils': 8.31.1(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3)
-      debug: 4.4.0(supports-color@8.1.1)
-      eslint: 9.25.1(jiti@2.4.2)
-      ts-api-utils: 2.0.1(typescript@5.8.3)
       typescript: 5.8.3
     transitivePeerDependencies:
       - supports-color
@@ -30375,15 +30283,13 @@ snapshots:
 
   highlightjs-vue@1.0.0: {}
 
-  hono-openapi@0.4.6(hono@4.7.4)(openapi-types@12.1.3)(zod@3.24.3):
+  hono-openapi@0.4.6(hono@4.7.7)(openapi-types@12.1.3)(zod@3.24.3):
     dependencies:
       json-schema-walker: 2.0.0
     optionalDependencies:
-      hono: 4.7.4
+      hono: 4.7.7
       openapi-types: 12.1.3
       zod: 3.24.3
-
-  hono@4.7.4: {}
 
   hono@4.7.7: {}
 
@@ -33964,12 +33870,6 @@ snapshots:
       preact: 10.26.4
       web-vitals: 4.2.4
 
-  posthog-node@4.10.1:
-    dependencies:
-      axios: 1.8.4(debug@4.4.0)
-    transitivePeerDependencies:
-      - debug
-
   posthog-node@4.16.0:
     dependencies:
       axios: 1.8.4(debug@4.4.0)
@@ -35983,10 +35883,6 @@ snapshots:
 
   trough@2.2.0: {}
 
-  ts-api-utils@2.0.1(typescript@5.8.3):
-    dependencies:
-      typescript: 5.8.3
-
   ts-api-utils@2.1.0(typescript@5.8.3):
     dependencies:
       typescript: 5.8.3
@@ -36242,16 +36138,6 @@ snapshots:
   typedarray-to-buffer@3.1.5:
     dependencies:
       is-typedarray: 1.0.0
-
-  typescript-eslint@8.31.1(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3):
-    dependencies:
-      '@typescript-eslint/eslint-plugin': 8.31.1(@typescript-eslint/parser@8.31.1(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3))(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3)
-      '@typescript-eslint/parser': 8.31.1(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3)
-      '@typescript-eslint/utils': 8.31.1(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3)
-      eslint: 9.25.1(jiti@2.4.2)
-      typescript: 5.8.3
-    transitivePeerDependencies:
-      - supports-color
 
   typescript-eslint@8.32.0(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3):
     dependencies:

@@ -13,10 +13,11 @@ import { useAgent } from '@/hooks/use-agents';
 import { useExecuteTool } from '@/hooks/use-execute-agent-tool';
 
 import ToolExecutor from '../tool-executor';
-import { HeaderTitle, Header, Crumb, Breadcrumb } from '@mastra/playground-ui';
+import { HeaderTitle, Header, Crumb, Breadcrumb, usePlaygroundStore } from '@mastra/playground-ui';
 
 const AgentTool = () => {
   const { toolId, agentId } = useParams();
+  const { runtimeContext: playgroundRuntimeContext } = usePlaygroundStore();
 
   const { executeTool, isExecutingTool } = useExecuteTool();
   const [result, setResult] = useState<any>(null);
@@ -32,6 +33,7 @@ const AgentTool = () => {
       agentId: agentId!,
       toolId: tool.id,
       input: data,
+      runtimeContext: playgroundRuntimeContext,
     });
     setResult(result);
   };
