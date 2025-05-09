@@ -9,8 +9,8 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^1.1.15",
-    "@ai-sdk/react": "^1.1.21",
+    "@ai-sdk/anthropic": "^1.2.10",
+    "@ai-sdk/react": "^1.2.11",
     "@mastra/core": "latest",
     "next": "^15.3.1",
     "react": "^19.0.0",
