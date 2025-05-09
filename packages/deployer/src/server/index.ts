@@ -1311,7 +1311,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
     mcpSseBasePath,
     describeRoute({
       description: 'Establish an MCP Server-Sent Events (SSE) connection with a server instance.',
-      tags: ['mcp', 'sse'],
+      tags: ['mcp'],
       parameters: [
         {
           name: 'serverId',
@@ -1339,7 +1339,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
     bodyLimit(bodyLimitOptions), // Apply body limit for messages
     describeRoute({
       description: 'Send a message to an MCP server over an established SSE connection.',
-      tags: ['mcp', 'sse'],
+      tags: ['mcp'],
       parameters: [
         {
           name: 'serverId',
