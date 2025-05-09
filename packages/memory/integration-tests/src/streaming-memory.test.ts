@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
-import { MastraClient } from '@mastra/client-js';
-import { randomUUID, UUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
+import type { UUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import path from 'node:path';
 import { openai } from '@ai-sdk/openai';
