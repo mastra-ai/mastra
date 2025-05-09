@@ -9,7 +9,7 @@ function formatToK(number: number) {
 
 export const GithubStarCount = ({ stars }: { stars: number }) => {
   return (
-    <div className="font-medium w-fit rounded-md opacity-90 transition-colors hover:opacity-100 flex items-center gap-2 justify-start pl-[7px] pr-2.5 py-2 h-[2.125rem] dark:text-white text-sm">
+    <div className="font-medium w-fit text-[var(--light-color-text-3)] dark:text-white rounded-md opacity-90 transition-colors hover:opacity-100 flex items-center gap-2 justify-start pl-[7px] pr-2.5 py-2 h-[2.125rem] text-sm">
       <svg
         width="37"
         height="37"
@@ -26,7 +26,7 @@ export const GithubStarCount = ({ stars }: { stars: number }) => {
         />
       </svg>
 
-      <div className="flex gap-1 items-center w-4">
+      <div className="flex gap-1  items-center w-4">
         <span>{formatToK(stars)}</span>
       </div>
     </div>
