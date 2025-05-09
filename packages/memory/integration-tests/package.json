@@ -46,6 +46,7 @@
     "@types/node": "^20.17.27",
     "ai": "^4.2.2",
     "jsdom": "^26.0.0",
+    "@mastra/client-js": "workspace:*",
     "mastra": "workspace:*",
     "next": "^15.2.4",
     "react": "^19.1.0",

@@ -492,17 +492,19 @@ export class Agent<
     threadId,
     resourceId,
     now,
+    experimental_generateMessageId,
   }: {
     messages: (CoreMessage | CoreAssistantMessage)[];
     threadId: string;
     resourceId: string;
     now: number;
+    experimental_generateMessageId: any;
   }) {
     if (!messages) return [];
     const messagesArray = Array.isArray(messages) ? messages : [messages];
 
     return this.sanitizeResponseMessages(messagesArray).map((message: CoreMessage | CoreAssistantMessage, index) => {
-      const messageId = randomUUID();
+      const messageId = (`id` in message && message.id) || experimental_generateMessageId?.() || randomUUID();
       let toolCallIds: string[] | undefined;
       let toolCallArgs: Record<string, unknown>[] | undefined;
       let toolNames: string[] | undefined;
@@ -955,6 +957,7 @@ export class Agent<
         memoryConfig,
         outputText,
         runId,
+        experimental_generateMessageId,
       }: {
         runId: string;
         result: Record<string, any>;
@@ -962,6 +965,7 @@ export class Agent<
         threadId: string;
         memoryConfig: MemoryConfig | undefined;
         outputText: string;
+        experimental_generateMessageId: any;
       }) => {
         const resToLog = {
           text: result?.text,
@@ -995,7 +999,10 @@ export class Agent<
             const threadMessages = this.sanitizeResponseMessages(ensureAllMessagesAreCoreMessages(messages)).map(
               (u, index) => {
                 return {
-                  id: this.getMemory()?.generateId()!,
+                  id:
+                    (`id` in u && u.id) || experimental_generateMessageId
+                      ? experimental_generateMessageId()
+                      : this.getMemory()?.generateId()!,
                   createdAt: new Date(now + index),
                   threadId: thread.id,
                   resourceId: resourceId,
@@ -1050,6 +1057,7 @@ export class Agent<
                   resourceId,
                   messages: responseMessages,
                   now: dateResponseMessagesFrom,
+                  experimental_generateMessageId,
                 }),
               ],
               memoryConfig,
@@ -1189,7 +1197,16 @@ export class Agent<
 
       const outputText = result.text;
 
-      await after({ result, threadId, thread, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+      await after({
+        result,
+        threadId,
+        thread,
+        memoryConfig: memoryOptions,
+        outputText,
+        runId: runIdToUse,
+        experimental_generateMessageId:
+          `experimental_generateMessageId` in rest ? rest.experimental_generateMessageId : undefined,
+      });
 
       const newResult = result as any;
 
@@ -1219,7 +1236,16 @@ export class Agent<
 
       const outputText = result.text;
 
-      await after({ result, thread, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+      await after({
+        result,
+        thread,
+        threadId,
+        memoryConfig: memoryOptions,
+        outputText,
+        runId: runIdToUse,
+        experimental_generateMessageId:
+          `experimental_generateMessageId` in rest ? rest.experimental_generateMessageId : undefined,
+      });
 
       return result as unknown as GenerateReturn<Z>;
     }
@@ -1243,7 +1269,16 @@ export class Agent<
 
     const outputText = JSON.stringify(result.object);
 
-    await after({ result, thread, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+    await after({
+      result,
+      thread,
+      threadId,
+      memoryConfig: memoryOptions,
+      outputText,
+      runId: runIdToUse,
+      experimental_generateMessageId:
+        `experimental_generateMessageId` in rest ? rest.experimental_generateMessageId : undefined,
+    });
 
     return result as unknown as GenerateReturn<Z>;
   }
@@ -1349,7 +1384,16 @@ export class Agent<
         onFinish: async (result: any) => {
           try {
             const outputText = result.text;
-            await after({ result, thread, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+            await after({
+              result,
+              thread,
+              threadId,
+              memoryConfig: memoryOptions,
+              outputText,
+              runId: runIdToUse,
+              experimental_generateMessageId:
+                `experimental_generateMessageId` in rest ? rest.experimental_generateMessageId : undefined,
+            });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
               error: e,
@@ -1384,7 +1428,16 @@ export class Agent<
         onFinish: async (result: any) => {
           try {
             const outputText = result.text;
-            await after({ result, thread, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+            await after({
+              result,
+              thread,
+              threadId,
+              memoryConfig: memoryOptions,
+              outputText,
+              runId: runIdToUse,
+              experimental_generateMessageId:
+                `experimental_generateMessageId` in rest ? rest.experimental_generateMessageId : undefined,
+            });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
               error: e,
@@ -1418,7 +1471,16 @@ export class Agent<
       onFinish: async (result: any) => {
         try {
           const outputText = JSON.stringify(result.object);
-          await after({ result, thread, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+          await after({
+            result,
+            thread,
+            threadId,
+            memoryConfig: memoryOptions,
+            outputText,
+            runId: runIdToUse,
+            experimental_generateMessageId:
+              `experimental_generateMessageId` in rest ? rest.experimental_generateMessageId : undefined,
+          });
         } catch (e) {
           this.logger.error('Error saving memory on finish', {
             error: e,

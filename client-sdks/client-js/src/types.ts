@@ -48,11 +48,11 @@ export interface GetAgentResponse {
 
 export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[];
-} & Partial<AgentGenerateOptions<T>>;
+} & Partial<Omit<AgentGenerateOptions<T>, 'experimental_generateMessageId'>>;
 
 export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[];
-} & Omit<AgentStreamOptions<T>, 'onFinish' | 'onStepFinish' | 'telemetry'>;
+} & Omit<AgentStreamOptions<T>, 'onFinish' | 'onStepFinish' | 'telemetry' | 'experimental_generateMessageId'>;
 
 export interface GetEvalsByAgentIdResponse extends GetAgentResponse {
   evals: any[];
