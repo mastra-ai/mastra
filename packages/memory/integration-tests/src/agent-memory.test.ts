@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { weatherTool } from './mastra/tools/weather';
 import { z } from 'zod';
