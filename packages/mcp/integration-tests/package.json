@@ -9,16 +9,16 @@
   "dependencies": {
     "@ai-sdk/openai": "^1.3.0",
     "@ai-sdk/react": "^1.2.1",
-    "@mastra/client-js": "link:../../../client-sdks/client-js",
-    "@mastra/core": "link:../../../packages/core",
-    "@mastra/mcp": "link:../../../packages/mcp",
+    "@mastra/client-js": "workspace:*",
+    "@mastra/core": "workspace:*",
+    "@mastra/mcp": "workspace:*",
     "dotenv": "^16.5.0",
     "zod": "^3.24.4"
   },
   "devDependencies": {
     "@testing-library/react": "^16.2.0",
     "@types/node": "^20.17.27",
-    "mastra": "link:../../../packages/cli",
+    "mastra": "workspace:*",
     "typescript": "^5.8.2",
     "vitest": "^1.6.1"
   }
