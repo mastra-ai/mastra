@@ -139,7 +139,7 @@ export const CustomSearch: FC<SearchProps> = ({
   onUseAgent,
   closeModal,
 }) => {
-  const [isLoading, setIsLoading] = useState(true);
+  const [isSearchLoading, setIsSearchLoading] = useState(true);
   const [error, setError] = useState<ReactElement | string>("");
   const [results, setResults] = useState<PagefindResult[]>([]);
   const [search, setSearch] = useState("");
@@ -162,7 +162,7 @@ export const CustomSearch: FC<SearchProps> = ({
         setError("");
         return;
       }
-      setIsLoading(true);
+      setIsSearchLoading(true);
       // @ts-expect-error - allow
       if (!window.pagefind) {
         try {
@@ -176,7 +176,7 @@ export const CustomSearch: FC<SearchProps> = ({
                 : `${error.constructor.name}: ${error.message}`
               : String(error);
           setError(message);
-          setIsLoading(false);
+          setIsSearchLoading(false);
           return;
         }
       }
@@ -189,7 +189,7 @@ export const CustomSearch: FC<SearchProps> = ({
 
       // @ts-expect-error - allow
       const data = await Promise.all(response.results.map((o) => o.data()));
-      setIsLoading(false);
+      setIsSearchLoading(false);
       setError("");
       setResults(
         // @ts-expect-error - allow
@@ -239,8 +239,6 @@ export const CustomSearch: FC<SearchProps> = ({
   };
 
   const isSearchEmpty = !search || !results.length;
-
-  const isSearchLoading = isLoading;
 
   return (
     <Combobox onChange={handleSelect}>
@@ -293,7 +291,7 @@ export const CustomSearch: FC<SearchProps> = ({
               "x:motion-reduce:transition-none",
               // From https://headlessui.com/react/combobox#adding-transitions
               "x:origin-top x:transition x:duration-200 x:ease-out x:data-closed:scale-95 x:data-closed:opacity-0 x:empty:invisible",
-              error || isLoading
+              error || isSearchLoading
                 ? [
                     "x:md:min-h-28 x:grow x:flex x:justify-center x:text-sm x:gap-2 x:px-8",
                     error
@@ -313,7 +311,7 @@ export const CustomSearch: FC<SearchProps> = ({
                   {error}
                 </div>
               </>
-            ) : isLoading ? (
+            ) : isSearchLoading ? (
               <>
                 <SpinnerIcon
                   height="20"
