@@ -275,8 +275,8 @@ export const CustomSearch: FC<SearchProps> = ({
       </div>
       <div
         className={cn(
-          "relative max-h-[500px] overflow-hidden",
-          isSearchLoading || isSearchEmpty || !isFocused
+          "relative overflow-hidden",
+          isSearchLoading || isSearchEmpty
             ? "h-fit"
             : "h-[500px]",
         )}
@@ -319,7 +319,6 @@ export const CustomSearch: FC<SearchProps> = ({
                 />
               </>
             ) : results.length ? (
-              <div>
                 <div className="mt-3">
                   <div className="border-t-[0.5px] border-borders-1 pt-3">
                     <ComboboxOption
@@ -355,7 +354,6 @@ export const CustomSearch: FC<SearchProps> = ({
                     <Result key={searchResult.url} data={searchResult} />
                   ))}
                 </div>
-              </div>
             ) : (
               deferredSearch && emptyResult
             )}
