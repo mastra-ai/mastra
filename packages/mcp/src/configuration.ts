@@ -229,8 +229,6 @@ To fix this you have three different options:
       }),
     );
   }
-
-
 }
 
 /**
