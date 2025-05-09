@@ -13,7 +13,7 @@
     "@mastra/core": "workspace:*",
     "@mastra/mcp": "workspace:*",
     "dotenv": "^16.5.0",
-    "zod": "^3.24.4"
+    "zod": "^3.24.3"
   },
   "devDependencies": {
     "@testing-library/react": "^16.2.0",
