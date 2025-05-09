@@ -1,5 +1,13 @@
 # @mastra/pinecone
 
+## 0.2.13-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [daf942f]
+- Updated dependencies [0b8b868]
+  - @mastra/core@0.9.4-alpha.0
+
 ## 0.2.12
 
 ### Patch Changes
