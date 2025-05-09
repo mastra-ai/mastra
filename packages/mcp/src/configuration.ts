@@ -132,22 +132,11 @@ To fix this you have three different options:
     this.addToInstanceCache();
     const connectedResources: Record<string, Resource[]> = {};
 
-    await Promise.all(
-      Object.entries(this.serverConfigs).map(async ([serverName, serverConfig]) => {
-        try {
-          const client = await this.getConnectedClient(serverName, serverConfig);
-          const response = await client.resources();
-          // Ensure response has the expected structure
-          if (response && 'resources' in response && Array.isArray(response.resources)) {
-            connectedResources[serverName] = response.resources;
-          }
-        } catch (e) {
-          this.logger.error(`Error getting resources from server ${serverName}`, {
-            error: e instanceof Error ? e.message : String(e),
-          });
-        }
-      })
-    );
+    await this.eachClientResources(async ({ serverName, resources }) => {
+      if (resources && Array.isArray(resources)) {
+        connectedResources[serverName] = resources;
+      }
+    });
 
     return connectedResources;
   }
@@ -215,7 +204,7 @@ To fix this you have three different options:
   }
 
   private async eachClientTools(
-    cb: (input: {
+    cb: (args: {
       serverName: string;
       tools: Record<string, any>; // <- any because we don't have proper tool schemas
       client: InstanceType<typeof InternalMastraMCPClient>;
@@ -226,6 +215,35 @@ To fix this you have three different options:
         const client = await this.getConnectedClient(serverName, serverConfig);
         const tools = await client.tools();
         await cb({ serverName, tools, client });
+      }),
+    );
+  }
+
+  /**
+   * Helper method to iterate through each connected MCP client and retrieve resources
+   * @param cb Callback function to process resources from each server
+   */
+  private async eachClientResources(
+    cb: (args: {
+      serverName: string;
+      resources: Resource[];
+      client: InstanceType<typeof InternalMastraMCPClient>;
+    }) => Promise<void>,
+  ) {
+    await Promise.all(
+      Object.entries(this.serverConfigs).map(async ([serverName, serverConfig]) => {
+        try {
+          const client = await this.getConnectedClient(serverName, serverConfig);
+          const response = await client.resources();
+          // Ensure response has the expected structure
+          if (response && 'resources' in response && Array.isArray(response.resources)) {
+            await cb({ serverName, resources: response.resources, client });
+          }
+        } catch (e) {
+          this.logger.error(`Error getting resources from server ${serverName}`, {
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
       }),
     );
   }

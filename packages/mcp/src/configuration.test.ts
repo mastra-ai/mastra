@@ -104,7 +104,7 @@ describe('MCPClient', () => {
     
     // Verify that each expected resource exists with the correct structure
     const weatherResources = resources.weather;
-    const currentWeather = weatherResources.find((r: Resource) => r.uri === 'weather://current');
+    const currentWeather = weatherResources.find(r => r.uri === 'weather://current');
     expect(currentWeather).toBeDefined();
     expect(currentWeather).toMatchObject({
       uri: 'weather://current',
@@ -113,7 +113,7 @@ describe('MCPClient', () => {
       mimeType: 'application/json'
     });
     
-    const forecast = weatherResources.find((r: Resource) => r.uri === 'weather://forecast');
+    const forecast = weatherResources.find(r => r.uri === 'weather://forecast');
     expect(forecast).toBeDefined();
     expect(forecast).toMatchObject({
       uri: 'weather://forecast',
@@ -122,7 +122,7 @@ describe('MCPClient', () => {
       mimeType: 'application/json'
     });
     
-    const historical = weatherResources.find((r: Resource) => r.uri === 'weather://historical');
+    const historical = weatherResources.find(r => r.uri === 'weather://historical');
     expect(historical).toBeDefined();
     expect(historical).toMatchObject({
       uri: 'weather://historical',
