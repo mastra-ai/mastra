@@ -4,6 +4,7 @@ import color from 'picocolors';
 import { init } from '../init/init';
 import { interactivePrompt } from '../init/utils';
 import type { LLMProvider } from '../init/utils';
+import { getPackageManager } from '../utils.js';
 
 import { createMastraProject } from './utils';
 
@@ -54,10 +55,11 @@ export const create = async (args: {
 };
 
 const postCreate = ({ projectName }: { projectName: string }) => {
+  const packageManager = getPackageManager();
   p.outro(`
    ${color.green('To start your project:')}
 
     ${color.cyan('cd')} ${projectName}
-    ${color.cyan('npm run dev')}
+    ${color.cyan(`${packageManager} run dev`)}
   `);
 };
