@@ -1,6 +1,6 @@
 import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
 import { MCPServer } from '@mastra/mcp';
+import { z } from 'zod';
 
 export const myMcpServer = new MCPServer({
   name: 'My Calculation & Data MCP Server',
