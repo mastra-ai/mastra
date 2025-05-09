@@ -42,7 +42,7 @@ export function CustomChatInterface({
   setIsAgentMode: (isAgentMode: boolean) => void;
   searchQuery: string;
 }) {
-  const { visibleMessages, appendMessage, isLoading, reset } = useCopilotChat();
+  const { visibleMessages, appendMessage, isLoading } = useCopilotChat();
 
   const [inputValue, setInputValue] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
