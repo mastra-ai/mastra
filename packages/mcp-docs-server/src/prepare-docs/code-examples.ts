@@ -58,8 +58,9 @@ export async function prepareCodeExamples() {
       const totalLines = output.split('\n').length;
 
       // Skip if total lines would exceed 1000
-      if (totalLines > 1000) {
-        log(`Skipping ${dir.name}: ${totalLines} lines exceeds limit of 500`);
+      const limit = 1000;
+      if (totalLines > limit) {
+        log(`Skipping ${dir.name}: ${totalLines} lines exceeds limit of ${limit}`);
         continue;
       }
 
