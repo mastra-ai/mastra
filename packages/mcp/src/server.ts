@@ -267,7 +267,6 @@ export class MCPServer extends MCPServerBase {
       if (!sessionId) {
         return context.text('No sessionId provided', 400);
       }
-      console.log('SSE Transports:', this.sseHonoTransports?.keys());
       if (!this.sseHonoTransports?.has(sessionId)) {
         return context.text(`No transport found for sessionId ${sessionId}`, 400);
       }
@@ -378,6 +377,8 @@ export class MCPServer extends MCPServerBase {
     while (true) {
       // This will keep the connection alive
       // You can also await for a promise that never resolves
+      this.logger.debug('Active Hono SSE Transports:', this.sseHonoTransports?.keys());
+      stream.write(':keep-alive\n\n');
       await stream.sleep(60_000);
     }
   }
