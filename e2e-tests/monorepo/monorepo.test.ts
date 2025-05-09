@@ -60,6 +60,19 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       expect(res.status).toBe(200);
       expect(body).toEqual({ message: 'Hello, world!' });
     });
+    it('should resolve api ALL routes', async () => {
+      let res = await fetch(`http://localhost:${port}/all`);
+      let body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body).toEqual({ message: 'Hello, GET!' });
+
+      res = await fetch(`http://localhost:${port}/all`, {
+        method: 'POST',
+      });
+      body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body).toEqual({ message: 'Hello, POST!' });
+    });
   }
 
   describe('dev', async () => {
