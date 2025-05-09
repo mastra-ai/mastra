@@ -1,4 +1,4 @@
-import type { RuntimeContext } from '@mastra/core/runtime-context';
+import { RuntimeContext } from '@mastra/core/runtime-context';
 import type {
   ClientOptions,
   GetVNextWorkflowResponse,
@@ -156,9 +156,10 @@ export class VNextWorkflow extends BaseResource {
     inputData: Record<string, any>;
     runtimeContext?: RuntimeContext;
   }): Promise<{ message: string }> {
+    const runtimeContext = params.runtimeContext ? Object.fromEntries(params.runtimeContext.entries()) : undefined;
     return this.request(`/api/workflows/v-next/${this.workflowId}/start?runId=${params.runId}`, {
       method: 'POST',
-      body: { inputData: params?.inputData, runtimeContext: params.runtimeContext },
+      body: { inputData: params?.inputData, runtimeContext },
     });
   }
 
@@ -171,13 +172,14 @@ export class VNextWorkflow extends BaseResource {
     step,
     runId,
     resumeData,
-    runtimeContext,
+    ...rest
   }: {
     step: string | string[];
     runId: string;
     resumeData?: Record<string, any>;
     runtimeContext?: RuntimeContext;
   }): Promise<{ message: string }> {
+    const runtimeContext = rest.runtimeContext ? Object.fromEntries(rest.runtimeContext.entries()) : undefined;
     return this.request(`/api/workflows/v-next/${this.workflowId}/resume?runId=${runId}`, {
       method: 'POST',
       stream: true,
@@ -205,9 +207,10 @@ export class VNextWorkflow extends BaseResource {
       searchParams.set('runId', params.runId);
     }
 
+    const runtimeContext = params.runtimeContext ? Object.fromEntries(params.runtimeContext.entries()) : undefined;
     return this.request(`/api/workflows/v-next/${this.workflowId}/start-async?${searchParams.toString()}`, {
       method: 'POST',
-      body: { inputData: params.inputData, runtimeContext: params.runtimeContext },
+      body: { inputData: params.inputData, runtimeContext },
     });
   }
 
@@ -222,12 +225,13 @@ export class VNextWorkflow extends BaseResource {
     resumeData?: Record<string, any>;
     runtimeContext?: RuntimeContext;
   }): Promise<VNextWorkflowRunResult> {
+    const runtimeContext = params.runtimeContext ? Object.fromEntries(params.runtimeContext.entries()) : undefined;
     return this.request(`/api/workflows/v-next/${this.workflowId}/resume-async?runId=${params.runId}`, {
       method: 'POST',
       body: {
         step: params.step,
         resumeData: params.resumeData,
-        runtimeContext: params.runtimeContext,
+        runtimeContext,
       },
     });
   }

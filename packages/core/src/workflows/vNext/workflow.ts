@@ -52,7 +52,7 @@ export type StepFlowEntry =
 
 export type SerializedStep = Pick<Step, 'id' | 'description'> & {
   component?: string;
-  stepFlow?: SerializedStepFlowEntry[];
+  serializedStepFlow?: SerializedStepFlowEntry[];
 };
 
 export type SerializedStepFlowEntry =
@@ -368,6 +368,10 @@ export class NewWorkflow<
     this.#runs = new Map();
   }
 
+  get runs() {
+    return this.#runs;
+  }
+
   get mastra() {
     return this.#mastra;
   }
@@ -406,7 +410,7 @@ export class NewWorkflow<
         id: step.id,
         description: step.description,
         component: (step as SerializedStep).component,
-        stepFlow: (step as SerializedStep).stepFlow,
+        serializedStepFlow: (step as SerializedStep).serializedStepFlow,
       },
     });
     this.steps[step.id] = step;
@@ -450,7 +454,7 @@ export class NewWorkflow<
           id: mappingStep.id,
           description: mappingStep.description,
           component: (mappingStep as SerializedStep).component,
-          stepFlow: (mappingStep as SerializedStep).stepFlow,
+          serializedStepFlow: (mappingStep as SerializedStep).serializedStepFlow,
         },
       });
       return this as unknown as NewWorkflow<TSteps, TWorkflowId, TInput, TOutput, any>;
@@ -540,7 +544,7 @@ export class NewWorkflow<
         id: mappingStep.id,
         description: mappingStep.description,
         component: (mappingStep as SerializedStep).component,
-        stepFlow: (mappingStep as SerializedStep).stepFlow,
+        serializedStepFlow: (mappingStep as SerializedStep).serializedStepFlow,
       },
     });
     return this as unknown as NewWorkflow<TSteps, TWorkflowId, TInput, TOutput, MappedOutputSchema>;
@@ -557,7 +561,7 @@ export class NewWorkflow<
           id: step.id,
           description: step.description,
           component: (step as SerializedStep).component,
-          stepFlow: (step as SerializedStep).stepFlow,
+          serializedStepFlow: (step as SerializedStep).serializedStepFlow,
         },
       })),
     });
@@ -599,7 +603,7 @@ export class NewWorkflow<
           id: step.id,
           description: step.description,
           component: (step as SerializedStep).component,
-          stepFlow: (step as SerializedStep).stepFlow,
+          serializedStepFlow: (step as SerializedStep).serializedStepFlow,
         },
       })),
       serializedConditions: steps.map(([cond, _step]) => ({ id: `${_step.id}-condition`, fn: cond.toString() })),
@@ -647,7 +651,7 @@ export class NewWorkflow<
         id: step.id,
         description: step.description,
         component: (step as SerializedStep).component,
-        stepFlow: (step as SerializedStep).stepFlow,
+        serializedStepFlow: (step as SerializedStep).serializedStepFlow,
       },
       serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
       loopType: 'dowhile',
@@ -673,7 +677,7 @@ export class NewWorkflow<
         id: step.id,
         description: step.description,
         component: (step as SerializedStep).component,
-        stepFlow: (step as SerializedStep).stepFlow,
+        serializedStepFlow: (step as SerializedStep).serializedStepFlow,
       },
       serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
       loopType: 'dountil',
@@ -702,7 +706,7 @@ export class NewWorkflow<
         id: (step as SerializedStep).id,
         description: (step as SerializedStep).description,
         component: (step as SerializedStep).component,
-        stepFlow: (step as SerializedStep).stepFlow,
+        serializedStepFlow: (step as SerializedStep).serializedStepFlow,
       },
       opts: opts ?? { concurrency: 1 },
     });
@@ -745,6 +749,12 @@ export class NewWorkflow<
    * @returns A Run instance that can be used to execute the workflow
    */
   createRun(options?: { runId?: string }): Run<TSteps, TInput, TOutput> {
+    if (this.stepFlow.length === 0) {
+      throw new Error('Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.');
+    }
+    if (!this.executionGraph.steps) {
+      throw new Error('Uncommitted step flow changes detected. Call .commit() to register the steps.');
+    }
     const runIdToUse = options?.runId || randomUUID();
 
     // Return a new Run instance with object parameters
@@ -784,7 +794,7 @@ export class NewWorkflow<
       resumePayload: any;
       runId?: string;
     };
-    emitter: EventEmitter;
+    emitter: { emit: (event: string, data: any) => void };
     mastra: Mastra;
   }): Promise<z.infer<TOutput>> {
     this.__registerMastra(mastra);
@@ -936,7 +946,12 @@ export class Run<
       runId: this.runId,
       graph: this.executionGraph,
       input: inputData,
-      emitter: this.emitter,
+      emitter: {
+        emit: (event: string, data: any) => {
+          this.emitter.emit(event, data);
+          return Promise.resolve();
+        },
+      },
       retryConfig: this.retryConfig,
       runtimeContext: runtimeContext ?? new RuntimeContext(),
     });
@@ -1014,7 +1029,12 @@ export class Run<
         // @ts-ignore
         resumePath: snapshot?.suspendedPaths?.[steps?.[0]] as any,
       },
-      emitter: this.emitter,
+      emitter: {
+        emit: (event: string, data: any) => {
+          this.emitter.emit(event, data);
+          return Promise.resolve();
+        },
+      },
       runtimeContext: params.runtimeContext ?? new RuntimeContext(),
     });
   }

@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import { convertToCoreMessages } from 'ai';
-import type { CoreMessage, ToolExecutionOptions } from 'ai';
+import type { CoreMessage, LanguageModelV1 } from 'ai';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
 
@@ -9,9 +9,10 @@ import type { ToolsInput } from './agent';
 import type { Logger } from './logger';
 import type { Mastra } from './mastra';
 import type { AiMessageType, MastraMemory } from './memory';
-import { RuntimeContext } from './runtime-context';
+import type { RuntimeContext } from './runtime-context';
 import { Tool } from './tools';
 import type { CoreTool, ToolAction, VercelTool } from './tools';
+import { CoreToolBuilder } from './tools/tool-compatibility/builder';
 
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -200,91 +201,21 @@ export function isVercelTool(tool?: ToolToConvert): tool is VercelTool {
   return !!(tool && !(tool instanceof Tool) && 'parameters' in tool);
 }
 
-interface ToolOptions {
+export interface ToolOptions {
   name: string;
   runId?: string;
   threadId?: string;
   resourceId?: string;
-  logger: Logger;
+  logger?: Logger;
   description?: string;
   mastra?: (Mastra & MastraPrimitives) | MastraPrimitives;
   runtimeContext: RuntimeContext;
   memory?: MastraMemory;
   agentName?: string;
+  model?: LanguageModelV1;
 }
 
 type ToolToConvert = VercelTool | ToolAction<any, any, any>;
-
-interface LogOptions {
-  agentName?: string;
-  toolName: string;
-  type?: 'tool' | 'toolset' | 'client-tool';
-}
-
-interface LogMessageOptions {
-  start: string;
-  error: string;
-}
-
-function createLogMessageOptions({ agentName, toolName, type }: LogOptions): LogMessageOptions {
-  // If no agent name, use default format
-  if (!agentName) {
-    return {
-      start: `Executing tool ${toolName}`,
-      error: `Failed tool execution`,
-    };
-  }
-
-  const prefix = `[Agent:${agentName}]`;
-  const toolType = type === 'toolset' ? 'toolset' : 'tool';
-
-  return {
-    start: `${prefix} - Executing ${toolType} ${toolName}`,
-    error: `${prefix} - Failed ${toolType} execution`,
-  };
-}
-
-function createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'tool' | 'toolset' | 'client-tool') {
-  // dont't add memory or mastra to logging
-  const { logger, mastra: _mastra, memory: _memory, runtimeContext, ...rest } = options;
-
-  const { start, error } = createLogMessageOptions({
-    agentName: options.agentName,
-    toolName: options.name,
-    type: logType,
-  });
-
-  const execFunction = async (args: any, execOptions: ToolExecutionOptions) => {
-    if (isVercelTool(tool)) {
-      return tool?.execute?.(args, execOptions) ?? undefined;
-    }
-
-    return (
-      tool?.execute?.(
-        {
-          context: args,
-          threadId: options.threadId,
-          resourceId: options.resourceId,
-          mastra: options.mastra,
-          memory: options.memory,
-          runId: options.runId,
-          runtimeContext: runtimeContext ?? new RuntimeContext(),
-        },
-        execOptions,
-      ) ?? undefined
-    );
-  };
-
-  return async (args: any, execOptions?: any) => {
-    try {
-      logger.debug(start, { ...rest, args });
-      return await execFunction(args, execOptions);
-    } catch (err) {
-      logger.error(error, { ...rest, error: err, args });
-      throw err;
-    }
-  };
-}
 
 /**
  * Checks if a value is a Zod type
@@ -356,59 +287,19 @@ function convertVercelToolParameters(tool: VercelTool): z.ZodType {
   return isZodType(schema) ? schema : resolveSerializedZodOutput(jsonSchemaToZod(schema));
 }
 
-function convertInputSchema(tool: ToolAction<any, any, any>): z.ZodType {
-  const schema = tool.inputSchema ?? z.object({});
-  return isZodType(schema) ? schema : resolveSerializedZodOutput(jsonSchemaToZod(schema));
-}
-
 /**
  * Converts a Vercel Tool or Mastra Tool into a CoreTool format
- * @param tool - The tool to convert (either VercelTool or ToolAction)
+ * @param originalTool - The tool to convert (either VercelTool or ToolAction)
  * @param options - Tool options including Mastra-specific settings
  * @param logType - Type of tool to log (tool or toolset)
  * @returns A CoreTool that can be used by the system
  */
 export function makeCoreTool(
-  tool: ToolToConvert,
+  originalTool: ToolToConvert,
   options: ToolOptions,
   logType?: 'tool' | 'toolset' | 'client-tool',
 ): CoreTool {
-  // Helper to get parameters based on tool type
-  const getParameters = () => {
-    if (isVercelTool(tool)) {
-      return convertVercelToolParameters(tool);
-    }
-
-    return convertInputSchema(tool);
-  };
-
-  // Check if this is a provider-defined tool
-  const isProviderDefined =
-    'type' in tool &&
-    tool.type === 'provider-defined' &&
-    'id' in tool &&
-    typeof tool.id === 'string' &&
-    tool.id.includes('.');
-
-  // For provider-defined tools, we need to include all required properties
-  if (isProviderDefined) {
-    return {
-      type: 'provider-defined' as const,
-      id: tool.id as `${string}.${string}`,
-      args: ('args' in tool ? tool.args : {}) as Record<string, unknown>,
-      description: tool.description!,
-      parameters: getParameters(),
-      execute: tool.execute ? createExecute(tool, { ...options, description: tool.description }, logType) : undefined,
-    };
-  }
-
-  // For function tools
-  return {
-    type: 'function' as const,
-    description: tool.description!,
-    parameters: getParameters(),
-    execute: tool.execute ? createExecute(tool, { ...options, description: tool.description }, logType) : undefined,
-  };
+  return new CoreToolBuilder({ originalTool, options, logType }).build();
 }
 
 /**

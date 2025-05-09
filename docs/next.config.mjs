@@ -128,6 +128,18 @@ export default withGT(
       return {
         beforeFiles: [
           {
+            source: "/en/docs/api/copilotkit",
+            destination: "/api/copilotkit",
+          },
+          {
+            source: "/ja/docs/api/copilotkit",
+            destination: "/api/copilotkit",
+          },
+          {
+            source: "/docs/api/copilotkit",
+            destination: "/api/copilotkit",
+          },
+          {
             source: "/:locale/docs/_next/:path+",
             destination: "/_next/:path+",
           },

@@ -13,13 +13,14 @@ import { useTool } from '@/hooks/use-all-tools';
 import { useExecuteTool } from '@/hooks/use-execute-tool';
 
 import ToolExecutor from '../tool-executor';
-import { HeaderTitle, Header, Breadcrumb, Crumb } from '@mastra/playground-ui';
+import { HeaderTitle, Header, Breadcrumb, Crumb, usePlaygroundStore } from '@mastra/playground-ui';
 
 const Tool = () => {
   const { toolId } = useParams();
   const { executeTool, isExecuting } = useExecuteTool();
   const [result, setResult] = useState<any>(null);
   const { tool, isLoading } = useTool(toolId!);
+  const { runtimeContext: playgroundRuntimeContext } = usePlaygroundStore();
 
   const handleExecuteTool = async (data: any) => {
     if (!tool) return;
@@ -27,6 +28,7 @@ const Tool = () => {
     const result = await executeTool({
       toolId: tool.id,
       input: data,
+      runtimeContext: playgroundRuntimeContext,
     });
     setResult(result);
   };
