@@ -1,5 +1,5 @@
 {
-  "name": "@mastra/mcp-server-integration-tests",
+  "name": "mcp-server-integration-tests",
   "private": true,
   "version": "0.1.0",
   "scripts": {
