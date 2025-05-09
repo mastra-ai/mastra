@@ -278,7 +278,7 @@ export const CustomSearch: FC<SearchProps> = ({
       </div>
       <div
         className={cn(
-          "relative",
+          "relative max-h-[500px] overflow-hidden",
           isSearchLoading || isSearchEmpty ? "h-fit" : "h-[500px]",
         )}
       >
