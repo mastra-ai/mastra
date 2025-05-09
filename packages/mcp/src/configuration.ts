@@ -1,5 +1,6 @@
 import { MastraBase } from '@mastra/core/base';
 import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import type { Resource } from '@modelcontextprotocol/sdk/types.js';
 import equal from 'fast-deep-equal';
 import { v5 as uuidv5 } from 'uuid';
 import { InternalMastraMCPClient } from './client';
@@ -125,18 +126,21 @@ To fix this you have three different options:
 
   /**
    * Get all resources from connected MCP servers
-   * @returns A record of server names to their resource lists
+   * @returns A record of server names to their resources
    */
   public async getResources() {
     this.addToInstanceCache();
-    const connectedResources: Record<string, any> = {};
+    const connectedResources: Record<string, Resource[]> = {};
 
     await Promise.all(
       Object.entries(this.serverConfigs).map(async ([serverName, serverConfig]) => {
         try {
           const client = await this.getConnectedClient(serverName, serverConfig);
-          const resources = await client.resources();
-          connectedResources[serverName] = resources;
+          const response = await client.resources();
+          // Ensure response has the expected structure
+          if (response && 'resources' in response && Array.isArray(response.resources)) {
+            connectedResources[serverName] = response.resources;
+          }
         } catch (e) {
           this.logger.error(`Error getting resources from server ${serverName}`, {
             error: e instanceof Error ? e.message : String(e),

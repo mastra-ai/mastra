@@ -2,6 +2,7 @@ import { spawn } from 'child_process';
 import path from 'path';
 import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll, vi } from 'vitest';
 import { MCPClient } from './configuration';
+import { Resource } from '@modelcontextprotocol/sdk/types.js';
 
 vi.setConfig({ testTimeout: 80000, hookTimeout: 80000 });
 
@@ -98,14 +99,37 @@ describe('MCPClient', () => {
     const resources = await mcp.getResources();
     
     expect(resources).toHaveProperty('weather');
-    expect(resources.weather.resources).toBeDefined();
-    expect(resources.weather.resources).toHaveLength(3);
+    expect(resources.weather).toBeDefined();
+    expect(resources.weather).toHaveLength(3);
     
-    const weatherResources = resources.weather.resources;
-    const resourceUris = weatherResources.map((r: any) => r.uri);
-    expect(resourceUris).toContain('weather://current');
-    expect(resourceUris).toContain('weather://forecast');
-    expect(resourceUris).toContain('weather://historical');
+    // Verify that each expected resource exists with the correct structure
+    const weatherResources = resources.weather;
+    const currentWeather = weatherResources.find((r: Resource) => r.uri === 'weather://current');
+    expect(currentWeather).toBeDefined();
+    expect(currentWeather).toMatchObject({
+      uri: 'weather://current',
+      name: 'Current Weather Data',
+      description: expect.any(String),
+      mimeType: 'application/json'
+    });
+    
+    const forecast = weatherResources.find((r: Resource) => r.uri === 'weather://forecast');
+    expect(forecast).toBeDefined();
+    expect(forecast).toMatchObject({
+      uri: 'weather://forecast',
+      name: 'Weather Forecast',
+      description: expect.any(String),
+      mimeType: 'application/json'
+    });
+    
+    const historical = weatherResources.find((r: Resource) => r.uri === 'weather://historical');
+    expect(historical).toBeDefined();
+    expect(historical).toMatchObject({
+      uri: 'weather://historical',
+      name: 'Historical Weather Data',
+      description: expect.any(String),
+      mimeType: 'application/json'
+    });
   });
   
   it('should handle errors when getting resources', async () => {
@@ -126,8 +150,8 @@ describe('MCPClient', () => {
       const resources = await errorClient.getResources();
       
       expect(resources).toHaveProperty('weather');
-      expect(resources.weather.resources).toBeDefined();
-      expect(resources.weather.resources.length).toBeGreaterThan(0);
+      expect(resources.weather).toBeDefined();
+      expect(resources.weather.length).toBeGreaterThan(0);
       
       expect(resources).not.toHaveProperty('nonexistentServer');
     } finally {
