@@ -224,7 +224,7 @@ export async function startVNextWorkflowRunHandler({
     ]);
 
     const _run = workflow.createRun({ runId });
-    await _run.start({
+    void _run.start({
       inputData,
       runtimeContext: finalRuntimeContext,
     });
@@ -372,7 +372,7 @@ export async function resumeVNextWorkflowHandler({
 
     const _run = workflow.createRun({ runId });
 
-    await _run.resume({
+    void _run.resume({
       step: body.step,
       resumeData: body.resumeData,
       runtimeContext,

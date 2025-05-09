@@ -12,8 +12,8 @@ export const mastra = new Mastra({
   vnext_workflows: {
     vnext_logCatWorkflow,
   },
-  logger: createLogger({
-    name: 'Mastra',
-    level: 'debug',
-  }),
+  // logger: createLogger({
+  //   name: 'Mastra',
+  //   level: 'debug',
+  // }),
 });
