@@ -15,6 +15,7 @@ export interface AgentTracesProps {
 }
 
 export function AgentTraces({ className, traces, isLoading, error }: AgentTracesProps) {
+  console.log({ traces });
   return <AgentTracesInner className={className} traces={traces} isLoading={isLoading} error={error} />;
 }
 
