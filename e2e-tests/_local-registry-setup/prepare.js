@@ -61,12 +61,12 @@ export async function prepareMonorepo(monorepoDir, glob) {
 
     execSync('pnpm changeset pre exit', {
       cwd: monorepoDir,
-      stdio: ['inherit', 'inherit', 'pipe'],
+      stdio: ['inherit', 'inherit', 'inherit'],
     });
 
     execSync('pnpm changeset version --snapshot create-mastra-e2e-test', {
       cwd: monorepoDir,
-      stdio: ['inherit', 'inherit', 'pipe'],
+      stdio: ['inherit', 'inherit', 'inherit'],
     });
   } catch (error) {
     cleanup(monorepoDir, false);
