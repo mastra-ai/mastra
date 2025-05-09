@@ -153,7 +153,7 @@ export const SubscribeForm = ({
                   placeholder={placeholder || "you@example.com"}
                   {...field}
                   className={cn(
-                    "bg-transparent placeholder:text-text-[#939393] text-sm placeholder:text-sm flex-1 focus:outline-none focus:ring-1 h-[35px] focus:ring-[hsl(var(--tag-green))] w-full py-[0.56rem] px-4 dark:border-[#343434] border rounded-md",
+                    "bg-transparent placeholder:text-text-[#939393] text-sm placeholder:text-sm flex-1 focus:outline-none focus:ring-1 h-[35px] focus:ring-[hsl(var(--tag-green))] w-full py-[0.56rem] px-4 dark:border-[#343434] border border-[var(--light-border-muted)] rounded-md",
                     inputClassName,
                   )}
                 />
@@ -170,7 +170,7 @@ export const SubscribeForm = ({
 
         <button
           className={cn(
-            "dark:bg-[#121212] bg-[#2a2a2a] w-full rounded-md hover:opacity-90 h-[32px] justify-center flex items-center px-4 text-white dark:text-white text-[14px]",
+            "dark:bg-[#121212] bg-[var(--light-color-surface-3)] w-full rounded-md hover:opacity-90 h-[32px] justify-center flex items-center px-4 text-[var(--light-color-text-5)] dark:text-white text-[14px]",
             buttonClassName,
           )}
           onClick={(e) => {
