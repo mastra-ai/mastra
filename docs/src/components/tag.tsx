@@ -1,7 +1,6 @@
 "use client";
 import { cn } from "@/lib/utils";
-import { useTheme } from "nextra-theme-docs";
-import { useEffect, useState } from "react";
+import { useThemeDetector } from "@/hooks/use-theme-detector";
 
 type TagProps = {
   children: React.ReactNode;
@@ -17,29 +16,7 @@ type TagProps = {
 );
 
 export const Tag = ({ children, text = "new", showAbbr }: TagProps) => {
-  const [isDark, setIsDark] = useState(false);
-
-  useEffect(() => {
-    // Initial check
-    setIsDark(document.documentElement.classList.contains("dark"));
-
-    // Create observer to watch for class changes
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.attributeName === "class") {
-          setIsDark(document.documentElement.classList.contains("dark"));
-        }
-      });
-    });
-
-    // Start observing
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["class"],
-    });
-
-    return () => observer.disconnect();
-  }, []);
+  const isDark = useThemeDetector();
 
   // Set default showAbbr based on text type
   const defaultShowAbbr =
