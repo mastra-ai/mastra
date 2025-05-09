@@ -94,6 +94,70 @@ describe('MCPClient', () => {
     expect(connectedToolsets.weather).toHaveProperty('getWeather');
   });
 
+  it('should get resources from connected MCP servers', async () => {
+    const resources = await mcp.getResources();
+
+    expect(resources).toHaveProperty('weather');
+    expect(resources.weather).toBeDefined();
+    expect(resources.weather).toHaveLength(3);
+
+    // Verify that each expected resource exists with the correct structure
+    const weatherResources = resources.weather;
+    const currentWeather = weatherResources.find(r => r.uri === 'weather://current');
+    expect(currentWeather).toBeDefined();
+    expect(currentWeather).toMatchObject({
+      uri: 'weather://current',
+      name: 'Current Weather Data',
+      description: expect.any(String),
+      mimeType: 'application/json',
+    });
+
+    const forecast = weatherResources.find(r => r.uri === 'weather://forecast');
+    expect(forecast).toBeDefined();
+    expect(forecast).toMatchObject({
+      uri: 'weather://forecast',
+      name: 'Weather Forecast',
+      description: expect.any(String),
+      mimeType: 'application/json',
+    });
+
+    const historical = weatherResources.find(r => r.uri === 'weather://historical');
+    expect(historical).toBeDefined();
+    expect(historical).toMatchObject({
+      uri: 'weather://historical',
+      name: 'Historical Weather Data',
+      description: expect.any(String),
+      mimeType: 'application/json',
+    });
+  });
+
+  it('should handle errors when getting resources', async () => {
+    const errorClient = new MCPClient({
+      id: 'error-test-client',
+      servers: {
+        weather: {
+          url: new URL('http://localhost:60808/sse'),
+        },
+        nonexistentServer: {
+          command: 'nonexistent-command',
+          args: [],
+        },
+      },
+    });
+
+    try {
+      const resources = await errorClient.getResources();
+
+      expect(resources).toHaveProperty('weather');
+      expect(resources.weather).toBeDefined();
+      expect(resources.weather.length).toBeGreaterThan(0);
+
+      expect(resources).not.toHaveProperty('nonexistentServer');
+    } finally {
+      await errorClient.disconnect();
+    }
+  });
+
   it('should handle connection errors gracefully', async () => {
     const badConfig = new MCPClient({
       servers: {
