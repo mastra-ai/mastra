@@ -924,6 +924,7 @@ export class Workflow<
       onStepTransition: this.#onStepTransition,
       resultMapping: this.resultMapping,
       onFinish: () => {
+        console.log('workflow finished and run deleted for run=', run.runId);
         this.#runs.delete(run.runId);
       },
       events,
@@ -946,14 +947,25 @@ export class Workflow<
    * @returns The workflow run instance if found, undefined otherwise
    */
   async getRun(runId: string) {
+    const inMemoryRun = this.#runs.get(runId);
+    if (inMemoryRun) {
+      return inMemoryRun;
+    }
     const storage = this.#mastra?.getStorage();
     if (!storage) {
       this.logger.debug('Cannot get workflow run. Mastra engine is not initialized');
       return null;
     }
-    const run = await storage.getWorkflowRunById({ runId, workflowName: this.name });
+    return await storage.getWorkflowRunById({ runId, workflowName: this.name });
+  }
 
-    return run ?? this.#runs.get(runId);
+  /**
+   * Gets a workflow run instance by ID, from memory
+   * @param runId - ID of the run to retrieve
+   * @returns The workflow run instance if found, undefined otherwise
+   */
+  async getMemoryRun(runId: string) {
+    return this.#runs.get(runId);
   }
 
   /**

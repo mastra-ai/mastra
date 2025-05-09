@@ -196,6 +196,7 @@ export class Workflow extends BaseResource {
               if (typeof chunk === 'string') {
                 try {
                   const parsedChunk = JSON.parse(chunk);
+                  console.log('parsedChunk==', parsedChunk);
                   yield parsedChunk;
                 } catch {
                   // Silently ignore parsing errors to maintain stream processing
@@ -245,6 +246,7 @@ export class Workflow extends BaseResource {
     }
 
     for await (const record of this.streamProcessor(response.body)) {
+      console.log('record==', record);
       onRecord(record);
     }
   }
