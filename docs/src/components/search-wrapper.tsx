@@ -8,7 +8,6 @@ import {
 import { useEffect, useState } from "react";
 import { CustomSearch } from "./custom-search";
 import { getSearchPlaceholder } from "./search-placeholder";
-import { JarvisIcon } from "./svgs/Icons";
 import { Button } from "./ui/button";
 
 const INPUTS = new Set(["INPUT", "SELECT", "BUTTON", "TEXTAREA"]);
@@ -16,7 +15,7 @@ const INPUTS = new Set(["INPUT", "SELECT", "BUTTON", "TEXTAREA"]);
 export const SearchWrapper = ({ locale }: { locale: string }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isAgentMode, setIsAgentMode] = useState(false);
-  const [isSearching, setIsSearching] = useState(false);
+  const [,setIsSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
@@ -78,7 +77,7 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
         as="div"
         className="relative z-1000 focus:outline-none"
         onClose={close}
-        id="search-modal"
+        unmount={false}
       >
         <DialogBackdrop className="fixed inset-0 delay-[0ms] duration-300 ease-out bg-black/50 backdrop-blur-md" />
         <div className="fixed inset-0 z-10 w-screen overflow-y-auto">
@@ -101,30 +100,11 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
                     <CustomSearch
                       placeholder={getSearchPlaceholder(locale)}
                       isAgentMode={isAgentMode}
+                      setIsAgentMode={setIsAgentMode}
                       setIsSearching={setIsSearching}
                       onUseAgent={handleUseAgent}
                       closeModal={close}
                     />
-                    {!isSearching && (
-                      <>
-                        <hr className="w-full my-2 text-borders-1" />
-                        <Button
-                          className="w-full flex items-center font-medium justify-between gap-2 cursor-pointer text-base h-10 pl-4 pr-3 bg-surface-5 text-accent-green bg-[url('/image/bloom-2.png')] bg-cover bg-right"
-                          variant="ghost"
-                          onClick={() => setIsAgentMode(true)}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="">
-                              <JarvisIcon className="w-full h-full" />
-                            </span>
-                            <span>Ask Docs Agent</span>
-                          </div>
-                          <span className="flex items-center h-8 px-3 text-sm font-medium rounded-sm bg-tag-green-2 text-accent-green justify-self-end">
-                            experimental
-                          </span>
-                        </Button>
-                      </>
-                    )}
                   </div>
                 )}
               </div>

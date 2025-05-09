@@ -12,13 +12,13 @@ import { addBasePath } from "next/dist/client/add-base-path";
 import { useRouter } from "next/navigation";
 import type {
   FC,
-  FocusEventHandler,
+  KeyboardEventHandler,
   ReactElement,
   ReactNode,
   SyntheticEvent,
 } from "react";
 import { useDeferredValue, useEffect, useRef, useState } from "react";
-import { JarvisIcon } from "./svgs/Icons";
+import { BookIcon, BurgerIcon, JarvisIcon } from "./svgs/Icons";
 import { InformationIcon } from "./svgs/information-icon";
 import { SpinnerIcon } from "./svgs/spinner";
 import { Button } from "./ui/button";
@@ -101,6 +101,7 @@ type SearchProps = {
   isAgentMode?: boolean;
   setIsSearching?: (isSearching: boolean) => void;
   onUseAgent: ({ searchQuery }: { searchQuery: string }) => void;
+  setIsAgentMode: (isAgentMode: boolean) => void;
   closeModal: () => void;
 };
 
@@ -207,13 +208,7 @@ export const CustomSearch: FC<SearchProps> = ({
   }, [deferredSearch]); // eslint-disable-line react-hooks/exhaustive-deps -- ignore searchOptions
 
   const router = useRouter();
-  const [, setFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null!);
-
-  const handleFocus: FocusEventHandler = (event) => {
-    const isFocus = event.type === "focus";
-    setFocused(isFocus);
-  };
 
   const handleChange = (event: SyntheticEvent<HTMLInputElement>) => {
     const { value } = event.currentTarget;
@@ -237,6 +232,12 @@ export const CustomSearch: FC<SearchProps> = ({
     setSearch("");
   };
 
+  const handleKeyDown: KeyboardEventHandler<HTMLInputElement> = (event) => {
+    if (event.key === "Enter") {
+      onUseAgent({ searchQuery: `Tell me about ${search}` });
+    }
+  };
+
   const isSearchEmpty = !search || !results.length;
 
   return (
@@ -244,7 +245,7 @@ export const CustomSearch: FC<SearchProps> = ({
       <div
         className={cn(
           className,
-          "w-full p-4 py-2 flex items-center gap-[14px]",
+          "w-full p-4 py-5 flex items-center gap-[14px]",
         )}
       >
         <span className="relative" onClick={() => inputRef.current.focus()}>
@@ -262,18 +263,11 @@ export const CustomSearch: FC<SearchProps> = ({
           autoComplete="off"
           type="search"
           onChange={handleChange}
-          onFocus={handleFocus}
-          onBlur={handleFocus}
           value={search}
+          onKeyDown={handleKeyDown}
           placeholder={placeholder}
           autoFocus
         />
-        {!!search && (
-          <AgentBadge
-            title="Ask Magent"
-            onClick={() => onUseAgent({ searchQuery: search })}
-          />
-        )}
       </div>
       <div
         className={cn(
@@ -319,13 +313,53 @@ export const CustomSearch: FC<SearchProps> = ({
                 {loading}
               </>
             ) : results.length ? (
-              results.map((searchResult) => (
-                <Result
-                  key={searchResult.url}
-                  data={searchResult}
-                  closeModal={closeModal}
-                />
-              ))
+              <div>
+                <div className="mt-3">
+                  <div className="border-t-[0.5px] border-borders-1 pt-3">
+                  <ComboboxOption
+                    className={({ focus }) =>
+                      cn(
+                        "w-full flex items-center font-medium justify-between gap-2 cursor-pointer text-base rounded-md px-4 py-2 bg-[url('/image/bloom-2.png')] bg-cover mb-2 bg-right",
+                        focus ? "bg-surface-5" : "bg-surface-4",
+                      )
+                    }
+                    value="ai"
+                    onClick={() => {
+                      closeModal();
+                      onUseAgent({
+                        searchQuery: `Tell me about ${search}`,
+                      });
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-accent-green shrink-0">
+                        <JarvisIcon className="w-6 h-6 shrink-0" />
+                      </span>
+                      <span className="flex flex-col text-lg font-medium text-left text-icons-5">
+                        <span>
+                          Tell me about{" "}
+                          <span className="text-accent-green">{search}</span>
+                        </span>
+                        <span className="text-icons-3 text-[15px] text-left font-normal">
+                          Use AI to answer your question
+                        </span>
+                      </span>
+                    </div>
+                    <span className="flex items-center h-8 px-3 text-sm font-medium rounded-sm bg-tag-green-2 text-accent-green justify-self-end">
+                      experimental
+                    </span>
+                  </ComboboxOption>
+
+                  </div>
+                  {results.map((searchResult) => (
+                    <Result
+                      key={searchResult.url}
+                      data={searchResult}
+                      closeModal={closeModal}
+                    />
+                  ))}
+                </div>
+              </div>
             ) : (
               deferredSearch && emptyResult
             )}
@@ -336,76 +370,43 @@ export const CustomSearch: FC<SearchProps> = ({
   );
 };
 
-const Result: FC<{ data: PagefindResult; closeModal: () => void }> = ({
-  data,
-  closeModal,
-}) => {
+const Result: FC<{
+  data: PagefindResult;
+  closeModal: () => void;
+}> = ({ data, closeModal }) => {
   const router = useRouter();
   return (
     <>
-      <div
-        className={cn(
-          "x:mx-2.5 x:mb-2 x:not-first:mt-6 x:select-none x:border-b x:border-black/10 x:px-2.5 x:pb-1.5 x:text-xs x:font-semibold x:uppercase x:text-gray-600 x:dark:border-white/20 x:dark:text-gray-300",
-          "x:contrast-more:border-gray-600 x:contrast-more:text-gray-900 x:contrast-more:dark:border-gray-50 x:contrast-more:dark:text-gray-50",
-        )}
-      >
-        {data.meta.title}
-      </div>
       {data.sub_results.map((subResult) => (
         <ComboboxOption
           key={subResult.url}
-          // as={NextLink}
           value={subResult}
-          // href={subResult.url}
           onClick={() => {
             closeModal();
             router.push(subResult.url);
           }}
           className={({ focus }) =>
             cn(
-              "x:mx-2.5 x:break-words x:rounded-md",
-              "x:contrast-more:border",
-              focus
-                ? "x:text-primary-600 x:contrast-more:border-current x:bg-primary-500/10"
-                : "x:text-gray-800 x:dark:text-gray-300 x:contrast-more:border-transparent",
-              "x:block x:scroll-m-12 x:px-2.5 x:py-2",
+              "flex flex-col gap-3 p-4 rounded-md cursor-pointer",
+              focus ? "bg-surface-5" : "bg-surface-4",
             )
           }
         >
-          <div className="x:text-base x:font-semibold x:leading-5">
-            {subResult.title}
+          <div className="flex gap-[14px] items-center">
+            <BookIcon className="w-5 h-5 text-icons-3" />
+            <span className="text-lg font-medium text-icons-6">
+              {subResult.title}
+            </span>
           </div>
-          <div
-            className={cn(
-              "x:mt-1 x:text-sm x:leading-[1.35rem] x:text-gray-600 x:dark:text-gray-400 x:contrast-more:dark:text-gray-50",
-              "x:[&_mark]:bg-primary-600/80 x:[&_mark]:text-white",
-            )}
-            dangerouslySetInnerHTML={{ __html: subResult.excerpt }}
-          />
+          <div className="ml-2 flex items-center gap-[14px] truncate border-l-2 border-borders-2 pl-4">
+            <BurgerIcon className="w-4 h-4 shrink-0 text-icons-3" />
+            <div
+              className="text-lg font-normal text-icons-3 [&_mark]:text-accent-green [&_mark]:bg-transparent"
+              dangerouslySetInnerHTML={{ __html: subResult.excerpt }}
+            />
+          </div>
         </ComboboxOption>
       ))}
     </>
   );
 };
-
-function AgentBadge({
-  title,
-  onClick,
-}: {
-  title: string;
-  onClick: () => void;
-}) {
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="flex items-center gap-2 px-2 py-1 text-xs font-medium rounded-sm cursor-pointer bg-surface-5 text-accent-green whitespace-nowrap"
-      onClick={onClick}
-    >
-      <span className="relative w-3 h-3">
-        <JarvisIcon className="w-full h-full" />
-      </span>
-      <span className="">{title}</span>
-    </Button>
-  );
-}
