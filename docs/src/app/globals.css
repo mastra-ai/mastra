@@ -188,7 +188,7 @@ nav:nth-child(2) {
   }
 
   &:is(html[class~="dark"] *) {
-    border: 0.5px solidvar(--border);
+    border: 0.5px solid var(--border);
   }
 }
 
