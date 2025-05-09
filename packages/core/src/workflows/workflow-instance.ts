@@ -34,7 +34,9 @@ export interface WorkflowResultReturn<
     props?: { triggerData?: z.infer<T>; runtimeContext?: RuntimeContext } | undefined,
   ) => Promise<WorkflowRunResult<T, TSteps, TResult>>;
   watch: (
-    onTransition: (state: Pick<WorkflowRunResult<T, TSteps, TResult>, 'results' | 'activePaths' | 'runId'>) => void,
+    onTransition: (
+      state: Pick<WorkflowRunResult<T, TSteps, TResult>, 'results' | 'activePaths' | 'runId' | 'timestamp'>,
+    ) => void,
   ) => () => void;
   resume: (props: {
     stepId: string;
