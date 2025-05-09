@@ -28,6 +28,7 @@
   --light-color-surface-2: #f2f2f2;
   --light-color-surface-3: #ededed;
   --light-color-surface-4: #ebebeb;
+  --light-color-surface-5: hsla(0, 0%, 88%, 0.9);
   --light-color-text-6: #0a0a0a;
   --light-color-text-5: #141414;
   --light-color-text-4: #5f5f5f;
@@ -188,7 +189,8 @@ nav:nth-child(2) {
   }
 
   &:is(html[class~="dark"] *) {
-    border: 0.5px solid var(--border);
+    color: white;
+    border-bottom: 0.5px solid var(--border);
   }
 }
 
@@ -374,10 +376,15 @@ button[title="Copy code"] {
   border: none;
 }
 
-/* .nextra-code span {
-  color: var(--color-primary);
-} */
+pre code.nextra-code:not([class*="twoslash-"]) > span[data-highlighted-line]{
+  --bg-color: var(--light-color-surface-5);
+  background-color: color-mix(in oklab, var(--bg-color) 90%, transparent);
 
+  &:is(html[class~="dark"] *) {
+   background-color: var(--color-surface-5);
+  }
+  
+}
 main h3:has(+ div.nextra-code) {
   display: none;
 }
