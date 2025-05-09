@@ -127,3 +127,64 @@ curl -X POST http://localhost:4111/api/agents/myAgent/generate \
     ]
   }'
 ```
+
+## Advanced usage
+
+The `mastra dev` server obeys a few extra environment variables that can
+be handy during development:
+
+### Disable build caching
+
+Set `MASTRA_DEV_NO_CACHE=1` to force a full rebuild rather than using
+the cached assets under `.mastra/`:
+
+```bash
+MASTRA_DEV_NO_CACHE=1 mastra dev
+```
+
+This helps when you are debugging bundler plugins or suspect stale
+output.
+
+### Limit parallelism
+
+`MASTRA_CONCURRENCY` caps how many expensive operations run in parallel
+(primarily build and evaluation steps). For example:
+
+```bash
+MASTRA_CONCURRENCY=4 mastra dev
+```
+
+Leave it unset to let the CLI pick a sensible default for the machine.
+
+### Custom provider endpoints
+
+When using providers supported by the Vercel AI SDK you can redirect
+requests through proxies or internal gateways by setting a base URL. For
+OpenAI:
+
+```bash
+OPENAI_API_KEY=sk-this_key \
+OPENAI_BASE_URL=https://openrouter.example/v1 \
+mastra dev
+```
+
+and for Anthropic:
+
+```bash
+ANTHROPIC_API_KEY=sk-anthropic42 \
+ANTHROPIC_BASE_URL=https://anthropic.internal \
+mastra dev
+```
+
+These are forwarded by the AI SDK and work with any `openai()` or
+`anthropic()` calls.
+
+### Disable telemetry
+
+To opt out of anonymous CLI analytics set
+`MASTRA_TELEMETRY_DISABLED=1`. This also prevents tracking within the
+local playground.
+
+```bash
+MASTRA_TELEMETRY_DISABLED=1 mastra dev
+```

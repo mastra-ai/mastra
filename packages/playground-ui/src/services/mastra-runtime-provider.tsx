@@ -7,6 +7,7 @@ import {
   AssistantRuntimeProvider,
 } from '@assistant-ui/react';
 import { useState, ReactNode, useEffect } from 'react';
+import { RuntimeContext } from '@mastra/core/di';
 
 import { ChatProps } from '@/types';
 import { createMastraClient } from '@/lib/mastra-client';
@@ -26,6 +27,7 @@ export function MastraRuntimeProvider({
   refreshThreadList,
   modelSettings = {},
   chatWithGenerate,
+  runtimeContext,
 }: Readonly<{
   children: ReactNode;
 }> &
@@ -36,6 +38,11 @@ export function MastraRuntimeProvider({
 
   const { frequencyPenalty, presencePenalty, maxRetries, maxSteps, maxTokens, temperature, topK, topP, instructions } =
     modelSettings;
+
+  const runtimeContextInstance = new RuntimeContext();
+  Object.entries(runtimeContext ?? {}).forEach(([key, value]) => {
+    runtimeContextInstance.set(key, value);
+  });
 
   useEffect(() => {
     const hasNewInitialMessages = initialMessages && initialMessages?.length > messages?.length;
@@ -100,6 +107,7 @@ export function MastraRuntimeProvider({
           topK,
           topP,
           instructions,
+          runtimeContext: runtimeContextInstance,
           ...(memory ? { threadId, resourceId: agentId } : {}),
         });
         if (generateResponse.response) {
@@ -204,6 +212,7 @@ export function MastraRuntimeProvider({
           topK,
           topP,
           instructions,
+          runtimeContext: runtimeContextInstance,
           ...(memory ? { threadId, resourceId: agentId } : {}),
         });
 
