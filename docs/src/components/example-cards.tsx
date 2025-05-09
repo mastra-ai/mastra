@@ -1,7 +1,7 @@
 "use client";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent } from "./ui/card";
 
@@ -27,7 +27,7 @@ export function CardItem({
   );
 }
 
-export function CardItems({
+function CardItemsInner({
   titles,
   items,
 }: {
@@ -76,6 +76,17 @@ export function CardItems({
         <CardItem links={items[activeTab] || []} />
       </div>
     </div>
+  );
+}
+
+export function CardItems(props: {
+  titles: string[];
+  items: Record<string, Array<{ title: string; href: string }>>;
+}) {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <CardItemsInner {...props} />
+    </Suspense>
   );
 }
 
