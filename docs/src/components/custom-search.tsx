@@ -216,6 +216,7 @@ export const CustomSearch: FC<SearchProps> = ({
     if (!searchResult) return;
     if (searchResult.url === "use-ai") {
       onUseAgent({ searchQuery: `Tell me about ${search}` });
+      setSearch("");
       return;
     }
     // Calling before navigation so selector `html:not(:has(*:focus))` in styles.css will work,
@@ -283,7 +284,7 @@ export const CustomSearch: FC<SearchProps> = ({
             transition
             static
             modal={false}
-            unmount={false}
+            unmount={true}
             className={cn(
               "x:motion-reduce:transition-none",
               // From https://headlessui.com/react/combobox#adding-transitions

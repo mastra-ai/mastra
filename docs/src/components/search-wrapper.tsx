@@ -52,6 +52,7 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
 
   function close() {
     setIsOpen(false);
+    setIsAgentMode(false);
   }
 
   function handleUseAgent({ searchQuery }: { searchQuery: string }) {
@@ -77,7 +78,7 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
         as="div"
         className="relative z-1000 focus:outline-none"
         onClose={close}
-        unmount={false}
+        unmount={true}
       >
         <DialogBackdrop className="fixed inset-0 delay-[0ms] duration-300 ease-out bg-black/50 backdrop-blur-md" />
         <div className="fixed inset-0 z-10 w-screen overflow-y-auto">
