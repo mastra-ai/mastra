@@ -58,7 +58,7 @@
     "setup": "pnpm install --ignore-scripts && pnpm run build:cli && pnpm install --shamefully-hoist"
   },
   "lint-staged": {
-    "*.{js,ts,tsx,md,json,graphql,gql}": [
+    "*.{js,mjs,ts,tsx,md,mdx,json,graphql,gql}": [
       "prettier --write"
     ]
   },
