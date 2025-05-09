@@ -68,5 +68,13 @@
     "@mastra/voice-speechify": "0.1.17",
     "@mastra/inngest": "0.0.2"
   },
-  "changesets": []
+  "changesets": [
+    "@mastra_dane-4054-dependencies",
+    "@mastra_dane-4173-dependencies",
+    "@mastra_fastembed-4054-dependencies",
+    "evil-oranges-cut",
+    "tame-camels-fry",
+    "thick-cobras-listen",
+    "tired-poets-look"
+  ]
 }

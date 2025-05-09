@@ -11,8 +11,8 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@ai-sdk/anthropic": "^1.2.10",
-    "@ai-sdk/fireworks": "^0.2.13",
+    "@ai-sdk/anthropic": "^1.2.11",
+    "@ai-sdk/fireworks": "^0.2.14",
     "@mastra/core": "latest",
     "@mastra/mcp": "latest",
     "@mastra/memory": "latest",

@@ -234,8 +234,8 @@ importers:
   examples/dane:
     dependencies:
       '@ai-sdk/anthropic':
-        specifier: ^1.2.10
-        version: 1.2.10(zod@3.24.4)
+        specifier: ^1.2.11
+        version: 1.2.11(zod@3.24.4)
       '@inquirer/prompts':
         specifier: ^7.3.3
         version: 7.4.0(@types/node@20.17.32)
@@ -3326,7 +3326,7 @@ importers:
         version: 3.24.3
     devDependencies:
       '@ai-sdk/openai':
-        specifier: ^1.3.21
+        specifier: ^1.3.22
         version: 1.3.22(zod@3.24.3)
       '@hono/node-server':
         specifier: ^1.14.1
@@ -3344,7 +3344,7 @@ importers:
         specifier: ^20.17.32
         version: 20.17.32
       ai:
-        specifier: ^4.3.13
+        specifier: ^4.3.15
         version: 4.3.15(react@19.1.0)(zod@3.24.3)
       eslint:
         specifier: ^9.23.0
@@ -3384,6 +3384,12 @@ packages:
 
   '@ai-sdk/anthropic@1.2.10':
     resolution: {integrity: sha512-PyE7EC2fPjs9DnzRAHDrPQmcnI2m2Eojr8pfhckOejOlDEh2w7NnSJr1W3qe5hUWzKr+6d7NG1ZKR9fhmpDdEQ==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.0.0
+
+  '@ai-sdk/anthropic@1.2.11':
+    resolution: {integrity: sha512-lZLcEMh8MXY4NVSrN/7DyI2rnid8k7cn/30nMmd3bwJrnIsOuIuuFvY8f0nj+pFcTi6AYK7ujLdqW5dQVz1YQw==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.0.0
@@ -18733,6 +18739,12 @@ snapshots:
     dependencies:
       '@ai-sdk/provider': 1.1.3
       '@ai-sdk/provider-utils': 2.2.7(zod@3.24.4)
+      zod: 3.24.4
+
+  '@ai-sdk/anthropic@1.2.11(zod@3.24.4)':
+    dependencies:
+      '@ai-sdk/provider': 1.1.3
+      '@ai-sdk/provider-utils': 2.2.8(zod@3.24.4)
       zod: 3.24.4
 
   '@ai-sdk/cohere@1.2.10(zod@3.24.4)':

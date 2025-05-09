@@ -22,7 +22,7 @@ importers:
         specifier: link:../../packages/memory
         version: link:../../packages/memory
       ai:
-        specifier: ^4.3.13
+        specifier: ^4.3.15
         version: 4.3.15(react@19.1.0)(zod@3.24.3)
       chalk:
         specifier: ^5.4.1
