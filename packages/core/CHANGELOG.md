@@ -1,5 +1,72 @@
 # @mastra/core
 
+## 0.9.4-alpha.0
+
+### Patch Changes
+
+- daf942f: [MASTRA-3367] updated createthread when using generatetitle to perserve thread metadata
+- 0b8b868: Added A2A support + streaming
+
+## 0.9.3
+
+### Patch Changes
+
+- e450778: vnext: Inngest playground fixes
+- 8902157: added an optional `bodySizeLimit` to server config so that users can pass custom bodylimit size in mb. If not, it defaults to 4.5 mb
+- ca0dc88: fix: filter out excessive logs when getting LLM for agents
+- 526c570: expose agent runtimeContext from clientSDK
+- d7a6a33: Allow more user messages to be saved to memory, and fix message saving when using output flag
+- 9cd1a46: [MASTRA-3338] update naming scheme for embedding index based on vector store rules and added duplicate index checks
+- b5d2de0: In vNext workflow serializedStepGraph, return only serializedStepFlow for steps created from a workflow
+  allow viewing inner nested workflows in a multi-layered nested vnext workflow on the playground
+- 644f8ad: Adds a tool compatibility layer to ensure models from various providers work the same way. Models may not be able to support all json schema properties (such as some openai reasoning models), as well as other models support the property but seem to ignore it. The feature allows for a compatibility class for a provider that can be customized to fit the models and make sure they're using the tool schemas properly.
+- 70dbf51: [MASTRA-2452] updated setBaggage for tracing
+
+## 0.9.3-alpha.1
+
+### Patch Changes
+
+- e450778: vnext: Inngest playground fixes
+- 8902157: added an optional `bodySizeLimit` to server config so that users can pass custom bodylimit size in mb. If not, it defaults to 4.5 mb
+- ca0dc88: fix: filter out excessive logs when getting LLM for agents
+- 9cd1a46: [MASTRA-3338] update naming scheme for embedding index based on vector store rules and added duplicate index checks
+- 70dbf51: [MASTRA-2452] updated setBaggage for tracing
+
+## 0.9.3-alpha.0
+
+### Patch Changes
+
+- 526c570: expose agent runtimeContext from clientSDK
+- b5d2de0: In vNext workflow serializedStepGraph, return only serializedStepFlow for steps created from a workflow
+  allow viewing inner nested workflows in a multi-layered nested vnext workflow on the playground
+- 644f8ad: Adds a tool compatibility layer to ensure models from various providers work the same way. Models may not be able to support all json schema properties (such as some openai reasoning models), as well as other models support the property but seem to ignore it. The feature allows for a compatibility class for a provider that can be customized to fit the models and make sure they're using the tool schemas properly.
+
+## 0.9.2
+
+### Patch Changes
+
+- 6052aa6: Add getWorkflowRunById to vNext workflow core and server handler
+- 967b41c: fix: removes new agent getter methods from telemetry
+- 3d2fb5c: Fix commonjs import for vnext workflows
+- 26738f4: Switched from a custom MCP tools schema deserializer to json-schema-to-zod - fixes an issue where MCP tool schemas didn't deserialize properly in Mastra playground. Also added support for testing tools with no input arguments in playground
+- 4155f47: Add parameters to filter workflow runs
+  Add fromDate and toDate to telemetry parameters
+- 7eeb2bc: Add Memory default storage breaking change warning
+- b804723: Fix #3831: keep conversations in tact by keeping empty assistant messages
+- 8607972: Introduce Mastra lint cli command
+- ccef9f9: Fixed a type error when converting tools
+- 0097d50: Add serializedStepGraph to vNext workflow
+  Return serializedStepGraph from vNext workflow
+  Use serializedStepGraph in vNext workflow graph
+- 7eeb2bc: Added explicit storage to memory in create-mastra so new projects don't see breaking change warnings
+- 17826a9: Added a breaking change warning about deprecated working memory "use: 'text-stream'" which is being fully replaced by "use: 'tool-call'"
+- 7d8b7c7: In vnext getworkflowRunById, pick run from this.#runs if it does not exist in storage
+- fba031f: Show traces for vNext workflow
+- 3a5f1e1: Created a new @mastra/fastembed package based on the default embedder in @mastra/core as the default embedder will be removed in a breaking change (May 20th)
+  Added a warning to use the new @mastra/fastembed package instead of the default embedder
+- 51e6923: fix ts errors on default proxy storage
+- 8398d89: vNext: dynamic input mappings
+
 ## 0.9.2-alpha.6
 
 ### Patch Changes

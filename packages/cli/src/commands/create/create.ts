@@ -4,6 +4,7 @@ import color from 'picocolors';
 import { init } from '../init/init';
 import { interactivePrompt } from '../init/utils';
 import type { LLMProvider } from '../init/utils';
+import { getPackageManager } from '../utils.js';
 
 import { createMastraProject } from './utils';
 
@@ -16,6 +17,7 @@ export const create = async (args: {
   createVersionTag?: string;
   timeout?: number;
   directory?: string;
+  mcpServer?: 'windsurf' | 'cursor' | 'cursor-global';
 }) => {
   const { projectName } = await createMastraProject({
     projectName: args?.projectName,
@@ -46,16 +48,18 @@ export const create = async (args: {
     llmProvider,
     addExample,
     llmApiKey,
+    configureEditorWithDocsMCP: args.mcpServer,
   });
 
   postCreate({ projectName });
 };
 
 const postCreate = ({ projectName }: { projectName: string }) => {
+  const packageManager = getPackageManager();
   p.outro(`
    ${color.green('To start your project:')}
 
     ${color.cyan('cd')} ${projectName}
-    ${color.cyan('npm run dev')}
+    ${color.cyan(`${packageManager} run dev`)}
   `);
 };
