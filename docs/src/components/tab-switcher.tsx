@@ -38,7 +38,12 @@ export const TabSwitcher = ({ className }: { className?: string }) => {
   const locale = pathname.split("/")[1];
 
   return (
-    <div className={cn("border-b-[0.5px] border-b-[var(--border)]", className)}>
+    <div
+      className={cn(
+        "border-b-[0.5px] dark:border-b-[var(--border)] bg-[var(--light-color-surface-15)] dark:bg-[var(--primary-bg)] border-b-[var(--light-border-muted)]",
+        className,
+      )}
+    >
       <div className="max-w-[var(--nextra-content-width)] mx-auto ">
         <nav
           className="flex gap-6 overflow-x-auto py-2 px-5 -ml-3"
@@ -56,8 +61,8 @@ export const TabSwitcher = ({ className }: { className?: string }) => {
                 className={cn(
                   "flex min-w-fit relative x:focus-visible:nextra-focus gap-1.5 items-center px-0 py-1 text-sm font-medium transition-colors",
                   isActive
-                    ? "text-primary"
-                    : " text-[var(--color-el-3)] hover:text-primary",
+                    ? "dark:text-primary text-[var(--light-color-text-6)]"
+                    : " dark:text-[var(--color-el-3)] text-[var(--light-color-text-4)] hover:text-[var(--light-color-text-6)] dark:hover:text-primary",
                 )}
                 aria-current={isActive ? "page" : undefined}
               >
@@ -65,7 +70,7 @@ export const TabSwitcher = ({ className }: { className?: string }) => {
 
                 {isActive && (
                   <motion.div
-                    className="absolute -bottom-2 rounded left-0 w-full h-0.5 bg-primary"
+                    className="absolute -bottom-2 rounded left-0 w-full h-0.5 bg-[var(--light-color-text-6)] dark:bg-primary"
                     layoutId="active-tab"
                   />
                 )}
