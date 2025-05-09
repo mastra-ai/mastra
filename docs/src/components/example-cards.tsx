@@ -2,7 +2,7 @@
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent } from "./ui/card";
 
 export function CardItem({
@@ -35,6 +35,7 @@ export function CardItems({
   items: Record<string, Array<{ title: string; href: string }>>;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const slugify = (str: string) =>
@@ -62,7 +63,7 @@ export function CardItems({
     setActiveTab(tab);
     const params = new URLSearchParams(searchParams?.toString());
     params.set("list", slugify(tab));
-    router.replace(`?${params.toString()}`);
+    router.replace(`${pathname}?${params.toString()}`);
   };
   return (
     <div>
