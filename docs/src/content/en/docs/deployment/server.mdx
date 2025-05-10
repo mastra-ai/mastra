@@ -41,6 +41,10 @@ export const mastra = new Mastra({
 ```
 
 
+The `method` option can be one of `"GET"`, `"POST"`, `"PUT"`,
+`"DELETE"` or `"ALL"`. Using `"ALL"` will cause the handler to be
+invoked for any HTTP method that matches the path.
+
 ## Custom CORS Config
 
 Mastra allows you to configure CORS (Cross-Origin Resource Sharing) settings for your server.

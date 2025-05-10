@@ -1,9 +1,9 @@
 import DocsChat from "@/chatbot/components/chat-widget";
 import {
-	Dialog,
-	DialogBackdrop,
-	DialogPanel,
-	DialogTitle,
+  Dialog,
+  DialogBackdrop,
+  DialogPanel,
+  DialogTitle,
 } from "@headlessui/react";
 import { useEffect, useState } from "react";
 import { CustomSearch } from "./custom-search";

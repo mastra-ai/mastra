@@ -31,7 +31,7 @@ describe('Workflow', () => {
       });
 
       expect(() => workflow.createRun()).toThrowError(
-        'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.'
+        'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
       );
     });
 
@@ -56,7 +56,7 @@ describe('Workflow', () => {
       workflow.then(step1);
 
       expect(() => workflow.createRun()).toThrowError(
-        'Uncommitted step flow changes detected. Call .commit() to register the steps.'
+        'Uncommitted step flow changes detected. Call .commit() to register the steps.',
       );
     });
 
@@ -2373,7 +2373,9 @@ describe('Workflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         steps: [step1],
-      }).then(step1).commit();
+      })
+        .then(step1)
+        .commit();
       const run = workflow.createRun();
       const run2 = workflow.createRun({ runId: run.runId });
 
