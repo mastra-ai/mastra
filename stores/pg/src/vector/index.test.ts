@@ -2139,6 +2139,26 @@ describe('PgVector', () => {
         }
       });
 
+      it('should describe index in custom schema', async () => {
+        // Create index in custom schema
+        await customSchemaVectorDB.createIndex({
+          indexName: testIndexName,
+          dimension: 3,
+          metric: 'dotproduct',
+          indexConfig: { type: 'hnsw' },
+        });
+        // Insert a vector
+        await customSchemaVectorDB.upsert({ indexName: testIndexName, vectors: [[1, 2, 3]] });
+        // Describe the index
+        const stats = await customSchemaVectorDB.describeIndex(testIndexName);
+        expect(stats).toMatchObject({
+          dimension: 3,
+          metric: 'dotproduct',
+          type: 'hnsw',
+          count: 1,
+        });
+      });
+
       it('should allow same index name in different schemas', async () => {
         // Create same index name in both schemas
         await vectorDB.createIndex({ indexName: testIndexName, dimension: 3 });
