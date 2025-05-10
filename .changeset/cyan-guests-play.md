@@ -10,6 +10,8 @@
 '@mastra/qdrant': patch
 '@mastra/astra': patch
 '@mastra/pg': patch
+'@mastra/couchbase': patch
+'@mastra/turbopuffer': patch
 ---
 
 [MASTRA-3358] Deprecate updateIndexById and deleteIndexById
