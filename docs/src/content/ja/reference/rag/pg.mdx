@@ -321,7 +321,7 @@ interface PGIndexStats {
   ]}
 />
 
-### updateIndexById()
+### updateVector()
 
 <PropertiesTable
   content={[
@@ -366,17 +366,17 @@ IDで既存のベクトルを更新します。ベクトルまたはメタデー
 
 ```typescript copy
 // ベクトルのみを更新
-await pgVector.updateIndexById("my_vectors", "vector123", {
+await pgVector.updateVector("my_vectors", "vector123", {
   vector: [0.1, 0.2, 0.3],
 });
 
 // メタデータのみを更新
-await pgVector.updateIndexById("my_vectors", "vector123", {
+await pgVector.updateVector("my_vectors", "vector123", {
   metadata: { label: "updated" },
 });
 
 // ベクトルとメタデータの両方を更新
-await pgVector.updateIndexById("my_vectors", "vector123", {
+await pgVector.updateVector("my_vectors", "vector123", {
   vector: [0.1, 0.2, 0.3],
   metadata: { label: "updated" },
 });

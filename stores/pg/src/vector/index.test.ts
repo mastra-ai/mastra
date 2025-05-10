@@ -285,7 +285,7 @@ describe('PgVector', () => {
           metadata: newMetaData,
         };
 
-        await vectorDB.updateIndexById(testIndexName, idToBeUpdated, update);
+        await vectorDB.updateVector(testIndexName, idToBeUpdated, update);
 
         const results: QueryResult[] = await vectorDB.query({
           indexName: testIndexName,
@@ -311,7 +311,7 @@ describe('PgVector', () => {
           metadata: newMetaData,
         };
 
-        await vectorDB.updateIndexById(testIndexName, idToBeUpdated, update);
+        await vectorDB.updateVector(testIndexName, idToBeUpdated, update);
 
         const results: QueryResult[] = await vectorDB.query({
           indexName: testIndexName,
@@ -335,7 +335,7 @@ describe('PgVector', () => {
           vector: newVector,
         };
 
-        await vectorDB.updateIndexById(testIndexName, idToBeUpdated, update);
+        await vectorDB.updateVector(testIndexName, idToBeUpdated, update);
 
         const results: QueryResult[] = await vectorDB.query({
           indexName: testIndexName,
@@ -348,7 +348,7 @@ describe('PgVector', () => {
       });
 
       it('should throw exception when no updates are given', async () => {
-        await expect(vectorDB.updateIndexById(testIndexName, 'id', {})).rejects.toThrow('No updates provided');
+        await expect(vectorDB.updateVector(testIndexName, 'id', {})).rejects.toThrow('No updates provided');
       });
     });
 

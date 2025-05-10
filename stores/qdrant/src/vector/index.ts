@@ -160,7 +160,40 @@ export class QdrantVector extends MastraVector {
     await this.client.deleteCollection(indexName);
   }
 
+  /**
+   * @deprecated Use {@link updateVector} instead. This method will be removed on May 20th, 2025.
+   *
+   * Updates a vector by its ID with the provided vector and/or metadata.
+   * @param indexName - The name of the index containing the vector.
+   * @param id - The ID of the vector to update.
+   * @param update - An object containing the vector and/or metadata to update.
+   * @param update.vector - An optional array of numbers representing the new vector.
+   * @param update.metadata - An optional record containing the new metadata.
+   * @returns A promise that resolves when the update is complete.
+   * @throws Will throw an error if no updates are provided or if the update operation fails.
+   */
   async updateIndexById(
+    indexName: string,
+    id: string,
+    update: { vector?: number[]; metadata?: Record<string, any> },
+  ): Promise<void> {
+    this.logger.warn(
+      `Deprecation Warning: updateIndexById() is deprecated. Please use updateVector() instead. updateIndexById() will be removed on May 20th.`,
+    );
+    await this.updateVector(indexName, id, update);
+  }
+
+  /**
+   * Updates a vector by its ID with the provided vector and/or metadata.
+   * @param indexName - The name of the index containing the vector.
+   * @param id - The ID of the vector to update.
+   * @param update - An object containing the vector and/or metadata to update.
+   * @param update.vector - An optional array of numbers representing the new vector.
+   * @param update.metadata - An optional record containing the new metadata.
+   * @returns A promise that resolves when the update is complete.
+   * @throws Will throw an error if no updates are provided or if the update operation fails.
+   */
+  async updateVector(
     indexName: string,
     id: string,
     update: {

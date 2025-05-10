@@ -68,15 +68,15 @@ export abstract class MastraVector extends MastraBase {
 
   abstract deleteIndex(indexName: string): Promise<void>;
 
-  async updateIndexById(
+  async updateVector(
     _indexName: string,
     _id: string,
     _update: { vector?: number[]; metadata?: Record<string, any> },
   ): Promise<void> {
-    throw new Error('updateIndexById is not implemented yet');
+    throw new Error('updateVector is not implemented yet');
   }
-  async deleteIndexById(_indexName: string, _id: string): Promise<void> {
-    throw new Error('deleteById is not implemented yet');
+  async deleteVector(_indexName: string, _id: string): Promise<void> {
+    throw new Error('deleteVector is not implemented yet');
   }
 
   protected async validateExistingIndex(indexName: string, dimension: number, metric: string) {

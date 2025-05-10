@@ -140,7 +140,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
           metadata: newMetaData,
         };
 
-        await vectorStore.updateIndexById(testIndexName, idToBeUpdated, update);
+        await vectorStore.updateVector(testIndexName, idToBeUpdated, update);
 
         await waitUntilVectorsIndexed(vectorStore, testIndexName, 3);
 
@@ -167,7 +167,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
           metadata: newMetaData,
         };
 
-        await expect(vectorStore.updateIndexById(testIndexName, 'id', update)).rejects.toThrow(
+        await expect(vectorStore.updateVector(testIndexName, 'id', update)).rejects.toThrow(
           'Both vector and metadata must be provided for an update',
         );
       });
@@ -183,7 +183,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
           vector: newVector,
         };
 
-        await vectorStore.updateIndexById(testIndexName, idToBeUpdated, update);
+        await vectorStore.updateVector(testIndexName, idToBeUpdated, update);
 
         await waitUntilVectorsIndexed(vectorStore, testIndexName, 3);
 
@@ -198,7 +198,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       }, 500000);
 
       it('should throw exception when no updates are given', async () => {
-        await expect(vectorStore.updateIndexById(testIndexName, 'id', {})).rejects.toThrow('No update data provided');
+        await expect(vectorStore.updateVector(testIndexName, 'id', {})).rejects.toThrow('No update data provided');
       });
     });
 

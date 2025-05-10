@@ -379,7 +379,7 @@ describe('MongoDBVector Integration Tests', () => {
       const idToBeUpdated = ids[0];
       const newVector = [1, 2, 3, 4];
       const newMetaData = { test: 'updates' };
-      await vectorDB.updateIndexById(indexName, idToBeUpdated, { vector: newVector, metadata: newMetaData });
+      await vectorDB.updateVector(indexName, idToBeUpdated, { vector: newVector, metadata: newMetaData });
       await new Promise(resolve => setTimeout(resolve, 5000));
       const results = await vectorDB.query({
         indexName,
@@ -399,7 +399,7 @@ describe('MongoDBVector Integration Tests', () => {
       expect(ids).toHaveLength(4);
       const idToBeUpdated = ids[0];
       const newMetaData = { test: 'metadata only update' };
-      await vectorDB.updateIndexById(indexName, idToBeUpdated, { metadata: newMetaData });
+      await vectorDB.updateVector(indexName, idToBeUpdated, { metadata: newMetaData });
       await new Promise(resolve => setTimeout(resolve, 5000));
       const results = await vectorDB.query({
         indexName,
@@ -419,7 +419,7 @@ describe('MongoDBVector Integration Tests', () => {
       expect(ids).toHaveLength(4);
       const idToBeUpdated = ids[0];
       const newVector = [1, 2, 3, 4];
-      await vectorDB.updateIndexById(indexName, idToBeUpdated, { vector: newVector });
+      await vectorDB.updateVector(indexName, idToBeUpdated, { vector: newVector });
       await new Promise(resolve => setTimeout(resolve, 5000));
       const results = await vectorDB.query({
         indexName,
@@ -434,7 +434,7 @@ describe('MongoDBVector Integration Tests', () => {
       expect(updatedResult?.vector).toEqual(newVector);
     });
     it('should throw exception when no updates are given', async () => {
-      await expect(vectorDB.updateIndexById(indexName, 'nonexistent-id', {})).rejects.toThrow('No updates provided');
+      await expect(vectorDB.updateVector(indexName, 'nonexistent-id', {})).rejects.toThrow('No updates provided');
     });
     it('should delete the vector by id', async () => {
       const ids = await vectorDB.upsert({ indexName, vectors: testVectors });
