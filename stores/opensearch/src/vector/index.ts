@@ -342,13 +342,26 @@ export class OpenSearchVector extends MastraVector {
   }
 
   /**
-   * Deletes a specific document from the index by ID.
+   * @deprecated Use {@link deleteVector} instead. This method will be removed on May 20th, 2025.
    *
-   * @param {string} indexName - The name of the index containing the document.
-   * @param {string} id - The ID of the document to delete.
-   * @returns {Promise<void>} A promise that resolves when the document is deleted.
+   * Deletes a vector by its ID.
+   * @param indexName - The name of the index containing the vector.
+   * @param id - The ID of the vector to delete.
+   * @returns A promise that resolves when the deletion is complete.
+   * @throws Will throw an error if the deletion operation fails.
    */
   async deleteIndexById(indexName: string, id: string): Promise<void> {
+    await this.deleteVector(indexName, id);
+  }
+
+  /**
+   * Deletes a vector by its ID.
+   * @param indexName - The name of the index containing the vector.
+   * @param id - The ID of the vector to delete.
+   * @returns A promise that resolves when the deletion is complete.
+   * @throws Will throw an error if the deletion operation fails.
+   */
+  async deleteVector(indexName: string, id: string): Promise<void> {
     try {
       await this.client.delete({
         index: indexName,

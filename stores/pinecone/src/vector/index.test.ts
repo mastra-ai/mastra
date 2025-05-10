@@ -402,7 +402,7 @@ describe.skip('PineconeVector Integration Tests', () => {
         expect(ids).toHaveLength(3);
         const idToBeDeleted = ids[0];
 
-        await vectorDB.deleteIndexById(indexNameDelete, idToBeDeleted);
+        await vectorDB.deleteVector(indexNameDelete, idToBeDeleted);
         await waitUntilVectorsIndexed(vectorDB, indexNameDelete, 2, true);
 
         // Query all vectors similar to the deleted one
@@ -515,7 +515,7 @@ describe.skip('PineconeVector Integration Tests', () => {
       await waitUntilVectorsIndexed(vectorDB, indexNameNamespace, 1);
 
       // Delete from namespace1
-      await vectorDB.deleteIndexById(indexNameNamespace, id, namespace1);
+      await vectorDB.deleteVector(indexNameNamespace, id, namespace1);
 
       await waitUntilVectorsIndexed(vectorDB, indexNameNamespace, 0, true);
 

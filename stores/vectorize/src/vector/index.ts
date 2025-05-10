@@ -242,10 +242,34 @@ export class CloudflareVector extends MastraVector {
     }
   }
 
+  /**
+   * @deprecated Use {@link deleteVector} instead. This method will be removed on May 20th, 2025.
+   *
+   * Deletes a vector by its ID.
+   * @param indexName - The name of the index containing the vector.
+   * @param id - The ID of the vector to delete.
+   * @returns A promise that resolves when the deletion is complete.
+   * @throws Will throw an error if the deletion operation fails.
+   */
   async deleteIndexById(indexName: string, id: string): Promise<void> {
-    await this.client.vectorize.indexes.deleteByIds(indexName, {
-      ids: [id],
-      account_id: this.accountId,
-    });
+    await this.deleteVector(indexName, id);
+  }
+
+  /**
+   * Deletes a vector by its ID.
+   * @param indexName - The name of the index containing the vector.
+   * @param id - The ID of the vector to delete.
+   * @returns A promise that resolves when the deletion is complete.
+   * @throws Will throw an error if the deletion operation fails.
+   */
+  async deleteVector(indexName: string, id: string): Promise<void> {
+    try {
+      await this.client.vectorize.indexes.deleteByIds(indexName, {
+        ids: [id],
+        account_id: this.accountId,
+      });
+    } catch (error: any) {
+      throw new Error(`Failed to delete index by id: ${id} for index name: ${indexName}: ${error.message}`);
+    }
   }
 }

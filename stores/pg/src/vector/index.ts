@@ -740,12 +740,34 @@ export class PgVector extends MastraVector {
       `;
 
       await client.query(query, values);
+    } catch (error: any) {
+      throw new Error(`Failed to update index by id: ${id} for index: ${indexName}: ${error.message}`);
     } finally {
       client.release();
     }
   }
 
+  /**
+   * @deprecated Use {@link deleteVector} instead. This method will be removed on May 20th, 2025.
+   *
+   * Deletes a vector by its ID.
+   * @param indexName - The name of the index containing the vector.
+   * @param id - The ID of the vector to delete.
+   * @returns A promise that resolves when the deletion is complete.
+   * @throws Will throw an error if the deletion operation fails.
+   */
   async deleteIndexById(indexName: string, id: string): Promise<void> {
+    await this.deleteVector(indexName, id);
+  }
+
+  /**
+   * Deletes a vector by its ID.
+   * @param indexName - The name of the index containing the vector.
+   * @param id - The ID of the vector to delete.
+   * @returns A promise that resolves when the deletion is complete.
+   * @throws Will throw an error if the deletion operation fails.
+   */
+  async deleteVector(indexName: string, id: string): Promise<void> {
     const client = await this.pool.connect();
     try {
       const tableName = this.getTableName(indexName);
@@ -754,6 +776,8 @@ export class PgVector extends MastraVector {
         WHERE vector_id = $1
       `;
       await client.query(query, [id]);
+    } catch (error: any) {
+      throw new Error(`Failed to delete index by id: ${id} for index: ${indexName}: ${error.message}`);
     } finally {
       client.release();
     }
