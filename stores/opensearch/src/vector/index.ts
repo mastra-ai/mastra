@@ -351,6 +351,9 @@ export class OpenSearchVector extends MastraVector {
    * @throws Will throw an error if the deletion operation fails.
    */
   async deleteIndexById(indexName: string, id: string): Promise<void> {
+    this.logger.warn(
+      `Deprecation Warning: deleteIndexById() is deprecated. Please use deleteVector() instead. deleteIndexById() will be removed on May 20th.`,
+    );
     await this.deleteVector(indexName, id);
   }
 
