@@ -38,7 +38,7 @@ export abstract class MastraVector extends MastraBase {
     this.logger.warn(
       `Deprecation Warning: Passing individual arguments to ${method}() is deprecated.
       Please use an object parameter instead.
-      Individual arguments will be removed on May 20th.`,
+      Individual arguments will be removed on May 20th, 2025.`,
     );
 
     const baseKeys = this.baseKeys[method as keyof typeof this.baseKeys] || [];
@@ -68,16 +68,13 @@ export abstract class MastraVector extends MastraBase {
 
   abstract deleteIndex(indexName: string): Promise<void>;
 
-  async updateIndexById(
-    _indexName: string,
-    _id: string,
-    _update: { vector?: number[]; metadata?: Record<string, any> },
-  ): Promise<void> {
-    throw new Error('updateIndexById is not implemented yet');
-  }
-  async deleteIndexById(_indexName: string, _id: string): Promise<void> {
-    throw new Error('deleteById is not implemented yet');
-  }
+  abstract updateVector(
+    indexName: string,
+    id: string,
+    update: { vector?: number[]; metadata?: Record<string, any> },
+  ): Promise<void>;
+
+  abstract deleteVector(indexName: string, id: string): Promise<void>;
 
   protected async validateExistingIndex(indexName: string, dimension: number, metric: string) {
     let info: IndexStats;

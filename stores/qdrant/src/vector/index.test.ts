@@ -118,7 +118,7 @@ describe('QdrantVector', () => {
         metadata: newMetaData,
       };
 
-      await qdrant.updateIndexById(testCollectionName, idToBeUpdated, update);
+      await qdrant.updateVector(testCollectionName, idToBeUpdated, update);
 
       const results: QueryResult[] = await qdrant.query({
         indexName: testCollectionName,
@@ -146,7 +146,7 @@ describe('QdrantVector', () => {
         metadata: newMetaData,
       };
 
-      await qdrant.updateIndexById(testCollectionName, idToBeUpdated, update);
+      await qdrant.updateVector(testCollectionName, idToBeUpdated, update);
 
       const results: QueryResult[] = await qdrant.query({
         indexName: testCollectionName,
@@ -171,7 +171,7 @@ describe('QdrantVector', () => {
         vector: newVector,
       };
 
-      await qdrant.updateIndexById(testCollectionName, idToBeUpdated, update);
+      await qdrant.updateVector(testCollectionName, idToBeUpdated, update);
 
       const results: QueryResult[] = await qdrant.query({
         indexName: testCollectionName,
@@ -185,12 +185,12 @@ describe('QdrantVector', () => {
     });
 
     it('should throw exception when no updates are given', async () => {
-      await expect(qdrant.updateIndexById(testCollectionName, 'id', {})).rejects.toThrow('No updates provided');
+      await expect(qdrant.updateVector(testCollectionName, 'id', {})).rejects.toThrow('No updates provided');
     });
 
     it('should throw error for non-existent index', async () => {
       const nonExistentIndex = 'non-existent-index';
-      await expect(qdrant.updateIndexById(nonExistentIndex, 'test-id', { vector: [1, 2, 3] })).rejects.toThrow();
+      await expect(qdrant.updateVector(nonExistentIndex, 'test-id', { vector: [1, 2, 3] })).rejects.toThrow();
     });
 
     it('should throw error for invalid vector dimension', async () => {
@@ -201,7 +201,7 @@ describe('QdrantVector', () => {
       });
 
       await expect(
-        qdrant.updateIndexById(testCollectionName, id, { vector: [1, 2] }), // Wrong dimension
+        qdrant.updateVector(testCollectionName, id, { vector: [1, 2] }), // Wrong dimension
       ).rejects.toThrow();
     });
   });
@@ -226,7 +226,7 @@ describe('QdrantVector', () => {
       expect(ids).toHaveLength(3);
       const idToBeDeleted = ids[0];
 
-      await qdrant.deleteIndexById(testCollectionName, idToBeDeleted);
+      await qdrant.deleteVector(testCollectionName, idToBeDeleted);
 
       const results: QueryResult[] = await qdrant.query({
         indexName: testCollectionName,

@@ -165,7 +165,7 @@ describe('DefaultVectorDB', () => {
         expect(ids).toHaveLength(2);
         const id = ids[1];
 
-        await vectorDB.deleteIndexById(testIndexName, ids[0]);
+        await vectorDB.deleteVector(testIndexName, ids[0]);
 
         const results = await vectorDB.query({ indexName: testIndexName, queryVector: [1, 2, 3] });
         expect(results).toHaveLength(1);
@@ -181,7 +181,7 @@ describe('DefaultVectorDB', () => {
           vector: [4, 5, 6],
           metadata: { test: 'updated' },
         };
-        await vectorDB.updateIndexById(testIndexName, id, update);
+        await vectorDB.updateVector(testIndexName, id, update);
 
         const results = await vectorDB.query({
           indexName: testIndexName,
@@ -202,7 +202,7 @@ describe('DefaultVectorDB', () => {
         const update = {
           metadata: { test: 'updated' },
         };
-        await vectorDB.updateIndexById(testIndexName, id, update);
+        await vectorDB.updateVector(testIndexName, id, update);
 
         const results = await vectorDB.query({ indexName: testIndexName, queryVector: [1, 2, 3], topK: 1 });
         expect(results[0]?.id).toBe(id);
@@ -218,7 +218,7 @@ describe('DefaultVectorDB', () => {
         const update = {
           vector: [4, 5, 6],
         };
-        await vectorDB.updateIndexById(testIndexName, id, update);
+        await vectorDB.updateVector(testIndexName, id, update);
 
         const results = await vectorDB.query({
           indexName: testIndexName,
@@ -236,7 +236,7 @@ describe('DefaultVectorDB', () => {
         const metadata = [{ test: 'initial' }];
         const [id] = await vectorDB.upsert({ indexName: testIndexName, vectors, metadata });
 
-        await expect(vectorDB.updateIndexById(testIndexName, id, {})).rejects.toThrow('No updates provided');
+        await expect(vectorDB.updateVector(testIndexName, id, {})).rejects.toThrow('No updates provided');
       });
     });
 

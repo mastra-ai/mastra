@@ -1224,7 +1224,7 @@ describe.skip('AstraVector Integration Tests', () => {
         metadata: newMetaData,
       };
 
-      await vectorDB.updateIndexById(indexName, idToBeUpdated, update);
+      await vectorDB.updateVector(indexName, idToBeUpdated, update);
 
       await new Promise(resolve => setTimeout(resolve, 2000));
 
@@ -1256,7 +1256,7 @@ describe.skip('AstraVector Integration Tests', () => {
         metadata: newMetaData,
       };
 
-      await vectorDB.updateIndexById(indexName, idToBeUpdated, update);
+      await vectorDB.updateVector(indexName, idToBeUpdated, update);
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       const results = await vectorDB.query({
@@ -1285,7 +1285,7 @@ describe.skip('AstraVector Integration Tests', () => {
         vector: newVector,
       };
 
-      await vectorDB.updateIndexById(indexName, idToBeUpdated, update);
+      await vectorDB.updateVector(indexName, idToBeUpdated, update);
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       const results = await vectorDB.query({
@@ -1303,7 +1303,7 @@ describe.skip('AstraVector Integration Tests', () => {
     });
 
     it('should throw exception when no updates are given', async () => {
-      await expect(vectorDB.updateIndexById(indexName, 'id', {})).rejects.toThrow('No updates provided');
+      await expect(vectorDB.updateVector(indexName, 'id', {})).rejects.toThrow('No updates provided');
     });
 
     it('should delete the vector by id', async () => {
@@ -1311,7 +1311,7 @@ describe.skip('AstraVector Integration Tests', () => {
       expect(ids).toHaveLength(4);
 
       const idToBeDeleted = ids[0];
-      await vectorDB.deleteIndexById(indexName, idToBeDeleted);
+      await vectorDB.deleteVector(indexName, idToBeDeleted);
 
       const results = await vectorDB.query({
         indexName: indexName,
