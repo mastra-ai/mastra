@@ -135,3 +135,43 @@ export const ArrowLeftIcon = ({ className }: { className?: string }) => (
     />
   </svg>
 );
+
+export const BookIcon = ({ className }: { className?: string }) => {
+  return (
+    <svg
+      width="14"
+      height="18"
+      viewBox="0 0 14 18"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+    >
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M2.84338 2.9819L5.15693 1.43953C5.26946 1.36451 5.51359 1.33824 5.6377 1.38598L11.8924 3.79163C11.9603 3.81776 12.0576 3.9594 12.0576 4.03839V15.2704C12.0576 15.5807 12.3092 15.8323 12.6195 15.8323C12.9299 15.8323 13.1815 15.5807 13.1815 15.2704V4.03839C13.1815 3.49448 12.798 2.93574 12.2959 2.74262L6.04116 0.33697C5.57782 0.15876 4.9507 0.226234 4.53349 0.504373L1.63056 2.43966L1.25523 2.68988L1.25808 2.69722C0.991616 2.81753 0.818359 3.0944 0.818359 3.46918V13.6392C0.818359 14.26 1.28833 14.9368 1.86564 15.1501L8.74755 17.6932C9.32594 17.9069 9.79483 17.574 9.79483 16.9568V6.2906C9.79483 5.6702 9.31222 5.01554 8.72986 4.83246L2.84338 2.9819Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+};
+
+export const BurgerIcon = ({ className }: { className?: string }) => {
+  return (
+    <svg
+      width="16"
+      height="14"
+      viewBox="0 0 16 14"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+    >
+      <path
+        d="M1.75977 1.49219H14.2332M1.75977 7.06508H10.4775M1.75977 12.5084H6.32663"
+        stroke="currentColor"
+        strokeWidth="2.125"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+};
