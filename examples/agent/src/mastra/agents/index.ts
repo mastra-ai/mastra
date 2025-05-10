@@ -3,6 +3,7 @@ import { OpenAIVoice } from '@mastra/voice-openai';
 import { Memory } from '@mastra/memory';
 import { Agent } from '@mastra/core/agent';
 import { cookingTool } from '../tools/index.js';
+import { myWorkflow } from '../workflows/index.js';
 
 const memory = new Memory();
 
@@ -17,6 +18,9 @@ export const chefAgent = new Agent({
   model: openai('gpt-4o-mini'),
   tools: {
     cookingTool,
+  },
+  workflows: {
+    myWorkflow,
   },
   memory,
   voice: new OpenAIVoice(),
