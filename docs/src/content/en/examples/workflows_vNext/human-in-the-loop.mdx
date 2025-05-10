@@ -20,7 +20,7 @@ import { openai } from '@ai-sdk/openai'
 
 const llm = openai('gpt-4o')
 
-export const summaryAgent = new Agent({
+export const summaryTravelAgent = new Agent({
   name: 'summaryTravelAgent',
   model: llm,
   instructions: `
@@ -58,7 +58,7 @@ const generateSuggestionsStep = createStep({
     suggestions: z.array(z.string()),
     vacationDescription: z.string(),
   }),
-  execute: async ({ inputData, mastra, container }) => {
+  execute: async ({ inputData, mastra }) => {
     if (!mastra) {
       throw new Error('Mastra is not initialized')
     }
@@ -132,8 +132,8 @@ const travelPlannerStep = createStep({
   },
 })
 
-const weatherWorkflow = createWorkflow({
-  id: 'weather-workflow',
+const travelAgentWorkflow = createWorkflow({
+  id: 'travel-agent-workflow',
   inputSchema: z.object({
     vacationDescription: z.string().describe('The description of the vacation'),
   }),
@@ -147,7 +147,7 @@ const weatherWorkflow = createWorkflow({
 
 travelAgentWorkflow.commit()
 
-export { weatherWorkflow, humanInputStep }
+export { travelAgentWorkflow, humanInputStep }
 ```
 
 ## Register Agent and Workflow instances with Mastra class
@@ -157,17 +157,21 @@ This is critical for enabling access to the agents within the workflow.
 ```ts showLineNumbers copy filename="index.ts"
 import { Mastra } from '@mastra/core/mastra'
 import { createLogger } from '@mastra/core/logger'
-import { weatherWorkflow } from './workflows'
-import { travelAgent, summaryAgent } from './agents'
+import { LibSQLStore } from '@mastra/libsql'
+import { travelAgentWorkflow } from './workflows'
+import { travelAgent, summaryTravelAgent } from './agents'
 
 const mastra = new Mastra({
   vnext_workflows: {
-    weatherWorkflow,
+    travelAgentWorkflow,
   },
   agents: {
     travelAgent,
-	  summaryAgent
+    summaryTravelAgent
   },
+  storage: new LibSQLStore({
+    url: ":memory:",
+  }),
   logger: createLogger({
     name: 'Mastra',
     level: 'info',
@@ -183,10 +187,11 @@ In addition to this, we'll resume the `humanInputStep` after collecting user inp
 
 ```ts showLineNumbers copy filename="exec.ts"
 import { mastra } from "./"
+import { select } from '@inquirer/prompts'
 import { createInterface } from 'readline'
 import { humanInputStep } from './workflows'
 
-const workflow = mastra.vnext_getWorkflow('weather-workflow')
+const workflow = mastra.vnext_getWorkflow('travelAgentWorkflow')
 const run = workflow.createRun({})
 const result = await run.start({
   inputData: { vacationDescription: 'I want to go to the beach' },
@@ -198,13 +203,10 @@ const suggStep = result?.steps?.['generate-suggestions']
 
 if (suggStep.status === 'success') {
   const suggestions = suggStep.output?.suggestions
-  console.log(
-    suggestions
-      .map(({ location, description }) => `- ${location}: ${description}`)
-      .join('\n')
-  )
-
-  const userInput = await readInput()
+  const userInput = await select<string>({
+    message: "Choose your holiday destination",
+    choices: suggestions.map(({ location, description }) =>`- ${location}: ${description}`)
+  })
 
   console.log('Selected:', userInput)
 
@@ -220,8 +222,6 @@ if (suggStep.status === 'success') {
   const result2 = await run.resume({
     resumeData: {
       selection: userInput,
-      vacationDescription: 'I want to go to the beach',
-      suggestions: suggStep?.output?.suggestions,
     },
     step: humanInputStep,
   })
