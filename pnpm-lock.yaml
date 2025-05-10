@@ -1689,9 +1689,6 @@ importers:
       '@ai-sdk/react':
         specifier: ^1.2.1
         version: 1.2.12(react@19.1.0)(zod@3.24.3)
-      '@mastra/client-js':
-        specifier: workspace:*
-        version: link:../../../client-sdks/client-js
       '@mastra/core':
         specifier: workspace:*
         version: link:../../core
