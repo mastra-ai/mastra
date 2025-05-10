@@ -87,7 +87,7 @@ const activityPlannerTool = createTool({
     activities: z.array(z.string()),
   }),
   execute: async ({ context, mastra }) => {
-    const plannerWorkflow = mastra?.getWorkflow("my-workflow");
+    const plannerWorkflow = mastra?.vnext_getWorkflow("my-workflow");
     if (!plannerWorkflow) {
       throw new Error("Planner workflow not found");
     }
