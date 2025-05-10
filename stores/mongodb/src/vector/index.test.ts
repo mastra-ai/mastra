@@ -440,9 +440,16 @@ describe('MongoDBVector Integration Tests', () => {
       const ids = await vectorDB.upsert({ indexName, vectors: testVectors });
       expect(ids).toHaveLength(4);
       const idToBeDeleted = ids[0];
+
+      const initialStats = await vectorDB.describeIndex(indexName);
+
       await vectorDB.deleteVector(indexName, idToBeDeleted);
       const results = await vectorDB.query({ indexName, queryVector: [1, 0, 0, 0], topK: 2 });
       expect(results.map(res => res.id)).not.toContain(idToBeDeleted);
+
+      await new Promise(resolve => setTimeout(resolve, 5000)); // Wait for count to update
+      const finalStats = await vectorDB.describeIndex(indexName);
+      expect(finalStats.count).toBe(initialStats.count - 1);
     });
   });
 
