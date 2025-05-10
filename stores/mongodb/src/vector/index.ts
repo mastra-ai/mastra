@@ -333,6 +333,8 @@ export class MongoDBVector extends MastraVector {
       const updateDoc: Record<string, any> = {};
 
       if (update.vector) {
+        const stats = await this.describeIndex(indexName);
+        await this.validateVectorDimensions([update.vector], stats.dimension);
         updateDoc[this.embeddingFieldName] = update.vector;
       }
 
