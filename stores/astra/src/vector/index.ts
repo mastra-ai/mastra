@@ -225,7 +225,7 @@ export class AstraVector extends MastraVector {
 
       await collection.findOneAndUpdate({ id }, { $set: updateDoc });
     } catch (error: any) {
-      throw new Error(`Failed to update index by id: ${id} for index name: ${indexName}: ${error.message}`);
+      throw new Error(`Failed to update vector by id: ${id} for index name: ${indexName}: ${error.message}`);
     }
   }
 
@@ -259,7 +259,7 @@ export class AstraVector extends MastraVector {
       const collection = this.#db.collection(indexName);
       await collection.deleteOne({ id });
     } catch (error: any) {
-      throw new Error(`Failed to delete index by id: ${id} for index name: ${indexName}: ${error.message}`);
+      throw new Error(`Failed to delete vector by id: ${id} for index name: ${indexName}: ${error.message}`);
     }
   }
 }

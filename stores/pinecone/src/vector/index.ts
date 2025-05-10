@@ -263,7 +263,7 @@ export class PineconeVector extends MastraVector {
 
       await index.update(updateObj);
     } catch (error: any) {
-      throw new Error(`Failed to update index by id: ${id} for index name: ${indexName}: ${error.message}`);
+      throw new Error(`Failed to update vector by id: ${id} for index name: ${indexName}: ${error.message}`);
     }
   }
 
@@ -276,13 +276,13 @@ export class PineconeVector extends MastraVector {
    * @returns A promise that resolves when the deletion is complete.
    * @throws Will throw an error if the deletion operation fails.
    */
-  async deleteIndexById(indexName: string, id: string): Promise<void> {
+  async deleteIndexById(indexName: string, id: string, namespace?: string): Promise<void> {
     this.logger.warn(
       `Deprecation Warning: deleteIndexById() is deprecated. 
       Please use deleteVector() instead. 
       deleteIndexById() will be removed on May 20th, 2025.`,
     );
-    await this.deleteVector(indexName, id);
+    await this.deleteVector(indexName, id, namespace);
   }
 
   /**
@@ -297,7 +297,7 @@ export class PineconeVector extends MastraVector {
       const index = this.client.Index(indexName).namespace(namespace || '');
       await index.deleteOne(id);
     } catch (error: any) {
-      throw new Error(`Failed to delete index by id: ${id} for index name: ${indexName}: ${error.message}`);
+      throw new Error(`Failed to delete vector by id: ${id} for index name: ${indexName}: ${error.message}`);
     }
   }
 }

@@ -383,7 +383,7 @@ export class LibSQLVector extends MastraVector {
         args,
       });
     } catch (error: any) {
-      throw new Error(`Failed to update index by id: ${id} for index: ${indexName}: ${error.message}`);
+      throw new Error(`Failed to update vector by id: ${id} for index: ${indexName}: ${error.message}`);
     }
   }
 
@@ -419,7 +419,7 @@ export class LibSQLVector extends MastraVector {
         args: [id],
       });
     } catch (error: any) {
-      throw new Error(`Failed to delete index by id: ${id} for index: ${indexName}: ${error.message}`);
+      throw new Error(`Failed to delete vector by id: ${id} for index: ${indexName}: ${error.message}`);
     }
   }
 

@@ -255,7 +255,7 @@ export class ChromaVector extends MastraVector {
 
       return await collection.update(updateOptions);
     } catch (error: any) {
-      throw new Error(`Failed to update index by id: ${id} for index name: ${indexName}: ${error.message}`);
+      throw new Error(`Failed to update vector by id: ${id} for index name: ${indexName}: ${error.message}`);
     }
   }
 
@@ -287,7 +287,7 @@ export class ChromaVector extends MastraVector {
       const collection: Collection = await this.getCollection(indexName, true);
       await collection.delete({ ids: [id] });
     } catch (error: any) {
-      throw new Error(`Failed to delete index by id: ${id} for index name: ${indexName}: ${error.message}`);
+      throw new Error(`Failed to delete vector by id: ${id} for index name: ${indexName}: ${error.message}`);
     }
   }
 }

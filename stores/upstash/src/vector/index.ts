@@ -170,7 +170,7 @@ export class UpstashVector extends MastraVector {
         namespace: indexName,
       });
     } catch (error: any) {
-      throw new Error(`Failed to update index by id: ${id} for index name: ${indexName}: ${error.message}`);
+      throw new Error(`Failed to update vector by id: ${id} for index name: ${indexName}: ${error.message}`);
     }
   }
 

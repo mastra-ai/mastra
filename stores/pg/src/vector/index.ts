@@ -743,7 +743,7 @@ export class PgVector extends MastraVector {
 
       await client.query(query, values);
     } catch (error: any) {
-      throw new Error(`Failed to update index by id: ${id} for index: ${indexName}: ${error.message}`);
+      throw new Error(`Failed to update vector by id: ${id} for index: ${indexName}: ${error.message}`);
     } finally {
       client.release();
     }
@@ -784,7 +784,7 @@ export class PgVector extends MastraVector {
       `;
       await client.query(query, [id]);
     } catch (error: any) {
-      throw new Error(`Failed to delete index by id: ${id} for index: ${indexName}: ${error.message}`);
+      throw new Error(`Failed to delete vector by id: ${id} for index: ${indexName}: ${error.message}`);
     } finally {
       client.release();
     }

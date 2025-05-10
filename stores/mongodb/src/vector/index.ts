@@ -352,7 +352,7 @@ export class MongoDBVector extends MastraVector {
 
       await collection.findOneAndUpdate({ _id: id }, { $set: updateDoc });
     } catch (error: any) {
-      throw new Error(`Failed to update index by id: ${id} for index name: ${indexName}: ${error.message}`);
+      throw new Error(`Failed to update vector by id: ${id} for index name: ${indexName}: ${error.message}`);
     }
   }
 
@@ -386,7 +386,7 @@ export class MongoDBVector extends MastraVector {
       const collection = await this.getCollection(indexName, true);
       await collection.deleteOne({ _id: id });
     } catch (error: any) {
-      throw new Error(`Failed to delete index by id: ${id} for index name: ${indexName}: ${error.message}`);
+      throw new Error(`Failed to delete vector by id: ${id} for index name: ${indexName}: ${error.message}`);
     }
   }
 
