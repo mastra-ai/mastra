@@ -246,6 +246,8 @@ export class ChromaVector extends MastraVector {
       const updateOptions: UpdateRecordsParams = { ids: [id] };
 
       if (update?.vector) {
+        const stats = await this.describeIndex(indexName);
+        this.validateVectorDimensions([update.vector], stats.dimension);
         updateOptions.embeddings = [update.vector];
       }
 

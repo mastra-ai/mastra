@@ -205,7 +205,7 @@ export class UpstashVector extends MastraVector {
         namespace: indexName,
       });
     } catch (error) {
-      console.error('Failed to delete index by ID:', error);
+      console.error(`Failed to delete vector by id: ${id} for index name: ${indexName}:`, error);
     }
   }
 }

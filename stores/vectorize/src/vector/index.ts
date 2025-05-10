@@ -276,7 +276,7 @@ export class CloudflareVector extends MastraVector {
         account_id: this.accountId,
       });
     } catch (error: any) {
-      throw new Error(`Failed to delete index by id: ${id} for index name: ${indexName}: ${error.message}`);
+      throw new Error(`Failed to delete vector by id: ${id} for index name: ${indexName}: ${error.message}`);
     }
   }
 }

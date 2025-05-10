@@ -209,6 +209,7 @@ export class PineconeVector extends MastraVector {
    * @param update - An object containing the vector and/or metadata to update.
    * @param update.vector - An optional array of numbers representing the new vector.
    * @param update.metadata - An optional record containing the new metadata.
+   * @param namespace - The namespace of the index (optional).
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
@@ -216,13 +217,14 @@ export class PineconeVector extends MastraVector {
     indexName: string,
     id: string,
     update: { vector?: number[]; metadata?: Record<string, any> },
+    namespace?: string,
   ): Promise<void> {
     this.logger.warn(
       `Deprecation Warning: updateIndexById() is deprecated. 
       Please use updateVector() instead. 
       updateIndexById() will be removed on May 20th, 2025.`,
     );
-    await this.updateVector(indexName, id, update);
+    await this.updateVector(indexName, id, update, namespace);
   }
 
   /**
@@ -232,6 +234,7 @@ export class PineconeVector extends MastraVector {
    * @param update - An object containing the vector and/or metadata to update.
    * @param update.vector - An optional array of numbers representing the new vector.
    * @param update.metadata - An optional record containing the new metadata.
+   * @param namespace - The namespace of the index (optional).
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
@@ -273,6 +276,7 @@ export class PineconeVector extends MastraVector {
    * Deletes a vector by its ID.
    * @param indexName - The name of the index containing the vector.
    * @param id - The ID of the vector to delete.
+   * @param namespace - The namespace of the index (optional).
    * @returns A promise that resolves when the deletion is complete.
    * @throws Will throw an error if the deletion operation fails.
    */
@@ -289,6 +293,7 @@ export class PineconeVector extends MastraVector {
    * Deletes a vector by its ID.
    * @param indexName - The name of the index containing the vector.
    * @param id - The ID of the vector to delete.
+   * @param namespace - The namespace of the index (optional).
    * @returns A promise that resolves when the deletion is complete.
    * @throws Will throw an error if the deletion operation fails.
    */

@@ -244,7 +244,7 @@ export class QdrantVector extends MastraVector {
         return;
       }
     } catch (error) {
-      console.error('Error updating point in Qdrant:', error);
+      console.error(`Failed to update vector by id: ${id} for index name: ${indexName}:`, error);
       throw error;
     }
   }
@@ -284,7 +284,7 @@ export class QdrantVector extends MastraVector {
         points: [pointId],
       });
     } catch (error: any) {
-      throw new Error(`Failed to delete index by id: ${id} for index name: ${indexName}: ${error.message}`);
+      throw new Error(`Failed to delete vector by id: ${id} for index name: ${indexName}: ${error.message}`);
     }
   }
 
