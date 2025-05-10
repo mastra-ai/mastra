@@ -12,6 +12,7 @@ import { PostHogProvider } from "@/analytics/posthog-provider";
 import { CookieConsent } from "@/components/cookie-consent";
 import { NextraLayout } from "@/components/nextra-layout";
 import { GTProvider } from "gt-next";
+import { CustomHead } from "@/components/custom-head";
 
 const fetchStars = async () => {
   try {
@@ -56,16 +57,8 @@ export default async function RootLayout({
       )}
       suppressHydrationWarning
     >
-      <Head
-        // primary-color
-        color={{
-          hue: 143,
-          saturation: 97,
-          lightness: 54,
-        }}
-      >
-        {/* Your additional tags should be passed as `children` of `<Head>` element */}
-      </Head>
+      <CustomHead />
+
       <body>
         <GTProvider locale={locale}>
           <PostHogProvider>
