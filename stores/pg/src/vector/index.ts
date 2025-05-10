@@ -72,7 +72,7 @@ export class PgVector extends MastraVector {
 
   /**
    * @deprecated Passing connectionString as a string is deprecated.
-   * Use the object parameter instead. This signature will be removed on May 20th.
+   * Use the object parameter instead. This signature will be removed on May 20th, 2025.
    */
   constructor(connectionString: string);
   constructor(config: {
@@ -101,7 +101,7 @@ export class PgVector extends MastraVector {
         Please use an object parameter instead:
         new PgVector({ connectionString })
 
-        The string signature will be removed on May 20th.`,
+        The string signature will be removed on May 20th, 2025.`,
       );
       connectionString = config;
       schemaName = undefined;
@@ -681,7 +681,9 @@ export class PgVector extends MastraVector {
     update: { vector?: number[]; metadata?: Record<string, any> },
   ): Promise<void> {
     this.logger.warn(
-      `Deprecation Warning: updateIndexById() is deprecated. Please use updateVector() instead. updateIndexById() will be removed on May 20th.`,
+      `Deprecation Warning: updateIndexById() is deprecated. 
+      Please use updateVector() instead. 
+      updateIndexById() will be removed on May 20th, 2025.`,
     );
     await this.updateVector(indexName, id, update);
   }
@@ -758,7 +760,9 @@ export class PgVector extends MastraVector {
    */
   async deleteIndexById(indexName: string, id: string): Promise<void> {
     this.logger.warn(
-      `Deprecation Warning: deleteIndexById() is deprecated. Please use deleteVector() instead. deleteIndexById() will be removed on May 20th.`,
+      `Deprecation Warning: deleteIndexById() is deprecated. 
+      Please use deleteVector() instead. 
+      deleteIndexById() will be removed on May 20th, 2025.`,
     );
     await this.deleteVector(indexName, id);
   }

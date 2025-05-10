@@ -302,7 +302,9 @@ export class MongoDBVector extends MastraVector {
     update: { vector?: number[]; metadata?: Record<string, any> },
   ): Promise<void> {
     this.logger.warn(
-      `Deprecation Warning: updateIndexById() is deprecated. Please use updateVector() instead. updateIndexById() will be removed on May 20th.`,
+      `Deprecation Warning: updateIndexById() is deprecated. 
+      Please use updateVector() instead. 
+      updateIndexById() will be removed on May 20th, 2025.`,
     );
     await this.updateVector(indexName, id, update);
   }
@@ -365,7 +367,9 @@ export class MongoDBVector extends MastraVector {
    */
   async deleteIndexById(indexName: string, id: string): Promise<void> {
     this.logger.warn(
-      `Deprecation Warning: deleteIndexById() is deprecated. Please use deleteVector() instead. deleteIndexById() will be removed on May 20th.`,
+      `Deprecation Warning: deleteIndexById() is deprecated. 
+      Please use deleteVector() instead. 
+      deleteIndexById() will be removed on May 20th, 2025.`,
     );
     await this.deleteVector(indexName, id);
   }
