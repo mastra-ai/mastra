@@ -43,7 +43,7 @@
     "eslint-config-next": "15.0.2",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.3"
   },
   "peerDependencies": {
     "react": ">= 0.14.0 || 19",
