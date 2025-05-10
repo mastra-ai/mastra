@@ -165,7 +165,7 @@ describe('DefaultVectorDB', () => {
         expect(ids).toHaveLength(2);
         const id = ids[1];
 
-        await vectorDB.deleteVector(testIndexName, id);
+        await vectorDB.deleteVector(testIndexName, ids[0]);
 
         const results = await vectorDB.query({ indexName: testIndexName, queryVector: [1, 2, 3] });
         expect(results).toHaveLength(1);
