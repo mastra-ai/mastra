@@ -36,20 +36,6 @@ const createTestMessage = (threadId: string, content: string, role: 'user' | 'as
   };
 };
 
-const cleanupDbFiles = (files: string[]) => {
-  for (const dbFile of files) {
-    const filePath = dbFile.replace(/^file:/, '');
-    for (const suffix of ['', '-wal', '-shm']) {
-      const target = filePath + suffix;
-      if (fs.existsSync(target)) {
-        try {
-          fs.unlinkSync(target);
-        } catch {}
-      }
-    }
-  }
-};
-
 dotenv.config({ path: '.env.test' });
 
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -57,12 +43,9 @@ const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 describe('Working Memory Tests', () => {
   let memory: Memory;
   let thread: any;
-  let dbFiles: string[] = [];
 
   beforeEach(async () => {
-    dbFiles = [];
     const dbFile = `file:working-memory.db`;
-    dbFiles.push(dbFile);
     // Create memory instance with working memory enabled
     memory = new Memory({
       options: {
@@ -104,14 +87,9 @@ describe('Working Memory Tests', () => {
     });
   });
 
-  afterEach(() => {
-    cleanupDbFiles(dbFiles);
-  });
-
   afterAll(async () => {
     const threads = await memory.getThreadsByResourceId({ resourceId });
     await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
-    cleanupDbFiles(dbFiles);
   });
 
   it('should handle LLM responses with working memory using OpenAI (test that the working memory prompt works)', async () => {
@@ -336,8 +314,7 @@ describe('Working Memory Tests', () => {
   });
 
   it('should respect working memory enabled/disabled setting', async () => {
-    const dbFile = `file:disabled-working-memory-${randomUUID()}.db`;
-    dbFiles.push(dbFile);
+    const dbFile = `file:disabled-working-memory.db`;
     // Create memory instance with working memory disabled
     const disabledMemory = new Memory({
       storage: new DefaultStorage({
@@ -399,8 +376,7 @@ describe('Working Memory Tests', () => {
   });
 
   it('should respect working memory use setting', async () => {
-    const dbFile = `file:tool-call-working-memory-${randomUUID()}.db`;
-    dbFiles.push(dbFile);
+    const dbFile = `file:working-memory-use.db`;
     // Create memory instance with working memory in tool-call mode
     const toolCallMemory = new Memory({
       storage: new DefaultStorage({
@@ -515,8 +491,7 @@ describe('Working Memory Tests', () => {
   });
 
   it('should handle LLM responses with working memory using tool calls', async () => {
-    const dbFile = `file:tool-call-working-memory-${randomUUID()}.db`;
-    dbFiles.push(dbFile);
+    const dbFile = `file:working-memory-tool-call.db`;
     const memory = new Memory({
       storage: new DefaultStorage({
         config: {
@@ -565,8 +540,7 @@ describe('Working Memory Tests', () => {
   });
 
   it("shouldn't pollute context with working memory tool call args, only the system instruction working memory should exist", async () => {
-    const dbFile = `file:tool-call-working-memory-${randomUUID()}.db`;
-    dbFiles.push(dbFile);
+    const dbFile = `file:working-memory-tool-call-args.db`;
     const memory = new Memory({
       storage: new DefaultStorage({
         config: {
