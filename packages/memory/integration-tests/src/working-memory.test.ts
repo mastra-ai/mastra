@@ -1,4 +1,3 @@
-import fs from 'fs';
 import { randomUUID } from 'node:crypto';
 import { createOpenAI } from '@ai-sdk/openai';
 import type { MessageType } from '@mastra/core';
