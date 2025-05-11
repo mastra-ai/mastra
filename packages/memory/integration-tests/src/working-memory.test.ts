@@ -7,7 +7,7 @@ import { LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import type { ToolCallPart } from 'ai';
 import dotenv from 'dotenv';
-import { describe, expect, it, beforeEach, afterAll, afterEach } from 'vitest';
+import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 
 const resourceId = 'test-resource';
 let messageCounter = 0;
