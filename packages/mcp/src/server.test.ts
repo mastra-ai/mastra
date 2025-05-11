@@ -1,4 +1,4 @@
-import http from 'http';
+import http from 'node:http';
 import path from 'path';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
@@ -31,11 +31,11 @@ describe('MCPServer', () => {
       });
     });
 
-    await new Promise(resolve => httpServer.listen(PORT, resolve));
+    await new Promise<void>(resolve => httpServer.listen(PORT, () => resolve()));
   });
 
   afterAll(async () => {
-    await new Promise(resolve => httpServer.close(resolve));
+    await new Promise<void>(resolve => httpServer.close(() => resolve()));
   });
 
   describe('MCPServer SSE transport', () => {
@@ -77,7 +77,6 @@ describe('MCPServer', () => {
     });
 
     it('should return 503 if message sent before SSE connection', async () => {
-      // Manually clear the SSE transport
       (server as any).sseTransport = undefined;
       const res = await fetch(`http://localhost:${PORT}/message`, {
         method: 'POST',

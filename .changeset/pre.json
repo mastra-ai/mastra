@@ -66,15 +66,23 @@
     "@mastra/voice-playai": "0.1.17",
     "@mastra/voice-sarvam": "0.1.12",
     "@mastra/voice-speechify": "0.1.17",
-    "@mastra/inngest": "0.0.2"
+    "@mastra/inngest": "0.0.2",
+    "mcp-server-integration-tests": "0.1.0"
   },
   "changesets": [
     "@mastra_dane-4054-dependencies",
     "@mastra_dane-4173-dependencies",
     "@mastra_fastembed-4054-dependencies",
+    "breezy-pots-repeat",
+    "curvy-bears-relax",
     "evil-oranges-cut",
+    "fruity-animals-lick",
+    "old-laws-sleep",
     "tame-camels-fry",
     "thick-cobras-listen",
-    "tired-poets-look"
+    "tired-poets-look",
+    "wild-moles-divide",
+    "yellow-hairs-run",
+    "yellow-symbols-check"
   ]
 }

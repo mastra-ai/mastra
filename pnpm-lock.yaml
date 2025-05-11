@@ -274,7 +274,7 @@ importers:
         version: 12.1.0
       dotenv:
         specifier: ^16.4.7
-        version: 16.4.7
+        version: 16.5.0
       drizzle-kit:
         specifier: ^0.30.5
         version: 0.30.5
@@ -603,7 +603,7 @@ importers:
         version: 12.1.0
       dotenv:
         specifier: ^16.4.7
-        version: 16.4.7
+        version: 16.5.0
       execa:
         specifier: ^9.5.2
         version: 9.5.2
@@ -978,7 +978,7 @@ importers:
         version: 3.6.0
       dotenv:
         specifier: ^16.4.7
-        version: 16.4.7
+        version: 16.5.0
       fastembed:
         specifier: ^1.14.4
         version: 1.14.4
@@ -1184,7 +1184,7 @@ importers:
         version: 2.0.4
       dotenv:
         specifier: ^16.4.7
-        version: 16.4.7
+        version: 16.5.0
       esbuild:
         specifier: ^0.25.1
         version: 0.25.1
@@ -1225,6 +1225,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
+      '@mastra/mcp':
+        specifier: workspace:^
+        version: link:../mcp
       '@microsoft/api-extractor':
         specifier: ^7.52.5
         version: 7.52.5(@types/node@20.17.32)
@@ -1240,12 +1243,12 @@ importers:
       '@types/node':
         specifier: ^20.17.32
         version: 20.17.32
-      concurrently:
-        specifier: ^9.1.2
-        version: 9.1.2
       eslint:
         specifier: ^9.23.0
         version: 9.25.1(jiti@2.4.2)
+      fetch-to-node:
+        specifier: ^2.1.0
+        version: 2.1.0
       hono-openapi:
         specifier: ^0.4.6
         version: 0.4.6(hono@4.7.7)(openapi-types@12.1.3)(zod@3.24.4)
@@ -1267,9 +1270,6 @@ importers:
       vitest:
         specifier: ^2.1.9
         version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.17.32)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
-      zod-to-json-schema:
-        specifier: ^3.24.5
-        version: 3.24.5(zod@3.24.4)
 
   packages/evals:
     dependencies:
@@ -1324,7 +1324,7 @@ importers:
         version: 4.3.15(react@19.1.0)(zod@3.24.4)
       dotenv:
         specifier: ^16.4.7
-        version: 16.4.7
+        version: 16.5.0
       eslint:
         specifier: ^9.23.0
         version: 9.25.1(jiti@2.4.2)
@@ -1408,6 +1408,9 @@ importers:
       fast-deep-equal:
         specifier: ^3.1.3
         version: 3.1.3
+      json-schema-to-zod:
+        specifier: ^2.6.0
+        version: 2.6.0
       uuid:
         specifier: ^11.1.0
         version: 11.1.0
@@ -1427,9 +1430,6 @@ importers:
       eslint:
         specifier: ^9.23.0
         version: 9.25.1(jiti@2.4.2)
-      json-schema-to-zod:
-        specifier: ^2.6.0
-        version: 2.6.0
       tsup:
         specifier: ^8.4.0
         version: 8.4.0(@microsoft/api-extractor@7.52.5(@types/node@20.17.32))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.3)(tsx@4.19.3)(typescript@5.8.3)(yaml@2.7.0)
@@ -1577,6 +1577,46 @@ importers:
         specifier: ^3.1.2
         version: 3.1.2(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.17.32)(@vitest/ui@3.0.9)(jiti@2.4.2)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.3)(yaml@2.7.0)
 
+  packages/mcp/integration-tests:
+    dependencies:
+      '@ai-sdk/openai':
+        specifier: ^1.3.21
+        version: 1.3.22(zod@3.24.4)
+      '@ai-sdk/react':
+        specifier: ^1.2.11
+        version: 1.2.12(react@19.1.0)(zod@3.24.4)
+      '@mastra/client-js':
+        specifier: workspace:*
+        version: link:../../../client-sdks/client-js
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@mastra/mcp':
+        specifier: workspace:*
+        version: link:..
+      dotenv:
+        specifier: ^16.5.0
+        version: 16.5.0
+      zod:
+        specifier: ^3.24.3
+        version: 3.24.4
+    devDependencies:
+      '@testing-library/react':
+        specifier: ^16.2.0
+        version: 16.2.0(@testing-library/dom@10.4.0)(@types/react-dom@19.0.4(@types/react@19.0.10))(@types/react@19.0.10)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      '@types/node':
+        specifier: ^20.17.32
+        version: 20.17.32
+      mastra:
+        specifier: workspace:*
+        version: link:../../cli
+      typescript:
+        specifier: ^5.8.3
+        version: 5.8.3
+      vitest:
+        specifier: ^1.6.1
+        version: 1.6.1(@edge-runtime/vm@3.2.0)(@types/node@20.17.32)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+
   packages/memory:
     dependencies:
       '@mastra/core':
@@ -1672,7 +1712,7 @@ importers:
         version: link:../../../stores/upstash
       dotenv:
         specifier: ^16.4.7
-        version: 16.4.7
+        version: 16.5.0
       zod:
         specifier: ^3.24.2
         version: 3.24.4
@@ -1981,7 +2021,7 @@ importers:
         version: 4.3.15(react@19.1.0)(zod@3.24.4)
       dotenv:
         specifier: ^16.4.7
-        version: 16.4.7
+        version: 16.5.0
       eslint:
         specifier: ^9.23.0
         version: 9.25.1(jiti@2.4.2)
@@ -2028,7 +2068,7 @@ importers:
         specifier: ^2.1.9
         version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.17.32)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
       zod:
-        specifier: ^3.24.4
+        specifier: ^3.24.3
         version: 3.24.4
       zod-to-json-schema:
         specifier: ^3.24.5
@@ -2478,7 +2518,7 @@ importers:
         version: 20.17.32
       dotenv:
         specifier: ^16.4.7
-        version: 16.4.7
+        version: 16.5.0
       eslint:
         specifier: ^9.23.0
         version: 9.25.1(jiti@2.4.2)
@@ -2518,7 +2558,7 @@ importers:
         version: 20.17.32
       dotenv:
         specifier: ^16.4.7
-        version: 16.4.7
+        version: 16.5.0
       eslint:
         specifier: ^9.23.0
         version: 9.25.1(jiti@2.4.2)
@@ -2743,7 +2783,7 @@ importers:
         version: 20.17.32
       dotenv:
         specifier: ^16.4.7
-        version: 16.4.7
+        version: 16.5.0
       eslint:
         specifier: ^9.23.0
         version: 9.25.1(jiti@2.4.2)
@@ -2808,7 +2848,7 @@ importers:
         version: 20.17.32
       dotenv:
         specifier: ^16.4.7
-        version: 16.4.7
+        version: 16.5.0
       eslint:
         specifier: ^9.23.0
         version: 9.25.1(jiti@2.4.2)
@@ -2845,7 +2885,7 @@ importers:
         version: 20.17.32
       dotenv:
         specifier: ^16.4.7
-        version: 16.4.7
+        version: 16.5.0
       eslint:
         specifier: ^9.23.0
         version: 9.25.1(jiti@2.4.2)
@@ -2879,7 +2919,7 @@ importers:
         version: 20.17.32
       dotenv:
         specifier: ^16.4.7
-        version: 16.4.7
+        version: 16.5.0
       eslint:
         specifier: ^9.23.0
         version: 9.25.1(jiti@2.4.2)
@@ -10650,11 +10690,6 @@ packages:
   concat-map@0.0.1:
     resolution: {integrity: sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==}
 
-  concurrently@9.1.2:
-    resolution: {integrity: sha512-H9MWcoPsYddwbOGM6difjVwVZHl63nwMEwDJG/L7VGtuaJhb12h2caPG2tVPWs7emuYix252iGfqOyrz1GczTQ==}
-    engines: {node: '>=18'}
-    hasBin: true
-
   confbox@0.1.8:
     resolution: {integrity: sha512-RMtmw0iFkeR4YV+fUOSucriAQNb9g8zFR52MWCtl+cCZOFRNL6zeB395vPzFhEjjn4fMxXudmELnl/KF/WrK6w==}
 
@@ -11294,6 +11329,10 @@ packages:
 
   dotenv@16.4.7:
     resolution: {integrity: sha512-47qPchRCykZC03FhkYAhrvwU4xDBFIj1QPqaarj6mdM/hgUzfPHcpkHJOn3mJAufFeeAxAzeGsr5X0M4k6fLZQ==}
+    engines: {node: '>=12'}
+
+  dotenv@16.5.0:
+    resolution: {integrity: sha512-m/C+AwOAr9/W1UOIZUo232ejMNnJAJtYQjUbHoNTBNTJSvqzzDh7vnrei3o3r3m9blf6ZoDkvcw0VmozNRFJxg==}
     engines: {node: '>=12'}
 
   drizzle-kit@0.30.5:
@@ -12124,6 +12163,9 @@ packages:
   fetch-h2@3.0.2:
     resolution: {integrity: sha512-Lo6UPdMKKc9Ond7yjG2vq0mnocspOLh1oV6+XZdtfdexacvMSz5xm3WoQhTAdoR2+UqPlyMNqcqfecipoD+l/A==}
     engines: {node: '>=12'}
+
+  fetch-to-node@2.1.0:
+    resolution: {integrity: sha512-Wq05j6LE1GrWpT2t1YbCkyFY6xKRJq3hx/oRJdWEJpZlik3g25MmdJS6RFm49iiMJw6zpZuBOrgihOgy2jGyAA==}
 
   fflate@0.4.8:
     resolution: {integrity: sha512-FJqqoDBR00Mdj9ppamLa/Y7vxm+PRmNWA67N846RvsoYVMKB4q3y/de5PA7gUmRMYK/8CMz2GDZQmCRN1wBcWA==}
@@ -27415,16 +27457,6 @@ snapshots:
 
   concat-map@0.0.1: {}
 
-  concurrently@9.1.2:
-    dependencies:
-      chalk: 4.1.2
-      lodash: 4.17.21
-      rxjs: 7.8.1
-      shell-quote: 1.8.2
-      supports-color: 8.1.1
-      tree-kill: 1.2.2
-      yargs: 17.7.2
-
   confbox@0.1.8: {}
 
   config-chain@1.1.13:
@@ -28053,6 +28085,8 @@ snapshots:
       type-fest: 4.37.0
 
   dotenv@16.4.7: {}
+
+  dotenv@16.5.0: {}
 
   drizzle-kit@0.30.5:
     dependencies:
@@ -29405,6 +29439,8 @@ snapshots:
       to-arraybuffer: 1.0.1
       tough-cookie: 4.1.4
 
+  fetch-to-node@2.1.0: {}
+
   fflate@0.4.8: {}
 
   fflate@0.8.2: {}
@@ -30384,7 +30420,7 @@ snapshots:
       axios: 1.8.4(debug@4.4.0)
       camelcase: 6.3.0
       debug: 4.4.0(supports-color@8.1.1)
-      dotenv: 16.4.7
+      dotenv: 16.5.0
       expect: 27.5.1
       extend: 3.0.2
       file-type: 16.5.4
@@ -31580,7 +31616,7 @@ snapshots:
   lambda-local@2.2.0:
     dependencies:
       commander: 10.0.1
-      dotenv: 16.4.7
+      dotenv: 16.5.0
       winston: 3.17.0
 
   language-subtag-registry@0.3.23: {}
