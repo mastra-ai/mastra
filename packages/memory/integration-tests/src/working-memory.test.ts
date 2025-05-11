@@ -1,3 +1,4 @@
+import fs from 'fs';
 import { randomUUID } from 'node:crypto';
 import { createOpenAI } from '@ai-sdk/openai';
 import type { MessageType } from '@mastra/core';
@@ -8,7 +9,6 @@ import { Memory } from '@mastra/memory';
 import type { ToolCallPart } from 'ai';
 import dotenv from 'dotenv';
 import { describe, expect, it, beforeEach, afterAll, afterEach } from 'vitest';
-import fs from 'fs';
 
 const resourceId = 'test-resource';
 let messageCounter = 0;
