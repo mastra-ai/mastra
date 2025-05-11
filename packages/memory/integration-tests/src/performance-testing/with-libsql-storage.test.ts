@@ -12,7 +12,7 @@ describe('Memory with LibSQL Integration', () => {
     const memory = new Memory({
       storage: new DefaultStorage({
         config: {
-          url: 'file:test.db',
+          url: 'file:perf-test.db',
         },
       }),
       options: {
