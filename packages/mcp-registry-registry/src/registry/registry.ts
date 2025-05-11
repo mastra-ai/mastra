@@ -96,8 +96,8 @@ export const registryData: RegistryFile = {
       id: 'klavisai',
       name: 'Klavis AI',
       description: 'Klavis AI is open source MCP integrations for AI Applications',
-      url: 'https://www.klavis.ai/',
-      tags: ['verified'],
+      url: 'https://github.com/Klavis-AI/klavis',
+      tags: ['open-source'],
     },
     {
       id: 'make',
