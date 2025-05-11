@@ -61,7 +61,7 @@ describe('Working Memory Tests', () => {
 
   beforeEach(async () => {
     dbFiles = [];
-    const dbFile = `file:working-memory-${randomUUID()}.db`;
+    const dbFile = `file:working-memory.db`;
     dbFiles.push(dbFile);
     // Create memory instance with working memory enabled
     memory = new Memory({
