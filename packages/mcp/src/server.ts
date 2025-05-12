@@ -12,6 +12,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { StreamableHTTPServerTransportOptions } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import type { SSEStreamingApi } from 'hono/streaming';
 import { streamSSE } from 'hono/streaming';
 import { SSETransport } from 'hono-mcp-server-sse-transport';
 import { z } from 'zod';
@@ -270,7 +271,11 @@ export class MCPServer extends MCPServerBase {
       if (!this.sseHonoTransports?.has(sessionId)) {
         return context.text(`No transport found for sessionId ${sessionId}`, 400);
       }
-      return await this.sseHonoTransports.get(sessionId)!.handlePostMessage(context);
+      const message = await this.sseHonoTransports?.get(sessionId)?.handlePostMessage(context);
+      if (!message) {
+        return context.text('Transport not found', 400);
+      }
+      return message;
     } else {
       this.logger.debug('Unknown path:', { path: url.pathname });
       return context.text('Unknown path', 404);
@@ -355,7 +360,7 @@ export class MCPServer extends MCPServerBase {
     });
   }
 
-  public async connectHonoSSE({ messagePath, stream }: { messagePath: string; stream: any }) {
+  public async connectHonoSSE({ messagePath, stream }: { messagePath: string; stream: SSEStreamingApi }) {
     this.logger.debug('Received SSE connection');
     const sseTransport = new SSETransport(messagePath, stream);
     const sessionId = sseTransport.sessionId;
@@ -379,7 +384,7 @@ export class MCPServer extends MCPServerBase {
       // You can also await for a promise that never resolves
       const sessionIds = Array.from(this.sseHonoTransports?.keys() || []);
       this.logger.debug('Active Hono SSE sessions:', { sessionIds });
-      stream.write(':keep-alive\n\n');
+      await stream.write(':keep-alive\n\n');
       await stream.sleep(60_000);
     }
   }
@@ -402,7 +407,6 @@ export class MCPServer extends MCPServerBase {
           await transport.close?.();
         }
         this.sseHonoTransports.clear();
-        this.sseHonoTransports = undefined;
       }
       if (this.streamableHTTPTransport) {
         await this.streamableHTTPTransport.close?.();
