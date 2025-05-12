@@ -555,6 +555,21 @@ export class PgVector extends MastraVector {
     try {
       const tableName = this.getTableName(indexName);
 
+      // Check if table exists with a vector column
+      const tableExistsQuery = `
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = $1
+          AND table_name = $2
+          AND udt_name = 'vector'
+        LIMIT 1;
+      `;
+      const tableExists = await client.query(tableExistsQuery, [this.schema || 'public', indexName]);
+
+      if (tableExists.rows.length === 0) {
+        throw new Error(`Vector table ${tableName} does not exist`);
+      }
+
       // Get vector dimension
       const dimensionQuery = `
                 SELECT atttypmod as dimension
@@ -579,13 +594,15 @@ export class PgVector extends MastraVector {
             JOIN pg_class c ON i.indexrelid = c.oid
             JOIN pg_am am ON c.relam = am.oid
             JOIN pg_opclass opclass ON i.indclass[0] = opclass.oid
-            WHERE c.relname = '${tableName}_vector_idx';
+            JOIN pg_namespace n ON c.relnamespace = n.oid
+            WHERE c.relname = $1
+            AND n.nspname = $2;
             `;
 
       const [dimResult, countResult, indexResult] = await Promise.all([
         client.query(dimensionQuery, [tableName]),
         client.query(countQuery),
-        client.query(indexQuery),
+        client.query(indexQuery, [`${indexName}_vector_idx`, this.schema || 'public']),
       ]);
 
       const { index_method, index_def, operator_class } = indexResult.rows[0] || {
