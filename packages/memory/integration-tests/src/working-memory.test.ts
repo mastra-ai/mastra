@@ -3,8 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { createOpenAI } from '@ai-sdk/openai';
 import type { MessageType } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
-import { DefaultStorage } from '@mastra/core/storage/libsql';
-import { LibSQLVector } from '@mastra/libsql';
+import { LibSQLVector, LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import type { ToolCallPart } from 'ai';
 import dotenv from 'dotenv';
@@ -85,10 +84,8 @@ describe('Working Memory Tests', () => {
           generateTitle: false,
         },
       },
-      storage: new DefaultStorage({
-        config: {
-          url: dbFile,
-        },
+      storage: new LibSQLStore({
+        url: dbFile,
       }),
       vector: new LibSQLVector({
         connectionUrl: dbFile, // relative path from bundled .mastra/output dir
@@ -340,10 +337,8 @@ describe('Working Memory Tests', () => {
     dbFiles.push(dbFile);
     // Create memory instance with working memory disabled
     const disabledMemory = new Memory({
-      storage: new DefaultStorage({
-        config: {
-          url: dbFile,
-        },
+      storage: new LibSQLStore({
+        url: dbFile,
       }),
       vector: new LibSQLVector({
         connectionUrl: dbFile, // relative path from bundled .mastra/output dir
@@ -403,10 +398,8 @@ describe('Working Memory Tests', () => {
     dbFiles.push(dbFile);
     // Create memory instance with working memory in tool-call mode
     const toolCallMemory = new Memory({
-      storage: new DefaultStorage({
-        config: {
-          url: dbFile,
-        },
+      storage: new LibSQLStore({
+        url: dbFile,
       }),
       vector: new LibSQLVector({
         connectionUrl: dbFile, // relative path from bundled .mastra/output dir
@@ -459,10 +452,8 @@ describe('Working Memory Tests', () => {
 
     // Create memory instance with working memory in text-stream mode
     const textStreamMemory = new Memory({
-      storage: new DefaultStorage({
-        config: {
-          url: dbFile,
-        },
+      storage: new LibSQLStore({
+        url: dbFile,
       }),
       vector: new LibSQLVector({
         connectionUrl: dbFile, // relative path from bundled .mastra/output dir
@@ -518,10 +509,8 @@ describe('Working Memory Tests', () => {
     const dbFile = `file:tool-call-working-memory-${randomUUID()}.db`;
     dbFiles.push(dbFile);
     const memory = new Memory({
-      storage: new DefaultStorage({
-        config: {
-          url: dbFile,
-        },
+      storage: new LibSQLStore({
+        url: dbFile,
       }),
       vector: new LibSQLVector({
         connectionUrl: dbFile, // relative path from bundled .mastra/output dir
@@ -568,10 +557,8 @@ describe('Working Memory Tests', () => {
     const dbFile = `file:tool-call-working-memory-${randomUUID()}.db`;
     dbFiles.push(dbFile);
     const memory = new Memory({
-      storage: new DefaultStorage({
-        config: {
-          url: dbFile,
-        },
+      storage: new LibSQLStore({
+        url: dbFile,
       }),
       vector: new LibSQLVector({
         connectionUrl: dbFile, // relative path from bundled .mastra/output dir
