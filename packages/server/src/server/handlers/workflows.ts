@@ -111,15 +111,15 @@ export async function startAsyncWorkflowHandler({
       return result;
     }
 
-    const run = await workflow.getRun(runId);
+    const run = workflow.getMemoryRun(runId);
 
     if (!run) {
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const newRun = workflow.createRun({ runId });
+    // const newRun = workflow.createRun({ runId });
 
-    const result = await newRun.start({
+    const result = await run.start({
       triggerData,
       runtimeContext,
     });
@@ -205,15 +205,15 @@ export async function startWorkflowRunHandler({
     }
 
     const workflow = mastra.getWorkflow(workflowId);
-    const run = await workflow.getRun(runId);
+    const run = workflow.getMemoryRun(runId);
 
     if (!run) {
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const newRun = workflow.createRun({ runId });
+    // const newRun = workflow.createRun({ runId });
 
-    await newRun.start({
+    void run.start({
       triggerData,
       runtimeContext,
     });
@@ -239,19 +239,17 @@ export async function watchWorkflowHandler({
     }
 
     const workflow = mastra.getWorkflow(workflowId);
-    const run = await workflow.getRun(runId);
+    const run = workflow.getMemoryRun(runId);
 
     if (!run) {
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const newRun = workflow.createRun({ runId });
-
     let unwatch: () => void;
     let asyncRef: NodeJS.Immediate | null = null;
     const stream = new ReadableStream<string>({
       start(controller) {
-        unwatch = newRun.watch(({ activePaths, runId, timestamp, results }) => {
+        unwatch = run.watch(({ activePaths, runId, timestamp, results }) => {
           const activePathsObj = Object.fromEntries(activePaths);
           controller.enqueue(JSON.stringify({ activePaths: activePathsObj, runId, timestamp, results }));
 
@@ -260,9 +258,10 @@ export async function watchWorkflowHandler({
             asyncRef = null;
           }
 
-          // a run is finished if we cannot retrieve it anymore
+          // a run is finished if none of the active paths is currently being executed
           asyncRef = setImmediate(() => {
-            if (!workflow.getMemoryRun(runId)) {
+            const runDone = Object.values(activePathsObj).every(value => value.status !== 'executing');
+            if (runDone) {
               controller.close();
               unwatch?.();
             }
@@ -297,15 +296,15 @@ export async function resumeAsyncWorkflowHandler({
     }
 
     const workflow = mastra.getWorkflow(workflowId);
-    const run = await workflow.getRun(runId);
+    const run = workflow.getMemoryRun(runId);
 
     if (!run) {
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const newRun = workflow.createRun({ runId });
+    // const newRun = workflow.createRun({ runId });
 
-    const result = await newRun.resume({
+    const result = await run.resume({
       stepId: body.stepId,
       context: body.context,
       runtimeContext,
@@ -334,15 +333,13 @@ export async function resumeWorkflowHandler({
     }
 
     const workflow = mastra.getWorkflow(workflowId);
-    const run = await workflow.getRun(runId);
+    const run = workflow.getMemoryRun(runId);
 
     if (!run) {
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const newRun = workflow.createRun({ runId });
-
-    await newRun.resume({
+    void run.resume({
       stepId: body.stepId,
       context: body.context,
       runtimeContext,

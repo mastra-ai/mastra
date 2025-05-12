@@ -83,9 +83,7 @@ export async function getVNextWorkflowByIdHandler({ mastra, workflowId }: VNextW
       }, {}),
       name: workflow.name,
       stepGraph: workflow.serializedStepGraph,
-      // @ts-ignore - ignore infinite recursion
       inputSchema: workflow.inputSchema ? stringify(zodToJsonSchema(workflow.inputSchema)) : undefined,
-      // @ts-ignore - ignore infinite recursion
       outputSchema: workflow.outputSchema ? stringify(zodToJsonSchema(workflow.outputSchema)) : undefined,
     };
   } catch (error) {
@@ -224,7 +222,7 @@ export async function startVNextWorkflowRunHandler({
     ]);
 
     const _run = workflow.createRun({ runId });
-    await _run.start({
+    void _run.start({
       inputData,
       runtimeContext: finalRuntimeContext,
     });
@@ -269,7 +267,7 @@ export async function watchVNextWorkflowHandler({
             asyncRef = null;
           }
 
-          // a run is finished if we cannot retrieve it anymore
+          // a run is finished if the status is not running
           asyncRef = setImmediate(async () => {
             const runDone = payload.workflowState.status !== 'running';
             if (runDone) {
@@ -372,7 +370,7 @@ export async function resumeVNextWorkflowHandler({
 
     const _run = workflow.createRun({ runId });
 
-    await _run.resume({
+    void _run.resume({
       step: body.step,
       resumeData: body.resumeData,
       runtimeContext,

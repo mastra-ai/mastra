@@ -1,5 +1,24 @@
 # @mastra/github
 
+## 1.1.23-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [3171b5b]
+- Updated dependencies [973e5ac]
+- Updated dependencies [9e1eff5]
+  - @mastra/core@0.9.4-alpha.2
+
+## 1.1.23-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [ab80e7e]
+- Updated dependencies [6fa1ad1]
+- Updated dependencies [c28d7a0]
+- Updated dependencies [edf1e88]
+  - @mastra/core@0.9.4-alpha.1
+
 ## 1.1.23-alpha.0
 
 ### Patch Changes

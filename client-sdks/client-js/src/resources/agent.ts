@@ -2,7 +2,7 @@ import { processDataStream } from '@ai-sdk/ui-utils';
 import type { GenerateReturn } from '@mastra/core';
 import type { JSONSchema7 } from 'json-schema';
 import { ZodSchema } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
+import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 
 import type {
   GenerateParams,
@@ -100,11 +100,8 @@ export class Agent extends BaseResource {
   ): Promise<GenerateReturn<T>> {
     const processedParams = {
       ...params,
-      output: params.output instanceof ZodSchema ? zodToJsonSchema(params.output) : params.output,
-      experimental_output:
-        params.experimental_output instanceof ZodSchema
-          ? zodToJsonSchema(params.experimental_output)
-          : params.experimental_output,
+      output: zodToJsonSchema(params.output),
+      experimental_output: zodToJsonSchema(params.experimental_output),
       runtimeContext: params.runtimeContext ? Object.fromEntries(params.runtimeContext.entries()) : undefined,
     };
 
@@ -128,11 +125,8 @@ export class Agent extends BaseResource {
   > {
     const processedParams = {
       ...params,
-      output: params.output instanceof ZodSchema ? zodToJsonSchema(params.output) : params.output,
-      experimental_output:
-        params.experimental_output instanceof ZodSchema
-          ? zodToJsonSchema(params.experimental_output)
-          : params.experimental_output,
+      output: zodToJsonSchema(params.output),
+      experimental_output: zodToJsonSchema(params.experimental_output),
       runtimeContext: params.runtimeContext ? Object.fromEntries(params.runtimeContext.entries()) : undefined,
     };
 

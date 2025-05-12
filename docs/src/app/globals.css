@@ -21,6 +21,7 @@
   --color-icons-2: hsla(0, 0%, 44%, 1);
   --color-icons-3: hsla(0, 0%, 58%, 1);
   --color-icons-4: hsla(0, 0%, 66%, 1);
+  --color-icons-5: hsla(0, 0%, 90%, 1);
   --color-icons-6: hsla(0, 0%, 100%, 1);
   --color-surface-1: hsla(0, 0%, 100%, 1);
   --color-surface-2: hsla(0, 0%, 95%, 1);
@@ -31,6 +32,10 @@
   --color-borders-2: hsla(0, 0%, 26%, 1);
   --color-accent-green: hsla(143, 97%, 54%, 1);
   --color-tag-green-2: hsla(142, 30%, 15%, 1);
+}
+
+#use-ai-text {
+  color: var(--color-icons-5);
 }
 
 :root {

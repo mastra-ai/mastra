@@ -963,7 +963,7 @@ export class Workflow<
    * @param runId - ID of the run to retrieve
    * @returns The workflow run instance if found, undefined otherwise
    */
-  async getMemoryRun(runId: string) {
+  getMemoryRun(runId: string) {
     return this.#runs.get(runId);
   }
 

@@ -12,6 +12,7 @@
     "@mastra/mcp": "latest",
     "@mastra/memory": "latest",
     "@mastra/voice-openai": "latest",
+    "ai": "^4.3.15",
     "fetch-to-node": "^2.1.0",
     "mastra": "latest",
     "zod": "^3.24.2"

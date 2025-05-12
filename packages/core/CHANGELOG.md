@@ -1,5 +1,22 @@
 # @mastra/core
 
+## 0.9.4-alpha.2
+
+### Patch Changes
+
+- 3171b5b: Fix jsonSchema on vercel tools
+- 973e5ac: Add workflows to agents properly
+- 9e1eff5: Fix tool compatibility schema handling by ensuring zodSchema.shape is safely accessed, preventing potential runtime errors.
+
+## 0.9.4-alpha.1
+
+### Patch Changes
+
+- ab80e7e: Fix resume workflow throwing workflow run not found error
+- 6fa1ad1: Fixes and issue when a tool provides no inputSchema and when a tool uses a non-zod schema.
+- c28d7a0: Fix watch workflow not streaming response back in legacy workflow
+- edf1e88: allows ability to pass McpServer into the mastra class and creates an endpoint /api/servers/:serverId/mcp to POST messages to an MCP server
+
 ## 0.9.4-alpha.0
 
 ### Patch Changes

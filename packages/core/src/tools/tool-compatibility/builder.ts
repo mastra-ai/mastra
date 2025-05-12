@@ -2,7 +2,7 @@ import type { ToolExecutionOptions } from 'ai';
 import { jsonSchema } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import jsonSchemaToZod from 'json-schema-to-zod';
-import type { ZodSchema } from 'zod';
+import type { ZodSchema, ZodType } from 'zod';
 import { z } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
 import { zodToJsonSchema } from 'zod-to-json-schema';
@@ -52,7 +52,18 @@ export function convertVercelToolParameters(tool: VercelTool): z.ZodType {
   // If the tool is a Vercel Tool, check if the parameters are already a zod object
   // If not, convert the parameters to a zod object using jsonSchemaToZod
   const schema = tool.parameters ?? z.object({});
-  return isZodType(schema) ? schema : resolveSerializedZodOutput(jsonSchemaToZod(schema));
+  if (isZodType(schema)) {
+    return schema;
+  } else {
+    let schemaToUse;
+    if ('jsonSchema' in schema) {
+      schemaToUse = schema.jsonSchema;
+    } else {
+      schemaToUse = schema;
+    }
+
+    return resolveSerializedZodOutput(jsonSchemaToZod(schemaToUse));
+  }
 }
 
 function convertInputSchema(tool: ToolAction<any, any, any>): z.ZodType {
@@ -188,9 +199,19 @@ export class CoreToolBuilder extends MastraBase {
         : undefined,
     };
 
+    const parametersObject: { parameters?: ZodType; inputSchema?: ZodType } = {};
+
+    if (isVercelTool(this.originalTool)) {
+      parametersObject.parameters = this.getParameters();
+    } else {
+      parametersObject.inputSchema = this.getParameters();
+    }
+
     const model = this.options.model;
 
-    if (model) {
+    const hasParameters = parametersObject.parameters || parametersObject.inputSchema;
+
+    if (model && hasParameters) {
       for (const compat of [
         new OpenAIReasoningToolCompat(model),
         new OpenAIToolCompat(model),
@@ -200,11 +221,14 @@ export class CoreToolBuilder extends MastraBase {
         new MetaToolCompat(model),
       ]) {
         if (compat.shouldApply()) {
-          return { ...definition, ...compat.process(this.originalTool) };
+          return { ...definition, ...compat.process({ ...this.originalTool, ...parametersObject }) };
         }
       }
     }
 
-    return { ...definition, parameters: convertZodSchemaToAISDKSchema(this.getParameters()) };
+    return {
+      ...definition,
+      parameters: convertZodSchemaToAISDKSchema(this.getParameters()),
+    };
   }
 }

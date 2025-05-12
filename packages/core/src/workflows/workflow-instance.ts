@@ -179,7 +179,11 @@ export class WorkflowInstance<
     const results = await this.execute({ triggerData, runtimeContext: runtimeContext ?? new RuntimeContext() });
 
     if (this.#onFinish) {
-      this.#onFinish();
+      const activePathsObj = Object.fromEntries(results.activePaths) as { [key: string]: { status: string } };
+      const hasSuspendedActivePaths = Object.values(activePathsObj).some(value => value.status === 'suspended');
+      if (!hasSuspendedActivePaths) {
+        this.#onFinish();
+      }
     }
 
     return {
