@@ -1,13 +1,11 @@
-import { jsonSchema, zodSchema } from 'ai';
+import { zodSchema } from 'ai';
 import type { Schema } from 'ai';
-import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
-import zodToJsonSchema from 'zod-to-json-schema';
 import type { Targets } from 'zod-to-json-schema';
 import type { MastraLanguageModel } from '../../agent/types';
 import { MastraBase } from '../../base';
 import { isVercelTool } from '../../utils';
-import { convertVercelToolParameters } from './builder';
+import { convertVercelToolParameters, convertZodSchemaToAISDKSchema } from './builder';
 import type { ToolToConvert } from './builder';
 
 export const ALL_STRING_CHECKS = ['regex', 'emoji', 'email', 'url', 'uuid', 'cuid', 'min', 'max'] as const;
@@ -81,8 +79,8 @@ export abstract class ToolCompatibility extends MastraBase {
 
   abstract processZodType<T extends z.AnyZodObject>(value: z.ZodTypeAny): ShapeValue<T>;
 
-  private zodToAISDKSchema<OBJECT>(zodSchema: z.AnyZodObject): {
-    schema: Schema<OBJECT>;
+  private applyZodSchemaCompatibility(zodSchema: z.AnyZodObject): {
+    schema: z.AnyZodObject;
   } {
     const newSchema = z.object(
       Object.entries<z.ZodTypeAny>(zodSchema.shape).reduce(
@@ -94,23 +92,7 @@ export abstract class ToolCompatibility extends MastraBase {
       ),
     );
 
-    // mirrors https://github.com/vercel/ai/blob/main/packages/ui-utils/src/zod-schema.ts#L21 but with a custom target
-    const schema = jsonSchema(
-      zodToJsonSchema(newSchema, {
-        $refStrategy: 'none',
-        target: this.getSchemaTarget(),
-      }) as JSONSchema7,
-      {
-        validate: value => {
-          const result = newSchema.safeParse(value);
-          return result.success
-            ? { success: true, value: result.data as OBJECT }
-            : { success: false, error: result.error };
-        },
-      },
-    );
-
-    return { schema };
+    return { schema: newSchema };
   }
 
   public defaultZodObjectHandler<T extends z.AnyZodObject>(value: z.ZodTypeAny): ShapeValue<T> {
@@ -374,11 +356,11 @@ export abstract class ToolCompatibility extends MastraBase {
     }
 
     // Constraints are now embedded in the Zod schema descriptions, so just use the schema as-is
-    const { schema } = this.zodToAISDKSchema(tool.inputSchema);
+    const { schema } = this.applyZodSchemaCompatibility(tool.inputSchema);
 
     return {
       description: tool.description,
-      parameters: schema,
+      parameters: convertZodSchemaToAISDKSchema(schema, this.getSchemaTarget()),
     };
   }
 }
