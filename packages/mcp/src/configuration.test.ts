@@ -4,7 +4,6 @@ import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll, vi } 
 import { allTools, mcpServerName } from './__fixtures__/fire-crawl-complex-schema';
 import type { LogHandler } from './client';
 import { MCPClient } from './configuration';
-import 'dotenv/config';
 
 vi.setConfig({ testTimeout: 80000, hookTimeout: 80000 });
 
