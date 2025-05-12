@@ -3,12 +3,16 @@ import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, afterAll } from 'vitest';
 import { z } from 'zod';
 import { weatherTool } from './mastra/tools/weather';
 
 describe('Agent Memory Tests', () => {
-  const dbFile = 'file:mastra-agent.db';
+  const dbFile = 'file::memory:?cache=shared';
+
+  afterAll(async () => {
+    setTimeout(() => process.exit(0), 100);
+  });
 
   describe('Agent memory message persistence', () => {
     // making a separate memory for agent to avoid conflicts with other tests
