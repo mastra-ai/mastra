@@ -1,8 +1,8 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import stripJsonComments from 'strip-json-comments';
 import { logger } from '../../../utils/logger.js';
 import type { LintContext, LintRule } from './types.js';
-import stripJsonComments from 'strip-json-comments';
 
 function readTsConfig(dir: string) {
   const tsConfigPath = join(dir, 'tsconfig.json');
