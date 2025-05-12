@@ -27,11 +27,14 @@ export interface MongoDBConfig {
 }
 
 export class MongoDBStore extends MastraStorage {
-  private client: MongoClient;
-  private db: Db;
+  #isConnected = false;
+  #client: MongoClient;
+  #db: Db | undefined;
+  readonly #dbName: string;
 
   constructor(config: MongoDBConfig) {
     super({ name: 'MongoDBStore' });
+    this.#isConnected = false;
 
     if (!config.url?.trim().length) {
       throw new Error(
@@ -45,8 +48,24 @@ export class MongoDBStore extends MastraStorage {
       );
     }
 
-    this.client = new MongoClient(config.url);
-    this.db = this.client.db(config.dbName);
+    this.#dbName = config.dbName;
+    this.#client = new MongoClient(config.url);
+  }
+
+  private async getConnection(): Promise<Db> {
+    if (this.#isConnected) {
+      return this.#db!;
+    }
+
+    await this.#client.connect();
+    this.#db = this.#client.db(this.#dbName);
+    this.#isConnected = true;
+    return this.#db;
+  }
+
+  private async getCollection(collectionName: string) {
+    const db = await this.getConnection();
+    return db.collection(collectionName);
   }
 
   async createTable(): Promise<void> {
@@ -55,7 +74,8 @@ export class MongoDBStore extends MastraStorage {
 
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     try {
-      await this.db.collection(tableName).deleteMany({});
+      const collection = await this.getCollection(tableName);
+      await collection.deleteMany({});
     } catch (error) {
       if (error instanceof Error) {
         this.logger.error(error.message);
@@ -65,7 +85,8 @@ export class MongoDBStore extends MastraStorage {
 
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     try {
-      await this.db.collection(tableName).insertOne(record);
+      const collection = await this.getCollection(tableName);
+      await collection.insertOne(record);
     } catch (error) {
       this.logger.error(`Error upserting into table ${tableName}: ${error}`);
       throw error;
@@ -78,7 +99,8 @@ export class MongoDBStore extends MastraStorage {
     }
 
     try {
-      await this.db.collection(tableName).insertMany(records);
+      const collection = await this.getCollection(tableName);
+      await collection.insertMany(records);
     } catch (error) {
       this.logger.error(`Error upserting into table ${tableName}: ${error}`);
       throw error;
@@ -88,7 +110,8 @@ export class MongoDBStore extends MastraStorage {
   async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
     this.logger.info(`Loading ${tableName} with keys ${JSON.stringify(keys)}`);
     try {
-      return (await this.db.collection(tableName).find(keys).toArray()) as R;
+      const collection = await this.getCollection(tableName);
+      return (await collection.find(keys).toArray()) as R;
     } catch (error) {
       this.logger.error(`Error loading ${tableName} with keys ${JSON.stringify(keys)}: ${error}`);
       throw error;
@@ -97,7 +120,8 @@ export class MongoDBStore extends MastraStorage {
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     try {
-      const result = await this.db.collection(TABLE_THREADS).findOne<any>({ id: threadId });
+      const collection = await this.getCollection(TABLE_THREADS);
+      const result = await collection.findOne<any>({ id: threadId });
       if (!result) {
         return null;
       }
@@ -114,7 +138,8 @@ export class MongoDBStore extends MastraStorage {
 
   async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
     try {
-      const results = await this.db.collection(TABLE_THREADS).find<any>({ resourceId }).toArray();
+      const collection = await this.getCollection(TABLE_THREADS);
+      const results = await collection.find<any>({ resourceId }).toArray();
       if (!results.length) {
         return [];
       }
@@ -131,7 +156,8 @@ export class MongoDBStore extends MastraStorage {
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     try {
-      await this.db.collection(TABLE_THREADS).insertOne({
+      const collection = await this.getCollection(TABLE_THREADS);
+      await collection.insertOne({
         ...thread,
         metadata: JSON.stringify(thread.metadata),
       });
@@ -166,7 +192,8 @@ export class MongoDBStore extends MastraStorage {
     };
 
     try {
-      await this.db.collection(TABLE_THREADS).updateOne(
+      const collection = await this.getCollection(TABLE_THREADS);
+      await collection.updateOne(
         { id },
         {
           $set: {
@@ -186,9 +213,11 @@ export class MongoDBStore extends MastraStorage {
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
     try {
       // First, delete all messages associated with the thread
-      await this.db.collection(TABLE_MESSAGES).deleteMany({ thread_id: threadId });
+      const collectionMessages = await this.getCollection(TABLE_MESSAGES);
+      await collectionMessages.deleteMany({ thread_id: threadId });
       // Then delete the thread itself
-      await this.db.collection(TABLE_THREADS).deleteOne({ id: threadId });
+      const collectionThreads = await this.getCollection(TABLE_THREADS);
+      await collectionThreads.deleteOne({ id: threadId });
     } catch (error) {
       this.logger.error(`Error deleting thread ${threadId}: ${error}`);
       throw error;
@@ -201,11 +230,11 @@ export class MongoDBStore extends MastraStorage {
       const include = selectBy?.include || [];
       let messages: MessageType[] = [];
       let allMessages: MessageType[] = [];
-
+      const collection = await this.getCollection(TABLE_MESSAGES);
       // Get all messages from the thread ordered by creation date descending
-      allMessages = (
-        await this.db.collection(TABLE_MESSAGES).find({ thread_id: threadId }).sort({ createdAt: -1 }).toArray()
-      ).map((row: any) => this.parseRow(row));
+      allMessages = (await collection.find({ thread_id: threadId }).sort({ createdAt: -1 }).toArray()).map((row: any) =>
+        this.parseRow(row),
+      );
 
       // If there are messages to include, select the messages around the included IDs
       if (include.length) {
@@ -267,7 +296,6 @@ export class MongoDBStore extends MastraStorage {
       this.logger.error('Thread ID is required to save messages');
       throw new Error('Thread ID is required');
     }
-    console.log('index.ts [276] SaveMessage', messages);
     try {
       // Prepare batch statements for all messages
       const messagesToInsert = messages.map(message => {
@@ -283,9 +311,9 @@ export class MongoDBStore extends MastraStorage {
         };
       });
 
-      console.log('index.ts [294]', messagesToInsert);
       // Execute all inserts in a single batch
-      await this.db.collection(TABLE_MESSAGES).insertMany(messagesToInsert);
+      const collection = await this.getCollection(TABLE_MESSAGES);
+      await collection.insertMany(messagesToInsert);
       return messages;
     } catch (error) {
       this.logger.error('Failed to save messages in database: ' + (error as { message: string })?.message);
@@ -337,8 +365,8 @@ export class MongoDBStore extends MastraStorage {
       });
     }
 
-    const result = await this.db
-      .collection(TABLE_TRACES)
+    const collection = await this.getCollection(TABLE_TRACES);
+    const result = await collection
       .find(query, {
         sort: { startTime: -1 },
       })
@@ -401,14 +429,15 @@ export class MongoDBStore extends MastraStorage {
       }
     }
 
+    const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
     let total = 0;
     // Only get total count when using pagination
     if (limit !== undefined && offset !== undefined) {
-      total = await this.db.collection(TABLE_WORKFLOW_SNAPSHOT).countDocuments(query);
+      total = await collection.countDocuments(query);
     }
 
     // Get results
-    const request = this.db.collection(TABLE_WORKFLOW_SNAPSHOT).find(query).sort({ createdAt: 'desc' });
+    const request = collection.find(query).sort({ createdAt: 'desc' });
     if (limit) {
       request.limit(limit);
     }
@@ -459,7 +488,8 @@ export class MongoDBStore extends MastraStorage {
         query['test_info'] = null;
       }
 
-      const documents = await this.db.collection(TABLE_EVALS).find(query).sort({ created_at: 'desc' }).toArray();
+      const collection = await this.getCollection(TABLE_EVALS);
+      const documents = await collection.find(query).sort({ created_at: 'desc' }).toArray();
       const result = documents.map(row => this.transformEvalRow(row));
       // Post filter to remove if test_info.testPath is null
       return result.filter(row => {
@@ -493,7 +523,8 @@ export class MongoDBStore extends MastraStorage {
   }): Promise<void> {
     try {
       const now = new Date().toISOString();
-      await this.db.collection(TABLE_WORKFLOW_SNAPSHOT).updateOne(
+      const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
+      await collection.updateOne(
         { workflow_name: workflowName, run_id: runId },
         {
           $set: {
@@ -556,7 +587,8 @@ export class MongoDBStore extends MastraStorage {
         query['workflow_name'] = workflowName;
       }
 
-      const result = await this.db.collection(TABLE_WORKFLOW_SNAPSHOT).findOne(query);
+      const collection = await this.getCollection(TABLE_WORKFLOW_SNAPSHOT);
+      const result = await collection.findOne(query);
       if (!result) {
         return null;
       }
@@ -631,6 +663,6 @@ export class MongoDBStore extends MastraStorage {
   }
 
   async close(): Promise<void> {
-    await this.client.close();
+    await this.#client.close();
   }
 }
