@@ -1,5 +1,16 @@
 # @mastra/client-js
 
+## 0.1.22-alpha.2
+
+### Patch Changes
+
+- b4c6c87: fix: Specify $refStrategy: 'none' when calling zodToJsonSchema.
+- c2b980b: Fix multiple too-calls in AGUI
+- Updated dependencies [3171b5b]
+- Updated dependencies [973e5ac]
+- Updated dependencies [9e1eff5]
+  - @mastra/core@0.9.4-alpha.2
+
 ## 0.1.22-alpha.1
 
 ### Patch Changes
