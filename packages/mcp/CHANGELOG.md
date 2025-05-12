@@ -1,5 +1,11 @@
 # @mastra/mcp
 
+## 0.5.0-alpha.3
+
+### Patch Changes
+
+- bb1e2c8: Make sure mcp handlers can only be registered once
+
 ## 0.5.0-alpha.2
 
 ### Patch Changes
