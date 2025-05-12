@@ -23,6 +23,8 @@ export class MCPServer extends MCPServerBase {
   private sseTransport?: SSEServerTransport;
   private sseHonoTransports?: Map<string, SSETransport>;
   private streamableHTTPTransport?: StreamableHTTPServerTransport;
+  private listToolsHandlerIsRegistered: boolean = false;
+  private callToolHandlerIsRegistered: boolean = false;
 
   /**
    * Get the current stdio transport.
@@ -117,6 +119,10 @@ export class MCPServer extends MCPServerBase {
    * Register the ListTools handler for listing all available tools.
    */
   private registerListToolsHandler() {
+    if (this.listToolsHandlerIsRegistered) {
+      return;
+    }
+    this.listToolsHandlerIsRegistered = true;
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
       this.logger.debug('Handling ListTools request');
       return {
@@ -133,6 +139,10 @@ export class MCPServer extends MCPServerBase {
    * Register the CallTool handler for executing a tool by name.
    */
   private registerCallToolHandler() {
+    if (this.callToolHandlerIsRegistered) {
+      return;
+    }
+    this.callToolHandlerIsRegistered = true;
     this.server.setRequestHandler(CallToolRequestSchema, async request => {
       const startTime = Date.now();
       try {
@@ -393,6 +403,8 @@ export class MCPServer extends MCPServerBase {
    * Close the MCP server and all its connections
    */
   async close() {
+    this.callToolHandlerIsRegistered = false;
+    this.listToolsHandlerIsRegistered = false;
     try {
       if (this.stdioTransport) {
         await this.stdioTransport.close?.();
