@@ -139,9 +139,9 @@ export class MCPServer extends MCPServerBase {
               isError: true,
             };
           }
-
+  
           this.logger.debug(`CallTool: Invoking '${request.params.name}' with arguments:`, request.params.arguments);
-
+  
           const validation = tool.parameters.validate?.(request.params.arguments ?? {});
           if (validation && !validation.success) {
             this.logger.warn(`CallTool: Invalid tool arguments for '${request.params.name}'`, {
@@ -159,7 +159,7 @@ export class MCPServer extends MCPServerBase {
               isError: true,
             };
           }
-
+  
           const result = await tool.execute(validation?.value, { messages: [], toolCallId: '' });
           const duration = Date.now() - startTime;
           this.logger.info(`Tool '${request.params.name}' executed successfully in ${duration}ms.`);
@@ -331,6 +331,8 @@ export class MCPServer extends MCPServerBase {
    * Close the MCP server and all its connections
    */
   async close() {
+    this.callToolHandlerIsRegistered = false;
+    this.listToolsHandlerIsRegistered = false;
     try {
       if (this.stdioTransport) {
         await this.stdioTransport.close?.();
