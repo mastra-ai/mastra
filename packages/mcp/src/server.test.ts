@@ -1,5 +1,6 @@
 import http from 'node:http';
 import path from 'path';
+import type { ServerType } from '@hono/node-server';
 import { serve } from '@hono/node-server';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { Hono } from 'hono';
@@ -125,7 +126,7 @@ describe('MCPServer', () => {
         tools: { weatherTool },
       });
 
-      httpServer = require('http').createServer(async (req: any, res: any) => {
+      httpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
         const url = new URL(req.url || '', `http://localhost:${PORT}`);
         await server.startHTTP({
           url,
@@ -194,7 +195,7 @@ describe('MCPServer', () => {
   describe('MCPServer Hono SSE Transport', () => {
     let server: MCPServer;
     let hono: Hono;
-    let honoServer: any;
+    let honoServer: ServerType;
     let client: MCPClient;
     const PORT = 9300 + Math.floor(Math.random() * 1000);
 

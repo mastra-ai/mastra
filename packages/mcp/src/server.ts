@@ -21,7 +21,7 @@ export class MCPServer extends MCPServerBase {
   private server: Server;
   private stdioTransport?: StdioServerTransport;
   private sseTransport?: SSEServerTransport;
-  private sseHonoTransports?: Map<string, SSETransport>;
+  private sseHonoTransports: Map<string, SSETransport>;
   private streamableHTTPTransport?: StreamableHTTPServerTransport;
   private listToolsHandlerIsRegistered: boolean = false;
   private callToolHandlerIsRegistered: boolean = false;
@@ -44,7 +44,7 @@ export class MCPServer extends MCPServerBase {
    * Get the current SSE Hono transport.
    */
   public getSseHonoTransport(sessionId: string): SSETransport | undefined {
-    return this.sseHonoTransports?.get(sessionId);
+    return this.sseHonoTransports.get(sessionId);
   }
 
   /**
@@ -278,10 +278,10 @@ export class MCPServer extends MCPServerBase {
       if (!sessionId) {
         return context.text('No sessionId provided', 400);
       }
-      if (!this.sseHonoTransports?.has(sessionId)) {
+      if (!this.sseHonoTransports.has(sessionId)) {
         return context.text(`No transport found for sessionId ${sessionId}`, 400);
       }
-      const message = await this.sseHonoTransports?.get(sessionId)?.handlePostMessage(context);
+      const message = await this.sseHonoTransports.get(sessionId)?.handlePostMessage(context);
       if (!message) {
         return context.text('Transport not found', 400);
       }
@@ -375,24 +375,24 @@ export class MCPServer extends MCPServerBase {
     const sseTransport = new SSETransport(messagePath, stream);
     const sessionId = sseTransport.sessionId;
     this.logger.debug('SSE Transport created with sessionId:', { sessionId });
-    this.sseHonoTransports?.set(sessionId, sseTransport);
+    this.sseHonoTransports.set(sessionId, sseTransport);
 
     stream.onAbort(() => {
       this.logger.debug('SSE Transport aborted with sessionId:', { sessionId });
-      this.sseHonoTransports?.delete(sessionId);
+      this.sseHonoTransports.delete(sessionId);
     });
 
     await this.server.connect(sseTransport);
     this.server.onclose = async () => {
       this.logger.debug('SSE Transport closed with sessionId:', { sessionId });
-      this.sseHonoTransports?.delete(sessionId);
+      this.sseHonoTransports.delete(sessionId);
       await this.server.close();
     };
 
     while (true) {
       // This will keep the connection alive
       // You can also await for a promise that never resolves
-      const sessionIds = Array.from(this.sseHonoTransports?.keys() || []);
+      const sessionIds = Array.from(this.sseHonoTransports.keys() || []);
       this.logger.debug('Active Hono SSE sessions:', { sessionIds });
       await stream.write(':keep-alive\n\n');
       await stream.sleep(60_000);
