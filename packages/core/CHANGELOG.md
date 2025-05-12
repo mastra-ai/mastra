@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 0.9.4-alpha.2
+
+### Patch Changes
+
+- 3171b5b: Fix jsonSchema on vercel tools
+- 973e5ac: Add workflows to agents properly
+- 9e1eff5: Fix tool compatibility schema handling by ensuring zodSchema.shape is safely accessed, preventing potential runtime errors.
+
 ## 0.9.4-alpha.1
 
 ### Patch Changes
