@@ -237,13 +237,14 @@ nav:nth-child(2) {
   color: var(--color-el-3);
 }
 
-.nextra-navbar:is(html[class~="dark"] *) kbd {
-  &:is(html[class~="light"] *) {
-    background: #f0f0f0;
-  }
+.nextra-navbar kbd {
+  padding-inline: 0.38rem;
+  padding-block: 0.19rem;
+  height: 1.375rem;
+  background: var(--light-color-surface-15);
 
   &:is(html[class~="dark"] *) {
-    background: #000000bf;
+    background: var(--primary-bg);
   }
 }
 
