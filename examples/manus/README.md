@@ -23,6 +23,7 @@ Follow the interactive prompts:
 ## Required Environment Variables
 
 Create a `.env` file with:
+
 ```
 EXA_API_KEY="your-exa-api-key"
 OPENAI_API_KEY="your-openai-api-key"

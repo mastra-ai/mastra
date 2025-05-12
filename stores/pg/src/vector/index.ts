@@ -72,7 +72,7 @@ export class PgVector extends MastraVector {
 
   /**
    * @deprecated Passing connectionString as a string is deprecated.
-   * Use the object parameter instead. This signature will be removed on May 20th.
+   * Use the object parameter instead. This signature will be removed on May 20th, 2025.
    */
   constructor(connectionString: string);
   constructor(config: {
@@ -101,7 +101,7 @@ export class PgVector extends MastraVector {
         Please use an object parameter instead:
         new PgVector({ connectionString })
 
-        The string signature will be removed on May 20th.`,
+        The string signature will be removed on May 20th, 2025.`,
       );
       connectionString = config;
       schemaName = undefined;
@@ -404,12 +404,14 @@ export class PgVector extends MastraVector {
 
   /**
    * @deprecated This function is deprecated. Use buildIndex instead
+   * This function will be removed on May 20th, 2025
    */
   async defineIndex(
     indexName: string,
     metric: 'cosine' | 'euclidean' | 'dotproduct' = 'cosine',
     indexConfig: IndexConfig,
   ): Promise<void> {
+    console.warn('defineIndex is deprecated. Use buildIndex instead. This function will be removed on May 20th, 2025');
     return this.buildIndex({ indexName, metric, indexConfig });
   }
 
@@ -678,7 +680,42 @@ export class PgVector extends MastraVector {
     await this.pool.end();
   }
 
+  /**
+   * @deprecated Use {@link updateVector} instead. This method will be removed on May 20th, 2025.
+   *
+   * Updates a vector by its ID with the provided vector and/or metadata.
+   * @param indexName - The name of the index containing the vector.
+   * @param id - The ID of the vector to update.
+   * @param update - An object containing the vector and/or metadata to update.
+   * @param update.vector - An optional array of numbers representing the new vector.
+   * @param update.metadata - An optional record containing the new metadata.
+   * @returns A promise that resolves when the update is complete.
+   * @throws Will throw an error if no updates are provided or if the update operation fails.
+   */
   async updateIndexById(
+    indexName: string,
+    id: string,
+    update: { vector?: number[]; metadata?: Record<string, any> },
+  ): Promise<void> {
+    this.logger.warn(
+      `Deprecation Warning: updateIndexById() is deprecated. 
+      Please use updateVector() instead. 
+      updateIndexById() will be removed on May 20th, 2025.`,
+    );
+    await this.updateVector(indexName, id, update);
+  }
+
+  /**
+   * Updates a vector by its ID with the provided vector and/or metadata.
+   * @param indexName - The name of the index containing the vector.
+   * @param id - The ID of the vector to update.
+   * @param update - An object containing the vector and/or metadata to update.
+   * @param update.vector - An optional array of numbers representing the new vector.
+   * @param update.metadata - An optional record containing the new metadata.
+   * @returns A promise that resolves when the update is complete.
+   * @throws Will throw an error if no updates are provided or if the update operation fails.
+   */
+  async updateVector(
     indexName: string,
     id: string,
     update: {
@@ -722,12 +759,39 @@ export class PgVector extends MastraVector {
       `;
 
       await client.query(query, values);
+    } catch (error: any) {
+      throw new Error(`Failed to update vector by id: ${id} for index: ${indexName}: ${error.message}`);
     } finally {
       client.release();
     }
   }
 
+  /**
+   * @deprecated Use {@link deleteVector} instead. This method will be removed on May 20th, 2025.
+   *
+   * Deletes a vector by its ID.
+   * @param indexName - The name of the index containing the vector.
+   * @param id - The ID of the vector to delete.
+   * @returns A promise that resolves when the deletion is complete.
+   * @throws Will throw an error if the deletion operation fails.
+   */
   async deleteIndexById(indexName: string, id: string): Promise<void> {
+    this.logger.warn(
+      `Deprecation Warning: deleteIndexById() is deprecated. 
+      Please use deleteVector() instead. 
+      deleteIndexById() will be removed on May 20th, 2025.`,
+    );
+    await this.deleteVector(indexName, id);
+  }
+
+  /**
+   * Deletes a vector by its ID.
+   * @param indexName - The name of the index containing the vector.
+   * @param id - The ID of the vector to delete.
+   * @returns A promise that resolves when the deletion is complete.
+   * @throws Will throw an error if the deletion operation fails.
+   */
+  async deleteVector(indexName: string, id: string): Promise<void> {
     const client = await this.pool.connect();
     try {
       const tableName = this.getTableName(indexName);
@@ -736,6 +800,8 @@ export class PgVector extends MastraVector {
         WHERE vector_id = $1
       `;
       await client.query(query, [id]);
+    } catch (error: any) {
+      throw new Error(`Failed to delete vector by id: ${id} for index: ${indexName}: ${error.message}`);
     } finally {
       client.release();
     }
