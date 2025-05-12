@@ -1,9 +1,9 @@
 import DocsChat from "@/chatbot/components/chat-widget";
 import {
-	Dialog,
-	DialogBackdrop,
-	DialogPanel,
-	DialogTitle,
+  Dialog,
+  DialogBackdrop,
+  DialogPanel,
+  DialogTitle,
 } from "@headlessui/react";
 import { useEffect, useState } from "react";
 import { CustomSearch } from "./custom-search";
@@ -15,7 +15,6 @@ const INPUTS = new Set(["INPUT", "SELECT", "BUTTON", "TEXTAREA"]);
 export const SearchWrapper = ({ locale }: { locale: string }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isAgentMode, setIsAgentMode] = useState(false);
-  const [,setIsSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
@@ -102,7 +101,6 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
                       placeholder={getSearchPlaceholder(locale)}
                       isAgentMode={isAgentMode}
                       setIsAgentMode={setIsAgentMode}
-                      setIsSearching={setIsSearching}
                       onUseAgent={handleUseAgent}
                       closeModal={close}
                     />

@@ -132,7 +132,6 @@ export const CustomSearch: FC<SearchProps> = ({
   errorText = "Failed to load search index.",
   placeholder = "Search or ask AI..",
   searchOptions,
-  setIsSearching,
   onUseAgent,
   closeModal,
 }) => {
@@ -143,14 +142,6 @@ export const CustomSearch: FC<SearchProps> = ({
   // https://github.com/shuding/nextra/pull/3514
   // defer pagefind results update for prioritizing user input state
   const deferredSearch = useDeferredValue(search);
-
-  useEffect(() => {
-    if (!!search) {
-      setIsSearching?.(true);
-    } else {
-      setIsSearching?.(false);
-    }
-  }, [setIsSearching, search]);
 
   useEffect(() => {
     const handleSearch = async (value: string) => {
