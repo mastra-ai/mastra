@@ -27,7 +27,7 @@ import {
 import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import { getLogsByRunIdHandler, getLogsHandler, getLogTransports } from './handlers/logs';
-import { getMcpServerMessageHandler, handleMcpServerSseRoutes } from './handlers/mcp';
+import { getMcpServerMessageHandler, getMcpServerSseHandler } from './handlers/mcp';
 import {
   createThreadHandler,
   deleteThreadHandler,
@@ -1332,7 +1332,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
         500: { description: 'Internal server error establishing SSE connection.' },
       },
     }),
-    handleMcpServerSseRoutes,
+    getMcpServerSseHandler,
   );
 
   // Route for POSTing messages over an established SSE connection
@@ -1366,7 +1366,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
         503: { description: 'SSE connection not established with this server, or server unable to process message.' },
       },
     }),
-    handleMcpServerSseRoutes,
+    getMcpServerSseHandler,
   );
 
   // Memory routes
