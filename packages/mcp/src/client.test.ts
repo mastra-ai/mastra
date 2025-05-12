@@ -8,7 +8,7 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 
-import { MastraMCPClient } from './client.js';
+import { InternalMastraMCPClient } from './client.js';
 
 async function setupTestServer(withSessionManagement: boolean) {
   const httpServer: HttpServer = createServer();
@@ -62,12 +62,12 @@ describe('MastraMCPClient with Streamable HTTP', () => {
     serverTransport: StreamableHTTPServerTransport;
     baseUrl: URL;
   };
-  let client: MastraMCPClient;
+  let client: InternalMastraMCPClient;
 
   describe('Stateless Mode', () => {
     beforeEach(async () => {
       testServer = await setupTestServer(false);
-      client = new MastraMCPClient({
+      client = new InternalMastraMCPClient({
         name: 'test-stateless-client',
         server: {
           url: testServer.baseUrl,
@@ -99,7 +99,7 @@ describe('MastraMCPClient with Streamable HTTP', () => {
   describe('Stateful Mode', () => {
     beforeEach(async () => {
       testServer = await setupTestServer(true);
-      client = new MastraMCPClient({
+      client = new InternalMastraMCPClient({
         name: 'test-stateful-client',
         server: {
           url: testServer.baseUrl,

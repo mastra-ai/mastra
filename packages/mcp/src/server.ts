@@ -4,7 +4,7 @@ import type { InternalCoreTool } from '@mastra/core';
 import { makeCoreTool } from '@mastra/core';
 import type { ToolsInput } from '@mastra/core/agent';
 import { MCPServerBase } from '@mastra/core/mcp';
-import type { MCPServerSSEOptions, ConvertedTool } from '@mastra/core/mcp';
+import type { MCPServerSSEOptions, ConvertedTool, MCPServerHonoSSEOptions } from '@mastra/core/mcp';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
@@ -12,12 +12,16 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { StreamableHTTPServerTransportOptions } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import type { SSEStreamingApi } from 'hono/streaming';
+import { streamSSE } from 'hono/streaming';
+import { SSETransport } from 'hono-mcp-server-sse-transport';
 import { z } from 'zod';
 
 export class MCPServer extends MCPServerBase {
   private server: Server;
   private stdioTransport?: StdioServerTransport;
   private sseTransport?: SSEServerTransport;
+  private sseHonoTransports: Map<string, SSETransport>;
   private streamableHTTPTransport?: StreamableHTTPServerTransport;
   private listToolsHandlerIsRegistered: boolean = false;
   private callToolHandlerIsRegistered: boolean = false;
@@ -34,6 +38,13 @@ export class MCPServer extends MCPServerBase {
    */
   public getSseTransport(): SSEServerTransport | undefined {
     return this.sseTransport;
+  }
+
+  /**
+   * Get the current SSE Hono transport.
+   */
+  public getSseHonoTransport(sessionId: string): SSETransport | undefined {
+    return this.sseHonoTransports.get(sessionId);
   }
 
   /**
@@ -58,6 +69,7 @@ export class MCPServer extends MCPServerBase {
       `Initialized MCPServer '${name}' v${version} with tools: ${Object.keys(this.convertedTools).join(', ')}`,
     );
 
+    this.sseHonoTransports = new Map();
     this.registerListToolsHandler();
     this.registerCallToolHandler();
   }
@@ -243,6 +255,44 @@ export class MCPServer extends MCPServerBase {
   }
 
   /**
+   * Handles MCP-over-SSE protocol for user-provided HTTP servers.
+   * Call this from your HTTP server for both the SSE and message endpoints.
+   *
+   * @param url Parsed URL of the incoming request
+   * @param ssePath Path for establishing the SSE connection (e.g. '/sse')
+   * @param messagePath Path for POSTing client messages (e.g. '/message')
+   * @param context Incoming Hono context
+   */
+  public async startHonoSSE({ url, ssePath, messagePath, context }: MCPServerHonoSSEOptions) {
+    if (url.pathname === ssePath) {
+      return streamSSE(context, async stream => {
+        await this.connectHonoSSE({
+          messagePath,
+          stream,
+        });
+      });
+    } else if (url.pathname === messagePath) {
+      this.logger.debug('Received message');
+      const sessionId = context.req.query('sessionId');
+      this.logger.debug('Received message for sessionId', { sessionId });
+      if (!sessionId) {
+        return context.text('No sessionId provided', 400);
+      }
+      if (!this.sseHonoTransports.has(sessionId)) {
+        return context.text(`No transport found for sessionId ${sessionId}`, 400);
+      }
+      const message = await this.sseHonoTransports.get(sessionId)?.handlePostMessage(context);
+      if (!message) {
+        return context.text('Transport not found', 400);
+      }
+      return message;
+    } else {
+      this.logger.debug('Unknown path:', { path: url.pathname });
+      return context.text('Unknown path', 404);
+    }
+  }
+
+  /**
    * Handles MCP-over-StreamableHTTP protocol for user-provided HTTP servers.
    * Call this from your HTTP server for the streamable HTTP endpoint.
    *
@@ -299,15 +349,6 @@ export class MCPServer extends MCPServerBase {
     }
   }
 
-  public async handlePostMessage(req: http.IncomingMessage, res: http.ServerResponse<http.IncomingMessage>) {
-    if (!this.sseTransport) {
-      res.writeHead(503);
-      res.end('SSE connection not established');
-      return;
-    }
-    await this.sseTransport.handlePostMessage(req, res);
-  }
-
   public async connectSSE({
     messagePath,
     res,
@@ -329,6 +370,35 @@ export class MCPServer extends MCPServerBase {
     });
   }
 
+  public async connectHonoSSE({ messagePath, stream }: { messagePath: string; stream: SSEStreamingApi }) {
+    this.logger.debug('Received SSE connection');
+    const sseTransport = new SSETransport(messagePath, stream);
+    const sessionId = sseTransport.sessionId;
+    this.logger.debug('SSE Transport created with sessionId:', { sessionId });
+    this.sseHonoTransports.set(sessionId, sseTransport);
+
+    stream.onAbort(() => {
+      this.logger.debug('SSE Transport aborted with sessionId:', { sessionId });
+      this.sseHonoTransports.delete(sessionId);
+    });
+
+    await this.server.connect(sseTransport);
+    this.server.onclose = async () => {
+      this.logger.debug('SSE Transport closed with sessionId:', { sessionId });
+      this.sseHonoTransports.delete(sessionId);
+      await this.server.close();
+    };
+
+    while (true) {
+      // This will keep the connection alive
+      // You can also await for a promise that never resolves
+      const sessionIds = Array.from(this.sseHonoTransports.keys() || []);
+      this.logger.debug('Active Hono SSE sessions:', { sessionIds });
+      await stream.write(':keep-alive\n\n');
+      await stream.sleep(60_000);
+    }
+  }
+
   /**
    * Close the MCP server and all its connections
    */
@@ -343,6 +413,12 @@ export class MCPServer extends MCPServerBase {
       if (this.sseTransport) {
         await this.sseTransport.close?.();
         this.sseTransport = undefined;
+      }
+      if (this.sseHonoTransports) {
+        for (const transport of this.sseHonoTransports.values()) {
+          await transport.close?.();
+        }
+        this.sseHonoTransports.clear();
       }
       if (this.streamableHTTPTransport) {
         await this.streamableHTTPTransport.close?.();
