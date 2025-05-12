@@ -429,10 +429,10 @@ function detectSingleMessageCharacteristics(
   }
 }
 
-function isUiMessage(message: CoreMessage | AiMessageType): message is AiMessageType {
+export function isUiMessage(message: CoreMessage | AiMessageType): message is AiMessageType {
   return detectSingleMessageCharacteristics(message) === `has-ui-specific-parts`;
 }
-function isCoreMessage(message: CoreMessage | AiMessageType): message is CoreMessage {
+export function isCoreMessage(message: CoreMessage | AiMessageType): message is CoreMessage {
   return [`has-core-specific-parts`, `message`].includes(detectSingleMessageCharacteristics(message));
 }
 
