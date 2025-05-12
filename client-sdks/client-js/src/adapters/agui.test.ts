@@ -91,6 +91,17 @@ describe('convertMessagesToMastraMessages', () => {
           },
         ],
       },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'tool-call-1',
+            toolName: 'getWeather',
+            result: { location: 'San Francisco' },
+          },
+        ],
+      },
     ]);
   });
 
@@ -144,12 +155,6 @@ describe('convertMessagesToMastraMessages', () => {
         ],
       },
       {
-        id: '3',
-        role: 'tool',
-        toolCallId: 'tool-call-1',
-        content: '{"temperature":72,"unit":"F"}',
-      },
-      {
         id: '4',
         role: 'assistant',
         content: 'The weather in San Francisco is 72°F.',
@@ -162,6 +167,14 @@ describe('convertMessagesToMastraMessages', () => {
     expect(result[0].role).toBe('user');
     expect(result[1].role).toBe('assistant');
     expect(result[2].role).toBe('tool');
+    expect(result[2].content).toEqual([
+      {
+        type: 'tool-result',
+        toolCallId: 'tool-call-1',
+        toolName: 'getWeather',
+        result: { location: 'San Francisco' },
+      },
+    ]);
     expect(result[3].role).toBe('assistant');
   });
 });
