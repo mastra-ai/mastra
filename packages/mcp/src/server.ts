@@ -107,97 +107,99 @@ export class MCPServer extends MCPServerBase {
    * Register the ListTools handler for listing all available tools.
    */
   private registerListToolsHandler() {
-    if (!this.listToolsHandlerIsRegistered) {
-      this.listToolsHandlerIsRegistered = true;
-      this.server.setRequestHandler(ListToolsRequestSchema, async () => {
-        this.logger.debug('Handling ListTools request');
-        return {
-          tools: Object.values(this.convertedTools).map(tool => ({
-            name: tool.name,
-            description: tool.description,
-            inputSchema: tool.parameters.jsonSchema,
-          })),
-        };
-      });
+    if (this.listToolsHandlerIsRegistered) {
+      return;
     }
+    this.listToolsHandlerIsRegistered = true;
+    this.server.setRequestHandler(ListToolsRequestSchema, async () => {
+      this.logger.debug('Handling ListTools request');
+      return {
+        tools: Object.values(this.convertedTools).map(tool => ({
+          name: tool.name,
+          description: tool.description,
+          inputSchema: tool.parameters.jsonSchema,
+        })),
+      };
+    });
   }
 
   /**
    * Register the CallTool handler for executing a tool by name.
    */
   private registerCallToolHandler() {
-    if (!this.callToolHandlerIsRegistered) {
-      this.callToolHandlerIsRegistered = true;
-      this.server.setRequestHandler(CallToolRequestSchema, async request => {
-        const startTime = Date.now();
-        try {
-          const tool = this.convertedTools[request.params.name];
-          if (!tool) {
-            this.logger.warn(`CallTool: Unknown tool '${request.params.name}' requested.`);
-            return {
-              content: [{ type: 'text', text: `Unknown tool: ${request.params.name}` }],
-              isError: true,
-            };
-          }
-  
-          this.logger.debug(`CallTool: Invoking '${request.params.name}' with arguments:`, request.params.arguments);
-  
-          const validation = tool.parameters.validate?.(request.params.arguments ?? {});
-          if (validation && !validation.success) {
-            this.logger.warn(`CallTool: Invalid tool arguments for '${request.params.name}'`, {
-              errors: validation.error,
-            });
-            return {
-              content: [{ type: 'text', text: `Invalid tool arguments: ${JSON.stringify(validation.error)}` }],
-              isError: true,
-            };
-          }
-          if (!tool.execute) {
-            this.logger.warn(`CallTool: Tool '${request.params.name}' does not have an execute function.`);
-            return {
-              content: [{ type: 'text', text: `Tool '${request.params.name}' does not have an execute function.` }],
-              isError: true,
-            };
-          }
-  
-          const result = await tool.execute(validation?.value, { messages: [], toolCallId: '' });
-          const duration = Date.now() - startTime;
-          this.logger.info(`Tool '${request.params.name}' executed successfully in ${duration}ms.`);
+    if (this.callToolHandlerIsRegistered) {
+      return;
+    }
+    this.callToolHandlerIsRegistered = true;
+    this.server.setRequestHandler(CallToolRequestSchema, async request => {
+      const startTime = Date.now();
+      try {
+        const tool = this.convertedTools[request.params.name];
+        if (!tool) {
+          this.logger.warn(`CallTool: Unknown tool '${request.params.name}' requested.`);
+          return {
+            content: [{ type: 'text', text: `Unknown tool: ${request.params.name}` }],
+            isError: true,
+          };
+        }
+
+        this.logger.debug(`CallTool: Invoking '${request.params.name}' with arguments:`, request.params.arguments);
+
+        const validation = tool.parameters.validate?.(request.params.arguments ?? {});
+        if (validation && !validation.success) {
+          this.logger.warn(`CallTool: Invalid tool arguments for '${request.params.name}'`, {
+            errors: validation.error,
+          });
+          return {
+            content: [{ type: 'text', text: `Invalid tool arguments: ${JSON.stringify(validation.error)}` }],
+            isError: true,
+          };
+        }
+        if (!tool.execute) {
+          this.logger.warn(`CallTool: Tool '${request.params.name}' does not have an execute function.`);
+          return {
+            content: [{ type: 'text', text: `Tool '${request.params.name}' does not have an execute function.` }],
+            isError: true,
+          };
+        }
+
+        const result = await tool.execute(validation?.value, { messages: [], toolCallId: '' });
+        const duration = Date.now() - startTime;
+        this.logger.info(`Tool '${request.params.name}' executed successfully in ${duration}ms.`);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result),
+            },
+          ],
+          isError: false,
+        };
+      } catch (error) {
+        const duration = Date.now() - startTime;
+        if (error instanceof z.ZodError) {
+          this.logger.warn('Invalid tool arguments', {
+            tool: request.params.name,
+            errors: error.errors,
+            duration: `${duration}ms`,
+          });
           return {
             content: [
               {
                 type: 'text',
-                text: JSON.stringify(result),
+                text: `Invalid arguments: ${error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`,
               },
             ],
-            isError: false,
-          };
-        } catch (error) {
-          const duration = Date.now() - startTime;
-          if (error instanceof z.ZodError) {
-            this.logger.warn('Invalid tool arguments', {
-              tool: request.params.name,
-              errors: error.errors,
-              duration: `${duration}ms`,
-            });
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: `Invalid arguments: ${error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`,
-                },
-              ],
-              isError: true,
-            };
-          }
-          this.logger.error(`Tool execution failed: ${request.params.name}`, { error });
-          return {
-            content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
             isError: true,
           };
         }
-      });
-    }
+        this.logger.error(`Tool execution failed: ${request.params.name}`, { error });
+        return {
+          content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+          isError: true,
+        };
+      }
+    });
   }
 
   /**
