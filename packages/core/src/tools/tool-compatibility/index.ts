@@ -83,7 +83,7 @@ export abstract class ToolCompatibility extends MastraBase {
     schema: z.AnyZodObject;
   } {
     const newSchema = z.object(
-      Object.entries<z.ZodTypeAny>(zodSchema.shape).reduce(
+      Object.entries<z.ZodTypeAny>(zodSchema.shape || {}).reduce(
         (acc, [key, value]) => ({
           ...acc,
           [key]: this.processZodType<any>(value),

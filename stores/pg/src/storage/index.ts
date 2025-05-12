@@ -203,11 +203,11 @@ export class PostgresStore extends MastraStorage {
     }
 
     if (fromDate) {
-      conditions.push(`createdAt >= $${idx++}`);
+      conditions.push(`createdAt >= \$${idx++}`);
     }
 
     if (toDate) {
-      conditions.push(`createdAt <= $${idx++}`);
+      conditions.push(`createdAt <= \$${idx++}`);
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';

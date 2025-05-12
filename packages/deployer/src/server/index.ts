@@ -728,122 +728,124 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
     streamGenerateHandler,
   );
 
-  app.post(
-    '/api/agents/:agentId/instructions',
-    bodyLimit(bodyLimitOptions),
-    describeRoute({
-      description: "Update an agent's instructions",
-      tags: ['agents'],
-      parameters: [
-        {
-          name: 'agentId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-      ],
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: {
-              type: 'object',
-              properties: {
-                instructions: {
-                  type: 'string',
-                  description: 'New instructions for the agent',
-                },
-              },
-              required: ['instructions'],
-            },
+  if (options.isDev) {
+    app.post(
+      '/api/agents/:agentId/instructions',
+      bodyLimit(bodyLimitOptions),
+      describeRoute({
+        description: "Update an agent's instructions",
+        tags: ['agents'],
+        parameters: [
+          {
+            name: 'agentId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
           },
-        },
-      },
-      responses: {
-        200: {
-          description: 'Instructions updated successfully',
-        },
-        403: {
-          description: 'Not allowed in non-playground environment',
-        },
-        404: {
-          description: 'Agent not found',
-        },
-      },
-    }),
-    setAgentInstructionsHandler,
-  );
-
-  app.post(
-    '/api/agents/:agentId/instructions/enhance',
-    bodyLimit(bodyLimitOptions),
-    describeRoute({
-      description: 'Generate an improved system prompt from instructions',
-      tags: ['agents'],
-      parameters: [
-        {
-          name: 'agentId',
-          in: 'path',
+        ],
+        requestBody: {
           required: true,
-          schema: { type: 'string' },
-          description: 'ID of the agent whose model will be used for prompt generation',
-        },
-      ],
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: {
-              type: 'object',
-              properties: {
-                instructions: {
-                  type: 'string',
-                  description: 'Instructions to generate a system prompt from',
-                },
-                comment: {
-                  type: 'string',
-                  description: 'Optional comment for the enhanced prompt',
-                },
-              },
-              required: ['instructions'],
-            },
-          },
-        },
-      },
-      responses: {
-        200: {
-          description: 'Generated system prompt and analysis',
           content: {
             'application/json': {
               schema: {
                 type: 'object',
                 properties: {
-                  explanation: {
+                  instructions: {
                     type: 'string',
-                    description: 'Detailed analysis of the instructions',
+                    description: 'New instructions for the agent',
                   },
-                  new_prompt: {
+                },
+                required: ['instructions'],
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Instructions updated successfully',
+          },
+          403: {
+            description: 'Not allowed in non-playground environment',
+          },
+          404: {
+            description: 'Agent not found',
+          },
+        },
+      }),
+      setAgentInstructionsHandler,
+    );
+
+    app.post(
+      '/api/agents/:agentId/instructions/enhance',
+      bodyLimit(bodyLimitOptions),
+      describeRoute({
+        description: 'Generate an improved system prompt from instructions',
+        tags: ['agents'],
+        parameters: [
+          {
+            name: 'agentId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+            description: 'ID of the agent whose model will be used for prompt generation',
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  instructions: {
                     type: 'string',
-                    description: 'The enhanced system prompt',
+                    description: 'Instructions to generate a system prompt from',
+                  },
+                  comment: {
+                    type: 'string',
+                    description: 'Optional comment for the enhanced prompt',
+                  },
+                },
+                required: ['instructions'],
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Generated system prompt and analysis',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    explanation: {
+                      type: 'string',
+                      description: 'Detailed analysis of the instructions',
+                    },
+                    new_prompt: {
+                      type: 'string',
+                      description: 'The enhanced system prompt',
+                    },
                   },
                 },
               },
             },
           },
+          400: {
+            description: 'Missing or invalid request parameters',
+          },
+          404: {
+            description: 'Agent not found',
+          },
+          500: {
+            description: 'Internal server error or model response parsing error',
+          },
         },
-        400: {
-          description: 'Missing or invalid request parameters',
-        },
-        404: {
-          description: 'Agent not found',
-        },
-        500: {
-          description: 'Internal server error or model response parsing error',
-        },
-      },
-    }),
-    generateSystemPromptHandler,
-  );
+      }),
+      generateSystemPromptHandler,
+    );
+  }
 
   app.get(
     '/api/agents/:agentId/speakers',
