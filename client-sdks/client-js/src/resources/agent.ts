@@ -48,7 +48,7 @@ export class AgentVoice extends BaseResource {
    * @param options - Optional provider-specific options
    * @returns Promise containing the transcribed text
    */
-  listen(audio: Blob, options?: Record<string, any>): Promise<Response> {
+  listen(audio: Blob, options?: Record<string, any>): Promise<{ text: string }> {
     const formData = new FormData();
     formData.append('audio', audio);
 
