@@ -1,5 +1,12 @@
 # @mastra/pg
 
+## 0.3.4-alpha.3
+
+### Patch Changes
+
+- 2836734: [MASTRA-3391] fix describe index for custom schema
+- a3fc60c: fix whereClause condition for fromDate and toDate in pg getTraces
+
 ## 0.3.4-alpha.2
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # @mastra/dane
 
+## 0.0.20-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [bb1e2c8]
+  - @mastra/mcp@0.5.0-alpha.3
+
 ## 0.0.20-alpha.2
 
 ### Patch Changes
