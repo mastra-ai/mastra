@@ -1,9 +1,9 @@
 import DocsChat from "@/chatbot/components/chat-widget";
 import {
-	Dialog,
-	DialogBackdrop,
-	DialogPanel,
-	DialogTitle,
+  Dialog,
+  DialogBackdrop,
+  DialogPanel,
+  DialogTitle,
 } from "@headlessui/react";
 import { useEffect, useState } from "react";
 import { CustomSearch } from "./custom-search";
@@ -67,7 +67,7 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
           onClick={open}
           size="sm"
           variant="ghost"
-          className="flex items-center text-sm font-normal justify-between w-full gap-6 cursor-pointer border-[0.5px] border-borders-1 text-icons-3"
+          className="flex items-center pr-[0.38rem] text-sm font-normal justify-between w-full gap-6 cursor-pointer border-[0.5px] bg-[var(--light-color-surface-4)] dark:bg-[var(--light-color-text-5)] border-[var(--light-border-muted)] dark:border-borders-1 text-icons-3"
         >
           <span className="text-sm">Search or ask..</span>
           <Shortcut />
@@ -141,7 +141,7 @@ function Shortcut() {
     <kbd className="flex items-center gap-1 text-xs font-medium text-icons-3">
       {navigator.userAgent.includes("Mac") ? (
         <>
-          <span className="text-base">⌘</span>K
+          <span className="text-sm">⌘</span>K
         </>
       ) : (
         "CTRL K"
