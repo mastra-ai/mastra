@@ -1,14 +1,15 @@
 import type { ToolExecutionOptions } from 'ai';
 import { jsonSchema } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
-import jsonSchemaToZod from 'json-schema-to-zod';
 import type { ZodSchema, ZodType } from 'zod';
 import { z } from 'zod';
+import { jsonSchemaObjectToZodRawShape } from 'zod-from-json-schema';
+import type { JSONSchema as ZodFromJSONSchema_JSONSchema } from 'zod-from-json-schema';
 import type { Targets } from 'zod-to-json-schema';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { MastraBase } from '../../base';
 import { RuntimeContext } from '../../runtime-context';
-import { isVercelTool, isZodType, resolveSerializedZodOutput } from '../../utils';
+import { isVercelTool, isZodType } from '../../utils';
 import type { ToolOptions } from '../../utils';
 import type { CoreTool, ToolAction, VercelTool } from '../types';
 import { AnthropicToolCompat } from './provider-compats/anthropic';
@@ -49,26 +50,36 @@ export function convertZodSchemaToAISDKSchema(zodSchema: ZodSchema, target: Targ
 }
 
 export function convertVercelToolParameters(tool: VercelTool): z.ZodType {
-  // If the tool is a Vercel Tool, check if the parameters are already a zod object
-  // If not, convert the parameters to a zod object using jsonSchemaToZod
   const schema = tool.parameters ?? z.object({});
   if (isZodType(schema)) {
     return schema;
   } else {
-    let schemaToUse;
-    if ('jsonSchema' in schema) {
-      schemaToUse = schema.jsonSchema;
-    } else {
-      schemaToUse = schema;
+    const jsonSchemaToConvert = ('jsonSchema' in schema ? schema.jsonSchema : schema) as ZodFromJSONSchema_JSONSchema;
+    try {
+      const rawShape = jsonSchemaObjectToZodRawShape(jsonSchemaToConvert);
+      return z.object(rawShape);
+    } catch (e: unknown) {
+      const errorMessage = `[CoreToolBuilder] Failed to convert Vercel tool JSON schema parameters to Zod. Original schema: ${JSON.stringify(jsonSchemaToConvert)}`;
+      console.error(errorMessage, e);
+      throw new Error(errorMessage + (e instanceof Error ? `\n${e.stack}` : '\nUnknown error object'));
     }
-
-    return resolveSerializedZodOutput(jsonSchemaToZod(schemaToUse));
   }
 }
 
 function convertInputSchema(tool: ToolAction<any, any, any>): z.ZodType {
   const schema = tool.inputSchema ?? z.object({});
-  return isZodType(schema) ? schema : resolveSerializedZodOutput(jsonSchemaToZod(schema));
+  if (isZodType(schema)) {
+    return schema;
+  } else {
+    try {
+      const rawShape = jsonSchemaObjectToZodRawShape(schema as ZodFromJSONSchema_JSONSchema);
+      return z.object(rawShape);
+    } catch (e: unknown) {
+      const errorMessage = `[CoreToolBuilder] Failed to convert tool input JSON schema to Zod. Original schema: ${JSON.stringify(schema)}`;
+      console.error(errorMessage, e);
+      throw new Error(errorMessage + (e instanceof Error ? `\n${e.stack}` : '\nUnknown error object'));
+    }
+  }
 }
 
 export class CoreToolBuilder extends MastraBase {

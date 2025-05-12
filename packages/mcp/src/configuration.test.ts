@@ -1,15 +1,12 @@
 import { spawn } from 'child_process';
 import path from 'path';
 import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll, vi } from 'vitest';
+import { allTools, mcpServerName } from './__fixtures__/fire-crawl-complex-schema';
 import type { LogHandler } from './client';
 import { MCPClient } from './configuration';
 import 'dotenv/config';
 
 vi.setConfig({ testTimeout: 80000, hookTimeout: 80000 });
-
-if (!process.env.FIRECRAWL_API_KEY) {
-  throw new Error('FIRECRAWL_API_KEY is not set');
-}
 
 describe('MCPClient', () => {
   let mcp: MCPClient;
@@ -376,10 +373,7 @@ describe('MCPClient', () => {
         servers: {
           'firecrawl-mcp': {
             command: 'npx',
-            args: ['-y', 'firecrawl-mcp'],
-            env: {
-              FIRECRAWL_API_KEY: process.env.FIRECRAWL_API_KEY!,
-            },
+            args: ['-y', 'tsx', path.join(__dirname, '__fixtures__/fire-crawl-complex-schema.ts')],
             logger: mockLogHandler,
           },
         },
@@ -393,7 +387,10 @@ describe('MCPClient', () => {
 
     it('should process tools from firecrawl-mcp without crashing', async () => {
       const tools = await complexClient.getTools();
-      expect(tools).toHaveProperty('firecrawl-mcp_firecrawl_crawl');
+
+      Object.keys(allTools).forEach(toolName => {
+        expect(tools).toHaveProperty(`${mcpServerName.replace(`-fixture`, ``)}_${toolName}`);
+      });
 
       expect(mockLogHandler.mock.calls.length).toBeGreaterThan(0);
     });
