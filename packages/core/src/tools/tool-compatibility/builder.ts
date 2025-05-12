@@ -52,7 +52,18 @@ export function convertVercelToolParameters(tool: VercelTool): z.ZodType {
   // If the tool is a Vercel Tool, check if the parameters are already a zod object
   // If not, convert the parameters to a zod object using jsonSchemaToZod
   const schema = tool.parameters ?? z.object({});
-  return isZodType(schema) ? schema : resolveSerializedZodOutput(jsonSchemaToZod(schema));
+  if (isZodType(schema)) {
+    return schema;
+  } else {
+    let schemaToUse;
+    if ('jsonSchema' in schema) {
+      schemaToUse = schema.jsonSchema;
+    } else {
+      schemaToUse = schema;
+    }
+
+    return resolveSerializedZodOutput(jsonSchemaToZod(schemaToUse));
+  }
 }
 
 function convertInputSchema(tool: ToolAction<any, any, any>): z.ZodType {

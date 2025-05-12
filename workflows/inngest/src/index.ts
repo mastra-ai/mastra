@@ -35,7 +35,6 @@ export function serve({ mastra, inngest }: { mastra: Mastra; inngest: Inngest })
   });
 }
 
-// @ts-ignore - infinite recursion
 export class InngestRun<
   TSteps extends NewStep<string, any, any>[] = NewStep<string, any, any>[],
   TInput extends z.ZodType<any> = z.ZodType<any>,
@@ -267,12 +266,10 @@ export class InngestWorkflow<
     }
   }
 
-  // @ts-ignore - infinite recursion
   createRun(options?: { runId?: string }): Run<TSteps, TInput, TOutput> {
     const runIdToUse = options?.runId || randomUUID();
 
     // Return a new Run instance with object parameters
-    // @ts-ignore - infinite recursion
     const run: Run<TSteps, TInput, TOutput> =
       this.runs.get(runIdToUse) ??
       new InngestRun(
