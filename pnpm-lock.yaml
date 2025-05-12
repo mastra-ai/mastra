@@ -1417,9 +1417,6 @@ importers:
       hono:
         specifier: ^4.7.4
         version: 4.7.7
-      json-schema-to-zod:
-        specifier: ^2.6.0
-        version: 2.6.0
       uuid:
         specifier: ^11.1.0
         version: 11.1.0
