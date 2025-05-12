@@ -124,10 +124,8 @@ import { search, calculate } from "../tools";
 
 // Initialize the realtime voice provider
 const voice = new OpenAIRealtimeVoice({
-  chatModel: {
-    apiKey: process.env.OPENAI_API_KEY,
-    model: "gpt-4o-mini-realtime",
-  },
+  apiKey: process.env.OPENAI_API_KEY,
+  model: "gpt-4o-mini-realtime",
   speaker: "alloy",
 });
 
