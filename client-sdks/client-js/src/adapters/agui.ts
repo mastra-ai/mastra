@@ -1,19 +1,19 @@
 // Cross-platform UUID generation function
-import { AbstractAgent, EventType } from '@ag-ui/client';
 import type {
-  BaseEvent,
-  RunAgentInput,
   AgentConfig,
-  RunStartedEvent,
+  BaseEvent,
+  Message,
+  RunAgentInput,
   RunFinishedEvent,
-  TextMessageStartEvent,
+  RunStartedEvent,
   TextMessageContentEvent,
   TextMessageEndEvent,
-  Message,
-  ToolCallStartEvent,
+  TextMessageStartEvent,
   ToolCallArgsEvent,
   ToolCallEndEvent,
+  ToolCallStartEvent,
 } from '@ag-ui/client';
+import { AbstractAgent, EventType } from '@ag-ui/client';
 import type { CoreMessage } from '@mastra/core';
 import { Observable } from 'rxjs';
 import type { Agent } from '../resources/agent';
@@ -39,7 +39,6 @@ export class AGUIAdapter extends AbstractAgent {
   protected run(input: RunAgentInput): Observable<BaseEvent> {
     return new Observable<BaseEvent>(subscriber => {
       const convertedMessages = convertMessagesToMastraMessages(input.messages);
-
       subscriber.next({
         type: EventType.RUN_STARTED,
         threadId: input.threadId,
@@ -205,6 +204,17 @@ export function convertMessagesToMastraMessages(messages: Message[]): CoreMessag
         role: 'assistant',
         content: parts,
       });
+      if (message.toolCalls?.length) {
+        result.push({
+          role: 'tool',
+          content: message.toolCalls.map(toolCall => ({
+            type: 'tool-result',
+            toolCallId: toolCall.id,
+            toolName: toolCall.function.name,
+            result: JSON.parse(toolCall.function.arguments),
+          })),
+        });
+      }
     } else if (message.role === 'user') {
       result.push({
         role: 'user',
