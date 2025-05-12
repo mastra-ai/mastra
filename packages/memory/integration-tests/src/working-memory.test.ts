@@ -35,20 +35,6 @@ const createTestMessage = (threadId: string, content: string, role: 'user' | 'as
   };
 };
 
-const cleanupDbFiles = (files: string[]) => {
-  for (const dbFile of files) {
-    const filePath = dbFile.replace(/^file:/, '');
-    for (const suffix of ['', '-wal', '-shm']) {
-      const target = filePath + suffix;
-      if (fs.existsSync(target)) {
-        try {
-          fs.unlinkSync(target);
-        } catch {}
-      }
-    }
-  }
-};
-
 dotenv.config({ path: '.env.test' });
 
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -56,12 +42,9 @@ const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 describe('Working Memory Tests', () => {
   let memory: Memory;
   let thread: any;
-  let dbFiles: string[] = [];
-  const dbFile = `file:working-memory-${randomUUID()}.db`;
+  const dbFile = 'file::memory:?cache=shared';
 
   beforeEach(async () => {
-    dbFiles = [];
-    dbFiles.push(dbFile);
     // Create memory instance with working memory enabled
     memory = new Memory({
       options: {
@@ -101,14 +84,9 @@ describe('Working Memory Tests', () => {
     });
   });
 
-  afterEach(() => {
-    cleanupDbFiles(dbFiles);
-  });
-
   afterAll(async () => {
     const threads = await memory.getThreadsByResourceId({ resourceId });
     await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
-    cleanupDbFiles(dbFiles);
   });
 
   it('should handle LLM responses with working memory using OpenAI (test that the working memory prompt works)', async () => {
@@ -333,8 +311,6 @@ describe('Working Memory Tests', () => {
   });
 
   it('should respect working memory enabled/disabled setting', async () => {
-    const dbFile = `file:disabled-working-memory-${randomUUID()}.db`;
-    dbFiles.push(dbFile);
     // Create memory instance with working memory disabled
     const disabledMemory = new Memory({
       storage: new LibSQLStore({
@@ -421,9 +397,6 @@ describe('Working Memory Tests', () => {
     expect(toolCallWorkingMemory?.metadata?.workingMemory).toContain('# User Information');
     expect(toolCallWorkingMemory?.metadata?.workingMemory).toContain('**First Name**: John');
     expect(toolCallWorkingMemory?.metadata?.workingMemory).toContain('**Location**: New York');
-
-    const dbFile = `file:text-stream-working-memory-${randomUUID()}.db`;
-    dbFiles.push(dbFile);
 
     // Create memory instance with working memory in text-stream mode
     const textStreamMemory = new Memory({
