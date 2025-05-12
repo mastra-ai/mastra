@@ -1,5 +1,17 @@
 # @mastra/deployer
 
+## 2.0.4-alpha.1
+
+### Patch Changes
+
+- ab80e7e: Fix resume workflow throwing workflow run not found error
+- c28d7a0: Fix watch workflow not streaming response back in legacy workflow
+- Updated dependencies [ab80e7e]
+- Updated dependencies [6fa1ad1]
+- Updated dependencies [c28d7a0]
+- Updated dependencies [edf1e88]
+  - @mastra/core@0.9.4-alpha.1
+
 ## 2.0.4-alpha.0
 
 ### Patch Changes

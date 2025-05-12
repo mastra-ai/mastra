@@ -18,6 +18,7 @@ export const RegisteredLogger = {
   MEMORY: 'MEMORY',
   STORAGE: 'STORAGE',
   EMBEDDINGS: 'EMBEDDINGS',
+  MCP_SERVER: 'MCP_SERVER',
 } as const;
 
 export type RegisteredLogger = (typeof RegisteredLogger)[keyof typeof RegisteredLogger];

@@ -2,7 +2,7 @@ import { processDataStream } from '@ai-sdk/ui-utils';
 import type { GenerateReturn } from '@mastra/core';
 import type { JSONSchema7 } from 'json-schema';
 import { ZodSchema } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
+import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 
 import type { GenerateParams, ClientOptions, StreamParams, GetNetworkResponse } from '../types';
 
@@ -34,11 +34,8 @@ export class Network extends BaseResource {
   ): Promise<GenerateReturn<T>> {
     const processedParams = {
       ...params,
-      output: params.output instanceof ZodSchema ? zodToJsonSchema(params.output) : params.output,
-      experimental_output:
-        params.experimental_output instanceof ZodSchema
-          ? zodToJsonSchema(params.experimental_output)
-          : params.experimental_output,
+      output: zodToJsonSchema(params.output),
+      experimental_output: zodToJsonSchema(params.experimental_output),
     };
 
     return this.request(`/api/networks/${this.networkId}/generate`, {
@@ -61,11 +58,8 @@ export class Network extends BaseResource {
   > {
     const processedParams = {
       ...params,
-      output: params.output instanceof ZodSchema ? zodToJsonSchema(params.output) : params.output,
-      experimental_output:
-        params.experimental_output instanceof ZodSchema
-          ? zodToJsonSchema(params.experimental_output)
-          : params.experimental_output,
+      output: zodToJsonSchema(params.output),
+      experimental_output: zodToJsonSchema(params.experimental_output),
     };
 
     const response: Response & {

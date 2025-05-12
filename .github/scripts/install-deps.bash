@@ -27,7 +27,7 @@ for package_json in $changed_files; do
   fi
 done
 
-Commit the changes if any were made
+# Commit the changes if any were made
 if [ -n "$(git status --porcelain)" ]; then
   git add .
   git commit -m "chore: update pnpm-lock.yaml files"

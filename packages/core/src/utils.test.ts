@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Logger } from './logger';
 import { RuntimeContext } from './runtime-context';
+import type { InternalCoreTool } from './tools';
 import { createTool } from './tools';
 import { isVercelTool, makeCoreTool, maskStreamTags, resolveSerializedZodOutput } from './utils';
 
@@ -265,8 +266,8 @@ describe('makeCoreTool', () => {
     );
 
     // Test the schema behavior instead of structure
-    expect(() => coreTool.parameters.parse({})).not.toThrow();
-    expect(() => coreTool.parameters.parse({ extra: 'field' })).not.toThrow();
+    expect(() => (coreTool as InternalCoreTool).parameters.validate({})).not.toThrow();
+    expect(() => (coreTool as InternalCoreTool).parameters.validate({ extra: 'field' })).not.toThrow();
   });
 
   it('should have default parameters if no parameters are provided for Mastra tool', () => {
@@ -281,8 +282,8 @@ describe('makeCoreTool', () => {
     );
 
     // Test the schema behavior instead of structure
-    expect(() => coreTool.parameters.parse({})).not.toThrow();
-    expect(() => coreTool.parameters.parse({ extra: 'field' })).not.toThrow();
+    expect(() => (coreTool as InternalCoreTool).parameters.validate({})).not.toThrow();
+    expect(() => (coreTool as InternalCoreTool).parameters.validate({ extra: 'field' })).not.toThrow();
   });
 });
 
