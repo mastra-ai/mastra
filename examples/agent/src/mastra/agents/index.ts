@@ -1,4 +1,5 @@
 import { openai } from '@ai-sdk/openai';
+import { jsonSchema, tool } from 'ai';
 import { OpenAIVoice } from '@mastra/voice-openai';
 import { Memory } from '@mastra/memory';
 import { Agent } from '@mastra/core/agent';
@@ -6,6 +7,33 @@ import { cookingTool } from '../tools/index.js';
 import { myWorkflow } from '../workflows/index.js';
 
 const memory = new Memory();
+
+// Define schema directly compatible with OpenAI's requirements
+const mySchema = jsonSchema({
+  type: 'object',
+  properties: {
+    city: {
+      type: 'string',
+      description: 'The city to get weather information for',
+    },
+  },
+  required: ['city'],
+});
+
+export const weatherInfo = tool({
+  description: 'Fetches the current weather information for a given city',
+  parameters: mySchema,
+  execute: async ({ city }) => {
+    return {
+      city,
+      weather: 'sunny',
+      temperature_celsius: 19,
+      temperature_fahrenheit: 66,
+      humidity: 50,
+      wind: '10 mph',
+    };
+  },
+});
 
 export const chefAgent = new Agent({
   name: 'Chef Agent',
@@ -18,6 +46,7 @@ export const chefAgent = new Agent({
   model: openai('gpt-4o-mini'),
   tools: {
     cookingTool,
+    weatherInfo,
   },
   workflows: {
     myWorkflow,
