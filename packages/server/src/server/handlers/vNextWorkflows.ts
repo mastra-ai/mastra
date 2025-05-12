@@ -83,9 +83,7 @@ export async function getVNextWorkflowByIdHandler({ mastra, workflowId }: VNextW
       }, {}),
       name: workflow.name,
       stepGraph: workflow.serializedStepGraph,
-      // @ts-ignore - ignore infinite recursion
       inputSchema: workflow.inputSchema ? stringify(zodToJsonSchema(workflow.inputSchema)) : undefined,
-      // @ts-ignore - ignore infinite recursion
       outputSchema: workflow.outputSchema ? stringify(zodToJsonSchema(workflow.outputSchema)) : undefined,
     };
   } catch (error) {
