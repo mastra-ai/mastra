@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { weatherTool } from './mastra/tools/weather';
 
 describe('Agent Memory Tests', () => {
-  const dbFile = 'file::memory:?cache=shared';
+  const dbFile = 'file:mastra-agent.db';
 
   describe('Agent memory message persistence', () => {
     // making a separate memory for agent to avoid conflicts with other tests

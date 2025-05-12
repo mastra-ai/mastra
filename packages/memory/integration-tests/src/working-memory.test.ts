@@ -1,4 +1,3 @@
-import fs from 'fs';
 import { randomUUID } from 'node:crypto';
 import { createOpenAI } from '@ai-sdk/openai';
 import type { MessageType } from '@mastra/core';
@@ -7,7 +6,7 @@ import { LibSQLVector, LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import type { ToolCallPart } from 'ai';
 import dotenv from 'dotenv';
-import { describe, expect, it, beforeEach, afterAll, afterEach } from 'vitest';
+import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 
 const resourceId = 'test-resource';
 let messageCounter = 0;
@@ -87,6 +86,7 @@ describe('Working Memory Tests', () => {
   afterAll(async () => {
     const threads = await memory.getThreadsByResourceId({ resourceId });
     await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
+    setTimeout(() => process.exit(0), 100);
   });
 
   it('should handle LLM responses with working memory using OpenAI (test that the working memory prompt works)', async () => {
