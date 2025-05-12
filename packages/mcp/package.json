@@ -43,6 +43,7 @@
   },
   "devDependencies": {
     "@ai-sdk/anthropic": "^1.1.15",
+    "@hono/node-server": "^1.13.8",
     "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.52.5",
     "@types/node": "^20.17.27",
