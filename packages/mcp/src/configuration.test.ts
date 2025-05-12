@@ -1,9 +1,15 @@
 import { spawn } from 'child_process';
 import path from 'path';
 import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll, vi } from 'vitest';
+import type { LogHandler } from './client';
 import { MCPClient } from './configuration';
+import 'dotenv/config';
 
 vi.setConfig({ testTimeout: 80000, hookTimeout: 80000 });
+
+if (!process.env.FIRECRAWL_API_KEY) {
+  throw new Error('FIRECRAWL_API_KEY is not set');
+}
 
 describe('MCPClient', () => {
   let mcp: MCPClient;
@@ -355,6 +361,41 @@ describe('MCPClient', () => {
       // Quick server should timeout
       await expect(mixedConfig.getTools()).rejects.toThrow(/Request timed out/);
       await mixedConfig.disconnect();
+    });
+  });
+
+  describe('Schema Handling', () => {
+    let complexClient: MCPClient;
+    let mockLogHandler: LogHandler & ReturnType<typeof vi.fn>;
+
+    beforeEach(async () => {
+      mockLogHandler = vi.fn();
+
+      complexClient = new MCPClient({
+        id: 'complex-schema-test-client-log-handler-firecrawl',
+        servers: {
+          'firecrawl-mcp': {
+            command: 'npx',
+            args: ['-y', 'firecrawl-mcp'],
+            env: {
+              FIRECRAWL_API_KEY: process.env.FIRECRAWL_API_KEY!,
+            },
+            logger: mockLogHandler,
+          },
+        },
+      });
+    });
+
+    afterEach(async () => {
+      mockLogHandler.mockClear();
+      await complexClient?.disconnect().catch(() => {});
+    });
+
+    it('should process tools from firecrawl-mcp without crashing', async () => {
+      const tools = await complexClient.getTools();
+      expect(tools).toHaveProperty('firecrawl-mcp_firecrawl_crawl');
+
+      expect(mockLogHandler.mock.calls.length).toBeGreaterThan(0);
     });
   });
 });
