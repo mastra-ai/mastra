@@ -18,20 +18,17 @@ const voice = new OpenAIRealtimeVoice();
 
 // Or initialize with specific configuration
 const voiceWithConfig = new OpenAIRealtimeVoice({
-  chatModel: {
-    apiKey: 'your-openai-api-key',
-    model: 'gpt-4o-mini-realtime-preview-2024-12-17',
-    options: {
-      sessionConfig: {
-        turn_detection: {
-          type: 'server_vad',
-          threshold: 0.6,
-          silence_duration_ms: 1200
-        }
-      }
-    }
-  },
+  apiKey: 'your-openai-api-key',
+  model: 'gpt-4o-mini-realtime-preview-2024-12-17',
   speaker: 'alloy'  // Default voice
+});
+
+voiceWithConfig.updateSession({
+  turn_detection: {
+    type: 'server_vad',
+    threshold: 0.6,
+    silence_duration_ms: 1200
+  }
 });
 
 // Establish connection
@@ -68,27 +65,6 @@ voice.connect();
 <PropertiesTable
   content={[
     {
-      name: "chatModel",
-      type: "object",
-      description: "OpenAIリアルタイムモデルの設定。",
-      isOptional: true,
-      defaultValue: "{}",
-    },
-    {
-      name: "speaker",
-      type: "string",
-      description: "音声合成のデフォルト音声ID。",
-      isOptional: true,
-      defaultValue: "'alloy'",
-    },
-  ]}
-/>
-
-### chatModel
-
-<PropertiesTable
-  content={[
-    {
       name: "model",
       type: "string",
       description: "リアルタイム音声インタラクションに使用するモデルID。",
@@ -102,49 +78,11 @@ voice.connect();
       isOptional: true,
     },
     {
-      name: "tools",
-      type: "ToolsInput",
-      description: "モデルの機能を拡張するためのツール設定。OpenAIRealtimeVoiceがエージェントに追加されると、エージェントに設定されたツールは自動的に音声インターフェースで利用可能になります。",
-      isOptional: true,
-    },
-    {
-      name: "options",
-      type: "object",
-      description: "リアルタイムクライアントの追加オプション。",
-      isOptional: true,
-    },
-  ]}
-/>
-
-### options
-
-<PropertiesTable
-  content={[
-    {
-      name: "sessionConfig",
-      type: "Realtime.SessionConfig",
-      description: "リアルタイムセッションの設定。",
-      isOptional: true,
-    },
-    {
-      name: "url",
+      name: "speaker",
       type: "string",
-      description: "カスタムWebSocket URL。",
+      description: "音声合成のデフォルト音声ID。",
       isOptional: true,
-    },
-    {
-      name: "dangerouslyAllowAPIKeyInBrowser",
-      type: "boolean",
-      description: "ブラウザ環境でAPIキーを許可するかどうか。",
-      isOptional: true,
-      defaultValue: "false",
-    },
-    {
-      name: "debug",
-      type: "boolean",
-      description: "デバッグログを有効にします。",
-      isOptional: true,
-      defaultValue: "false",
+      defaultValue: "'alloy'",
     },
   ]}
 />

@@ -1,5 +1,23 @@
 # @mastra/pg
 
+## 0.3.4-alpha.4
+
+### Patch Changes
+
+- c3bd795: [MASTRA-3358] Deprecate updateIndexById and deleteIndexById
+- Updated dependencies [396be50]
+- Updated dependencies [c3bd795]
+- Updated dependencies [da082f8]
+- Updated dependencies [a5810ce]
+  - @mastra/core@0.9.4-alpha.3
+
+## 0.3.4-alpha.3
+
+### Patch Changes
+
+- 2836734: [MASTRA-3391] fix describe index for custom schema
+- a3fc60c: fix whereClause condition for fromDate and toDate in pg getTraces
+
 ## 0.3.4-alpha.2
 
 ### Patch Changes

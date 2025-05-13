@@ -18,20 +18,17 @@ const voice = new OpenAIRealtimeVoice();
 
 // Or initialize with specific configuration
 const voiceWithConfig = new OpenAIRealtimeVoice({
-  chatModel: {
-    apiKey: 'your-openai-api-key',
-    model: 'gpt-4o-mini-realtime-preview-2024-12-17',
-    options: {
-      sessionConfig: {
-        turn_detection: {
-          type: 'server_vad',
-          threshold: 0.6,
-          silence_duration_ms: 1200
-        }
-      }
-    }
-  },
+  apiKey: 'your-openai-api-key',
+  model: 'gpt-4o-mini-realtime-preview-2024-12-17',
   speaker: 'alloy'  // Default voice
+});
+
+voiceWithConfig.updateSession({
+  turn_detection: {
+    type: 'server_vad',
+    threshold: 0.6,
+    silence_duration_ms: 1200
+  }
 });
 
 // Establish connection
@@ -68,27 +65,6 @@ voice.connect();
 <PropertiesTable
   content={[
     {
-      name: "chatModel",
-      type: "object",
-      description: "Configuration for the OpenAI realtime model.",
-      isOptional: true,
-      defaultValue: "{}",
-    },
-    {
-      name: "speaker",
-      type: "string",
-      description: "Default voice ID for speech synthesis.",
-      isOptional: true,
-      defaultValue: "'alloy'",
-    },
-  ]}
-/>
-
-### chatModel
-
-<PropertiesTable
-  content={[
-    {
       name: "model",
       type: "string",
       description: "The model ID to use for real-time voice interactions.",
@@ -102,49 +78,11 @@ voice.connect();
       isOptional: true,
     },
     {
-      name: "tools",
-      type: "ToolsInput",
-      description: "Tools configuration for extending model capabilities. When OpenAIRealtimeVoice is added to an Agent, any tools configured for the Agent will automatically be available to the voice interface.",
-      isOptional: true,
-    },
-    {
-      name: "options",
-      type: "object",
-      description: "Additional options for the realtime client.",
-      isOptional: true,
-    },
-  ]}
-/>
-
-### options
-
-<PropertiesTable
-  content={[
-    {
-      name: "sessionConfig",
-      type: "Realtime.SessionConfig",
-      description: "Configuration for the realtime session.",
-      isOptional: true,
-    },
-    {
-      name: "url",
+      name: "speaker",
       type: "string",
-      description: "Custom WebSocket URL.",
+      description: "Default voice ID for speech synthesis.",
       isOptional: true,
-    },
-    {
-      name: "dangerouslyAllowAPIKeyInBrowser",
-      type: "boolean",
-      description: "Whether to allow API key in browser environments.",
-      isOptional: true,
-      defaultValue: "false",
-    },
-    {
-      name: "debug",
-      type: "boolean",
-      description: "Enable debug logging.",
-      isOptional: true,
-      defaultValue: "false",
+      defaultValue: "'alloy'",
     },
   ]}
 />

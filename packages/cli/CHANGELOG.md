@@ -1,5 +1,23 @@
 # mastra
 
+## 0.6.3-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [396be50]
+- Updated dependencies [c3bd795]
+- Updated dependencies [da082f8]
+- Updated dependencies [a5810ce]
+  - @mastra/core@0.9.4-alpha.3
+  - @mastra/deployer@0.3.4-alpha.3
+
+## 0.6.3-alpha.3
+
+### Patch Changes
+
+- cebc50a: "mastra lint now supports comments in tsconfig.json"
+  - @mastra/deployer@0.3.4-alpha.2
+
 ## 0.6.3-alpha.2
 
 ### Patch Changes

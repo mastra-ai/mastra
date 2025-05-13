@@ -1,5 +1,18 @@
 # @mastra/deployer
 
+## 0.3.4-alpha.3
+
+### Patch Changes
+
+- 396be50: updated mcp server routes for MCP SSE for use with hono server
+- Updated dependencies [396be50]
+- Updated dependencies [c3bd795]
+- Updated dependencies [da082f8]
+- Updated dependencies [0c3d117]
+- Updated dependencies [a5810ce]
+  - @mastra/core@0.9.4-alpha.3
+  - @mastra/server@2.0.4-alpha.3
+
 ## 0.3.4-alpha.2
 
 ### Patch Changes
