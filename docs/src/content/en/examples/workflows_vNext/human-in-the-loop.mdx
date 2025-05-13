@@ -201,7 +201,7 @@ if (suggStep.status === 'success') {
   const suggestions = suggStep.output?.suggestions
   const userInput = await select<string>({
     message: "Choose your holiday destination",
-    choices: suggestions.map(({ location, description }: { location: string, description: string }) =>`- ${location}: ${description}`)
+    choices: suggestions.map(({ location, description }: { location: string, description: string }) => `- ${location}: ${description}`)
   })
  
   console.log('Selected:', userInput)

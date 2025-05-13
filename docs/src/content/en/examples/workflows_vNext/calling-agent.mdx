@@ -68,7 +68,7 @@ export { planningAgent }
 ```
 
 ## Define Activity Planning Workflow
-Define the weather workflow with 2 steps: one to fetch the weather via a network call, and another to plan activities using the planning agent.
+Define the activity planning workflow with 2 steps: one to fetch the weather via a network call, and another to plan activities using the planning agent.
 ```ts showLineNumbers copy filename="workflows/agent-workflow.ts"
 import { createWorkflow, createStep } from '@mastra/core/workflows/vNext'
 import { z } from 'zod'
@@ -116,7 +116,8 @@ const fetchWeather = createStep({
       throw new Error('Trigger data not found')
     }
  
-    const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(inputData.city)}&count=1`    const geocodingResponse = await fetch(geocodingUrl)
+    const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(inputData.city)}&count=1`    
+    const geocodingResponse = await fetch(geocodingUrl)
     const geocodingData = (await geocodingResponse.json()) as {
       results: { latitude: number; longitude: number; name: string }[]
     }
@@ -202,7 +203,7 @@ const planActivities = createStep({
  
 const activityPlanningWorkflow = createWorkflow({
   steps: [fetchWeather, planActivities],
-  id: 'weather-workflow-step1-single-day',
+  id: 'activity-planning-step1-single-day',
   inputSchema: z.object({
     city: z.string().describe('The city to get the weather for'),
   }),
@@ -219,8 +220,8 @@ export { activityPlanningWorkflow }
 ```
 
 ## Register Agent and Workflow instances with Mastra class
-Register the planning agent and weather workflow with the mastra instance.
-This is critical for enabling access to the planning agent within the weather workflow.
+Register the planning agent and activity planning workflow with the mastra instance.
+This is critical for enabling access to the planning agent within the activity planning workflow.
 
 ```ts showLineNumbers copy filename="index.ts"
 import { Mastra } from '@mastra/core/mastra'
@@ -244,8 +245,8 @@ const mastra = new Mastra({
 export { mastra }
 ```
 
-## Execute the weather workflow
-Here, we'll get the weather workflow from the mastra instance, then create a run and execute the created run with the required inputData.
+## Execute the activity planning workflow
+Here, we'll get the activity planning workflow from the mastra instance, then create a run and execute the created run with the required inputData.
 
 ```ts showLineNumbers copy filename="exec.ts"
 import { mastra } from "./"

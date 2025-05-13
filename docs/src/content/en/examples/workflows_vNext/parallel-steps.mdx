@@ -266,7 +266,7 @@ const planIndoorActivities = createStep({
   },
 })
  
-const sythesizeStep = createStep({
+const synthesizeStep = createStep({
   id: 'sythesize-step',
   description: 'Synthesizes the results of the indoor and outdoor activities',
   inputSchema: z.object({
@@ -325,11 +325,11 @@ const activityPlanningWorkflow = createWorkflow({
   outputSchema: z.object({
     activities: z.string(),
   }),
-  steps: [fetchWeather, planActivities, planIndoorActivities, sythesizeStep]
+  steps: [fetchWeather, planActivities, planIndoorActivities, synthesizeStep]
 })
   .then(fetchWeather)
   .parallel([planActivities, planIndoorActivities])
-  .then(sythesizeStep)
+  .then(synthesizeStep)
   .commit()
  
 export { activityPlanningWorkflow }
@@ -345,7 +345,7 @@ import { Mastra } from '@mastra/core/mastra'
 import { createLogger } from '@mastra/core/logger'
 import { activityPlanningWorkflow } from './workflows/parallel-workflow'
 import { planningAgent } from './agents/planning-agent'
-import { synthesizeAgent } from './agents/syntesize-agent'
+import { synthesizeAgent } from './agents/synthesize-agent'
  
 const mastra = new Mastra({
   vnext_workflows: {
