@@ -1,5 +1,11 @@
 # @mastra/mcp
 
+## 0.5.0-alpha.5
+
+### Patch Changes
+
+- 8baa6c8: passes runtimeContext to the logger function inside MCPClient tool calls
+
 ## 0.5.0-alpha.4
 
 ### Patch Changes
