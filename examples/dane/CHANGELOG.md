@@ -1,5 +1,18 @@
 # @mastra/dane
 
+## 0.0.20-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [3e9c131]
+  - @mastra/core@0.9.4-alpha.4
+  - @mastra/github@1.1.23-alpha.4
+  - @mastra/mcp@0.5.0-alpha.6
+  - @mastra/memory@0.3.4-alpha.4
+  - @mastra/rag@0.1.23-alpha.4
+  - @mastra/libsql@0.0.4-alpha.4
+  - @mastra/upstash@0.3.4-alpha.4
+
 ## 0.0.20-alpha.5
 
 ### Patch Changes

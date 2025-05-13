@@ -1,5 +1,12 @@
 # @mastra/mcp
 
+## 0.5.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [3e9c131]
+  - @mastra/core@0.9.4-alpha.4
+
 ## 0.5.0-alpha.5
 
 ### Patch Changes

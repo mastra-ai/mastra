@@ -1,5 +1,12 @@
 # @mastra/astra
 
+## 0.2.15-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [3e9c131]
+  - @mastra/core@0.9.4-alpha.4
+
 ## 0.2.15-alpha.3
 
 ### Patch Changes
