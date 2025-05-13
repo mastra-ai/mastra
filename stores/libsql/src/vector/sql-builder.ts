@@ -1,12 +1,13 @@
 import type { InValue } from '@libsql/client';
+
 import type {
-  VectorFilter,
   BasicOperator,
   NumericOperator,
   ArrayOperator,
   ElementOperator,
   LogicalOperator,
   RegexOperator,
+  VectorFilter,
 } from '@mastra/core/vector/filter';
 
 export type OperatorType =
@@ -26,30 +27,76 @@ type FilterOperator = {
 
 type OperatorFn = (key: string, value?: any) => FilterOperator;
 
+export function validateIdentifier(name: string, kind = 'identifier') {
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {
+    throw new Error(`Invalid ${kind}: ${name}`);
+  }
+}
+
+function validateFieldKey(key: string) {
+  if (!/^[a-zA-Z_][a-zA-Z0-9_\.]*$/.test(key)) {
+    throw new Error(`Invalid field key: ${key}`);
+  }
+}
 // Helper functions to create operators
 const createBasicOperator = (symbol: string) => {
-  return (key: string): FilterOperator => ({
-    sql: `CASE 
-      WHEN ? IS NULL THEN json_extract(metadata, '$."${handleKey(key)}"') IS ${symbol === '=' ? '' : 'NOT'} NULL
-      ELSE json_extract(metadata, '$."${handleKey(key)}"') ${symbol} ?
-    END`,
-    needsValue: true,
-    transformValue: (value: any) => {
-      // Return the values directly, not in an object
-      return [value, value];
-    },
-  });
+  return (key: string): FilterOperator => {
+    validateFieldKey(key);
+    return {
+      sql: `CASE 
+        WHEN ? IS NULL THEN json_extract(metadata, '$."${handleKey(key)}"') IS ${symbol === '=' ? '' : 'NOT'} NULL
+        ELSE json_extract(metadata, '$."${handleKey(key)}"') ${symbol} ?
+      END`,
+      needsValue: true,
+      transformValue: (value: any) => {
+        // Return the values directly, not in an object
+        return [value, value];
+      },
+    };
+  };
 };
 const createNumericOperator = (symbol: string) => {
-  return (key: string): FilterOperator => ({
-    sql: `CAST(json_extract(metadata, '$."${handleKey(key)}"') AS NUMERIC) ${symbol} ?`,
-    needsValue: true,
-  });
+  return (key: string): FilterOperator => {
+    validateFieldKey(key);
+    return {
+      sql: `CAST(json_extract(metadata, '$."${handleKey(key)}"') AS NUMERIC) ${symbol} ?`,
+      needsValue: true,
+    };
+  };
 };
 
 const validateJsonArray = (key: string) =>
   `json_valid(json_extract(metadata, '$."${handleKey(key)}"'))
    AND json_type(json_extract(metadata, '$."${handleKey(key)}"')) = 'array'`;
+
+function buildElemMatchConditions(value: any) {
+  const conditions = Object.entries(value).map(([field, fieldValue]) => {
+    if (field.startsWith('$')) {
+      // Direct operators on array elements ($in, $gt, etc)
+      const { sql, values } = buildCondition('elem.value', { [field]: fieldValue }, '');
+      // Replace the metadata path with elem.value
+      const pattern = /json_extract\(metadata, '\$\."[^"]*"(\."[^"]*")*'\)/g;
+      const elemSql = sql.replace(pattern, 'elem.value');
+      return { sql: elemSql, values };
+    } else if (typeof fieldValue === 'object' && !Array.isArray(fieldValue)) {
+      // Nested field with operators (count: { $gt: 20 })
+      const { sql, values } = buildCondition(field, fieldValue, '');
+      // Replace the field path with elem.value path
+      const pattern = /json_extract\(metadata, '\$\."[^"]*"(\."[^"]*")*'\)/g;
+      const elemSql = sql.replace(pattern, `json_extract(elem.value, '$."${field}"')`);
+      return { sql: elemSql, values };
+    } else {
+      validateFieldKey(field);
+      // Simple field equality (warehouse: 'A')
+      return {
+        sql: `json_extract(elem.value, '$."${field}"') = ?`,
+        values: [fieldValue],
+      };
+    }
+  });
+
+  return conditions;
+}
 
 // Define all filter operators
 export const FILTER_OPERATORS: Record<string, OperatorFn> = {
@@ -61,101 +108,121 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
   $lte: createNumericOperator('<='),
 
   // Array Operators
-  $in: (key: string, value: any) => ({
-    sql: `json_extract(metadata, '$."${handleKey(key)}"') IN (${value.map(() => '?').join(',')})`,
-    needsValue: true,
-  }),
+  $in: (key: string, value: any) => {
+    validateFieldKey(key);
+    const arr = Array.isArray(value) ? value : [value];
+    if (arr.length === 0) {
+      return { sql: '1 = 0', needsValue: true, transformValue: () => [] };
+    }
+    const paramPlaceholders = arr.map(() => '?').join(',');
+    return {
+      sql: `(
+      CASE
+        WHEN ${validateJsonArray(key)} THEN
+          EXISTS (
+            SELECT 1 FROM json_each(json_extract(metadata, '$."${handleKey(key)}"')) as elem
+            WHERE elem.value IN (SELECT value FROM json_each(?))
+          )
+        ELSE json_extract(metadata, '$."${handleKey(key)}"') IN (${paramPlaceholders})
+      END
+    )`,
+      needsValue: true,
+      transformValue: () => [JSON.stringify(arr), ...arr],
+    };
+  },
 
-  $nin: (key: string, value: any) => ({
-    sql: `json_extract(metadata, '$."${handleKey(key)}"') NOT IN (${value.map(() => '?').join(',')})`,
-    needsValue: true,
-  }),
-  $all: (key: string) => ({
-    sql: `json_extract(metadata, '$."${handleKey(key)}"') = ?`,
-    needsValue: true,
-    transformValue: (value: any) => {
-      const arrayValue = Array.isArray(value) ? value : [value];
-      if (arrayValue.length === 0) {
-        return {
-          sql: '1 = 0',
-          values: [],
-        };
-      }
+  $nin: (key: string, value: any) => {
+    validateFieldKey(key);
+    const arr = Array.isArray(value) ? value : [value];
+    if (arr.length === 0) {
+      return { sql: '1 = 1', needsValue: true, transformValue: () => [] };
+    }
+    const paramPlaceholders = arr.map(() => '?').join(',');
+    return {
+      sql: `(
+      CASE
+        WHEN ${validateJsonArray(key)} THEN
+          NOT EXISTS (
+            SELECT 1 FROM json_each(json_extract(metadata, '$."${handleKey(key)}"')) as elem
+            WHERE elem.value IN (SELECT value FROM json_each(?))
+          )
+        ELSE json_extract(metadata, '$."${handleKey(key)}"') NOT IN (${paramPlaceholders})
+      END
+    )`,
+      needsValue: true,
+      transformValue: () => [JSON.stringify(arr), ...arr],
+    };
+  },
+  $all: (key: string, value: any) => {
+    validateFieldKey(key);
+    let sql: string;
+    const arrayValue = Array.isArray(value) ? value : [value];
 
-      return {
-        sql: `(
-          CASE
-            WHEN ${validateJsonArray(key)} THEN
-                NOT EXISTS (
-                    SELECT value 
-                    FROM json_each(?) 
-                    WHERE value NOT IN (
-                    SELECT value 
-                    FROM json_each(json_extract(metadata, '$."${handleKey(key)}"'))
-                )
+    if (arrayValue.length === 0) {
+      // If the array is empty, always return false (no matches)
+      sql = '1 = 0';
+    } else {
+      sql = `(
+      CASE
+        WHEN ${validateJsonArray(key)} THEN
+          NOT EXISTS (
+            SELECT value
+            FROM json_each(?)
+            WHERE value NOT IN (
+              SELECT value
+              FROM json_each(json_extract(metadata, '$."${handleKey(key)}"'))
             )
-            ELSE FALSE
-          END
-        )`,
-        values: [JSON.stringify(arrayValue)],
-      };
-    },
-  }),
-  $elemMatch: (key: string) => ({
-    sql: `json_extract(metadata, '$."${handleKey(key)}"') = ?`,
-    needsValue: true,
-    transformValue: (value: any) => {
-      if (typeof value !== 'object' || Array.isArray(value)) {
-        throw new Error('$elemMatch requires an object with conditions');
-      }
+          )
+        ELSE FALSE
+      END
+    )`;
+    }
 
-      // For nested object conditions
-      const conditions = Object.entries(value).map(([field, fieldValue]) => {
-        if (field.startsWith('$')) {
-          // Direct operators on array elements ($in, $gt, etc)
-          const { sql, values } = buildCondition('elem.value', { [field]: fieldValue }, '');
-          // Replace the metadata path with elem.value
-          const pattern = /json_extract\(metadata, '\$\."[^"]*"(\."[^"]*")*'\)/g;
-          const elemSql = sql.replace(pattern, 'elem.value');
-          return { sql: elemSql, values };
-        } else if (typeof fieldValue === 'object' && !Array.isArray(fieldValue)) {
-          // Nested field with operators (count: { $gt: 20 })
-          const { sql, values } = buildCondition(field, fieldValue, '');
-          // Replace the field path with elem.value path
-          const pattern = /json_extract\(metadata, '\$\."[^"]*"(\."[^"]*")*'\)/g;
-          const elemSql = sql.replace(pattern, `json_extract(elem.value, '$."${field}"')`);
-          return { sql: elemSql, values };
-        } else {
-          // Simple field equality (warehouse: 'A')
-          return {
-            sql: `json_extract(elem.value, '$."${field}"') = ?`,
-            values: [fieldValue],
-          };
+    return {
+      sql,
+      needsValue: true,
+      transformValue: () => {
+        if (arrayValue.length === 0) {
+          return [];
         }
-      });
+        return [JSON.stringify(arrayValue)];
+      },
+    };
+  },
+  $elemMatch: (key: string, value: any) => {
+    validateFieldKey(key);
+    if (typeof value !== 'object' || Array.isArray(value)) {
+      throw new Error('$elemMatch requires an object with conditions');
+    }
 
-      return {
-        sql: `(
-          CASE
-            WHEN ${validateJsonArray(key)} THEN
-              EXISTS (
-                SELECT 1 
-                FROM json_each(json_extract(metadata, '$."${handleKey(key)}"')) as elem
-                WHERE ${conditions.map(c => c.sql).join(' AND ')}
-              )
-            ELSE FALSE
-          END
-        )`,
-        values: conditions.flatMap(c => c.values),
-      };
-    },
-  }),
+    // For nested object conditions
+    const conditions = buildElemMatchConditions(value);
+
+    return {
+      sql: `(
+        CASE
+          WHEN ${validateJsonArray(key)} THEN
+            EXISTS (
+              SELECT 1
+              FROM json_each(json_extract(metadata, '$."${handleKey(key)}"')) as elem
+              WHERE ${conditions.map(c => c.sql).join(' AND ')}
+            )
+          ELSE FALSE
+        END
+      )`,
+      needsValue: true,
+      transformValue: () => conditions.flatMap(c => c.values),
+    };
+  },
 
   // Element Operators
-  $exists: (key: string) => ({
-    sql: `json_extract(metadata, '$."${handleKey(key)}"') IS NOT NULL`,
-    needsValue: false,
-  }),
+  $exists: (key: string) => {
+    validateFieldKey(key);
+    return {
+      sql: `json_extract(metadata, '$."${handleKey(key)}"') IS NOT NULL`,
+      needsValue: false,
+    };
+  },
 
   // Logical Operators
   $and: (key: string) => ({
@@ -171,16 +238,19 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
     sql: `NOT (${key})`,
     needsValue: false,
   }),
-  $size: (key: string, paramIndex: number) => ({
-    sql: `(
+  $size: (key: string, paramIndex: number) => {
+    validateFieldKey(key);
+    return {
+      sql: `(
     CASE
       WHEN json_type(json_extract(metadata, '$."${handleKey(key)}"')) = 'array' THEN 
         json_array_length(json_extract(metadata, '$."${handleKey(key)}"')) = $${paramIndex}
       ELSE FALSE
     END
   )`,
-    needsValue: true,
-  }),
+      needsValue: true,
+    };
+  },
   //   /**
   //    * Regex Operators
   //    * Supports case insensitive and multiline
@@ -247,52 +317,50 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
   //       };
   //     },
   //   }),
-  $contains: (key: string) => ({
-    sql: `json_extract(metadata, '$."${handleKey(key)}"') = ?`,
-    needsValue: true,
-    transformValue: (value: any) => {
-      // Array containment
-      if (Array.isArray(value)) {
-        return {
-          sql: `(
-            SELECT ${validateJsonArray(key)}
-            AND EXISTS (
-              SELECT 1 
-              FROM json_each(json_extract(metadata, '$."${handleKey(key)}"')) as m
-              WHERE m.value IN (SELECT value FROM json_each(?))
-            )
-          )`,
-          values: [JSON.stringify(value)],
-        };
-      }
-
-      // Nested object traversal
-      if (value && typeof value === 'object') {
-        const paths: string[] = [];
-        const values: any[] = [];
-
-        function traverse(obj: any, path: string[] = []) {
-          for (const [k, v] of Object.entries(obj)) {
-            const currentPath = [...path, k];
-            if (v && typeof v === 'object' && !Array.isArray(v)) {
-              traverse(v, currentPath);
-            } else {
-              paths.push(currentPath.join('.'));
-              values.push(v);
-            }
-          }
+  $contains: (key: string, value: any) => {
+    validateFieldKey(key);
+    let sql;
+    if (Array.isArray(value)) {
+      sql = `(
+        SELECT ${validateJsonArray(key)}
+        AND EXISTS (
+          SELECT 1
+          FROM json_each(json_extract(metadata, '$."${handleKey(key)}"')) as m
+          WHERE m.value IN (SELECT value FROM json_each(?))
+        )
+      )`;
+    } else if (typeof value === 'string') {
+      sql = `lower(json_extract(metadata, '$."${handleKey(key)}"')) LIKE '%' || lower(?) || '%'`;
+    } else {
+      sql = `json_extract(metadata, '$."${handleKey(key)}"') = ?`;
+    }
+    return {
+      sql,
+      needsValue: true,
+      transformValue: () => {
+        if (Array.isArray(value)) {
+          return [JSON.stringify(value)];
         }
-
-        traverse(value);
-        return {
-          sql: `(${paths.map(path => `json_extract(metadata, '$."${handleKey(key)}"."${path}"') = ?`).join(' AND ')})`,
-          values,
-        };
-      }
-
-      return value;
-    },
-  }),
+        if (typeof value === 'object' && value !== null) {
+          return [JSON.stringify(value)];
+        }
+        return [value];
+      },
+    };
+  },
+  /**
+   * $objectContains: True JSON containment for advanced use (deep sub-object match).
+   * Usage: { field: { $objectContains: { ...subobject } } }
+   */
+  // $objectContains: (key: string) => ({
+  //   sql: '', // Will be overridden by transformValue
+  //   needsValue: true,
+  //   transformValue: (value: any) => ({
+  //     sql: `json_type(json_extract(metadata, '$."${handleKey(key)}"')) = 'object'
+  //         AND json_patch(json_extract(metadata, '$."${handleKey(key)}"'), ?) = json_extract(metadata, '$."${handleKey(key)}"')`,
+  //     values: [JSON.stringify(value)],
+  //   }),
+  // }),
 };
 
 export interface FilterResult {

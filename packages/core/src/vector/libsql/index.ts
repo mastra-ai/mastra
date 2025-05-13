@@ -15,7 +15,7 @@ import type {
 } from '../index';
 
 import { LibSQLFilterTranslator } from './filter';
-import { buildFilterQuery } from './sql-builder';
+import { buildFilterQuery, validateIdentifier } from './sql-builder';
 
 interface LibSQLQueryParams extends QueryVectorParams {
   minScore?: number;
@@ -101,12 +101,21 @@ export class LibSQLVector extends MastraVector {
 
     try {
       const { indexName, queryVector, topK = 10, filter, includeVector = false, minScore = 0 } = params;
+      validateIdentifier(indexName, 'index name');
+
+      if (!Number.isInteger(topK) || topK <= 0) {
+        throw new Error('topK must be a positive integer');
+      }
+      if (!Array.isArray(queryVector) || !queryVector.every(x => typeof x === 'number' && Number.isFinite(x))) {
+        throw new Error('queryVector must be an array of finite numbers');
+      }
 
       const vectorStr = `[${queryVector.join(',')}]`;
 
       const translatedFilter = this.transformFilter(filter);
       const { sql: filterQuery, values: filterValues } = buildFilterQuery(translatedFilter);
       filterValues.push(minScore);
+      filterValues.push(topK);
 
       const query = `
         WITH vector_scores AS (
@@ -122,7 +131,7 @@ export class LibSQLVector extends MastraVector {
         FROM vector_scores
         WHERE score > ?
         ORDER BY score DESC
-        LIMIT ${topK}`;
+        LIMIT ?`;
 
       const result = await this.turso.execute({
         sql: query,
@@ -144,6 +153,7 @@ export class LibSQLVector extends MastraVector {
     const params = this.normalizeArgs<UpsertVectorParams>('upsert', args);
 
     const { indexName, vectors, metadata, ids } = params;
+    validateIdentifier(indexName, 'index name');
     const tx = await this.turso.transaction('write');
 
     try {
@@ -202,9 +212,7 @@ export class LibSQLVector extends MastraVector {
     const { indexName, dimension } = params;
     try {
       // Validate inputs
-      if (!indexName.match(/^[a-zA-Z_][a-zA-Z0-9_]*$/)) {
-        throw new Error('Invalid index name format');
-      }
+      validateIdentifier(indexName, 'index name');
       if (!Number.isInteger(dimension) || dimension <= 0) {
         throw new Error('Dimension must be a positive integer');
       }
@@ -239,6 +247,7 @@ export class LibSQLVector extends MastraVector {
 
   async deleteIndex(indexName: string): Promise<void> {
     try {
+      validateIdentifier(indexName, 'index name');
       // Drop the table
       await this.turso.execute({
         sql: `DROP TABLE IF EXISTS ${indexName}`,
@@ -271,6 +280,7 @@ export class LibSQLVector extends MastraVector {
 
   async describeIndex(indexName: string): Promise<IndexStats> {
     try {
+      validateIdentifier(indexName, 'index name');
       // Get table info including column info
       const tableInfoQuery = `
         SELECT sql 
@@ -331,7 +341,9 @@ export class LibSQLVector extends MastraVector {
     update: { vector?: number[]; metadata?: Record<string, any> },
   ): Promise<void> {
     this.logger.warn(
-      `Deprecation Warning: updateIndexById() is deprecated. Please use updateVector() instead. updateIndexById() will be removed on May 20th, 2025.`,
+      `Deprecation Warning: updateIndexById() is deprecated. 
+      Please use updateVector() instead. 
+      updateIndexById() will be removed on May 20th, 2025.`,
     );
     await this.updateVector(indexName, id, update);
   }
@@ -353,6 +365,7 @@ export class LibSQLVector extends MastraVector {
     update: { vector?: number[]; metadata?: Record<string, any> },
   ): Promise<void> {
     try {
+      validateIdentifier(indexName, 'index name');
       const updates = [];
       const args: InValue[] = [];
 
@@ -414,6 +427,7 @@ export class LibSQLVector extends MastraVector {
    */
   async deleteVector(indexName: string, id: string): Promise<void> {
     try {
+      validateIdentifier(indexName, 'index name');
       await this.turso.execute({
         sql: `DELETE FROM ${indexName} WHERE vector_id = ?`,
         args: [id],

@@ -18,6 +18,12 @@ function safelyParseJSON(jsonString: string): any {
   }
 }
 
+function validateIdentifier(name: string, kind = 'identifier') {
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {
+    throw new Error(`Invalid ${kind}: ${name}`);
+  }
+}
+
 let hasWarned = false;
 function warnDeprecation(logger: Logger) {
   if (hasWarned) return;
@@ -92,7 +98,9 @@ export class LibSQLStore extends MastraStorage {
   }
 
   private getCreateTableSQL(tableName: TABLE_NAMES, schema: Record<string, StorageColumn>): string {
+    validateIdentifier(tableName, 'table name');
     const columns = Object.entries(schema).map(([name, col]) => {
+      validateIdentifier(name, 'column name');
       let type = col.type.toUpperCase();
       if (type === 'TEXT') type = 'TEXT';
       if (type === 'TIMESTAMP') type = 'TEXT'; // Store timestamps as ISO strings
@@ -123,6 +131,7 @@ export class LibSQLStore extends MastraStorage {
     tableName: TABLE_NAMES;
     schema: Record<string, StorageColumn>;
   }): Promise<void> {
+    validateIdentifier(tableName, 'table name');
     try {
       this.logger.debug(`Creating database table`, { tableName, operation: 'schema init' });
       const sql = this.getCreateTableSQL(tableName, schema);
@@ -134,6 +143,7 @@ export class LibSQLStore extends MastraStorage {
   }
 
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
+    validateIdentifier(tableName, 'table name');
     try {
       await this.client.execute(`DELETE FROM ${tableName}`);
     } catch (e) {
@@ -147,7 +157,9 @@ export class LibSQLStore extends MastraStorage {
     sql: string;
     args: InValue[];
   } {
+    validateIdentifier(tableName, 'table name');
     const columns = Object.keys(record);
+    columns.forEach(col => validateIdentifier(col, 'column name'));
     const values = Object.values(record).map(v => {
       if (typeof v === `undefined`) {
         // returning an undefined value will cause libsql to throw
@@ -168,6 +180,7 @@ export class LibSQLStore extends MastraStorage {
 
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     warnDeprecation(this.logger);
+    validateIdentifier(tableName, 'table name');
 
     try {
       await this.client.execute(
@@ -185,6 +198,8 @@ export class LibSQLStore extends MastraStorage {
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
     if (records.length === 0) return;
 
+    validateIdentifier(tableName, 'table name');
+
     warnDeprecation(this.logger);
 
     try {
@@ -197,6 +212,10 @@ export class LibSQLStore extends MastraStorage {
   }
 
   async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
+    validateIdentifier(tableName, 'table name');
+
+    Object.keys(keys).forEach(key => validateIdentifier(key, 'column name'));
+
     const conditions = Object.entries(keys)
       .map(([key]) => `${key} = ?`)
       .join(' AND ');

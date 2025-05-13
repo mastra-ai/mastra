@@ -22,28 +22,52 @@ export type OperatorType =
 type FilterOperator = {
   sql: string;
   needsValue: boolean;
-  transformValue?: () => any;
+  transformValue?: (value: any) => any;
 };
 
 type OperatorFn = (key: string, value?: any) => FilterOperator;
 
+export function validateIdentifier(name: string, kind = 'identifier') {
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {
+    throw new Error(`Invalid ${kind}: ${name}`);
+  }
+}
+
+function validateFieldKey(key: string) {
+  if (!/^[a-zA-Z_][a-zA-Z0-9_\.]*$/.test(key)) {
+    throw new Error(`Invalid field key: ${key}`);
+  }
+}
 // Helper functions to create operators
 const createBasicOperator = (symbol: string) => {
-  return (key: string, value: any): FilterOperator => ({
-    sql: `CASE 
-      WHEN ? IS NULL THEN json_extract(metadata, '$."${handleKey(key)}"') IS ${symbol === '=' ? '' : 'NOT'} NULL
-      ELSE json_extract(metadata, '$."${handleKey(key)}"') ${symbol} ?
-    END`,
-    needsValue: true,
-    transformValue: () => [value, value],
-  });
+  return (key: string): FilterOperator => {
+    validateFieldKey(key);
+    return {
+      sql: `CASE 
+        WHEN ? IS NULL THEN json_extract(metadata, '$."${handleKey(key)}"') IS ${symbol === '=' ? '' : 'NOT'} NULL
+        ELSE json_extract(metadata, '$."${handleKey(key)}"') ${symbol} ?
+      END`,
+      needsValue: true,
+      transformValue: (value: any) => {
+        // Return the values directly, not in an object
+        return [value, value];
+      },
+    };
+  };
 };
 const createNumericOperator = (symbol: string) => {
-  return (key: string): FilterOperator => ({
-    sql: `CAST(json_extract(metadata, '$."${handleKey(key)}"') AS NUMERIC) ${symbol} ?`,
-    needsValue: true,
-  });
+  return (key: string): FilterOperator => {
+    validateFieldKey(key);
+    return {
+      sql: `CAST(json_extract(metadata, '$."${handleKey(key)}"') AS NUMERIC) ${symbol} ?`,
+      needsValue: true,
+    };
+  };
 };
+
+const validateJsonArray = (key: string) =>
+  `json_valid(json_extract(metadata, '$."${handleKey(key)}"'))
+   AND json_type(json_extract(metadata, '$."${handleKey(key)}"')) = 'array'`;
 
 function buildElemMatchConditions(value: any) {
   const conditions = Object.entries(value).map(([field, fieldValue]) => {
@@ -62,6 +86,7 @@ function buildElemMatchConditions(value: any) {
       const elemSql = sql.replace(pattern, `json_extract(elem.value, '$."${field}"')`);
       return { sql: elemSql, values };
     } else {
+      validateFieldKey(field);
       // Simple field equality (warehouse: 'A')
       return {
         sql: `json_extract(elem.value, '$."${field}"') = ?`,
@@ -72,10 +97,6 @@ function buildElemMatchConditions(value: any) {
 
   return conditions;
 }
-
-const validateJsonArray = (key: string) =>
-  `json_valid(json_extract(metadata, '$."${handleKey(key)}"'))
-   AND json_type(json_extract(metadata, '$."${handleKey(key)}"')) = 'array'`;
 
 // Define all filter operators
 export const FILTER_OPERATORS: Record<string, OperatorFn> = {
@@ -88,6 +109,7 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
 
   // Array Operators
   $in: (key: string, value: any) => {
+    validateFieldKey(key);
     const arr = Array.isArray(value) ? value : [value];
     if (arr.length === 0) {
       return { sql: '1 = 0', needsValue: true, transformValue: () => [] };
@@ -110,6 +132,7 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
   },
 
   $nin: (key: string, value: any) => {
+    validateFieldKey(key);
     const arr = Array.isArray(value) ? value : [value];
     if (arr.length === 0) {
       return { sql: '1 = 1', needsValue: true, transformValue: () => [] };
@@ -131,6 +154,7 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
     };
   },
   $all: (key: string, value: any) => {
+    validateFieldKey(key);
     let sql: string;
     const arrayValue = Array.isArray(value) ? value : [value];
 
@@ -166,6 +190,7 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
     };
   },
   $elemMatch: (key: string, value: any) => {
+    validateFieldKey(key);
     if (typeof value !== 'object' || Array.isArray(value)) {
       throw new Error('$elemMatch requires an object with conditions');
     }
@@ -191,10 +216,13 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
   },
 
   // Element Operators
-  $exists: (key: string) => ({
-    sql: `json_extract(metadata, '$."${handleKey(key)}"') IS NOT NULL`,
-    needsValue: false,
-  }),
+  $exists: (key: string) => {
+    validateFieldKey(key);
+    return {
+      sql: `json_extract(metadata, '$."${handleKey(key)}"') IS NOT NULL`,
+      needsValue: false,
+    };
+  },
 
   // Logical Operators
   $and: (key: string) => ({
@@ -210,16 +238,19 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
     sql: `NOT (${key})`,
     needsValue: false,
   }),
-  $size: (key: string, paramIndex: number) => ({
-    sql: `(
+  $size: (key: string, paramIndex: number) => {
+    validateFieldKey(key);
+    return {
+      sql: `(
     CASE
       WHEN json_type(json_extract(metadata, '$."${handleKey(key)}"')) = 'array' THEN 
         json_array_length(json_extract(metadata, '$."${handleKey(key)}"')) = $${paramIndex}
       ELSE FALSE
     END
   )`,
-    needsValue: true,
-  }),
+      needsValue: true,
+    };
+  },
   //   /**
   //    * Regex Operators
   //    * Supports case insensitive and multiline
@@ -287,6 +318,7 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
   //     },
   //   }),
   $contains: (key: string, value: any) => {
+    validateFieldKey(key);
     let sql;
     if (Array.isArray(value)) {
       sql = `(
@@ -485,7 +517,11 @@ const processOperator = (key: string, operator: string, operatorValue: any): Fil
     return { sql: operatorResult.sql, values: [] };
   }
 
-  const transformed = operatorResult.transformValue ? operatorResult.transformValue() : operatorValue;
+  const transformed = operatorResult.transformValue ? operatorResult.transformValue(operatorValue) : operatorValue;
+
+  if (transformed && typeof transformed === 'object' && 'sql' in transformed) {
+    return transformed;
+  }
 
   return {
     sql: operatorResult.sql,
