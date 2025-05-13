@@ -48,7 +48,7 @@ let mockMCPServer: Partial<MastraMCPServerImplementation>;
 
 describe('getMcpServerMessageHandler', () => {
   const serverId = 'test-mcp-server';
-  const requestUrl = `http://localhost/api/servers/${serverId}/mcp`;
+  const requestUrl = `http://localhost/api/mcp/${serverId}/mcp`;
   let mockNodeReq: any;
   let mockNodeRes: any;
   let mockFetchRes: Response;
@@ -86,7 +86,7 @@ describe('getMcpServerMessageHandler', () => {
     expect(toReqRes).toHaveBeenCalledWith(mockContext.req.raw);
     expect(mockMCPServer.startHTTP).toHaveBeenCalledWith({
       url: new URL(requestUrl),
-      httpPath: `/api/servers/${serverId}/mcp`,
+      httpPath: `/api/mcp/${serverId}/mcp`,
       req: mockNodeReq,
       res: mockNodeRes,
       options: {
@@ -139,13 +139,13 @@ describe('getMcpServerMessageHandler', () => {
   });
 
   it('should pass the correct URL and httpPath to startHTTP', async () => {
-    const actualRequestUrl = `http://localhost/api/servers/${serverId}/mcp`;
+    const actualRequestUrl = `http://localhost/api/mcp/${serverId}/mcp`;
     const mockContext = createMockContext(serverId, actualRequestUrl) as Context;
     await getMcpServerMessageHandler(mockContext);
     expect(mockMCPServer.startHTTP).toHaveBeenCalledWith(
       expect.objectContaining({
         url: new URL(actualRequestUrl),
-        httpPath: `/api/servers/${serverId}/mcp`,
+        httpPath: `/api/mcp/${serverId}/mcp`,
       }),
     );
   });
@@ -228,7 +228,7 @@ describe('listMcpRegistryServersHandler', () => {
       server2: mockServer2 as MastraMCPServerImplementation,
     });
     const mockContext = createRegistryMockContext({
-      requestUrl: 'http://localhost/api/v0/servers',
+      requestUrl: 'http://localhost/api/mcp/v0/servers',
       mastraInstance: mockMastra,
     }) as Context;
 
@@ -248,7 +248,7 @@ describe('listMcpRegistryServersHandler', () => {
       server2: mockServer2 as MastraMCPServerImplementation,
     });
     const mockContext = createRegistryMockContext({
-      requestUrl: 'http://localhost/api/v0/servers?limit=1&offset=0',
+      requestUrl: 'http://localhost/api/mcp/v0/servers?limit=1&offset=0',
       queryParams: { limit: '1', offset: '0' },
       mastraInstance: mockMastra,
     }) as Context;
@@ -258,13 +258,13 @@ describe('listMcpRegistryServersHandler', () => {
 
     expect(body.servers).toEqual([server1Info]);
     expect(body.total_count).toBe(2);
-    expect(body.next).toBe('http://localhost/api/v0/servers?limit=1&offset=1');
+    expect(body.next).toBe('http://localhost/api/mcp/v0/servers?limit=1&offset=1');
   });
 
   it('should return empty list if getMCPServers returns undefined', async () => {
     (mockMastra.getMCPServers as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
     const mockContext = createRegistryMockContext({
-      requestUrl: 'http://localhost/api/v0/servers',
+      requestUrl: 'http://localhost/api/mcp/v0/servers',
       mastraInstance: mockMastra,
     }) as Context;
 
@@ -279,7 +279,7 @@ describe('listMcpRegistryServersHandler', () => {
 
   it('should return 500 if Mastra instance or getMCPServers is not available', async () => {
     const mockContext = createRegistryMockContext({
-      requestUrl: 'http://localhost/api/v0/servers',
+      requestUrl: 'http://localhost/api/mcp/v0/servers',
       mastraInstance: {} as Partial<Mastra>, // Simulate missing getMCPServers
     }) as Context;
 
@@ -318,7 +318,7 @@ describe('getMcpRegistryServerDetailHandler', () => {
     (mockMastra.getMCPServer as ReturnType<typeof vi.fn>).mockReturnValue(mockServer as MastraMCPServerImplementation);
     const mockContext = createRegistryMockContext({
       serverId,
-      requestUrl: `http://localhost/api/v0/servers/${serverId}`,
+      requestUrl: `http://localhost/api/mcp/v0/servers/${serverId}`,
       mastraInstance: mockMastra,
     }) as Context;
 
@@ -335,7 +335,7 @@ describe('getMcpRegistryServerDetailHandler', () => {
     (mockMastra.getMCPServer as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
     const mockContext = createRegistryMockContext({
       serverId,
-      requestUrl: `http://localhost/api/v0/servers/${serverId}`,
+      requestUrl: `http://localhost/api/mcp/v0/servers/${serverId}`,
       mastraInstance: mockMastra,
     }) as Context;
 
@@ -348,7 +348,7 @@ describe('getMcpRegistryServerDetailHandler', () => {
   it('should return 500 if Mastra instance or getMCPServer is not available', async () => {
     const mockContext = createRegistryMockContext({
       serverId,
-      requestUrl: `http://localhost/api/v0/servers/${serverId}`,
+      requestUrl: `http://localhost/api/mcp/v0/servers/${serverId}`,
       mastraInstance: {} as Partial<Mastra>, // Simulate missing getMCPServer
     }) as Context;
 

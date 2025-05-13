@@ -128,6 +128,7 @@
     "@opentelemetry/sdk-trace-base": "^1.30.1",
     "@opentelemetry/sdk-trace-node": "^1.30.1",
     "@opentelemetry/semantic-conventions": "^1.30.0",
+    "@sindresorhus/slugify": "^2.2.1",
     "ai": "^4.2.2",
     "cohere-ai": "^7.16.0",
     "date-fns": "^3.6.0",

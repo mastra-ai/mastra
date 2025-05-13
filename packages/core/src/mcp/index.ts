@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+import slugify from '@sindresorhus/slugify';
 import type { ToolsInput } from '../agent';
 import { MastraBase } from '../base';
 import { RegisteredLogger } from '../logger';
@@ -14,7 +16,6 @@ import type {
   ServerDetailInfo,
   ServerInfo,
 } from './types';
-
 export * from './types';
 
 // +++ Updated MCPServerBase +++
@@ -108,11 +109,13 @@ export abstract class MCPServerBase extends MastraBase {
     this.name = config.name;
     this.version = config.version;
 
+    // If user does not provide an ID, we will use the key from the Mastra config, but if user does not pass MCPServer
+    // to Mastra, we will generate a random UUID as a backup.
     if (config.id) {
-      this._id = config.id;
+      this._id = slugify(config.id);
       this.idWasSet = true;
     } else {
-      this._id = globalThis.crypto?.randomUUID?.() || `fallback-uuid-${Date.now()}-${Math.random()}`;
+      this._id = randomUUID();
     }
 
     this.description = config.description;

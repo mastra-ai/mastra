@@ -8,7 +8,7 @@ import { handleError } from './error';
 const getMastra = (c: Context): Mastra => c.get('mastra') as Mastra;
 
 /**
- * Handler for POST /api/servers/:serverId/mcp
+ * Handler for POST /api/mcp/:serverId/mcp
  */
 export const getMcpServerMessageHandler = async (c: Context) => {
   const mastra = getMastra(c);
@@ -23,7 +23,7 @@ export const getMcpServerMessageHandler = async (c: Context) => {
   try {
     await server.startHTTP({
       url: new URL(c.req.url),
-      httpPath: `/api/servers/${serverId}/mcp`,
+      httpPath: `/api/mcp/${serverId}/mcp`,
       req,
       res,
       options: {
@@ -56,8 +56,8 @@ export const getMcpServerSseHandler = async (c: Context) => {
 
   // Define the paths that MCPServer's startSSE method will compare against.
   // These paths correspond to the routes we will define in server/index.ts.
-  const sseConnectionPath = `/api/servers/${serverId}/sse`;
-  const sseMessagePath = `/api/servers/${serverId}/messages`;
+  const sseConnectionPath = `/api/mcp/${serverId}/sse`;
+  const sseMessagePath = `/api/mcp/${serverId}/messages`;
 
   try {
     // MCPServer.startSSE will use requestUrl.pathname to differentiate
@@ -75,7 +75,7 @@ export const getMcpServerSseHandler = async (c: Context) => {
 };
 
 /**
- * Handler for GET /api/v0/servers - List MCP Servers (Registry Style)
+ * Handler for GET /api/mcp/v0/servers - List MCP Servers (Registry Style)
  */
 export const listMcpRegistryServersHandler = async (c: Context) => {
   const mastra = getMastra(c);
@@ -118,7 +118,7 @@ export const listMcpRegistryServersHandler = async (c: Context) => {
 };
 
 /**
- * Handler for GET /api/v0/servers/:id - Get MCP Server Details (Registry Style)
+ * Handler for GET /api/mcp/v0/servers/:id - Get MCP Server Details (Registry Style)
  */
 export const getMcpRegistryServerDetailHandler = async (c: Context) => {
   const mastra = getMastra(c);
