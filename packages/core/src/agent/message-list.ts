@@ -166,30 +166,96 @@ export class MessageList {
             break;
           case 'file':
             // Mastra V1 file parts can have mimeType and data (binary/data URL, URL object, or URL string)
-            if (part.data instanceof URL && part.data.protocol !== 'data:') {
-              // If it's a non-data URL object, add it to experimental_attachments
-              experimentalAttachments.push({
-                name: part.filename, // Assuming V1 MessageType FilePart might have a name, or leave undefined
-                url: part.data.toString(),
-                contentType: part.mimeType, // Use mimeType as contentType
-              });
-            } else if (
-              typeof part.data === 'string' &&
-              (part.data.startsWith('http://') || part.data.startsWith('https://'))
+
+            // Validate mimeType for non-image/text files
+            if (
+              !part.mimeType ||
+              (part.mimeType !== 'image/jpeg' &&
+                part.mimeType !== 'image/png' &&
+                part.mimeType !== 'image/gif' &&
+                part.mimeType !== 'text/plain' &&
+                part.mimeType !== 'text/html' &&
+                part.mimeType !== 'text/css' &&
+                part.mimeType !== 'text/javascript' &&
+                part.mimeType !== 'application/json' &&
+                part.mimeType !== 'application/xml' &&
+                part.mimeType !== 'application/pdf')
             ) {
-              // If it's a non-data URL string, add it to experimental_attachments
-              experimentalAttachments.push({
-                name: part.filename, // Assuming V1 MessageType FilePart might have a name, or leave undefined
-                url: part.data,
-                contentType: part.mimeType, // Use mimeType as contentType
-              });
+              console.warn(
+                `Missing or unsupported mimeType for file part: ${part.mimeType}. Treating as generic file.`,
+              );
+              // Decide how to handle this - for now, proceed but maybe log a warning or use a default mimeType?
+              // For now, we'll proceed, but this might be a point for refinement.
+            }
+
+            if (part.data instanceof URL) {
+              try {
+                // Validate URL object
+                new URL(part.data.toString()); // Check if it's a valid URL format
+                if (part.data.protocol !== 'data:') {
+                  // If it's a non-data URL object, add it to experimental_attachments
+                  experimentalAttachments.push({
+                    name: part.filename, // Assuming V1 MessageType FilePart might have a name, or leave undefined
+                    url: part.data.toString(),
+                    contentType: part.mimeType, // Use mimeType as contentType
+                  });
+                } else {
+                  // If it's a data URL object, convert to base64 and add to parts
+                  parts.push({
+                    type: 'file',
+                    mimeType: part.mimeType,
+                    data: toBase64String(part.data),
+                  });
+                }
+              } catch (error) {
+                console.error(`Invalid URL in Mastra V1 file part: ${part.data}`, error);
+                // Decide how to handle invalid URLs - skip the part, throw an error?
+                // For now, we'll skip this part.
+              }
+            } else if (typeof part.data === 'string') {
+              try {
+                // Validate URL string or data URL string
+                if (part.data.startsWith('http://') || part.data.startsWith('https://')) {
+                  new URL(part.data); // Check if it's a valid URL format
+                  // If it's a non-data URL string, add it to experimental_attachments
+                  experimentalAttachments.push({
+                    name: part.filename, // Assuming V1 MessageType FilePart might have a name, or leave undefined
+                    url: part.data,
+                    contentType: part.mimeType, // Use mimeType as contentType
+                  });
+                } else if (part.data.startsWith('data:')) {
+                  // If it's a data URL string, convert to base64 and add to parts
+                  parts.push({
+                    type: 'file',
+                    mimeType: part.mimeType,
+                    data: toBase64String(part.data),
+                  });
+                } else {
+                  // Assume it's base64 data directly
+                  parts.push({
+                    type: 'file',
+                    mimeType: part.mimeType,
+                    data: part.data, // Assume it's already base64
+                  });
+                }
+              } catch (error) {
+                console.error(`Invalid URL or data URL string in Mastra V1 file part: ${part.data}`, error);
+                // Decide how to handle invalid URLs - skip the part, throw an error?
+                // For now, we'll skip this part.
+              }
             } else {
-              // Otherwise (binary data, data URL object, or data URL string), convert to base64 and add to parts
-              parts.push({
-                type: 'file',
-                mimeType: part.mimeType,
-                data: toBase64String(part.data),
-              });
+              // Otherwise (binary data), convert to base64 and add to parts
+              try {
+                parts.push({
+                  type: 'file',
+                  mimeType: part.mimeType,
+                  data: toBase64String(part.data),
+                });
+              } catch (error) {
+                console.error(`Failed to convert binary data to base64 in Mastra V1 file part: ${error}`, error);
+                // Decide how to handle conversion errors - skip the part, throw an error?
+                // For now, we'll skip this part.
+              }
             }
             break;
           case 'tool-result':
@@ -250,6 +316,53 @@ export class MessageList {
   }
 
   private vercelUIMessageToMastraMessageV2(message: UIMessage): MastraMessageV2 {
+    const experimentalAttachments: UIMessage['experimental_attachments'] = [];
+
+    if (message.experimental_attachments && Array.isArray(message.experimental_attachments)) {
+      for (const attachment of message.experimental_attachments) {
+        if (!attachment.url) {
+          console.warn('Skipping attachment with missing URL:', attachment);
+          continue;
+        }
+
+        try {
+          const url = new URL(attachment.url);
+
+          // Check for unsupported protocols
+          if (url.protocol !== 'http:' && url.protocol !== 'https:' && url.protocol !== 'data:') {
+            console.warn(`Skipping attachment with unsupported URL protocol: ${url.protocol}`, attachment);
+            continue;
+          }
+
+          // Check for invalid data URL format
+          if (url.protocol === 'data:') {
+            // The toBase64String function already validates data URL format,
+            // so we can rely on it throwing an error if invalid.
+            // Just calling it here to trigger potential validation error.
+            toBase64String(url);
+          }
+
+          // Check for missing contentType for non-image/text types (based on AI SDK test)
+          // Note: AI SDK test specifically checked for 'file' type without contentType.
+          // We'll do a broader check for non-image/text, but could refine if needed.
+          if (
+            !attachment.contentType &&
+            !attachment.url.startsWith('data:image/') &&
+            !attachment.url.startsWith('data:text/')
+          ) {
+            console.warn('Skipping attachment with missing contentType for non-image/text data:', attachment);
+            continue;
+          }
+
+          // If all checks pass, add the attachment
+          experimentalAttachments.push(attachment);
+        } catch (error) {
+          console.error(`Skipping attachment with invalid URL or data: ${attachment.url}`, error);
+          continue;
+        }
+      }
+    }
+
     return {
       id: message.id || randomUUID(),
       role: message.role,
@@ -258,8 +371,8 @@ export class MessageList {
       resourceId: this.memoryInfo?.resourceId,
       content: {
         format: 2,
-        parts: message.parts,
-        experimental_attachments: message.experimental_attachments,
+        parts: message.parts || [], // Ensure parts is always an array
+        experimental_attachments: experimentalAttachments.length > 0 ? experimentalAttachments : undefined, // Only include if not empty
       },
     };
   }
@@ -348,20 +461,96 @@ export class MessageList {
             break;
           case 'file':
             // CoreMessage file parts can have mimeType and data (binary/data URL) or just a URL
-            if (part.data instanceof URL && part.data.protocol !== 'data:') {
-              // If it's a non-data URL, add it to experimental_attachments
-              experimentalAttachments.push({
-                name: part.filename, // Assuming CoreMessage FilePart might have a name, or leave undefined
-                url: part.data.toString(),
-                contentType: part.mimeType, // Use mimeType as contentType
-              });
+
+            // Validate mimeType for non-image/text files (CoreMessage file parts are typed, but defensive check)
+            if (
+              !part.mimeType ||
+              (part.mimeType !== 'image/jpeg' &&
+                part.mimeType !== 'image/png' &&
+                part.mimeType !== 'image/gif' &&
+                part.mimeType !== 'text/plain' &&
+                part.mimeType !== 'text/html' &&
+                part.mimeType !== 'text/css' &&
+                part.mimeType !== 'text/javascript' &&
+                part.mimeType !== 'application/json' &&
+                part.mimeType !== 'application/xml' &&
+                part.mimeType !== 'application/pdf')
+            ) {
+              console.warn(
+                `Missing or unsupported mimeType for CoreMessage file part: ${part.mimeType}. Treating as generic file.`,
+              );
+              // Decide how to handle this - for now, proceed but maybe log a warning or use a default mimeType?
+              // For now, we'll proceed, but this might be a point for refinement.
+            }
+
+            if (part.data instanceof URL) {
+              try {
+                // Validate URL object
+                new URL(part.data.toString()); // Check if it's a valid URL format
+                if (part.data.protocol !== 'data:') {
+                  // If it's a non-data URL, add it to experimental_attachments
+                  experimentalAttachments.push({
+                    name: part.filename, // Assuming CoreMessage FilePart might have a name, or leave undefined
+                    url: part.data.toString(),
+                    contentType: part.mimeType, // Use mimeType as contentType
+                  });
+                } else {
+                  // If it's a data URL object, convert to base64 and add to parts
+                  parts.push({
+                    type: 'file',
+                    mimeType: part.mimeType,
+                    data: toBase64String(part.data),
+                  });
+                }
+              } catch (error) {
+                console.error(`Invalid URL in CoreMessage file part: ${part.data}`, error);
+                // Decide how to handle invalid URLs - skip the part, throw an error?
+                // For now, we'll skip this part.
+              }
+            } else if (typeof part.data === 'string') {
+              try {
+                // Validate URL string or data URL string
+                if (part.data.startsWith('http://') || part.data.startsWith('https://')) {
+                  new URL(part.data); // Check if it's a valid URL format
+                  // If it's a non-data URL string, add it to experimental_attachments
+                  experimentalAttachments.push({
+                    name: part.filename, // Assuming CoreMessage FilePart might have a name, or leave undefined
+                    url: part.data,
+                    contentType: part.mimeType, // Use mimeType as contentType
+                  });
+                } else if (part.data.startsWith('data:')) {
+                  // If it's a data URL string, convert to base64 and add to parts
+                  parts.push({
+                    type: 'file',
+                    mimeType: part.mimeType,
+                    data: toBase64String(part.data),
+                  });
+                } else {
+                  // Assume it's base64 data directly
+                  parts.push({
+                    type: 'file',
+                    mimeType: part.mimeType,
+                    data: part.data, // Assume it's already base64
+                  });
+                }
+              } catch (error) {
+                console.error(`Invalid URL or data URL string in CoreMessage file part: ${part.data}`, error);
+                // Decide how to handle invalid URLs - skip the part, throw an error?
+                // For now, we'll skip this part.
+              }
             } else {
-              // Otherwise (binary data or data URL), convert to base64 and add to parts
-              parts.push({
-                type: 'file',
-                mimeType: part.mimeType,
-                data: toBase64String(part.data),
-              });
+              // Otherwise (binary data), convert to base64 and add to parts
+              try {
+                parts.push({
+                  type: 'file',
+                  mimeType: part.mimeType,
+                  data: toBase64String(part.data),
+                });
+              } catch (error) {
+                console.error(`Failed to convert binary data to base64 in CoreMessage file part: ${error}`, error);
+                // Decide how to handle conversion errors - skip the part, throw an error?
+                // For now, we'll skip this part.
+              }
             }
             break;
           default:
