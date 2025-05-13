@@ -2,8 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { createOpenAI } from '@ai-sdk/openai';
 import type { MessageType } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
-import { DefaultStorage } from '@mastra/core/storage/libsql';
-import { LibSQLVector } from '@mastra/libsql';
+import { LibSQLVector, LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import type { ToolCallPart } from 'ai';
 import dotenv from 'dotenv';
@@ -42,6 +41,7 @@ const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 describe('Working Memory Tests', () => {
   let memory: Memory;
   let thread: any;
+  const dbFile = 'file::memory:?cache=shared';
 
   beforeEach(async () => {
     // Create memory instance with working memory enabled
@@ -66,17 +66,14 @@ describe('Working Memory Tests', () => {
           generateTitle: false,
         },
       },
-      storage: new DefaultStorage({
-        config: {
-          url: 'file:test.db',
-        },
+      storage: new LibSQLStore({
+        url: dbFile,
       }),
       vector: new LibSQLVector({
-        connectionUrl: 'file:test.db', // relative path from bundled .mastra/output dir
+        connectionUrl: dbFile, // relative path from bundled .mastra/output dir
       }),
       embedder: openai.embedding('text-embedding-3-small'),
     });
-
     // Reset message counter
     messageCounter = 0;
 
@@ -89,6 +86,7 @@ describe('Working Memory Tests', () => {
   afterAll(async () => {
     const threads = await memory.getThreadsByResourceId({ resourceId });
     await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
+    setTimeout(() => process.exit(0), 100);
   });
 
   it('should handle LLM responses with working memory using OpenAI (test that the working memory prompt works)', async () => {
@@ -315,13 +313,11 @@ describe('Working Memory Tests', () => {
   it('should respect working memory enabled/disabled setting', async () => {
     // Create memory instance with working memory disabled
     const disabledMemory = new Memory({
-      storage: new DefaultStorage({
-        config: {
-          url: 'file:test.db',
-        },
+      storage: new LibSQLStore({
+        url: dbFile,
       }),
       vector: new LibSQLVector({
-        connectionUrl: 'file:test.db', // relative path from bundled .mastra/output dir
+        connectionUrl: dbFile, // relative path from bundled .mastra/output dir
       }),
       embedder: openai.embedding('text-embedding-3-small'),
       options: {
@@ -374,40 +370,12 @@ describe('Working Memory Tests', () => {
   });
 
   it('should respect working memory use setting', async () => {
-    // Create memory instance with working memory in tool-call mode
-    const toolCallMemory = new Memory({
-      storage: new DefaultStorage({
-        config: {
-          url: 'file:test.db',
-        },
-      }),
-      vector: new LibSQLVector({
-        connectionUrl: 'file:test.db', // relative path from bundled .mastra/output dir
-      }),
-      embedder: openai.embedding('text-embedding-3-small'),
-      options: {
-        workingMemory: {
-          enabled: true,
-          template: `# User Information
-- **First Name**: 
-- **Location**: 
-`,
-          use: 'tool-call',
-        },
-        lastMessages: 10,
-        threads: {
-          generateTitle: false,
-        },
-        semanticRecall: true,
-      },
-    });
-
-    const toolCallThread = await toolCallMemory.saveThread({
+    const toolCallThread = await memory.saveThread({
       thread: createTestThread('Tool Call Working Memory Thread'),
     });
 
     // Get the system message and verify instructions
-    const systemMessage = await toolCallMemory.getSystemMessage({ threadId: toolCallThread.id });
+    const systemMessage = await memory.getSystemMessage({ threadId: toolCallThread.id });
     expect(systemMessage).not.toContain('<working_memory>text</working_memory>');
     expect(systemMessage).toContain('updateWorkingMemory');
 
@@ -416,7 +384,7 @@ describe('Working Memory Tests', () => {
       name: 'Tool Call Memory Agent',
       instructions: 'You are a helpful AI agent. Always remember user information.',
       model: openai('gpt-4o'),
-      memory: toolCallMemory,
+      memory,
     });
 
     await toolCallAgent.generate('Hi, my name is John and I live in New York', {
@@ -425,20 +393,18 @@ describe('Working Memory Tests', () => {
     });
 
     // Verify working memory was saved in tool-call mode
-    const toolCallWorkingMemory = await toolCallMemory.getThreadById({ threadId: toolCallThread.id });
+    const toolCallWorkingMemory = await memory.getThreadById({ threadId: toolCallThread.id });
     expect(toolCallWorkingMemory?.metadata?.workingMemory).toContain('# User Information');
     expect(toolCallWorkingMemory?.metadata?.workingMemory).toContain('**First Name**: John');
     expect(toolCallWorkingMemory?.metadata?.workingMemory).toContain('**Location**: New York');
 
     // Create memory instance with working memory in text-stream mode
     const textStreamMemory = new Memory({
-      storage: new DefaultStorage({
-        config: {
-          url: 'file:test.db',
-        },
+      storage: new LibSQLStore({
+        url: dbFile,
       }),
       vector: new LibSQLVector({
-        connectionUrl: 'file:test.db', // relative path from bundled .mastra/output dir
+        connectionUrl: dbFile, // relative path from bundled .mastra/output dir
       }),
       embedder: openai.embedding('text-embedding-3-small'),
       options: {
@@ -488,29 +454,6 @@ describe('Working Memory Tests', () => {
   });
 
   it('should handle LLM responses with working memory using tool calls', async () => {
-    const memory = new Memory({
-      storage: new DefaultStorage({
-        config: {
-          url: 'file:test.db',
-        },
-      }),
-      vector: new LibSQLVector({
-        connectionUrl: 'file:test.db', // relative path from bundled .mastra/output dir
-      }),
-      embedder: openai.embedding('text-embedding-3-small'),
-      options: {
-        workingMemory: {
-          enabled: true,
-          use: 'tool-call',
-        },
-        lastMessages: 5,
-        threads: {
-          generateTitle: false,
-        },
-        semanticRecall: true,
-      },
-    });
-
     const agent = new Agent({
       name: 'Memory Test Agent',
       instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
@@ -536,33 +479,6 @@ describe('Working Memory Tests', () => {
   });
 
   it("shouldn't pollute context with working memory tool call args, only the system instruction working memory should exist", async () => {
-    const memory = new Memory({
-      storage: new DefaultStorage({
-        config: {
-          url: 'file:test.db',
-        },
-      }),
-      vector: new LibSQLVector({
-        connectionUrl: 'file:test.db', // relative path from bundled .mastra/output dir
-      }),
-      embedder: openai.embedding('text-embedding-3-small'),
-      options: {
-        workingMemory: {
-          enabled: true,
-          use: 'tool-call',
-          template: `# User Information
-- **First Name**: 
-- **Location**: 
-`,
-        },
-        lastMessages: 5,
-        threads: {
-          generateTitle: false,
-        },
-        semanticRecall: true,
-      },
-    });
-
     const agent = new Agent({
       name: 'Memory Test Agent',
       instructions: 'You are a helpful AI agent. Always add working memory tags to remember user information.',
