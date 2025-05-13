@@ -1,5 +1,37 @@
 # @mastra/deployer
 
+## 2.0.4-alpha.3
+
+### Patch Changes
+
+- 0c3d117: Add workflows to agent server handlers
+- Updated dependencies [396be50]
+- Updated dependencies [c3bd795]
+- Updated dependencies [da082f8]
+- Updated dependencies [a5810ce]
+  - @mastra/core@0.9.4-alpha.3
+
+## 2.0.4-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [3171b5b]
+- Updated dependencies [973e5ac]
+- Updated dependencies [9e1eff5]
+  - @mastra/core@0.9.4-alpha.2
+
+## 2.0.4-alpha.1
+
+### Patch Changes
+
+- ab80e7e: Fix resume workflow throwing workflow run not found error
+- c28d7a0: Fix watch workflow not streaming response back in legacy workflow
+- Updated dependencies [ab80e7e]
+- Updated dependencies [6fa1ad1]
+- Updated dependencies [c28d7a0]
+- Updated dependencies [edf1e88]
+  - @mastra/core@0.9.4-alpha.1
+
 ## 2.0.4-alpha.0
 
 ### Patch Changes

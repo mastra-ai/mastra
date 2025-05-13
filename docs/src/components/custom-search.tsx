@@ -12,16 +12,14 @@ import { addBasePath } from "next/dist/client/add-base-path";
 import { useRouter } from "next/navigation";
 import type {
   FC,
-  FocusEventHandler,
   ReactElement,
   ReactNode,
-  SyntheticEvent,
+  SyntheticEvent
 } from "react";
 import { useDeferredValue, useEffect, useRef, useState } from "react";
-import { JarvisIcon } from "./svgs/Icons";
+import { BookIcon, BurgerIcon, JarvisIcon } from "./svgs/Icons";
 import { InformationIcon } from "./svgs/information-icon";
 import { SpinnerIcon } from "./svgs/spinner";
-import { Button } from "./ui/button";
 import { ScrollArea } from "./ui/scroll-area";
 
 /**
@@ -101,6 +99,7 @@ type SearchProps = {
   isAgentMode?: boolean;
   setIsSearching?: (isSearching: boolean) => void;
   onUseAgent: ({ searchQuery }: { searchQuery: string }) => void;
+  setIsAgentMode: (isAgentMode: boolean) => void;
   closeModal: () => void;
 };
 
@@ -131,10 +130,8 @@ export const CustomSearch: FC<SearchProps> = ({
   className,
   emptyResult = "No results found.",
   errorText = "Failed to load search index.",
-  loading = "Loading…",
-  placeholder = "Search documentation…",
+  placeholder = "Search or ask AI..",
   searchOptions,
-  setIsSearching,
   onUseAgent,
   closeModal,
 }) => {
@@ -145,14 +142,6 @@ export const CustomSearch: FC<SearchProps> = ({
   // https://github.com/shuding/nextra/pull/3514
   // defer pagefind results update for prioritizing user input state
   const deferredSearch = useDeferredValue(search);
-
-  useEffect(() => {
-    if (!!search) {
-      setIsSearching?.(true);
-    } else {
-      setIsSearching?.(false);
-    }
-  }, [setIsSearching, search]);
 
   useEffect(() => {
     const handleSearch = async (value: string) => {
@@ -207,13 +196,7 @@ export const CustomSearch: FC<SearchProps> = ({
   }, [deferredSearch]); // eslint-disable-line react-hooks/exhaustive-deps -- ignore searchOptions
 
   const router = useRouter();
-  const [, setFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null!);
-
-  const handleFocus: FocusEventHandler = (event) => {
-    const isFocus = event.type === "focus";
-    setFocused(isFocus);
-  };
 
   const handleChange = (event: SyntheticEvent<HTMLInputElement>) => {
     const { value } = event.currentTarget;
@@ -222,6 +205,11 @@ export const CustomSearch: FC<SearchProps> = ({
 
   const handleSelect = (searchResult: PagefindResult | null) => {
     if (!searchResult) return;
+    if (searchResult.url === "use-ai") {
+      onUseAgent({ searchQuery: `Tell me about ${search}` });
+      setSearch("");
+      return;
+    }
     // Calling before navigation so selector `html:not(:has(*:focus))` in styles.css will work,
     // and we'll have padding top since input is not focused
     inputRef.current.blur();
@@ -234,17 +222,23 @@ export const CustomSearch: FC<SearchProps> = ({
     } else {
       router.push(searchResult.url);
     }
+    closeModal();
     setSearch("");
   };
 
-  const isSearchEmpty = !search || !results.length;
+  const handleBlur = () => {
+    closeModal();
+  };
+
+  const isSearchEmpty = !search;
+
 
   return (
     <Combobox onChange={handleSelect}>
       <div
         className={cn(
           className,
-          "w-full p-4 py-2 flex items-center gap-[14px]",
+          "w-full p-4 py-[10px] flex items-center gap-[14px]",
         )}
       >
         <span className="relative" onClick={() => inputRef.current.focus()}>
@@ -256,41 +250,37 @@ export const CustomSearch: FC<SearchProps> = ({
           className={() =>
             cn(
               "x:[&::-webkit-search-cancel-button]:appearance-none",
-              "outline-none caret-accent-green text-icons-6 focus:outline-none w-full placeholder:text-icons-4 placeholder:text-base placeholder:font-normal",
+              "outline-none caret-accent-green text-icons-6 focus:outline-none w-full placeholder:text-icons-4 placeholder:text-lg placeholder:font-normal",
             )
           }
           autoComplete="off"
           type="search"
+          autoFocus
           onChange={handleChange}
-          onFocus={handleFocus}
-          onBlur={handleFocus}
           value={search}
           placeholder={placeholder}
-          autoFocus
+          onBlur={handleBlur}
         />
-        {!!search && (
-          <AgentBadge
-            title="Ask Magent"
-            onClick={() => onUseAgent({ searchQuery: search })}
-          />
-        )}
       </div>
       <div
         className={cn(
-          "relative max-h-[500px] overflow-hidden",
-          isSearchLoading || isSearchEmpty ? "h-fit" : "h-[500px]",
+          "relative overflow-hidden",
+          isSearchLoading || isSearchEmpty
+            ? "h-fit"
+            : "h-[500px]",
         )}
       >
         <ScrollArea className="h-full">
           <ComboboxOptions
             transition
+            static
             modal={false}
-            // anchor="bottom"
+            unmount={true}
             className={cn(
               "x:motion-reduce:transition-none",
               // From https://headlessui.com/react/combobox#adding-transitions
               "x:origin-top x:transition x:duration-200 x:ease-out x:data-closed:scale-95 x:data-closed:opacity-0 x:empty:invisible",
-              error || isSearchLoading
+              error || (isSearchLoading && !isSearchEmpty)
                 ? [
                     "x:md:min-h-28 x:grow x:flex x:justify-center x:text-sm x:gap-2 x:px-8",
                     error
@@ -310,22 +300,49 @@ export const CustomSearch: FC<SearchProps> = ({
                   {error}
                 </div>
               </>
-            ) : isSearchLoading ? (
+            ) : isSearchLoading && !isSearchEmpty ? (
               <>
                 <SpinnerIcon
                   height="20"
                   className="x:shrink-0 x:animate-spin"
                 />
-                {loading}
               </>
             ) : results.length ? (
-              results.map((searchResult) => (
-                <Result
-                  key={searchResult.url}
-                  data={searchResult}
-                  closeModal={closeModal}
-                />
-              ))
+                <div className="mt-3">
+                  <div className="border-t-[0.5px] border-borders-1 pt-3">
+                    <ComboboxOption
+                      className={({ focus }) =>
+                        cn(
+                          "w-full flex items-center font-medium justify-between gap-2 cursor-pointer text-base rounded-md px-4 py-2 bg-[url('/image/bloom-2.png')] bg-cover mb-2 bg-right",
+                          focus ? "bg-surface-5" : "bg-surface-4",
+                        )
+                      }
+                      value={{ url: "use-ai" }}
+                      key="use-ai"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-accent-green shrink-0">
+                          <JarvisIcon className="w-6 h-6 shrink-0" />
+                        </span>
+                        <span className="flex flex-col text-lg font-medium text-left text-icons-5">
+                          <span id="use-ai-text" className="text-icons-5">
+                            Tell me about{" "}
+                            <span className="text-accent-green">{search}</span>
+                          </span>
+                          <span className="text-icons-3 text-[15px] text-left font-normal">
+                            Use AI to answer your question
+                          </span>
+                        </span>
+                      </div>
+                      <span className="flex items-center h-8 px-3 text-sm font-medium rounded-sm bg-tag-green-2 text-accent-green justify-self-end">
+                        experimental
+                      </span>
+                    </ComboboxOption>
+                  </div>
+                  {results.map((searchResult) => (
+                    <Result key={searchResult.url} data={searchResult} />
+                  ))}
+                </div>
             ) : (
               deferredSearch && emptyResult
             )}
@@ -336,76 +353,37 @@ export const CustomSearch: FC<SearchProps> = ({
   );
 };
 
-const Result: FC<{ data: PagefindResult; closeModal: () => void }> = ({
-  data,
-  closeModal,
-}) => {
-  const router = useRouter();
+const Result: FC<{
+  data: PagefindResult;
+}> = ({ data }) => {
   return (
     <>
-      <div
-        className={cn(
-          "x:mx-2.5 x:mb-2 x:not-first:mt-6 x:select-none x:border-b x:border-black/10 x:px-2.5 x:pb-1.5 x:text-xs x:font-semibold x:uppercase x:text-gray-600 x:dark:border-white/20 x:dark:text-gray-300",
-          "x:contrast-more:border-gray-600 x:contrast-more:text-gray-900 x:contrast-more:dark:border-gray-50 x:contrast-more:dark:text-gray-50",
-        )}
-      >
-        {data.meta.title}
-      </div>
       {data.sub_results.map((subResult) => (
         <ComboboxOption
           key={subResult.url}
-          // as={NextLink}
           value={subResult}
-          // href={subResult.url}
-          onClick={() => {
-            closeModal();
-            router.push(subResult.url);
-          }}
           className={({ focus }) =>
             cn(
-              "x:mx-2.5 x:break-words x:rounded-md",
-              "x:contrast-more:border",
-              focus
-                ? "x:text-primary-600 x:contrast-more:border-current x:bg-primary-500/10"
-                : "x:text-gray-800 x:dark:text-gray-300 x:contrast-more:border-transparent",
-              "x:block x:scroll-m-12 x:px-2.5 x:py-2",
+              "flex flex-col gap-3 p-4 rounded-md cursor-pointer",
+              focus ? "bg-surface-5" : "bg-surface-4",
             )
           }
         >
-          <div className="x:text-base x:font-semibold x:leading-5">
-            {subResult.title}
+          <div className="flex gap-[14px] items-center">
+            <BookIcon className="w-5 h-5 text-icons-3" />
+            <span className="text-lg font-medium truncate text-icons-6">
+              {subResult.title}
+            </span>
           </div>
-          <div
-            className={cn(
-              "x:mt-1 x:text-sm x:leading-[1.35rem] x:text-gray-600 x:dark:text-gray-400 x:contrast-more:dark:text-gray-50",
-              "x:[&_mark]:bg-primary-600/80 x:[&_mark]:text-white",
-            )}
-            dangerouslySetInnerHTML={{ __html: subResult.excerpt }}
-          />
+          <div className="ml-2 flex items-center gap-[14px] truncate border-l-2 border-borders-2 pl-4">
+            <BurgerIcon className="w-4 h-4 shrink-0 text-icons-3" />
+            <div
+              className="text-lg font-normal truncate text-icons-3 [&_mark]:text-accent-green [&_mark]:bg-transparent"
+              dangerouslySetInnerHTML={{ __html: subResult.excerpt }}
+            />
+          </div>
         </ComboboxOption>
       ))}
     </>
   );
 };
-
-function AgentBadge({
-  title,
-  onClick,
-}: {
-  title: string;
-  onClick: () => void;
-}) {
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="flex items-center gap-2 px-2 py-1 text-xs font-medium rounded-sm cursor-pointer bg-surface-5 text-accent-green whitespace-nowrap"
-      onClick={onClick}
-    >
-      <span className="relative w-3 h-3">
-        <JarvisIcon className="w-full h-full" />
-      </span>
-      <span className="">{title}</span>
-    </Button>
-  );
-}

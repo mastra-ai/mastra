@@ -12,27 +12,14 @@ STS enables continuous bidirectional audio communication through listening to ev
 
 ## Configuration
 
-- **`chatModel`**: Configuration for the realtime model.
-  - **`apiKey`**: Your OpenAI API key. Falls back to the `OPENAI_API_KEY` environment variable.
-  - **`model`**: The model ID to use for real-time voice interactions (e.g., `gpt-4o-mini-realtime`).
-  - **`options`**: Additional options for the realtime client, such as session configuration.
+- **`apiKey`**: Your OpenAI API key. Falls back to the `OPENAI_API_KEY` environment variable.
+- **`model`**: The model ID to use for real-time voice interactions (e.g., `gpt-4o-mini-realtime`).
 - **`speaker`**: The default voice ID for speech synthesis. This allows you to specify which voice to use for the speech output.
 
 ```typescript
 const voice = new OpenAIRealtimeVoice({
-  chatModel: {
-    apiKey: 'your-openai-api-key',
-    model: 'gpt-4o-mini-realtime',
-    options: {
-      sessionConfig: {
-        turn_detection: {
-          type: 'server_vad',
-          threshold: 0.6,
-          silence_duration_ms: 1200,
-        },
-      },
-    },
-  },
+  apiKey: 'your-openai-api-key',
+  model: 'gpt-4o-mini-realtime',
   speaker: 'alloy', // Default voice
 });
 

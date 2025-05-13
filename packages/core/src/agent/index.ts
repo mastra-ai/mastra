@@ -33,6 +33,7 @@ import { makeCoreTool, createMastraProxy, ensureToolProperties, ensureAllMessage
 import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import { agentToStep, Step } from '../workflows';
+import type { NewWorkflow } from '../workflows/vNext';
 import type {
   AgentConfig,
   MastraLanguageModel,
@@ -70,6 +71,7 @@ function resoolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T)
     'getInstructions',
     'getTools',
     'getLLM',
+    'getWorkflows',
   ],
 })
 export class Agent<
@@ -83,6 +85,7 @@ export class Agent<
   readonly model?: DynamicArgument<MastraLanguageModel>;
   #mastra?: Mastra;
   #memory?: MastraMemory;
+  #workflows?: DynamicArgument<Record<string, NewWorkflow>>;
   #defaultGenerateOptions: AgentGenerateOptions;
   #defaultStreamOptions: AgentStreamOptions;
   #tools: DynamicArgument<TTools>;
@@ -104,6 +107,10 @@ export class Agent<
     }
 
     this.model = config.model;
+
+    if (config.workflows) {
+      this.#workflows = config.workflows;
+    }
 
     this.#defaultGenerateOptions = config.defaultGenerateOptions || {};
     this.#defaultStreamOptions = config.defaultStreamOptions || {};
@@ -162,6 +169,25 @@ export class Agent<
     }
 
     return this.#voice;
+  }
+
+  public async getWorkflows({
+    runtimeContext = new RuntimeContext(),
+  }: { runtimeContext?: RuntimeContext } = {}): Promise<Record<string, NewWorkflow>> {
+    let workflowRecord;
+    if (typeof this.#workflows === 'function') {
+      workflowRecord = await Promise.resolve(this.#workflows({ runtimeContext }));
+    } else {
+      workflowRecord = this.#workflows ?? {};
+    }
+
+    Object.entries(workflowRecord || {}).forEach(([_workflowName, workflow]) => {
+      if (this.#mastra) {
+        workflow.__registerMastra(this.#mastra);
+      }
+    });
+
+    return workflowRecord;
   }
 
   public async getVoice({ runtimeContext }: { runtimeContext?: RuntimeContext } = {}) {
@@ -492,17 +518,19 @@ export class Agent<
     threadId,
     resourceId,
     now,
+    experimental_generateMessageId,
   }: {
     messages: (CoreMessage | CoreAssistantMessage)[];
     threadId: string;
     resourceId: string;
     now: number;
+    experimental_generateMessageId: any;
   }) {
     if (!messages) return [];
     const messagesArray = Array.isArray(messages) ? messages : [messages];
 
     return this.sanitizeResponseMessages(messagesArray).map((message: CoreMessage | CoreAssistantMessage, index) => {
-      const messageId = randomUUID();
+      const messageId = (`id` in message && message.id) || experimental_generateMessageId?.() || randomUUID();
       let toolCallIds: string[] | undefined;
       let toolCallArgs: Record<string, unknown>[] | undefined;
       let toolNames: string[] | undefined;
@@ -628,62 +656,24 @@ export class Agent<
     }) as Array<CoreMessage>;
   }
 
-  private async convertTools({
-    toolsets,
-    clientTools,
-    threadId,
-    resourceId,
+  private async getMemoryTools({
     runId,
+    resourceId,
+    threadId,
     runtimeContext,
+    mastraProxy,
   }: {
-    toolsets?: ToolsetsInput;
-    clientTools?: ToolsInput;
-    threadId?: string;
-    resourceId?: string;
     runId?: string;
+    resourceId?: string;
+    threadId?: string;
     runtimeContext: RuntimeContext;
-  }): Promise<Record<string, CoreTool>> {
-    this.logger.debug(`[Agents:${this.name}] - Assigning tools`, { runId, threadId, resourceId });
-
+    mastraProxy?: MastraUnion;
+  }) {
+    let convertedMemoryTools: Record<string, CoreTool> = {};
     // Get memory tools if available
     const memory = this.getMemory();
     const memoryTools = memory?.getTools?.();
 
-    let mastraProxy = undefined;
-    const logger = this.logger;
-    if (this.#mastra) {
-      mastraProxy = createMastraProxy({ mastra: this.#mastra, logger });
-    }
-
-    const tools = await this.getTools({ runtimeContext });
-
-    // Convert tools
-    const convertedEntries = await Promise.all(
-      Object.entries(tools || {}).map(async ([k, tool]) => {
-        if (tool) {
-          const options = {
-            name: k,
-            runId,
-            threadId,
-            resourceId,
-            logger: this.logger,
-            mastra: mastraProxy as MastraUnion | undefined,
-            memory,
-            agentName: this.name,
-            runtimeContext,
-            model: typeof this.model === 'function' ? await this.getModel({ runtimeContext }) : this.model,
-          };
-          return [k, makeCoreTool(tool, options)];
-        }
-        return undefined;
-      }),
-    );
-    const converted = Object.fromEntries(
-      convertedEntries.filter((entry): entry is [string, CoreTool] => Boolean(entry)),
-    );
-
-    // Convert memory tools with proper context
-    let convertedMemoryTools: Record<string, CoreTool> = {};
     if (memoryTools) {
       const memoryToolEntries = await Promise.all(
         Object.entries(memoryTools).map(async ([k, tool]) => {
@@ -735,17 +725,91 @@ export class Agent<
           ] as [string, CoreTool];
         }),
       );
+
       convertedMemoryTools = Object.fromEntries(
         memoryToolEntries.filter((entry): entry is [string, CoreTool] => Boolean(entry)),
       );
     }
+    return convertedMemoryTools;
+  }
 
-    // Convert tools from toolsets
-    const toolsFromToolsetsConverted: Record<string, CoreTool> = {
-      ...converted,
-      ...convertedMemoryTools,
+  private async getAssignedTools({
+    runtimeContext,
+    runId,
+    resourceId,
+    threadId,
+    mastraProxy,
+  }: {
+    runId?: string;
+    resourceId?: string;
+    threadId?: string;
+    runtimeContext: RuntimeContext;
+    mastraProxy?: MastraUnion;
+  }) {
+    let toolsForRequest: Record<string, CoreTool> = {};
+
+    this.logger.debug(`[Agents:${this.name}] - Assembling assigned tools`, { runId, threadId, resourceId });
+
+    const memory = this.getMemory();
+
+    // Mastra tools passed into the Agent
+
+    const assignedTools = await this.getTools({ runtimeContext });
+
+    const assignedToolEntries = Object.entries(assignedTools || {});
+
+    const assignedCoreToolEntries = await Promise.all(
+      assignedToolEntries.map(async ([k, tool]) => {
+        if (!tool) {
+          return;
+        }
+
+        const options = {
+          name: k,
+          runId,
+          threadId,
+          resourceId,
+          logger: this.logger,
+          mastra: mastraProxy as MastraUnion | undefined,
+          memory,
+          agentName: this.name,
+          runtimeContext,
+          model: typeof this.model === 'function' ? await this.getModel({ runtimeContext }) : this.model,
+        };
+
+        return [k, makeCoreTool(tool, options)];
+      }),
+    );
+
+    const assignedToolEntriesConverted = Object.fromEntries(
+      assignedCoreToolEntries.filter((entry): entry is [string, CoreTool] => Boolean(entry)),
+    );
+
+    toolsForRequest = {
+      ...assignedToolEntriesConverted,
     };
 
+    return toolsForRequest;
+  }
+
+  private async getToolsets({
+    runId,
+    threadId,
+    resourceId,
+    toolsets,
+    runtimeContext,
+    mastraProxy,
+  }: {
+    runId?: string;
+    threadId?: string;
+    resourceId?: string;
+    toolsets: ToolsetsInput;
+    runtimeContext: RuntimeContext;
+    mastraProxy?: MastraUnion;
+  }) {
+    let toolsForRequest: Record<string, CoreTool> = {};
+
+    const memory = this.getMemory();
     const toolsFromToolsets = Object.values(toolsets || {});
 
     if (toolsFromToolsets.length > 0) {
@@ -768,11 +832,31 @@ export class Agent<
             model: typeof this.model === 'function' ? await this.getModel({ runtimeContext }) : this.model,
           };
           const convertedToCoreTool = makeCoreTool(toolObj, options, 'toolset');
-          toolsFromToolsetsConverted[toolName] = convertedToCoreTool;
+          toolsForRequest[toolName] = convertedToCoreTool;
         }
       }
     }
 
+    return toolsForRequest;
+  }
+
+  private async getClientTools({
+    runId,
+    threadId,
+    resourceId,
+    runtimeContext,
+    mastraProxy,
+    clientTools,
+  }: {
+    runId?: string;
+    threadId?: string;
+    resourceId?: string;
+    runtimeContext: RuntimeContext;
+    mastraProxy?: MastraUnion;
+    clientTools?: ToolsInput;
+  }) {
+    let toolsForRequest: Record<string, CoreTool> = {};
+    const memory = this.getMemory();
     // Convert client tools
     const clientToolsForInput = Object.entries(clientTools || {});
     if (clientToolsForInput.length > 0) {
@@ -794,11 +878,140 @@ export class Agent<
           model: typeof this.model === 'function' ? await this.getModel({ runtimeContext }) : this.model,
         };
         const convertedToCoreTool = makeCoreTool(rest, options, 'client-tool');
-        toolsFromToolsetsConverted[toolName] = convertedToCoreTool;
+        toolsForRequest[toolName] = convertedToCoreTool;
       }
     }
 
-    return toolsFromToolsetsConverted;
+    return toolsForRequest;
+  }
+
+  private async getWorkflowTools({
+    runId,
+    threadId,
+    resourceId,
+    runtimeContext,
+  }: {
+    runId?: string;
+    threadId?: string;
+    resourceId?: string;
+    runtimeContext: RuntimeContext;
+  }) {
+    let convertedWorkflowTools: Record<string, CoreTool> = {};
+    const workflows = await this.getWorkflows({ runtimeContext });
+    if (Object.keys(workflows).length > 0) {
+      convertedWorkflowTools = Object.entries(workflows).reduce(
+        (memo, [workflowName, workflow]) => {
+          memo[workflowName] = {
+            description: workflow.description || `Workflow: ${workflowName}`,
+            parameters: workflow.inputSchema || { type: 'object', properties: {} },
+            execute: async (args: any) => {
+              try {
+                this.logger.debug(`[Agent:${this.name}] - Executing workflow as tool ${workflowName}`, {
+                  name: workflowName,
+                  description: workflow.description,
+                  args,
+                  runId,
+                  threadId,
+                  resourceId,
+                });
+
+                const run = workflow.createRun();
+
+                const result = await run.start({
+                  inputData: args,
+                  runtimeContext,
+                });
+                return result;
+              } catch (err) {
+                this.logger.error(`[Agent:${this.name}] - Failed workflow tool execution`, {
+                  error: err,
+                  runId,
+                  threadId,
+                  resourceId,
+                });
+                throw err;
+              }
+            },
+          };
+          return memo;
+        },
+        {} as Record<string, CoreTool>,
+      );
+    }
+
+    return convertedWorkflowTools;
+  }
+
+  private async convertTools({
+    toolsets,
+    clientTools,
+    threadId,
+    resourceId,
+    runId,
+    runtimeContext,
+  }: {
+    toolsets?: ToolsetsInput;
+    clientTools?: ToolsInput;
+    threadId?: string;
+    resourceId?: string;
+    runId?: string;
+    runtimeContext: RuntimeContext;
+  }): Promise<Record<string, CoreTool>> {
+    let mastraProxy = undefined;
+    const logger = this.logger;
+
+    if (this.#mastra) {
+      mastraProxy = createMastraProxy({ mastra: this.#mastra, logger });
+    }
+
+    const assignedTools = await this.getAssignedTools({
+      runId,
+      resourceId,
+      threadId,
+      runtimeContext,
+      mastraProxy,
+    });
+
+    const memoryTools = await this.getMemoryTools({
+      runId,
+      resourceId,
+      threadId,
+      runtimeContext,
+      mastraProxy,
+    });
+
+    const toolsetTools = await this.getToolsets({
+      runId,
+      resourceId,
+      threadId,
+      runtimeContext,
+      mastraProxy,
+      toolsets: toolsets!,
+    });
+
+    const clientsideTools = await this.getClientTools({
+      runId,
+      resourceId,
+      threadId,
+      runtimeContext,
+      mastraProxy,
+      clientTools: clientTools!,
+    });
+
+    const workflowTools = await this.getWorkflowTools({
+      runId,
+      resourceId,
+      threadId,
+      runtimeContext,
+    });
+
+    return {
+      ...assignedTools,
+      ...memoryTools,
+      ...toolsetTools,
+      ...clientsideTools,
+      ...workflowTools,
+    };
   }
 
   async preExecute({
@@ -955,6 +1168,7 @@ export class Agent<
         memoryConfig,
         outputText,
         runId,
+        experimental_generateMessageId,
       }: {
         runId: string;
         result: Record<string, any>;
@@ -962,6 +1176,7 @@ export class Agent<
         threadId: string;
         memoryConfig: MemoryConfig | undefined;
         outputText: string;
+        experimental_generateMessageId: any;
       }) => {
         const resToLog = {
           text: result?.text,
@@ -995,7 +1210,10 @@ export class Agent<
             const threadMessages = this.sanitizeResponseMessages(ensureAllMessagesAreCoreMessages(messages)).map(
               (u, index) => {
                 return {
-                  id: this.getMemory()?.generateId()!,
+                  id:
+                    (`id` in u && u.id) || experimental_generateMessageId
+                      ? experimental_generateMessageId()
+                      : this.getMemory()?.generateId()!,
                   createdAt: new Date(now + index),
                   threadId: thread.id,
                   resourceId: resourceId,
@@ -1050,6 +1268,7 @@ export class Agent<
                   resourceId,
                   messages: responseMessages,
                   now: dateResponseMessagesFrom,
+                  experimental_generateMessageId,
                 }),
               ],
               memoryConfig,
@@ -1189,7 +1408,16 @@ export class Agent<
 
       const outputText = result.text;
 
-      await after({ result, threadId, thread, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+      await after({
+        result,
+        threadId,
+        thread,
+        memoryConfig: memoryOptions,
+        outputText,
+        runId: runIdToUse,
+        experimental_generateMessageId:
+          `experimental_generateMessageId` in rest ? rest.experimental_generateMessageId : undefined,
+      });
 
       const newResult = result as any;
 
@@ -1219,7 +1447,16 @@ export class Agent<
 
       const outputText = result.text;
 
-      await after({ result, thread, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+      await after({
+        result,
+        thread,
+        threadId,
+        memoryConfig: memoryOptions,
+        outputText,
+        runId: runIdToUse,
+        experimental_generateMessageId:
+          `experimental_generateMessageId` in rest ? rest.experimental_generateMessageId : undefined,
+      });
 
       return result as unknown as GenerateReturn<Z>;
     }
@@ -1243,7 +1480,16 @@ export class Agent<
 
     const outputText = JSON.stringify(result.object);
 
-    await after({ result, thread, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+    await after({
+      result,
+      thread,
+      threadId,
+      memoryConfig: memoryOptions,
+      outputText,
+      runId: runIdToUse,
+      experimental_generateMessageId:
+        `experimental_generateMessageId` in rest ? rest.experimental_generateMessageId : undefined,
+    });
 
     return result as unknown as GenerateReturn<Z>;
   }
@@ -1349,7 +1595,16 @@ export class Agent<
         onFinish: async (result: any) => {
           try {
             const outputText = result.text;
-            await after({ result, thread, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+            await after({
+              result,
+              thread,
+              threadId,
+              memoryConfig: memoryOptions,
+              outputText,
+              runId: runIdToUse,
+              experimental_generateMessageId:
+                `experimental_generateMessageId` in rest ? rest.experimental_generateMessageId : undefined,
+            });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
               error: e,
@@ -1384,7 +1639,16 @@ export class Agent<
         onFinish: async (result: any) => {
           try {
             const outputText = result.text;
-            await after({ result, thread, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+            await after({
+              result,
+              thread,
+              threadId,
+              memoryConfig: memoryOptions,
+              outputText,
+              runId: runIdToUse,
+              experimental_generateMessageId:
+                `experimental_generateMessageId` in rest ? rest.experimental_generateMessageId : undefined,
+            });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
               error: e,
@@ -1418,7 +1682,16 @@ export class Agent<
       onFinish: async (result: any) => {
         try {
           const outputText = JSON.stringify(result.object);
-          await after({ result, thread, threadId, memoryConfig: memoryOptions, outputText, runId: runIdToUse });
+          await after({
+            result,
+            thread,
+            threadId,
+            memoryConfig: memoryOptions,
+            outputText,
+            runId: runIdToUse,
+            experimental_generateMessageId:
+              `experimental_generateMessageId` in rest ? rest.experimental_generateMessageId : undefined,
+          });
         } catch (e) {
           this.logger.error('Error saving memory on finish', {
             error: e,
