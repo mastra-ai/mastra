@@ -253,21 +253,17 @@ export function AgentDetails({ agentId }: { agentId: string }) {
           <div className="grid grid-cols-[100px_1fr] gap-2">
             <p className="text-mastra-el-3">Workflows</p>
             <div className="flex flex-col gap-2 text-mastra-el-5">
-              {workflowsArray?.length ? (
-                workflowsArray.map(([workflowKey, workflow]) => (
-                  <span
-                    key={workflowKey}
-                    onClick={() => {
-                      // navigate(`/workflows/v-next/${workflowKey}/graph`);
-                    }}
-                    className="no-underline"
-                  >
-                    {workflow.name}
-                  </span>
-                ))
-              ) : (
-                <p className="text-mastra-el-5">No tools</p>
-              )}
+              {workflowsArray.map(([workflowKey, workflow]) => (
+                <span
+                  key={workflowKey}
+                  onClick={() => {
+                    // navigate(`/workflows/v-next/${workflowKey}/graph`);
+                  }}
+                  className="no-underline"
+                >
+                  {workflow.name}
+                </span>
+              ))}
             </div>
           </div>
         ) : null}
