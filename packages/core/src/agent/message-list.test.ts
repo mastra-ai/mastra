@@ -952,6 +952,94 @@ describe('MessageList', () => {
       ]);
     });
 
+    it('should correctly handle an assistant message with reasoning, tool calls, results, and subsequent text', () => {
+      const userMsg = {
+        role: 'user',
+        content: 'Perform a task requiring data.',
+      } satisfies VercelCoreMessage;
+
+      const assistantMsgPart1 = {
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: 'First, I need to gather some data.', signature: 'sig-gather' },
+          { type: 'text', text: 'Calling data tool...' },
+          { type: 'tool-call', toolName: 'data-tool', toolCallId: 'call-data-1', args: { query: 'required data' } },
+        ],
+      } satisfies VercelCoreMessage;
+
+      const toolResultMsg = {
+        role: 'tool',
+        content: [
+          { type: 'tool-result', toolName: 'data-tool', toolCallId: 'call-data-1', result: '{"data": "gathered"}' },
+        ],
+      } satisfies VercelCoreMessage;
+
+      const assistantMsgPart2 = {
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: 'Data gathered, now processing.', signature: 'sig-process' },
+          { type: 'text', text: 'Task completed successfully with gathered data.' },
+        ],
+      } satisfies VercelCoreMessage;
+
+      const messageSequence = [userMsg, assistantMsgPart1, toolResultMsg, assistantMsgPart2];
+
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: expect.any(String),
+          role: 'user',
+          createdAt: expect.any(Date),
+          originalMessage: userMsg,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: userMsg.content }],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+        {
+          id: expect.any(String), // Should be the ID of the first assistant message in the sequence
+          role: 'assistant',
+          createdAt: expect.any(Date), // Should be the timestamp of the last message in the sequence
+          originalMessage: assistantMsgPart1, // Original message should be the first assistant message
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'step-start' },
+              {
+                type: 'reasoning',
+                reasoning: 'First, I need to gather some data.',
+                details: [{ type: 'text', text: 'First, I need to gather some data.', signature: 'sig-gather' }],
+              },
+              { type: 'text', text: 'Calling data tool...' },
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result', // State should be updated to result
+                  toolName: 'data-tool',
+                  toolCallId: 'call-data-1',
+                  args: { query: 'required data' },
+                  result: '{"data": "gathered"}', // Result from the tool message
+                },
+              },
+              {
+                type: 'reasoning',
+                reasoning: 'Data gathered, now processing.',
+                details: [{ type: 'text', text: 'Data gathered, now processing.', signature: 'sig-process' }],
+              },
+              { type: 'text', text: 'Task completed successfully with gathered data.' },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
+    });
+
     it('should correctly convert and add a Vercel CoreMessage with reasoning and redacted-reasoning parts', () => {
       const inputCoreMessage = {
         role: 'assistant',
@@ -1704,6 +1792,486 @@ describe('MessageList', () => {
         threadId,
         resourceId,
       } satisfies MessageListItem);
+    });
+
+    it('should correctly convert and add a Vercel UIMessage with text and experimental_attachments', () => {
+      const input = {
+        id: 'ui-msg-text-attachment-1',
+        role: 'user',
+        content: 'Check out this image:', // The content string might still be present in some useChat versions, though parts is preferred
+        createdAt: new Date('2023-10-26T10:10:00.000Z'),
+        parts: [{ type: 'text', text: 'Check out this image:' }],
+        experimental_attachments: [
+          {
+            name: 'example.png',
+            url: 'https://example.com/images/example.png',
+            contentType: 'image/png',
+          },
+        ],
+      } satisfies VercelUIMessage;
+
+      const list = new MessageList({ threadId, resourceId }).add(input, 'new-message');
+
+      const messages = list.getMessages();
+      expect(messages.length).toBe(1);
+
+      expect(messages[0]).toEqual({
+        id: input.id,
+        role: 'user',
+        createdAt: input.createdAt,
+        originalMessage: input,
+        contentSource: 'new-message',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Check out this image:' }],
+          experimental_attachments: [
+            {
+              name: 'example.png',
+              url: 'https://example.com/images/example.png',
+              contentType: 'image/png',
+            },
+          ],
+        },
+        threadId,
+        resourceId,
+      } satisfies MessageListItem);
+    });
+
+    it('should correctly handle a mixed sequence of Mastra V1 and Vercel UIMessages with tool calls and results', () => {
+      const userMsgV1 = {
+        id: 'v1-user-1',
+        role: 'user',
+        content: 'Please find some information.',
+        threadId,
+        resourceId,
+        createdAt: new Date('2023-10-26T12:00:00.000Z'),
+        type: 'text',
+      } satisfies MastraMessageV1;
+
+      const assistantMsgV1 = {
+        id: 'v1-assistant-1',
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Searching...' },
+          { type: 'tool-call', toolName: 'search-tool', toolCallId: 'call-mix-1', args: { query: 'info' } },
+        ],
+        threadId,
+        resourceId,
+        createdAt: new Date('2023-10-26T12:00:01.000Z'),
+        type: 'text',
+      } satisfies MastraMessageV1;
+
+      const toolResultMsgV1 = {
+        id: 'v1-tool-1',
+        role: 'tool',
+        content: [
+          { type: 'tool-result', toolName: 'search-tool', toolCallId: 'call-mix-1', result: 'Found relevant data.' },
+        ],
+        threadId,
+        resourceId,
+        createdAt: new Date('2023-10-26T12:00:02.000Z'),
+        type: 'tool-result',
+      } satisfies MastraMessageV1;
+
+      const assistantMsgUIV2 = {
+        id: 'ui-assistant-1',
+        role: 'assistant',
+        content: 'Here is the information I found.',
+        createdAt: new Date('2023-10-26T12:00:03.000Z'),
+        parts: [{ type: 'text', text: 'Here is the information I found.' }],
+        experimental_attachments: [],
+      } satisfies VercelUIMessage;
+
+      const messageSequence = [userMsgV1, assistantMsgV1, toolResultMsgV1, assistantMsgUIV2];
+
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: userMsgV1.id,
+          role: 'user',
+          createdAt: userMsgV1.createdAt,
+          originalMessage: userMsgV1,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: userMsgV1.content }],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+        {
+          id: assistantMsgV1.id, // Should retain the original assistant message ID
+          role: 'assistant',
+          createdAt: assistantMsgUIV2.createdAt, // The last message's timestamp might be used for the merged message
+          originalMessage: assistantMsgV1, // Original message should be the first assistant message in the sequence
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'step-start' },
+              { type: 'text', text: 'Searching...' },
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result', // State should be updated to result
+                  toolName: 'search-tool',
+                  toolCallId: 'call-mix-1',
+                  args: { query: 'info' },
+                  result: 'Found relevant data.', // Result from the tool message
+                },
+              },
+              { type: 'text', text: 'Here is the information I found.' }, // Text from the Vercel UIMessage
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
+    });
+
+    it('should correctly handle an assistant message with interleaved text, tool call, and tool result', () => {
+      const userMsg = {
+        role: 'user',
+        content: 'Perform a task.',
+      } satisfies VercelCoreMessage;
+
+      const assistantMsgWithToolCall = {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Okay, I will perform the task.' },
+          { type: 'tool-call', toolName: 'task-tool', toolCallId: 'call-task-1', args: { task: 'perform' } },
+        ],
+      } satisfies VercelCoreMessage;
+
+      const toolResultMsg = {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolName: 'task-tool',
+            toolCallId: 'call-task-1',
+            result: 'Task completed successfully.',
+          },
+        ],
+      } satisfies VercelCoreMessage;
+
+      const assistantMsgWithFinalText = {
+        role: 'assistant',
+        content: 'The task is now complete.',
+      } satisfies VercelCoreMessage;
+
+      const messageSequence = [userMsg, assistantMsgWithToolCall, toolResultMsg, assistantMsgWithFinalText];
+
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: expect.any(String),
+          role: 'user',
+          createdAt: expect.any(Date),
+          originalMessage: userMsg,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: userMsg.content }],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+        {
+          id: expect.any(String), // Should be the ID of the first assistant message in the sequence
+          role: 'assistant',
+          createdAt: expect.any(Date), // Should be the timestamp of the last message in the sequence
+          originalMessage: assistantMsgWithToolCall, // Original message should be the first assistant message
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'step-start' },
+              { type: 'text', text: 'Okay, I will perform the task.' },
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolName: 'task-tool',
+                  toolCallId: 'call-task-1',
+                  args: { task: 'perform' },
+                  result: 'Task completed successfully.',
+                },
+              },
+              { type: 'text', text: 'The task is now complete.' },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
+    });
+
+    it('should correctly convert and add a Vercel CoreMessage with text and a data URL file part', () => {
+      const inputCoreMessage = {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Here is an embedded image:' },
+          {
+            type: 'file',
+            mimeType: 'image/gif',
+            data: new URL('data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=='),
+          }, // 1x1 transparent GIF
+        ],
+      } satisfies VercelCoreMessage;
+
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: expect.any(String),
+          role: 'user',
+          createdAt: expect.any(Date),
+          originalMessage: inputCoreMessage,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'Here is an embedded image:' },
+              { type: 'file', mimeType: 'image/gif', data: 'R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==' }, // Base64 data
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
+    });
+
+    it('should correctly handle an assistant message with reasoning and tool calls', () => {
+      const inputCoreMessage = {
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: 'First, I need to gather some data.', signature: 'sig-gather' },
+          { type: 'text', text: 'Gathering data...' },
+          { type: 'tool-call', toolName: 'data-tool', toolCallId: 'call-data-1', args: { query: 'required data' } },
+          { type: 'reasoning', text: 'Data gathered, now I will process it.', signature: 'sig-process' },
+        ],
+      } satisfies VercelCoreMessage;
+
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: expect.any(String),
+          role: 'assistant',
+          createdAt: expect.any(Date),
+          originalMessage: inputCoreMessage,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'step-start' },
+              {
+                type: 'reasoning',
+                reasoning: 'First, I need to gather some data.',
+                details: [{ type: 'text', text: 'First, I need to gather some data.', signature: 'sig-gather' }],
+              },
+              { type: 'text', text: 'Gathering data...' },
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'call',
+                  toolName: 'data-tool',
+                  toolCallId: 'call-data-1',
+                  args: { query: 'required data' },
+                },
+              },
+              {
+                type: 'reasoning',
+                reasoning: 'Data gathered, now I will process it.',
+                details: [{ type: 'text', text: 'Data gathered, now I will process it.', signature: 'sig-process' }],
+              },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
+    });
+
+    it('should correctly handle an assistant message with multiple interleaved tool calls and results', () => {
+      const userMsg = {
+        role: 'user',
+        content: 'What is the weather in London and Paris?',
+      } satisfies VercelCoreMessage;
+
+      const assistantMsgWithCalls = {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Okay, I will check the weather for both cities.' },
+          { type: 'tool-call', toolName: 'weather-tool', toolCallId: 'call-london', args: { city: 'London' } },
+          { type: 'text', text: 'And now for Paris.' },
+          { type: 'tool-call', toolName: 'weather-tool', toolCallId: 'call-paris', args: { city: 'Paris' } },
+        ],
+      } satisfies VercelCoreMessage;
+
+      const toolResultLondon = {
+        role: 'tool',
+        content: [{ type: 'tool-result', toolName: 'weather-tool', toolCallId: 'call-london', result: '20°C, sunny' }],
+      } satisfies VercelCoreMessage;
+
+      const toolResultParis = {
+        role: 'tool',
+        content: [{ type: 'tool-result', toolName: 'weather-tool', toolCallId: 'call-paris', result: '15°C, cloudy' }],
+      } satisfies VercelCoreMessage;
+
+      const assistantMsgWithFinalText = {
+        role: 'assistant',
+        content: "The weather in London is 20°C and sunny, and in Paris it's 15°C and cloudy.",
+      } satisfies VercelCoreMessage;
+
+      const messageSequence = [
+        userMsg,
+        assistantMsgWithCalls,
+        toolResultLondon,
+        toolResultParis,
+        assistantMsgWithFinalText,
+      ];
+
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: expect.any(String),
+          role: 'user',
+          createdAt: expect.any(Date),
+          originalMessage: userMsg,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: userMsg.content }],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+        {
+          id: expect.any(String), // Should be the ID of the first assistant message in the sequence
+          role: 'assistant',
+          createdAt: expect.any(Date), // Should be the timestamp of the last message in the sequence
+          originalMessage: assistantMsgWithCalls, // Original message should be the first assistant message
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'step-start' },
+              { type: 'text', text: 'Okay, I will check the weather for both cities.' },
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolName: 'weather-tool',
+                  toolCallId: 'call-london',
+                  args: { city: 'London' },
+                  result: '20°C, sunny',
+                },
+              },
+              { type: 'text', text: 'And now for Paris.' },
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolName: 'weather-tool',
+                  toolCallId: 'call-paris',
+                  args: { city: 'Paris' },
+                  result: '15°C, cloudy',
+                },
+              },
+              { type: 'text', text: "The weather in London is 20°C and sunny, and in Paris it's 15°C and cloudy." },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
+    });
+
+    it('should correctly handle an assistant message with only reasoning parts', () => {
+      const inputCoreMessage = {
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: 'Thinking step 1...', signature: 'sig-1' },
+          { type: 'redacted-reasoning', data: 'some hidden data' },
+          { type: 'reasoning', text: 'Final thought.', signature: 'sig-2' },
+        ],
+      } satisfies VercelCoreMessage;
+
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: expect.any(String),
+          role: 'assistant',
+          createdAt: expect.any(Date),
+          originalMessage: inputCoreMessage,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'step-start' },
+              {
+                type: 'reasoning',
+                reasoning: 'Thinking step 1...',
+                details: [{ type: 'text', text: 'Thinking step 1...', signature: 'sig-1' }],
+              },
+              { type: 'reasoning', reasoning: '', details: [{ type: 'redacted', data: 'some hidden data' }] },
+              {
+                type: 'reasoning',
+                reasoning: 'Final thought.',
+                details: [{ type: 'text', text: 'Final thought.', signature: 'sig-2' }],
+              },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
+    });
+
+    it('should correctly convert a Vercel CoreMessage with a file part containing a non-data URL', () => {
+      const inputCoreMessage = {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Here is another image URL:' },
+          {
+            type: 'file',
+            mimeType: 'image/png',
+            data: new URL('https://example.com/another-image.png'),
+            filename: 'another-image.png',
+          },
+        ],
+      } satisfies VercelCoreMessage;
+
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: expect.any(String),
+          role: 'user',
+          createdAt: expect.any(Date),
+          originalMessage: inputCoreMessage,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'Here is another image URL:' }],
+            experimental_attachments: [
+              {
+                name: 'another-image.png',
+                url: 'https://example.com/another-image.png',
+                contentType: 'image/png',
+              },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
     });
 
     describe('toBase64String', () => {
