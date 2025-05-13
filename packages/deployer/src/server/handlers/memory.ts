@@ -145,7 +145,7 @@ export async function getMessagesHandler(c: Context) {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.query('agentId');
     const threadId = c.req.param('threadId');
-    const rawLimit = c.req.param('limit');
+    const rawLimit = c.req.query('limit');
     let limit: number | undefined = undefined;
 
     if (rawLimit !== undefined) {

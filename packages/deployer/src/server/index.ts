@@ -1473,7 +1473,8 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
           name: 'limit',
           in: 'query',
           required: false,
-          schema: { type: 'string' },
+          schema: { type: 'number' },
+          description: 'Limit the number of messages to retrieve (default: 40)',
         },
       ],
       responses: {
