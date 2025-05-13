@@ -133,7 +133,7 @@ describe('ChromaVector Integration Tests', () => {
         metadata: newMetaData,
       };
 
-      await vectorDB.updateIndexById(testIndexName, idToBeUpdated, update);
+      await vectorDB.updateVector(testIndexName, idToBeUpdated, update);
 
       const results: QueryResult[] = await vectorDB.query({
         indexName: testIndexName,
@@ -159,7 +159,7 @@ describe('ChromaVector Integration Tests', () => {
         metadata: newMetaData,
       };
 
-      await vectorDB.updateIndexById(testIndexName, idToBeUpdated, update);
+      await vectorDB.updateVector(testIndexName, idToBeUpdated, update);
 
       const results: QueryResult[] = await vectorDB.query({
         indexName: testIndexName,
@@ -183,7 +183,7 @@ describe('ChromaVector Integration Tests', () => {
         vector: newVector,
       };
 
-      await vectorDB.updateIndexById(testIndexName, idToBeUpdated, update);
+      await vectorDB.updateVector(testIndexName, idToBeUpdated, update);
 
       const results: QueryResult[] = await vectorDB.query({
         indexName: testIndexName,
@@ -196,7 +196,7 @@ describe('ChromaVector Integration Tests', () => {
     });
 
     it('should throw exception when no updates are given', async () => {
-      await expect(vectorDB.updateIndexById(testIndexName, 'id', {})).rejects.toThrow('No updates provided');
+      await expect(vectorDB.updateVector(testIndexName, 'id', {})).rejects.toThrow('No updates provided');
     });
 
     it('should delete the vector by id', async () => {
@@ -204,7 +204,7 @@ describe('ChromaVector Integration Tests', () => {
       expect(ids).toHaveLength(3);
       const idToBeDeleted = ids[0];
 
-      await vectorDB.deleteIndexById(testIndexName, idToBeDeleted);
+      await vectorDB.deleteVector(testIndexName, idToBeDeleted);
 
       const results: QueryResult[] = await vectorDB.query({
         indexName: testIndexName,
