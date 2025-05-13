@@ -291,6 +291,37 @@ MCPClient handles server connections gracefully:
 2. Graceful server shutdown to prevent error messages during development
 3. Proper cleanup of resources when disconnecting
 
+## Using SSE Request Headers
+
+When using the legacy SSE MCP transport, you must configure both `requestInit` and `eventSourceInit` due to a bug in the MCP SDK:
+
+```ts
+const sseClient = new MCPClient({
+  servers: {
+    exampleServer: {
+      url: new URL("https://your-mcp-server.com/sse"),
+      // Note: requestInit alone isn't enough for SSE
+      requestInit: {
+        headers: {
+          Authorization: "Bearer your-token",
+        },
+      },
+      // This is also required for SSE connections with custom headers
+      eventSourceInit: {
+        fetch(input: Request | URL | string, init?: RequestInit) {
+          const headers = new Headers(init?.headers || {});
+          headers.set("Authorization", "Bearer your-token");
+          return fetch(input, {
+            ...init,
+            headers,
+          });
+        },
+      },
+    },
+  },
+});
+```
+
 ## Related Information
 
 - For more about the Model Context Protocol, see the [@modelcontextprotocol/sdk documentation](https://github.com/modelcontextprotocol/typescript-sdk)
