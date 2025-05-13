@@ -98,8 +98,8 @@ The IAM role or user used by this package needs the following permissions:
         "dynamodb:BatchWriteItem"
       ],
       "Resource": [
-        "arn:aws:dynamodb:*:*:table/mastra-single-table",
-        "arn:aws:dynamodb:*:*:table/mastra-single-table/index/*"
+        "arn:aws:dynamodb:*:*:table/${YOUR_TABLE_NAME}",
+        "arn:aws:dynamodb:*:*:table/${YOUR_TABLE_NAME}/index/*"
       ]
     }
   ]
