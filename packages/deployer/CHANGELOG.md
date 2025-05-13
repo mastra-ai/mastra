@@ -1,5 +1,35 @@
 # @mastra/deployer
 
+## 0.3.4
+
+### Patch Changes
+
+- 396be50: updated mcp server routes for MCP SSE for use with hono server
+- 5c70b8a: [MASTRA-3234] added limit for client-js getMessages
+- 03c40d1: instructions is only available in playground
+- cb1f698: Set runtimeContext from playground for agents, tools, workflows
+- 0b8b868: Added A2A support + streaming
+- edf1e88: allows ability to pass McpServer into the mastra class and creates an endpoint /api/servers/:serverId/mcp to POST messages to an MCP server
+- Updated dependencies [396be50]
+- Updated dependencies [ab80e7e]
+- Updated dependencies [5c70b8a]
+- Updated dependencies [c3bd795]
+- Updated dependencies [da082f8]
+- Updated dependencies [0c3d117]
+- Updated dependencies [a5810ce]
+- Updated dependencies [3e9c131]
+- Updated dependencies [3171b5b]
+- Updated dependencies [cb1f698]
+- Updated dependencies [973e5ac]
+- Updated dependencies [daf942f]
+- Updated dependencies [0b8b868]
+- Updated dependencies [9e1eff5]
+- Updated dependencies [6fa1ad1]
+- Updated dependencies [c28d7a0]
+- Updated dependencies [edf1e88]
+  - @mastra/core@0.9.4
+  - @mastra/server@2.0.4
+
 ## 0.3.4-alpha.4
 
 ### Patch Changes

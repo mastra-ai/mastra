@@ -1,5 +1,44 @@
 # @mastra/mcp
 
+## 0.5.0
+
+### Minor Changes
+
+- e229660: MCPClient: expose connected client resources.
+
+  Added a new `getResources()` method to the MCPClient class that allows clients to retrieve resources from connected MCP servers. Resources are data or content exposed by MCP servers that can be accessed by clients.
+
+  The implementation includes:
+
+  - Direct access to resources from all connected MCP servers, grouped by server name
+  - Robust error handling that allows partial results when some servers fail
+  - Comprehensive test coverage with real server implementation
+
+  This feature enables applications to access data and content exposed by MCP servers through the resources capability, such as files, databases, or other content sources.
+
+### Patch Changes
+
+- 8baa6c8: passes runtimeContext to the logger function inside MCPClient tool calls
+- 396be50: updated mcp server routes for MCP SSE for use with hono server
+- da082f8: Switch from serializing json schema string as a function to a library that creates a zod object in memory from the json schema. This reduces the errors we were seeing from zod schema code that could not be serialized.
+- bb1e2c8: Make sure mcp handlers can only be registered once
+- edf1e88: allows ability to pass McpServer into the mastra class and creates an endpoint /api/servers/:serverId/mcp to POST messages to an MCP server
+- Updated dependencies [396be50]
+- Updated dependencies [ab80e7e]
+- Updated dependencies [c3bd795]
+- Updated dependencies [da082f8]
+- Updated dependencies [a5810ce]
+- Updated dependencies [3e9c131]
+- Updated dependencies [3171b5b]
+- Updated dependencies [973e5ac]
+- Updated dependencies [daf942f]
+- Updated dependencies [0b8b868]
+- Updated dependencies [9e1eff5]
+- Updated dependencies [6fa1ad1]
+- Updated dependencies [c28d7a0]
+- Updated dependencies [edf1e88]
+  - @mastra/core@0.9.4
+
 ## 0.5.0-alpha.6
 
 ### Patch Changes

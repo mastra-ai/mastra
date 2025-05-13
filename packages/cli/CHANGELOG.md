@@ -1,5 +1,33 @@
 # mastra
 
+## 0.6.3
+
+### Patch Changes
+
+- cebc50a: "mastra lint now supports comments in tsconfig.json"
+- 15dc8e4: Use detected package manager in post-create instructions
+- a3435f8: Add node engine to create-mastra project package.json
+- cb1f698: Set runtimeContext from playground for agents, tools, workflows
+- Updated dependencies [396be50]
+- Updated dependencies [ab80e7e]
+- Updated dependencies [5c70b8a]
+- Updated dependencies [c3bd795]
+- Updated dependencies [da082f8]
+- Updated dependencies [a5810ce]
+- Updated dependencies [3e9c131]
+- Updated dependencies [3171b5b]
+- Updated dependencies [03c40d1]
+- Updated dependencies [cb1f698]
+- Updated dependencies [973e5ac]
+- Updated dependencies [daf942f]
+- Updated dependencies [0b8b868]
+- Updated dependencies [9e1eff5]
+- Updated dependencies [6fa1ad1]
+- Updated dependencies [c28d7a0]
+- Updated dependencies [edf1e88]
+  - @mastra/core@0.9.4
+  - @mastra/deployer@0.3.4
+
 ## 0.6.3-alpha.6
 
 ### Patch Changes

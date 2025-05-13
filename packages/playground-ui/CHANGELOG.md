@@ -1,5 +1,33 @@
 # @mastra/playground-ui
 
+## 5.0.4
+
+### Patch Changes
+
+- cb1f698: Set runtimeContext from playground for agents, tools, workflows
+- Updated dependencies [396be50]
+- Updated dependencies [ab80e7e]
+- Updated dependencies [c2f9e60]
+- Updated dependencies [5c70b8a]
+- Updated dependencies [c3bd795]
+- Updated dependencies [da082f8]
+- Updated dependencies [b4c6c87]
+- Updated dependencies [0c3d117]
+- Updated dependencies [a5810ce]
+- Updated dependencies [3e9c131]
+- Updated dependencies [3171b5b]
+- Updated dependencies [c2b980b]
+- Updated dependencies [cb1f698]
+- Updated dependencies [973e5ac]
+- Updated dependencies [daf942f]
+- Updated dependencies [0b8b868]
+- Updated dependencies [9e1eff5]
+- Updated dependencies [6fa1ad1]
+- Updated dependencies [c28d7a0]
+- Updated dependencies [edf1e88]
+  - @mastra/core@0.9.4
+  - @mastra/client-js@0.1.22
+
 ## 5.0.4-alpha.4
 
 ### Patch Changes
