@@ -69,13 +69,13 @@ const planningAgent = new Agent({
 export { planningAgent }
 ```
 
-## Define Weather Workflow
-Define the weather workflow with 3 steps: one to fetch the weather via a network call, one to plan activities, and another to plan only indoor activities.
+## Define Activity Planning Workflow
+Define the planning workflow with 3 steps: one to fetch the weather via a network call, one to plan activities, and another to plan only indoor activities.
 Both using the planning agent.
 
 ```ts showLineNumbers copy filename="workflows/conditional-workflow.ts"
 import { z } from 'zod'
-import { createStep, createWorkflow } from './vNext'
+import { createWorkflow, createStep } from "@mastra/core/workflows/vNext";
 
 
 function getWeatherCondition(code: number): string {
@@ -164,7 +164,7 @@ const fetchWeather = createStep({
   },
 })
 
-// Plan activities indorrs or outdoors
+// Plan activities indoors or outdoors
 const planActivities = createStep({
   id: 'plan-activities',
   description: 'Suggests activities based on weather conditions',
@@ -173,7 +173,6 @@ const planActivities = createStep({
     activities: z.string(),
   }),
   execute: async ({ inputData, mastra }) => {
-    console.log('planActivities')
     const forecast = inputData
 
     if (!forecast) {
@@ -218,7 +217,6 @@ const planIndoorActivities = createStep({
     activities: z.string(),
   }),
   execute: async ({ inputData, mastra }) => {
-    console.log('planIndoorActivities')
     const forecast = inputData
 
     if (!forecast) {
@@ -252,8 +250,8 @@ const planIndoorActivities = createStep({
   },
 })
 
-const weatherWorkflow = createWorkflow({
-  id: 'weather-workflow-step2-if-else',
+const activityPlanningWorkflow = createWorkflow({
+  id: 'activity-planning-workflow-step2-if-else',
   inputSchema: z.object({
     city: z.string().describe('The city to get the weather for'),
   }),
@@ -277,31 +275,9 @@ const weatherWorkflow = createWorkflow({
     ],
   ])
 
-weatherWorkflow.commit()
+activityPlanningWorkflow.commit()
 
-export { weatherWorkflow }
-```
-
-```ts showLineNumbers copy filename="index.ts"
-import { Mastra } from '@mastra/core/mastra'
-import { createLogger } from '@mastra/core/logger'
-import { weatherWorkflow } from './workflows'
-import { planningAgent } from './agents'
-
-const mastra = new Mastra({
-  vnext_workflows: {
-    weatherWorkflow,
-  },
-  agents: {
-    planningAgent,
-  },
-  logger: createLogger({
-    name: 'Mastra',
-    level: 'info',
-  }),
-})
-
-export { mastra }
+export { activityPlanningWorkflow }
 ```
 
 ## Register Agent and Workflow instances with Mastra class
@@ -311,12 +287,12 @@ This is critical for enabling access to the agents within the workflow.
 ```ts showLineNumbers copy filename="index.ts"
 import { Mastra } from '@mastra/core/mastra'
 import { createLogger } from '@mastra/core/logger'
-import { weatherWorkflow } from './workflows'
-import { planningAgent } from './agents'
-
+import { activityPlanningWorkflow } from './workflows/conditional-workflow'
+import { planningAgent } from './agents/planning-agent'
+ 
 const mastra = new Mastra({
   vnext_workflows: {
-    weatherWorkflow,
+    activityPlanningWorkflow,
   },
   agents: {
     planningAgent,
@@ -326,17 +302,17 @@ const mastra = new Mastra({
     level: 'info',
   }),
 })
-
+ 
 export { mastra }
 ```
 
-## Execute the weather workflow
-Here, we'll get the weather workflow from the mastra instance, then create a run and execute the created run with the required inputData.
+## Execute the activity planning workflow
+Here, we'll get the activity planning workflow from the mastra instance, then create a run and execute the created run with the required inputData.
 
 ```ts showLineNumbers copy filename="exec.ts"
 import { mastra } from "./"
 
-const workflow = mastra.vnext_getWorkflow('weatherWorkflow')
+const workflow = mastra.vnext_getWorkflow('activityPlanningWorkflow')
 const run = workflow.createRun()
 
 const result = await run.start({ inputData: { city: 'New York' } })

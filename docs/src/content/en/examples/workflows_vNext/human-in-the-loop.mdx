@@ -17,20 +17,20 @@ Define the travel agents.
 ```ts showLineNumbers copy filename="agents/travel-agents.ts"
 import { Agent } from '@mastra/core/agent'
 import { openai } from '@ai-sdk/openai'
-
+ 
 const llm = openai('gpt-4o')
-
+ 
 export const summaryTravelAgent = new Agent({
   name: 'summaryTravelAgent',
   model: llm,
   instructions: `
   You are a travel agent who is given a user prompt about what kind of holiday they want to go on.
   You then generate 3 different options for the holiday. Return the suggestions as a JSON array {"location": "string", "description": "string"}[]. Don't format as markdown.
-
   Make the options as different as possible from each other.
   Also make the plan very short and summarized.
   `,
 })
+
 export const travelAgent = new Agent({
   name: 'travelAgent',
   model: llm,
@@ -46,9 +46,9 @@ Defines a workflow which includes a suspending step: `humanInputStep`.
 
 ```ts showLineNumbers copy filename="workflows/human-in-the-loop-workflow.ts"
 import { createWorkflow, createStep } from '@mastra/core/workflows/vNext'
-
+ 
 import { z } from 'zod'
-
+ 
 const generateSuggestionsStep = createStep({
   id: 'generate-suggestions',
   inputSchema: z.object({
@@ -62,7 +62,7 @@ const generateSuggestionsStep = createStep({
     if (!mastra) {
       throw new Error('Mastra is not initialized')
     }
-
+ 
     const { vacationDescription } = inputData
     const result = await mastra.getAgent('summaryTravelAgent').generate([
       {
@@ -74,7 +74,7 @@ const generateSuggestionsStep = createStep({
     return { suggestions: JSON.parse(result.text), vacationDescription }
   },
 })
-
+ 
 const humanInputStep = createStep({
   id: 'human-input',
   inputSchema: z.object({
@@ -99,14 +99,14 @@ const humanInputStep = createStep({
         vacationDescription: inputData?.vacationDescription,
       }
     }
-
+ 
     return {
       selection: resumeData?.selection,
       vacationDescription: inputData?.vacationDescription,
     }
   },
 })
-
+ 
 const travelPlannerStep = createStep({
   id: 'travel-planner',
   inputSchema: z.object({
@@ -121,7 +121,7 @@ const travelPlannerStep = createStep({
     if (!travelAgent) {
       throw new Error('Travel agent is not initialized')
     }
-
+ 
     const { selection, vacationDescription } = inputData
     const result = await travelAgent.generate([
       { role: 'assistant', content: vacationDescription },
@@ -131,7 +131,7 @@ const travelPlannerStep = createStep({
     return { travelPlan: result.text }
   },
 })
-
+ 
 const travelAgentWorkflow = createWorkflow({
   id: 'travel-agent-workflow',
   inputSchema: z.object({
@@ -144,9 +144,9 @@ const travelAgentWorkflow = createWorkflow({
   .then(generateSuggestionsStep)
   .then(humanInputStep)
   .then(travelPlannerStep)
-
+ 
 travelAgentWorkflow.commit()
-
+ 
 export { travelAgentWorkflow, humanInputStep }
 ```
 
@@ -157,27 +157,23 @@ This is critical for enabling access to the agents within the workflow.
 ```ts showLineNumbers copy filename="index.ts"
 import { Mastra } from '@mastra/core/mastra'
 import { createLogger } from '@mastra/core/logger'
-import { LibSQLStore } from '@mastra/libsql'
-import { travelAgentWorkflow } from './workflows'
-import { travelAgent, summaryTravelAgent } from './agents'
-
+import { travelAgentWorkflow } from './workflows/human-in-the-loop-workflow'
+import { summaryTravelAgent, travelAgent } from './agents/travel-agent'
+ 
 const mastra = new Mastra({
   vnext_workflows: {
     travelAgentWorkflow,
   },
   agents: {
     travelAgent,
-    summaryTravelAgent
+	  summaryTravelAgent
   },
-  storage: new LibSQLStore({
-    url: ":memory:",
-  }),
   logger: createLogger({
     name: 'Mastra',
     level: 'info',
   }),
 })
-
+ 
 export { mastra }
 ```
 
@@ -188,28 +184,28 @@ In addition to this, we'll resume the `humanInputStep` after collecting user inp
 ```ts showLineNumbers copy filename="exec.ts"
 import { mastra } from "./"
 import { select } from '@inquirer/prompts'
-import { createInterface } from 'readline'
-import { humanInputStep } from './workflows'
+import { humanInputStep } from './workflows/human-in-the-loop-workflow'
+ 
 
 const workflow = mastra.vnext_getWorkflow('travelAgentWorkflow')
 const run = workflow.createRun({})
 const result = await run.start({
   inputData: { vacationDescription: 'I want to go to the beach' },
 })
-
+ 
 console.log('result', result)
-
+ 
 const suggStep = result?.steps?.['generate-suggestions']
-
+ 
 if (suggStep.status === 'success') {
   const suggestions = suggStep.output?.suggestions
   const userInput = await select<string>({
     message: "Choose your holiday destination",
-    choices: suggestions.map(({ location, description }) =>`- ${location}: ${description}`)
+    choices: suggestions.map(({ location, description }: { location: string, description: string }) =>`- ${location}: ${description}`)
   })
-
+ 
   console.log('Selected:', userInput)
-
+ 
   console.log('resuming from', result, 'with', {
     inputData: {
       selection: userInput,
@@ -218,14 +214,14 @@ if (suggStep.status === 'success') {
     },
     step: humanInputStep,
   })
-
+ 
   const result2 = await run.resume({
     resumeData: {
       selection: userInput,
     },
     step: humanInputStep,
   })
-
+ 
   console.dir(result2, { depth: null })
 }
 ```
