@@ -2274,6 +2274,249 @@ describe('MessageList', () => {
       ]);
     });
 
+    it('works with a copy/pasted conversation from useChat input messages', async () => {
+      const history = (
+        [
+          {
+            id: 'c59c844b-0f1a-409a-995e-3382a3ee1eaa',
+            content: 'hi',
+            role: 'user' as const,
+            type: 'text',
+            createdAt: '2025-03-25T20:29:58.103Z',
+            threadId: '68',
+          },
+          {
+            id: '7bb920f1-1a89-4f1a-8fb0-6befff982946',
+            content: [
+              {
+                type: 'text',
+                text: 'Hello! How can I assist you today?',
+              },
+            ],
+            role: 'assistant',
+            type: 'text',
+            createdAt: '2025-03-25T20:29:58.717Z',
+            threadId: '68',
+          },
+          {
+            id: '673b1279-9ce5-428e-a646-d19d83ed4d67',
+            content: 'LA',
+            role: 'user' as const,
+            type: 'text',
+            createdAt: '2025-03-25T20:30:01.911Z',
+            threadId: '68',
+          },
+          {
+            id: '6a903ed0-1cf4-463d-8ea0-c13bd0896405',
+            content: [
+              {
+                type: 'tool-call',
+                toolCallId: 'call_fziykqCGOygt5QGj6xVnkQaE',
+                toolName: 'updateWorkingMemory',
+                args: {
+                  memory: '<user><location>LA</location></user>',
+                },
+              },
+            ],
+            role: 'assistant',
+            type: 'tool-call',
+            createdAt: '2025-03-25T20:30:02.175Z',
+            threadId: '68',
+          },
+          {
+            id: 'c27b7dbe-ce80-41f5-9eb3-33a668238a1b',
+            content: [
+              {
+                type: 'tool-result',
+                toolCallId: 'call_fziykqCGOygt5QGj6xVnkQaE',
+                toolName: 'updateWorkingMemory',
+                result: {
+                  success: true,
+                },
+              },
+            ],
+            role: 'tool',
+            type: 'tool-result',
+            createdAt: '2025-03-25T20:30:02.176Z',
+            threadId: '68',
+          },
+          {
+            id: 'd1fc1d8e-2aca-47a8-8239-0bb761d63fd6',
+            content: [
+              {
+                type: 'text',
+                text: "Got it! You're in LA. What would you like to talk about or do today?",
+              },
+            ],
+            role: 'assistant',
+            type: 'text',
+            createdAt: '2025-03-25T20:30:02.177Z',
+            threadId: '68',
+          },
+          {
+            id: '1b271c02-7762-4416-91e9-146a25ce9c73',
+            content: [
+              {
+                type: 'text',
+                text: 'Hello',
+              },
+            ],
+            role: 'user' as const,
+            type: 'text',
+            createdAt: '2025-05-13T22:23:26.584Z',
+            threadId: '68',
+          },
+          {
+            id: 'msg-Cpo828mGmAc8dhWwQcD32Net',
+            content: [
+              {
+                type: 'text',
+                text: 'Hello again! How can I help you today?',
+              },
+            ],
+            role: 'assistant',
+            type: 'text',
+            createdAt: '2025-05-13T22:23:26.585Z',
+            threadId: '68',
+          },
+          {
+            id: 'eab9da82-6120-4630-b60e-0a7cb86b0718',
+            content: [
+              {
+                type: 'text',
+                text: 'Hi',
+              },
+            ],
+            role: 'user' as const,
+            type: 'text',
+            createdAt: '2025-05-13T22:24:51.608Z',
+            threadId: '68',
+          },
+          {
+            id: 'msg-JpZvGeyqVaUo1wthbXf0EVSS',
+            content: [
+              {
+                type: 'text',
+                text: 'Hi there! What’s on your mind?',
+              },
+            ],
+            role: 'assistant',
+            type: 'text',
+            createdAt: '2025-05-13T22:24:51.609Z',
+            threadId: '68',
+          },
+          {
+            role: 'user' as const,
+            content: [
+              {
+                type: 'text',
+                text: 'hello',
+              },
+            ],
+          },
+        ] as const
+      ).map(m => ({
+        ...m,
+        createdAt: `createdAt` in m && m.createdAt ? new Date(m.createdAt) : new Date(),
+      })) as MastraMessageV1[];
+
+      const list = new MessageList({ threadId: '68' }).add(history, 'memory');
+
+      const uiMessages = list.toUIMessages();
+
+      expect(uiMessages.length).toBe(9);
+      expect(uiMessages).toEqual([
+        {
+          id: 'c59c844b-0f1a-409a-995e-3382a3ee1eaa',
+          role: 'user',
+          content: '',
+          createdAt: new Date('2025-03-25T20:29:58.103Z'),
+          parts: [{ type: 'text', text: 'hi' }],
+          experimental_attachments: [],
+        },
+        {
+          id: '7bb920f1-1a89-4f1a-8fb0-6befff982946',
+          role: 'assistant',
+          content: '',
+          createdAt: new Date('2025-03-25T20:29:58.717Z'),
+          parts: [{ type: 'step-start' }, { type: 'text', text: 'Hello! How can I assist you today?' }],
+          experimental_attachments: [],
+        },
+        {
+          id: '673b1279-9ce5-428e-a646-d19d83ed4d67',
+          role: 'user',
+          content: '',
+          createdAt: new Date('2025-03-25T20:30:01.911Z'),
+          parts: [{ type: 'text', text: 'LA' }],
+          experimental_attachments: [],
+        },
+        {
+          id: '6a903ed0-1cf4-463d-8ea0-c13bd0896405',
+          role: 'assistant',
+          content: '',
+          createdAt: new Date('2025-03-25T20:30:02.177Z'), // Merged message takes the latest timestamp
+          parts: [
+            { type: 'step-start' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call_fziykqCGOygt5QGj6xVnkQaE',
+                toolName: 'updateWorkingMemory',
+                args: { memory: '<user><location>LA</location></user>' },
+                result: { success: true },
+              },
+            },
+            {
+              type: 'text',
+              text: "Got it! You're in LA. What would you like to talk about or do today?",
+            },
+          ],
+          experimental_attachments: [],
+        },
+        {
+          id: '1b271c02-7762-4416-91e9-146a25ce9c73',
+          role: 'user',
+          content: '',
+          createdAt: new Date('2025-05-13T22:23:26.584Z'),
+          parts: [{ type: 'text', text: 'Hello' }],
+          experimental_attachments: [],
+        },
+        {
+          id: 'msg-Cpo828mGmAc8dhWwQcD32Net',
+          role: 'assistant',
+          content: '',
+          createdAt: new Date('2025-05-13T22:23:26.585Z'),
+          parts: [{ type: 'step-start' }, { type: 'text', text: 'Hello again! How can I help you today?' }],
+          experimental_attachments: [],
+        },
+        {
+          id: 'eab9da82-6120-4630-b60e-0a7cb86b0718',
+          role: 'user',
+          content: '',
+          createdAt: new Date('2025-05-13T22:24:51.608Z'),
+          parts: [{ type: 'text', text: 'Hi' }],
+          experimental_attachments: [],
+        },
+        {
+          id: 'msg-JpZvGeyqVaUo1wthbXf0EVSS',
+          role: 'assistant',
+          content: '',
+          createdAt: new Date('2025-05-13T22:24:51.609Z'),
+          parts: [{ type: 'step-start' }, { type: 'text', text: 'Hi there! What’s on your mind?' }],
+          experimental_attachments: [],
+        },
+        {
+          id: expect.any(String), // The last message doesn't have an ID in the input, so MessageList generates one
+          role: 'user',
+          content: '',
+          createdAt: expect.any(Date), // MessageList generates createdAt for messages without one
+          parts: [{ type: 'text', text: 'hello' }],
+          experimental_attachments: [],
+        },
+      ]);
+    });
+
     describe('toBase64String', () => {
       it('should return the string itself if the input is a string', () => {
         const input = 'alreadybase64==';
