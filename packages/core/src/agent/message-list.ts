@@ -192,6 +192,39 @@ export class MessageList {
               });
             }
             break;
+          case 'tool-result':
+            // Find the corresponding tool-call part in the current message's parts
+            const existingCallPartV1 = parts.find(
+              p =>
+                p.type === 'tool-invocation' &&
+                p.toolInvocation.toolCallId === part.toolCallId &&
+                p.toolInvocation.state === 'call', // Look for the 'call' state
+            );
+
+            if (existingCallPartV1?.type === 'tool-invocation') {
+              // Update the existing tool-call part to state 'result'
+              existingCallPartV1.toolInvocation = {
+                ...existingCallPartV1.toolInvocation,
+                state: 'result',
+                result: part.result,
+              };
+              // Keep the existing args
+            } else {
+              // If the tool-call part wasn't found (shouldn't happen in a valid sequence,
+              // but as a fallback, add a new tool-invocation part with state 'result')
+              console.warn(`Tool call part not found for result: ${part.toolCallId}. Adding result as a new part.`);
+              parts.push({
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: part.toolCallId,
+                  toolName: part.toolName,
+                  result: part.result,
+                  args: {}, // Args are unknown if call wasn't found
+                },
+              });
+            }
+            break;
           default:
             // Ignore unknown part types for now
             console.warn(`Ignoring unknown MessageType content part type: ${part.type}`);
@@ -269,22 +302,32 @@ export class MessageList {
               p =>
                 p.type === `tool-invocation` &&
                 p.toolInvocation.toolCallId === part.toolCallId &&
-                p.toolInvocation.state !== `result`,
+                p.toolInvocation.state === `call`, // Look for the 'call' state
             );
             const call = parts[callIndex];
-            if (call) {
-              delete parts[callIndex];
-            }
-            parts.push({
-              type: 'tool-invocation',
-              toolInvocation: {
-                toolName: part.toolName,
+            if (call && call.type === `tool-invocation`) {
+              // Update the existing tool-call part to state 'result'
+              call.toolInvocation = {
+                ...call.toolInvocation,
+                state: 'result',
                 result: part.result,
-                toolCallId: part.toolCallId,
-                args: call && `args` in call && call.args ? call.args : {},
-                state: `result`,
-              },
-            });
+              };
+              // Keep the existing args
+            } else {
+              // If the tool-call part wasn't found (shouldn't happen in a valid sequence,
+              // but as a fallback, add a new tool-invocation part with state 'result')
+              console.warn(`Tool call part not found for result: ${part.toolCallId}. Adding result as a new part.`);
+              parts.push({
+                type: 'tool-invocation',
+                toolInvocation: {
+                  toolName: part.toolName,
+                  result: part.result,
+                  toolCallId: part.toolCallId,
+                  args: {}, // Args are unknown if call wasn't found
+                  state: `result`,
+                },
+              });
+            }
             break;
 
           case 'reasoning':
