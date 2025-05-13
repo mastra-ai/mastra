@@ -34,7 +34,7 @@ interface WorkflowSnapshotDBItem {
   entity: string; // Typically 'workflow_snapshot'
   workflow_name: string;
   run_id: string;
-  snapshot: string; // JSON stringified WorkflowRunState
+  snapshot: WorkflowRunState; // Should be WorkflowRunState after ElectroDB get attribute processing
   createdAt: string; // ISO Date string
   updatedAt: string; // ISO Date string
   resourceId?: string;
@@ -746,7 +746,7 @@ export class DynamoDBStore extends MastraStorage {
       }
 
       // Parse the snapshot string
-      return JSON.parse(result.data.snapshot) as WorkflowRunState;
+      return result.data.snapshot as WorkflowRunState;
     } catch (error) {
       this.logger.error('Failed to load workflow snapshot', { workflowName, runId, error });
       throw error;
@@ -864,7 +864,7 @@ export class DynamoDBStore extends MastraStorage {
           return null;
         }
 
-        const snapshot = JSON.parse(result.data.snapshot);
+        const snapshot = result.data.snapshot;
         return {
           workflowName: result.data.workflow_name,
           runId: result.data.run_id,
@@ -901,7 +901,7 @@ export class DynamoDBStore extends MastraStorage {
         return null;
       }
 
-      const snapshot = JSON.parse(matchingRunDbItem.snapshot);
+      const snapshot = matchingRunDbItem.snapshot;
       return {
         workflowName: matchingRunDbItem.workflow_name,
         runId: matchingRunDbItem.run_id,
@@ -921,7 +921,7 @@ export class DynamoDBStore extends MastraStorage {
     return {
       workflowName: snapshotData.workflow_name,
       runId: snapshotData.run_id,
-      snapshot: typeof snapshotData.snapshot === 'string' ? JSON.parse(snapshotData.snapshot) : snapshotData.snapshot,
+      snapshot: snapshotData.snapshot as WorkflowRunState,
       createdAt: new Date(snapshotData.createdAt),
       updatedAt: new Date(snapshotData.updatedAt),
       resourceId: snapshotData.resourceId,
@@ -1015,6 +1015,22 @@ export class DynamoDBStore extends MastraStorage {
       });
     } catch (error) {
       this.logger.error('Failed to get evals by agent name', { agentName, type, error });
+      throw error;
+    }
+  }
+
+  /**
+   * Closes the DynamoDB client connection and cleans up resources.
+   * Should be called when the store is no longer needed, e.g., at the end of tests or application shutdown.
+   */
+  public async close(): Promise<void> {
+    this.logger.debug('Closing DynamoDB client for store:', { name: this.name });
+    try {
+      this.client.destroy();
+      this.logger.debug('DynamoDB client closed successfully for store:', { name: this.name });
+    } catch (error) {
+      this.logger.error('Error closing DynamoDB client for store:', { name: this.name, error });
+      // Optionally re-throw or handle as appropriate for your application's error handling strategy
       throw error;
     }
   }

@@ -10,10 +10,6 @@ export const baseAttributes = {
       }
       return value || new Date().toISOString();
     },
-    // Parse ISO string to Date on get
-    get: (value: string) => {
-      return value;
-    },
     // Initialize with current timestamp if not provided
     default: () => new Date().toISOString(),
   },
@@ -26,10 +22,6 @@ export const baseAttributes = {
         return value.toISOString();
       }
       return value || new Date().toISOString();
-    },
-    // Parse ISO string to Date on get
-    get: (value: string) => {
-      return value;
     },
     // Always use current timestamp when creating/updating
     default: () => new Date().toISOString(),

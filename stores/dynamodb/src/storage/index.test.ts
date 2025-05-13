@@ -35,13 +35,26 @@ async function waitForDynamoDBLocal(client: DynamoDBClient, timeoutMs = 90000): 
       await client.send(new ListTablesCommand({}));
       console.log('DynamoDB Local is ready.');
       return; // Success
-    } catch (error: any) {
-      if (error.name === 'ECONNREFUSED' || error.name === 'TimeoutError' || error.name === 'ERR_INVALID_PROTOCOL') {
+    } catch (e: unknown) {
+      let errorName: string | undefined;
+
+      if (e instanceof Error) {
+        errorName = e.name;
+      } else if (
+        typeof e === 'object' &&
+        e !== null &&
+        'name' in e &&
+        typeof (e as { name: unknown }).name === 'string'
+      ) {
+        errorName = (e as { name: string }).name;
+      }
+
+      if (errorName === 'ECONNREFUSED' || errorName === 'TimeoutError' || errorName === 'ERR_INVALID_PROTOCOL') {
         // Expected errors while starting
         await new Promise(resolve => setTimeout(resolve, 500)); // Wait before retrying
       } else {
-        console.error('Unexpected error waiting for DynamoDB Local:', error);
-        throw error; // Rethrow unexpected errors
+        console.error('Unexpected error waiting for DynamoDB Local:', e);
+        throw e; // Rethrow unexpected errors
       }
     }
   }
@@ -145,12 +158,25 @@ beforeAll(async () => {
     console.log(`Waiting for table ${TEST_TABLE_NAME} to be deleted...`);
     await waitUntilTableNotExists({ client: setupClient, maxWaitTime: 60 }, { TableName: TEST_TABLE_NAME });
     console.log(`Table ${TEST_TABLE_NAME} deleted.`);
-  } catch (error: any) {
-    if (error.name === 'ResourceNotFoundException') {
+  } catch (e: unknown) {
+    let errorName: string | undefined;
+
+    if (e instanceof Error) {
+      errorName = e.name;
+    } else if (
+      typeof e === 'object' &&
+      e !== null &&
+      'name' in e &&
+      typeof (e as { name: unknown }).name === 'string'
+    ) {
+      errorName = (e as { name: string }).name;
+    }
+
+    if (errorName === 'ResourceNotFoundException') {
       console.log(`Table ${TEST_TABLE_NAME} does not exist, proceeding.`);
     } else {
-      console.error(`Error deleting table ${TEST_TABLE_NAME}:`, error);
-      throw error; // Rethrow other errors
+      console.error(`Error deleting table ${TEST_TABLE_NAME}:`, e);
+      throw e; // Rethrow other errors
     }
   }
 
@@ -254,10 +280,12 @@ describe('DynamoDBStore Integration Tests', () => {
     await clearSingleTable(setupClient, TEST_TABLE_NAME);
   });
 
-  afterAll(() => {
+  afterAll(async () => {
     // No client.destroy() needed here as the store manages its internal client
     // Or if the store exposes a close/destroy method, call that.
-    // await store.close(); // Assuming store has a close method
+    if (store) {
+      await store.close(); // Assuming store has a close method
+    }
   });
 
   // DynamoDB-specific tests
