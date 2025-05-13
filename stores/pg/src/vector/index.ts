@@ -15,7 +15,7 @@ import pg from 'pg';
 import xxhash from 'xxhash-wasm';
 
 import { PGFilterTranslator } from './filter';
-import { buildFilterQuery } from './sql-builder';
+import { buildFilterQuery, validateIdentifier } from './sql-builder';
 import type { IndexConfig, IndexType } from './types';
 
 export interface PGIndexStats extends IndexStats {
@@ -161,6 +161,8 @@ export class PgVector extends MastraVector {
   }
 
   private getTableName(indexName: string) {
+    validateIdentifier(indexName, 'index name');
+    if (this.schema) validateIdentifier(this.schema, 'schema name');
     return this.schema ? `${this.schema}.${indexName}` : indexName;
   }
 
@@ -184,11 +186,18 @@ export class PgVector extends MastraVector {
     ]);
     const { indexName, queryVector, topK = 10, filter, includeVector = false, minScore = 0, ef, probes } = params;
 
+    if (!Number.isInteger(topK) || topK <= 0) {
+      throw new Error('topK must be a positive integer');
+    }
+    if (!Array.isArray(queryVector) || !queryVector.every(x => typeof x === 'number' && Number.isFinite(x))) {
+      throw new Error('queryVector must be an array of finite numbers');
+    }
+
     const client = await this.pool.connect();
     try {
       const vectorStr = `[${queryVector.join(',')}]`;
       const translatedFilter = this.transformFilter(filter);
-      const { sql: filterQuery, values: filterValues } = buildFilterQuery(translatedFilter, minScore);
+      const { sql: filterQuery, values: filterValues } = buildFilterQuery(translatedFilter, minScore, topK);
 
       // Get index type and configuration
       const indexInfo = await this.getIndexInfo(indexName);
@@ -221,7 +230,7 @@ export class PgVector extends MastraVector {
         FROM vector_scores
         WHERE score > $1
         ORDER BY score DESC
-        LIMIT ${topK}`;
+        LIMIT $2`;
       const result = await client.query(query, filterValues);
 
       return result.rows.map(({ id, score, metadata, embedding }) => ({

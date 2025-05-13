@@ -40,6 +40,12 @@ export type PostgresConfig = {
     }
 );
 
+function validateIdentifier(name: string, kind = 'identifier') {
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {
+    throw new Error(`Invalid ${kind}: ${name}`);
+  }
+}
+
 export class PostgresStore extends MastraStorage {
   private db: pgPromise.IDatabase<{}>;
   private pgp: pgPromise.IMain;
@@ -93,6 +99,8 @@ export class PostgresStore extends MastraStorage {
   }
 
   private getTableName(indexName: string) {
+    validateIdentifier(indexName, 'table name');
+    if (this.schema) validateIdentifier(this.schema, 'schema name');
     return this.schema ? `${this.schema}."${indexName}"` : `"${indexName}"`;
   }
 
@@ -192,12 +200,14 @@ export class PostgresStore extends MastraStorage {
     }
     if (attributes) {
       Object.keys(attributes).forEach(key => {
+        validateIdentifier(key, 'attribute key');
         conditions.push(`attributes->>'${key}' = \$${idx++}`);
       });
     }
 
     if (filters) {
       Object.entries(filters).forEach(([key]) => {
+        validateIdentifier(key, 'filter key');
         conditions.push(`${key} = \$${idx++}`);
       });
     }
@@ -341,6 +351,7 @@ export class PostgresStore extends MastraStorage {
     try {
       const columns = Object.entries(schema)
         .map(([name, def]) => {
+          validateIdentifier(name, 'column name');
           const constraints = [];
           if (def.primaryKey) constraints.push('PRIMARY KEY');
           if (!def.nullable) constraints.push('NOT NULL');
@@ -393,6 +404,7 @@ export class PostgresStore extends MastraStorage {
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     try {
       const columns = Object.keys(record);
+      columns.forEach(col => validateIdentifier(col, 'column name'));
       const values = Object.values(record);
       const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
 
@@ -409,6 +421,7 @@ export class PostgresStore extends MastraStorage {
   async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
     try {
       const keyEntries = Object.entries(keys);
+      keyEntries.forEach(([key]) => validateIdentifier(key, 'column name'));
       const conditions = keyEntries.map(([key], index) => `"${key}" = $${index + 1}`).join(' AND ');
       const values = keyEntries.map(([_, value]) => value);
 

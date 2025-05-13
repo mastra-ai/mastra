@@ -25,22 +25,40 @@ type FilterOperator = {
 
 type OperatorFn = (key: string, paramIndex: number, value?: any) => FilterOperator;
 
+export function validateIdentifier(name: string, kind = 'identifier') {
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {
+    throw new Error(`Invalid ${kind}: ${name}`);
+  }
+}
+
 // Helper functions to create operators
+function validateFieldKey(key: string) {
+  if (!/^[a-zA-Z_][a-zA-Z0-9_\.]*$/.test(key)) {
+    throw new Error(`Invalid field key: ${key}`);
+  }
+}
+
 const createBasicOperator = (symbol: string) => {
-  return (key: string, paramIndex: number) => ({
-    sql: `CASE 
-      WHEN $${paramIndex}::text IS NULL THEN metadata#>>'{${handleKey(key)}}' IS ${symbol === '=' ? '' : 'NOT'} NULL
-      ELSE metadata#>>'{${handleKey(key)}}' ${symbol} $${paramIndex}::text
-    END`,
-    needsValue: true,
-  });
+  return (key: string, paramIndex: number) => {
+    validateFieldKey(key);
+    return {
+      sql: `CASE 
+        WHEN $${paramIndex}::text IS NULL THEN metadata#>>'{${handleKey(key)}}' IS ${symbol === '=' ? '' : 'NOT'} NULL
+        ELSE metadata#>>'{${handleKey(key)}}' ${symbol} $${paramIndex}::text
+      END`,
+      needsValue: true,
+    };
+  };
 };
 
 const createNumericOperator = (symbol: string) => {
-  return (key: string, paramIndex: number) => ({
-    sql: `(metadata#>>'{${handleKey(key)}}')::numeric ${symbol} $${paramIndex}`,
-    needsValue: true,
-  });
+  return (key: string, paramIndex: number) => {
+    validateFieldKey(key);
+    return {
+      sql: `(metadata#>>'{${handleKey(key)}}')::numeric ${symbol} $${paramIndex}`,
+      needsValue: true,
+    };
+  };
 };
 
 function buildElemMatchConditions(value: any, paramIndex: number): { sql: string; values: any[] } {
@@ -73,6 +91,11 @@ function buildElemMatchConditions(value: any, paramIndex: number): { sql: string
       paramValue = val;
     }
 
+    // Validate paramKey if present
+    if (paramKey) {
+      validateFieldKey(paramKey);
+    }
+
     const operatorFn = FILTER_OPERATORS[paramOperator as keyof typeof FILTER_OPERATORS];
     if (!operatorFn) {
       throw new Error(`Invalid operator: ${paramOperator}`);
@@ -102,37 +125,46 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
   $lte: createNumericOperator('<='),
 
   // Array Operators
-  $in: (key, paramIndex) => ({
-    sql: `(
-      CASE
-        WHEN jsonb_typeof(metadata->'${handleKey(key)}') = 'array' THEN
-          EXISTS (
-            SELECT 1 FROM jsonb_array_elements_text(metadata->'${handleKey(key)}') as elem
-            WHERE elem = ANY($${paramIndex}::text[])
-          )
-        ELSE metadata#>>'{${handleKey(key)}}' = ANY($${paramIndex}::text[])
-      END
-    )`,
-    needsValue: true,
-  }),
-  $nin: (key, paramIndex) => ({
-    sql: `(
-      CASE
-        WHEN jsonb_typeof(metadata->'${handleKey(key)}') = 'array' THEN
-          NOT EXISTS (
-            SELECT 1 FROM jsonb_array_elements_text(metadata->'${handleKey(key)}') as elem
-            WHERE elem = ANY($${paramIndex}::text[])
-          )
-        ELSE metadata#>>'{${handleKey(key)}}' != ALL($${paramIndex}::text[])
-      END
-    )`,
-    needsValue: true,
-  }),
-  $all: (key, paramIndex) => ({
-    sql: `CASE WHEN array_length($${paramIndex}::text[], 1) IS NULL THEN false 
-          ELSE (metadata#>'{${handleKey(key)}}')::jsonb ?& $${paramIndex}::text[] END`,
-    needsValue: true,
-  }),
+  $in: (key, paramIndex) => {
+    validateFieldKey(key);
+    return {
+      sql: `(
+        CASE
+          WHEN jsonb_typeof(metadata->'${handleKey(key)}') = 'array' THEN
+            EXISTS (
+              SELECT 1 FROM jsonb_array_elements_text(metadata->'${handleKey(key)}') as elem
+              WHERE elem = ANY($${paramIndex}::text[])
+            )
+          ELSE metadata#>>'{${handleKey(key)}}' = ANY($${paramIndex}::text[])
+        END
+      )`,
+      needsValue: true,
+    };
+  },
+  $nin: (key, paramIndex) => {
+    validateFieldKey(key);
+    return {
+      sql: `(
+        CASE
+          WHEN jsonb_typeof(metadata->'${handleKey(key)}') = 'array' THEN
+            NOT EXISTS (
+              SELECT 1 FROM jsonb_array_elements_text(metadata->'${handleKey(key)}') as elem
+              WHERE elem = ANY($${paramIndex}::text[])
+            )
+          ELSE metadata#>>'{${handleKey(key)}}' != ALL($${paramIndex}::text[])
+        END
+      )`,
+      needsValue: true,
+    };
+  },
+  $all: (key, paramIndex) => {
+    validateFieldKey(key);
+    return {
+      sql: `CASE WHEN array_length($${paramIndex}::text[], 1) IS NULL THEN false 
+            ELSE (metadata#>'{${handleKey(key)}}')::jsonb ?& $${paramIndex}::text[] END`,
+      needsValue: true,
+    };
+  },
   $elemMatch: (key: string, paramIndex: number, value: any): FilterOperator => {
     const { sql, values } = buildElemMatchConditions(value, paramIndex);
     return {
@@ -152,10 +184,13 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
     };
   },
   // Element Operators
-  $exists: key => ({
-    sql: `metadata ? '${key}'`,
-    needsValue: false,
-  }),
+  $exists: key => {
+    validateFieldKey(key);
+    return {
+      sql: `metadata ? '${key}'`,
+      needsValue: false,
+    };
+  },
 
   // Logical Operators
   $and: key => ({ sql: `(${key})`, needsValue: false }),
@@ -164,12 +199,16 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
   $nor: key => ({ sql: `NOT (${key})`, needsValue: false }),
 
   // Regex Operators
-  $regex: (key, paramIndex) => ({
-    sql: `metadata#>>'{${handleKey(key)}}' ~ $${paramIndex}`,
-    needsValue: true,
-  }),
+  $regex: (key, paramIndex) => {
+    validateFieldKey(key);
+    return {
+      sql: `metadata#>>'{${handleKey(key)}}' ~ $${paramIndex}`,
+      needsValue: true,
+    };
+  },
 
   $contains: (key, paramIndex, value: any) => {
+    validateFieldKey(key);
     let sql;
     if (Array.isArray(value)) {
       sql = `(metadata->'${handleKey(key)}') ?& $${paramIndex}`;
@@ -196,16 +235,19 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
   //     return JSON.stringify(parts.reduceRight((value, key) => ({ [key]: value }), value));
   //   },
   // }),
-  $size: (key: string, paramIndex: number) => ({
-    sql: `(
+  $size: (key: string, paramIndex: number) => {
+    validateFieldKey(key);
+    return {
+      sql: `(
       CASE
         WHEN jsonb_typeof(metadata#>'{${handleKey(key)}}') = 'array' THEN 
           jsonb_array_length(metadata#>'{${handleKey(key)}}') = $${paramIndex}
         ELSE FALSE
       END
     )`,
-    needsValue: true,
-  }),
+      needsValue: true,
+    };
+  },
 };
 
 export interface FilterResult {
@@ -217,8 +259,8 @@ export const handleKey = (key: string) => {
   return key.replace(/\./g, ',');
 };
 
-export function buildFilterQuery(filter: VectorFilter, minScore: number): FilterResult {
-  const values = [minScore];
+export function buildFilterQuery(filter: VectorFilter, minScore: number, topK: number): FilterResult {
+  const values = [minScore, topK];
 
   function buildCondition(key: string, value: any, parentPath: string): string {
     // Handle logical operators ($and/$or)
