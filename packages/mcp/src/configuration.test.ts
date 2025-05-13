@@ -413,7 +413,7 @@ describe('MCPClient', () => {
           client.disconnect().catch(e => console.error(`Error disconnecting client during test cleanup: ${e}`)),
         ),
       );
-      clientsToCleanup = [];
+      clientsToCleanup = []; // Reset for the next test
     });
 
     it('should pass runtimeContext to the server logger function during tool execution', async () => {
@@ -558,5 +558,75 @@ describe('MCPClient', () => {
       );
       expect(contextALeak).toBe(false);
     }, 20000);
+
+    it('should isolate runtimeContext between different servers on the same MCPClient', async () => {
+      const sharedLoggerFn = vi.fn();
+
+      const clientWithTwoServers = new MCPClient({
+        id: 'mcp-multi-server-context-isolation',
+        servers: {
+          serverX: {
+            command: 'npx',
+            args: ['tsx', path.join(__dirname, '__fixtures__/stock-price.ts')], // Re-use fixture, tool name will differ by server
+            logger: sharedLoggerFn,
+            env: { FAKE_CREDS: 'serverX-creds' }, // Make env slightly different for clarity if needed
+          },
+          serverY: {
+            command: 'npx',
+            args: ['tsx', path.join(__dirname, '__fixtures__/stock-price.ts')], // Re-use fixture
+            logger: sharedLoggerFn,
+            env: { FAKE_CREDS: 'serverY-creds' },
+          },
+        },
+      });
+      clientsToCleanup.push(clientWithTwoServers);
+
+      const tools = await clientWithTwoServers.getTools();
+      const toolX = tools['serverX_getStockPrice'];
+      const toolY = tools['serverY_getStockPrice'];
+      expect(toolX).toBeDefined();
+      expect(toolY).toBeDefined();
+
+      // --- Call tool on Server X with contextX ---
+      type ContextX = { requestId: string };
+      const runtimeContextX = new RuntimeContext<ContextX>();
+      runtimeContextX.set('requestId', 'req-X-001');
+
+      await toolX.execute({ context: { symbol: 'AAA' }, runtimeContext: runtimeContextX });
+
+      expect(sharedLoggerFn).toHaveBeenCalled();
+      let callsAfterToolX = [...sharedLoggerFn.mock.calls];
+      const logCallForX = callsAfterToolX.find(call => {
+        const logMessage = call[0] as LogMessage;
+        return logMessage.serverName === 'serverX' && logMessage.runtimeContext?.get('requestId') === 'req-X-001';
+      });
+      expect(logCallForX).toBeDefined();
+      expect((logCallForX?.[0] as LogMessage)?.runtimeContext?.get('requestId')).toBe('req-X-001');
+
+      sharedLoggerFn.mockClear(); // Clear for next distinct operation
+
+      // --- Call tool on Server Y with contextY ---
+      type ContextY = { customerId: string };
+      const runtimeContextY = new RuntimeContext<ContextY>();
+      runtimeContextY.set('customerId', 'cust-Y-002');
+
+      await toolY.execute({ context: { symbol: 'BBB' }, runtimeContext: runtimeContextY });
+
+      expect(sharedLoggerFn).toHaveBeenCalled();
+      let callsAfterToolY = [...sharedLoggerFn.mock.calls];
+      const logCallForY = callsAfterToolY.find(call => {
+        const logMessage = call[0] as LogMessage;
+        return logMessage.serverName === 'serverY' && logMessage.runtimeContext?.get('customerId') === 'cust-Y-002';
+      });
+      expect(logCallForY).toBeDefined();
+      expect((logCallForY?.[0] as LogMessage)?.runtimeContext?.get('customerId')).toBe('cust-Y-002');
+
+      // Ensure contextX did not leak into logs from serverY's operation
+      const contextXLeakInYLogs = callsAfterToolY.some(call => {
+        const logMessage = call[0] as LogMessage;
+        return logMessage.runtimeContext?.get('requestId') === 'req-X-001';
+      });
+      expect(contextXLeakInYLogs).toBe(false);
+    }, 25000); // Increased timeout for multiple server ops
   });
 });
