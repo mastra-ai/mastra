@@ -78,7 +78,6 @@ export abstract class MCPServerBase extends MastraBase {
   setId(id: string) {
     if (this.idWasSet) {
       if (this._id !== id) {
-        this.logger.warn(`ID was already set to '${this._id}' and cannot be changed to '${id}'.`);
       }
       return;
     }
