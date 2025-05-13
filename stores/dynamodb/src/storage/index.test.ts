@@ -887,7 +887,7 @@ describe('DynamoDBStore Integration Tests', () => {
             endpoint: LOCAL_ENDPOINT,
             region: LOCAL_REGION,
             credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
-          } as any, // Use 'as any' to bypass TS check for missing property
+          } satisfies Omit<DynamoDBStoreConfig, 'tableName'>, // Use satisfies to ensure type safety
         });
       }).toThrow(/tableName must be provided/); // Check for specific error message if possible
     });
