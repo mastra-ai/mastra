@@ -24,7 +24,6 @@ export async function getAgentsHandler({ mastra, runtimeContext }: Context & { r
         const instructions = await agent.getInstructions({ runtimeContext });
         const tools = await agent.getTools({ runtimeContext });
         const llm = await agent.getLLM({ runtimeContext });
-        const workflows = await agent.getWorkflows({ runtimeContext });
 
         const serializedAgentTools = Object.entries(tools || {}).reduce<any>((acc, [key, tool]) => {
           const _tool = tool as any;
@@ -39,14 +38,20 @@ export async function getAgentsHandler({ mastra, runtimeContext }: Context & { r
         let serializedAgentWorkflows = {};
 
         if ('getWorkflows' in agent) {
-          serializedAgentWorkflows = Object.entries(workflows || {}).reduce<any>((acc, [key, workflow]) => {
-            return {
-              ...acc,
-              [key]: {
-                name: workflow.name,
-              },
-            };
-          }, {});
+          const logger = mastra.getLogger();
+          try {
+            const workflows = await agent.getWorkflows({ runtimeContext });
+            serializedAgentWorkflows = Object.entries(workflows || {}).reduce<any>((acc, [key, workflow]) => {
+              return {
+                ...acc,
+                [key]: {
+                  name: workflow.name,
+                },
+              };
+            }, {});
+          } catch (error) {
+            logger.error('Error getting workflows for agent', { agentName: agent.name, error });
+          }
         }
 
         return {
@@ -99,16 +104,21 @@ export async function getAgentByIdHandler({
     let serializedAgentWorkflows = {};
 
     if ('getWorkflows' in agent) {
-      const workflows = await agent.getWorkflows({ runtimeContext });
+      const logger = mastra.getLogger();
+      try {
+        const workflows = await agent.getWorkflows({ runtimeContext });
 
-      serializedAgentWorkflows = Object.entries(workflows || {}).reduce<any>((acc, [key, workflow]) => {
-        return {
-          ...acc,
-          [key]: {
-            name: workflow.name,
-          },
-        };
-      }, {});
+        serializedAgentWorkflows = Object.entries(workflows || {}).reduce<any>((acc, [key, workflow]) => {
+          return {
+            ...acc,
+            [key]: {
+              name: workflow.name,
+            },
+          };
+        }, {});
+      } catch (error) {
+        logger.error('Error getting workflows for agent', { agentName: agent.name, error });
+      }
     }
 
     const instructions = await agent.getInstructions({ runtimeContext });
