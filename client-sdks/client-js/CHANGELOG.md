@@ -1,5 +1,18 @@
 # @mastra/client-js
 
+## 0.1.22-alpha.3
+
+### Patch Changes
+
+- c2f9e60: Resolves type issue and listen response string wrapped in text object twice
+- 0c3d117: Add workflows to agent server handlers
+- a5810ce: Add support for experimental_generateMessageId and remove it from client-js types since it's not serializable
+- Updated dependencies [396be50]
+- Updated dependencies [c3bd795]
+- Updated dependencies [da082f8]
+- Updated dependencies [a5810ce]
+  - @mastra/core@0.9.4-alpha.3
+
 ## 0.1.22-alpha.2
 
 ### Patch Changes
