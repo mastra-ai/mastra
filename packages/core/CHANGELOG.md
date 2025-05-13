@@ -1,5 +1,14 @@
 # @mastra/core
 
+## 0.9.4-alpha.3
+
+### Patch Changes
+
+- 396be50: updated mcp server routes for MCP SSE for use with hono server
+- c3bd795: [MASTRA-3358] Deprecate updateIndexById and deleteIndexById
+- da082f8: Switch from serializing json schema string as a function to a library that creates a zod object in memory from the json schema. This reduces the errors we were seeing from zod schema code that could not be serialized.
+- a5810ce: Add support for experimental_generateMessageId and remove it from client-js types since it's not serializable
+
 ## 0.9.4-alpha.2
 
 ### Patch Changes

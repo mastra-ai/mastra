@@ -1,5 +1,16 @@
 # @mastra/opensearch
 
+## 0.1.1-alpha.3
+
+### Patch Changes
+
+- c3bd795: [MASTRA-3358] Deprecate updateIndexById and deleteIndexById
+- Updated dependencies [396be50]
+- Updated dependencies [c3bd795]
+- Updated dependencies [da082f8]
+- Updated dependencies [a5810ce]
+  - @mastra/core@0.9.4-alpha.3
+
 ## 0.1.1-alpha.2
 
 ### Patch Changes

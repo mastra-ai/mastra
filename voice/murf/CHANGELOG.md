@@ -1,5 +1,15 @@
 # @mastra/voice-murf
 
+## 0.1.18-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [396be50]
+- Updated dependencies [c3bd795]
+- Updated dependencies [da082f8]
+- Updated dependencies [a5810ce]
+  - @mastra/core@0.9.4-alpha.3
+
 ## 0.1.18-alpha.2
 
 ### Patch Changes
