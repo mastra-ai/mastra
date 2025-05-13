@@ -157,10 +157,16 @@ export class MongoDBStore extends MastraStorage {
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
     try {
       const collection = await this.getCollection(TABLE_THREADS);
-      await collection.insertOne({
-        ...thread,
-        metadata: JSON.stringify(thread.metadata),
-      });
+      await collection.updateOne(
+        { id: thread.id },
+        {
+          $set: {
+            ...thread,
+            metadata: JSON.stringify(thread.metadata),
+          },
+        },
+        { upsert: true },
+      );
       return thread;
     } catch (error) {
       this.logger.error(`Error saving thread ${thread.id}: ${error}`);

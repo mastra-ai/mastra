@@ -213,6 +213,29 @@ describe('MongoDBStore', () => {
       const retrievedMessages = await store.getMessages({ threadId: thread.id });
       expect(retrievedMessages).toHaveLength(0);
     });
+
+    it('should not create duplicate threads with the same threadId but update the existing one', async () => {
+      const test = new Test(store).build();
+      await test.clearTables();
+      const thread = test.generateSampleThread();
+
+      // Save the thread for the first time
+      await store.saveThread({ thread });
+
+      // Modify the thread and save again with the same id
+      const updatedThread = { ...thread, title: 'Updated Title', metadata: { key: 'newValue' } };
+      await store.saveThread({ thread: updatedThread });
+
+      // Retrieve all threads with this id (should only be one)
+      const collection = await store['getCollection'](TABLE_THREADS);
+      const allThreads = await collection.find({ id: thread.id }).toArray();
+      expect(allThreads).toHaveLength(1);
+
+      // Retrieve the thread and check it was updated
+      const retrievedThread = await store.getThreadById({ threadId: thread.id });
+      expect(retrievedThread?.title).toBe('Updated Title');
+      expect(retrievedThread?.metadata).toEqual({ key: 'newValue' });
+    });
   });
 
   describe('Message Operations', () => {
@@ -271,7 +294,7 @@ describe('MongoDBStore', () => {
 
       // Verify order is maintained
       retrievedMessages.forEach((msg, idx) => {
-        expect((msg.content[0] as any).text).toBe((messages[idx]!.content[0] as any).text);
+        expect(((msg as any).content[0] as any).text).toBe((messages[idx]!.content[0] as any).text);
       });
     });
   });
