@@ -32,6 +32,40 @@ export type MessageListItem = {
   resourceId?: string;
 };
 
+export function toBase64String(data: Uint8Array | ArrayBuffer | string | URL): string {
+  if (typeof data === 'string') {
+    // If it's a string, assume it's already base64 or should be treated as such.
+    return data;
+  }
+
+  if (data instanceof Uint8Array) {
+    return Buffer.from(data).toString('base64');
+  }
+
+  if (data instanceof ArrayBuffer) {
+    return Buffer.from(data).toString('base64');
+  }
+
+  if (data instanceof URL) {
+    // If it's a URL, check if it's a data URL and extract the base64 data
+    if (data.protocol === 'data:') {
+      const base64Match = data.toString().match(/^data:[^;]+;base64,(.+)$/);
+      if (base64Match && base64Match[1]) {
+        return base64Match[1];
+      } else {
+        throw new Error(`Invalid data URL format: ${data}`);
+      }
+    } else {
+      // If it's a non-data URL, throw an error or handle as needed
+      throw new Error(`Unsupported URL protocol for base64 conversion: ${data.protocol}`);
+    }
+  }
+
+  throw new Error(
+    `Unsupported data type for base64 conversion: ${typeof data}. Expected Uint8Array, ArrayBuffer, string, or URL.`,
+  );
+}
+
 export class MessageList {
   private messages: MessageListItem[] = [];
   private lastCreatedAt: Date | undefined;
@@ -48,11 +82,17 @@ export class MessageList {
 
   private generateCreatedAt(): Date {
     const now = new Date();
-    if (this.lastCreatedAt && now.getTime() <= this.lastCreatedAt.getTime()) {
-      const newDate = new Date(this.lastCreatedAt.getTime() + 1);
-      this.lastCreatedAt = newDate;
-      return newDate;
+
+    if (this.lastCreatedAt) {
+      const lastTime = this.lastCreatedAt.getTime();
+
+      if (now.getTime() <= lastTime) {
+        const newDate = new Date(lastTime + 1);
+        this.lastCreatedAt = newDate;
+        return newDate;
+      }
     }
+
     this.lastCreatedAt = now;
     return now;
   }
@@ -83,6 +123,7 @@ export class MessageList {
   private mastraMessageV1ToMastraMessageV2(message: MessageType): MastraMessageV2 {
     const createdAt = message.createdAt || this.generateCreatedAt();
     const parts: UIMessage['parts'] = [];
+    const experimentalAttachments: UIMessage['experimental_attachments'] = [];
 
     if (typeof message.content === 'string') {
       parts.push({
@@ -109,7 +150,48 @@ export class MessageList {
               },
             });
             break;
-          // TODO: Handle reasoning, redacted-reasoning, and file types if necessary
+          case 'reasoning':
+            parts.push({
+              type: 'reasoning',
+              reasoning: part.text, // Assuming reasoning text is directly in text for V1
+              details: [{ type: 'text', text: part.text, signature: part.signature }], // Assuming simple text detail for V1
+            });
+            break;
+          case 'redacted-reasoning':
+            parts.push({
+              type: 'reasoning',
+              reasoning: '', // V1 might not have a separate reasoning field for redacted
+              details: [{ type: 'redacted', data: part.data }],
+            });
+            break;
+          case 'file':
+            // Mastra V1 file parts can have mimeType and data (binary/data URL, URL object, or URL string)
+            if (part.data instanceof URL && part.data.protocol !== 'data:') {
+              // If it's a non-data URL object, add it to experimental_attachments
+              experimentalAttachments.push({
+                name: part.filename, // Assuming V1 MessageType FilePart might have a name, or leave undefined
+                url: part.data.toString(),
+                contentType: part.mimeType, // Use mimeType as contentType
+              });
+            } else if (
+              typeof part.data === 'string' &&
+              (part.data.startsWith('http://') || part.data.startsWith('https://'))
+            ) {
+              // If it's a non-data URL string, add it to experimental_attachments
+              experimentalAttachments.push({
+                name: part.filename, // Assuming V1 MessageType FilePart might have a name, or leave undefined
+                url: part.data,
+                contentType: part.mimeType, // Use mimeType as contentType
+              });
+            } else {
+              // Otherwise (binary data, data URL object, or data URL string), convert to base64 and add to parts
+              parts.push({
+                type: 'file',
+                mimeType: part.mimeType,
+                data: toBase64String(part.data),
+              });
+            }
+            break;
           default:
             // Ignore unknown part types for now
             console.warn(`Ignoring unknown MessageType content part type: ${part.type}`);
@@ -118,16 +200,19 @@ export class MessageList {
       }
     }
 
+    const content: MastraMessageV2['content'] = {
+      format: 2,
+      parts,
+    };
+    if (experimentalAttachments.length) content.experimental_attachments = experimentalAttachments;
+
     return {
       id: message.id,
-      role: message.role as any, // TODO: Refine role mapping if necessary
+      role: message.role === `tool` ? `assistant` : message.role,
       createdAt,
       threadId: message.threadId,
       resourceId: message.resourceId,
-      content: {
-        format: 2,
-        parts,
-      },
+      content,
     };
   }
 
@@ -150,6 +235,7 @@ export class MessageList {
     const id = randomUUID();
     const createdAt = this.generateCreatedAt();
     const parts: UIMessage['parts'] = [];
+    const experimentalAttachments: UIMessage['experimental_attachments'] = [];
 
     if (typeof coreMessage.content === 'string' && coreMessage.content !== ``) {
       parts.push({
@@ -201,12 +287,52 @@ export class MessageList {
             });
             break;
 
-          // TODO: Handle reasoning, redacted-reasoning, and file types
+          case 'reasoning':
+            // CoreMessage reasoning parts have text and signature
+            parts.push({
+              type: 'reasoning',
+              reasoning: part.text, // Assuming text is the main reasoning content
+              details: [{ type: 'text', text: part.text, signature: part.signature }],
+            });
+            break;
+          case 'redacted-reasoning':
+            // CoreMessage redacted-reasoning parts have data
+            parts.push({
+              type: 'reasoning',
+              reasoning: '', // No text reasoning for redacted parts
+              details: [{ type: 'redacted', data: part.data }],
+            });
+            break;
+          case 'file':
+            // CoreMessage file parts can have mimeType and data (binary/data URL) or just a URL
+            if (part.data instanceof URL && part.data.protocol !== 'data:') {
+              // If it's a non-data URL, add it to experimental_attachments
+              experimentalAttachments.push({
+                name: part.filename, // Assuming CoreMessage FilePart might have a name, or leave undefined
+                url: part.data.toString(),
+                contentType: part.mimeType, // Use mimeType as contentType
+              });
+            } else {
+              // Otherwise (binary data or data URL), convert to base64 and add to parts
+              parts.push({
+                type: 'file',
+                mimeType: part.mimeType,
+                data: toBase64String(part.data),
+              });
+            }
+            break;
           default:
             throw new Error(`Found unknown CoreMessage content part type: ${part.type}`);
         }
       }
     }
+
+    const content: MastraMessageV2['content'] = {
+      format: 2,
+      parts,
+    };
+
+    if (experimentalAttachments.length) content.experimental_attachments = experimentalAttachments;
 
     return {
       id,
@@ -214,10 +340,7 @@ export class MessageList {
       createdAt,
       threadId: this.memoryInfo?.threadId,
       resourceId: this.memoryInfo?.resourceId,
-      content: {
-        format: 2,
-        parts,
-      },
+      content,
     };
   }
 

@@ -2,7 +2,7 @@ import type { CoreMessage, Message } from 'ai';
 import { describe, expect, it } from 'vitest';
 import type { MessageType } from '../memory';
 import type { MessageListItem } from './message-list';
-import { MessageList } from './message-list';
+import { MessageList, toBase64String } from './message-list';
 
 type VercelUIMessage = Message;
 type VercelCoreMessage = CoreMessage;
@@ -324,6 +324,1427 @@ describe('MessageList', () => {
           resourceId,
         },
       ]);
+    });
+
+    it('should correctly convert and add a Vercel CoreMessage with reasoning and redacted-reasoning parts', () => {
+      const inputCoreMessage = {
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: 'Step 1: Analyze', signature: 'sig-a' },
+          { type: 'redacted-reasoning', data: 'sensitive data' },
+          { type: 'text', text: 'Result of step 1.' },
+        ],
+      } satisfies VercelCoreMessage;
+
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: expect.any(String),
+          role: 'assistant',
+          createdAt: expect.any(Date),
+          originalMessage: inputCoreMessage,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'step-start' },
+              {
+                type: 'reasoning',
+                reasoning: 'Step 1: Analyze',
+                details: [{ type: 'text', text: 'Step 1: Analyze', signature: 'sig-a' }],
+              },
+              { type: 'reasoning', reasoning: '', details: [{ type: 'redacted', data: 'sensitive data' }] },
+              { type: 'text', text: 'Result of step 1.' },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
+    });
+
+    it('should correctly convert and add a Vercel CoreMessage with file parts', () => {
+      const inputCoreMessage = {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Here is an image:' },
+          { type: 'file', mimeType: 'image/png', data: new Uint8Array([1, 2, 3, 4]) },
+        ],
+      } satisfies VercelCoreMessage;
+
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: expect.any(String),
+          role: 'user',
+          createdAt: expect.any(Date),
+          originalMessage: inputCoreMessage,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'Here is an image:' },
+              { type: 'file', mimeType: 'image/png', data: 'AQIDBA==' }, // Base64 of [1, 2, 3, 4]
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
+    });
+
+    it('should correctly convert and add a Mastra V1 MessageType with reasoning and redacted-reasoning parts', () => {
+      const inputV1Message = {
+        id: 'v1-msg-3',
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: 'Analyzing data...', signature: 'sig-b' },
+          { type: 'redacted-reasoning', data: 'more sensitive data' },
+          { type: 'text', text: 'Analysis complete.' },
+        ],
+        threadId,
+        resourceId,
+        createdAt: new Date('2023-10-26T09:02:00.000Z'),
+        type: 'text',
+      } satisfies MastraMessageV1;
+
+      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: inputV1Message.id,
+          role: inputV1Message.role,
+          createdAt: inputV1Message.createdAt,
+          originalMessage: inputV1Message,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'step-start' },
+              {
+                type: 'reasoning',
+                reasoning: 'Analyzing data...',
+                details: [{ type: 'text', text: 'Analyzing data...', signature: 'sig-b' }],
+              },
+              { type: 'reasoning', reasoning: '', details: [{ type: 'redacted', data: 'more sensitive data' }] },
+              { type: 'text', text: 'Analysis complete.' },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
+    });
+
+    it('should correctly convert and add a Mastra V1 MessageType with file parts', () => {
+      const inputV1Message = {
+        id: 'v1-msg-4',
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Here is a document:' },
+          { type: 'file', mimeType: 'application/pdf', data: 'JVBERi0xLjQKJ...' }, // Dummy base64
+        ],
+        threadId,
+        resourceId,
+        createdAt: new Date('2023-10-26T09:03:00.000Z'),
+        type: 'text',
+      } satisfies MastraMessageV1;
+
+      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: inputV1Message.id,
+          role: inputV1Message.role,
+          createdAt: inputV1Message.createdAt,
+          originalMessage: inputV1Message,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'Here is a document:' },
+              { type: 'file', mimeType: 'application/pdf', data: 'JVBERi0xLjQKJ...' },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
+    });
+
+    it('should correctly handle a sequence of assistant messages with interleaved tool calls and results', () => {
+      const msg1 = {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Step 1: Call tool A' },
+          { type: 'tool-call', toolName: 'tool-a', toolCallId: 'call-a-1', args: {} },
+        ],
+      } satisfies VercelCoreMessage;
+      const msg2 = {
+        role: 'tool',
+        content: [{ type: 'tool-result', toolName: 'tool-a', toolCallId: 'call-a-1', result: 'Result A' }],
+      } satisfies VercelCoreMessage;
+      const msg3 = {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Step 2: Call tool B' },
+          { type: 'tool-call', toolName: 'tool-b', toolCallId: 'call-b-1', args: {} },
+        ],
+      } satisfies VercelCoreMessage;
+      const msg4 = {
+        role: 'tool',
+        content: [{ type: 'tool-result', toolName: 'tool-b', toolCallId: 'call-b-1', result: 'Result B' }],
+      } satisfies VercelCoreMessage;
+      const msg5 = {
+        role: 'assistant',
+        content: 'Final response.',
+      } satisfies VercelCoreMessage;
+
+      const messageSequence = [msg1, msg2, msg3, msg4, msg5];
+
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: expect.any(String),
+          role: 'assistant',
+          createdAt: expect.any(Date),
+          originalMessage: msg1,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'step-start' },
+              { type: 'text', text: 'Step 1: Call tool A' },
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolName: 'tool-a',
+                  toolCallId: 'call-a-1',
+                  args: {},
+                  result: 'Result A',
+                },
+              },
+              { type: 'text', text: 'Step 2: Call tool B' },
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolName: 'tool-b',
+                  toolCallId: 'call-b-1',
+                  args: {},
+                  result: 'Result B',
+                },
+              },
+              { type: 'text', text: 'Final response.' },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
+    });
+
+    it('should correctly handle a sequence of assistant messages with interleaved tool calls and results and a final user message', () => {
+      const msg1 = {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Step 1: Call tool A' },
+          { type: 'tool-call', toolName: 'tool-a', toolCallId: 'call-a-1', args: {} },
+        ],
+      } satisfies VercelCoreMessage;
+      const msg2 = {
+        role: 'tool',
+        content: [{ type: 'tool-result', toolName: 'tool-a', toolCallId: 'call-a-1', result: 'Result A' }],
+      } satisfies VercelCoreMessage;
+      const msg3 = {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Step 2: Call tool B' },
+          { type: 'tool-call', toolName: 'tool-b', toolCallId: 'call-b-1', args: {} },
+        ],
+      } satisfies VercelCoreMessage;
+      const msg4 = {
+        role: 'tool',
+        content: [{ type: 'tool-result', toolName: 'tool-b', toolCallId: 'call-b-1', result: 'Result B' }],
+      } satisfies VercelCoreMessage;
+      const msg5 = {
+        role: 'assistant',
+        content: 'Final response.',
+      } satisfies VercelCoreMessage;
+      const msg6 = {
+        role: 'user',
+        content: 'Thanks!',
+      } satisfies VercelCoreMessage;
+
+      const messageSequence = [msg1, msg2, msg3, msg4, msg5, msg6];
+
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: expect.any(String),
+          role: 'assistant',
+          createdAt: expect.any(Date),
+          originalMessage: msg1,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'step-start' },
+              { type: 'text', text: 'Step 1: Call tool A' },
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolName: 'tool-a',
+                  toolCallId: 'call-a-1',
+                  args: {},
+                  result: 'Result A',
+                },
+              },
+              { type: 'text', text: 'Step 2: Call tool B' },
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolName: 'tool-b',
+                  toolCallId: 'call-b-1',
+                  args: {},
+                  result: 'Result B',
+                },
+              },
+              { type: 'text', text: 'Final response.' },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+        {
+          id: expect.any(String),
+          role: 'user',
+          createdAt: expect.any(Date),
+          originalMessage: msg6,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'Thanks!' }],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
+    });
+
+    it('should correctly convert and add a Vercel CoreMessage with reasoning and redacted-reasoning parts', () => {
+      const inputCoreMessage = {
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: 'Step 1: Analyze', signature: 'sig-a' },
+          { type: 'redacted-reasoning', data: 'sensitive data' },
+          { type: 'text', text: 'Result of step 1.' },
+        ],
+      } satisfies VercelCoreMessage;
+
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: expect.any(String),
+          role: 'assistant',
+          createdAt: expect.any(Date),
+          originalMessage: inputCoreMessage,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'step-start' },
+              {
+                type: 'reasoning',
+                reasoning: 'Step 1: Analyze',
+                details: [{ type: 'text', text: 'Step 1: Analyze', signature: 'sig-a' }],
+              },
+              { type: 'reasoning', reasoning: '', details: [{ type: 'redacted', data: 'sensitive data' }] },
+              { type: 'text', text: 'Result of step 1.' },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
+    });
+
+    it('should correctly convert and add a Vercel CoreMessage with file parts', () => {
+      const inputCoreMessage = {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Here is an image:' },
+          { type: 'file', mimeType: 'image/png', data: new Uint8Array([1, 2, 3, 4]) },
+        ],
+      } satisfies VercelCoreMessage;
+
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: expect.any(String),
+          role: 'user',
+          createdAt: expect.any(Date),
+          originalMessage: inputCoreMessage,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'Here is an image:' },
+              { type: 'file', mimeType: 'image/png', data: 'AQIDBA==' }, // Base64 of [1, 2, 3, 4]
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
+    });
+
+    it('should correctly convert and add a Mastra V1 MessageType with reasoning and redacted-reasoning parts', () => {
+      const inputV1Message = {
+        id: 'v1-msg-3',
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: 'Analyzing data...', signature: 'sig-b' },
+          { type: 'redacted-reasoning', data: 'more sensitive data' },
+          { type: 'text', text: 'Analysis complete.' },
+        ],
+        threadId,
+        resourceId,
+        createdAt: new Date('2023-10-26T09:02:00.000Z'),
+        type: 'text',
+      } satisfies MastraMessageV1;
+
+      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: inputV1Message.id,
+          role: inputV1Message.role,
+          createdAt: inputV1Message.createdAt,
+          originalMessage: inputV1Message,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'step-start' },
+              {
+                type: 'reasoning',
+                reasoning: 'Analyzing data...',
+                details: [{ type: 'text', text: 'Analyzing data...', signature: 'sig-b' }],
+              },
+              { type: 'reasoning', reasoning: '', details: [{ type: 'redacted', data: 'more sensitive data' }] },
+              { type: 'text', text: 'Analysis complete.' },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
+    });
+
+    it('should correctly convert and add a Mastra V1 MessageType with file parts', () => {
+      const inputV1Message = {
+        id: 'v1-msg-4',
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Here is a document:' },
+          { type: 'file', mimeType: 'application/pdf', data: 'JVBERi0xLjQKJ...' }, // Dummy base64
+        ],
+        threadId,
+        resourceId,
+        createdAt: new Date('2023-10-26T09:03:00.000Z'),
+        type: 'text',
+      } satisfies MastraMessageV1;
+
+      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: inputV1Message.id,
+          role: inputV1Message.role,
+          createdAt: inputV1Message.createdAt,
+          originalMessage: inputV1Message,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'Here is a document:' },
+              { type: 'file', mimeType: 'application/pdf', data: 'JVBERi0xLjQKJ...' },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
+    });
+
+    it('should correctly handle a sequence of assistant messages with interleaved tool calls and results', () => {
+      const msg1 = {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Step 1: Call tool A' },
+          { type: 'tool-call', toolName: 'tool-a', toolCallId: 'call-a-1', args: {} },
+        ],
+      } satisfies VercelCoreMessage;
+      const msg2 = {
+        role: 'tool',
+        content: [{ type: 'tool-result', toolName: 'tool-a', toolCallId: 'call-a-1', result: 'Result A' }],
+      } satisfies VercelCoreMessage;
+      const msg3 = {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Step 2: Call tool B' },
+          { type: 'tool-call', toolName: 'tool-b', toolCallId: 'call-b-1', args: {} },
+        ],
+      } satisfies VercelCoreMessage;
+      const msg4 = {
+        role: 'tool',
+        content: [{ type: 'tool-result', toolName: 'tool-b', toolCallId: 'call-b-1', result: 'Result B' }],
+      } satisfies VercelCoreMessage;
+      const msg5 = {
+        role: 'assistant',
+        content: 'Final response.',
+      } satisfies VercelCoreMessage;
+
+      const messageSequence = [msg1, msg2, msg3, msg4, msg5];
+
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: expect.any(String),
+          role: 'assistant',
+          createdAt: expect.any(Date),
+          originalMessage: msg1,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'step-start' },
+              { type: 'text', text: 'Step 1: Call tool A' },
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolName: 'tool-a',
+                  toolCallId: 'call-a-1',
+                  args: {},
+                  result: 'Result A',
+                },
+              },
+              { type: 'text', text: 'Step 2: Call tool B' },
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolName: 'tool-b',
+                  toolCallId: 'call-b-1',
+                  args: {},
+                  result: 'Result B',
+                },
+              },
+              { type: 'text', text: 'Final response.' },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
+    });
+
+    it('should correctly handle a sequence of assistant messages with interleaved tool calls and results and a final user message', () => {
+      const msg1 = {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Step 1: Call tool A' },
+          { type: 'tool-call', toolName: 'tool-a', toolCallId: 'call-a-1', args: {} },
+        ],
+      } satisfies VercelCoreMessage;
+      const msg2 = {
+        role: 'tool',
+        content: [{ type: 'tool-result', toolName: 'tool-a', toolCallId: 'call-a-1', result: 'Result A' }],
+      } satisfies VercelCoreMessage;
+      const msg3 = {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Step 2: Call tool B' },
+          { type: 'tool-call', toolName: 'tool-b', toolCallId: 'call-b-1', args: {} },
+        ],
+      } satisfies VercelCoreMessage;
+      const msg4 = {
+        role: 'tool',
+        content: [{ type: 'tool-result', toolName: 'tool-b', toolCallId: 'call-b-1', result: 'Result B' }],
+      } satisfies VercelCoreMessage;
+      const msg5 = {
+        role: 'assistant',
+        content: 'Final response.',
+      } satisfies VercelCoreMessage;
+      const msg6 = {
+        role: 'user',
+        content: 'Thanks!',
+      } satisfies VercelCoreMessage;
+
+      const messageSequence = [msg1, msg2, msg3, msg4, msg5, msg6];
+
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: expect.any(String),
+          role: 'assistant',
+          createdAt: expect.any(Date),
+          originalMessage: msg1,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'step-start' },
+              { type: 'text', text: 'Step 1: Call tool A' },
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolName: 'tool-a',
+                  toolCallId: 'call-a-1',
+                  args: {},
+                  result: 'Result A',
+                },
+              },
+              { type: 'text', text: 'Step 2: Call tool B' },
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolName: 'tool-b',
+                  toolCallId: 'call-b-1',
+                  args: {},
+                  result: 'Result B',
+                },
+              },
+              { type: 'text', text: 'Final response.' },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+        {
+          id: expect.any(String),
+          role: 'user',
+          createdAt: expect.any(Date),
+          originalMessage: msg6,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'Thanks!' }],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
+    });
+
+    it('should correctly convert and add a Vercel CoreMessage with reasoning and redacted-reasoning parts', () => {
+      const inputCoreMessage = {
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: 'Step 1: Analyze', signature: 'sig-a' },
+          { type: 'redacted-reasoning', data: 'sensitive data' },
+          { type: 'text', text: 'Result of step 1.' },
+        ],
+      } satisfies VercelCoreMessage;
+
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: expect.any(String),
+          role: 'assistant',
+          createdAt: expect.any(Date),
+          originalMessage: inputCoreMessage,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'step-start' },
+              {
+                type: 'reasoning',
+                reasoning: 'Step 1: Analyze',
+                details: [{ type: 'text', text: 'Step 1: Analyze', signature: 'sig-a' }],
+              },
+              { type: 'reasoning', reasoning: '', details: [{ type: 'redacted', data: 'sensitive data' }] },
+              { type: 'text', text: 'Result of step 1.' },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
+    });
+
+    it('should correctly convert and add a Vercel CoreMessage with file parts', () => {
+      const inputCoreMessage = {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Here is an image:' },
+          { type: 'file', mimeType: 'image/png', data: new Uint8Array([1, 2, 3, 4]) },
+        ],
+      } satisfies VercelCoreMessage;
+
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: expect.any(String),
+          role: 'user',
+          createdAt: expect.any(Date),
+          originalMessage: inputCoreMessage,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'Here is an image:' },
+              { type: 'file', mimeType: 'image/png', data: 'AQIDBA==' }, // Base64 of [1, 2, 3, 4]
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
+    });
+
+    it('should correctly convert and add a Mastra V1 MessageType with reasoning and redacted-reasoning parts', () => {
+      const inputV1Message = {
+        id: 'v1-msg-3',
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: 'Analyzing data...', signature: 'sig-b' },
+          { type: 'redacted-reasoning', data: 'more sensitive data' },
+          { type: 'text', text: 'Analysis complete.' },
+        ],
+        threadId,
+        resourceId,
+        createdAt: new Date('2023-10-26T09:02:00.000Z'),
+        type: 'text',
+      } satisfies MastraMessageV1;
+
+      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: inputV1Message.id,
+          role: inputV1Message.role,
+          createdAt: inputV1Message.createdAt,
+          originalMessage: inputV1Message,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'step-start' },
+              {
+                type: 'reasoning',
+                reasoning: 'Analyzing data...',
+                details: [{ type: 'text', text: 'Analyzing data...', signature: 'sig-b' }],
+              },
+              { type: 'reasoning', reasoning: '', details: [{ type: 'redacted', data: 'more sensitive data' }] },
+              { type: 'text', text: 'Analysis complete.' },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
+    });
+
+    it('should correctly convert and add a Mastra V1 MessageType with file parts', () => {
+      const inputV1Message = {
+        id: 'v1-msg-4',
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Here is a document:' },
+          { type: 'file', mimeType: 'application/pdf', data: 'JVBERi0xLjQKJ...' }, // Dummy base64
+        ],
+        threadId,
+        resourceId,
+        createdAt: new Date('2023-10-26T09:03:00.000Z'),
+        type: 'text',
+      } satisfies MastraMessageV1;
+
+      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: inputV1Message.id,
+          role: inputV1Message.role,
+          createdAt: inputV1Message.createdAt,
+          originalMessage: inputV1Message,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'Here is a document:' },
+              { type: 'file', mimeType: 'application/pdf', data: 'JVBERi0xLjQKJ...' },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
+    });
+
+    it('should correctly handle a sequence of assistant messages with interleaved tool calls and results', () => {
+      const msg1 = {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Step 1: Call tool A' },
+          { type: 'tool-call', toolName: 'tool-a', toolCallId: 'call-a-1', args: {} },
+        ],
+      } satisfies VercelCoreMessage;
+      const msg2 = {
+        role: 'tool',
+        content: [{ type: 'tool-result', toolName: 'tool-a', toolCallId: 'call-a-1', result: 'Result A' }],
+      } satisfies VercelCoreMessage;
+      const msg3 = {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Step 2: Call tool B' },
+          { type: 'tool-call', toolName: 'tool-b', toolCallId: 'call-b-1', args: {} },
+        ],
+      } satisfies VercelCoreMessage;
+      const msg4 = {
+        role: 'tool',
+        content: [{ type: 'tool-result', toolName: 'tool-b', toolCallId: 'call-b-1', result: 'Result B' }],
+      } satisfies VercelCoreMessage;
+      const msg5 = {
+        role: 'assistant',
+        content: 'Final response.',
+      } satisfies VercelCoreMessage;
+
+      const messageSequence = [msg1, msg2, msg3, msg4, msg5];
+
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: expect.any(String),
+          role: 'assistant',
+          createdAt: expect.any(Date),
+          originalMessage: msg1,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'step-start' },
+              { type: 'text', text: 'Step 1: Call tool A' },
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolName: 'tool-a',
+                  toolCallId: 'call-a-1',
+                  args: {},
+                  result: 'Result A',
+                },
+              },
+              { type: 'text', text: 'Step 2: Call tool B' },
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolName: 'tool-b',
+                  toolCallId: 'call-b-1',
+                  args: {},
+                  result: 'Result B',
+                },
+              },
+              { type: 'text', text: 'Final response.' },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
+    });
+
+    it('should correctly handle a sequence of assistant messages with interleaved tool calls and results and a final user message', () => {
+      const msg1 = {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Step 1: Call tool A' },
+          { type: 'tool-call', toolName: 'tool-a', toolCallId: 'call-a-1', args: {} },
+        ],
+      } satisfies VercelCoreMessage;
+      const msg2 = {
+        role: 'tool',
+        content: [{ type: 'tool-result', toolName: 'tool-a', toolCallId: 'call-a-1', result: 'Result A' }],
+      } satisfies VercelCoreMessage;
+      const msg3 = {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Step 2: Call tool B' },
+          { type: 'tool-call', toolName: 'tool-b', toolCallId: 'call-b-1', args: {} },
+        ],
+      } satisfies VercelCoreMessage;
+      const msg4 = {
+        role: 'tool',
+        content: [{ type: 'tool-result', toolName: 'tool-b', toolCallId: 'call-b-1', result: 'Result B' }],
+      } satisfies VercelCoreMessage;
+      const msg5 = {
+        role: 'assistant',
+        content: 'Final response.',
+      } satisfies VercelCoreMessage;
+      const msg6 = {
+        role: 'user',
+        content: 'Thanks!',
+      } satisfies VercelCoreMessage;
+
+      const messageSequence = [msg1, msg2, msg3, msg4, msg5, msg6];
+
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: expect.any(String),
+          role: 'assistant',
+          createdAt: expect.any(Date),
+          originalMessage: msg1,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'step-start' },
+              { type: 'text', text: 'Step 1: Call tool A' },
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolName: 'tool-a',
+                  toolCallId: 'call-a-1',
+                  args: {},
+                  result: 'Result A',
+                },
+              },
+              { type: 'text', text: 'Step 2: Call tool B' },
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolName: 'tool-b',
+                  toolCallId: 'call-b-1',
+                  args: {},
+                  result: 'Result B',
+                },
+              },
+              { type: 'text', text: 'Final response.' },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+        {
+          id: expect.any(String),
+          role: 'user',
+          createdAt: expect.any(Date),
+          originalMessage: msg6,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'Thanks!' }],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
+    });
+
+    it('should correctly convert and add a Vercel CoreMessage with reasoning and redacted-reasoning parts', () => {
+      const inputCoreMessage = {
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: 'Step 1: Analyze', signature: 'sig-a' },
+          { type: 'redacted-reasoning', data: 'sensitive data' },
+          { type: 'text', text: 'Result of step 1.' },
+        ],
+      } satisfies VercelCoreMessage;
+
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: expect.any(String),
+          role: 'assistant',
+          createdAt: expect.any(Date),
+          originalMessage: inputCoreMessage,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'step-start' },
+              {
+                type: 'reasoning',
+                reasoning: 'Step 1: Analyze',
+                details: [{ type: 'text', text: 'Step 1: Analyze', signature: 'sig-a' }],
+              },
+              { type: 'reasoning', reasoning: '', details: [{ type: 'redacted', data: 'sensitive data' }] },
+              { type: 'text', text: 'Result of step 1.' },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
+    });
+
+    it('should correctly convert and add a Vercel CoreMessage with file parts', () => {
+      const inputCoreMessage = {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Here is an image:' },
+          { type: 'file', mimeType: 'image/png', data: new Uint8Array([1, 2, 3, 4]) },
+        ],
+      } satisfies VercelCoreMessage;
+
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: expect.any(String),
+          role: 'user',
+          createdAt: expect.any(Date),
+          originalMessage: inputCoreMessage,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'Here is an image:' },
+              { type: 'file', mimeType: 'image/png', data: 'AQIDBA==' },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
+    });
+
+    it('should correctly convert and add a Mastra V1 MessageType with reasoning and redacted-reasoning parts', () => {
+      const inputV1Message = {
+        id: 'v1-msg-3',
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: 'Analyzing data...', signature: 'sig-b' },
+          { type: 'redacted-reasoning', data: 'more sensitive data' },
+          { type: 'text', text: 'Analysis complete.' },
+        ],
+        threadId,
+        resourceId,
+        createdAt: new Date('2023-10-26T09:02:00.000Z'),
+        type: 'text',
+      } satisfies MastraMessageV1;
+
+      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: inputV1Message.id,
+          role: inputV1Message.role,
+          createdAt: inputV1Message.createdAt,
+          originalMessage: inputV1Message,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'step-start' },
+              {
+                type: 'reasoning',
+                reasoning: 'Analyzing data...',
+                details: [{ type: 'text', text: 'Analyzing data...', signature: 'sig-b' }],
+              },
+              { type: 'reasoning', reasoning: '', details: [{ type: 'redacted', data: 'more sensitive data' }] },
+              { type: 'text', text: 'Analysis complete.' },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
+    });
+
+    it('should correctly convert and add a Mastra V1 MessageType with file parts', () => {
+      const inputV1Message = {
+        id: 'v1-msg-4',
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Here is a document:' },
+          { type: 'file', mimeType: 'application/pdf', data: 'JVBERi0xLjQKJ...' }, // Dummy base64
+        ],
+        threadId,
+        resourceId,
+        createdAt: new Date('2023-10-26T09:03:00.000Z'),
+        type: 'text',
+      } satisfies MastraMessageV1;
+
+      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: inputV1Message.id,
+          role: inputV1Message.role,
+          createdAt: inputV1Message.createdAt,
+          originalMessage: inputV1Message,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'Here is a document:' },
+              { type: 'file', mimeType: 'application/pdf', data: 'JVBERi0xLjQKJ...' },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
+    });
+
+    it('should correctly handle a sequence of assistant messages with interleaved tool calls and results', () => {
+      const msg1 = {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Step 1: Call tool A' },
+          { type: 'tool-call', toolName: 'tool-a', toolCallId: 'call-a-1', args: {} },
+        ],
+      } satisfies VercelCoreMessage;
+      const msg2 = {
+        role: 'tool',
+        content: [{ type: 'tool-result', toolName: 'tool-a', toolCallId: 'call-a-1', result: 'Result A' }],
+      } satisfies VercelCoreMessage;
+      const msg3 = {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Step 2: Call tool B' },
+          { type: 'tool-call', toolName: 'tool-b', toolCallId: 'call-b-1', args: {} },
+        ],
+      } satisfies VercelCoreMessage;
+      const msg4 = {
+        role: 'tool',
+        content: [{ type: 'tool-result', toolName: 'tool-b', toolCallId: 'call-b-1', result: 'Result B' }],
+      } satisfies VercelCoreMessage;
+      const msg5 = {
+        role: 'assistant',
+        content: 'Final response.',
+      } satisfies VercelCoreMessage;
+
+      const messageSequence = [msg1, msg2, msg3, msg4, msg5];
+
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: expect.any(String),
+          role: 'assistant',
+          createdAt: expect.any(Date),
+          originalMessage: msg1,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'step-start' },
+              { type: 'text', text: 'Step 1: Call tool A' },
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolName: 'tool-a',
+                  toolCallId: 'call-a-1',
+                  args: {},
+                  result: 'Result A',
+                },
+              },
+              { type: 'text', text: 'Step 2: Call tool B' },
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolName: 'tool-b',
+                  toolCallId: 'call-b-1',
+                  args: {},
+                  result: 'Result B',
+                },
+              },
+              { type: 'text', text: 'Final response.' },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
+    });
+
+    it('should correctly handle a sequence of assistant messages with interleaved tool calls and results and a final user message', () => {
+      const msg1 = {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Step 1: Call tool A' },
+          { type: 'tool-call', toolName: 'tool-a', toolCallId: 'call-a-1', args: {} },
+        ],
+      } satisfies VercelCoreMessage;
+      const msg2 = {
+        role: 'tool',
+        content: [{ type: 'tool-result', toolName: 'tool-a', toolCallId: 'call-a-1', result: 'Result A' }],
+      } satisfies VercelCoreMessage;
+      const msg3 = {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Step 2: Call tool B' },
+          { type: 'tool-call', toolName: 'tool-b', toolCallId: 'call-b-1', args: {} },
+        ],
+      } satisfies VercelCoreMessage;
+      const msg4 = {
+        role: 'tool',
+        content: [{ type: 'tool-result', toolName: 'tool-b', toolCallId: 'call-b-1', result: 'Result B' }],
+      } satisfies VercelCoreMessage;
+      const msg5 = {
+        role: 'assistant',
+        content: 'Final response.',
+      } satisfies VercelCoreMessage;
+      const msg6 = {
+        role: 'user',
+        content: 'Thanks!',
+      } satisfies VercelCoreMessage;
+
+      const messageSequence = [msg1, msg2, msg3, msg4, msg5, msg6];
+
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: expect.any(String),
+          role: 'assistant',
+          createdAt: expect.any(Date),
+          originalMessage: msg1,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'step-start' },
+              { type: 'text', text: 'Step 1: Call tool A' },
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolName: 'tool-a',
+                  toolCallId: 'call-a-1',
+                  args: {},
+                  result: 'Result A',
+                },
+              },
+              { type: 'text', text: 'Step 2: Call tool B' },
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolName: 'tool-b',
+                  toolCallId: 'call-b-1',
+                  args: {},
+                  result: 'Result B',
+                },
+              },
+              { type: 'text', text: 'Final response.' },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+        {
+          id: expect.any(String),
+          role: 'user',
+          createdAt: expect.any(Date),
+          originalMessage: msg6,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'Thanks!' }],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
+    });
+
+    it('should correctly convert a Mastra V1 MessageType with a file part containing a non-data URL', () => {
+      const inputV1Message = {
+        id: 'v1-msg-url-1',
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Here is an image URL:' },
+          {
+            type: 'file',
+            mimeType: 'image/jpeg',
+            data: new URL('https://example.com/image.jpg'),
+            filename: 'image.jpg',
+          },
+        ],
+        threadId,
+        resourceId,
+        createdAt: new Date('2023-10-26T09:04:00.000Z'),
+        type: 'text',
+      } satisfies MastraMessageV1;
+
+      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: inputV1Message.id,
+          role: inputV1Message.role,
+          createdAt: inputV1Message.createdAt,
+          originalMessage: inputV1Message,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'Here is an image URL:' }],
+            experimental_attachments: [
+              {
+                name: 'image.jpg',
+                url: 'https://example.com/image.jpg',
+                contentType: 'image/jpeg',
+              },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
+    });
+
+    it('should correctly convert a Vercel CoreMessage with a file part containing a non-data URL', () => {
+      const inputCoreMessage = {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Here is another image URL:' },
+          {
+            type: 'file',
+            mimeType: 'image/png',
+            data: new URL('https://example.com/another-image.png'),
+            filename: 'another-image.png',
+          },
+        ],
+      } satisfies VercelCoreMessage;
+
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, `new-message`);
+
+      expect(list.getMessages()).toEqual([
+        {
+          id: expect.any(String),
+          role: 'user',
+          createdAt: expect.any(Date),
+          originalMessage: inputCoreMessage,
+          contentSource: 'new-message',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'Here is another image URL:' }],
+            experimental_attachments: [
+              {
+                name: 'another-image.png',
+                url: 'https://example.com/another-image.png',
+                contentType: 'image/png',
+              },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MessageListItem,
+      ]);
+    });
+
+    it('should correctly preserve experimental_attachments from a Vercel UIMessage', () => {
+      const input = {
+        id: 'ui-msg-attachments-1',
+        role: 'user',
+        content: 'Message with attachment',
+        createdAt: new Date('2023-10-26T10:05:00.000Z'),
+        parts: [{ type: 'text', text: 'Message with attachment' }],
+        experimental_attachments: [
+          {
+            name: 'report.pdf',
+            url: 'https://example.com/files/report.pdf',
+            contentType: 'application/pdf',
+          },
+        ],
+      } satisfies VercelUIMessage;
+
+      const list = new MessageList({ threadId, resourceId }).add(input, 'new-message');
+
+      const messages = list.getMessages();
+      expect(messages.length).toBe(1);
+
+      expect(messages[0]).toEqual({
+        id: input.id,
+        role: 'user',
+        createdAt: input.createdAt,
+        originalMessage: input,
+        contentSource: 'new-message',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Message with attachment' }],
+          experimental_attachments: [
+            {
+              name: 'report.pdf',
+              url: 'https://example.com/files/report.pdf',
+              contentType: 'application/pdf',
+            },
+          ],
+        },
+        threadId,
+        resourceId,
+      } satisfies MessageListItem);
+    });
+
+    describe('toBase64String', () => {
+      it('should return the string itself if the input is a string', () => {
+        const input = 'alreadybase64==';
+        expect(toBase64String(input)).toBe('alreadybase64==');
+      });
+
+      it('should convert Uint8Array to base64 string', () => {
+        const input = new Uint8Array([1, 2, 3, 4]);
+        expect(toBase64String(input)).toBe('AQIDBA==');
+      });
+
+      it('should convert ArrayBuffer to base64 string', () => {
+        const input = new Uint8Array([5, 6, 7, 8]).buffer;
+        expect(toBase64String(input)).toBe('BQYHCA==');
+      });
+
+      it('should extract base64 from a data URL', () => {
+        const input = new URL(
+          'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+        );
+        expect(toBase64String(input)).toBe(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+        );
+      });
+
+      it('should throw an error for invalid data URL format', () => {
+        const input = new URL('data:image/png,invaliddata');
+        expect(() => toBase64String(input)).toThrow('Invalid data URL format');
+      });
+
+      it('should throw an error for non-data URLs', () => {
+        const input = new URL('https://example.com/image.png');
+        expect(() => toBase64String(input)).toThrow('Unsupported URL protocol for base64 conversion: https:');
+      });
+
+      it('should throw an error for unsupported data types', () => {
+        const input = 12345 as any; // Test with a number
+        expect(() => toBase64String(input)).toThrow('Unsupported data type for base64 conversion: number');
+      });
     });
   });
 });
