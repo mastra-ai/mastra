@@ -3,26 +3,6 @@ import type { Context } from 'hono';
 import type { ToolsInput } from '../agent';
 import type { InternalCoreTool } from '../tools';
 
-/**
- * Configuration options for an MCP server
- */
-export interface MCPServerConfig {
-  /**
-   * Name of the MCP server
-   */
-  name: string;
-
-  /**
-   * Version of the MCP server
-   */
-  version: string;
-
-  /**
-   * Tools to register with the MCP server
-   */
-  tools: ToolsInput;
-}
-
 export type ConvertedTool = {
   name: string;
   description?: string;
