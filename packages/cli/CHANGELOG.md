@@ -1,5 +1,11 @@
 # mastra
 
+## 0.6.3-alpha.5
+
+### Patch Changes
+
+- a3435f8: Add node engine to create-mastra project package.json
+
 ## 0.6.3-alpha.4
 
 ### Patch Changes
