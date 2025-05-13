@@ -228,6 +228,9 @@ export async function getMessagesHandler({
 }: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId'> & {
   limit?: number;
 }) {
+  if (limit !== undefined && (!Number.isInteger(limit) || limit <= 0)) {
+    throw new HTTPException(400, { message: 'Invalid limit: must be a positive integer' });
+  }
   try {
     validateBody({ threadId });
 

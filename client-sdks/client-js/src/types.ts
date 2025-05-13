@@ -175,6 +175,9 @@ export interface UpdateMemoryThreadParams {
 }
 
 export interface GetMemoryThreadMessagesParams {
+  /**
+   * Limit the number of messages to retrieve (default: 40)
+   */
   limit?: number;
 }
 
