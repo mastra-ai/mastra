@@ -1,4 +1,5 @@
 import { MastraBase } from '@mastra/core/base';
+import type { RuntimeContext } from '@mastra/core/di';
 import { createTool } from '@mastra/core/tools';
 import { isZodType } from '@mastra/core/utils';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -27,6 +28,7 @@ export interface LogMessage {
   timestamp: Date;
   serverName: string;
   details?: Record<string, any>;
+  runtimeContext?: RuntimeContext | null;
 }
 
 export type LogHandler = (logMessage: LogMessage) => void;
@@ -107,6 +109,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private enableServerLogs?: boolean;
   private serverConfig: MastraMCPServerDefinition;
   private transport?: Transport;
+  private currentOperationContext: RuntimeContext | null = null;
 
   constructor({
     name,
@@ -159,6 +162,7 @@ export class InternalMastraMCPClient extends MastraBase {
         timestamp: new Date(),
         serverName: this.name,
         details,
+        runtimeContext: this.currentOperationContext,
       });
     }
   }
@@ -365,7 +369,9 @@ export class InternalMastraMCPClient extends MastraBase {
           id: `${this.name}_${tool.name}`,
           description: tool.description || '',
           inputSchema: this.convertInputSchema(tool.inputSchema),
-          execute: async ({ context }) => {
+          execute: async ({ context, runtimeContext }: { context: any; runtimeContext?: RuntimeContext | null }) => {
+            const previousContext = this.currentOperationContext;
+            this.currentOperationContext = runtimeContext || null; // Set current context
             try {
               this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: context });
               const res = await this.client.callTool(
@@ -386,6 +392,8 @@ export class InternalMastraMCPClient extends MastraBase {
                 toolArgs: context,
               });
               throw e;
+            } finally {
+              this.currentOperationContext = previousContext; // Restore previous context
             }
           },
         });

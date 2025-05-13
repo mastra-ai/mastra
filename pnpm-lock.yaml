@@ -1430,6 +1430,9 @@ importers:
       '@ai-sdk/anthropic':
         specifier: ^1.1.15
         version: 1.2.11(zod@3.24.4)
+      '@ai-sdk/openai':
+        specifier: ^1.3.22
+        version: 1.3.22(zod@3.24.4)
       '@hono/node-server':
         specifier: ^1.13.8
         version: 1.14.1(hono@4.7.7)
