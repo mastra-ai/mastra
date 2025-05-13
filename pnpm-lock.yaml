@@ -970,6 +970,9 @@ importers:
       '@opentelemetry/semantic-conventions':
         specifier: ^1.30.0
         version: 1.30.0
+      '@sindresorhus/slugify':
+        specifier: ^2.2.1
+        version: 2.2.1
       ai:
         specifier: ^4.2.2
         version: 4.3.15(react@19.1.0)(zod@3.24.4)
