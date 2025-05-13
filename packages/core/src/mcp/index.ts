@@ -77,8 +77,6 @@ export abstract class MCPServerBase extends MastraBase {
    */
   setId(id: string) {
     if (this.idWasSet) {
-      if (this._id !== id) {
-      }
       return;
     }
     this._id = id;
