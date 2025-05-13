@@ -142,6 +142,7 @@
     "radash": "^12.1.0",
     "sift": "^17.1.3",
     "xstate": "^5.19.2",
+    "zod-from-json-schema": "^0.0.5",
     "zod-to-json-schema": "^3.24.5"
   },
   "peerDependencies": {

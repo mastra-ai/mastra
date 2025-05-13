@@ -1,6 +1,8 @@
 import { spawn } from 'child_process';
 import path from 'path';
 import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll, vi } from 'vitest';
+import { allTools, mcpServerName } from './__fixtures__/fire-crawl-complex-schema';
+import type { LogHandler } from './client';
 import { MCPClient } from './configuration';
 
 vi.setConfig({ testTimeout: 80000, hookTimeout: 80000 });
@@ -355,6 +357,41 @@ describe('MCPClient', () => {
       // Quick server should timeout
       await expect(mixedConfig.getTools()).rejects.toThrow(/Request timed out/);
       await mixedConfig.disconnect();
+    });
+  });
+
+  describe('Schema Handling', () => {
+    let complexClient: MCPClient;
+    let mockLogHandler: LogHandler & ReturnType<typeof vi.fn>;
+
+    beforeEach(async () => {
+      mockLogHandler = vi.fn();
+
+      complexClient = new MCPClient({
+        id: 'complex-schema-test-client-log-handler-firecrawl',
+        servers: {
+          'firecrawl-mcp': {
+            command: 'npx',
+            args: ['-y', 'tsx', path.join(__dirname, '__fixtures__/fire-crawl-complex-schema.ts')],
+            logger: mockLogHandler,
+          },
+        },
+      });
+    });
+
+    afterEach(async () => {
+      mockLogHandler.mockClear();
+      await complexClient?.disconnect().catch(() => {});
+    });
+
+    it('should process tools from firecrawl-mcp without crashing', async () => {
+      const tools = await complexClient.getTools();
+
+      Object.keys(allTools).forEach(toolName => {
+        expect(tools).toHaveProperty(`${mcpServerName.replace(`-fixture`, ``)}_${toolName}`);
+      });
+
+      expect(mockLogHandler.mock.calls.length).toBeGreaterThan(0);
     });
   });
 });
