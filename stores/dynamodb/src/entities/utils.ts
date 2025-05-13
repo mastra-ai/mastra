@@ -47,7 +47,7 @@ export const baseAttributes = {
     get: (value?: string) => {
       if (value) {
         try {
-          return value;
+          return JSON.parse(value);
         } catch (e) {
           // If parsing fails, return the original string
           return value;
