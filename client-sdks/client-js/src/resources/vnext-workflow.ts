@@ -1,4 +1,4 @@
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type {
   ClientOptions,
   GetVNextWorkflowResponse,
