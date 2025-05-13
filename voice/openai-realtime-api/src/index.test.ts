@@ -26,9 +26,7 @@ describe('OpenAIRealtimeVoice', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     voice = new OpenAIRealtimeVoice({
-      chatModel: {
-        apiKey: 'test-api-key',
-      },
+      apiKey: 'test-api-key',
     });
     mockClient = (voice as any).client;
   });
