@@ -20,7 +20,7 @@
     "nodemon": "^3.1.9",
     "ts-node": "^10.9.2",
     "tsx": "^4.19.3",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.3"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "latest",
