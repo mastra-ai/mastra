@@ -1,6 +1,11 @@
 import type { StorageThreadType } from '@mastra/core';
 
-import type { GetMemoryThreadMessagesResponse, ClientOptions, UpdateMemoryThreadParams } from '../types';
+import type {
+  GetMemoryThreadMessagesResponse,
+  ClientOptions,
+  UpdateMemoryThreadParams,
+  GetMemoryThreadMessagesParams,
+} from '../types';
 
 import { BaseResource } from './base';
 
@@ -45,9 +50,14 @@ export class MemoryThread extends BaseResource {
 
   /**
    * Retrieves messages associated with the thread
+   * @param params - Optional parameters including limit for number of messages to retrieve
    * @returns Promise containing thread messages and UI messages
    */
-  getMessages(): Promise<GetMemoryThreadMessagesResponse> {
-    return this.request(`/api/memory/threads/${this.threadId}/messages?agentId=${this.agentId}`);
+  getMessages(params?: GetMemoryThreadMessagesParams): Promise<GetMemoryThreadMessagesResponse> {
+    const query = new URLSearchParams({
+      agentId: this.agentId,
+      ...(params?.limit ? { limit: params.limit.toString() } : {}),
+    });
+    return this.request(`/api/memory/threads/${this.threadId}/messages?${query.toString()}`);
   }
 }

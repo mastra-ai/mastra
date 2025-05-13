@@ -1,5 +1,63 @@
 # @mastra/core
 
+## 0.9.4-alpha.3
+
+### Patch Changes
+
+- 396be50: updated mcp server routes for MCP SSE for use with hono server
+- c3bd795: [MASTRA-3358] Deprecate updateIndexById and deleteIndexById
+- da082f8: Switch from serializing json schema string as a function to a library that creates a zod object in memory from the json schema. This reduces the errors we were seeing from zod schema code that could not be serialized.
+- a5810ce: Add support for experimental_generateMessageId and remove it from client-js types since it's not serializable
+
+## 0.9.4-alpha.2
+
+### Patch Changes
+
+- 3171b5b: Fix jsonSchema on vercel tools
+- 973e5ac: Add workflows to agents properly
+- 9e1eff5: Fix tool compatibility schema handling by ensuring zodSchema.shape is safely accessed, preventing potential runtime errors.
+
+## 0.9.4-alpha.1
+
+### Patch Changes
+
+- ab80e7e: Fix resume workflow throwing workflow run not found error
+- 6fa1ad1: Fixes and issue when a tool provides no inputSchema and when a tool uses a non-zod schema.
+- c28d7a0: Fix watch workflow not streaming response back in legacy workflow
+- edf1e88: allows ability to pass McpServer into the mastra class and creates an endpoint /api/servers/:serverId/mcp to POST messages to an MCP server
+
+## 0.9.4-alpha.0
+
+### Patch Changes
+
+- daf942f: [MASTRA-3367] updated createthread when using generatetitle to perserve thread metadata
+- 0b8b868: Added A2A support + streaming
+
+## 0.9.3
+
+### Patch Changes
+
+- e450778: vnext: Inngest playground fixes
+- 8902157: added an optional `bodySizeLimit` to server config so that users can pass custom bodylimit size in mb. If not, it defaults to 4.5 mb
+- ca0dc88: fix: filter out excessive logs when getting LLM for agents
+- 526c570: expose agent runtimeContext from clientSDK
+- d7a6a33: Allow more user messages to be saved to memory, and fix message saving when using output flag
+- 9cd1a46: [MASTRA-3338] update naming scheme for embedding index based on vector store rules and added duplicate index checks
+- b5d2de0: In vNext workflow serializedStepGraph, return only serializedStepFlow for steps created from a workflow
+  allow viewing inner nested workflows in a multi-layered nested vnext workflow on the playground
+- 644f8ad: Adds a tool compatibility layer to ensure models from various providers work the same way. Models may not be able to support all json schema properties (such as some openai reasoning models), as well as other models support the property but seem to ignore it. The feature allows for a compatibility class for a provider that can be customized to fit the models and make sure they're using the tool schemas properly.
+- 70dbf51: [MASTRA-2452] updated setBaggage for tracing
+
+## 0.9.3-alpha.1
+
+### Patch Changes
+
+- e450778: vnext: Inngest playground fixes
+- 8902157: added an optional `bodySizeLimit` to server config so that users can pass custom bodylimit size in mb. If not, it defaults to 4.5 mb
+- ca0dc88: fix: filter out excessive logs when getting LLM for agents
+- 9cd1a46: [MASTRA-3338] update naming scheme for embedding index based on vector store rules and added duplicate index checks
+- 70dbf51: [MASTRA-2452] updated setBaggage for tracing
+
 ## 0.9.3-alpha.0
 
 ### Patch Changes

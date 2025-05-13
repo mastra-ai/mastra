@@ -19,6 +19,17 @@ jobs:
     # Only run on the main repository, not on forks
     if: ${{ github.repository == 'mastra-ai/mastra' }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        suite:
+          - pg
+          - upstash
+          - libsql
+          - streaming
+          - working-memory
+          - agent-memory
+          - processors
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -59,8 +70,9 @@ jobs:
       - name: Build vector+store packages
         run: pnpm turbo build --filter "./stores/*" --filter "mastra" --filter "@mastra/memory" --filter "@mastra/fastembed"
 
-      - name: Run Memory tests
-        run: pnpm test:memory
+      - name: Run Memory ${{ matrix.suite }} tests
+        run: pnpm run test:${{ matrix.suite }}
+        working-directory: packages/memory/integration-tests
         env:
           NODE_OPTIONS: '--max_old_space_size=8096'
           DB_URL: 'postgresql://postgres:postgres@localhost:5432/mastra'

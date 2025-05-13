@@ -42,17 +42,18 @@ export interface GetAgentResponse {
   name: string;
   instructions: string;
   tools: Record<string, GetToolResponse>;
+  workflows: Record<string, GetWorkflowResponse>;
   provider: string;
   modelId: string;
 }
 
 export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[];
-} & Partial<AgentGenerateOptions<T>>;
+} & Partial<Omit<AgentGenerateOptions<T>, 'experimental_generateMessageId'>>;
 
 export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[];
-} & Omit<AgentStreamOptions<T>, 'onFinish' | 'onStepFinish' | 'telemetry'>;
+} & Omit<AgentStreamOptions<T>, 'onFinish' | 'onStepFinish' | 'telemetry' | 'experimental_generateMessageId'>;
 
 export interface GetEvalsByAgentIdResponse extends GetAgentResponse {
   evals: any[];
@@ -172,6 +173,13 @@ export interface UpdateMemoryThreadParams {
   title: string;
   metadata: Record<string, any>;
   resourceId: string;
+}
+
+export interface GetMemoryThreadMessagesParams {
+  /**
+   * Limit the number of messages to retrieve (default: 40)
+   */
+  limit?: number;
 }
 
 export interface GetMemoryThreadMessagesResponse {

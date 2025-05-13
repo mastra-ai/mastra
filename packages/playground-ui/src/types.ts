@@ -27,6 +27,7 @@ export interface ChatProps {
   refreshThreadList?: () => void;
   modelSettings?: ModelSettings;
   chatWithGenerate?: boolean;
+  runtimeContext?: Record<string, any>;
 }
 
 export type SpanStatus = {

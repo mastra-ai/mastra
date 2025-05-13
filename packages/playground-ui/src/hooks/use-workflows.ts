@@ -189,14 +189,22 @@ export const useExecuteWorkflow = (baseUrl: string) => {
     workflowId,
     runId,
     input,
+    runtimeContext: playgroundRuntimeContext,
   }: {
     workflowId: string;
     runId: string;
     input: any;
+    runtimeContext: Record<string, any>;
   }) => {
     try {
+      const runtimeContext = new RuntimeContext();
+      Object.entries(playgroundRuntimeContext).forEach(([key, value]) => {
+        runtimeContext.set(key, value);
+      });
+
       const workflow = client.getVNextWorkflow(workflowId);
-      await workflow.start({ runId, inputData: input || {} });
+
+      await workflow.start({ runId, inputData: input || {}, runtimeContext });
     } catch (error) {
       console.error('Error starting workflow run:', error);
       throw error;
@@ -207,14 +215,20 @@ export const useExecuteWorkflow = (baseUrl: string) => {
     workflowId,
     runId,
     input,
+    runtimeContext: playgroundRuntimeContext,
   }: {
     workflowId: string;
     runId?: string;
     input: any;
+    runtimeContext: Record<string, any>;
   }) => {
     try {
+      const runtimeContext = new RuntimeContext();
+      Object.entries(playgroundRuntimeContext).forEach(([key, value]) => {
+        runtimeContext.set(key, value);
+      });
       const workflow = client.getVNextWorkflow(workflowId);
-      const result = await workflow.startAsync({ runId, inputData: input || {} });
+      const result = await workflow.startAsync({ runId, inputData: input || {}, runtimeContext });
       return result;
     } catch (error) {
       console.error('Error starting workflow run:', error);
@@ -372,17 +386,22 @@ export const useResumeWorkflow = (baseUrl: string) => {
     step,
     runId,
     resumeData,
-    runtimeContext,
+    runtimeContext: playgroundRuntimeContext,
   }: {
     workflowId: string;
     step: string | string[];
     runId: string;
     resumeData: any;
-    runtimeContext?: RuntimeContext;
+    runtimeContext: Record<string, any>;
   }) => {
     try {
       setIsResumingVNextWorkflow(true);
       const client = createMastraClient(baseUrl);
+
+      const runtimeContext = new RuntimeContext();
+      Object.entries(playgroundRuntimeContext).forEach(([key, value]) => {
+        runtimeContext.set(key, value);
+      });
 
       const response = await client.getVNextWorkflow(workflowId).resume({ step, runId, resumeData, runtimeContext });
 

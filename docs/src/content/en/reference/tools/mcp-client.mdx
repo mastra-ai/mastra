@@ -44,17 +44,18 @@ constructor({
       type: "number",
       isOptional: true,
       defaultValue: "60000",
-      description: "Global timeout value in milliseconds for all servers unless overridden in individual server configs.",
+      description:
+        "Global timeout value in milliseconds for all servers unless overridden in individual server configs.",
     },
   ]}
 />
 
 ### MastraMCPServerDefinition
 
-Each server in the `servers` map is configured using the `MastraMCPServerDefinition` type. The `MastraMCPClient` used internally automatically detects the transport type based on the provided parameters:
+Each server in the `servers` map is configured using the `MastraMCPServerDefinition` type. The transport type is detected based on the provided parameters:
 
--   If `command` is provided, it uses the Stdio transport.
--   If `url` is provided, it first attempts to use the Streamable HTTP transport and falls back to the legacy SSE transport if the initial connection fails.
+- If `command` is provided, it uses the Stdio transport.
+- If `url` is provided, it first attempts to use the Streamable HTTP transport and falls back to the legacy SSE transport if the initial connection fails.
 
 <br />
 <PropertiesTable
@@ -75,13 +76,15 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
       name: "env",
       type: "Record<string, string>",
       isOptional: true,
-      description: "For Stdio servers: Environment variables to set for the command.",
+      description:
+        "For Stdio servers: Environment variables to set for the command.",
     },
     {
       name: "url",
       type: "URL",
       isOptional: true,
-      description: "For HTTP servers (Streamable HTTP or SSE): The URL of the server.",
+      description:
+        "For HTTP servers (Streamable HTTP or SSE): The URL of the server.",
     },
     {
       name: "requestInit",
@@ -93,7 +96,8 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
       name: "eventSourceInit",
       type: "EventSourceInit",
       isOptional: true,
-      description: "For SSE fallback: Custom fetch configuration for SSE connections. Required when using custom headers with SSE.",
+      description:
+        "For SSE fallback: Custom fetch configuration for SSE connections. Required when using custom headers with SSE.",
     },
     {
       name: "logger",
@@ -155,7 +159,9 @@ async disconnect(): Promise<void>
 
 ## Examples
 
-### Basic Usage
+### Static Tool Configuration
+
+For tools where you have a single connection to the MCP server for you entire app, use `getTools()` and pass the tools to your agent:
 
 ```typescript
 import { MCPClient } from "@mastra/mcp";
@@ -190,7 +196,9 @@ const agent = new Agent({
 });
 ```
 
-### Using Toolsets in generate() or stream()
+### Dynamic toolsets
+
+When you need a new MCP connection for each user, use `getToolsets()` and add the tools when calling stream or generate:
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
@@ -286,6 +294,37 @@ MCPClient handles server connections gracefully:
 1. Automatic connection management for multiple servers
 2. Graceful server shutdown to prevent error messages during development
 3. Proper cleanup of resources when disconnecting
+
+## Using SSE Request Headers
+
+When using the legacy SSE MCP transport, you must configure both `requestInit` and `eventSourceInit` due to a bug in the MCP SDK:
+
+```ts
+const sseClient = new MCPClient({
+  servers: {
+    exampleServer: {
+      url: new URL("https://your-mcp-server.com/sse"),
+      // Note: requestInit alone isn't enough for SSE
+      requestInit: {
+        headers: {
+          Authorization: "Bearer your-token",
+        },
+      },
+      // This is also required for SSE connections with custom headers
+      eventSourceInit: {
+        fetch(input: Request | URL | string, init?: RequestInit) {
+          const headers = new Headers(init?.headers || {});
+          headers.set("Authorization", "Bearer your-token");
+          return fetch(input, {
+            ...init,
+            headers,
+          });
+        },
+      },
+    },
+  },
+});
+```
 
 ## Related Information
 

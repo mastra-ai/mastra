@@ -96,6 +96,7 @@ describe('Agent Handlers', () => {
           name: 'test-agent',
           instructions: 'test instructions',
           tools: {},
+          workflows: {},
           provider: 'openai.chat',
           modelId: 'gpt-4o',
         },
@@ -111,6 +112,7 @@ describe('Agent Handlers', () => {
         name: 'test-agent',
         instructions: 'test instructions',
         tools: {},
+        workflows: {},
         provider: 'openai.chat',
         modelId: 'gpt-4o',
       });

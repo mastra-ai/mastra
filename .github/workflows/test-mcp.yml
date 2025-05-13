@@ -30,7 +30,9 @@ jobs:
         run: pnpm install
 
       - name: Build @mastra/mcp
-        run: pnpm turbo --filter="./packages/mcp" build
+        run: pnpm turbo --filter="./packages/mcp" --filter "mastra" build
 
       - name: Run MCP tests
         run: pnpm run test:mcp
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

@@ -21,7 +21,6 @@ export const AgentContext = createContext<AgentContextType>({} as AgentContextTy
 export function AgentProvider({ children }: { children: ReactNode }) {
   const [modelSettings, setModelSettings] = useState<ModelSettings>(defaultModelSettings);
   const [chatWithGenerate, setChatWithGenerate] = useState<boolean>(false);
-
   const resetModelSettings = () => {
     setModelSettings(defaultModelSettings);
   };

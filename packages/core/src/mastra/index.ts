@@ -2,6 +2,7 @@ import type { Agent } from '../agent';
 import type { MastraDeployer } from '../deployer';
 import { LogLevel, createLogger, noopLogger } from '../logger';
 import type { Logger } from '../logger';
+import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory/memory';
 import type { AgentNetwork } from '../network';
 import type { ServerConfig } from '../server/types';
@@ -23,6 +24,7 @@ export interface Config<
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends Logger = Logger,
   TNetworks extends Record<string, AgentNetwork> = Record<string, AgentNetwork>,
+  TMCPServers extends Record<string, MCPServerBase> = Record<string, MCPServerBase>,
 > {
   agents?: TAgents;
   networks?: TNetworks;
@@ -35,6 +37,7 @@ export interface Config<
   telemetry?: OtelConfig;
   deployer?: MastraDeployer;
   server?: ServerConfig;
+  mcpServers?: TMCPServers;
 
   /**
    * Server middleware functions to be applied to API routes
@@ -62,6 +65,7 @@ export class Mastra<
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
   TLogger extends Logger = Logger,
   TNetworks extends Record<string, AgentNetwork> = Record<string, AgentNetwork>,
+  TMCPServers extends Record<string, MCPServerBase> = Record<string, MCPServerBase>,
 > {
   #vectors?: TVectors;
   #agents: TAgents;
@@ -79,6 +83,7 @@ export class Mastra<
   #memory?: MastraMemory;
   #networks?: TNetworks;
   #server?: ServerConfig;
+  #mcpServers?: TMCPServers;
 
   /**
    * @deprecated use getTelemetry() instead
@@ -101,7 +106,7 @@ export class Mastra<
     return this.#memory;
   }
 
-  constructor(config?: Config<TAgents, TWorkflows, TNewWorkflows, TVectors, TTTS, TLogger>) {
+  constructor(config?: Config<TAgents, TWorkflows, TNewWorkflows, TVectors, TTTS, TLogger, TNetworks, TMCPServers>) {
     // Store server middleware with default path
     if (config?.serverMiddleware) {
       this.#serverMiddleware = config.serverMiddleware.map(m => ({
@@ -177,6 +182,23 @@ export class Mastra<
 
     if (config?.vectors) {
       this.#vectors = config.vectors;
+    }
+
+    if (config?.networks) {
+      this.#networks = config.networks;
+    }
+
+    if (config?.mcpServers) {
+      this.#mcpServers = config.mcpServers;
+
+      // Set logger and telemetry for MCP servers
+      Object.values(this.#mcpServers).forEach(server => {
+        if (this.#telemetry) {
+          server.__setTelemetry(this.#telemetry);
+        }
+
+        server.__registerMastra(this);
+      });
     }
 
     if (config?.memory) {
@@ -444,6 +466,12 @@ Do:
         this.#vectors?.[key]?.__setLogger(this.#logger);
       });
     }
+
+    if (this.#mcpServers) {
+      Object.keys(this.#mcpServers).forEach(key => {
+        this.#mcpServers?.[key]?.__setLogger(this.#logger);
+      });
+    }
   }
 
   public setTelemetry(telemetry: OtelConfig) {
@@ -574,5 +602,22 @@ Do:
     console.log(this.#logger);
 
     return await this.#logger.getLogs(transportId);
+  }
+
+  /**
+   * Get a specific MCP server by ID
+   * @param serverId - The ID of the MCP server to retrieve
+   * @returns The MCP server with the specified ID, or undefined if not found
+   */
+  public getMCPServer(serverId: string): MCPServerBase | undefined {
+    return this.#mcpServers?.[serverId];
+  }
+
+  /**
+   * Get all registered MCP servers as a Record, with keys being their IDs.
+   * @returns Record of MCP server IDs to MCPServerBase instances, or undefined if none.
+   */
+  public getMCPServers(): TMCPServers | undefined {
+    return this.#mcpServers;
   }
 }

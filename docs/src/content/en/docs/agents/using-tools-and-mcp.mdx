@@ -107,3 +107,22 @@ const agent = new Agent({
 ```
 
 For more details on configuring `MCPClient` and the difference between static and dynamic MCP server configurations, see the [MCP Overview](/docs/tools-mcp/mcp-overview).
+
+## Accessing MCP Resources
+
+In addition to tools, MCP servers can also expose resources - data or content that can be retrieved and used in your application.
+
+```typescript filename="src/mastra/resources.ts" {3-8}
+import { mcp } from "./mcp";
+
+// Get resources from all connected MCP servers
+const resources = await mcp.getResources();
+
+// Access resources from a specific server
+if (resources.filesystem) {
+  const resource = resources.filesystem.find(r => r.uri === 'filesystem://Downloads');
+  console.log(`Resource: ${resource?.name}`);
+}
+```
+
+Each resource has a URI, name, description, and MIME type. The `getResources()` method handles errors gracefully - if a server fails or doesn't support resources, it will be omitted from the results.

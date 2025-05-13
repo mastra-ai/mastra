@@ -4,34 +4,66 @@ import path from 'path';
 import { ensureFile, readJSON, writeJSON } from 'fs-extra/esm';
 
 const args = ['-y', '@mastra/mcp-docs-server@latest'];
-const mcpConfig = {
-  mcpServers: {
-    mastra:
-      process.platform === `win32`
-        ? {
-            command: 'cmd',
-            args: ['/c', 'npx', ...args],
-          }
-        : {
-            command: 'npx',
-            args,
-          },
-  },
+const createMcpConfig = (editor: Editor) => {
+  if (editor === 'vscode') {
+    return {
+      servers: {
+        mastra:
+          process.platform === `win32`
+            ? {
+                command: 'cmd',
+                args: ['/c', 'npx', ...args],
+                type: 'stdio',
+              }
+            : {
+                command: 'npx',
+                args,
+                type: 'stdio',
+              },
+      },
+    };
+  }
+  return {
+    mcpServers: {
+      mastra:
+        process.platform === `win32`
+          ? {
+              command: 'cmd',
+              args: ['/c', 'npx', ...args],
+            }
+          : {
+              command: 'npx',
+              args,
+            },
+    },
+  };
 };
 
-function makeConfig(original: { mcpServers?: Record<string, unknown> }) {
+function makeConfig(
+  original: { mcpServers?: Record<string, unknown>; servers?: Record<string, unknown> },
+  editor: Editor,
+) {
+  if (editor === 'vscode') {
+    return {
+      ...original,
+      servers: {
+        ...(original?.servers || {}),
+        ...createMcpConfig(editor).servers,
+      },
+    };
+  }
   return {
     ...original,
     mcpServers: {
       ...(original?.mcpServers || {}),
-      ...mcpConfig.mcpServers,
+      ...createMcpConfig(editor).mcpServers,
     },
   };
 }
 
-async function writeMergedConfig(configPath: string) {
+async function writeMergedConfig(configPath: string, editor: Editor) {
   const configExists = existsSync(configPath);
-  const config = makeConfig(configExists ? await readJSON(configPath) : {});
+  const config = makeConfig(configExists ? await readJSON(configPath) : {}, editor);
   await ensureFile(configPath);
   await writeJSON(configPath, config, {
     spaces: 2,
@@ -40,23 +72,23 @@ async function writeMergedConfig(configPath: string) {
 
 export const windsurfGlobalMCPConfigPath = path.join(os.homedir(), '.codeium', 'windsurf', 'mcp_config.json');
 export const cursorGlobalMCPConfigPath = path.join(os.homedir(), '.cursor', 'mcp.json');
+export const vscodeMCPConfigPath = path.join(process.cwd(), '.vscode', 'mcp.json');
 
-export async function installMastraDocsMCPServer({
-  editor,
-  directory,
-}: {
-  editor: undefined | 'cursor' | 'cursor-global' | 'windsurf';
-  directory: string;
-}) {
+export type Editor = 'cursor' | 'cursor-global' | 'windsurf' | 'vscode';
+
+export async function installMastraDocsMCPServer({ editor, directory }: { editor?: Editor; directory: string }) {
   if (editor === `cursor`) {
-    await writeMergedConfig(path.join(directory, '.cursor', 'mcp.json'));
+    await writeMergedConfig(path.join(directory, '.cursor', 'mcp.json'), 'cursor');
+  }
+  if (editor === `vscode`) {
+    await writeMergedConfig(path.join(directory, '.vscode', 'mcp.json'), 'vscode');
   }
   if (editor === `cursor-global`) {
     const alreadyInstalled = await globalMCPIsAlreadyInstalled(editor);
     if (alreadyInstalled) {
       return;
     }
-    await writeMergedConfig(cursorGlobalMCPConfigPath);
+    await writeMergedConfig(cursorGlobalMCPConfigPath, 'cursor-global');
   }
 
   if (editor === `windsurf`) {
@@ -64,11 +96,11 @@ export async function installMastraDocsMCPServer({
     if (alreadyInstalled) {
       return;
     }
-    await writeMergedConfig(windsurfGlobalMCPConfigPath);
+    await writeMergedConfig(windsurfGlobalMCPConfigPath, editor);
   }
 }
 
-export async function globalMCPIsAlreadyInstalled(editor: undefined | 'cursor' | 'cursor-global' | 'windsurf') {
+export async function globalMCPIsAlreadyInstalled(editor: Editor) {
   let configPath: string = ``;
 
   if (editor === 'windsurf') {

@@ -1,4 +1,3 @@
-import type EventEmitter from 'events';
 import type { Mastra } from '../..';
 import { MastraBase } from '../../base';
 import type { RuntimeContext } from '../../di';
@@ -46,7 +45,7 @@ export abstract class ExecutionEngine extends MastraBase {
       resumePayload: any;
       resumePath: number[];
     };
-    emitter: EventEmitter;
+    emitter: { emit: (event: string, data: any) => Promise<void> };
     runtimeContext: RuntimeContext;
     retryConfig?: {
       attempts?: number;
