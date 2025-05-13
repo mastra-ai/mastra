@@ -13,8 +13,15 @@ import type {
   ToolCallStartEvent,
 } from '@ag-ui/client';
 import { AbstractAgent, EventType } from '@ag-ui/client';
+import {
+  CopilotRuntime,
+  copilotRuntimeNodeHttpEndpoint,
+  CopilotServiceAdapter,
+  ExperimentalEmptyAdapter,
+} from '@copilotkit/runtime';
 import { processDataStream } from '@ai-sdk/ui-utils';
 import type { CoreMessage, Mastra } from '@mastra/core';
+import { registerApiRoute } from '@mastra/core/server';
 import type { Agent } from '@mastra/core/agent';
 import { randomUUID } from 'crypto';
 import { Observable } from 'rxjs';
@@ -216,4 +223,38 @@ export function getAGUI({ mastra, resourceId }: { mastra: Mastra; resourceId?: s
     },
     {} as Record<string, AGUIAdapter>,
   );
+}
+
+export function registerCopilotKit({
+  path,
+  resourceId,
+  serviceAdapter = new ExperimentalEmptyAdapter(),
+}: {
+  path: string;
+  resourceId: string;
+  serviceAdapter?: CopilotServiceAdapter;
+}) {
+  return registerApiRoute(path, {
+    method: `ALL`,
+    handler: async c => {
+      const mastra = c.get('mastra');
+
+      const agents = getAGUI({
+        resourceId,
+        mastra,
+      });
+
+      const runtime = new CopilotRuntime({
+        agents,
+      });
+
+      const handler = copilotRuntimeNodeHttpEndpoint({
+        endpoint: path,
+        runtime,
+        serviceAdapter,
+      });
+
+      return handler.handle(c.req.raw, {});
+    },
+  });
 }

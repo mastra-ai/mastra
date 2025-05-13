@@ -1,12 +1,9 @@
 import { Mastra } from '@mastra/core/mastra';
 import { createLogger } from '@mastra/core/logger';
 import { LibSQLStore } from '@mastra/libsql';
-import { getAGUI } from '@mastra/agui';
+import { getAGUI, registerCopilotKit } from '@mastra/agui';
 import { weatherAgent } from './agents';
 import { registerApiRoute } from '@mastra/core/server';
-import { CopilotRuntime, copilotRuntimeNodeHttpEndpoint, ExperimentalEmptyAdapter } from '@copilotkit/runtime';
-
-const serviceAdapter = new ExperimentalEmptyAdapter();
 
 export const mastra = new Mastra({
   agents: { weatherAgent },
@@ -21,32 +18,13 @@ export const mastra = new Mastra({
   server: {
     cors: {
       origin: '*',
-      allowMethods: ['POST'],
+      allowMethods: ['*'],
       allowHeaders: ['*'],
     },
     apiRoutes: [
-      registerApiRoute('/copilotkit', {
-        method: `POST`,
-        handler: async c => {
-          const mastra = c.get('mastra');
-
-          const agents = getAGUI({
-            resourceId: 'weatherAgent',
-            mastra,
-          });
-
-          const runtime = new CopilotRuntime({
-            agents,
-          });
-
-          const handler = copilotRuntimeNodeHttpEndpoint({
-            endpoint: '/copilotkit',
-            runtime,
-            serviceAdapter,
-          });
-
-          return handler.handle(c.req.raw, {});
-        },
+      registerCopilotKit({
+        path: '/copilotkit',
+        resourceId: 'weatherAgent',
       }),
     ],
   },
