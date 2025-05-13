@@ -9,6 +9,7 @@ import type {
   BaseLogMessage,
   WorkflowRunResult as CoreWorkflowRunResult,
   VNextWorkflowRuns,
+  WorkflowRuns,
 } from '@mastra/core';
 
 import type { AgentGenerateOptions, AgentStreamOptions } from '@mastra/core/agent';
@@ -86,7 +87,9 @@ export interface GetWorkflowRunsParams {
   resourceId?: string;
 }
 
-export type GetWorkflowRunsResponse = VNextWorkflowRuns;
+export type GetWorkflowRunsResponse = WorkflowRuns;
+
+export type GetVNextWorkflowRunsResponse = VNextWorkflowRuns;
 
 export type WorkflowRunResult = {
   activePaths: Record<string, { status: string; suspendPayload?: any; stepPath: string[] }>;
