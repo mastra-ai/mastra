@@ -331,6 +331,10 @@ export class Workflow<
     attempts?: number;
     delay?: number;
   };
+
+  #closeStreamAction?: () => Promise<void>;
+  #executionResults?: Promise<WorkflowResult<TOutput, TSteps>>;
+
   #mastra?: Mastra;
 
   #runs: Map<string, Run<TSteps, TInput, TOutput>> = new Map();
@@ -965,12 +969,75 @@ export class Run<
     return result;
   }
 
-  watch(cb: (event: WatchEvent) => void): () => void {
+  /**
+   * Starts the workflow execution with the provided input as a stream
+   * @param input The input data for the workflow
+   * @returns A promise that resolves to the workflow output
+   */
+  stream({ inputData, runtimeContext }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}): {
+    stream: ReadableStream<WatchEvent>;
+    getWorkflowState: () => Promise<WorkflowResult<TOutput, TSteps>>;
+  } {
+    const { readable, writable } = new TransformStream<WatchEvent, WatchEvent>();
+
+    const writer = writable.getWriter();
+    const unwatch = this.watch(async event => {
+      try {
+        await writer.write(event);
+      } catch {}
+    }, 'watch-v2');
+
+    this.#closeStreamAction = async () => {
+      this.emitter.emit('watch-v2', {
+        type: 'finish',
+        payload: { runId: this.runId },
+      });
+      unwatch();
+
+      try {
+        try {
+          await writer.close();
+        } catch {
+          // Stream might already be closed
+        } finally {
+          writer.releaseLock();
+        }
+      } catch (err) {
+        console.error('Error closing stream:', err);
+      }
+    };
+
+    this.emitter.emit('watch-v2', {
+      type: 'start',
+      payload: { runId: this.runId },
+    });
+    this.#executionResults = this.start({ inputData, runtimeContext }).then(result => {
+      if (result.status !== 'suspended') {
+        this.#closeStreamAction?.().catch(() => {});
+      }
+
+      return result;
+    });
+
+    return {
+      stream: readable,
+      getWorkflowState: () => this.#executionResults!,
+    };
+  }
+
+  watch(cb: (event: WatchEvent) => void, type: 'watch' | 'watch-v2' = 'watch'): () => void {
     const watchCb = (event: WatchEvent) => {
       this.updateState(event.payload);
-      cb({ type: event.type, payload: this.getState() as any, eventTimestamp: event.eventTimestamp });
+
+      if (type !== 'watch-v2') {
+        cb({ type: event.type, payload: this.getState() as any, eventTimestamp: event.eventTimestamp });
+      }
     };
+
     this.emitter.on('watch', watchCb);
+    if (type === 'watch-v2') {
+      this.emitter.on('watch-v2', cb);
+    }
 
     const nestedWatchCb = ({ event, workflowId }: { event: WatchEvent; workflowId: string }) => {
       try {
@@ -999,6 +1066,10 @@ export class Run<
     this.emitter.on('nested-watch', nestedWatchCb);
 
     return () => {
+      if (type === 'watch-v2') {
+        this.emitter.off('watch-v2', cb);
+      }
+
       this.emitter.off('watch', watchCb);
       this.emitter.off('nested-watch', nestedWatchCb);
     };
@@ -1021,26 +1092,38 @@ export class Run<
       runId: this.runId,
     });
 
-    return this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
-      workflowId: this.workflowId,
-      runId: this.runId,
-      graph: this.executionGraph,
-      input: params.resumeData,
-      resume: {
-        steps,
-        stepResults: snapshot?.context as any,
-        resumePayload: params.resumeData,
-        // @ts-ignore
-        resumePath: snapshot?.suspendedPaths?.[steps?.[0]] as any,
-      },
-      emitter: {
-        emit: (event: string, data: any) => {
-          this.emitter.emit(event, data);
-          return Promise.resolve();
+    const executionResultPromise = this.executionEngine
+      .execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
+        workflowId: this.workflowId,
+        runId: this.runId,
+        graph: this.executionGraph,
+        input: params.resumeData,
+        resume: {
+          steps,
+          stepResults: snapshot?.context as any,
+          resumePayload: params.resumeData,
+          // @ts-ignore
+          resumePath: snapshot?.suspendedPaths?.[steps?.[0]] as any,
         },
-      },
-      runtimeContext: params.runtimeContext ?? new RuntimeContext(),
-    });
+        emitter: {
+          emit: (event: string, data: any) => {
+            this.emitter.emit(event, data);
+            return Promise.resolve();
+          },
+        },
+        runtimeContext: params.runtimeContext ?? new RuntimeContext(),
+      })
+      .then(result => {
+        if (result.status !== 'suspended') {
+          this.#closeStreamAction?.().catch(() => {});
+        }
+
+        return result;
+      });
+
+    this.#executionResults = executionResultPromise;
+
+    return executionResultPromise;
   }
 
   /**

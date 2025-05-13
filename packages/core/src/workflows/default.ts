@@ -246,6 +246,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       },
       eventTimestamp: Date.now(),
     });
+    await emitter.emit('watch-v2', {
+      type: 'step-start',
+      payload: {
+        id: step.id,
+      },
+    });
 
     const _runStep = (step: Step<any, any, any, any>, spanName: string, attributes?: Record<string, string>) => {
       return async (data: any) => {
@@ -347,6 +353,33 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       },
       eventTimestamp: Date.now(),
     });
+
+    if (execResults.status === 'suspended') {
+      await emitter.emit('watch-v2', {
+        type: 'step-suspended',
+        payload: {
+          id: step.id,
+          output: execResults.output,
+        },
+      });
+    } else {
+      await emitter.emit('watch-v2', {
+        type: 'step-result',
+        payload: {
+          id: step.id,
+          status: execResults.status,
+          output: execResults.output,
+        },
+      });
+
+      await emitter.emit('watch-v2', {
+        type: 'step-finish',
+        payload: {
+          id: step.id,
+          metadata: {},
+        },
+      });
+    }
 
     return execResults;
   }

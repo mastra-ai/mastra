@@ -12,7 +12,478 @@ import { cloneStep, cloneWorkflow, createStep, createWorkflow } from './workflow
 
 const testStorage = new MockStore();
 
+vi.mock('crypto', () => {
+  return {
+    randomUUID: vi.fn(() => 'mock-uuid-1'),
+  };
+});
+
 describe('Workflow', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+
+    let counter = 0;
+    randomUUID.mockImplementation(() => {
+      return `mock-uuid-${++counter}`;
+    });
+  });
+
+  describe('Streaming', () => {
+    it('should generate a stream', async () => {
+      const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
+      const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: step1Action,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ value: z.string() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: step2Action,
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [step1, step2],
+      });
+      workflow.then(step1).then(step2).commit();
+
+      const runId = 'test-run-id';
+      let watchData: WatchEvent[] = [];
+      const run = workflow.createRun({
+        runId,
+      });
+
+      const { stream, getWorkflowState } = run.stream({ inputData: {} });
+
+      // Start watching the workflow
+      for await (const data of stream) {
+        watchData.push(JSON.parse(JSON.stringify(data)));
+      }
+
+      const executionResult = await getWorkflowState();
+
+      expect(watchData.length).toBe(8);
+      expect(watchData).toMatchInlineSnapshot(`
+        [
+          {
+            "payload": {
+              "runId": "test-run-id",
+            },
+            "type": "start",
+          },
+          {
+            "payload": {
+              "id": "step1",
+            },
+            "type": "step-start",
+          },
+          {
+            "payload": {
+              "id": "step1",
+              "output": {
+                "result": "success1",
+              },
+              "status": "success",
+            },
+            "type": "step-result",
+          },
+          {
+            "payload": {
+              "id": "step1",
+              "metadata": {},
+            },
+            "type": "step-finish",
+          },
+          {
+            "payload": {
+              "id": "step2",
+            },
+            "type": "step-start",
+          },
+          {
+            "payload": {
+              "id": "step2",
+              "output": {
+                "result": "success2",
+              },
+              "status": "success",
+            },
+            "type": "step-result",
+          },
+          {
+            "payload": {
+              "id": "step2",
+              "metadata": {},
+            },
+            "type": "step-finish",
+          },
+          {
+            "payload": {
+              "runId": "test-run-id",
+            },
+            "type": "finish",
+          },
+        ]
+      `);
+      // Verify execution completed successfully
+      expect(executionResult.steps.step1).toEqual({
+        status: 'success',
+        output: { result: 'success1' },
+      });
+      expect(executionResult.steps.step2).toEqual({
+        status: 'success',
+        output: { result: 'success2' },
+      });
+    });
+
+    it('should handle basic suspend and resume flow', async () => {
+      const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
+      const promptAgentAction = vi
+        .fn()
+        .mockImplementationOnce(async ({ suspend }) => {
+          console.log('suspend');
+          await suspend();
+          return undefined;
+        })
+        .mockImplementationOnce(() => ({ modelOutput: 'test output' }));
+      const evaluateToneAction = vi.fn().mockResolvedValue({
+        toneScore: { score: 0.8 },
+        completenessScore: { score: 0.7 },
+      });
+      const improveResponseAction = vi.fn().mockResolvedValue({ improvedOutput: 'improved output' });
+      const evaluateImprovedAction = vi.fn().mockResolvedValue({
+        toneScore: { score: 0.9 },
+        completenessScore: { score: 0.8 },
+      });
+
+      const getUserInput = createStep({
+        id: 'getUserInput',
+        execute: getUserInputAction,
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ userInput: z.string() }),
+      });
+      const promptAgent = createStep({
+        id: 'promptAgent',
+        execute: promptAgentAction,
+        inputSchema: z.object({ userInput: z.string() }),
+        outputSchema: z.object({ modelOutput: z.string() }),
+      });
+      const evaluateTone = createStep({
+        id: 'evaluateToneConsistency',
+        execute: evaluateToneAction,
+        inputSchema: z.object({ modelOutput: z.string() }),
+        outputSchema: z.object({
+          toneScore: z.any(),
+          completenessScore: z.any(),
+        }),
+      });
+      const improveResponse = createStep({
+        id: 'improveResponse',
+        execute: improveResponseAction,
+        inputSchema: z.object({ toneScore: z.any(), completenessScore: z.any() }),
+        outputSchema: z.object({ improvedOutput: z.string() }),
+      });
+      const evaluateImproved = createStep({
+        id: 'evaluateImprovedResponse',
+        execute: evaluateImprovedAction,
+        inputSchema: z.object({ improvedOutput: z.string() }),
+        outputSchema: z.object({
+          toneScore: z.any(),
+          completenessScore: z.any(),
+        }),
+      });
+
+      const promptEvalWorkflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({}),
+        steps: [getUserInput, promptAgent, evaluateTone, improveResponse, evaluateImproved],
+      });
+
+      promptEvalWorkflow
+        .then(getUserInput)
+        .then(promptAgent)
+        .then(evaluateTone)
+        .then(improveResponse)
+        .then(evaluateImproved)
+        .commit();
+
+      // Create a new storage instance for initial run
+      const initialStorage = new DefaultStorage({
+        config: {
+          url: 'file::memory:',
+        },
+      });
+      await initialStorage.init();
+
+      new Mastra({
+        storage: initialStorage,
+        vnext_workflows: { 'test-workflow': promptEvalWorkflow },
+      });
+
+      const run = promptEvalWorkflow.createRun();
+
+      const { stream, getWorkflowState } = run.stream({ inputData: { input: 'test' } });
+
+      for await (const data of stream) {
+        if (data.type === 'step-suspended') {
+          expect(promptAgentAction).toHaveBeenCalledTimes(1);
+
+          // make it async to show that execution is not blocked
+          setImmediate(() => {
+            const resumeData = { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } };
+            run.resume({ resumeData: resumeData as any, step: promptAgent });
+          });
+          expect(evaluateToneAction).not.toHaveBeenCalledTimes(1);
+        }
+      }
+
+      expect(evaluateToneAction).toHaveBeenCalledTimes(1);
+
+      const resumeResult = await getWorkflowState();
+
+      expect(resumeResult.steps).toEqual({
+        input: { input: 'test' },
+        getUserInput: { status: 'success', output: { userInput: 'test input' } },
+        promptAgent: { status: 'success', output: { modelOutput: 'test output' } },
+        evaluateToneConsistency: {
+          status: 'success',
+          output: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+        },
+        improveResponse: { status: 'success', output: { improvedOutput: 'improved output' } },
+        evaluateImprovedResponse: {
+          status: 'success',
+          output: { toneScore: { score: 0.9 }, completenessScore: { score: 0.8 } },
+        },
+      });
+    });
+
+    it('should be able to use an agent as a step', async () => {
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({
+          prompt1: z.string(),
+          prompt2: z.string(),
+        }),
+        outputSchema: z.object({}),
+      });
+
+      const agent = new Agent({
+        name: 'test-agent-1',
+        instructions: 'test agent instructions',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: `Paris`,
+          }),
+        }),
+      });
+
+      const agent2 = new Agent({
+        name: 'test-agent-2',
+        instructions: 'test agent instructions',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: `London`,
+          }),
+        }),
+      });
+
+      const startStep = createStep({
+        id: 'start',
+        inputSchema: z.object({
+          prompt1: z.string(),
+          prompt2: z.string(),
+        }),
+        outputSchema: z.object({ prompt1: z.string(), prompt2: z.string() }),
+        execute: async ({ inputData }) => {
+          return {
+            prompt1: inputData.prompt1,
+            prompt2: inputData.prompt2,
+          };
+        },
+      });
+
+      new Mastra({
+        vnext_workflows: { 'test-workflow': workflow },
+        agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
+      });
+
+      const agentStep1 = createStep(agent);
+      const agentStep2 = createStep(agent2);
+
+      workflow
+        .then(startStep)
+        .map({
+          prompt: {
+            step: startStep,
+            path: 'prompt1',
+          },
+        })
+        .then(agentStep1)
+        .map({
+          prompt: {
+            step: startStep,
+            path: 'prompt2',
+          },
+        })
+        .then(agentStep2)
+        .commit();
+
+      const run = workflow.createRun({
+        runId: 'test-run-id',
+      });
+      const { stream } = await run.stream({
+        inputData: { prompt1: 'Capital of France, just the name', prompt2: 'Capital of UK, just the name' },
+      });
+
+      expect(await Array.fromAsync(stream.values())).toMatchInlineSnapshot(`
+        [
+          {
+            "payload": {
+              "runId": "test-run-id",
+            },
+            "type": "start",
+          },
+          {
+            "payload": {
+              "id": "start",
+            },
+            "type": "step-start",
+          },
+          {
+            "payload": {
+              "id": "start",
+              "output": {
+                "prompt1": "Capital of France, just the name",
+                "prompt2": "Capital of UK, just the name",
+              },
+              "status": "success",
+            },
+            "type": "step-result",
+          },
+          {
+            "payload": {
+              "id": "start",
+              "metadata": {},
+            },
+            "type": "step-finish",
+          },
+          {
+            "payload": {
+              "id": "mapping_mock-uuid-2",
+            },
+            "type": "step-start",
+          },
+          {
+            "payload": {
+              "id": "mapping_mock-uuid-2",
+              "output": {
+                "prompt": "Capital of France, just the name",
+              },
+              "status": "success",
+            },
+            "type": "step-result",
+          },
+          {
+            "payload": {
+              "id": "mapping_mock-uuid-2",
+              "metadata": {},
+            },
+            "type": "step-finish",
+          },
+          {
+            "payload": {
+              "id": "test-agent-1",
+            },
+            "type": "step-start",
+          },
+          {
+            "payload": {
+              "id": "test-agent-1",
+              "output": {
+                "text": "Paris",
+              },
+              "status": "success",
+            },
+            "type": "step-result",
+          },
+          {
+            "payload": {
+              "id": "test-agent-1",
+              "metadata": {},
+            },
+            "type": "step-finish",
+          },
+          {
+            "payload": {
+              "id": "mapping_mock-uuid-3",
+            },
+            "type": "step-start",
+          },
+          {
+            "payload": {
+              "id": "mapping_mock-uuid-3",
+              "output": {
+                "prompt": "Capital of UK, just the name",
+              },
+              "status": "success",
+            },
+            "type": "step-result",
+          },
+          {
+            "payload": {
+              "id": "mapping_mock-uuid-3",
+              "metadata": {},
+            },
+            "type": "step-finish",
+          },
+          {
+            "payload": {
+              "id": "test-agent-2",
+            },
+            "type": "step-start",
+          },
+          {
+            "payload": {
+              "id": "test-agent-2",
+              "output": {
+                "text": "London",
+              },
+              "status": "success",
+            },
+            "type": "step-result",
+          },
+          {
+            "payload": {
+              "id": "test-agent-2",
+              "metadata": {},
+            },
+            "type": "step-finish",
+          },
+          {
+            "payload": {
+              "runId": "test-run-id",
+            },
+            "type": "finish",
+          },
+        ]
+      `);
+    });
+  });
+
   describe('Basic Workflow Execution', () => {
     it('should throw error when execution flow not defined', () => {
       const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
