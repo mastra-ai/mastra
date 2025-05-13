@@ -18,7 +18,6 @@ import type {
 } from './types';
 export * from './types';
 
-// +++ Updated MCPServerBase +++
 /**
  * Abstract base class for MCP server implementations.
  * This provides a common interface and shared functionality for all MCP servers
