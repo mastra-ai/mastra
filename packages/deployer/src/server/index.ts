@@ -1469,6 +1469,12 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
           required: true,
           schema: { type: 'string' },
         },
+        {
+          name: 'limit',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
       ],
       responses: {
         200: {

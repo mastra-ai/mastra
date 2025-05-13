@@ -174,6 +174,10 @@ export interface UpdateMemoryThreadParams {
   resourceId: string;
 }
 
+export interface GetMemoryThreadMessagesParams {
+  limit?: number;
+}
+
 export interface GetMemoryThreadMessagesResponse {
   messages: CoreMessage[];
   uiMessages: AiMessageType[];

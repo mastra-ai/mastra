@@ -224,7 +224,10 @@ export async function getMessagesHandler({
   mastra,
   agentId,
   threadId,
-}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId'>) {
+  limit,
+}: Pick<MemoryContext, 'mastra' | 'agentId' | 'threadId'> & {
+  limit?: number;
+}) {
   try {
     validateBody({ threadId });
 
@@ -239,7 +242,10 @@ export async function getMessagesHandler({
       throw new HTTPException(404, { message: 'Thread not found' });
     }
 
-    const result = await memory.query({ threadId: threadId! });
+    const result = await memory.query({
+      threadId: threadId!,
+      ...(limit && { selectBy: { last: limit } }),
+    });
     return result;
   } catch (error) {
     return handleError(error, 'Error getting messages');
