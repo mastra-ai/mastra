@@ -103,7 +103,7 @@ export interface VNextWorkflowRunState {
   // Core state info
   runId: string;
   value: Record<string, string>;
-  context: { input: Record<string, any> } & Record<string, StepResult<any>>;
+  context: { input?: Record<string, any> } & Record<string, StepResult<any>>;
   activePaths: Array<{
     stepPath: string[];
     stepId: string;
