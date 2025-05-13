@@ -80,6 +80,10 @@ export class D1Store extends MastraStorage {
   constructor(config: D1StoreConfig) {
     super({ name: 'D1' });
 
+    if (config.tablePrefix && !/^[a-zA-Z0-9_]*$/.test(config.tablePrefix)) {
+      throw new Error('Invalid tablePrefix: only letters, numbers, and underscores are allowed.');
+    }
+
     this.tablePrefix = config.tablePrefix || '';
 
     // Determine which API to use based on provided config

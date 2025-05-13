@@ -17,12 +17,21 @@ export class SqlBuilder {
     if (!columns || (Array.isArray(columns) && columns.length === 0)) {
       this.sql = 'SELECT *';
     } else {
-      this.sql = `SELECT ${Array.isArray(columns) ? columns.join(', ') : columns}`;
+      const cols = Array.isArray(columns) ? columns : [columns];
+      for (const col of cols) {
+        if (col !== '*' && !/^[a-zA-Z0-9_]+(\s+AS\s+[a-zA-Z0-9_]+)?$/i.test(col)) {
+          throw new Error(`Invalid column name: ${col}`);
+        }
+      }
+      this.sql = `SELECT ${cols.join(', ')}`;
     }
     return this;
   }
 
   from(table: string): SqlBuilder {
+    if (!/^[a-zA-Z0-9_]+$/.test(table)) {
+      throw new Error(`Invalid table name: ${table}`);
+    }
     this.sql += ` FROM ${table}`;
     return this;
   }
@@ -65,6 +74,12 @@ export class SqlBuilder {
   }
 
   orderBy(column: string, direction: 'ASC' | 'DESC' = 'ASC'): SqlBuilder {
+    if (!/^[a-zA-Z0-9_]+$/.test(column)) {
+      throw new Error(`Invalid column name: ${column}`);
+    }
+    if (!['ASC', 'DESC'].includes(direction)) {
+      throw new Error(`Invalid sort direction: ${direction}`);
+    }
     this.sql += ` ORDER BY ${column} ${direction}`;
     return this;
   }
@@ -101,6 +116,14 @@ export class SqlBuilder {
     conflictColumns?: string[],
     updateMap?: Record<string, string>,
   ): SqlBuilder {
+    if (!/^[a-zA-Z0-9_]+$/.test(table)) {
+      throw new Error(`Invalid table name: ${table}`);
+    }
+    for (const col of columns) {
+      if (!/^[a-zA-Z0-9_]+$/.test(col)) {
+        throw new Error(`Invalid column name: ${col}`);
+      }
+    }
     const placeholders = columns.map(() => '?').join(', ');
 
     if (conflictColumns && updateMap) {
@@ -120,6 +143,14 @@ export class SqlBuilder {
 
   // Update operations
   update(table: string, columns: string[], values: SqlParam[]): SqlBuilder {
+    if (!/^[a-zA-Z0-9_]+$/.test(table)) {
+      throw new Error(`Invalid table name: ${table}`);
+    }
+    for (const col of columns) {
+      if (!/^[a-zA-Z0-9_]+$/.test(col)) {
+        throw new Error(`Invalid column name: ${col}`);
+      }
+    }
     const setClause = columns.map(col => `${col} = ?`).join(', ');
     this.sql = `UPDATE ${table} SET ${setClause}`;
     this.params.push(...values);
@@ -128,6 +159,9 @@ export class SqlBuilder {
 
   // Delete operations
   delete(table: string): SqlBuilder {
+    if (!/^[a-zA-Z0-9_]+$/.test(table)) {
+      throw new Error(`Invalid table name: ${table}`);
+    }
     this.sql = `DELETE FROM ${table}`;
     return this;
   }
@@ -140,6 +174,16 @@ export class SqlBuilder {
    * @returns The builder instance
    */
   createTable(table: string, columnDefinitions: string[], tableConstraints?: string[]): SqlBuilder {
+    if (!/^[a-zA-Z0-9_]+$/.test(table)) {
+      throw new Error(`Invalid table name: ${table}`);
+    }
+    // Naive validation: check the first word of each column definition
+    for (const def of columnDefinitions) {
+      const colName = def.split(/\s+/)[0];
+      if (colName && !/^[a-zA-Z0-9_]+$/.test(colName)) {
+        throw new Error(`Invalid column name in definition: ${colName}`);
+      }
+    }
     const columns = columnDefinitions.join(', ');
     const constraints = tableConstraints && tableConstraints.length > 0 ? ', ' + tableConstraints.join(', ') : '';
     this.sql = `CREATE TABLE IF NOT EXISTS ${table} (${columns}${constraints})`;
@@ -167,14 +211,16 @@ export class SqlBuilder {
    * @returns The builder instance
    */
   createIndex(indexName: string, tableName: string, columnName: string, indexType: string = ''): SqlBuilder {
+    if (!/^[a-zA-Z0-9_]+$/.test(indexName)) {
+      throw new Error(`Invalid index name: ${indexName}`);
+    }
+    if (!/^[a-zA-Z0-9_]+$/.test(tableName)) {
+      throw new Error(`Invalid table name: ${tableName}`);
+    }
+    if (!/^[a-zA-Z0-9_]+$/.test(columnName)) {
+      throw new Error(`Invalid column name: ${columnName}`);
+    }
     this.sql = `CREATE ${indexType ? indexType + ' ' : ''}INDEX IF NOT EXISTS ${indexName} ON ${tableName}(${columnName})`;
-    return this;
-  }
-
-  // Raw SQL with params
-  raw(sql: string, ...params: SqlParam[]): SqlBuilder {
-    this.sql = sql;
-    this.params.push(...params);
     return this;
   }
 
@@ -185,6 +231,9 @@ export class SqlBuilder {
    * @param exact If true, will not add % wildcards
    */
   like(column: string, value: string, exact: boolean = false): SqlBuilder {
+    if (!/^[a-zA-Z0-9_]+$/.test(column)) {
+      throw new Error(`Invalid column name: ${column}`);
+    }
     const likeValue = exact ? value : `%${value}%`;
     if (this.whereAdded) {
       this.sql += ` AND ${column} LIKE ?`;
@@ -203,6 +252,9 @@ export class SqlBuilder {
    * @param value The value to match
    */
   jsonLike(column: string, key: string, value: string): SqlBuilder {
+    if (!/^[a-zA-Z0-9_]+$/.test(column)) {
+      throw new Error(`Invalid column name: ${column}`);
+    }
     const jsonPattern = `%"${key}":"${value}"%`;
     if (this.whereAdded) {
       this.sql += ` AND ${column} LIKE ?`;
