@@ -1,5 +1,7 @@
 import { spawn } from 'child_process';
 import path from 'path';
+import type { LogMessage } from './client';
+import { RuntimeContext } from '@mastra/core/di';
 import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll, vi } from 'vitest';
 import { allTools, mcpServerName } from './__fixtures__/fire-crawl-complex-schema';
 import type { LogHandler } from './client';
@@ -10,6 +12,7 @@ vi.setConfig({ testTimeout: 80000, hookTimeout: 80000 });
 describe('MCPClient', () => {
   let mcp: MCPClient;
   let weatherProcess: ReturnType<typeof spawn>;
+  let clients: MCPClient[] = [];
 
   beforeAll(async () => {
     // Start the weather SSE server
@@ -52,11 +55,16 @@ describe('MCPClient', () => {
         },
       },
     });
+    clients.push(mcp);
   });
 
   afterEach(async () => {
     // Clean up any connected clients
     await mcp.disconnect();
+    const index = clients.indexOf(mcp);
+    if (index > -1) {
+      clients.splice(index, 1);
+    }
   });
 
   afterAll(async () => {
@@ -393,5 +401,61 @@ describe('MCPClient', () => {
 
       expect(mockLogHandler.mock.calls.length).toBeGreaterThan(0);
     });
+  });
+
+  describe('MCPClient Configuration', () => {
+    it.only('should pass runtimeContext to the server logger function during tool execution', async () => {
+      type TestContext = { channel: string; userId: string };
+      const testContextInstance = new RuntimeContext<TestContext>();
+      testContextInstance.set('channel', 'test-channel-123');
+      testContextInstance.set('userId', 'user-abc-987');
+
+      const loggerFn = vi.fn();
+
+      // This test manages its own client instance
+      const clientForTest = new MCPClient({
+        servers: {
+          stockPrice: {
+            command: 'npx',
+            // Corrected args for npx tsx
+            args: ['tsx', path.join(__dirname, '__fixtures__/stock-price.ts')],
+            env: {
+              FAKE_CREDS: 'test',
+            },
+            logger: loggerFn,
+          },
+        },
+      });
+
+      try {
+        const tools = await clientForTest.getTools();
+        const stockTool = tools['stockPrice_getStockPrice'];
+        expect(stockTool).toBeDefined();
+
+        await stockTool.execute({
+          context: { symbol: 'MSFT' },
+          runtimeContext: testContextInstance,
+        });
+
+        expect(loggerFn).toHaveBeenCalled();
+
+        const callWithContext = loggerFn.mock.calls.find(call => {
+          const logMessage = call[0] as LogMessage;
+          return (
+            logMessage.runtimeContext &&
+            typeof logMessage.runtimeContext.get === 'function' &&
+            logMessage.runtimeContext.get('channel') === 'test-channel-123' &&
+            logMessage.runtimeContext.get('userId') === 'user-abc-987'
+          );
+        });
+
+        expect(callWithContext).toBeDefined();
+
+        const capturedLogMessage = callWithContext?.[0] as LogMessage;
+        expect(capturedLogMessage?.serverName).toEqual('stockPrice');
+      } finally {
+        await clientForTest.disconnect(); // Ensure this specific client is disconnected
+      }
+    }, 15000);
   });
 });
