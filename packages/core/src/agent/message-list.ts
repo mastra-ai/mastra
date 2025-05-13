@@ -273,6 +273,9 @@ export class MessageList {
         }
       }
     } else {
+      if (messageV2.role === `assistant`) {
+        messageV2.content.parts.unshift({ type: 'step-start' });
+      }
       this.messages.push({
         ...messageV2,
         originalMessage: message,

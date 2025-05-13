@@ -109,6 +109,7 @@ describe('MessageList', () => {
           createdAt: expect.any(Date),
           experimental_attachments: [],
           parts: [
+            { type: 'step-start' },
             {
               type: 'tool-invocation',
               toolInvocation: {
@@ -150,6 +151,7 @@ describe('MessageList', () => {
           content: {
             format: 2,
             parts: [
+              { type: 'step-start' },
               { type: 'text', text: 'Okay, checking the weather.' },
               {
                 type: 'tool-invocation',
@@ -224,6 +226,7 @@ describe('MessageList', () => {
           content: {
             format: 2,
             parts: [
+              { type: 'step-start' },
               { type: 'text', text: 'Okay, I can do that.' },
               {
                 type: 'tool-invocation',
@@ -299,6 +302,7 @@ describe('MessageList', () => {
           content: {
             format: 2,
             parts: [
+              { type: 'step-start' },
               { type: 'text', text: msg2.content[0].text },
               {
                 type: 'tool-invocation',
