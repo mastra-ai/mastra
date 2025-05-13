@@ -369,7 +369,9 @@ export class InternalMastraMCPClient extends MastraBase {
           id: `${this.name}_${tool.name}`,
           description: tool.description || '',
           inputSchema: this.convertInputSchema(tool.inputSchema),
-          execute: async ({ context }) => {
+          execute: async ({ context, runtimeContext }: { context: any; runtimeContext?: RuntimeContext | null }) => {
+            const previousContext = this.currentOperationContext;
+            this.currentOperationContext = runtimeContext || null; // Set current context
             try {
               this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: context });
               const res = await this.client.callTool(
@@ -390,6 +392,8 @@ export class InternalMastraMCPClient extends MastraBase {
                 toolArgs: context,
               });
               throw e;
+            } finally {
+              this.currentOperationContext = previousContext; // Restore previous context
             }
           },
         });

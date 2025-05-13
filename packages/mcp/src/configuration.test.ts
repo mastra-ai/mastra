@@ -1,10 +1,11 @@
 import { spawn } from 'child_process';
 import path from 'path';
-import type { LogMessage } from './client';
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/di';
 import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll, vi } from 'vitest';
 import { allTools, mcpServerName } from './__fixtures__/fire-crawl-complex-schema';
-import type { LogHandler } from './client';
+import type { LogHandler, LogMessage } from './client';
 import { MCPClient } from './configuration';
 
 vi.setConfig({ testTimeout: 80000, hookTimeout: 80000 });
@@ -404,58 +405,158 @@ describe('MCPClient', () => {
   });
 
   describe('MCPClient Configuration', () => {
-    it.only('should pass runtimeContext to the server logger function during tool execution', async () => {
+    let clientsToCleanup: MCPClient[] = [];
+
+    afterEach(async () => {
+      await Promise.all(
+        clientsToCleanup.map(client =>
+          client.disconnect().catch(e => console.error(`Error disconnecting client during test cleanup: ${e}`)),
+        ),
+      );
+      clientsToCleanup = [];
+    });
+
+    it('should pass runtimeContext to the server logger function during tool execution', async () => {
       type TestContext = { channel: string; userId: string };
       const testContextInstance = new RuntimeContext<TestContext>();
       testContextInstance.set('channel', 'test-channel-123');
       testContextInstance.set('userId', 'user-abc-987');
-
       const loggerFn = vi.fn();
 
-      // This test manages its own client instance
       const clientForTest = new MCPClient({
         servers: {
           stockPrice: {
             command: 'npx',
-            // Corrected args for npx tsx
             args: ['tsx', path.join(__dirname, '__fixtures__/stock-price.ts')],
-            env: {
-              FAKE_CREDS: 'test',
-            },
+            env: { FAKE_CREDS: 'test' },
             logger: loggerFn,
           },
         },
       });
+      clientsToCleanup.push(clientForTest);
 
-      try {
-        const tools = await clientForTest.getTools();
-        const stockTool = tools['stockPrice_getStockPrice'];
-        expect(stockTool).toBeDefined();
+      const tools = await clientForTest.getTools();
+      const stockTool = tools['stockPrice_getStockPrice'];
+      expect(stockTool).toBeDefined();
 
-        await stockTool.execute({
-          context: { symbol: 'MSFT' },
-          runtimeContext: testContextInstance,
-        });
+      await stockTool.execute({
+        context: { symbol: 'MSFT' },
+        runtimeContext: testContextInstance,
+      });
 
-        expect(loggerFn).toHaveBeenCalled();
-
-        const callWithContext = loggerFn.mock.calls.find(call => {
-          const logMessage = call[0] as LogMessage;
-          return (
-            logMessage.runtimeContext &&
-            typeof logMessage.runtimeContext.get === 'function' &&
-            logMessage.runtimeContext.get('channel') === 'test-channel-123' &&
-            logMessage.runtimeContext.get('userId') === 'user-abc-987'
-          );
-        });
-
-        expect(callWithContext).toBeDefined();
-
-        const capturedLogMessage = callWithContext?.[0] as LogMessage;
-        expect(capturedLogMessage?.serverName).toEqual('stockPrice');
-      } finally {
-        await clientForTest.disconnect(); // Ensure this specific client is disconnected
-      }
+      expect(loggerFn).toHaveBeenCalled();
+      const callWithContext = loggerFn.mock.calls.find(call => {
+        const logMessage = call[0] as LogMessage;
+        return (
+          logMessage.runtimeContext &&
+          typeof logMessage.runtimeContext.get === 'function' &&
+          logMessage.runtimeContext.get('channel') === 'test-channel-123' &&
+          logMessage.runtimeContext.get('userId') === 'user-abc-987'
+        );
+      });
+      expect(callWithContext).toBeDefined();
+      const capturedLogMessage = callWithContext?.[0] as LogMessage;
+      expect(capturedLogMessage?.serverName).toEqual('stockPrice');
     }, 15000);
+
+    it('should pass runtimeContext to MCP logger when tool is called via an Agent', async () => {
+      type TestAgentContext = { traceId: string; tenant: string };
+      const agentTestContext = new RuntimeContext<TestAgentContext>();
+      agentTestContext.set('traceId', 'agent-trace-xyz');
+      agentTestContext.set('tenant', 'acme-corp');
+      const loggerFn = vi.fn();
+
+      const mcpClientForAgentTest = new MCPClient({
+        id: 'mcp-for-agent-test-suite',
+        servers: {
+          stockPriceServer: {
+            command: 'npx',
+            args: ['tsx', path.join(__dirname, '__fixtures__/stock-price.ts')],
+            env: { FAKE_CREDS: 'test' },
+            logger: loggerFn,
+          },
+        },
+      });
+      clientsToCleanup.push(mcpClientForAgentTest);
+
+      const agentName = 'stockAgentForContextTest';
+      const agent = new Agent({
+        name: agentName,
+        model: openai('gpt-4o'),
+        instructions: 'Use the getStockPrice tool to find the price of MSFT.',
+        tools: await mcpClientForAgentTest.getTools(),
+      });
+
+      await agent.generate('What is the price of MSFT?', { runtimeContext: agentTestContext });
+
+      expect(loggerFn).toHaveBeenCalled();
+      const callWithAgentContext = loggerFn.mock.calls.find(call => {
+        const logMessage = call[0] as LogMessage;
+        return (
+          logMessage.runtimeContext &&
+          typeof logMessage.runtimeContext.get === 'function' &&
+          logMessage.runtimeContext.get('traceId') === 'agent-trace-xyz' &&
+          logMessage.runtimeContext.get('tenant') === 'acme-corp'
+        );
+      });
+      expect(callWithAgentContext).toBeDefined();
+      if (callWithAgentContext) {
+        const capturedLogMessage = callWithAgentContext[0] as LogMessage;
+        expect(capturedLogMessage?.serverName).toEqual('stockPriceServer');
+      }
+    }, 20000);
+
+    it('should correctly use different runtimeContexts on sequential direct tool calls', async () => {
+      const loggerFn = vi.fn();
+      const clientForSeqTest = new MCPClient({
+        id: 'mcp-sequential-context-test',
+        servers: {
+          stockPriceServer: {
+            command: 'npx',
+            args: ['tsx', path.join(__dirname, '__fixtures__/stock-price.ts')],
+            env: { FAKE_CREDS: 'test' },
+            logger: loggerFn,
+          },
+        },
+      });
+      clientsToCleanup.push(clientForSeqTest);
+
+      const tools = await clientForSeqTest.getTools();
+      const stockTool = tools['stockPriceServer_getStockPrice'];
+      expect(stockTool).toBeDefined();
+
+      type ContextA = { callId: string };
+      const runtimeContextA = new RuntimeContext<ContextA>();
+      runtimeContextA.set('callId', 'call-A-111');
+      await stockTool.execute({ context: { symbol: 'MSFT' }, runtimeContext: runtimeContextA });
+
+      expect(loggerFn).toHaveBeenCalled();
+      let callsAfterA = [...loggerFn.mock.calls];
+      const logCallForA = callsAfterA.find(
+        call => (call[0] as LogMessage).runtimeContext?.get('callId') === 'call-A-111',
+      );
+      expect(logCallForA).toBeDefined();
+      expect((logCallForA?.[0] as LogMessage)?.runtimeContext?.get('callId')).toBe('call-A-111');
+
+      loggerFn.mockClear();
+
+      type ContextB = { sessionId: string };
+      const runtimeContextB = new RuntimeContext<ContextB>();
+      runtimeContextB.set('sessionId', 'session-B-222');
+      await stockTool.execute({ context: { symbol: 'GOOG' }, runtimeContext: runtimeContextB });
+
+      expect(loggerFn).toHaveBeenCalled();
+      let callsAfterB = [...loggerFn.mock.calls];
+      const logCallForB = callsAfterB.find(
+        call => (call[0] as LogMessage).runtimeContext?.get('sessionId') === 'session-B-222',
+      );
+      expect(logCallForB).toBeDefined();
+      expect((logCallForB?.[0] as LogMessage)?.runtimeContext?.get('sessionId')).toBe('session-B-222');
+
+      const contextALeak = callsAfterB.some(
+        call => (call[0] as LogMessage).runtimeContext?.get('callId') === 'call-A-111',
+      );
+      expect(contextALeak).toBe(false);
+    }, 20000);
   });
 });
