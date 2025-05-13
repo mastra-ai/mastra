@@ -2802,7 +2802,7 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
     {
       fetch: app.fetch,
       port,
-      hostname: serverOptions?.host ?? 'localhost',
+      hostname: serverOptions?.host ?? undefined,
     },
     () => {
       const logger = mastra.getLogger();
