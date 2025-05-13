@@ -46,5 +46,11 @@ export const workflowSnapshotEntity = new Entity({
       pk: { field: 'pk', composite: ['entity', 'workflow_name'] },
       sk: { field: 'sk', composite: ['run_id'] },
     },
+    // GSI to allow querying by run_id efficiently without knowing the workflow_name
+    gsi2: {
+      index: 'gsi2',
+      pk: { field: 'gsi2pk', composite: ['entity', 'run_id'] },
+      sk: { field: 'gsi2sk', composite: ['workflow_name'] },
+    },
   },
 });

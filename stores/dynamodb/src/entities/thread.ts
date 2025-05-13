@@ -28,12 +28,34 @@ export const threadEntity = new Entity({
     metadata: {
       type: 'string',
       required: false,
+      // Stringify metadata object on set if it's not already a string
+      set: (value?: Record<string, unknown> | string) => {
+        if (value && typeof value !== 'string') {
+          return JSON.stringify(value);
+        }
+        return value;
+      },
+      // Parse JSON string to object on get
+      get: (value?: string) => {
+        if (value && typeof value === 'string') {
+          try {
+            // Attempt to parse only if it might be JSON (e.g., starts with { or [)
+            if (value.startsWith('{') || value.startsWith('[')) {
+              return JSON.parse(value);
+            }
+          } catch (e) {
+            // Ignore parse error, return original string
+            return value;
+          }
+        }
+        return value;
+      },
     },
   },
   indexes: {
     primary: {
       pk: { field: 'pk', composite: ['entity', 'id'] },
-      sk: { field: 'sk', composite: [] },
+      sk: { field: 'sk', composite: ['id'] },
     },
     byResource: {
       index: 'gsi1',
@@ -42,14 +64,3 @@ export const threadEntity = new Entity({
     },
   },
 });
-
-// // Export the base entity
-// export const ThreadEntity = new Entity(schema);
-
-// // Export the configuration function
-// export function configureThreadEntity(
-//   client: DynamoDBDocumentClient,
-//   table: string,
-// ): Entity<string, string, string, Schema<string, string, string>> {
-//   return new Entity(schema, { client, table });
-// }

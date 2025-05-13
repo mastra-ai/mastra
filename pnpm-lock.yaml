@@ -2649,7 +2649,7 @@ importers:
         specifier: workspace:*
         version: link:../_test-utils
       '@types/node':
-        specifier: ^20.17.27
+        specifier: ^20.17.32
         version: 20.17.32
       tsup:
         specifier: ^8.0.0
@@ -4777,44 +4777,30 @@ packages:
   '@couchbase/couchbase-darwin-arm64-napi@4.4.5':
     resolution: {integrity: sha512-Myy6jzYnr2PRiEEASgr63QmQGCqaTBP5w2N1GMnBZxdMJD1iqClu2E4cqAlFfAeA1Y9MpKjPIuqTr9ls7nqx/w==}
     engines: {node: '>=16'}
-    cpu: [arm64]
-    os: [darwin]
 
   '@couchbase/couchbase-darwin-x64-napi@4.4.5':
     resolution: {integrity: sha512-rX9j+2TUhzWs8GOAWLIEl5KhJf5LanHoACGol7FYhZmAxC26CTNJJztSpLMgJyhc0k/JtESPUDyMW3mopTX1aw==}
     engines: {node: '>=16'}
-    cpu: [x64]
-    os: [darwin]
 
   '@couchbase/couchbase-linux-arm64-napi@4.4.5':
     resolution: {integrity: sha512-r1rMwagow538+ivhC4w1OZU+DncaXgYbTY3VdvWVYpMl/BO6bXaa5P89jyKREnqWGieItVYXWupNote2HqfQog==}
     engines: {node: '>=16'}
-    cpu: [arm64]
-    os: [linux]
 
   '@couchbase/couchbase-linux-x64-napi@4.4.5':
     resolution: {integrity: sha512-hTLxwOeQukfP6Y2R8ZuvQpCpwhUt2VK9BHSrAxv2Vx3PUyVk19VsM46beR93rryqinB3Gdc/at+etU7dYFCHBw==}
     engines: {node: '>=16'}
-    cpu: [x64]
-    os: [linux]
 
   '@couchbase/couchbase-linuxmusl-arm64-napi@4.4.5':
     resolution: {integrity: sha512-7tlxGjdDDZy5wgDOCW7aJm9Ve6Gc31tJHd0R2HcHZVESaTUeHf0mLdJp2vtDYOhY0OCytQqaubkp7VIR7nHR4g==}
     engines: {node: '>=16'}
-    cpu: [arm64]
-    os: [linux]
 
   '@couchbase/couchbase-linuxmusl-x64-napi@4.4.5':
     resolution: {integrity: sha512-JA6xp4hgqZkhe0/I6dNTHynC5z3fr/rjgQzqWjdomGS+V+CiUekQOvJPEiBWbvfGnzBJf0KIMm7+OQ/d/w8guw==}
     engines: {node: '>=16'}
-    cpu: [x64]
-    os: [linux]
 
   '@couchbase/couchbase-win32-x64-napi@4.4.5':
     resolution: {integrity: sha512-acVe9Bq22Ml/bVoh3z82o+bVIQTNsauRmuX7wH+Jezk/2he0J0+DNWj53y6o/cfv4YQgbUhzTe5u/7FR6mEMYg==}
     engines: {node: '>=16'}
-    cpu: [x64]
-    os: [win32]
 
   '@cspotcode/source-map-support@0.8.1':
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}

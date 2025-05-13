@@ -95,6 +95,7 @@ The IAM role or user used by this package needs the following permissions:
         "dynamodb:DeleteItem",
         "dynamodb:Query",
         "dynamodb:Scan",
+        "dynamodb:BatchGetItem",
         "dynamodb:BatchWriteItem"
       ],
       "Resource": [

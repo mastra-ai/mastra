@@ -9,9 +9,10 @@
     "src"
   ],
   "scripts": {
-    "build": "tsup",
+    "build": "tsup src/index.ts --format esm,cjs --clean --treeshake=smallest --splitting",
     "dev": "tsup --watch",
     "clean": "rm -rf dist",
+    "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest watch",
     "typecheck": "tsc --noEmit"

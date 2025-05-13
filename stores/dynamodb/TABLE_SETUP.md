@@ -17,11 +17,24 @@ The `@mastra/dynamodb` package uses a single-table design pattern with ElectroDB
     - Partition Key: `gsi2pk` (String)
     - Sort Key: `gsi2sk` (String)
 
-_(Note: These GSIs (Global Secondary Indexes) allow efficient querying on attributes other than the primary key, enabling different data access patterns required by Mastra components. For example, GSI1 might be used to retrieve all messages for a specific thread.)_
+_(Note: These GSIs (Global Secondary Indexes) allow efficient querying on attributes other than the primary key, enabling different data access patterns required by Mastra components.)_
+
+### GSI Usage Details:
+
+- **GSI1 (Index Name: `gsi1`)**: This index is used by multiple entities for common lookup patterns:
+
+  - `threadEntity`: Query by `resourceId` (`byResource` index).
+  - `messageEntity`: Query by `threadId` (`byThread` index).
+  - `traceEntity`: Query by `name` (`byName` index).
+  - `evalEntity`: Query by `agent_name` (`byAgent` index).
+
+- **GSI2 (Index Name: `gsi2`)**: This index is used for:
+  - `traceEntity`: Query by `scope` (`byScope` index).
+  - `workflowSnapshotEntity`: Query by `run_id` (`byRunId` index).
 
 ## CloudFormation Template
 
-Here's an example CloudFormation template for creating the required table:
+Here's an example CloudFormation template for creating the required table, reflecting the GSI usage:
 
 ```yaml
 Resources:
@@ -56,7 +69,7 @@ Resources:
             - AttributeName: gsi1sk
               KeyType: RANGE
           Projection:
-            ProjectionType: ALL
+            ProjectionType: ALL # Suitable for varied query needs of GSI1
         - IndexName: gsi2
           KeySchema:
             - AttributeName: gsi2pk
@@ -105,7 +118,7 @@ export class MastraDynamoDbStack extends cdk.Stack {
       // projectionType defaults to ALL in CDK, which is suitable for flexible querying but has cost implications.
     });
 
-    // Add GSI2
+    // Add GSI2 (Used by Trace and WorkflowSnapshot)
     table.addGlobalSecondaryIndex({
       indexName: 'gsi2',
       partitionKey: { name: 'gsi2pk', type: dynamodb.AttributeType.STRING },

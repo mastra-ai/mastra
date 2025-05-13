@@ -1,20 +1,20 @@
-import { DynamoDBStore } from '..';
 import {
-  DynamoDBClient,
+  BatchWriteItemCommand,
   CreateTableCommand,
   DeleteTableCommand,
+  DescribeTableCommand,
+  DynamoDBClient,
   ListTablesCommand,
+  ScanCommand,
   waitUntilTableExists,
   waitUntilTableNotExists,
-  ScanCommand,
-  BatchWriteItemCommand,
-  DescribeTableCommand,
 } from '@aws-sdk/client-dynamodb';
-import { describe, beforeAll, beforeEach, afterAll, test, expect } from 'vitest';
-import type { StorageThreadType, MessageType, WorkflowRunState, WorkflowRun } from '@mastra/core';
-import { TABLE_EVALS, TABLE_WORKFLOW_SNAPSHOT, TABLE_THREADS } from '@mastra/core/storage';
+import type { MessageType, StorageThreadType, WorkflowRun, WorkflowRunState } from '@mastra/core';
+import { TABLE_EVALS, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import { spawn } from 'child_process';
 import { randomUUID } from 'crypto';
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
+import { DynamoDBStore } from '..';
 
 const TEST_TABLE_NAME = 'mastra-single-table-test'; // Define the single table name
 const LOCAL_ENDPOINT = 'http://localhost:8000';
@@ -883,11 +883,10 @@ describe('DynamoDBStore Integration Tests', () => {
         new DynamoDBStore({
           name: 'MissingTableStore',
           config: {
-            // tableName is missing
             endpoint: LOCAL_ENDPOINT,
             region: LOCAL_REGION,
             credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
-          } satisfies Omit<DynamoDBStoreConfig, 'tableName'>, // Use satisfies to ensure type safety
+          } as any, // Cast to any to bypass compile-time check for this specific test
         });
       }).toThrow(/tableName must be provided/); // Check for specific error message if possible
     });

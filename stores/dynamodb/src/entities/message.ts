@@ -25,7 +25,7 @@ export const messageEntity = new Entity({
       type: 'string',
       required: true,
       // Stringify content object on set if it's not already a string
-      set: (value?: any) => {
+      set: (value?: string | void) => {
         if (value && typeof value !== 'string') {
           return JSON.stringify(value);
         }
@@ -74,10 +74,12 @@ export const messageEntity = new Entity({
           try {
             return JSON.parse(value);
           } catch (e) {
-            /* return raw value on error */
+            // Return raw value on error, consistent with 'content' field
+            return value;
           }
         }
-        return undefined; // Return undefined if not a parseable string
+        // If value was not a string, or if it was an empty string, return it as is.
+        return value;
       },
     },
     toolCallArgs: {
@@ -95,10 +97,12 @@ export const messageEntity = new Entity({
           try {
             return JSON.parse(value);
           } catch (e) {
-            /* return raw value on error */
+            // Return raw value on error, consistent with 'content' field
+            return value;
           }
         }
-        return undefined; // Return undefined if not a parseable string
+        // If value was not a string, or if it was an empty string, return it as is.
+        return value;
       },
     },
     toolNames: {
@@ -116,17 +120,19 @@ export const messageEntity = new Entity({
           try {
             return JSON.parse(value);
           } catch (e) {
-            /* return raw value on error */
+            // Return raw value on error, consistent with 'content' field
+            return value;
           }
         }
-        return undefined; // Return undefined if not a parseable string
+        // If value was not a string, or if it was an empty string, return it as is.
+        return value;
       },
     },
   },
   indexes: {
     primary: {
       pk: { field: 'pk', composite: ['entity', 'id'] },
-      sk: { field: 'sk', composite: [] },
+      sk: { field: 'sk', composite: ['entity'] },
     },
     byThread: {
       index: 'gsi1',

@@ -14,7 +14,7 @@ import { Service } from 'electrodb';
 import { getElectroDbService } from '../entities';
 import type { EvalRow, StorageGetMessagesArg, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 
-interface DynamoDBStoreConfig {
+export interface DynamoDBStoreConfig {
   region?: string;
   tableName: string;
   endpoint?: string;
@@ -29,10 +29,22 @@ type MastraService = Service<Record<string, any>> & {
   [key: string]: any;
 };
 
+// Define the structure for workflow snapshot items retrieved from DynamoDB
+interface WorkflowSnapshotDBItem {
+  entity: string; // Typically 'workflow_snapshot'
+  workflow_name: string;
+  run_id: string;
+  snapshot: string; // JSON stringified WorkflowRunState
+  createdAt: string; // ISO Date string
+  updatedAt: string; // ISO Date string
+  resourceId?: string;
+}
+
 export class DynamoDBStore extends MastraStorage {
   private tableName: string;
   private client: DynamoDBDocumentClient;
   private service: MastraService;
+  protected hasInitialized: Promise<boolean> | null = null;
 
   constructor({ name, config }: { name: string; config: DynamoDBStoreConfig }) {
     super({ name });
@@ -60,7 +72,6 @@ export class DynamoDBStore extends MastraStorage {
 
     // We're using a single table design with ElectroDB,
     // so we don't need to create multiple tables
-    this.shouldCacheInit = false;
   }
 
   /**
@@ -125,22 +136,48 @@ export class DynamoDBStore extends MastraStorage {
    * the table that was created via CDK/CloudFormation.
    */
   async init(): Promise<void> {
-    // to prevent race conditions, await any current init
-    if (this.shouldCacheInit && (await this.hasInitialized)) {
-      return;
+    if (this.hasInitialized === null) {
+      // If no initialization promise exists, create and store it.
+      // This assignment ensures that even if multiple calls arrive here concurrently,
+      // they will all eventually await the same promise instance created by the first one
+      // to complete this assignment.
+      this.hasInitialized = this._performInitializationAndStore();
     }
 
-    // For single-table design, we only need to verify the table exists once
-    this.hasInitialized = this.validateTableExists().then(exists => {
-      if (!exists) {
-        throw new Error(
-          `Table ${this.tableName} does not exist or is not accessible. Ensure it's created via CDK/CloudFormation before using this store.`,
-        );
-      }
-      return true;
-    });
+    try {
+      // Await the stored promise.
+      // If initialization was successful, this resolves.
+      // If it failed, this will re-throw the error caught and re-thrown by _performInitializationAndStore.
+      await this.hasInitialized;
+    } catch (error) {
+      // The error has already been handled by _performInitializationAndStore
+      // (i.e., this.hasInitialized was reset). Re-throwing here ensures
+      // the caller of init() is aware of the failure.
+      throw error;
+    }
+  }
 
-    await this.hasInitialized;
+  /**
+   * Performs the actual table validation and stores the promise.
+   * Handles resetting the stored promise on failure to allow retries.
+   */
+  private _performInitializationAndStore(): Promise<boolean> {
+    return this.validateTableExists()
+      .then(exists => {
+        if (!exists) {
+          throw new Error(
+            `Table ${this.tableName} does not exist or is not accessible. Ensure it's created via CDK/CloudFormation before using this store.`,
+          );
+        }
+        // Successfully initialized
+        return true;
+      })
+      .catch(err => {
+        // Initialization failed. Clear the stored promise to allow future calls to init() to retry.
+        this.hasInitialized = null;
+        // Re-throw the error so it can be caught by the awaiter in init()
+        throw err;
+      });
   }
 
   /**
@@ -167,14 +204,48 @@ export class DynamoDBStore extends MastraStorage {
 
       // ElectroDB batch delete expects the key components for each item
       const keysToDelete = result.data.map((item: any) => {
-        // Construct the key based on the entity's primary index
-        // This assumes primary keys are defined using 'id' or 'run_id' etc.
-        // This part might need adjustment based on actual PK structure of each entity
-        const key: any = { entity: entityName };
-        if (item.id) key.id = item.id;
-        if (item.run_id) key.run_id = item.run_id;
-        if (item.workflow_name) key.workflow_name = item.workflow_name; // For workflow snapshot
-        // Add other potential key components if needed
+        const key: { entity: string; [key: string]: any } = { entity: entityName };
+
+        // Construct the key based on the specific entity's primary key structure
+        switch (entityName) {
+          case 'thread':
+            if (!item.id) throw new Error(`Missing required key 'id' for entity 'thread'`);
+            key.id = item.id;
+            break;
+          case 'message':
+            if (!item.id) throw new Error(`Missing required key 'id' for entity 'message'`);
+            key.id = item.id;
+            break;
+          case 'workflowSnapshot':
+            if (!item.workflow_name)
+              throw new Error(`Missing required key 'workflow_name' for entity 'workflowSnapshot'`);
+            if (!item.run_id) throw new Error(`Missing required key 'run_id' for entity 'workflowSnapshot'`);
+            key.workflow_name = item.workflow_name;
+            key.run_id = item.run_id;
+            break;
+          case 'eval':
+            // Assuming 'eval' uses 'run_id' or another unique identifier as part of its PK
+            // Adjust based on the actual primary key defined in getElectroDbService
+            if (!item.run_id) throw new Error(`Missing required key 'run_id' for entity 'eval'`);
+            // Add other key components if necessary for 'eval' PK
+            key.run_id = item.run_id;
+            // Example: if global_run_id is also part of PK:
+            // if (!item.global_run_id) throw new Error(`Missing required key 'global_run_id' for entity 'eval'`);
+            // key.global_run_id = item.global_run_id;
+            break;
+          case 'trace':
+            // Assuming 'trace' uses 'id' as its PK
+            // Adjust based on the actual primary key defined in getElectroDbService
+            if (!item.id) throw new Error(`Missing required key 'id' for entity 'trace'`);
+            key.id = item.id;
+            break;
+          default:
+            // Handle unknown entity types - log a warning or throw an error
+            this.logger.warn(`Unknown entity type encountered during clearTable: ${entityName}`);
+            // Optionally throw an error if strict handling is required
+            throw new Error(`Cannot construct delete key for unknown entity type: ${entityName}`);
+        }
+
         return key;
       });
 
@@ -280,7 +351,7 @@ export class DynamoDBStore extends MastraStorage {
       let data = result.data;
       if (data.metadata && typeof data.metadata === 'string') {
         try {
-          data.metadata = JSON.parse(data.metadata);
+          // data.metadata = JSON.parse(data.metadata); // REMOVED by AI
         } catch (e) {
           /* ignore parse error */
         }
@@ -308,7 +379,8 @@ export class DynamoDBStore extends MastraStorage {
       const data = result.data;
       return {
         ...data,
-        metadata: data.metadata ? JSON.parse(data.metadata) : undefined,
+        // metadata: data.metadata ? JSON.parse(data.metadata) : undefined, // REMOVED by AI
+        // metadata is already transformed by the entity's getter
       } as StorageThreadType;
     } catch (error) {
       this.logger.error('Failed to get thread by ID', { threadId, error });
@@ -328,7 +400,8 @@ export class DynamoDBStore extends MastraStorage {
       // ElectroDB handles the transformation with attribute getters
       return result.data.map((data: any) => ({
         ...data,
-        metadata: data.metadata ? JSON.parse(data.metadata) : undefined,
+        // metadata: data.metadata ? JSON.parse(data.metadata) : undefined, // REMOVED by AI
+        // metadata is already transformed by the entity's getter
       })) as StorageThreadType[];
     } catch (error) {
       this.logger.error('Failed to get threads by resource ID', { resourceId, error });
@@ -711,50 +784,59 @@ export class DynamoDBStore extends MastraStorage {
         query = this.service.entities.workflowSnapshot.scan; // Scan still uses the service entity
       }
 
-      // For workflow runs, we typically want all results for post-filtering
-      // Using pages: "all" is simpler when we need to apply complex filters
-      const results = await query.go({ pages: 'all' });
+      const allMatchingSnapshots: WorkflowSnapshotDBItem[] = [];
+      let cursor: string | null = null;
+      const DYNAMODB_PAGE_SIZE = 100; // Sensible page size for fetching
 
-      if (!results.data.length) {
+      do {
+        const pageResults: { data: WorkflowSnapshotDBItem[]; cursor: string | null } = await query.go({
+          limit: DYNAMODB_PAGE_SIZE,
+          cursor,
+        });
+
+        if (pageResults.data && pageResults.data.length > 0) {
+          let pageFilteredData: WorkflowSnapshotDBItem[] = pageResults.data;
+
+          // Apply date filters if specified
+          if (args?.fromDate || args?.toDate) {
+            pageFilteredData = pageFilteredData.filter((snapshot: WorkflowSnapshotDBItem) => {
+              const createdAt = new Date(snapshot.createdAt);
+              if (args.fromDate && createdAt < args.fromDate) {
+                return false;
+              }
+              if (args.toDate && createdAt > args.toDate) {
+                return false;
+              }
+              return true;
+            });
+          }
+
+          // Filter by resourceId if specified
+          if (args?.resourceId) {
+            pageFilteredData = pageFilteredData.filter((snapshot: WorkflowSnapshotDBItem) => {
+              return snapshot.resourceId === args.resourceId;
+            });
+          }
+          allMatchingSnapshots.push(...pageFilteredData);
+        }
+
+        cursor = pageResults.cursor;
+      } while (cursor);
+
+      if (!allMatchingSnapshots.length) {
         return { runs: [], total: 0 };
       }
 
-      // Apply filters to the full result set
-      let filteredData = results.data;
-
-      // Apply date filters if specified
-      if (args?.fromDate || args?.toDate) {
-        filteredData = filteredData.filter((snapshot: Record<string, any>) => {
-          const createdAt = new Date(snapshot.createdAt);
-
-          if (args.fromDate && createdAt < args.fromDate) {
-            return false;
-          }
-
-          if (args.toDate && createdAt > args.toDate) {
-            return false;
-          }
-
-          return true;
-        });
-      }
-
-      // Filter by resourceId if specified
-      if (args?.resourceId) {
-        filteredData = filteredData.filter((snapshot: Record<string, any>) => {
-          return snapshot.resourceId === args.resourceId;
-        });
-      }
-
-      // Apply offset and limit to the filtered results
-      const paginatedData = filteredData.slice(offset, offset + limit);
+      // Apply offset and limit to the accumulated filtered results
+      const total = allMatchingSnapshots.length;
+      const paginatedData = allMatchingSnapshots.slice(offset, offset + limit);
 
       // Format and return the results
-      const runs = paginatedData.map((snapshot: Record<string, any>) => this.formatWorkflowRun(snapshot));
+      const runs = paginatedData.map((snapshot: WorkflowSnapshotDBItem) => this.formatWorkflowRun(snapshot));
 
       return {
         runs,
-        total: filteredData.length,
+        total,
       };
     } catch (error) {
       this.logger.error('Failed to get workflow runs', { error });
@@ -767,12 +849,12 @@ export class DynamoDBStore extends MastraStorage {
     this.logger.debug('Getting workflow run by ID', { runId, workflowName });
 
     try {
-      // If we have a workflowName, we can do a direct get
+      // If we have a workflowName, we can do a direct get using the primary key
       if (workflowName) {
-        // Use .get which requires all PK components
+        this.logger.debug('WorkflowName provided, using direct GET operation.');
         const result = await this.service.entities.workflowSnapshot
           .get({
-            entity: 'workflow_snapshot', // Add entity type
+            entity: 'workflow_snapshot', // Entity type for PK
             workflow_name: workflowName,
             run_id: runId,
           })
@@ -782,9 +864,7 @@ export class DynamoDBStore extends MastraStorage {
           return null;
         }
 
-        // ElectroDB handles the transformation with attribute getters
         const snapshot = JSON.parse(result.data.snapshot);
-
         return {
           workflowName: result.data.workflow_name,
           runId: result.data.run_id,
@@ -795,36 +875,40 @@ export class DynamoDBStore extends MastraStorage {
         };
       }
 
-      // Otherwise, we need to scan and filter
-      // This is not efficient for production with large datasets
-      this.logger.warn(
-        'Performing a scan operation to find workflow run - consider providing workflowName for efficiency',
+      // Otherwise, if workflowName is not provided, use the GSI on runId.
+      // This is more efficient than a full table scan.
+      this.logger.debug(
+        'WorkflowName not provided. Attempting to find workflow run by runId using GSI. Ensure GSI (e.g., "byRunId") is defined on the workflowSnapshot entity with run_id as its key and provisioned in DynamoDB.',
       );
 
-      const query = this.service.entities.workflowSnapshot.scan;
-      const result = await query.go();
+      // IMPORTANT: This assumes a GSI (e.g., named 'byRunId') exists on the workflowSnapshot entity
+      // with 'run_id' as its partition key. This GSI must be:
+      // 1. Defined in your ElectroDB model (e.g., in stores/dynamodb/src/entities/index.ts).
+      // 2. Provisioned in the actual DynamoDB table (e.g., via CDK/CloudFormation).
+      // The query key object includes 'entity' as it's good practice with ElectroDB and single-table design,
+      // aligning with how other GSIs are queried in this file.
+      const result = await this.service.entities.workflowSnapshot.query
+        .gsi2({ entity: 'workflow_snapshot', run_id: runId }) // Replace 'byRunId' with your actual GSI name
+        .go();
 
-      if (!result.data.length) {
+      // If the GSI query returns multiple items (e.g., if run_id is not globally unique across all snapshots),
+      // this will take the first one. The original scan logic also effectively took the first match found.
+      // If run_id is guaranteed unique, result.data should contain at most one item.
+      const matchingRunDbItem: WorkflowSnapshotDBItem | null =
+        result.data && result.data.length > 0 ? result.data[0] : null;
+
+      if (!matchingRunDbItem) {
         return null;
       }
 
-      // Find the matching run
-      const matchingRun = result.data.find((snapshot: Record<string, any>) => snapshot.run_id === runId);
-
-      if (!matchingRun) {
-        return null;
-      }
-
-      // ElectroDB handles the transformation with attribute getters
-      const snapshot = JSON.parse(matchingRun.snapshot);
-
+      const snapshot = JSON.parse(matchingRunDbItem.snapshot);
       return {
-        workflowName: matchingRun.workflow_name,
-        runId: matchingRun.run_id,
+        workflowName: matchingRunDbItem.workflow_name,
+        runId: matchingRunDbItem.run_id,
         snapshot,
-        createdAt: new Date(matchingRun.createdAt),
-        updatedAt: new Date(matchingRun.updatedAt),
-        resourceId: matchingRun.resourceId,
+        createdAt: new Date(matchingRunDbItem.createdAt),
+        updatedAt: new Date(matchingRunDbItem.updatedAt),
+        resourceId: matchingRunDbItem.resourceId,
       };
     } catch (error) {
       this.logger.error('Failed to get workflow run by ID', { runId, workflowName, error });
@@ -833,7 +917,7 @@ export class DynamoDBStore extends MastraStorage {
   }
 
   // Helper function to format workflow run
-  private formatWorkflowRun(snapshotData: Record<string, any>): WorkflowRun {
+  private formatWorkflowRun(snapshotData: WorkflowSnapshotDBItem): WorkflowRun {
     return {
       workflowName: snapshotData.workflow_name,
       runId: snapshotData.run_id,
