@@ -52,7 +52,7 @@ constructor({
 
 ### MastraMCPServerDefinition
 
-Each server in the `servers` map is configured using the `MastraMCPServerDefinition` type. The `MastraMCPClient` used internally automatically detects the transport type based on the provided parameters:
+Each server in the `servers` map is configured using the `MastraMCPServerDefinition` type. The transport type is detected based on the provided parameters:
 
 - If `command` is provided, it uses the Stdio transport.
 - If `url` is provided, it first attempts to use the Streamable HTTP transport and falls back to the legacy SSE transport if the initial connection fails.
