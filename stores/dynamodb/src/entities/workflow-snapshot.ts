@@ -33,7 +33,7 @@ export const workflowSnapshotEntity = new Entity({
       },
       // Parse JSON string to object on get
       get: (value?: string) => {
-        return value;
+        return value ? JSON.parse(value) : value;
       },
     },
     resourceId: {
