@@ -1,5 +1,79 @@
 # @mastra/mcp
 
+## 0.5.0-alpha.3
+
+### Patch Changes
+
+- bb1e2c8: Make sure mcp handlers can only be registered once
+
+## 0.5.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [3171b5b]
+- Updated dependencies [973e5ac]
+- Updated dependencies [9e1eff5]
+  - @mastra/core@0.9.4-alpha.2
+
+## 0.5.0-alpha.1
+
+### Minor Changes
+
+- e229660: MCPClient: expose connected client resources.
+
+  Added a new `getResources()` method to the MCPClient class that allows clients to retrieve resources from connected MCP servers. Resources are data or content exposed by MCP servers that can be accessed by clients.
+
+  The implementation includes:
+
+  - Direct access to resources from all connected MCP servers, grouped by server name
+  - Robust error handling that allows partial results when some servers fail
+  - Comprehensive test coverage with real server implementation
+
+  This feature enables applications to access data and content exposed by MCP servers through the resources capability, such as files, databases, or other content sources.
+
+### Patch Changes
+
+- edf1e88: allows ability to pass McpServer into the mastra class and creates an endpoint /api/servers/:serverId/mcp to POST messages to an MCP server
+- Updated dependencies [ab80e7e]
+- Updated dependencies [6fa1ad1]
+- Updated dependencies [c28d7a0]
+- Updated dependencies [edf1e88]
+  - @mastra/core@0.9.4-alpha.1
+
+## 0.4.4-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [daf942f]
+- Updated dependencies [0b8b868]
+  - @mastra/core@0.9.4-alpha.0
+
+## 0.4.3
+
+### Patch Changes
+
+- Updated dependencies [e450778]
+- Updated dependencies [8902157]
+- Updated dependencies [ca0dc88]
+- Updated dependencies [526c570]
+- Updated dependencies [d7a6a33]
+- Updated dependencies [9cd1a46]
+- Updated dependencies [b5d2de0]
+- Updated dependencies [644f8ad]
+- Updated dependencies [70dbf51]
+  - @mastra/core@0.9.3
+
+## 0.4.3-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [e450778]
+- Updated dependencies [8902157]
+- Updated dependencies [ca0dc88]
+- Updated dependencies [9cd1a46]
+- Updated dependencies [70dbf51]
+  - @mastra/core@0.9.3-alpha.1
+
 ## 0.4.3-alpha.0
 
 ### Patch Changes

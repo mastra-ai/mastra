@@ -54,6 +54,8 @@ export function AgentDetails({ agentId }: { agentId: string }) {
 
   const toolsArray = Object.entries(agent?.tools ?? {});
 
+  const workflowsArray = Object.entries(agent?.workflows ?? {});
+
   return (
     <ScrollArea className="h-[calc(100vh-126px)] pt-2 px-4 pb-4 text-xs">
       <div className="space-y-4">
@@ -207,8 +209,10 @@ export function AgentDetails({ agentId }: { agentId: string }) {
           <p className="text-mastra-el-3">Chat Method</p>
           <div className="flex flex-col gap-2 text-mastra-el-5">
             <RadioGroup
+              orientation="horizontal"
               value={chatWithGenerate ? 'generate' : 'stream'}
               onValueChange={value => setChatWithGenerate(value === 'generate')}
+              className="flex flex-row gap-2"
             >
               <div className="flex items-center gap-2">
                 <RadioGroupItem value="generate" id="generate" className="text-mastra-el-3" />
@@ -245,6 +249,24 @@ export function AgentDetails({ agentId }: { agentId: string }) {
             )}
           </div>
         </div>
+        {workflowsArray?.length ? (
+          <div className="grid grid-cols-[100px_1fr] gap-2">
+            <p className="text-mastra-el-3">Workflows</p>
+            <div className="flex flex-col gap-2 text-mastra-el-5">
+              {workflowsArray.map(([workflowKey, workflow]) => (
+                <span
+                  key={workflowKey}
+                  onClick={() => {
+                    // navigate(`/workflows/v-next/${workflowKey}/graph`);
+                  }}
+                  className="no-underline"
+                >
+                  {workflow.name}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
     </ScrollArea>
   );

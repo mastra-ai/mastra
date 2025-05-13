@@ -41,3 +41,22 @@ This creates a new Mastra project. You can run it in three different ways:
    - `-k, --llm-api-key`: API key for the selected LLM provider (will be added to .env file)
    - `-e, --example`: Include example code
    - `-ne, --no-example`: Skip example code
+
+## Advanced usage
+
+### Disable analytics
+
+If you prefer not to send anonymous usage data then set the
+`MASTRA_TELEMETRY_DISABLED=1` environment variable when running the
+command:
+
+```bash
+MASTRA_TELEMETRY_DISABLED=1 mastra init
+```
+
+### Custom provider endpoints
+
+Initialised projects respect the `OPENAI_BASE_URL` and
+`ANTHROPIC_BASE_URL` variables if present. This lets you route provider
+traffic through proxies or private gateways when starting the dev server
+later on.

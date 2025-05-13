@@ -226,6 +226,7 @@ describe('Memory Handlers', () => {
           createdAt: new Date(),
           threadId: 'test-thread',
           type: 'text',
+          resourceId: 'test-resource',
         },
       ];
 

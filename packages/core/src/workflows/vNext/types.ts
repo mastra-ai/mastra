@@ -8,7 +8,7 @@ export type StepSuccess<T> = {
 
 export type StepFailure = {
   status: 'failed';
-  error: string;
+  error: string | Error;
 };
 
 export type StepSuspended<T> = {

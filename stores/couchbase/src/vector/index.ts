@@ -7,7 +7,7 @@ import type {
   QueryVectorParams,
 } from '@mastra/core/vector';
 import type { Bucket, Cluster, Collection, Scope } from 'couchbase';
-import { connect, SearchRequest, VectorQuery, VectorSearch } from 'couchbase';
+import { MutateInSpec, connect, SearchRequest, VectorQuery, VectorSearch } from 'couchbase';
 
 type MastraMetric = 'cosine' | 'euclidean' | 'dotproduct';
 type CouchbaseMetric = 'cosine' | 'l2_norm' | 'dot_product';
@@ -283,5 +283,65 @@ export class CouchbaseVector extends MastraVector {
     }
     await this.scope.searchIndexes().dropIndex(indexName);
     this.vector_dimension = null as unknown as number;
+  }
+
+  /**
+   * Updates a vector by its ID with the provided vector and/or metadata.
+   * @param indexName - The name of the index containing the vector.
+   * @param id - The ID of the vector to update.
+   * @param update - An object containing the vector and/or metadata to update.
+   * @param update.vector - An optional array of numbers representing the new vector.
+   * @param update.metadata - An optional record containing the new metadata.
+   * @returns A promise that resolves when the update is complete.
+   * @throws Will throw an error if no updates are provided or if the update operation fails.
+   */
+  async updateVector(
+    _indexName: string,
+    id: string,
+    updates: { vector?: number[]; metadata?: Record<string, any> },
+  ): Promise<void> {
+    if (!updates.vector && !updates.metadata) {
+      throw new Error('No updates provided');
+    }
+    const collection = await this.getCollection();
+
+    // Check if document exists
+    try {
+      await collection.get(id);
+    } catch (err: any) {
+      if (err.code === 13 || err.message?.includes('document not found')) {
+        throw new Error(`Vector with id ${id} does not exist`);
+      }
+      throw err;
+    }
+
+    const specs: MutateInSpec[] = [];
+    if (updates.vector) specs.push(MutateInSpec.replace('embedding', updates.vector));
+    if (updates.metadata) specs.push(MutateInSpec.replace('metadata', updates.metadata));
+
+    await collection.mutateIn(id, specs);
+  }
+
+  /**
+   * Deletes a vector by its ID.
+   * @param indexName - The name of the index containing the vector.
+   * @param id - The ID of the vector to delete.
+   * @returns A promise that resolves when the deletion is complete.
+   * @throws Will throw an error if the deletion operation fails.
+   */
+  async deleteVector(_indexName: string, id: string): Promise<void> {
+    const collection = await this.getCollection();
+
+    // Check if document exists
+    try {
+      await collection.get(id);
+    } catch (err: any) {
+      if (err.code === 13 || err.message?.includes('document not found')) {
+        throw new Error(`Vector with id ${id} does not exist`);
+      }
+      throw err;
+    }
+
+    await collection.remove(id);
   }
 }

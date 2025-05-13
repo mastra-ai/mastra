@@ -79,7 +79,84 @@ const memory = new Memory({
 });
 ```
 
-If your agent is not properly updating working memory when you expect it to, you can add system instructions on _how_ and _when_ to use this template in your agents `instruction` setting.
+## Designing Effective Templates
+
+A well-structured template keeps the information easy for the agent to parse and update. Treat the
+template as a short form that you want the assistant to keep up to date.
+
+- **Short, focused labels.** Avoid paragraphs or very long headings. Keep labels brief (for example
+  `## Personal Info` or `- Name:`) so updates are easy to read and less likely to be truncated.
+- **Use consistent casing.** Inconsistent capitalization (`Timezone:` vs `timezone:`) can cause messy
+  updates. Stick to Title Case or lower case for headings and bullet labels.
+- **Keep placeholder text simple.** Use hints such as `[e.g., Formal]` or `[Date]` to help the LLM
+  fill in the correct spots.
+- **Abbreviate very long values.** If you only need a short form, include guidance like
+  `- Name: [First name or nickname]` or `- Address (short):` rather than the full legal text.
+- **Mention update rules in `instructions`.** You can instruct how and when to fill or clear parts of
+  the template directly in the agent's `instructions` field.
+
+### Alternative Template Styles
+
+Use a shorter single block if you only need a few items:
+
+```typescript
+const basicMemory = new Memory({
+  options: {
+    workingMemory: {
+      enabled: true,
+      template: `User Facts:\n- Name:\n- Favorite Color:\n- Current Topic:`,
+    },
+  },
+});
+```
+
+You can also store the key facts in a short paragraph format if you prefer a more narrative style:
+
+```typescript
+const paragraphMemory = new Memory({
+  options: {
+    workingMemory: {
+      enabled: true,
+      template: `Important Details:\n\nKeep a short paragraph capturing the user's important facts (name, main goal, current task).`,
+    },
+  },
+});
+```
+
+## Example: Multi-step Retention
+
+Below is a simplified view of how the `User Profile` template updates across a short user
+conversation:
+
+```nohighlight
+# User Profile
+
+## Personal Info
+
+- Name:
+- Location:
+- Timezone:
+
+--- After user says "My name is **Sam** and I'm from **Berlin**" ---
+
+# User Profile
+- Name: Sam
+- Location: Berlin
+- Timezone:
+
+--- After user adds "By the way I'm normally in **CET**" ---
+
+# User Profile
+- Name: Sam
+- Location: Berlin
+- Timezone: CET
+```
+
+The agent can now refer to `Sam` or `Berlin` in later responses without requesting the information
+again because it has been stored in working memory.
+
+If your agent is not properly updating working memory when you expect it to, you can add system
+instructions on _how_ and _when_ to use this template in your agent's `instructions` setting.
 
 ## Examples
 

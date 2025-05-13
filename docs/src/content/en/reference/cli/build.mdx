@@ -15,6 +15,33 @@ mastra build [options]
 
 - `--dir <path>`: Directory containing your Mastra project (default: current directory)
 
+## Advanced usage
+
+### Limit parallelism
+
+For CI or when running in resource constrained environments you can cap
+how many expensive tasks run at once by setting `MASTRA_CONCURRENCY`.
+
+```bash
+MASTRA_CONCURRENCY=2 mastra build
+```
+
+Unset it to allow the CLI to base concurrency on the host capabilities.
+
+### Disable telemetry
+
+To opt out of anonymous build analytics set:
+
+```bash
+MASTRA_TELEMETRY_DISABLED=1 mastra build
+```
+
+### Custom provider endpoints
+
+Build time respects the same `OPENAI_BASE_URL` and `ANTHROPIC_BASE_URL`
+variables that `mastra dev` does. They are forwarded by the AI SDK to
+any workflows or tools that call the providers.
+
 ## What It Does
 
 1. Locates your Mastra entry file (either `src/mastra/index.ts` or `src/mastra/index.js`)

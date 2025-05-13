@@ -7,7 +7,7 @@ export const ReferenceCards = () => {
         "Core",
         "CLI",
         "Agents",
-        "Tools",
+        "Tools & MCP",
         "Workflows",
         "Networks",
         "Memory",
@@ -46,6 +46,10 @@ export const ReferenceCards = () => {
         ],
         Agents: [
           {
+            title: "Agent",
+            href: "/reference/agents/agent",
+          },
+          {
             title: "getAgent()",
             href: "/reference/agents/getAgent",
           },
@@ -62,7 +66,7 @@ export const ReferenceCards = () => {
             href: "/reference/agents/stream",
           },
         ],
-        Tools: [
+        "Tools & MCP": [
           {
             title: "createDocumentChunkerTool()",
             href: "/reference/tools/document-chunker-tool",

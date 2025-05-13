@@ -23,9 +23,7 @@ import { mastra } from './mastra-instance';
 
 const app = new Hono();
 
-app.get('/mastra/agents', ctx =>
-  handlers.agents.getAgentsHandler({ mastra, runtimeContext: ctx }),
-);
+app.get('/mastra/agents', ctx => handlers.agents.getAgentsHandler({ mastra, runtimeContext: ctx }));
 app.post('/mastra/agents/:id/generate', async ctx => {
   const body = await ctx.req.json();
   return handlers.agents.generateHandler({

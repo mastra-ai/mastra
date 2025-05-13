@@ -3,7 +3,7 @@ import { CopilotKit, useCopilotChat } from "@copilotkit/react-core";
 import { Markdown } from "@copilotkit/react-ui";
 import { Role, TextMessage } from "@copilotkit/runtime-client-gql";
 
-import { ArrowLeftIcon, PaperIcon } from "@/components/svgs/Icons";
+import { ArrowLeftIcon } from "@/components/svgs/Icons";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import Spinner from "@/components/ui/spinner";
@@ -42,16 +42,19 @@ export function CustomChatInterface({
   setIsAgentMode: (isAgentMode: boolean) => void;
   searchQuery: string;
 }) {
-  const { visibleMessages, appendMessage, isLoading, reset } = useCopilotChat();
+  const { visibleMessages, appendMessage, isLoading } = useCopilotChat();
 
   const [inputValue, setInputValue] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const processedQueryRef = useRef(""); // Track processed queries
 
   useEffect(() => {
-    console.log({ searchQuery });
-    if (searchQuery === "") return;
+    if (searchQuery === "" || processedQueryRef.current === searchQuery) return;
+
+    // Track that we've processed this query
+    processedQueryRef.current = searchQuery;
     appendMessage(new TextMessage({ content: searchQuery, role: Role.User }));
-  }, [searchQuery]);
+  }, [searchQuery, appendMessage]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -67,10 +70,6 @@ export function CustomChatInterface({
     setInputValue("");
   };
 
-  const handleNewChat = () => {
-    reset();
-  };
-
   const handleBackToSearch = () => {
     setIsAgentMode(false);
   };
@@ -78,7 +77,7 @@ export function CustomChatInterface({
   return (
     <div className="flex flex-col w-full h-[600px]">
       {/* Chat header */}
-      <div className="flex justify-between w-full p-5">
+      <div className="flex w-full p-5">
         <Button
           variant="ghost"
           className="cursor-pointer hover:bg-surface-6 text-icons-3 bg-surface-5"
@@ -87,15 +86,6 @@ export function CustomChatInterface({
         >
           <ArrowLeftIcon className="w-3 h-3" />
           Back to Search
-        </Button>
-        <Button
-          variant="ghost"
-          className="cursor-pointer hover:bg-surface-6 text-icons-3 bg-surface-5"
-          size="slim"
-          onClick={handleNewChat}
-        >
-          <PaperIcon className="w-6 h-6" />
-          New chat
         </Button>
       </div>
 
@@ -159,7 +149,6 @@ export function CustomChatInterface({
                     setInputValue("");
                   }
                 }
-                // Shift+Enter will create a new line (default behavior)
               }}
               placeholder="Enter your message..."
               className="border-none shadow-none resize-none text-icons-6 placeholder:text-icons-2 focus-visible:ring-0"

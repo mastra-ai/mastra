@@ -1,5 +1,72 @@
 # @mastra/deployer
 
+## 0.3.4-alpha.2
+
+### Patch Changes
+
+- 03c40d1: instructions is only available in playground
+- Updated dependencies [3171b5b]
+- Updated dependencies [973e5ac]
+- Updated dependencies [9e1eff5]
+  - @mastra/core@0.9.4-alpha.2
+  - @mastra/server@2.0.4-alpha.2
+
+## 0.3.4-alpha.1
+
+### Patch Changes
+
+- edf1e88: allows ability to pass McpServer into the mastra class and creates an endpoint /api/servers/:serverId/mcp to POST messages to an MCP server
+- Updated dependencies [ab80e7e]
+- Updated dependencies [6fa1ad1]
+- Updated dependencies [c28d7a0]
+- Updated dependencies [edf1e88]
+  - @mastra/server@2.0.4-alpha.1
+  - @mastra/core@0.9.4-alpha.1
+
+## 0.3.4-alpha.0
+
+### Patch Changes
+
+- cb1f698: Set runtimeContext from playground for agents, tools, workflows
+- 0b8b868: Added A2A support + streaming
+- Updated dependencies [cb1f698]
+- Updated dependencies [daf942f]
+- Updated dependencies [0b8b868]
+  - @mastra/server@2.0.4-alpha.0
+  - @mastra/core@0.9.4-alpha.0
+
+## 0.3.3
+
+### Patch Changes
+
+- 8902157: added an optional `bodySizeLimit` to server config so that users can pass custom bodylimit size in mb. If not, it defaults to 4.5 mb
+- 70dbf51: [MASTRA-2452] updated setBaggage for tracing
+- Updated dependencies [e450778]
+- Updated dependencies [8902157]
+- Updated dependencies [ca0dc88]
+- Updated dependencies [526c570]
+- Updated dependencies [d7a6a33]
+- Updated dependencies [9cd1a46]
+- Updated dependencies [b5d2de0]
+- Updated dependencies [644f8ad]
+- Updated dependencies [70dbf51]
+  - @mastra/core@0.9.3
+  - @mastra/server@2.0.3
+
+## 0.3.3-alpha.1
+
+### Patch Changes
+
+- 8902157: added an optional `bodySizeLimit` to server config so that users can pass custom bodylimit size in mb. If not, it defaults to 4.5 mb
+- 70dbf51: [MASTRA-2452] updated setBaggage for tracing
+- Updated dependencies [e450778]
+- Updated dependencies [8902157]
+- Updated dependencies [ca0dc88]
+- Updated dependencies [9cd1a46]
+- Updated dependencies [70dbf51]
+  - @mastra/core@0.9.3-alpha.1
+  - @mastra/server@2.0.3-alpha.1
+
 ## 0.3.3-alpha.0
 
 ### Patch Changes

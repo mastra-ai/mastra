@@ -70,4 +70,4 @@ jobs:
 
       - name: Install dependencies
         if: steps.check-examples.outputs.examples_changed == 'true'
-        run: bash ./.github/scripts/install-deps.bash
+        run: bash ./.github/scripts/install-deps.bash ${{ github.event.pull_request.base.sha }}

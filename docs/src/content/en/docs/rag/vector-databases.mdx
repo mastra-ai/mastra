@@ -11,7 +11,7 @@ After generating embeddings, you need to store them in a database that supports 
 
 ## Supported Databases
 
-<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB']}>
+<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB', 'OpenSearch']}>
   <Tabs.Tab>
   ```ts filename="vector-store.ts" showLineNumbers copy
   import { PgVector } from '@mastra/pg';
@@ -181,6 +181,22 @@ import { LibSQLVector } from "@mastra/core/vector/libsql";
   });
   ```
 </Tabs.Tab>
+<Tabs.Tab>
+```ts filename="vector-store.ts" showLineNumbers copy
+  import { OpenSearchVector } from '@mastra/opensearch'
+
+  const store = new OpenSearchVector(process.env.OPENSEARCH_URL)
+  await store.createIndex({
+    indexName: "my-collection",
+    dimension: 1536,
+  });
+  await store.upsert({
+    indexName: "my-collection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
+```
+</Tabs.Tab>
 </Tabs>
 
 ## Using Vector Storage
@@ -210,7 +226,7 @@ The dimension size must match the output dimension of your chosen embedding mode
 
 Each vector database enforces specific naming conventions for indexes and collections to ensure compatibility and prevent conflicts.
 
-<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB']}>
+<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB', 'OpenSearch']}>
   <Tabs.Tab>
     Index names must:
     - Start with a letter or underscore
@@ -291,6 +307,16 @@ Each vector database enforces specific naming conventions for indexes and collec
     - Example: `my_collection.123` is valid
     - Example: `my-index` is not valid (contains hyphen)
     - Example: `My$Collection` is not valid (contains `$`)
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Index names must:
+    - Use only lowercase letters
+    - Not begin with underscores or hyphens
+    - Not contain spaces, commas
+    - Not contain special characters (e.g. `:`, `"`, `*`, `+`, `/`, `\`, `|`, `?`, `#`, `>`, `<`)
+    - Example: `my-index-123` is valid
+    - Example: `My_Index` is not valid (contains uppercase letters)
+    - Example: `_myindex` is not valid (begins with underscore)
   </Tabs.Tab>
 </Tabs>
 

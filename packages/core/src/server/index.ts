@@ -1,4 +1,4 @@
-import type { Handler, MiddlewareHandler } from 'hono';
+import type { Context, Handler, MiddlewareHandler } from 'hono';
 import type { DescribeRouteOptions } from 'hono-openapi';
 import type { Mastra } from '../mastra';
 import type { ApiRoute, Methods } from './types';
@@ -16,7 +16,7 @@ export function registerApiRoute<P extends string>(
     : {
         method: Methods;
         openapi?: DescribeRouteOptions;
-        handler: Handler<
+        handler?: Handler<
           {
             Variables: {
               mastra: Mastra;
@@ -24,6 +24,17 @@ export function registerApiRoute<P extends string>(
           },
           P,
           ParamsFromPath<P>
+        >;
+        createHandler?: (c: Context) => Promise<
+          Handler<
+            {
+              Variables: {
+                mastra: Mastra;
+              };
+            },
+            P,
+            ParamsFromPath<P>
+          >
         >;
         middleware?: MiddlewareHandler | MiddlewareHandler[];
       },
@@ -37,6 +48,7 @@ export function registerApiRoute<P extends string>(
     path,
     method: options.method,
     handler: options.handler,
+    createHandler: options.createHandler,
     openapi: options.openapi,
     middleware: options.middleware,
   } as ApiRoute;

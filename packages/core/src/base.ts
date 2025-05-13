@@ -20,7 +20,10 @@ export class MastraBase {
    */
   __setLogger(logger: Logger) {
     this.logger = logger;
-    this.logger.debug(`Logger updated [component=${this.component}] [name=${this.name}]`);
+
+    if (this.component !== RegisteredLogger.LLM) {
+      this.logger.debug(`Logger updated [component=${this.component}] [name=${this.name}]`);
+    }
   }
 
   /**
@@ -29,7 +32,10 @@ export class MastraBase {
    */
   __setTelemetry(telemetry: Telemetry) {
     this.telemetry = telemetry;
-    this.logger.debug(`Telemetry updated [component=${this.component}] [tracer=${this.telemetry.tracer}]`);
+
+    if (this.component !== RegisteredLogger.LLM) {
+      this.logger.debug(`Telemetry updated [component=${this.component}] [name=${this.telemetry.name}]`);
+    }
   }
 
   /**

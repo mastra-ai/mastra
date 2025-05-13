@@ -247,6 +247,16 @@ export const POST = handle(app);
   async lint(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
     await super.lint(entryFile, outputDirectory, toolsPaths);
 
-    // Lint for vercel support
+    await super.lint(entryFile, outputDirectory, toolsPaths);
+
+    const hasLibsql = (await this.deps.checkDependencies(['@mastra/libsql'])) === `ok`;
+
+    if (hasLibsql) {
+      this.logger.error(
+        `Vercel Deployer does not support @libsql/client(which may have been installed by @mastra/libsql) as a dependency. 
+        Use other Mastra Storage options instead e.g @mastra/pg`,
+      );
+      process.exit(1);
+    }
   }
 }

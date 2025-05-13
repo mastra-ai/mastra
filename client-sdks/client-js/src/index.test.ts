@@ -236,6 +236,7 @@ describe('MastraClient Resources', () => {
         model: 'gpt-4',
         instructions: 'Test instructions',
         tools: {},
+        workflows: {},
       };
       mockFetchResponse(mockResponse);
 
@@ -549,6 +550,35 @@ describe('MastraClient Resources', () => {
           headers: expect.objectContaining({
             Authorization: 'Bearer test-key',
           }),
+        }),
+      );
+    });
+
+    it('should get thread messages with limit', async () => {
+      const mockResponse = {
+        messages: [
+          {
+            id: '1',
+            content: 'test',
+            threadId,
+            role: 'user',
+            type: 'text',
+            resourceId: 'test-resource',
+            createdAt: new Date(),
+          },
+        ],
+        uiMessages: [],
+      };
+      mockFetchResponse(mockResponse);
+
+      const limit = 5;
+      const result = await memoryThread.getMessages({ limit });
+
+      expect(result).toEqual(mockResponse);
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/memory/threads/${threadId}/messages?agentId=${agentId}&limit=${limit}`,
+        expect.objectContaining({
+          headers: expect.objectContaining(clientOptions.headers),
         }),
       );
     });

@@ -1,5 +1,76 @@
 # @mastra/playground-ui
 
+## 5.0.4-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [b4c6c87]
+- Updated dependencies [3171b5b]
+- Updated dependencies [c2b980b]
+- Updated dependencies [973e5ac]
+- Updated dependencies [9e1eff5]
+  - @mastra/client-js@0.1.22-alpha.2
+  - @mastra/core@0.9.4-alpha.2
+
+## 5.0.4-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [ab80e7e]
+- Updated dependencies [6fa1ad1]
+- Updated dependencies [c28d7a0]
+- Updated dependencies [edf1e88]
+  - @mastra/core@0.9.4-alpha.1
+  - @mastra/client-js@0.1.22-alpha.1
+
+## 5.0.4-alpha.0
+
+### Patch Changes
+
+- cb1f698: Set runtimeContext from playground for agents, tools, workflows
+- Updated dependencies [cb1f698]
+- Updated dependencies [daf942f]
+- Updated dependencies [0b8b868]
+  - @mastra/client-js@0.1.22-alpha.0
+  - @mastra/core@0.9.4-alpha.0
+
+## 5.0.3
+
+### Patch Changes
+
+- b5d2de0: In vNext workflow serializedStepGraph, return only serializedStepFlow for steps created from a workflow
+  allow viewing inner nested workflows in a multi-layered nested vnext workflow on the playground
+- 62c9e7d: Fix disappearing tool calls in streaming
+- d2dfc37: Fix autoform number form default value
+- Updated dependencies [e450778]
+- Updated dependencies [8902157]
+- Updated dependencies [ca0dc88]
+- Updated dependencies [526c570]
+- Updated dependencies [36eb1aa]
+- Updated dependencies [d7a6a33]
+- Updated dependencies [9cd1a46]
+- Updated dependencies [b5d2de0]
+- Updated dependencies [62c9e7d]
+- Updated dependencies [644f8ad]
+- Updated dependencies [70dbf51]
+  - @mastra/core@0.9.3
+  - @mastra/client-js@0.1.21
+
+## 5.0.3-alpha.1
+
+### Patch Changes
+
+- 62c9e7d: Fix disappearing tool calls in streaming
+- Updated dependencies [e450778]
+- Updated dependencies [8902157]
+- Updated dependencies [ca0dc88]
+- Updated dependencies [36eb1aa]
+- Updated dependencies [9cd1a46]
+- Updated dependencies [62c9e7d]
+- Updated dependencies [70dbf51]
+  - @mastra/core@0.9.3-alpha.1
+  - @mastra/client-js@0.1.21-alpha.1
+
 ## 5.0.3-alpha.0
 
 ### Patch Changes

@@ -23,7 +23,7 @@ import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
 export type PostgresConfig = {
   schemaName?: string;
   /**
-   * @deprecated Use `schemaName` instead. Support for `schema` will be removed in a future release.
+   * @deprecated Use `schemaName` instead. Support for `schema` will be removed on May 20th, 2025.
    */
   schema?: string;
 } & (
@@ -74,7 +74,7 @@ export class PostgresStore extends MastraStorage {
     // Deprecation notice for schema (old option)
     if ('schema' in config && config.schema) {
       console.warn(
-        '[DEPRECATION NOTICE] The "schema" option in PostgresStore is deprecated. Please use "schemaName" instead. Support for "schema" will be removed in a future release.',
+        '[DEPRECATION NOTICE] The "schema" option in PostgresStore is deprecated. Please use "schemaName" instead. Support for "schema" will be removed on May 20th, 2025.',
       );
     }
     this.schema = config.schemaName ?? config.schema;
@@ -203,11 +203,11 @@ export class PostgresStore extends MastraStorage {
     }
 
     if (fromDate) {
-      conditions.push(`createdAt >= $${idx++}`);
+      conditions.push(`createdAt >= \$${idx++}`);
     }
 
     if (toDate) {
-      conditions.push(`createdAt <= $${idx++}`);
+      conditions.push(`createdAt <= \$${idx++}`);
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';

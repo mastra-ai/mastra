@@ -12,6 +12,54 @@ import { cloneStep, cloneWorkflow, createStep, createWorkflow } from './workflow
 
 describe('Workflow', () => {
   describe('Basic Workflow Execution', () => {
+    it('should throw error when execution flow not defined', () => {
+      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        steps: [step1],
+      });
+
+      expect(() => workflow.createRun()).toThrowError(
+        'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.'
+      );
+    });
+
+    it('should throw error when execution graph is not committed', () => {
+      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        steps: [step1],
+      });
+
+      workflow.then(step1);
+
+      expect(() => workflow.createRun()).toThrowError(
+        'Uncommitted step flow changes detected. Call .commit() to register the steps.'
+      );
+    });
+
     it('should execute a single step workflow successfully', async () => {
       const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
       const step1 = createStep({
@@ -2090,13 +2138,7 @@ describe('Workflow', () => {
 
       let watchData: WatchEvent[] = [];
       const onTransition = data => {
-        watchData.push({
-          ...data,
-          payload: {
-            currentStep: data.payload.currentStep ? { ...data.payload.currentStep } : undefined,
-            workflowState: { ...data.payload.workflowState },
-          },
-        });
+        watchData.push(JSON.parse(JSON.stringify(data)));
       };
 
       const run = workflow.createRun();
@@ -2119,7 +2161,10 @@ describe('Workflow', () => {
             status: 'running',
             steps: {
               input: {},
-              step1: { status: 'success', output: { result: 'success1' } },
+              step1: {
+                status: 'success',
+                output: { result: 'success1' },
+              },
             },
             result: null,
             error: null,
@@ -2184,13 +2229,7 @@ describe('Workflow', () => {
 
       let watchData: WatchEvent[] = [];
       const onTransition = data => {
-        watchData.push({
-          ...data,
-          payload: {
-            currentStep: data.payload.currentStep ? { ...data.payload.currentStep } : undefined,
-            workflowState: { ...data.payload.workflowState },
-          },
-        });
+        watchData.push(JSON.parse(JSON.stringify(data)));
       };
 
       const run = workflow.createRun();
@@ -2214,7 +2253,10 @@ describe('Workflow', () => {
             status: 'running',
             steps: {
               input: {},
-              step1: { status: 'success', output: { result: 'success1' } },
+              step1: {
+                status: 'success',
+                output: { result: 'success1' },
+              },
             },
             result: null,
             error: null,
@@ -2318,12 +2360,20 @@ describe('Workflow', () => {
       }
     });
     it('should return the correct runId', async () => {
+      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
       const workflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({}),
         outputSchema: z.object({}),
-        steps: [],
-      });
+        steps: [step1],
+      }).then(step1).commit();
       const run = workflow.createRun();
       const run2 = workflow.createRun({ runId: run.runId });
 
@@ -2712,10 +2762,14 @@ describe('Workflow', () => {
         let hasResumed = false;
         let hasResumedImproveResponse = false;
         run.watch(async data => {
-          const isHumanInterventionSuspended =
-            data.payload?.currentStep?.id === 'humanIntervention' && data.payload?.currentStep?.status === 'suspended';
-          const isImproveResponseSuspended =
-            data.payload?.currentStep?.id === 'improveResponse' && data.payload?.currentStep?.status === 'suspended';
+          const state = data.payload?.workflowState;
+
+          if (state.status !== 'suspended') {
+            return;
+          }
+
+          const isHumanInterventionSuspended = state.steps?.humanIntervention?.status === 'suspended';
+          const isImproveResponseSuspended = state.steps?.improveResponse?.status === 'suspended';
 
           if (isHumanInterventionSuspended) {
             if (!hasResumed) {
@@ -2748,6 +2802,7 @@ describe('Workflow', () => {
         });
       });
 
+      const result = await resultPromise;
       const initialResult = await started;
       expect(initialResult?.steps.improveResponse.status).toBe('suspended');
       // @ts-ignore
@@ -2757,7 +2812,6 @@ describe('Workflow', () => {
       expect(improvedResponseResult?.steps.improveResponse.status).toBe('success');
       expect(improvedResponseResult?.steps.evaluateImprovedResponse.status).toBe('success');
 
-      const result = await resultPromise;
       if (!result) {
         throw new Error('Resume failed to return a result');
       }

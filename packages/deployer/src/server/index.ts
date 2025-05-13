@@ -4,16 +4,17 @@ import { join } from 'path/posix';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
-import { Telemetry } from '@mastra/core';
 import type { Mastra } from '@mastra/core';
+import { Telemetry } from '@mastra/core';
 import { RuntimeContext } from '@mastra/core/runtime-context';
-import { Hono } from 'hono';
 import type { Context, MiddlewareHandler } from 'hono';
+import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { timeout } from 'hono/timeout';
 import { describeRoute, openAPISpecs } from 'hono-openapi';
+import { getAgentCardByIdHandler, getAgentExecutionHandler } from './handlers/a2a';
 import {
   generateHandler,
   getAgentByIdHandler,
@@ -26,6 +27,7 @@ import {
 import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import { getLogsByRunIdHandler, getLogsHandler, getLogTransports } from './handlers/logs';
+import { getMcpServerMessageHandler, getMcpServerSseHandler } from './handlers/mcp';
 import {
   createThreadHandler,
   deleteThreadHandler,
@@ -37,38 +39,38 @@ import {
   updateThreadHandler,
 } from './handlers/memory';
 import {
+  generateHandler as generateNetworkHandler,
   getNetworkByIdHandler,
   getNetworksHandler,
-  generateHandler as generateNetworkHandler,
   streamGenerateHandler as streamGenerateNetworkHandler,
 } from './handlers/network';
 import { generateSystemPromptHandler } from './handlers/prompt';
 import { rootHandler } from './handlers/root';
 import { getTelemetryHandler, storeTelemetryHandler } from './handlers/telemetry';
 import { executeAgentToolHandler, executeToolHandler, getToolByIdHandler, getToolsHandler } from './handlers/tools';
-import { upsertVectors, createIndex, queryVectors, listIndexes, describeIndex, deleteIndex } from './handlers/vector';
+import { createIndex, deleteIndex, describeIndex, listIndexes, queryVectors, upsertVectors } from './handlers/vector';
 import {
-  startVNextWorkflowRunHandler,
-  resumeAsyncVNextWorkflowHandler,
-  startAsyncVNextWorkflowHandler,
-  getVNextWorkflowByIdHandler,
-  getVNextWorkflowsHandler,
-  resumeVNextWorkflowHandler,
-  watchVNextWorkflowHandler,
   createVNextWorkflowRunHandler,
+  getVNextWorkflowByIdHandler,
   getVNextWorkflowRunsHandler,
+  getVNextWorkflowsHandler,
+  resumeAsyncVNextWorkflowHandler,
+  resumeVNextWorkflowHandler,
+  startAsyncVNextWorkflowHandler,
+  startVNextWorkflowRunHandler,
+  watchVNextWorkflowHandler,
 } from './handlers/vNextWorkflows.js';
-import { getSpeakersHandler, speakHandler, listenHandler } from './handlers/voice';
+import { getSpeakersHandler, listenHandler, speakHandler } from './handlers/voice';
 import {
-  startWorkflowRunHandler,
-  resumeAsyncWorkflowHandler,
-  startAsyncWorkflowHandler,
-  getWorkflowByIdHandler,
-  getWorkflowsHandler,
-  resumeWorkflowHandler,
-  watchWorkflowHandler,
   createRunHandler,
+  getWorkflowByIdHandler,
   getWorkflowRunsHandler,
+  getWorkflowsHandler,
+  resumeAsyncWorkflowHandler,
+  resumeWorkflowHandler,
+  startAsyncWorkflowHandler,
+  startWorkflowRunHandler,
+  watchWorkflowHandler,
 } from './handlers/workflows.js';
 import type { ServerBundleOptions } from './types';
 import { html } from './welcome.js';
@@ -121,7 +123,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
       span.updateName(`${c.req.method} ${c.req.path}`);
 
       const newCtx = Telemetry.setBaggage({
-        'http.request_id': requestId,
+        'http.request_id': { value: requestId },
       });
 
       await new Promise(resolve => {
@@ -140,8 +142,19 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
   // Add Mastra to context
   app.use('*', function setContext(c, next) {
     const runtimeContext = new RuntimeContext();
+    const proxyRuntimeContext = new Proxy(runtimeContext, {
+      get(target, prop) {
+        if (prop === 'get') {
+          return function (key: string) {
+            const value = target.get(key);
+            return value ?? `<${key}>`;
+          };
+        }
+        return Reflect.get(target, prop);
+      },
+    });
 
-    c.set('runtimeContext', runtimeContext);
+    c.set('runtimeContext', proxyRuntimeContext);
     c.set('mastra', mastra);
     c.set('tools', tools);
     c.set('playground', options.playground === true);
@@ -175,7 +188,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
   }
 
   const bodyLimitOptions = {
-    maxSize: 4.5 * 1024 * 1024, // 4.5 MB,
+    maxSize: server?.bodySizeLimit ?? 4.5 * 1024 * 1024, // 4.5 MB,
     onError: (c: Context) => c.json({ error: 'Request body too large' }, 413),
   };
 
@@ -210,14 +223,18 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
         middlewares.push(describeRoute(route.openapi));
       }
 
+      const handler = 'handler' in route ? route.handler : await route.createHandler({ mastra });
+
       if (route.method === 'GET') {
-        app.get(route.path, ...middlewares, route.handler);
+        app.get(route.path, ...middlewares, handler);
       } else if (route.method === 'POST') {
-        app.post(route.path, ...middlewares, route.handler);
+        app.post(route.path, ...middlewares, handler);
       } else if (route.method === 'PUT') {
-        app.put(route.path, ...middlewares, route.handler);
+        app.put(route.path, ...middlewares, handler);
       } else if (route.method === 'DELETE') {
-        app.delete(route.path, ...middlewares, route.handler);
+        app.delete(route.path, ...middlewares, handler);
+      } else if (route.method === 'ALL') {
+        app.all(route.path, ...middlewares, handler);
       }
     }
   }
@@ -225,6 +242,150 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
   if (server?.build?.apiReqLogs) {
     app.use(logger());
   }
+
+  /**
+   * A2A
+   */
+
+  app.get(
+    '/.well-known/:agentId/agent.json',
+    describeRoute({
+      description: 'Get agent configuration',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Agent configuration',
+        },
+      },
+    }),
+    getAgentCardByIdHandler,
+  );
+
+  app.post(
+    '/a2a/:agentId',
+    describeRoute({
+      description: 'Execute agent via A2A protocol',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                method: {
+                  type: 'string',
+                  enum: ['tasks/send', 'tasks/sendSubscribe', 'tasks/get', 'tasks/cancel'],
+                  description: 'The A2A protocol method to execute',
+                },
+                params: {
+                  type: 'object',
+                  oneOf: [
+                    {
+                      // TaskSendParams
+                      type: 'object',
+                      properties: {
+                        id: {
+                          type: 'string',
+                          description: 'Unique identifier for the task being initiated or continued',
+                        },
+                        sessionId: {
+                          type: 'string',
+                          description: 'Optional identifier for the session this task belongs to',
+                        },
+                        message: {
+                          type: 'object',
+                          description: 'The message content to send to the agent for processing',
+                        },
+                        pushNotification: {
+                          type: 'object',
+                          nullable: true,
+                          description:
+                            'Optional pushNotification information for receiving notifications about this task',
+                        },
+                        historyLength: {
+                          type: 'integer',
+                          nullable: true,
+                          description:
+                            'Optional parameter to specify how much message history to include in the response',
+                        },
+                        metadata: {
+                          type: 'object',
+                          nullable: true,
+                          description: 'Optional metadata associated with sending this message',
+                        },
+                      },
+                      required: ['id', 'message'],
+                    },
+                    {
+                      // TaskQueryParams
+                      type: 'object',
+                      properties: {
+                        id: { type: 'string', description: 'The unique identifier of the task' },
+                        historyLength: {
+                          type: 'integer',
+                          nullable: true,
+                          description: 'Optional history length to retrieve for the task',
+                        },
+                        metadata: {
+                          type: 'object',
+                          nullable: true,
+                          description: 'Optional metadata to include with the operation',
+                        },
+                      },
+                      required: ['id'],
+                    },
+                    {
+                      // TaskIdParams
+                      type: 'object',
+                      properties: {
+                        id: { type: 'string', description: 'The unique identifier of the task' },
+                        metadata: {
+                          type: 'object',
+                          nullable: true,
+                          description: 'Optional metadata to include with the operation',
+                        },
+                      },
+                      required: ['id'],
+                    },
+                  ],
+                },
+              },
+              required: ['method', 'params'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'A2A response',
+        },
+        400: {
+          description: 'Missing or invalid request parameters',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    getAgentExecutionHandler,
+  );
 
   // API routes
   app.get(
@@ -567,122 +728,124 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
     streamGenerateHandler,
   );
 
-  app.post(
-    '/api/agents/:agentId/instructions',
-    bodyLimit(bodyLimitOptions),
-    describeRoute({
-      description: "Update an agent's instructions",
-      tags: ['agents'],
-      parameters: [
-        {
-          name: 'agentId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-      ],
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: {
-              type: 'object',
-              properties: {
-                instructions: {
-                  type: 'string',
-                  description: 'New instructions for the agent',
-                },
-              },
-              required: ['instructions'],
-            },
+  if (options.isDev) {
+    app.post(
+      '/api/agents/:agentId/instructions',
+      bodyLimit(bodyLimitOptions),
+      describeRoute({
+        description: "Update an agent's instructions",
+        tags: ['agents'],
+        parameters: [
+          {
+            name: 'agentId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
           },
-        },
-      },
-      responses: {
-        200: {
-          description: 'Instructions updated successfully',
-        },
-        403: {
-          description: 'Not allowed in non-playground environment',
-        },
-        404: {
-          description: 'Agent not found',
-        },
-      },
-    }),
-    setAgentInstructionsHandler,
-  );
-
-  app.post(
-    '/api/agents/:agentId/instructions/enhance',
-    bodyLimit(bodyLimitOptions),
-    describeRoute({
-      description: 'Generate an improved system prompt from instructions',
-      tags: ['agents'],
-      parameters: [
-        {
-          name: 'agentId',
-          in: 'path',
+        ],
+        requestBody: {
           required: true,
-          schema: { type: 'string' },
-          description: 'ID of the agent whose model will be used for prompt generation',
-        },
-      ],
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: {
-              type: 'object',
-              properties: {
-                instructions: {
-                  type: 'string',
-                  description: 'Instructions to generate a system prompt from',
-                },
-                comment: {
-                  type: 'string',
-                  description: 'Optional comment for the enhanced prompt',
-                },
-              },
-              required: ['instructions'],
-            },
-          },
-        },
-      },
-      responses: {
-        200: {
-          description: 'Generated system prompt and analysis',
           content: {
             'application/json': {
               schema: {
                 type: 'object',
                 properties: {
-                  explanation: {
+                  instructions: {
                     type: 'string',
-                    description: 'Detailed analysis of the instructions',
+                    description: 'New instructions for the agent',
                   },
-                  new_prompt: {
+                },
+                required: ['instructions'],
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Instructions updated successfully',
+          },
+          403: {
+            description: 'Not allowed in non-playground environment',
+          },
+          404: {
+            description: 'Agent not found',
+          },
+        },
+      }),
+      setAgentInstructionsHandler,
+    );
+
+    app.post(
+      '/api/agents/:agentId/instructions/enhance',
+      bodyLimit(bodyLimitOptions),
+      describeRoute({
+        description: 'Generate an improved system prompt from instructions',
+        tags: ['agents'],
+        parameters: [
+          {
+            name: 'agentId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+            description: 'ID of the agent whose model will be used for prompt generation',
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  instructions: {
                     type: 'string',
-                    description: 'The enhanced system prompt',
+                    description: 'Instructions to generate a system prompt from',
+                  },
+                  comment: {
+                    type: 'string',
+                    description: 'Optional comment for the enhanced prompt',
+                  },
+                },
+                required: ['instructions'],
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Generated system prompt and analysis',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    explanation: {
+                      type: 'string',
+                      description: 'Detailed analysis of the instructions',
+                    },
+                    new_prompt: {
+                      type: 'string',
+                      description: 'The enhanced system prompt',
+                    },
                   },
                 },
               },
             },
           },
+          400: {
+            description: 'Missing or invalid request parameters',
+          },
+          404: {
+            description: 'Agent not found',
+          },
+          500: {
+            description: 'Internal server error or model response parsing error',
+          },
         },
-        400: {
-          description: 'Missing or invalid request parameters',
-        },
-        404: {
-          description: 'Agent not found',
-        },
-        500: {
-          description: 'Internal server error or model response parsing error',
-        },
-      },
-    }),
-    generateSystemPromptHandler,
-  );
+      }),
+      generateSystemPromptHandler,
+    );
+  }
 
   app.get(
     '/api/agents/:agentId/speakers',
@@ -1092,6 +1255,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
               type: 'object',
               properties: {
                 data: { type: 'object' },
+                runtimeContext: { type: 'object' },
               },
               required: ['data'],
             },
@@ -1108,6 +1272,101 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
       },
     }),
     executeAgentToolHandler,
+  );
+
+  // MCP server routes
+  app.post(
+    '/api/servers/:serverId/mcp',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Send a message to an MCP server using Streamable HTTP',
+      tags: ['mcp'],
+      parameters: [
+        {
+          name: 'serverId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        content: { 'application/json': { schema: { type: 'object' } } },
+      },
+      responses: {
+        200: {
+          description: 'Streamable HTTP connection processed',
+        },
+        404: {
+          description: 'MCP server not found',
+        },
+      },
+    }),
+    getMcpServerMessageHandler,
+  );
+
+  // New MCP server routes for SSE
+  const mcpSseBasePath = '/api/servers/:serverId/sse';
+  const mcpSseMessagePath = '/api/servers/:serverId/messages';
+
+  // Route for establishing SSE connection
+  app.get(
+    mcpSseBasePath,
+    describeRoute({
+      description: 'Establish an MCP Server-Sent Events (SSE) connection with a server instance.',
+      tags: ['mcp'],
+      parameters: [
+        {
+          name: 'serverId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+          description: 'The ID of the MCP server instance.',
+        },
+      ],
+      responses: {
+        200: {
+          description:
+            'SSE connection established. The client will receive events over this connection. (Content-Type: text/event-stream)',
+        },
+        404: { description: 'MCP server instance not found.' },
+        500: { description: 'Internal server error establishing SSE connection.' },
+      },
+    }),
+    getMcpServerSseHandler,
+  );
+
+  // Route for POSTing messages over an established SSE connection
+  app.post(
+    mcpSseMessagePath,
+    bodyLimit(bodyLimitOptions), // Apply body limit for messages
+    describeRoute({
+      description: 'Send a message to an MCP server over an established SSE connection.',
+      tags: ['mcp'],
+      parameters: [
+        {
+          name: 'serverId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+          description: 'The ID of the MCP server instance.',
+        },
+      ],
+      requestBody: {
+        description: 'JSON-RPC message to send to the MCP server.',
+        required: true,
+        content: { 'application/json': { schema: { type: 'object' } } }, // MCP messages are typically JSON
+      },
+      responses: {
+        200: {
+          description:
+            'Message received and is being processed by the MCP server. The actual result or error will be sent as an SSE event over the established connection.',
+        },
+        400: { description: 'Bad request (e.g., invalid JSON payload or missing body).' },
+        404: { description: 'MCP server instance not found or SSE connection path incorrect.' },
+        503: { description: 'SSE connection not established with this server, or server unable to process message.' },
+      },
+    }),
+    getMcpServerSseHandler,
   );
 
   // Memory routes
@@ -1209,6 +1468,13 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
           in: 'query',
           required: true,
           schema: { type: 'string' },
+        },
+        {
+          name: 'limit',
+          in: 'query',
+          required: false,
+          schema: { type: 'number' },
+          description: 'Limit the number of messages to retrieve (default: 40)',
         },
       ],
       responses: {
@@ -1495,7 +1761,10 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
                   oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
                 },
                 resumeData: { type: 'object' },
-                runtimeContext: { type: 'object' },
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the workflow execution',
+                },
               },
               required: ['step'],
             },
@@ -1537,7 +1806,10 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
                   oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
                 },
                 resumeData: { type: 'object' },
-                runtimeContext: { type: 'object' },
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the workflow execution',
+                },
               },
               required: ['step'],
             },
@@ -1605,7 +1877,10 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                runtimeContext: { type: 'object' },
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the workflow execution',
+                },
               },
             },
           },
@@ -1650,7 +1925,10 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
               type: 'object',
               properties: {
                 inputData: { type: 'object' },
-                runtimeContext: { type: 'object' },
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the workflow execution',
+                },
               },
             },
           },
@@ -2205,6 +2483,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
               type: 'object',
               properties: {
                 data: { type: 'object' },
+                runtimeContext: { type: 'object' },
               },
               required: ['data'],
             },
@@ -2530,7 +2809,7 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
       const host = serverOptions?.host ?? 'localhost';
       logger.info(` Mastra API running on port http://${host}:${port}/api`);
       if (options?.isDev) {
-        logger.info(`� Open API documentation available at http://${host}:${port}/openapi.json`);
+        logger.info(`🔗 Open API documentation available at http://${host}:${port}/openapi.json`);
       }
       if (options?.isDev) {
         logger.info(`🧪 Swagger UI available at http://${host}:${port}/swagger-ui`);
