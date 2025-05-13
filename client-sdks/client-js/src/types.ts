@@ -174,6 +174,13 @@ export interface UpdateMemoryThreadParams {
   resourceId: string;
 }
 
+export interface GetMemoryThreadMessagesParams {
+  /**
+   * Limit the number of messages to retrieve (default: 40)
+   */
+  limit?: number;
+}
+
 export interface GetMemoryThreadMessagesResponse {
   messages: CoreMessage[];
   uiMessages: AiMessageType[];
