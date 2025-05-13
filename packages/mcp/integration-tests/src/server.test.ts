@@ -3,6 +3,7 @@ import { createServer } from 'node:http';
 import path from 'path';
 import { MCPClient } from '@mastra/mcp';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { ServerInfo } from '@mastra/core/mcp';
 
 vi.setConfig({ testTimeout: 20000, hookTimeout: 20000 });
 
@@ -162,7 +163,7 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
       expect(Array.isArray(body.servers)).toBe(true);
       expect(body.total_count).toBeGreaterThanOrEqual(1); // Expect at least the default server
 
-      const defaultServerInfo = body.servers.find((s: any) => s.id === defaultMcpServerLogicalId);
+      const defaultServerInfo: ServerInfo = body.servers.find((s: ServerInfo) => s.id === defaultMcpServerLogicalId);
       expect(defaultServerInfo).toBeDefined();
       expect(defaultServerInfo).toHaveProperty('name');
       expect(defaultServerInfo).toHaveProperty('version_detail');

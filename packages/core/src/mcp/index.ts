@@ -71,8 +71,7 @@ export abstract class MCPServerBase extends MastraBase {
    * Sets the server's unique ID. This method is typically called by Mastra when
    * registering the server, using the key provided in the Mastra configuration.
    * It ensures the ID is set only once.
-   * If an ID was already provided in the MCPServerConfig, this method will warn
-   * if an attempt is made to change it to a *different* ID.
+   * If an ID was already provided in the MCPServerConfig, this method will be a no-op.
    * @param id The unique ID to assign to the server.
    */
   setId(id: string) {

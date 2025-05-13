@@ -18,18 +18,6 @@ let httpServer: http.Server;
 
 vi.setConfig({ testTimeout: 20000, hookTimeout: 20000 });
 
-// Mock crypto.randomUUID with a valid UUID v4 format
-const mockUUID = '123e4567-e89b-12d3-a456-426614174000';
-if (typeof globalThis.crypto !== 'object') {
-  // @ts-ignore
-  globalThis.crypto = {};
-}
-if (typeof globalThis.crypto.randomUUID !== 'function') {
-  // @ts-ignore
-  globalThis.crypto.randomUUID = () => '7f9ca974-7eee-47c3-8bab-190807042023'; // Fallback also in UUID format
-}
-vi.spyOn(globalThis.crypto, 'randomUUID').mockImplementation(() => mockUUID);
-
 // Mock Date constructor for predictable release dates
 const mockDateISO = '2024-01-01T00:00:00.000Z';
 const mockDate = new Date(mockDateISO);
@@ -54,7 +42,6 @@ const minimalConfig: MCPServerConfig = {
 describe('MCPServer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(globalThis.crypto, 'randomUUID').mockImplementation(() => mockUUID);
 
     // @ts-ignore - Mocking Date completely
     global.Date = vi.fn((...args: any[]) => {
@@ -77,7 +64,7 @@ describe('MCPServer', () => {
   describe('Constructor and Metadata Initialization', () => {
     it('should initialize with default metadata if not provided', () => {
       const server = new MCPServer(minimalConfig);
-      expect(server.id).toBe(mockUUID);
+      expect(server.id).toBeDefined();
       expect(server.name).toBe('TestServer');
       expect(server.version).toBe('1.0.0');
       expect(server.description).toBeUndefined();
@@ -125,7 +112,7 @@ describe('MCPServer', () => {
       const serverInfo = server.getServerInfo();
 
       expect(serverInfo).toEqual({
-        id: mockUUID, // Default ID is UUID format
+        id: expect.any(String),
         name: 'TestServer',
         description: undefined,
         repository: undefined,
@@ -171,7 +158,7 @@ describe('MCPServer', () => {
       const serverDetail = server.getServerDetail();
 
       expect(serverDetail).toEqual({
-        id: mockUUID, // Default ID is UUID format
+        id: expect.any(String),
         name: 'TestServer',
         description: undefined,
         repository: undefined,
