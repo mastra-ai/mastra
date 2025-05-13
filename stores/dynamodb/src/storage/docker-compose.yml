@@ -8,9 +8,9 @@ services:
     # network_mode: host 
     ports:
       - "8000:8000" # Map container port 8000 to host port 8000
-    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-inMemory"]
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb"]
     volumes:
-      - dynamodb_data:/home/dynamodblocal/data # Persist data if not using -inMemory
+      - dynamodb_data:/home/dynamodblocal/data
 
 volumes:
   dynamodb_data: {} 
