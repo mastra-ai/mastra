@@ -33,6 +33,9 @@ export const evalEntity = new Entity({
       },
       // Parse JSON string to object on get
       get: (value?: string) => {
+        if (value) {
+          return JSON.parse(value);
+        }
         return value;
       },
     },
