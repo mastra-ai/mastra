@@ -236,6 +236,7 @@ describe('MastraClient Resources', () => {
         model: 'gpt-4',
         instructions: 'Test instructions',
         tools: {},
+        workflows: {},
       };
       mockFetchResponse(mockResponse);
 
