@@ -1,5 +1,13 @@
 # @mastra/client-js
 
+## 0.1.22-alpha.4
+
+### Patch Changes
+
+- 5c70b8a: [MASTRA-3234] added limit for client-js getMessages
+- Updated dependencies [3e9c131]
+  - @mastra/core@0.9.4-alpha.4
+
 ## 0.1.22-alpha.3
 
 ### Patch Changes

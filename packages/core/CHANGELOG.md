@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.9.4-alpha.4
+
+### Patch Changes
+
+- 3e9c131: Typo resoolve.
+
 ## 0.9.4-alpha.3
 
 ### Patch Changes
