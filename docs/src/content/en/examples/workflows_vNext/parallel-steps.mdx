@@ -3,13 +3,16 @@ title: "Example: Parallel Execution | Workflows | Mastra Docs"
 description: Example of using Mastra to execute multiple independent tasks in parallel within a workflow.
 ---
 
-import { GithubLink } from "@/components/github-link";
-
 # Parallel Execution with Steps
 
 When building AI applications, you often need to process multiple independent tasks simultaneously to improve efficiency.
 We make this functionality a core part of workflows through the `.parallel` method.
 
+## Setup
+
+```sh copy
+npm install @ai-sdk/openai @mastra/core
+```
 
 ## Define Planning Agent
 Define a planning agent which leverages an LLM call to plan activities given a location and corresponding weather conditions.
@@ -20,6 +23,8 @@ import { openai } from '@ai-sdk/openai'
 
 const llm = openai('gpt-4o')
 
+// Define the planning agent with specific instructions for formatting
+// and structuring weather-based activity recommendations
 const planningAgent = new Agent({
   name: 'planningAgent',
   model: llm,
@@ -79,6 +84,8 @@ import { openai } from '@ai-sdk/openai'
 
 const llm = openai('gpt-4o')
 
+// Define the synthesize agent that combines indoor and outdoor activity plans
+// into a comprehensive report, considering weather conditions and alternatives
 const synthesizeAgent = new Agent({
   name: 'synthesizeAgent',
   model: llm,
@@ -108,7 +115,9 @@ const forecastSchema = z.object({
   condition: z.string(),
   location: z.string(),
 })
- 
+
+// Step to fetch weather data for a given city
+// Makes API calls to get current weather conditions and forecast
 const fetchWeather = createStep({
   id: 'fetch-weather',
   description: 'Fetches weather forecast for a given city',
@@ -162,7 +171,9 @@ const fetchWeather = createStep({
     return forecast
   },
 })
- 
+
+// Step to plan outdoor activities based on weather conditions
+// Uses the planning agent to generate activity recommendations
 const planActivities = createStep({
   id: 'plan-activities',
   description: 'Suggests activities based on weather conditions',
@@ -205,6 +216,8 @@ const planActivities = createStep({
   },
 })
  
+// Helper function to convert weather codes to human-readable conditions
+// Maps numeric codes from the weather API to descriptive strings
 function getWeatherCondition(code: number): string {
   const conditions: Record<number, string> = {
     0: 'Clear sky',
@@ -226,7 +239,9 @@ function getWeatherCondition(code: number): string {
   }
   return conditions[code] || 'Unknown'
 }
- 
+
+// Step to plan indoor activities as backup options
+// Generates alternative indoor activities in case of bad weather
 const planIndoorActivities = createStep({
   id: 'plan-indoor-activities',
   description: 'Suggests indoor activities based on weather conditions',
@@ -265,7 +280,9 @@ const planIndoorActivities = createStep({
     }
   },
 })
- 
+
+// Step to synthesize and combine indoor/outdoor activity plans
+// Creates a comprehensive plan that considers both options
 const synthesizeStep = createStep({
   id: 'sythesize-step',
   description: 'Synthesizes the results of the indoor and outdoor activities',
@@ -346,7 +363,9 @@ import { createLogger } from '@mastra/core/logger'
 import { activityPlanningWorkflow } from './workflows/parallel-workflow'
 import { planningAgent } from './agents/planning-agent'
 import { synthesizeAgent } from './agents/synthesize-agent'
- 
+
+// Initialize Mastra with required agents and workflows
+// This setup enables agent access within the workflow steps
 const mastra = new Mastra({
   vnext_workflows: {
     activityPlanningWorkflow,
@@ -373,17 +392,8 @@ import { mastra } from "./"
 const workflow = mastra.vnext_getWorkflow('activityPlanningWorkflow')
 const run = workflow.createRun()
 
+// Execute the workflow with a specific city
+// This will run through all steps and generate activity recommendations
 const result = await run.start({ inputData: { city: 'Ibiza' } })
 console.dir(result, { depth: null })
 ```
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/parallel-steps"
-  }
-/>

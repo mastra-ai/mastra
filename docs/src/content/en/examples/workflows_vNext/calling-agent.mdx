@@ -3,11 +3,15 @@ title: "Example: Calling an Agent from a Workflow | Mastra Docs"
 description: Example of using Mastra to call an AI agent from within a workflow step.
 ---
 
-import { GithubLink } from "@/components/github-link";
-
 # Calling an Agent From a Workflow
 
 This example demonstrates how to create a workflow that calls an AI agent to suggest activities for the provided weather conditions, and execute it within a workflow step.
+
+## Setup
+
+```sh copy
+npm install @ai-sdk/openai @mastra/core 
+```
 
 ## Define Planning Agent
 Define a planning agent which leverages an LLM call to plan activities given a location and corresponding weather conditions.
@@ -18,6 +22,7 @@ import { openai } from '@ai-sdk/openai'
 
 const llm = openai('gpt-4o')
 
+// Create a new agent for activity planning
 const planningAgent = new Agent({
   name: 'planningAgent',
   model: llm,
@@ -73,6 +78,7 @@ Define the activity planning workflow with 2 steps: one to fetch the weather via
 import { createWorkflow, createStep } from '@mastra/core/workflows/vNext'
 import { z } from 'zod'
  
+// Helper function to convert numeric weather codes to human-readable descriptions
 function getWeatherCondition(code: number): string {
   const conditions: Record<number, string> = {
     0: 'Clear sky',
@@ -104,6 +110,7 @@ const forecastSchema = z.object({
   location: z.string(),
 })
  
+// Step 1: Create a step to fetch weather data for a given city
 const fetchWeather = createStep({
   id: 'fetch-weather',
   description: 'Fetches weather forecast for a given city',
@@ -116,6 +123,7 @@ const fetchWeather = createStep({
       throw new Error('Trigger data not found')
     }
  
+    // First API call: Convert city name to latitude and longitude
     const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(inputData.city)}&count=1`    
     const geocodingResponse = await fetch(geocodingUrl)
     const geocodingData = (await geocodingResponse.json()) as {
@@ -128,6 +136,7 @@ const fetchWeather = createStep({
  
     const { latitude, longitude, name } = geocodingData.results[0]
  
+    // Second API call: Get weather data using coordinates
     const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=precipitation,weathercode&timezone=auto,&hourly=precipitation_probability,temperature_2m`
     const response = await fetch(weatherUrl)
     const data = (await response.json()) as {
@@ -158,6 +167,7 @@ const fetchWeather = createStep({
   },
 })
  
+// Step 2: Create a step to generate activity recommendations using the agent
 const planActivities = createStep({
   id: 'plan-activities',
   description: 'Suggests activities based on weather conditions',
@@ -229,6 +239,7 @@ import { createLogger } from '@mastra/core/logger'
 import { activityPlanningWorkflow } from './workflows/agent-workflow'
 import { planningAgent } from './agents/planning-agent'
  
+// Create a new Mastra instance and register components
 const mastra = new Mastra({
   vnext_workflows: {
     activityPlanningWorkflow,
@@ -254,20 +265,8 @@ import { mastra } from "./"
 const workflow = mastra.vnext_getWorkflow('activityPlanningWorkflow')
 const run = workflow.createRun()
 
+// Start the workflow with New York as the city input
 const result = await run.start({ inputData: { city: 'New York' } })
 console.dir(result, { depth: null })
 ```
-
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/calling-agent"
-  }
-/>
-
 

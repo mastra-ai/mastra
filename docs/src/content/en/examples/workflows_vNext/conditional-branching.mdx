@@ -3,13 +3,16 @@ title: "Example: Conditional Branching | Workflows | Mastra Docs"
 description: Example of using Mastra to create conditional branches in workflows using the `branch` statement .
 ---
 
-import { GithubLink } from "@/components/github-link";
-
 # Workflow with Conditional Branching
 
 Workflows often need to follow different paths based on some condition.
 This example demonstrates how to use the `branch` construct to create conditional flows within your workflows.
 
+## Setup
+
+```sh copy
+npm install @ai-sdk/openai @mastra/core 
+```
 
 ## Define Planning Agent
 Define a planning agent which leverages an LLM call to plan activities given a location and corresponding weather conditions.
@@ -20,6 +23,8 @@ import { openai } from '@ai-sdk/openai'
 
 const llm = openai('gpt-4o')
 
+// Define the planning agent that generates activity recommendations
+// based on weather conditions and location
 const planningAgent = new Agent({
   name: 'planningAgent',
   model: llm,
@@ -77,7 +82,7 @@ Both using the planning agent.
 import { z } from 'zod'
 import { createWorkflow, createStep } from "@mastra/core/workflows/vNext";
 
-
+// Helper function to convert weather codes to human-readable conditions
 function getWeatherCondition(code: number): string {
   const conditions: Record<number, string> = {
     0: 'Clear sky',
@@ -109,7 +114,8 @@ const forecastSchema = z.object({
   location: z.string(),
 })
 
-// Fetch weather step
+// Step to fetch weather data for a given city
+// Makes API calls to get current weather conditions and forecast
 const fetchWeather = createStep({
   id: 'fetch-weather',
   description: 'Fetches weather forecast for a given city',
@@ -164,7 +170,8 @@ const fetchWeather = createStep({
   },
 })
 
-// Plan activities indoors or outdoors
+// Step to plan activities based on weather conditions
+// Uses the planning agent to generate activity recommendations
 const planActivities = createStep({
   id: 'plan-activities',
   description: 'Suggests activities based on weather conditions',
@@ -208,7 +215,8 @@ const planActivities = createStep({
   },
 })
 
-// Plan indoor activities only
+// Step to plan indoor activities only
+// Used when precipitation chance is high
 const planIndoorActivities = createStep({
   id: 'plan-indoor-activities',
   description: 'Suggests indoor activities based on weather conditions',
@@ -250,6 +258,11 @@ const planIndoorActivities = createStep({
   },
 })
 
+// Main workflow that:
+// 1. Fetches weather data
+// 2. Branches based on precipitation chance:
+//    - If >50%: Plans indoor activities
+//    - If <=50%: Plans outdoor activities
 const activityPlanningWorkflow = createWorkflow({
   id: 'activity-planning-workflow-step2-if-else',
   inputSchema: z.object({
@@ -261,12 +274,14 @@ const activityPlanningWorkflow = createWorkflow({
 })
   .then(fetchWeather)
   .branch([
+    // Branch for high precipitation (indoor activities)
     [
       async ({ inputData }) => {
         return inputData?.precipitationChance > 50
       },
       planIndoorActivities,
     ],
+    // Branch for low precipitation (outdoor activities)
     [
       async ({ inputData }) => {
         return inputData?.precipitationChance <= 50
@@ -290,6 +305,8 @@ import { createLogger } from '@mastra/core/logger'
 import { activityPlanningWorkflow } from './workflows/conditional-workflow'
 import { planningAgent } from './agents/planning-agent'
  
+// Initialize Mastra with the activity planning workflow
+// This enables the workflow to be executed and access the planning agent
 const mastra = new Mastra({
   vnext_workflows: {
     activityPlanningWorkflow,
@@ -315,16 +332,8 @@ import { mastra } from "./"
 const workflow = mastra.vnext_getWorkflow('activityPlanningWorkflow')
 const run = workflow.createRun()
 
+// Start the workflow with a city
+// This will fetch weather and plan activities based on conditions
 const result = await run.start({ inputData: { city: 'New York' } })
 console.dir(result, { depth: null })
 ```
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/conditional-branching'}
-/>
-

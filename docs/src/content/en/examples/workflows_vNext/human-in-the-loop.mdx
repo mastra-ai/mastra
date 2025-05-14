@@ -3,13 +3,16 @@ title: "Example: Human in the Loop | Workflows | Mastra Docs"
 description: Example of using Mastra to create workflows with human intervention points.
 ---
 
-import { GithubLink } from '@/components/github-link';
-
 # Human in the Loop Workflow
 
 Human-in-the-loop workflows allow you to pause execution at specific points to collect user input, make decisions, or perform actions that require human judgment.
 This example demonstrates how to create a workflow with human intervention points.
 
+## Setup
+
+```sh copy
+npm install @ai-sdk/openai @mastra/core @inquirer/prompts
+```
 
 ## Define Agents
 Define the travel agents.
@@ -20,6 +23,8 @@ import { openai } from '@ai-sdk/openai'
  
 const llm = openai('gpt-4o')
  
+// Agent that generates multiple holiday options
+// Returns a JSON array of locations and descriptions
 export const summaryTravelAgent = new Agent({
   name: 'summaryTravelAgent',
   model: llm,
@@ -31,6 +36,8 @@ export const summaryTravelAgent = new Agent({
   `,
 })
 
+// Agent that creates detailed travel plans
+// Takes the selected option and generates a comprehensive itinerary
 export const travelAgent = new Agent({
   name: 'travelAgent',
   model: llm,
@@ -46,9 +53,10 @@ Defines a workflow which includes a suspending step: `humanInputStep`.
 
 ```ts showLineNumbers copy filename="workflows/human-in-the-loop-workflow.ts"
 import { createWorkflow, createStep } from '@mastra/core/workflows/vNext'
- 
 import { z } from 'zod'
  
+// Step that generates multiple holiday options based on user's vacation description
+// Uses the summaryTravelAgent to create diverse travel suggestions
 const generateSuggestionsStep = createStep({
   id: 'generate-suggestions',
   inputSchema: z.object({
@@ -75,6 +83,9 @@ const generateSuggestionsStep = createStep({
   },
 })
  
+// Step that pauses the workflow to get user input
+// Allows the user to select their preferred holiday option from the suggestions
+// Uses suspend/resume mechanism to handle the interaction
 const humanInputStep = createStep({
   id: 'human-input',
   inputSchema: z.object({
@@ -107,6 +118,8 @@ const humanInputStep = createStep({
   },
 })
  
+// Step that creates a detailed travel plan based on the user's selection
+// Uses the travelAgent to generate comprehensive holiday details
 const travelPlannerStep = createStep({
   id: 'travel-planner',
   inputSchema: z.object({
@@ -132,6 +145,10 @@ const travelPlannerStep = createStep({
   },
 })
  
+// Main workflow that orchestrates the holiday planning process:
+// 1. Generates multiple options
+// 2. Gets user input
+// 3. Creates detailed plan
 const travelAgentWorkflow = createWorkflow({
   id: 'travel-agent-workflow',
   inputSchema: z.object({
@@ -160,6 +177,10 @@ import { createLogger } from '@mastra/core/logger'
 import { travelAgentWorkflow } from './workflows/human-in-the-loop-workflow'
 import { summaryTravelAgent, travelAgent } from './agents/travel-agent'
  
+// Initialize Mastra instance with:
+// - The travel planning workflow
+// - Both travel agents (summary and detailed planning)
+// - Logging configuration
 const mastra = new Mastra({
   vnext_workflows: {
     travelAgentWorkflow,
@@ -189,6 +210,8 @@ import { humanInputStep } from './workflows/human-in-the-loop-workflow'
 
 const workflow = mastra.vnext_getWorkflow('travelAgentWorkflow')
 const run = workflow.createRun({})
+
+// Start the workflow with initial vacation description
 const result = await run.start({
   inputData: { vacationDescription: 'I want to go to the beach' },
 })
@@ -197,8 +220,11 @@ console.log('result', result)
  
 const suggStep = result?.steps?.['generate-suggestions']
  
+// If suggestions were generated successfully, proceed with user interaction
 if (suggStep.status === 'success') {
   const suggestions = suggStep.output?.suggestions
+  
+  // Present options to user and get their selection
   const userInput = await select<string>({
     message: "Choose your holiday destination",
     choices: suggestions.map(({ location, description }: { location: string, description: string }) => `- ${location}: ${description}`)
@@ -206,6 +232,7 @@ if (suggStep.status === 'success') {
  
   console.log('Selected:', userInput)
  
+  // Prepare to resume the workflow with user's selection
   console.log('resuming from', result, 'with', {
     inputData: {
       selection: userInput,
@@ -231,15 +258,4 @@ Human-in-the-loop workflows are powerful for building systems that blend automat
 - Approval workflows
 - Supervised AI systems
 - Customer service automation with escalation
-
-<br />
-<br />
-<hr className={"dark:border-[#404040] border-gray-300"} />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/human-in-the-loop"
-  }
-/>
 
