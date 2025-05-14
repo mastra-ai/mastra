@@ -174,7 +174,8 @@ export class SqlBuilder {
     // Naive validation: check the first word of each column definition
     for (const def of columnDefinitions) {
       const colName = def.split(/\s+/)[0];
-      validateColumnName(colName || '');
+      if (!colName) throw new Error('Empty column name in definition');
+      validateColumnName(colName);
     }
     const columns = columnDefinitions.join(', ');
     const constraints = tableConstraints && tableConstraints.length > 0 ? ', ' + tableConstraints.join(', ') : '';

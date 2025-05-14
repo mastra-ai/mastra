@@ -190,7 +190,7 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
   $exists: key => {
     validateFieldKey(key);
     return {
-      sql: `metadata ? '${key}'`,
+      sql: `metadata ? '${handleKey(key)}'`,
       needsValue: false,
     };
   },

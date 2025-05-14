@@ -292,7 +292,7 @@ describe('SQL Builder', () => {
         createSqlBuilder()
           .select()
           .from('users')
-          .orderBy('id', 'BAD' as any),
+          .orderBy('id', 'BAD' as 'ASC' | 'DESC'),
       ).toThrow(/Invalid sort direction/);
     });
     it('should throw on invalid column name in like', () => {
