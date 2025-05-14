@@ -1,9 +1,9 @@
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type {
   ClientOptions,
   GetVNextWorkflowResponse,
+  GetVNextWorkflowRunsResponse,
   GetWorkflowRunsParams,
-  GetWorkflowRunsResponse,
   VNextWorkflowRunResult,
   VNextWorkflowWatchResult,
 } from '../types';
@@ -104,7 +104,7 @@ export class VNextWorkflow extends BaseResource {
    * @param params - Parameters for filtering runs
    * @returns Promise containing vNext workflow runs array
    */
-  runs(params?: GetWorkflowRunsParams): Promise<GetWorkflowRunsResponse> {
+  runs(params?: GetWorkflowRunsParams): Promise<GetVNextWorkflowRunsResponse> {
     const searchParams = new URLSearchParams();
     if (params?.fromDate) {
       searchParams.set('fromDate', params.fromDate.toISOString());

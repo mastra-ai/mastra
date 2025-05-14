@@ -1,5 +1,86 @@
 # @mastra/mcp-docs-server
 
+## 0.0.14
+
+### Patch Changes
+
+- ce9435f: Increased the allowed size of loc in the docs MCPs examples tool so that the agents.md example still fits in
+- Updated dependencies [8baa6c8]
+- Updated dependencies [396be50]
+- Updated dependencies [ab80e7e]
+- Updated dependencies [e229660]
+- Updated dependencies [c3bd795]
+- Updated dependencies [da082f8]
+- Updated dependencies [bb1e2c8]
+- Updated dependencies [a5810ce]
+- Updated dependencies [3e9c131]
+- Updated dependencies [3171b5b]
+- Updated dependencies [973e5ac]
+- Updated dependencies [daf942f]
+- Updated dependencies [0b8b868]
+- Updated dependencies [9e1eff5]
+- Updated dependencies [6fa1ad1]
+- Updated dependencies [c28d7a0]
+- Updated dependencies [edf1e88]
+  - @mastra/mcp@0.5.0
+  - @mastra/core@0.9.4
+
+## 0.0.14-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [3e9c131]
+  - @mastra/core@0.9.4-alpha.4
+  - @mastra/mcp@0.5.0-alpha.6
+
+## 0.0.14-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [8baa6c8]
+  - @mastra/mcp@0.5.0-alpha.5
+
+## 0.0.14-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [396be50]
+- Updated dependencies [c3bd795]
+- Updated dependencies [da082f8]
+- Updated dependencies [a5810ce]
+  - @mastra/core@0.9.4-alpha.3
+  - @mastra/mcp@0.5.0-alpha.4
+
+## 0.0.14-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [bb1e2c8]
+  - @mastra/mcp@0.5.0-alpha.3
+
+## 0.0.14-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [3171b5b]
+- Updated dependencies [973e5ac]
+- Updated dependencies [9e1eff5]
+  - @mastra/core@0.9.4-alpha.2
+  - @mastra/mcp@0.5.0-alpha.2
+
+## 0.0.14-alpha.1
+
+### Patch Changes
+
+- ce9435f: Increased the allowed size of loc in the docs MCPs examples tool so that the agents.md example still fits in
+- Updated dependencies [ab80e7e]
+- Updated dependencies [e229660]
+- Updated dependencies [6fa1ad1]
+- Updated dependencies [c28d7a0]
+- Updated dependencies [edf1e88]
+  - @mastra/core@0.9.4-alpha.1
+  - @mastra/mcp@0.5.0-alpha.1
+
 ## 0.0.14-alpha.0
 
 ### Patch Changes

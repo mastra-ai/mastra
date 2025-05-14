@@ -8,6 +8,8 @@ import { z } from 'zod';
 import { weatherTool } from './mastra/tools/weather';
 
 describe('Agent Memory Tests', () => {
+  const dbFile = 'file:mastra-agent.db';
+
   describe('Agent memory message persistence', () => {
     // making a separate memory for agent to avoid conflicts with other tests
     const memory = new Memory({
@@ -19,10 +21,10 @@ describe('Agent Memory Tests', () => {
         semanticRecall: true,
       },
       storage: new LibSQLStore({
-        url: 'file:mastra-agent.db', // relative path from bundled .mastra/output dir
+        url: dbFile,
       }),
       vector: new LibSQLVector({
-        connectionUrl: 'file:mastra-agent.db', // relative path from bundled .mastra/output dir
+        connectionUrl: dbFile,
       }),
       embedder: openai.embedding('text-embedding-3-small'),
     });
@@ -108,8 +110,8 @@ describe('Agent Memory Tests', () => {
         semanticRecall: true,
         lastMessages: 10,
       },
-      storage: new LibSQLStore({ url: 'file:mastra-agent.db' }),
-      vector: new LibSQLVector({ connectionUrl: 'file:mastra-agent.db' }),
+      storage: new LibSQLStore({ url: dbFile }),
+      vector: new LibSQLVector({ connectionUrl: dbFile }),
       embedder: openai.embedding('text-embedding-3-small'),
     });
     const agentWithTitle = new Agent({
@@ -127,8 +129,8 @@ describe('Agent Memory Tests', () => {
         semanticRecall: true,
         lastMessages: 10,
       },
-      storage: new LibSQLStore({ url: 'file:mastra-agent.db' }),
-      vector: new LibSQLVector({ connectionUrl: 'file:mastra-agent.db' }),
+      storage: new LibSQLStore({ url: dbFile }),
+      vector: new LibSQLVector({ connectionUrl: dbFile }),
       embedder: openai.embedding('text-embedding-3-small'),
     });
     const agentNoTitle = new Agent({

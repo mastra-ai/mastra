@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import EventEmitter from 'events';
 import { z } from 'zod';
-import type { Mastra, WorkflowRun } from '../..';
+import type { Mastra, VNextWorkflowRun, VNextWorkflowRuns } from '../..';
 import type { MastraPrimitives } from '../../action';
 import { Agent } from '../../agent';
 import { MastraBase } from '../../base';
@@ -845,7 +845,7 @@ export class NewWorkflow<
       return { runs: [], total: 0 };
     }
 
-    return storage.getWorkflowRuns({ workflowName: this.id, ...(args ?? {}) });
+    return storage.getWorkflowRuns({ workflowName: this.id, ...(args ?? {}) }) as unknown as VNextWorkflowRuns;
   }
 
   async getWorkflowRunById(runId: string) {
@@ -854,11 +854,13 @@ export class NewWorkflow<
       this.logger.debug('Cannot get workflow runs. Mastra engine is not initialized');
       return null;
     }
-    const run = await storage.getWorkflowRunById({ runId, workflowName: this.id });
+    const run = (await storage.getWorkflowRunById({ runId, workflowName: this.id })) as unknown as VNextWorkflowRun;
 
     return (
       run ??
-      (this.#runs.get(runId) ? ({ ...this.#runs.get(runId), workflowName: this.id } as unknown as WorkflowRun) : null)
+      (this.#runs.get(runId)
+        ? ({ ...this.#runs.get(runId), workflowName: this.id } as unknown as VNextWorkflowRun)
+        : null)
     );
   }
 }

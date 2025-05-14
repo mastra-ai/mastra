@@ -1,6 +1,6 @@
 import { ReadableStream } from 'node:stream/web';
 import { RuntimeContext } from '@mastra/core/di';
-import type { WorkflowRuns } from '@mastra/core/storage';
+import type { VNextWorkflowRuns } from '@mastra/core/storage';
 import type { NewWorkflow, SerializedStepFlowEntry } from '@mastra/core/workflows/vNext';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
@@ -83,9 +83,7 @@ export async function getVNextWorkflowByIdHandler({ mastra, workflowId }: VNextW
       }, {}),
       name: workflow.name,
       stepGraph: workflow.serializedStepGraph,
-      // @ts-ignore - ignore infinite recursion
       inputSchema: workflow.inputSchema ? stringify(zodToJsonSchema(workflow.inputSchema)) : undefined,
-      // @ts-ignore - ignore infinite recursion
       outputSchema: workflow.outputSchema ? stringify(zodToJsonSchema(workflow.outputSchema)) : undefined,
     };
   } catch (error) {
@@ -398,7 +396,7 @@ export async function getVNextWorkflowRunsHandler({
   limit?: number;
   offset?: number;
   resourceId?: string;
-}): Promise<WorkflowRuns> {
+}): Promise<VNextWorkflowRuns> {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });
