@@ -13,9 +13,11 @@ export const useAgentStore = create<AgentStore>()(
   persist(
     set => ({
       modelSettings: {},
-      setModelSettings: modelSettings => set({ modelSettings }),
+      setModelSettings: modelSettings =>
+        set(state => ({ modelSettings: { ...state.modelSettings, ...modelSettings } })),
       chatWithGenerate: {},
-      setChatWithGenerate: chatWithGenerate => set({ chatWithGenerate }),
+      setChatWithGenerate: chatWithGenerate =>
+        set(state => ({ chatWithGenerate: { ...state.chatWithGenerate, ...chatWithGenerate } })),
     }),
     {
       name: 'mastra-agent-store',

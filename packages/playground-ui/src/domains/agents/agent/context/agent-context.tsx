@@ -30,7 +30,7 @@ export function AgentProvider({ agentId, children }: { agentId: string; children
   const modelSettings = modelSettingsStore[agentId] || defaultModelSettings;
 
   const setModelSettings = (modelSettings: ModelSettings) => {
-    setModelSettingsStore({ ...modelSettingsStore, [agentId]: modelSettings });
+    setModelSettingsStore({ [agentId]: modelSettings });
   };
 
   const resetModelSettings = () => {
@@ -39,7 +39,7 @@ export function AgentProvider({ agentId, children }: { agentId: string; children
 
   const chatWithGenerate = chatWithGenerateStore[agentId] || false;
   const setChatWithGenerate = (chatWithGenerate: boolean) => {
-    setChatWithGenerateStore({ ...chatWithGenerateStore, [agentId]: chatWithGenerate });
+    setChatWithGenerateStore({ [agentId]: chatWithGenerate });
   };
 
   return (
