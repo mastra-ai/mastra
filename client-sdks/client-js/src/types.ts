@@ -12,6 +12,7 @@ import type {
 } from '@mastra/core';
 
 import type { AgentGenerateOptions, AgentStreamOptions } from '@mastra/core/agent';
+import type { ServerInfo } from '@mastra/core/mcp';
 import type { NewWorkflow, WatchEvent, WorkflowResult as VNextWorkflowResult } from '@mastra/core/workflows/vNext';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
@@ -267,4 +268,10 @@ export interface GetNetworkResponse {
     modelId: string;
   };
   state?: Record<string, any>;
+}
+
+export interface McpServerListResponse {
+  servers: ServerInfo[];
+  next: string | null;
+  total_count: number;
 }

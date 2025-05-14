@@ -4,7 +4,14 @@ import type { InternalCoreTool } from '@mastra/core';
 import { makeCoreTool } from '@mastra/core';
 import type { ToolsInput } from '@mastra/core/agent';
 import { MCPServerBase } from '@mastra/core/mcp';
-import type { MCPServerSSEOptions, ConvertedTool, MCPServerHonoSSEOptions } from '@mastra/core/mcp';
+import type {
+  MCPServerConfig,
+  ServerInfo,
+  ServerDetailInfo,
+  ConvertedTool,
+  MCPServerHonoSSEOptions,
+  MCPServerSSEOptions,
+} from '@mastra/core/mcp';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
@@ -56,17 +63,18 @@ export class MCPServer extends MCPServerBase {
 
   /**
    * Construct a new MCPServer instance.
-   * @param opts.name - Server name
-   * @param opts.version - Server version
-   * @param opts.tools - Tool definitions to register
+   * @param opts - Configuration options for the server, including registry metadata.
    */
-  constructor({ name, version, tools }: { name: string; version: string; tools: ToolsInput }) {
-    super({ name, version, tools });
+  constructor(opts: MCPServerConfig) {
+    super(opts);
 
-    this.server = new Server({ name, version }, { capabilities: { tools: {}, logging: { enabled: true } } });
+    this.server = new Server(
+      { name: this.name, version: this.version },
+      { capabilities: { tools: {}, logging: { enabled: true } } },
+    );
 
     this.logger.info(
-      `Initialized MCPServer '${name}' v${version} with tools: ${Object.keys(this.convertedTools).join(', ')}`,
+      `Initialized MCPServer '${this.name}' v${this.version} (ID: ${this.id}) with tools: ${Object.keys(this.convertedTools).join(', ')}`,
     );
 
     this.sseHonoTransports = new Map();
@@ -107,7 +115,7 @@ export class MCPServer extends MCPServerBase {
         name: toolName,
         description: coreTool.description,
         parameters: coreTool.parameters,
-        execute: coreTool.execute,
+        execute: coreTool.execute!,
       };
       this.logger.info(`Registered tool: '${toolName}' [${toolInstance?.description || 'No description'}]`);
     }
@@ -429,5 +437,36 @@ export class MCPServer extends MCPServerBase {
     } catch (error) {
       this.logger.error('Error closing MCP server:', { error });
     }
+  }
+
+  /**
+   * Gets the basic information about the server, conforming to the Server schema.
+   * @returns ServerInfo object.
+   */
+  public getServerInfo(): ServerInfo {
+    return {
+      id: this.id,
+      name: this.name,
+      description: this.description,
+      repository: this.repository,
+      version_detail: {
+        version: this.version,
+        release_date: this.releaseDate,
+        is_latest: this.isLatest,
+      },
+    };
+  }
+
+  /**
+   * Gets detailed information about the server, conforming to the ServerDetail schema.
+   * @returns ServerDetailInfo object.
+   */
+  public getServerDetail(): ServerDetailInfo {
+    return {
+      ...this.getServerInfo(),
+      package_canonical: this.packageCanonical,
+      packages: this.packages,
+      remotes: this.remotes,
+    };
   }
 }
