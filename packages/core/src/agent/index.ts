@@ -257,6 +257,7 @@ export class Agent<
     return resolveMaybePromise(result, version => {
       if (!version) {
         this.logger.error(`[Agent:${this.name}] - Function-based version returned empty value`);
+        throw new Error('Version is required when using a function to provide it. The function returned an empty value.');
       }
 
       return version;
