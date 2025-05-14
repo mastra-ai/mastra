@@ -205,6 +205,7 @@ Mastraツールはオプションの`execute`非同期関数も公開してい�
 クライアントサイドのツール呼び出しを活用する一つの方法は、クライアントサイドのツール実行のために`@ai-sdk/react`の`useChat`フックの`onToolCall`プロパティを使用することです。
 
 ## カスタムDataStream
+
 特定のシナリオでは、エージェントのdataStreamにカスタムデータやメッセージ注釈を書き込む必要があります。
 これは以下のような場合に役立ちます：
 
@@ -214,15 +215,16 @@ Mastraツールはオプションの`execute`非同期関数も公開してい�
 MastraはAI SDKとうまく統合して、これを可能にします
 
 ### CreateDataStream
+
 `createDataStream`関数を使用すると、クライアントに追加データをストリーミングできます
 
-```typescript  copy
-    import { createDataStream } from "ai"
-    import { Agent } from '@mastra/core/agent';
+```typescript copy
+import { createDataStream } from "ai";
+import { Agent } from "@mastra/core/agent";
 
-    export const weatherAgent = new Agent({
-      name: 'Weather Agent',
-      instructions: `
+export const weatherAgent = new Agent({
+  name: "Weather Agent",
+  instructions: `
           You are a helpful weather assistant that provides accurate weather information.
 
           Your primary function is to help users get weather details for specific locations. When responding:
@@ -234,29 +236,30 @@ MastraはAI SDKとうまく統合して、これを可能にします
 
           Use the weatherTool to fetch current weather data.
     `,
-      model: openai('gpt-4o'),
-      tools: { weatherTool },
-    });
+  model: openai("gpt-4o"),
+  tools: { weatherTool },
+});
 
-    const stream = createDataStream({
-      async execute(dataStream) {
-        // Write data
-        dataStream.writeData({ value: 'Hello' });
+const stream = createDataStream({
+  async execute(dataStream) {
+    // Write data
+    dataStream.writeData({ value: "Hello" });
 
-        // Write annotation
-        dataStream.writeMessageAnnotation({ type: 'status', value: 'processing' });
-  
-        //mastra agent stream
-        const agentStream = await weatherAgent.stream('What is the weather')
+    // Write annotation
+    dataStream.writeMessageAnnotation({ type: "status", value: "processing" });
 
-        // Merge agent stream
-         agentStream.mergeIntoDataStream(dataStream);
-      },
-      onError: error => `Custom error: ${error.message}`,
-  });
+    //mastra agent stream
+    const agentStream = await weatherAgent.stream("What is the weather");
 
+    // Merge agent stream
+    agentStream.mergeIntoDataStream(dataStream);
+  },
+  onError: (error) => `Custom error: ${error.message}`,
+});
 ```
+
 ### CreateDataStreamResponse
+
 `createDataStreamResponse`関数は、クライアントにデータをストリーミングするResponseオブジェクトを作成します
 
 ```typescript filename="app/api/chat/route.ts" copy
@@ -270,25 +273,26 @@ export async function POST(req: Request) {
 
   const response = createDataStreamResponse({
     status: 200,
-    statusText: 'OK',
+    statusText: "OK",
     headers: {
-      'Custom-Header': 'value',
+      "Custom-Header": "value",
     },
     async execute(dataStream) {
       // Write data
-      dataStream.writeData({ value: 'Hello' });
+      dataStream.writeData({ value: "Hello" });
 
       // Write annotation
-      dataStream.writeMessageAnnotation({ type: 'status', value: 'processing' });
+      dataStream.writeMessageAnnotation({
+        type: "status",
+        value: "processing",
+      });
 
       // Merge agent stream
       agentStream.mergeIntoDataStream(dataStream);
     },
-    onError: error => `Custom error: ${error.message}`,
+    onError: (error) => `Custom error: ${error.message}`,
   });
 
-  return response
+  return response;
 }
 ```
-
-

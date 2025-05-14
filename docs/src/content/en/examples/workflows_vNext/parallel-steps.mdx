@@ -8,6 +8,7 @@ description: Example of using Mastra to execute multiple independent tasks in pa
 When building AI applications, you often need to process multiple independent tasks simultaneously to improve efficiency.
 We make this functionality a core part of workflows through the `.parallel` method.
 
+
 ## Setup
 
 ```sh copy
@@ -15,18 +16,19 @@ npm install @ai-sdk/openai @mastra/core
 ```
 
 ## Define Planning Agent
+
 Define a planning agent which leverages an LLM call to plan activities given a location and corresponding weather conditions.
 
 ```ts showLineNumbers copy filename="agents/planning-agent.ts"
-import { Agent } from '@mastra/core/agent'
-import { openai } from '@ai-sdk/openai'
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
 
-const llm = openai('gpt-4o')
+const llm = openai("gpt-4o");
 
 // Define the planning agent with specific instructions for formatting
 // and structuring weather-based activity recommendations
 const planningAgent = new Agent({
-  name: 'planningAgent',
+  name: "planningAgent",
   model: llm,
   instructions: `
         You are a local activities and travel expert who excels at weather-based planning. Analyze the weather data and provide practical activity recommendations.
@@ -69,44 +71,43 @@ const planningAgent = new Agent({
 
         Maintain this exact formatting for consistency, using the emoji and section headers as shown.
       `,
-})
+});
 
-export { planningAgent }
+export { planningAgent };
 ```
 
-
 ## Define Synthesize Agent
+
 Define a synthesize agent which takes planned indoor and outdoor activities and provides a full report on the day.
 
 ```ts showLineNumbers copy filename="agents/synthesize-agent.ts"
-import { Agent } from '@mastra/core/agent'
-import { openai } from '@ai-sdk/openai'
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
 
-const llm = openai('gpt-4o')
+const llm = openai("gpt-4o");
 
 // Define the synthesize agent that combines indoor and outdoor activity plans
 // into a comprehensive report, considering weather conditions and alternatives
 const synthesizeAgent = new Agent({
-  name: 'synthesizeAgent',
+  name: "synthesizeAgent",
   model: llm,
   instructions: `
   You are given two different blocks of text, one about indoor activities and one about outdoor activities.
   Make this into a full report about the day and the possibilities depending on whether it rains or not.
   `,
-})
+});
 
-export { synthesizeAgent }
+export { synthesizeAgent };
 ```
 
-
-
 ## Define Parallel Workflow
+
 Here, we'll define a workflow which orchestrates a parallel -> sequential flow between the planning steps and the synthesize step.
 
 ```ts showLineNumbers copy filename="workflows/parallel-workflow.ts"
 import { z } from 'zod'
 import { createStep, createWorkflow } from '@mastra/core/workflows/vNext'
- 
+
 const forecastSchema = z.object({
   date: z.string(),
   maxTemp: z.number(),
@@ -114,20 +115,20 @@ const forecastSchema = z.object({
   precipitationChance: z.number(),
   condition: z.string(),
   location: z.string(),
-})
+});
 
 // Step to fetch weather data for a given city
 // Makes API calls to get current weather conditions and forecast
 const fetchWeather = createStep({
-  id: 'fetch-weather',
-  description: 'Fetches weather forecast for a given city',
+  id: "fetch-weather",
+  description: "Fetches weather forecast for a given city",
   inputSchema: z.object({
     city: z.string(),
   }),
   outputSchema: forecastSchema,
   execute: async ({ inputData }) => {
     if (!inputData) {
-      throw new Error('Trigger data not found')
+      throw new Error("Trigger data not found");
     }
  
     const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(inputData.city)}&count=1`
@@ -135,9 +136,9 @@ const fetchWeather = createStep({
     const geocodingData = (await geocodingResponse.json()) as {
       results: { latitude: number; longitude: number; name: string }[]
     }
- 
+
     if (!geocodingData.results?.[0]) {
-      throw new Error(`Location '${inputData.city}' not found`)
+      throw new Error(`Location '${inputData.city}' not found`);
     }
  
     const { latitude, longitude, name } = geocodingData.results[0]
@@ -146,16 +147,16 @@ const fetchWeather = createStep({
     const response = await fetch(weatherUrl)
     const data = (await response.json()) as {
       current: {
-        time: string
-        precipitation: number
-        weathercode: number
-      }
+        time: string;
+        precipitation: number;
+        weathercode: number;
+      };
       hourly: {
         precipitation_probability: number[]
         temperature_2m: number[]
       }
     }
- 
+
     const forecast = {
       date: new Date().toISOString(),
       maxTemp: Math.max(...data.hourly.temperature_2m),
@@ -164,28 +165,29 @@ const fetchWeather = createStep({
       location: name,
       precipitationChance: data.hourly.precipitation_probability.reduce(
         (acc, curr) => Math.max(acc, curr),
-        0
+        0,
       ),
     }
  
     return forecast
+
   },
-})
+});
 
 // Step to plan outdoor activities based on weather conditions
 // Uses the planning agent to generate activity recommendations
 const planActivities = createStep({
-  id: 'plan-activities',
-  description: 'Suggests activities based on weather conditions',
+  id: "plan-activities",
+  description: "Suggests activities based on weather conditions",
   inputSchema: forecastSchema,
   outputSchema: z.object({
     activities: z.string(),
   }),
   execute: async ({ inputData, mastra }) => {
     const forecast = inputData
- 
+
     if (!forecast) {
-      throw new Error('Forecast data not found')
+      throw new Error("Forecast data not found");
     }
  
     const prompt = `Based on the following weather forecast for ${forecast.location}, suggest appropriate activities:
@@ -194,25 +196,25 @@ const planActivities = createStep({
  
     const agent = mastra?.getAgent('planningAgent')
     if (!agent) {
-      throw new Error('Planning agent not found')
+      throw new Error("Planning agent not found");
     }
  
     const response = await agent.stream([
       {
-        role: 'user',
+        role: "user",
         content: prompt,
       },
     ])
  
     let activitiesText = ''
- 
+
     for await (const chunk of response.textStream) {
-      process.stdout.write(chunk)
-      activitiesText += chunk
+      process.stdout.write(chunk);
+      activitiesText += chunk;
     }
     return {
       activities: activitiesText,
-    }
+    };
   },
 })
  
@@ -220,66 +222,66 @@ const planActivities = createStep({
 // Maps numeric codes from the weather API to descriptive strings
 function getWeatherCondition(code: number): string {
   const conditions: Record<number, string> = {
-    0: 'Clear sky',
-    1: 'Mainly clear',
-    2: 'Partly cloudy',
-    3: 'Overcast',
-    45: 'Foggy',
-    48: 'Depositing rime fog',
-    51: 'Light drizzle',
-    53: 'Moderate drizzle',
-    55: 'Dense drizzle',
-    61: 'Slight rain',
-    63: 'Moderate rain',
-    65: 'Heavy rain',
-    71: 'Slight snow fall',
-    73: 'Moderate snow fall',
-    75: 'Heavy snow fall',
-    95: 'Thunderstorm',
-  }
-  return conditions[code] || 'Unknown'
+    0: "Clear sky",
+    1: "Mainly clear",
+    2: "Partly cloudy",
+    3: "Overcast",
+    45: "Foggy",
+    48: "Depositing rime fog",
+    51: "Light drizzle",
+    53: "Moderate drizzle",
+    55: "Dense drizzle",
+    61: "Slight rain",
+    63: "Moderate rain",
+    65: "Heavy rain",
+    71: "Slight snow fall",
+    73: "Moderate snow fall",
+    75: "Heavy snow fall",
+    95: "Thunderstorm",
+  };
+  return conditions[code] || "Unknown";
 }
 
 // Step to plan indoor activities as backup options
 // Generates alternative indoor activities in case of bad weather
 const planIndoorActivities = createStep({
-  id: 'plan-indoor-activities',
-  description: 'Suggests indoor activities based on weather conditions',
+  id: "plan-indoor-activities",
+  description: "Suggests indoor activities based on weather conditions",
   inputSchema: forecastSchema,
   outputSchema: z.object({
     activities: z.string(),
   }),
   execute: async ({ inputData, mastra }) => {
     const forecast = inputData
- 
+
     if (!forecast) {
-      throw new Error('Forecast data not found')
+      throw new Error("Forecast data not found");
     }
  
     const prompt = `In case it rains, plan indoor activities for ${forecast.location} on ${forecast.date}`
  
     const agent = mastra?.getAgent('planningAgent')
     if (!agent) {
-      throw new Error('Planning agent not found')
+      throw new Error("Planning agent not found");
     }
  
     const response = await agent.stream([
       {
-        role: 'user',
+        role: "user",
         content: prompt,
       },
     ])
  
     let activitiesText = ''
- 
+
     for await (const chunk of response.textStream) {
-      activitiesText += chunk
+      activitiesText += chunk;
     }
     return {
       activities: activitiesText,
-    }
+    };
   },
-})
+});
 
 // Step to synthesize and combine indoor/outdoor activity plans
 // Creates a comprehensive plan that considers both options
@@ -287,10 +289,10 @@ const synthesizeStep = createStep({
   id: 'sythesize-step',
   description: 'Synthesizes the results of the indoor and outdoor activities',
   inputSchema: z.object({
-    'plan-activities': z.object({
+    "plan-activities": z.object({
       activities: z.string(),
     }),
-    'plan-indoor-activities': z.object({
+    "plan-indoor-activities": z.object({
       activities: z.string(),
     }),
   }),
@@ -316,21 +318,21 @@ const synthesizeStep = createStep({
  
     const response = await agent.stream([
       {
-        role: 'user',
+        role: "user",
         content: prompt,
       },
     ])
  
     let activitiesText = ''
- 
+
     for await (const chunk of response.textStream) {
-      process.stdout.write(chunk)
-      activitiesText += chunk
+      process.stdout.write(chunk);
+      activitiesText += chunk;
     }
  
     return {
       activities: activitiesText,
-    }
+    };
   },
 })
  
@@ -352,8 +354,8 @@ const activityPlanningWorkflow = createWorkflow({
 export { activityPlanningWorkflow }
 ```
 
-
 ## Register Agent and Workflow instances with Mastra class
+
 Register the agents and workflow with the mastra instance.
 This is critical for enabling access to the agents within the workflow.
 
@@ -372,11 +374,11 @@ const mastra = new Mastra({
   },
   agents: {
     planningAgent,
-	  synthesizeAgent
+    synthesizeAgent,
   },
   logger: createLogger({
-    name: 'Mastra',
-    level: 'info',
+    name: "Mastra",
+    level: "info",
   }),
 })
  
@@ -384,10 +386,11 @@ export { mastra }
 ```
 
 ## Execute the activity planning workflow
+
 Here, we'll get the weather workflow from the mastra instance, then create a run and execute the created run with the required inputData.
 
 ```ts showLineNumbers copy filename="exec.ts"
-import { mastra } from "./"
+import { mastra } from "./";
 
 const workflow = mastra.vnext_getWorkflow('activityPlanningWorkflow')
 const run = workflow.createRun()

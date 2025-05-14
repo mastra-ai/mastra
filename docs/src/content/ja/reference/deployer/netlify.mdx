@@ -10,14 +10,14 @@ NetlifyDeployerは、Mastraアプリケーションをネットリファイ・�
 ## 使用例
 
 ```typescript
-import { Mastra } from '@mastra/core';
-import { NetlifyDeployer } from '@mastra/deployer-netlify';
+import { Mastra } from "@mastra/core";
+import { NetlifyDeployer } from "@mastra/deployer-netlify";
 
 const mastra = new Mastra({
   deployer: new NetlifyDeployer({
-    scope: 'your-team-slug',
-    projectName: 'your-project-name',
-    token: 'your-netlify-token'
+    scope: "your-team-slug",
+    projectName: "your-project-name",
+    token: "your-netlify-token",
   }),
   // ... other Mastra configuration options
 });
@@ -38,7 +38,8 @@ const mastra = new Mastra({
     {
       name: "projectName",
       type: "string",
-      description: "あなたのNetlifyサイトの名前（存在しない場合は作成されます）。",
+      description:
+        "あなたのNetlifyサイトの名前（存在しない場合は作成されます）。",
       isOptional: false,
     },
     {
@@ -50,7 +51,6 @@ const mastra = new Mastra({
   ]}
 />
 
-
 ### 環境変数
 
 NetlifyDeployerは複数のソースから環境変数を処理します：
@@ -58,7 +58,6 @@ NetlifyDeployerは複数のソースから環境変数を処理します：
 1. **環境ファイル**: `.env.production`および`.env`ファイルからの変数。
 2. **設定**: Mastra設定を通じて渡される変数。
 3. **Netlifyダッシュボード**: Netlifyのウェブインターフェースを通じて管理することもできます。
-
 
 ## Mastraプロジェクトのビルド
 
@@ -85,7 +84,7 @@ NetlifyDeployerは、`.mastra/output`に以下の設定で`netlify.toml`設定�
 
 ```toml
 [functions]
-node_bundler = "esbuild"            
+node_bundler = "esbuild"
 directory = "netlify/functions"
 
 [[redirects]]
@@ -100,6 +99,7 @@ to = "/.netlify/functions/api/:splat"
 ビルド後、Mastraアプリケーションの`.mastra/output`を以下のいずれかの方法でNetlifyにデプロイできます：
 
 1. **Netlify CLI**: Netlifyの公式CLIツールを使用して直接デプロイ
+
    - CLIをインストール: `npm install -g netlify-cli`
    - 出力ディレクトリに移動: `cd .mastra/output`
    - 関数ディレクトリを指定してデプロイ: `netlify deploy --dir . --functions ./netlify/functions`

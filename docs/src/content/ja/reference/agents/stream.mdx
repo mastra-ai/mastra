@@ -21,7 +21,7 @@ description: Mastraエージェントの`.stream()`メソッドに関するド�
 
 ```typescript
 interface Message {
-  role: 'system' | 'user' | 'assistant';
+  role: "system" | "user" | "assistant";
   content: string;
 }
 ```
@@ -36,7 +36,8 @@ interface Message {
       name: "abortSignal",
       type: "AbortSignal",
       isOptional: true,
-      description: "エージェントの実行を中止できる信号オブジェクト。信号が中止されると、進行中のすべての操作が終了します。",
+      description:
+        "エージェントの実行を中止できる信号オブジェクト。信号が中止されると、進行中のすべての操作が終了します。",
     },
     {
       name: "context",
@@ -48,13 +49,15 @@ interface Message {
       name: "experimental_output",
       type: "Zod schema | JsonSchema7",
       isOptional: true,
-      description: "テキスト生成とツール呼び出しと共に構造化された出力生成を有効にします。モデルは提供されたスキーマに準拠したレスポンスを生成します。",
+      description:
+        "テキスト生成とツール呼び出しと共に構造化された出力生成を有効にします。モデルは提供されたスキーマに準拠したレスポンスを生成します。",
     },
     {
       name: "instructions",
       type: "string",
       isOptional: true,
-      description: "この特定の生成のためにエージェントのデフォルト指示を上書きするカスタム指示。新しいエージェントインスタンスを作成せずに動的にエージェントの動作を変更するのに役立ちます。",
+      description:
+        "この特定の生成のためにエージェントのデフォルト指示を上書きするカスタム指示。新しいエージェントインスタンスを作成せずに動的にエージェントの動作を変更するのに役立ちます。",
     },
     {
       name: "maxSteps",
@@ -74,63 +77,73 @@ interface Message {
       name: "memoryOptions",
       type: "MemoryConfig",
       isOptional: true,
-      description: "メモリ管理の設定オプション。詳細は以下のMemoryConfigセクションを参照してください。",
+      description:
+        "メモリ管理の設定オプション。詳細は以下のMemoryConfigセクションを参照してください。",
     },
     {
       name: "onFinish",
       type: "StreamTextOnFinishCallback | StreamObjectOnFinishCallback",
       isOptional: true,
-      description: "ストリーミングが完了したときに呼び出されるコールバック関数。",
+      description:
+        "ストリーミングが完了したときに呼び出されるコールバック関数。",
     },
     {
       name: "onStepFinish",
       type: "GenerateTextOnStepFinishCallback<any> | never",
       isOptional: true,
-      description: "ストリーミング中の各ステップ後に呼び出されるコールバック関数。構造化出力では利用できません。",
+      description:
+        "ストリーミング中の各ステップ後に呼び出されるコールバック関数。構造化出力では利用できません。",
     },
     {
       name: "output",
       type: "Zod schema | JsonSchema7",
       isOptional: true,
-      description: "出力の予想される構造を定義します。JSONスキーマオブジェクトまたはZodスキーマを指定できます。",
+      description:
+        "出力の予想される構造を定義します。JSONスキーマオブジェクトまたはZodスキーマを指定できます。",
     },
     {
       name: "resourceId",
       type: "string",
       isOptional: true,
-      description: "エージェントと対話するユーザーまたはリソースの識別子。threadIdが提供される場合は必須です。",
+      description:
+        "エージェントと対話するユーザーまたはリソースの識別子。threadIdが提供される場合は必須です。",
     },
     {
       name: "telemetry",
       type: "TelemetrySettings",
       isOptional: true,
-      description: "ストリーミング中のテレメトリ収集の設定。詳細は以下のTelemetrySettingsセクションを参照してください。",
+      description:
+        "ストリーミング中のテレメトリ収集の設定。詳細は以下のTelemetrySettingsセクションを参照してください。",
     },
     {
       name: "temperature",
       type: "number",
       isOptional: true,
-      description: "モデルの出力のランダム性を制御します。高い値（例：0.8）は出力をよりランダムにし、低い値（例：0.2）はより焦点を絞った決定論的な出力にします。",
+      description:
+        "モデルの出力のランダム性を制御します。高い値（例：0.8）は出力をよりランダムにし、低い値（例：0.2）はより焦点を絞った決定論的な出力にします。",
     },
     {
       name: "threadId",
       type: "string",
       isOptional: true,
-      description: "会話スレッドの識別子。複数のやり取りにわたってコンテキストを維持できます。resourceIdが提供される場合は必須です。",
+      description:
+        "会話スレッドの識別子。複数のやり取りにわたってコンテキストを維持できます。resourceIdが提供される場合は必須です。",
     },
     {
       name: "toolChoice",
       type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
       isOptional: true,
       defaultValue: "'auto'",
-      description: "ストリーミング中にエージェントがツールをどのように使用するかを制御します。",
+      description:
+        "ストリーミング中にエージェントがツールをどのように使用するかを制御します。",
     },
     {
       name: "toolsets",
       type: "ToolsetsInput",
       isOptional: true,
-      description: "このストリーム中にエージェントが利用できるようにする追加のツールセット。",
-    }
+      description:
+        "このストリーム中にエージェントが利用できるようにする追加のツールセット。",
+    },
   ]}
 />
 
@@ -144,13 +157,15 @@ interface Message {
       name: "lastMessages",
       type: "number | false",
       isOptional: true,
-      description: "コンテキストに含める最新メッセージの数。falseに設定すると無効になります。",
+      description:
+        "コンテキストに含める最新メッセージの数。falseに設定すると無効になります。",
     },
     {
       name: "semanticRecall",
       type: "boolean | object",
       isOptional: true,
-      description: "セマンティックメモリリコールの設定。ブール値または詳細な設定が可能です。",
+      description:
+        "セマンティックメモリリコールの設定。ブール値または詳細な設定が可能です。",
       properties: [
         {
           type: "number",
@@ -160,8 +175,8 @@ interface Message {
               type: "number",
               isOptional: true,
               description: "取得する意味的に最も類似したメッセージの数。",
-            }
-          ]
+            },
+          ],
         },
         {
           type: "number | object",
@@ -170,11 +185,12 @@ interface Message {
               name: "messageRange",
               type: "number | { before: number; after: number }",
               isOptional: true,
-              description: "セマンティック検索の対象とするメッセージの範囲。単一の数値または前後の設定が可能です。",
-            }
-          ]
-        }
-      ]
+              description:
+                "セマンティック検索の対象とするメッセージの範囲。単一の数値または前後の設定が可能です。",
+            },
+          ],
+        },
+      ],
     },
     {
       name: "workingMemory",
@@ -186,12 +202,12 @@ interface Message {
           type: "boolean",
           parameters: [
             {
-              name: "enabled", 
-              type: "boolean", 
-              isOptional: true, 
-              description: "ワーキングメモリを有効にするかどうか。"
-            }
-          ]
+              name: "enabled",
+              type: "boolean",
+              isOptional: true,
+              description: "ワーキングメモリを有効にするかどうか。",
+            },
+          ],
         },
         {
           type: "string",
@@ -201,8 +217,8 @@ interface Message {
               type: "string",
               isOptional: true,
               description: "ワーキングメモリに使用するテンプレート。",
-            }
-          ]
+            },
+          ],
         },
         {
           type: "'text-stream' | 'tool-call'",
@@ -212,10 +228,10 @@ interface Message {
               type: "'text-stream' | 'tool-call'",
               isOptional: true,
               description: "ワーキングメモリに使用するコンテンツのタイプ。",
-            }
-          ]
-        }
-      ]
+            },
+          ],
+        },
+      ],
     },
     {
       name: "threads",
@@ -231,11 +247,11 @@ interface Message {
               type: "boolean",
               isOptional: true,
               description: "新しいスレッドのタイトルを自動生成するかどうか。",
-            }
-          ]
-        }
-      ]
-    }
+            },
+          ],
+        },
+      ],
+    },
   ]}
 />
 
@@ -250,40 +266,46 @@ interface Message {
       type: "boolean",
       isOptional: true,
       defaultValue: "false",
-      description: "テレメトリを有効または無効にします。実験的な機能のため、デフォルトでは無効になっています。",
+      description:
+        "テレメトリを有効または無効にします。実験的な機能のため、デフォルトでは無効になっています。",
     },
     {
       name: "recordInputs",
       type: "boolean",
       isOptional: true,
       defaultValue: "true",
-      description: "入力の記録を有効または無効にします。機密情報の記録を避けたり、データ転送を減らしたり、パフォーマンスを向上させたりするために無効にすることもできます。",
+      description:
+        "入力の記録を有効または無効にします。機密情報の記録を避けたり、データ転送を減らしたり、パフォーマンスを向上させたりするために無効にすることもできます。",
     },
     {
       name: "recordOutputs",
       type: "boolean",
       isOptional: true,
       defaultValue: "true",
-      description: "出力の記録を有効または無効にします。機密情報の記録を避けたり、データ転送を減らしたり、パフォーマンスを向上させたりするために無効にすることもできます。",
+      description:
+        "出力の記録を有効または無効にします。機密情報の記録を避けたり、データ転送を減らしたり、パフォーマンスを向上させたりするために無効にすることもできます。",
     },
     {
       name: "functionId",
       type: "string",
       isOptional: true,
-      description: "この関数の識別子。テレメトリデータを関数ごとにグループ化するために使用されます。",
+      description:
+        "この関数の識別子。テレメトリデータを関数ごとにグループ化するために使用されます。",
     },
     {
       name: "metadata",
       type: "Record<string, AttributeValue>",
       isOptional: true,
-      description: "テレメトリデータに含める追加情報。AttributeValueは文字列、数値、ブール値、これらの型の配列、またはnullにすることができます。",
+      description:
+        "テレメトリデータに含める追加情報。AttributeValueは文字列、数値、ブール値、これらの型の配列、またはnullにすることができます。",
     },
     {
       name: "tracer",
       type: "Tracer",
       isOptional: true,
-      description: "テレメトリデータに使用するカスタムOpenTelemetryトレーサーインスタンス。詳細はOpenTelemetryのドキュメントを参照してください。",
-    }
+      description:
+        "テレメトリデータに使用するカスタムOpenTelemetryトレーサーインスタンス。詳細はOpenTelemetryのドキュメントを参照してください。",
+    },
   ]}
 />
 
@@ -299,26 +321,30 @@ interface Message {
       name: "textStream",
       type: "AsyncIterable<string>",
       isOptional: true,
-      description: "テキストチャンクのストリーム。output が 'text' の場合（スキーマが提供されていない）または `experimental_output` を使用する場合に存在します。",
+      description:
+        "テキストチャンクのストリーム。output が 'text' の場合（スキーマが提供されていない）または `experimental_output` を使用する場合に存在します。",
     },
     {
       name: "objectStream",
       type: "AsyncIterable<object>",
       isOptional: true,
-      description: "構造化データのストリーム。スキーマを持つ `output` オプションを使用する場合にのみ存在します。",
+      description:
+        "構造化データのストリーム。スキーマを持つ `output` オプションを使用する場合にのみ存在します。",
     },
     {
       name: "partialObjectStream",
       type: "AsyncIterable<object>",
       isOptional: true,
-      description: "構造化データのストリーム。`experimental_output` オプションを使用する場合にのみ存在します。",
+      description:
+        "構造化データのストリーム。`experimental_output` オプションを使用する場合にのみ存在します。",
     },
     {
       name: "object",
       type: "Promise<object>",
       isOptional: true,
-      description: "最終的な構造化出力に解決されるプロミス。`output` または `experimental_output` オプションを使用する場合に存在します。",
-    }
+      description:
+        "最終的な構造化出力に解決されるプロミス。`output` または `experimental_output` オプションを使用する場合に存在します。",
+    },
   ]}
 />
 
@@ -328,7 +354,7 @@ interface Message {
 
 ```typescript
 const stream = await myAgent.stream([
-  { role: "user", content: "Tell me a story." }
+  { role: "user", content: "Tell me a story." },
 ]);
 
 for await (const chunk of stream.textStream) {
@@ -340,22 +366,19 @@ for await (const chunk of stream.textStream) {
 
 ```typescript
 const schema = {
-  type: 'object',
+  type: "object",
   properties: {
-    summary: { type: 'string' },
-    nextSteps: { type: 'array', items: { type: 'string' } }
+    summary: { type: "string" },
+    nextSteps: { type: "array", items: { type: "string" } },
   },
-  required: ['summary', 'nextSteps']
+  required: ["summary", "nextSteps"],
 };
 
-const response = await myAgent.stream(
-  "What should we do next?",
-  {
-    output: schema,
-    threadId: "project-123",
-    onFinish: text => console.log("Finished:", text)
-  }
-);
+const response = await myAgent.stream("What should we do next?", {
+  output: schema,
+  threadId: "project-123",
+  onFinish: (text) => console.log("Finished:", text),
+});
 
 for await (const chunk of response.textStream) {
   console.log(chunk);
@@ -366,4 +389,3 @@ console.log("Final structured result:", result);
 ```
 
 Agentの`stream()`とLLMの`stream()`の主な違いは、Agentは`threadId`を通じて会話のコンテキストを維持し、ツールにアクセスでき、エージェントのメモリシステムと統合できることです。
-

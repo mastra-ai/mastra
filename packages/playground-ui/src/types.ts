@@ -65,11 +65,6 @@ export type Span = {
   createdAt: string;
 };
 
-export type SpanNode = Span & {
-  children: SpanNode[];
-  relativePercentage?: number;
-};
-
 export type RefinedTrace = {
   traceId: string;
   serviceName: string;
@@ -78,3 +73,5 @@ export type RefinedTrace = {
   status: SpanStatus;
   trace: Span[];
 };
+
+export * from './domains/traces/types';

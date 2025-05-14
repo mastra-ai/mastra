@@ -5,7 +5,7 @@ description: Documentation for the Tone Consistency Metric in Mastra, which eval
 
 # ToneConsistencyMetric
 
-The `ToneConsistencyMetric` class evaluates the text's emotional tone and sentiment consistency.  It can operate in two modes: comparing tone between input/output pairs or analyzing tone stability within a single text.
+The `ToneConsistencyMetric` class evaluates the text's emotional tone and sentiment consistency. It can operate in two modes: comparing tone between input/output pairs or analyzing tone stability within a single text.
 
 ## Basic Usage
 
@@ -17,13 +17,13 @@ const metric = new ToneConsistencyMetric();
 // Compare tone between input and output
 const result1 = await metric.measure(
   "I love this amazing product!",
-  "This product is wonderful and fantastic!"
+  "This product is wonderful and fantastic!",
 );
 
 // Analyze tone stability in a single text
 const result2 = await metric.measure(
   "The service is excellent. The staff is friendly. The atmosphere is perfect.",
-  ""  // Empty string for single-text analysis
+  "", // Empty string for single-text analysis
 );
 
 console.log(result1.score); // Tone consistency score from 0-1
@@ -43,9 +43,10 @@ console.log(result2.score); // Tone stability score from 0-1
     {
       name: "output",
       type: "string",
-      description: "Reference text for tone comparison (empty string for stability analysis)",
+      description:
+        "Reference text for tone comparison (empty string for stability analysis)",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -62,7 +63,7 @@ console.log(result2.score); // Tone stability score from 0-1
       name: "info",
       type: "object",
       description: "Detailed tone info",
-    }
+    },
   ]}
 />
 
@@ -84,7 +85,7 @@ console.log(result2.score); // Tone stability score from 0-1
       name: "difference",
       type: "number",
       description: "Absolute difference between sentiment scores",
-    }
+    },
   ]}
 />
 
@@ -101,10 +102,9 @@ console.log(result2.score); // Tone stability score from 0-1
       name: "sentimentVariance",
       type: "number",
       description: "Variance in sentiment between sentences",
-    }
+    },
   ]}
 />
-
 
 ## Scoring Details
 
@@ -113,17 +113,20 @@ The metric evaluates sentiment consistency through tone pattern analysis and mod
 ### Scoring Process
 
 1. Analyzes tone patterns:
+
    - Extracts sentiment features
    - Computes sentiment scores
    - Measures tone variations
 
 2. Calculates mode-specific score:
    **Tone Consistency** (input and output):
+
    - Compares sentiment between texts
    - Calculates sentiment difference
    - Score = 1 - (sentiment_difference / max_difference)
 
    **Tone Stability** (single input):
+
    - Analyzes sentiment across sentences
    - Calculates sentiment variance
    - Score = 1 - (sentiment_variance / max_variance)
@@ -131,7 +134,9 @@ The metric evaluates sentiment consistency through tone pattern analysis and mod
 Final score: `mode_specific_score * scale`
 
 ### Score interpretation
+
 (0 to scale, default 0-1)
+
 - 1.0: Perfect tone consistency/stability
 - 0.7-0.9: Strong consistency with minor variations
 - 0.4-0.6: Moderate consistency with noticeable shifts
@@ -148,7 +153,7 @@ const metric = new ToneConsistencyMetric();
 // Tone Consistency Mode
 const consistencyResult = await metric.measure(
   "This product is fantastic and amazing!",
-  "The product is excellent and wonderful!"
+  "The product is excellent and wonderful!",
 );
 // Example output:
 // {
@@ -163,7 +168,7 @@ const consistencyResult = await metric.measure(
 // Tone Stability Mode
 const stabilityResult = await metric.measure(
   "Great service! Friendly staff. Perfect atmosphere.",
-  ""
+  "",
 );
 // Example output:
 // {
