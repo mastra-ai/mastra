@@ -7,10 +7,14 @@
   "version": "0.0.1",
   "dependencies": {
     "@ai-sdk/openai": "latest",
-    "@mastra/core": "latest",
-    "@mastra/voice-openai": "latest",
-    "@mastra/memory": "latest",
     "@mastra/client-js": "latest",
+    "@mastra/core": "latest",
+    "@mastra/mcp": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/voice-openai": "latest",
+    "ai": "^4.3.15",
+    "fetch-to-node": "^2.1.0",
+    "mastra": "latest",
     "zod": "^3.24.2"
   },
   "pnpm": {
@@ -18,12 +22,15 @@
       "@mastra/core": "link:../../packages/core",
       "@mastra/voice-openai": "link:../../voice/openai",
       "@mastra/memory": "link:../../packages/memory",
-      "@mastra/client-js": "link:../../client-sdks/client-js"
+      "@mastra/client-js": "link:../../client-sdks/client-js",
+      "@mastra/mcp": "link:../../packages/mcp",
+      "mastra": "link:../../packages/cli"
     }
   },
   "scripts": {
     "start-deployed": "npx bun src/with-deployed.ts",
-    "start": "npx bun src/index.ts"
+    "start": "npx bun src/index.ts",
+    "mastra:dev": "mastra dev"
   },
   "keywords": [],
   "author": "",

@@ -1,8 +1,8 @@
 # Memory クラスリファレンス
 
-`Memory` クラスは、Mastra における会話履歴とスレッドベースのメッセージストレージを管理するための堅牢なシステムを提供します。これにより、会話の永続的な保存、セマンティック検索機能、および効率的なメッセージの取得が可能になります。デフォルトでは、LibSQL をストレージとベクトル検索に使用し、FastEmbed を埋め込みに使用します。
+`Memory` クラスは、Mastraで会話履歴とスレッドベースのメッセージストレージを管理するための堅牢なシステムを提供します。会話の永続的な保存、セマンティック検索機能、効率的なメッセージ取得を可能にします。デフォルトでは、ストレージとベクトル検索にLibSQLを使用し、埋め込みにFastEmbedを使用します。
 
-## 基本的な使用法
+## 基本的な使い方
 
 ```typescript copy showLineNumbers
 import { Memory } from "@mastra/memory";
@@ -18,37 +18,36 @@ const agent = new Agent({
 
 ```typescript copy showLineNumbers
 import { Memory } from "@mastra/memory";
-import { LibSQLStore } from "@mastra/core/storage/libsql";
-import { LibSQLVector } from "@mastra/core/vector/libsql";
+import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 import { Agent } from "@mastra/core/agent";
 
 const memory = new Memory({
-  // オプションのストレージ設定 - デフォルトでlibsqlが使用されます
+  // Optional storage configuration - libsql will be used by default
   storage: new LibSQLStore({
-    url: "file:memory.db",
+    url: "file:./memory.db",
   }),
 
-  // セマンティック検索のためのオプションのベクターデータベース - デフォルトでlibsqlが使用されます
+  // Optional vector database for semantic search - libsql will be used by default
   vector: new LibSQLVector({
-    url: "file:vector.db",
+    url: "file:./vector.db",
   }),
 
-  // メモリ設定オプション
+  // Memory configuration options
   options: {
-    // 含める最近のメッセージの数
+    // Number of recent messages to include
     lastMessages: 20,
 
-    // セマンティック検索設定
+    // Semantic search configuration
     semanticRecall: {
-      topK: 3, // 取得する類似メッセージの数
+      topK: 3, // Number of similar messages to retrieve
       messageRange: {
-        // 各結果の周囲に含めるメッセージ
+        // Messages to include around each result
         before: 2,
         after: 1,
       },
     },
 
-    // 作業メモリ設定
+    // Working memory configuration
     workingMemory: {
       enabled: true,
       template: `
@@ -66,15 +65,15 @@ const agent = new Agent({
 });
 ```
 
-### 作業メモリ
+### ワーキングメモリ
 
-作業メモリ機能により、エージェントは会話を通じて持続的な情報を保持できます。有効にすると、Memoryクラスはテキストストリームタグまたはツールコールを通じて作業メモリの更新を自動的に管理します。
+ワーキングメモリ機能により、エージェントは会話全体で永続的な情報を維持することができます。有効にすると、Memoryクラスはテキストストリームタグまたはツールコールを通じて、ワーキングメモリの更新を自動的に管理します。
 
-作業メモリの更新を処理するための2つのモードがあります：
+ワーキングメモリの更新を処理するには、2つのモードがあります：
 
-1. **text-stream** (デフォルト): エージェントはMarkdownを含むXMLタグを使用して作業メモリの更新を直接応答に含めます (`<working_memory># User \n ## Preferences...</working_memory>`)。これらのタグは自動的に処理され、表示される出力から削除されます。
+1. **text-stream**（デフォルト）：エージェントはMarkdownを含むXMLタグ（`<working_memory># User \n ## Preferences...</working_memory>`）を使用して、直接レスポンスにワーキングメモリの更新を含めます。これらのタグは自動的に処理され、表示される出力からは削除されます。
 
-2. **tool-call**: エージェントは専用のツールを使用して作業メモリを更新します。このモードは、`toDataStream()`を使用する場合に使用する必要があります。text-streamモードはデータストリーミングと互換性がありません。さらに、このモードはメモリ更新に対するより明示的な制御を提供し、テキストタグの管理よりもツールの使用が得意なエージェントと連携する場合に好まれるかもしれません。
+2. **tool-call**：エージェントはワーキングメモリを更新するための専用ツールを使用します。このモードは`toDataStream()`と連携する場合に使用すべきです。なぜならtext-streamモードはデータストリーミングと互換性がないためです。さらに、このモードはメモリ更新に対するより明示的な制御を提供し、テキストタグの管理よりもツールの使用が得意なエージェントと連携する場合に好まれることがあります。
 
 設定例：
 
@@ -90,26 +89,52 @@ const memory = new Memory({
 });
 ```
 
-テンプレートが提供されていない場合、Memoryクラスはユーザーの詳細、好み、目標、その他のコンテキスト情報をMarkdown形式で含むデフォルトテンプレートを使用します。詳細な使用例とベストプラクティスについては、[作業メモリガイド](/docs/memory/working-memory.mdx#designing-effective-templates)を参照してください。
+テンプレートが提供されない場合、Memoryクラスはユーザーの詳細、設定、目標、およびその他の文脈情報をMarkdown形式で含むデフォルトのテンプレートを使用します。詳細な使用例とベストプラクティスについては、[ワーキングメモリガイド](/docs/memory/working-memory.mdx#designing-effective-templates)を参照してください。
 
 ### embedder
 
-デフォルトでは、Memoryは`bge-small-en-v1.5`モデルを使用したFastEmbedを使用します。これはパフォーマンスとモデルサイズ（約130MB）のバランスが良好です。異なるモデルやプロバイダーを使用したい場合のみ、embedderを指定する必要があります。
+`semanticRecall`が有効になっている場合、埋め込みモデルが必要です。
 
-ローカル埋め込みがサポートされていない環境では、APIベースのembedderを使用できます：
+一つのオプションは`@mastra/fastembed`を使用することです。これは[FastEmbed](https://github.com/Anush008/fastembed-js)を使用したオンデバイス/ローカルの埋め込みモデルを提供します。このモデルはローカルで実行され、APIキーやネットワークリクエストを必要としません。
 
-```typescript {6}
+使用するには、まずパッケージをインストールします：
+
+```bash npm2yarn copy
+npm install @mastra/fastembed
+```
+
+次に、`Memory`インスタンスで設定します：
+
+```typescript {2,7}
 import { Memory } from "@mastra/memory";
-import { openai } from "@ai-sdk/openai";
+import { fastembed } from "@mastra/fastembed";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
   memory: new Memory({
-    embedder: openai.embedding("text-embedding-3-small"), // ネットワークリクエストを追加
+    embedder: fastembed,
+    // ... その他のメモリ設定
   }),
 });
 ```
 
-Mastraは、OpenAI、Google、Mistral、Cohereからのオプションを含む、多くの埋め込みモデルを[Vercel AI SDK](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings)を通じてサポートしています。
+プロジェクトをデプロイする場所によっては、FastEmbedの大きな内部依存関係のため、プロジェクトがデプロイできない場合があることに注意してください。
+
+あるいは、OpenAIのようなAPIベースの埋め込みツール（この問題がない）を使用することもできます：
+
+```typescript {2,7}
+import { Memory } from "@mastra/memory";
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  memory: new Memory({
+    embedder: openai.embedding("text-embedding-3-small"),
+  }),
+});
+```
+
+Mastraは[Vercel AI SDK](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings)を通じて、OpenAI、Google、Mistral、Cohereなどのオプションを含む多くの埋め込みモデルをサポートしています。
 
 ## パラメータ
 
@@ -131,7 +156,7 @@ Mastraは、OpenAI、Google、Mistral、Cohereからのオプションを含む�
       name: "embedder",
       type: "EmbeddingModel",
       description:
-        "ベクトル埋め込みのためのエンベッダーインスタンス。デフォルトではFastEmbed (bge-small-en-v1.5)を使用",
+        "ベクトル埋め込みのためのエンベッダーインスタンス。デフォルトではFastEmbed（bge-small-en-v1.5）を使用",
       isOptional: true,
     },
     {
@@ -151,7 +176,7 @@ Mastraは、OpenAI、Google、Mistral、Cohereからのオプションを含む�
       name: "lastMessages",
       type: "number | false",
       description:
-        "取得する最新メッセージの数。無効にするにはfalseに設定。",
+        "取得する最新メッセージの数。無効にするにはfalseに設定します。",
       isOptional: true,
       defaultValue: "40",
     },
@@ -159,9 +184,9 @@ Mastraは、OpenAI、Google、Mistral、Cohereからのオプションを含む�
       name: "semanticRecall",
       type: "boolean | SemanticRecallConfig",
       description:
-        "メッセージ履歴でのセマンティック検索を有効にします。ベクトルストアが提供されている場合、自動的に有効になります。",
+        "メッセージ履歴でのセマンティック検索を有効にします。ベクトルストアが提供されると自動的に有効になります。",
       isOptional: true,
-      defaultValue: "false (ベクトルストアが提供されている場合はtrue)",
+      defaultValue: "false（ベクトルストアが提供されている場合はtrue）",
     },
     {
       name: "topK",
@@ -183,7 +208,7 @@ Mastraは、OpenAI、Google、Mistral、Cohereからのオプションを含む�
       name: "workingMemory",
       type: "{ enabled: boolean; template?: string; use?: 'text-stream' | 'tool-call' }",
       description:
-        "会話を通じてユーザー情報を永続的に保存するためのワーキングメモリ機能の設定。'use'設定は、ワーキングメモリの更新がテキストストリームタグまたはツールコールを通じてどのように処理されるかを決定します。ワーキングメモリはMarkdown形式を使用して、継続的に関連する情報を構造化し保存します。",
+        "会話間でユーザー情報を永続的に保存できるワーキングメモリ機能の設定。'use'設定は、ワーキングメモリの更新がテキストストリームタグを通じて処理されるか、ツール呼び出しを通じて処理されるかを決定します。ワーキングメモリはマークダウン形式を使用して、継続的に関連する情報を構造化して保存します。",
       isOptional: true,
       defaultValue:
         "{ enabled: false, template: '# User Information\\n- **First Name**:\\n- **Last Name**:\\n...', use: 'text-stream' }",
@@ -192,16 +217,16 @@ Mastraは、OpenAI、Google、Mistral、Cohereからのオプションを含む�
       name: "threads",
       type: "{ generateTitle?: boolean }",
       description:
-        "メモリスレッド作成に関連する設定。`generateTitle`は、ユーザーの最初のメッセージのllmサマリーからスレッドタイトルを生成します。",
+        "メモリスレッド作成に関する設定。`generateTitle`を設定すると、ユーザーの最初のメッセージからLLMの要約によってthread.titleが生成されます。",
       isOptional: true,
       defaultValue: "{ generateTitle: true }",
     },
   ]}
 />
 
-### 関連
+### 関連項目
 
-- [メモリの始め方](/docs/memory/overview.mdx)
+- [メモリの使用を開始する](/docs/memory/overview.mdx)
 - [セマンティックリコール](/docs/memory/semantic-recall.mdx)
 - [ワーキングメモリ](/docs/memory/working-memory.mdx)
 - [メモリプロセッサ](/docs/memory/memory-processors.mdx)
@@ -209,4 +234,3 @@ Mastraは、OpenAI、Google、Mistral、Cohereからのオプションを含む�
 - [query](/reference/memory/query.mdx)
 - [getThreadById](/reference/memory/getThreadById.mdx)
 - [getThreadsByResourceId](/reference/memory/getThreadsByResourceId.mdx)
-

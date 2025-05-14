@@ -91,10 +91,8 @@ type RealtimeClientServerEventMap = {
  * @example
  * ```typescript
  * const voice = new OpenAIRealtimeVoice({
- *   chatModel: {
- *     apiKey: process.env.OPENAI_API_KEY,
- *     model: 'gpt-4o-mini-realtime'
- *   }
+ *   apiKey: process.env.OPENAI_API_KEY,
+ *   model: 'gpt-4o-mini-realtime'
  * });
  *
  * await voice.open();
@@ -129,10 +127,8 @@ export class OpenAIRealtimeVoice extends MastraVoice {
    * @example
    * ```typescript
    * const voice = new OpenAIRealtimeVoice({
-   *   chatModel: {
-   *     apiKey: 'your-api-key',
-   *     model: 'gpt-4o-mini-realtime',
-   *   },
+   *   apiKey: 'your-api-key',
+   *   model: 'gpt-4o-mini-realtime',
    *   speaker: 'alloy'
    * });
    * ```

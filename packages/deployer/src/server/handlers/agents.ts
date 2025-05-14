@@ -14,7 +14,10 @@ import { handleError } from './error';
 
 // Agent handlers
 export async function getAgentsHandler(c: Context) {
-  const serializedAgents = await getOriginalAgentsHandler({ mastra: c.get('mastra') });
+  const serializedAgents = await getOriginalAgentsHandler({
+    mastra: c.get('mastra'),
+    runtimeContext: c.get('runtimeContext'),
+  });
 
   return c.json(serializedAgents);
 }
@@ -22,10 +25,12 @@ export async function getAgentsHandler(c: Context) {
 export async function getAgentByIdHandler(c: Context) {
   const mastra: Mastra = c.get('mastra');
   const agentId = c.req.param('agentId');
+  const runtimeContext: RuntimeContext = c.get('runtimeContext');
 
   const result = await getOriginalAgentByIdHandler({
     mastra,
     agentId,
+    runtimeContext,
   });
 
   return c.json(result);
@@ -34,10 +39,12 @@ export async function getAgentByIdHandler(c: Context) {
 export async function getEvalsByAgentIdHandler(c: Context) {
   const mastra: Mastra = c.get('mastra');
   const agentId = c.req.param('agentId');
+  const runtimeContext: RuntimeContext = c.get('runtimeContext');
 
   const result = await getOriginalEvalsByAgentIdHandler({
     mastra,
     agentId,
+    runtimeContext,
   });
 
   return c.json(result);
@@ -46,10 +53,12 @@ export async function getEvalsByAgentIdHandler(c: Context) {
 export async function getLiveEvalsByAgentIdHandler(c: Context) {
   const mastra: Mastra = c.get('mastra');
   const agentId = c.req.param('agentId');
+  const runtimeContext: RuntimeContext = c.get('runtimeContext');
 
   const result = await getOriginalLiveEvalsByAgentIdHandler({
     mastra,
     agentId,
+    runtimeContext,
   });
 
   return c.json(result);

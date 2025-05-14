@@ -13,9 +13,11 @@ import { handleError } from './error';
 export async function getNetworksHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
+    const runtimeContext: RuntimeContext = c.get('runtimeContext');
 
     const networks = await getOriginalNetworksHandler({
       mastra,
+      runtimeContext,
     });
 
     return c.json(networks);
@@ -28,10 +30,12 @@ export async function getNetworkByIdHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const networkId = c.req.param('networkId');
+    const runtimeContext: RuntimeContext = c.get('runtimeContext');
 
     const network = await getOriginalNetworkByIdHandler({
       mastra,
       networkId,
+      runtimeContext,
     });
 
     return c.json(network);

@@ -9,6 +9,7 @@ export interface IBundler {
   bundle(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void>;
   prepare(outputDirectory: string): Promise<void>;
   writePackageJson(outputDirectory: string, dependencies: Map<string, string>): Promise<void>;
+  lint(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void>;
 }
 
 export abstract class MastraBundler extends MastraBase implements IBundler {
@@ -36,4 +37,5 @@ export abstract class MastraBundler extends MastraBase implements IBundler {
   abstract writeInstrumentationFile(outputDirectory: string): Promise<void>;
   abstract getEnvFiles(): Promise<string[]>;
   abstract bundle(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void>;
+  abstract lint(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void>;
 }

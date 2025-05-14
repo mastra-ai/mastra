@@ -9,7 +9,7 @@ import {
   getVNextWorkflowsHandler,
   getVNextWorkflowByIdHandler,
   startAsyncVNextWorkflowHandler,
-  getVNextWorkflowRunHandler,
+  getVNextWorkflowRunByIdHandler,
   createVNextWorkflowRunHandler,
   startVNextWorkflowRunHandler,
   resumeAsyncVNextWorkflowHandler,
@@ -88,16 +88,18 @@ function serializeWorkflow(workflow: NewWorkflow) {
     name: workflow.id,
     steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
       acc[key] = {
-        ...step,
+        id: step.id,
+        description: step.description,
         inputSchema: step.inputSchema ? stringify(zodToJsonSchema(step.inputSchema)) : undefined,
         outputSchema: step.outputSchema ? stringify(zodToJsonSchema(step.outputSchema)) : undefined,
         resumeSchema: step.resumeSchema ? stringify(zodToJsonSchema(step.resumeSchema)) : undefined,
+        suspendSchema: step.suspendSchema ? stringify(zodToJsonSchema(step.suspendSchema)) : undefined,
       };
       return acc;
     }, {}),
     inputSchema: workflow.inputSchema ? stringify(zodToJsonSchema(workflow.inputSchema)) : undefined,
     outputSchema: workflow.outputSchema ? stringify(zodToJsonSchema(workflow.outputSchema)) : undefined,
-    stepGraph: workflow.stepGraph,
+    stepGraph: workflow.serializedStepGraph,
   };
 }
 
@@ -191,10 +193,10 @@ describe('vNext Workflow Handlers', () => {
     });
   });
 
-  describe('getVNextWorkflowRunHandler', () => {
+  describe('getVNextWorkflowRunByIdHandler', () => {
     it('should throw error when workflowId is not provided', async () => {
       await expect(
-        getVNextWorkflowRunHandler({
+        getVNextWorkflowRunByIdHandler({
           mastra: mockMastra,
           runId: 'test-run',
         }),
@@ -203,7 +205,7 @@ describe('vNext Workflow Handlers', () => {
 
     it('should throw error when runId is not provided', async () => {
       await expect(
-        getVNextWorkflowRunHandler({
+        getVNextWorkflowRunByIdHandler({
           mastra: mockMastra,
           workflowId: 'test-workflow',
         }),
@@ -212,7 +214,7 @@ describe('vNext Workflow Handlers', () => {
 
     it('should throw error when vnext workflow is not found', async () => {
       await expect(
-        getVNextWorkflowRunHandler({
+        getVNextWorkflowRunByIdHandler({
           mastra: mockMastra,
           workflowId: 'non-existent',
           runId: 'test-run',
@@ -222,7 +224,7 @@ describe('vNext Workflow Handlers', () => {
 
     it('should throw error when vnext workflow run is not found', async () => {
       await expect(
-        getVNextWorkflowRunHandler({
+        getVNextWorkflowRunByIdHandler({
           mastra: mockMastra,
           workflowId: 'test-workflow',
           runId: 'non-existent',
@@ -237,7 +239,7 @@ describe('vNext Workflow Handlers', () => {
 
       await run.start({ inputData: {} });
 
-      const result = await getVNextWorkflowRunHandler({
+      const result = await getVNextWorkflowRunByIdHandler({
         mastra: mockMastra,
         workflowId: 'test-workflow',
         runId: 'test-run',

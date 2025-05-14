@@ -10,9 +10,9 @@ import { GithubLink } from "@/components/github-link";
 
 埋め込みを生成した後、それらをベクトル類似検索をサポートするデータベースに保存する必要があります。この例では、後で取得するために埋め込みをさまざまなベクトルデータベースに保存する方法を示します。
 
-<Tabs items={['PgVector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra DB', 'LibSQL', 'Upstash', 'Cloudflare']}>
+<Tabs items={['PgVector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra DB', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB']}>
   <Tabs.Tab>
-    `PgVector` クラスは、pgvector 拡張機能を使用して PostgreSQL にインデックスを作成し、埋め込みを挿入するためのメソッドを提供します。
+    `PgVector`クラスは、pgvector拡張機能を使用してPostgreSQLにインデックスを作成し、埋め込みを挿入するためのメソッドを提供します。
 
     ```tsx copy
     import { openai } from "@ai-sdk/openai";
@@ -57,7 +57,7 @@ import { GithubLink } from "@/components/github-link";
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `PineconeVector` クラスは、Pinecone という管理されたベクターデータベースサービスにインデックスを作成し、埋め込みを挿入するためのメソッドを提供します。
+    `PineconeVector`クラスは、マネージドベクトルデータベースサービスであるPineconeにインデックスを作成し、埋め込みを挿入するためのメソッドを提供します。
 
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -98,7 +98,7 @@ import { GithubLink } from "@/components/github-link";
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `QdrantVector` クラスは、高性能なベクターデータベースである Qdrant にコレクションを作成し、埋め込みを挿入するためのメソッドを提供します。
+    `QdrantVector`クラスは、高性能ベクトルデータベースであるQdrantにコレクションを作成し、埋め込みを挿入するためのメソッドを提供します。
 
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -135,7 +135,7 @@ import { GithubLink } from "@/components/github-link";
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `ChromaVector` クラスは、コレクションを作成し、Chroma（オープンソースの埋め込みデータベース）に埋め込みを挿入するためのメソッドを提供します。
+    `ChromaVector`クラスは、オープンソースの埋め込みデータベースであるChromaにコレクションを作成し、埋め込みを挿入するためのメソッドを提供します。
 
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -179,7 +179,7 @@ import { GithubLink } from "@/components/github-link";
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `AstraVector` クラスは、コレクションを作成し、DataStax Astra DB（クラウドネイティブのベクターデータベース）に埋め込みを挿入するためのメソッドを提供します。
+    `AstraVector`クラスは、クラウドネイティブなベクトルデータベースであるDataStax Astra DBにコレクションを作成し、埋め込みを挿入するためのメソッドを提供します。
 
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -216,7 +216,7 @@ import { GithubLink } from "@/components/github-link";
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `LibSQLVector` クラスは、コレクションを作成し、LibSQL（SQLiteのフォークでベクター拡張を持つ）に埋め込みを挿入するためのメソッドを提供します。
+    `LibSQLVector`クラスは、ベクトル拡張機能を持つSQLiteのフォークであるLibSQLにコレクションを作成し、埋め込みを挿入するためのメソッドを提供します。
 
     ```tsx copy
     import { openai } from "@ai-sdk/openai";
@@ -260,7 +260,7 @@ import { GithubLink } from "@/components/github-link";
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `UpstashVector` クラスは、コレクションを作成し、埋め込みをサーバーレスベクターデータベースである Upstash Vector に挿入するためのメソッドを提供します。
+    `UpstashVector`クラスは、サーバーレスベクトルデータベースであるUpstash Vectorにコレクションを作成し、埋め込みを挿入するためのメソッドを提供します。
 
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -296,7 +296,7 @@ import { GithubLink } from "@/components/github-link";
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `CloudflareVector` クラスは、コレクションを作成し、埋め込みをサーバーレスベクターデータベースサービスである Cloudflare Vectorize に挿入するためのメソッドを提供します。
+    `CloudflareVector`クラスは、サーバーレスベクトルデータベースサービスであるCloudflare Vectorizeにコレクションを作成し、埋め込みを挿入するためのメソッドを提供します。
 
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -330,6 +330,43 @@ import { GithubLink } from "@/components/github-link";
     });
     ```
   </Tabs.Tab>
+
+  <Tabs.Tab>
+    `MongoDBVector`クラスは、Atlas SearchでMongoDBにインデックスを作成し、埋め込みを挿入するためのメソッドを提供します。
+
+    ```tsx copy
+    import { openai } from "@ai-sdk/openai";
+    import { MongoDBVector } from "@mastra/mongodb";
+    import { MDocument } from "@mastra/rag";
+    import { embedMany } from "ai";
+
+    const doc = MDocument.fromText("Your text content...");
+
+    const chunks = await doc.chunk();
+
+    const { embeddings } = await embedMany({
+      values: chunks.map(chunk => chunk.text),
+      model: openai.embedding("text-embedding-3-small"),
+    });
+
+    const vectorDB = new MongoDBVector({
+      uri: process.env.MONGODB_URI!,
+      dbName: process.env.MONGODB_DB_NAME!,
+    });
+
+    await vectorDB.createIndex({
+      indexName: "test_index",
+      dimension: 1536,
+    });
+
+    await vectorDB.upsert({
+      indexName: "test_index",
+      vectors: embeddings,
+      metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
+    });
+    ```
+  </Tabs.Tab>
 </Tabs>
+
 
 

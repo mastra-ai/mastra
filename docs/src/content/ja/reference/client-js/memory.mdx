@@ -2,11 +2,19 @@
 
 メモリーAPIは、Mastraでの会話スレッドとメッセージ履歴を管理するためのメソッドを提供します。
 
-## メモリースレッド操作
+## Mastraクライアントの初期化
+
+```typescript
+import { MastraClient } from "@mastra/client-js";
+
+const client = new MastraClient();
+```
+
+## メモリスレッド操作
 
 ### すべてのスレッドを取得する
 
-特定のリソースのすべてのメモリースレッドを取得します：
+特定のリソースのすべてのメモリスレッドを取得します：
 
 ```typescript
 const threads = await client.getMemoryThreads({
@@ -17,7 +25,7 @@ const threads = await client.getMemoryThreads({
 
 ### 新しいスレッドを作成する
 
-新しいメモリースレッドを作成します：
+新しいメモリスレッドを作成します：
 
 ```typescript
 const thread = await client.createMemoryThread({
@@ -30,7 +38,7 @@ const thread = await client.createMemoryThread({
 
 ### 特定のスレッドの操作
 
-特定のメモリースレッドのインスタンスを取得します：
+特定のメモリスレッドのインスタンスを取得します：
 
 ```typescript
 const thread = client.getMemoryThread("thread-id", "agent-id");
@@ -38,7 +46,7 @@ const thread = client.getMemoryThread("thread-id", "agent-id");
 
 ## スレッドメソッド
 
-### スレッドの詳細を取得する
+### スレッド詳細の取得
 
 特定のスレッドに関する詳細を取得します：
 
@@ -46,7 +54,7 @@ const thread = client.getMemoryThread("thread-id", "agent-id");
 const details = await thread.get();
 ```
 
-### スレッドを更新する
+### スレッドの更新
 
 スレッドのプロパティを更新します：
 
@@ -58,7 +66,7 @@ const updated = await thread.update({
 });
 ```
 
-### スレッドを削除する
+### スレッドの削除
 
 スレッドとそのメッセージを削除します：
 
@@ -68,9 +76,9 @@ await thread.delete();
 
 ## メッセージ操作
 
-### メッセージを保存
+### メッセージの保存
 
-メッセージをメモリに保存します:
+メモリにメッセージを保存します：
 
 ```typescript
 const savedMessages = await client.saveMessageToMemory({
@@ -88,9 +96,9 @@ const savedMessages = await client.saveMessageToMemory({
 });
 ```
 
-### メモリステータスを取得
+### メモリステータスの取得
 
-メモリシステムのステータスを確認します:
+メモリシステムのステータスを確認します：
 
 ```typescript
 const status = await client.getMemoryStatus("agent-id");

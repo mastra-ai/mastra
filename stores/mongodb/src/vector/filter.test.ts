@@ -44,7 +44,7 @@ describe('MongoDBFilterTranslator', () => {
       const filter = {
         active: true,
         deleted: false,
-        status: { $eq: true }
+        status: { $eq: true },
       };
       expect(translator.translate(filter)).toEqual(filter);
     });
@@ -57,7 +57,7 @@ describe('MongoDBFilterTranslator', () => {
         tags: { $all: ['tag1', 'tag2'] },
         categories: { $in: ['A', 'B'] },
         items: { $nin: ['item1', 'item2'] },
-        scores: { $elemMatch: { $gt: 90 } }
+        scores: { $elemMatch: { $gt: 90 } },
       };
       expect(translator.translate(filter)).toEqual(filter);
     });
@@ -79,7 +79,7 @@ describe('MongoDBFilterTranslator', () => {
 
     it('handles $size operator', () => {
       const filter = {
-        tags: { $size: 3 }
+        tags: { $size: 3 },
       };
       expect(translator.translate(filter)).toEqual(filter);
     });
@@ -97,14 +97,14 @@ describe('MongoDBFilterTranslator', () => {
     it('handles $not operator', () => {
       const filter = {
         field: { $not: { $eq: 'value' } },
-        $not: { field: 'value' }
+        $not: { field: 'value' },
       };
       expect(translator.translate(filter)).toEqual(filter);
     });
 
     it('handles $nor operator', () => {
       const filter = {
-        $nor: [{ status: 'deleted' }, { active: false }]
+        $nor: [{ status: 'deleted' }, { active: false }],
       };
       expect(translator.translate(filter)).toEqual(filter);
     });
@@ -322,14 +322,14 @@ describe('MongoDBFilterTranslator', () => {
   describe('regex support', () => {
     it('handles $regex operator', () => {
       const filter = {
-        name: { $regex: '^test' }
+        name: { $regex: '^test' },
       };
       expect(translator.translate(filter)).toEqual(filter);
     });
 
     it('handles RegExp objects', () => {
       const filter = {
-        name: /^test/i
+        name: /^test/i,
       };
       // RegExp objects should be preserved
       expect(translator.translate(filter)).toEqual(filter);
@@ -387,12 +387,7 @@ describe('MongoDBFilterTranslator', () => {
     });
 
     it('throws error for non-logical operators at top level', () => {
-      const invalidFilters = [
-        { $gt: 100 }, 
-        { $in: ['value1', 'value2'] }, 
-        { $exists: true },
-        { $regex: 'pattern' }
-      ];
+      const invalidFilters = [{ $gt: 100 }, { $in: ['value1', 'value2'] }, { $exists: true }, { $regex: 'pattern' }];
 
       invalidFilters.forEach(filter => {
         expect(() => translator.translate(filter)).toThrow(/Invalid top-level operator/);

@@ -507,6 +507,8 @@ export class LibSQLStore extends MastraStorage {
       perPage,
       attributes,
       filters,
+      fromDate,
+      toDate,
     }: {
       name?: string;
       scope?: string;
@@ -514,6 +516,8 @@ export class LibSQLStore extends MastraStorage {
       perPage: number;
       attributes?: Record<string, string>;
       filters?: Record<string, any>;
+      fromDate?: Date;
+      toDate?: Date;
     } = {
       page: 0,
       perPage: 100,
@@ -542,6 +546,15 @@ export class LibSQLStore extends MastraStorage {
         conditions.push(`${key} = ?`);
       });
     }
+
+    if (fromDate) {
+      conditions.push('createdAt >= ?');
+    }
+
+    if (toDate) {
+      conditions.push('createdAt <= ?');
+    }
+
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     if (name) {
@@ -562,6 +575,14 @@ export class LibSQLStore extends MastraStorage {
       for (const [, value] of Object.entries(filters)) {
         args.push(value);
       }
+    }
+
+    if (fromDate) {
+      args.push(fromDate.toISOString());
+    }
+
+    if (toDate) {
+      args.push(toDate.toISOString());
     }
 
     args.push(limit, offset);
@@ -666,8 +687,58 @@ export class LibSQLStore extends MastraStorage {
     return { runs, total: total || runs.length };
   }
 
-  async getWorkflowRunById(_args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null> {
-    throw new Error('Method not implemented.');
+  async getWorkflowRunById({
+    runId,
+    workflowName,
+  }: {
+    runId: string;
+    workflowName?: string;
+  }): Promise<WorkflowRun | null> {
+    const conditions: string[] = [];
+    const args: (string | number)[] = [];
+
+    if (runId) {
+      conditions.push('run_id = ?');
+      args.push(runId);
+    }
+
+    if (workflowName) {
+      conditions.push('workflow_name = ?');
+      args.push(workflowName);
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const result = await this.client.execute({
+      sql: `SELECT * FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause}`,
+      args,
+    });
+
+    if (!result.rows?.[0]) {
+      return null;
+    }
+
+    return this.parseWorkflowRun(result.rows[0]);
+  }
+
+  private parseWorkflowRun(row: Record<string, any>): WorkflowRun {
+    let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+    if (typeof parsedSnapshot === 'string') {
+      try {
+        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+      } catch (e) {
+        // If parsing fails, return the raw snapshot string
+        console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+      }
+    }
+    return {
+      workflowName: row.workflow_name as string,
+      runId: row.run_id as string,
+      snapshot: parsedSnapshot,
+      resourceId: row.resourceId as string,
+      createdAt: new Date(row.created_at as string),
+      updatedAt: new Date(row.updated_at as string),
+    };
   }
 }
 

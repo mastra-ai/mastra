@@ -75,6 +75,10 @@ const renovateConfig = {
       enabled: false,
     },
     {
+      matchDatasources: ['npm'],
+      minimumReleaseAge: '3 days',
+    },
+    {
       groupName: 'examples',
       commitMessageTopic: 'examples',
       groupSlug: 'examples-minor',
@@ -128,11 +132,45 @@ const renovateConfig = {
       matchFileNames: ['+(package.json)', '**/package.json'],
       matchUpdateTypes: ['major', 'minor', 'patch'],
       matchDepTypes: ['devDependencies'],
-      matchPackageNames: ['@microsoft/api-extractor', 'tsup', 'rollup'],
+      matchPackageNames: ['@microsoft/api-extractor', 'tsup', 'rollup', '@types/node', 'dotenv'],
+      enabled: true,
+    },
+    {
+      groupName: 'Test tools',
+      commitMessageTopic: 'Test tools',
+      matchFileNames: ['+(package.json)', '**/package.json'],
+      matchUpdateTypes: ['major', 'minor', 'patch'],
+      matchDepTypes: ['devDependencies'],
+      matchPackageNames: ['vitest'],
+      enabled: true,
+    },
+    {
+      groupName: 'Schema',
+      commitMessageTopic: 'Schema',
+      matchFileNames: ['+(package.json)', '**/package.json'],
+      matchPackageNames: ['zod', 'json-schema', 'zod-to-json-schema'],
+      matchUpdateTypes: ['major', 'minor', 'patch'],
+      matchDepTypes: ['dependencies', 'devDependencies'],
+      dependencyDashboardApproval: false,
       enabled: true,
     },
   ],
 };
+
+const ignorePackages = [
+  '@microsoft/api-extractor',
+  'tsup',
+  'rollup',
+  'eslint',
+  'prettier',
+  'typescript',
+  'vitest',
+  '@types/node',
+  'dotenv',
+  'zod',
+  'json-schema',
+  'zod-to-json-schema',
+];
 
 for (const pkg of listOfPackages) {
   const packageJsonPath = `${pkg}/package.json`;
@@ -149,6 +187,7 @@ for (const pkg of listOfPackages) {
       matchFileNames: [`${pkg}/package.json`],
       matchUpdateTypes: ['minor', 'patch'],
       matchDepTypes: ['dependencies', 'devDependencies'],
+      matchPackageNames: ['*', ...ignorePackages.map(pkg => `!${pkg}`)], // Match all except ignored packages
       enabled: true,
     });
 
@@ -159,6 +198,7 @@ for (const pkg of listOfPackages) {
       matchUpdateTypes: ['major'],
       matchDepTypes: ['dependencies', 'devDependencies'],
       enabled: true,
+      dependencyDashboardApproval: true,
     });
   } catch (error) {
     console.warn(`Could not read package.json for ${pkg}, using directory name instead`);
@@ -168,6 +208,7 @@ for (const pkg of listOfPackages) {
       matchFileNames: [`${pkg}/package.json`],
       matchUpdateTypes: ['minor', 'patch'],
       matchDepTypes: ['dependencies', 'devDependencies'],
+      matchPackageNames: ['*', ...ignorePackages.map(pkg => `!${pkg}`)], // Match all except ignored packages
       enabled: true,
     });
 
@@ -178,6 +219,7 @@ for (const pkg of listOfPackages) {
       matchUpdateTypes: ['major'],
       matchDepTypes: ['dependencies', 'devDependencies'],
       enabled: true,
+      dependencyDashboardApproval: true,
     });
   }
 }

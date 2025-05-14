@@ -1,5 +1,344 @@
 # @mastra/playground-ui
 
+## 5.0.4
+
+### Patch Changes
+
+- cb1f698: Set runtimeContext from playground for agents, tools, workflows
+- Updated dependencies [396be50]
+- Updated dependencies [ab80e7e]
+- Updated dependencies [c2f9e60]
+- Updated dependencies [5c70b8a]
+- Updated dependencies [c3bd795]
+- Updated dependencies [da082f8]
+- Updated dependencies [b4c6c87]
+- Updated dependencies [0c3d117]
+- Updated dependencies [a5810ce]
+- Updated dependencies [3e9c131]
+- Updated dependencies [3171b5b]
+- Updated dependencies [c2b980b]
+- Updated dependencies [cb1f698]
+- Updated dependencies [973e5ac]
+- Updated dependencies [daf942f]
+- Updated dependencies [0b8b868]
+- Updated dependencies [9e1eff5]
+- Updated dependencies [6fa1ad1]
+- Updated dependencies [c28d7a0]
+- Updated dependencies [edf1e88]
+  - @mastra/core@0.9.4
+  - @mastra/client-js@0.1.22
+
+## 5.0.4-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [5c70b8a]
+- Updated dependencies [3e9c131]
+  - @mastra/client-js@0.1.22-alpha.4
+  - @mastra/core@0.9.4-alpha.4
+
+## 5.0.4-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [396be50]
+- Updated dependencies [c2f9e60]
+- Updated dependencies [c3bd795]
+- Updated dependencies [da082f8]
+- Updated dependencies [0c3d117]
+- Updated dependencies [a5810ce]
+  - @mastra/core@0.9.4-alpha.3
+  - @mastra/client-js@0.1.22-alpha.3
+
+## 5.0.4-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [b4c6c87]
+- Updated dependencies [3171b5b]
+- Updated dependencies [c2b980b]
+- Updated dependencies [973e5ac]
+- Updated dependencies [9e1eff5]
+  - @mastra/client-js@0.1.22-alpha.2
+  - @mastra/core@0.9.4-alpha.2
+
+## 5.0.4-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [ab80e7e]
+- Updated dependencies [6fa1ad1]
+- Updated dependencies [c28d7a0]
+- Updated dependencies [edf1e88]
+  - @mastra/core@0.9.4-alpha.1
+  - @mastra/client-js@0.1.22-alpha.1
+
+## 5.0.4-alpha.0
+
+### Patch Changes
+
+- cb1f698: Set runtimeContext from playground for agents, tools, workflows
+- Updated dependencies [cb1f698]
+- Updated dependencies [daf942f]
+- Updated dependencies [0b8b868]
+  - @mastra/client-js@0.1.22-alpha.0
+  - @mastra/core@0.9.4-alpha.0
+
+## 5.0.3
+
+### Patch Changes
+
+- b5d2de0: In vNext workflow serializedStepGraph, return only serializedStepFlow for steps created from a workflow
+  allow viewing inner nested workflows in a multi-layered nested vnext workflow on the playground
+- 62c9e7d: Fix disappearing tool calls in streaming
+- d2dfc37: Fix autoform number form default value
+- Updated dependencies [e450778]
+- Updated dependencies [8902157]
+- Updated dependencies [ca0dc88]
+- Updated dependencies [526c570]
+- Updated dependencies [36eb1aa]
+- Updated dependencies [d7a6a33]
+- Updated dependencies [9cd1a46]
+- Updated dependencies [b5d2de0]
+- Updated dependencies [62c9e7d]
+- Updated dependencies [644f8ad]
+- Updated dependencies [70dbf51]
+  - @mastra/core@0.9.3
+  - @mastra/client-js@0.1.21
+
+## 5.0.3-alpha.1
+
+### Patch Changes
+
+- 62c9e7d: Fix disappearing tool calls in streaming
+- Updated dependencies [e450778]
+- Updated dependencies [8902157]
+- Updated dependencies [ca0dc88]
+- Updated dependencies [36eb1aa]
+- Updated dependencies [9cd1a46]
+- Updated dependencies [62c9e7d]
+- Updated dependencies [70dbf51]
+  - @mastra/core@0.9.3-alpha.1
+  - @mastra/client-js@0.1.21-alpha.1
+
+## 5.0.3-alpha.0
+
+### Patch Changes
+
+- b5d2de0: In vNext workflow serializedStepGraph, return only serializedStepFlow for steps created from a workflow
+  allow viewing inner nested workflows in a multi-layered nested vnext workflow on the playground
+- d2dfc37: Fix autoform number form default value
+- Updated dependencies [526c570]
+- Updated dependencies [b5d2de0]
+- Updated dependencies [644f8ad]
+  - @mastra/client-js@0.1.21-alpha.0
+  - @mastra/core@0.9.3-alpha.0
+
+## 5.0.2
+
+### Patch Changes
+
+- 2cf3b8f: dependencies updates:
+  - Updated dependency [`zod@^3.24.3` ↗︎](https://www.npmjs.com/package/zod/v/3.24.3) (from `^3.24.2`, in `dependencies`)
+- 144fa1b: lift up the traces fetching and allow to pass them down in the TracesTable. It allows passing down mastra client traces OR clickhouse traces
+- 33b84fd: fix showing sig digits in trace / span duration
+- 26738f4: Switched from a custom MCP tools schema deserializer to json-schema-to-zod - fixes an issue where MCP tool schemas didn't deserialize properly in Mastra playground. Also added support for testing tools with no input arguments in playground
+- 0097d50: Add serializedStepGraph to vNext workflow
+  Return serializedStepGraph from vNext workflow
+  Use serializedStepGraph in vNext workflow graph
+- 5b43dd0: revamp ui for threads
+- fba031f: Show traces for vNext workflow
+- b63e712: refactor: Separate fetching traces from within playground-ui components
+- Updated dependencies [2cf3b8f]
+- Updated dependencies [6052aa6]
+- Updated dependencies [967b41c]
+- Updated dependencies [3d2fb5c]
+- Updated dependencies [26738f4]
+- Updated dependencies [4155f47]
+- Updated dependencies [254f5c3]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [b804723]
+- Updated dependencies [8607972]
+- Updated dependencies [ccef9f9]
+- Updated dependencies [0097d50]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [17826a9]
+- Updated dependencies [7d8b7c7]
+- Updated dependencies [2429c74]
+- Updated dependencies [fba031f]
+- Updated dependencies [2e4f8e9]
+- Updated dependencies [3a5f1e1]
+- Updated dependencies [51e6923]
+- Updated dependencies [8398d89]
+  - @mastra/client-js@0.1.20
+  - @mastra/core@0.9.2
+
+## 5.0.2-alpha.6
+
+### Patch Changes
+
+- 144fa1b: lift up the traces fetching and allow to pass them down in the TracesTable. It allows passing down mastra client traces OR clickhouse traces
+- Updated dependencies [6052aa6]
+- Updated dependencies [7d8b7c7]
+- Updated dependencies [2e4f8e9]
+- Updated dependencies [3a5f1e1]
+- Updated dependencies [8398d89]
+  - @mastra/core@0.9.2-alpha.6
+  - @mastra/client-js@0.1.20-alpha.6
+
+## 5.0.2-alpha.5
+
+### Patch Changes
+
+- fba031f: Show traces for vNext workflow
+- Updated dependencies [3d2fb5c]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [8607972]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [fba031f]
+  - @mastra/core@0.9.2-alpha.5
+  - @mastra/client-js@0.1.20-alpha.5
+
+## 5.0.2-alpha.4
+
+### Patch Changes
+
+- 5b43dd0: revamp ui for threads
+- Updated dependencies [ccef9f9]
+- Updated dependencies [51e6923]
+  - @mastra/core@0.9.2-alpha.4
+  - @mastra/client-js@0.1.20-alpha.4
+
+## 5.0.2-alpha.3
+
+### Patch Changes
+
+- 33b84fd: fix showing sig digits in trace / span duration
+- b63e712: refactor: Separate fetching traces from within playground-ui components
+- Updated dependencies [967b41c]
+- Updated dependencies [4155f47]
+- Updated dependencies [17826a9]
+  - @mastra/core@0.9.2-alpha.3
+  - @mastra/client-js@0.1.20-alpha.3
+
+## 5.0.2-alpha.2
+
+### Patch Changes
+
+- 26738f4: Switched from a custom MCP tools schema deserializer to json-schema-to-zod - fixes an issue where MCP tool schemas didn't deserialize properly in Mastra playground. Also added support for testing tools with no input arguments in playground
+- Updated dependencies [26738f4]
+  - @mastra/core@0.9.2-alpha.2
+  - @mastra/client-js@0.1.20-alpha.2
+
+## 5.0.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [254f5c3]
+- Updated dependencies [b804723]
+- Updated dependencies [2429c74]
+  - @mastra/client-js@0.1.20-alpha.1
+  - @mastra/core@0.9.2-alpha.1
+
+## 5.0.2-alpha.0
+
+### Patch Changes
+
+- 0097d50: Add serializedStepGraph to vNext workflow
+  Return serializedStepGraph from vNext workflow
+  Use serializedStepGraph in vNext workflow graph
+- Updated dependencies [0097d50]
+  - @mastra/client-js@0.1.20-alpha.0
+  - @mastra/core@0.9.2-alpha.0
+
+## 5.0.1
+
+### Patch Changes
+
+- 34a76ca: Call workflow cleanup function when closing watch stream controller
+- 70124e1: revamp the ui for traces
+- 3b74a74: add badge for failure / successful traces
+- 05806e3: revamp the UI of the chat in playground
+- 926821d: Fix triggerSchema default not showing in workflow ui
+- 0c3c4f4: Playground routing model settings for AgentNetworks
+- 1700eca: fixing overflow on agent traces
+- 11d4485: Show VNext workflows on the playground
+  Show running status for step in vNext workflowState
+- ca665d3: fix the ui for smaller screen regarding traces
+- 57b25ed: Use resumeSchema to show inputs on the playground for suspended workflows
+- f1d4b7a: Add x-mastra-dev-playground header to all playground requests
+- 5a66ced: add click on trace row
+- Updated dependencies [405b63d]
+- Updated dependencies [81fb7f6]
+- Updated dependencies [20275d4]
+- Updated dependencies [7d1892c]
+- Updated dependencies [a90a082]
+- Updated dependencies [2d17c73]
+- Updated dependencies [61e92f5]
+- Updated dependencies [35955b0]
+- Updated dependencies [6262bd5]
+- Updated dependencies [c1409ef]
+- Updated dependencies [3e7b69d]
+- Updated dependencies [e4943b8]
+- Updated dependencies [b50b9b7]
+- Updated dependencies [11d4485]
+- Updated dependencies [479f490]
+- Updated dependencies [c23a81c]
+- Updated dependencies [2d4001d]
+- Updated dependencies [c71013a]
+- Updated dependencies [1d3b1cd]
+  - @mastra/core@0.9.1
+  - @mastra/client-js@0.1.19
+
+## 5.0.1-alpha.9
+
+### Patch Changes
+
+- ca665d3: fix the ui for smaller screen regarding traces
+
+## 5.0.1-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [2d17c73]
+  - @mastra/core@0.9.1-alpha.8
+  - @mastra/client-js@0.1.19-alpha.8
+
+## 5.0.1-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [1d3b1cd]
+  - @mastra/core@0.9.1-alpha.7
+  - @mastra/client-js@0.1.19-alpha.7
+
+## 5.0.1-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [c23a81c]
+  - @mastra/core@0.9.1-alpha.6
+  - @mastra/client-js@0.1.19-alpha.6
+
+## 5.0.1-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [3e7b69d]
+  - @mastra/core@0.9.1-alpha.5
+  - @mastra/client-js@0.1.19-alpha.5
+
+## 5.0.1-alpha.4
+
+### Patch Changes
+
+- 3b74a74: add badge for failure / successful traces
+- 5a66ced: add click on trace row
+- Updated dependencies [e4943b8]
+- Updated dependencies [479f490]
+  - @mastra/core@0.9.1-alpha.4
+  - @mastra/client-js@0.1.19-alpha.4
+
 ## 5.0.1-alpha.3
 
 ### Patch Changes

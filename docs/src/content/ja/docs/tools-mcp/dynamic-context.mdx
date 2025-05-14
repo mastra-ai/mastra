@@ -1,0 +1,126 @@
+---
+title: "動的ツールコンテキスト | ツール & MCP | Mastra ドキュメント"
+description: Mastraの RuntimeContextを使用して、動的なリクエスト固有の設定をツールに提供する方法を学びます。
+---
+
+import { Callout } from "nextra/components";
+
+# 動的ツールコンテキスト
+
+Mastraは依存性注入に基づいた`RuntimeContext`システムを提供しており、実行中にツールに動的なリクエスト固有の設定を渡すことができます。これは、ツールの中核コードを変更することなく、ユーザーIDやリクエストヘッダー、その他のランタイム要因に基づいてツールの動作を変更する必要がある場合に役立ちます。
+
+<Callout>
+  **注意:** `RuntimeContext`は主にツール実行に*データを渡す*ために使用されます。これは、複数の呼び出しにわたって会話履歴と状態の永続性を処理するエージェントメモリとは異なります。
+</Callout>
+
+## 基本的な使用方法
+
+`RuntimeContext`を使用するには、まず動的設定の型構造を定義します。次に、定義した型で`RuntimeContext`のインスタンスを作成し、希望する値を設定します。最後に、`agent.generate()`または`agent.stream()`を呼び出す際に、オプションオブジェクトに`runtimeContext`インスタンスを含めます。
+
+```typescript
+import { RuntimeContext } from "@mastra/core/di";
+// Assume 'agent' is an already defined Mastra Agent instance
+
+// Define the context type
+type WeatherRuntimeContext = {
+  "temperature-scale": "celsius" | "fahrenheit";
+};
+
+// Instantiate RuntimeContext and set values
+const runtimeContext = new RuntimeContext<WeatherRuntimeContext>();
+runtimeContext.set("temperature-scale", "celsius");
+
+// Pass to agent call
+const response = await agent.generate("What's the weather like today?", {
+  runtimeContext, // Pass the context here
+});
+
+console.log(response.text);
+```
+
+## ツール内でのコンテキストへのアクセス
+
+ツールは`execute`関数の第2引数の一部として`runtimeContext`を受け取ります。その後、`.get()`メソッドを使用して値を取得できます。
+
+```typescript filename="src/mastra/tools/weather-tool.ts"
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
+// Assume WeatherRuntimeContext is defined as above and accessible here
+
+// Dummy fetch function
+async function fetchWeather(
+  location: string,
+  options: { temperatureUnit: "celsius" | "fahrenheit" }
+): Promise<any> {
+  console.log(`Fetching weather for ${location} in ${options.temperatureUnit}`);
+  // Replace with actual API call
+  return { temperature: options.temperatureUnit === "celsius" ? 20 : 68 };
+}
+
+export const weatherTool = createTool({
+  id: "getWeather",
+  description: "Get the current weather for a location",
+  inputSchema: z.object({
+    location: z.string().describe("The location to get weather for"),
+  }),
+  // The tool's execute function receives runtimeContext
+  execute: async ({ context, runtimeContext }) => {
+    // Type-safe access to runtimeContext variables
+    const temperatureUnit = runtimeContext.get("temperature-scale");
+
+    // Use the context value in the tool logic
+    const weather = await fetchWeather(context.location, {
+      temperatureUnit,
+    });
+
+    return { result: `The temperature is ${weather.temperature}°${temperatureUnit === "celsius" ? "C" : "F"}` };
+  },
+});
+```
+
+エージェントが`weatherTool`を使用する際、`agent.generate()`呼び出し中に`runtimeContext`に設定された`temperature-scale`の値がツールの`execute`関数内で利用可能になります。
+
+## サーバーミドルウェアでの使用
+
+サーバー環境（ExpressやNext.jsなど）では、ミドルウェアを使用して、ヘッダーやユーザーセッションなどの受信リクエストデータに基づいて自動的に`RuntimeContext`を設定できます。
+
+以下は、Mastraの組み込みサーバーミドルウェアサポート（内部的にHonoを使用）を使用して、Cloudflareの`CF-IPCountry`ヘッダーに基づいて温度スケールを設定する例です：
+
+```typescript filename="src/mastra/index.ts"
+import { Mastra } from "@mastra/core";
+import { RuntimeContext } from "@mastra/core/di";
+import { weatherAgent } from "./agents/weather"; // Assume agent is defined elsewhere
+
+// Define RuntimeContext type
+type WeatherRuntimeContext = {
+  "temperature-scale": "celsius" | "fahrenheit";
+};
+
+export const mastra = new Mastra({
+  agents: {
+    weather: weatherAgent,
+  },
+  server: {
+    middleware: [
+      async (c, next) => {
+        // Get the RuntimeContext instance
+        const runtimeContext = c.get<RuntimeContext<WeatherRuntimeContext>>("runtimeContext");
+
+        // Get country code from request header
+        const country = c.req.header("CF-IPCountry");
+
+        // Set temperature scale based on country
+        runtimeContext.set(
+          "temperature-scale",
+          country === "US" ? "fahrenheit" : "celsius",
+        );
+
+        // Continue request processing
+        await next();
+      },
+    ],
+  },
+});
+```
+
+このミドルウェアを設置すると、このMastraサーバーインスタンスによって処理されるすべてのエージェント呼び出しは、ユーザーの推測された国に基づいて自動的に`RuntimeContext`に`temperature-scale`が設定され、`weatherTool`のようなツールはそれに応じて使用されます。

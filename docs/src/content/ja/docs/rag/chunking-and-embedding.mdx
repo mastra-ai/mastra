@@ -44,9 +44,9 @@ const chunks = await doc.chunk({
 
 チャンク戦略については、[チャンクドキュメント](/reference/rag/chunk.mdx)で詳しく説明しています。
 
-## ステップ 2: 埋め込み生成
+## ステップ2：埋め込み生成
 
-お好みのプロバイダーを使用してチャンクを埋め込みに変換します。Mastraは、OpenAIやCohereを含む多くの埋め込みプロバイダーをサポートしています。
+チャンクを好みのプロバイダーを使用して埋め込みに変換します。MastraはOpenAIやCohereを含む多くの埋め込みプロバイダーをサポートしています：
 
 ### OpenAIを使用する
 
@@ -72,36 +72,40 @@ const { embeddings } = await embedMany({
 });
 ```
 
-埋め込み関数はベクトルを返します。これは、テキストの意味を表す数値の配列であり、ベクトルデータベースでの類似性検索に準備が整っています。
+埋め込み関数はベクトル（テキストの意味的な意味を表す数値の配列）を返し、ベクターデータベースでの類似性検索に使用できる状態になります。
 
-### 埋め込み次元の設定
+### 埋め込みの次元数の設定
 
-埋め込みモデルは通常、固定された次元数（例: OpenAIの`text-embedding-3-small`では1536）のベクトルを出力します。
-一部のモデルはこの次元数を減らすことをサポートしており、以下の利点があります:
-- ベクトルデータベースでのストレージ要件を減少させる
-- 類似性検索の計算コストを削減する
+埋め込みモデルは通常、固定された次元数のベクトルを出力します（例：OpenAIの`text-embedding-3-small`では1536次元）。
+一部のモデルではこの次元数を削減することができ、以下のような利点があります：
+- ベクターデータベースでの保存要件の削減
+- 類似性検索の計算コストの削減
 
-サポートされているモデルの例を以下に示します:
+以下はサポートされているモデルの例です：
 
-OpenAI (text-embedding-3モデル):
+OpenAI（text-embedding-3モデル）：
   ```ts
   const { embeddings } = await embedMany({
     model: openai.embedding('text-embedding-3-small', {
-      dimensions: 256  // text-embedding-3以降でのみサポート
+      dimensions: 256  // text-embedding-3以降のモデルでのみサポート
     }),
     values: chunks.map(chunk => chunk.text),
   });
   ```
 
-Google (text-embedding-004):
+Google（text-embedding-004）：
   ```ts
   const { embeddings } = await embedMany({
     model: google.textEmbeddingModel('text-embedding-004', {
-      outputDimensionality: 256  // 末尾から過剰な値を切り捨て
+      outputDimensionality: 256  // 末尾から過剰な値を切り捨てる
     }),
     values: chunks.map(chunk => chunk.text),
   });
   ```
+
+### ベクターデータベースの互換性
+
+埋め込みを保存する際、ベクターデータベースのインデックスは埋め込みモデルの出力サイズに合わせて設定する必要があります。次元数が一致しない場合、エラーやデータ破損が発生する可能性があります。
 
 ## 例: 完全なパイプライン
 
@@ -149,8 +153,12 @@ await vectorStore.upsert({
 ```
 
 ##
-さまざまなチャンク戦略と埋め込み構成の例については、以下を参照してください：
+さまざまなチャンキング戦略と埋め込み設定の例については、以下を参照してください：
 
 - [チャンクサイズの調整](/reference/rag/chunk.mdx#adjust-chunk-size)
-- [チャンク区切りの調整](/reference/rag/chunk.mdx#adjust-chunk-delimiters)
+- [チャンク区切り文字の調整](/reference/rag/chunk.mdx#adjust-chunk-delimiters)
 - [Cohereを使用したテキストの埋め込み](/reference/rag/embeddings.mdx#using-cohere)
+
+ベクトルデータベースと埋め込みの詳細については、以下を参照してください：
+- [ベクトルデータベース](./vector-databases.mdx)
+- [埋め込みAPIリファレンス](/reference/rag/embeddings.mdx)

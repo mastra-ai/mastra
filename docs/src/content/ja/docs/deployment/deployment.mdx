@@ -31,13 +31,13 @@ description: "プラットフォーム固有のデプロイヤーや標準HTTP�
 
 ```bash copy
 # For Cloudflare
-npm install @mastra/deployer-cloudflare
+npm install @mastra/deployer-cloudflare@latest
 
 # For Vercel
-npm install @mastra/deployer-vercel
+npm install @mastra/deployer-vercel@latest
 
 # For Netlify
-npm install @mastra/deployer-netlify
+npm install @mastra/deployer-netlify@latest
 ```
 
 ### デプロイヤーの設定
@@ -63,7 +63,7 @@ export const mastra = new Mastra({
 
 各デプロイヤーには特定の設定オプションがあります。以下は基本的な例ですが、完全な詳細についてはリファレンスドキュメントを参照してください。
 
-#### Cloudflare デプロイヤー
+#### Cloudflareデプロイヤー
 
 ```typescript copy showLineNumbers
 new CloudflareDeployer({
@@ -73,9 +73,9 @@ new CloudflareDeployer({
 })
 ```
 
-[Cloudflare デプロイヤーリファレンスを見る →](/reference/deployer/cloudflare)
+[Cloudflareデプロイヤーリファレンスを見る →](/reference/deployer/cloudflare)
 
-#### Vercel デプロイヤー
+#### Vercelデプロイヤー
 
 ```typescript copy showLineNumbers
 new VercelDeployer({
@@ -86,9 +86,9 @@ new VercelDeployer({
 })
 ```
 
-[Vercel デプロイヤーリファレンスを見る →](/reference/deployer/vercel)
+[Vercelデプロイヤーリファレンスを見る →](/reference/deployer/vercel)
 
-#### Netlify デプロイヤー
+#### Netlifyデプロイヤー
 
 ```typescript copy showLineNumbers
 new NetlifyDeployer({
@@ -98,7 +98,7 @@ new NetlifyDeployer({
 })
 ```
 
-[Netlify デプロイヤーリファレンスを見る →](/reference/deployer/netlify)
+[Netlifyデプロイヤーリファレンスを見る →](/reference/deployer/netlify)
 
 ## 環境変数
 

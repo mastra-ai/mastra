@@ -1,10 +1,18 @@
-# Telemetry API
+# テレメトリーAPI
 
-Telemetry APIは、Mastraアプリケーションからトレースを取得し、分析するためのメソッドを提供します。これにより、アプリケーションの動作とパフォーマンスを監視し、デバッグすることができます。
+テレメトリーAPIは、Mastraアプリケーションからトレースを取得して分析するためのメソッドを提供します。これにより、アプリケーションの動作とパフォーマンスを監視およびデバッグするのに役立ちます。
+
+## Mastraクライアントの初期化
+
+```typescript
+import { MastraClient } from "@mastra/client-js";
+
+const client = new MastraClient();
+```
 
 ## トレースの取得
 
-オプションのフィルタリングとページネーションを使用してトレースを取得します:
+オプションのフィルタリングとページネーションを使用してトレースを取得します：
 
 ```typescript
 const telemetry = await client.getTelemetry({

@@ -4,5 +4,4 @@ const meta = {
   "ai-recruiter": "ワークフロー: AI Recruiter",
   "research-assistant": "RAG: Research Assistant",
 };
-
 export default meta;

@@ -44,7 +44,7 @@ function Agent() {
     <AgentProvider>
       <section className={cn('relative h-[calc(100%-40px)] divide-x flex w-full')}>
         {sidebar && memory?.result ? (
-          <div className="h-full w-[256px]">
+          <div className="h-full w-[300px] overflow-y-auto">
             <AgentSidebar agentId={agentId!} threadId={threadId!} threads={threads} isLoading={isThreadsLoading} />
           </div>
         ) : null}
@@ -56,9 +56,7 @@ function Agent() {
             threadId={threadId!}
             initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
             memory={memory?.result}
-            refreshThreadList={() => {
-              refreshThreads();
-            }}
+            refreshThreadList={refreshThreads}
           />
         </div>
 

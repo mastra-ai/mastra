@@ -1,0 +1,138 @@
+---
+title: "例：制御フロー | ワークフロー | Mastra ドキュメント"
+description: 提供された条件に基づいてループを持つワークフローを作成するためにMastraを使用する例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# ステップ実行のループ処理
+この例では、条件が満たされるまで1つ以上のステップをループで実行するワークフローを作成する方法を示しています
+
+
+## ループワークフローの定義
+提供された条件が満たされるまでネストされたワークフローを実行するワークフローを定義します。
+
+```ts showLineNumbers copy filename="looping-workflow.ts"
+import { createWorkflow, createStep } from '@mastra/core/workflows/vNext'
+import { z } from 'zod'
+
+const incrementStep = createStep({
+  id: 'increment',
+  inputSchema: z.object({
+    value: z.number(),
+  }),
+  outputSchema: z.object({
+    value: z.number(),
+  }),
+  execute: async ({ inputData }) => {
+    return { value: inputData.value + 1 }
+  },
+})
+
+const sideEffectStep = createStep({
+  id: 'side-effect',
+  inputSchema: z.object({
+    value: z.number(),
+  }),
+  outputSchema: z.object({
+    value: z.number(),
+  }),
+  execute: async ({ inputData }) => {
+    console.log('log', inputData.value)
+    return { value: inputData.value }
+  },
+})
+
+const finalStep = createStep({
+  id: 'final',
+  inputSchema: z.object({
+    value: z.number(),
+  }),
+  outputSchema: z.object({
+    value: z.number(),
+  }),
+  execute: async ({ inputData }) => {
+    return { value: inputData.value }
+  },
+})
+
+const workflow = createWorkflow({
+  id: 'increment-workflow',
+  inputSchema: z.object({
+    value: z.number(),
+  }),
+  outputSchema: z.object({
+    value: z.number(),
+  }),
+})
+  .dountil(
+    createWorkflow({
+      id: 'increment-workflow',
+      inputSchema: z.object({
+        value: z.number(),
+      }),
+      outputSchema: z.object({
+        value: z.number(),
+      }),
+      steps: [incrementStep, sideEffectStep],
+    })
+      .then(incrementStep)
+      .then(sideEffectStep)
+      .commit(),
+    async ({ inputData }) => inputData.value >= 10
+  )
+  .then(finalStep)
+
+workflow.commit()
+
+export { workflow as incrementWorkflow }
+```
+
+
+## MastraクラスでWorkflowインスタンスを登録する
+ワークフローをmastraインスタンスに登録します。
+
+```ts showLineNumbers copy filename="index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { createLogger } from '@mastra/core/logger'
+import { incrementWorkflow } from './workflows'
+
+const mastra = new Mastra({
+  vnext_workflows: {
+    incrementWorkflow,
+  },
+  logger: createLogger({
+    name: 'Mastra',
+    level: 'info',
+  }),
+})
+
+export { mastra }
+```
+
+
+## ワークフローを実行する
+ここでは、mastraインスタンスからインクリメントワークフローを取得し、実行を作成して、必要なinputDataで作成した実行を実行します。
+
+```ts showLineNumbers copy filename="exec.ts"
+import { mastra } from "./"
+
+const workflow = mastra.vnext_getWorkflow('incrementWorkflow')
+const run = workflow.createRun()
+
+const result = await run.start({ inputData: { value: 0 } })
+console.dir(result, { depth: null })
+```
+
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/control-flow"
+  }
+/>
+

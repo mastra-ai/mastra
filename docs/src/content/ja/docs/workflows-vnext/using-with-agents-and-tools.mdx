@@ -1,0 +1,129 @@
+---
+title: "エージェントとツールを使用したワークフロー | ワークフロー (vNext) | Mastra ドキュメント"
+description: "Mastraワークフロー（vNext）のステップは、入力、出力、実行ロジックを定義することで、操作を管理するための構造化された方法を提供します。"
+---
+
+## ステップとしてのエージェント
+
+vNextワークフローでは、Mastraエージェントを`createStep(agent)`を使用して直接ステップとして使用できます：
+
+```typescript
+// エージェントは別の場所で定義
+const myAgent = new Agent({
+  name: "myAgent",
+  instructions: "...",
+  model: openai("gpt-4"),
+});
+
+// エージェントを使用してMastraインスタンスを作成
+const mastra = new Mastra({
+  agents: {
+    myAgent,
+  },
+  vnext_workflows: {
+    myWorkflow,
+  },
+});
+
+// ワークフローでエージェントを使用
+myWorkflow
+  .then(preparationStep)
+  .map({
+    prompt: {
+      step: preparationStep,
+      path: "formattedPrompt",
+    },
+  })
+  .then(createStep(myAgent)) // エージェントを直接ステップとして使用
+  .then(processResultStep)
+  .commit();
+```
+
+## ステップとしてのツール
+
+vNextワークフローでは、`createStep(tool)`を使用してMastraツールを直接ステップとして使用できます：
+
+```typescript
+const myTool = createTool({
+  id: "my-tool",
+  description: "My tool",
+  inputSchema: z.object({}),
+  outputSchema: z.object({}),
+  execute: async ({ inputData }) => {
+    return { result: "success" };
+  },
+});
+
+myWorkflow.then(createStep(myTool)).then(finalStep).commit();
+```
+
+## エージェント内のツールとしてのワークフロー
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { createTool } from "@mastra/core/tools";
+import { createWorkflow, createStep } from "@mastra/core/workflows/vNext";
+
+const weatherWorkflow = createWorkflow({
+  steps: [fetchWeather, planActivities],
+  id: "weather-workflow-step1-single-day",
+  inputSchema: z.object({
+    city: z.string().describe("The city to get the weather for"),
+  }),
+  outputSchema: z.object({
+    activities: z.string(),
+  }),
+})
+  .then(fetchWeather)
+  .then(planActivities);
+
+const activityPlannerTool = createTool({
+  id: "get-weather-specific-activities",
+  description: "Get weather-specific activities for a city",
+  inputSchema: z.object({
+    city: z.string(),
+  }),
+  outputSchema: z.object({
+    activities: z.array(z.string()),
+  }),
+  execute: async ({ context, mastra }) => {
+    const plannerWorkflow = mastra?.getWorkflow("my-workflow");
+    if (!plannerWorkflow) {
+      throw new Error("Planner workflow not found");
+    }
+
+    const run = plannerWorkflow.createRun();
+    const results = await run.start({
+      triggerData: {
+        city: context.city,
+      },
+    });
+    const planActivitiesStep = results.results["plan-activities"];
+    if (planActivitiesStep.status === "success") {
+      return planActivitiesStep.output;
+    }
+
+    return {
+      activities: "No activities found",
+    };
+  },
+});
+
+const activityPlannerAgent = new Agent({
+  name: "activityPlannerAgent",
+  model: openai("gpt-4o"),
+  instructions: `
+  あなたはアクティビティプランナーです。任意の都市の天気に特化したアクティビティを取得するのに役立つツールにアクセスできます。このツールはアクティビティを計画するためにエージェントを使用しており、あなたは都市名を提供するだけで良いです。得られた情報をそのまま返し、その上にあなた自身の考えを追加してください。
+  `,
+  tools: { activityPlannerTool },
+});
+
+export const mastra = new Mastra({
+  vnext_workflows: {
+    "my-workflow": myWorkflow,
+  },
+  agents: {
+    activityPlannerAgent,
+  },
+});
+```

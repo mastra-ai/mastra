@@ -142,62 +142,25 @@ curl --location 'http://localhost:4111/api/workflows/myWorkflow/start-async' \
 
 ステップ間でデータをマッピングしたり、動的なデータフローを作成する必要がある場合、[ワークフロー変数](./variables.mdx)は、情報をあるステップから別のステップに渡し、ステップ出力内のネストされたプロパティにアクセスするための強力なメカニズムを提供します。
 
-## 一時停止と再開
-
-外部データ、ユーザー入力、または非同期イベントのために実行を一時停止する必要がある場合、Mastraは[任意のステップでの一時停止をサポートしています](./suspend-and-resume.mdx)。ワークフローの状態を保持し、後で再開することができます。
-
 ## 可観測性とデバッグ
 
-Mastra ワークフローは、ワークフロー実行内の各ステップの入力と出力を自動的に[ログに記録します](../../reference/observability/otel-config.mdx)。これにより、このデータをお好みのログ、テレメトリー、または可観測性ツールに送信することができます。
+Mastraワークフローは自動的に[ワークフロー実行内の各ステップの入力と出力をログに記録](../../reference/observability/otel-config.mdx)し、このデータを好みのロギング、テレメトリ、または可観測性ツールに送信できるようにします。
 
-次のことができます：
+以下のことが可能です：
 
-- 各ステップのステータスを追跡する（例：`success`、`error`、または `suspended`）。
-- 分析のために実行固有のメタデータを保存する。
-- ログを転送することで、Datadog や New Relic などのサードパーティの可観測性プラットフォームと統合する。
+- 各ステップのステータス（例：`success`、`error`、または`suspended`）を追跡する。
+- 分析のための実行固有のメタデータを保存する。
+- ログを転送することで、DatadogやNew Relicなどのサードパーティの可観測性プラットフォームと統合する。
 
-## リクエスト/ユーザー固有の変数の注入
-
-ツールとワークフローの依存性注入をサポートしています。`start` または `resume` 関数呼び出しにコンテナを直接渡すか、[サーバーミドルウェア](/docs/deployment/server#Middleware)を使用して注入することができます。
-
-```ts showLineNumbers filename="src/mastra/run-workflow.ts" copy
-import { mastra } from "./index";
-
-const stepTwo = new Step({
-  id: "stepTwo",
-  execute: async ({ context, runtimeContext }) => {
-    const multiplier = runtimeContext.get("multiplier");
-    const doubledValue = context.getStepResult(stepOne)?.doubledValue;
-    if (!doubledValue) {
-      return { incrementedValue: 0 };
-    }
-
-    return {
-      incrementedValue: doubledValue * multiplier,
-    };
-  },
-});
-
-// Get the workflow
-const myWorkflow = mastra.getWorkflow("myWorkflow");
-const { runId, start, resume } = myWorkflow.createRun();
-
-type MyRuntimeContext = { multiplier; number };
-
-const runtimeContext = new RuntimeContext<MyRuntimeContext>();
-runtimeContext.set("multiplier", 5);
-
-// Start the workflow execution
-await start({ triggerData: { inputValue: 45 }, runtimeContext });
-await resume({ stepId: "stepTwo", runtimeContext });
 ```
 
-## 追加リソース
+## その他のリソース
 
 - ガイドセクションの[ワークフローガイド](../guides/ai-recruiter.mdx)は、主要な概念をカバーするチュートリアルです。
-- [順次ステップのワークフロー例](../../examples/workflows/sequential-steps.mdx)
+- [シーケンシャルステップのワークフロー例](../../examples/workflows/sequential-steps.mdx)
 - [並列ステップのワークフロー例](../../examples/workflows/parallel-steps.mdx)
 - [分岐パスのワークフロー例](../../examples/workflows/branching-paths.mdx)
 - [ワークフロー変数の例](../../examples/workflows/workflow-variables.mdx)
 - [循環依存関係のワークフロー例](../../examples/workflows/cyclical-dependencies.mdx)
 - [一時停止と再開のワークフロー例](../../examples/workflows/suspend-and-resume.mdx)
+```

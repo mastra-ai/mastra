@@ -459,6 +459,8 @@ export class LibSQLStore extends MastraStorage {
       perPage,
       attributes,
       filters,
+      fromDate,
+      toDate,
     }: {
       name?: string;
       scope?: string;
@@ -466,6 +468,8 @@ export class LibSQLStore extends MastraStorage {
       perPage: number;
       attributes?: Record<string, string>;
       filters?: Record<string, any>;
+      fromDate?: Date;
+      toDate?: Date;
     } = {
       page: 0,
       perPage: 100,
@@ -494,6 +498,14 @@ export class LibSQLStore extends MastraStorage {
         conditions.push(`${key} = ?`);
       });
     }
+
+    if (fromDate) {
+      conditions.push('createdAt >= ?');
+    }
+
+    if (toDate) {
+      conditions.push('createdAt <= ?');
+    }
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     if (name) {
@@ -514,6 +526,14 @@ export class LibSQLStore extends MastraStorage {
       for (const [, value] of Object.entries(filters)) {
         args.push(value);
       }
+    }
+
+    if (fromDate) {
+      args.push(fromDate.toISOString());
+    }
+
+    if (toDate) {
+      args.push(toDate.toISOString());
     }
 
     args.push(limit, offset);

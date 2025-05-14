@@ -72,3 +72,8 @@ export type RecordTypes = {
   [TABLE_EVALS]: EvalRow;
   [TABLE_TRACES]: any;
 };
+
+export type ListOptions = {
+  limit?: number;
+  prefix?: string;
+};

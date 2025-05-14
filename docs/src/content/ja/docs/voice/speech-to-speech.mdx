@@ -12,27 +12,14 @@ STSは、リアルタイムモデルからのイベントをリッスンする�
 
 ## 設定
 
-- **`chatModel`**: リアルタイムモデルの設定。
-  - **`apiKey`**: あなたのOpenAI APIキー。`OPENAI_API_KEY`環境変数にフォールバックします。
-  - **`model`**: リアルタイム音声インタラクションに使用するモデルID（例：`gpt-4o-mini-realtime`）。
-  - **`options`**: セッション設定などのリアルタイムクライアントの追加オプション。
+- **`apiKey`**: あなたのOpenAI APIキー。`OPENAI_API_KEY`環境変数にフォールバックします。
+- **`model`**: リアルタイム音声インタラクションに使用するモデルID（例：`gpt-4o-mini-realtime`）。
 - **`speaker`**: 音声合成のデフォルトボイスID。音声出力に使用するボイスを指定できます。
 
 ```typescript
 const voice = new OpenAIRealtimeVoice({
-  chatModel: {
-    apiKey: 'your-openai-api-key',
-    model: 'gpt-4o-mini-realtime',
-    options: {
-      sessionConfig: {
-        turn_detection: {
-          type: 'server_vad',
-          threshold: 0.6,
-          silence_duration_ms: 1200,
-        },
-      },
-    },
-  },
+  apiKey: 'your-openai-api-key',
+  model: 'gpt-4o-mini-realtime',
   speaker: 'alloy', // デフォルトボイス
 });
 

@@ -388,6 +388,56 @@ describe('agent', () => {
     expect(sanitizedMessages).toHaveLength(2);
   });
 
+  it('should preserve empty assistant messages after tool use', () => {
+    const agent = new Agent({
+      name: 'Test agent',
+      instructions: 'Test agent',
+      model: openai('gpt-4o'),
+    });
+
+    // Create an assistant message with a tool call
+    const assistantToolCallMessage = {
+      role: 'assistant' as const,
+      content: [{ type: 'tool-call' as const, toolName: 'testTool', toolCallId: 'tool-1', args: {}, text: 'call' }],
+    };
+
+    // Create a tool message that responds to the tool call
+    const toolMessage = {
+      role: 'tool' as const,
+      content: [
+        { type: 'tool-result' as const, toolName: 'testTool', toolCallId: 'tool-1', text: 'result', result: '' },
+      ],
+    };
+
+    // Create an empty assistant message that follows the tool message
+    const emptyAssistantMessage = {
+      role: 'assistant' as const,
+      content: '', // Empty string content
+    };
+
+    const userMessage = {
+      role: 'user' as const,
+      content: 'Hello',
+    };
+
+    const messages = [assistantToolCallMessage, toolMessage, emptyAssistantMessage, userMessage];
+
+    const sanitizedMessages = agent.sanitizeResponseMessages(messages);
+
+    // The empty assistant message should be preserved even though it has empty content
+    expect(sanitizedMessages).toContainEqual(emptyAssistantMessage);
+
+    // The tool message should be preserved because it has a matching tool call ID
+    expect(sanitizedMessages).toContainEqual(toolMessage);
+
+    // All messages should be preserved
+    expect(sanitizedMessages).toHaveLength(4);
+    expect(sanitizedMessages[0]).toEqual(assistantToolCallMessage);
+    expect(sanitizedMessages[1]).toEqual(toolMessage);
+    expect(sanitizedMessages[2]).toEqual(emptyAssistantMessage);
+    expect(sanitizedMessages[3]).toEqual(userMessage);
+  });
+
   describe('voice capabilities', () => {
     class MockVoice extends MastraVoice {
       async speak(): Promise<NodeJS.ReadableStream> {

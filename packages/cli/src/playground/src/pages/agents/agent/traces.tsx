@@ -1,13 +1,14 @@
-import { AgentTraces } from '@mastra/playground-ui';
+import { AgentTraces, TraceProvider, useTraces } from '@mastra/playground-ui';
 import { useParams } from 'react-router';
 
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { useAgent } from '@/hooks/use-agents';
 
-function AgentTracesPage() {
+function AgentTracesContent() {
   const { agentId } = useParams();
   const { agent, isLoading: isAgentLoading } = useAgent(agentId!);
+  const { traces, firstCallLoading, error } = useTraces(agent?.name || '', '');
 
   if (isAgentLoading) {
     return (
@@ -17,7 +18,17 @@ function AgentTracesPage() {
     );
   }
 
-  return <AgentTraces agentName={agent?.name!} baseUrl="" className="h-[calc(100vh-40px)]" />;
+  return (
+    <AgentTraces traces={traces || []} isLoading={firstCallLoading} error={error} className="h-[calc(100vh-40px)]" />
+  );
+}
+
+function AgentTracesPage() {
+  return (
+    <TraceProvider>
+      <AgentTracesContent />
+    </TraceProvider>
+  );
 }
 
 export default AgentTracesPage;

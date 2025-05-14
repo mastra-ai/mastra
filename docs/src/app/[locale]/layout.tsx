@@ -71,13 +71,14 @@ export default async function RootLayout({
           <PostHogProvider>
             <NextraLayout stars={stars} locale={locale} pageMap={pageMap}>
               {children}
+              {/* {<DocsChat />} */}
             </NextraLayout>
           </PostHogProvider>
           <Toaster />
           <CookieConsent />
         </GTProvider>
+        <Analytics />
       </body>
-      <Analytics />
     </html>
   );
 }

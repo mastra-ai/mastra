@@ -7,5 +7,4 @@ const meta = {
   "memory-processors": "メモリプロセッサ",
   "use-chat": "AI SDK useChat フック", // 追加されたエントリ
 };
-
 export default meta;

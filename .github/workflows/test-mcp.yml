@@ -23,14 +23,16 @@ jobs:
       - name: Setup Node.js 20.x
         uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version: 20.19.1
           cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install
 
       - name: Build @mastra/mcp
-        run: pnpm turbo --filter="./packages/mcp" build
+        run: pnpm turbo --filter="./packages/mcp" --filter "mastra" build
 
       - name: Run MCP tests
         run: pnpm run test:mcp
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

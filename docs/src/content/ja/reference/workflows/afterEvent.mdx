@@ -48,7 +48,7 @@ workflow.afterEvent(eventName: string): Workflow
 ### 基本的な使用法
 
 ```typescript
-// Define workflow with events
+// イベントを含むワークフローを定義
 const workflow = new Workflow({
   name: 'approval-workflow',
   events: {
@@ -61,16 +61,16 @@ const workflow = new Workflow({
   },
 });
 
-// Build workflow with event suspension point
+// イベント中断ポイントを含むワークフローを構築
 workflow
   .step(submitRequest)
-  .afterEvent('approval')    // Workflow suspends here
-  .step(processApproval)     // This step runs after the event occurs
+  .afterEvent('approval')    // ワークフローはここで中断します
+  .step(processApproval)     // このステップはイベント発生後に実行されます
   .commit();
 ```
-## 関連
+## 関連項目
 
 - [イベント駆動型ワークフロー](./events.mdx)
 - [resumeWithEvent()](./resumeWithEvent.mdx)
-- [一時停止と再開](../../workflows/suspend-and-resume.mdx)
-- [Workflow クラス](./workflow.mdx)
+- [中断と再開](../../docs/workflows/suspend-and-resume.mdx)
+- [Workflowクラス](./workflow.mdx)

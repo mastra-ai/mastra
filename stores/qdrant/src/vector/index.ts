@@ -75,14 +75,25 @@ export class QdrantVector extends MastraVector {
     if (!Number.isInteger(dimension) || dimension <= 0) {
       throw new Error('Dimension must be a positive integer');
     }
-    await this.client.createCollection(indexName, {
-      vectors: {
-        // @ts-expect-error
-        size: dimension,
-        // @ts-expect-error
-        distance: DISTANCE_MAPPING[metric],
-      },
-    });
+    if (!DISTANCE_MAPPING[metric]) {
+      throw new Error(`Invalid metric: "${metric}". Must be one of: cosine, euclidean, dotproduct`);
+    }
+    try {
+      await this.client.createCollection(indexName, {
+        vectors: {
+          size: dimension,
+          distance: DISTANCE_MAPPING[metric],
+        },
+      });
+    } catch (error: any) {
+      const message = error?.message || error?.toString();
+      // Qdrant typically returns 409 for existing collection
+      if (error?.status === 409 || (typeof message === 'string' && message.toLowerCase().includes('exists'))) {
+        // Fetch collection info and check dimension
+        await this.validateExistingIndex(indexName, dimension, metric);
+        return;
+      }
+    }
   }
 
   transformFilter(filter?: VectorFilter) {
@@ -149,7 +160,42 @@ export class QdrantVector extends MastraVector {
     await this.client.deleteCollection(indexName);
   }
 
+  /**
+   * @deprecated Use {@link updateVector} instead. This method will be removed on May 20th, 2025.
+   *
+   * Updates a vector by its ID with the provided vector and/or metadata.
+   * @param indexName - The name of the index containing the vector.
+   * @param id - The ID of the vector to update.
+   * @param update - An object containing the vector and/or metadata to update.
+   * @param update.vector - An optional array of numbers representing the new vector.
+   * @param update.metadata - An optional record containing the new metadata.
+   * @returns A promise that resolves when the update is complete.
+   * @throws Will throw an error if no updates are provided or if the update operation fails.
+   */
   async updateIndexById(
+    indexName: string,
+    id: string,
+    update: { vector?: number[]; metadata?: Record<string, any> },
+  ): Promise<void> {
+    this.logger.warn(
+      `Deprecation Warning: updateIndexById() is deprecated. 
+      Please use updateVector() instead. 
+      updateIndexById() will be removed on May 20th, 2025.`,
+    );
+    await this.updateVector(indexName, id, update);
+  }
+
+  /**
+   * Updates a vector by its ID with the provided vector and/or metadata.
+   * @param indexName - The name of the index containing the vector.
+   * @param id - The ID of the vector to update.
+   * @param update - An object containing the vector and/or metadata to update.
+   * @param update.vector - An optional array of numbers representing the new vector.
+   * @param update.metadata - An optional record containing the new metadata.
+   * @returns A promise that resolves when the update is complete.
+   * @throws Will throw an error if no updates are provided or if the update operation fails.
+   */
+  async updateVector(
     indexName: string,
     id: string,
     update: {
@@ -198,19 +244,48 @@ export class QdrantVector extends MastraVector {
         return;
       }
     } catch (error) {
-      console.error('Error updating point in Qdrant:', error);
+      console.error(`Failed to update vector by id: ${id} for index name: ${indexName}:`, error);
       throw error;
     }
   }
 
+  /**
+   * @deprecated Use {@link deleteVector} instead. This method will be removed on May 20th, 2025.
+   *
+   * Deletes a vector by its ID.
+   * @param indexName - The name of the index containing the vector.
+   * @param id - The ID of the vector to delete.
+   * @returns A promise that resolves when the deletion is complete.
+   * @throws Will throw an error if the deletion operation fails.
+   */
   async deleteIndexById(indexName: string, id: string): Promise<void> {
-    // Parse the ID - Qdrant supports both string and numeric IDs
-    const pointId = this.parsePointId(id);
+    this.logger.warn(
+      `Deprecation Warning: deleteIndexById() is deprecated. 
+      Please use deleteVector() instead. 
+      deleteIndexById() will be removed on May 20th, 2025.`,
+    );
+    await this.deleteVector(indexName, id);
+  }
 
-    // Use the Qdrant client to delete the point from the collection
-    await this.client.delete(indexName, {
-      points: [pointId],
-    });
+  /**
+   * Deletes a vector by its ID.
+   * @param indexName - The name of the index containing the vector.
+   * @param id - The ID of the vector to delete.
+   * @returns A promise that resolves when the deletion is complete.
+   * @throws Will throw an error if the deletion operation fails.
+   */
+  async deleteVector(indexName: string, id: string): Promise<void> {
+    try {
+      // Parse the ID - Qdrant supports both string and numeric IDs
+      const pointId = this.parsePointId(id);
+
+      // Use the Qdrant client to delete the point from the collection
+      await this.client.delete(indexName, {
+        points: [pointId],
+      });
+    } catch (error: any) {
+      throw new Error(`Failed to delete vector by id: ${id} for index name: ${indexName}: ${error.message}`);
+    }
   }
 
   /**

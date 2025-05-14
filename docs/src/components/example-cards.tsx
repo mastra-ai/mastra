@@ -1,7 +1,8 @@
 "use client";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import { useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent } from "./ui/card";
 
 export function CardItem({
@@ -9,37 +10,67 @@ export function CardItem({
 }: {
   links: Array<{ title: string; href: string }>;
 }) {
-    return (
-      <Card className="dark:border-[#404040] w-full lg:w-fit px-0 rounded-none border-none shadow-none transition-colors">
-        <CardContent className="space-y-2 w-full px-0 gap-3 grid md:grid-cols-2 lg:grid-cols-3">
-          {links.map((item) => (
-            <Link
-              key={`${item.title}-${item.href}`}
-              href={item.href}
-              className="flex bg-[#1a1a1a]/50 mb-0 border-[0.5px]  rounded-md dark:border-[#343434] items-center group justify-between p-2 px-4 text-sm"
-            >
-              {item.title}
-            </Link>
-          ))}
-        </CardContent>
-      </Card>
-    );
+  return (
+    <Card className="dark:border-[#404040] w-full lg:w-fit px-0 rounded-none border-none shadow-none transition-colors">
+      <CardContent className="space-y-2 w-full px-0 gap-3 grid md:grid-cols-2 lg:grid-cols-3">
+        {links.map((item) => (
+          <Link
+            key={`${item.title}-${item.href}`}
+            href={item.href}
+            className="flex bg-[#1a1a1a]/50 mb-0 border-[0.5px]  rounded-md dark:border-[#343434] items-center group justify-between p-2 px-4 text-sm"
+          >
+            {item.title}
+          </Link>
+        ))}
+      </CardContent>
+    </Card>
+  );
 }
 
-export function CardItems({
+function CardItemsInner({
   titles,
   items,
 }: {
   titles: string[];
   items: Record<string, Array<{ title: string; href: string }>>;
 }) {
-  const [activeTab, setActiveTab] = useState(titles[0]);
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const slugify = (str: string) =>
+    str
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "");
+
+  const listParam = searchParams?.get("list") ?? "";
+  const initialTab = useMemo(() => {
+    const match = titles.find((t) => slugify(t) === slugify(listParam));
+    return match ?? titles[0];
+  }, [listParam, titles]);
+
+  const [activeTab, setActiveTab] = useState(initialTab);
+
+  useEffect(() => {
+    const match = titles.find((t) => slugify(t) === slugify(listParam));
+    if (match && match !== activeTab) {
+      setActiveTab(match);
+    }
+  }, [listParam, titles]);
+
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    const params = new URLSearchParams(searchParams?.toString());
+    params.set("list", slugify(tab));
+    router.replace(`${pathname}?${params.toString()}`);
+  };
   return (
     <div>
       <CardTitle
         titles={titles}
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={handleTabChange}
       />
       <div className="mt-6">
         <CardItem links={items[activeTab] || []} />
@@ -48,6 +79,16 @@ export function CardItems({
   );
 }
 
+export function CardItems(props: {
+  titles: string[];
+  items: Record<string, Array<{ title: string; href: string }>>;
+}) {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <CardItemsInner {...props} />
+    </Suspense>
+  );
+}
 
 export function CardTitle({
   titles,

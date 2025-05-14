@@ -1,7 +1,6 @@
-import type { MessageType } from '@mastra/core';
 import { describe, expect, beforeEach, it, vi } from 'vitest';
-
 import { MastraClient } from './client';
+import type { McpServerListResponse, ServerDetailInfo } from './types';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -237,6 +236,7 @@ describe('MastraClient Resources', () => {
         model: 'gpt-4',
         instructions: 'Test instructions',
         tools: {},
+        workflows: {},
       };
       mockFetchResponse(mockResponse);
 
@@ -489,7 +489,7 @@ describe('MastraClient Resources', () => {
       const result = await memoryThread.update({
         title: 'Updated Thread',
         metadata: { updated: true },
-        resourceid: 'test-resource',
+        resourceId: 'test-resource',
       });
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
@@ -536,6 +536,7 @@ describe('MastraClient Resources', () => {
           content: 'test',
           role: 'user' as const,
           threadId: 'test-thread',
+          resourceId: 'test-resource',
           createdAt: new Date('2025-03-26T10:40:55.116Z'),
         },
       ];
@@ -549,6 +550,35 @@ describe('MastraClient Resources', () => {
           headers: expect.objectContaining({
             Authorization: 'Bearer test-key',
           }),
+        }),
+      );
+    });
+
+    it('should get thread messages with limit', async () => {
+      const mockResponse = {
+        messages: [
+          {
+            id: '1',
+            content: 'test',
+            threadId,
+            role: 'user',
+            type: 'text',
+            resourceId: 'test-resource',
+            createdAt: new Date(),
+          },
+        ],
+        uiMessages: [],
+      };
+      mockFetchResponse(mockResponse);
+
+      const limit = 5;
+      const result = await memoryThread.getMessages({ limit });
+
+      expect(result).toEqual(mockResponse);
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/memory/threads/${threadId}/messages?agentId=${agentId}&limit=${limit}`,
+        expect.objectContaining({
+          headers: expect.objectContaining(clientOptions.headers),
         }),
       );
     });
@@ -584,10 +614,10 @@ describe('MastraClient Resources', () => {
     it('should execute tool', async () => {
       const mockResponse = { data: 'test' };
       mockFetchResponse(mockResponse);
-      const result = await tool.execute({ data: '' });
+      const result = await tool.execute({ data: '', runId: 'test-run-id' });
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
-        `${clientOptions.baseUrl}/api/tools/test-tool/execute`,
+        `${clientOptions.baseUrl}/api/tools/test-tool/execute?runId=test-run-id`,
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
@@ -705,6 +735,96 @@ describe('MastraClient Resources', () => {
           }),
         }),
       );
+    });
+  });
+
+  describe('MCP Server Registry Client Methods', () => {
+    const mockServerInfo1 = {
+      id: 'mcp-server-1',
+      name: 'Test MCP Server 1',
+      version_detail: { version: '1.0.0', release_date: '2023-01-01T00:00:00Z', is_latest: true },
+    };
+    const mockServerInfo2 = {
+      id: 'mcp-server-2',
+      name: 'Test MCP Server 2',
+      version_detail: { version: '1.1.0', release_date: '2023-02-01T00:00:00Z', is_latest: true },
+    };
+
+    const mockServerDetail1: ServerDetailInfo = {
+      ...mockServerInfo1,
+      description: 'Detailed description for server 1',
+      package_canonical: 'npm',
+      packages: [{ registry_name: 'npm', name: '@example/server1', version: '1.0.0' }],
+      remotes: [{ transport_type: 'sse', url: 'http://localhost/sse1' }],
+    };
+
+    describe('getMcpServers()', () => {
+      it('should fetch a list of MCP servers', async () => {
+        const mockResponse: McpServerListResponse = {
+          servers: [mockServerInfo1, mockServerInfo2],
+          total_count: 2,
+          next: null,
+        };
+        mockFetchResponse(mockResponse);
+
+        const result = await client.getMcpServers();
+        expect(result).toEqual(mockResponse);
+        expect(global.fetch).toHaveBeenCalledWith(
+          `${clientOptions.baseUrl}/api/mcp/v0/servers`,
+          expect.objectContaining({
+            headers: expect.objectContaining(clientOptions.headers),
+          }),
+        );
+      });
+
+      it('should fetch MCP servers with limit and offset parameters', async () => {
+        const mockResponse: McpServerListResponse = {
+          servers: [mockServerInfo1],
+          total_count: 2,
+          next: '/api/mcp/v0/servers?limit=1&offset=1',
+        };
+        mockFetchResponse(mockResponse);
+
+        const result = await client.getMcpServers({ limit: 1, offset: 0 });
+        expect(result).toEqual(mockResponse);
+        expect(global.fetch).toHaveBeenCalledWith(
+          `${clientOptions.baseUrl}/api/mcp/v0/servers?limit=1&offset=0`,
+          expect.objectContaining({
+            headers: expect.objectContaining(clientOptions.headers),
+          }),
+        );
+      });
+    });
+
+    describe('getMcpServerDetails()', () => {
+      const serverId = 'mcp-server-1';
+
+      it('should fetch details for a specific MCP server', async () => {
+        mockFetchResponse(mockServerDetail1);
+
+        const result = await client.getMcpServerDetails(serverId);
+        expect(result).toEqual(mockServerDetail1);
+        expect(global.fetch).toHaveBeenCalledWith(
+          `${clientOptions.baseUrl}/api/mcp/v0/servers/${serverId}`,
+          expect.objectContaining({
+            headers: expect.objectContaining(clientOptions.headers),
+          }),
+        );
+      });
+
+      it('should fetch MCP server details with a version parameter', async () => {
+        mockFetchResponse(mockServerDetail1);
+        const version = '1.0.0';
+
+        const result = await client.getMcpServerDetails(serverId, { version });
+        expect(result).toEqual(mockServerDetail1);
+        expect(global.fetch).toHaveBeenCalledWith(
+          `${clientOptions.baseUrl}/api/mcp/v0/servers/${serverId}?version=${version}`,
+          expect.objectContaining({
+            headers: expect.objectContaining(clientOptions.headers),
+          }),
+        );
+      });
     });
   });
 });

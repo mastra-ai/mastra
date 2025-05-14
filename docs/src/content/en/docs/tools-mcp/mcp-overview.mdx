@@ -1,0 +1,224 @@
+---
+title: "MCP Overview | Tools & MCP | Mastra Docs"
+description: Learn about the Model Context Protocol (MCP), how to use third-party tools via MCPClient, connect to registries, and share your own tools using MCPServer.
+---
+
+import { Tabs } from "nextra/components";
+
+# MCP Overview
+
+[Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction) is an open standard designed to let AI models discover and interact with external tools and resources. Think of it as a universal plugin system for AI agents, allowing them to use tools regardless of the language they were written in or where they are hosted.
+
+Mastra uses MCP to connect agents to external tool servers.
+
+## Use third-party tools with an MCP Client
+
+Mastra provides the `MCPClient` class to manage connections to one or more MCP servers and access their tools.
+
+### Installation
+
+If you haven't already, install the Mastra MCP package:
+
+```bash npm2yarn copy
+npm install @mastra/mcp@latest
+```
+
+### Configuring `MCPClient`
+
+You configure `MCPClient` with a map of servers you want to connect to. It supports connections via subprocess (Stdio) or HTTP (Streamable HTTP with SSE fallback).
+
+```typescript
+import { MCPClient } from "@mastra/mcp";
+
+const mcp = new MCPClient({
+  servers: {
+    // Stdio example
+    sequential: {
+      command: "npx",
+      args: ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+    },
+    // HTTP example
+    weather: {
+      url: new URL("http://localhost:8080/mcp"),
+      requestInit: {
+        headers: {
+          Authorization: "Bearer your-token",
+        },
+      },
+    },
+  },
+});
+```
+
+For detailed configuration options, see the [`MCPClient` reference documentation](/reference/tools/mcp-client).
+
+### Static vs Dynamic Tool Configurations
+
+`MCPClient` offers two approaches to retrieving tools from connected servers, suitable for different application architectures:
+
+| Feature          | Static Configuration (`await mcp.getTools()`) | Dynamic Configuration (`await mcp.getToolsets()`) |
+| :--------------- | :-------------------------------------------- | :---------------------------------------------------- |
+| **Use Case**     | Single-user, static config (e.g., CLI tool) | Multi-user, dynamic config (e.g., SaaS app)         |
+| **Configuration**| Fixed at agent initialization                 | Per-request, dynamic                                |
+| **Credentials**  | Shared across all uses                        | Can vary per user/request                             |
+| **Agent Setup**  | Tools added in `Agent` constructor            | Tools passed in `generate()` or `stream()` options  |
+
+*   **Static Configuration (`getTools()`):** Fetches all tools from all configured servers. Best when the tool configuration (like API keys) is static and shared across all users or requests. You typically call this once and pass the result to the `tools` property when defining your `Agent`.
+    [Reference: `getTools()`](/reference/tools/mcp-client#gettools)
+
+    ```typescript
+    import { Agent } from "@mastra/core/agent";
+    // ... mcp client setup
+
+    const agent = new Agent({
+      // ... other agent config
+      tools: await mcp.getTools(),
+    });
+    ```
+
+*   **Dynamic Configuration (`getToolsets()`):** Designed for scenarios where configuration might change per request or per user (e.g., different API keys for different tenants in a multi-user application). You pass the result of `getToolsets()` to the `toolsets` option in the agent's `generate()` or `stream()` method.
+    [Reference: `getToolsets()`](/reference/tools/mcp-client#gettoolsets)
+
+    ```typescript
+    import { Agent } from "@mastra/core/agent";
+    // ... agent setup without tools initially
+
+    async function handleRequest(userPrompt: string, userApiKey: string) {
+      const userMcp = new MCPClient({ /* config with userApiKey */ });
+      const toolsets = await userMcp.getToolsets();
+
+      const response = await agent.stream(userPrompt, {
+        toolsets, // Pass dynamic toolsets
+      });
+      // ... handle response
+      await userMcp.disconnect();
+    }
+    ```
+
+## Connecting to an MCP registry
+
+MCP servers can be discovered through registries. Here’s how to connect to some popular ones using `MCPClient`:
+
+<Tabs items={["mcp.run", "Composio.dev", "Smithery.ai"]}>
+  <Tabs.Tab>
+    [mcp.run](https://www.mcp.run/) provides pre-authenticated, managed MCP servers. Tools are grouped into Profiles, each with a unique, signed URL.
+
+    ```typescript
+    import { MCPClient } from "@mastra/mcp";
+
+    const mcp = new MCPClient({
+      servers: {
+        marketing: { // Example profile name
+          url: new URL(process.env.MCP_RUN_SSE_URL!), // Get URL from mcp.run profile
+        },
+      },
+    });
+    ```
+
+    > **Important:** Treat the mcp.run SSE URL like a password. Store it securely, for example, in an environment variable.
+    > ```bash filename=".env"
+    > MCP_RUN_SSE_URL=https://www.mcp.run/api/mcp/sse?nonce=...
+    > ```
+
+  </Tabs.Tab>
+  <Tabs.Tab>
+    [Composio.dev](https://composio.dev) offers a registry of [SSE-based MCP servers](https://mcp.composio.dev). You can use the SSE URL generated for tools like Cursor directly.
+
+    ```typescript
+    import { MCPClient } from "@mastra/mcp";
+
+    const mcp = new MCPClient({
+      servers: {
+        googleSheets: {
+          url: new URL("https://mcp.composio.dev/googlesheets/[private-url-path]"),
+        },
+        gmail: {
+          url: new URL("https://mcp.composio.dev/gmail/[private-url-path]"),
+        },
+      },
+    });
+    ```
+
+    Authentication with services like Google Sheets often happens interactively through the agent conversation.
+
+    *Note: Composio URLs are typically tied to a single user account, making them best suited for personal automation rather than multi-tenant applications.*
+
+  </Tabs.Tab>
+  <Tabs.Tab>
+    [Smithery.ai](https://smithery.ai) provides a registry accessible via their CLI.
+
+    ```typescript
+    // Unix/Mac
+    import { MCPClient } from "@mastra/mcp";
+
+    const mcp = new MCPClient({
+      servers: {
+        sequentialThinking: {
+          command: "npx",
+          args: [
+            "-y",
+            "@smithery/cli@latest",
+            "run",
+            "@smithery-ai/server-sequential-thinking",
+            "--config",
+            "{}",
+          ],
+        },
+      },
+    });
+    ```
+
+    ```typescript
+    // Windows
+    import { MCPClient } from "@mastra/mcp";
+
+    const mcp = new MCPClient({
+      servers: {
+        sequentialThinking: {
+          command: "cmd",
+          args: [
+            "/c",
+            "npx",
+            "-y",
+            "@smithery/cli@latest",
+            "run",
+            "@smithery-ai/server-sequential-thinking",
+            "--config",
+            "{}",
+          ],
+        },
+      },
+    });
+    ```
+
+  </Tabs.Tab>
+</Tabs>
+
+## Share your tools with an MCP server
+
+If you have created your own Mastra tools, you can expose them to any MCP-compatible client using Mastra's `MCPServer` class.
+
+This allows others to use your tools without needing direct access to your codebase.
+
+### Using `MCPServer`
+
+You initialize `MCPServer` with a name, version, and the Mastra tools you want to share.
+
+```typescript
+import { MCPServer } from "@mastra/mcp";
+import { weatherTool } from "./tools"; // Your Mastra tool
+
+const server = new MCPServer({
+  name: "My Weather Server",
+  version: "1.0.0",
+  tools: { weatherTool }, // Provide your tool(s) here
+});
+
+// Start the server (e.g., using stdio for a CLI tool)
+// await server.startStdio();
+
+// Or integrate with an HTTP server using startSSE()
+// See MCPServer reference for details
+```
+
+For detailed usage and examples, see the [`MCPServer` reference documentation](/reference/tools/mcp-server).

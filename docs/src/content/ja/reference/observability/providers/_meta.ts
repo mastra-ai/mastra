@@ -10,5 +10,4 @@ const meta = {
   traceloop: "Traceloop",
   laminar: "Laminar",
 };
-
 export default meta;

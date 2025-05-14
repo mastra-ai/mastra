@@ -15,10 +15,10 @@ cd docs
 Some features of the docs won't work unless you have private keys for these projects.
 These include:
 
-* posthog
-* form subscription
-* analytics
-* chatbot
+- posthog
+- form subscription
+- analytics
+- chatbot
 
 Copy the Env file:
 
@@ -35,7 +35,7 @@ npm i
 ```
 
 > The docs have a separate `package.json` file and is not part of the workspace so please do not use
-`pnpm` or `yarn` to launch the docs.
+> `pnpm` or `yarn` to launch the docs.
 
 Run the appropriate CLI command in your terminal:
 
@@ -60,9 +60,9 @@ The Mastra docs use [MDX](https://mdxjs.com/).
 
 Adding new conent requires:
 
-* YAML frontmatter
-* A navigation entry in a `meta.ts` file
-* Content for the docs
+- YAML frontmatter
+- A navigation entry in a `meta.ts` file
+- Content for the docs
 
 Frontmatter looks like this. title and description are mandatory.
 
@@ -71,7 +71,7 @@ Frontmatter looks like this. title and description are mandatory.
 title: "Introduction | Mastra Docs"
 description: "Mastra is a TypeScript agent framework. It helps you build AI applications and features quickly. It gives you the set of primitives you need: workflows, agents, RAG, integrations, syncs and evals."
 ---
-````
+```
 
 Navigation is defined in a relative `meta.ts` file. It modifies the title of the content in the sidebar
 

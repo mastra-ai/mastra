@@ -36,7 +36,7 @@ Mastraクラスはアプリケーションの主要なエントリーポイン�
       name: "vectors",
       type: "Record<string, MastraVector>",
       description:
-        "セマンティック検索やベクトルベースのツールに使用されるベクトルストアインスタンス（例：Pinecone、PgVector、Qdrant）",
+        "セマンティック検索とベクトルベースのツール（例：Pinecone、PgVector、Qdrant）に使用されるベクトルストアインスタンス",
       isOptional: true,
     },
     {
@@ -54,11 +54,11 @@ Mastraクラスはアプリケーションの主要なエントリーポイン�
       defaultValue: "{}",
     },
     {
-      name: "serverMiddleware",
-      type: "Array<{ handler: (c: any, next: () => Promise<void>) => Promise<Response | void>; path?: string; }>",
-      description: "APIルートに適用されるサーバーミドルウェア関数。各ミドルウェアはパスパターンを指定できます（デフォルトは'/api/*'）。",
+      name: "server",
+      type: "ServerConfig",
+      description: "ポート、ホスト、タイムアウト、APIルート、ミドルウェア、CORS設定、Swagger UI、APIリクエストログ、OpenAPIドキュメントのビルドオプションを含むサーバー構成。",
       isOptional: true,
-      defaultValue: "[]",
+      defaultValue: "{ port: 4111, host: localhost,  cors: { origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type'], exposeHeaders: ['Content-Length', 'X-Requested-With'], credentials: false } }",
     },
   ]}
 />
@@ -159,11 +159,11 @@ export const mastra = new Mastra({
       example: 'const memory = mastra.getMemory();',
     },
     {
-      name: "getServerMiddleware()",
-      type: "Array<{ handler: Function; path: string; }>",
+      name: "getServer()",
+      type: "ServerConfig | undefined",
       description:
-        "設定されているサーバーミドルウェア関数を返します。",
-      example: 'const middleware = mastra.getServerMiddleware();',
+        "ポート、タイムアウト、APIルート、ミドルウェア、CORS設定、ビルドオプションを含むサーバー構成を返します。",
+      example: 'const serverConfig = mastra.getServer();',
     },
     {
       name: "setStorage(storage)",
@@ -216,17 +216,3 @@ export const mastra = new Mastra({
     },
   ]}
 />
-
-## エラー処理
-
-Mastraクラスのメソッドは、キャッチ可能な型付きエラーをスローします：
-
-```typescript copy
-try {
-  const tool = mastra.getTool("nonexistentTool");
-} catch (error) {
-  if (error instanceof Error) {
-    console.log(error.message); // "Tool with name nonexistentTool not found"
-  }
-}
-```

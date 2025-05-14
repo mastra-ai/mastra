@@ -1,0 +1,104 @@
+---
+title: "例：MCPServerのデプロイ | エージェント | Mastra ドキュメント"
+description: stdioトランスポートを使用してMastra MCPServerをセットアップ、ビルド、デプロイし、NPMに公開する例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# 例：MCPServerのデプロイ
+
+この例では、stdioトランスポートを使用した基本的なMastra MCPServerのセットアップ、ビルド、およびNPMへの公開などのデプロイ準備の手順を説明します。
+
+## 依存関係のインストール
+
+必要なパッケージをインストールします：
+
+```bash
+pnpm add @mastra/mcp @mastra/core tsup
+```
+
+## MCP サーバーのセットアップ
+
+1.  stdio サーバー用のファイルを作成します。例えば、`/src/mastra/stdio.ts` などです。
+
+2.  以下のコードをファイルに追加します。実際の Mastra ツールをインポートし、サーバーに適切な名前を付けることを忘れないでください。
+
+    ```typescript filename="src/mastra/stdio.ts" copy
+    #!/usr/bin/env node
+    import { MCPServer } from "@mastra/mcp";
+    import { weatherTool } from "./tools";
+
+    const server = new MCPServer({
+      name: "my-mcp-server",
+      version: "1.0.0",
+      tools: { weatherTool },
+    });
+
+    server.startStdio().catch((error) => {
+      console.error("Error running MCP server:", error);
+      process.exit(1);
+    });
+    ```
+
+3.  `package.json` を更新して、ビルドされたサーバーファイルを指す `bin` エントリとサーバーをビルドするためのスクリプトを含めます。
+
+  ```json filename="package.json" copy
+  {
+    "bin": "dist/stdio.js",
+    "scripts": {
+      "build:mcp": "tsup src/mastra/stdio.ts --format esm --no-splitting --dts && chmod +x dist/stdio.js"
+    }
+  }
+  ```
+
+4.  ビルドコマンドを実行します：
+
+    ```bash
+    pnpm run build:mcp
+    ```
+
+    これによりサーバーコードがコンパイルされ、出力ファイルが実行可能になります。
+
+## NPMへのデプロイ
+
+MCPサーバーを他の人（または自分自身）が`npx`経由で、または依存関係として使用できるようにするには、NPMに公開することができます。
+
+1.  NPMアカウントを持っていて、ログインしていることを確認してください（`npm login`）。
+2.  `package.json`のパッケージ名がユニークで利用可能であることを確認してください。
+3.  ビルド後、プロジェクトのルートから公開コマンドを実行します：
+
+    ```bash
+    npm publish --access public
+    ```
+
+    パッケージの公開に関する詳細については、[NPMドキュメント](https://docs.npmjs.com/creating-and-publishing-scoped-public-packages)を参照してください。
+
+## デプロイされたMCPサーバーを使用する
+
+公開後、あなたのMCPサーバーは、パッケージを実行するコマンドを指定することで`MCPClient`から使用できます。また、Claude デスクトップ、Cursor、Windsurfなど他のMCPクライアントも使用できます。
+
+```typescript
+import { MCPClient } from "@mastra/mcp";
+
+const mcp = new MCPClient({
+  servers: {
+    // このMCPサーバーインスタンスに名前を付ける
+    yourServerName: {
+      command: "npx",
+      args: ["-y", "@your-org-name/your-package-name@latest"], // あなたのパッケージ名に置き換えてください
+    },
+  },
+});
+
+// この設定からツールやツールセットを取得して、エージェントで使用できます
+const tools = await mcp.getTools();
+const toolsets = await mcp.getToolsets();
+```
+
+注意: 組織スコープなしで公開した場合、`args`は単に`["-y", "your-package-name@latest"]`になるかもしれません。
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />

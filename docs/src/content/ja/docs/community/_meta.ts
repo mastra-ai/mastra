@@ -1,5 +1,4 @@
 import { Meta } from "nextra";
-
 const meta: Meta = {
   licensing: {
     title: "ライセンス",
@@ -8,5 +7,4 @@ const meta: Meta = {
     title: "ディスコード",
   },
 };
-
 export default meta;

@@ -7,12 +7,12 @@ import type { RefinedTrace } from '@/domains/traces/types';
 import { refineTraces } from '@/domains/traces/utils';
 import { TraceContext } from '@/domains/traces/context/trace-context';
 import { createMastraClient } from '@/lib/mastra-client';
+
 export const useTraces = (componentName: string, baseUrl: string, isWorkflow: boolean = false) => {
   const [traces, setTraces] = useState<RefinedTrace[]>([]);
 
   const { setTraces: setTraceContextTraces } = useContext(TraceContext);
 
-  // Memoize the client instance
   const client = useMemo(() => createMastraClient(baseUrl), [baseUrl]);
 
   const fetchFn = useCallback(async () => {
@@ -43,6 +43,7 @@ export const useTraces = (componentName: string, baseUrl: string, isWorkflow: bo
   );
 
   const onError = useCallback((error: { message: string }) => {
+    console.log(`error, onError`, error);
     toast.error(error.message);
   }, []);
 

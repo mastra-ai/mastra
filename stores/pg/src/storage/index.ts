@@ -23,7 +23,7 @@ import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
 export type PostgresConfig = {
   schemaName?: string;
   /**
-   * @deprecated Use `schemaName` instead. Support for `schema` will be removed in a future release.
+   * @deprecated Use `schemaName` instead. Support for `schema` will be removed on May 20th, 2025.
    */
   schema?: string;
 } & (
@@ -74,7 +74,7 @@ export class PostgresStore extends MastraStorage {
     // Deprecation notice for schema (old option)
     if ('schema' in config && config.schema) {
       console.warn(
-        '[DEPRECATION NOTICE] The "schema" option in PostgresStore is deprecated. Please use "schemaName" instead. Support for "schema" will be removed in a future release.',
+        '[DEPRECATION NOTICE] The "schema" option in PostgresStore is deprecated. Please use "schemaName" instead. Support for "schema" will be removed on May 20th, 2025.',
       );
     }
     this.schema = config.schemaName ?? config.schema;
@@ -165,6 +165,8 @@ export class PostgresStore extends MastraStorage {
     perPage,
     attributes,
     filters,
+    fromDate,
+    toDate,
   }: {
     name?: string;
     scope?: string;
@@ -172,6 +174,8 @@ export class PostgresStore extends MastraStorage {
     perPage: number;
     attributes?: Record<string, string>;
     filters?: Record<string, any>;
+    fromDate?: Date;
+    toDate?: Date;
   }): Promise<any[]> {
     let idx = 1;
     const limit = perPage;
@@ -198,6 +202,14 @@ export class PostgresStore extends MastraStorage {
       });
     }
 
+    if (fromDate) {
+      conditions.push(`createdAt >= \$${idx++}`);
+    }
+
+    if (toDate) {
+      conditions.push(`createdAt <= \$${idx++}`);
+    }
+
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     if (name) {
@@ -218,6 +230,14 @@ export class PostgresStore extends MastraStorage {
       for (const [, value] of Object.entries(filters)) {
         args.push(value);
       }
+    }
+
+    if (fromDate) {
+      args.push(fromDate.toISOString());
+    }
+
+    if (toDate) {
+      args.push(toDate.toISOString());
     }
 
     const result = await this.db.manyOrNone<{

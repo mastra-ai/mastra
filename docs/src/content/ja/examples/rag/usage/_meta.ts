@@ -6,5 +6,4 @@ const meta = {
   "cot-workflow-rag": "ワークフローによる構造化推論",
   "graph-rag": "グラフRAG",
 };
-
 export default meta;

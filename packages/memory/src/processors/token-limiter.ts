@@ -25,8 +25,8 @@ export class TokenLimiter extends MemoryProcessor {
   // Token overheads per OpenAI's documentation
   // See: https://cookbook.openai.com/examples/how_to_count_tokens_with_tiktoken#6-counting-tokens-for-chat-completions-api-calls
   // Every message follows <|start|>{role/name}\n{content}<|end|>
-  public TOKENS_PER_MESSAGE = 3; // tokens added for each message (start & end tokens)
-  public TOKENS_PER_TOOL = 2; // empirical adjustment for tool calls
+  public TOKENS_PER_MESSAGE = 3.8; // tokens added for each message (start & end tokens)
+  public TOKENS_PER_TOOL = 2.2; // empirical adjustment for tool calls
   public TOKENS_PER_CONVERSATION = 25; // fixed overhead for the conversation
 
   /**

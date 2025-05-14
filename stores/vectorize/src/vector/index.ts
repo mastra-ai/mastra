@@ -24,6 +24,10 @@ export class CloudflareVector extends MastraVector {
     });
   }
 
+  get indexSeparator(): string {
+    return '-';
+  }
+
   async upsert(...args: ParamsToArgs<UpsertVectorParams>): Promise<string[]> {
     const params = this.normalizeArgs<UpsertVectorParams>('upsert', args);
 
@@ -62,66 +66,34 @@ export class CloudflareVector extends MastraVector {
     return translator.translate(filter);
   }
 
-  private async verifyIndexExists(indexName: string, dimension: number): Promise<boolean> {
-    try {
-      const info = await this.client.vectorize.indexes.info(indexName, {
-        account_id: this.accountId,
-      });
-
-      if (!info) {
-        return false; // Index doesn't exist
-      }
-      if (info.dimensions !== dimension) {
-        throw new Error(
-          `Index "${indexName}" already exists with ${info.dimensions} dimensions, but ${dimension} dimensions were requested`,
-        );
-      }
-
-      // Index exists with matching dimensions
-      return true;
-    } catch (error: any) {
-      // Check if this is an expected "index doesn't exist" error
-      // This covers all variants of not found/deleted errors by checking:
-      // 1. HTTP status (404/410 both mean the index isn't there)
-      // 2. Error message content (contains common patterns)
-      const message = error?.errors?.[0]?.message || error?.message;
-      if (
-        error.status === 404 ||
-        error.status === 410 ||
-        message?.toLowerCase().includes('not found') ||
-        message?.toLowerCase().includes('deleted')
-      ) {
-        return false;
-      }
-
-      // For any other errors, propagate them up
-      throw error;
-    }
-  }
-
   async createIndex(...args: ParamsToArgs<CreateIndexParams>): Promise<void> {
     const params = this.normalizeArgs<CreateIndexParams>('createIndex', args);
-
     const { indexName, dimension, metric = 'cosine' } = params;
 
-    // Check if index exists with correct dimensions
-    const exists = await this.verifyIndexExists(indexName, dimension);
-    if (exists) {
-      this.logger.info(
-        `Index "${indexName}" already exists with ${dimension} dimensions and metric ${metric}, skipping creation.`,
-      );
-      return;
+    try {
+      await this.client.vectorize.indexes.create({
+        account_id: this.accountId,
+        config: {
+          dimensions: dimension,
+          metric: metric === 'dotproduct' ? 'dot-product' : metric,
+        },
+        name: indexName,
+      });
+    } catch (error: any) {
+      // Check for 'already exists' error
+      const message = error?.errors?.[0]?.message || error?.message;
+      if (
+        error.status === 409 ||
+        (typeof message === 'string' &&
+          (message.toLowerCase().includes('already exists') || message.toLowerCase().includes('duplicate')))
+      ) {
+        // Fetch index info and check dimensions
+        await this.validateExistingIndex(indexName, dimension, metric);
+        return;
+      }
+      // For any other errors, propagate
+      throw error;
     }
-
-    // Index doesn't exist, create it
-    await this.client.vectorize.indexes.create({
-      account_id: this.accountId,
-      config: {
-        dimensions: dimension,
-        metric: metric === 'dotproduct' ? 'dot-product' : metric,
-      },
-      name: indexName,
-    });
   }
 
   async query(...args: ParamsToArgs<QueryVectorParams>): Promise<QueryResult[]> {
@@ -206,7 +178,42 @@ export class CloudflareVector extends MastraVector {
     return res?.metadataIndexes ?? [];
   }
 
+  /**
+   * @deprecated Use {@link updateVector} instead. This method will be removed on May 20th, 2025.
+   *
+   * Updates a vector by its ID with the provided vector and/or metadata.
+   * @param indexName - The name of the index containing the vector.
+   * @param id - The ID of the vector to update.
+   * @param update - An object containing the vector and/or metadata to update.
+   * @param update.vector - An optional array of numbers representing the new vector.
+   * @param update.metadata - An optional record containing the new metadata.
+   * @returns A promise that resolves when the update is complete.
+   * @throws Will throw an error if no updates are provided or if the update operation fails.
+   */
   async updateIndexById(
+    indexName: string,
+    id: string,
+    update: { vector?: number[]; metadata?: Record<string, any> },
+  ): Promise<void> {
+    this.logger.warn(
+      `Deprecation Warning: updateIndexById() is deprecated. 
+      Please use updateVector() instead. 
+      updateIndexById() will be removed on May 20th, 2025.`,
+    );
+    await this.updateVector(indexName, id, update);
+  }
+
+  /**
+   * Updates a vector by its ID with the provided vector and/or metadata.
+   * @param indexName - The name of the index containing the vector.
+   * @param id - The ID of the vector to update.
+   * @param update - An object containing the vector and/or metadata to update.
+   * @param update.vector - An optional array of numbers representing the new vector.
+   * @param update.metadata - An optional record containing the new metadata.
+   * @returns A promise that resolves when the update is complete.
+   * @throws Will throw an error if no updates are provided or if the update operation fails.
+   */
+  async updateVector(
     indexName: string,
     id: string,
     update: {
@@ -214,29 +221,62 @@ export class CloudflareVector extends MastraVector {
       metadata?: Record<string, any>;
     },
   ): Promise<void> {
-    if (!update.vector && !update.metadata) {
-      throw new Error('No update data provided');
-    }
+    try {
+      if (!update.vector && !update.metadata) {
+        throw new Error('No update data provided');
+      }
 
-    const updatePayload: any = {
-      ids: [id],
-      account_id: this.accountId,
-    };
+      const updatePayload: any = {
+        ids: [id],
+        account_id: this.accountId,
+      };
 
-    if (update.vector) {
-      updatePayload.vectors = [update.vector];
-    }
-    if (update.metadata) {
-      updatePayload.metadata = [update.metadata];
-    }
+      if (update.vector) {
+        updatePayload.vectors = [update.vector];
+      }
+      if (update.metadata) {
+        updatePayload.metadata = [update.metadata];
+      }
 
-    await this.upsert({ indexName: indexName, vectors: updatePayload.vectors, metadata: updatePayload.metadata });
+      await this.upsert({ indexName: indexName, vectors: updatePayload.vectors, metadata: updatePayload.metadata });
+    } catch (error: any) {
+      throw new Error(`Failed to update vector by id: ${id} for index name: ${indexName}: ${error.message}`);
+    }
   }
 
+  /**
+   * @deprecated Use {@link deleteVector} instead. This method will be removed on May 20th, 2025.
+   *
+   * Deletes a vector by its ID.
+   * @param indexName - The name of the index containing the vector.
+   * @param id - The ID of the vector to delete.
+   * @returns A promise that resolves when the deletion is complete.
+   * @throws Will throw an error if the deletion operation fails.
+   */
   async deleteIndexById(indexName: string, id: string): Promise<void> {
-    await this.client.vectorize.indexes.deleteByIds(indexName, {
-      ids: [id],
-      account_id: this.accountId,
-    });
+    this.logger.warn(
+      `Deprecation Warning: deleteIndexById() is deprecated. 
+      Please use deleteVector() instead. 
+      deleteIndexById() will be removed on May 20th, 2025.`,
+    );
+    await this.deleteVector(indexName, id);
+  }
+
+  /**
+   * Deletes a vector by its ID.
+   * @param indexName - The name of the index containing the vector.
+   * @param id - The ID of the vector to delete.
+   * @returns A promise that resolves when the deletion is complete.
+   * @throws Will throw an error if the deletion operation fails.
+   */
+  async deleteVector(indexName: string, id: string): Promise<void> {
+    try {
+      await this.client.vectorize.indexes.deleteByIds(indexName, {
+        ids: [id],
+        account_id: this.accountId,
+      });
+    } catch (error: any) {
+      throw new Error(`Failed to delete vector by id: ${id} for index name: ${indexName}: ${error.message}`);
+    }
   }
 }

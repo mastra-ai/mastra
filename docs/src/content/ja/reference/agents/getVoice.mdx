@@ -1,0 +1,107 @@
+---
+title: "リファレンス: Agent.getVoice() | エージェント | Mastra ドキュメント"
+description: "Mastraエージェントの`.getVoice()`メソッドに関するドキュメント。音声機能のための音声プロバイダーを取得します。"
+---
+
+# Agent.getVoice()
+
+`getVoice()`メソッドは、エージェントに設定された音声プロバイダーを取得し、それが関数の場合は解決します。このメソッドは、テキスト読み上げや音声認識機能のためにエージェントの音声機能にアクセスするために使用されます。
+
+## 構文
+
+```typescript
+getVoice({ runtimeContext }: { runtimeContext?: RuntimeContext } = {}): CompositeVoice | Promise<CompositeVoice>
+```
+
+## パラメータ
+
+<br />
+<PropertiesTable
+  content={[
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      isOptional: true,
+      description: "依存性注入とコンテキスト情報のためのランタイムコンテキスト。提供されない場合は、新しいRuntimeContextインスタンスがデフォルトとなります。",
+    },
+  ]}
+/>
+
+## 戻り値
+
+`CompositeVoice`インスタンスまたは`CompositeVoice`インスタンスに解決されるPromiseを返します。エージェントに音声プロバイダーが設定されていない場合は、デフォルトの音声プロバイダーを返します。
+
+## 説明
+
+`getVoice()`メソッドは、エージェントの音声機能にアクセスするために使用されます。これは、直接提供されるか、関数から返される音声プロバイダーを解決します。
+
+音声プロバイダーは以下を可能にします：
+- テキストから音声への変換（発話）
+- 音声からテキストへの変換（聴取）
+- 利用可能なスピーカー/音声の取得
+
+## 例
+
+### 基本的な使用法
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
+import { openai } from '@ai-sdk/openai';
+
+// Create an agent with a voice provider
+const agent = new Agent({
+  name: "voice-assistant",
+  instructions: "You are a helpful voice assistant.",
+  model: openai("gpt-4o"),
+  voice: new ElevenLabsVoice({
+    apiKey: process.env.ELEVENLABS_API_KEY,
+  }),
+});
+
+// Get the voice provider
+const voice = await agent.getVoice();
+
+// Use the voice provider for text-to-speech
+const audioStream = await voice.speak("Hello, how can I help you today?");
+
+// Use the voice provider for speech-to-text
+const transcription = await voice.listen(audioStream);
+
+// Get available speakers
+const speakers = await voice.getSpeakers();
+console.log(speakers);
+```
+
+### RuntimeContextでの使用
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
+import { RuntimeContext } from "@mastra/core/runtime-context";
+import { openai } from '@ai-sdk/openai';
+
+// Create an agent with a dynamic voice provider
+const agent = new Agent({
+  name: "voice-assistant",
+  instructions: ({ runtimeContext }) =>  {
+    // Dynamic instructions based on runtime context
+    const instructions = runtimeContext.get("preferredVoiceInstructions");
+    return instructions || "You are a helpful voice assistant.";
+  },
+  model: openai("gpt-4o"),
+  voice: new ElevenLabsVoice({
+    apiKey: process.env.ELEVENLABS_API_KEY,
+  }),
+});
+
+// Create a runtime context with preferences
+const context = new RuntimeContext();
+context.set("preferredVoiceInstructions", "You are an evil voice assistant");
+
+// Get the voice provider using the runtime context
+const voice = await agent.getVoice({ runtimeContext: context });
+
+// Use the voice provider
+const audioStream = await voice.speak("Hello, how can I help you today?");
+```

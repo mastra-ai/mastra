@@ -1,5 +1,301 @@
 # @mastra/mcp
 
+## 0.5.0
+
+### Minor Changes
+
+- e229660: MCPClient: expose connected client resources.
+
+  Added a new `getResources()` method to the MCPClient class that allows clients to retrieve resources from connected MCP servers. Resources are data or content exposed by MCP servers that can be accessed by clients.
+
+  The implementation includes:
+
+  - Direct access to resources from all connected MCP servers, grouped by server name
+  - Robust error handling that allows partial results when some servers fail
+  - Comprehensive test coverage with real server implementation
+
+  This feature enables applications to access data and content exposed by MCP servers through the resources capability, such as files, databases, or other content sources.
+
+### Patch Changes
+
+- 8baa6c8: passes runtimeContext to the logger function inside MCPClient tool calls
+- 396be50: updated mcp server routes for MCP SSE for use with hono server
+- da082f8: Switch from serializing json schema string as a function to a library that creates a zod object in memory from the json schema. This reduces the errors we were seeing from zod schema code that could not be serialized.
+- bb1e2c8: Make sure mcp handlers can only be registered once
+- edf1e88: allows ability to pass McpServer into the mastra class and creates an endpoint /api/servers/:serverId/mcp to POST messages to an MCP server
+- Updated dependencies [396be50]
+- Updated dependencies [ab80e7e]
+- Updated dependencies [c3bd795]
+- Updated dependencies [da082f8]
+- Updated dependencies [a5810ce]
+- Updated dependencies [3e9c131]
+- Updated dependencies [3171b5b]
+- Updated dependencies [973e5ac]
+- Updated dependencies [daf942f]
+- Updated dependencies [0b8b868]
+- Updated dependencies [9e1eff5]
+- Updated dependencies [6fa1ad1]
+- Updated dependencies [c28d7a0]
+- Updated dependencies [edf1e88]
+  - @mastra/core@0.9.4
+
+## 0.5.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [3e9c131]
+  - @mastra/core@0.9.4-alpha.4
+
+## 0.5.0-alpha.5
+
+### Patch Changes
+
+- 8baa6c8: passes runtimeContext to the logger function inside MCPClient tool calls
+
+## 0.5.0-alpha.4
+
+### Patch Changes
+
+- 396be50: updated mcp server routes for MCP SSE for use with hono server
+- da082f8: Switch from serializing json schema string as a function to a library that creates a zod object in memory from the json schema. This reduces the errors we were seeing from zod schema code that could not be serialized.
+- Updated dependencies [396be50]
+- Updated dependencies [c3bd795]
+- Updated dependencies [da082f8]
+- Updated dependencies [a5810ce]
+  - @mastra/core@0.9.4-alpha.3
+
+## 0.5.0-alpha.3
+
+### Patch Changes
+
+- bb1e2c8: Make sure mcp handlers can only be registered once
+
+## 0.5.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [3171b5b]
+- Updated dependencies [973e5ac]
+- Updated dependencies [9e1eff5]
+  - @mastra/core@0.9.4-alpha.2
+
+## 0.5.0-alpha.1
+
+### Minor Changes
+
+- e229660: MCPClient: expose connected client resources.
+
+  Added a new `getResources()` method to the MCPClient class that allows clients to retrieve resources from connected MCP servers. Resources are data or content exposed by MCP servers that can be accessed by clients.
+
+  The implementation includes:
+
+  - Direct access to resources from all connected MCP servers, grouped by server name
+  - Robust error handling that allows partial results when some servers fail
+  - Comprehensive test coverage with real server implementation
+
+  This feature enables applications to access data and content exposed by MCP servers through the resources capability, such as files, databases, or other content sources.
+
+### Patch Changes
+
+- edf1e88: allows ability to pass McpServer into the mastra class and creates an endpoint /api/servers/:serverId/mcp to POST messages to an MCP server
+- Updated dependencies [ab80e7e]
+- Updated dependencies [6fa1ad1]
+- Updated dependencies [c28d7a0]
+- Updated dependencies [edf1e88]
+  - @mastra/core@0.9.4-alpha.1
+
+## 0.4.4-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [daf942f]
+- Updated dependencies [0b8b868]
+  - @mastra/core@0.9.4-alpha.0
+
+## 0.4.3
+
+### Patch Changes
+
+- Updated dependencies [e450778]
+- Updated dependencies [8902157]
+- Updated dependencies [ca0dc88]
+- Updated dependencies [526c570]
+- Updated dependencies [d7a6a33]
+- Updated dependencies [9cd1a46]
+- Updated dependencies [b5d2de0]
+- Updated dependencies [644f8ad]
+- Updated dependencies [70dbf51]
+  - @mastra/core@0.9.3
+
+## 0.4.3-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [e450778]
+- Updated dependencies [8902157]
+- Updated dependencies [ca0dc88]
+- Updated dependencies [9cd1a46]
+- Updated dependencies [70dbf51]
+  - @mastra/core@0.9.3-alpha.1
+
+## 0.4.3-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [526c570]
+- Updated dependencies [b5d2de0]
+- Updated dependencies [644f8ad]
+  - @mastra/core@0.9.3-alpha.0
+
+## 0.4.2
+
+### Patch Changes
+
+- 26738f4: Switched from a custom MCP tools schema deserializer to json-schema-to-zod - fixes an issue where MCP tool schemas didn't deserialize properly in Mastra playground. Also added support for testing tools with no input arguments in playground
+- 8bb9b4d: Deprecation warning was on the subclass, rather than the deprecated class. So the deprecation warning would show even if you used the new class.
+- Updated dependencies [6052aa6]
+- Updated dependencies [967b41c]
+- Updated dependencies [3d2fb5c]
+- Updated dependencies [26738f4]
+- Updated dependencies [4155f47]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [b804723]
+- Updated dependencies [8607972]
+- Updated dependencies [ccef9f9]
+- Updated dependencies [0097d50]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [17826a9]
+- Updated dependencies [7d8b7c7]
+- Updated dependencies [fba031f]
+- Updated dependencies [3a5f1e1]
+- Updated dependencies [51e6923]
+- Updated dependencies [8398d89]
+  - @mastra/core@0.9.2
+
+## 0.4.2-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [6052aa6]
+- Updated dependencies [7d8b7c7]
+- Updated dependencies [3a5f1e1]
+- Updated dependencies [8398d89]
+  - @mastra/core@0.9.2-alpha.6
+
+## 0.4.2-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [3d2fb5c]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [8607972]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [fba031f]
+  - @mastra/core@0.9.2-alpha.5
+
+## 0.4.2-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [ccef9f9]
+- Updated dependencies [51e6923]
+  - @mastra/core@0.9.2-alpha.4
+
+## 0.4.2-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [967b41c]
+- Updated dependencies [4155f47]
+- Updated dependencies [17826a9]
+  - @mastra/core@0.9.2-alpha.3
+
+## 0.4.2-alpha.2
+
+### Patch Changes
+
+- 26738f4: Switched from a custom MCP tools schema deserializer to json-schema-to-zod - fixes an issue where MCP tool schemas didn't deserialize properly in Mastra playground. Also added support for testing tools with no input arguments in playground
+- Updated dependencies [26738f4]
+  - @mastra/core@0.9.2-alpha.2
+
+## 0.4.2-alpha.1
+
+### Patch Changes
+
+- 8bb9b4d: Deprecation warning was on the subclass, rather than the deprecated class. So the deprecation warning would show even if you used the new class.
+- Updated dependencies [b804723]
+  - @mastra/core@0.9.2-alpha.1
+
+## 0.4.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [0097d50]
+  - @mastra/core@0.9.2-alpha.0
+
+## 0.4.1
+
+### Patch Changes
+
+- 2526527: We are deprecating the MastraMCPClient class in favour of using MCPClient (formerly MCPConfiguration). MCPClient can handle 1+ MCP servers, whereas MastraMCPClient can only handle a single MCP server. Rather than having two different interfaces to use when using a single MCP vs multiple, we opted to nudge people towards using the interface that is more flexible.
+- ba1f4f3: Added Streamable HTTP MCP support to MCPConfiguration and MastraMCPClient
+- a2ccb71: improved mcp config cache
+- Updated dependencies [405b63d]
+- Updated dependencies [81fb7f6]
+- Updated dependencies [20275d4]
+- Updated dependencies [7d1892c]
+- Updated dependencies [a90a082]
+- Updated dependencies [2d17c73]
+- Updated dependencies [61e92f5]
+- Updated dependencies [35955b0]
+- Updated dependencies [6262bd5]
+- Updated dependencies [c1409ef]
+- Updated dependencies [3e7b69d]
+- Updated dependencies [e4943b8]
+- Updated dependencies [11d4485]
+- Updated dependencies [479f490]
+- Updated dependencies [c23a81c]
+- Updated dependencies [2d4001d]
+- Updated dependencies [c71013a]
+- Updated dependencies [1d3b1cd]
+  - @mastra/core@0.9.1
+
+## 0.4.1-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [2d17c73]
+  - @mastra/core@0.9.1-alpha.8
+
+## 0.4.1-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [1d3b1cd]
+  - @mastra/core@0.9.1-alpha.7
+
+## 0.4.1-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [c23a81c]
+  - @mastra/core@0.9.1-alpha.6
+
+## 0.4.1-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [3e7b69d]
+  - @mastra/core@0.9.1-alpha.5
+
+## 0.4.1-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [e4943b8]
+- Updated dependencies [479f490]
+  - @mastra/core@0.9.1-alpha.4
+
 ## 0.4.1-alpha.4
 
 ### Patch Changes

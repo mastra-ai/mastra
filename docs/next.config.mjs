@@ -128,6 +128,18 @@ export default withGT(
       return {
         beforeFiles: [
           {
+            source: "/en/docs/api/copilotkit",
+            destination: "/api/copilotkit",
+          },
+          {
+            source: "/ja/docs/api/copilotkit",
+            destination: "/api/copilotkit",
+          },
+          {
+            source: "/docs/api/copilotkit",
+            destination: "/api/copilotkit",
+          },
+          {
             source: "/:locale/docs/_next/:path+",
             destination: "/_next/:path+",
           },
@@ -165,8 +177,18 @@ export default withGT(
         permanent: true,
       },
       {
+        source: "/docs/agents/adding-tools",
+        destination: "/docs/agents/using-tools-and-mcp",
+        permanent: true,
+      },
+      {
         source: "/docs/agents/02a-mcp-guide",
         destination: "/docs/agents/mcp-guide",
+        permanent: true,
+      },
+      {
+        source: "/docs/agents/mcp-guide",
+        destination: "/docs/agents/using-tools-and-mcp",
         permanent: true,
       },
       {
@@ -358,6 +380,11 @@ export default withGT(
       {
         source: "/docs/local-dev/integrations",
         destination: "/docs/integrations",
+        permanent: true,
+      },
+      {
+        source: "/docs/integrations",
+        destination: "/docs/tools-mcp/mcp-overview",
         permanent: true,
       },
       {

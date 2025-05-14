@@ -11,10 +11,10 @@ export interface TracesSidebarProps {
 export const TracesSidebar = ({ onResize }: TracesSidebarProps) => {
   return (
     <MastraResizablePanel
-      className="h-full"
-      defaultWidth={70}
+      className="h-full absolute right-0 inset-y-0 bg-surface2"
+      defaultWidth={80}
       minimumWidth={50}
-      maximumWidth={70}
+      maximumWidth={80}
       setCurrentWidth={onResize}
     >
       <div className="h-full grid grid-cols-2">

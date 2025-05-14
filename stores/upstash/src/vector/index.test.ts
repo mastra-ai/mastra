@@ -140,7 +140,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
           metadata: newMetaData,
         };
 
-        await vectorStore.updateIndexById(testIndexName, idToBeUpdated, update);
+        await vectorStore.updateVector(testIndexName, idToBeUpdated, update);
 
         await waitUntilVectorsIndexed(vectorStore, testIndexName, 3);
 
@@ -167,7 +167,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
           metadata: newMetaData,
         };
 
-        await expect(vectorStore.updateIndexById(testIndexName, 'id', update)).rejects.toThrow(
+        await expect(vectorStore.updateVector(testIndexName, 'id', update)).rejects.toThrow(
           'Both vector and metadata must be provided for an update',
         );
       });
@@ -183,7 +183,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
           vector: newVector,
         };
 
-        await vectorStore.updateIndexById(testIndexName, idToBeUpdated, update);
+        await vectorStore.updateVector(testIndexName, idToBeUpdated, update);
 
         await waitUntilVectorsIndexed(vectorStore, testIndexName, 3);
 
@@ -198,7 +198,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       }, 500000);
 
       it('should throw exception when no updates are given', async () => {
-        await expect(vectorStore.updateIndexById(testIndexName, 'id', {})).rejects.toThrow('No update data provided');
+        await expect(vectorStore.updateVector(testIndexName, 'id', {})).rejects.toThrow('No update data provided');
       });
     });
 
@@ -214,7 +214,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
         expect(ids).toHaveLength(3);
         const idToBeDeleted = ids[0];
 
-        await vectorStore.deleteIndexById(testIndexName, idToBeDeleted);
+        await vectorStore.deleteVector(testIndexName, idToBeDeleted);
 
         const results: QueryResult[] = await vectorStore.query({
           indexName: testIndexName,
@@ -256,6 +256,15 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
   });
 
   describe('Error Handling', () => {
+    const testIndexName = 'test_index_error';
+    beforeAll(async () => {
+      await vectorStore.createIndex({ indexName: testIndexName, dimension: 3 });
+    });
+
+    afterAll(async () => {
+      await vectorStore.deleteIndex(testIndexName);
+    });
+
     it('should handle invalid dimension vectors', async () => {
       await expect(
         vectorStore.upsert({ indexName: testIndexName, vectors: [[1.0, 0.0]] }), // Wrong dimensions

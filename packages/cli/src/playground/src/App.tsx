@@ -22,6 +22,7 @@ import { NetworkLayout } from './domains/networks/network-layout';
 import { VNextWorkflowLayout } from './domains/workflows/v-next-workflow-layout';
 import Network from './pages/networks/network';
 import { PostHogProvider } from './lib/analytics';
+import RuntimeContext from './pages/runtime-context';
 
 function App() {
   return (
@@ -100,6 +101,7 @@ function App() {
               <Route path="traces" element={<VNextWorkflowTracesPage />} />
             </Route>
             <Route path="/" element={<Navigate to="/agents" />} />
+            <Route path="/runtime-context" element={<RuntimeContext />} />
           </Route>
         </Routes>
       </BrowserRouter>

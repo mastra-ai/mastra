@@ -282,7 +282,7 @@ describe.skip('PineconeVector Integration Tests', () => {
           metadata: newMetaData,
         };
 
-        await vectorDB.updateIndexById(indexNameUpdate, idToBeUpdated, update);
+        await vectorDB.updateVector(indexNameUpdate, idToBeUpdated, update);
 
         await waitUntilVectorsIndexed(vectorDB, indexNameUpdate, 3);
 
@@ -311,7 +311,7 @@ describe.skip('PineconeVector Integration Tests', () => {
           metadata: newMetaData,
         };
 
-        await vectorDB.updateIndexById(indexNameUpdate, idToBeUpdated, update);
+        await vectorDB.updateVector(indexNameUpdate, idToBeUpdated, update);
 
         await waitUntilVectorsIndexed(vectorDB, indexNameUpdate, 3);
 
@@ -338,7 +338,7 @@ describe.skip('PineconeVector Integration Tests', () => {
           vector: newVector,
         };
 
-        await vectorDB.updateIndexById(indexNameUpdate, idToBeUpdated, update);
+        await vectorDB.updateVector(indexNameUpdate, idToBeUpdated, update);
 
         await waitUntilVectorsIndexed(vectorDB, indexNameUpdate, 3);
 
@@ -355,12 +355,12 @@ describe.skip('PineconeVector Integration Tests', () => {
       }, 500000);
 
       it('should throw exception when no updates are given', async () => {
-        await expect(vectorDB.updateIndexById(indexNameUpdate, 'id', {})).rejects.toThrow('No updates provided');
+        await expect(vectorDB.updateVector(indexNameUpdate, 'id', {})).rejects.toThrow('No updates provided');
       });
 
       it('should throw error for non-existent index', async () => {
         const nonExistentIndex = 'non-existent-index';
-        await expect(vectorDB.updateIndexById(nonExistentIndex, 'test-id', { vector: [1, 2, 3] })).rejects.toThrow();
+        await expect(vectorDB.updateVector(nonExistentIndex, 'test-id', { vector: [1, 2, 3] })).rejects.toThrow();
       });
 
       it('should throw error for invalid vector dimension', async () => {
@@ -371,7 +371,7 @@ describe.skip('PineconeVector Integration Tests', () => {
         });
 
         await expect(
-          vectorDB.updateIndexById(indexNameUpdate, id, { vector: [1, 2] }), // Wrong dimension
+          vectorDB.updateVector(indexNameUpdate, id, { vector: [1, 2] }), // Wrong dimension
         ).rejects.toThrow();
       }, 500000);
     });
@@ -402,7 +402,7 @@ describe.skip('PineconeVector Integration Tests', () => {
         expect(ids).toHaveLength(3);
         const idToBeDeleted = ids[0];
 
-        await vectorDB.deleteIndexById(indexNameDelete, idToBeDeleted);
+        await vectorDB.deleteVector(indexNameDelete, idToBeDeleted);
         await waitUntilVectorsIndexed(vectorDB, indexNameDelete, 2, true);
 
         // Query all vectors similar to the deleted one
@@ -490,7 +490,7 @@ describe.skip('PineconeVector Integration Tests', () => {
       await waitUntilVectorsIndexed(vectorDB, indexNameNamespace, 1);
 
       // Update in namespace1
-      await vectorDB.updateIndexById(indexNameNamespace, id, { metadata: { label: 'updated' } }, namespace1);
+      await vectorDB.updateVector(indexNameNamespace, id, { metadata: { label: 'updated' } }, namespace1);
 
       await waitUntilVectorsIndexed(vectorDB, indexNameNamespace, 1);
 
@@ -515,7 +515,7 @@ describe.skip('PineconeVector Integration Tests', () => {
       await waitUntilVectorsIndexed(vectorDB, indexNameNamespace, 1);
 
       // Delete from namespace1
-      await vectorDB.deleteIndexById(indexNameNamespace, id, namespace1);
+      await vectorDB.deleteVector(indexNameNamespace, id, namespace1);
 
       await waitUntilVectorsIndexed(vectorDB, indexNameNamespace, 0, true);
 
@@ -555,6 +555,14 @@ describe.skip('PineconeVector Integration Tests', () => {
   });
 
   describe('Error Handling', () => {
+    const testIndexName = 'test-index-error';
+    beforeAll(async () => {
+      await vectorDB.createIndex({ indexName: testIndexName, dimension: 3 });
+    });
+
+    afterAll(async () => {
+      await vectorDB.deleteIndex(testIndexName);
+    });
     it('should handle non-existent index query gracefully', async () => {
       const nonExistentIndex = 'non-existent-index';
       await expect(vectorDB.query({ indexName: nonExistentIndex, queryVector: [1, 0, 0] })).rejects.toThrow();
@@ -564,6 +572,60 @@ describe.skip('PineconeVector Integration Tests', () => {
       const wrongDimVector = [[1, 0]]; // 2D vector for 3D index
       await expect(vectorDB.upsert({ indexName: testIndexName, vectors: wrongDimVector })).rejects.toThrow();
     }, 500000);
+
+    it('should handle duplicate index creation gracefully', async () => {
+      const duplicateIndexName = `duplicate-test`;
+      const dimension = 768;
+      const infoSpy = vi.spyOn(vectorDB['logger'], 'info');
+      const warnSpy = vi.spyOn(vectorDB['logger'], 'warn');
+
+      try {
+        // Create index first time
+        await vectorDB.createIndex({
+          indexName: duplicateIndexName,
+          dimension,
+          metric: 'cosine',
+        });
+
+        // Try to create with same dimensions - should not throw
+        await expect(
+          vectorDB.createIndex({
+            indexName: duplicateIndexName,
+            dimension,
+            metric: 'cosine',
+          }),
+        ).resolves.not.toThrow();
+
+        expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('already exists with'));
+
+        // Try to create with same dimensions and different metric - should not throw
+        await expect(
+          vectorDB.createIndex({
+            indexName: duplicateIndexName,
+            dimension,
+            metric: 'euclidean',
+          }),
+        ).resolves.not.toThrow();
+
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Attempted to create index with metric'));
+
+        // Try to create with different dimensions - should throw
+        await expect(
+          vectorDB.createIndex({
+            indexName: duplicateIndexName,
+            dimension: dimension + 1,
+            metric: 'cosine',
+          }),
+        ).rejects.toThrow(
+          `Index "${duplicateIndexName}" already exists with ${dimension} dimensions, but ${dimension + 1} dimensions were requested`,
+        );
+      } finally {
+        infoSpy.mockRestore();
+        warnSpy.mockRestore();
+        // Cleanup
+        await vectorDB.deleteIndex(duplicateIndexName);
+      }
+    });
   });
 
   describe('Performance Tests', () => {

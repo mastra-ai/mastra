@@ -1,0 +1,84 @@
+---
+title: "リファレンス: エージェント | エージェント | Mastra ドキュメント"
+description: "Mastraのエージェントクラスに関するドキュメント。様々な機能を持つAIエージェントを作成するための基盤を提供します。"
+---
+
+# Agent
+
+`Agent` クラスは、MastraでのAIエージェント作成の基盤です。レスポンスの生成、ストリーミング対話、音声機能の処理のためのメソッドを提供します。
+
+## インポート
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+```
+
+## コンストラクタ
+
+指定された設定で新しいAgentインスタンスを作成します。
+
+```typescript
+constructor(config: AgentConfig<TAgentId, TTools, TMetrics>)
+```
+
+### パラメータ
+<br />
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      isOptional: false,
+      description: "エージェントの一意の識別子。",
+    },
+    {
+      name: "instructions",
+      type: "string | ({ runtimeContext: RuntimeContext }) => string | Promise<string>",
+      isOptional: false,
+      description: "エージェントの動作を導く指示。静的な文字列または文字列を返す関数のいずれかです。",
+    },
+    {
+      name: "model",
+      type: "MastraLanguageModel | ({ runtimeContext: RuntimeContext }) => MastraLanguageModel | Promise<MastraLanguageModel>",
+      isOptional: false,
+      description: "応答生成に使用する言語モデル。モデルインスタンスまたはモデルを返す関数のいずれかです。",
+    },
+    {
+      name: "tools",
+      type: "ToolsInput | ({ runtimeContext: RuntimeContext }) => ToolsInput | Promise<ToolsInput>",
+      isOptional: true,
+      description: "エージェントが使用できるツール。静的なオブジェクトまたはツールを返す関数のいずれかです。",
+    },
+    {
+      name: "defaultGenerateOptions",
+      type: "AgentGenerateOptions",
+      isOptional: true,
+      description: "generate()を呼び出す際に使用するデフォルトオプション。",
+    },
+    {
+      name: "defaultStreamOptions",
+      type: "AgentStreamOptions",
+      isOptional: true,
+      description: "stream()を呼び出す際に使用するデフォルトオプション。",
+    },
+    {
+      name: "evals",
+      type: "Record<string, Metric>",
+      isOptional: true,
+      description: "エージェントのパフォーマンスを評価するための評価指標。",
+    },
+    {
+      name: "memory",
+      type: "MastraMemory",
+      isOptional: true,
+      description: "エージェントが情報を保存および取得するためのメモリシステム。",
+    },
+    {
+      name: "voice",
+      type: "CompositeVoice",
+      isOptional: true,
+      description: "音声テキスト変換およびテキスト音声変換機能のための音声機能。",
+    },
+  ]}
+/>

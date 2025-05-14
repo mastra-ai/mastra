@@ -8,9 +8,12 @@ import type {
   StorageThreadType,
   BaseLogMessage,
   WorkflowRunResult as CoreWorkflowRunResult,
+  VNextWorkflowRuns,
+  WorkflowRuns,
 } from '@mastra/core';
 
 import type { AgentGenerateOptions, AgentStreamOptions } from '@mastra/core/agent';
+import type { ServerInfo } from '@mastra/core/mcp';
 import type { NewWorkflow, WatchEvent, WorkflowResult as VNextWorkflowResult } from '@mastra/core/workflows/vNext';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
@@ -41,20 +44,24 @@ export interface GetAgentResponse {
   name: string;
   instructions: string;
   tools: Record<string, GetToolResponse>;
+  workflows: Record<string, GetWorkflowResponse>;
   provider: string;
   modelId: string;
 }
 
 export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[];
-} & Partial<AgentGenerateOptions<T>>;
+} & Partial<Omit<AgentGenerateOptions<T>, 'experimental_generateMessageId'>>;
 
 export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[];
-} & Omit<AgentStreamOptions<T>, 'onFinish' | 'onStepFinish' | 'telemetry'>;
+} & Omit<AgentStreamOptions<T>, 'onFinish' | 'onStepFinish' | 'experimental_generateMessageId'>;
 
 export interface GetEvalsByAgentIdResponse extends GetAgentResponse {
   evals: any[];
+  instructions: string;
+  name: string;
+  id: string;
 }
 
 export interface GetToolResponse {
@@ -73,6 +80,18 @@ export interface GetWorkflowResponse {
   workflowId?: string;
 }
 
+export interface GetWorkflowRunsParams {
+  fromDate?: Date;
+  toDate?: Date;
+  limit?: number;
+  offset?: number;
+  resourceId?: string;
+}
+
+export type GetWorkflowRunsResponse = WorkflowRuns;
+
+export type GetVNextWorkflowRunsResponse = VNextWorkflowRuns;
+
 export type WorkflowRunResult = {
   activePaths: Record<string, { status: string; suspendPayload?: any; stepPath: string[] }>;
   results: CoreWorkflowRunResult<any, any, any>['results'];
@@ -82,8 +101,17 @@ export type WorkflowRunResult = {
 
 export interface GetVNextWorkflowResponse {
   name: string;
-  steps: NewWorkflow['steps'];
-  stepGraph: NewWorkflow['stepGraph'];
+  steps: {
+    [key: string]: {
+      id: string;
+      description: string;
+      inputSchema: string;
+      outputSchema: string;
+      resumeSchema: string;
+      suspendSchema: string;
+    };
+  };
+  stepGraph: NewWorkflow['serializedStepGraph'];
   inputSchema: string;
   outputSchema: string;
 }
@@ -149,6 +177,13 @@ export interface UpdateMemoryThreadParams {
   title: string;
   metadata: Record<string, any>;
   resourceId: string;
+}
+
+export interface GetMemoryThreadMessagesParams {
+  /**
+   * Limit the number of messages to retrieve (default: 40)
+   */
+  limit?: number;
 }
 
 export interface GetMemoryThreadMessagesResponse {
@@ -219,6 +254,8 @@ export interface GetTelemetryParams {
   page?: number;
   perPage?: number;
   attribute?: Record<string, string>;
+  fromDate?: Date;
+  toDate?: Date;
 }
 
 export interface GetNetworkResponse {
@@ -234,4 +271,10 @@ export interface GetNetworkResponse {
     modelId: string;
   };
   state?: Record<string, any>;
+}
+
+export interface McpServerListResponse {
+  servers: ServerInfo[];
+  next: string | null;
+  total_count: number;
 }

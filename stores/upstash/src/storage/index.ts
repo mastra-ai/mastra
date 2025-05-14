@@ -143,6 +143,8 @@ export class UpstashStore extends MastraStorage {
       perPage = 100,
       attributes,
       filters,
+      fromDate,
+      toDate,
     }: {
       name?: string;
       scope?: string;
@@ -150,6 +152,8 @@ export class UpstashStore extends MastraStorage {
       perPage: number;
       attributes?: Record<string, string>;
       filters?: Record<string, any>;
+      fromDate?: Date;
+      toDate?: Date;
     } = {
       page: 0,
       perPage: 100,
@@ -201,6 +205,20 @@ export class UpstashStore extends MastraStorage {
       if (filters) {
         filteredTraces = filteredTraces.filter(record =>
           Object.entries(filters).every(([key, value]) => record[key] === value),
+        );
+      }
+
+      // Apply fromDate filter if provided
+      if (fromDate) {
+        filteredTraces = filteredTraces.filter(
+          record => new Date(record.createdAt).getTime() >= new Date(fromDate).getTime(),
+        );
+      }
+
+      // Apply toDate filter if provided
+      if (toDate) {
+        filteredTraces = filteredTraces.filter(
+          record => new Date(record.createdAt).getTime() <= new Date(toDate).getTime(),
         );
       }
 

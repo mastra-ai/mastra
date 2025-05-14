@@ -81,6 +81,7 @@ export async function writeAgentSample(llmProvider: LLMProvider, destPath: strin
 ${providerImport}
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
+import { LibSQLStore } from '@mastra/libsql';
 ${addExampleTool ? `import { weatherTool } from '../tools';` : ''}
 
 export const weatherAgent = new Agent({
@@ -89,6 +90,9 @@ export const weatherAgent = new Agent({
   model: ${modelItem},
   ${addExampleTool ? 'tools: { weatherTool },' : ''}
   memory: new Memory({
+    storage: new LibSQLStore({
+      url: "file:../mastra.db", // path is relative to the .mastra/output directory
+    }),
     options: {
       lastMessages: 10,
       semanticRecall: false,

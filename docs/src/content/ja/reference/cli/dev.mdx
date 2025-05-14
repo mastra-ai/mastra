@@ -25,13 +25,6 @@ description: エージェント、ツール、ワークフローの開発サー�
         "登録する追加のツールディレクトリへのパスをカンマ区切りで指定します。例：'src/tools/dbTools,src/tools/scraperTools'。",
       isOptional: true,
     },
-    {
-      name: "--port",
-      type: "number",
-      description:
-        "開発サーバーのポート番号を指定します。デフォルトは4111です。",
-      isOptional: true,
-    },
   ]}
 />
 
@@ -40,15 +33,15 @@ description: エージェント、ツール、ワークフローの開発サー�
 `mastra dev`でサーバーを起動すると、デフォルトで以下のRESTルートが公開されます：
 
 ### システムルート
-- **GET `/api`**: API状態を取得します。
+- **GET `/api`**: APIステータスを取得します。
 
 ### エージェントルート
 
 エージェントは`src/mastra/agents`からエクスポートされることが想定されています。
 
-- **GET `/api/agents`**: Mastraフォルダに登録されているエージェントを一覧表示します。
+- **GET `/api/agents`**: Mastraフォルダ内で登録されているエージェントを一覧表示します。
 - **GET `/api/agents/:agentId`**: IDでエージェントを取得します。
-- **GET `/api/agents/:agentId/evals/ci`**: エージェントIDでCI評価を取得します。
+- **GET `/api/agents/:agentId/evals/ci`**: エージェントIDでCIの評価を取得します。
 - **GET `/api/agents/:agentId/evals/live`**: エージェントIDでライブ評価を取得します。
 - **POST `/api/agents/:agentId/generate`**: 指定されたエージェントにテキストベースのプロンプトを送信し、エージェントの応答を返します。
 - **POST `/api/agents/:agentId/stream`**: エージェントからの応答をストリームします。
@@ -104,8 +97,8 @@ description: エージェント、ツール、ワークフローの開発サー�
 - **POST `/api/vector/:vectorName/upsert`**: インデックスにベクトルをアップサートします。
 - **POST `/api/vector/:vectorName/create-index`**: 新しいベクトルインデックスを作成します。
 - **POST `/api/vector/:vectorName/query`**: インデックスからベクトルをクエリします。
-- **GET `/api/vector/:vectorName/indexes`**: ベクトルストアのすべてのインデックスをリストします。
-- **GET `/api/vector/:vectorName/indexes/:indexName`**: 特定のインデックスに関する詳細を取得します。
+- **GET `/api/vector/:vectorName/indexes`**: ベクトルストアのすべてのインデックスを一覧表示します。
+- **GET `/api/vector/:vectorName/indexes/:indexName`**: 特定のインデックスの詳細を取得します。
 - **DELETE `/api/vector/:vectorName/indexes/:indexName`**: 特定のインデックスを削除します。
 
 ### OpenAPI仕様
@@ -113,11 +106,13 @@ description: エージェント、ツール、ワークフローの開発サー�
 - **GET `/openapi.json`**: プロジェクトのルートに対して自動生成されたOpenAPI仕様を返します。
 - **GET `/swagger-ui`**: API文書化のためのSwagger UIにアクセスします。
 
-## 追加情報
+## 追加の注意事項
 
-ポートはデフォルトで4111に設定されています。
+ポートのデフォルトは4111です。ポートとホスト名の両方はmastraサーバー設定で構成できます。設定の詳細については[開発サーバーの起動](/docs/local-dev/mastra-dev#launch-development-server)を参照してください。
 
 使用するプロバイダー（例：`OPENAI_API_KEY`、`ANTHROPIC_API_KEY`など）の環境変数が`.env.development`または`.env`ファイルに設定されていることを確認してください。
+
+Mastraフォルダ内の`index.ts`ファイルが、開発サーバーが読み取るためのMastraインスタンスをエクスポートしていることを確認してください。
 
 ### リクエスト例
 

@@ -108,9 +108,9 @@ const handleInitialSubmit = async (formData: FormData) => {
 };
 ```
 
-## オーディオの再生
+## 音声の再生
 
-このスニペットは、新しいオーディオデータを監視してテキスト読み上げオーディオの再生を処理する方法を示しています。オーディオが受信されると、コードはオーディオブロブからブラウザで再生可能なURLを作成し、それをオーディオ要素に割り当て、自動的に再生を試みます:
+このスニペットは、新しい音声データを監視してテキスト読み上げ音声の再生を処理する方法を示しています。音声が受信されると、コードは音声ブロブからブラウザで再生可能なURLを作成し、それを音声要素に割り当て、自動的に再生を試みます：
 
 ```typescript filename="/app/components/StoryManager.tsx"
 useEffect(() => {
@@ -145,7 +145,7 @@ useEffect(() => {
 }, [audioData]);
 ```
 
-インタラクティブストーリージェネレーターの完全な実装は、私たちのGitHubリポジトリで見ることができます。
+インタラクティブストーリージェネレーターの完全な実装は、GitHubリポジトリで確認できます。
 
 <br />
 <br />
@@ -154,6 +154,6 @@ useEffect(() => {
 <br />
 <GithubLink
   link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/voice/interactive-story"
+    "https://github.com/mastra-ai/voice-examples/tree/main/text-to-speech/interactive-story"
   }
 />

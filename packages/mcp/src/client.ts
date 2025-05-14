@@ -1,6 +1,7 @@
 import { MastraBase } from '@mastra/core/base';
+import type { RuntimeContext } from '@mastra/core/di';
 import { createTool } from '@mastra/core/tools';
-import { jsonSchemaToModel } from '@mastra/core/utils';
+import { isZodType } from '@mastra/core/utils';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import type { SSEClientTransportOptions } from '@modelcontextprotocol/sdk/client/sse.js';
@@ -15,6 +16,8 @@ import { CallToolResultSchema, ListResourcesResultSchema } from '@modelcontextpr
 
 import { asyncExitHook, gracefulExit } from 'exit-hook';
 import { z } from 'zod';
+import { jsonSchemaObjectToZodRawShape } from 'zod-from-json-schema';
+import type { JSONSchema } from 'zod-from-json-schema';
 
 // Re-export MCP SDK LoggingLevel for convenience
 export type { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
@@ -25,6 +28,7 @@ export interface LogMessage {
   timestamp: Date;
   serverName: string;
   details?: Record<string, any>;
+  runtimeContext?: RuntimeContext | null;
 }
 
 export type LogHandler = (logMessage: LogMessage) => void;
@@ -89,15 +93,23 @@ function convertLogLevelToLoggerMethod(level: LoggingLevel): 'debug' | 'info' | 
   }
 }
 
+export type InternalMastraMCPClientOptions = {
+  name: string;
+  server: MastraMCPServerDefinition;
+  capabilities?: ClientCapabilities;
+  version?: string;
+  timeout?: number;
+};
+
 export class InternalMastraMCPClient extends MastraBase {
   name: string;
   private client: Client;
   private readonly timeout: number;
   private logHandler?: LogHandler;
   private enableServerLogs?: boolean;
-  private static hasWarned = false;
   private serverConfig: MastraMCPServerDefinition;
   private transport?: Transport;
+  private currentOperationContext: RuntimeContext | null = null;
 
   constructor({
     name,
@@ -105,21 +117,8 @@ export class InternalMastraMCPClient extends MastraBase {
     server,
     capabilities = {},
     timeout = DEFAULT_REQUEST_TIMEOUT_MSEC,
-  }: {
-    name: string;
-    server: MastraMCPServerDefinition;
-    capabilities?: ClientCapabilities;
-    version?: string;
-    timeout?: number;
-  }) {
+  }: InternalMastraMCPClientOptions) {
     super({ name: 'MastraMCPClient' });
-    if (!InternalMastraMCPClient.hasWarned) {
-      // eslint-disable-next-line no-console
-      console.warn(
-        '[DEPRECATION] MastraMCPClient is deprecated and will be removed in a future release. Please use MCPClient instead.',
-      );
-      InternalMastraMCPClient.hasWarned = true;
-    }
     this.name = name;
     this.timeout = timeout;
     this.logHandler = server.logger;
@@ -163,6 +162,7 @@ export class InternalMastraMCPClient extends MastraBase {
         timestamp: new Date(),
         serverName: this.name,
         details,
+        runtimeContext: this.currentOperationContext,
       });
     }
   }
@@ -326,44 +326,87 @@ export class InternalMastraMCPClient extends MastraBase {
     });
   }
 
+  private convertInputSchema(
+    inputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['inputSchema'] | JSONSchema,
+  ): z.ZodType {
+    if (isZodType(inputSchema)) {
+      return inputSchema;
+    }
+
+    try {
+      // Assuming inputSchema is a JSONSchema object type for tool inputs
+      const rawShape = jsonSchemaObjectToZodRawShape(inputSchema as JSONSchema);
+      return z.object(rawShape); // Wrap the raw shape to return a ZodType (object)
+    } catch (error: unknown) {
+      let errorDetails: string | undefined;
+      if (error instanceof Error) {
+        errorDetails = error.stack;
+      } else {
+        // Attempt to stringify, fallback to String()
+        try {
+          errorDetails = JSON.stringify(error);
+        } catch {
+          errorDetails = String(error);
+        }
+      }
+      this.log('error', 'Failed to convert JSON schema to Zod schema using zodFromJsonSchema', {
+        error: errorDetails,
+        originalJsonSchema: inputSchema,
+      });
+
+      throw new Error(errorDetails);
+    }
+  }
+
   async tools() {
     this.log('debug', `Requesting tools from MCP server`);
     const { tools } = await this.client.listTools({ timeout: this.timeout });
     const toolsRes: Record<string, any> = {};
     tools.forEach(tool => {
       this.log('debug', `Processing tool: ${tool.name}`);
-      const s = jsonSchemaToModel(tool.inputSchema);
-      const mastraTool = createTool({
-        id: `${this.name}_${tool.name}`,
-        description: tool.description || '',
-        inputSchema: s,
-        execute: async ({ context }) => {
-          try {
-            this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: context });
-            const res = await this.client.callTool(
-              {
-                name: tool.name,
-                arguments: context,
-              },
-              CallToolResultSchema,
-              {
-                timeout: this.timeout,
-              },
-            );
-            this.log('debug', `Tool executed successfully: ${tool.name}`);
-            return res;
-          } catch (e) {
-            this.log('error', `Error calling tool: ${tool.name}`, {
-              error: e instanceof Error ? e.stack : JSON.stringify(e, null, 2),
-              toolArgs: context,
-            });
-            throw e;
-          }
-        },
-      });
+      try {
+        const mastraTool = createTool({
+          id: `${this.name}_${tool.name}`,
+          description: tool.description || '',
+          inputSchema: this.convertInputSchema(tool.inputSchema),
+          execute: async ({ context, runtimeContext }: { context: any; runtimeContext?: RuntimeContext | null }) => {
+            const previousContext = this.currentOperationContext;
+            this.currentOperationContext = runtimeContext || null; // Set current context
+            try {
+              this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: context });
+              const res = await this.client.callTool(
+                {
+                  name: tool.name,
+                  arguments: context,
+                },
+                CallToolResultSchema,
+                {
+                  timeout: this.timeout,
+                },
+              );
+              this.log('debug', `Tool executed successfully: ${tool.name}`);
+              return res;
+            } catch (e) {
+              this.log('error', `Error calling tool: ${tool.name}`, {
+                error: e instanceof Error ? e.stack : JSON.stringify(e, null, 2),
+                toolArgs: context,
+              });
+              throw e;
+            } finally {
+              this.currentOperationContext = previousContext; // Restore previous context
+            }
+          },
+        });
 
-      if (tool.name) {
-        toolsRes[tool.name] = mastraTool;
+        if (tool.name) {
+          toolsRes[tool.name] = mastraTool;
+        }
+      } catch (toolCreationError: unknown) {
+        // Catch errors during tool creation itself (e.g., if createTool has issues)
+        this.log('error', `Failed to create Mastra tool wrapper for MCP tool: ${tool.name}`, {
+          error: toolCreationError instanceof Error ? toolCreationError.stack : String(toolCreationError),
+          mcpToolDefinition: tool,
+        });
       }
     });
 
@@ -374,4 +417,12 @@ export class InternalMastraMCPClient extends MastraBase {
 /**
  * @deprecated MastraMCPClient is deprecated and will be removed in a future release. Please use MCPClient instead.
  */
-export const MastraMCPClient = InternalMastraMCPClient;
+
+export class MastraMCPClient extends InternalMastraMCPClient {
+  constructor(args: InternalMastraMCPClientOptions) {
+    super(args);
+    this.logger.warn(
+      '[DEPRECATION] MastraMCPClient is deprecated and will be removed in a future release. Please use MCPClient instead.',
+    );
+  }
+}

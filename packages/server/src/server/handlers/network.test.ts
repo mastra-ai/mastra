@@ -29,6 +29,8 @@ describe('Network Handlers', () => {
   let mockNetwork: AgentNetwork;
   let mockAgents: Agent[];
 
+  const runtimeContext = new RuntimeContext();
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockAgents = [createMockAgent('agent1'), createMockAgent('agent2')];
@@ -43,7 +45,7 @@ describe('Network Handlers', () => {
 
   describe('getNetworksHandler', () => {
     it('should get all networks successfully', async () => {
-      const result = await getNetworksHandler({ mastra: mockMastra });
+      const result = await getNetworksHandler({ mastra: mockMastra, runtimeContext });
 
       expect(result).toEqual([
         {
@@ -62,18 +64,19 @@ describe('Network Handlers', () => {
 
   describe('getNetworkByIdHandler', () => {
     it('should throw error when networkId is not provided', async () => {
-      await expect(getNetworkByIdHandler({ mastra: mockMastra })).rejects.toThrow('Network not found');
+      await expect(getNetworkByIdHandler({ mastra: mockMastra, runtimeContext })).rejects.toThrow('Network not found');
     });
 
     it('should throw error when network is not found', async () => {
-      await expect(getNetworkByIdHandler({ mastra: mockMastra, networkId: 'non-existent' })).rejects.toThrow(
-        'Network not found',
-      );
+      await expect(
+        getNetworkByIdHandler({ mastra: mockMastra, runtimeContext, networkId: 'non-existent' }),
+      ).rejects.toThrow('Network not found');
     });
 
     it('should get network by ID successfully', async () => {
       const result = await getNetworkByIdHandler({
         mastra: mockMastra,
+        runtimeContext,
         networkId: 'test-network',
       });
 

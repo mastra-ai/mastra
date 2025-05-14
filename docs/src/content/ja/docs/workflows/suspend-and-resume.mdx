@@ -158,69 +158,62 @@ if (improveResponseStepResult?.status === "suspended") {
 }
 ```
 
-## イベントベースの一時停止と再開
+## サスペンドとレジュームのためのストレージ
 
-手動でステップを一時停止することに加えて、Mastra は `afterEvent` メソッドを通じてイベントベースの一時停止を提供します。これにより、ワークフローは特定のイベントが発生するまで自動的に一時停止し、待機することができます。
+ワークフローが `await suspend()` を使用して一時停止されると、Mastraは自動的にワークフロー全体の状態をストレージに永続化します。これは、長期間一時停止される可能性のあるワークフローにとって不可欠であり、アプリケーションの再起動やサーバーインスタンス間でも状態が保持されることを保証します。
 
-### afterEvent と resumeWithEvent の使用
+### デフォルトストレージ: LibSQL
 
-`afterEvent` メソッドは、特定のイベントが発生するのを待つ一時停止ポイントをワークフロー内に自動的に作成します。イベントが発生したときに、`resumeWithEvent` を使用してイベントデータと共にワークフローを続行できます。
-
-以下はその動作方法です：
-
-1. ワークフロー設定でイベントを定義する
-2. `afterEvent` を使用してそのイベントを待つ一時停止ポイントを作成する
-3. イベントが発生したときに、イベント名とデータを使用して `resumeWithEvent` を呼び出す
-
-### 例：イベントベースのワークフロー
+デフォルトでは、MastraはストレージエンジンとしてLibSQLを使用します：
 
 ```typescript
-// ステップを定義
-const getUserInput = new Step({
-  id: "getUserInput",
-  execute: async () => ({ userInput: "initial input" }),
-  outputSchema: z.object({ userInput: z.string() }),
-});
+import { Mastra } from "@mastra/core/mastra";
+import { LibSQLStore } from "@mastra/libsql";
 
-const processApproval = new Step({
-  id: "processApproval",
-  execute: async ({ context }) => {
-    // コンテキストからイベントデータにアクセス
-    const approvalData = context.inputData?.resumedEvent;
-    return {
-      approved: approvalData?.approved,
-      approvedBy: approvalData?.approverName,
-    };
-  },
-  outputSchema: z.object({
-    approved: z.boolean(),
-    approvedBy: z.string(),
+const mastra = new Mastra({
+  storage: new LibSQLStore({
+    url: "file:./storage.db", // 開発用のローカルファイルベースのデータベース
+    // 本番環境では、永続的なURLを使用します：
+    // url: process.env.DATABASE_URL,
+    // authToken: process.env.DATABASE_AUTH_TOKEN, // 認証接続用のオプション
   }),
 });
-
-// イベント定義でワークフローを作成
-const approvalWorkflow = new Workflow({
-  name: "approval-workflow",
-  triggerSchema: z.object({ requestId: z.string() }),
-  events: {
-    approvalReceived: {
-      schema: z.object({
-        approved: z.boolean(),
-        approverName: z.string(),
-      }),
-    },
-  },
-});
-
-// イベントベースの一時停止でワークフローを構築
-approvalWorkflow
-  .step(getUserInput)
-  .afterEvent("approvalReceived") // ワークフローはここで自動的に一時停止します
-  .step(processApproval) // このステップはイベントが受信された後に実行されます
-  .commit();
 ```
 
-### イベントベースのワークフローの実行
+LibSQLストレージは異なるモードで設定できます：
+
+- インメモリデータベース（テスト用）：`:memory:`
+- ファイルベースのデータベース（開発用）：`file:storage.db`
+- リモートデータベース（本番用）：`libsql://your-database.turso.io` のようなURL
+
+### 代替ストレージオプション
+
+#### Upstash（Redis互換）
+
+サーバーレスアプリケーションやRedisが好ましい環境向け：
+
+```bash copy
+npm install @mastra/upstash@latest
+```
+
+```typescript
+import { Mastra } from "@mastra/core/mastra";
+import { UpstashStore } from "@mastra/upstash";
+
+const mastra = new Mastra({
+  storage: new UpstashStore({
+    url: process.env.UPSTASH_URL,
+    token: process.env.UPSTASH_TOKEN,
+  }),
+});
+```
+
+### ストレージに関する考慮事項
+
+- すべてのストレージオプションは、サスペンドとレジューム機能を同じように対応しています
+- ワークフローの状態は一時停止時に自動的にシリアライズされて保存されます
+- サスペンド/レジュームをストレージで動作させるために追加の設定は必要ありません
+- インフラストラクチャ、スケーリングのニーズ、既存の技術スタックに基づいてストレージオプションを選択してください
 
 ```typescript
 // ワークフローを取得
@@ -388,17 +381,3 @@ watch(async ({ activePaths }) => {
 await start({ triggerData: { requestId: "auto-123" } });
 ```
 
-## さらなる読み物
-
-サスペンドとレジュームが内部でどのように機能するかを深く理解するために：
-
-- [Mastra Workflowsにおけるスナップショットの理解](../../reference/workflows/snapshots.mdx) - サスペンドとレジューム機能を支えるスナップショットメカニズムについて学ぶ
-- [ステップ設定ガイド](./steps.mdx) - ワークフロー内のステップ設定について詳しく学ぶ
-- [制御フローガイド](./control-flow.mdx) - 高度なワークフロー制御パターン
-- [イベント駆動型ワークフロー](../../reference/workflows/events.mdx) - イベントベースのワークフローに関する詳細なリファレンス
-
-## 関連リソース
-
-- 完全な動作例については、[Suspend and Resume Example](../../examples/workflows/suspend-and-resume.mdx) を参照してください
-- suspend/resume API の詳細については、[Step Class Reference](../../reference/workflows/step-class.mdx) を確認してください
-- 一時停止されたワークフローの監視については、[Workflow Observability](../../reference/observability/otel-config.mdx) をレビューしてください

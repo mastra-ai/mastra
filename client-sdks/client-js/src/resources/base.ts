@@ -1,4 +1,4 @@
-import type { RequestFunction, RequestOptions, ClientOptions } from '../types';
+import type { RequestOptions, ClientOptions } from '../types';
 
 export class BaseResource {
   readonly options: ClientOptions;

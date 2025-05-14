@@ -2,6 +2,8 @@ import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type {
   ClientOptions,
   GetVNextWorkflowResponse,
+  GetVNextWorkflowRunsResponse,
+  GetWorkflowRunsParams,
   VNextWorkflowRunResult,
   VNextWorkflowWatchResult,
 } from '../types';
@@ -67,7 +69,7 @@ export class VNextWorkflow extends BaseResource {
               }
             }
           }
-        } catch (error) {
+        } catch {
           // Silently ignore parsing errors to maintain stream processing
           // This allows the stream to continue even if one record is malformed
         }
@@ -98,6 +100,36 @@ export class VNextWorkflow extends BaseResource {
   }
 
   /**
+   * Retrieves all runs for a vNext workflow
+   * @param params - Parameters for filtering runs
+   * @returns Promise containing vNext workflow runs array
+   */
+  runs(params?: GetWorkflowRunsParams): Promise<GetVNextWorkflowRunsResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.fromDate) {
+      searchParams.set('fromDate', params.fromDate.toISOString());
+    }
+    if (params?.toDate) {
+      searchParams.set('toDate', params.toDate.toISOString());
+    }
+    if (params?.limit) {
+      searchParams.set('limit', String(params.limit));
+    }
+    if (params?.offset) {
+      searchParams.set('offset', String(params.offset));
+    }
+    if (params?.resourceId) {
+      searchParams.set('resourceId', params.resourceId);
+    }
+
+    if (searchParams.size) {
+      return this.request(`/api/workflows/v-next/${this.workflowId}/runs?${searchParams}`);
+    } else {
+      return this.request(`/api/workflows/v-next/${this.workflowId}/runs`);
+    }
+  }
+
+  /**
    * Creates a new vNext workflow run
    * @param params - Optional object containing the optional runId
    * @returns Promise containing the runId of the created run
@@ -124,9 +156,10 @@ export class VNextWorkflow extends BaseResource {
     inputData: Record<string, any>;
     runtimeContext?: RuntimeContext;
   }): Promise<{ message: string }> {
+    const runtimeContext = params.runtimeContext ? Object.fromEntries(params.runtimeContext.entries()) : undefined;
     return this.request(`/api/workflows/v-next/${this.workflowId}/start?runId=${params.runId}`, {
       method: 'POST',
-      body: { inputData: params?.inputData, runtimeContext: params.runtimeContext },
+      body: { inputData: params?.inputData, runtimeContext },
     });
   }
 
@@ -139,13 +172,14 @@ export class VNextWorkflow extends BaseResource {
     step,
     runId,
     resumeData,
-    runtimeContext,
+    ...rest
   }: {
     step: string | string[];
     runId: string;
     resumeData?: Record<string, any>;
     runtimeContext?: RuntimeContext;
   }): Promise<{ message: string }> {
+    const runtimeContext = rest.runtimeContext ? Object.fromEntries(rest.runtimeContext.entries()) : undefined;
     return this.request(`/api/workflows/v-next/${this.workflowId}/resume?runId=${runId}`, {
       method: 'POST',
       stream: true,
@@ -173,9 +207,10 @@ export class VNextWorkflow extends BaseResource {
       searchParams.set('runId', params.runId);
     }
 
+    const runtimeContext = params.runtimeContext ? Object.fromEntries(params.runtimeContext.entries()) : undefined;
     return this.request(`/api/workflows/v-next/${this.workflowId}/start-async?${searchParams.toString()}`, {
       method: 'POST',
-      body: { inputData: params.inputData, runtimeContext: params.runtimeContext },
+      body: { inputData: params.inputData, runtimeContext },
     });
   }
 
@@ -190,12 +225,13 @@ export class VNextWorkflow extends BaseResource {
     resumeData?: Record<string, any>;
     runtimeContext?: RuntimeContext;
   }): Promise<VNextWorkflowRunResult> {
+    const runtimeContext = params.runtimeContext ? Object.fromEntries(params.runtimeContext.entries()) : undefined;
     return this.request(`/api/workflows/v-next/${this.workflowId}/resume-async?runId=${params.runId}`, {
       method: 'POST',
       body: {
         step: params.step,
         resumeData: params.resumeData,
-        runtimeContext: params.runtimeContext,
+        runtimeContext,
       },
     });
   }

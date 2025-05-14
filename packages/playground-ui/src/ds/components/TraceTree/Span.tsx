@@ -14,7 +14,6 @@ import { WorkflowIcon } from '../../icons/WorkflowIcon';
 import { Txt } from '../Txt';
 
 import { Time } from './Time';
-import { TraceDurationProvider, useTraceDuration } from './Trace.context';
 
 export interface SpanProps {
   children: React.ReactNode;
@@ -25,6 +24,8 @@ export interface SpanProps {
   isRoot?: boolean;
   onClick?: () => void;
   isActive?: boolean;
+  offsetMs: number;
+  totalDurationMs: number;
 }
 
 export const spanIconMap = {
@@ -49,61 +50,72 @@ export const spanVariantClasses = {
   other: 'text-icon6',
 };
 
-export const Span = ({ children, durationMs, variant, tokenCount, spans, isRoot, onClick, isActive }: SpanProps) => {
+export const Span = ({
+  children,
+  durationMs,
+  variant,
+  tokenCount,
+  spans,
+  isRoot,
+  onClick,
+  isActive,
+  offsetMs,
+  totalDurationMs,
+}: SpanProps) => {
   const [isExpanded, setIsExpanded] = useState(true);
-  const traceDuration = useTraceDuration();
+
   const VariantIcon = spanIconMap[variant];
   const variantClass = spanVariantClasses[variant];
 
-  const progressPercent = (durationMs / traceDuration) * 100;
+  const progressPercent = (durationMs / totalDurationMs) * 100;
+  const offsetPercent = (offsetMs / totalDurationMs) * 100;
 
   const TextEl = onClick ? 'button' : 'div';
 
   return (
-    <TraceDurationProvider durationMs={durationMs}>
-      <li>
-        <div className={clsx('flex justify-between items-center gap-2 rounded-md pl-2', isActive && 'bg-surface4')}>
-          <div className="flex h-8 items-center gap-1 min-w-0">
-            {spans ? (
-              <button
-                type="button"
-                aria-label={isExpanded ? 'Collapse span' : 'Expand span'}
-                aria-expanded={isExpanded}
-                className="text-icon3 flex h-4 w-4"
-                onClick={() => setIsExpanded(!isExpanded)}
-              >
-                <Icon>
-                  <ChevronIcon className={clsx('transition-transform -rotate-90', { 'rotate-0': isExpanded })} />
-                </Icon>
-              </button>
-            ) : (
-              <div aria-hidden className="h-full w-4">
-                {!isRoot && <div className="ml-[7px] h-full w-px rounded-full" />}
-              </div>
-            )}
+    <li>
+      <div className={clsx('flex justify-between items-center gap-2 rounded-md pl-2', isActive && 'bg-surface4')}>
+        <div className="flex h-8 items-center gap-1 min-w-0">
+          {spans ? (
+            <button
+              type="button"
+              aria-label={isExpanded ? 'Collapse span' : 'Expand span'}
+              aria-expanded={isExpanded}
+              className="text-icon3 flex h-4 w-4"
+              onClick={() => setIsExpanded(!isExpanded)}
+            >
+              <Icon>
+                <ChevronIcon className={clsx('transition-transform -rotate-90', { 'rotate-0': isExpanded })} />
+              </Icon>
+            </button>
+          ) : (
+            <div aria-hidden className="h-full w-4">
+              {!isRoot && <div className="ml-[7px] h-full w-px rounded-full" />}
+            </div>
+          )}
 
-            <TextEl className="flex items-center gap-2 min-w-0" onClick={onClick}>
-              <div className={clsx('bg-surface4 flex items-center justify-center rounded-md p-[3px]', variantClass)}>
-                <Icon>
-                  <VariantIcon />
-                </Icon>
-              </div>
-              <Txt variant="ui-md" className="text-icon6 truncate">
-                {children}
-              </Txt>
-            </TextEl>
-          </div>
-
-          <Time
-            durationMs={durationMs}
-            tokenCount={tokenCount}
-            variant={variant === 'agent' ? 'agent' : undefined}
-            progressPercent={progressPercent}
-          />
+          <TextEl className="flex items-center gap-2 min-w-0" onClick={onClick}>
+            <div className={clsx('bg-surface4 flex items-center justify-center rounded-md p-[3px]', variantClass)}>
+              <Icon>
+                <VariantIcon />
+              </Icon>
+            </div>
+            <Txt variant="ui-md" className="text-icon6 truncate">
+              {children}
+            </Txt>
+          </TextEl>
         </div>
 
-        {isExpanded && spans && <div className="ml-4">{spans}</div>}
-      </li>
-    </TraceDurationProvider>
+        <Time
+          durationMs={durationMs}
+          tokenCount={tokenCount}
+          variant={variant === 'agent' ? 'agent' : undefined}
+          progressPercent={progressPercent}
+          offsetPercent={offsetPercent}
+        />
+      </div>
+
+      {isExpanded && spans && <div className="ml-4">{spans}</div>}
+    </li>
   );
 };

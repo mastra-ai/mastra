@@ -1,7 +1,9 @@
 import { jsonSchemaToZod } from 'json-schema-to-zod';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import type { Logger } from './logger';
+import { Logger } from './logger';
+import { RuntimeContext } from './runtime-context';
+import type { InternalCoreTool } from './tools';
 import { createTool } from './tools';
 import { isVercelTool, makeCoreTool, maskStreamTags, resolveSerializedZodOutput } from './utils';
 
@@ -151,17 +153,10 @@ describe('resolveSerializedZodOutput', () => {
 });
 
 describe('makeCoreTool', () => {
-  const mockLogger = {
-    debug: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-  } as unknown as Logger;
-
   const mockOptions = {
     name: 'testTool',
-    logger: mockLogger,
     description: 'Test tool description',
+    runtimeContext: new RuntimeContext(),
   };
 
   it('should convert a Vercel tool correctly', async () => {
@@ -221,6 +216,7 @@ describe('makeCoreTool', () => {
   });
 
   it('should handle tool execution errors correctly', async () => {
+    const errorSpy = vi.spyOn(Logger.prototype, 'error');
     const error = new Error('Test error');
     const mastraTool = createTool({
       id: 'test',
@@ -238,8 +234,9 @@ describe('makeCoreTool', () => {
       await expect(coreTool.execute({ name: 'test' }, { toolCallId: 'test-id', messages: [] })).rejects.toThrow(
         'Test error',
       );
-      expect(mockLogger.error).toHaveBeenCalled();
+      expect(errorSpy).toHaveBeenCalled();
     }
+    errorSpy.mockRestore();
   });
 
   it('should handle undefined execute function', () => {
@@ -269,8 +266,8 @@ describe('makeCoreTool', () => {
     );
 
     // Test the schema behavior instead of structure
-    expect(() => coreTool.parameters.parse({})).not.toThrow();
-    expect(() => coreTool.parameters.parse({ extra: 'field' })).not.toThrow();
+    expect(() => (coreTool as InternalCoreTool).parameters.validate({})).not.toThrow();
+    expect(() => (coreTool as InternalCoreTool).parameters.validate({ extra: 'field' })).not.toThrow();
   });
 
   it('should have default parameters if no parameters are provided for Mastra tool', () => {
@@ -285,16 +282,13 @@ describe('makeCoreTool', () => {
     );
 
     // Test the schema behavior instead of structure
-    expect(() => coreTool.parameters.parse({})).not.toThrow();
-    expect(() => coreTool.parameters.parse({ extra: 'field' })).not.toThrow();
+    expect(() => (coreTool as InternalCoreTool).parameters.validate({})).not.toThrow();
+    expect(() => (coreTool as InternalCoreTool).parameters.validate({ extra: 'field' })).not.toThrow();
   });
 });
 
 it('should log correctly for Vercel tool execution', async () => {
-  const mockLogger = {
-    debug: vi.fn(),
-    error: vi.fn(),
-  } as unknown as Logger;
+  const debugSpy = vi.spyOn(Logger.prototype, 'debug');
 
   const vercelTool = {
     description: 'test',
@@ -304,11 +298,13 @@ it('should log correctly for Vercel tool execution', async () => {
 
   const coreTool = makeCoreTool(vercelTool, {
     name: 'testTool',
-    logger: mockLogger,
     agentName: 'testAgent',
+    runtimeContext: new RuntimeContext(),
   });
 
   await coreTool.execute?.({ name: 'test' }, { toolCallId: 'test-id', messages: [] });
 
-  expect(mockLogger.debug).toHaveBeenCalledWith('[Agent:testAgent] - Executing tool testTool', expect.any(Object));
+  expect(debugSpy).toHaveBeenCalledWith('[Agent:testAgent] - Executing tool testTool', expect.any(Object));
+
+  debugSpy.mockRestore();
 });

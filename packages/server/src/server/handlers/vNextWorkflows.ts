@@ -1,7 +1,7 @@
 import { ReadableStream } from 'node:stream/web';
-import type { RuntimeContext } from '@mastra/core/di';
-import type { WorkflowRuns } from '@mastra/core/storage';
-import type { NewWorkflow } from '@mastra/core/workflows/vNext';
+import { RuntimeContext } from '@mastra/core/di';
+import type { VNextWorkflowRuns } from '@mastra/core/storage';
+import type { NewWorkflow, SerializedStepFlowEntry } from '@mastra/core/workflows/vNext';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
 import { HTTPException } from '../http-exception';
@@ -21,14 +21,16 @@ export async function getVNextWorkflowsHandler({ mastra }: VNextWorkflowContext)
         name: workflow.name,
         steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
           acc[key] = {
-            ...step,
+            id: step.id,
+            description: step.description,
             inputSchema: step.inputSchema ? stringify(zodToJsonSchema(step.inputSchema)) : undefined,
             outputSchema: step.outputSchema ? stringify(zodToJsonSchema(step.outputSchema)) : undefined,
             resumeSchema: step.resumeSchema ? stringify(zodToJsonSchema(step.resumeSchema)) : undefined,
+            suspendSchema: step.suspendSchema ? stringify(zodToJsonSchema(step.suspendSchema)) : undefined,
           };
           return acc;
         }, {}),
-        stepGraph: workflow.stepGraph,
+        stepGraph: workflow.serializedStepGraph,
         inputSchema: workflow.inputSchema ? stringify(zodToJsonSchema(workflow.inputSchema)) : undefined,
         outputSchema: workflow.outputSchema ? stringify(zodToJsonSchema(workflow.outputSchema)) : undefined,
       };
@@ -40,7 +42,22 @@ export async function getVNextWorkflowsHandler({ mastra }: VNextWorkflowContext)
   }
 }
 
-export async function getVNextWorkflowByIdHandler({ mastra, workflowId }: VNextWorkflowContext) {
+type SerializedStep = {
+  id: string;
+  description: string;
+  inputSchema: string | undefined;
+  outputSchema: string | undefined;
+  resumeSchema: string | undefined;
+  suspendSchema: string | undefined;
+};
+
+export async function getVNextWorkflowByIdHandler({ mastra, workflowId }: VNextWorkflowContext): Promise<{
+  steps: SerializedStep[];
+  name: string | undefined;
+  stepGraph: SerializedStepFlowEntry[];
+  inputSchema: string | undefined;
+  outputSchema: string | undefined;
+}> {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -55,15 +72,17 @@ export async function getVNextWorkflowByIdHandler({ mastra, workflowId }: VNextW
     return {
       steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
         acc[key] = {
-          ...step,
+          id: step.id,
+          description: step.description,
           inputSchema: step.inputSchema ? stringify(zodToJsonSchema(step.inputSchema)) : undefined,
           outputSchema: step.outputSchema ? stringify(zodToJsonSchema(step.outputSchema)) : undefined,
           resumeSchema: step.resumeSchema ? stringify(zodToJsonSchema(step.resumeSchema)) : undefined,
+          suspendSchema: step.suspendSchema ? stringify(zodToJsonSchema(step.suspendSchema)) : undefined,
         };
         return acc;
       }, {}),
       name: workflow.name,
-      stepGraph: workflow.stepGraph,
+      stepGraph: workflow.serializedStepGraph,
       inputSchema: workflow.inputSchema ? stringify(zodToJsonSchema(workflow.inputSchema)) : undefined,
       outputSchema: workflow.outputSchema ? stringify(zodToJsonSchema(workflow.outputSchema)) : undefined,
     };
@@ -72,11 +91,13 @@ export async function getVNextWorkflowByIdHandler({ mastra, workflowId }: VNextW
   }
 }
 
-export async function getVNextWorkflowRunHandler({
+export async function getVNextWorkflowRunByIdHandler({
   mastra,
   workflowId,
   runId,
-}: Pick<VNextWorkflowContext, 'mastra' | 'workflowId' | 'runId'>): Promise<ReturnType<NewWorkflow['getWorkflowRun']>> {
+}: Pick<VNextWorkflowContext, 'mastra' | 'workflowId' | 'runId'>): Promise<
+  ReturnType<NewWorkflow['getWorkflowRunById']>
+> {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });
@@ -92,7 +113,7 @@ export async function getVNextWorkflowRunHandler({
       throw new HTTPException(404, { message: 'Workflow not found' });
     }
 
-    const run = await workflow.getWorkflowRun(runId);
+    const run = await workflow.getWorkflowRunById(runId);
 
     if (!run) {
       throw new HTTPException(404, { message: 'Workflow run not found' });
@@ -134,9 +155,11 @@ export async function startAsyncVNextWorkflowHandler({
   workflowId,
   runId,
   inputData,
+  runtimeContextFromRequest,
 }: Pick<VNextWorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
   inputData?: unknown;
   runtimeContext?: RuntimeContext;
+  runtimeContextFromRequest?: Record<string, unknown>;
 }) {
   try {
     if (!workflowId) {
@@ -149,10 +172,15 @@ export async function startAsyncVNextWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow not found' });
     }
 
+    const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
+      ...Array.from(runtimeContext?.entries() ?? []),
+      ...Array.from(Object.entries(runtimeContextFromRequest ?? {})),
+    ]);
+
     const _run = workflow.createRun({ runId });
     const result = await _run.start({
       inputData,
-      runtimeContext,
+      runtimeContext: finalRuntimeContext,
     });
     return result;
   } catch (error) {
@@ -166,9 +194,11 @@ export async function startVNextWorkflowRunHandler({
   workflowId,
   runId,
   inputData,
+  runtimeContextFromRequest,
 }: Pick<VNextWorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
   inputData?: unknown;
   runtimeContext?: RuntimeContext;
+  runtimeContextFromRequest?: Record<string, unknown>;
 }) {
   try {
     if (!workflowId) {
@@ -180,16 +210,21 @@ export async function startVNextWorkflowRunHandler({
     }
 
     const workflow = mastra.vnext_getWorkflow(workflowId);
-    const run = await workflow.getWorkflowRun(runId);
+    const run = await workflow.getWorkflowRunById(runId);
 
     if (!run) {
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
+    const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
+      ...Array.from(runtimeContext?.entries() ?? []),
+      ...Array.from(Object.entries(runtimeContextFromRequest ?? {})),
+    ]);
+
     const _run = workflow.createRun({ runId });
-    await _run.start({
+    void _run.start({
       inputData,
-      runtimeContext,
+      runtimeContext: finalRuntimeContext,
     });
 
     return { message: 'Workflow run started' };
@@ -213,7 +248,7 @@ export async function watchVNextWorkflowHandler({
     }
 
     const workflow = mastra.vnext_getWorkflow(workflowId);
-    const run = await workflow.getWorkflowRun(runId);
+    const run = await workflow.getWorkflowRunById(runId);
 
     if (!run) {
       throw new HTTPException(404, { message: 'Workflow run not found' });
@@ -232,7 +267,7 @@ export async function watchVNextWorkflowHandler({
             asyncRef = null;
           }
 
-          // a run is finished if we cannot retrieve it anymore
+          // a run is finished if the status is not running
           asyncRef = setImmediate(async () => {
             const runDone = payload.workflowState.status !== 'running';
             if (runDone) {
@@ -259,9 +294,11 @@ export async function resumeAsyncVNextWorkflowHandler({
   runId,
   body,
   runtimeContext,
+  runtimeContextFromRequest,
 }: VNextWorkflowContext & {
   body: { step: string | string[]; resumeData?: unknown };
   runtimeContext?: RuntimeContext;
+  runtimeContextFromRequest?: Record<string, unknown>;
 }) {
   try {
     if (!workflowId) {
@@ -277,18 +314,22 @@ export async function resumeAsyncVNextWorkflowHandler({
     }
 
     const workflow = mastra.vnext_getWorkflow(workflowId);
-    const run = await workflow.getWorkflowRun(runId);
+    const run = await workflow.getWorkflowRunById(runId);
 
     if (!run) {
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const _run = workflow.createRun({ runId });
+    const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
+      ...Array.from(runtimeContext?.entries() ?? []),
+      ...Array.from(Object.entries(runtimeContextFromRequest ?? {})),
+    ]);
 
+    const _run = workflow.createRun({ runId });
     const result = await _run.resume({
       step: body.step,
       resumeData: body.resumeData,
-      runtimeContext,
+      runtimeContext: finalRuntimeContext,
     });
 
     return result;
@@ -321,7 +362,7 @@ export async function resumeVNextWorkflowHandler({
     }
 
     const workflow = mastra.vnext_getWorkflow(workflowId);
-    const run = await workflow.getWorkflowRun(runId);
+    const run = await workflow.getWorkflowRunById(runId);
 
     if (!run) {
       throw new HTTPException(404, { message: 'Workflow run not found' });
@@ -329,7 +370,7 @@ export async function resumeVNextWorkflowHandler({
 
     const _run = workflow.createRun({ runId });
 
-    await _run.resume({
+    void _run.resume({
       step: body.step,
       resumeData: body.resumeData,
       runtimeContext,
@@ -341,14 +382,28 @@ export async function resumeVNextWorkflowHandler({
   }
 }
 
-export async function getVNextWorkflowRunsHandler({ mastra, workflowId }: VNextWorkflowContext): Promise<WorkflowRuns> {
+export async function getVNextWorkflowRunsHandler({
+  mastra,
+  workflowId,
+  fromDate,
+  toDate,
+  limit,
+  offset,
+  resourceId,
+}: VNextWorkflowContext & {
+  fromDate?: Date;
+  toDate?: Date;
+  limit?: number;
+  offset?: number;
+  resourceId?: string;
+}): Promise<VNextWorkflowRuns> {
   try {
     if (!workflowId) {
       throw new HTTPException(400, { message: 'Workflow ID is required' });
     }
 
     const workflow = mastra.vnext_getWorkflow(workflowId);
-    const workflowRuns = (await workflow.getWorkflowRuns()) || {
+    const workflowRuns = (await workflow.getWorkflowRuns({ fromDate, toDate, limit, offset, resourceId })) || {
       runs: [],
       total: 0,
     };

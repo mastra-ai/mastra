@@ -130,7 +130,13 @@ An optional object that can include configuration for output structure, memory m
       type: "ToolsetsInput",
       isOptional: true,
       description: "Additional toolsets to make available to the agent during this stream.",
-    }
+    },
+    {
+      name: "clientTools",
+      type: "ToolsInput",
+      isOptional: true,
+      description: "Tools that are executed on the 'client' side of the request. These tools do not have execute functions in the definition.",
+    },
   ]}
 />
 

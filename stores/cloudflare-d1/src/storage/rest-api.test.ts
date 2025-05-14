@@ -10,9 +10,10 @@ import {
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import dotenv from 'dotenv';
-import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll, vi, afterEach } from 'vitest';
 
 import {
+  checkWorkflowSnapshot,
   createSampleMessage,
   createSampleThread,
   createSampleThreadWithParams,
@@ -164,7 +165,7 @@ describe.skip('D1Store REST API', () => {
       // Insert test data
       await store.insert({
         tableName: testTableName as TABLE_NAMES,
-        record: { id: 'test1', data: 'test-data' } as unknown as StorageThreadType,
+        record: { id: 'test1', data: 'test-data' },
       });
 
       // Clear the table
@@ -479,12 +480,12 @@ describe.skip('D1Store REST API', () => {
     });
     it('should save and retrieve workflow snapshots', async () => {
       const thread = createSampleThread();
-      const workflow = createSampleWorkflowSnapshot(thread.id);
+      const { snapshot, runId } = createSampleWorkflowSnapshot(thread.id, 'running');
 
       await store.persistWorkflowSnapshot({
         workflowName: 'test-workflow',
-        runId: workflow.runId,
-        snapshot: workflow,
+        runId,
+        snapshot,
       });
       await new Promise(resolve => setTimeout(resolve, 5000));
 
@@ -492,11 +493,11 @@ describe.skip('D1Store REST API', () => {
         async () =>
           await store.loadWorkflowSnapshot({
             workflowName: 'test-workflow',
-            runId: workflow.runId,
+            runId,
           }),
-        snapshot => snapshot?.runId === workflow.runId,
+        snapshot => snapshot?.runId === runId,
       );
-      expect(retrieved).toEqual(workflow);
+      expect(retrieved).toEqual(snapshot);
     });
 
     it('should handle non-existent workflow snapshots', async () => {
@@ -509,23 +510,23 @@ describe.skip('D1Store REST API', () => {
 
     it('should update workflow snapshot status', async () => {
       const thread = createSampleThread();
-      const workflow = createSampleWorkflowSnapshot(thread.id);
+      const { snapshot, runId } = createSampleWorkflowSnapshot(thread.id, 'running');
 
       await store.persistWorkflowSnapshot({
         workflowName: 'test-workflow',
-        runId: workflow.runId,
-        snapshot: workflow,
+        runId,
+        snapshot,
       });
 
       const updatedSnapshot = {
-        ...workflow,
-        value: { [workflow.runId]: 'completed' },
+        ...snapshot,
+        value: { [runId]: 'completed' },
         timestamp: Date.now(),
       };
 
       await store.persistWorkflowSnapshot({
         workflowName: 'test-workflow',
-        runId: workflow.runId,
+        runId,
         snapshot: updatedSnapshot,
       });
 
@@ -533,13 +534,13 @@ describe.skip('D1Store REST API', () => {
         async () =>
           await store.loadWorkflowSnapshot({
             workflowName: 'test-workflow',
-            runId: workflow.runId,
+            runId,
           }),
-        snapshot => snapshot?.value[workflow.runId] === 'completed',
+        snapshot => snapshot?.value[runId] === 'completed',
       );
 
-      expect(retrieved?.value[workflow.runId]).toBe('completed');
-      expect(retrieved?.timestamp).toBeGreaterThan(workflow.timestamp);
+      expect(retrieved?.value[runId]).toBe('completed');
+      expect(retrieved?.timestamp).toBeGreaterThan(snapshot.timestamp);
     });
 
     it('should handle complex workflow state', async () => {
@@ -589,6 +590,7 @@ describe.skip('D1Store REST API', () => {
             status: 'waiting',
           },
         ],
+        suspendedPaths: {},
       };
 
       await store.persistWorkflowSnapshot({
@@ -603,6 +605,452 @@ describe.skip('D1Store REST API', () => {
       });
 
       expect(loadedSnapshot).toEqual(complexSnapshot);
+    });
+  });
+
+  describe('Workflow Snapshots', () => {
+    beforeEach(async () => {
+      // Clear workflow snapshots before each test
+      await store.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+    });
+
+    it('should persist and load workflow snapshots', async () => {
+      const thread = createSampleThread();
+      const { snapshot, runId } = createSampleWorkflowSnapshot(thread.id, 'running');
+
+      await store.persistWorkflowSnapshot({
+        workflowName: 'test-workflow',
+        runId,
+        snapshot,
+      });
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
+      const retrieved = await retryUntil(
+        async () =>
+          await store.loadWorkflowSnapshot({
+            workflowName: 'test-workflow',
+            runId,
+          }),
+        snapshot => snapshot?.runId === runId,
+      );
+
+      expect(retrieved).toEqual(snapshot);
+    });
+
+    it('should handle non-existent workflow snapshots', async () => {
+      const retrieved = await store.loadWorkflowSnapshot({
+        workflowName: 'non-existent',
+        runId: 'non-existent',
+      });
+
+      expect(retrieved).toBeNull();
+    });
+
+    it('should update existing workflow snapshot', async () => {
+      const thread = createSampleThread();
+      const { snapshot, runId } = createSampleWorkflowSnapshot(thread.id, 'running');
+
+      await store.persistWorkflowSnapshot({
+        workflowName: 'test-workflow',
+        runId,
+        snapshot,
+      });
+
+      const updatedSnapshot = {
+        ...snapshot,
+        value: { [runId]: 'completed' },
+        timestamp: Date.now(),
+      };
+
+      await store.persistWorkflowSnapshot({
+        workflowName: 'test-workflow',
+        runId,
+        snapshot: updatedSnapshot,
+      });
+
+      const retrieved = await retryUntil(
+        async () =>
+          await store.loadWorkflowSnapshot({
+            workflowName: 'test-workflow',
+            runId,
+          }),
+        snapshot => snapshot?.value[runId] === 'completed',
+      );
+
+      expect(retrieved?.value[runId]).toBe('completed');
+      expect(retrieved?.timestamp).toBeGreaterThan(snapshot.timestamp);
+    });
+
+    it('should handle workflow step updates', async () => {
+      const workflow: WorkflowRunState = {
+        runId: 'test-run-3',
+        value: { 'test-run-3': 'running' },
+        timestamp: Date.now(),
+        context: {
+          steps: {
+            'step-1': {
+              status: 'waiting' as const,
+              payload: { input: 'test' },
+            },
+            'step-2': {
+              status: 'waiting' as const,
+              payload: { input: 'test2' },
+            },
+          },
+          triggerData: { source: 'test' },
+          attempts: { 'step-1': 0, 'step-2': 0 },
+        },
+        activePaths: [
+          { stepPath: ['main'], stepId: 'step-1', status: 'waiting' },
+          { stepPath: ['main'], stepId: 'step-2', status: 'waiting' },
+        ],
+        suspendedPaths: {},
+      };
+
+      await store.persistWorkflowSnapshot({
+        workflowName: 'test-workflow',
+        runId: workflow.runId,
+        snapshot: workflow,
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
+      // Update step-1 status to completed
+      const updatedWorkflow = {
+        ...workflow,
+        context: {
+          ...workflow.context,
+          steps: {
+            ...workflow.context.steps,
+            'step-1': {
+              status: 'success' as const,
+              payload: { result: 'done' },
+            },
+          },
+        },
+        activePaths: [{ stepPath: ['main'], stepId: 'step-2', status: 'waiting' }],
+      };
+
+      await store.persistWorkflowSnapshot({
+        workflowName: 'test-workflow',
+        runId: workflow.runId,
+        snapshot: updatedWorkflow,
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
+      const retrieved = await store.loadWorkflowSnapshot({
+        workflowName: 'test-workflow',
+        runId: workflow.runId,
+      });
+
+      expect(retrieved?.context.steps['step-1'].status).toBe('success');
+      expect(retrieved?.context.steps['step-1'].payload).toEqual({ result: 'done' });
+      expect(retrieved?.context.steps['step-2'].status).toBe('waiting');
+      expect(retrieved?.activePaths).toEqual([{ stepPath: ['main'], stepId: 'step-2', status: 'waiting' }]);
+    });
+  });
+
+  describe('getWorkflowRuns', () => {
+    beforeEach(async () => {
+      await store.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+    });
+    it('returns empty array when no workflows exist', async () => {
+      const { runs, total } = await store.getWorkflowRuns();
+      expect(runs).toEqual([]);
+      expect(total).toBe(0);
+    });
+
+    it('returns all workflows by default', async () => {
+      const workflowName1 = 'default_test_1';
+      const workflowName2 = 'default_test_2';
+      const thread = createSampleThread();
+
+      const {
+        snapshot: workflow1,
+        runId: runId1,
+        stepId: stepId1,
+      } = createSampleWorkflowSnapshot(thread.id, 'success');
+      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot(thread.id, 'failed');
+
+      await store.persistWorkflowSnapshot({ workflowName: workflowName1, runId: runId1, snapshot: workflow1 });
+      await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
+      await store.persistWorkflowSnapshot({ workflowName: workflowName2, runId: runId2, snapshot: workflow2 });
+
+      const { runs, total } = await store.getWorkflowRuns();
+      expect(runs).toHaveLength(2);
+      expect(total).toBe(2);
+      expect(runs[0]!.workflowName).toBe(workflowName2); // Most recent first
+      expect(runs[1]!.workflowName).toBe(workflowName1);
+      const firstSnapshot = runs[0]!.snapshot;
+      const secondSnapshot = runs[1]!.snapshot;
+      checkWorkflowSnapshot(firstSnapshot, stepId2, 'failed');
+      checkWorkflowSnapshot(secondSnapshot, stepId1, 'success');
+    });
+
+    it('filters by workflow name', async () => {
+      const workflowName1 = 'filter_test_1';
+      const workflowName2 = 'filter_test_2';
+      const thread = createSampleThread();
+
+      const {
+        snapshot: workflow1,
+        runId: runId1,
+        stepId: stepId1,
+      } = createSampleWorkflowSnapshot(thread.id, 'success');
+      const { snapshot: workflow2, runId: runId2 } = createSampleWorkflowSnapshot(thread.id, 'failed');
+
+      await store.persistWorkflowSnapshot({ workflowName: workflowName1, runId: runId1, snapshot: workflow1 });
+      await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
+      await store.persistWorkflowSnapshot({ workflowName: workflowName2, runId: runId2, snapshot: workflow2 });
+
+      const { runs, total } = await store.getWorkflowRuns({ workflowName: workflowName1 });
+      expect(runs).toHaveLength(1);
+      expect(total).toBe(1);
+      expect(runs[0]!.workflowName).toBe(workflowName1);
+      const snapshot = runs[0]!.snapshot;
+      checkWorkflowSnapshot(snapshot, stepId1, 'success');
+    });
+
+    it('filters by date range', async () => {
+      const now = new Date();
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
+      const workflowName1 = 'date_test_1';
+      const workflowName2 = 'date_test_2';
+      const workflowName3 = 'date_test_3';
+      const thread = createSampleThread();
+
+      const { snapshot: workflow1, runId: runId1 } = createSampleWorkflowSnapshot(thread.id, 'success');
+      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot(thread.id, 'failed');
+      const {
+        snapshot: workflow3,
+        runId: runId3,
+        stepId: stepId3,
+      } = createSampleWorkflowSnapshot(thread.id, 'suspended');
+
+      await store.insert({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        record: {
+          workflow_name: workflowName1,
+          run_id: runId1,
+          snapshot: workflow1,
+          createdAt: twoDaysAgo,
+          updatedAt: twoDaysAgo,
+        },
+      });
+      await store.insert({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        record: {
+          workflow_name: workflowName2,
+          run_id: runId2,
+          snapshot: workflow2,
+          createdAt: yesterday,
+          updatedAt: yesterday,
+        },
+      });
+      await store.insert({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        record: {
+          workflow_name: workflowName3,
+          run_id: runId3,
+          snapshot: workflow3,
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+
+      const { runs } = await store.getWorkflowRuns({
+        fromDate: yesterday,
+        toDate: now,
+      });
+
+      expect(runs).toHaveLength(2);
+      expect(runs[0]!.workflowName).toBe(workflowName3);
+      expect(runs[1]!.workflowName).toBe(workflowName2);
+      const firstSnapshot = runs[0]!.snapshot;
+      const secondSnapshot = runs[1]!.snapshot;
+      checkWorkflowSnapshot(firstSnapshot, stepId3, 'suspended');
+      checkWorkflowSnapshot(secondSnapshot, stepId2, 'failed');
+    });
+
+    it('handles pagination', async () => {
+      const workflowName1 = 'page_test_1';
+      const workflowName2 = 'page_test_2';
+      const workflowName3 = 'page_test_3';
+      const thread = createSampleThread();
+
+      const {
+        snapshot: workflow1,
+        runId: runId1,
+        stepId: stepId1,
+      } = createSampleWorkflowSnapshot(thread.id, 'success');
+      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot(thread.id, 'failed');
+      const {
+        snapshot: workflow3,
+        runId: runId3,
+        stepId: stepId3,
+      } = createSampleWorkflowSnapshot(thread.id, 'suspended');
+
+      await store.persistWorkflowSnapshot({ workflowName: workflowName1, runId: runId1, snapshot: workflow1 });
+      await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
+      await store.persistWorkflowSnapshot({ workflowName: workflowName2, runId: runId2, snapshot: workflow2 });
+      await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
+      await store.persistWorkflowSnapshot({ workflowName: workflowName3, runId: runId3, snapshot: workflow3 });
+
+      // Get first page
+      const page1 = await store.getWorkflowRuns({ limit: 2, offset: 0 });
+      expect(page1.runs).toHaveLength(2);
+      expect(page1.total).toBe(3); // Total count of all records
+      expect(page1.runs[0]!.workflowName).toBe(workflowName3);
+      expect(page1.runs[1]!.workflowName).toBe(workflowName2);
+      const firstSnapshot = page1.runs[0]!.snapshot;
+      const secondSnapshot = page1.runs[1]!.snapshot;
+      checkWorkflowSnapshot(firstSnapshot, stepId3, 'suspended');
+      checkWorkflowSnapshot(secondSnapshot, stepId2, 'failed');
+
+      // Get second page
+      const page2 = await store.getWorkflowRuns({ limit: 2, offset: 2 });
+      expect(page2.runs).toHaveLength(1);
+      expect(page2.total).toBe(3);
+      expect(page2.runs[0]!.workflowName).toBe(workflowName1);
+      const snapshot = page2.runs[0]!.snapshot;
+      checkWorkflowSnapshot(snapshot, stepId1, 'success');
+    });
+  });
+
+  describe('getWorkflowRunById', () => {
+    const workflowName = 'workflow-id-test';
+    let runId: string;
+    let stepId: string;
+
+    beforeEach(async () => {
+      // Insert a workflow run for positive test
+      const thread = createSampleThread();
+      const sample = createSampleWorkflowSnapshot(thread.id, 'success');
+      runId = sample.runId;
+      stepId = sample.stepId;
+      await store.insert({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        record: {
+          workflow_name: workflowName,
+          run_id: runId,
+          resourceId: 'resource-abc',
+          snapshot: sample.snapshot,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+    });
+
+    it('should retrieve a workflow run by ID', async () => {
+      const found = await store.getWorkflowRunById({
+        runId,
+        workflowName,
+      });
+      expect(found).not.toBeNull();
+      expect(found?.runId).toBe(runId);
+      checkWorkflowSnapshot(found?.snapshot!, stepId, 'success');
+    });
+
+    it('should return null for non-existent workflow run ID', async () => {
+      const notFound = await store.getWorkflowRunById({
+        runId: 'non-existent-id',
+        workflowName,
+      });
+      expect(notFound).toBeNull();
+    });
+  });
+  describe('getWorkflowRuns with resourceId', () => {
+    const workflowName = 'workflow-id-test';
+    let resourceId: string;
+    let runIds: string[] = [];
+
+    beforeEach(async () => {
+      const thread = createSampleThread();
+      // Insert multiple workflow runs for the same resourceId
+      resourceId = 'resource-shared';
+      for (const status of ['success', 'failed']) {
+        const sample = createSampleWorkflowSnapshot(thread.id, status);
+        runIds.push(sample.runId);
+        await store.insert({
+          tableName: TABLE_WORKFLOW_SNAPSHOT,
+          record: {
+            workflow_name: workflowName,
+            run_id: sample.runId,
+            resourceId,
+            snapshot: sample.snapshot,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+      }
+      // Insert a run with a different resourceId
+      const other = createSampleWorkflowSnapshot(thread.id, 'waiting');
+      await store.insert({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        record: {
+          workflow_name: workflowName,
+          run_id: other.runId,
+          resourceId: 'resource-other',
+          snapshot: other.snapshot,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+    });
+
+    it('should retrieve all workflow runs by resourceId', async () => {
+      const { runs } = await store.getWorkflowRuns({
+        resourceId,
+        workflowName,
+      });
+      expect(Array.isArray(runs)).toBe(true);
+      expect(runs.length).toBeGreaterThanOrEqual(2);
+      for (const run of runs) {
+        expect(run.resourceId).toBe(resourceId);
+      }
+    });
+
+    it('should return an empty array if no workflow runs match resourceId', async () => {
+      const { runs } = await store.getWorkflowRuns({
+        resourceId: 'non-existent-resource',
+        workflowName,
+      });
+      expect(Array.isArray(runs)).toBe(true);
+      expect(runs.length).toBe(0);
+    });
+  });
+
+  describe('hasColumn', () => {
+    const tempTable = 'temp_test_table';
+
+    beforeEach(async () => {
+      // Always try to drop the table before each test, ignore errors if it doesn't exist
+      try {
+        await store['executeQuery']({ sql: `DROP TABLE IF EXISTS ${tempTable}` });
+      } catch {
+        /* ignore */
+      }
+    });
+
+    it('returns true if the column exists', async () => {
+      await store['executeQuery']({ sql: `CREATE TABLE ${tempTable} (id SERIAL PRIMARY KEY, resourceId TEXT)` });
+      expect(await store['hasColumn'](tempTable, 'resourceId')).toBe(true);
+    });
+
+    it('returns false if the column does not exist', async () => {
+      await store['executeQuery']({ sql: `CREATE TABLE ${tempTable} (id SERIAL PRIMARY KEY)` });
+      expect(await store['hasColumn'](tempTable, 'resourceId')).toBe(false);
+    });
+
+    afterEach(async () => {
+      // Always try to drop the table after each test, ignore errors if it doesn't exist
+      try {
+        await store['executeQuery']({ sql: `DROP TABLE IF EXISTS ${tempTable}` });
+      } catch {
+        /* ignore */
+      }
     });
   });
 
@@ -740,148 +1188,6 @@ describe.skip('D1Store REST API', () => {
         order => order.length > 0,
       );
       expect(order.length).toBe(3);
-    });
-  });
-
-  describe('Workflow Snapshots', () => {
-    beforeEach(async () => {
-      // Clear workflow snapshots before each test
-      await store.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
-    });
-
-    it('should persist and load workflow snapshots', async () => {
-      const thread = createSampleThread();
-      const workflow = createSampleWorkflowSnapshot(thread.id);
-
-      await store.persistWorkflowSnapshot({
-        workflowName: 'test-workflow',
-        runId: workflow.runId,
-        snapshot: workflow,
-      });
-      await new Promise(resolve => setTimeout(resolve, 5000));
-
-      const retrieved = await retryUntil(
-        async () =>
-          await store.loadWorkflowSnapshot({
-            workflowName: 'test-workflow',
-            runId: workflow.runId,
-          }),
-        snapshot => snapshot?.runId === workflow.runId,
-      );
-
-      expect(retrieved).toEqual(workflow);
-    });
-
-    it('should handle non-existent workflow snapshots', async () => {
-      const retrieved = await store.loadWorkflowSnapshot({
-        workflowName: 'non-existent',
-        runId: 'non-existent',
-      });
-
-      expect(retrieved).toBeNull();
-    });
-
-    it('should update workflow snapshot status', async () => {
-      const thread = createSampleThread();
-      const workflow = createSampleWorkflowSnapshot(thread.id);
-
-      await store.persistWorkflowSnapshot({
-        workflowName: 'test-workflow',
-        runId: workflow.runId,
-        snapshot: workflow,
-      });
-
-      const updatedWorkflow = {
-        ...workflow,
-        value: { [workflow.runId]: 'completed' },
-        timestamp: Date.now(),
-      };
-
-      await store.persistWorkflowSnapshot({
-        workflowName: 'test-workflow',
-        runId: workflow.runId,
-        snapshot: updatedWorkflow,
-      });
-
-      const retrieved = await retryUntil(
-        async () =>
-          await store.loadWorkflowSnapshot({
-            workflowName: 'test-workflow',
-            runId: workflow.runId,
-          }),
-        snapshot => snapshot?.value[workflow.runId] === 'completed',
-      );
-
-      expect(retrieved?.value[workflow.runId]).toBe('completed');
-      expect(retrieved?.timestamp).toBeGreaterThan(workflow.timestamp);
-    });
-
-    it('should handle workflow step updates', async () => {
-      const workflow: WorkflowRunState = {
-        runId: 'test-run-3',
-        value: { 'test-run-3': 'running' },
-        timestamp: Date.now(),
-        context: {
-          steps: {
-            'step-1': {
-              status: 'waiting' as const,
-              payload: { input: 'test' },
-            },
-            'step-2': {
-              status: 'waiting' as const,
-              payload: { input: 'test2' },
-            },
-          },
-          triggerData: { source: 'test' },
-          attempts: { 'step-1': 0, 'step-2': 0 },
-        },
-        activePaths: [
-          { stepPath: ['main'], stepId: 'step-1', status: 'waiting' },
-          { stepPath: ['main'], stepId: 'step-2', status: 'waiting' },
-        ],
-      };
-
-      await store.persistWorkflowSnapshot({
-        workflowName: 'test-workflow',
-        runId: workflow.runId,
-        snapshot: workflow,
-      });
-
-      await new Promise(resolve => setTimeout(resolve, 5000));
-
-      // Update step-1 status to completed
-      const updatedWorkflow = {
-        ...workflow,
-        context: {
-          ...workflow.context,
-          steps: {
-            ...workflow.context.steps,
-            'step-1': {
-              status: 'success' as const,
-              payload: { result: 'done' },
-            },
-          },
-        },
-        activePaths: [{ stepPath: ['main'], stepId: 'step-2', status: 'waiting' }],
-      };
-
-      await store.persistWorkflowSnapshot({
-        workflowName: 'test-workflow',
-        runId: workflow.runId,
-        snapshot: updatedWorkflow,
-      });
-
-      await new Promise(resolve => setTimeout(resolve, 5000));
-
-      const retrieved = await store.loadWorkflowSnapshot({
-        workflowName: 'test-workflow',
-        runId: workflow.runId,
-      });
-
-      expect(retrieved?.context.steps['step-1'].status).toBe('success');
-      expect(retrieved?.context.steps['step-1'].payload).toEqual({ result: 'done' });
-      expect(retrieved?.context.steps['step-2'].status).toBe('waiting');
-      expect(retrieved?.activePaths).toEqual([{ stepPath: ['main'], stepId: 'step-2', status: 'waiting' }]);
     });
   });
 

@@ -10,8 +10,9 @@ import { Tabs } from "nextra/components";
 
 例のセクションは、Mastraを使用した基本的なAIエンジニアリングを示す短いプロジェクト例のリストで、テキスト生成、構造化された出力、ストリーミングレスポンス、検索拡張生成（RAG）、音声などが含まれています。
 
-<CardItems titles={["Agent", "Workflow", "Memory", "RAG", "Evals", "Voice"]} items={
-  {Agent: [
+<CardItems titles={["エージェント", "ワークフロー", "メモリ", "RAG", "評価", "音声"]} items={
+  {
+    Agent: [
       {
         title: "システムプロンプトを使用したエージェント",
         href: "/examples/agents/system-prompt",
@@ -93,7 +94,7 @@ import { Tabs } from "nextra/components";
       { title: "チャンク配列の埋め込み", href: "/examples/rag/embedding/embed-chunk-array" },
       { title: "チャンクサイズの調整", href: "/examples/rag/chunking/adjust-chunk-size" },
       {
-        title: "チャンク区切りの調整",
+        title: "チャンク区切り文字の調整",
         href: "/examples/rag/chunking/adjust-chunk-delimiters",
       },
       {
@@ -120,11 +121,11 @@ import { Tabs } from "nextra/components";
       },
       { title: "メタデータフィルタリング", href: "/examples/rag/usage/filter-rag" },
       {
-        title: "結果の再ランキング",
+        title: "結果の再ランク付け",
         href: "/examples/rag/rerank/rerank",
       },
       {
-        title: "ツールを使用した結果の再ランキング",
+        title: "ツールを使用した結果の再ランク付け",
         href: "/examples/rag/rerank/rerank-rag",
       },
       { title: "思考連鎖プロンプティング", href: "/examples/rag/usage/cot-rag" },
@@ -216,7 +217,15 @@ import { Tabs } from "nextra/components";
     {
       title: "音声認識",
       href: "/examples/voice/speech-to-text",
-    }
+    },
+    {
+      title: "ターンテイキング",
+      href: "/examples/voice/turn-taking",
+    },
+    {
+      title: "音声から音声へ",
+      href: "/examples/voice/speech-to-speech",
+    },
   ],
 }}>
 
