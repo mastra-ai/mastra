@@ -41,7 +41,7 @@ export type PostgresConfig = {
 );
 
 function validateIdentifier(name: string, kind = 'identifier') {
-  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name) || name.length > 63) {
     throw new Error(`Invalid ${kind}: ${name}`);
   }
 }
