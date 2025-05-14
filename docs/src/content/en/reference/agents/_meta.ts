@@ -4,6 +4,7 @@ const meta = {
   createTool: "createTool()",
   generate: "generate()",
   stream: "stream()",
+  getWorkflows: "getWorkflows()",
   getVoice: "getVoice()",
   getInstructions: "getInstructions()",
   getTools: "getTools()",

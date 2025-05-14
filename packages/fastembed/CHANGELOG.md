@@ -1,5 +1,12 @@
 # @mastra/fastembed
 
+## 0.0.3
+
+### Patch Changes
+
+- 48b8c2c: dependencies updates:
+  - Updated dependency [`ai@^3.4.33` ↗︎](https://www.npmjs.com/package/ai/v/3.4.33) (from `^3.0.0`, in `dependencies`)
+
 ## 0.0.3-alpha.0
 
 ### Patch Changes

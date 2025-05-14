@@ -4,7 +4,7 @@ async function main() {
   const mcpClient = new MCPClient({
     servers: {
       myMcpServer: {
-        url: new URL('http://localhost:4111/api/servers/myMcpServer/mcp'),
+        url: new URL('http://localhost:4111/api/mcp/myMcpServer/mcp'),
       },
     },
   });

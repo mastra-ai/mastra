@@ -19,7 +19,9 @@ import type {
   GetWorkflowResponse,
   SaveMessageToMemoryParams,
   SaveMessageToMemoryResponse,
+  McpServerListResponse,
 } from './types';
+import type { ServerDetailInfo } from '@mastra/core/mcp';
 
 export class MastraClient extends BaseResource {
   constructor(options: ClientOptions) {
@@ -255,6 +257,38 @@ export class MastraClient extends BaseResource {
    */
   public getNetwork(networkId: string) {
     return new Network(this.options, networkId);
+  }
+
+  /**
+   * Retrieves a list of available MCP servers.
+   * @param params - Optional parameters for pagination (limit, offset).
+   * @returns Promise containing the list of MCP servers and pagination info.
+   */
+  public getMcpServers(params?: { limit?: number; offset?: number }): Promise<McpServerListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.limit !== undefined) {
+      searchParams.set('limit', String(params.limit));
+    }
+    if (params?.offset !== undefined) {
+      searchParams.set('offset', String(params.offset));
+    }
+    const queryString = searchParams.toString();
+    return this.request(`/api/mcp/v0/servers${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Retrieves detailed information for a specific MCP server.
+   * @param serverId - The ID of the MCP server to retrieve.
+   * @param params - Optional parameters, e.g., specific version.
+   * @returns Promise containing the detailed MCP server information.
+   */
+  public getMcpServerDetails(serverId: string, params?: { version?: string }): Promise<ServerDetailInfo> {
+    const searchParams = new URLSearchParams();
+    if (params?.version) {
+      searchParams.set('version', params.version);
+    }
+    const queryString = searchParams.toString();
+    return this.request(`/api/mcp/v0/servers/${serverId}${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
