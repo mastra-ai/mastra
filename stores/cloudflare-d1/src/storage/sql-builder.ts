@@ -1,3 +1,5 @@
+import { validateSqlIdentifier } from '@mastra/core/utils';
+
 /**
  * Type definition for SQL query parameters
  */
@@ -39,7 +41,7 @@ export class SqlBuilder {
   }
 
   from(table: string): SqlBuilder {
-    validateIdentifier('table', table);
+    validateSqlIdentifier(table, 'table name');
     this.sql += ` FROM ${table}`;
     return this;
   }
@@ -82,7 +84,7 @@ export class SqlBuilder {
   }
 
   orderBy(column: string, direction: 'ASC' | 'DESC' = 'ASC'): SqlBuilder {
-    validateIdentifier('column', column);
+    validateSqlIdentifier(column, 'column name');
     if (!['ASC', 'DESC'].includes(direction)) {
       throw new Error(`Invalid sort direction: ${direction}`);
     }
@@ -122,9 +124,9 @@ export class SqlBuilder {
     conflictColumns?: string[],
     updateMap?: Record<string, string>,
   ): SqlBuilder {
-    validateIdentifier('table', table);
+    validateSqlIdentifier(table, 'table name');
     for (const col of columns) {
-      validateIdentifier('column', col);
+      validateSqlIdentifier(col, 'column name');
     }
     const placeholders = columns.map(() => '?').join(', ');
 
@@ -145,9 +147,9 @@ export class SqlBuilder {
 
   // Update operations
   update(table: string, columns: string[], values: SqlParam[]): SqlBuilder {
-    validateIdentifier('table', table);
+    validateSqlIdentifier(table, 'table name');
     for (const col of columns) {
-      validateIdentifier('column', col);
+      validateSqlIdentifier(col, 'column name');
     }
     const setClause = columns.map(col => `${col} = ?`).join(', ');
     this.sql = `UPDATE ${table} SET ${setClause}`;
@@ -157,7 +159,7 @@ export class SqlBuilder {
 
   // Delete operations
   delete(table: string): SqlBuilder {
-    validateIdentifier('table', table);
+    validateSqlIdentifier(table, 'table name');
     this.sql = `DELETE FROM ${table}`;
     return this;
   }
@@ -170,12 +172,12 @@ export class SqlBuilder {
    * @returns The builder instance
    */
   createTable(table: string, columnDefinitions: string[], tableConstraints?: string[]): SqlBuilder {
-    validateIdentifier('table', table);
+    validateSqlIdentifier(table, 'table name');
     // Naive validation: check the first word of each column definition
     for (const def of columnDefinitions) {
       const colName = def.split(/\s+/)[0];
       if (!colName) throw new Error('Empty column name in definition');
-      validateIdentifier('column', colName);
+      validateSqlIdentifier(colName, 'column name');
     }
     const columns = columnDefinitions.join(', ');
     const constraints = tableConstraints && tableConstraints.length > 0 ? ', ' + tableConstraints.join(', ') : '';
@@ -204,9 +206,9 @@ export class SqlBuilder {
    * @returns The builder instance
    */
   createIndex(indexName: string, tableName: string, columnName: string, indexType: string = ''): SqlBuilder {
-    validateIdentifier('index', indexName);
-    validateIdentifier('table', tableName);
-    validateIdentifier('column', columnName);
+    validateSqlIdentifier(indexName, 'index name');
+    validateSqlIdentifier(tableName, 'table name');
+    validateSqlIdentifier(columnName, 'column name');
     this.sql = `CREATE ${indexType ? indexType + ' ' : ''}INDEX IF NOT EXISTS ${indexName} ON ${tableName}(${columnName})`;
     return this;
   }
@@ -218,7 +220,7 @@ export class SqlBuilder {
    * @param exact If true, will not add % wildcards
    */
   like(column: string, value: string, exact: boolean = false): SqlBuilder {
-    validateIdentifier('column', column);
+    validateSqlIdentifier(column, 'column name');
     const likeValue = exact ? value : `%${value}%`;
     if (this.whereAdded) {
       this.sql += ` AND ${column} LIKE ?`;
@@ -237,8 +239,8 @@ export class SqlBuilder {
    * @param value The value to match
    */
   jsonLike(column: string, key: string, value: string): SqlBuilder {
-    validateIdentifier('column', column);
-    validateIdentifier('key', key);
+    validateSqlIdentifier(column, 'column name');
+    validateSqlIdentifier(key, 'key name');
     const jsonPattern = `%"${key}":"${value}"%`;
     if (this.whereAdded) {
       this.sql += ` AND ${column} LIKE ?`;
@@ -282,16 +284,6 @@ function validateSelectIdentifier(column: string) {
   if (column !== '*' && !/^[a-zA-Z0-9_]+(\s+AS\s+[a-zA-Z0-9_]+)?$/i.test(column)) {
     throw new Error(
       `Invalid column name: "${column}". Must be "*" or a valid identifier (letters, numbers, underscores), optionally with "AS alias".`,
-    );
-  }
-}
-
-function validateIdentifier(kind: string, name: string) {
-  if (!/^[a-zA-Z0-9_]+$/.test(name)) {
-    throw new Error(
-      `Invalid ${kind} name: ${name}. 
-      Must start with a letter or underscore, 
-      contain only letters, numbers, or underscores.`,
     );
   }
 }

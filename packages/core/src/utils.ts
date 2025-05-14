@@ -452,3 +452,20 @@ export function ensureAllMessagesAreCoreMessages(messages: (CoreMessage | AiMess
     })
     .flat();
 }
+
+/**
+ * Validates an identifier for use in SQL stores.
+ * @param name - The identifier to validate.
+ * @param kind - The type of identifier (e.g., 'table name', 'column name').
+ * @throws Will throw an error if the identifier is invalid.
+ */
+export function validateSqlIdentifier(name: string, kind = 'identifier') {
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name) || name.length > 63) {
+    throw new Error(
+      `Invalid ${kind}: ${name}. 
+      Must start with a letter or underscore, 
+      contain only letters, numbers, or underscores, 
+      and be at most 63 characters long.`,
+    );
+  }
+}

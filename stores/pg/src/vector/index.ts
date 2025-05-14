@@ -1,3 +1,4 @@
+import { validateSqlIdentifier } from '@mastra/core/utils';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   IndexStats,
@@ -15,7 +16,7 @@ import pg from 'pg';
 import xxhash from 'xxhash-wasm';
 
 import { PGFilterTranslator } from './filter';
-import { buildFilterQuery, validateIdentifier } from './sql-builder';
+import { buildFilterQuery } from './sql-builder';
 import type { IndexConfig, IndexType } from './types';
 
 export interface PGIndexStats extends IndexStats {
@@ -161,8 +162,8 @@ export class PgVector extends MastraVector {
   }
 
   private getTableName(indexName: string) {
-    validateIdentifier(indexName, 'index name');
-    if (this.schema) validateIdentifier(this.schema, 'schema name');
+    validateSqlIdentifier(indexName, 'index name');
+    if (this.schema) validateSqlIdentifier(this.schema, 'schema name');
     return this.schema ? `${this.schema}.${indexName}` : indexName;
   }
 

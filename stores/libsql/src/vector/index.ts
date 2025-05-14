@@ -1,6 +1,7 @@
 import { createClient } from '@libsql/client';
 import type { Client as TursoClient, InValue } from '@libsql/client';
 
+import { validateSqlIdentifier } from '@mastra/core/utils';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   IndexStats,
@@ -13,7 +14,7 @@ import type {
 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import { LibSQLFilterTranslator } from './filter';
-import { buildFilterQuery, validateIdentifier } from './sql-builder';
+import { buildFilterQuery } from './sql-builder';
 
 interface LibSQLQueryParams extends QueryVectorParams {
   minScore?: number;
@@ -62,7 +63,7 @@ export class LibSQLVector extends MastraVector {
 
     try {
       const { indexName, queryVector, topK = 10, filter, includeVector = false, minScore = 0 } = params;
-      validateIdentifier(indexName, 'index name');
+      validateSqlIdentifier(indexName, 'index name');
 
       if (!Number.isInteger(topK) || topK <= 0) {
         throw new Error('topK must be a positive integer');
@@ -114,7 +115,7 @@ export class LibSQLVector extends MastraVector {
     const params = this.normalizeArgs<UpsertVectorParams>('upsert', args);
 
     const { indexName, vectors, metadata, ids } = params;
-    validateIdentifier(indexName, 'index name');
+    validateSqlIdentifier(indexName, 'index name');
     const tx = await this.turso.transaction('write');
 
     try {
@@ -173,7 +174,7 @@ export class LibSQLVector extends MastraVector {
     const { indexName, dimension } = params;
     try {
       // Validate inputs
-      validateIdentifier(indexName, 'index name');
+      validateSqlIdentifier(indexName, 'index name');
       if (!Number.isInteger(dimension) || dimension <= 0) {
         throw new Error('Dimension must be a positive integer');
       }
@@ -208,7 +209,7 @@ export class LibSQLVector extends MastraVector {
 
   async deleteIndex(indexName: string): Promise<void> {
     try {
-      validateIdentifier(indexName, 'index name');
+      validateSqlIdentifier(indexName, 'index name');
       // Drop the table
       await this.turso.execute({
         sql: `DROP TABLE IF EXISTS ${indexName}`,
@@ -241,7 +242,7 @@ export class LibSQLVector extends MastraVector {
 
   async describeIndex(indexName: string): Promise<IndexStats> {
     try {
-      validateIdentifier(indexName, 'index name');
+      validateSqlIdentifier(indexName, 'index name');
       // Get table info including column info
       const tableInfoQuery = `
         SELECT sql 
@@ -326,7 +327,7 @@ export class LibSQLVector extends MastraVector {
     update: { vector?: number[]; metadata?: Record<string, any> },
   ): Promise<void> {
     try {
-      validateIdentifier(indexName, 'index name');
+      validateSqlIdentifier(indexName, 'index name');
       const updates = [];
       const args: InValue[] = [];
 
@@ -388,7 +389,7 @@ export class LibSQLVector extends MastraVector {
    */
   async deleteVector(indexName: string, id: string): Promise<void> {
     try {
-      validateIdentifier(indexName, 'index name');
+      validateSqlIdentifier(indexName, 'index name');
       await this.turso.execute({
         sql: `DELETE FROM ${indexName} WHERE vector_id = ?`,
         args: [id],
