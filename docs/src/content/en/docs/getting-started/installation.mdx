@@ -27,26 +27,10 @@ We recommend starting a new Mastra project using `create-mastra`, which will sca
 a project, run:
 
 <Tabs items={["npx", "npm", "yarn", "pnpm"]}>
-  <Tabs.Tab>
-  ```bash copy 
-  npx create-mastra@latest 
-  ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-  ```bash copy
-   npm create mastra@latest 
-   ```
-   </Tabs.Tab>
-  <Tabs.Tab>
-  ```bash copy
-   yarn create mastra@latest 
-   ```
-   </Tabs.Tab>
-  <Tabs.Tab>
-  ```bash copy
-   pnpm create mastra@latest
-  ```
-  </Tabs.Tab>
+  <Tabs.Tab>```bash copy npx create-mastra@latest ```</Tabs.Tab>
+  <Tabs.Tab>```bash copy npm create mastra@latest ```</Tabs.Tab>
+  <Tabs.Tab>```bash copy yarn create mastra@latest ```</Tabs.Tab>
+  <Tabs.Tab>```bash copy pnpm create mastra@latest ```</Tabs.Tab>
 </Tabs>
 
 On installation, you'll be guided through the following prompts:
@@ -124,9 +108,11 @@ npx create-mastra@latest --timeout 120000
 
 **Note for LLMs**:
 For a quick one-liner that includes examples you can run:
+
 ```bash copy
 npx -y mastra@latest --project-name <your-project> --example --components "tools,agents,workflows" --llm <llm-provider>
 ```
+
 The available options for the `--llm` flag are: `openai|anthropic|groq|google|cerebras`.
 
 > **Tip:** As long as you provide all required flags (project name as an argument or with `-p, --project-name`, `--components`, `--llm`, and either `--example` or `--no-example`), the CLI will run fully non-interactively with no prompts.
@@ -151,36 +137,23 @@ Then, initialize a TypeScript project including the `@mastra/core` package:
 
 <Tabs items={["npm", "pnpm", "yarn", "bun"]}>
   <Tabs.Tab>
-  ```bash copy
-  npm init -y 
-  npm install typescript tsx @types/node mastra@latest --save-dev 
-  npm install @mastra/core@latest zod @ai-sdk/openai
-  npx tsc --init 
-  ```
+    ```bash copy npm init -y npm install typescript tsx @types/node
+    mastra@latest --save-dev npm install @mastra/core@latest zod @ai-sdk/openai
+    npx tsc --init ```
   </Tabs.Tab>
   <Tabs.Tab>
-  ```bash copy
-  pnpm init
-  pnpm add typescript tsx @types/node mastra@latest --save-dev
-  pnpm add @mastra/core@latest zod @ai-sdk/openai
-  pnpm dlx tsc --init 
-  ```
+    ```bash copy pnpm init pnpm add typescript tsx @types/node mastra@latest
+    --save-dev pnpm add @mastra/core@latest zod @ai-sdk/openai pnpm dlx tsc
+    --init ```
   </Tabs.Tab>
   <Tabs.Tab>
-  ```bash copy
-  yarn init -y
-  yarn add typescript tsx @types/node mastra@latest --dev
-  yarn add @mastra/core@latest zod @ai-sdk/openai
-  yarn dlx tsc --init 
-  ```
+    ```bash copy yarn init -y yarn add typescript tsx @types/node mastra@latest
+    --dev yarn add @mastra/core@latest zod @ai-sdk/openai yarn dlx tsc --init
+    ```
   </Tabs.Tab>
   <Tabs.Tab>
-  ```bash copy
-  bun init -y
-  bun add typescript tsx @types/node mastra@latest --dev
-  bun add @mastra/core@latest zod @ai-sdk/openai
-  bunx tsc --init 
-  ```
+    ```bash copy bun init -y bun add typescript tsx @types/node mastra@latest
+    --dev bun add @mastra/core@latest zod @ai-sdk/openai bunx tsc --init ```
   </Tabs.Tab>
 </Tabs>
 
@@ -376,9 +349,9 @@ This registers your agent with Mastra so that `mastra dev` can discover and serv
 
 ## Existing Project Installation
 
-  To add Mastra to an existing project, see our Local development docs on [adding mastra to an existing project](/docs/local-dev/add-to-existing-project).
-  
-  You can also checkout our framework specific docs e.g [Next.js](/docs/frameworks/next-js)
+To add Mastra to an existing project, see our Local development docs on [adding mastra to an existing project](/docs/local-dev/add-to-existing-project).
+
+You can also checkout our framework specific docs e.g [Next.js](/docs/frameworks/next-js)
 
 ## Start the Mastra Server
 
@@ -466,5 +439,3 @@ npx tsx src/index.ts
 ```
 
 This should output the agent's response to your console.
-
-

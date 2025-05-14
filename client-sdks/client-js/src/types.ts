@@ -8,10 +8,12 @@ import type {
   StorageThreadType,
   BaseLogMessage,
   WorkflowRunResult as CoreWorkflowRunResult,
+  VNextWorkflowRuns,
   WorkflowRuns,
 } from '@mastra/core';
 
 import type { AgentGenerateOptions, AgentStreamOptions } from '@mastra/core/agent';
+import type { ServerInfo } from '@mastra/core/mcp';
 import type { NewWorkflow, WatchEvent, WorkflowResult as VNextWorkflowResult } from '@mastra/core/workflows/vNext';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
@@ -53,7 +55,7 @@ export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undef
 
 export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[];
-} & Omit<AgentStreamOptions<T>, 'onFinish' | 'onStepFinish' | 'telemetry' | 'experimental_generateMessageId'>;
+} & Omit<AgentStreamOptions<T>, 'onFinish' | 'onStepFinish' | 'experimental_generateMessageId'>;
 
 export interface GetEvalsByAgentIdResponse extends GetAgentResponse {
   evals: any[];
@@ -87,6 +89,8 @@ export interface GetWorkflowRunsParams {
 }
 
 export type GetWorkflowRunsResponse = WorkflowRuns;
+
+export type GetVNextWorkflowRunsResponse = VNextWorkflowRuns;
 
 export type WorkflowRunResult = {
   activePaths: Record<string, { status: string; suspendPayload?: any; stepPath: string[] }>;
@@ -267,4 +271,10 @@ export interface GetNetworkResponse {
     modelId: string;
   };
   state?: Record<string, any>;
+}
+
+export interface McpServerListResponse {
+  servers: ServerInfo[];
+  next: string | null;
+  total_count: number;
 }

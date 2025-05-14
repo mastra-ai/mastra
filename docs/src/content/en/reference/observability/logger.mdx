@@ -11,11 +11,15 @@ A Logger instance is created by `createLogger()` and provides methods to record 
 
 ```typescript showLineNumbers copy
 // Using a console logger
-const logger = createLogger({ name: 'Mastra', level: 'info' });
+const logger = createLogger({ name: "Mastra", level: "info" });
 
-logger.debug('Debug message'); // Won't be logged because level is INFO
-logger.info({ message: 'User action occurred', destinationPath: 'user-actions', type: 'AGENT' }); // Logged
-logger.error('An error occurred'); // Logged as ERROR
+logger.debug("Debug message"); // Won't be logged because level is INFO
+logger.info({
+  message: "User action occurred",
+  destinationPath: "user-actions",
+  type: "AGENT",
+}); // Logged
+logger.error("An error occurred"); // Logged as ERROR
 ```
 
 ## Methods
@@ -23,31 +27,31 @@ logger.error('An error occurred'); // Logged as ERROR
 <PropertiesTable
   content={[
     {
-      name: 'debug',
-      type: '(message: BaseLogMessage | string, ...args: any[]) => void | Promise<void>',
-      description: 'Write a DEBUG-level log. Only recorded if level ≤ DEBUG.',
+      name: "debug",
+      type: "(message: BaseLogMessage | string, ...args: any[]) => void | Promise<void>",
+      description: "Write a DEBUG-level log. Only recorded if level ≤ DEBUG.",
     },
     {
-      name: 'info',
-      type: '(message: BaseLogMessage | string, ...args: any[]) => void | Promise<void>',
-      description: 'Write an INFO-level log. Only recorded if level ≤ INFO.',
+      name: "info",
+      type: "(message: BaseLogMessage | string, ...args: any[]) => void | Promise<void>",
+      description: "Write an INFO-level log. Only recorded if level ≤ INFO.",
     },
     {
-      name: 'warn',
-      type: '(message: BaseLogMessage | string, ...args: any[]) => void | Promise<void>',
-      description: 'Write a WARN-level log. Only recorded if level ≤ WARN.',
+      name: "warn",
+      type: "(message: BaseLogMessage | string, ...args: any[]) => void | Promise<void>",
+      description: "Write a WARN-level log. Only recorded if level ≤ WARN.",
     },
     {
-      name: 'error',
-      type: '(message: BaseLogMessage | string, ...args: any[]) => void | Promise<void>',
-      description: 'Write an ERROR-level log. Only recorded if level ≤ ERROR.',
+      name: "error",
+      type: "(message: BaseLogMessage | string, ...args: any[]) => void | Promise<void>",
+      description: "Write an ERROR-level log. Only recorded if level ≤ ERROR.",
     },
     {
-      name: 'cleanup',
-      type: '() => Promise<void>',
+      name: "cleanup",
+      type: "() => Promise<void>",
       isOptional: true,
       description:
-        'Cleanup resources held by the logger (e.g., network connections for Upstash). Not all loggers implement this.',
+        "Cleanup resources held by the logger (e.g., network connections for Upstash). Not all loggers implement this.",
     },
   ]}
 />

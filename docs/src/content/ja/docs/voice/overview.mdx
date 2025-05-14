@@ -2,27 +2,29 @@
 title: Mastraの音声機能 | Mastra ドキュメント
 description: Mastraの音声機能の概要。テキスト読み上げ、音声認識、リアルタイム音声変換などを含みます。
 ---
+
 import { Tabs } from "nextra/components";
 import { AudioPlayback } from "@/components/audio-playback";
 
 # Mastraの音声機能
 
-Mastraの音声システムは、音声インタラクションのための統一されたインターフェースを提供し、アプリケーションでテキスト読み上げ（TTS）、音声認識（STT）、リアルタイム音声変換（STS）機能を実現します。 
+Mastraの音声システムは、音声インタラクションのための統一されたインターフェースを提供し、アプリケーションでテキスト読み上げ（TTS）、音声認識（STT）、リアルタイム音声変換（STS）機能を実現します。
 
 ## エージェントに音声を追加する
 
 エージェントに音声機能を統合する方法については、[エージェントへの音声追加](../agents/adding-voice.mdx)のドキュメントをご覧ください。このセクションでは、単一および複数の音声プロバイダーの使用方法、およびリアルタイムのインタラクションについて説明しています。
 
 ```typescript
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
 import { OpenAIVoice } from "@mastra/voice-openai";
 
 // Initialize OpenAI voice for TTS
 
 const voiceAgent = new Agent({
   name: "Voice Agent",
-  instructions: "You are a voice assistant that can help users with their tasks.",
+  instructions:
+    "You are a voice assistant that can help users with their tasks.",
   model: openai("gpt-4o"),
   voice: new OpenAIVoice(),
 });
@@ -64,6 +66,7 @@ OpenAI、ElevenLabsなど、複数のプロバイダーから選択できます�
     ```
 
     OpenAIの音声プロバイダーについての詳細は[OpenAI音声リファレンス](/reference/voice/openai)をご覧ください。
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -91,6 +94,7 @@ OpenAI、ElevenLabsなど、複数のプロバイダーから選択できます�
     ```
 
     Azureの音声プロバイダーについての詳細は[Azure音声リファレンス](/reference/voice/azure)をご覧ください。
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -118,6 +122,7 @@ OpenAI、ElevenLabsなど、複数のプロバイダーから選択できます�
     ```
 
     ElevenLabsの音声プロバイダーについての詳細は[ElevenLabs音声リファレンス](/reference/voice/elevenlabs)をご覧ください。
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -145,6 +150,7 @@ OpenAI、ElevenLabsなど、複数のプロバイダーから選択できます�
     ```
 
     PlayAIの音声プロバイダーについての詳細は[PlayAI音声リファレンス](/reference/voice/playai)をご覧ください。
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -172,6 +178,7 @@ OpenAI、ElevenLabsなど、複数のプロバイダーから選択できます�
     ```
 
     Google音声プロバイダーの詳細については、[Google音声リファレンス](/reference/voice/google)をご覧ください。
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -199,6 +206,7 @@ OpenAI、ElevenLabsなど、複数のプロバイダーから選択できます�
     ```
 
     Cloudflare音声プロバイダーの詳細については、[Cloudflare音声リファレンス](/reference/voice/cloudflare)をご覧ください。
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -226,6 +234,7 @@ OpenAI、ElevenLabsなど、複数のプロバイダーから選択できます�
     ```
 
     Deepgram音声プロバイダーの詳細については、[Deepgram音声リファレンス](/reference/voice/deepgram)をご覧ください。
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -253,6 +262,7 @@ OpenAI、ElevenLabsなど、複数のプロバイダーから選択できます�
     ```
 
     Speechify音声プロバイダーの詳細については、[Speechify音声リファレンス](/reference/voice/speechify)をご覧ください。
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -280,6 +290,7 @@ OpenAI、ElevenLabsなど、複数のプロバイダーから選択できます�
     ```
 
     Sarvam音声プロバイダーの詳細については、[Sarvam音声リファレンス](/reference/voice/sarvam)をご覧ください。
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -307,16 +318,17 @@ OpenAI、ElevenLabsなど、複数のプロバイダーから選択できます�
     ```
 
     Murf音声プロバイダーの詳細については、[Murf音声リファレンス](/reference/voice/murf)をご覧ください。
+
   </Tabs.Tab>
 </Tabs>
-
 
 ### 音声からテキストへの変換 (STT)
 
 OpenAI、ElevenLabsなど、さまざまなプロバイダーを使用して音声コンテンツを文字起こしします。詳細な設定オプションなどについては、[音声からテキストへ](./speech-to-text)をご確認ください。
 
 サンプル音声ファイルは[こちら](https://github.com/mastra-ai/realtime-voice-demo/raw/refs/heads/main/how_can_i_help_you.mp3)からダウンロードできます。
-<br/>
+
+<br />
 <AudioPlayback audio="https://github.com/mastra-ai/realtime-voice-demo/raw/refs/heads/main/how_can_i_help_you.mp3" />
 
 <Tabs items={["OpenAI", "Azure", "ElevenLabs", "Google", "Cloudflare", "Deepgram", "Sarvam"]}>
@@ -346,6 +358,7 @@ OpenAI、ElevenLabsなど、さまざまなプロバイダーを使用して音�
     ```
 
     OpenAIの音声プロバイダーについての詳細は[OpenAI音声リファレンス](/reference/voice/openai)をご覧ください。
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -375,6 +388,7 @@ OpenAI、ElevenLabsなど、さまざまなプロバイダーを使用して音�
     ```
 
     Azureの音声プロバイダーについての詳細は[Azure音声リファレンス](/reference/voice/azure)をご覧ください。
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -403,6 +417,7 @@ OpenAI、ElevenLabsなど、さまざまなプロバイダーを使用して音�
     ```
 
     ElevenLabsの音声プロバイダーについての詳細は[ElevenLabs音声リファレンス](/reference/voice/elevenlabs)をご覧ください。
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -431,6 +446,7 @@ OpenAI、ElevenLabsなど、さまざまなプロバイダーを使用して音�
     ```
 
     Googleの音声プロバイダーについての詳細は[Google音声リファレンス](/reference/voice/google)をご覧ください。
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -459,6 +475,7 @@ OpenAI、ElevenLabsなど、さまざまなプロバイダーを使用して音�
     ```
 
     Cloudflare音声プロバイダーの詳細については、[Cloudflare音声リファレンス](/reference/voice/cloudflare)をご覧ください。
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -487,6 +504,7 @@ OpenAI、ElevenLabsなど、さまざまなプロバイダーを使用して音�
     ```
 
     Deepgram音声プロバイダーの詳細については、[Deepgram音声リファレンス](/reference/voice/deepgram)をご覧ください。
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -515,9 +533,9 @@ OpenAI、ElevenLabsなど、さまざまなプロバイダーを使用して音�
     ```
 
     Sarvam音声プロバイダーの詳細については、[Sarvam音声リファレンス](/reference/voice/sarvam)をご覧ください。
+
   </Tabs.Tab>
 </Tabs>
-
 
 ### 音声から音声へ（STS）
 
@@ -533,15 +551,15 @@ import { playAudio, getMicrophoneStream } from '@mastra/node-audio';
 import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
 
 const voiceAgent = new Agent({
-  name: "Voice Agent",
-  instructions: "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
-  voice: new OpenAIRealtimeVoice(),
+name: "Voice Agent",
+instructions: "You are a voice assistant that can help users with their tasks.",
+model: openai("gpt-4o"),
+voice: new OpenAIRealtimeVoice(),
 });
 
 // Listen for agent audio responses
 voiceAgent.voice.on('speaker', ({ audio }) => {
-  playAudio(audio);
+playAudio(audio);
 });
 
 // Initiate the conversation
@@ -550,7 +568,8 @@ await voiceAgent.voice.speak('How can I help you today?');
 // Send continuous audio from the microphone
 const micStream = getMicrophoneStream();
 await voiceAgent.voice.send(micStream);
-```
+
+````
 
 OpenAI音声プロバイダーの詳細については、[OpenAI音声リファレンス](/reference/voice/openai-realtime)をご覧ください。
   </Tabs.Tab>
@@ -828,7 +847,7 @@ const responseAudio = await voice.speak(`You said: ${transcript}`, {
 
 // 音声レスポンスを再生
 playAudio(responseAudio);
-```
+````
 
 CompositeVoiceの詳細については、[CompositeVoiceリファレンス](/reference/voice/composite-voice)を参照してください。
 

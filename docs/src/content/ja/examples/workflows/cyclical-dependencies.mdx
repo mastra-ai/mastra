@@ -10,13 +10,13 @@ import { GithubLink } from "@/components/github-link";
 ワークフローは、条件に基づいてステップがループバックできる循環依存関係をサポートしています。以下の例は、条件付きロジックを使用してループを作成し、繰り返し実行を処理する方法を示しています。
 
 ```ts showLineNumbers copy
-import { Workflow, Step } from '@mastra/core';
-import { z } from 'zod';
+import { Workflow, Step } from "@mastra/core";
+import { z } from "zod";
 
 async function main() {
   const doubleValue = new Step({
-    id: 'doubleValue',
-    description: '入力値を2倍にします',
+    id: "doubleValue",
+    description: "入力値を2倍にします",
     inputSchema: z.object({
       inputValue: z.number(),
     }),
@@ -30,21 +30,24 @@ async function main() {
   });
 
   const incrementByOne = new Step({
-    id: 'incrementByOne',
-    description: '入力値に1を加えます',
+    id: "incrementByOne",
+    description: "入力値に1を加えます",
     outputSchema: z.object({
       incrementedValue: z.number(),
     }),
     execute: async ({ context }) => {
-      const valueToIncrement = context?.getStepResult<{ firstValue: number }>('trigger')?.firstValue;
-      if (!valueToIncrement) throw new Error('インクリメントする値が提供されていません');
+      const valueToIncrement = context?.getStepResult<{ firstValue: number }>(
+        "trigger",
+      )?.firstValue;
+      if (!valueToIncrement)
+        throw new Error("インクリメントする値が提供されていません");
       const incrementedValue = valueToIncrement + 1;
       return { incrementedValue };
     },
   });
 
   const cyclicalWorkflow = new Workflow({
-    name: 'cyclical-workflow',
+    name: "cyclical-workflow",
     triggerSchema: z.object({
       firstValue: z.number(),
     }),
@@ -54,8 +57,8 @@ async function main() {
     .step(doubleValue, {
       variables: {
         inputValue: {
-          step: 'trigger',
-          path: 'firstValue',
+          step: "trigger",
+          path: "firstValue",
         },
       },
     })
@@ -65,7 +68,7 @@ async function main() {
       variables: {
         inputValue: {
           step: doubleValue,
-          path: 'doubledValue',
+          path: "doubledValue",
         },
       },
     })
@@ -73,7 +76,7 @@ async function main() {
 
   const { runId, start } = cyclicalWorkflow.createRun();
 
-  console.log('Run', runId);
+  console.log("Run", runId);
 
   const res = await start({ triggerData: { firstValue: 6 } });
 

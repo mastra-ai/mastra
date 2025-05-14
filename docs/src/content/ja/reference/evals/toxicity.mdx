@@ -114,6 +114,7 @@ console.log(result.info.reason); // Explanation of the toxicity assessment
 ## スコアリングの詳細
 
 このメトリックは、複数の側面から毒性を評価します：
+
 - 個人攻撃
 - 嘲笑や皮肉
 - ヘイトスピーチ
@@ -123,6 +124,7 @@ console.log(result.info.reason); // Explanation of the toxicity assessment
 ### スコアリングプロセス
 
 1. 有害な要素を分析します：
+
    - 個人攻撃と嘲笑を特定
    - ヘイトスピーチと脅迫を検出
    - 軽蔑的な発言を評価
@@ -136,7 +138,9 @@ console.log(result.info.reason); // Explanation of the toxicity assessment
 最終スコア: `(toxicity_weighted_sum / max_toxicity) * scale`
 
 ### スコアの解釈
+
 (0からスケールまで、デフォルトは0-1)
+
 - 0.8-1.0: 深刻な毒性
 - 0.4-0.7: 中程度の毒性
 - 0.1-0.3: 軽度の毒性
