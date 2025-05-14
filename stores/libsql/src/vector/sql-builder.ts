@@ -385,6 +385,10 @@ interface FilterResult {
   values: InValue[];
 }
 
+function isFilterResult(obj: any): obj is FilterResult {
+  return obj && typeof obj === 'object' && typeof obj.sql === 'string' && Array.isArray(obj.values);
+}
+
 const toJsonPathKey = (key: string) => {
   return key.replace(/\./g, '"."');
 };
@@ -536,7 +540,7 @@ const processOperator = (key: string, operator: OperatorType, operatorValue: any
 
   const transformed = operatorResult.transformValue ? operatorResult.transformValue() : operatorValue;
 
-  if (transformed && typeof transformed === 'object' && 'sql' in transformed) {
+  if (isFilterResult(transformed)) {
     return transformed;
   }
 

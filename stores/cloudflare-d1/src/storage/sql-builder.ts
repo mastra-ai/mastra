@@ -280,12 +280,16 @@ export function createSqlBuilder(): SqlBuilder {
 
 function validateSelectIdentifier(column: string) {
   if (column !== '*' && !/^[a-zA-Z0-9_]+(\s+AS\s+[a-zA-Z0-9_]+)?$/i.test(column)) {
-    throw new Error(`Invalid column name: ${column}`);
+    `Invalid column name: "${column}". Must be "*" or a valid identifier (letters, numbers, underscores), optionally with "AS alias".`;
   }
 }
 
 function validateIdentifier(kind: string, name: string) {
   if (!/^[a-zA-Z0-9_]+$/.test(name)) {
-    throw new Error(`Invalid ${kind} name: ${name}`);
+    throw new Error(
+      `Invalid ${kind}: ${name}. 
+      Must start with a letter or underscore, 
+      contain only letters, numbers, or underscores.`,
+    );
   }
 }
