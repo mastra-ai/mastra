@@ -68,7 +68,6 @@ export function toBase64String(data: Uint8Array | ArrayBuffer | string | URL): s
 
 export class MessageList {
   private messages: MessageListItem[] = [];
-  private lastCreatedAt: Date | undefined;
   private memoryInfo: null | { threadId: string; resourceId?: string } = null;
 
   constructor({
@@ -80,6 +79,113 @@ export class MessageList {
     }
   }
 
+  public toUIMessages(): UIMessage[] {
+    return this.messages.map(m => ({
+      id: m.id,
+      role: m.role,
+      content: '',
+      createdAt: m.createdAt,
+      parts: m.content.parts,
+      experimental_attachments: m.content.experimental_attachments || [],
+    }));
+  }
+
+  public getMessages(): MessageListItem[] {
+    return this.messages;
+  }
+
+  public add(messages: MessageInput | MessageInput[], contentSource: MessageListItem['contentSource']) {
+    if (Array.isArray(messages)) {
+      for (const message of messages) {
+        this.addOne(message, contentSource);
+      }
+    } else {
+      this.addOne(messages, contentSource);
+    }
+
+    return this;
+  }
+
+  private addOne(message: MessageInput, contentSource: MessageListItem['contentSource']) {
+    const messageV2 = this.inputToMastraMessageV2(message);
+
+    const latestMessage = this.messages.at(-1);
+
+    // Handle non-tool messages (user, assistant, system, data)
+    // If the last message is an assistant message and the new message is also an assistant message, merge them.
+    if (latestMessage?.role === 'assistant' && messageV2.role === 'assistant') {
+      latestMessage.createdAt = messageV2.createdAt || latestMessage.createdAt;
+
+      for (const part of messageV2.content.parts) {
+        // If the incoming part is a tool-invocation result, find the corresponding call in the latest message
+        if (part.type === 'tool-invocation' && part.toolInvocation.state === 'result') {
+          const existingCallPart = latestMessage.content.parts.find(
+            p => p.type === 'tool-invocation' && p.toolInvocation.toolCallId === part.toolInvocation.toolCallId,
+          );
+
+          if (existingCallPart && existingCallPart.type === 'tool-invocation') {
+            // Update the existing tool-call part with the result
+            existingCallPart.toolInvocation = {
+              ...existingCallPart.toolInvocation,
+              state: 'result',
+              result: part.toolInvocation.result,
+            };
+            // Keep the existing args from the call part
+          } else {
+            // This indicates a tool result for a call not found in the preceding assistant message
+            console.warn(
+              `Tool call part not found in preceding assistant message for result: ${part.toolInvocation.toolCallId}. Skipping result part.`,
+              part,
+            );
+          }
+        } else {
+          // For all other part types, simply push them to the latest message's parts
+          latestMessage.content.parts.push(part);
+        }
+      }
+    } else {
+      // Add new message if not merging with the last assistant message
+      if (messageV2.role === 'assistant') {
+        // Add step-start part for new assistant messages
+        messageV2.content.parts.unshift({ type: 'step-start' });
+      }
+      this.messages.push({
+        ...messageV2,
+        originalMessage: message,
+        contentSource,
+      });
+    }
+
+    return this;
+  }
+
+  private inputToMastraMessageV2(message: MessageInput): MastraMessageV2 {
+    if (`threadId` in message && message.threadId && this.memoryInfo && message.threadId !== this.memoryInfo.threadId) {
+      throw new Error(
+        `Received input message with wrong threadId. Input ${message.threadId}, expected ${this.memoryInfo.threadId}`,
+      );
+    }
+
+    if (
+      `resourceId` in message &&
+      message.resourceId &&
+      this.memoryInfo &&
+      message.resourceId !== this.memoryInfo.resourceId
+    ) {
+      throw new Error(
+        `Received input message with wrong resourceId. Input ${message.resourceId}, expected ${this.memoryInfo.resourceId}`,
+      );
+    }
+
+    if (this.isMastraMessageV1(message)) return this.mastraMessageV1ToMastraMessageV2(message);
+    if (this.isMastraMessageV2(message)) return message;
+    if (this.isVercelCoreMessage(message)) return this.vercelCoreMessageToMastraMessageV2(message);
+    if (this.isVercelUIMessage(message)) return this.vercelUIMessageToMastraMessageV2(message);
+
+    throw new Error(`Found unhandled message ${JSON.stringify(message)}`);
+  }
+
+  private lastCreatedAt: Date | undefined;
   private generateCreatedAt(): Date {
     const now = new Date();
 
@@ -119,6 +225,7 @@ export class MessageList {
         msg.content.format === 2,
     );
   }
+
   // TODO: need to differentiate AI SDK v4 and v5 messages?
   private mastraMessageV1ToMastraMessageV2(message: MessageType): MastraMessageV2 {
     const createdAt = message.createdAt || this.generateCreatedAt();
@@ -355,6 +462,7 @@ export class MessageList {
       },
     };
   }
+
   // TODO: need to differentiate AI SDK v4 and v5 messages?
   private vercelCoreMessageToMastraMessageV2(coreMessage: CoreMessage): MastraMessageV2 {
     const id = randomUUID();
@@ -533,110 +641,5 @@ export class MessageList {
       resourceId: this.memoryInfo?.resourceId,
       content,
     };
-  }
-
-  private inputToMastraMessageV2(message: MessageInput): MastraMessageV2 {
-    if (`threadId` in message && message.threadId && this.memoryInfo && message.threadId !== this.memoryInfo.threadId) {
-      throw new Error(
-        `Received input message with wrong threadId. Input ${message.threadId}, expected ${this.memoryInfo.threadId}`,
-      );
-    }
-
-    if (
-      `resourceId` in message &&
-      message.resourceId &&
-      this.memoryInfo &&
-      message.resourceId !== this.memoryInfo.resourceId
-    ) {
-      throw new Error(
-        `Received input message with wrong resourceId. Input ${message.resourceId}, expected ${this.memoryInfo.resourceId}`,
-      );
-    }
-
-    if (this.isMastraMessageV1(message)) return this.mastraMessageV1ToMastraMessageV2(message);
-    if (this.isMastraMessageV2(message)) return message;
-    if (this.isVercelCoreMessage(message)) return this.vercelCoreMessageToMastraMessageV2(message);
-    if (this.isVercelUIMessage(message)) return this.vercelUIMessageToMastraMessageV2(message);
-
-    throw new Error(`Found unhandled message ${JSON.stringify(message)}`);
-  }
-
-  private addOne(message: MessageInput, contentSource: MessageListItem['contentSource']) {
-    const messageV2 = this.inputToMastraMessageV2(message);
-
-    const latestMessage = this.messages.at(-1);
-
-    // Handle non-tool messages (user, assistant, system, data)
-    // If the last message is an assistant message and the new message is also an assistant message, merge them.
-    if (latestMessage?.role === 'assistant' && messageV2.role === 'assistant') {
-      latestMessage.createdAt = messageV2.createdAt || latestMessage.createdAt;
-
-      for (const part of messageV2.content.parts) {
-        // If the incoming part is a tool-invocation result, find the corresponding call in the latest message
-        if (part.type === 'tool-invocation' && part.toolInvocation.state === 'result') {
-          const existingCallPart = latestMessage.content.parts.find(
-            p => p.type === 'tool-invocation' && p.toolInvocation.toolCallId === part.toolInvocation.toolCallId,
-          );
-
-          if (existingCallPart && existingCallPart.type === 'tool-invocation') {
-            // Update the existing tool-call part with the result
-            existingCallPart.toolInvocation = {
-              ...existingCallPart.toolInvocation,
-              state: 'result',
-              result: part.toolInvocation.result,
-            };
-            // Keep the existing args from the call part
-          } else {
-            // This indicates a tool result for a call not found in the preceding assistant message
-            console.warn(
-              `Tool call part not found in preceding assistant message for result: ${part.toolInvocation.toolCallId}. Skipping result part.`,
-              part,
-            );
-          }
-        } else {
-          // For all other part types, simply push them to the latest message's parts
-          latestMessage.content.parts.push(part);
-        }
-      }
-    } else {
-      // Add new message if not merging with the last assistant message
-      if (messageV2.role === 'assistant') {
-        // Add step-start part for new assistant messages
-        messageV2.content.parts.unshift({ type: 'step-start' });
-      }
-      this.messages.push({
-        ...messageV2,
-        originalMessage: message,
-        contentSource,
-      });
-    }
-
-    return this;
-  }
-  public add(messages: MessageInput | MessageInput[], contentSource: MessageListItem['contentSource']) {
-    if (Array.isArray(messages)) {
-      for (const message of messages) {
-        this.addOne(message, contentSource);
-      }
-    } else {
-      this.addOne(messages, contentSource);
-    }
-
-    return this;
-  }
-
-  public toUIMessages(): UIMessage[] {
-    return this.messages.map(m => ({
-      id: m.id,
-      role: m.role,
-      content: '',
-      createdAt: m.createdAt,
-      parts: m.content.parts,
-      experimental_attachments: m.content.experimental_attachments || [],
-    }));
-  }
-
-  public getMessages(): MessageListItem[] {
-    return this.messages;
   }
 }
