@@ -34,8 +34,6 @@ body:
       label: Expected Behavior
       description: A clear and concise description of what you expected to happen.
       placeholder: 'The workflow should execute successfully and return the expected result.'
-    validations:
-      required: true
 
   - type: textarea
     attributes:
@@ -47,57 +45,6 @@ body:
         - OS: (e.g., Windows 11, macOS, Ubuntu 22.04)
         - LLM Provider: (e.g., OpenAI, Anthropic, Google Gemini)
         - Browser (if applicable): (e.g., Chrome 120)
-    validations:
-      required: true
-
-  - type: dropdown
-    attributes:
-      label: Component
-      description: Which component of Mastra is affected?
-      multiple: true
-      options:
-        - Agents
-        - Tools
-        - Workflows
-        - RAG
-        - Integrations
-        - Evals
-        - CLI
-        - Playground UI
-        - Deployment
-        - Memory
-        - Other
-    validations:
-      required: true
-
-  - type: textarea
-    attributes:
-      label: Code Snippet
-      description: If applicable, provide a minimal code snippet that demonstrates the issue.
-      render: typescript
-      placeholder: |
-        import { createWorkflow } from "@mastra/core";
-
-        // Your code example here
-    validations:
-      required: false
-
-  - type: textarea
-    attributes:
-      label: Error Logs
-      description: If applicable, include any error messages or logs.
-      render: shell
-      placeholder: 'Error: Failed to execute workflow...'
-    validations:
-      required: false
-
-  - type: textarea
-    attributes:
-      label: Additional Context
-      description: Add any other context about the problem here.
-      placeholder: 'Any other information that might be relevant to the issue.'
-    validations:
-      required: false
 
   - type: checkboxes
     attributes:
