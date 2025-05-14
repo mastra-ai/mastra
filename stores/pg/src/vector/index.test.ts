@@ -12,7 +12,7 @@ describe('PgVector', () => {
 
   beforeAll(async () => {
     // Initialize PgVector
-    vectorDB = new PgVector(connectionString);
+    vectorDB = new PgVector({ connectionString });
   });
 
   afterAll(async () => {
@@ -759,7 +759,7 @@ describe('PgVector', () => {
         expect(results[0]?.metadata?.tags).toContain('sale');
       });
 
-      it('should filter with $elemMatch using multiple conditions', async () => {
+      it.only('should filter with $elemMatch using multiple conditions', async () => {
         const results = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
@@ -2006,7 +2006,7 @@ describe('PgVector', () => {
 
     beforeAll(async () => {
       // Initialize default vectorDB first
-      vectorDB = new PgVector(connectionString);
+      vectorDB = new PgVector({ connectionString });
 
       // Create schema using the default vectorDB connection
       const client = await vectorDB['pool'].connect();

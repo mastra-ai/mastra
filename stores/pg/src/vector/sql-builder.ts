@@ -8,14 +8,15 @@ import type {
   VectorFilter,
 } from '@mastra/core/vector/filter';
 
-export type OperatorType =
+type OperatorType =
   | BasicOperator
   | NumericOperator
   | ArrayOperator
   | ElementOperator
   | LogicalOperator
   | '$contains'
-  | Exclude<RegexOperator, '$options'>;
+  | Exclude<RegexOperator, '$options'>
+  | '$size';
 
 type FilterOperator = {
   sql: string;
@@ -26,16 +27,17 @@ type FilterOperator = {
 type OperatorFn = (key: string, paramIndex: number, value?: any) => FilterOperator;
 
 export function validateIdentifier(name: string, kind = 'identifier') {
-  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name) || name.length > 63) {
     throw new Error(`Invalid ${kind}: ${name}`);
   }
 }
 
 // Helper functions to create operators
 function validateFieldKey(key: string) {
+  if (!key) return;
   const segments = key.split('.');
   for (const segment of segments) {
-    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(segment)) {
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(segment) || segment.length > 63) {
       throw new Error(`Invalid field key segment: ${segment} in ${key}`);
     }
   }
@@ -44,10 +46,11 @@ function validateFieldKey(key: string) {
 const createBasicOperator = (symbol: string) => {
   return (key: string, paramIndex: number) => {
     validateFieldKey(key);
+    const jsonPathKey = toJsonPathKey(key);
     return {
       sql: `CASE 
-        WHEN $${paramIndex}::text IS NULL THEN metadata#>>'{${handleKey(key)}}' IS ${symbol === '=' ? '' : 'NOT'} NULL
-        ELSE metadata#>>'{${handleKey(key)}}' ${symbol} $${paramIndex}::text
+        WHEN $${paramIndex}::text IS NULL THEN metadata#>>'{${jsonPathKey}}' IS ${symbol === '=' ? '' : 'NOT'} NULL
+        ELSE metadata#>>'{${jsonPathKey}}' ${symbol} $${paramIndex}::text
       END`,
       needsValue: true,
     };
@@ -57,8 +60,9 @@ const createBasicOperator = (symbol: string) => {
 const createNumericOperator = (symbol: string) => {
   return (key: string, paramIndex: number) => {
     validateFieldKey(key);
+    const jsonPathKey = toJsonPathKey(key);
     return {
-      sql: `(metadata#>>'{${handleKey(key)}}')::numeric ${symbol} $${paramIndex}`,
+      sql: `(metadata#>>'{${jsonPathKey}}')::numeric ${symbol} $${paramIndex}`,
       needsValue: true,
     };
   };
@@ -94,15 +98,11 @@ function buildElemMatchConditions(value: any, paramIndex: number): { sql: string
       paramValue = val;
     }
 
-    // Validate paramKey if present
-    if (paramKey) {
-      validateFieldKey(paramKey);
-    }
-
-    const operatorFn = FILTER_OPERATORS[paramOperator as keyof typeof FILTER_OPERATORS];
+    const operatorFn = FILTER_OPERATORS[paramOperator as OperatorType];
     if (!operatorFn) {
       throw new Error(`Invalid operator: ${paramOperator}`);
     }
+    console.log('field', field);
     const result = operatorFn(paramKey, nextParamIndex, paramValue);
 
     const sql = result.sql.replaceAll('metadata#>>', 'elem#>>');
@@ -119,7 +119,7 @@ function buildElemMatchConditions(value: any, paramIndex: number): { sql: string
 }
 
 // Define all filter operators
-export const FILTER_OPERATORS: Record<string, OperatorFn> = {
+const FILTER_OPERATORS: Record<OperatorType, OperatorFn> = {
   $eq: createBasicOperator('='),
   $ne: createBasicOperator('!='),
   $gt: createNumericOperator('>'),
@@ -130,15 +130,16 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
   // Array Operators
   $in: (key, paramIndex) => {
     validateFieldKey(key);
+    const jsonPathKey = toJsonPathKey(key);
     return {
       sql: `(
         CASE
-          WHEN jsonb_typeof(metadata->'${handleKey(key)}') = 'array' THEN
+          WHEN jsonb_typeof(metadata->'${jsonPathKey}') = 'array' THEN
             EXISTS (
-              SELECT 1 FROM jsonb_array_elements_text(metadata->'${handleKey(key)}') as elem
+              SELECT 1 FROM jsonb_array_elements_text(metadata->'${jsonPathKey}') as elem
               WHERE elem = ANY($${paramIndex}::text[])
             )
-          ELSE metadata#>>'{${handleKey(key)}}' = ANY($${paramIndex}::text[])
+          ELSE metadata#>>'{${jsonPathKey}}' = ANY($${paramIndex}::text[])
         END
       )`,
       needsValue: true,
@@ -146,15 +147,16 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
   },
   $nin: (key, paramIndex) => {
     validateFieldKey(key);
+    const jsonPathKey = toJsonPathKey(key);
     return {
       sql: `(
         CASE
-          WHEN jsonb_typeof(metadata->'${handleKey(key)}') = 'array' THEN
+          WHEN jsonb_typeof(metadata->'${jsonPathKey}') = 'array' THEN
             NOT EXISTS (
-              SELECT 1 FROM jsonb_array_elements_text(metadata->'${handleKey(key)}') as elem
+              SELECT 1 FROM jsonb_array_elements_text(metadata->'${jsonPathKey}') as elem
               WHERE elem = ANY($${paramIndex}::text[])
             )
-          ELSE metadata#>>'{${handleKey(key)}}' != ALL($${paramIndex}::text[])
+          ELSE metadata#>>'{${jsonPathKey}}' != ALL($${paramIndex}::text[])
         END
       )`,
       needsValue: true,
@@ -162,21 +164,23 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
   },
   $all: (key, paramIndex) => {
     validateFieldKey(key);
+    const jsonPathKey = toJsonPathKey(key);
     return {
       sql: `CASE WHEN array_length($${paramIndex}::text[], 1) IS NULL THEN false 
-            ELSE (metadata#>'{${handleKey(key)}}')::jsonb ?& $${paramIndex}::text[] END`,
+            ELSE (metadata#>'{${jsonPathKey}}')::jsonb ?& $${paramIndex}::text[] END`,
       needsValue: true,
     };
   },
   $elemMatch: (key: string, paramIndex: number, value: any): FilterOperator => {
     const { sql, values } = buildElemMatchConditions(value, paramIndex);
+    const jsonPathKey = toJsonPathKey(key);
     return {
       sql: `(
         CASE
-          WHEN jsonb_typeof(metadata->'${handleKey(key)}') = 'array' THEN
+          WHEN jsonb_typeof(metadata->'${jsonPathKey}') = 'array' THEN
             EXISTS (
               SELECT 1 
-              FROM jsonb_array_elements(metadata->'${handleKey(key)}') as elem
+              FROM jsonb_array_elements(metadata->'${jsonPathKey}') as elem
               WHERE ${sql}
             )
           ELSE FALSE
@@ -189,8 +193,9 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
   // Element Operators
   $exists: key => {
     validateFieldKey(key);
+    const jsonPathKey = toJsonPathKey(key);
     return {
-      sql: `metadata ? '${handleKey(key)}'`,
+      sql: `metadata ? '${jsonPathKey}'`,
       needsValue: false,
     };
   },
@@ -204,21 +209,23 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
   // Regex Operators
   $regex: (key, paramIndex) => {
     validateFieldKey(key);
+    const jsonPathKey = toJsonPathKey(key);
     return {
-      sql: `metadata#>>'{${handleKey(key)}}' ~ $${paramIndex}`,
+      sql: `metadata#>>'{${jsonPathKey}}' ~ $${paramIndex}`,
       needsValue: true,
     };
   },
 
   $contains: (key, paramIndex, value: any) => {
     validateFieldKey(key);
+    const jsonPathKey = toJsonPathKey(key);
     let sql;
     if (Array.isArray(value)) {
-      sql = `(metadata->'${handleKey(key)}') ?& $${paramIndex}`;
+      sql = `(metadata->'${jsonPathKey}') ?& $${paramIndex}`;
     } else if (typeof value === 'string') {
-      sql = `metadata->>'${handleKey(key)}' ILIKE '%' || $${paramIndex} || '%'`;
+      sql = `metadata->>'${jsonPathKey}' ILIKE '%' || $${paramIndex} || '%'`;
     } else {
-      sql = `metadata->>'${handleKey(key)}' = $${paramIndex}`;
+      sql = `metadata->>'${jsonPathKey}' = $${paramIndex}`;
     }
     return {
       sql,
@@ -240,11 +247,12 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
   // }),
   $size: (key: string, paramIndex: number) => {
     validateFieldKey(key);
+    const jsonPathKey = toJsonPathKey(key);
     return {
       sql: `(
       CASE
-        WHEN jsonb_typeof(metadata#>'{${handleKey(key)}}') = 'array' THEN 
-          jsonb_array_length(metadata#>'{${handleKey(key)}}') = $${paramIndex}
+        WHEN jsonb_typeof(metadata#>'{${jsonPathKey}}') = 'array' THEN 
+          jsonb_array_length(metadata#>'{${jsonPathKey}}') = $${paramIndex}
         ELSE FALSE
       END
     )`,
@@ -253,12 +261,12 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
   },
 };
 
-export interface FilterResult {
+interface FilterResult {
   sql: string;
   values: any[];
 }
 
-export const handleKey = (key: string) => {
+const toJsonPathKey = (key: string) => {
   return key.replace(/\./g, ',');
 };
 
@@ -274,7 +282,7 @@ export function buildFilterQuery(filter: VectorFilter, minScore: number, topK: n
     // If condition is not a FilterCondition object, assume it's an equality check
     if (!value || typeof value !== 'object') {
       values.push(value);
-      return `metadata#>>'{${handleKey(key)}}' = $${values.length}`;
+      return `metadata#>>'{${toJsonPathKey(key)}}' = $${values.length}`;
     }
 
     // Handle operator conditions
@@ -285,10 +293,10 @@ export function buildFilterQuery(filter: VectorFilter, minScore: number, topK: n
       const entries = Object.entries(operatorValue as Record<string, unknown>);
       const conditions = entries
         .map(([nestedOp, nestedValue]) => {
-          if (!FILTER_OPERATORS[nestedOp as keyof typeof FILTER_OPERATORS]) {
+          if (!FILTER_OPERATORS[nestedOp as OperatorType]) {
             throw new Error(`Invalid operator in $not condition: ${nestedOp}`);
           }
-          const operatorFn = FILTER_OPERATORS[nestedOp]!;
+          const operatorFn = FILTER_OPERATORS[nestedOp as OperatorType]!;
           const operatorResult = operatorFn(key, values.length + 1);
           if (operatorResult.needsValue) {
             values.push(nestedValue as number);
@@ -299,7 +307,7 @@ export function buildFilterQuery(filter: VectorFilter, minScore: number, topK: n
 
       return `NOT (${conditions})`;
     }
-    const operatorFn = FILTER_OPERATORS[operator as string]!;
+    const operatorFn = FILTER_OPERATORS[operator as OperatorType]!;
     const operatorResult = operatorFn(key, values.length + 1, operatorValue);
     if (operatorResult.needsValue) {
       const transformedValue = operatorResult.transformValue ? operatorResult.transformValue() : operatorValue;
