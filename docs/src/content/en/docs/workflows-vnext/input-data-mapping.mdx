@@ -44,8 +44,12 @@ There are many cases where `.map()` can be useful in matching inputs to outputs,
 One use case for input mappings is renaming outputs to match inputs:
 
 ```typescript
+import { Mastra } from "@mastra/core";
+import { createWorkflow, createStep } from "@mastra/core/workflows/vNext";
+import { z } from "zod";
+
 const step1 = createStep({
-  id: "step1",
+  id: "rename-step1",
   inputSchema: z.object({
     inputValue: z.string(),
   }),
@@ -53,43 +57,57 @@ const step1 = createStep({
     outputValue: z.string(),
   }),
   execute: async ({ inputData }) => {
-    return { outputValue: inputData.inputValue };
+    console.log(`Step 1 received: ${inputData.inputValue}`);
+    return { outputValue: `${inputData.inputValue}` };
   },
 });
 
 const step2 = createStep({
-  id: "step2",
+  id: "rename-step2",
   inputSchema: z.object({
     unexpectedName: z.string(),
   }),
-  outputSchema: z.object({
-    result: z.string(),
-  }),
+  outputSchema: z.string(),
   execute: async ({ inputData }) => {
-    return { result: inputData.outputValue };
+    console.log(`Step 2 received: ${inputData.unexpectedName}`);
+    return `${inputData.unexpectedName}`;
   },
 });
-const workflow = createWorkflow({
+
+const myWorkflow = createWorkflow({
   id: "my-workflow",
-  steps: [step1, step2],
   inputSchema: z.object({
     inputValue: z.string(),
   }),
-  outputSchema: z.object({
-    result: z.string(),
-  }),
+  outputSchema: z.string(),
+  steps: [step1, step2],
+})
+.then(step1)
+// mapping output from step1 "outputValue" 
+// to input for step2 "unexpectedName"
+.map({
+  unexpectedName: {
+    step: step1,
+    path: "outputValue",
+  },
+})
+.then(step2)
+.commit();
+
+
+const mastra = new Mastra({
+  vnext_workflows: {
+    myWorkflow,
+  }
 });
 
-workflow
-  .then(step1)
-  .map({
-    unexpectedName: {
-      step: step1,
-      path: "outputValue",
-    },
-  })
-  .then(step2)
-  .commit();
+const run = mastra.vnext_getWorkflow("myWorkflow").createRun();
+const res = await run.start({
+  inputData: { inputValue: "Hello world" }
+});
+if (res.status === "success") {
+  console.log(res.result);
+}
 ```
 
 ## Using workflow inputs as later step inputs
