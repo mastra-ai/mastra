@@ -14,7 +14,7 @@ function. If it returns a `Response` the request is short-circuited. Calling
 `next()` continues processing the next middleware or route handler.
 
 ```typescript copy showLineNumbers
-import { Mastra } from '@mastra/core';
+import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
   server: {
@@ -22,14 +22,14 @@ export const mastra = new Mastra({
       {
         handler: async (c, next) => {
           // Example: Add authentication check
-          const authHeader = c.req.header('Authorization');
+          const authHeader = c.req.header("Authorization");
           if (!authHeader) {
-            return new Response('Unauthorized', { status: 401 });
+            return new Response("Unauthorized", { status: 401 });
           }
 
           await next();
         },
-        path: '/api/*',
+        path: "/api/*",
       },
       // Add a global request logger
       async (c, next) => {
@@ -45,8 +45,8 @@ To attach middleware to a single route pass the `middleware` option to
 `registerApiRoute`:
 
 ```typescript copy showLineNumbers
-registerApiRoute('/my-custom-route', {
-  method: 'GET',
+registerApiRoute("/my-custom-route", {
+  method: "GET",
   middleware: [
     async (c, next) => {
       console.log(`${c.req.method} ${c.req.url}`);
@@ -54,8 +54,8 @@ registerApiRoute('/my-custom-route', {
     },
   ],
   handler: async (c) => {
-    const mastra = c.get('mastra');
-    return c.json({ message: 'Hello, world!' });
+    const mastra = c.get("mastra");
+    return c.json({ message: "Hello, world!" });
   },
 });
 ```
@@ -142,4 +142,3 @@ be inspected by middleware to tailor behaviour:
 - `x-mastra-cloud`: request originates from Mastra Cloud
 - `x-mastra-client-type`: identifies the client SDK, e.g. `js` or `python`
 - `x-mastra-dev-playground`: request triggered from a local playground
-

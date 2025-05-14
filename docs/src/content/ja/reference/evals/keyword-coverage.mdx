@@ -16,7 +16,7 @@ const metric = new KeywordCoverageMetric();
 
 const result = await metric.measure(
   "What are the key features of Python programming language?",
-  "Python is a high-level programming language known for its simple syntax and extensive libraries."
+  "Python is a high-level programming language known for its simple syntax and extensive libraries.",
 );
 
 console.log(result.score); // 0～1のカバレッジスコア
@@ -38,7 +38,7 @@ console.log(result.info); // キーワードカバレッジに関する詳細な
       type: "string",
       description: "キーワードカバレッジを評価するためのテキスト",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -54,7 +54,8 @@ console.log(result.info); // キーワードカバレッジに関する詳細な
     {
       name: "info",
       type: "object",
-      description: "キーワードカバレッジに関する詳細なメトリクスを含むオブジェクト",
+      description:
+        "キーワードカバレッジに関する詳細なメトリクスを含むオブジェクト",
       properties: [
         {
           type: "number",
@@ -63,8 +64,8 @@ console.log(result.info); // キーワードカバレッジに関する詳細な
               name: "matchedKeywords",
               type: "number",
               description: "出力内で見つかったキーワードの数",
-            }
-          ]
+            },
+          ],
         },
         {
           type: "number",
@@ -73,17 +74,18 @@ console.log(result.info); // キーワードカバレッジに関する詳細な
               name: "totalKeywords",
               type: "number",
               description: "入力からの総キーワード数",
-            }
-          ]
-        }
-      ]
-    }
+            },
+          ],
+        },
+      ],
+    },
   ]}
 />
 
 ## スコアリングの詳細
 
 このメトリクスは、以下の機能を使用してキーワードのカバレッジを評価します：
+
 - 一般的な単語やストップワードのフィルタリング（例：「the」、「a」、「and」）
 - 大文字小文字を区別しないマッチング
 - 単語の形式のバリエーション処理
@@ -92,6 +94,7 @@ console.log(result.info); // キーワードカバレッジに関する詳細な
 ### スコアリングプロセス
 
 1. 入力と出力からキーワードを処理します：
+
    - 一般的な単語やストップワードをフィルタリング
    - 大文字小文字と単語の形式を正規化
    - 特殊用語や複合語を処理
@@ -104,7 +107,9 @@ console.log(result.info); // キーワードカバレッジに関する詳細な
 最終スコア：`(matched_keywords / total_keywords) * scale`
 
 ### スコアの解釈
+
 （0からスケール、デフォルトは0-1）
+
 - 1.0：完璧なキーワードカバレッジ
 - 0.7-0.9：ほとんどのキーワードが存在する良好なカバレッジ
 - 0.4-0.6：一部のキーワードが欠けている中程度のカバレッジ
@@ -121,7 +126,7 @@ const metric = new KeywordCoverageMetric();
 // Perfect coverage example
 const result1 = await metric.measure(
   "The quick brown fox jumps over the lazy dog",
-  "A quick brown fox jumped over a lazy dog"
+  "A quick brown fox jumped over a lazy dog",
 );
 // {
 //   score: 1.0,
@@ -134,7 +139,7 @@ const result1 = await metric.measure(
 // Partial coverage example
 const result2 = await metric.measure(
   "Python features include easy syntax, dynamic typing, and extensive libraries",
-  "Python has simple syntax and many libraries"
+  "Python has simple syntax and many libraries",
 );
 // {
 //   score: 0.67,
@@ -147,7 +152,7 @@ const result2 = await metric.measure(
 // Technical terms example
 const result3 = await metric.measure(
   "Discuss React.js component lifecycle and state management",
-  "React components have lifecycle methods and manage state"
+  "React components have lifecycle methods and manage state",
 );
 // {
 //   score: 1.0,
@@ -161,6 +166,7 @@ const result3 = await metric.measure(
 ## 特殊なケース
 
 このメトリクスはいくつかの特殊なケースを処理します：
+
 - 空の入力/出力：両方が空の場合は1.0のスコアを返し、片方だけが空の場合は0.0を返します
 - 単一の単語：単一のキーワードとして扱われます
 - 専門用語：複合的な専門用語（例：「React.js」、「machine learning」）を保持します

@@ -53,16 +53,17 @@ pnpm add @mastra/voice-openai  # OpenAIの例
 STTの主要なメソッドは、音声をテキストに変換する`listen()`メソッドです。使用方法は次のとおりです：
 
 ```typescript
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { OpenAIVoice } from '@mastra/voice-openai';
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { OpenAIVoice } from "@mastra/voice-openai";
 import { getMicrophoneStream } from "@mastra/node-audio";
 
 const voice = new OpenAIVoice();
 
 const agent = new Agent({
   name: "Voice Agent",
-  instructions: "You are a voice assistant that provides recommendations based on user input.",
+  instructions:
+    "You are a voice assistant that provides recommendations based on user input.",
   model: openai("gpt-4o"),
   voice,
 });
@@ -75,10 +76,11 @@ const transcript = await agent.voice.listen(audioStream, {
 
 console.log(`User said: ${transcript}`);
 
-const { text } = await agent.generate(`Based on what the user said, provide them a recommendation: ${transcript}`);
+const { text } = await agent.generate(
+  `Based on what the user said, provide them a recommendation: ${transcript}`,
+);
 
 console.log(`Recommendation: ${text}`);
 ```
 
 STTをエージェントで使用する方法については、[エージェントに音声を追加する](../agents/adding-voice.mdx)のドキュメントをご覧ください。
-

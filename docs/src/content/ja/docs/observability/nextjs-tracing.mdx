@@ -16,8 +16,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   experimental: {
-    instrumentationHook: true // Next.js 15+ では不要
-  }
+    instrumentationHook: true, // Next.js 15+ では不要
+  },
 };
 
 export default nextConfig;
@@ -34,8 +34,8 @@ export const mastra = new Mastra({
   // ... 他の設定
   telemetry: {
     serviceName: "your-project-name",
-    enabled: true
-  }
+    enabled: true,
+  },
 });
 ```
 
@@ -60,17 +60,17 @@ import {
   NodeSDK,
   ATTR_SERVICE_NAME,
   Resource,
-} from '@mastra/core/telemetry/otel-vendor';
-import { LangfuseExporter } from 'langfuse-vercel';
+} from "@mastra/core/telemetry/otel-vendor";
+import { LangfuseExporter } from "langfuse-vercel";
 
 export function register() {
   const exporter = new LangfuseExporter({
     // ... Langfuse 設定
-  })
+  });
 
   const sdk = new NodeSDK({
     resource: new Resource({
-      [ATTR_SERVICE_NAME]: 'ai',
+      [ATTR_SERVICE_NAME]: "ai",
     }),
     traceExporter: exporter,
   });
@@ -92,10 +92,10 @@ npm install @opentelemetry/api @vercel/otel
 2. プロジェクトのルート（または src フォルダを使用している場合はその中）にインストゥルメンテーションファイルを作成します:
 
 ```ts filename="instrumentation.ts" copy
-import { registerOTel } from '@vercel/otel'
+import { registerOTel } from "@vercel/otel";
 
 export function register() {
-  registerOTel({ serviceName: 'your-project-name' })
+  registerOTel({ serviceName: "your-project-name" });
 }
 ```
 
@@ -104,5 +104,6 @@ export function register() {
 このセットアップにより、Next.js アプリケーションと Mastra 操作のための OpenTelemetry トレーシングが有効になります。
 
 詳細については、以下のドキュメントを参照してください:
+
 - [Next.js インストゥルメンテーション](https://nextjs.org/docs/app/building-your-application/optimizing/instrumentation)
 - [Vercel OpenTelemetry](https://vercel.com/docs/observability/otel-overview/quickstart)

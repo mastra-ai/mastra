@@ -12,13 +12,13 @@ Configuration options for workflow steps that control variable mapping, executio
 ```typescript
 workflow.step(processOrder, {
   variables: {
-    orderId: { step: 'trigger', path: 'id' },
-    userId: { step: 'auth', path: 'user.id' }
+    orderId: { step: "trigger", path: "id" },
+    userId: { step: "auth", path: "user.id" },
   },
   when: {
-    ref: { step: 'auth', path: 'status' },
-    query: { $eq: 'authenticated' }
-  }
+    ref: { step: "auth", path: "status" },
+    query: { $eq: "authenticated" },
+  },
 });
 ```
 
@@ -30,14 +30,14 @@ workflow.step(processOrder, {
       name: "variables",
       type: "Record<string, VariableRef>",
       description: "Maps step input variables to values from other steps",
-      isOptional: true
+      isOptional: true,
     },
     {
       name: "when",
       type: "StepCondition",
       description: "Condition that must be met for step execution",
-      isOptional: true
-    }
+      isOptional: true,
+    },
   ]}
 />
 
@@ -49,18 +49,19 @@ workflow.step(processOrder, {
       name: "step",
       type: "string | Step | { id: string }",
       description: "Source step for the variable value",
-      isOptional: false
+      isOptional: false,
     },
     {
       name: "path",
       type: "string",
       description: "Path to the value in the step's output",
-      isOptional: false
-    }
+      isOptional: false,
+    },
   ]}
 />
 
 ## Related
+
 - [Path Comparison](../../docs/workflows/control-flow.mdx)
 - [Step Function Reference](./step-function.mdx)
 - [Step Class Reference](./step-class.mdx)

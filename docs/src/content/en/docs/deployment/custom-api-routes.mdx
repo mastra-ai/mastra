@@ -13,19 +13,19 @@ Routes can live in the same file as the `Mastra` instance but separating them
 helps keep configuration concise.
 
 ```typescript copy showLineNumbers
-import { Mastra } from '@mastra/core';
-import { registerApiRoute } from '@mastra/core/server';
+import { Mastra } from "@mastra/core";
+import { registerApiRoute } from "@mastra/core/server";
 
 export const mastra = new Mastra({
   server: {
     apiRoutes: [
-      registerApiRoute('/my-custom-route', {
-        method: 'GET',
+      registerApiRoute("/my-custom-route", {
+        method: "GET",
         handler: async (c) => {
-          const mastra = c.get('mastra');
-          const agents = await mastra.getAgent('my-agent');
+          const mastra = c.get("mastra");
+          const agents = await mastra.getAgent("my-agent");
 
-          return c.json({ message: 'Hello, world!' });
+          return c.json({ message: "Hello, world!" });
         },
       }),
     ],
@@ -40,8 +40,8 @@ To add route-specific middleware pass a `middleware` array when calling
 `registerApiRoute`.
 
 ```typescript copy showLineNumbers
-registerApiRoute('/my-custom-route', {
-  method: 'GET',
+registerApiRoute("/my-custom-route", {
+  method: "GET",
   middleware: [
     async (c, next) => {
       console.log(`${c.req.method} ${c.req.url}`);
@@ -49,8 +49,7 @@ registerApiRoute('/my-custom-route', {
     },
   ],
   handler: async (c) => {
-    return c.json({ message: 'My route with custom middleware' });
+    return c.json({ message: "My route with custom middleware" });
   },
 });
 ```
-

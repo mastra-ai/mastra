@@ -24,7 +24,7 @@ The system demonstrates metadata extraction in two ways:
 Import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/index.ts"
-import { MDocument } from '@mastra/rag';
+import { MDocument } from "@mastra/rag";
 ```
 
 ## Document Creation
@@ -54,13 +54,13 @@ Extract metadata directly from the document:
 ```typescript copy showLineNumbers{17} filename="src/index.ts"
 // Configure metadata extraction options
 await doc.extractMetadata({
-  keywords: true,  // Extract important keywords
-  summary: true,   // Generate a concise summary
+  keywords: true, // Extract important keywords
+  summary: true, // Generate a concise summary
 });
 
 // Retrieve the extracted metadata
 const meta = doc.getMetadata();
-console.log('Extracted Metadata:', meta);
+console.log("Extracted Metadata:", meta);
 
 // Example Output:
 // Extracted Metadata: {
@@ -83,17 +83,17 @@ Combine document chunking with metadata extraction:
 ```typescript copy showLineNumbers{40} filename="src/index.ts"
 // Configure chunking with metadata extraction
 await doc.chunk({
-  strategy: 'recursive',  // Use recursive chunking strategy
-  size: 200,             // Maximum chunk size
+  strategy: "recursive", // Use recursive chunking strategy
+  size: 200, // Maximum chunk size
   extract: {
-    keywords: true,      // Extract keywords per chunk
-    summary: true,       // Generate summary per chunk
+    keywords: true, // Extract keywords per chunk
+    summary: true, // Generate summary per chunk
   },
 });
 
 // Get metadata from chunks
 const metaTwo = doc.getMetadata();
-console.log('Chunk Metadata:', metaTwo);
+console.log("Chunk Metadata:", metaTwo);
 
 // Example Output:
 // Chunk Metadata: {
@@ -118,4 +118,4 @@ console.log('Chunk Metadata:', metaTwo);
   link={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/metadata-extraction"
   }
-/> 
+/>

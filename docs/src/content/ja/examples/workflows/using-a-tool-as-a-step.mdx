@@ -3,20 +3,20 @@ title: "例：ツールをステップとして使用する | ワークフロー
 description: カスタムツールをワークフローのステップとして統合するためにMastraを使用する例。
 ---
 
-import { GithubLink } from '@/components/github-link';
+import { GithubLink } from "@/components/github-link";
 
 # ワークフローステップとしてのツール
 
 この例では、カスタムツールをワークフローステップとして作成し統合する方法を示し、入力/出力スキーマを定義し、ツールの実行ロジックを実装する方法を示します。
 
 ```ts showLineNumbers copy
-import { createTool } from '@mastra/core/tools';
-import { Workflow } from '@mastra/core/workflows';
-import { z } from 'zod';
+import { createTool } from "@mastra/core/tools";
+import { Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
 
 const crawlWebpage = createTool({
-  id: 'Crawl Webpage',
-  description: 'Crawls a webpage and extracts the text content',
+  id: "Crawl Webpage",
+  description: "Crawls a webpage and extracts the text content",
   inputSchema: z.object({
     url: z.string().url(),
   }),
@@ -26,17 +26,17 @@ const crawlWebpage = createTool({
   execute: async ({ context }) => {
     const response = await fetch(context.triggerData.url);
     const text = await response.text();
-    return { rawText: 'This is the text content of the webpage: ' + text };
+    return { rawText: "This is the text content of the webpage: " + text };
   },
 });
 
-const contentWorkflow = new Workflow({ name: 'content-review' });
+const contentWorkflow = new Workflow({ name: "content-review" });
 
 contentWorkflow.step(crawlWebpage).commit();
 
 const { start } = contentWorkflow.createRun();
 
-const res = await start({ triggerData: { url: 'https://example.com'} });
+const res = await start({ triggerData: { url: "https://example.com" } });
 
 console.log(res.results);
 ```
@@ -46,4 +46,8 @@ console.log(res.results);
 <hr className="dark:border-[#404040] border-gray-300" />
 <br />
 <br />
-<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/tool-as-workflow-step'} />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/tool-as-workflow-step"
+  }
+/>

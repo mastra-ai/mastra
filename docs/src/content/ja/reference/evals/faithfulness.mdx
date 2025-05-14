@@ -58,16 +58,14 @@ console.log(result.info.reason); // "All claims are supported by the context."
     {
       name: "scale",
       type: "number",
-      description:
-        "最大スコア値。最終スコアはこのスケールに正規化されます。",
+      description: "最大スコア値。最終スコアはこのスケールに正規化されます。",
       isOptional: false,
       defaultValue: "1",
     },
     {
       name: "context",
       type: "string[]",
-      description:
-        "出力の主張が検証されるコンテキストチャンクの配列。",
+      description: "出力の主張が検証されるコンテキストチャンクの配列。",
       isOptional: false,
     },
   ]}
@@ -130,6 +128,7 @@ console.log(result.info.reason); // "All claims are supported by the context."
 ### 採点プロセス
 
 1. 主張とコンテキストを分析します：
+
    - すべての主張（事実的および推測的）を抽出
    - 各主張をコンテキストに対して検証
    - 以下の3つの判定のいずれかを割り当て：
@@ -145,7 +144,9 @@ console.log(result.info.reason); // "All claims are supported by the context."
 最終スコア：`(supported_claims / total_claims) * scale`
 
 ### スコアの解釈
+
 （0から設定値まで、デフォルトは0-1）
+
 - 1.0：すべての主張がコンテキストによって裏付けられている
 - 0.7-0.9：ほとんどの主張が裏付けられており、検証不可能なものはわずか
 - 0.4-0.6：裏付けと矛盾が混在している
