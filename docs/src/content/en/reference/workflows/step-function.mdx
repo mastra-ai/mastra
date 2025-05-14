@@ -13,11 +13,11 @@ The `.step()` method adds a new step to the workflow, optionally configuring its
 workflow.step({
   id: "stepTwo",
   outputSchema: z.object({
-    result: z.number()
+    result: z.number(),
   }),
   execute: async ({ context }) => {
     return { result: 42 };
-  }
+  },
 });
 ```
 
@@ -28,15 +28,16 @@ workflow.step({
     {
       name: "stepConfig",
       type: "Step | StepDefinition | string",
-      description: "Step instance, configuration object, or step ID to add to workflow",
-      isOptional: false
+      description:
+        "Step instance, configuration object, or step ID to add to workflow",
+      isOptional: false,
     },
     {
       name: "options",
       type: "StepOptions",
       description: "Optional configuration for step execution",
-      isOptional: true
-    }
+      isOptional: true,
+    },
   ]}
 />
 
@@ -48,20 +49,20 @@ workflow.step({
       name: "id",
       type: "string",
       description: "Unique identifier for the step",
-      isOptional: false
+      isOptional: false,
     },
     {
       name: "outputSchema",
       type: "z.ZodSchema",
       description: "Schema for validating step output",
-      isOptional: true
+      isOptional: true,
     },
     {
       name: "execute",
       type: "(params: ExecuteParams) => Promise<any>",
       description: "Function containing step logic",
-      isOptional: false
-    }
+      isOptional: false,
+    },
   ]}
 />
 
@@ -73,18 +74,19 @@ workflow.step({
       name: "variables",
       type: "Record<string, VariableRef>",
       description: "Map of variable names to their source references",
-      isOptional: true
+      isOptional: true,
     },
     {
       name: "when",
       type: "StepCondition",
       description: "Condition that must be met for step to execute",
-      isOptional: true
-    }
+      isOptional: true,
+    },
   ]}
 />
 
 ## Related
+
 - [Basic Usage with Step Instance](../../docs/workflows/steps.mdx)
 - [Step Class Reference](./step-class.mdx)
 - [Workflow Class Reference](./workflow.mdx)

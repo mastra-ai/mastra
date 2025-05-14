@@ -18,15 +18,15 @@ const voice = new SpeechifyVoice();
 // カスタム設定で初期化
 const voice = new SpeechifyVoice({
   speechModel: {
-    name: 'simba-english',
-    apiKey: 'your-api-key'
+    name: "simba-english",
+    apiKey: "your-api-key",
   },
-  speaker: 'george'  // デフォルトの声
+  speaker: "george", // デフォルトの声
 });
 
 // テキストを音声に変換
 const audioStream = await voice.speak("Hello, world!", {
-  speaker: 'henry',  // デフォルトの声を上書き
+  speaker: "henry", // デフォルトの声を上書き
 });
 ```
 
@@ -65,7 +65,8 @@ const audioStream = await voice.speak("Hello, world!", {
     {
       name: "apiKey",
       type: "string",
-      description: "Speechify APIキー。SPEECHIFY_API_KEY環境変数にフォールバックします",
+      description:
+        "Speechify APIキー。SPEECHIFY_API_KEY環境変数にフォールバックします",
       isOptional: true,
     },
   ]}
@@ -82,7 +83,8 @@ const audioStream = await voice.speak("Hello, world!", {
     {
       name: "input",
       type: "string | NodeJS.ReadableStream",
-      description: "音声に変換するテキスト。ストリームが提供された場合、最初にテキストに変換されます。",
+      description:
+        "音声に変換するテキスト。ストリームが提供された場合、最初にテキストに変換されます。",
       isOptional: false,
     },
     {

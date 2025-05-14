@@ -5,6 +5,7 @@ dist/
 # IDE
 .vscode/
 .idea/
+.history/
 
 # Dev artifacts
 .dev/db/*

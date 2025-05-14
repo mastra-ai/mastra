@@ -2,6 +2,7 @@
 title: "リファレンス: ステップ | ワークフローの構築 | Mastra ドキュメント"
 description: ワークフロー内の個々の作業単位を定義するStepクラスのドキュメント。
 ---
+
 # ステップ
 
 Stepクラスは、ワークフロー内の個々の作業単位を定義し、実行ロジック、データ検証、および入出力処理をカプセル化します。
@@ -13,18 +14,18 @@ const processOrder = new Step({
   id: "processOrder",
   inputSchema: z.object({
     orderId: z.string(),
-    userId: z.string()
+    userId: z.string(),
   }),
   outputSchema: z.object({
     status: z.string(),
-    orderId: z.string()
+    orderId: z.string(),
   }),
   execute: async ({ context, runId }) => {
     return {
       status: "processed",
-      orderId: context.orderId
+      orderId: context.orderId,
     };
-  }
+  },
 });
 ```
 
@@ -36,32 +37,32 @@ const processOrder = new Step({
       name: "id",
       type: "string",
       description: "ステップの一意の識別子",
-      required: true
+      required: true,
     },
     {
       name: "inputSchema",
       type: "z.ZodSchema",
       description: "実行前に入力データを検証するためのZodスキーマ",
-      required: false
+      required: false,
     },
     {
       name: "outputSchema",
       type: "z.ZodSchema",
       description: "ステップの出力データを検証するためのZodスキーマ",
-      required: false
+      required: false,
     },
     {
       name: "payload",
       type: "Record<string, any>",
       description: "変数とマージされる静的データ",
-      required: false
+      required: false,
     },
     {
       name: "execute",
       type: "(params: ExecuteParams) => Promise<any>",
       description: "ステップのロジックを含む非同期関数",
-      required: true
-    }
+      required: true,
+    },
   ]}
 />
 
@@ -72,23 +73,23 @@ const processOrder = new Step({
     {
       name: "context",
       type: "StepContext",
-      description: "ワークフローのコンテキストとステップの結果へのアクセス"
+      description: "ワークフローのコンテキストとステップの結果へのアクセス",
     },
     {
       name: "runId",
       type: "string",
-      description: "現在のワークフロー実行の一意の識別子"
+      description: "現在のワークフロー実行の一意の識別子",
     },
     {
       name: "suspend",
       type: "() => Promise<void>",
-      description: "ステップの実行を一時停止する関数"
+      description: "ステップの実行を一時停止する関数",
     },
     {
       name: "mastra",
       type: "Mastra",
-      description: "Mastraインスタンスへのアクセス"
-    }
+      description: "Mastraインスタンスへのアクセス",
+    },
   ]}
 />
 
@@ -97,4 +98,3 @@ const processOrder = new Step({
 - [ワークフローリファレンス](./workflow.mdx)
 - [ステップ設定ガイド](../../docs/workflows/steps.mdx)
 - [制御フローガイド](../../docs/workflows/control-flow.mdx)
-

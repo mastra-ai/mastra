@@ -11,11 +11,15 @@ description: 様々な重大度レベルでイベントを記録するための�
 
 ```typescript showLineNumbers copy
 // Using a console logger
-const logger = createLogger({ name: 'Mastra', level: 'info' });
+const logger = createLogger({ name: "Mastra", level: "info" });
 
-logger.debug('Debug message'); // Won't be logged because level is INFO
-logger.info({ message: 'User action occurred', destinationPath: 'user-actions', type: 'AGENT' }); // Logged
-logger.error('An error occurred'); // Logged as ERROR
+logger.debug("Debug message"); // Won't be logged because level is INFO
+logger.info({
+  message: "User action occurred",
+  destinationPath: "user-actions",
+  type: "AGENT",
+}); // Logged
+logger.error("An error occurred"); // Logged as ERROR
 ```
 
 ## メソッド
@@ -23,31 +27,35 @@ logger.error('An error occurred'); // Logged as ERROR
 <PropertiesTable
   content={[
     {
-      name: 'debug',
-      type: '(message: BaseLogMessage | string, ...args: any[]) => void | Promise<void>',
-      description: 'DEBUGレベルのログを書き込みます。レベルがDEBUG以下の場合のみ記録されます。',
+      name: "debug",
+      type: "(message: BaseLogMessage | string, ...args: any[]) => void | Promise<void>",
+      description:
+        "DEBUGレベルのログを書き込みます。レベルがDEBUG以下の場合のみ記録されます。",
     },
     {
-      name: 'info',
-      type: '(message: BaseLogMessage | string, ...args: any[]) => void | Promise<void>',
-      description: 'INFOレベルのログを書き込みます。レベルがINFO以下の場合のみ記録されます。',
+      name: "info",
+      type: "(message: BaseLogMessage | string, ...args: any[]) => void | Promise<void>",
+      description:
+        "INFOレベルのログを書き込みます。レベルがINFO以下の場合のみ記録されます。",
     },
     {
-      name: 'warn',
-      type: '(message: BaseLogMessage | string, ...args: any[]) => void | Promise<void>',
-      description: 'WARNレベルのログを書き込みます。レベルがWARN以下の場合のみ記録されます。',
+      name: "warn",
+      type: "(message: BaseLogMessage | string, ...args: any[]) => void | Promise<void>",
+      description:
+        "WARNレベルのログを書き込みます。レベルがWARN以下の場合のみ記録されます。",
     },
     {
-      name: 'error',
-      type: '(message: BaseLogMessage | string, ...args: any[]) => void | Promise<void>',
-      description: 'ERRORレベルのログを書き込みます。レベルがERROR以下の場合のみ記録されます。',
+      name: "error",
+      type: "(message: BaseLogMessage | string, ...args: any[]) => void | Promise<void>",
+      description:
+        "ERRORレベルのログを書き込みます。レベルがERROR以下の場合のみ記録されます。",
     },
     {
-      name: 'cleanup',
-      type: '() => Promise<void>',
+      name: "cleanup",
+      type: "() => Promise<void>",
       isOptional: true,
       description:
-        'ロガーが保持するリソースをクリーンアップします（例：Upstashのネットワーク接続）。すべてのロガーがこれを実装しているわけではありません。',
+        "ロガーが保持するリソースをクリーンアップします（例：Upstashのネットワーク接続）。すべてのロガーがこれを実装しているわけではありません。",
     },
   ]}
 />

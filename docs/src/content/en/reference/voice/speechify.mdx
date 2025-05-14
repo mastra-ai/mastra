@@ -18,15 +18,15 @@ const voice = new SpeechifyVoice();
 // Initialize with custom configuration
 const voice = new SpeechifyVoice({
   speechModel: {
-    name: 'simba-english',
-    apiKey: 'your-api-key'
+    name: "simba-english",
+    apiKey: "your-api-key",
   },
-  speaker: 'george'  // Default voice
+  speaker: "george", // Default voice
 });
 
 // Convert text to speech
 const audioStream = await voice.speak("Hello, world!", {
-  speaker: 'henry',  // Override default voice
+  speaker: "henry", // Override default voice
 });
 ```
 
@@ -65,7 +65,8 @@ const audioStream = await voice.speak("Hello, world!", {
     {
       name: "apiKey",
       type: "string",
-      description: "Speechify API key. Falls back to SPEECHIFY_API_KEY environment variable",
+      description:
+        "Speechify API key. Falls back to SPEECHIFY_API_KEY environment variable",
       isOptional: true,
     },
   ]}
@@ -82,7 +83,8 @@ Converts text to speech using the configured speech model and voice.
     {
       name: "input",
       type: "string | NodeJS.ReadableStream",
-      description: "Text to convert to speech. If a stream is provided, it will be converted to text first.",
+      description:
+        "Text to convert to speech. If a stream is provided, it will be converted to text first.",
       isOptional: false,
     },
     {

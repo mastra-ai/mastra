@@ -25,7 +25,7 @@ The example shows how to:
 Import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/index.ts"
-import { KeywordCoverageMetric } from '@mastra/evals/nlp';
+import { KeywordCoverageMetric } from "@mastra/evals/nlp";
 ```
 
 ## Metric Configuration
@@ -43,15 +43,16 @@ const metric = new KeywordCoverageMetric();
 Evaluate a response that includes all key terms:
 
 ```typescript copy showLineNumbers{7} filename="src/index.ts"
-const input1 = 'JavaScript frameworks like React and Vue';
-const output1 = 'Popular JavaScript frameworks include React and Vue for web development';
+const input1 = "JavaScript frameworks like React and Vue";
+const output1 =
+  "Popular JavaScript frameworks include React and Vue for web development";
 
-console.log('Example 1 - Full Coverage:');
-console.log('Input:', input1);
-console.log('Output:', output1);
+console.log("Example 1 - Full Coverage:");
+console.log("Input:", input1);
+console.log("Output:", output1);
 
 const result1 = await metric.measure(input1, output1);
-console.log('Metric Result:', {
+console.log("Metric Result:", {
   score: result1.score,
   info: {
     totalKeywords: result1.info.totalKeywords,
@@ -67,15 +68,15 @@ console.log('Metric Result:', {
 Evaluate a response with some keywords present:
 
 ```typescript copy showLineNumbers{24} filename="src/index.ts"
-const input2 = 'TypeScript offers interfaces, generics, and type inference';
-const output2 = 'TypeScript provides type inference and some advanced features';
+const input2 = "TypeScript offers interfaces, generics, and type inference";
+const output2 = "TypeScript provides type inference and some advanced features";
 
-console.log('Example 2 - Partial Coverage:');
-console.log('Input:', input2);
-console.log('Output:', output2);
+console.log("Example 2 - Partial Coverage:");
+console.log("Input:", input2);
+console.log("Output:", output2);
 
 const result2 = await metric.measure(input2, output2);
-console.log('Metric Result:', {
+console.log("Metric Result:", {
   score: result2.score,
   info: {
     totalKeywords: result2.info.totalKeywords,
@@ -91,15 +92,16 @@ console.log('Metric Result:', {
 Evaluate a response with limited keyword matching:
 
 ```typescript copy showLineNumbers{41} filename="src/index.ts"
-const input3 = 'Machine learning models require data preprocessing, feature engineering, and hyperparameter tuning';
-const output3 = 'Data preparation is important for models';
+const input3 =
+  "Machine learning models require data preprocessing, feature engineering, and hyperparameter tuning";
+const output3 = "Data preparation is important for models";
 
-console.log('Example 3 - Minimal Coverage:');
-console.log('Input:', input3);
-console.log('Output:', output3);
+console.log("Example 3 - Minimal Coverage:");
+console.log("Input:", input3);
+console.log("Output:", output3);
 
 const result3 = await metric.measure(input3, output3);
-console.log('Metric Result:', {
+console.log("Metric Result:", {
   score: result3.score,
   info: {
     totalKeywords: result3.info.totalKeywords,
@@ -115,6 +117,7 @@ console.log('Metric Result:', {
 The metric provides:
 
 1. A coverage score between 0 and 1:
+
    - 1.0: Complete coverage - all keywords present
    - 0.7-0.9: High coverage - most keywords included
    - 0.4-0.6: Partial coverage - some keywords present
@@ -136,4 +139,4 @@ The metric provides:
   link={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/keyword-coverage"
   }
-/> 
+/>

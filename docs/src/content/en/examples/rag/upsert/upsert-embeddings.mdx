@@ -49,6 +49,7 @@ After generating embeddings, you need to store them in a database that supports 
         "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-pgvector"
       }
     />
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -84,9 +85,10 @@ After generating embeddings, you need to store them in a database that supports 
     <br />
     <hr className="dark:border-[#404040] border-gray-300" />
     <br />
-    <GithubLink 
-      link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-pinecone'} 
+    <GithubLink
+      link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-pinecone'}
     />
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -123,6 +125,7 @@ After generating embeddings, you need to store them in a database that supports 
       metadata: chunks?.map(chunk => ({ text: chunk.text })),
     });
     ```
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -161,9 +164,10 @@ After generating embeddings, you need to store them in a database that supports 
     <br />
     <hr className="dark:border-[#404040] border-gray-300" />
     <br />
-    <GithubLink 
-      link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-chroma'} 
+    <GithubLink
+      link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-chroma'}
     />
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -200,6 +204,7 @@ After generating embeddings, you need to store them in a database that supports 
       metadata: chunks?.map(chunk => ({ text: chunk.text })),
     });
     ```
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -239,9 +244,10 @@ After generating embeddings, you need to store them in a database that supports 
     <br />
     <hr className="dark:border-[#404040] border-gray-300" />
     <br />
-    <GithubLink 
-      link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-libsql'} 
+    <GithubLink
+      link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-libsql'}
     />
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -277,6 +283,7 @@ After generating embeddings, you need to store them in a database that supports 
       metadata: chunks?.map(chunk => ({ text: chunk.text })),
     });
     ```
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -312,6 +319,7 @@ After generating embeddings, you need to store them in a database that supports 
       metadata: chunks?.map(chunk => ({ text: chunk.text })),
     });
     ```
+
   </Tabs.Tab>
   <Tabs.Tab>
   The `MongoDBVector` class provides methods to create indexes and insert embeddings into MongoDB with Atlas Search.
@@ -346,5 +354,6 @@ After generating embeddings, you need to store them in a database that supports 
       metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
     });
     ```
+
   </Tabs.Tab>
 </Tabs>

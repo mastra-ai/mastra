@@ -25,14 +25,14 @@ const storageWorkers = new CloudflareStore({
     messages: MESSAGES_KV, // KVNamespace binding for messages table
     // Add other tables as needed
   },
-  keyPrefix: 'dev_', // Optional: isolate keys per environment
+  keyPrefix: "dev_", // Optional: isolate keys per environment
 });
 
 // --- Example 2: Using REST API ---
 const storageRest = new CloudflareStore({
   accountId: process.env.CLOUDFLARE_ACCOUNT_ID!, // Cloudflare Account ID
   apiToken: process.env.CLOUDFLARE_API_TOKEN!, // Cloudflare API Token
-  namespacePrefix: 'dev_', // Optional: isolate namespaces per environment
+  namespacePrefix: "dev_", // Optional: isolate namespaces per environment
 });
 ```
 
@@ -61,13 +61,15 @@ const storageRest = new CloudflareStore({
     {
       name: "namespacePrefix",
       type: "string",
-      description: "すべての名前空間名のオプションのプレフィックス（環境分離に役立ちます）",
+      description:
+        "すべての名前空間名のオプションのプレフィックス（環境分離に役立ちます）",
       isOptional: true,
     },
     {
       name: "keyPrefix",
       type: "string",
-      description: "すべてのキーのオプションのプレフィックス（環境分離に役立ちます）",
+      description:
+        "すべてのキーのオプションのプレフィックス（環境分離に役立ちます）",
       isOptional: true,
     },
   ]}

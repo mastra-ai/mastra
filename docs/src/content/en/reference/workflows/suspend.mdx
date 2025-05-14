@@ -17,7 +17,7 @@ const approvalStep = new Step({
       await suspend();
     }
     return { approved: true };
-  }
+  },
 });
 ```
 
@@ -29,8 +29,8 @@ const approvalStep = new Step({
       name: "metadata",
       type: "Record<string, any>",
       description: "Optional data to store with the suspended state",
-      isOptional: true
-    }
+      isOptional: true,
+    },
   ]}
 />
 
@@ -41,8 +41,8 @@ const approvalStep = new Step({
     {
       name: "Promise<void>",
       type: "Promise",
-      description: "Resolves when the workflow is successfully suspended"
-    }
+      description: "Resolves when the workflow is successfully suspended",
+    },
   ]}
 />
 
@@ -56,10 +56,10 @@ const reviewStep = new Step({
   execute: async ({ context, suspend }) => {
     await suspend({
       reason: "Needs manager approval",
-      requestedBy: context.user
+      requestedBy: context.user,
     });
     return { reviewed: true };
-  }
+  },
 });
 ```
 
