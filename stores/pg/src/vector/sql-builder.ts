@@ -33,6 +33,7 @@ export function validateIdentifier(name: string, kind = 'identifier') {
 
 // Helper functions to create operators
 function validateFieldKey(key: string) {
+  if (key === '') return;
   if (!/^[a-zA-Z_][a-zA-Z0-9_\.]*$/.test(key)) {
     throw new Error(`Invalid field key: ${key}`);
   }

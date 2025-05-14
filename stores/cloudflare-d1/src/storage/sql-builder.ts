@@ -4,6 +4,18 @@
 export type SqlParam = string | number | boolean | null | undefined;
 
 /**
+ * Interface for SQL query options with generic type support
+ */
+export interface SqlQueryOptions {
+  /** SQL query to execute */
+  sql: string;
+  /** Parameters to bind to the query */
+  params?: SqlParam[];
+  /** Whether to return only the first result */
+  first?: boolean;
+}
+
+/**
  * SQL Builder class for constructing type-safe SQL queries
  * This helps create maintainable and secure SQL queries with proper parameter handling
  */
