@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { subscribe } from '@inngest/realtime';
-import type { Mastra, WorkflowRun } from '@mastra/core';
+import type { Mastra, VNextWorkflowRun, VNextWorkflowRuns } from '@mastra/core';
 import { RuntimeContext } from '@mastra/core/di';
 import { NewWorkflow, createStep, Run, DefaultExecutionEngine, cloneStep } from '@mastra/core/workflows/vNext';
 import type {
@@ -35,7 +35,6 @@ export function serve({ mastra, inngest }: { mastra: Mastra; inngest: Inngest })
   });
 }
 
-// @ts-ignore - infinite recursion
 export class InngestRun<
   TSteps extends NewStep<string, any, any>[] = NewStep<string, any, any>[],
   TInput extends z.ZodType<any> = z.ZodType<any>,
@@ -227,20 +226,22 @@ export class InngestWorkflow<
       return { runs: [], total: 0 };
     }
 
-    return storage.getWorkflowRuns({ workflowName: this.id, ...(args ?? {}) });
+    return storage.getWorkflowRuns({ workflowName: this.id, ...(args ?? {}) }) as unknown as VNextWorkflowRuns;
   }
 
-  async getWorkflowRunById(runId: string): Promise<WorkflowRun | null> {
+  async getWorkflowRunById(runId: string): Promise<VNextWorkflowRun | null> {
     const storage = this.#mastra?.getStorage();
     if (!storage) {
       this.logger.debug('Cannot get workflow runs. Mastra engine is not initialized');
       return null;
     }
-    const run = await storage.getWorkflowRunById({ runId, workflowName: this.id });
+    const run = (await storage.getWorkflowRunById({ runId, workflowName: this.id })) as unknown as VNextWorkflowRun;
 
     return (
       run ??
-      (this.runs.get(runId) ? ({ ...this.runs.get(runId), workflowName: this.id } as unknown as WorkflowRun) : null)
+      (this.runs.get(runId)
+        ? ({ ...this.runs.get(runId), workflowName: this.id } as unknown as VNextWorkflowRun)
+        : null)
     );
   }
 
@@ -267,12 +268,10 @@ export class InngestWorkflow<
     }
   }
 
-  // @ts-ignore - infinite recursion
   createRun(options?: { runId?: string }): Run<TSteps, TInput, TOutput> {
     const runIdToUse = options?.runId || randomUUID();
 
     // Return a new Run instance with object parameters
-    // @ts-ignore - infinite recursion
     const run: Run<TSteps, TInput, TOutput> =
       this.runs.get(runIdToUse) ??
       new InngestRun(

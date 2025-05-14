@@ -38,11 +38,6 @@ export type Span = {
   createdAt: string;
 };
 
-export type SpanNode = Span & {
-  children: SpanNode[];
-  relativePercentage?: number;
-};
-
 export type RefinedTrace = {
   traceId: string;
   serviceName: string;
@@ -50,4 +45,15 @@ export type RefinedTrace = {
   started: number;
   status: SpanStatus;
   trace: Span[];
+};
+
+export type EnhancedSpan = Span & {
+  offset: number;
+  totalDurationMs: number;
+};
+
+export type SpanNode = Span & {
+  children: SpanNode[];
+  totalDurationMs: number;
+  offset: number;
 };

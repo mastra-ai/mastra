@@ -321,7 +321,7 @@ interface PGIndexStats {
   ]}
 />
 
-### updateIndexById()
+### updateVector()
 
 <PropertiesTable
   content={[
@@ -366,23 +366,23 @@ Updates an existing vector by ID. At least one of vector or metadata must be pro
 
 ```typescript copy
 // Update just the vector
-await pgVector.updateIndexById("my_vectors", "vector123", {
+await pgVector.updateVector("my_vectors", "vector123", {
   vector: [0.1, 0.2, 0.3],
 });
 
 // Update just the metadata
-await pgVector.updateIndexById("my_vectors", "vector123", {
+await pgVector.updateVector("my_vectors", "vector123", {
   metadata: { label: "updated" },
 });
 
 // Update both vector and metadata
-await pgVector.updateIndexById("my_vectors", "vector123", {
+await pgVector.updateVector("my_vectors", "vector123", {
   vector: [0.1, 0.2, 0.3],
   metadata: { label: "updated" },
 });
 ```
 
-### deleteIndexById()
+### deleteVector()
 
 <PropertiesTable
   content={[
@@ -402,7 +402,7 @@ await pgVector.updateIndexById("my_vectors", "vector123", {
 Deletes a single vector by ID from the specified index.
 
 ```typescript copy
-await pgVector.deleteIndexById("my_vectors", "vector123");
+await pgVector.deleteVector("my_vectors", "vector123");
 ```
 
 ### disconnect()

@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import type { UUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import path from 'node:path';
 import { openai } from '@ai-sdk/openai';
@@ -88,6 +89,40 @@ describe('Memory Streaming Tests', () => {
     expect(response2).toContain('Seattle');
     expect(response2).toContain('weather');
     expect(response2).toContain('70 degrees');
+  });
+
+  it('should use experimental_generateMessageId for messages in memory', async () => {
+    const agent = new Agent({
+      name: 'test-msg-id',
+      instructions: 'you are a helpful assistant.',
+      model: openai('gpt-4o'),
+      memory,
+    });
+
+    const threadId = randomUUID();
+    const resourceId = 'test-resource-msg-id';
+    const customIds: UUID[] = [];
+
+    await agent.generate('Hello, world!', {
+      threadId,
+      resourceId,
+      experimental_generateMessageId: () => {
+        const id = randomUUID();
+        customIds.push(id);
+        return id;
+      },
+    });
+
+    const { messages } = await agent.getMemory()!.query({ threadId });
+
+    expect(messages).toHaveLength(2);
+    expect(messages.length).toBe(customIds.length);
+    for (const message of messages) {
+      if (!(`id` in message)) {
+        throw new Error(`Expected message.id`);
+      }
+      expect(customIds).contains(message.id);
+    }
   });
 
   describe('should stream via useChat after tool call', () => {

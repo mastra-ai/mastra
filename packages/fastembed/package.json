@@ -1,6 +1,6 @@
 {
   "name": "@mastra/fastembed",
-  "version": "0.0.3-alpha.0",
+  "version": "0.0.3",
   "license": "Elastic-2.0",
   "type": "module",
   "main": "dist/index.js",
