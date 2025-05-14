@@ -1,6 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import { openai } from '@ai-sdk/openai';
 import { MockLanguageModelV1 } from 'ai/test';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
