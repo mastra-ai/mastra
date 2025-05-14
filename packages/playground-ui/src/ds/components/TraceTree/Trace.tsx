@@ -2,7 +2,6 @@ import React from 'react';
 
 import { Span, SpanProps } from './Span';
 import { Spans } from './Spans';
-import { TraceDurationProvider } from './Trace.context';
 
 export interface TraceProps {
   name: string;
@@ -12,21 +11,31 @@ export interface TraceProps {
   onClick?: () => void;
   variant: SpanProps['variant'];
   isActive?: boolean;
+  totalDurationMs: number;
 }
 
-export const Trace = ({ name, spans, durationMs, tokenCount, onClick, variant, isActive }: TraceProps) => {
+export const Trace = ({
+  name,
+  spans,
+  durationMs,
+  tokenCount,
+  onClick,
+  variant,
+  isActive,
+  totalDurationMs,
+}: TraceProps) => {
   return (
-    <TraceDurationProvider durationMs={durationMs}>
-      <Span
-        isRoot
-        durationMs={durationMs}
-        variant={variant}
-        spans={<Spans>{spans}</Spans>}
-        onClick={onClick}
-        isActive={isActive}
-      >
-        {name}
-      </Span>
-    </TraceDurationProvider>
+    <Span
+      isRoot
+      durationMs={durationMs}
+      variant={variant}
+      spans={<Spans>{spans}</Spans>}
+      onClick={onClick}
+      isActive={isActive}
+      offsetMs={0}
+      totalDurationMs={totalDurationMs}
+    >
+      {name}
+    </Span>
   );
 };
