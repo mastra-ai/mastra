@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "gtx-cli translate && pnpm build:llms-txt && next build",
+    "build": "pnpm build:llms-txt && next build",
     "build:llms-txt": "tsx src/scripts/build-llms-text-files.ts",
     "build:stars": "tsx scripts/fetchStars.ts",
     "start": "next start",
@@ -24,6 +24,7 @@
     "@radix-ui/react-scroll-area": "^1.2.8",
     "@radix-ui/react-slot": "^1.1.2",
     "@tailwindcss/postcss": "^4.0.17",
+    "@tanstack/react-virtual": "^3.13.8",
     "@vercel/analytics": "^1.5.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
