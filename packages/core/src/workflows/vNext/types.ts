@@ -104,11 +104,7 @@ export interface VNextWorkflowRunState {
   runId: string;
   value: Record<string, string>;
   context: { input?: Record<string, any> } & Record<string, StepResult<any>>;
-  activePaths: Array<{
-    stepPath: string[];
-    stepId: string;
-    status: string;
-  }>;
+  activePaths: Array<unknwon>;
   suspendedPaths: Record<string, number[]>;
   timestamp: number;
 }
