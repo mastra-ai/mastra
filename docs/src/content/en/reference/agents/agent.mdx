@@ -22,6 +22,7 @@ constructor(config: AgentConfig<TAgentId, TTools, TMetrics>)
 ```
 
 ### Parameters
+
 <br />
 
 <PropertiesTable
@@ -36,19 +37,22 @@ constructor(config: AgentConfig<TAgentId, TTools, TMetrics>)
       name: "instructions",
       type: "string | ({ runtimeContext: RuntimeContext }) => string | Promise<string>",
       isOptional: false,
-      description: "Instructions that guide the agent's behavior. Can be a static string or a function that returns a string.",
+      description:
+        "Instructions that guide the agent's behavior. Can be a static string or a function that returns a string.",
     },
     {
       name: "model",
       type: "MastraLanguageModel | ({ runtimeContext: RuntimeContext }) => MastraLanguageModel | Promise<MastraLanguageModel>",
       isOptional: false,
-      description: "The language model to use for generating responses. Can be a model instance or a function that returns a model.",
+      description:
+        "The language model to use for generating responses. Can be a model instance or a function that returns a model.",
     },
     {
       name: "tools",
       type: "ToolsInput | ({ runtimeContext: RuntimeContext }) => ToolsInput | Promise<ToolsInput>",
       isOptional: true,
-      description: "Tools that the agent can use. Can be a static object or a function that returns tools.",
+      description:
+        "Tools that the agent can use. Can be a static object or a function that returns tools.",
     },
     {
       name: "defaultGenerateOptions",
@@ -66,7 +70,8 @@ constructor(config: AgentConfig<TAgentId, TTools, TMetrics>)
       name: "workflows",
       type: "Record<string, NewWorkflow> | ({ runtimeContext: RuntimeContext }) => Record<string, NewWorkflow> | Promise<Record<string, NewWorkflow>>",
       isOptional: true,
-      description: "Workflows that the agent can execute. Can be a static object or a function that returns workflows."
+      description:
+        "Workflows that the agent can execute. Can be a static object or a function that returns workflows.",
     },
     {
       name: "evals",
@@ -78,13 +83,15 @@ constructor(config: AgentConfig<TAgentId, TTools, TMetrics>)
       name: "memory",
       type: "MastraMemory",
       isOptional: true,
-      description: "Memory system for the agent to store and retrieve information.",
+      description:
+        "Memory system for the agent to store and retrieve information.",
     },
     {
       name: "voice",
       type: "CompositeVoice",
       isOptional: true,
-      description: "Voice capabilities for speech-to-text and text-to-speech functionality.",
+      description:
+        "Voice capabilities for speech-to-text and text-to-speech functionality.",
     },
   ]}
 />

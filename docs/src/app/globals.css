@@ -2,7 +2,6 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-
 @theme inline {
   --primary-bg: #050505;
   --secondary-bg: #121212;
@@ -15,9 +14,9 @@
   --font-sans: var(--inter);
   --font-mono: var(--geist-mono);
   --font-serif: var(--tasa);
-  --tag-blue: 211,69%,49%;
-  --tag-green: 143,97%,54%;
-  --tag-purple: 286,38%,52%;
+  --tag-blue: 211, 69%, 49%;
+  --tag-green: 143, 97%, 54%;
+  --tag-purple: 286, 38%, 52%;
   --color-icons-2: hsla(0, 0%, 44%, 1);
   --color-icons-3: hsla(0, 0%, 58%, 1);
   --color-icons-4: hsla(0, 0%, 66%, 1);
@@ -44,7 +43,7 @@
   --copilot-kit-primary-color: var(--tag-green);
 }
 
-body:is(html[class~="dark"] *){
+body:is(html[class~="dark"] *) {
   background: var(--primary-bg);
 }
 
@@ -53,29 +52,29 @@ body:is(html[class~="dark"] *){
 }
 
 #scroll-area-viewport > div {
-  display: block!important;
+  display: block !important;
 }
 
 .copilotKitMarkdown p {
-  font-size: 13px!important;
+  font-size: 13px !important;
 }
 
 .copilotKitMarkdown hr {
-  margin-block: 16px!important;
-  color: var(--color-borders-1)!important;
+  margin-block: 16px !important;
+  color: var(--color-borders-1) !important;
 }
 
 .copilotKitMarkdown a {
-  color: var(--color-accent-green)!important;
+  color: var(--color-accent-green) !important;
 }
 
 .copilotKitMarkdown {
-  max-width: 100%!important;
+  max-width: 100% !important;
 }
 
 button.copilotKitCodeBlockToolbarButton {
-  padding-inline: 8px!important;
-  cursor: pointer!important;
+  padding-inline: 8px !important;
+  cursor: pointer !important;
 }
 
 div .copilotKitPopup {
@@ -101,13 +100,13 @@ div .copilotKitInputContainer {
   border-bottom-right-radius: 0;
 }
 
-
 /* Navbar */
 .nextra-navbar-blur {
   display: none;
 }
 
-header + div, footer{
+header + div,
+footer {
   --nextra-content-width: 1220px;
 }
 
@@ -120,18 +119,17 @@ header > * {
   background: var(--primary-bg);
 }
 
- header nav > div:nth-child(2){
-    display: none;
+header nav > div:nth-child(2) {
+  display: none;
 }
 
 /* mobile nav */
-.nextra-mobile-nav{
+.nextra-mobile-nav {
   padding-block-start: calc(var(--nextra-navbar-height) * 2);
 }
 
-
 .nextra-navbar nav > a {
-  &:hover{
+  &:hover {
     transition: none;
     opacity: 1;
   }
@@ -149,7 +147,7 @@ header > * {
     color: var(--color-el-3);
   }
 
-  &:focus{
+  &:focus {
     box-shadow: none;
     outline: 1px solid hsl(var(--tag-green));
   }
@@ -218,7 +216,7 @@ aside {
   --icon-position: 11.5px;
 }
 
-article{
+article {
   --x-color-gray-400: var(--color-el-3);
 }
 
@@ -258,7 +256,7 @@ div:has(+ pre) {
   box-shadow: none;
 }
 
-div:has(+ pre ) {
+div:has(+ pre) {
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
 }
@@ -281,7 +279,7 @@ main h3:has(+ div.nextra-code) {
 }
 
 /*****Sidebar******/
-aside{
+aside {
   border-right: 0.5px solid var(--border);
 }
 aside > * {
@@ -291,7 +289,7 @@ aside > * {
   );
 }
 
-aside>div:first-child button{
+aside > div:first-child button {
   font-weight: 500;
   color: var(--color-primary);
 }
@@ -370,12 +368,12 @@ aside a[href="/reference"]::before {
 
 aside a[href="/docs"]::before,
 aside a[href="/examples"]::before,
-aside a[href="/guides"]::before
-{
+aside a[href="/guides"]::before {
   background-image: url("icons/introduction.svg");
 }
 
-aside button[data-href="/docs/reference"]::before,aside a[href="/reference"]::before  {
+aside button[data-href="/docs/reference"]::before,
+aside a[href="/reference"]::before {
   background-image: url("icons/reference.svg");
 }
 
@@ -405,7 +403,7 @@ aside > div:nth-child(1) button {
 /*** Table of Contents ***/
 
 .nextra-toc > * {
-    --x-color-gray-400: #939393;
+  --x-color-gray-400: #939393;
 }
 
 .nextra-toc div > p {
@@ -415,34 +413,33 @@ aside > div:nth-child(1) button {
   padding-inline-start: 2.24rem;
 
   &::before {
-   content: "";
-   position: absolute;
-   left: 12px;
-   bottom: 1;
-   width: 1rem;
-   height: 1rem;
-   background-size: contain;
-   background-repeat: no-repeat;
-   background-image: url("icons/on-this-page.svg");
+    content: "";
+    position: absolute;
+    left: 12px;
+    bottom: 1;
+    width: 1rem;
+    height: 1rem;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-image: url("icons/on-this-page.svg");
   }
 }
 
-.nextra-toc ul a{
+.nextra-toc ul a {
   --x-color-gray-400: var(--color-el-3);
   --x-color-primary-600: var(--color-primary);
   --x-color-gray-600: var(--color-el-3);
   font-weight: 500;
 }
 
-
-.showcase-item > *{
-  &:hover{
+.showcase-item > * {
+  &:hover {
     text-decoration: none;
   }
 }
 
 /** one off utility **/
 
-a:focus-visible{
-  border-radius:4px;
+a:focus-visible {
+  border-radius: 4px;
 }

@@ -10,14 +10,14 @@ The VercelDeployer deploys Mastra applications to Vercel, handling configuration
 ## Usage Example
 
 ```typescript
-import { Mastra } from '@mastra/core';
-import { VercelDeployer } from '@mastra/deployer-vercel';
+import { Mastra } from "@mastra/core";
+import { VercelDeployer } from "@mastra/deployer-vercel";
 
 const mastra = new Mastra({
   deployer: new VercelDeployer({
-    teamSlug: 'your-team-slug',
-    projectName: 'your-project-name',
-    token: 'your-vercel-token'
+    teamSlug: "your-team-slug",
+    projectName: "your-project-name",
+    token: "your-vercel-token",
   }),
   // ... other Mastra configuration options
 });
@@ -38,7 +38,8 @@ const mastra = new Mastra({
     {
       name: "projectName",
       type: "string",
-      description: "Name of your Vercel project (will be created if it doesn't exist).",
+      description:
+        "Name of your Vercel project (will be created if it doesn't exist).",
       isOptional: false,
     },
     {
@@ -49,7 +50,6 @@ const mastra = new Mastra({
     },
   ]}
 />
-
 
 ### Environment Variables
 
@@ -62,7 +62,9 @@ The VercelDeployer handles environment variables from multiple sources:
 The deployer automatically synchronizes environment variables between your local development environment and Vercel's environment variable system, ensuring consistency across all deployment environments (production, preview, and development).
 
 ## Lint Mastra Project
+
 Lint your Mastra project to make sure it's fine to build
+
 ```bash
 npx mastra lint
 ```
@@ -114,6 +116,7 @@ The VercelDeployer automatically generates a `vercel.json` configuration file in
 After building, you can deploy your Mastra application `.mastra/output` to Vercel using any of these methods:
 
 1. **Vercel CLI**: Deploy directly using Vercel's official CLI tool
+
    - Install the CLI: `npm install -g vercel`
    - Navigate to the output directory: `cd .mastra/output`
    - Deploy to preview environment: `vercel`

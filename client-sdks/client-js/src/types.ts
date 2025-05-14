@@ -8,6 +8,7 @@ import type {
   StorageThreadType,
   BaseLogMessage,
   WorkflowRunResult as CoreWorkflowRunResult,
+  VNextWorkflowRuns,
   WorkflowRuns,
 } from '@mastra/core';
 
@@ -54,7 +55,7 @@ export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undef
 
 export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[];
-} & Omit<AgentStreamOptions<T>, 'onFinish' | 'onStepFinish' | 'telemetry' | 'experimental_generateMessageId'>;
+} & Omit<AgentStreamOptions<T>, 'onFinish' | 'onStepFinish' | 'experimental_generateMessageId'>;
 
 export interface GetEvalsByAgentIdResponse extends GetAgentResponse {
   evals: any[];
@@ -88,6 +89,8 @@ export interface GetWorkflowRunsParams {
 }
 
 export type GetWorkflowRunsResponse = WorkflowRuns;
+
+export type GetVNextWorkflowRunsResponse = VNextWorkflowRuns;
 
 export type WorkflowRunResult = {
   activePaths: Record<string, { status: string; suspendPayload?: any; stepPath: string[] }>;

@@ -15,10 +15,10 @@ import { MDocument } from "@mastra/rag";
 const doc = MDocument.fromText(text);
 const chunks = await doc.chunk({
   extract: {
-    title: true,    // Extract titles using default settings
-    summary: true,  // Generate summaries using default settings
-    keywords: true  // Extract keywords using default settings
-  }
+    title: true, // Extract titles using default settings
+    summary: true, // Generate summaries using default settings
+    keywords: true, // Extract keywords using default settings
+  },
 });
 
 // Example output:
@@ -76,26 +76,28 @@ The `extract` parameter accepts the following fields:
       name: "llm",
       type: "MastraLanguageModel",
       isOptional: true,
-      description: "AI SDK language model to use for title extraction"
+      description: "AI SDK language model to use for title extraction",
     },
     {
       name: "nodes",
       type: "number",
       isOptional: true,
-      description: "Number of title nodes to extract"
+      description: "Number of title nodes to extract",
     },
     {
       name: "nodeTemplate",
       type: "string",
       isOptional: true,
-      description: "Custom prompt template for title node extraction. Must include {context} placeholder"
+      description:
+        "Custom prompt template for title node extraction. Must include {context} placeholder",
     },
     {
       name: "combineTemplate",
       type: "string",
       isOptional: true,
-      description: "Custom prompt template for combining titles. Must include {context} placeholder"
-    }
+      description:
+        "Custom prompt template for combining titles. Must include {context} placeholder",
+    },
   ]}
 />
 
@@ -107,20 +109,22 @@ The `extract` parameter accepts the following fields:
       name: "llm",
       type: "MastraLanguageModel",
       isOptional: true,
-      description: "AI SDK language model to use for summary extraction"
+      description: "AI SDK language model to use for summary extraction",
     },
     {
       name: "summaries",
       type: "('self' | 'prev' | 'next')[]",
       isOptional: true,
-      description: "List of summary types to generate. Can only include 'self' (current chunk), 'prev' (previous chunk), or 'next' (next chunk)"
+      description:
+        "List of summary types to generate. Can only include 'self' (current chunk), 'prev' (previous chunk), or 'next' (next chunk)",
     },
     {
       name: "promptTemplate",
       type: "string",
       isOptional: true,
-      description: "Custom prompt template for summary generation. Must include {context} placeholder"
-    }
+      description:
+        "Custom prompt template for summary generation. Must include {context} placeholder",
+    },
   ]}
 />
 
@@ -132,26 +136,27 @@ The `extract` parameter accepts the following fields:
       name: "llm",
       type: "MastraLanguageModel",
       isOptional: true,
-      description: "AI SDK language model to use for question generation"
+      description: "AI SDK language model to use for question generation",
     },
     {
       name: "questions",
       type: "number",
       isOptional: true,
-      description: "Number of questions to generate"
+      description: "Number of questions to generate",
     },
     {
       name: "promptTemplate",
       type: "string",
       isOptional: true,
-      description: "Custom prompt template for question generation. Must include both {context} and {numQuestions} placeholders"
+      description:
+        "Custom prompt template for question generation. Must include both {context} and {numQuestions} placeholders",
     },
     {
       name: "embeddingOnly",
       type: "boolean",
       isOptional: true,
-      description: "If true, only generate embeddings without actual questions"
-    }
+      description: "If true, only generate embeddings without actual questions",
+    },
   ]}
 />
 
@@ -163,20 +168,21 @@ The `extract` parameter accepts the following fields:
       name: "llm",
       type: "MastraLanguageModel",
       isOptional: true,
-      description: "AI SDK language model to use for keyword extraction"
+      description: "AI SDK language model to use for keyword extraction",
     },
     {
       name: "keywords",
       type: "number",
       isOptional: true,
-      description: "Number of keywords to extract"
+      description: "Number of keywords to extract",
     },
     {
       name: "promptTemplate",
       type: "string",
       isOptional: true,
-      description: "Custom prompt template for keyword extraction. Must include both {context} and {maxKeywords} placeholders"
-    }
+      description:
+        "Custom prompt template for keyword extraction. Must include both {context} and {maxKeywords} placeholders",
+    },
   ]}
 />
 
@@ -190,30 +196,30 @@ const chunks = await doc.chunk({
   extract: {
     // Title extraction with custom settings
     title: {
-      nodes: 2,  // Extract 2 title nodes
+      nodes: 2, // Extract 2 title nodes
       nodeTemplate: "Generate a title for this: {context}",
-      combineTemplate: "Combine these titles: {context}"
+      combineTemplate: "Combine these titles: {context}",
     },
 
     // Summary extraction with custom settings
     summary: {
-      summaries: ["self"],  // Generate summaries for current chunk
-      promptTemplate: "Summarize this: {context}"
+      summaries: ["self"], // Generate summaries for current chunk
+      promptTemplate: "Summarize this: {context}",
     },
 
     // Question generation with custom settings
     questions: {
-      questions: 3,  // Generate 3 questions
+      questions: 3, // Generate 3 questions
       promptTemplate: "Generate {numQuestions} questions about: {context}",
-      embeddingOnly: false
+      embeddingOnly: false,
     },
 
     // Keyword extraction with custom settings
     keywords: {
-      keywords: 5,  // Extract 5 keywords
-      promptTemplate: "Extract {maxKeywords} key terms from: {context}"
-    }
-  }
+      keywords: 5, // Extract 5 keywords
+      promptTemplate: "Extract {maxKeywords} key terms from: {context}",
+    },
+  },
 });
 
 // Example output:
@@ -246,4 +252,3 @@ const doc = new MDocument({
 await doc.extractMetadata({ title: true });
 // The first two chunks will share a title, while the third chunk will be assigned a separate title.
 ```
-

@@ -10,10 +10,7 @@ description: ワークフロー内の `.commit()` メソッドに関するドキ
 ## 使用法
 
 ```typescript
-workflow
-  .step(stepA)
-  .then(stepB)
-  .commit();
+workflow.step(stepA).then(stepB).commit();
 ```
 
 ## 戻り値
@@ -23,8 +20,8 @@ workflow
     {
       name: "workflow",
       type: "Workflow",
-      description: "ワークフローインスタンス"
-    }
+      description: "ワークフローインスタンス",
+    },
   ]}
 />
 

@@ -4,17 +4,17 @@
 
 @layer base {
   @font-face {
-    font-family: 'geist';
+    font-family: "geist";
     font-style: normal;
     font-weight: 100 900;
-    src: url(/fonts/geist.woff2) format('woff2');
+    src: url(/fonts/geist.woff2) format("woff2");
   }
 
   @font-face {
-    font-family: 'geist-mono';
+    font-family: "geist-mono";
     font-style: normal;
     font-weight: 100 900;
-    src: url(/fonts/geist-mono.woff2) format('woff2');
+    src: url(/fonts/geist-mono.woff2) format("woff2");
   }
 
   :root {

@@ -12,31 +12,34 @@ description: ワークフロー内のステップ条件クラスのドキュメ�
 条件を指定する方法は3つあります：関数、クエリオブジェクト、シンプルなパス比較。
 
 ### 1. 関数条件
+
 ```typescript copy showLineNumbers
 workflow.step(processOrder, {
   when: async ({ context }) => {
-    const auth = context?.getStepResult<{status: string}>("auth");
+    const auth = context?.getStepResult<{ status: string }>("auth");
     return auth?.status === "authenticated";
-  }
+  },
 });
 ```
 
 ### 2. クエリオブジェクト
+
 ```typescript copy showLineNumbers
 workflow.step(processOrder, {
   when: {
-    ref: { step: 'auth', path: 'status' },
-    query: { $eq: 'authenticated' }
-  }
+    ref: { step: "auth", path: "status" },
+    query: { $eq: "authenticated" },
+  },
 });
 ```
 
 ### 3. シンプルなパス比較
+
 ```typescript copy showLineNumbers
 workflow.step(processOrder, {
   when: {
-    "auth.status": "authenticated"
-  }
+    "auth.status": "authenticated",
+  },
 });
 ```
 
@@ -53,15 +56,17 @@ workflow.step(processOrder, {
     {
       name: "ref",
       type: "{ stepId: string | 'trigger'; path: string }",
-      description: "ステップ出力値への参照。stepIdはステップIDまたは初期データ用の'trigger'です。pathはステップ結果内の値の位置を指定します",
-      isOptional: false
+      description:
+        "ステップ出力値への参照。stepIdはステップIDまたは初期データ用の'trigger'です。pathはステップ結果内の値の位置を指定します",
+      isOptional: false,
     },
     {
       name: "query",
       type: "Query<any>",
-      description: "sift演算子（$eq, $gt, など）を使用したMongoDBスタイルのクエリ",
-      isOptional: false
-    }
+      description:
+        "sift演算子（$eq, $gt, など）を使用したMongoDBスタイルのクエリ",
+      isOptional: false,
+    },
   ]}
 />
 
@@ -76,53 +81,53 @@ Queryオブジェクトは、前のステップやトリガーデータからの
     {
       name: "$eq",
       type: "any",
-      description: "値に等しい"
+      description: "値に等しい",
     },
     {
       name: "$ne",
       type: "any",
-      description: "値に等しくない"
+      description: "値に等しくない",
     },
     {
       name: "$gt",
       type: "number",
-      description: "値より大きい"
+      description: "値より大きい",
     },
     {
       name: "$gte",
       type: "number",
-      description: "値以上"
+      description: "値以上",
     },
     {
       name: "$lt",
       type: "number",
-      description: "値より小さい"
+      description: "値より小さい",
     },
     {
       name: "$lte",
       type: "number",
-      description: "値以下"
+      description: "値以下",
     },
     {
       name: "$in",
       type: "any[]",
-      description: "配列に値が存在する"
+      description: "配列に値が存在する",
     },
     {
       name: "$nin",
       type: "any[]",
-      description: "配列に値が存在しない"
+      description: "配列に値が存在しない",
     },
     {
       name: "and",
       type: "StepCondition[]",
-      description: "すべてが真でなければならない条件の配列"
+      description: "すべてが真でなければならない条件の配列",
     },
     {
       name: "or",
       type: "StepCondition[]",
-      description: "少なくとも1つが真でなければならない条件の配列"
-    }
+      description: "少なくとも1つが真でなければならない条件の配列",
+    },
   ]}
 />
 

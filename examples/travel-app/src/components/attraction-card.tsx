@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import { Clock, MapPin } from 'lucide-react';
+import { Clock, MapPin } from "lucide-react";
 
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
 /* eslint-disable @next/next/no-img-element */
 interface AttractionCardProps {
@@ -14,12 +14,19 @@ interface AttractionCardProps {
   duration?: string;
 }
 
-export function AttractionCard({ name, location, imageUrl, description, price, duration }: AttractionCardProps) {
+export function AttractionCard({
+  name,
+  location,
+  imageUrl,
+  description,
+  price,
+  duration,
+}: AttractionCardProps) {
   return (
     <Card className="w-full rounded-none border-black border-4 h-full flex flex-col">
       <div className="relative w-full h-[200px]">
         <img
-          src={imageUrl || '/placeholder.svg?height=300&width=200'}
+          src={imageUrl || "/placeholder.svg?height=300&width=200"}
           width={300}
           height={200}
           alt={name}
@@ -45,7 +52,9 @@ export function AttractionCard({ name, location, imageUrl, description, price, d
         <p className="text-sm  line-clamp-3 flex-1">{description}</p>
 
         <div className="bg-[var(--brut-red)] px-3 py-1 border-2 border-black inline-block transform -rotate-2">
-          <span className="font-bold">${price.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+          <span className="font-bold">
+            ${price.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+          </span>
           <span className="text-sm"> per person</span>
         </div>
       </CardContent>

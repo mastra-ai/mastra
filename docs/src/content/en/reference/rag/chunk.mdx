@@ -10,7 +10,7 @@ The `.chunk()` function splits documents into smaller segments using various str
 ## Example
 
 ```typescript
-import { MDocument } from '@mastra/rag';
+import { MDocument } from "@mastra/rag";
 
 const doc = MDocument.fromMarkdown(`
 # Introduction
@@ -28,12 +28,15 @@ const chunks = await doc.chunk();
 
 // Markdown-specific chunking with header extraction
 const chunksWithMetadata = await doc.chunk({
-  strategy: 'markdown',
-  headers: [['#', 'title'], ['##', 'section']],
+  strategy: "markdown",
+  headers: [
+    ["#", "title"],
+    ["##", "section"],
+  ],
   extract: {
     summary: true, // Extract summaries with default settings
-    keywords: true  // Extract keywords with default settings
-  }
+    keywords: true, // Extract keywords with default settings
+  },
 });
 ```
 
@@ -48,7 +51,7 @@ const chunksWithMetadata = await doc.chunk({
       description:
         "The chunking strategy to use. If not specified, defaults based on document type. Depending on the chunking strategy, there are additional optionals. Defaults: .md files → 'markdown', .html/.htm → 'html', .json → 'json', .tex → 'latex', others → 'recursive'",
     },
-     {
+    {
       name: "size",
       type: "number",
       isOptional: true,
@@ -67,7 +70,8 @@ const chunksWithMetadata = await doc.chunk({
       type: "string",
       isOptional: true,
       defaultValue: "\\n\\n",
-      description: "Character(s) to split on. Defaults to double newline for text content.",
+      description:
+        "Character(s) to split on. Defaults to double newline for text content.",
     },
     {
       name: "isSeparatorRegex",
@@ -87,7 +91,8 @@ const chunksWithMetadata = await doc.chunk({
       name: "extract",
       type: "ExtractParams",
       isOptional: true,
-      description: "Metadata extraction configuration. See [ExtractParams reference](./extract-params) for details.",
+      description:
+        "Metadata extraction configuration. See [ExtractParams reference](./extract-params) for details.",
     },
   ]}
 />
@@ -99,26 +104,32 @@ Strategy-specific options are passed as top-level parameters alongside the strat
 ```typescript showLineNumbers copy
 // HTML strategy example
 const chunks = await doc.chunk({
-  strategy: 'html',
-  headers: [['h1', 'title'], ['h2', 'subtitle']], // HTML-specific option
-  sections: [['div.content', 'main']], // HTML-specific option
-  size: 500 // general option
+  strategy: "html",
+  headers: [
+    ["h1", "title"],
+    ["h2", "subtitle"],
+  ], // HTML-specific option
+  sections: [["div.content", "main"]], // HTML-specific option
+  size: 500, // general option
 });
 
 // Markdown strategy example
 const chunks = await doc.chunk({
-  strategy: 'markdown',
-  headers: [['#', 'title'], ['##', 'section']], // Markdown-specific option
+  strategy: "markdown",
+  headers: [
+    ["#", "title"],
+    ["##", "section"],
+  ], // Markdown-specific option
   stripHeaders: true, // Markdown-specific option
-  overlap: 50 // general option
+  overlap: 50, // general option
 });
 
 // Token strategy example
 const chunks = await doc.chunk({
-  strategy: 'token',
-  encodingName: 'gpt2', // Token-specific option
-  modelName: 'gpt-3.5-turbo', // Token-specific option
-  size: 1000 // general option
+  strategy: "token",
+  encodingName: "gpt2", // Token-specific option
+  modelName: "gpt-3.5-turbo", // Token-specific option
+  size: 1000, // general option
 });
 ```
 
