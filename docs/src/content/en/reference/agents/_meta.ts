@@ -7,6 +7,7 @@ const meta = {
   getWorkflows: "getWorkflows()",
   getVoice: "getVoice()",
   getInstructions: "getInstructions()",
+  getVersion: "getVersion()",
   getTools: "getTools()",
   getModel: "getModel()",
   getMemory: "getMemory()",

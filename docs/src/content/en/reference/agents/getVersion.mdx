@@ -1,0 +1,92 @@
+---
+title: "Reference: Agent.getVersion() | Agents | Mastra Docs"
+description: "Documentation for the `.getVersion()` method in Mastra agents, which retrieves the version of the agent."
+---
+
+# Agent.getVersion()
+
+The `getVersion()` method retrieves the version of the agent.
+
+## Syntax
+
+```typescript
+getVersion({ runtimeContext }: { runtimeContext?: RuntimeContext } = {}): string | Promise<string>
+```
+
+## Parameters
+
+<br />
+<PropertiesTable
+  content={[
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      isOptional: true,
+      description: "Runtime context for dependency injection and contextual information.",
+    },
+  ]}
+/>
+
+## Return Value
+
+Returns a string or a Promise that resolves to a string containing the agent's version.
+
+## Default Value
+
+The default value is `"0.0.0"`.
+
+## Description
+
+The `getVersion()` method is used to access the version of the agent. It resolves the version, which can be either directly provided as a string or returned from a function.
+
+Version is a non-critical component of an agent's configuration as it allows for tracking and managing different versions of an agent. It is used to compare agents using different instructions or LLMs with the same objective.
+
+## Examples
+
+### Basic Usage
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { openai } from '@ai-sdk/openai';
+
+// Create an agent with static version
+const agent = new Agent({
+  name: "assistant",
+  instructions: "You are a helpful assistant that provides concise and accurate information.",
+  version: "1.0.0",
+  model: openai("gpt-4o"),
+});
+
+// Get the version
+const version = await agent.getVersion();
+console.log(version); // "1.0.0"
+```
+
+### Using with RuntimeContext
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { RuntimeContext } from "@mastra/core/runtime-context";
+import { openai } from '@ai-sdk/openai';
+
+// Create an agent with dynamic instructions
+const agent = new Agent({
+  name: "contextual-assistant",
+  version: ({ runtimeContext }) => runtimeContext.get("role") ?? 'normal',
+  instructions: ({ runtimeContext }) => {
+    if (runtimeContext.get("role") === "professional") {
+      return "You are a technical assistant specializing in machine learning. Provide detailed technical explanations.";
+    }
+    return "You are a helpful assistant providing easy-to-understand information about machine learning.";
+  },
+  model: openai("gpt-4o"),
+});
+
+// Create a runtime context with user preferences
+const context = new RuntimeContext();
+context.set("role", "professional");
+
+// Get the version using the runtime context
+const version = await agent.getVersion({ runtimeContext: context });
+console.log(version); // "professional"
+```

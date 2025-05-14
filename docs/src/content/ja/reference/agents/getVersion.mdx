@@ -1,0 +1,92 @@
+---
+title: "リファレンス: Agent.getVersion() | エージェント | Mastra ドキュメント"
+description: "Mastraエージェントの`.getVersion()`メソッドに関するドキュメント。エージェントのバージョンを取得します。"
+---
+
+# Agent.getVersion()
+
+`getVersion()`メソッドは、エージェントのバージョンを取得します。
+
+## 構文
+
+```typescript
+getVersion({ runtimeContext }: { runtimeContext?: RuntimeContext } = {}): string | Promise<string>
+```
+
+## Parameters
+
+<br />
+<PropertiesTable
+  content={[
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      isOptional: true,
+      description: "Runtime context for dependency injection and contextual information.",
+    },
+  ]}
+/>
+
+## 戻り値
+
+文字列または文字列に解決されるPromiseを返します。
+
+## デフォルト値
+
+デフォルト値は`"0.0.0"`です。
+
+## 説明
+
+`getVersion()`メソッドは、エージェントのバージョンを取得するために使用されます。バージョンは、文字列として直接提供されるか、関数から返されます。
+
+バージョンは、エージェントの設定において非クリティカルなコンポーネントです。異なる指示やLLMを使用して同じ目的を達成するエージェントを比較するために使用されます。
+
+## 例
+
+### 基本的な使用例
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { openai } from '@ai-sdk/openai';
+
+// 静的なバージョンを持つエージェントを作成
+const agent = new Agent({
+  name: "assistant",
+  instructions: "You are a helpful assistant that provides concise and accurate information.",
+  version: "1.0.0",
+  model: openai("gpt-4o"),
+});
+
+// バージョンを取得
+const version = await agent.getVersion();
+console.log(version); // "1.0.0"
+```
+
+### RuntimeContextを使用した例
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { RuntimeContext } from "@mastra/core/runtime-context";
+import { openai } from '@ai-sdk/openai';
+
+// 動的な指示を持つエージェントを作成
+const agent = new Agent({
+  name: "contextual-assistant",
+  version: ({ runtimeContext }) => runtimeContext.get("role") ?? 'normal',
+  instructions: ({ runtimeContext }) => {
+    if (runtimeContext.get("role") === "professional") {
+      return "You are a technical assistant specializing in machine learning. Provide detailed technical explanations.";
+    }
+    return "You are a helpful assistant providing easy-to-understand information about machine learning.";
+  },
+  model: openai("gpt-4o"),
+});
+
+// 役割を含むランタイムコンテキストを作成
+const context = new RuntimeContext();
+context.set("role", "professional");
+
+// ランタイムコンテキストを使用してバージョンを取得
+const version = await agent.getVersion({ runtimeContext: context });
+console.log(version); // "professional"
+```
