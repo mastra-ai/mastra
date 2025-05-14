@@ -361,7 +361,10 @@ const FILTER_OPERATORS: Record<OperatorType, OperatorFn> = {
         if (typeof value === 'object' && value !== null) {
           return [JSON.stringify(value)];
         }
-        return [escapeLikePattern(value)];
+        if (typeof value === 'string') {
+          return [escapeLikePattern(value)];
+        }
+        return [value];
       },
     };
   },

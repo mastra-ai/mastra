@@ -177,9 +177,6 @@ export class SqlBuilder {
       if (!colName) throw new Error('Empty column name in definition');
       validateIdentifier('column', colName);
     }
-    for (const constraint of tableConstraints || []) {
-      validateIdentifier('constraint', constraint);
-    }
     const columns = columnDefinitions.join(', ');
     const constraints = tableConstraints && tableConstraints.length > 0 ? ', ' + tableConstraints.join(', ') : '';
     this.sql = `CREATE TABLE IF NOT EXISTS ${table} (${columns}${constraints})`;
