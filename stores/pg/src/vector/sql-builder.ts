@@ -28,7 +28,12 @@ type OperatorFn = (key: string, paramIndex: number, value?: any) => FilterOperat
 
 export function validateIdentifier(name: string, kind = 'identifier') {
   if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name) || name.length > 63) {
-    throw new Error(`Invalid ${kind}: ${name}`);
+    throw new Error(
+      `Invalid ${kind}: ${name}. 
+      Must start with a letter or underscore, 
+      contain only letters, numbers, or underscores, 
+      and be at most 63 characters long.`,
+    );
   }
 }
 
@@ -102,7 +107,6 @@ function buildElemMatchConditions(value: any, paramIndex: number): { sql: string
     if (!operatorFn) {
       throw new Error(`Invalid operator: ${paramOperator}`);
     }
-    console.log('field', field);
     const result = operatorFn(paramKey, nextParamIndex, paramValue);
 
     const sql = result.sql.replaceAll('metadata#>>', 'elem#>>');

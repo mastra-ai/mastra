@@ -28,7 +28,12 @@ type OperatorFn = (key: string, value?: any) => FilterOperator;
 
 export function validateIdentifier(name: string, kind = 'identifier') {
   if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name) || name.length > 63) {
-    throw new Error(`Invalid ${kind}: ${name}`);
+    throw new Error(
+      `Invalid ${kind}: ${name}. 
+      Must start with a letter or underscore, 
+      contain only letters, numbers, or underscores, 
+      and be at most 63 characters long.`,
+    );
   }
 }
 
@@ -74,20 +79,20 @@ const validateJsonArray = (key: string) =>
   `json_valid(json_extract(metadata, '$."${key}"'))
    AND json_type(json_extract(metadata, '$."${key}"')) = 'array'`;
 
+const pattern = /json_extract\(metadata, '\$\."[^"]*"(\."[^"]*")*'\)/g;
+
 function buildElemMatchConditions(value: any) {
   const conditions = Object.entries(value).map(([field, fieldValue]) => {
     if (field.startsWith('$')) {
       // Direct operators on array elements ($in, $gt, etc)
       const { sql, values } = buildCondition('elem.value', { [field]: fieldValue }, '');
       // Replace the metadata path with elem.value
-      const pattern = /json_extract\(metadata, '\$\."[^"]*"(\."[^"]*")*'\)/g;
       const elemSql = sql.replace(pattern, 'elem.value');
       return { sql: elemSql, values };
     } else if (typeof fieldValue === 'object' && !Array.isArray(fieldValue)) {
       // Nested field with operators (count: { $gt: 20 })
       const { sql, values } = buildCondition(field, fieldValue, '');
       // Replace the field path with elem.value path
-      const pattern = /json_extract\(metadata, '\$\."[^"]*"(\."[^"]*")*'\)/g;
       const elemSql = sql.replace(pattern, `json_extract(elem.value, '$."${field}"')`);
       return { sql: elemSql, values };
     } else {

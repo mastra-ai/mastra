@@ -42,7 +42,12 @@ export type PostgresConfig = {
 
 function validateIdentifier(name: string, kind = 'identifier') {
   if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name) || name.length > 63) {
-    throw new Error(`Invalid ${kind}: ${name}`);
+    throw new Error(
+      `Invalid ${kind}: ${name}. 
+      Must start with a letter or underscore, 
+      contain only letters, numbers, or underscores, 
+      and be at most 63 characters long.`,
+    );
   }
 }
 

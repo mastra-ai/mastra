@@ -238,6 +238,7 @@ export class SqlBuilder {
    */
   jsonLike(column: string, key: string, value: string): SqlBuilder {
     validateIdentifier('column', column);
+    validateIdentifier('key', key);
     const jsonPattern = `%"${key}":"${value}"%`;
     if (this.whereAdded) {
       this.sql += ` AND ${column} LIKE ?`;
