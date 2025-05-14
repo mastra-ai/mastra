@@ -105,9 +105,32 @@ Options:
 
 Example usage:
 
-```bash
+````bash
 # Lint default directory
 mastra lint
+
+
+### Update
+
+`mastra update`
+
+Updates all Mastra packages in your project to either the latest stable or alpha version.
+
+Options:
+```bash
+--alpha   Update to the latest alpha versions
+--latest  Update to the latest stable versions
+--root    Path to your root folder
+````
+
+Example usage:
+
+```bash
+# Update to latest stable version
+mastra update --latest
+
+# Update to latest alpha version
+mastra update --alpha
 ```
 
 # Telemetry
