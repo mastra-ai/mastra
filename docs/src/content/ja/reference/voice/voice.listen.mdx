@@ -49,7 +49,8 @@ const transcriptWithOptions = await voice.listen(audioStream, {
     {
       name: "audioStream",
       type: "NodeJS.ReadableStream",
-      description: "文字起こしするためのオーディオストリーム。これはファイルストリームまたはマイクストリームである可能性があります。",
+      description:
+        "文字起こしするためのオーディオストリーム。これはファイルストリームまたはマイクストリームである可能性があります。",
       isOptional: false,
     },
     {
@@ -57,13 +58,14 @@ const transcriptWithOptions = await voice.listen(audioStream, {
       type: "object",
       description: "音声認識のためのプロバイダー固有のオプション",
       isOptional: true,
-    }
+    },
   ]}
 />
 
 ## 戻り値
 
 次のいずれかを返します:
+
 - `Promise<string>`: 転写されたテキストに解決されるプロミス
 - `Promise<NodeJS.ReadableStream>`: 転写されたテキストのストリームに解決されるプロミス（ストリーミング転写用）
 - `Promise<void>`: テキストを直接返すのではなく「書き込み」イベントを発するリアルタイムプロバイダー用
@@ -94,7 +96,7 @@ const transcriptWithOptions = await voice.listen(audioStream, {
       type: "string",
       description: "言語コード（例: 'en', 'fr', 'de'）",
       isOptional: true,
-    }
+    },
   ]}
 />
 
@@ -115,7 +117,7 @@ const transcriptWithOptions = await voice.listen(audioStream, {
       description: "Google Cloud Speech-to-Text APIからの認識設定",
       isOptional: true,
       defaultValue: "{ encoding: 'LINEAR16', languageCode: 'en-US' }",
-    }
+    },
   ]}
 />
 
@@ -136,7 +138,7 @@ const transcriptWithOptions = await voice.listen(audioStream, {
       description: "文字起こしのための言語コード",
       isOptional: true,
       defaultValue: "'en'",
-    }
+    },
   ]}
 />
 

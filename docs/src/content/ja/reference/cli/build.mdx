@@ -37,19 +37,22 @@ mastra build --dir ./my-mastra-project
 ## 出力
 
 このコマンドは`.mastra`ディレクトリに本番用バンドルを生成します。これには以下が含まれます：
+
 - あなたのMastraエージェントをエンドポイントとして公開するHonoベースのHTTPサーバー
 - 本番環境向けに最適化されたJavaScriptファイル
 - デバッグ用のソースマップ
 - 必要な依存関係
 
 この出力は以下に適しています：
+
 - クラウドサーバー（EC2、Digital Ocean）へのデプロイ
 - コンテナ化された環境での実行
 - コンテナオーケストレーションシステムでの使用
 
 ## デプロイヤー
-デプロイヤーを使用すると、ビルド出力が対象プラットフォーム向けに自動的に準備されます。例：
-- [Vercel デプロイヤー](/reference/deployer/vercel)
-- [Netlify デプロイヤー](/reference/deployer/netlify) 
-- [Cloudflare デプロイヤー](/reference/deployer/cloudflare)
 
+デプロイヤーを使用すると、ビルド出力が対象プラットフォーム向けに自動的に準備されます。例：
+
+- [Vercel デプロイヤー](/reference/deployer/vercel)
+- [Netlify デプロイヤー](/reference/deployer/netlify)
+- [Cloudflare デプロイヤー](/reference/deployer/cloudflare)

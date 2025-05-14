@@ -33,8 +33,8 @@ OPENAI_API_KEY=your_api_key_here
 必要な依存関係をインポートします：
 
 ```typescript copy showLineNumbers filename="src/index.ts"
-import { openai } from '@ai-sdk/openai';
-import { ContextPositionMetric } from '@mastra/evals/llm';
+import { openai } from "@ai-sdk/openai";
+import { ContextPositionMetric } from "@mastra/evals/llm";
 ```
 
 ## 使用例
@@ -45,26 +45,26 @@ import { ContextPositionMetric } from '@mastra/evals/llm';
 
 ```typescript copy showLineNumbers{5} filename="src/index.ts"
 const context1 = [
-  'フランスの首都はパリです。',
-  'パリは508年から首都です。',
-  'パリはフランスの政治の中心です。',
-  '首都はフランス政府をホストしています。',
+  "フランスの首都はパリです。",
+  "パリは508年から首都です。",
+  "パリはフランスの政治の中心です。",
+  "首都はフランス政府をホストしています。",
 ];
 
-const metric1 = new ContextPositionMetric(openai('gpt-4o-mini'), {
+const metric1 = new ContextPositionMetric(openai("gpt-4o-mini"), {
   context: context1,
 });
 
-const query1 = 'フランスの首都はどこですか？';
-const response1 = 'フランスの首都はパリです。';
+const query1 = "フランスの首都はどこですか？";
+const response1 = "フランスの首都はパリです。";
 
-console.log('例1 - 高い位置の順守:');
-console.log('コンテキスト:', context1);
-console.log('クエリ:', query1);
-console.log('応答:', response1);
+console.log("例1 - 高い位置の順守:");
+console.log("コンテキスト:", context1);
+console.log("クエリ:", query1);
+console.log("応答:", response1);
 
 const result1 = await metric1.measure(query1, response1);
-console.log('メトリック結果:', {
+console.log("メトリック結果:", {
   score: result1.score,
   reason: result1.info.reason,
 });
@@ -78,26 +78,26 @@ console.log('メトリック結果:', {
 
 ```typescript copy showLineNumbers{31} filename="src/index.ts"
 const context2 = [
-  '象は草食動物です。',
-  '成象は最大13,000ポンドまで重くなります。',
-  '象は陸上で最大の動物です。',
-  '象は植物や草を食べます。',
+  "象は草食動物です。",
+  "成象は最大13,000ポンドまで重くなります。",
+  "象は陸上で最大の動物です。",
+  "象は植物や草を食べます。",
 ];
 
-const metric2 = new ContextPositionMetric(openai('gpt-4o-mini'), {
+const metric2 = new ContextPositionMetric(openai("gpt-4o-mini"), {
   context: context2,
 });
 
-const query2 = '象はどのくらいの重さですか？';
-const response2 = '成象は最大13,000ポンドまで重くなり、陸上で最大の動物です。';
+const query2 = "象はどのくらいの重さですか？";
+const response2 = "成象は最大13,000ポンドまで重くなり、陸上で最大の動物です。";
 
-console.log('例2 - 混合位置の順守:');
-console.log('コンテキスト:', context2);
-console.log('クエリ:', query2);
-console.log('応答:', response2);
+console.log("例2 - 混合位置の順守:");
+console.log("コンテキスト:", context2);
+console.log("クエリ:", query2);
+console.log("応答:", response2);
 
 const result2 = await metric2.measure(query2, response2);
-console.log('メトリック結果:', {
+console.log("メトリック結果:", {
   score: result2.score,
   reason: result2.info.reason,
 });
@@ -111,30 +111,29 @@ console.log('メトリック結果:', {
 
 ```typescript copy showLineNumbers{57} filename="src/index.ts"
 const context3 = [
-  '虹は空に現れます。',
-  '虹にはさまざまな色があります。',
-  '虹は曲がった形をしています。',
-  '虹は太陽光が水滴に当たるときに形成されます。',
+  "虹は空に現れます。",
+  "虹にはさまざまな色があります。",
+  "虹は曲がった形をしています。",
+  "虹は太陽光が水滴に当たるときに形成されます。",
 ];
 
-const metric3 = new ContextPositionMetric(openai('gpt-4o-mini'), {
+const metric3 = new ContextPositionMetric(openai("gpt-4o-mini"), {
   context: context3,
 });
 
-const query3 = '虹はどのように形成されますか？';
-const response3 = '虹は太陽光が空中の水滴と相互作用することで作られます。';
+const query3 = "虹はどのように形成されますか？";
+const response3 = "虹は太陽光が空中の水滴と相互作用することで作られます。";
 
-console.log('例3 - 低い位置の順守:');
-console.log('コンテキスト:', context3);
-console.log('クエリ:', query3);
-console.log('応答:', response3);
+console.log("例3 - 低い位置の順守:");
+console.log("コンテキスト:", context3);
+console.log("クエリ:", query3);
+console.log("応答:", response3);
 
 const result3 = await metric3.measure(query3, response3);
-console.log('メトリック結果:', {
+console.log("メトリック結果:", {
   score: result3.score,
   reason: result3.info.reason,
 });
 // 例の出力:
 // メトリック結果: { score: 0.12, reason: 'コンテキストにはいくつかの関連情報が含まれていますが、ほとんどの関連情報は最後にあります。' }
 ```
-

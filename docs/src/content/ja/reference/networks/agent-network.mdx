@@ -1,6 +1,6 @@
 ---
-title: 'AgentNetwork（実験的）'
-description: 'AgentNetworkクラスのリファレンスドキュメント'
+title: "AgentNetwork（実験的）"
+description: "AgentNetworkクラスのリファレンスドキュメント"
 ---
 
 # AgentNetwork (実験的)
@@ -18,34 +18,40 @@ description: 'AgentNetworkクラスのリファレンスドキュメント'
 ## 使用法
 
 ```typescript
-import { AgentNetwork } from '@mastra/core/network';
-import { openai } from '@mastra/openai';
+import { AgentNetwork } from "@mastra/core/network";
+import { openai } from "@mastra/openai";
 
 // Create specialized agents
 const webSearchAgent = new Agent({
-  name: 'Web Search Agent',
-  instructions: 'You search the web for information.',
-  model: openai('gpt-4o'),
-  tools: { /* web search tools */ },
+  name: "Web Search Agent",
+  instructions: "You search the web for information.",
+  model: openai("gpt-4o"),
+  tools: {
+    /* web search tools */
+  },
 });
 
 const dataAnalysisAgent = new Agent({
-  name: 'Data Analysis Agent',
-  instructions: 'You analyze data and provide insights.',
-  model: openai('gpt-4o'),
-  tools: { /* data analysis tools */ },
+  name: "Data Analysis Agent",
+  instructions: "You analyze data and provide insights.",
+  model: openai("gpt-4o"),
+  tools: {
+    /* data analysis tools */
+  },
 });
 
 // Create the network
 const researchNetwork = new AgentNetwork({
-  name: 'Research Network',
-  instructions: 'Coordinate specialized agents to research topics thoroughly.',
-  model: openai('gpt-4o'),
+  name: "Research Network",
+  instructions: "Coordinate specialized agents to research topics thoroughly.",
+  model: openai("gpt-4o"),
   agents: [webSearchAgent, dataAnalysisAgent],
 });
 
 // Use the network
-const result = await researchNetwork.generate('Research the impact of climate change on agriculture');
+const result = await researchNetwork.generate(
+  "Research the impact of climate change on agriculture",
+);
 console.log(result.text);
 ```
 

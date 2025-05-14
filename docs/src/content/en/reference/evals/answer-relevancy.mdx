@@ -126,6 +126,7 @@ The metric evaluates relevancy through query-answer alignment, considering compl
 ### Scoring Process
 
 1. Statement Analysis:
+
    - Breaks output into meaningful statements while preserving context
    - Evaluates each statement against query requirements
 
@@ -137,7 +138,9 @@ The metric evaluates relevancy through query-answer alignment, considering compl
 Final score: `((direct + uncertainty * partial) / total_statements) * scale`
 
 ### Score interpretation
+
 (0 to scale, default 0-1)
+
 - 1.0: Perfect relevance - complete and accurate
 - 0.7-0.9: High relevance - minor gaps or imprecisions
 - 0.4-0.6: Moderate relevance - significant gaps
@@ -153,13 +156,10 @@ import { AnswerRelevancyMetric } from "@mastra/evals/llm";
 // Configure the model for evaluation
 const model = openai("gpt-4o-mini");
 
-const metric = new AnswerRelevancyMetric(
-  model,
-  {
-    uncertaintyWeight: 0.5, // Higher weight for uncertain verdicts
-    scale: 5, // Use 0-5 scale instead of 0-1
-  },
-);
+const metric = new AnswerRelevancyMetric(model, {
+  uncertaintyWeight: 0.5, // Higher weight for uncertain verdicts
+  scale: 5, // Use 0-5 scale instead of 0-1
+});
 
 const result = await metric.measure(
   "What are the benefits of exercise?",

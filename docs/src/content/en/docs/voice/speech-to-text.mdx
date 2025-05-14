@@ -5,7 +5,7 @@ description: Overview of Speech-to-Text capabilities in Mastra, including config
 
 # Speech-to-Text (STT)
 
-Speech-to-Text (STT) in Mastra provides a standardized interface for converting audio input into text across multiple service providers. 
+Speech-to-Text (STT) in Mastra provides a standardized interface for converting audio input into text across multiple service providers.
 STT helps create voice-enabled applications that can respond to human speech, enabling hands-free interaction, accessibility for users with disabilities, and more natural human-computer interfaces.
 
 ## Configuration
@@ -53,16 +53,17 @@ pnpm add @mastra/voice-openai  # Example for OpenAI
 The primary method for STT is the `listen()` method, which converts spoken audio into text. Here's how to use it:
 
 ```typescript
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { OpenAIVoice } from '@mastra/voice-openai';
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { OpenAIVoice } from "@mastra/voice-openai";
 import { getMicrophoneStream } from "@mastra/node-audio";
 
 const voice = new OpenAIVoice();
 
 const agent = new Agent({
   name: "Voice Agent",
-  instructions: "You are a voice assistant that provides recommendations based on user input.",
+  instructions:
+    "You are a voice assistant that provides recommendations based on user input.",
   model: openai("gpt-4o"),
   voice,
 });
@@ -75,10 +76,11 @@ const transcript = await agent.voice.listen(audioStream, {
 
 console.log(`User said: ${transcript}`);
 
-const { text } = await agent.generate(`Based on what the user said, provide them a recommendation: ${transcript}`);
+const { text } = await agent.generate(
+  `Based on what the user said, provide them a recommendation: ${transcript}`,
+);
 
 console.log(`Recommendation: ${text}`);
 ```
 
 Check out the [Adding Voice to Agents](../agents/adding-voice.mdx) documentation to learn how to use STT in an agent.
-

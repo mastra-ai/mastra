@@ -22,7 +22,8 @@ getVoice({ runtimeContext }: { runtimeContext?: RuntimeContext } = {}): Composit
       name: "runtimeContext",
       type: "RuntimeContext",
       isOptional: true,
-      description: "Runtime context for dependency injection and contextual information. Defaults to a new RuntimeContext instance if not provided.",
+      description:
+        "Runtime context for dependency injection and contextual information. Defaults to a new RuntimeContext instance if not provided.",
     },
   ]}
 />
@@ -36,6 +37,7 @@ Returns a `CompositeVoice` instance or a Promise that resolves to a `CompositeVo
 The `getVoice()` method is used to access the voice capabilities of an agent. It resolves the voice provider, which can be either directly provided or returned from a function.
 
 The voice provider enables:
+
 - Text-to-speech conversion (speaking)
 - Speech-to-text conversion (listening)
 - Retrieving available speakers/voices
@@ -47,7 +49,7 @@ The voice provider enables:
 ```typescript
 import { Agent } from "@mastra/core/agent";
 import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
-import { openai } from '@ai-sdk/openai';
+import { openai } from "@ai-sdk/openai";
 
 // Create an agent with a voice provider
 const agent = new Agent({
@@ -79,12 +81,12 @@ console.log(speakers);
 import { Agent } from "@mastra/core/agent";
 import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
 import { RuntimeContext } from "@mastra/core/runtime-context";
-import { openai } from '@ai-sdk/openai';
+import { openai } from "@ai-sdk/openai";
 
 // Create an agent with a dynamic voice provider
 const agent = new Agent({
   name: "voice-assistant",
-  instructions: ({ runtimeContext }) =>  {
+  instructions: ({ runtimeContext }) => {
     // Dynamic instructions based on runtime context
     const instructions = runtimeContext.get("preferredVoiceInstructions");
     return instructions || "You are a helpful voice assistant.";

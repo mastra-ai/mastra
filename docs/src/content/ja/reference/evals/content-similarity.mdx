@@ -14,13 +14,10 @@ import { ContentSimilarityMetric } from "@mastra/evals/nlp";
 
 const metric = new ContentSimilarityMetric({
   ignoreCase: true,
-  ignoreWhitespace: true
+  ignoreWhitespace: true,
 });
 
-const result = await metric.measure(
-  "Hello, world!",
-  "hello world"
-);
+const result = await metric.measure("Hello, world!", "hello world");
 
 console.log(result.score); // 0から1までの類似度スコア
 console.log(result.info); // 詳細な類似度メトリクス
@@ -36,7 +33,7 @@ console.log(result.info); // 詳細な類似度メトリクス
       description: "類似性比較のための設定オプション",
       isOptional: true,
       defaultValue: "{ ignoreCase: true, ignoreWhitespace: true }",
-    }
+    },
   ]}
 />
 
@@ -57,7 +54,7 @@ console.log(result.info); // 詳細な類似度メトリクス
       description: "文字列を比較する際に空白を正規化するかどうか",
       isOptional: true,
       defaultValue: "true",
-    }
+    },
   ]}
 />
 
@@ -76,7 +73,7 @@ console.log(result.info); // 詳細な類似度メトリクス
       type: "string",
       description: "類似性を評価するテキスト",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -101,10 +98,10 @@ console.log(result.info); // 詳細な類似度メトリクス
               name: "similarity",
               type: "number",
               description: "2つのテキスト間の生の類似スコア",
-            }
-          ]
-        }
-      ]
+            },
+          ],
+        },
+      ],
     },
   ]}
 />
@@ -116,6 +113,7 @@ console.log(result.info); // 詳細な類似度メトリクス
 ### スコアリングプロセス
 
 1. テキストを正規化します:
+
    - 大文字小文字の正規化（ignoreCase: true の場合）
    - 空白の正規化（ignoreWhitespace: true の場合）
 
@@ -128,7 +126,9 @@ console.log(result.info); // 詳細な類似度メトリクス
 最終スコア: `similarity_value * scale`
 
 ### スコアの解釈
+
 (0 から scale、デフォルト 0-1)
+
 - 1.0: 完全一致 - 同一のテキスト
 - 0.7-0.9: 高い類似性 - ほとんど一致する内容
 - 0.4-0.6: 中程度の類似性 - 部分的な一致
@@ -143,13 +143,10 @@ import { ContentSimilarityMetric } from "@mastra/evals/nlp";
 // 大文字と小文字を区別する比較
 const caseSensitiveMetric = new ContentSimilarityMetric({
   ignoreCase: false,
-  ignoreWhitespace: true
+  ignoreWhitespace: true,
 });
 
-const result1 = await caseSensitiveMetric.measure(
-  "Hello World",
-  "hello world"
-); // 大文字と小文字の違いによりスコアが低くなる
+const result1 = await caseSensitiveMetric.measure("Hello World", "hello world"); // 大文字と小文字の違いによりスコアが低くなる
 
 // 出力例:
 // {
@@ -160,12 +157,12 @@ const result1 = await caseSensitiveMetric.measure(
 // 厳密な空白の比較
 const strictWhitespaceMetric = new ContentSimilarityMetric({
   ignoreCase: true,
-  ignoreWhitespace: false
+  ignoreWhitespace: false,
 });
 
 const result2 = await strictWhitespaceMetric.measure(
   "Hello   World",
-  "Hello World"
+  "Hello World",
 ); // 空白の違いによりスコアが低くなる
 
 // 出力例:
@@ -178,6 +175,6 @@ const result2 = await strictWhitespaceMetric.measure(
 ## 関連
 
 - [Completeness Metric](./completeness)
-- [Textual Difference Metric](./textual-difference) 
+- [Textual Difference Metric](./textual-difference)
 - [Answer Relevancy Metric](./answer-relevancy)
 - [Keyword Coverage Metric](./keyword-coverage)

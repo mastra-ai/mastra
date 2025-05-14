@@ -44,7 +44,10 @@ myWorkflow
   .then(initialStep)
   .branch([
     [async ({ inputData }) => inputData.value > 50, highValueStep],
-    [async ({ inputData }) => inputData.value > 10 && inputData.value <= 50, lowValueStep],
+    [
+      async ({ inputData }) => inputData.value > 10 && inputData.value <= 50,
+      lowValueStep,
+    ],
     [async ({ inputData }) => inputData.value <= 10, extremelyLowValueStep],
   ])
   .then(finalStep)
@@ -53,7 +56,7 @@ myWorkflow
 
 分岐条件は順番に評価され、一致する条件を持つすべてのステップが並行して実行されます。`inputData.value`が`5`の場合、`lowValueStep`と`extremelyLowValueStep`の両方が実行されます。
 
-各条件付きステップ（`highValueStep`や`lowValueStep`など）は、前のステップ（この場合は`initialStep`）の出力を入力として受け取ります。一致する各条件付きステップの出力が収集されます。分岐後の次のステップ（`finalStep`）は、分岐で実行されたすべてのステップの出力を含むオブジェクトを受け取ります。このオブジェクトのキーはステップIDであり、値はそれらのステップの出力です（`{ lowValueStep: <lowValueStepの出力>, extremelyLowValueStep: <extremelyLowValueStepの出力> }`）。 
+各条件付きステップ（`highValueStep`や`lowValueStep`など）は、前のステップ（この場合は`initialStep`）の出力を入力として受け取ります。一致する各条件付きステップの出力が収集されます。分岐後の次のステップ（`finalStep`）は、分岐で実行されたすべてのステップの出力を含むオブジェクトを受け取ります。このオブジェクトのキーはステップIDであり、値はそれらのステップの出力です（`{ lowValueStep: <lowValueStepの出力>, extremelyLowValueStep: <extremelyLowValueStepの出力> }`）。
 
 ## ループ
 

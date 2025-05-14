@@ -1,4 +1,3 @@
-
 ---
 title: "Cloudflare Deployer"
 description: "CloudflareDeployerクラスのドキュメント。MastraアプリケーションをCloudflare Workersにデプロイします。"
@@ -11,24 +10,24 @@ CloudflareDeployerは、MastraアプリケーションをCloudflare Workersに�
 ## 使用例
 
 ```typescript
-import { Mastra } from '@mastra/core';
-import { CloudflareDeployer } from '@mastra/deployer-cloudflare';
+import { Mastra } from "@mastra/core";
+import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
 
 const mastra = new Mastra({
   deployer: new CloudflareDeployer({
-    scope: 'your-account-id',
-    projectName: 'your-project-name',
+    scope: "your-account-id",
+    projectName: "your-project-name",
     routes: [
       {
-        pattern: 'example.com/*',
-        zone_name: 'example.com',
+        pattern: "example.com/*",
+        zone_name: "example.com",
         custom_domain: true,
       },
     ],
-    workerNamespace: 'your-namespace',
+    workerNamespace: "your-namespace",
     auth: {
-      apiToken: 'your-api-token',
-      apiEmail: 'your-email',
+      apiToken: "your-api-token",
+      apiEmail: "your-email",
     },
   }),
   // ... other Mastra configuration options
@@ -133,7 +132,6 @@ CloudflareDeployerは複数のソースから環境変数を処理します：
 1. **環境ファイル**：`.env.production`と`.env`ファイルからの変数。
 2. **設定**：`env`パラメータを通じて渡される変数。
 
-
 ## Mastraプロジェクトのビルド
 
 Cloudflareデプロイメント用にMastraプロジェクトをビルドするには：
@@ -144,11 +142,13 @@ npx mastra build
 ビルドプロセスは`.mastra/output`ディレクトリに以下の出力構造を生成します：
 
 ```
+
 .mastra/output/
-├── index.mjs        # メインワーカーのエントリーポイント
-├── wrangler.json    # Cloudflare Workerの設定
-└── assets/          # 静的アセットと依存関係
-```
+├── index.mjs # メインワーカーのエントリーポイント
+├── wrangler.json # Cloudflare Workerの設定
+└── assets/ # 静的アセットと依存関係
+
+````
 
 ### Wranglerの設定
 
@@ -172,7 +172,7 @@ CloudflareDeployerは以下の設定で`wrangler.json`設定ファイルを自�
     // 指定された場合のルート設定
   ]
 }
-```
+````
 
 ### ルート設定
 
@@ -181,23 +181,23 @@ CloudflareDeployerは以下の設定で`wrangler.json`設定ファイルを自�
 ```typescript
 const routes = [
   {
-    pattern: 'api.example.com/*',
-    zone_name: 'example.com',
+    pattern: "api.example.com/*",
+    zone_name: "example.com",
     custom_domain: true,
   },
   {
-    pattern: 'example.com/api/*',
-    zone_name: 'example.com',
+    pattern: "example.com/api/*",
+    zone_name: "example.com",
   },
 ];
 ```
-
 
 ## デプロイオプション
 
 ビルド後、Mastraアプリケーションの`.mastra/output`をCloudflare Workersに以下のいずれかの方法でデプロイできます：
 
 1. **Wrangler CLI**: Cloudflareの公式CLIツールを使用して直接デプロイ
+
    - CLIをインストール: `npm install -g wrangler`
    - 出力ディレクトリに移動: `cd .mastra/output`
    - Cloudflareアカウントにログイン: `wrangler login`
