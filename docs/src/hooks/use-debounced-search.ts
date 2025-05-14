@@ -121,7 +121,7 @@ export function useDebounceSearch(
 
             if (signal.aborted) return;
             setIsSearchLoading(false);
-            console.log("error", message);
+            console.error("error", message);
             return;
           }
         }
