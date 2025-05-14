@@ -33,6 +33,7 @@ export function validateIdentifier(name: string, kind = 'identifier') {
 }
 
 function validateFieldKey(key: string) {
+  if (!key) return;
   const segments = key.split('.');
   for (const segment of segments) {
     if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(segment) || segment.length > 63) {
