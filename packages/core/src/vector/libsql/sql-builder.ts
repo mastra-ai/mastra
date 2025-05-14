@@ -347,7 +347,7 @@ const FILTER_OPERATORS: Record<OperatorType, OperatorFn> = {
         )
       )`;
     } else if (typeof value === 'string') {
-      sql = `lower(json_extract(metadata, '$."${jsonPathKey}"')) LIKE '%' || lower(?) || '%'`;
+      sql = `lower(json_extract(metadata, '$."${jsonPathKey}"')) LIKE '%' || lower(?) || '%' ESCAPE '\\'`;
     } else {
       sql = `json_extract(metadata, '$."${jsonPathKey}"') = ?`;
     }
@@ -361,7 +361,7 @@ const FILTER_OPERATORS: Record<OperatorType, OperatorFn> = {
         if (typeof value === 'object' && value !== null) {
           return [JSON.stringify(value)];
         }
-        return [value];
+        return [escapeLikePattern(value)];
       },
     };
   },
@@ -392,6 +392,10 @@ function isFilterResult(obj: any): obj is FilterResult {
 const toJsonPathKey = (key: string) => {
   return key.replace(/\./g, '"."');
 };
+
+function escapeLikePattern(str: string): string {
+  return str.replace(/([%_\\])/g, '\\$1');
+}
 
 export function buildFilterQuery(filter: VectorFilter): FilterResult {
   if (!filter) {

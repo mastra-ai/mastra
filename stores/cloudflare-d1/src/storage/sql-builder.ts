@@ -177,6 +177,9 @@ export class SqlBuilder {
       if (!colName) throw new Error('Empty column name in definition');
       validateIdentifier('column', colName);
     }
+    for (const constraint of tableConstraints || []) {
+      validateIdentifier('constraint', constraint);
+    }
     const columns = columnDefinitions.join(', ');
     const constraints = tableConstraints && tableConstraints.length > 0 ? ', ' + tableConstraints.join(', ') : '';
     this.sql = `CREATE TABLE IF NOT EXISTS ${table} (${columns}${constraints})`;
@@ -280,14 +283,16 @@ export function createSqlBuilder(): SqlBuilder {
 
 function validateSelectIdentifier(column: string) {
   if (column !== '*' && !/^[a-zA-Z0-9_]+(\s+AS\s+[a-zA-Z0-9_]+)?$/i.test(column)) {
-    `Invalid column name: "${column}". Must be "*" or a valid identifier (letters, numbers, underscores), optionally with "AS alias".`;
+    throw new Error(
+      `Invalid column name: "${column}". Must be "*" or a valid identifier (letters, numbers, underscores), optionally with "AS alias".`,
+    );
   }
 }
 
 function validateIdentifier(kind: string, name: string) {
   if (!/^[a-zA-Z0-9_]+$/.test(name)) {
     throw new Error(
-      `Invalid ${kind}: ${name}. 
+      `Invalid ${kind} name: ${name}. 
       Must start with a letter or underscore, 
       contain only letters, numbers, or underscores.`,
     );

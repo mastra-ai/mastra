@@ -227,14 +227,15 @@ const FILTER_OPERATORS: Record<OperatorType, OperatorFn> = {
     if (Array.isArray(value)) {
       sql = `(metadata->'${jsonPathKey}') ?& $${paramIndex}`;
     } else if (typeof value === 'string') {
-      sql = `metadata->>'${jsonPathKey}' ILIKE '%' || $${paramIndex} || '%'`;
+      sql = `metadata->>'${jsonPathKey}' ILIKE '%' || $${paramIndex} || '%' ESCAPE '\\'`;
     } else {
       sql = `metadata->>'${jsonPathKey}' = $${paramIndex}`;
     }
     return {
       sql,
       needsValue: true,
-      transformValue: () => (Array.isArray(value) ? value.map(String) : value),
+      transformValue: () =>
+        Array.isArray(value) ? value.map(String) : typeof value === 'string' ? escapeLikePattern(value) : value,
     };
   },
   /**
@@ -274,6 +275,10 @@ const toJsonPathKey = (key: string) => {
   return key.replace(/\./g, ',');
 };
 
+function escapeLikePattern(str: string): string {
+  return str.replace(/([%_\\])/g, '\\$1');
+}
+
 export function buildFilterQuery(filter: VectorFilter, minScore: number, topK: number): FilterResult {
   const values = [minScore, topK];
 
@@ -301,7 +306,7 @@ export function buildFilterQuery(filter: VectorFilter, minScore: number, topK: n
             throw new Error(`Invalid operator in $not condition: ${nestedOp}`);
           }
           const operatorFn = FILTER_OPERATORS[nestedOp as OperatorType]!;
-          const operatorResult = operatorFn(key, values.length + 1);
+          const operatorResult = operatorFn(key, values.length + 1, nestedValue);
           if (operatorResult.needsValue) {
             values.push(nestedValue as number);
           }
