@@ -98,10 +98,11 @@ export class Agent extends BaseResource {
   generate<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
     params: GenerateParams<T>,
   ): Promise<GenerateReturn<T>> {
+    params.messages;
     const processedParams = {
       ...params,
-      output: zodToJsonSchema(params.output),
-      experimental_output: zodToJsonSchema(params.experimental_output),
+      output: params.output ? zodToJsonSchema(params.output) : undefined,
+      experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
       runtimeContext: params.runtimeContext ? Object.fromEntries(params.runtimeContext.entries()) : undefined,
     };
 
@@ -125,8 +126,8 @@ export class Agent extends BaseResource {
   > {
     const processedParams = {
       ...params,
-      output: zodToJsonSchema(params.output),
-      experimental_output: zodToJsonSchema(params.experimental_output),
+      output: params.output ? zodToJsonSchema(params.output) : undefined,
+      experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
       runtimeContext: params.runtimeContext ? Object.fromEntries(params.runtimeContext.entries()) : undefined,
     };
 
