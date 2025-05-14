@@ -22,7 +22,7 @@ export type OperatorType =
 type FilterOperator = {
   sql: string;
   needsValue: boolean;
-  transformValue?: (value: any) => any;
+  transformValue?: () => any;
 };
 
 type OperatorFn = (key: string, value?: any) => FilterOperator;
@@ -34,13 +34,16 @@ export function validateIdentifier(name: string, kind = 'identifier') {
 }
 
 function validateFieldKey(key: string) {
-  if (!/^[a-zA-Z_][a-zA-Z0-9_\.]*$/.test(key)) {
-    throw new Error(`Invalid field key: ${key}`);
+  const segments = key.split('.');
+  for (const segment of segments) {
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(segment)) {
+      throw new Error(`Invalid field key segment: ${segment} in ${key}`);
+    }
   }
 }
 // Helper functions to create operators
 const createBasicOperator = (symbol: string) => {
-  return (key: string): FilterOperator => {
+  return (key: string, value: any): FilterOperator => {
     validateFieldKey(key);
     return {
       sql: `CASE 
@@ -48,7 +51,7 @@ const createBasicOperator = (symbol: string) => {
         ELSE json_extract(metadata, '$."${handleKey(key)}"') ${symbol} ?
       END`,
       needsValue: true,
-      transformValue: (value: any) => {
+      transformValue: () => {
         // Return the values directly, not in an object
         return [value, value];
       },
@@ -517,7 +520,7 @@ const processOperator = (key: string, operator: string, operatorValue: any): Fil
     return { sql: operatorResult.sql, values: [] };
   }
 
-  const transformed = operatorResult.transformValue ? operatorResult.transformValue(operatorValue) : operatorValue;
+  const transformed = operatorResult.transformValue ? operatorResult.transformValue() : operatorValue;
 
   if (transformed && typeof transformed === 'object' && 'sql' in transformed) {
     return transformed;
