@@ -2,7 +2,7 @@ import { join, resolve, isAbsolute } from 'path';
 import { createClient } from '@libsql/client';
 import type { Client as TursoClient, InValue } from '@libsql/client';
 
-import { validateSqlIdentifier } from '@mastra/core/utils';
+import { validateSqlIdentifier } from '../../utils';
 import type { VectorFilter } from '../filter';
 import { MastraVector } from '../index';
 import type {

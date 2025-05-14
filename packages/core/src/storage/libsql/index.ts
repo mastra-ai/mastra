@@ -1,10 +1,10 @@
 import { join, resolve, isAbsolute } from 'node:path';
 import { createClient } from '@libsql/client';
 import type { Client, InValue, Config as LibSQLConfig } from '@libsql/client';
-import { validateSqlIdentifier } from '@mastra/core/utils';
 import type { MetricResult, TestInfo } from '../../eval';
 import type { Logger } from '../../logger';
 import type { MessageType, StorageThreadType } from '../../memory/types';
+import { validateSqlIdentifier } from '../../utils';
 import type { WorkflowRunState } from '../../workflows';
 import { MastraStorage } from '../base';
 import { TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS, TABLE_TRACES, TABLE_WORKFLOW_SNAPSHOT } from '../constants';
