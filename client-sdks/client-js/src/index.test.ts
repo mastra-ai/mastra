@@ -1,6 +1,6 @@
 import { describe, expect, beforeEach, it, vi } from 'vitest';
-
 import { MastraClient } from './client';
+import type { McpServerListResponse, ServerDetailInfo } from './types';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -735,6 +735,96 @@ describe('MastraClient Resources', () => {
           }),
         }),
       );
+    });
+  });
+
+  describe('MCP Server Registry Client Methods', () => {
+    const mockServerInfo1 = {
+      id: 'mcp-server-1',
+      name: 'Test MCP Server 1',
+      version_detail: { version: '1.0.0', release_date: '2023-01-01T00:00:00Z', is_latest: true },
+    };
+    const mockServerInfo2 = {
+      id: 'mcp-server-2',
+      name: 'Test MCP Server 2',
+      version_detail: { version: '1.1.0', release_date: '2023-02-01T00:00:00Z', is_latest: true },
+    };
+
+    const mockServerDetail1: ServerDetailInfo = {
+      ...mockServerInfo1,
+      description: 'Detailed description for server 1',
+      package_canonical: 'npm',
+      packages: [{ registry_name: 'npm', name: '@example/server1', version: '1.0.0' }],
+      remotes: [{ transport_type: 'sse', url: 'http://localhost/sse1' }],
+    };
+
+    describe('getMcpServers()', () => {
+      it('should fetch a list of MCP servers', async () => {
+        const mockResponse: McpServerListResponse = {
+          servers: [mockServerInfo1, mockServerInfo2],
+          total_count: 2,
+          next: null,
+        };
+        mockFetchResponse(mockResponse);
+
+        const result = await client.getMcpServers();
+        expect(result).toEqual(mockResponse);
+        expect(global.fetch).toHaveBeenCalledWith(
+          `${clientOptions.baseUrl}/api/mcp/v0/servers`,
+          expect.objectContaining({
+            headers: expect.objectContaining(clientOptions.headers),
+          }),
+        );
+      });
+
+      it('should fetch MCP servers with limit and offset parameters', async () => {
+        const mockResponse: McpServerListResponse = {
+          servers: [mockServerInfo1],
+          total_count: 2,
+          next: '/api/mcp/v0/servers?limit=1&offset=1',
+        };
+        mockFetchResponse(mockResponse);
+
+        const result = await client.getMcpServers({ limit: 1, offset: 0 });
+        expect(result).toEqual(mockResponse);
+        expect(global.fetch).toHaveBeenCalledWith(
+          `${clientOptions.baseUrl}/api/mcp/v0/servers?limit=1&offset=0`,
+          expect.objectContaining({
+            headers: expect.objectContaining(clientOptions.headers),
+          }),
+        );
+      });
+    });
+
+    describe('getMcpServerDetails()', () => {
+      const serverId = 'mcp-server-1';
+
+      it('should fetch details for a specific MCP server', async () => {
+        mockFetchResponse(mockServerDetail1);
+
+        const result = await client.getMcpServerDetails(serverId);
+        expect(result).toEqual(mockServerDetail1);
+        expect(global.fetch).toHaveBeenCalledWith(
+          `${clientOptions.baseUrl}/api/mcp/v0/servers/${serverId}`,
+          expect.objectContaining({
+            headers: expect.objectContaining(clientOptions.headers),
+          }),
+        );
+      });
+
+      it('should fetch MCP server details with a version parameter', async () => {
+        mockFetchResponse(mockServerDetail1);
+        const version = '1.0.0';
+
+        const result = await client.getMcpServerDetails(serverId, { version });
+        expect(result).toEqual(mockServerDetail1);
+        expect(global.fetch).toHaveBeenCalledWith(
+          `${clientOptions.baseUrl}/api/mcp/v0/servers/${serverId}?version=${version}`,
+          expect.objectContaining({
+            headers: expect.objectContaining(clientOptions.headers),
+          }),
+        );
+      });
     });
   });
 });
