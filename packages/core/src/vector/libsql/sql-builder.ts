@@ -1,5 +1,6 @@
 import type { InValue } from '@libsql/client';
 
+import { validateFieldKey } from '../../utils';
 import type {
   BasicOperator,
   NumericOperator,
@@ -26,15 +27,6 @@ type FilterOperator = {
 
 type OperatorFn = (key: string, value?: any) => FilterOperator;
 
-function validateFieldKey(key: string) {
-  if (!key) return;
-  const segments = key.split('.');
-  for (const segment of segments) {
-    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(segment) || segment.length > 63) {
-      throw new Error(`Invalid field key segment: ${segment} in ${key}`);
-    }
-  }
-}
 // Helper functions to create operators
 const createBasicOperator = (symbol: string) => {
   return (key: string, value: any): FilterOperator => {

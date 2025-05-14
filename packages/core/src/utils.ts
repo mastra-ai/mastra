@@ -454,18 +454,51 @@ export function ensureAllMessagesAreCoreMessages(messages: (CoreMessage | AiMess
 }
 
 /**
- * Validates an identifier for use in SQL stores.
- * @param name - The identifier to validate.
- * @param kind - The type of identifier (e.g., 'table name', 'column name').
- * @throws Will throw an error if the identifier is invalid.
+ * Validates that a given string is a valid SQL identifier (such as a table or column name).
+ *
+ * The identifier must:
+ * - Start with a letter (a-z, A-Z) or underscore (_)
+ * - Contain only letters, numbers, or underscores
+ * - Be at most 63 characters long
+ *
+ * @param name - The identifier string to validate.
+ * @param kind - A human-readable description of the identifier type (e.g., 'table name', 'column name'). Used in error messages.
+ * @throws {Error} If the identifier does not conform to SQL naming rules.
+ *
+ * @example
+ * validateSqlIdentifier('my_table'); // Passes
+ * validateSqlIdentifier('123table'); // Throws error
  */
 export function validateSqlIdentifier(name: string, kind = 'identifier') {
   if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name) || name.length > 63) {
     throw new Error(
-      `Invalid ${kind}: ${name}. 
-      Must start with a letter or underscore, 
-      contain only letters, numbers, or underscores, 
-      and be at most 63 characters long.`,
+      `Invalid ${kind}: ${name}. Must start with a letter or underscore, contain only letters, numbers, or underscores, and be at most 63 characters long.`,
     );
+  }
+}
+
+/**
+ * Validates a dot-separated key representing a nested SQL field path (e.g., 'user.profile.name').
+ *
+ * Each segment must:
+ * - Start with a letter (a-z, A-Z) or underscore (_)
+ * - Contain only letters, numbers, or underscores
+ * - Be at most 63 characters long
+ *
+ * @param key - The dot-separated field key to validate.
+ * @throws {Error} If any segment of the key is invalid.
+ *
+ * @example
+ * validateFieldKey('user_profile.name'); // Passes
+ * validateFieldKey('user..name'); // Throws error (empty segment)
+ * validateFieldKey('user.123name'); // Throws error (invalid segment)
+ */
+export function validateFieldKey(key: string) {
+  if (!key) return;
+  const segments = key.split('.');
+  for (const segment of segments) {
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(segment) || segment.length > 63) {
+      throw new Error(`Invalid field key segment: ${segment} in ${key}`);
+    }
   }
 }
