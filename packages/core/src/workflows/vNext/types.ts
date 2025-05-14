@@ -98,3 +98,13 @@ export type ZodPathType<T extends z.ZodTypeAny, P extends string> =
         ? Shape[P]
         : never
     : never;
+
+export interface VNextWorkflowRunState {
+  // Core state info
+  runId: string;
+  value: Record<string, string>;
+  context: { input?: Record<string, any> } & Record<string, StepResult<any>>;
+  activePaths: Array<unknown>;
+  suspendedPaths: Record<string, number[]>;
+  timestamp: number;
+}

@@ -8,6 +8,7 @@ import type {
   StorageThreadType,
   BaseLogMessage,
   WorkflowRunResult as CoreWorkflowRunResult,
+  VNextWorkflowRuns,
   WorkflowRuns,
 } from '@mastra/core';
 
@@ -88,6 +89,8 @@ export interface GetWorkflowRunsParams {
 }
 
 export type GetWorkflowRunsResponse = WorkflowRuns;
+
+export type GetVNextWorkflowRunsResponse = VNextWorkflowRuns;
 
 export type WorkflowRunResult = {
   activePaths: Record<string, { status: string; suspendPayload?: any; stepPath: string[] }>;
