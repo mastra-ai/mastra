@@ -6,20 +6,19 @@ import {
   ComboboxOption,
   ComboboxOptions,
 } from "@headlessui/react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import cn from "clsx";
 import { Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { FC, ReactNode, SyntheticEvent } from "react";
 import { useRef } from "react";
-import { BookIcon, BurgerIcon, JarvisIcon } from "./svgs/Icons";
-import { SpinnerIcon } from "./svgs/spinner";
-import { useVirtualizer } from "@tanstack/react-virtual";
 import {
-  useDebounceSearch,
   PagefindResult,
   PagefindSearchOptions,
+  useDebounceSearch,
 } from "../hooks/use-debounced-search";
-import { ScrollArea } from "./ui/scroll-area";
+import { BookIcon, BurgerIcon, JarvisIcon } from "./svgs/Icons";
+import { SpinnerIcon } from "./svgs/spinner";
 
 type SearchProps = {
   /**

@@ -67,7 +67,7 @@ export const ragWorkflow = new Workflow({
 const vectorQueryTool = createVectorQueryTool({
   vectorStoreName: "pgVector",
   indexName: "embeddings",
-  model: openai.embedding('text-embedding-3-small'),
+  model: openai.embedding("text-embedding-3-small"),
 });
 ```
 
@@ -100,10 +100,8 @@ const analyzeContext = new Step({
   }),
   execute: async ({ context, mastra }) => {
     console.log("---------------------------");
-    const ragAgent = mastra?.getAgent('ragAgent');
-    const query = context?.getStepResult<{ query: string }>(
-      "trigger",
-    )?.query;
+    const ragAgent = mastra?.getAgent("ragAgent");
+    const query = context?.getStepResult<{ query: string }>("trigger")?.query;
 
     const analysisPrompt = `${query} 1. まず、取得したコンテキストチャンクを注意深く分析し、重要な情報を特定します。`;
 
@@ -126,7 +124,7 @@ const breakdownThoughts = new Step({
   }),
   execute: async ({ context, mastra }) => {
     console.log("---------------------------");
-    const ragAgent = mastra?.getAgent('ragAgent');
+    const ragAgent = mastra?.getAgent("ragAgent");
     const analysis = context?.getStepResult<{
       initialAnalysis: string;
     }>("analyzeContext")?.initialAnalysis;
@@ -156,7 +154,7 @@ const connectPieces = new Step({
   }),
   execute: async ({ context, mastra }) => {
     console.log("---------------------------");
-    const ragAgent = mastra?.getAgent('ragAgent');
+    const ragAgent = mastra?.getAgent("ragAgent");
     const process = context?.getStepResult<{
       breakdown: string;
     }>("breakdownThoughts")?.breakdown;
@@ -185,7 +183,7 @@ const drawConclusions = new Step({
   }),
   execute: async ({ context, mastra }) => {
     console.log("---------------------------");
-    const ragAgent = mastra?.getAgent('ragAgent');
+    const ragAgent = mastra?.getAgent("ragAgent");
     const evidence = context?.getStepResult<{
       connections: string;
     }>("connectPieces")?.connections;
@@ -214,7 +212,7 @@ const finalAnswer = new Step({
   }),
   execute: async ({ context, mastra }) => {
     console.log("---------------------------");
-    const ragAgent = mastra?.getAgent('ragAgent');
+    const ragAgent = mastra?.getAgent("ragAgent");
     const conclusions = context?.getStepResult<{
       conclusions: string;
     }>("drawConclusions")?.conclusions;
@@ -272,7 +270,9 @@ export const mastra = new Mastra({
 ドキュメントを処理し、チャンクに分割します：
 
 ```typescript copy showLineNumbers{177} filename="index.ts"
-const doc = MDocument.fromText(`The Impact of Climate Change on Global Agriculture...`);
+const doc = MDocument.fromText(
+  `The Impact of Climate Change on Global Agriculture...`,
+);
 
 const chunks = await doc.chunk({
   strategy: "recursive",
@@ -288,8 +288,8 @@ const chunks = await doc.chunk({
 
 ```typescript copy showLineNumbers{186} filename="index.ts"
 const { embeddings } = await embedMany({
-  model: openai.embedding('text-embedding-3-small'),
-  values: chunks.map(chunk => chunk.text),
+  model: openai.embedding("text-embedding-3-small"),
+  values: chunks.map((chunk) => chunk.text),
 });
 
 const vectorStore = mastra.getVector("pgVector");
@@ -303,4 +303,3 @@ await vectorStore.upsert({
   metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
 });
 ```
-

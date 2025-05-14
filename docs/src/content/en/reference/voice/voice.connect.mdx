@@ -14,9 +14,9 @@ import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
 import Speaker from "@mastra/node-speaker";
 
 const speaker = new Speaker({
-  sampleRate: 24100,  // Audio sample rate in Hz - standard for high-quality audio on MacBook Pro
-  channels: 1,        // Mono audio output (as opposed to stereo which would be 2)
-  bitDepth: 16,       // Bit depth for audio quality - CD quality standard (16-bit resolution)
+  sampleRate: 24100, // Audio sample rate in Hz - standard for high-quality audio on MacBook Pro
+  channels: 1, // Mono audio output (as opposed to stereo which would be 2)
+  bitDepth: 16, // Bit depth for audio quality - CD quality standard (16-bit resolution)
 });
 
 // Initialize a real-time voice provider
@@ -49,7 +49,6 @@ await voice.connect({
 });
 ```
 
-
 ## Parameters
 
 <PropertiesTable
@@ -59,7 +58,7 @@ await voice.connect({
       type: "Record<string, unknown>",
       description: "Provider-specific connection options",
       isOptional: true,
-    }
+    },
   ]}
 />
 
@@ -88,7 +87,7 @@ Each real-time voice provider may support different options for the `connect()` 
       description: "Whether to automatically reconnect on connection loss",
       isOptional: true,
       defaultValue: "false",
-    }
+    },
   ]}
 />
 

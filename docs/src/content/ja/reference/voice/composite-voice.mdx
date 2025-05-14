@@ -23,7 +23,7 @@ const playai = new PlayAIVoice();
 // Use OpenAI for listening (speech-to-text) and PlayAI for speaking (text-to-speech)
 const voice = new CompositeVoice({
   input: openai,
-  output: playai
+  output: playai,
 });
 
 // Convert speech to text using OpenAI
@@ -75,13 +75,15 @@ const audio = await voice.speak("Hello, world!");
     {
       name: "options",
       type: "object",
-      description: "スピーキングプロバイダーに渡されるプロバイダー固有のオプション",
+      description:
+        "スピーキングプロバイダーに渡されるプロバイダー固有のオプション",
       isOptional: true,
     },
   ]}
 />
 
 注意事項:
+
 - スピーキングプロバイダーが設定されていない場合、このメソッドはエラーをスローします
 - オプションは設定されたスピーキングプロバイダーに渡されます
 - 音声データのストリームを返します
@@ -101,13 +103,15 @@ const audio = await voice.speak("Hello, world!");
     {
       name: "options",
       type: "object",
-      description: "リスニングプロバイダーに渡されるプロバイダー固有のオプション",
+      description:
+        "リスニングプロバイダーに渡されるプロバイダー固有のオプション",
       isOptional: true,
     },
   ]}
 />
 
 注意事項:
+
 - リスニングプロバイダーが設定されていない場合、このメソッドはエラーをスローします
 - オプションは設定されたリスニングプロバイダーに渡されます
 - プロバイダーに応じて、文字列または転写されたテキストのストリームを返します
@@ -127,13 +131,15 @@ const audio = await voice.speak("Hello, world!");
     {
       name: "key",
       type: "value",
-      description: "プロバイダーによって異なる追加の声のプロパティ（例: 名前、言語）",
+      description:
+        "プロバイダーによって異なる追加の声のプロパティ（例: 名前、言語）",
       isOptional: true,
     },
   ]}
 />
 
 注意事項:
+
 - スピーキングプロバイダーからのみ声を返します
 - スピーキングプロバイダーが設定されていない場合、空の配列を返します
 - 各声オブジェクトには少なくともvoiceIdプロパティがあります

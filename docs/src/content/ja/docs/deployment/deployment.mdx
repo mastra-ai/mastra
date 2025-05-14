@@ -21,6 +21,7 @@ description: "プラットフォーム固有のデプロイヤーや標準HTTP�
 ## サーバーレスプラットフォームデプロイヤー
 
 プラットフォーム固有のデプロイヤーは、以下の設定とデプロイメントを処理します：
+
 - **[Cloudflare Workers](/reference/deployer/cloudflare)**
 - **[Vercel](/reference/deployer/vercel)**
 - **[Netlify](/reference/deployer/netlify)**
@@ -45,15 +46,17 @@ npm install @mastra/deployer-netlify@latest
 エントリーファイルでデプロイヤーを設定します：
 
 ```typescript copy showLineNumbers
-import { Mastra, createLogger } from '@mastra/core';
-import { CloudflareDeployer } from '@mastra/deployer-cloudflare';
+import { Mastra, createLogger } from "@mastra/core";
+import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
 
 export const mastra = new Mastra({
-  agents: { /* your agents here */ },
-  logger: createLogger({ name: 'MyApp', level: 'debug' }),
+  agents: {
+    /* your agents here */
+  },
+  logger: createLogger({ name: "MyApp", level: "debug" }),
   deployer: new CloudflareDeployer({
-    scope: 'your-cloudflare-scope',
-    projectName: 'your-project-name',
+    scope: "your-cloudflare-scope",
+    projectName: "your-project-name",
     // See complete configuration options in the reference docs
   }),
 });
@@ -67,10 +70,10 @@ export const mastra = new Mastra({
 
 ```typescript copy showLineNumbers
 new CloudflareDeployer({
-  scope: 'your-cloudflare-account-id',
-  projectName: 'your-project-name',
+  scope: "your-cloudflare-account-id",
+  projectName: "your-project-name",
   // For complete configuration options, see the reference documentation
-})
+});
 ```
 
 [Cloudflareデプロイヤーリファレンスを見る →](/reference/deployer/cloudflare)
@@ -79,11 +82,11 @@ new CloudflareDeployer({
 
 ```typescript copy showLineNumbers
 new VercelDeployer({
-  teamSlug: 'your-vercel-team-slug',
-  projectName: 'your-project-name',
-  token: 'your-vercel-token'
+  teamSlug: "your-vercel-team-slug",
+  projectName: "your-project-name",
+  token: "your-vercel-token",
   // For complete configuration options, see the reference documentation
-})
+});
 ```
 
 [Vercelデプロイヤーリファレンスを見る →](/reference/deployer/vercel)
@@ -92,10 +95,10 @@ new VercelDeployer({
 
 ```typescript copy showLineNumbers
 new NetlifyDeployer({
-  scope: 'your-netlify-team-slug',
-  projectName: 'your-project-name',
-  token: 'your-netlify-token'
-})
+  scope: "your-netlify-team-slug",
+  projectName: "your-project-name",
+  token: "your-netlify-token",
+});
 ```
 
 [Netlifyデプロイヤーリファレンスを見る →](/reference/deployer/netlify)
@@ -123,4 +126,3 @@ npx mastra build
 
 Deployerを使用すると、ビルド出力は自動的にターゲットプラットフォーム用に準備されます。
 その後、プラットフォーム（Vercel、netlify、cloudfare など）のCLI/UIを通じて、ビルド出力 `.mastra/output` をデプロイできます。
-
