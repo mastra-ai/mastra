@@ -13,12 +13,13 @@ import type { FC, ReactNode, SyntheticEvent } from "react";
 import { useRef } from "react";
 import { BookIcon, BurgerIcon, JarvisIcon } from "./svgs/Icons";
 import { SpinnerIcon } from "./svgs/spinner";
-import { ScrollArea } from "./ui/scroll-area";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   useDebounceSearch,
   PagefindResult,
   PagefindSearchOptions,
 } from "../hooks/use-debounced-search";
+import { ScrollArea } from "./ui/scroll-area";
 
 type SearchProps = {
   /**
@@ -75,6 +76,27 @@ export const CustomSearch: FC<SearchProps> = ({
 
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null!);
+  const resultsContainerRef = useRef<HTMLDivElement>(null);
+
+  // Virtual list for search results
+  const virtualizer = useVirtualizer({
+    count: results.length
+      ? results.flatMap((r) => r.sub_results).length + 1
+      : 0, // +1 for the AI option
+    getScrollElement: () => resultsContainerRef.current,
+    estimateSize: () => 100, // Approximate height of each result item
+    overscan: 5,
+  });
+
+  // Flatten sub_results for virtualization
+  const flattenedResults = results.length
+    ? results.flatMap((result) =>
+        result.sub_results.map((sub) => ({
+          parentUrl: result.url,
+          ...sub,
+        })),
+      )
+    : [];
 
   const handleChange = (event: SyntheticEvent<HTMLInputElement>) => {
     const { value } = event.currentTarget;
@@ -142,10 +164,16 @@ export const CustomSearch: FC<SearchProps> = ({
       <div
         className={cn(
           "relative overflow-hidden",
-          isSearchLoading || isSearchEmpty ? "h-fit" : "h-[500px]",
+          isSearchLoading || isSearchEmpty || !results.length
+            ? "h-fit"
+            : "h-[500px]",
         )}
       >
-        <ScrollArea className="h-full">
+        <div
+          ref={resultsContainerRef}
+          className="h-full overflow-auto"
+          id="docs-search-results"
+        >
           <ComboboxOptions
             transition
             static
@@ -153,15 +181,13 @@ export const CustomSearch: FC<SearchProps> = ({
             unmount={true}
             className={cn(
               "x:motion-reduce:transition-none",
-              // From https://headlessui.com/react/combobox#adding-transitions
               "x:origin-top x:transition x:duration-200 x:ease-out x:data-closed:scale-95 x:data-closed:opacity-0 x:empty:invisible",
               isSearchLoading && !isSearchEmpty
                 ? [
                     "x:md:min-h-28 x:grow x:flex x:justify-center x:text-sm x:gap-2 x:px-8",
                     "x:text-gray-400 x:items-center",
                   ]
-                : // headlessui adds max-height as style, use !important to override
-                  "max-h-none!",
+                : "max-h-none!",
               "x:w-full",
             )}
           >
@@ -172,83 +198,125 @@ export const CustomSearch: FC<SearchProps> = ({
                   className="x:shrink-0 x:animate-spin"
                 />
               </>
-            ) : results.length ? (
-              <div className="mt-3">
-                <div className="border-t-[0.5px] border-borders-1 pt-3">
-                  <ComboboxOption
-                    className={({ focus }) =>
-                      cn(
-                        "w-full flex items-center font-medium justify-between gap-2 cursor-pointer text-base rounded-md px-4 py-2 bg-[url('/image/bloom-2.png')] bg-cover mb-2 bg-right",
-                        focus ? "bg-surface-5" : "bg-surface-4",
-                      )
-                    }
-                    value={{ url: "use-ai" }}
-                    key="use-ai"
+            ) : search ? (
+              <div>
+                {results.length > 0 && (
+                  <div
+                    style={{
+                      height: `${virtualizer.getTotalSize()}px`,
+                      width: "100%",
+                      position: "relative",
+                    }}
                   >
-                    <div className="flex items-center gap-2">
-                      <span className="text-accent-green shrink-0">
-                        <JarvisIcon className="w-6 h-6 shrink-0" />
-                      </span>
-                      <span className="flex flex-col text-lg font-medium text-left text-icons-5">
-                        <span id="use-ai-text" className="text-icons-5">
-                          Tell me about{" "}
-                          <span className="text-accent-green">{search}</span>
-                        </span>
-                        <span className="text-icons-3 text-[15px] text-left font-normal">
-                          Use AI to answer your question
-                        </span>
-                      </span>
-                    </div>
-                    <span className="flex items-center h-8 px-3 text-sm font-medium rounded-sm bg-tag-green-2 text-accent-green justify-self-end">
-                      experimental
-                    </span>
-                  </ComboboxOption>
-                </div>
-                {results.map((searchResult) => (
-                  <Result key={searchResult.url} data={searchResult} />
-                ))}
+                    {virtualizer.getVirtualItems().map((virtualItem) => {
+                      // First item is the AI suggestion
+                      if (virtualItem.index === 0) {
+                        return (
+                          <div
+                            key="use-ai"
+                            style={{
+                              position: "absolute",
+                              top: 0,
+                              left: 0,
+                              width: "100%",
+                              height: `${virtualItem.size}px`,
+                              transform: `translateY(${virtualItem.start}px)`,
+                            }}
+                          >
+                            <div className="mt-3">
+                              <div className="border-t-[0.5px] border-borders-1 pt-3">
+                                <ComboboxOption
+                                  className={({ focus }) =>
+                                    cn(
+                                      "w-full flex items-center font-medium justify-between gap-2 cursor-pointer text-base rounded-md px-4 py-2 bg-[url('/image/bloom-2.png')] bg-cover mb-2 bg-right",
+                                      focus ? "bg-surface-5" : "bg-surface-4",
+                                    )
+                                  }
+                                  value={{ url: "use-ai" }}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-accent-green shrink-0">
+                                      <JarvisIcon className="w-6 h-6 shrink-0" />
+                                    </span>
+                                    <span className="flex flex-col text-lg font-medium text-left text-icons-5">
+                                      <span
+                                        id="use-ai-text"
+                                        className="text-icons-5"
+                                      >
+                                        Tell me about{" "}
+                                        <span className="text-accent-green">
+                                          {search}
+                                        </span>
+                                      </span>
+                                      <span className="text-icons-3 text-[15px] text-left font-normal">
+                                        Use AI to answer your question
+                                      </span>
+                                    </span>
+                                  </div>
+                                  <span className="flex items-center h-8 px-3 text-sm font-medium rounded-sm bg-tag-green-2 text-accent-green justify-self-end">
+                                    experimental
+                                  </span>
+                                </ComboboxOption>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      // Rest are search results
+                      const resultIndex = virtualItem.index - 1; // Subtract 1 because first item is AI option
+                      const subResult = flattenedResults[resultIndex];
+
+                      if (!subResult) return null;
+
+                      return (
+                        <div
+                          key={subResult.url}
+                          style={{
+                            position: "absolute",
+                            top: 0,
+                            left: 0,
+                            width: "100%",
+                            height: `${virtualItem.size}px`,
+                            transform: `translateY(${virtualItem.start}px)`,
+                          }}
+                        >
+                          <ComboboxOption
+                            value={subResult}
+                            className={({ focus }) =>
+                              cn(
+                                "flex flex-col gap-3 p-4 rounded-md cursor-pointer",
+                                focus ? "bg-surface-5" : "bg-surface-4",
+                              )
+                            }
+                          >
+                            <div className="flex gap-[14px] items-center">
+                              <BookIcon className="w-5 h-5 text-icons-3" />
+                              <span className="text-lg font-medium truncate text-icons-6">
+                                {subResult.title}
+                              </span>
+                            </div>
+                            <div className="ml-2 flex items-center gap-[14px] truncate border-l-2 border-borders-2 pl-4">
+                              <BurgerIcon className="w-4 h-4 shrink-0 text-icons-3" />
+                              <div
+                                className="text-lg font-normal truncate text-icons-3 [&_mark]:text-accent-green [&_mark]:bg-transparent"
+                                dangerouslySetInnerHTML={{
+                                  __html: subResult.excerpt,
+                                }}
+                              />
+                            </div>
+                          </ComboboxOption>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {results.length === 0 && emptyResult}
               </div>
-            ) : (
-              search && emptyResult
-            )}
+            ) : null}
           </ComboboxOptions>
-        </ScrollArea>
+        </div>
       </div>
     </Combobox>
-  );
-};
-
-const Result: FC<{
-  data: PagefindResult;
-}> = ({ data }) => {
-  return (
-    <>
-      {data.sub_results.map((subResult) => (
-        <ComboboxOption
-          key={subResult.url}
-          value={subResult}
-          className={({ focus }) =>
-            cn(
-              "flex flex-col gap-3 p-4 rounded-md cursor-pointer",
-              focus ? "bg-surface-5" : "bg-surface-4",
-            )
-          }
-        >
-          <div className="flex gap-[14px] items-center">
-            <BookIcon className="w-5 h-5 text-icons-3" />
-            <span className="text-lg font-medium truncate text-icons-6">
-              {subResult.title}
-            </span>
-          </div>
-          <div className="ml-2 flex items-center gap-[14px] truncate border-l-2 border-borders-2 pl-4">
-            <BurgerIcon className="w-4 h-4 shrink-0 text-icons-3" />
-            <div
-              className="text-lg font-normal truncate text-icons-3 [&_mark]:text-accent-green [&_mark]:bg-transparent"
-              dangerouslySetInnerHTML={{ __html: subResult.excerpt }}
-            />
-          </div>
-        </ComboboxOption>
-      ))}
-    </>
   );
 };
