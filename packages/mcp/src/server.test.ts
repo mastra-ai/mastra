@@ -2,9 +2,12 @@ import http from 'node:http';
 import path from 'path';
 import type { ServerType } from '@hono/node-server';
 import { serve } from '@hono/node-server';
+import type { ToolsInput } from '@mastra/core/agent';
+import type { MCPServerConfig, Repository, PackageInfo, RemoteInfo } from '@mastra/core/mcp';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { Hono } from 'hono';
-import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi, beforeEach } from 'vitest';
+import { z } from 'zod';
 import { weatherTool } from './__fixtures__/tools';
 import { MCPClient } from './configuration';
 import { MCPServer } from './server';
@@ -15,7 +18,197 @@ let httpServer: http.Server;
 
 vi.setConfig({ testTimeout: 20000, hookTimeout: 20000 });
 
+// Mock Date constructor for predictable release dates
+const mockDateISO = '2024-01-01T00:00:00.000Z';
+const mockDate = new Date(mockDateISO);
+const OriginalDate = global.Date; // Store original Date
+
+// Mock a simple tool
+const mockToolExecute = vi.fn(async (args: any) => ({ result: 'tool executed', args }));
+const mockTools: ToolsInput = {
+  testTool: {
+    description: 'A test tool',
+    parameters: z.object({ input: z.string().optional() }),
+    execute: mockToolExecute,
+  },
+};
+
+const minimalConfig: MCPServerConfig = {
+  name: 'TestServer',
+  version: '1.0.0',
+  tools: mockTools,
+};
+
 describe('MCPServer', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    // @ts-ignore - Mocking Date completely
+    global.Date = vi.fn((...args: any[]) => {
+      if (args.length === 0) {
+        // new Date()
+        return mockDate;
+      }
+      // @ts-ignore
+      return new OriginalDate(...args); // new Date('some-string') or new Date(timestamp)
+    }) as any;
+
+    // @ts-ignore
+    global.Date.now = vi.fn(() => mockDate.getTime());
+    // @ts-ignore
+    global.Date.prototype.toISOString = vi.fn(() => mockDateISO);
+    // @ts-ignore // Static Date.toISOString() might be used by some libraries
+    global.Date.toISOString = vi.fn(() => mockDateISO);
+  });
+
+  describe('Constructor and Metadata Initialization', () => {
+    it('should initialize with default metadata if not provided', () => {
+      const server = new MCPServer(minimalConfig);
+      expect(server.id).toBeDefined();
+      expect(server.name).toBe('TestServer');
+      expect(server.version).toBe('1.0.0');
+      expect(server.description).toBeUndefined();
+      expect(server.repository).toBeUndefined();
+      // MCPServerBase stores releaseDate as string, compare directly or re-parse
+      expect(server.releaseDate).toBe(mockDateISO);
+      expect(server.isLatest).toBe(true);
+      expect(server.packageCanonical).toBeUndefined();
+      expect(server.packages).toBeUndefined();
+      expect(server.remotes).toBeUndefined();
+    });
+
+    it('should initialize with custom metadata when provided', () => {
+      const repository: Repository = { url: 'https://github.com/test/repo', source: 'github', id: 'repo-id' };
+      const packages: PackageInfo[] = [{ registry_name: 'npm', name: 'test-package', version: '1.0.0' }];
+      const remotes: RemoteInfo[] = [{ transport_type: 'sse', url: 'https://test.com/sse' }];
+      const customReleaseDate = '2023-12-31T00:00:00.000Z';
+      const customConfig: MCPServerConfig = {
+        ...minimalConfig,
+        id: 'custom-id-doesnt-need-uuid-format-if-set-explicitly',
+        description: 'A custom server description',
+        repository,
+        releaseDate: customReleaseDate,
+        isLatest: false,
+        packageCanonical: 'npm',
+        packages,
+        remotes,
+      };
+      const server = new MCPServer(customConfig);
+
+      expect(server.id).toBe('custom-id-doesnt-need-uuid-format-if-set-explicitly');
+      expect(server.description).toBe('A custom server description');
+      expect(server.repository).toEqual(repository);
+      expect(server.releaseDate).toBe(customReleaseDate);
+      expect(server.isLatest).toBe(false);
+      expect(server.packageCanonical).toBe('npm');
+      expect(server.packages).toEqual(packages);
+      expect(server.remotes).toEqual(remotes);
+    });
+  });
+
+  describe('getServerInfo()', () => {
+    it('should return correct ServerInfo with default metadata', () => {
+      const server = new MCPServer(minimalConfig);
+      const serverInfo = server.getServerInfo();
+
+      expect(serverInfo).toEqual({
+        id: expect.any(String),
+        name: 'TestServer',
+        description: undefined,
+        repository: undefined,
+        version_detail: {
+          version: '1.0.0',
+          release_date: mockDateISO,
+          is_latest: true,
+        },
+      });
+    });
+
+    it('should return correct ServerInfo with custom metadata', () => {
+      const repository: Repository = { url: 'https://github.com/test/repo', source: 'github', id: 'repo-id' };
+      const customReleaseDate = '2023-11-01T00:00:00.000Z';
+      const customConfig: MCPServerConfig = {
+        ...minimalConfig,
+        id: 'custom-id-for-info',
+        description: 'Custom description',
+        repository,
+        releaseDate: customReleaseDate,
+        isLatest: false,
+      };
+      const server = new MCPServer(customConfig);
+      const serverInfo = server.getServerInfo();
+
+      expect(serverInfo).toEqual({
+        id: 'custom-id-for-info',
+        name: 'TestServer',
+        description: 'Custom description',
+        repository,
+        version_detail: {
+          version: '1.0.0',
+          release_date: customReleaseDate,
+          is_latest: false,
+        },
+      });
+    });
+  });
+
+  describe('getServerDetail()', () => {
+    it('should return correct ServerDetailInfo with default metadata', () => {
+      const server = new MCPServer(minimalConfig);
+      const serverDetail = server.getServerDetail();
+
+      expect(serverDetail).toEqual({
+        id: expect.any(String),
+        name: 'TestServer',
+        description: undefined,
+        repository: undefined,
+        version_detail: {
+          version: '1.0.0',
+          release_date: mockDateISO,
+          is_latest: true,
+        },
+        package_canonical: undefined,
+        packages: undefined,
+        remotes: undefined,
+      });
+    });
+
+    it('should return correct ServerDetailInfo with custom metadata', () => {
+      const repository: Repository = { url: 'https://github.com/test/repo', source: 'github', id: 'repo-id' };
+      const packages: PackageInfo[] = [{ registry_name: 'npm', name: 'test-package', version: '1.0.0' }];
+      const remotes: RemoteInfo[] = [{ transport_type: 'sse', url: 'https://test.com/sse' }];
+      const customReleaseDate = '2023-10-01T00:00:00.000Z';
+      const customConfig: MCPServerConfig = {
+        ...minimalConfig,
+        id: 'custom-id-for-detail',
+        description: 'Custom detail description',
+        repository,
+        releaseDate: customReleaseDate,
+        isLatest: true,
+        packageCanonical: 'docker',
+        packages,
+        remotes,
+      };
+      const server = new MCPServer(customConfig);
+      const serverDetail = server.getServerDetail();
+
+      expect(serverDetail).toEqual({
+        id: 'custom-id-for-detail',
+        name: 'TestServer',
+        description: 'Custom detail description',
+        repository,
+        version_detail: {
+          version: '1.0.0',
+          release_date: customReleaseDate,
+          is_latest: true,
+        },
+        package_canonical: 'docker',
+        packages,
+        remotes,
+      });
+    });
+  });
+
   describe('MCPServer SSE transport', () => {
     let sseRes: Response | undefined;
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;

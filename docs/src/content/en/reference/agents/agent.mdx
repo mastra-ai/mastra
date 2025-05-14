@@ -63,6 +63,12 @@ constructor(config: AgentConfig<TAgentId, TTools, TMetrics>)
       description: "Default options to use when calling stream().",
     },
     {
+      name: "workflows",
+      type: "Record<string, NewWorkflow> | ({ runtimeContext: RuntimeContext }) => Record<string, NewWorkflow> | Promise<Record<string, NewWorkflow>>",
+      isOptional: true,
+      description: "Workflows that the agent can execute. Can be a static object or a function that returns workflows."
+    },
+    {
       name: "evals",
       type: "Record<string, Metric>",
       isOptional: true,
