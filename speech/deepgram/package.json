@@ -26,7 +26,6 @@
   "license": "Elastic-2.0",
   "dependencies": {
     "@deepgram/sdk": "^3.11.2",
-    "@mastra/core": "workspace:^",
     "zod": "^3.24.3"
   },
   "devDependencies": {
@@ -35,6 +34,10 @@
     "@types/node": "^20.17.27",
     "eslint": "^9.23.0",
     "tsup": "^8.4.0",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "@mastra/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@mastra/core": "^0.9.4"
   }
 }

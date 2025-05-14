@@ -64,15 +64,18 @@
     "size-limit": "^11.2.0",
     "ts-jest": "^29.2.6",
     "tsup": "^8.4.0",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "@mastra/core": "workspace:*"
   },
   "keywords": [],
   "author": "",
   "license": "Elastic-2.0",
   "dependencies": {
     "@hey-api/client-fetch": "^0.3.4",
-    "@mastra/core": "workspace:^",
     "ts-to-zod": "^3.15.0",
     "zod": "^3.24.3"
+  },
+  "peerDependencies": {
+    "@mastra/core": "^0.9.4"
   }
 }

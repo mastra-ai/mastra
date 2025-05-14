@@ -28,7 +28,6 @@
     "posttest": "node scripts/stop-docker.js"
   },
   "dependencies": {
-    "@mastra/core": "workspace:^",
     "couchbase": "^4.4.5"
   },
   "devDependencies": {
@@ -41,6 +40,10 @@
     "eslint": "^9.23.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
-    "vitest": "^3.0.9"
+    "vitest": "^3.0.9",
+    "@mastra/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@mastra/core": "^0.9.4"
   }
 }
