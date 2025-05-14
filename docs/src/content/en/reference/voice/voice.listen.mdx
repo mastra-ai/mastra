@@ -49,7 +49,8 @@ const transcriptWithOptions = await voice.listen(audioStream, {
     {
       name: "audioStream",
       type: "NodeJS.ReadableStream",
-      description: "Audio stream to transcribe. This can be a file stream or a microphone stream.",
+      description:
+        "Audio stream to transcribe. This can be a file stream or a microphone stream.",
       isOptional: false,
     },
     {
@@ -57,13 +58,14 @@ const transcriptWithOptions = await voice.listen(audioStream, {
       type: "object",
       description: "Provider-specific options for speech recognition",
       isOptional: true,
-    }
+    },
   ]}
 />
 
 ## Return Value
 
 Returns one of the following:
+
 - `Promise<string>`: A promise that resolves to the transcribed text
 - `Promise<NodeJS.ReadableStream>`: A promise that resolves to a stream of transcribed text (for streaming transcription)
 - `Promise<void>`: For real-time providers that emit 'writing' events instead of returning text directly
@@ -94,7 +96,7 @@ Each voice provider may support additional options specific to their implementat
       type: "string",
       description: "Language code (e.g., 'en', 'fr', 'de')",
       isOptional: true,
-    }
+    },
   ]}
 />
 
@@ -112,10 +114,11 @@ Each voice provider may support additional options specific to their implementat
     {
       name: "options.config",
       type: "object",
-      description: "Recognition configuration from Google Cloud Speech-to-Text API",
+      description:
+        "Recognition configuration from Google Cloud Speech-to-Text API",
       isOptional: true,
       defaultValue: "{ encoding: 'LINEAR16', languageCode: 'en-US' }",
-    }
+    },
   ]}
 />
 
@@ -136,7 +139,7 @@ Each voice provider may support additional options specific to their implementat
       description: "Language code for transcription",
       isOptional: true,
       defaultValue: "'en'",
-    }
+    },
   ]}
 />
 

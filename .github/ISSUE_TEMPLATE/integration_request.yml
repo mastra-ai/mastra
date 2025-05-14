@@ -1,7 +1,7 @@
 name: Integration Request
 description: Request a new integration to be added to Mastra
-title: "[INTEGRATION] "
-labels: ["integration", "enhancement"]
+title: '[INTEGRATION] '
+labels: ['integration', 'enhancement']
 body:
   - type: markdown
     attributes:
@@ -23,7 +23,7 @@ body:
     attributes:
       label: Use Case
       description: Describe how you would use this integration with Mastra.
-      placeholder: "I want to use this integration to allow my Mastra agents to fetch data from this service and use it in workflows."
+      placeholder: 'I want to use this integration to allow my Mastra agents to fetch data from this service and use it in workflows.'
     validations:
       required: true
 
@@ -57,7 +57,7 @@ body:
     attributes:
       label: Additional Context
       description: Add any other context or screenshots about the integration request here.
-      placeholder: "Any additional information that might help us understand the request better."
+      placeholder: 'Any additional information that might help us understand the request better.'
     validations:
       required: false
 

@@ -47,15 +47,18 @@ myWorkflow
           return { incrementedValue: 0 };
         }
 
-        return { incrementedValue: context.steps.stepOne.output.doubledValue + 1 };
+        return {
+          incrementedValue: context.steps.stepOne.output.doubledValue + 1,
+        };
       },
     }),
-  ).commit();
+  )
+  .commit();
 
-  // Register the workflow with Mastra
-  export const mastra = new Mastra({
-    workflows: { myWorkflow },
-  });
+// Register the workflow with Mastra
+export const mastra = new Mastra({
+  workflows: { myWorkflow },
+});
 ```
 
 ## ステップを個別に作成する

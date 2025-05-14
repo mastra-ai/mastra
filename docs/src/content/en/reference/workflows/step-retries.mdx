@@ -35,10 +35,10 @@ You can set a default retry configuration for all steps in a workflow:
 
 ```typescript
 const workflow = new Workflow({
-  name: 'my-workflow',
+  name: "my-workflow",
   retryConfig: {
-    attempts: 3,    // Number of retries (in addition to the initial attempt)
-    delay: 1000,    // Delay between retries in milliseconds
+    attempts: 3, // Number of retries (in addition to the initial attempt)
+    delay: 1000, // Delay between retries in milliseconds
   },
 });
 ```
@@ -49,13 +49,13 @@ You can also configure retries on individual steps, which will override the work
 
 ```typescript
 const fetchDataStep = new Step({
-  id: 'fetchData',
+  id: "fetchData",
   execute: async () => {
     // Fetch data from external API
   },
   retryConfig: {
-    attempts: 5,    // This step will retry up to 5 times
-    delay: 2000,    // With a 2-second delay between retries
+    attempts: 5, // This step will retry up to 5 times
+    delay: 2000, // With a 2-second delay between retries
   },
 });
 ```
@@ -64,10 +64,10 @@ const fetchDataStep = new Step({
 
 The `retryConfig` object supports the following parameters:
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `attempts` | number | 0 | The number of retry attempts (in addition to the initial attempt) |
-| `delay` | number | 1000 | Time in milliseconds to wait between retries |
+| Parameter  | Type   | Default | Description                                                       |
+| ---------- | ------ | ------- | ----------------------------------------------------------------- |
+| `attempts` | number | 0       | The number of retry attempts (in addition to the initial attempt) |
+| `delay`    | number | 1000    | Time in milliseconds to wait between retries                      |
 
 ## How Retries Work
 
@@ -90,53 +90,50 @@ During retry attempts, the workflow execution remains active but paused for the 
 ### Basic Retry Example
 
 ```typescript
-import { Workflow, Step } from '@mastra/core/workflows';
+import { Workflow, Step } from "@mastra/core/workflows";
 
 // Define a step that might fail
 const unreliableApiStep = new Step({
-  id: 'callUnreliableApi',
+  id: "callUnreliableApi",
   execute: async () => {
     // Simulate an API call that might fail
     const random = Math.random();
     if (random < 0.7) {
-      throw new Error('API call failed');
+      throw new Error("API call failed");
     }
-    return { data: 'API response data' };
+    return { data: "API response data" };
   },
   retryConfig: {
-    attempts: 3,  // Retry up to 3 times
-    delay: 2000,  // Wait 2 seconds between attempts
+    attempts: 3, // Retry up to 3 times
+    delay: 2000, // Wait 2 seconds between attempts
   },
 });
 
 // Create a workflow with the unreliable step
 const workflow = new Workflow({
-  name: 'retry-demo-workflow',
+  name: "retry-demo-workflow",
 });
 
-workflow
-  .step(unreliableApiStep)
-  .then(processResultStep)
-  .commit();
+workflow.step(unreliableApiStep).then(processResultStep).commit();
 ```
 
 ### Workflow-level Retries with Step Override
 
 ```typescript
-import { Workflow, Step } from '@mastra/core/workflows';
+import { Workflow, Step } from "@mastra/core/workflows";
 
 // Create a workflow with default retry configuration
 const workflow = new Workflow({
-  name: 'multi-retry-workflow',
+  name: "multi-retry-workflow",
   retryConfig: {
-    attempts: 2,  // All steps will retry twice by default
-    delay: 1000,  // With a 1-second delay
+    attempts: 2, // All steps will retry twice by default
+    delay: 1000, // With a 1-second delay
   },
 });
 
 // This step uses the workflow's default retry configuration
 const standardStep = new Step({
-  id: 'standardStep',
+  id: "standardStep",
   execute: async () => {
     // Some operation that might fail
   },
@@ -144,32 +141,28 @@ const standardStep = new Step({
 
 // This step overrides the workflow's retry configuration
 const criticalStep = new Step({
-  id: 'criticalStep',
+  id: "criticalStep",
   execute: async () => {
     // Critical operation that needs more retry attempts
   },
   retryConfig: {
-    attempts: 5,  // Override with 5 retry attempts
-    delay: 5000,  // And a longer 5-second delay
+    attempts: 5, // Override with 5 retry attempts
+    delay: 5000, // And a longer 5-second delay
   },
 });
 
 // This step disables retries
 const noRetryStep = new Step({
-  id: 'noRetryStep',
+  id: "noRetryStep",
   execute: async () => {
     // Operation that should not retry
   },
   retryConfig: {
-    attempts: 0,  // Explicitly disable retries
+    attempts: 0, // Explicitly disable retries
   },
 });
 
-workflow
-  .step(standardStep)
-  .then(criticalStep)
-  .then(noRetryStep)
-  .commit();
+workflow.step(standardStep).then(criticalStep).then(noRetryStep).commit();
 ```
 
 ## Monitoring Retries

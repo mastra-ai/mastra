@@ -21,14 +21,14 @@ const metric = new ContextRelevancyMetric(model, {
     "All data is encrypted at rest and in transit",
     "Two-factor authentication is mandatory",
     "The platform supports multiple languages",
-    "Our offices are located in San Francisco"
-  ]
+    "Our offices are located in San Francisco",
+  ],
 });
 
 const result = await metric.measure(
   "What are our product's security features?",
   "Our product uses encryption and requires 2FA.",
-  );
+);
 
 console.log(result.score); // Score from 0-1
 console.log(result.info.reason); // Explanation of the relevancy assessment
@@ -41,7 +41,8 @@ console.log(result.info.reason); // Explanation of the relevancy assessment
     {
       name: "model",
       type: "LanguageModel",
-      description: "Configuration for the model used to evaluate context relevancy",
+      description:
+        "Configuration for the model used to evaluate context relevancy",
       isOptional: false,
     },
     {
@@ -49,7 +50,7 @@ console.log(result.info.reason); // Explanation of the relevancy assessment
       type: "ContextRelevancyMetricOptions",
       description: "Configuration options for the metric",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -67,9 +68,10 @@ console.log(result.info.reason); // Explanation of the relevancy assessment
     {
       name: "context",
       type: "string[]",
-      description: "Array of retrieved context documents used to generate the response",
+      description:
+        "Array of retrieved context documents used to generate the response",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -88,7 +90,7 @@ console.log(result.info.reason); // Explanation of the relevancy assessment
       type: "string",
       description: "The LLM's response to evaluate",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -113,11 +115,11 @@ console.log(result.info.reason); // Explanation of the relevancy assessment
               name: "reason",
               type: "string",
               description: "Detailed explanation of the relevancy assessment",
-            }
-          ]
-        }
-      ]
-    }
+            },
+          ],
+        },
+      ],
+    },
   ]}
 />
 
@@ -128,6 +130,7 @@ The metric evaluates how well retrieved context matches the query through binary
 ### Scoring Process
 
 1. Extracts statements from context:
+
    - Breaks down context into meaningful units
    - Preserves semantic relationships
 
@@ -139,7 +142,9 @@ The metric evaluates how well retrieved context matches the query through binary
 Final score: `(relevant_statements / total_statements) * scale`
 
 ### Score interpretation
+
 (0 to scale, default 0-1)
+
 - 1.0: Perfect relevancy - all retrieved context is relevant
 - 0.7-0.9: High relevancy - most context is relevant with few irrelevant pieces
 - 0.4-0.6: Moderate relevancy - a mix of relevant and irrelevant context
@@ -162,8 +167,8 @@ const metric = new ContextRelevancyMetric(model, {
     "Pro plan includes advanced features at $30/month",
     "Enterprise plan has custom pricing",
     "Our company was founded in 2020",
-    "We have offices worldwide"
-  ]
+    "We have offices worldwide",
+  ],
 });
 
 const result = await metric.measure(
@@ -175,7 +180,7 @@ const result = await metric.measure(
 // {
 //   score: 60,
 //   info: {
-//     reason: "3 out of 5 statements are relevant to pricing plans. The statements about 
+//     reason: "3 out of 5 statements are relevant to pricing plans. The statements about
 //           company founding and office locations are not relevant to the pricing query."
 //   }
 // }
@@ -185,4 +190,4 @@ const result = await metric.measure(
 
 - [Contextual Recall Metric](./contextual-recall)
 - [Context Precision Metric](./context-precision)
-- [Context Position Metric](./context-position) 
+- [Context Position Metric](./context-position)

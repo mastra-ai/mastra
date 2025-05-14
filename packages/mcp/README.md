@@ -330,12 +330,12 @@ console.log(Object.keys(resources)); // ['weather', 'dataService']
 if (resources.weather) {
   // Access resources from the weather server
   const weatherResources = resources.weather;
-  
+
   // Each resource has uri, name, description, and mimeType
   weatherResources.forEach(resource => {
     console.log(`${resource.uri}: ${resource.name} (${resource.mimeType})`);
   });
-  
+
   // Find a specific resource by URI
   const forecast = weatherResources.find(r => r.uri === 'weather://forecast');
   if (forecast) {

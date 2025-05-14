@@ -11,8 +11,8 @@ start関数はワークフローの実行を開始します。定義されたワ
 
 ```typescript copy showLineNumbers
 const { runId, start } = workflow.createRun();
-const result = await start({ 
-  triggerData: { inputValue: 42 } 
+const result = await start({
+  triggerData: { inputValue: 42 },
 });
 ```
 
@@ -24,8 +24,8 @@ const result = await start({
       name: "config",
       type: "object",
       description: "ワークフロー実行を開始するための設定",
-      isOptional: true
-    }
+      isOptional: true,
+    },
   ]}
 />
 
@@ -37,8 +37,8 @@ const result = await start({
       name: "triggerData",
       type: "Record<string, any>",
       description: "ワークフローのtriggerSchemaに一致する初期データ",
-      isOptional: false
-    }
+      isOptional: false,
+    },
   ]}
 />
 
@@ -49,13 +49,13 @@ const result = await start({
     {
       name: "results",
       type: "Record<string, any>",
-      description: "すべての完了したワークフローステップからの結合出力"
+      description: "すべての完了したワークフローステップからの結合出力",
     },
     {
       name: "status",
       type: "'completed' | 'error' | 'suspended'",
-      description: "ワークフロー実行の最終ステータス"
-    }
+      description: "ワークフロー実行の最終ステータス",
+    },
   ]}
 />
 
@@ -81,4 +81,7 @@ try {
 - [createRun リファレンス](./createRun.mdx)
 - [Workflow クラス リファレンス](./workflow.mdx)
 - [Step クラス リファレンス](./step-class.mdx)
+
+```
+
 ```

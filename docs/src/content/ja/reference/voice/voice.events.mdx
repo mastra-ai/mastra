@@ -16,12 +16,14 @@ description: "音声プロバイダーから発信されるイベントのドキ
     {
       name: "error",
       type: "Error",
-      description: "音声処理中にエラーが発生した場合、または音声データ形式がサポートされていない場合に発行されます",
+      description:
+        "音声処理中にエラーが発生した場合、または音声データ形式がサポートされていない場合に発行されます",
     },
     {
       name: "session.created",
       type: "object",
-      description: "OpenAIサービスとの新しいセッションが作成されたときに発行されます",
+      description:
+        "OpenAIサービスとの新しいセッションが作成されたときに発行されます",
     },
     {
       name: "session.updated",
@@ -31,7 +33,8 @@ description: "音声プロバイダーから発信されるイベントのドキ
     {
       name: "response.created",
       type: "object",
-      description: "AIアシスタントによって新しい応答が作成されたときに発行されます",
+      description:
+        "AIアシスタントによって新しい応答が作成されたときに発行されます",
     },
     {
       name: "response.done",
@@ -46,12 +49,14 @@ description: "音声プロバイダーから発信されるイベントのドキ
     {
       name: "writing",
       type: "object",
-      description: "テキストが文字起こし（ユーザー）または生成（アシスタント）されているときに発行されます",
+      description:
+        "テキストが文字起こし（ユーザー）または生成（アシスタント）されているときに発行されます",
     },
     {
       name: "speaking",
       type: "object",
-      description: "音声プロバイダーから音声データが利用可能になったときに発行されます",
+      description:
+        "音声プロバイダーから音声データが利用可能になったときに発行されます",
     },
     {
       name: "speaking.done",
@@ -67,7 +72,7 @@ description: "音声プロバイダーから発信されるイベントのドキ
       name: "tool-call-result",
       type: "object",
       description: "ツールの実行が結果とともに完了したときに発行されます",
-    }
+    },
   ]}
 />
 

@@ -10,28 +10,28 @@ services:
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
       interval: 5s
       timeout: 5s
       retries: 5
   redis:
     image: redis:7-alpine
     ports:
-      - "6370:6379"
+      - '6370:6379'
     command: redis-server --requirepass redis_password
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       timeout: 5s
       retries: 5
   serverless-redis-http:
     image: hiett/serverless-redis-http:latest
     ports:
-      - "8079:80"
+      - '8079:80'
     environment:
       SRH_MODE: env
       SRH_TOKEN: test_token
-      SRH_CONNECTION_STRING: "redis://:redis_password@redis:6379"
+      SRH_CONNECTION_STRING: 'redis://:redis_password@redis:6379'
     depends_on:
       redis:
         condition: service_healthy

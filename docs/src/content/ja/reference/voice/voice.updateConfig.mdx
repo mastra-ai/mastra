@@ -30,8 +30,8 @@ voice.updateConfig({
   turn_detection: {
     type: "server_vad",
     threshold: 0.5,
-    silence_duration_ms: 1000
-  }
+    silence_duration_ms: 1000,
+  },
 });
 
 // The next speak() call will use the new configuration
@@ -39,15 +39,17 @@ await voice.speak("Hello with my new voice!");
 ```
 
 ## パラメータ
+
 <br />
 <PropertiesTable
   content={[
     {
       name: "options",
       type: "Record<string, unknown>",
-      description: "更新する設定オプション。具体的なプロパティは音声プロバイダーによって異なります。",
+      description:
+        "更新する設定オプション。具体的なプロパティは音声プロバイダーによって異なります。",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -60,7 +62,8 @@ await voice.speak("Hello with my new voice!");
 異なる音声プロバイダーは異なる設定オプションをサポートしています：
 
 ### OpenAI リアルタイム
-<br/>
+
+<br />
 <PropertiesTable
   content={[
     {
@@ -74,7 +77,7 @@ await voice.speak("Hello with my new voice!");
       type: "{ type: string, threshold?: number, silence_duration_ms?: number }",
       description: "ユーザーが話し終わったことを検出するための設定",
       isOptional: true,
-    }
+    },
   ]}
 />
 

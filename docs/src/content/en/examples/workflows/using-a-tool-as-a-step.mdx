@@ -3,20 +3,20 @@ title: "Example: Using a Tool as a Step | Workflows | Mastra Docs"
 description: Example of using Mastra to integrate a custom tool as a step in a workflow.
 ---
 
-import { GithubLink } from '@/components/github-link';
+import { GithubLink } from "@/components/github-link";
 
 # Tool as a Workflow step
 
 This example demonstrates how to create and integrate a custom tool as a workflow step, showing how to define input/output schemas and implement the tool's execution logic.
 
 ```ts showLineNumbers copy
-import { createTool } from '@mastra/core/tools';
-import { Workflow } from '@mastra/core/workflows';
-import { z } from 'zod';
+import { createTool } from "@mastra/core/tools";
+import { Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
 
 const crawlWebpage = createTool({
-  id: 'Crawl Webpage',
-  description: 'Crawls a webpage and extracts the text content',
+  id: "Crawl Webpage",
+  description: "Crawls a webpage and extracts the text content",
   inputSchema: z.object({
     url: z.string().url(),
   }),
@@ -26,17 +26,17 @@ const crawlWebpage = createTool({
   execute: async ({ context }) => {
     const response = await fetch(context.triggerData.url);
     const text = await response.text();
-    return { rawText: 'This is the text content of the webpage: ' + text };
+    return { rawText: "This is the text content of the webpage: " + text };
   },
 });
 
-const contentWorkflow = new Workflow({ name: 'content-review' });
+const contentWorkflow = new Workflow({ name: "content-review" });
 
 contentWorkflow.step(crawlWebpage).commit();
 
 const { start } = contentWorkflow.createRun();
 
-const res = await start({ triggerData: { url: 'https://example.com'} });
+const res = await start({ triggerData: { url: "https://example.com" } });
 
 console.log(res.results);
 ```
@@ -46,4 +46,8 @@ console.log(res.results);
 <hr className="dark:border-[#404040] border-gray-300" />
 <br />
 <br />
-<GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/tool-as-workflow-step'} />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/tool-as-workflow-step"
+  }
+/>
