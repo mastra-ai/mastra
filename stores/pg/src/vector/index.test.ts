@@ -759,7 +759,7 @@ describe('PgVector', () => {
         expect(results[0]?.metadata?.tags).toContain('sale');
       });
 
-      it.only('should filter with $elemMatch using multiple conditions', async () => {
+      it('should filter with $elemMatch using multiple conditions', async () => {
         const results = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],

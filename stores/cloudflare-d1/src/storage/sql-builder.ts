@@ -31,7 +31,7 @@ export class SqlBuilder {
     } else {
       const cols = Array.isArray(columns) ? columns : [columns];
       for (const col of cols) {
-        validateSelectColumn(col);
+        validateSelectIdentifier(col);
       }
       this.sql = `SELECT ${cols.join(', ')}`;
     }
@@ -39,7 +39,7 @@ export class SqlBuilder {
   }
 
   from(table: string): SqlBuilder {
-    validateTableName(table);
+    validateIdentifier('table', table);
     this.sql += ` FROM ${table}`;
     return this;
   }
@@ -82,7 +82,7 @@ export class SqlBuilder {
   }
 
   orderBy(column: string, direction: 'ASC' | 'DESC' = 'ASC'): SqlBuilder {
-    validateColumnName(column);
+    validateIdentifier('column', column);
     if (!['ASC', 'DESC'].includes(direction)) {
       throw new Error(`Invalid sort direction: ${direction}`);
     }
@@ -122,9 +122,9 @@ export class SqlBuilder {
     conflictColumns?: string[],
     updateMap?: Record<string, string>,
   ): SqlBuilder {
-    validateTableName(table);
+    validateIdentifier('table', table);
     for (const col of columns) {
-      validateColumnName(col);
+      validateIdentifier('column', col);
     }
     const placeholders = columns.map(() => '?').join(', ');
 
@@ -145,9 +145,9 @@ export class SqlBuilder {
 
   // Update operations
   update(table: string, columns: string[], values: SqlParam[]): SqlBuilder {
-    validateTableName(table);
+    validateIdentifier('table', table);
     for (const col of columns) {
-      validateColumnName(col);
+      validateIdentifier('column', col);
     }
     const setClause = columns.map(col => `${col} = ?`).join(', ');
     this.sql = `UPDATE ${table} SET ${setClause}`;
@@ -157,7 +157,7 @@ export class SqlBuilder {
 
   // Delete operations
   delete(table: string): SqlBuilder {
-    validateTableName(table);
+    validateIdentifier('table', table);
     this.sql = `DELETE FROM ${table}`;
     return this;
   }
@@ -170,12 +170,12 @@ export class SqlBuilder {
    * @returns The builder instance
    */
   createTable(table: string, columnDefinitions: string[], tableConstraints?: string[]): SqlBuilder {
-    validateTableName(table);
+    validateIdentifier('table', table);
     // Naive validation: check the first word of each column definition
     for (const def of columnDefinitions) {
       const colName = def.split(/\s+/)[0];
       if (!colName) throw new Error('Empty column name in definition');
-      validateColumnName(colName);
+      validateIdentifier('column', colName);
     }
     const columns = columnDefinitions.join(', ');
     const constraints = tableConstraints && tableConstraints.length > 0 ? ', ' + tableConstraints.join(', ') : '';
@@ -204,9 +204,9 @@ export class SqlBuilder {
    * @returns The builder instance
    */
   createIndex(indexName: string, tableName: string, columnName: string, indexType: string = ''): SqlBuilder {
-    validateIndexName(indexName);
-    validateTableName(tableName);
-    validateColumnName(columnName);
+    validateIdentifier('index', indexName);
+    validateIdentifier('table', tableName);
+    validateIdentifier('column', columnName);
     this.sql = `CREATE ${indexType ? indexType + ' ' : ''}INDEX IF NOT EXISTS ${indexName} ON ${tableName}(${columnName})`;
     return this;
   }
@@ -218,7 +218,7 @@ export class SqlBuilder {
    * @param exact If true, will not add % wildcards
    */
   like(column: string, value: string, exact: boolean = false): SqlBuilder {
-    validateColumnName(column);
+    validateIdentifier('column', column);
     const likeValue = exact ? value : `%${value}%`;
     if (this.whereAdded) {
       this.sql += ` AND ${column} LIKE ?`;
@@ -237,7 +237,7 @@ export class SqlBuilder {
    * @param value The value to match
    */
   jsonLike(column: string, key: string, value: string): SqlBuilder {
-    validateColumnName(column);
+    validateIdentifier('column', column);
     const jsonPattern = `%"${key}":"${value}"%`;
     if (this.whereAdded) {
       this.sql += ` AND ${column} LIKE ?`;
@@ -277,26 +277,14 @@ export function createSqlBuilder(): SqlBuilder {
   return new SqlBuilder();
 }
 
-function validateSelectColumn(column: string) {
+function validateSelectIdentifier(column: string) {
   if (column !== '*' && !/^[a-zA-Z0-9_]+(\s+AS\s+[a-zA-Z0-9_]+)?$/i.test(column)) {
     throw new Error(`Invalid column name: ${column}`);
   }
 }
 
-function validateColumnName(name: string) {
+function validateIdentifier(kind: string, name: string) {
   if (!/^[a-zA-Z0-9_]+$/.test(name)) {
-    throw new Error(`Invalid column name: ${name}`);
-  }
-}
-
-function validateTableName(name: string) {
-  if (!/^[a-zA-Z0-9_]+$/.test(name)) {
-    throw new Error(`Invalid table name: ${name}`);
-  }
-}
-
-function validateIndexName(name: string) {
-  if (!/^[a-zA-Z0-9_]+$/.test(name)) {
-    throw new Error(`Invalid index name: ${name}`);
+    throw new Error(`Invalid ${kind} name: ${name}`);
   }
 }
