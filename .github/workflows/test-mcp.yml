@@ -34,3 +34,5 @@ jobs:
 
       - name: Run MCP tests
         run: pnpm run test:mcp
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

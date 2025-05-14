@@ -191,8 +191,9 @@ export class Mastra<
     if (config?.mcpServers) {
       this.#mcpServers = config.mcpServers;
 
-      // Set logger and telemetry for MCP servers
-      Object.values(this.#mcpServers).forEach(server => {
+      // Set logger/telemetry/Mastra instance/id for MCP servers
+      Object.entries(this.#mcpServers).forEach(([key, server]) => {
+        server.setId(key);
         if (this.#telemetry) {
           server.__setTelemetry(this.#telemetry);
         }
@@ -605,19 +606,76 @@ Do:
   }
 
   /**
-   * Get a specific MCP server by ID
-   * @param serverId - The ID of the MCP server to retrieve
-   * @returns The MCP server with the specified ID, or undefined if not found
+   * Get all registered MCP server instances.
+   * @returns A record of MCP server ID to MCPServerBase instance, or undefined if none are registered.
    */
-  public getMCPServer(serverId: string): MCPServerBase | undefined {
-    return this.#mcpServers?.[serverId];
+  public getMCPServers(): Record<string, MCPServerBase> | undefined {
+    return this.#mcpServers;
   }
 
   /**
-   * Get all registered MCP servers as a Record, with keys being their IDs.
-   * @returns Record of MCP server IDs to MCPServerBase instances, or undefined if none.
+   * Get a specific MCP server instance.
+   * If a version is provided, it attempts to find the server with that exact logical ID and version.
+   * If no version is provided, it returns the server with the specified logical ID that has the most recent releaseDate.
+   * The logical ID should match the `id` property of the MCPServer instance (typically set via MCPServerConfig.id).
+   * @param serverId - The logical ID of the MCP server to retrieve.
+   * @param version - Optional specific version of the MCP server to retrieve.
+   * @returns The MCP server instance, or undefined if not found or if the specific version is not found.
    */
-  public getMCPServers(): TMCPServers | undefined {
-    return this.#mcpServers;
+  public getMCPServer(serverId: string, version?: string): MCPServerBase | undefined {
+    if (!this.#mcpServers) {
+      return undefined;
+    }
+
+    const allRegisteredServers = Object.values(this.#mcpServers || {});
+
+    const matchingLogicalIdServers = allRegisteredServers.filter(server => server.id === serverId);
+
+    if (matchingLogicalIdServers.length === 0) {
+      this.#logger?.debug(`No MCP servers found with logical ID: ${serverId}`);
+      return undefined;
+    }
+
+    if (version) {
+      const specificVersionServer = matchingLogicalIdServers.find(server => server.version === version);
+      if (!specificVersionServer) {
+        this.#logger?.debug(`MCP server with logical ID '${serverId}' found, but not version '${version}'.`);
+      }
+      return specificVersionServer;
+    } else {
+      // No version specified, find the one with the most recent releaseDate
+      if (matchingLogicalIdServers.length === 1) {
+        return matchingLogicalIdServers[0];
+      }
+
+      matchingLogicalIdServers.sort((a, b) => {
+        // Ensure releaseDate exists and is a string before creating a Date object
+        const dateAVal = a.releaseDate && typeof a.releaseDate === 'string' ? new Date(a.releaseDate).getTime() : NaN;
+        const dateBVal = b.releaseDate && typeof b.releaseDate === 'string' ? new Date(b.releaseDate).getTime() : NaN;
+
+        if (isNaN(dateAVal) && isNaN(dateBVal)) return 0;
+        if (isNaN(dateAVal)) return 1; // Treat invalid/missing dates as older
+        if (isNaN(dateBVal)) return -1; // Treat invalid/missing dates as older
+
+        return dateBVal - dateAVal; // Sorts in descending order of time (latest first)
+      });
+
+      // After sorting, the first element should be the latest if its date is valid
+      if (matchingLogicalIdServers.length > 0) {
+        const latestServer = matchingLogicalIdServers[0];
+        if (
+          latestServer &&
+          latestServer.releaseDate &&
+          typeof latestServer.releaseDate === 'string' &&
+          !isNaN(new Date(latestServer.releaseDate).getTime())
+        ) {
+          return latestServer;
+        }
+      }
+      this.#logger?.warn(
+        `Could not determine the latest server for logical ID '${serverId}' due to invalid or missing release dates, or no servers left after filtering.`,
+      );
+      return undefined;
+    }
   }
 }
