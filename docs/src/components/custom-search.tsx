@@ -10,12 +10,7 @@ import cn from "clsx";
 import { Search } from "lucide-react";
 import { addBasePath } from "next/dist/client/add-base-path";
 import { useRouter } from "next/navigation";
-import type {
-  FC,
-  ReactElement,
-  ReactNode,
-  SyntheticEvent
-} from "react";
+import type { FC, ReactElement, ReactNode, SyntheticEvent } from "react";
 import { useDeferredValue, useEffect, useRef, useState } from "react";
 import { BookIcon, BurgerIcon, JarvisIcon } from "./svgs/Icons";
 import { InformationIcon } from "./svgs/information-icon";
@@ -232,7 +227,6 @@ export const CustomSearch: FC<SearchProps> = ({
 
   const isSearchEmpty = !search;
 
-
   return (
     <Combobox onChange={handleSelect}>
       <div
@@ -265,9 +259,7 @@ export const CustomSearch: FC<SearchProps> = ({
       <div
         className={cn(
           "relative overflow-hidden",
-          isSearchLoading || isSearchEmpty
-            ? "h-fit"
-            : "h-[500px]",
+          isSearchLoading || isSearchEmpty ? "h-fit" : "h-[500px]",
         )}
       >
         <ScrollArea className="h-full">
@@ -308,41 +300,41 @@ export const CustomSearch: FC<SearchProps> = ({
                 />
               </>
             ) : results.length ? (
-                <div className="mt-3">
-                  <div className="border-t-[0.5px] border-borders-1 pt-3">
-                    <ComboboxOption
-                      className={({ focus }) =>
-                        cn(
-                          "w-full flex items-center font-medium justify-between gap-2 cursor-pointer text-base rounded-md px-4 py-2 bg-[url('/image/bloom-2.png')] bg-cover mb-2 bg-right",
-                          focus ? "bg-surface-5" : "bg-surface-4",
-                        )
-                      }
-                      value={{ url: "use-ai" }}
-                      key="use-ai"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-accent-green shrink-0">
-                          <JarvisIcon className="w-6 h-6 shrink-0" />
-                        </span>
-                        <span className="flex flex-col text-lg font-medium text-left text-icons-5">
-                          <span id="use-ai-text" className="text-icons-5">
-                            Tell me about{" "}
-                            <span className="text-accent-green">{search}</span>
-                          </span>
-                          <span className="text-icons-3 text-[15px] text-left font-normal">
-                            Use AI to answer your question
-                          </span>
-                        </span>
-                      </div>
-                      <span className="flex items-center h-8 px-3 text-sm font-medium rounded-sm bg-tag-green-2 text-accent-green justify-self-end">
-                        experimental
+              <div className="mt-3">
+                <div className="border-t-[0.5px] border-borders-1 pt-3">
+                  <ComboboxOption
+                    className={({ focus }) =>
+                      cn(
+                        "w-full flex items-center font-medium justify-between gap-2 cursor-pointer text-base rounded-md px-4 py-2 bg-[url('/image/bloom-2.png')] bg-cover mb-2 bg-right",
+                        focus ? "bg-surface-5" : "bg-surface-4",
+                      )
+                    }
+                    value={{ url: "use-ai" }}
+                    key="use-ai"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-accent-green shrink-0">
+                        <JarvisIcon className="w-6 h-6 shrink-0" />
                       </span>
-                    </ComboboxOption>
-                  </div>
-                  {results.map((searchResult) => (
-                    <Result key={searchResult.url} data={searchResult} />
-                  ))}
+                      <span className="flex flex-col text-lg font-medium text-left text-icons-5">
+                        <span id="use-ai-text" className="text-icons-5">
+                          Tell me about{" "}
+                          <span className="text-accent-green">{search}</span>
+                        </span>
+                        <span className="text-icons-3 text-[15px] text-left font-normal">
+                          Use AI to answer your question
+                        </span>
+                      </span>
+                    </div>
+                    <span className="flex items-center h-8 px-3 text-sm font-medium rounded-sm bg-tag-green-2 text-accent-green justify-self-end">
+                      experimental
+                    </span>
+                  </ComboboxOption>
                 </div>
+                {results.map((searchResult) => (
+                  <Result key={searchResult.url} data={searchResult} />
+                ))}
+              </div>
             ) : (
               deferredSearch && emptyResult
             )}

@@ -21,21 +21,9 @@ Mastra Client SDKは、クライアント環境から[Mastraサーバー](/docs/
 import { Tabs } from "nextra/components";
 
 <Tabs items={["npm", "yarn", "pnpm"]}>
-  <Tabs.Tab>
-```bash copy
-npm install @mastra/client-js@latest
-```
-  </Tabs.Tab>
-  <Tabs.Tab>
-```bash copy
-yarn add @mastra/client-js@latest
-```
-  </Tabs.Tab>
-  <Tabs.Tab>
-```bash copy
-pnpm add @mastra/client-js@latest
-```
-  </Tabs.Tab>
+  <Tabs.Tab>```bash copy npm install @mastra/client-js@latest ```</Tabs.Tab>
+  <Tabs.Tab>```bash copy yarn add @mastra/client-js@latest ```</Tabs.Tab>
+  <Tabs.Tab>```bash copy pnpm add @mastra/client-js@latest ```</Tabs.Tab>
 </Tabs>
 
 ## Mastra Clientの初期化
@@ -60,12 +48,13 @@ const client = new MastraClient({
   baseUrl: "http://localhost:4111",
 
   // 開発用のオプション設定
-  retries: 3,           // リトライ試行回数
-  backoffMs: 300,       // 初期リトライバックオフ時間
-  maxBackoffMs: 5000,   // 最大リトライバックオフ時間
-  headers: {            // 開発用カスタムヘッダー
-    "X-Development": "true"
-  }
+  retries: 3, // リトライ試行回数
+  backoffMs: 300, // 初期リトライバックオフ時間
+  maxBackoffMs: 5000, // 最大リトライバックオフ時間
+  headers: {
+    // 開発用カスタムヘッダー
+    "X-Development": "true",
+  },
 });
 ```
 
@@ -82,9 +71,9 @@ const response = await agent.generate({
   messages: [
     {
       role: "user",
-      content: "Hello, I'm testing the local development setup!"
-    }
-  ]
+      content: "Hello, I'm testing the local development setup!",
+    },
+  ],
 });
 ```
 
@@ -98,8 +87,8 @@ Mastraクライアントは、Mastraサーバーが提供するすべてのリ�
 - [**ワークフロー**](/reference/client-js/workflows): 自動化されたワークフローの作成と管理
 - [**ベクトル**](/reference/client-js/vectors): セマンティック検索と類似性マッチングのためのベクトル操作の処理
 
-
 ## ベストプラクティス
+
 1. **エラー処理**: 開発シナリオに適切なエラー処理を実装する
 2. **環境変数**: 設定には環境変数を使用する
 3. **デバッグ**: 必要に応じて詳細なログ記録を有効にする
@@ -109,11 +98,10 @@ Mastraクライアントは、Mastraサーバーが提供するすべてのリ�
 try {
   const agent = client.getAgent("dev-agent-id");
   const response = await agent.generate({
-    messages: [{ role: "user", content: "Test message" }]
+    messages: [{ role: "user", content: "Test message" }],
   });
   console.log("Response:", response);
 } catch (error) {
   console.error("Development error:", error);
 }
 ```
-

@@ -55,20 +55,20 @@ import { openai } from "@ai-sdk/openai";
 import { embedMany } from "ai";
 
 const { embeddings } = await embedMany({
-  model: openai.embedding('text-embedding-3-small'),
-  values: chunks.map(chunk => chunk.text),
+  model: openai.embedding("text-embedding-3-small"),
+  values: chunks.map((chunk) => chunk.text),
 });
 ```
 
 ### Cohereを使用する
 
 ```ts showLineNumbers copy
-import { cohere } from '@ai-sdk/cohere';
-import { embedMany } from 'ai';
+import { cohere } from "@ai-sdk/cohere";
+import { embedMany } from "ai";
 
 const { embeddings } = await embedMany({
-  model: cohere.embedding('embed-english-v3.0'),
-  values: chunks.map(chunk => chunk.text),
+  model: cohere.embedding("embed-english-v3.0"),
+  values: chunks.map((chunk) => chunk.text),
 });
 ```
 
@@ -78,30 +78,33 @@ const { embeddings } = await embedMany({
 
 埋め込みモデルは通常、固定された次元数のベクトルを出力します（例：OpenAIの`text-embedding-3-small`では1536次元）。
 一部のモデルではこの次元数を削減することができ、以下のような利点があります：
+
 - ベクターデータベースでの保存要件の削減
 - 類似性検索の計算コストの削減
 
 以下はサポートされているモデルの例です：
 
 OpenAI（text-embedding-3モデル）：
-  ```ts
-  const { embeddings } = await embedMany({
-    model: openai.embedding('text-embedding-3-small', {
-      dimensions: 256  // text-embedding-3以降のモデルでのみサポート
-    }),
-    values: chunks.map(chunk => chunk.text),
-  });
-  ```
+
+```ts
+const { embeddings } = await embedMany({
+  model: openai.embedding("text-embedding-3-small", {
+    dimensions: 256, // text-embedding-3以降のモデルでのみサポート
+  }),
+  values: chunks.map((chunk) => chunk.text),
+});
+```
 
 Google（text-embedding-004）：
-  ```ts
-  const { embeddings } = await embedMany({
-    model: google.textEmbeddingModel('text-embedding-004', {
-      outputDimensionality: 256  // 末尾から過剰な値を切り捨てる
-    }),
-    values: chunks.map(chunk => chunk.text),
-  });
-  ```
+
+```ts
+const { embeddings } = await embedMany({
+  model: google.textEmbeddingModel("text-embedding-004", {
+    outputDimensionality: 256, // 末尾から過剰な値を切り捨てる
+  }),
+  values: chunks.map((chunk) => chunk.text),
+});
+```
 
 ### ベクターデータベースの互換性
 
@@ -133,16 +136,16 @@ const chunks = await doc.chunk({
 
 // Generate embeddings with OpenAI
 const { embeddings: openAIEmbeddings } = await embedMany({
-  model: openai.embedding('text-embedding-3-small'),
-  values: chunks.map(chunk => chunk.text),
+  model: openai.embedding("text-embedding-3-small"),
+  values: chunks.map((chunk) => chunk.text),
 });
 
 // OR
 
 // Generate embeddings with Cohere
 const { embeddings: cohereEmbeddings } = await embedMany({
-  model: cohere.embedding('embed-english-v3.0'),
-  values: chunks.map(chunk => chunk.text),
+  model: cohere.embedding("embed-english-v3.0"),
+  values: chunks.map((chunk) => chunk.text),
 });
 
 // Store embeddings in your vector database
@@ -153,6 +156,7 @@ await vectorStore.upsert({
 ```
 
 ##
+
 さまざまなチャンキング戦略と埋め込み設定の例については、以下を参照してください：
 
 - [チャンクサイズの調整](/reference/rag/chunk.mdx#adjust-chunk-size)
@@ -160,5 +164,6 @@ await vectorStore.upsert({
 - [Cohereを使用したテキストの埋め込み](/reference/rag/embeddings.mdx#using-cohere)
 
 ベクトルデータベースと埋め込みの詳細については、以下を参照してください：
+
 - [ベクトルデータベース](./vector-databases.mdx)
 - [埋め込みAPIリファレンス](/reference/rag/embeddings.mdx)

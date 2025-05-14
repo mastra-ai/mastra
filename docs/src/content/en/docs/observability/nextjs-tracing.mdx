@@ -5,7 +5,7 @@ description: "Set up OpenTelemetry tracing for Next.js applications"
 
 # Next.js Tracing
 
-Next.js requires additional configuration to enable OpenTelemetry tracing. 
+Next.js requires additional configuration to enable OpenTelemetry tracing.
 
 ### Step 1: Next.js Configuration
 
@@ -16,8 +16,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   experimental: {
-    instrumentationHook: true // Not required in Next.js 15+
-  }
+    instrumentationHook: true, // Not required in Next.js 15+
+  },
 };
 
 export default nextConfig;
@@ -34,8 +34,8 @@ export const mastra = new Mastra({
   // ... other config
   telemetry: {
     serviceName: "your-project-name",
-    enabled: true
-  }
+    enabled: true,
+  },
 });
 ```
 
@@ -60,17 +60,17 @@ import {
   NodeSDK,
   ATTR_SERVICE_NAME,
   Resource,
-} from '@mastra/core/telemetry/otel-vendor';
-import { LangfuseExporter } from 'langfuse-vercel';
+} from "@mastra/core/telemetry/otel-vendor";
+import { LangfuseExporter } from "langfuse-vercel";
 
 export function register() {
   const exporter = new LangfuseExporter({
     // ... Langfuse config
-  })
+  });
 
   const sdk = new NodeSDK({
     resource: new Resource({
-      [ATTR_SERVICE_NAME]: 'ai',
+      [ATTR_SERVICE_NAME]: "ai",
     }),
     traceExporter: exporter,
   });
@@ -92,10 +92,10 @@ npm install @opentelemetry/api @vercel/otel
 2. Create an instrumentation file at the root of your project (or in the src folder if using one):
 
 ```ts filename="instrumentation.ts" copy
-import { registerOTel } from '@vercel/otel'
+import { registerOTel } from "@vercel/otel";
 
 export function register() {
-  registerOTel({ serviceName: 'your-project-name' })
+  registerOTel({ serviceName: "your-project-name" });
 }
 ```
 
@@ -104,5 +104,6 @@ export function register() {
 This setup will enable OpenTelemetry tracing for your Next.js application and Mastra operations.
 
 For more details, see the documentation for:
+
 - [Next.js Instrumentation](https://nextjs.org/docs/app/building-your-application/optimizing/instrumentation)
 - [Vercel OpenTelemetry](https://vercel.com/docs/observability/otel-overview/quickstart)

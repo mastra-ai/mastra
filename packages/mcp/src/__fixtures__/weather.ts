@@ -2,11 +2,11 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { createServer } from 'http';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
-import { 
-  CallToolRequestSchema, 
-  ListToolsRequestSchema, 
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
   ListResourcesRequestSchema,
-  ReadResourceRequestSchema
+  ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
@@ -32,7 +32,7 @@ const server = new Server(
   {
     capabilities: {
       tools: {},
-      resources: {}
+      resources: {},
     },
   },
 );
@@ -98,31 +98,31 @@ const weatherResources = [
     uri: 'weather://current',
     name: 'Current Weather Data',
     description: 'Real-time weather data for the current location',
-    mimeType: 'application/json'
+    mimeType: 'application/json',
   },
   {
     uri: 'weather://forecast',
     name: 'Weather Forecast',
     description: '5-day weather forecast',
-    mimeType: 'application/json'
+    mimeType: 'application/json',
   },
   {
     uri: 'weather://historical',
     name: 'Historical Weather Data',
     description: 'Weather data from the past 30 days',
-    mimeType: 'application/json'
-  }
+    mimeType: 'application/json',
+  },
 ];
 
 // List available resources
 server.setRequestHandler(ListResourcesRequestSchema, async () => ({
-  resources: weatherResources
+  resources: weatherResources,
 }));
 
 // Read resource contents
-server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+server.setRequestHandler(ReadResourceRequestSchema, async request => {
   const uri = request.params.uri;
-  
+
   if (uri === 'weather://current') {
     return {
       contents: [
@@ -135,10 +135,10 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
             conditions: 'Partly Cloudy',
             humidity: 65,
             windSpeed: 12,
-            updated: new Date().toISOString()
-          })
-        }
-      ]
+            updated: new Date().toISOString(),
+          }),
+        },
+      ],
     };
   } else if (uri === 'weather://forecast') {
     return {
@@ -151,10 +151,10 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
             { day: 2, high: 22, low: 14, conditions: 'Clear' },
             { day: 3, high: 20, low: 13, conditions: 'Partly Cloudy' },
             { day: 4, high: 18, low: 11, conditions: 'Rain' },
-            { day: 5, high: 17, low: 10, conditions: 'Showers' }
-          ])
-        }
-      ]
+            { day: 5, high: 17, low: 10, conditions: 'Showers' },
+          ]),
+        },
+      ],
     };
   } else if (uri === 'weather://historical') {
     return {
@@ -168,13 +168,13 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
             rainDays: 8,
             sunnyDays: 18,
             recordHigh: 28,
-            recordLow: 7
-          })
-        }
-      ]
+            recordLow: 7,
+          }),
+        },
+      ],
     };
   }
-  
+
   throw new Error(`Resource not found: ${uri}`);
 });
 

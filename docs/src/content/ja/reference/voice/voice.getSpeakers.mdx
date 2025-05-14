@@ -18,7 +18,7 @@ import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
 // Initialize voice providers
 const openaiVoice = new OpenAIVoice();
 const elevenLabsVoice = new ElevenLabsVoice({
-  apiKey: process.env.ELEVENLABS_API_KEY
+  apiKey: process.env.ELEVENLABS_API_KEY,
 });
 
 // Get available speakers from OpenAI
@@ -48,8 +48,9 @@ await elevenLabsVoice.speak(text, { speaker: elevenLabsSpeakers[0].voiceId });
     {
       name: "Promise<Array<{ voiceId: string } & TSpeakerMetadata>>",
       type: "Promise",
-      description: "音声オプションの配列を解決するプロミス。各オプションには少なくともvoiceIdプロパティが含まれ、プロバイダー固有の追加メタデータが含まれる場合があります。",
-    }
+      description:
+        "音声オプションの配列を解決するプロミス。各オプションには少なくともvoiceIdプロパティが含まれ、プロバイダー固有の追加メタデータが含まれる場合があります。",
+    },
   ]}
 />
 
@@ -70,21 +71,22 @@ await elevenLabsVoice.speak(text, { speaker: elevenLabsSpeakers[0].voiceId });
     />
   </Tabs.Tab>
 
-  <Tabs.Tab label="OpenAI Realtime">
-    <PropertiesTable
-      content={[
+<Tabs.Tab label="OpenAI Realtime">
+  <PropertiesTable
+    content={[
       {
         name: "voiceId",
         type: "string",
-        description: "音声の一意識別子（例：'alloy'、'echo'、'fable'、'onyx'、'nova'、'shimmer'）",
-      }
+        description:
+          "音声の一意識別子（例：'alloy'、'echo'、'fable'、'onyx'、'nova'、'shimmer'）",
+      },
     ]}
-    />
-  </Tabs.Tab>
+  />
+</Tabs.Tab>
 
-  <Tabs.Tab label="Deepgram">
-    <PropertiesTable
-      content={[
+<Tabs.Tab label="Deepgram">
+  <PropertiesTable
+    content={[
       {
         name: "voiceId",
         type: "string",
@@ -94,14 +96,14 @@ await elevenLabsVoice.speak(text, { speaker: elevenLabsSpeakers[0].voiceId });
         name: "language",
         type: "string",
         description: "音声IDに埋め込まれた言語コード（例：'en'）",
-      }
+      },
     ]}
-    />
-  </Tabs.Tab>
+  />
+</Tabs.Tab>
 
-  <Tabs.Tab label="ElevenLabs">
-    <PropertiesTable
-      content={[
+<Tabs.Tab label="ElevenLabs">
+  <PropertiesTable
+    content={[
       {
         name: "voiceId",
         type: "string",
@@ -116,14 +118,14 @@ await elevenLabsVoice.speak(text, { speaker: elevenLabsSpeakers[0].voiceId });
         name: "category",
         type: "string",
         description: "音声のカテゴリ（例：'premade'、'cloned'）",
-      }
+      },
     ]}
-    />
-  </Tabs.Tab>
+  />
+</Tabs.Tab>
 
-  <Tabs.Tab label="Google">
-    <PropertiesTable
-      content={[
+<Tabs.Tab label="Google">
+  <PropertiesTable
+    content={[
       {
         name: "voiceId",
         type: "string",
@@ -133,14 +135,14 @@ await elevenLabsVoice.speak(text, { speaker: elevenLabsSpeakers[0].voiceId });
         name: "languageCodes",
         type: "string[]",
         description: "音声がサポートする言語コードの配列（例：['en-US']）",
-      }
+      },
     ]}
-    />
-  </Tabs.Tab>
+  />
+</Tabs.Tab>
 
-  <Tabs.Tab label="Azure">
-    <PropertiesTable
-      content={[
+<Tabs.Tab label="Azure">
+  <PropertiesTable
+    content={[
       {
         name: "voiceId",
         type: "string",
@@ -155,14 +157,14 @@ await elevenLabsVoice.speak(text, { speaker: elevenLabsSpeakers[0].voiceId });
         name: "region",
         type: "string",
         description: "音声IDから抽出された地域コード（例：'US'）",
-      }
+      },
     ]}
-    />
-  </Tabs.Tab>
+  />
+</Tabs.Tab>
 
-  <Tabs.Tab label="Murf">
-    <PropertiesTable
-      content={[
+<Tabs.Tab label="Murf">
+  <PropertiesTable
+    content={[
       {
         name: "voiceId",
         type: "string",
@@ -182,14 +184,14 @@ await elevenLabsVoice.speak(text, { speaker: elevenLabsSpeakers[0].voiceId });
         name: "gender",
         type: "string",
         description: "音声の性別（現在の実装では常に'neutral'）",
-      }
+      },
     ]}
-    />
-  </Tabs.Tab>
+  />
+</Tabs.Tab>
 
-  <Tabs.Tab label="PlayAI">
-    <PropertiesTable
-      content={[
+<Tabs.Tab label="PlayAI">
+  <PropertiesTable
+    content={[
       {
         name: "voiceId",
         type: "string",
@@ -203,7 +205,8 @@ await elevenLabsVoice.speak(text, { speaker: elevenLabsSpeakers[0].voiceId });
       {
         name: "accent",
         type: "string",
-        description: "音声のアクセント（例：'US'、'Irish'、'US African American'）",
+        description:
+          "音声のアクセント（例：'US'、'Irish'、'US African American'）",
       },
       {
         name: "gender",
@@ -219,14 +222,14 @@ await elevenLabsVoice.speak(text, { speaker: elevenLabsSpeakers[0].voiceId });
         name: "style",
         type: "string",
         description: "音声の話し方のスタイル（例：'Conversational'）",
-      }
+      },
     ]}
-    />
-  </Tabs.Tab>
+  />
+</Tabs.Tab>
 
-  <Tabs.Tab label="Speechify">
-    <PropertiesTable
-      content={[
+<Tabs.Tab label="Speechify">
+  <PropertiesTable
+    content={[
       {
         name: "voiceId",
         type: "string",
@@ -241,10 +244,10 @@ await elevenLabsVoice.speak(text, { speaker: elevenLabsSpeakers[0].voiceId });
         name: "language",
         type: "string",
         description: "音声の言語コード（例：'en-US'）",
-      }
+      },
     ]}
-    />
-  </Tabs.Tab>
+  />
+</Tabs.Tab>
 
   <Tabs.Tab label="Sarvam">
     <PropertiesTable
@@ -273,9 +276,6 @@ await elevenLabsVoice.speak(text, { speaker: elevenLabsSpeakers[0].voiceId });
     />
   </Tabs.Tab>
 </Tabs>
-
-
-
 
 ## 注意事項
 

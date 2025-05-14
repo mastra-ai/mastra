@@ -40,10 +40,10 @@ const stepTwo = new Step({
   id: "stepTwo",
   execute: async ({ context }) => {
     if (context.steps.stepOne.status !== "success") {
-      return { incrementedValue: 0 }
+      return { incrementedValue: 0 };
     }
 
-    return { incrementedValue: context.steps.stepOne.output.doubledValue + 1 }
+    return { incrementedValue: context.steps.stepOne.output.doubledValue + 1 };
   },
 });
 
@@ -51,10 +51,10 @@ const stepThree = new Step({
   id: "stepThree",
   execute: async ({ context }) => {
     if (context.steps.stepTwo.status !== "success") {
-      return { tripledValue: 0 }
+      return { tripledValue: 0 };
     }
 
-    return { tripledValue: context.steps.stepTwo.output.incrementedValue * 3 }
+    return { tripledValue: context.steps.stepTwo.output.incrementedValue * 3 };
   },
 });
 
