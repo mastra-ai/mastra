@@ -69,6 +69,7 @@ function resolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) 
     'log',
     'getModel',
     'getInstructions',
+    'getVersion',
     'getTools',
     'getLLM',
     'getWorkflows',
@@ -81,6 +82,7 @@ export class Agent<
 > extends MastraBase {
   public id: TAgentId;
   public name: TAgentId;
+  #version: DynamicArgument<string>;
   #instructions: DynamicArgument<string>;
   readonly model?: DynamicArgument<MastraLanguageModel>;
   #mastra?: Mastra;
@@ -99,6 +101,7 @@ export class Agent<
 
     this.name = config.name;
     this.id = config.name;
+    this.#version = config.version ?? '0.0.0';
 
     this.#instructions = config.instructions;
 
@@ -230,6 +233,33 @@ export class Agent<
       }
 
       return instructions;
+    });
+  }
+
+  get version() {
+    this.logger.warn('The version property is deprecated. Please use getVersion() instead.');
+
+    if (typeof this.#version === 'function') {
+      throw new Error('Version is not compatible when version is a function. Please use getVersion() instead.');
+    }
+
+    return this.#version;
+  }
+
+  public getVersion({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
+    | string
+    | Promise<string> {
+    if (typeof this.#version === 'string') {
+      return this.#version;
+    }
+
+    const result = this.#version({ runtimeContext });
+    return resolveMaybePromise(result, version => {
+      if (!version) {
+        this.logger.error(`[Agent:${this.name}] - Function-based version returned empty value`);
+      }
+
+      return version;
     });
   }
 
@@ -1287,6 +1317,7 @@ export class Agent<
         if (Object.keys(this.evals || {}).length > 0) {
           const input = messages.map(message => message.content).join('\n');
           const runIdToUse = runId || crypto.randomUUID();
+          const agentVersion = await this.getVersion({ runtimeContext });
           for (const metric of Object.values(this.evals || {})) {
             executeHook(AvailableHooks.ON_GENERATION, {
               input,
@@ -1295,6 +1326,7 @@ export class Agent<
               metric,
               agentName: this.name,
               instructions: instructions || this.instructions,
+              agentVersion,
             });
           }
         }

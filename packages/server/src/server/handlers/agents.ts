@@ -22,6 +22,7 @@ export async function getAgentsHandler({ mastra, runtimeContext }: Context & { r
     const serializedAgentsMap = await Promise.all(
       Object.entries(agents).map(async ([id, agent]) => {
         const instructions = await agent.getInstructions({ runtimeContext });
+        const version = await agent.getVersion({ runtimeContext });
         const tools = await agent.getTools({ runtimeContext });
         const llm = await agent.getLLM({ runtimeContext });
 
@@ -58,6 +59,7 @@ export async function getAgentsHandler({ mastra, runtimeContext }: Context & { r
           id,
           name: agent.name,
           instructions,
+          version,
           tools: serializedAgentTools,
           workflows: serializedAgentWorkflows,
           provider: llm?.getProvider(),
@@ -122,11 +124,13 @@ export async function getAgentByIdHandler({
     }
 
     const instructions = await agent.getInstructions({ runtimeContext });
+    const version = await agent.getVersion({ runtimeContext });
     const llm = await agent.getLLM({ runtimeContext });
 
     return {
       name: agent.name,
       instructions,
+      version,
       tools: serializedAgentTools,
       workflows: serializedAgentWorkflows,
       provider: llm?.getProvider(),
@@ -146,11 +150,13 @@ export async function getEvalsByAgentIdHandler({
     const agent = mastra.getAgent(agentId);
     const evals = (await mastra.getStorage()?.getEvalsByAgentName?.(agent.name, 'test')) || [];
     const instructions = await agent.getInstructions({ runtimeContext });
+    const version = await agent.getVersion({ runtimeContext });
     return {
       id: agentId,
       name: agent.name,
       instructions,
       evals,
+      version,
     };
   } catch (error) {
     return handleError(error, 'Error getting test evals');
@@ -166,11 +172,12 @@ export async function getLiveEvalsByAgentIdHandler({
     const agent = mastra.getAgent(agentId);
     const evals = (await mastra.getStorage()?.getEvalsByAgentName?.(agent.name, 'live')) || [];
     const instructions = await agent.getInstructions({ runtimeContext });
-
+    const version = await agent.getVersion({ runtimeContext });
     return {
       id: agentId,
       name: agent.name,
       instructions,
+      version,
       evals,
     };
   } catch (error) {

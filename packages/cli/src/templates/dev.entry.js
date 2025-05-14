@@ -9,7 +9,7 @@ import { createNodeServer } from '#server';
 // @ts-ignore
 await createNodeServer(mastra, { playground: true, isDev: true });
 
-registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName, instructions }) => {
+registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName, instructions, version }) => {
   evaluate({
     agentName,
     input,
@@ -18,6 +18,7 @@ registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agen
     runId,
     globalRunId: runId,
     instructions,
+    version,
   });
 });
 
@@ -47,6 +48,7 @@ registerHook(AvailableHooks.ON_EVALUATION, async traceObject => {
         global_run_id: traceObject.globalRunId,
         run_id: traceObject.runId,
         created_at: new Date().toISOString(),
+        version: traceObject.version,
       },
     });
   }
