@@ -101,7 +101,56 @@ For detailed configuration options, see the [`MCPClient` reference documentation
 
 MCP servers can be discovered through registries. Here’s how to connect to some popular ones using `MCPClient`:
 
-<Tabs items={["mcp.run", "Composio.dev", "Smithery.ai"]}>
+<Tabs items={["Ampersand","mcp.run", "Composio.dev", "Smithery.ai"]}>
+  <Tabs.Tab>
+    [withampersand.com](https://withampersand.com) offers a single multi-tenant [MCP Server](https://www.npmjs.com/package/@amp-labs/mcp-server) that allows you to connect your agent to 150+ B2B Integrations. 
+    
+    Sign up at https://withampersand.com to get your AMPERSAND_PROJECT_ID, AMPERSAND_INTEGRATION_ID & set the groupRef to the unique customerId inside your application. 
+    
+
+    ```typescript
+    
+    // MCPClient with Ampersand MCP Server with SSE
+    export const mcp = new MCPClient({
+        servers: {
+        "@amp-labs/mcp-server": {
+            "url": "https://mcp.withampersand.com/sse?apiKey=<AMPERSAND_API_KEY>&project=<AMPERSAND_PROJECT_ID>&integrationId=<AMPERSAND_INTEGRATION_ID>&groupRef=<AMPERSAND_GROUP_REF>"
+        }
+      }   
+    });
+
+    ```
+
+    If you prefer to run the MCP server locally: 
+
+    ```typescript
+    import { MCPClient } from "@mastra/mcp";
+
+    // MCPClient with Ampersand MCP Server using stdio transport
+    export const mcp = new MCPClient({
+        servers: {
+          filesystem: {
+            command: "npx",
+            args: [
+              "-y",
+              "@amp-labs/mcp-server@latest",
+              "--transport",
+              "stdio",
+              "--project",
+              process.env.AMPERSAND_PROJECT_ID || "",
+              "--integrationId",
+              process.env.AMPERSAND_INTEGRATION_ID || "",
+              "--groupRef",
+              process.env.AMPERSAND_GROUP_REF || "",
+            ],
+            env: {
+              AMPERSAND_API_KEY: process.env.AMPERSAND_API_KEY || "",
+            },
+          },
+        },
+    });
+    ```
+  </Tabs.Tab>
   <Tabs.Tab>
     [mcp.run](https://www.mcp.run/) provides pre-authenticated, managed MCP servers. Tools are grouped into Profiles, each with a unique, signed URL.
 
