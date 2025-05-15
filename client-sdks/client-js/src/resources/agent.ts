@@ -14,7 +14,8 @@ import type {
 } from '../types';
 
 import { BaseResource } from './base';
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import type { RuntimeContext } from '@mastra/core/runtime-context';
+import { parseClientRuntimeContext } from '../utils';
 
 export class AgentVoice extends BaseResource {
   constructor(
@@ -102,11 +103,7 @@ export class Agent extends BaseResource {
       ...params,
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
-      runtimeContext: params.runtimeContext
-        ? params.runtimeContext instanceof RuntimeContext
-          ? Object.fromEntries(params.runtimeContext.entries())
-          : params.runtimeContext
-        : undefined,
+      runtimeContext: parseClientRuntimeContext(params.runtimeContext),
     };
 
     return this.request(`/api/agents/${this.agentId}/generate`, {
@@ -131,11 +128,7 @@ export class Agent extends BaseResource {
       ...params,
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
-      runtimeContext: params.runtimeContext
-        ? params.runtimeContext instanceof RuntimeContext
-          ? Object.fromEntries(params.runtimeContext.entries())
-          : params.runtimeContext
-        : undefined,
+      runtimeContext: parseClientRuntimeContext(params.runtimeContext),
     };
 
     const response: Response & {

@@ -1,7 +1,8 @@
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type { GetToolResponse, ClientOptions } from '../types';
 
 import { BaseResource } from './base';
+import { parseClientRuntimeContext } from '../utils';
 
 export class Tool extends BaseResource {
   constructor(
@@ -33,11 +34,7 @@ export class Tool extends BaseResource {
 
     const body = {
       data: params.data,
-      runtimeContext: params.runtimeContext
-        ? params.runtimeContext instanceof RuntimeContext
-          ? Object.fromEntries(params.runtimeContext.entries())
-          : params.runtimeContext
-        : undefined,
+      runtimeContext: parseClientRuntimeContext(params.runtimeContext),
     };
 
     return this.request(`/api/tools/${this.toolId}/execute?${url.toString()}`, {
