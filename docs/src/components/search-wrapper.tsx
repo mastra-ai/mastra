@@ -99,8 +99,6 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
                   <div className="p-[10px]">
                     <CustomSearch
                       placeholder={getSearchPlaceholder(locale)}
-                      isAgentMode={isAgentMode}
-                      setIsAgentMode={setIsAgentMode}
                       onUseAgent={handleUseAgent}
                       closeModal={close}
                     />
