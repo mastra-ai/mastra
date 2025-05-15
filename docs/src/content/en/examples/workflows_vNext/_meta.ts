@@ -5,6 +5,7 @@ const meta = {
   "agent-and-tool-interop": "Using a Tool/Agent as a Step",
   "human-in-the-loop": "Human in the Loop",
   "control-flow": "Control flow",
+  "inngest-workflow": "Inngest Workflow",
   // "input-data-mapping": "Input Data Mapping",
 };
 
