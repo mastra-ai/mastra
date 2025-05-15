@@ -286,7 +286,6 @@ const mastra = new Mastra({
   }
 });
 
-console.log("\nRunning Example 3: Using multiple outputs");
 const run = mastra.vnext_getWorkflow("myWorkflow").createRun();
 const res = await run.start({
   inputData: { inputValue: "Starting data" }
