@@ -122,7 +122,9 @@ describe.skip('PineconeVector Integration Tests', () => {
   const dimension = 3;
 
   beforeAll(async () => {
-    vectorDB = new PineconeVector(PINECONE_API_KEY);
+    vectorDB = new PineconeVector({
+      apiKey: PINECONE_API_KEY,
+    });
     // Delete test index
     try {
       await vectorDB.deleteIndex({ indexName: testIndexName });

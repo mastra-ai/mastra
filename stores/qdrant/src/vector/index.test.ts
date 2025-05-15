@@ -13,7 +13,7 @@ describe('QdrantVector', () => {
 
   describe('Index Operations', () => {
     beforeAll(async () => {
-      qdrant = new QdrantVector('http://localhost:6333/');
+      qdrant = new QdrantVector({ url: 'http://localhost:6333/' });
       await qdrant.createIndex({ indexName: testCollectionName, dimension });
     });
 
@@ -36,7 +36,7 @@ describe('QdrantVector', () => {
 
   describe('Vector Operations', () => {
     beforeAll(async () => {
-      qdrant = new QdrantVector('http://localhost:6333/');
+      qdrant = new QdrantVector({ url: 'http://localhost:6333/' });
       await qdrant.createIndex({ indexName: testCollectionName, dimension });
     });
 
@@ -339,7 +339,7 @@ describe('QdrantVector', () => {
     ];
 
     beforeAll(async () => {
-      qdrant = new QdrantVector('http://localhost:6333/');
+      qdrant = new QdrantVector({ url: 'http://localhost:6333/' });
       await qdrant.createIndex({ indexName: testCollectionName, dimension });
       await qdrant.upsert({ indexName: testCollectionName, vectors: filterTestVectors, metadata: filterTestMetadata });
     });
@@ -874,7 +874,7 @@ describe('QdrantVector', () => {
     ];
 
     beforeAll(async () => {
-      qdrant = new QdrantVector('http://localhost:6333/');
+      qdrant = new QdrantVector({ url: 'http://localhost:6333/' });
       await qdrant.createIndex({ indexName: testCollectionName, dimension });
       await qdrant.upsert({ indexName: testCollectionName, vectors: filterTestVectors, metadata: filterTestMetadata });
     });
@@ -906,7 +906,7 @@ describe('QdrantVector', () => {
 
   describe('Performance Tests', () => {
     beforeAll(async () => {
-      qdrant = new QdrantVector('http://localhost:6333/');
+      qdrant = new QdrantVector({ url: 'http://localhost:6333/' });
       await qdrant.createIndex({ indexName: testCollectionName, dimension });
     });
 

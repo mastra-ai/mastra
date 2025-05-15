@@ -38,7 +38,9 @@ For detailed setup instructions and best practices, see the [official pgvector r
 ```ts filename="vector-store.ts" showLineNumbers copy
 import { PineconeVector } from '@mastra/pinecone'
 
-const store = new PineconeVector(process.env.PINECONE_API_KEY)
+const store = new PineconeVector({
+  apiKey: process.env.PINECONE_API_KEY,
+})
 await store.createIndex({
   indexName: "myCollection",
   dimension: 1536,
@@ -56,8 +58,8 @@ await store.upsert({
   import { QdrantVector } from '@mastra/qdrant'
 
 const store = new QdrantVector({
-url: process.env.QDRANT_URL,
-apiKey: process.env.QDRANT_API_KEY
+  url: process.env.QDRANT_URL,
+  apiKey: process.env.QDRANT_API_KEY
 })
 await store.createIndex({
 indexName: "myCollection",
@@ -193,7 +195,7 @@ metadata: chunks.map(chunk => ({ text: chunk.text })),
 ```ts filename="vector-store.ts" showLineNumbers copy
 import { OpenSearchVector } from '@mastra/opensearch'
 
-const store = new OpenSearchVector(process.env.OPENSEARCH_URL)
+const store = new OpenSearchVector({ url: process.env.OPENSEARCH_URL })
 await store.createIndex({
   indexName: "my-collection",
   dimension: 1536,
