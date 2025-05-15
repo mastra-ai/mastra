@@ -15,3 +15,4 @@ packages/cli/src/commands/init/init.test.ts
 packages/cli/dist
 **/integrations/**
 packages/create-mastra/rollup.config.js
+docs/**/*.mdx
