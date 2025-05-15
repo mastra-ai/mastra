@@ -12,7 +12,7 @@ describe('PgVector', () => {
 
   beforeAll(async () => {
     // Initialize PgVector
-    vectorDB = new PgVector(connectionString);
+    vectorDB = new PgVector({ connectionString });
   });
 
   afterAll(async () => {
@@ -2006,7 +2006,7 @@ describe('PgVector', () => {
 
     beforeAll(async () => {
       // Initialize default vectorDB first
-      vectorDB = new PgVector(connectionString);
+      vectorDB = new PgVector({ connectionString });
 
       // Create schema using the default vectorDB connection
       const client = await vectorDB['pool'].connect();

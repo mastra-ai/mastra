@@ -5,41 +5,49 @@ description: Dynamically configure your agent's instruction, model and tools usi
 
 # Dynamic Agents
 
-Dynamic agents use [runtime context](./runtime-variables), like user IDs and other important parameters, to adjust their settings in real-time. This means they can change the model they use, update their instructions, and select different tools as needed. By using this context, agents can better respond to each user's needs. They can also call any API to gather more information, which helps improve what the agents can do.
+Dynamic agents use [runtime context](./runtime-variables), like user IDs and other important parameters, to adjust their settings in real-time.
 
-## Key Benefits
+This means they can change the model they use, update their instructions, and select different tools as needed.
 
-- **Flexibility**: Adjust agent behavior dynamically without altering the core code.
-- **Efficiency**: Consolidate multiple agents into a single dynamic agent.
-- **Scalability**: Easily scale agent capabilities by modifying runtime context.
+By using this context, agents can better respond to each user's needs. They can also call any API to gather more information, which helps improve what the agents can do.
 
 ### Example Configuration
 
-Here's an example of how to configure a dynamic agent with model, instructions, and tools:
+Here's an example of how to configure a dynamic agent with runtime context. The agent adjusts its instructions, model, and tools depending on whether the user is a premium subscriber:
 
 ```typescript
 const dynamicAgent = new Agent({
   name: "Master Chef Agent",
   instructions: async ({ runtimeContext }) => {
-    // Fetch user preferences from API using user ID from runtime context
+    // Fetch user preferences from an API using user ID from runtime context
     const userId = runtimeContext.get("userId");
-    const userPreferences = await fetchUserPreferences(userId);
+    const prefs = await fetchUserPreferences(userId);
+    const premium = runtimeContext.get("premiumUser") === true;
 
-    return `You are a master chef specializing in personalized recipes. 
-    The current user (${userId}) has the following dietary preferences:
-    - Allergies: ${userPreferences.allergies.join(", ") || "None"}
-    - Preferred cuisines: ${userPreferences.cuisines.join(", ")}
-    - Dietary restrictions: ${userPreferences.restrictions.join(", ") || "None"}
-    
-    Tailor your cooking advice and recipes to match these preferences.`;
+    const base = `The current user (${userId}) has the following preferences:
+    - Allergies: ${prefs.allergies.join(", ") || "None"}
+    - Preferred cuisines: ${prefs.cuisines.join(", ")}
+    - Dietary restrictions: ${prefs.restrictions.join(", ") || "None"}`;
+
+    return premium
+      ? `You are a master chef creating gourmet dishes.\n${base}`
+      : `You are a home cook giving simple recipes.\n${base}`;
   },
-  model: ({ runtimeContext }) => openai("gpt-4o-mini"),
+  model: ({ runtimeContext }) =>
+    runtimeContext.get("premiumUser") === true
+      ? openai("gpt-4o")
+      : openai("gpt-3.5-turbo"),
   tools: ({ runtimeContext }) => {
-    return {
-      recipeDatabase,
-      ingredientSubstitutions,
-      nutritionalCalculator,
-    };
+    const premium = runtimeContext.get("premiumUser") === true;
+    return premium
+      ? {
+          recipeDatabase,
+          ingredientSubstitutions,
+          nutritionalCalculator,
+        }
+      : {
+          recipeDatabase,
+        };
   },
 });
 ```
