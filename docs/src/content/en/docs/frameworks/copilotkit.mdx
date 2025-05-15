@@ -16,10 +16,26 @@ Combined with Mastra, you can build sophisticated AI apps featuring bidirectiona
 Create a new Mastra project using the `mastra` CLI:
 
 <Tabs items={["npx", "npm", "yarn", "pnpm"]}>
-  <Tabs.Tab>```bash copy npx create-mastra@latest ```</Tabs.Tab>
-  <Tabs.Tab>```bash copy npm create mastra ```</Tabs.Tab>
-  <Tabs.Tab>```bash copy yarn create mastra ```</Tabs.Tab>
-  <Tabs.Tab>```bash copy pnpm create mastra ```</Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    npx create-mastra@latest
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    npm create mastra
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    yarn create mastra
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    pnpm create mastra
+    ```
+  </Tabs.Tab>
 </Tabs>
 
 Select the agent example when scaffolding your project. This will give you a weather agent.
@@ -31,9 +47,21 @@ For detailed setup instructions, see the [installation guide](/docs/getting-star
 Integrating Mastra with CopilotKit involves two main steps: setting up the backend runtime and configuring your frontend components.
 
 <Tabs items={["npm", "yarn", "pnpm"]}>
-  <Tabs.Tab>```bash copy npm install @copilotkit/runtime ```</Tabs.Tab>
-  <Tabs.Tab>```bash copy yarn add @copilotkit/runtime ```</Tabs.Tab>
-  <Tabs.Tab>```bash copy pnpm add @copilotkit/runtime ```</Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    npm install @copilotkit/runtime
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    yarn add @copilotkit/runtime
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    pnpm add @copilotkit/runtime
+    ```
+  </Tabs.Tab>
 </Tabs>
 
 ## Set up the runtime
@@ -43,9 +71,21 @@ You can leverage Mastra's custom API routes to add CopilotKit's runtime to your 
 The current version of the integration leverages `MastraClient` to format Mastra agents into the AGUI format of CopilotKit.
 
 <Tabs items={["npm", "yarn", "pnpm"]}>
-  <Tabs.Tab>```bash copy npm install @mastra/client-js ```</Tabs.Tab>
-  <Tabs.Tab>```bash copy yarn add @mastra/client-js ```</Tabs.Tab>
-  <Tabs.Tab>```bash copy pnpm add @mastra/client-js ```</Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    npm install @mastra/client-js
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    yarn add @mastra/client-js
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    pnpm add @mastra/client-js
+    ```
+  </Tabs.Tab>
 </Tabs>
 
 Next, let's update the Mastra instance with a custom API route for CopilotKit.
@@ -113,13 +153,19 @@ Install CopilotKit's React components:
 
 <Tabs items={["npm", "yarn", "pnpm"]}>
   <Tabs.Tab>
-    ```bash copy npm install @copilotkit/react-core @copilotkit/react-ui ```
+    ```bash copy
+    npm install @copilotkit/react-core @copilotkit/react-ui
+    ```
   </Tabs.Tab>
   <Tabs.Tab>
-    ```bash copy yarn add @copilotkit/react-core @copilotkit/react-ui ```
+    ```bash copy
+    yarn add @copilotkit/react-core @copilotkit/react-ui
+    ```
   </Tabs.Tab>
   <Tabs.Tab>
-    ```bash copy pnpm add @copilotkit/react-core @copilotkit/react-ui ```
+    ```bash copy
+    pnpm add @copilotkit/react-core @copilotkit/react-ui
+    ```
   </Tabs.Tab>
 </Tabs>
 

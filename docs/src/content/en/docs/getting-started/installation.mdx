@@ -27,10 +27,27 @@ We recommend starting a new Mastra project using `create-mastra`, which will sca
 a project, run:
 
 <Tabs items={["npx", "npm", "yarn", "pnpm"]}>
-  <Tabs.Tab>```bash copy npx create-mastra@latest ```</Tabs.Tab>
-  <Tabs.Tab>```bash copy npm create mastra@latest ```</Tabs.Tab>
-  <Tabs.Tab>```bash copy yarn create mastra@latest ```</Tabs.Tab>
-  <Tabs.Tab>```bash copy pnpm create mastra@latest ```</Tabs.Tab>
+
+  <Tabs.Tab>
+    ```bash copy
+    npx create-mastra@latest
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    npm create mastra@latest
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    yarn create mastra@latest
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    pnpm create-mastra@latest
+    ```
+  </Tabs.Tab>
 </Tabs>
 
 On installation, you'll be guided through the following prompts:
@@ -136,24 +153,37 @@ cd hello-mastra
 Then, initialize a TypeScript project including the `@mastra/core` package:
 
 <Tabs items={["npm", "pnpm", "yarn", "bun"]}>
+
   <Tabs.Tab>
-    ```bash copy npm init -y npm install typescript tsx @types/node
-    mastra@latest --save-dev npm install @mastra/core@latest zod @ai-sdk/openai
-    npx tsc --init ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```bash copy pnpm init pnpm add typescript tsx @types/node mastra@latest
-    --save-dev pnpm add @mastra/core@latest zod @ai-sdk/openai pnpm dlx tsc
-    --init ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```bash copy yarn init -y yarn add typescript tsx @types/node mastra@latest
-    --dev yarn add @mastra/core@latest zod @ai-sdk/openai yarn dlx tsc --init
+    ```bash copy
+    npm init -y
+    npm install typescript tsx @types/node mastra@latest --save-dev
+    npm install @mastra/core@latest zod @ai-sdk/openai
+    npx tsc --init
     ```
   </Tabs.Tab>
   <Tabs.Tab>
-    ```bash copy bun init -y bun add typescript tsx @types/node mastra@latest
-    --dev bun add @mastra/core@latest zod @ai-sdk/openai bunx tsc --init
+    ```bash copy
+    pnpm init
+    pnpm add typescript tsx @types/node mastra@latest --save-dev
+    pnpm add @mastra/core@latest zod @ai-sdk/openai
+    pnpm dlx tsc --init
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy 
+    yarn init -y
+    yarn add typescript tsx @types/node mastra@latest --dev
+    yarn add @mastra/core@latest zod @ai-sdk/openai
+    yarn dlx tsc --init
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    bun init -y
+    bun add typescript tsx @types/node mastra@latest --dev
+    bun add @mastra/core@latest zod @ai-sdk/openai
+    bunx tsc --init
     ```
   </Tabs.Tab>
 </Tabs>
