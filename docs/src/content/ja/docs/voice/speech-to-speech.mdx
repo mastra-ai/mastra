@@ -18,9 +18,9 @@ STSは、リアルタイムモデルからのイベントをリッスンする�
 
 ```typescript
 const voice = new OpenAIRealtimeVoice({
-  apiKey: 'your-openai-api-key',
-  model: 'gpt-4o-mini-realtime',
-  speaker: 'alloy', // デフォルトボイス
+  apiKey: "your-openai-api-key",
+  model: "gpt-4o-mini-realtime",
+  speaker: "alloy", // デフォルトボイス
 });
 
 // デフォルト設定を使用する場合、設定は以下のように簡略化できます：
@@ -35,9 +35,9 @@ import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
 import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
 
 const agent = new Agent({
-  name: 'Agent',
+  name: "Agent",
   instructions: `You are a helpful assistant with real-time voice capabilities.`,
-  model: openai('gpt-4o'),
+  model: openai("gpt-4o"),
   voice: new OpenAIRealtimeVoice(),
 });
 
@@ -45,12 +45,12 @@ const agent = new Agent({
 await agent.voice.connect();
 
 // Listen for agent audio responses
-agent.voice.on('speaker', ({ audio }) => {
+agent.voice.on("speaker", ({ audio }) => {
   playAudio(audio);
 });
 
 // Initiate the conversation
-await agent.voice.speak('How can I help you today?');
+await agent.voice.speak("How can I help you today?");
 
 // Send continuous audio from the microphone
 const micStream = getMicrophoneStream();

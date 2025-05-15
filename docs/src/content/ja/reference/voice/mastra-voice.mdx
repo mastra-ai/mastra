@@ -14,9 +14,9 @@ import { MastraVoice } from "@mastra/core/voice";
 
 // 音声プロバイダーの実装を作成
 class MyVoiceProvider extends MastraVoice {
-  constructor(config: { 
-    speechModel?: BuiltInModelConfig; 
-    listeningModel?: BuiltInModelConfig; 
+  constructor(config: {
+    speechModel?: BuiltInModelConfig;
+    listeningModel?: BuiltInModelConfig;
     speaker?: string;
     realtimeConfig?: {
       model?: string;
@@ -28,48 +28,56 @@ class MyVoiceProvider extends MastraVoice {
       speechModel: config.speechModel,
       listeningModel: config.listeningModel,
       speaker: config.speaker,
-      realtimeConfig: config.realtimeConfig
+      realtimeConfig: config.realtimeConfig,
     });
   }
 
   // 必須の抽象メソッドを実装
-  async speak(input: string | NodeJS.ReadableStream, options?: { speaker?: string }): Promise<NodeJS.ReadableStream | void> {
+  async speak(
+    input: string | NodeJS.ReadableStream,
+    options?: { speaker?: string },
+  ): Promise<NodeJS.ReadableStream | void> {
     // テキストから音声への変換を実装
   }
 
-  async listen(audioStream: NodeJS.ReadableStream, options?: unknown): Promise<string | NodeJS.ReadableStream | void> {
+  async listen(
+    audioStream: NodeJS.ReadableStream,
+    options?: unknown,
+  ): Promise<string | NodeJS.ReadableStream | void> {
     // 音声からテキストへの変換を実装
   }
 
-  async getSpeakers(): Promise<Array<{ voiceId: string; [key: string]: unknown }>> {
+  async getSpeakers(): Promise<
+    Array<{ voiceId: string; [key: string]: unknown }>
+  > {
     // 利用可能な音声のリストを返す
   }
-  
+
   // オプションの音声から音声へのメソッド
   async connect(): Promise<void> {
     // 音声から音声への通信のためのWebSocket接続を確立
   }
-  
+
   async send(audioData: NodeJS.ReadableStream | Int16Array): Promise<void> {
     // 音声から音声へのオーディオデータをストリーム
   }
-  
+
   async answer(): Promise<void> {
     // 音声プロバイダーに応答を促す
   }
-  
+
   addTools(tools: Array<unknown>): void {
     // 音声プロバイダーが使用するツールを追加
   }
-  
+
   close(): void {
     // WebSocket接続を閉じる
   }
-  
+
   on(event: string, callback: (data: unknown) => void): void {
     // イベントリスナーを登録
   }
-  
+
   off(event: string, callback: (data: unknown) => void): void {
     // イベントリスナーを削除
   }
@@ -182,6 +190,7 @@ abstract speak(
 ```
 
 目的:
+
 - テキスト入力を受け取り、プロバイダーのテキスト読み上げサービスを使用して音声に変換します
 - 柔軟性のために文字列とストリーム入力の両方をサポートします
 - オプションを通じてデフォルトのスピーカー/声を上書きすることができます
@@ -202,6 +211,7 @@ abstract listen(
 ```
 
 目的:
+
 - 音声ストリームを受け取り、プロバイダーの音声認識サービスを使用してテキストに変換します
 - トランスクリプション設定のためのプロバイダー固有のオプションをサポートします
 - 完全なテキストトランスクリプションまたはトランスクリプションされたテキストのストリームを返すことができます
@@ -217,6 +227,7 @@ abstract getSpeakers(): Promise<Array<{ voiceId: string; [key: string]: unknown 
 ```
 
 目的:
+
 - プロバイダーから利用可能な声/スピーカーのリストを取得します
 - 各声には少なくともvoiceIdプロパティが必要です
 - プロバイダーは各声に関する追加のメタデータを含めることができます
@@ -235,6 +246,7 @@ connect(config?: unknown): Promise<void>
 ```
 
 目的:
+
 - 通信のために音声サービスへの接続を初期化します
 - send()やanswer()のような機能を使用する前に呼び出す必要があります
 - 接続が確立されると解決されるPromiseを返します
@@ -249,6 +261,7 @@ send(audioData: NodeJS.ReadableStream | Int16Array): Promise<void>
 ```
 
 目的:
+
 - 音声プロバイダーに音声データをリアルタイムで送信し、処理します
 - ライブマイク入力のような連続音声ストリーミングシナリオに便利です
 - ReadableStreamとInt16Arrayの両方の音声フォーマットをサポートします
@@ -263,6 +276,7 @@ answer(): Promise<void>
 ```
 
 目的:
+
 - 音声プロバイダーに応答を生成する信号を送信します
 - リアルタイムの会話でAIに応答を促すために使用されます
 - 応答はイベントシステム（例: 'speaking'イベント）を通じて発信されます
@@ -276,6 +290,7 @@ addTools(tools: Array<Tool>): void
 ```
 
 目的:
+
 - 会話中に音声プロバイダーが使用できるツールを追加します
 - ツールは音声プロバイダーの機能を拡張できます
 - 実装はプロバイダー固有です
@@ -289,6 +304,7 @@ close(): void
 ```
 
 目的:
+
 - 音声サービスへの接続を閉じます
 - リソースをクリーンアップし、進行中のリアルタイム処理を停止します
 - 音声インスタンスを終了する際に呼び出すべきです
@@ -305,6 +321,7 @@ on<E extends VoiceEventType>(
 ```
 
 目的:
+
 - 指定されたイベントが発生したときに呼び出されるコールバック関数を登録します
 - 標準イベントには'speaking'、'writing'、'error'が含まれます
 - プロバイダーはカスタムイベントも発信できます
@@ -322,6 +339,7 @@ off<E extends VoiceEventType>(
 ```
 
 目的:
+
 - 以前に登録されたイベントリスナーを削除します
 - イベントハンドラーが不要になったときにクリーンアップするために使用されます
 
@@ -334,7 +352,8 @@ MastraVoiceクラスには、リアルタイム通信のためのイベントシ
     {
       name: "speaking",
       type: "{ text: string; audioStream?: NodeJS.ReadableStream; audio?: Int16Array }",
-      description: "音声プロバイダーが話しているときに発生し、音声データを含みます",
+      description:
+        "音声プロバイダーが話しているときに発生し、音声データを含みます",
     },
     {
       name: "writing",

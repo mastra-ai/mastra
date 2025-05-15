@@ -61,7 +61,7 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
 
   return (
     <>
-      <div className="absolute inset-0 m-auto w-[460px] h-fit">
+      <div className="hidden md:block absolute inset-0 m-auto w-[460px] h-fit">
         <Button
           onClick={open}
           size="sm"
@@ -75,7 +75,7 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
       <Dialog
         open={isOpen}
         as="div"
-        className="relative z-1000 focus:outline-none"
+        className="relative hidden md:block z-1000 focus:outline-none"
         onClose={close}
         unmount={true}
       >

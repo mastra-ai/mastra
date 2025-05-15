@@ -20,10 +20,10 @@ PgVectorクラスは、[PostgreSQL](https://www.postgresql.org/)と[pgvector](ht
     {
       name: "schemaName",
       type: "string",
-      description: 
+      description:
         "ベクトルストアが使用するスキーマの名前。提供されない場合はデフォルトのスキーマを使用します。",
       isOptional: true,
-    }
+    },
   ]}
 />
 
@@ -32,15 +32,17 @@ PgVectorクラスは、[PostgreSQL](https://www.postgresql.org/)と[pgvector](ht
 `PgVector`を2つの方法でインスタンス化できます：
 
 ```ts
-import { PgVector } from '@mastra/pg';
+import { PgVector } from "@mastra/pg";
 
 // 接続文字列を使用する方法（文字列形式）
-const vectorStore1 = new PgVector('postgresql://user:password@localhost:5432/mydb');
+const vectorStore1 = new PgVector(
+  "postgresql://user:password@localhost:5432/mydb",
+);
 
 // 設定オブジェクトを使用する方法（オプションのschemaNameを含む）
 const vectorStore2 = new PgVector({
-  connectionString: 'postgresql://user:password@localhost:5432/mydb',
-  schemaName: 'custom_schema', // オプション
+  connectionString: "postgresql://user:password@localhost:5432/mydb",
+  schemaName: "custom_schema", // オプション
 });
 ```
 
@@ -151,8 +153,7 @@ const vectorStore2 = new PgVector({
             {
               name: "m",
               type: "number",
-              description:
-                "ノードごとの最大接続数（デフォルト: 8）",
+              description: "ノードごとの最大接続数（デフォルト: 8）",
               isOptional: true,
             },
             {

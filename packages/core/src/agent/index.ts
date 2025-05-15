@@ -47,7 +47,7 @@ import type {
 
 export * from './types';
 
-function resoolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) => R) {
+function resolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) => R) {
   if (value instanceof Promise) {
     return value.then(cb);
   }
@@ -221,7 +221,7 @@ export class Agent<
     }
 
     const result = this.#instructions({ runtimeContext });
-    return resoolveMaybePromise(result, instructions => {
+    return resolveMaybePromise(result, instructions => {
       if (!instructions) {
         this.logger.error(`[Agent:${this.name}] - Function-based instructions returned empty value`);
         throw new Error(
@@ -252,7 +252,7 @@ export class Agent<
 
     const result = this.#tools({ runtimeContext });
 
-    return resoolveMaybePromise(result, tools => {
+    return resolveMaybePromise(result, tools => {
       if (!tools) {
         this.logger.error(`[Agent:${this.name}] - Function-based tools returned empty value`);
         throw new Error(
@@ -284,7 +284,7 @@ export class Agent<
     | Promise<MastraLLMBase> {
     const model = this.getModel({ runtimeContext });
 
-    return resoolveMaybePromise(model, model => {
+    return resolveMaybePromise(model, model => {
       const llm = new MastraLLM({ model, mastra: this.#mastra });
 
       // Apply stored primitives if available
@@ -318,7 +318,7 @@ export class Agent<
     }
 
     const result = this.model({ runtimeContext });
-    return resoolveMaybePromise(result, model => {
+    return resolveMaybePromise(result, model => {
       if (!model) {
         this.logger.error(`[Agent:${this.name}] - Function-based model returned empty value`);
         throw new Error('Model is required to use an Agent. The function-based model returned an empty value.');

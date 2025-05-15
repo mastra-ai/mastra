@@ -18,36 +18,36 @@ const voice = new OpenAIRealtimeVoice();
 
 // Or initialize with specific configuration
 const voiceWithConfig = new OpenAIRealtimeVoice({
-  apiKey: 'your-openai-api-key',
-  model: 'gpt-4o-mini-realtime-preview-2024-12-17',
-  speaker: 'alloy'  // Default voice
+  apiKey: "your-openai-api-key",
+  model: "gpt-4o-mini-realtime-preview-2024-12-17",
+  speaker: "alloy", // Default voice
 });
 
 voiceWithConfig.updateSession({
   turn_detection: {
-    type: 'server_vad',
+    type: "server_vad",
     threshold: 0.6,
-    silence_duration_ms: 1200
-  }
+    silence_duration_ms: 1200,
+  },
 });
 
 // Establish connection
 await voice.connect();
 
 // Set up event listeners
-voice.on('speaker', ({ audio }) => {
+voice.on("speaker", ({ audio }) => {
   // Handle audio data (Int16Array) pcm format by default
   playAudio(audio);
 });
 
-voice.on('writing', ({ text, role }) => {
+voice.on("writing", ({ text, role }) => {
   // Handle transcribed text
   console.log(`${role}: ${text}`);
 });
 
 // Convert text to speech
-await voice.speak('Hello, how can I help you today?', {
-  speaker: 'echo'  // Override default voice
+await voice.speak("Hello, how can I help you today?", {
+  speaker: "echo", // Override default voice
 });
 
 // Process audio input
@@ -74,7 +74,8 @@ voice.connect();
     {
       name: "apiKey",
       type: "string",
-      description: "OpenAI APIキー。OPENAI_API_KEY環境変数にフォールバックします。",
+      description:
+        "OpenAI APIキー。OPENAI_API_KEY環境変数にフォールバックします。",
       isOptional: true,
     },
     {
@@ -94,7 +95,8 @@ voice.connect();
     {
       name: "type",
       type: "string",
-      description: "使用するVADのタイプ。サーバー側のVADはより高い精度を提供します。",
+      description:
+        "使用するVADのタイプ。サーバー側のVADはより高い精度を提供します。",
       isOptional: true,
       defaultValue: "'server_vad'",
     },
@@ -297,17 +299,20 @@ OpenAIRealtimeVoice クラスは次のイベントを発行します:
     {
       name: "speaking",
       type: "event",
-      description: "モデルからオーディオデータが受信されたときに発行されます。コールバックは { audio: Int16Array } を受け取ります。",
+      description:
+        "モデルからオーディオデータが受信されたときに発行されます。コールバックは { audio: Int16Array } を受け取ります。",
     },
     {
       name: "writing",
       type: "event",
-      description: "文字起こしされたテキストが利用可能になったときに発行されます。コールバックは { text: string, role: string } を受け取ります。",
+      description:
+        "文字起こしされたテキストが利用可能になったときに発行されます。コールバックは { text: string, role: string } を受け取ります。",
     },
     {
       name: "error",
       type: "event",
-      description: "エラーが発生したときに発行されます。コールバックはエラーオブジェクトを受け取ります。",
+      description:
+        "エラーが発生したときに発行されます。コールバックはエラーオブジェクトを受け取ります。",
     },
   ]}
 />
@@ -358,4 +363,3 @@ OpenAIRealtimeVoice クラスは次のイベントを発行します:
 - `sage`: 落ち着いて思慮深い
 - `shimmer`: 明るくエネルギッシュな
 - `verse`: 多才で表現力豊かな
-
