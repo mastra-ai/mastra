@@ -594,7 +594,7 @@ describe('OpenSearchVector', () => {
         expect(ids).toHaveLength(3);
         const idToBeDeleted = ids[0];
 
-        await vectorDB.deleteVector(testIndexName, idToBeDeleted);
+        await vectorDB.deleteVector({ indexName: testIndexName, id: idToBeDeleted });
 
         const results: QueryResult[] = await vectorDB.query({
           indexName: testIndexName,

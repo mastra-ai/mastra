@@ -404,7 +404,7 @@ await pgVector.updateVector("my_vectors", "vector123", {
 Deletes a single vector by ID from the specified index.
 
 ```typescript copy
-await pgVector.deleteVector("my_vectors", "vector123");
+await pgVector.deleteVector({ indexName: "my_vectors", id: "vector123" });
 ```
 
 ### disconnect()

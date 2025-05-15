@@ -8,6 +8,7 @@ import type {
   DescribeIndexParams,
   ParamsToArgs,
   DeleteIndexParams,
+  DeleteVectorParams,
 } from '@mastra/core/vector';
 import type { Bucket, Cluster, Collection, Scope } from 'couchbase';
 import { MutateInSpec, connect, SearchRequest, VectorQuery, VectorSearch } from 'couchbase';
@@ -336,7 +337,10 @@ export class CouchbaseVector extends MastraVector {
    * @returns A promise that resolves when the deletion is complete.
    * @throws Will throw an error if the deletion operation fails.
    */
-  async deleteVector(_indexName: string, id: string): Promise<void> {
+  async deleteVector(...args: ParamsToArgs<DeleteVectorParams>): Promise<void> {
+    const params = this.normalizeArgs<DeleteVectorParams>('deleteVector', args);
+
+    const { id } = params;
     const collection = await this.getCollection();
 
     // Check if document exists

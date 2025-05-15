@@ -214,7 +214,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
         expect(ids).toHaveLength(3);
         const idToBeDeleted = ids[0];
 
-        await vectorStore.deleteVector(testIndexName, idToBeDeleted);
+        await vectorStore.deleteVector({ indexName: testIndexName, id: idToBeDeleted });
 
         const results: QueryResult[] = await vectorStore.query({
           indexName: testIndexName,

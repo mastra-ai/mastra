@@ -484,7 +484,7 @@ describe('Integration Testing CouchbaseVector', async () => {
       expect(ids).toHaveLength(3);
       const idToBeDeleted = ids[0];
 
-      await couchbase_client.deleteVector(test_indexName, idToBeDeleted);
+      await couchbase_client.deleteVector({ indexName: test_indexName, id: idToBeDeleted });
 
       try {
         await collection.get(idToBeDeleted);

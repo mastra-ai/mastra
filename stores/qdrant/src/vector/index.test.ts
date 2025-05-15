@@ -226,7 +226,7 @@ describe('QdrantVector', () => {
       expect(ids).toHaveLength(3);
       const idToBeDeleted = ids[0];
 
-      await qdrant.deleteVector(testCollectionName, idToBeDeleted);
+      await qdrant.deleteVector({ indexName: testCollectionName, id: idToBeDeleted });
 
       const results: QueryResult[] = await qdrant.query({
         indexName: testCollectionName,

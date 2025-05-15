@@ -443,7 +443,7 @@ describe('MongoDBVector Integration Tests', () => {
 
       const initialStats = await vectorDB.describeIndex({ indexName });
 
-      await vectorDB.deleteVector(indexName, idToBeDeleted);
+      await vectorDB.deleteVector({ indexName, id: idToBeDeleted });
       const results = await vectorDB.query({ indexName, queryVector: [1, 0, 0, 0], topK: 2 });
       expect(results.map(res => res.id)).not.toContain(idToBeDeleted);
 

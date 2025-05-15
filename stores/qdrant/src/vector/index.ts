@@ -8,6 +8,7 @@ import type {
   ParamsToArgs,
   DescribeIndexParams,
   DeleteIndexParams,
+  DeleteVectorParams,
 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import { QdrantClient } from '@qdrant/js-client-rest';
@@ -270,7 +271,7 @@ export class QdrantVector extends MastraVector {
       Please use deleteVector() instead. 
       deleteIndexById() will be removed on May 20th, 2025.`,
     );
-    await this.deleteVector(indexName, id);
+    await this.deleteVector({ indexName, id });
   }
 
   /**
@@ -280,7 +281,9 @@ export class QdrantVector extends MastraVector {
    * @returns A promise that resolves when the deletion is complete.
    * @throws Will throw an error if the deletion operation fails.
    */
-  async deleteVector(indexName: string, id: string): Promise<void> {
+  async deleteVector(...args: ParamsToArgs<DeleteVectorParams>): Promise<void> {
+    const params = this.normalizeArgs<DeleteVectorParams>('deleteVector', args);
+    const { indexName, id } = params;
     try {
       // Parse the ID - Qdrant supports both string and numeric IDs
       const pointId = this.parsePointId(id);

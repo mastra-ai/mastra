@@ -1311,7 +1311,7 @@ describe.skip('AstraVector Integration Tests', () => {
       expect(ids).toHaveLength(4);
 
       const idToBeDeleted = ids[0];
-      await vectorDB.deleteVector(indexName, idToBeDeleted);
+      await vectorDB.deleteVector({ indexName, id: idToBeDeleted });
 
       const results = await vectorDB.query({
         indexName: indexName,

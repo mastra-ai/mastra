@@ -10,6 +10,8 @@ import type {
   UpsertVectorArgs,
   DescribeIndexParams,
   DeleteIndexParams,
+  DeleteVectorParams,
+  DeleteVectorArgs,
 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import { Pinecone } from '@pinecone-database/pinecone';
@@ -39,6 +41,12 @@ interface PineconeUpsertVectorParams extends UpsertVectorParams {
 }
 
 type PineconeUpsertVectorArgs = [...UpsertVectorArgs, string?, RecordSparseValues[]?];
+
+interface PineconeDeleteVectorParams extends DeleteVectorParams {
+  namespace?: string;
+}
+
+type PineconeDeleteVectorArgs = [...DeleteVectorArgs, string?];
 
 export class PineconeVector extends MastraVector {
   private client: Pinecone;
@@ -292,7 +300,7 @@ export class PineconeVector extends MastraVector {
       Please use deleteVector() instead. 
       deleteIndexById() will be removed on May 20th, 2025.`,
     );
-    await this.deleteVector(indexName, id, namespace);
+    await this.deleteVector({ indexName, id, namespace });
   }
 
   /**
@@ -303,7 +311,11 @@ export class PineconeVector extends MastraVector {
    * @returns A promise that resolves when the deletion is complete.
    * @throws Will throw an error if the deletion operation fails.
    */
-  async deleteVector(indexName: string, id: string, namespace?: string): Promise<void> {
+  async deleteVector(...args: ParamsToArgs<PineconeDeleteVectorParams> | PineconeDeleteVectorArgs): Promise<void> {
+    const params = this.normalizeArgs<PineconeDeleteVectorParams, PineconeDeleteVectorArgs>('deleteVector', args, [
+      'namespace',
+    ]);
+    const { indexName, id, namespace } = params;
     try {
       const index = this.client.Index(indexName).namespace(namespace || '');
       await index.deleteOne(id);

@@ -10,6 +10,7 @@ import type {
   UpsertVectorArgs,
   DescribeIndexParams,
   DeleteIndexParams,
+  DeleteVectorParams,
 } from '@mastra/core/vector';
 
 import type { VectorFilter } from '@mastra/core/vector/filter';
@@ -291,7 +292,10 @@ export class ChromaVector extends MastraVector {
    * @returns A promise that resolves when the deletion is complete.
    * @throws Will throw an error if the deletion operation fails.
    */
-  async deleteVector(indexName: string, id: string): Promise<void> {
+  async deleteVector(...args: ParamsToArgs<DeleteVectorParams>): Promise<void> {
+    const params = this.normalizeArgs<DeleteVectorParams>('deleteVector', args);
+
+    const { indexName, id } = params;
     try {
       const collection: Collection = await this.getCollection(indexName, true);
       await collection.delete({ ids: [id] });

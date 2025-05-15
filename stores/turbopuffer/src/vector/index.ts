@@ -1,6 +1,7 @@
 import type {
   CreateIndexParams,
   DeleteIndexParams,
+  DeleteVectorParams,
   DescribeIndexParams,
   IndexStats,
   ParamsToArgs,
@@ -295,7 +296,9 @@ export class TurbopufferVector extends MastraVector {
    * @returns A promise that resolves when the deletion is complete.
    * @throws Will throw an error if the deletion operation fails.
    */
-  async deleteVector(indexName: string, id: string): Promise<void> {
+  async deleteVector(...args: ParamsToArgs<DeleteVectorParams>): Promise<void> {
+    const params = this.normalizeArgs<DeleteVectorParams>('deleteVector', args);
+    const { indexName, id } = params;
     try {
       const namespace = this.client.namespace(indexName);
       await namespace.delete({ ids: [id] });

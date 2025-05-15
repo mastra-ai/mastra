@@ -372,7 +372,7 @@ describe('PgVector', () => {
         expect(ids).toHaveLength(3);
         const idToBeDeleted = ids[0];
 
-        await vectorDB.deleteVector(testIndexName, idToBeDeleted);
+        await vectorDB.deleteVector({ indexName: testIndexName, id: idToBeDeleted });
 
         const results: QueryResult[] = await vectorDB.query({
           indexName: testIndexName,
@@ -2215,7 +2215,7 @@ describe('PgVector', () => {
         });
 
         // Test delete operation
-        await customSchemaVectorDB.deleteVector(testIndexName, id!);
+        await customSchemaVectorDB.deleteVector({ indexName: testIndexName, id: id! });
 
         // Verify deletion
         const results = await customSchemaVectorDB.query({
