@@ -14,7 +14,7 @@ import { ServerInfo } from '@mastra/core/mcp';
 
 const MCPs = () => {
   const { servers: mcpServers, isLoading: isLoadingMCPServers } = useMCPServers();
-  const [selectedServer, setSelectedServer] = useState<any | null>(null);
+  const [selectedServer, setSelectedServer] = useState<ServerInfo | null>(null);
 
   const { tools: selectedServerTools, isLoading: isLoadingServerTools } = useMCPServerTools(selectedServer);
 
@@ -32,7 +32,7 @@ const MCPs = () => {
     copyMessage: 'Streamable HTTP URL copied to clipboard!',
   });
 
-  const handleSelectServer = (server: any) => {
+  const handleSelectServer = (server: ServerInfo) => {
     setSelectedServer(server);
   };
 
@@ -92,8 +92,7 @@ const MCPs = () => {
                   </div>
                 </li>
               ))}
-            {isLoadingMCPServers &&
-              !mcpServers &&
+            {!mcpServers &&
               [1, 2, 3].map(i => (
                 <li key={i} className="px-2 py-2 rounded-md bg-mastra-bg-13">
                   <div className="flex gap-2 items-center">
@@ -107,10 +106,6 @@ const MCPs = () => {
         <div className="flex flex-col gap-4 py-6 px-4 h-full overflow-y-scroll">
           {selectedServer && (
             <div className="mb-4 p-3 border border-mastra-border-1 rounded-md bg-mastra-bg-13">
-              <h3 className="text-md font-semibold text-mastra-el-7 mb-2">
-                Connection Endpoints for {selectedServer.name}
-              </h3>
-
               <div className="mb-2">
                 <p className="text-xs text-mastra-el-3 mb-1">SSE Endpoint:</p>
                 <div className="flex items-center gap-2">
