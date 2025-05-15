@@ -36,6 +36,14 @@ export default defineConfig(({ mode }) => {
             target: 'http://localhost:4111',
             changeOrigin: true,
           },
+          '/openapi.json': {
+            target: 'http://localhost:4111',
+            changeOrigin: true,
+          },
+          '/swagger-ui': {
+            target: 'http://localhost:4111',
+            changeOrigin: true,
+          },
         },
       },
     };

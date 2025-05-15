@@ -1,7 +1,6 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAgent } from '@/hooks/use-agents';
 import { AgentDetails } from './agent-details';
-import { AgentEndpoints } from './agent-endpoints';
 import { AgentLogs } from './agent-logs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge, MemoryIcon, Txt } from '@mastra/playground-ui';
@@ -95,11 +94,6 @@ export function AgentInformation({ agentId }: { agentId: string }) {
             </p>
           </TabsTrigger>
 
-          <TabsTrigger value="endpoints" className="group shrink-0">
-            <p className="text-xs p-3 text-mastra-el-3 group-data-[state=active]:text-mastra-el-5 group-data-[state=active]:border-b-2 group-data-[state=active]:pb-2.5 border-white">
-              Endpoints
-            </p>
-          </TabsTrigger>
           <TabsTrigger value="logs" className="group shrink-0">
             <p className="text-xs p-3 text-mastra-el-3 group-data-[state=active]:text-mastra-el-5 group-data-[state=active]:border-b-2 group-data-[state=active]:pb-2.5 border-white">
               Log Drains
@@ -115,9 +109,7 @@ export function AgentInformation({ agentId }: { agentId: string }) {
           {isLoading && <Skeleton className="h-full" />}
           {agent && <AgentDetails agent={agent} />}
         </TabsContent>
-        <TabsContent value="endpoints">
-          {isLoading ? <Skeleton className="h-full" /> : <AgentEndpoints agentId={agentId} />}
-        </TabsContent>
+
         <TabsContent value="logs">
           {isLoading ? <Skeleton className="h-full" /> : <AgentLogs agentId={agentId} />}
         </TabsContent>

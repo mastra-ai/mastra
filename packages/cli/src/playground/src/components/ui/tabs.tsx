@@ -4,6 +4,7 @@ import * as TabsPrimitive from '@radix-ui/react-tabs';
 import * as React from 'react';
 
 import { cn } from '../../lib/utils';
+import clsx from 'clsx';
 
 const Tabs = TabsPrimitive.Root;
 
@@ -16,7 +17,7 @@ TabsList.displayName = TabsPrimitive.List.displayName;
 const TabsTrigger = React.forwardRef<
   React.ComponentRef<typeof TabsPrimitive.Trigger>,
   React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>
->(({ className, ...props }, ref) => <TabsPrimitive.Trigger ref={ref} className={cn(className)} {...props} />);
+>(({ className, ...props }, ref) => <TabsPrimitive.Trigger ref={ref} className={clsx(className)} {...props} />);
 TabsTrigger.displayName = TabsPrimitive.Trigger.displayName;
 
 const TabsContent = React.forwardRef<
