@@ -16,9 +16,10 @@ Mastraは、セマンティック検索、フィルタリング、再ランキ�
 1. ユーザーのクエリは、ドキュメント埋め込みに使用されるのと同じモデルを使用して埋め込みに変換されます
 2. この埋め込みはベクトル類似性を使用して保存された埋め込みと比較されます
 3. 最も類似したチャンクが取得され、オプションで以下の処理が可能です：
-  - メタデータによるフィルタリング
-  - より良い関連性のための再ランク付け
-  - ナレッジグラフを通じた処理
+
+- メタデータによるフィルタリング
+- より良い関連性のための再ランク付け
+- ナレッジグラフを通じた処理
 
 ## 基本的な検索
 
@@ -32,7 +33,7 @@ import { PgVector } from "@mastra/pg";
 // Convert query to embedding
 const { embedding } = await embed({
   value: "What are the main points in the article?",
-  model: openai.embedding('text-embedding-3-small'),
+  model: openai.embedding("text-embedding-3-small"),
 });
 
 // Query vector store
@@ -54,15 +55,15 @@ console.log(results);
   {
     text: "Climate change poses significant challenges...",
     score: 0.89,
-    metadata: { source: "article1.txt" }
+    metadata: { source: "article1.txt" },
   },
   {
     text: "Rising temperatures affect crop yields...",
     score: 0.82,
-    metadata: { source: "article1.txt" }
-  }
+    metadata: { source: "article1.txt" },
+  },
   // ... more results
-]
+];
 ```
 
 基本的な検索方法の使用例については、[結果の取得](../../examples/rag/query/retrieve-results.mdx)の例を参照してください。
@@ -84,8 +85,8 @@ const results = await pgVector.query({
   queryVector: embedding,
   topK: 10,
   filter: {
-    source: "article1.txt"
-  }
+    source: "article1.txt",
+  },
 });
 
 // Numeric comparison
@@ -94,8 +95,8 @@ const results = await pgVector.query({
   queryVector: embedding,
   topK: 10,
   filter: {
-    price: { $gt: 100 }
-  }
+    price: { $gt: 100 },
+  },
 });
 
 // Multiple conditions
@@ -106,8 +107,8 @@ const results = await pgVector.query({
   filter: {
     category: "electronics",
     price: { $lt: 1000 },
-    inStock: true
-  }
+    inStock: true,
+  },
 });
 
 // Array operations
@@ -116,8 +117,8 @@ const results = await pgVector.query({
   queryVector: embedding,
   topK: 10,
   filter: {
-    tags: { $in: ["sale", "new"] }
-  }
+    tags: { $in: ["sale", "new"] },
+  },
 });
 
 // Logical operators
@@ -126,19 +127,14 @@ const results = await pgVector.query({
   queryVector: embedding,
   topK: 10,
   filter: {
-    $or: [
-      { category: "electronics" },
-      { category: "accessories" }
-    ],
-    $and: [
-      { price: { $gt: 50 } },
-      { price: { $lt: 200 } }
-    ]
-  }
+    $or: [{ category: "electronics" }, { category: "accessories" }],
+    $and: [{ price: { $gt: 50 } }, { price: { $lt: 200 } }],
+  },
 });
-``` 
+```
 
 メタデータフィルタリングの一般的なユースケース：
+
 - ドキュメントのソースまたはタイプによるフィルタリング
 - 日付範囲によるフィルタリング
 - 特定のカテゴリやタグによるフィルタリング
@@ -154,15 +150,16 @@ const results = await pgVector.query({
 
 ```ts showLineNumbers copy
 const vectorQueryTool = createVectorQueryTool({
-  vectorStoreName: 'pgVector',
-  indexName: 'embeddings',
-  model: openai.embedding('text-embedding-3-small'),
+  vectorStoreName: "pgVector",
+  indexName: "embeddings",
+  model: openai.embedding("text-embedding-3-small"),
 });
 ```
 
 ツールを作成する際は、ツールの名前と説明に特に注意してください - これらはエージェントが検索機能をいつどのように使用するかを理解するのに役立ちます。例えば、「SearchKnowledgeBase」と名付け、「Xトピックに関連する情報を見つけるために私たちのドキュメントを検索する」と説明することができます。
 
 これは特に以下の場合に役立ちます：
+
 - エージェントが取得する情報を動的に決定する必要がある場合
 - 検索プロセスが複雑な意思決定を必要とする場合
 - コンテキストに基づいて複数の検索戦略を組み合わせたい場合
@@ -190,6 +187,7 @@ const vectorQueryTool = createVectorQueryTool({
       tools: { vectorQueryTool },
     });
     ```
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -207,6 +205,7 @@ const vectorQueryTool = createVectorQueryTool({
       tools: { vectorQueryTool },
     });
     ```
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -224,6 +223,7 @@ const vectorQueryTool = createVectorQueryTool({
       tools: { vectorQueryTool },
     });
     ```
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -241,6 +241,7 @@ const vectorQueryTool = createVectorQueryTool({
       tools: { vectorQueryTool },
     });
     ```
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -258,6 +259,7 @@ const vectorQueryTool = createVectorQueryTool({
       tools: { vectorQueryTool },
     });
     ```
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -275,6 +277,7 @@ const vectorQueryTool = createVectorQueryTool({
       tools: { vectorQueryTool },
     });
     ```
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -292,6 +295,7 @@ const vectorQueryTool = createVectorQueryTool({
       tools: { vectorQueryTool },
     });
     ```
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -309,6 +313,7 @@ const vectorQueryTool = createVectorQueryTool({
       tools: { vectorQueryTool },
     });
     ```
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -326,9 +331,9 @@ const vectorQueryTool = createVectorQueryTool({
       tools: { vectorQueryTool },
     });
     ```
+
   </Tabs.Tab>
 </Tabs>
-
 
 ### 再ランキング
 
@@ -352,7 +357,11 @@ const initialResults = await pgVector.query({
 });
 
 // Re-rank the results
-const rerankedResults = await rerank(initialResults, query, openai('gpt-4o-mini'));
+const rerankedResults = await rerank(
+  initialResults,
+  query,
+  openai("gpt-4o-mini"),
+);
 ```
 
 > **注意:** 再ランキング中にセマンティックスコアリングが正しく機能するためには、各結果に`metadata.text`フィールドにテキストコンテンツが含まれている必要があります。
@@ -375,12 +384,12 @@ const rerankedResults = await rerank(initialResults, query, openai('gpt-4o-mini'
 
 ```ts showLineNumbers copy
 const graphQueryTool = createGraphQueryTool({
-  vectorStoreName: 'pgVector',
-  indexName: 'embeddings',
-  model: openai.embedding('text-embedding-3-small'),
+  vectorStoreName: "pgVector",
+  indexName: "embeddings",
+  model: openai.embedding("text-embedding-3-small"),
   graphOptions: {
     threshold: 0.7,
-  }
+  },
 });
 ```
 

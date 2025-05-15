@@ -100,8 +100,8 @@ export class Agent extends BaseResource {
   ): Promise<GenerateReturn<T>> {
     const processedParams = {
       ...params,
-      output: zodToJsonSchema(params.output),
-      experimental_output: zodToJsonSchema(params.experimental_output),
+      output: params.output ? zodToJsonSchema(params.output) : undefined,
+      experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
       runtimeContext: params.runtimeContext ? Object.fromEntries(params.runtimeContext.entries()) : undefined,
     };
 
@@ -125,8 +125,8 @@ export class Agent extends BaseResource {
   > {
     const processedParams = {
       ...params,
-      output: zodToJsonSchema(params.output),
-      experimental_output: zodToJsonSchema(params.experimental_output),
+      output: params.output ? zodToJsonSchema(params.output) : undefined,
+      experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
       runtimeContext: params.runtimeContext ? Object.fromEntries(params.runtimeContext.entries()) : undefined,
     };
 

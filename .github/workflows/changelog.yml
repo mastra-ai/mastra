@@ -40,9 +40,9 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20.19.1"
-          cache: "pnpm"
-          registry-url: "https://registry.npmjs.org"
+          node-version: '20.19.1'
+          cache: 'pnpm'
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
         run: pnpm install

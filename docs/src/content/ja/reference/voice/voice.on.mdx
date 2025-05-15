@@ -27,7 +27,7 @@ await voice.connect();
 
 // Register event listener for transcribed text
 voice.on("writing", (event) => {
-  if (event.role === 'user') {
+  if (event.role === "user") {
     process.stdout.write(chalk.green(event.text));
   } else {
     process.stdout.write(chalk.blue(event.text));
@@ -52,21 +52,24 @@ voice.on("error", ({ message, code, details }) => {
 ```
 
 ## パラメータ
-<br/>
+
+<br />
 <PropertiesTable
   content={[
     {
       name: "event",
       type: "string",
-      description: "リッスンするイベントの名前。利用可能なイベントのリストについては、[ボイスイベント](./voice.events)のドキュメントを参照してください。",
+      description:
+        "リッスンするイベントの名前。利用可能なイベントのリストについては、[ボイスイベント](./voice.events)のドキュメントを参照してください。",
       isOptional: false,
     },
     {
       name: "callback",
       type: "function",
-      description: "イベントが発生したときに呼び出されるコールバック関数。コールバックのシグネチャは特定のイベントによって異なります。",
+      description:
+        "イベントが発生したときに呼び出されるコールバック関数。コールバックのシグネチャは特定のイベントによって異なります。",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -99,9 +102,9 @@ import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
 import Speaker from "@mastra/node-speaker";
 
 const speaker = new Speaker({
-  sampleRate: 24100,  // MacBook Proでの高品質オーディオの標準であるHz単位のオーディオサンプルレート
-  channels: 1,        // モノラルオーディオ出力（ステレオの場合は2）
-  bitDepth: 16,       // オーディオ品質のビット深度 - CD品質の標準（16ビット解像度）
+  sampleRate: 24100, // MacBook Proでの高品質オーディオの標準であるHz単位のオーディオサンプルレート
+  channels: 1, // モノラルオーディオ出力（ステレオの場合は2）
+  bitDepth: 16, // オーディオ品質のビット深度 - CD品質の標準（16ビット解像度）
 });
 
 const realtimeVoice = new OpenAIRealtimeVoice();
@@ -114,7 +117,7 @@ await voice.connect();
 
 // これにより、OpenAIRealtimeVoiceプロバイダーにイベントリスナーが登録されます
 voice.on("speaker", (stream) => {
-  stream.pipe(speaker)
+  stream.pipe(speaker);
 });
 ```
 

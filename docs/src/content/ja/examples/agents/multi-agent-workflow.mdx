@@ -29,7 +29,8 @@ import { z } from "zod";
 ```typescript
 const copywriterAgent = new Agent({
   name: "Copywriter",
-  instructions: "あなたはブログ投稿のコピーを書くコピーライターエージェントです。",
+  instructions:
+    "あなたはブログ投稿のコピーを書くコピーライターエージェントです。",
   model: anthropic("claude-3-5-sonnet-20241022"),
 });
 ```
@@ -59,7 +60,8 @@ const copywriterStep = new Step({
 ```typescript
 const editorAgent = new Agent({
   name: "Editor",
-  instructions: "あなたはブログ投稿のコピーを編集するエディターエージェントです。",
+  instructions:
+    "あなたはブログ投稿のコピーを編集するエディターエージェントです。",
   model: openai("gpt-4o-mini"),
 });
 ```
@@ -70,7 +72,9 @@ const editorAgent = new Agent({
 const editorStep = new Step({
   id: "editorStep",
   execute: async ({ context }) => {
-    const copy = context?.getStepResult<{ copy: number }>("copywriterStep")?.copy;
+    const copy = context?.getStepResult<{ copy: number }>(
+      "copywriterStep",
+    )?.copy;
 
     const result = await editorAgent.generate(
       `Edit the following blog post only returning the edited copy: ${copy}`,

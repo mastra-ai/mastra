@@ -1,5 +1,5 @@
 ---
-title: "リファレンス: Workflow.execute() | ワークフロー | Mastra ドキュメント" 
+title: "リファレンス: Workflow.execute() | ワークフロー | Mastra ドキュメント"
 description: "Mastra ワークフローにおける `.execute()` メソッドのドキュメントで、ワークフローステップを実行し、結果を返します。"
 ---
 
@@ -13,14 +13,14 @@ description: "Mastra ワークフローにおける `.execute()` メソッドの
 const workflow = new Workflow({
   name: "my-workflow",
   triggerSchema: z.object({
-    inputValue: z.number()
-  })
+    inputValue: z.number(),
+  }),
 });
 
 workflow.step(stepOne).then(stepTwo).commit();
 
 const result = await workflow.execute({
-  triggerData: { inputValue: 42 }
+  triggerData: { inputValue: 42 },
 });
 ```
 
@@ -38,16 +38,16 @@ const result = await workflow.execute({
           name: "triggerData",
           type: "TriggerSchema",
           description: "ワークフローのトリガースキーマに一致する入力データ",
-          isOptional: false
+          isOptional: false,
         },
         {
-          name: "runId", 
+          name: "runId",
           type: "string",
           description: "この実行ランを追跡するためのオプションのID",
-          isOptional: true
-        }
-      ]
-    }
+          isOptional: true,
+        },
+      ],
+    },
   ]}
 />
 
@@ -62,21 +62,21 @@ const result = await workflow.execute({
       properties: [
         {
           name: "runId",
-          type: "string", 
-          description: "この実行ランの一意の識別子"
+          type: "string",
+          description: "この実行ランの一意の識別子",
         },
         {
           name: "results",
           type: "Record<string, StepResult>",
-          description: "完了した各ステップの結果"
+          description: "完了した各ステップの結果",
         },
         {
           name: "status",
           type: "WorkflowStatus",
-          description: "ワークフローランの最終ステータス"
-        }
-      ]
-    }
+          description: "ワークフローランの最終ステータス",
+        },
+      ],
+    },
   ]}
 />
 
@@ -87,7 +87,7 @@ const result = await workflow.execute({
 ```typescript
 const result = await workflow.execute({
   runId: "custom-run-id",
-  triggerData: { inputValue: 42 }
+  triggerData: { inputValue: 42 },
 });
 ```
 
@@ -95,7 +95,7 @@ const result = await workflow.execute({
 
 ```typescript
 const { runId, results, status } = await workflow.execute({
-  triggerData: { inputValue: 42 }
+  triggerData: { inputValue: 42 },
 });
 
 if (status === "COMPLETED") {
