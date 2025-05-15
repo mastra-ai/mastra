@@ -418,7 +418,7 @@ export class LibSQLVector extends MastraVector {
     }
   }
 
-  async truncateIndex(...args: ParamsToArgs<DeleteIndexParams>) {
+  async truncateIndex(...args: ParamsToArgs<DeleteIndexParams>): Promise<void> {
     const params = this.normalizeArgs<DeleteIndexParams>('truncateIndex', args);
     const { indexName } = params;
     await this.turso.execute({

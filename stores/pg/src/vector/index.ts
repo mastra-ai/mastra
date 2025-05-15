@@ -690,7 +690,7 @@ export class PgVector extends MastraVector {
     }
   }
 
-  async truncateIndex(...args: ParamsToArgs<DeleteIndexParams>) {
+  async truncateIndex(...args: ParamsToArgs<DeleteIndexParams>): Promise<void> {
     const params = this.normalizeArgs<DeleteIndexParams>('truncateIndex', args);
     const { indexName } = params;
     const client = await this.pool.connect();
