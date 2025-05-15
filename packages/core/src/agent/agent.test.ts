@@ -1,5 +1,7 @@
 import { PassThrough } from 'stream';
 import { createOpenAI } from '@ai-sdk/openai';
+import { simulateReadableStream } from 'ai';
+import { MockLanguageModelV1 } from 'ai/test';
 import { config } from 'dotenv';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -32,15 +34,35 @@ const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 describe('agent', () => {
   const integration = new TestIntegration();
 
+  let dummyModel;
+  beforeEach(() => {
+    dummyModel = new MockLanguageModelV1({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { promptTokens: 10, completionTokens: 20 },
+        text: `Dummy response`,
+      }),
+    });
+  });
+
   it('should get a text response from the agent', async () => {
     const electionAgent = new Agent({
       name: 'US Election agent',
       instructions: 'You know about the past US elections',
-      model: openai('gpt-4o'),
+      model: new MockLanguageModelV1({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: `Donald Trump won the 2016 U.S. presidential election, defeating Hillary Clinton.`,
+        }),
+      }),
     });
 
     const mastra = new Mastra({
       agents: { electionAgent },
+      logger: false,
     });
 
     const agentOne = mastra.getAgent('electionAgent');
@@ -57,11 +79,36 @@ describe('agent', () => {
     const electionAgent = new Agent({
       name: 'US Election agent',
       instructions: 'You know about the past US elections',
-      model: openai('gpt-4o'),
+      model: new MockLanguageModelV1({
+        doStream: async () => ({
+          stream: simulateReadableStream({
+            chunks: [
+              { type: 'text-delta', textDelta: 'Donald' },
+              { type: 'text-delta', textDelta: ' Trump' },
+              { type: 'text-delta', textDelta: ` won` },
+              { type: 'text-delta', textDelta: ` the` },
+              { type: 'text-delta', textDelta: ` ` },
+              { type: 'text-delta', textDelta: `201` },
+              { type: 'text-delta', textDelta: `6` },
+              { type: 'text-delta', textDelta: ` US` },
+              { type: 'text-delta', textDelta: ` presidential` },
+              { type: 'text-delta', textDelta: ` election` },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                logprobs: undefined,
+                usage: { completionTokens: 10, promptTokens: 3 },
+              },
+            ],
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        }),
+      }),
     });
 
     const mastra = new Mastra({
       agents: { electionAgent },
+      logger: false,
     });
 
     const agentOne = mastra.getAgent('electionAgent');
@@ -86,11 +133,20 @@ describe('agent', () => {
     const electionAgent = new Agent({
       name: 'US Election agent',
       instructions: 'You know about the past US elections',
-      model: openai('gpt-4o'),
+      model: new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: `{"winner":"Barack Obama"}`,
+        }),
+      }),
     });
 
     const mastra = new Mastra({
       agents: { electionAgent },
+      logger: false,
     });
 
     const agentOne = mastra.getAgent('electionAgent');
@@ -102,7 +158,6 @@ describe('agent', () => {
     });
 
     const { object } = response;
-
     expect(object.winner).toContain('Barack Obama');
   });
 
@@ -110,11 +165,21 @@ describe('agent', () => {
     const electionAgent = new Agent({
       name: 'US Election agent',
       instructions: 'You know about the past US elections',
-      model: openai('gpt-4o'),
+      // model: openai('gpt-4o'),
+      model: new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: `{"elements":[{"winner":"Barack Obama","year":"2012"},{"winner":"Donald Trump","year":"2016"}]}`,
+        }),
+      }),
     });
 
     const mastra = new Mastra({
       agents: { electionAgent },
+      logger: false,
     });
 
     const agentOne = mastra.getAgent('electionAgent');
@@ -147,11 +212,31 @@ describe('agent', () => {
     const electionAgent = new Agent({
       name: 'US Election agent',
       instructions: 'You know about the past US elections',
-      model: openai('gpt-4o'),
+      model: new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doStream: async () => ({
+          stream: simulateReadableStream({
+            chunks: [
+              { type: 'text-delta', textDelta: '{' },
+              { type: 'text-delta', textDelta: '"winner":' },
+              { type: 'text-delta', textDelta: `"Barack Obama"` },
+              { type: 'text-delta', textDelta: `}` },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                logprobs: undefined,
+                usage: { completionTokens: 10, promptTokens: 3 },
+              },
+            ],
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        }),
+      }),
     });
 
     const mastra = new Mastra({
       agents: { electionAgent },
+      logger: false,
     });
 
     const agentOne = mastra.getAgent('electionAgent');
@@ -197,6 +282,7 @@ describe('agent', () => {
 
     const mastra = new Mastra({
       agents: { userAgent },
+      logger: false,
     });
 
     const agentOne = mastra.getAgent('userAgent');
@@ -289,6 +375,7 @@ describe('agent', () => {
 
     const mastra = new Mastra({
       agents: { userAgent },
+      logger: false,
     });
 
     const agentOne = mastra.getAgent('userAgent');
@@ -317,6 +404,7 @@ describe('agent', () => {
       agents: {
         testAgent,
       },
+      logger: false,
     });
 
     const agentOne = mastra.getAgent('testAgent');
@@ -353,7 +441,14 @@ describe('agent', () => {
     const agent = new Agent({
       name: 'Test agent',
       instructions: 'Test agent',
-      model: openai('gpt-4o'),
+      model: new MockLanguageModelV1({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: ``,
+        }),
+      }),
     });
 
     const toolResultOne = {
@@ -392,7 +487,14 @@ describe('agent', () => {
     const agent = new Agent({
       name: 'Test agent',
       instructions: 'Test agent',
-      model: openai('gpt-4o'),
+      model: new MockLanguageModelV1({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: ``,
+        }),
+      }),
     });
 
     // Create an assistant message with a tool call
@@ -460,7 +562,7 @@ describe('agent', () => {
       voiceAgent = new Agent({
         name: 'Voice Agent',
         instructions: 'You are an agent with voice capabilities',
-        model: openai('gpt-4o'),
+        model: dummyModel,
         voice: new CompositeVoice({
           output: new MockVoice({
             speaker: 'mock-voice',
@@ -545,7 +647,7 @@ describe('agent', () => {
         const agentWithoutVoice = new Agent({
           name: 'No Voice Agent',
           instructions: 'You are an agent without voice capabilities',
-          model: openai('gpt-4o'),
+          model: dummyModel,
         });
 
         await expect(agentWithoutVoice.voice.getSpeakers()).rejects.toThrow('No voice provider configured');
@@ -585,12 +687,12 @@ describe('agent', () => {
       });
 
       // Verify tools exist
-      expect(agent.tools.mastraTool).toBeDefined();
-      expect(agent.tools.vercelTool).toBeDefined();
+      expect((agent.getTools() as Agent['tools']).mastraTool).toBeDefined();
+      expect((agent.getTools() as Agent['tools']).vercelTool).toBeDefined();
 
       // Verify both tools can be executed
-      await agent.tools.mastraTool.execute?.({ name: 'test' });
-      await agent.tools.vercelTool.execute?.({ name: 'test' });
+      await (agent.getTools() as Agent['tools']).mastraTool.execute!({ name: 'test' });
+      await (agent.getTools() as Agent['tools']).vercelTool.execute!({ name: 'test' });
 
       expect(mastraExecute).toHaveBeenCalled();
       expect(vercelExecute).toHaveBeenCalled();
@@ -626,6 +728,7 @@ describe('agent', () => {
 
       const mastra = new Mastra({
         agents: { agent },
+        logger: false,
       });
 
       const testAgent = mastra.getAgent('agent');
@@ -672,6 +775,7 @@ describe('agent', () => {
 
       const mastra = new Mastra({
         agents: { agent },
+        logger: false,
       });
 
       const testAgent = mastra.getAgent('agent');
