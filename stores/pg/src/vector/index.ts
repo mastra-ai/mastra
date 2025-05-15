@@ -148,7 +148,7 @@ export class PgVector extends MastraVector {
       // warm the created indexes cache so we don't need to check if indexes exist every time
       const existingIndexes = await this.listIndexes();
       void existingIndexes.map(async indexName => {
-        const info = await this.getIndexInfo(indexName);
+        const info = await this.getIndexInfo({ indexName });
         const key = await this.getIndexCacheKey({
           indexName,
           metric: info.metric,
@@ -177,7 +177,7 @@ export class PgVector extends MastraVector {
   }
 
   async getIndexInfo(...args: ParamsToArgs<DescribeIndexParams>): Promise<PGIndexStats> {
-    const params = this.normalizeArgs<DescribeIndexParams>('describeIndex', args);
+    const params = this.normalizeArgs<DescribeIndexParams>('getIndexInfo', args);
     const { indexName } = params;
     if (!this.describeIndexCache.has(indexName)) {
       this.describeIndexCache.set(indexName, await this.describeIndex({ indexName }));
@@ -207,7 +207,7 @@ export class PgVector extends MastraVector {
       const { sql: filterQuery, values: filterValues } = buildFilterQuery(translatedFilter, minScore, topK);
 
       // Get index type and configuration
-      const indexInfo = await this.getIndexInfo(indexName);
+      const indexInfo = await this.getIndexInfo({ indexName });
 
       // Set HNSW search parameter if applicable
       if (indexInfo.type === 'hnsw') {
