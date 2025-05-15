@@ -1,6 +1,6 @@
 'use client';
 
-import { DraftingCompass, Network, Workflow, Globe } from 'lucide-react';
+import { DraftingCompass, Network, Workflow, Globe, Server } from 'lucide-react';
 import { Link, useLocation } from 'react-router';
 
 import {
@@ -143,6 +143,11 @@ const links = [
     name: 'Tools',
     url: '/tools',
     icon: DraftingCompass,
+  },
+  {
+    name: 'MCP Servers',
+    url: '/mcps',
+    icon: Server,
   },
   {
     name: 'Workflows',
