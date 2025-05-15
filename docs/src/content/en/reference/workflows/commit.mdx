@@ -10,10 +10,7 @@ The `.commit()` method re-initializes the workflow's state machine with the curr
 ## Usage
 
 ```typescript
-workflow
-  .step(stepA)
-  .then(stepB)
-  .commit();
+workflow.step(stepA).then(stepB).commit();
 ```
 
 ## Returns
@@ -23,8 +20,8 @@ workflow
     {
       name: "workflow",
       type: "Workflow",
-      description: "The workflow instance"
-    }
+      description: "The workflow instance",
+    },
   ]}
 />
 

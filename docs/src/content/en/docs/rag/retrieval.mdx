@@ -7,7 +7,7 @@ import { Tabs } from "nextra/components";
 
 ## Retrieval in RAG Systems
 
-After storing embeddings, you need to retrieve relevant chunks to answer user queries. 
+After storing embeddings, you need to retrieve relevant chunks to answer user queries.
 
 Mastra provides flexible retrieval options with support for semantic search, filtering, and re-ranking.
 
@@ -16,9 +16,10 @@ Mastra provides flexible retrieval options with support for semantic search, fil
 1. The user's query is converted to an embedding using the same model used for document embeddings
 2. This embedding is compared to stored embeddings using vector similarity
 3. The most similar chunks are retrieved and can be optionally:
-  - Filtered by metadata
-  - Re-ranked for better relevance
-  - Processed through a knowledge graph
+
+- Filtered by metadata
+- Re-ranked for better relevance
+- Processed through a knowledge graph
 
 ## Basic Retrieval
 
@@ -32,7 +33,7 @@ import { PgVector } from "@mastra/pg";
 // Convert query to embedding
 const { embedding } = await embed({
   value: "What are the main points in the article?",
-  model: openai.embedding('text-embedding-3-small'),
+  model: openai.embedding("text-embedding-3-small"),
 });
 
 // Query vector store
@@ -54,15 +55,15 @@ Results include both the text content and a similarity score:
   {
     text: "Climate change poses significant challenges...",
     score: 0.89,
-    metadata: { source: "article1.txt" }
+    metadata: { source: "article1.txt" },
   },
   {
     text: "Rising temperatures affect crop yields...",
     score: 0.82,
-    metadata: { source: "article1.txt" }
-  }
+    metadata: { source: "article1.txt" },
+  },
   // ... more results
-]
+];
 ```
 
 For an example of how to use the basic retrieval method, see the [Retrieve Results](../../examples/rag/query/retrieve-results.mdx) example.
@@ -84,8 +85,8 @@ const results = await pgVector.query({
   queryVector: embedding,
   topK: 10,
   filter: {
-    source: "article1.txt"
-  }
+    source: "article1.txt",
+  },
 });
 
 // Numeric comparison
@@ -94,8 +95,8 @@ const results = await pgVector.query({
   queryVector: embedding,
   topK: 10,
   filter: {
-    price: { $gt: 100 }
-  }
+    price: { $gt: 100 },
+  },
 });
 
 // Multiple conditions
@@ -106,8 +107,8 @@ const results = await pgVector.query({
   filter: {
     category: "electronics",
     price: { $lt: 1000 },
-    inStock: true
-  }
+    inStock: true,
+  },
 });
 
 // Array operations
@@ -116,8 +117,8 @@ const results = await pgVector.query({
   queryVector: embedding,
   topK: 10,
   filter: {
-    tags: { $in: ["sale", "new"] }
-  }
+    tags: { $in: ["sale", "new"] },
+  },
 });
 
 // Logical operators
@@ -126,19 +127,14 @@ const results = await pgVector.query({
   queryVector: embedding,
   topK: 10,
   filter: {
-    $or: [
-      { category: "electronics" },
-      { category: "accessories" }
-    ],
-    $and: [
-      { price: { $gt: 50 } },
-      { price: { $lt: 200 } }
-    ]
-  }
+    $or: [{ category: "electronics" }, { category: "accessories" }],
+    $and: [{ price: { $gt: 50 } }, { price: { $lt: 200 } }],
+  },
 });
-``` 
+```
 
 Common use cases for metadata filtering:
+
 - Filter by document source or type
 - Filter by date ranges
 - Filter by specific categories or tags
@@ -154,15 +150,16 @@ Sometimes you want to give your agent the ability to query a vector database dir
 
 ```ts showLineNumbers copy
 const vectorQueryTool = createVectorQueryTool({
-  vectorStoreName: 'pgVector',
-  indexName: 'embeddings',
-  model: openai.embedding('text-embedding-3-small'),
+  vectorStoreName: "pgVector",
+  indexName: "embeddings",
+  model: openai.embedding("text-embedding-3-small"),
 });
 ```
 
 When creating the tool, pay special attention to the tool's name and description - these help the agent understand when and how to use the retrieval capabilities. For example, you might name it "SearchKnowledgeBase" and describe it as "Search through our documentation to find relevant information about X topic."
 
 This is particularly useful when:
+
 - Your agent needs to dynamically decide what information to retrieve
 - The retrieval process requires complex decision-making
 - You want the agent to combine multiple retrieval strategies based on context
@@ -171,7 +168,7 @@ For detailed configuration options and advanced usage, see the [Vector Query Too
 
 ### Vector Store Prompts
 
-Vector store prompts define query patterns and filtering capabilities for each vector database implementation. 
+Vector store prompts define query patterns and filtering capabilities for each vector database implementation.
 When implementing filtering, these prompts are required in the agent's instructions to specify valid operators and syntax for each vector store implementation.
 
 <Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB']}>
@@ -352,7 +349,11 @@ const initialResults = await pgVector.query({
 });
 
 // Re-rank the results
-const rerankedResults = await rerank(initialResults, query, openai('gpt-4o-mini'));
+const rerankedResults = await rerank(
+  initialResults,
+  query,
+  openai("gpt-4o-mini"),
+);
 ```
 
 > **Note:** For semantic scoring to work properly during re-ranking, each result must include the text content in its `metadata.text` field.
@@ -375,12 +376,12 @@ Example setup:
 
 ```ts showLineNumbers copy
 const graphQueryTool = createGraphQueryTool({
-  vectorStoreName: 'pgVector',
-  indexName: 'embeddings',
-  model: openai.embedding('text-embedding-3-small'),
+  vectorStoreName: "pgVector",
+  indexName: "embeddings",
+  model: openai.embedding("text-embedding-3-small"),
   graphOptions: {
     threshold: 0.7,
-  }
+  },
 });
 ```
 

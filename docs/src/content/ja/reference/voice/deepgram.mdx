@@ -18,14 +18,14 @@ const voice = new DeepgramVoice();
 // Initialize with custom configuration
 const voice = new DeepgramVoice({
   speechModel: {
-    name: 'aura',
-    apiKey: 'your-api-key',
+    name: "aura",
+    apiKey: "your-api-key",
   },
   listeningModel: {
-    name: 'nova-2',
-    apiKey: 'your-api-key',
+    name: "nova-2",
+    apiKey: "your-api-key",
   },
-  speaker: 'asteria-en',
+  speaker: "asteria-en",
 });
 
 // Text-to-Speech
@@ -44,14 +44,14 @@ const transcript = await voice.listen(audioStream);
       type: "DeepgramVoiceConfig",
       description: "テキストから音声への機能のための設定。",
       isOptional: true,
-      defaultValue: "{ name: 'aura' }"
+      defaultValue: "{ name: 'aura' }",
     },
     {
       name: "listeningModel",
       type: "DeepgramVoiceConfig",
       description: "音声からテキストへの機能のための設定。",
       isOptional: true,
-      defaultValue: "{ name: 'nova' }"
+      defaultValue: "{ name: 'nova' }",
     },
     {
       name: "speaker",
@@ -76,7 +76,8 @@ const transcript = await voice.listen(audioStream);
     {
       name: "apiKey",
       type: "string",
-      description: "Deepgram APIキー。DEEPGRAM_API_KEY環境変数にフォールバックします",
+      description:
+        "Deepgram APIキー。DEEPGRAM_API_KEY環境変数にフォールバックします",
       isOptional: true,
     },
     {
@@ -105,7 +106,8 @@ const transcript = await voice.listen(audioStream);
     {
       name: "input",
       type: "string | NodeJS.ReadableStream",
-      description: "音声に変換するテキスト。ストリームが提供された場合、最初にテキストに変換されます。",
+      description:
+        "音声に変換するテキスト。ストリームが提供された場合、最初にテキストに変換されます。",
       isOptional: false,
     },
     {
@@ -159,6 +161,6 @@ const transcript = await voice.listen(audioStream);
       type: "string",
       description: "音声の一意の識別子",
       isOptional: false,
-    }
+    },
   ]}
 />

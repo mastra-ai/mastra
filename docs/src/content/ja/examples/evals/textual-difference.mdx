@@ -25,7 +25,7 @@ import { GithubLink } from "@/components/github-link";
 必要な依存関係をインポートします:
 
 ```typescript copy showLineNumbers filename="src/index.ts"
-import { TextualDifferenceMetric } from '@mastra/evals/nlp';
+import { TextualDifferenceMetric } from "@mastra/evals/nlp";
 ```
 
 ## メトリック設定
@@ -43,15 +43,15 @@ const metric = new TextualDifferenceMetric();
 まったく同じテキストを評価します：
 
 ```typescript copy showLineNumbers{7} filename="src/index.ts"
-const input1 = 'The quick brown fox jumps over the lazy dog';
-const output1 = 'The quick brown fox jumps over the lazy dog';
+const input1 = "The quick brown fox jumps over the lazy dog";
+const output1 = "The quick brown fox jumps over the lazy dog";
 
-console.log('Example 1 - Identical Texts:');
-console.log('Input:', input1);
-console.log('Output:', output1);
+console.log("Example 1 - Identical Texts:");
+console.log("Input:", input1);
+console.log("Output:", output1);
 
 const result1 = await metric.measure(input1, output1);
-console.log('Metric Result:', {
+console.log("Metric Result:", {
   score: result1.score,
   info: {
     confidence: result1.info.confidence,
@@ -72,15 +72,15 @@ console.log('Metric Result:', {
 小さなバリエーションのあるテキストを評価します：
 
 ```typescript copy showLineNumbers{26} filename="src/index.ts"
-const input2 = 'Hello world! How are you?';
-const output2 = 'Hello there! How is it going?';
+const input2 = "Hello world! How are you?";
+const output2 = "Hello there! How is it going?";
 
-console.log('Example 2 - Minor Differences:');
-console.log('Input:', input2);
-console.log('Output:', output2);
+console.log("Example 2 - Minor Differences:");
+console.log("Input:", input2);
+console.log("Output:", output2);
 
 const result2 = await metric.measure(input2, output2);
-console.log('Metric Result:', {
+console.log("Metric Result:", {
   score: result2.score,
   info: {
     confidence: result2.info.confidence,
@@ -106,15 +106,15 @@ console.log('Metric Result:', {
 大きな違いのあるテキストを評価します：
 
 ```typescript copy showLineNumbers{45} filename="src/index.ts"
-const input3 = 'Python is a high-level programming language';
-const output3 = 'JavaScript is used for web development';
+const input3 = "Python is a high-level programming language";
+const output3 = "JavaScript is used for web development";
 
-console.log('Example 3 - Major Differences:');
-console.log('Input:', input3);
-console.log('Output:', output3);
+console.log("Example 3 - Major Differences:");
+console.log("Input:", input3);
+console.log("Output:", output3);
 
 const result3 = await metric.measure(input3, output3);
-console.log('Metric Result:', {
+console.log("Metric Result:", {
   score: result3.score,
   info: {
     confidence: result3.info.confidence,
@@ -140,6 +140,7 @@ console.log('Metric Result:', {
 このメトリックは以下を提供します：
 
 1. 0から1の間の類似度スコア：
+
    - 1.0: 同一のテキスト - 違いなし
    - 0.7-0.9: 小さな違い - 少しの変更が必要
    - 0.4-0.6: 中程度の違い - かなりの変更が必要
@@ -147,6 +148,7 @@ console.log('Metric Result:', {
    - 0.0: 完全に異なるテキスト
 
 2. 詳細なメトリックには以下が含まれます：
+
    - 信頼度: テキストの長さに基づく比較の信頼性
    - 比率: シーケンスマッチングからの生の類似度スコア
    - 変更: 必要な編集操作の数
@@ -167,4 +169,4 @@ console.log('Metric Result:', {
   link={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/textual-difference"
   }
-/> 
+/>

@@ -39,7 +39,7 @@ This method is often used in conjunction with `hasOwnMemory()` to check if an ag
 ```typescript
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
-import { openai } from '@ai-sdk/openai';
+import { openai } from "@ai-sdk/openai";
 
 // Create a memory system
 const memory = new Memory();
@@ -47,7 +47,8 @@ const memory = new Memory();
 // Create an agent with memory
 const agent = new Agent({
   name: "memory-assistant",
-  instructions: "You are a helpful assistant that remembers previous conversations.",
+  instructions:
+    "You are a helpful assistant that remembers previous conversations.",
   model: openai("gpt-4o"),
   memory,
 });
@@ -61,7 +62,7 @@ if (agentMemory) {
     resourceId: "user-123",
     threadId: "conversation-1",
   });
-  
+
   console.log("Retrieved thread:", thread);
 }
 ```
@@ -70,7 +71,7 @@ if (agentMemory) {
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
-import { openai } from '@ai-sdk/openai';
+import { openai } from "@ai-sdk/openai";
 
 // Create an agent without memory
 const agent = new Agent({
@@ -93,7 +94,7 @@ if (agent.hasOwnMemory()) {
 ```typescript
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
-import { openai } from '@ai-sdk/openai';
+import { openai } from "@ai-sdk/openai";
 
 // Create a memory system
 const memory = new Memory();
@@ -101,7 +102,8 @@ const memory = new Memory();
 // Create an agent with memory
 const agent = new Agent({
   name: "memory-assistant",
-  instructions: "You are a helpful assistant that remembers previous conversations.",
+  instructions:
+    "You are a helpful assistant that remembers previous conversations.",
   model: openai("gpt-4o"),
   memory,
 });
@@ -128,10 +130,10 @@ if (agentMemory) {
     resourceId: "user-123",
     threadId: "conversation-1",
     selectBy: {
-      last: 10  // Get the last 10 messages
-    }
+      last: 10, // Get the last 10 messages
+    },
   });
-  
+
   console.log("Retrieved messages:", messages);
 }
 ```

@@ -43,8 +43,7 @@ console.log(result.info.reason); // Explanation of the score
     {
       name: "model",
       type: "LanguageModel",
-      description:
-        "指示の整合性を評価するために使用されるモデルの設定",
+      description: "指示の整合性を評価するために使用されるモデルの設定",
       isOptional: false,
     },
     {
@@ -102,13 +101,13 @@ console.log(result.info.reason); // Explanation of the score
     {
       name: "score",
       type: "number",
-      description: "整合性スコア（0から指定されたスケールまで、デフォルトは0-1）",
+      description:
+        "整合性スコア（0から指定されたスケールまで、デフォルトは0-1）",
     },
     {
       name: "info",
       type: "object",
-      description:
-        "指示の遵守に関する詳細なメトリクスを含むオブジェクト",
+      description: "指示の遵守に関する詳細なメトリクスを含むオブジェクト",
       properties: [
         {
           type: "string",
@@ -116,8 +115,7 @@ console.log(result.info.reason); // Explanation of the score
             {
               name: "reason",
               type: "string",
-              description:
-                "スコアと指示の遵守に関する詳細な説明",
+              description: "スコアと指示の遵守に関する詳細な説明",
             },
           ],
         },
@@ -129,6 +127,7 @@ console.log(result.info.reason); // Explanation of the score
 ## スコアリングの詳細
 
 このメトリックは以下を通じて指示の整合性を評価します：
+
 - 各指示の適用可能性の評価
 - 適用可能な指示に対する厳格な遵守評価
 - すべての判定に対する詳細な根拠
@@ -137,6 +136,7 @@ console.log(result.info.reason); // Explanation of the score
 ### 指示の判定
 
 各指示は以下の3つの判定のいずれかを受けます：
+
 - "yes"：指示が適用可能であり、完全に従っている
 - "no"：指示が適用可能だが、従っていないか部分的にしか従っていない
 - "n/a"：指示が与えられたコンテキストに適用できない
@@ -144,11 +144,13 @@ console.log(result.info.reason); // Explanation of the score
 ### スコアリングプロセス
 
 1. 指示の適用可能性を評価：
+
    - 各指示がコンテキストに適用されるかどうかを判断
    - 関連性のない指示を "n/a" としてマーク
    - ドメイン固有の要件を考慮
 
 2. 適用可能な指示の遵守を評価：
+
    - 各適用可能な指示を独立して評価
    - "yes" の判定には完全な遵守が必要
    - すべての判定に対する具体的な理由を文書化
@@ -173,7 +175,9 @@ console.log(result.info.reason); // Explanation of the score
   - 最終スコア計算に影響しない
 
 ### スコアの解釈
+
 （0からスケールまで、デフォルトは0-1）
+
 - 1.0：適用可能なすべての指示に完璧に従っている
 - 0.7-0.9：適用可能な指示のほとんどに従っている
 - 0.4-0.6：適用可能な指示への遵守が混在している

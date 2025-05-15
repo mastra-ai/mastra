@@ -27,22 +27,22 @@ You can configure retries at the workflow level or for individual steps:
 ```typescript
 // Workflow-level retry configuration
 const workflow = new Workflow({
-  name: 'my-workflow',
+  name: "my-workflow",
   retryConfig: {
-    attempts: 3,    // Number of retry attempts
-    delay: 1000,    // Delay between retries in milliseconds
+    attempts: 3, // Number of retry attempts
+    delay: 1000, // Delay between retries in milliseconds
   },
 });
 
 // Step-level retry configuration (overrides workflow-level)
 const apiStep = new Step({
-  id: 'callApi',
+  id: "callApi",
   execute: async () => {
     // API call that might fail
   },
   retryConfig: {
-    attempts: 5,    // This step will retry up to 5 times
-    delay: 2000,    // With a 2-second delay between retries
+    attempts: 5, // This step will retry up to 5 times
+    delay: 2000, // With a 2-second delay between retries
   },
 });
 ```
@@ -56,7 +56,7 @@ You can create alternative workflow paths based on the success or failure of pre
 ```typescript
 // Create a workflow with conditional branching
 const workflow = new Workflow({
-  name: 'error-handling-workflow',
+  name: "error-handling-workflow",
 });
 
 workflow
@@ -64,13 +64,13 @@ workflow
   .then(processDataStep, {
     // Only execute processDataStep if fetchDataStep was successful
     when: ({ context }) => {
-      return context.steps.fetchDataStep?.status === 'success';
+      return context.steps.fetchDataStep?.status === "success";
     },
   })
   .then(fallbackStep, {
     // Execute fallbackStep if fetchDataStep failed
     when: ({ context }) => {
-      return context.steps.fetchDataStep?.status === 'failed';
+      return context.steps.fetchDataStep?.status === "failed";
     },
   })
   .commit();
@@ -90,7 +90,7 @@ watch(async ({ results }) => {
     .map(([stepId]) => stepId);
 
   if (failedSteps.length > 0) {
-    console.error(`Workflow has failed steps: ${failedSteps.join(', ')}`);
+    console.error(`Workflow has failed steps: ${failedSteps.join(", ")}`);
     // Take remedial action, such as alerting or logging
   }
 });
@@ -104,7 +104,7 @@ Within a step's execution function, you can handle errors programmatically:
 
 ```typescript
 const robustStep = new Step({
-  id: 'robustStep',
+  id: "robustStep",
   execute: async ({ context }) => {
     try {
       // Attempt the primary operation
@@ -112,13 +112,13 @@ const robustStep = new Step({
       return { success: true, data: result };
     } catch (error) {
       // Log the error
-      console.error('Operation failed:', error);
+      console.error("Operation failed:", error);
 
       // Return a graceful fallback result instead of throwing
       return {
         success: false,
         error: error.message,
-        fallbackData: 'Default value'
+        fallbackData: "Default value",
       };
     }
   },
@@ -131,21 +131,21 @@ You can make decisions based on the results of previous steps:
 
 ```typescript
 const finalStep = new Step({
-  id: 'finalStep',
+  id: "finalStep",
   execute: async ({ context }) => {
     // Check results of previous steps
-    const step1Success = context.steps.step1?.status === 'success';
-    const step2Success = context.steps.step2?.status === 'success';
+    const step1Success = context.steps.step1?.status === "success";
+    const step2Success = context.steps.step2?.status === "success";
 
     if (step1Success && step2Success) {
       // All steps succeeded
-      return { status: 'complete', result: 'All operations succeeded' };
+      return { status: "complete", result: "All operations succeeded" };
     } else if (step1Success) {
       // Only step1 succeeded
-      return { status: 'partial', result: 'Partial completion' };
+      return { status: "partial", result: "Partial completion" };
     } else {
       // Critical failure
-      return { status: 'failed', result: 'Critical steps failed' };
+      return { status: "failed", result: "Critical steps failed" };
     }
   },
 });
