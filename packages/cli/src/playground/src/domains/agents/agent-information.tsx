@@ -4,17 +4,20 @@ import { AgentDetails } from './agent-details';
 import { AgentEndpoints } from './agent-endpoints';
 import { AgentLogs } from './agent-logs';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Badge, Txt } from '@mastra/playground-ui';
+import { Badge, MemoryIcon, Txt } from '@mastra/playground-ui';
 import { AgentIcon } from '@mastra/playground-ui';
 import { Icon } from '@mastra/playground-ui';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { CopyIcon } from 'lucide-react';
+import { Link } from 'react-router';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { providerMapToIcon } from './table.columns';
 import { AgentOverview } from './agent-overview';
+import { useMemory } from '@/hooks/use-memory';
 
 export function AgentInformation({ agentId }: { agentId: string }) {
   const { agent, isLoading } = useAgent(agentId);
+  const { memory, isLoading: isMemoryLoading } = useMemory(agentId);
   const { handleCopy } = useCopyToClipboard({ text: agentId });
 
   const providerIcon = providerMapToIcon[(agent?.provider || 'openai.chat') as keyof typeof providerMapToIcon];
@@ -27,7 +30,7 @@ export function AgentInformation({ agentId }: { agentId: string }) {
             <AgentIcon />
           </Icon>
 
-          {isLoading ? (
+          {isLoading || isMemoryLoading ? (
             <Skeleton className="h-3 w-1/3" />
           ) : (
             <div className="flex items-center gap-4">
@@ -53,6 +56,28 @@ export function AgentInformation({ agentId }: { agentId: string }) {
           </Badge>
 
           <Badge>{agent?.modelId}</Badge>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge icon={<MemoryIcon />} variant={memory?.result ? 'success' : 'error'}>
+                {memory?.result ? 'Memory is On' : 'Memory is Off'}
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>
+              {memory?.result ? (
+                'Memory is active, your messages will be persisted.'
+              ) : (
+                <>
+                  <p>Memory is off, your messages will not be persisted neither available in the context.</p>
+                  <p>
+                    <Link to="https://mastra.ai/en/docs/memory/overview" target="_blank" className="underline">
+                      See documentation to enable memory
+                    </Link>
+                  </p>
+                </>
+              )}
+            </TooltipContent>
+          </Tooltip>
         </div>
       </div>
 
