@@ -29,10 +29,9 @@ export class MCPTool extends BaseResource {
    * @param params - Parameters for tool execution, including data/args and optional runtimeContext.
    * @returns Promise containing the result of the tool execution.
    */
-  execute(params: { data?: any; args?: any; runtimeContext?: RuntimeContext }): Promise<any> {
+  execute(params: { data?: any; runtimeContext?: RuntimeContext }): Promise<any> {
     const body: any = {};
     if (params.data !== undefined) body.data = params.data;
-    else if (params.args !== undefined) body.args = params.args;
     // If none of data, args the body might be empty or just contain runtimeContext.
     // The handler will look for these, so an empty args object might be appropriate if that's the intent.
     // else body.data = {}; // Or let it be empty if no specific input fields are used

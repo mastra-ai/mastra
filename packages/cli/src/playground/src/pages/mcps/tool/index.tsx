@@ -11,6 +11,7 @@ import { Header, Breadcrumb, Crumb, usePlaygroundStore } from '@mastra/playgroun
 
 import { useMCPServerTool } from '@/hooks/use-mcp-server-tool';
 import ToolExecutor from '@/pages/tools/tool-executor';
+import { RuntimeContext } from '@mastra/core/runtime-context';
 
 const MCPServerToolExecutor = () => {
   const { serverId, toolId } = useParams<{ serverId: string; toolId: string }>();
@@ -35,8 +36,8 @@ const MCPServerToolExecutor = () => {
     setExecutionResult(null);
     try {
       const result = await mcpTool.instance.execute({
-        input: data,
-        runtimeContext: playgroundRuntimeContext,
+        data,
+        runtimeContext: playgroundRuntimeContext as RuntimeContext,
       });
       setExecutionResult(result);
     } catch (e) {
