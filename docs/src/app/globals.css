@@ -91,6 +91,14 @@ div .copilotKitPopup {
   display: none;
 }
 
+#docs-search-results {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+#docs-search-results::-webkit-scrollbar {
+  display: none;
+}
 .poweredBy {
   background: var(--copilot-kit-background-color);
 }
