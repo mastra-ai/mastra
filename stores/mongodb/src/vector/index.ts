@@ -130,6 +130,15 @@ export class MongoDBVector extends MastraVector {
     await collection.updateOne({ _id: '__index_metadata__' }, { $set: { dimension, metric } }, { upsert: true });
   }
 
+  /**
+   * Waits for the index to be ready.
+   *
+   * @param params - The parameters for waiting for the index to be ready
+   * @param params.indexName - The name of the index to wait for
+   * @param params.timeoutMs - The maximum time in milliseconds to wait for the index to be ready (default: 60000)
+   * @param params.checkIntervalMs - The interval in milliseconds at which to check if the index is ready (default: 2000)
+   * @returns A promise that resolves when the index is ready
+   */
   async waitForIndexReady(...args: ParamsToArgs<MongoDBIndexReadyParams> | MongoDBIndexReadyArgs): Promise<void> {
     const params = this.normalizeArgs<MongoDBIndexReadyParams, MongoDBIndexReadyArgs>('waitForIndexReady', args, [
       'timeoutMs',
@@ -272,6 +281,13 @@ export class MongoDBVector extends MastraVector {
     return collections.map(col => col.name);
   }
 
+  /**
+   * Retrieves statistics about a vector index.
+   *
+   * @param params - The parameters for describing an index
+   * @param params.indexName - The name of the index to describe
+   * @returns A promise that resolves to the index statistics including dimension, count and metric
+   */
   async describeIndex(...args: ParamsToArgs<DescribeIndexParams>): Promise<IndexStats> {
     const params = this.normalizeArgs<DescribeIndexParams>('describeIndex', args);
 

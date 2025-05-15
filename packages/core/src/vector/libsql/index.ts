@@ -287,6 +287,13 @@ export class LibSQLVector extends MastraVector {
     }
   }
 
+  /**
+   * Retrieves statistics about a vector index.
+   *
+   * @param params - The parameters for describing an index
+   * @param params.indexName - The name of the index to describe
+   * @returns A promise that resolves to the index statistics including dimension, count and metric
+   */
   async describeIndex(...args: ParamsToArgs<DescribeIndexParams>): Promise<IndexStats> {
     try {
       const { indexName } = this.normalizeArgs<DescribeIndexParams>('describeIndex', args);

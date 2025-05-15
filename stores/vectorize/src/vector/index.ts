@@ -9,6 +9,7 @@ import type {
   DeleteIndexParams,
   DeleteVectorParams,
   UpdateVectorParams,
+  IndexStats,
 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import Cloudflare from 'cloudflare';
@@ -135,7 +136,14 @@ export class CloudflareVector extends MastraVector {
     return res?.result?.map(index => index.name!) || [];
   }
 
-  async describeIndex(...args: ParamsToArgs<DescribeIndexParams>) {
+  /**
+   * Retrieves statistics about a vector index.
+   *
+   * @param params - The parameters for describing an index
+   * @param params.indexName - The name of the index to describe
+   * @returns A promise that resolves to the index statistics including dimension, count and metric
+   */
+  async describeIndex(...args: ParamsToArgs<DescribeIndexParams>): Promise<IndexStats> {
     const params = this.normalizeArgs<DescribeIndexParams>('describeIndex', args);
     const { indexName } = params;
 
@@ -156,7 +164,7 @@ export class CloudflareVector extends MastraVector {
     };
   }
 
-  async deleteIndex(...args: ParamsToArgs<DeleteIndexParams>) {
+  async deleteIndex(...args: ParamsToArgs<DeleteIndexParams>): Promise<void> {
     const params = this.normalizeArgs<DeleteIndexParams>('deleteIndex', args);
     const { indexName } = params;
 

@@ -4,6 +4,7 @@ import type {
   DeleteIndexParams,
   DeleteVectorParams,
   DescribeIndexParams,
+  IndexStats,
   ParamsToArgs,
   QueryResult,
   QueryVectorParams,
@@ -84,7 +85,14 @@ export class UpstashVector extends MastraVector {
     return indexes.filter(Boolean);
   }
 
-  async describeIndex(...args: ParamsToArgs<DescribeIndexParams>) {
+  /**
+   * Retrieves statistics about a vector index.
+   *
+   * @param params - The parameters for describing an index
+   * @param params.indexName - The name of the index to describe
+   * @returns A promise that resolves to the index statistics including dimension, count and metric
+   */
+  async describeIndex(...args: ParamsToArgs<DescribeIndexParams>): Promise<IndexStats> {
     const params = this.normalizeArgs<DescribeIndexParams>('describeIndex', args);
     const { indexName } = params;
     const info = await this.client.info();
