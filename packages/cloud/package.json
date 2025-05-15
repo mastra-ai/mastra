@@ -28,11 +28,12 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@google-cloud/pubsub": "^5.0.0",
     "@mastra/core": "workspace:^",
-    "@opentelemetry/otlp-transformer": "^0.57.2",
+    "@opentelemetry/core": "^1.30.1",
     "@opentelemetry/otlp-exporter-base": "^0.57.2",
-    "@opentelemetry/sdk-trace-base": "^1.30.1",
-    "@opentelemetry/core": "^1.30.1"
+    "@opentelemetry/otlp-transformer": "^0.57.2",
+    "@opentelemetry/sdk-trace-base": "^1.30.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
