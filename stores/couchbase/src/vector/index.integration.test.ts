@@ -218,7 +218,7 @@ describe('Integration Testing CouchbaseVector', async () => {
     }, 50000);
 
     it('should delete index', async () => {
-      await couchbase_client.deleteIndex(test_indexName);
+      await couchbase_client.deleteIndex({ indexName: test_indexName });
       await new Promise(resolve => setTimeout(resolve, 5000));
       await expect(scope.searchIndexes().getIndex(test_indexName)).rejects.toThrowError();
     }, 50000);
@@ -246,7 +246,7 @@ describe('Integration Testing CouchbaseVector', async () => {
     }, 50000);
 
     afterAll(async () => {
-      await couchbase_client.deleteIndex(test_indexName);
+      await couchbase_client.deleteIndex({ indexName: test_indexName });
       await new Promise(resolve => setTimeout(resolve, 5000));
     }, 50000);
 
@@ -532,7 +532,7 @@ describe('Integration Testing CouchbaseVector', async () => {
       expect(allIndexes.find(idx => idx.name === nonExistentIndex)).toBeUndefined();
 
       // Now test the couchbase_client method
-      await expect(couchbase_client.deleteIndex(nonExistentIndex)).rejects.toThrow();
+      await expect(couchbase_client.deleteIndex({ indexName: nonExistentIndex })).rejects.toThrow();
     }, 50000);
 
     it('should throw error for empty vectors array in upsert', async () => {
@@ -601,7 +601,7 @@ describe('Integration Testing CouchbaseVector', async () => {
         infoSpy.mockRestore();
         warnSpy.mockRestore();
         // Cleanup
-        await couchbase_client.deleteIndex(duplicateIndexName);
+        await couchbase_client.deleteIndex({ indexName: duplicateIndexName });
       }
     }, 50000);
   });
@@ -611,7 +611,7 @@ describe('Integration Testing CouchbaseVector', async () => {
       const indexes = await couchbase_client.listIndexes();
       if (indexes.length > 0) {
         for (const index of indexes) {
-          await couchbase_client.deleteIndex(index);
+          await couchbase_client.deleteIndex({ indexName: index });
           await new Promise(resolve => setTimeout(resolve, 5000));
         }
       }
@@ -674,7 +674,7 @@ describe('Integration Testing CouchbaseVector', async () => {
       expect((couchbase_client as any).vector_dimension).toBe(testDimension);
 
       // Delete the index
-      await couchbase_client.deleteIndex(testIndexName);
+      await couchbase_client.deleteIndex({ indexName: testIndexName });
       await new Promise(resolve => setTimeout(resolve, 5000));
 
       // Verify dimension is reset
@@ -690,7 +690,7 @@ describe('Integration Testing CouchbaseVector', async () => {
       const indexes = await couchbase_client.listIndexes();
       if (indexes.length > 0) {
         for (const index of indexes) {
-          await couchbase_client.deleteIndex(index);
+          await couchbase_client.deleteIndex({ indexName: index });
           await new Promise(resolve => setTimeout(resolve, 5000));
         }
       }
@@ -723,7 +723,7 @@ describe('Integration Testing CouchbaseVector', async () => {
         expect(stats.metric).toBe(mastraMetric);
 
         // Clean up
-        await couchbase_client.deleteIndex(testIndexName);
+        await couchbase_client.deleteIndex({ indexName: testIndexName });
         await new Promise(resolve => setTimeout(resolve, 5000));
       }
     }, 50000);

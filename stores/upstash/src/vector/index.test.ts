@@ -59,12 +59,12 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
 
     // Cleanup: delete test index
     try {
-      await vectorStore.deleteIndex(testIndexName);
+      await vectorStore.deleteIndex({ indexName: testIndexName });
     } catch (error) {
       console.warn('Failed to delete test index:', error);
     }
     try {
-      await vectorStore.deleteIndex(filterIndexName);
+      await vectorStore.deleteIndex({ indexName: filterIndexName });
     } catch (error) {
       console.warn('Failed to delete filter index:', error);
     }
@@ -122,7 +122,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       const testIndexName = 'test-index';
 
       afterEach(async () => {
-        await vectorStore.deleteIndex(testIndexName);
+        await vectorStore.deleteIndex({ indexName: testIndexName });
       });
 
       it('should update the vector by id', async () => {
@@ -206,7 +206,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       const testVectors = [createVector(0, 1.0), createVector(1, 1.0), createVector(2, 1.0)];
 
       afterEach(async () => {
-        await vectorStore.deleteIndex(testIndexName);
+        await vectorStore.deleteIndex({ indexName: testIndexName });
       });
 
       it('should delete the vector by id', async () => {
@@ -262,7 +262,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
     });
 
     afterAll(async () => {
-      await vectorStore.deleteIndex(testIndexName);
+      await vectorStore.deleteIndex({ indexName: testIndexName });
     });
 
     it('should handle invalid dimension vectors', async () => {
@@ -1208,8 +1208,8 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
     let warnSpy;
 
     afterAll(async () => {
-      await vectorStore.deleteIndex(indexName);
-      await vectorStore.deleteIndex(indexName2);
+      await vectorStore.deleteIndex({ indexName });
+      await vectorStore.deleteIndex({ indexName: indexName2 });
     });
 
     beforeEach(async () => {
@@ -1218,7 +1218,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
 
     afterEach(async () => {
       warnSpy.mockRestore();
-      await vectorStore.deleteIndex(indexName2);
+      await vectorStore.deleteIndex({ indexName: indexName2 });
     });
 
     const createVector = (primaryDimension: number, value: number = 1.0): number[] => {

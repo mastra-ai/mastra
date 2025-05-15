@@ -75,7 +75,7 @@ async function createIndexAndWait(
 // Delete index (collection) and wait until it is removed
 async function deleteIndexAndWait(vectorDB: MongoDBVector, indexName: string) {
   try {
-    await vectorDB.deleteIndex(indexName);
+    await vectorDB.deleteIndex({ indexName });
     const deleted = await waitForCondition(
       async () => {
         const cols = await vectorDB.listIndexes();
@@ -105,7 +105,7 @@ describe('MongoDBVector Integration Tests', () => {
     // Cleanup any existing collections
     try {
       const cols = await vectorDB.listIndexes();
-      await Promise.all(cols.map(c => vectorDB.deleteIndex(c)));
+      await Promise.all(cols.map(c => vectorDB.deleteIndex({ indexName: c })));
       const deleted = await waitForCondition(async () => (await vectorDB.listIndexes()).length === 0, 30000, 2000);
       if (!deleted) throw new Error('Timed out waiting for collections to be deleted');
     } catch (error) {
@@ -119,12 +119,12 @@ describe('MongoDBVector Integration Tests', () => {
 
   afterAll(async () => {
     try {
-      await vectorDB.deleteIndex(testIndexName);
+      await vectorDB.deleteIndex({ indexName: testIndexName });
     } catch (error) {
       console.error('Failed to delete test collection:', error);
     }
     try {
-      await vectorDB.deleteIndex(testIndexName2);
+      await vectorDB.deleteIndex({ indexName: testIndexName2 });
     } catch (error) {
       console.error('Failed to delete test collection:', error);
     }

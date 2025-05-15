@@ -7,6 +7,7 @@ import type {
   QueryVectorParams,
   DescribeIndexParams,
   ParamsToArgs,
+  DeleteIndexParams,
 } from '@mastra/core/vector';
 import type { Bucket, Cluster, Collection, Scope } from 'couchbase';
 import { MutateInSpec, connect, SearchRequest, VectorQuery, VectorSearch } from 'couchbase';
@@ -280,7 +281,9 @@ export class CouchbaseVector extends MastraVector {
     };
   }
 
-  async deleteIndex(indexName: string): Promise<void> {
+  async deleteIndex(...args: ParamsToArgs<DeleteIndexParams>): Promise<void> {
+    const params = this.normalizeArgs<DeleteIndexParams>('deleteIndex', args);
+    const { indexName } = params;
     await this.getCollection();
     if (!(await this.listIndexes()).includes(indexName)) {
       throw new Error(`Index ${indexName} does not exist`);

@@ -84,7 +84,7 @@ function waitUntilVectorsIndexed(vectorDB: TurbopufferVector, indexName: string,
         console.log(`Deleting test index: ${testIndexName}`);
         try {
           // Cleanup: delete test index
-          await vectorDB.deleteIndex(testIndexName);
+          await vectorDB.deleteIndex({ indexName: testIndexName });
           console.log(`Successfully deleted test index: ${testIndexName}`);
         } catch (deleteError) {
           console.error(`Error deleting test index ${testIndexName}:`, deleteError);
@@ -165,7 +165,7 @@ function waitUntilVectorsIndexed(vectorDB: TurbopufferVector, indexName: string,
     });
 
     afterAll(async () => {
-      await vectorDB.deleteIndex(testIndexName);
+      await vectorDB.deleteIndex({ indexName: testIndexName });
     });
 
     it('should handle non-existent index query gracefully', async () => {
@@ -201,7 +201,7 @@ function waitUntilVectorsIndexed(vectorDB: TurbopufferVector, indexName: string,
       ).resolves.not.toThrow();
 
       // Cleanup
-      await vectorDB.deleteIndex(duplicateIndexName);
+      await vectorDB.deleteIndex({ indexName: duplicateIndexName });
     });
   });
 

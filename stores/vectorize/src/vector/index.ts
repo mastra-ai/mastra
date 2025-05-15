@@ -6,6 +6,7 @@ import type {
   QueryVectorParams,
   ParamsToArgs,
   DescribeIndexParams,
+  DeleteIndexParams,
 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import Cloudflare from 'cloudflare';
@@ -153,7 +154,10 @@ export class CloudflareVector extends MastraVector {
     };
   }
 
-  async deleteIndex(indexName: string): Promise<void> {
+  async deleteIndex(...args: ParamsToArgs<DeleteIndexParams>) {
+    const params = this.normalizeArgs<DeleteIndexParams>('deleteIndex', args);
+    const { indexName } = params;
+
     await this.client.vectorize.indexes.delete(indexName, {
       account_id: this.accountId,
     });

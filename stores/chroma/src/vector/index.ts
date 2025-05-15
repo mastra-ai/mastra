@@ -9,6 +9,7 @@ import type {
   QueryVectorArgs,
   UpsertVectorArgs,
   DescribeIndexParams,
+  DeleteIndexParams,
 } from '@mastra/core/vector';
 
 import type { VectorFilter } from '@mastra/core/vector/filter';
@@ -195,7 +196,9 @@ export class ChromaVector extends MastraVector {
     };
   }
 
-  async deleteIndex(indexName: string): Promise<void> {
+  async deleteIndex(...args: ParamsToArgs<DeleteIndexParams>): Promise<void> {
+    const params = this.normalizeArgs<DeleteIndexParams>('deleteIndex', args);
+    const { indexName } = params;
     await this.client.deleteCollection({ name: indexName });
     this.collections.delete(indexName);
   }

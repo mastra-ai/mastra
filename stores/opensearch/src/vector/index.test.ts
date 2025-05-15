@@ -44,14 +44,14 @@ describe('OpenSearchVector', () => {
 
   afterAll(async () => {
     // Clean up test tables
-    await vectorDB.deleteIndex(testIndexName);
+    await vectorDB.deleteIndex({ indexName: testIndexName });
   });
 
   // Index Management Tests
   describe('Index Management', () => {
     describe('createIndex', () => {
       afterAll(async () => {
-        await vectorDB.deleteIndex(testIndexName2);
+        await vectorDB.deleteIndex({ indexName: testIndexName2 });
       });
 
       it('should create a new vector table with specified dimensions', async () => {
@@ -75,7 +75,7 @@ describe('OpenSearchVector', () => {
     describe('metrics', () => {
       const testIndex = 'test_metric';
       afterEach(async () => {
-        await vectorDB.deleteIndex(testIndex);
+        await vectorDB.deleteIndex({ indexName: testIndex });
       });
       it('should create index with cosine metric', async () => {
         await vectorDB.createIndex({
@@ -115,7 +115,7 @@ describe('OpenSearchVector', () => {
       });
 
       afterAll(async () => {
-        await vectorDB.deleteIndex(indexName);
+        await vectorDB.deleteIndex({ indexName });
       });
 
       it('should list all vector tables', async () => {
@@ -124,7 +124,7 @@ describe('OpenSearchVector', () => {
       });
 
       it('should not return created index in list if it is deleted', async () => {
-        await vectorDB.deleteIndex(indexName);
+        await vectorDB.deleteIndex({ indexName });
         const indexes = await vectorDB.listIndexes();
         expect(indexes).not.toContain(indexName);
       });
@@ -137,7 +137,7 @@ describe('OpenSearchVector', () => {
       });
 
       afterAll(async () => {
-        await vectorDB.deleteIndex(indexName);
+        await vectorDB.deleteIndex({ indexName });
       });
 
       it('should return correct index stats', async () => {
@@ -170,7 +170,7 @@ describe('OpenSearchVector', () => {
         expect(indexes).toContain(testIndexName);
 
         // Delete the index after the test
-        await vectorDB.deleteIndex(testIndexName);
+        await vectorDB.deleteIndex({ indexName: testIndexName });
       });
 
       it('should throw an error if dimension is not a positive integer', async () => {
@@ -186,7 +186,7 @@ describe('OpenSearchVector', () => {
         let indexes = await vectorDB.listIndexes();
         expect(indexes).toContain(deleteTestIndex);
 
-        await vectorDB.deleteIndex(deleteTestIndex);
+        await vectorDB.deleteIndex({ indexName: deleteTestIndex });
 
         indexes = await vectorDB.listIndexes();
         expect(indexes).not.toContain(deleteTestIndex);
@@ -201,7 +201,7 @@ describe('OpenSearchVector', () => {
     });
 
     afterEach(async () => {
-      await vectorDB.deleteIndex(testIndexName);
+      await vectorDB.deleteIndex({ indexName: testIndexName });
     });
 
     describe('query', () => {
@@ -421,7 +421,7 @@ describe('OpenSearchVector', () => {
       });
 
       afterEach(async () => {
-        await vectorDB.deleteIndex(testIndexName);
+        await vectorDB.deleteIndex({ indexName: testIndexName });
       });
 
       it('should insert new vectors', async () => {
@@ -485,7 +485,7 @@ describe('OpenSearchVector', () => {
       });
 
       afterEach(async () => {
-        await vectorDB.deleteIndex(testIndexName);
+        await vectorDB.deleteIndex({ indexName: testIndexName });
       });
 
       it('should update the vector by id', async () => {
@@ -586,7 +586,7 @@ describe('OpenSearchVector', () => {
       });
 
       afterEach(async () => {
-        await vectorDB.deleteIndex(testIndexName);
+        await vectorDB.deleteIndex({ indexName: testIndexName });
       });
 
       it('should delete the vector by id', async () => {
@@ -663,7 +663,7 @@ describe('OpenSearchVector', () => {
     });
 
     afterEach(async () => {
-      await vectorDB.deleteIndex(indexName);
+      await vectorDB.deleteIndex({ indexName });
     });
 
     // Numeric Comparison Tests
@@ -1487,7 +1487,7 @@ describe('OpenSearchVector', () => {
     });
 
     afterAll(async () => {
-      await vectorDB.deleteIndex(testIndexName);
+      await vectorDB.deleteIndex({ indexName: testIndexName });
     });
 
     it('should handle non-existent index queries', async () => {
@@ -1550,7 +1550,7 @@ describe('OpenSearchVector', () => {
         infoSpy.mockRestore();
         warnSpy.mockRestore();
         // Cleanup
-        await vectorDB.deleteIndex(duplicateIndexName);
+        await vectorDB.deleteIndex({ indexName: duplicateIndexName });
       }
     });
   });

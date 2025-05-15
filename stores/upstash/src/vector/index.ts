@@ -1,6 +1,7 @@
 import { MastraVector } from '@mastra/core/vector';
 import type {
   CreateIndexParams,
+  DeleteIndexParams,
   DescribeIndexParams,
   ParamsToArgs,
   QueryResult,
@@ -93,7 +94,9 @@ export class UpstashVector extends MastraVector {
     };
   }
 
-  async deleteIndex(indexName: string): Promise<void> {
+  async deleteIndex(...args: ParamsToArgs<DeleteIndexParams>): Promise<void> {
+    const params = this.normalizeArgs<DeleteIndexParams>('deleteIndex', args);
+    const { indexName } = params;
     try {
       await this.client.deleteNamespace(indexName);
     } catch (error) {

@@ -253,7 +253,7 @@ describe('CloudflareVector', () => {
 
   afterAll(async () => {
     try {
-      await vectorDB.deleteIndex(testIndexName);
+      await vectorDB.deleteIndex({ indexName: testIndexName });
     } catch (_error) {
       console.warn('Failed to delete test index:', _error);
     }
@@ -266,7 +266,7 @@ describe('CloudflareVector', () => {
     beforeEach(async () => {
       // Cleanup any existing index before each test
       try {
-        await vectorDB.deleteIndex(tempIndexName);
+        await vectorDB.deleteIndex({ indexName: tempIndexName });
         await waitForIndexDeletion(vectorDB, tempIndexName);
       } catch {
         // Ignore errors if index doesn't exist
@@ -276,7 +276,7 @@ describe('CloudflareVector', () => {
     afterEach(async () => {
       // Cleanup after each test
       try {
-        await vectorDB.deleteIndex(tempIndexName);
+        await vectorDB.deleteIndex({ indexName: tempIndexName });
         await waitForIndexDeletion(vectorDB, tempIndexName);
       } catch {
         // Ignore errors if index doesn't exist
@@ -287,7 +287,7 @@ describe('CloudflareVector', () => {
       try {
         // clean up this unique index that only has one test.
         // the test cleans it up but if it fails in the middle it might cause future tests to fail
-        await vectorDB.deleteIndex(tempIndexNameCreateDescribeDelete);
+        await vectorDB.deleteIndex({ indexName: tempIndexNameCreateDescribeDelete });
       } catch {}
     });
 
@@ -317,7 +317,7 @@ describe('CloudflareVector', () => {
 
       try {
         // Delete
-        await vectorDB.deleteIndex(tempIndexNameCreateDescribeDelete);
+        await vectorDB.deleteIndex({ indexName: tempIndexNameCreateDescribeDelete });
       } catch (e) {
         console.error(`Failed deleting index ${tempIndexNameCreateDescribeDelete}`, e);
       }
@@ -398,17 +398,17 @@ describe('CloudflareVector', () => {
 
     afterAll(async () => {
       try {
-        await vectorDB.deleteIndex(indexName1);
+        await vectorDB.deleteIndex({ indexName: indexName1 });
       } catch {
         // Ignore errors if index doesn't exist
       }
       try {
-        await vectorDB.deleteIndex(indexName2);
+        await vectorDB.deleteIndex({ indexName: indexName2 });
       } catch {
         // Ignore errors if index doesn't exist
       }
       try {
-        await vectorDB.deleteIndex(indexName3);
+        await vectorDB.deleteIndex({ indexName: indexName3 });
       } catch {
         // Ignore errors if index doesn't exist
       }
@@ -493,7 +493,7 @@ describe('CloudflareVector', () => {
 
     afterEach(async () => {
       try {
-        await vectorDB.deleteIndex(indexName);
+        await vectorDB.deleteIndex({ indexName });
         await waitForIndexDeletion(vectorDB, indexName);
       } catch {
         // Ignore errors if index doesn't exist
@@ -572,7 +572,7 @@ describe('CloudflareVector', () => {
         infoSpy.mockRestore();
         warnSpy.mockRestore();
         // Cleanup
-        await vectorDB.deleteIndex(duplicateIndexName);
+        await vectorDB.deleteIndex({ indexName: duplicateIndexName });
       }
     });
 
@@ -764,7 +764,7 @@ describe('CloudflareVector', () => {
         await vectorDB.deleteMetadataIndex(testIndexName2, propertyName as string);
       }
       try {
-        await vectorDB.deleteIndex(testIndexName2);
+        await vectorDB.deleteIndex({ indexName: testIndexName2 });
       } catch {
         // Ignore errors if index doesn't exist
       }
@@ -1261,25 +1261,25 @@ describe('CloudflareVector', () => {
 
     beforeAll(async () => {
       try {
-        await vectorDB.deleteIndex(indexName);
+        await vectorDB.deleteIndex({ indexName });
         await waitForIndexDeletion(vectorDB, indexName);
       } catch {
         // Ignore errors if index doesn't exist
       }
       try {
-        await vectorDB.deleteIndex(indexName2);
+        await vectorDB.deleteIndex({ indexName: indexName2 });
         await waitForIndexDeletion(vectorDB, indexName2);
       } catch {
         // Ignore errors if index doesn't exist
       }
       try {
-        await vectorDB.deleteIndex(indexName3);
+        await vectorDB.deleteIndex({ indexName: indexName3 });
         await waitForIndexDeletion(vectorDB, indexName3);
       } catch {
         // Ignore errors if index doesn't exist
       }
       try {
-        await vectorDB.deleteIndex(indexName4);
+        await vectorDB.deleteIndex({ indexName: indexName4 });
         await waitForIndexDeletion(vectorDB, indexName4);
       } catch {
         // Ignore errors if index doesn't exist
@@ -1290,22 +1290,22 @@ describe('CloudflareVector', () => {
 
     afterAll(async () => {
       try {
-        await vectorDB.deleteIndex(indexName);
+        await vectorDB.deleteIndex({ indexName });
       } catch {
         // Ignore errors if index doesn't exist
       }
       try {
-        await vectorDB.deleteIndex(indexName2);
+        await vectorDB.deleteIndex({ indexName: indexName2 });
       } catch {
         // Ignore errors if index doesn't exist
       }
       try {
-        await vectorDB.deleteIndex(indexName3);
+        await vectorDB.deleteIndex({ indexName: indexName3 });
       } catch {
         // Ignore errors if index doesn't exist
       }
       try {
-        await vectorDB.deleteIndex(indexName4);
+        await vectorDB.deleteIndex({ indexName: indexName4 });
       } catch {
         // Ignore errors if index doesn't exist
       }
@@ -1318,7 +1318,7 @@ describe('CloudflareVector', () => {
     afterEach(async () => {
       warnSpy.mockRestore();
       try {
-        await vectorDB.deleteIndex(indexName2);
+        await vectorDB.deleteIndex({ indexName: indexName2 });
       } catch (_error) {
         console.warn('Failed to delete test index:', _error);
       }

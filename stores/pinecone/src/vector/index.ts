@@ -9,6 +9,7 @@ import type {
   QueryVectorArgs,
   UpsertVectorArgs,
   DescribeIndexParams,
+  DeleteIndexParams,
 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import { Pinecone } from '@pinecone-database/pinecone';
@@ -196,7 +197,9 @@ export class PineconeVector extends MastraVector {
     };
   }
 
-  async deleteIndex(indexName: string): Promise<void> {
+  async deleteIndex(...args: ParamsToArgs<DeleteIndexParams>): Promise<void> {
+    const params = this.normalizeArgs<DeleteIndexParams>('deleteIndex', args);
+    const { indexName } = params;
     try {
       await this.client.deleteIndex(indexName);
     } catch (error: any) {

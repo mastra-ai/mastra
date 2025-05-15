@@ -328,7 +328,7 @@ describe('Unit Testing CouchbaseVector', () => {
     }, 50000);
 
     it('should delete index', async () => {
-      await couchbase_client.deleteIndex(test_indexName);
+      await couchbase_client.deleteIndex({ indexName: test_indexName });
 
       expect(mockScopeSearchIndexesFn).toHaveBeenCalledTimes(2);
 
@@ -548,7 +548,7 @@ describe('Unit Testing CouchbaseVector', () => {
     });
 
     it('should throw error when deleting a non-existent index', async () => {
-      await expect(couchbase_client.deleteIndex('non_existent_index')).rejects.toThrow(
+      await expect(couchbase_client.deleteIndex({ indexName: 'non_existent_index' })).rejects.toThrow(
         `Index non_existent_index does not exist`,
       );
     });
@@ -637,7 +637,7 @@ describe('Unit Testing CouchbaseVector', () => {
       clearAllMocks();
 
       // Delete the index
-      await couchbase_client.deleteIndex(test_indexName);
+      await couchbase_client.deleteIndex({ indexName: test_indexName });
 
       // Verify dimension is reset
       expect((couchbase_client as any).vector_dimension).toBeNull();

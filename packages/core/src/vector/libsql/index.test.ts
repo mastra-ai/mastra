@@ -15,7 +15,7 @@ describe('DefaultVectorDB', () => {
 
   afterAll(async () => {
     // Clean up test tables
-    await vectorDB.deleteIndex(testIndexName);
+    await vectorDB.deleteIndex({ indexName: testIndexName });
   });
 
   // Index Management Tests
@@ -49,7 +49,7 @@ describe('DefaultVectorDB', () => {
       });
 
       afterAll(async () => {
-        await vectorDB.deleteIndex(indexName);
+        await vectorDB.deleteIndex({ indexName });
       });
 
       it('should list all vector tables', async () => {
@@ -71,7 +71,7 @@ describe('DefaultVectorDB', () => {
       });
 
       afterAll(async () => {
-        await vectorDB.deleteIndex(indexName);
+        await vectorDB.deleteIndex({ indexName });
       });
 
       it('should return correct index stats', async () => {
@@ -104,7 +104,7 @@ describe('DefaultVectorDB', () => {
       });
 
       afterEach(async () => {
-        await vectorDB.deleteIndex(testIndexName);
+        await vectorDB.deleteIndex({ indexName: testIndexName });
       });
 
       it('should insert new vectors', async () => {
@@ -258,7 +258,7 @@ describe('DefaultVectorDB', () => {
       });
 
       afterEach(async () => {
-        await vectorDB.deleteIndex(indexName);
+        await vectorDB.deleteIndex({ indexName });
       });
 
       it('should return closest vectors', async () => {
@@ -345,7 +345,7 @@ describe('DefaultVectorDB', () => {
     });
 
     afterEach(async () => {
-      await vectorDB.deleteIndex(indexName);
+      await vectorDB.deleteIndex({ indexName });
     });
 
     // Numeric Comparison Tests
@@ -1643,12 +1643,12 @@ describe('DefaultVectorDB', () => {
     let warnSpy;
 
     beforeAll(async () => {
-      await vectorDB.createIndex({ indexName: indexName, dimension: 3 });
+      await vectorDB.createIndex({ indexName, dimension: 3 });
     });
 
     afterAll(async () => {
-      await vectorDB.deleteIndex(indexName);
-      await vectorDB.deleteIndex(indexName2);
+      await vectorDB.deleteIndex({ indexName });
+      await vectorDB.deleteIndex({ indexName: indexName2 });
     });
 
     beforeEach(async () => {
@@ -1657,7 +1657,7 @@ describe('DefaultVectorDB', () => {
 
     afterEach(async () => {
       warnSpy.mockRestore();
-      await vectorDB.deleteIndex(indexName2);
+      await vectorDB.deleteIndex({ indexName: indexName2 });
     });
 
     it('should show deprecation warning when using individual args for createIndex', async () => {

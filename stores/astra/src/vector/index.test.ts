@@ -44,7 +44,7 @@ async function createIndexAndWait(
 }
 
 async function deleteIndexAndWait(vectorDB: AstraVector, indexName: string) {
-  await vectorDB.deleteIndex(indexName);
+  await vectorDB.deleteIndex({ indexName });
   const deleted = await waitForCondition(
     async () => {
       const newCollections = await vectorDB.listIndexes();
@@ -80,7 +80,7 @@ describe.skip('AstraVector Integration Tests', () => {
     });
     try {
       const collections = await vectorDB.listIndexes();
-      await Promise.all(collections.map(c => vectorDB.deleteIndex(c)));
+      await Promise.all(collections.map(c => vectorDB.deleteIndex({ indexName: c })));
       const deleted = await waitForCondition(
         async () => {
           const remainingCollections = await vectorDB.listIndexes();
@@ -104,12 +104,12 @@ describe.skip('AstraVector Integration Tests', () => {
   afterAll(async () => {
     // Cleanup: delete test collection
     try {
-      await vectorDB.deleteIndex(testIndexName);
+      await vectorDB.deleteIndex({ indexName: testIndexName });
     } catch (error) {
       console.error('Failed to delete test collection:', error);
     }
     try {
-      await vectorDB.deleteIndex(testIndexName2);
+      await vectorDB.deleteIndex({ indexName: testIndexName2 });
     } catch (error) {
       console.error('Failed to delete test collection:', error);
     }
@@ -1331,7 +1331,7 @@ describe.skip('AstraVector Integration Tests', () => {
     });
 
     afterAll(async () => {
-      await vectorDB.deleteIndex(testIndexName);
+      await vectorDB.deleteIndex({ indexName: testIndexName });
     });
 
     it('should handle non-existent index queries', async () => {
@@ -1376,7 +1376,7 @@ describe.skip('AstraVector Integration Tests', () => {
         );
       } finally {
         // Cleanup
-        await vectorDB.deleteIndex(duplicateIndexName);
+        await vectorDB.deleteIndex({ indexName: duplicateIndexName });
       }
     });
   });

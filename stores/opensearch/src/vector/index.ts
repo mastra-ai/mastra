@@ -1,5 +1,6 @@
 import type {
   CreateIndexParams,
+  DeleteIndexParams,
   DescribeIndexParams,
   IndexStats,
   ParamsToArgs,
@@ -125,7 +126,10 @@ export class OpenSearchVector extends MastraVector {
    * @param {string} indexName - The name of the index to delete.
    * @returns {Promise<void>} A promise that resolves when the index is deleted.
    */
-  async deleteIndex(indexName: string): Promise<void> {
+  async deleteIndex(...args: ParamsToArgs<DeleteIndexParams>): Promise<void> {
+    const params = this.normalizeArgs<DeleteIndexParams>('deleteIndex', args);
+
+    const { indexName } = params;
     try {
       await this.client.indices.delete({ index: indexName });
     } catch (error) {

@@ -16,7 +16,7 @@ describe('ChromaVector Integration Tests', () => {
   beforeEach(async () => {
     // Clean up any existing test index
     try {
-      await vectorDB.deleteIndex(testIndexName);
+      await vectorDB.deleteIndex({ indexName: testIndexName });
     } catch {
       // Ignore errors if index doesn't exist
     }
@@ -26,7 +26,7 @@ describe('ChromaVector Integration Tests', () => {
   afterEach(async () => {
     // Cleanup after tests
     try {
-      await vectorDB.deleteIndex(testIndexName);
+      await vectorDB.deleteIndex({ indexName: testIndexName });
     } catch {
       // Ignore cleanup errors
     }
@@ -46,7 +46,7 @@ describe('ChromaVector Integration Tests', () => {
     });
 
     it('should delete index', async () => {
-      await vectorDB.deleteIndex(testIndexName);
+      await vectorDB.deleteIndex({ indexName: testIndexName });
       const indexes = await vectorDB.listIndexes();
       expect(indexes).not.toContain(testIndexName);
     });
@@ -61,7 +61,7 @@ describe('ChromaVector Integration Tests', () => {
         const stats = await vectorDB.describeIndex({ indexName: testIndex });
         expect(stats.metric).toBe(metric);
 
-        await vectorDB.deleteIndex(testIndex);
+        await vectorDB.deleteIndex({ indexName: testIndex });
       }
     });
   });
@@ -279,7 +279,7 @@ describe('ChromaVector Integration Tests', () => {
     });
 
     afterAll(async () => {
-      await vectorDB.deleteIndex(testIndexName);
+      await vectorDB.deleteIndex({ indexName: testIndexName });
     });
 
     it('should handle non-existent index queries', async () => {
@@ -342,7 +342,7 @@ describe('ChromaVector Integration Tests', () => {
         infoSpy.mockRestore();
         warnSpy.mockRestore();
         // Cleanup
-        await vectorDB.deleteIndex(duplicateIndexName);
+        await vectorDB.deleteIndex({ indexName: duplicateIndexName });
       }
     });
   });
@@ -519,7 +519,7 @@ describe('ChromaVector Integration Tests', () => {
     // Set up test vectors and metadata
     beforeAll(async () => {
       try {
-        await vectorDB.deleteIndex(testIndexName2);
+        await vectorDB.deleteIndex({ indexName: testIndexName2 });
       } catch {
         // Ignore errors if index doesn't exist
       }
@@ -567,7 +567,7 @@ describe('ChromaVector Integration Tests', () => {
     afterAll(async () => {
       // Cleanup after tests
       try {
-        await vectorDB.deleteIndex(testIndexName2);
+        await vectorDB.deleteIndex({ indexName: testIndexName2 });
       } catch {
         // Ignore cleanup errors
       }
@@ -1238,7 +1238,7 @@ describe('ChromaVector Integration Tests', () => {
 
     beforeAll(async () => {
       try {
-        await vectorDB.deleteIndex(testIndexName3);
+        await vectorDB.deleteIndex({ indexName: testIndexName3 });
       } catch {
         // Ignore errors if index doesn't exist
       }
@@ -1272,7 +1272,7 @@ describe('ChromaVector Integration Tests', () => {
     afterAll(async () => {
       // Cleanup after tests
       try {
-        await vectorDB.deleteIndex(testIndexName3);
+        await vectorDB.deleteIndex({ indexName: testIndexName3 });
       } catch {
         // Ignore cleanup errors
       }
@@ -1468,17 +1468,17 @@ describe('ChromaVector Integration Tests', () => {
     let warnSpy;
 
     beforeAll(async () => {
-      await vectorDB.createIndex({ indexName: indexName, dimension: 3 });
+      await vectorDB.createIndex({ indexName, dimension: 3 });
     });
 
     afterAll(async () => {
       try {
-        await vectorDB.deleteIndex(indexName);
+        await vectorDB.deleteIndex({ indexName });
       } catch {
         // Ignore errors if index doesn't exist
       }
       try {
-        await vectorDB.deleteIndex(indexName2);
+        await vectorDB.deleteIndex({ indexName: indexName2 });
       } catch {
         // Ignore errors if index doesn't exist
       }
@@ -1491,7 +1491,7 @@ describe('ChromaVector Integration Tests', () => {
     afterEach(async () => {
       warnSpy.mockRestore();
       try {
-        await vectorDB.deleteIndex(indexName2);
+        await vectorDB.deleteIndex({ indexName: indexName2 });
       } catch {
         // Ignore errors if index doesn't exist
       }
@@ -1575,7 +1575,7 @@ describe('ChromaVector Integration Tests', () => {
 
     beforeEach(async () => {
       try {
-        await vectorDB.deleteIndex(perfTestIndex);
+        await vectorDB.deleteIndex({ indexName: perfTestIndex });
       } catch {
         // Ignore errors if index doesn't exist
       }
@@ -1584,7 +1584,7 @@ describe('ChromaVector Integration Tests', () => {
 
     afterEach(async () => {
       try {
-        await vectorDB.deleteIndex(perfTestIndex);
+        await vectorDB.deleteIndex({ indexName: perfTestIndex });
       } catch {
         // Ignore cleanup errors
       }

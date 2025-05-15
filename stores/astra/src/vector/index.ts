@@ -9,6 +9,7 @@ import type {
   QueryVectorParams,
   ParamsToArgs,
   DescribeIndexParams,
+  DeleteIndexParams,
 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 
@@ -169,7 +170,10 @@ export class AstraVector extends MastraVector {
    * @param {string} indexName - The name of the collection to delete.
    * @returns {Promise<void>} A promise that resolves when the collection is deleted.
    */
-  async deleteIndex(indexName: string): Promise<void> {
+  async deleteIndex(...args: ParamsToArgs<DeleteIndexParams>): Promise<void> {
+    const params = this.normalizeArgs<DeleteIndexParams>('deleteIndex', args);
+
+    const { indexName } = params;
     const collection = this.#db.collection(indexName);
     await collection.drop();
   }

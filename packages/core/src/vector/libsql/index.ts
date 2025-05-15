@@ -14,6 +14,7 @@ import type {
   ParamsToArgs,
   QueryVectorArgs,
   DescribeIndexParams,
+  DeleteIndexParams,
 } from '../index';
 
 import { LibSQLFilterTranslator } from './filter';
@@ -248,7 +249,10 @@ export class LibSQLVector extends MastraVector {
     }
   }
 
-  async deleteIndex(indexName: string): Promise<void> {
+  async deleteIndex(...args: ParamsToArgs<DeleteIndexParams>): Promise<void> {
+    const params = this.normalizeArgs<DeleteIndexParams>('deleteIndex', args);
+
+    const { indexName } = params;
     try {
       const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
       // Drop the table

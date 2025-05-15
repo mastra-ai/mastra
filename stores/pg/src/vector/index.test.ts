@@ -17,7 +17,7 @@ describe('PgVector', () => {
 
   afterAll(async () => {
     // Clean up test tables
-    await vectorDB.deleteIndex(testIndexName);
+    await vectorDB.deleteIndex({ indexName: testIndexName });
     await vectorDB.disconnect();
   });
 
@@ -43,7 +43,7 @@ describe('PgVector', () => {
   describe('Index Management', () => {
     describe('createIndex', () => {
       afterAll(async () => {
-        await vectorDB.deleteIndex(testIndexName2);
+        await vectorDB.deleteIndex({ indexName: testIndexName2 });
       });
 
       it('should create a new vector table with specified dimensions', async () => {
@@ -106,7 +106,7 @@ describe('PgVector', () => {
       });
 
       afterAll(async () => {
-        await vectorDB.deleteIndex(indexName);
+        await vectorDB.deleteIndex({ indexName });
       });
 
       it('should list all vector tables', async () => {
@@ -115,7 +115,7 @@ describe('PgVector', () => {
       });
 
       it('should not return created index in list if it is deleted', async () => {
-        await vectorDB.deleteIndex(indexName);
+        await vectorDB.deleteIndex({ indexName });
         const indexes = await vectorDB.listIndexes();
         expect(indexes).not.toContain(indexName);
       });
@@ -128,7 +128,7 @@ describe('PgVector', () => {
       });
 
       afterAll(async () => {
-        await vectorDB.deleteIndex(indexName);
+        await vectorDB.deleteIndex({ indexName });
       });
 
       it('should return correct index stats', async () => {
@@ -163,7 +163,7 @@ describe('PgVector', () => {
       });
 
       afterAll(async () => {
-        await vectorDB.deleteIndex(indexName);
+        await vectorDB.deleteIndex({ indexName });
       });
 
       it('should build index with specified metric and config', async () => {
@@ -202,7 +202,7 @@ describe('PgVector', () => {
       });
 
       afterEach(async () => {
-        await vectorDB.deleteIndex(testIndexName);
+        await vectorDB.deleteIndex({ indexName: testIndexName });
       });
 
       it('should insert new vectors', async () => {
@@ -267,7 +267,7 @@ describe('PgVector', () => {
       });
 
       afterEach(async () => {
-        await vectorDB.deleteIndex(testIndexName);
+        await vectorDB.deleteIndex({ indexName: testIndexName });
       });
 
       it('should update the vector by id', async () => {
@@ -364,7 +364,7 @@ describe('PgVector', () => {
       });
 
       afterEach(async () => {
-        await vectorDB.deleteIndex(testIndexName);
+        await vectorDB.deleteIndex({ indexName: testIndexName });
       });
 
       it('should delete the vector by id', async () => {
@@ -390,7 +390,7 @@ describe('PgVector', () => {
         const indexName = `test_query_2_${indexType}`;
         beforeAll(async () => {
           try {
-            await vectorDB.deleteIndex(indexName);
+            await vectorDB.deleteIndex({ indexName });
           } catch {
             // Ignore if doesn't exist
           }
@@ -413,7 +413,7 @@ describe('PgVector', () => {
         });
 
         afterAll(async () => {
-          await vectorDB.deleteIndex(indexName);
+          await vectorDB.deleteIndex({ indexName });
         });
 
         it('should return closest vectors', async () => {
@@ -451,7 +451,7 @@ describe('PgVector', () => {
     const indexName = 'test_query_filters';
     beforeAll(async () => {
       try {
-        await vectorDB.deleteIndex(indexName);
+        await vectorDB.deleteIndex({ indexName });
       } catch {
         // Ignore if doesn't exist
       }
@@ -509,7 +509,7 @@ describe('PgVector', () => {
     });
 
     afterAll(async () => {
-      await vectorDB.deleteIndex(indexName);
+      await vectorDB.deleteIndex({ indexName });
     });
 
     // Numeric Comparison Tests
@@ -1346,7 +1346,7 @@ describe('PgVector', () => {
       });
 
       afterAll(async () => {
-        await vectorDB.deleteIndex(testIndexName);
+        await vectorDB.deleteIndex({ indexName: testIndexName });
       });
 
       it('should handle non-existent index queries', async () => {
@@ -1379,7 +1379,7 @@ describe('PgVector', () => {
         ).resolves.not.toThrow();
 
         // Cleanup
-        await vectorDB.deleteIndex(duplicateIndexName);
+        await vectorDB.deleteIndex({ indexName: duplicateIndexName });
       });
     });
 
@@ -1765,7 +1765,7 @@ describe('PgVector', () => {
       });
 
       afterAll(async () => {
-        await vectorDB.deleteIndex(indexName);
+        await vectorDB.deleteIndex({ indexName });
       });
 
       it('should use default ef value', async () => {
@@ -1810,7 +1810,7 @@ describe('PgVector', () => {
       });
 
       afterAll(async () => {
-        await vectorDB.deleteIndex(indexName);
+        await vectorDB.deleteIndex({ indexName });
       });
 
       it('should use default probe value', async () => {
@@ -1845,12 +1845,12 @@ describe('PgVector', () => {
     let warnSpy;
 
     beforeAll(async () => {
-      await vectorDB.createIndex({ indexName: indexName, dimension: 3 });
+      await vectorDB.createIndex({ indexName, dimension: 3 });
     });
 
     afterAll(async () => {
-      await vectorDB.deleteIndex(indexName);
-      await vectorDB.deleteIndex(indexName2);
+      await vectorDB.deleteIndex({ indexName });
+      await vectorDB.deleteIndex({ indexName: indexName2 });
     });
 
     beforeEach(async () => {
@@ -1859,7 +1859,7 @@ describe('PgVector', () => {
 
     afterEach(async () => {
       warnSpy.mockRestore();
-      await vectorDB.deleteIndex(indexName2);
+      await vectorDB.deleteIndex({ indexName: indexName2 });
     });
 
     it('should show deprecation warning when using individual args for createIndex', async () => {
@@ -1973,7 +1973,7 @@ describe('PgVector', () => {
       const stats = await vectorDB.describeIndex({ indexName });
       expect(stats.dimension).toBe(dimension);
 
-      await vectorDB.deleteIndex(indexName);
+      await vectorDB.deleteIndex({ indexName });
     });
 
     it('should handle concurrent buildIndex attempts', async () => {
@@ -1995,7 +1995,7 @@ describe('PgVector', () => {
       const stats = await vectorDB.describeIndex({ indexName });
       expect(stats.type).toBe('ivfflat');
 
-      await vectorDB.deleteIndex(indexName);
+      await vectorDB.deleteIndex({ indexName });
     });
   });
 
@@ -2030,7 +2030,7 @@ describe('PgVector', () => {
     afterAll(async () => {
       // Clean up test tables and schema
       try {
-        await customSchemaVectorDB.deleteIndex('schema_test_vectors');
+        await customSchemaVectorDB.deleteIndex({ indexName: 'schema_test_vectors' });
       } catch {
         // Ignore errors if index doesn't exist
       }
@@ -2075,12 +2075,12 @@ describe('PgVector', () => {
       beforeEach(async () => {
         // Clean up any existing indexes
         try {
-          await customSchemaVectorDB.deleteIndex(testIndexName);
+          await customSchemaVectorDB.deleteIndex({ indexName: testIndexName });
         } catch {
           // Ignore if doesn't exist
         }
         try {
-          await vectorDB.deleteIndex(testIndexName);
+          await vectorDB.deleteIndex({ indexName: testIndexName });
         } catch {
           // Ignore if doesn't exist
         }
@@ -2089,12 +2089,12 @@ describe('PgVector', () => {
       afterEach(async () => {
         // Clean up indexes after each test
         try {
-          await customSchemaVectorDB.deleteIndex(testIndexName);
+          await customSchemaVectorDB.deleteIndex({ indexName: testIndexName });
         } catch {
           // Ignore if doesn't exist
         }
         try {
-          await vectorDB.deleteIndex(testIndexName);
+          await vectorDB.deleteIndex({ indexName: testIndexName });
         } catch {
           // Ignore if doesn't exist
         }

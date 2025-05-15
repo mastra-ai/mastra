@@ -10,6 +10,7 @@ import type {
   QueryVectorArgs,
   CreateIndexArgs,
   DescribeIndexParams,
+  DeleteIndexParams,
 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import { Mutex } from 'async-mutex';
@@ -663,7 +664,9 @@ export class PgVector extends MastraVector {
     }
   }
 
-  async deleteIndex(indexName: string): Promise<void> {
+  async deleteIndex(...args: ParamsToArgs<DeleteIndexParams>): Promise<void> {
+    const params = this.normalizeArgs<DeleteIndexParams>('deleteIndex', args);
+    const { indexName } = params;
     const client = await this.pool.connect();
     try {
       const tableName = this.getTableName(indexName);

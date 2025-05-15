@@ -7,6 +7,7 @@ import type {
   QueryVectorParams,
   ParamsToArgs,
   DescribeIndexParams,
+  DeleteIndexParams,
 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import { QdrantClient } from '@qdrant/js-client-rest';
@@ -159,7 +160,9 @@ export class QdrantVector extends MastraVector {
     };
   }
 
-  async deleteIndex(indexName: string): Promise<void> {
+  async deleteIndex(...args: ParamsToArgs<DeleteIndexParams>): Promise<void> {
+    const params = this.normalizeArgs<DeleteIndexParams>('deleteIndex', args);
+    const { indexName } = params;
     await this.client.deleteCollection(indexName);
   }
 
