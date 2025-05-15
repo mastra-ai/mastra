@@ -366,6 +366,9 @@ export class CouchbaseVector extends MastraVector {
     if (!update.vector && !update.metadata) {
       throw new Error('No updates provided');
     }
+    if (update.vector && this.vector_dimension && update.vector.length !== this.vector_dimension) {
+      throw new Error('Vector dimension mismatch');
+    }
     const collection = await this.getCollection();
 
     // Check if document exists
