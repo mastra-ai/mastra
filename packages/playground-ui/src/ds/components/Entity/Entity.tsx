@@ -15,6 +15,7 @@ export const Entity = ({ children, className, onClick }: EntityProps) => {
       onKeyDown={e => {
         if (!onClick) return;
         if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
           onClick?.();
         }
       }}
