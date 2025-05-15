@@ -1,4 +1,4 @@
-import { validateFieldKey } from '@mastra/core/utils';
+import { parseFieldKey } from '@mastra/core/utils';
 import type {
   BasicOperator,
   NumericOperator,
@@ -29,8 +29,7 @@ type OperatorFn = (key: string, paramIndex: number, value?: any) => FilterOperat
 
 const createBasicOperator = (symbol: string) => {
   return (key: string, paramIndex: number) => {
-    validateFieldKey(key);
-    const jsonPathKey = toJsonPathKey(key);
+    const jsonPathKey = parseJsonPathKey(key);
     return {
       sql: `CASE 
         WHEN $${paramIndex}::text IS NULL THEN metadata#>>'{${jsonPathKey}}' IS ${symbol === '=' ? '' : 'NOT'} NULL
@@ -43,8 +42,7 @@ const createBasicOperator = (symbol: string) => {
 
 const createNumericOperator = (symbol: string) => {
   return (key: string, paramIndex: number) => {
-    validateFieldKey(key);
-    const jsonPathKey = toJsonPathKey(key);
+    const jsonPathKey = parseJsonPathKey(key);
     return {
       sql: `(metadata#>>'{${jsonPathKey}}')::numeric ${symbol} $${paramIndex}`,
       needsValue: true,
@@ -112,8 +110,7 @@ const FILTER_OPERATORS: Record<OperatorType, OperatorFn> = {
 
   // Array Operators
   $in: (key, paramIndex) => {
-    validateFieldKey(key);
-    const jsonPathKey = toJsonPathKey(key);
+    const jsonPathKey = parseJsonPathKey(key);
     return {
       sql: `(
         CASE
@@ -129,8 +126,7 @@ const FILTER_OPERATORS: Record<OperatorType, OperatorFn> = {
     };
   },
   $nin: (key, paramIndex) => {
-    validateFieldKey(key);
-    const jsonPathKey = toJsonPathKey(key);
+    const jsonPathKey = parseJsonPathKey(key);
     return {
       sql: `(
         CASE
@@ -146,8 +142,7 @@ const FILTER_OPERATORS: Record<OperatorType, OperatorFn> = {
     };
   },
   $all: (key, paramIndex) => {
-    validateFieldKey(key);
-    const jsonPathKey = toJsonPathKey(key);
+    const jsonPathKey = parseJsonPathKey(key);
     return {
       sql: `CASE WHEN array_length($${paramIndex}::text[], 1) IS NULL THEN false 
             ELSE (metadata#>'{${jsonPathKey}}')::jsonb ?& $${paramIndex}::text[] END`,
@@ -156,7 +151,7 @@ const FILTER_OPERATORS: Record<OperatorType, OperatorFn> = {
   },
   $elemMatch: (key: string, paramIndex: number, value: any): FilterOperator => {
     const { sql, values } = buildElemMatchConditions(value, paramIndex);
-    const jsonPathKey = toJsonPathKey(key);
+    const jsonPathKey = parseJsonPathKey(key);
     return {
       sql: `(
         CASE
@@ -175,8 +170,7 @@ const FILTER_OPERATORS: Record<OperatorType, OperatorFn> = {
   },
   // Element Operators
   $exists: key => {
-    validateFieldKey(key);
-    const jsonPathKey = toJsonPathKey(key);
+    const jsonPathKey = parseJsonPathKey(key);
     return {
       sql: `metadata ? '${jsonPathKey}'`,
       needsValue: false,
@@ -191,8 +185,7 @@ const FILTER_OPERATORS: Record<OperatorType, OperatorFn> = {
 
   // Regex Operators
   $regex: (key, paramIndex) => {
-    validateFieldKey(key);
-    const jsonPathKey = toJsonPathKey(key);
+    const jsonPathKey = parseJsonPathKey(key);
     return {
       sql: `metadata#>>'{${jsonPathKey}}' ~ $${paramIndex}`,
       needsValue: true,
@@ -200,8 +193,7 @@ const FILTER_OPERATORS: Record<OperatorType, OperatorFn> = {
   },
 
   $contains: (key, paramIndex, value: any) => {
-    validateFieldKey(key);
-    const jsonPathKey = toJsonPathKey(key);
+    const jsonPathKey = parseJsonPathKey(key);
     let sql;
     if (Array.isArray(value)) {
       sql = `(metadata->'${jsonPathKey}') ?& $${paramIndex}`;
@@ -230,8 +222,7 @@ const FILTER_OPERATORS: Record<OperatorType, OperatorFn> = {
   //   },
   // }),
   $size: (key: string, paramIndex: number) => {
-    validateFieldKey(key);
-    const jsonPathKey = toJsonPathKey(key);
+    const jsonPathKey = parseJsonPathKey(key);
     return {
       sql: `(
       CASE
@@ -250,8 +241,9 @@ interface FilterResult {
   values: any[];
 }
 
-const toJsonPathKey = (key: string) => {
-  return key.replace(/\./g, ',');
+const parseJsonPathKey = (key: string) => {
+  const parsedKey = key !== '' ? parseFieldKey(key) : '';
+  return parsedKey.replace(/\./g, ',');
 };
 
 function escapeLikePattern(str: string): string {
@@ -270,7 +262,7 @@ export function buildFilterQuery(filter: VectorFilter, minScore: number, topK: n
     // If condition is not a FilterCondition object, assume it's an equality check
     if (!value || typeof value !== 'object') {
       values.push(value);
-      return `metadata#>>'{${toJsonPathKey(key)}}' = $${values.length}`;
+      return `metadata#>>'{${parseJsonPathKey(key)}}' = $${values.length}`;
     }
 
     // Handle operator conditions

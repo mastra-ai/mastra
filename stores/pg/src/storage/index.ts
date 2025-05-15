@@ -16,7 +16,7 @@ import type {
   WorkflowRun,
   WorkflowRuns,
 } from '@mastra/core/storage';
-import { validateSqlIdentifier } from '@mastra/core/utils';
+import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
 import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
@@ -94,9 +94,9 @@ export class PostgresStore extends MastraStorage {
   }
 
   private getTableName(indexName: string) {
-    validateSqlIdentifier(indexName, 'table name');
-    if (this.schema) validateSqlIdentifier(this.schema, 'schema name');
-    return this.schema ? `${this.schema}."${indexName}"` : `"${indexName}"`;
+    const parsedIndexName = parseSqlIdentifier(indexName, 'table name');
+    const parsedSchemaName = this.schema ? parseSqlIdentifier(this.schema, 'schema name') : undefined;
+    return parsedSchemaName ? `${parsedSchemaName}."${parsedIndexName}"` : `"${parsedIndexName}"`;
   }
 
   async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
@@ -195,15 +195,15 @@ export class PostgresStore extends MastraStorage {
     }
     if (attributes) {
       Object.keys(attributes).forEach(key => {
-        validateSqlIdentifier(key, 'attribute key');
-        conditions.push(`attributes->>'${key}' = \$${idx++}`);
+        const parsedKey = parseSqlIdentifier(key, 'attribute key');
+        conditions.push(`attributes->>'${parsedKey}' = \$${idx++}`);
       });
     }
 
     if (filters) {
       Object.entries(filters).forEach(([key]) => {
-        validateSqlIdentifier(key, 'filter key');
-        conditions.push(`${key} = \$${idx++}`);
+        const parsedKey = parseSqlIdentifier(key, 'filter key');
+        conditions.push(`${parsedKey} = \$${idx++}`);
       });
     }
 
@@ -346,11 +346,11 @@ export class PostgresStore extends MastraStorage {
     try {
       const columns = Object.entries(schema)
         .map(([name, def]) => {
-          validateSqlIdentifier(name, 'column name');
+          const parsedName = parseSqlIdentifier(name, 'column name');
           const constraints = [];
           if (def.primaryKey) constraints.push('PRIMARY KEY');
           if (!def.nullable) constraints.push('NOT NULL');
-          return `"${name}" ${def.type.toUpperCase()} ${constraints.join(' ')}`;
+          return `"${parsedName}" ${def.type.toUpperCase()} ${constraints.join(' ')}`;
         })
         .join(',\n');
 
@@ -398,8 +398,7 @@ export class PostgresStore extends MastraStorage {
 
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     try {
-      const columns = Object.keys(record);
-      columns.forEach(col => validateSqlIdentifier(col, 'column name'));
+      const columns = Object.keys(record).map(col => parseSqlIdentifier(col, 'column name'));
       const values = Object.values(record);
       const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
 
@@ -415,8 +414,7 @@ export class PostgresStore extends MastraStorage {
 
   async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
     try {
-      const keyEntries = Object.entries(keys);
-      keyEntries.forEach(([key]) => validateSqlIdentifier(key, 'column name'));
+      const keyEntries = Object.entries(keys).map(([key, value]) => [parseSqlIdentifier(key, 'column name'), value]);
       const conditions = keyEntries.map(([key], index) => `"${key}" = $${index + 1}`).join(' AND ');
       const values = keyEntries.map(([_, value]) => value);
 

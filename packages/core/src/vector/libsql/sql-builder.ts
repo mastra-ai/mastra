@@ -1,6 +1,5 @@
 import type { InValue } from '@libsql/client';
-
-import { validateFieldKey } from '../../utils';
+import { parseFieldKey } from '../../utils';
 import type {
   BasicOperator,
   NumericOperator,
@@ -30,8 +29,7 @@ type OperatorFn = (key: string, value?: any) => FilterOperator;
 // Helper functions to create operators
 const createBasicOperator = (symbol: string) => {
   return (key: string, value: any): FilterOperator => {
-    validateFieldKey(key);
-    const jsonPathKey = toJsonPathKey(key);
+    const jsonPathKey = parseJsonPathKey(key);
     return {
       sql: `CASE 
         WHEN ? IS NULL THEN json_extract(metadata, '$."${jsonPathKey}"') IS ${symbol === '=' ? '' : 'NOT'} NULL
@@ -47,8 +45,7 @@ const createBasicOperator = (symbol: string) => {
 };
 const createNumericOperator = (symbol: string) => {
   return (key: string): FilterOperator => {
-    validateFieldKey(key);
-    const jsonPathKey = toJsonPathKey(key);
+    const jsonPathKey = parseJsonPathKey(key);
     return {
       sql: `CAST(json_extract(metadata, '$."${jsonPathKey}"') AS NUMERIC) ${symbol} ?`,
       needsValue: true,
@@ -77,10 +74,10 @@ function buildElemMatchConditions(value: any) {
       const elemSql = sql.replace(pattern, `json_extract(elem.value, '$."${field}"')`);
       return { sql: elemSql, values };
     } else {
-      validateFieldKey(field);
+      const parsedFieldKey = parseFieldKey(field);
       // Simple field equality (warehouse: 'A')
       return {
-        sql: `json_extract(elem.value, '$."${field}"') = ?`,
+        sql: `json_extract(elem.value, '$."${parsedFieldKey}"') = ?`,
         values: [fieldValue],
       };
     }
@@ -100,8 +97,7 @@ const FILTER_OPERATORS: Record<OperatorType, OperatorFn> = {
 
   // Array Operators
   $in: (key: string, value: any) => {
-    validateFieldKey(key);
-    const jsonPathKey = toJsonPathKey(key);
+    const jsonPathKey = parseJsonPathKey(key);
     const arr = Array.isArray(value) ? value : [value];
     if (arr.length === 0) {
       return { sql: '1 = 0', needsValue: true, transformValue: () => [] };
@@ -124,8 +120,7 @@ const FILTER_OPERATORS: Record<OperatorType, OperatorFn> = {
   },
 
   $nin: (key: string, value: any) => {
-    validateFieldKey(key);
-    const jsonPathKey = toJsonPathKey(key);
+    const jsonPathKey = parseJsonPathKey(key);
     const arr = Array.isArray(value) ? value : [value];
     if (arr.length === 0) {
       return { sql: '1 = 1', needsValue: true, transformValue: () => [] };
@@ -147,8 +142,7 @@ const FILTER_OPERATORS: Record<OperatorType, OperatorFn> = {
     };
   },
   $all: (key: string, value: any) => {
-    validateFieldKey(key);
-    const jsonPathKey = toJsonPathKey(key);
+    const jsonPathKey = parseJsonPathKey(key);
     let sql: string;
     const arrayValue = Array.isArray(value) ? value : [value];
 
@@ -184,8 +178,7 @@ const FILTER_OPERATORS: Record<OperatorType, OperatorFn> = {
     };
   },
   $elemMatch: (key: string, value: any) => {
-    validateFieldKey(key);
-    const jsonPathKey = toJsonPathKey(key);
+    const jsonPathKey = parseJsonPathKey(key);
     if (typeof value !== 'object' || Array.isArray(value)) {
       throw new Error('$elemMatch requires an object with conditions');
     }
@@ -212,8 +205,7 @@ const FILTER_OPERATORS: Record<OperatorType, OperatorFn> = {
 
   // Element Operators
   $exists: (key: string) => {
-    validateFieldKey(key);
-    const jsonPathKey = toJsonPathKey(key);
+    const jsonPathKey = parseJsonPathKey(key);
     return {
       sql: `json_extract(metadata, '$."${jsonPathKey}"') IS NOT NULL`,
       needsValue: false,
@@ -235,8 +227,7 @@ const FILTER_OPERATORS: Record<OperatorType, OperatorFn> = {
     needsValue: false,
   }),
   $size: (key: string, paramIndex: number) => {
-    validateFieldKey(key);
-    const jsonPathKey = toJsonPathKey(key);
+    const jsonPathKey = parseJsonPathKey(key);
     return {
       sql: `(
     CASE
@@ -315,8 +306,7 @@ const FILTER_OPERATORS: Record<OperatorType, OperatorFn> = {
   //     },
   //   }),
   $contains: (key: string, value: any) => {
-    validateFieldKey(key);
-    const jsonPathKey = toJsonPathKey(key);
+    const jsonPathKey = parseJsonPathKey(key);
     let sql;
     if (Array.isArray(value)) {
       sql = `(
@@ -373,8 +363,9 @@ function isFilterResult(obj: any): obj is FilterResult {
   return obj && typeof obj === 'object' && typeof obj.sql === 'string' && Array.isArray(obj.values);
 }
 
-const toJsonPathKey = (key: string) => {
-  return key.replace(/\./g, '"."');
+const parseJsonPathKey = (key: string) => {
+  const parsedKey = parseFieldKey(key);
+  return parsedKey.replace(/\./g, '"."');
 };
 
 function escapeLikePattern(str: string): string {

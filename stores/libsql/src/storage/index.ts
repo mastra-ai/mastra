@@ -18,7 +18,7 @@ import type {
   WorkflowRun,
   WorkflowRuns,
 } from '@mastra/core/storage';
-import { validateSqlIdentifier } from '@mastra/core/utils';
+import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 
 function safelyParseJSON(jsonString: string): any {
@@ -49,9 +49,9 @@ export class LibSQLStore extends MastraStorage {
   }
 
   private getCreateTableSQL(tableName: TABLE_NAMES, schema: Record<string, StorageColumn>): string {
-    validateSqlIdentifier(tableName, 'table name');
+    const parsedTableName = parseSqlIdentifier(tableName, 'table name');
     const columns = Object.entries(schema).map(([name, col]) => {
-      validateSqlIdentifier(name, 'column name');
+      const parsedColumnName = parseSqlIdentifier(name, 'column name');
       let type = col.type.toUpperCase();
       if (type === 'TEXT') type = 'TEXT';
       if (type === 'TIMESTAMP') type = 'TEXT'; // Store timestamps as ISO strings
@@ -60,19 +60,19 @@ export class LibSQLStore extends MastraStorage {
       const nullable = col.nullable ? '' : 'NOT NULL';
       const primaryKey = col.primaryKey ? 'PRIMARY KEY' : '';
 
-      return `${name} ${type} ${nullable} ${primaryKey}`.trim();
+      return `${parsedColumnName} ${type} ${nullable} ${primaryKey}`.trim();
     });
 
     // For workflow_snapshot table, create a composite primary key
     if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
-      const stmnt = `CREATE TABLE IF NOT EXISTS ${tableName} (
+      const stmnt = `CREATE TABLE IF NOT EXISTS ${parsedTableName} (
                 ${columns.join(',\n')},
                 PRIMARY KEY (workflow_name, run_id)
             )`;
       return stmnt;
     }
 
-    return `CREATE TABLE IF NOT EXISTS ${tableName} (${columns.join(', ')})`;
+    return `CREATE TABLE IF NOT EXISTS ${parsedTableName} (${columns.join(', ')})`;
   }
 
   async createTable({
@@ -82,7 +82,6 @@ export class LibSQLStore extends MastraStorage {
     tableName: TABLE_NAMES;
     schema: Record<string, StorageColumn>;
   }): Promise<void> {
-    validateSqlIdentifier(tableName, 'table name');
     try {
       this.logger.debug(`Creating database table`, { tableName, operation: 'schema init' });
       const sql = this.getCreateTableSQL(tableName, schema);
@@ -94,9 +93,9 @@ export class LibSQLStore extends MastraStorage {
   }
 
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    validateSqlIdentifier(tableName, 'table name');
+    const parsedTableName = parseSqlIdentifier(tableName, 'table name');
     try {
-      await this.client.execute(`DELETE FROM ${tableName}`);
+      await this.client.execute(`DELETE FROM ${parsedTableName}`);
     } catch (e) {
       if (e instanceof Error) {
         this.logger.error(e.message);
@@ -108,9 +107,8 @@ export class LibSQLStore extends MastraStorage {
     sql: string;
     args: InValue[];
   } {
-    validateSqlIdentifier(tableName, 'table name');
-    const columns = Object.keys(record);
-    columns.forEach(col => validateSqlIdentifier(col, 'column name'));
+    const parsedTableName = parseSqlIdentifier(tableName, 'table name');
+    const columns = Object.keys(record).map(col => parseSqlIdentifier(col, 'column name'));
     const values = Object.values(record).map(v => {
       if (typeof v === `undefined`) {
         // returning an undefined value will cause libsql to throw
@@ -124,14 +122,12 @@ export class LibSQLStore extends MastraStorage {
     const placeholders = values.map(() => '?').join(', ');
 
     return {
-      sql: `INSERT OR REPLACE INTO ${tableName} (${columns.join(', ')}) VALUES (${placeholders})`,
+      sql: `INSERT OR REPLACE INTO ${parsedTableName} (${columns.join(', ')}) VALUES (${placeholders})`,
       args: values,
     };
   }
 
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    validateSqlIdentifier(tableName, 'table name');
-
     try {
       await this.client.execute(
         this.prepareStatement({
@@ -148,8 +144,6 @@ export class LibSQLStore extends MastraStorage {
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
     if (records.length === 0) return;
 
-    validateSqlIdentifier(tableName, 'table name');
-
     try {
       const batchStatements = records.map(r => this.prepareStatement({ tableName, record: r }));
       await this.client.batch(batchStatements, 'write');
@@ -160,17 +154,15 @@ export class LibSQLStore extends MastraStorage {
   }
 
   async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
-    validateSqlIdentifier(tableName, 'table name');
+    const parsedTableName = parseSqlIdentifier(tableName, 'table name');
 
-    Object.keys(keys).forEach(key => validateSqlIdentifier(key, 'column name'));
+    const parsedKeys = Object.keys(keys).map(key => parseSqlIdentifier(key, 'column name'));
 
-    const conditions = Object.entries(keys)
-      .map(([key]) => `${key} = ?`)
-      .join(' AND ');
+    const conditions = parsedKeys.map(key => `${key} = ?`).join(' AND ');
     const values = Object.values(keys);
 
     const result = await this.client.execute({
-      sql: `SELECT * FROM ${tableName} WHERE ${conditions} ORDER BY createdAt DESC LIMIT 1`,
+      sql: `SELECT * FROM ${parsedTableName} WHERE ${conditions} ORDER BY createdAt DESC LIMIT 1`,
       args: values,
     });
 

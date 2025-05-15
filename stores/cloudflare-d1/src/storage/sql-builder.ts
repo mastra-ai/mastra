@@ -1,4 +1,4 @@
-import { validateSqlIdentifier } from '@mastra/core/utils';
+import { parseSqlIdentifier } from '@mastra/core/utils';
 
 /**
  * Type definition for SQL query parameters
@@ -32,17 +32,15 @@ export class SqlBuilder {
       this.sql = 'SELECT *';
     } else {
       const cols = Array.isArray(columns) ? columns : [columns];
-      for (const col of cols) {
-        validateSelectIdentifier(col);
-      }
-      this.sql = `SELECT ${cols.join(', ')}`;
+      const parsedCols = cols.map(col => parseSelectIdentifier(col));
+      this.sql = `SELECT ${parsedCols.join(', ')}`;
     }
     return this;
   }
 
   from(table: string): SqlBuilder {
-    validateSqlIdentifier(table, 'table name');
-    this.sql += ` FROM ${table}`;
+    const parsedTableName = parseSqlIdentifier(table, 'table name');
+    this.sql += ` FROM ${parsedTableName}`;
     return this;
   }
 
@@ -84,11 +82,11 @@ export class SqlBuilder {
   }
 
   orderBy(column: string, direction: 'ASC' | 'DESC' = 'ASC'): SqlBuilder {
-    validateSqlIdentifier(column, 'column name');
+    const parsedColumn = parseSqlIdentifier(column, 'column name');
     if (!['ASC', 'DESC'].includes(direction)) {
       throw new Error(`Invalid sort direction: ${direction}`);
     }
-    this.sql += ` ORDER BY ${column} ${direction}`;
+    this.sql += ` ORDER BY ${parsedColumn} ${direction}`;
     return this;
   }
 
@@ -124,22 +122,21 @@ export class SqlBuilder {
     conflictColumns?: string[],
     updateMap?: Record<string, string>,
   ): SqlBuilder {
-    validateSqlIdentifier(table, 'table name');
-    for (const col of columns) {
-      validateSqlIdentifier(col, 'column name');
-    }
-    const placeholders = columns.map(() => '?').join(', ');
+    const parsedTableName = parseSqlIdentifier(table, 'table name');
+    const parsedColumns = columns.map(col => parseSqlIdentifier(col, 'column name'));
+    const placeholders = parsedColumns.map(() => '?').join(', ');
 
     if (conflictColumns && updateMap) {
+      const parsedConflictColumns = conflictColumns.map(col => parseSqlIdentifier(col, 'column name'));
       const updateClause = Object.entries(updateMap)
         .map(([col, expr]) => `${col} = ${expr}`)
         .join(', ');
-      this.sql = `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders}) ON CONFLICT(${conflictColumns.join(', ')}) DO UPDATE SET ${updateClause}`;
+      this.sql = `INSERT INTO ${parsedTableName} (${parsedColumns.join(', ')}) VALUES (${placeholders}) ON CONFLICT(${parsedConflictColumns.join(', ')}) DO UPDATE SET ${updateClause}`;
       this.params.push(...values);
       return this;
     }
 
-    this.sql = `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders})`;
+    this.sql = `INSERT INTO ${parsedTableName} (${parsedColumns.join(', ')}) VALUES (${placeholders})`;
     this.params.push(...values);
 
     return this;
@@ -147,20 +144,18 @@ export class SqlBuilder {
 
   // Update operations
   update(table: string, columns: string[], values: SqlParam[]): SqlBuilder {
-    validateSqlIdentifier(table, 'table name');
-    for (const col of columns) {
-      validateSqlIdentifier(col, 'column name');
-    }
-    const setClause = columns.map(col => `${col} = ?`).join(', ');
-    this.sql = `UPDATE ${table} SET ${setClause}`;
+    const parsedTableName = parseSqlIdentifier(table, 'table name');
+    const parsedColumns = columns.map(col => parseSqlIdentifier(col, 'column name'));
+    const setClause = parsedColumns.map(col => `${col} = ?`).join(', ');
+    this.sql = `UPDATE ${parsedTableName} SET ${setClause}`;
     this.params.push(...values);
     return this;
   }
 
   // Delete operations
   delete(table: string): SqlBuilder {
-    validateSqlIdentifier(table, 'table name');
-    this.sql = `DELETE FROM ${table}`;
+    const parsedTableName = parseSqlIdentifier(table, 'table name');
+    this.sql = `DELETE FROM ${parsedTableName}`;
     return this;
   }
 
@@ -172,16 +167,17 @@ export class SqlBuilder {
    * @returns The builder instance
    */
   createTable(table: string, columnDefinitions: string[], tableConstraints?: string[]): SqlBuilder {
-    validateSqlIdentifier(table, 'table name');
+    const parsedTableName = parseSqlIdentifier(table, 'table name');
     // Naive validation: check the first word of each column definition
-    for (const def of columnDefinitions) {
+    const parsedColumnDefinitions = columnDefinitions.map(def => {
       const colName = def.split(/\s+/)[0];
       if (!colName) throw new Error('Empty column name in definition');
-      validateSqlIdentifier(colName, 'column name');
-    }
-    const columns = columnDefinitions.join(', ');
+      parseSqlIdentifier(colName, 'column name');
+      return def;
+    });
+    const columns = parsedColumnDefinitions.join(', ');
     const constraints = tableConstraints && tableConstraints.length > 0 ? ', ' + tableConstraints.join(', ') : '';
-    this.sql = `CREATE TABLE IF NOT EXISTS ${table} (${columns}${constraints})`;
+    this.sql = `CREATE TABLE IF NOT EXISTS ${parsedTableName} (${columns}${constraints})`;
     return this;
   }
 
@@ -206,10 +202,10 @@ export class SqlBuilder {
    * @returns The builder instance
    */
   createIndex(indexName: string, tableName: string, columnName: string, indexType: string = ''): SqlBuilder {
-    validateSqlIdentifier(indexName, 'index name');
-    validateSqlIdentifier(tableName, 'table name');
-    validateSqlIdentifier(columnName, 'column name');
-    this.sql = `CREATE ${indexType ? indexType + ' ' : ''}INDEX IF NOT EXISTS ${indexName} ON ${tableName}(${columnName})`;
+    const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
+    const parsedTableName = parseSqlIdentifier(tableName, 'table name');
+    const parsedColumnName = parseSqlIdentifier(columnName, 'column name');
+    this.sql = `CREATE ${indexType ? indexType + ' ' : ''}INDEX IF NOT EXISTS ${parsedIndexName} ON ${parsedTableName}(${parsedColumnName})`;
     return this;
   }
 
@@ -220,12 +216,12 @@ export class SqlBuilder {
    * @param exact If true, will not add % wildcards
    */
   like(column: string, value: string, exact: boolean = false): SqlBuilder {
-    validateSqlIdentifier(column, 'column name');
+    const parsedColumnName = parseSqlIdentifier(column, 'column name');
     const likeValue = exact ? value : `%${value}%`;
     if (this.whereAdded) {
-      this.sql += ` AND ${column} LIKE ?`;
+      this.sql += ` AND ${parsedColumnName} LIKE ?`;
     } else {
-      this.sql += ` WHERE ${column} LIKE ?`;
+      this.sql += ` WHERE ${parsedColumnName} LIKE ?`;
       this.whereAdded = true;
     }
     this.params.push(likeValue);
@@ -239,11 +235,11 @@ export class SqlBuilder {
    * @param value The value to match
    */
   jsonLike(column: string, key: string, value: string): SqlBuilder {
-    validateSqlIdentifier(column, 'column name');
-    validateSqlIdentifier(key, 'key name');
-    const jsonPattern = `%"${key}":"${value}"%`;
+    const parsedColumnName = parseSqlIdentifier(column, 'column name');
+    const parsedKey = parseSqlIdentifier(key, 'key name');
+    const jsonPattern = `%"${parsedKey}":"${value}"%`;
     if (this.whereAdded) {
-      this.sql += ` AND ${column} LIKE ?`;
+      this.sql += ` AND ${parsedColumnName} LIKE ?`;
     } else {
       this.sql += ` WHERE ${column} LIKE ?`;
       this.whereAdded = true;
@@ -280,10 +276,28 @@ export function createSqlBuilder(): SqlBuilder {
   return new SqlBuilder();
 }
 
-function validateSelectIdentifier(column: string) {
+/** Represents a validated SQL SELECT column identifier (or '*', optionally with 'AS alias'). */
+export type SelectIdentifier = string & { __brand: 'SelectIdentifier' };
+
+/**
+ * Parses and returns a valid SQL SELECT column identifier.
+ * Allows a single identifier (letters, numbers, underscores), or '*', optionally with 'AS alias'.
+ *
+ * @param column - The column identifier string to parse.
+ * @returns The validated column identifier as a branded type.
+ * @throws {Error} If invalid.
+ *
+ * @example
+ * const col = parseSelectIdentifier('user_id'); // Ok
+ * parseSelectIdentifier('user_id AS uid'); // Ok
+ * parseSelectIdentifier('*'); // Ok
+ * parseSelectIdentifier('user id'); // Throws error
+ */
+export function parseSelectIdentifier(column: string): SelectIdentifier {
   if (column !== '*' && !/^[a-zA-Z0-9_]+(\s+AS\s+[a-zA-Z0-9_]+)?$/i.test(column)) {
     throw new Error(
       `Invalid column name: "${column}". Must be "*" or a valid identifier (letters, numbers, underscores), optionally with "AS alias".`,
     );
   }
+  return column as SelectIdentifier;
 }

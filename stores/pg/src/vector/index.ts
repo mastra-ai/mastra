@@ -1,4 +1,4 @@
-import { validateSqlIdentifier } from '@mastra/core/utils';
+import { parseSqlIdentifier } from '@mastra/core/utils';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   IndexStats,
@@ -162,9 +162,9 @@ export class PgVector extends MastraVector {
   }
 
   private getTableName(indexName: string) {
-    validateSqlIdentifier(indexName, 'index name');
-    if (this.schema) validateSqlIdentifier(this.schema, 'schema name');
-    return this.schema ? `${this.schema}.${indexName}` : indexName;
+    const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
+    const parsedSchemaName = this.schema ? parseSqlIdentifier(this.schema, 'schema name') : undefined;
+    return parsedSchemaName ? `${parsedSchemaName}.${parsedIndexName}` : parsedIndexName;
   }
 
   transformFilter(filter?: VectorFilter) {

@@ -453,52 +453,59 @@ export function ensureAllMessagesAreCoreMessages(messages: (CoreMessage | AiMess
     .flat();
 }
 
+/** Represents a validated SQL identifier (e.g., table or column name). */
+export type SqlIdentifier = string & { __brand: 'SqlIdentifier' };
+/** Represents a validated dot-separated SQL field key. */
+export type FieldKey = string & { __brand: 'FieldKey' };
+
 /**
- * Validates that a given string is a valid SQL identifier (such as a table or column name).
- *
+ * Parses and returns a valid SQL identifier (such as a table or column name).
  * The identifier must:
- * - Start with a letter (a-z, A-Z) or underscore (_)
- * - Contain only letters, numbers, or underscores
- * - Be at most 63 characters long
+ *   - Start with a letter (a-z, A-Z) or underscore (_)
+ *   - Contain only letters, numbers, or underscores
+ *   - Be at most 63 characters long
  *
- * @param name - The identifier string to validate.
- * @param kind - A human-readable description of the identifier type (e.g., 'table name', 'column name'). Used in error messages.
+ * @param name - The identifier string to parse.
+ * @param kind - Optional label for error messages (e.g., 'table name').
+ * @returns The validated identifier as a branded type.
  * @throws {Error} If the identifier does not conform to SQL naming rules.
  *
  * @example
- * validateSqlIdentifier('my_table'); // Passes
- * validateSqlIdentifier('123table'); // Throws error
+ * const id = parseSqlIdentifier('my_table'); // Ok
+ * parseSqlIdentifier('123table'); // Throws error
  */
-export function validateSqlIdentifier(name: string, kind = 'identifier') {
+export function parseSqlIdentifier(name: string, kind = 'identifier'): SqlIdentifier {
   if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name) || name.length > 63) {
     throw new Error(
       `Invalid ${kind}: ${name}. Must start with a letter or underscore, contain only letters, numbers, or underscores, and be at most 63 characters long.`,
     );
   }
+  return name as SqlIdentifier;
 }
 
 /**
- * Validates a dot-separated key representing a nested SQL field path (e.g., 'user.profile.name').
- *
+ * Parses and returns a valid dot-separated SQL field key (e.g., 'user.profile.name').
  * Each segment must:
- * - Start with a letter (a-z, A-Z) or underscore (_)
- * - Contain only letters, numbers, or underscores
- * - Be at most 63 characters long
+ *   - Start with a letter (a-z, A-Z) or underscore (_)
+ *   - Contain only letters, numbers, or underscores
+ *   - Be at most 63 characters long
  *
- * @param key - The dot-separated field key to validate.
+ * @param key - The dot-separated field key string to parse.
+ * @returns The validated field key as a branded type.
  * @throws {Error} If any segment of the key is invalid.
  *
  * @example
- * validateFieldKey('user_profile.name'); // Passes
- * validateFieldKey('user..name'); // Throws error (empty segment)
- * validateFieldKey('user.123name'); // Throws error (invalid segment)
+ * const key = parseFieldKey('user_profile.name'); // Ok
+ * parseFieldKey('user..name'); // Throws error
+ * parseFieldKey('user.123name'); // Throws error
  */
-export function validateFieldKey(key: string) {
-  if (!key) return;
+export function parseFieldKey(key: string): FieldKey {
+  if (!key) throw new Error('Field key cannot be empty');
   const segments = key.split('.');
   for (const segment of segments) {
     if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(segment) || segment.length > 63) {
       throw new Error(`Invalid field key segment: ${segment} in ${key}`);
     }
   }
+  return key as FieldKey;
 }
