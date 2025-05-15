@@ -41,7 +41,7 @@ function Agent() {
   }
 
   return (
-    <AgentProvider>
+    <AgentProvider agentId={agentId!}>
       <section className={cn('relative h-[calc(100%-40px)] divide-x flex w-full')}>
         {sidebar && memory?.result ? (
           <div className="h-full w-[300px] overflow-y-auto">
