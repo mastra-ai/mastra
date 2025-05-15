@@ -22,22 +22,54 @@ MastraをNext.jsアプリケーションに統合する主な方法は2つあり
 
 CLIを使用して新しいMastraプロジェクトを作成します：
 
-<Tabs items={["npx", "npm", "yarn", "pnpm"]}>
-  <Tabs.Tab>```bash copy npx create-mastra@latest ```</Tabs.Tab>
-  <Tabs.Tab>```bash copy npm create mastra ```</Tabs.Tab>
-  <Tabs.Tab>```bash copy yarn create mastra ```</Tabs.Tab>
-  <Tabs.Tab>```bash copy pnpm create mastra ```</Tabs.Tab>
+<Tabs>
+  <Tabs.Tab>
+    ```bash copy
+    npx create-mastra@latest
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    npm create mastra
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    yarn create mastra
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    pnpm create mastra
+    ```
+  </Tabs.Tab>
 </Tabs>
 
 詳細なセットアップ手順については、[インストールガイド](/docs/getting-started/installation)をご覧ください。
 
 ### MastraClientのインストール
 
-<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
-  <Tabs.Tab>```bash copy npm install @mastra/client-js@latest ```</Tabs.Tab>
-  <Tabs.Tab>```bash copy yarn add @mastra/client-js@latest ```</Tabs.Tab>
-  <Tabs.Tab>```bash copy pnpm add @mastra/client-js@latest ```</Tabs.Tab>
-  <Tabs.Tab>```bash copy bun add @mastra/client-js@latest ```</Tabs.Tab>
+<Tabs>
+  <Tabs.Tab>
+    ```bash copy
+    npm install @mastra/client-js@latest
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    yarn add @mastra/client-js@latest
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    pnpm add @mastra/client-js@latest
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    bun add @mastra/client-js@latest
+    ```
+  </Tabs.Tab>
 </Tabs>
 
 ### MastraClientの使用
@@ -106,10 +138,22 @@ cd your-nextjs-app
 
 次に初期化コマンドを実行します：
 
-<Tabs items={["npm", "yarn", "pnpm"]}>
-  <Tabs.Tab>```bash copy npx mastra@latest init ```</Tabs.Tab>
-  <Tabs.Tab>```bash copy yarn dlx mastra@latest init ```</Tabs.Tab>
-  <Tabs.Tab>```bash copy pnpm dlx mastra@latest init ```</Tabs.Tab>
+<Tabs>
+  <Tabs.Tab>
+    ```bash copy
+    npx mastra@latest init
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    yarn dlx mastra@latest init
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    pnpm dlx mastra@latest init
+    ```
+  </Tabs.Tab>
 </Tabs>
 
 これによりNext.jsプロジェクトにMastraがセットアップされます。初期化やその他の設定オプションの詳細については、[mastra init リファレンス](/reference/cli/init)をご覧ください。
@@ -191,6 +235,7 @@ export async function POST(req: Request) {
 - デプロイメントプラットフォームでLLM APIキーの環境変数を設定する
 - 本番環境での適切なエラーハンドリングを実装する
 - AIエージェントのパフォーマンスとコストを監視する
+
 </Steps>
 
 ## 可観測性

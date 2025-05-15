@@ -1,12 +1,13 @@
-import { createContext, useState, ReactNode } from 'react';
+import { createContext, useState, ReactNode, useEffect } from 'react';
 import { ModelSettings } from '../../../../types';
+import { useAgentStore } from '@/store/agent-store';
 
 type AgentContextType = {
   modelSettings: ModelSettings;
   chatWithGenerate: boolean;
-  setModelSettings: React.Dispatch<React.SetStateAction<ModelSettings>>;
+  setModelSettings: (modelSettings: ModelSettings) => void;
   resetModelSettings: () => void;
-  setChatWithGenerate: React.Dispatch<React.SetStateAction<boolean>>;
+  setChatWithGenerate: (chatWithGenerate: boolean) => void;
 };
 
 const defaultModelSettings: ModelSettings = {
@@ -18,11 +19,27 @@ const defaultModelSettings: ModelSettings = {
 
 export const AgentContext = createContext<AgentContextType>({} as AgentContextType);
 
-export function AgentProvider({ children }: { children: ReactNode }) {
-  const [modelSettings, setModelSettings] = useState<ModelSettings>(defaultModelSettings);
-  const [chatWithGenerate, setChatWithGenerate] = useState<boolean>(false);
+export function AgentProvider({ agentId, children }: { agentId: string; children: ReactNode }) {
+  const {
+    modelSettings: modelSettingsStore,
+    setModelSettings: setModelSettingsStore,
+    chatWithGenerate: chatWithGenerateStore,
+    setChatWithGenerate: setChatWithGenerateStore,
+  } = useAgentStore();
+
+  const modelSettings = modelSettingsStore[agentId] || defaultModelSettings;
+
+  const setModelSettings = (modelSettings: ModelSettings) => {
+    setModelSettingsStore({ [agentId]: modelSettings });
+  };
+
   const resetModelSettings = () => {
     setModelSettings(defaultModelSettings);
+  };
+
+  const chatWithGenerate = chatWithGenerateStore[agentId] || false;
+  const setChatWithGenerate = (chatWithGenerate: boolean) => {
+    setChatWithGenerateStore({ [agentId]: chatWithGenerate });
   };
 
   return (
