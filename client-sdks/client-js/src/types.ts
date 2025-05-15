@@ -278,3 +278,14 @@ export interface McpServerListResponse {
   next: string | null;
   total_count: number;
 }
+
+export interface McpToolInfo {
+  id: string;
+  name: string;
+  description?: string;
+  inputSchema: string;
+}
+
+export interface McpServerToolListResponse {
+  tools: McpToolInfo[];
+}
