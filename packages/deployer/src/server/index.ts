@@ -24,6 +24,7 @@ import {
   setAgentInstructionsHandler,
   streamGenerateHandler,
 } from './handlers/agents';
+import { authenticateMiddleware, exchangeTokenHandler } from './handlers/auth';
 import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import { getLogsByRunIdHandler, getLogsHandler, getLogTransports } from './handlers/logs';
@@ -166,6 +167,8 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
     c.set('isDev', options.isDev === true);
     return next();
   });
+
+  app.use('*', authenticateMiddleware);
 
   // Apply custom server middleware from Mastra instance
   const serverMiddleware = mastra.getServerMiddleware?.();
@@ -2801,6 +2804,29 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
       },
     }),
     deleteIndex,
+  );
+
+  app.post(
+    '/auth/exchange',
+    describeRoute({
+      description: 'Exchange a token for a Mastra API key',
+      tags: ['auth'],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                provider: { type: 'string' },
+                token: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+    }),
+    exchangeTokenHandler,
   );
 
   if (options?.isDev || server?.build?.openAPIDocs || server?.build?.swaggerUI) {

@@ -5,14 +5,17 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "npx tsx src/mastra/index.ts"
+    "dev": "mastra dev"
   },
   "keywords": [],
   "author": "",
   "license": "MIT",
   "dependencies": {
     "@ai-sdk/openai": "latest",
-    "@mastra/core": "latest",
+    "@mastra/core": "workspace:*",
+    "jsonwebtoken": "^9.0.2",
+    "jwks-rsa": "^3.2.0",
+    "mastra": "workspace:*",
     "zod": "^3.24.3"
   },
   "version": "0.0.1",

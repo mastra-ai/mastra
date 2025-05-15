@@ -7,6 +7,13 @@ export class BaseResource {
     this.options = options;
   }
 
+  setAuthToken(token: string) {
+    this.options.headers = {
+      ...this.options.headers,
+      Authorization: `Bearer ${token}`,
+    };
+  }
+
   /**
    * Makes an HTTP request to the API with retries and exponential backoff
    * @param path - The API endpoint path
