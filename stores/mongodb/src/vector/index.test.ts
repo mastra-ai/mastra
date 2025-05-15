@@ -60,7 +60,7 @@ async function createIndexAndWait(
   metric: 'cosine' | 'euclidean' | 'dotproduct',
 ) {
   await vectorDB.createIndex({ indexName, dimension, metric });
-  await vectorDB.waitForIndexReady(indexName);
+  await vectorDB.waitForIndexReady({ indexName });
   const created = await waitForCondition(
     async () => {
       const cols = await vectorDB.listIndexes();

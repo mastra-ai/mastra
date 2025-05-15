@@ -33,6 +33,14 @@ export interface MongoDBQueryVectorParams extends QueryVectorParams {
   documentFilter?: VectorFilter;
 }
 
+export interface MongoDBIndexReadyParams {
+  indexName: string;
+  timeoutMs?: number;
+  checkIntervalMs?: number;
+}
+
+type MongoDBIndexReadyArgs = [string, number?, number?];
+
 // Define the document interface
 interface MongoDBDocument extends Document {
   _id: string; // Explicitly declare '_id' as string
@@ -122,7 +130,12 @@ export class MongoDBVector extends MastraVector {
     await collection.updateOne({ _id: '__index_metadata__' }, { $set: { dimension, metric } }, { upsert: true });
   }
 
-  async waitForIndexReady(indexName: string, timeoutMs: number = 60000, checkIntervalMs: number = 2000): Promise<void> {
+  async waitForIndexReady(...args: ParamsToArgs<MongoDBIndexReadyParams> | MongoDBIndexReadyArgs): Promise<void> {
+    const params = this.normalizeArgs<MongoDBIndexReadyParams, MongoDBIndexReadyArgs>('waitForIndexReady', args, [
+      'timeoutMs',
+      'checkIntervalMs',
+    ]);
+    const { indexName, timeoutMs = 60000, checkIntervalMs = 2000 } = params;
     const collection = await this.getCollection(indexName, true);
     const indexNameInternal = `${indexName}_vector_index`;
 
