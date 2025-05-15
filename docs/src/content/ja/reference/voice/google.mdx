@@ -18,32 +18,32 @@ const voice = new GoogleVoice();
 // Initialize with custom configuration
 const voice = new GoogleVoice({
   speechModel: {
-    apiKey: 'your-speech-api-key',
+    apiKey: "your-speech-api-key",
   },
   listeningModel: {
-    apiKey: 'your-listening-api-key',
+    apiKey: "your-listening-api-key",
   },
-  speaker: 'en-US-Casual-K',
+  speaker: "en-US-Casual-K",
 });
 
 // Text-to-Speech
 const audioStream = await voice.speak("Hello, world!", {
-  languageCode: 'en-US',
+  languageCode: "en-US",
   audioConfig: {
-    audioEncoding: 'LINEAR16',
+    audioEncoding: "LINEAR16",
   },
 });
 
 // Speech-to-Text
 const transcript = await voice.listen(audioStream, {
   config: {
-    encoding: 'LINEAR16',
-    languageCode: 'en-US',
+    encoding: "LINEAR16",
+    languageCode: "en-US",
   },
 });
 
 // Get available voices for a specific language
-const voices = await voice.getSpeakers({ languageCode: 'en-US' });
+const voices = await voice.getSpeakers({ languageCode: "en-US" });
 ```
 
 ## コンストラクターパラメータ
@@ -81,7 +81,8 @@ const voices = await voice.getSpeakers({ languageCode: 'en-US' });
     {
       name: "apiKey",
       type: "string",
-      description: "Google Cloud APIキー。GOOGLE_API_KEY環境変数にフォールバックします",
+      description:
+        "Google Cloud APIキー。GOOGLE_API_KEY環境変数にフォールバックします",
       isOptional: true,
     },
   ]}
@@ -98,7 +99,8 @@ Google Cloud Text-to-Speech サービスを使用してテキストを音声に�
     {
       name: "input",
       type: "string | NodeJS.ReadableStream",
-      description: "音声に変換するテキスト。ストリームが提供された場合、最初にテキストに変換されます。",
+      description:
+        "音声に変換するテキスト。ストリームが提供された場合、最初にテキストに変換されます。",
       isOptional: false,
     },
     {
@@ -116,13 +118,15 @@ Google Cloud Text-to-Speech サービスを使用してテキストを音声に�
     {
       name: "options.languageCode",
       type: "string",
-      description: "音声の言語コード（例: 'en-US'）。スピーカーIDからの言語コードまたは 'en-US' がデフォルトです。",
+      description:
+        "音声の言語コード（例: 'en-US'）。スピーカーIDからの言語コードまたは 'en-US' がデフォルトです。",
       isOptional: true,
     },
     {
       name: "options.audioConfig",
       type: "ISynthesizeSpeechRequest['audioConfig']",
-      description: "Google Cloud Text-to-Speech API からのオーディオ設定オプション",
+      description:
+        "Google Cloud Text-to-Speech API からのオーディオ設定オプション",
       isOptional: true,
       defaultValue: "{ audioEncoding: 'LINEAR16' }",
     },
@@ -184,7 +188,7 @@ Google Cloud Speech-to-Text サービスを使用して音声をテキストに�
       type: "string[]",
       description: "この音声がサポートする言語コードのリスト",
       isOptional: false,
-    }
+    },
   ]}
 />
 

@@ -25,7 +25,7 @@ The example shows how to:
 Import the necessary dependencies:
 
 ```typescript copy showLineNumbers filename="src/index.ts"
-import { TextualDifferenceMetric } from '@mastra/evals/nlp';
+import { TextualDifferenceMetric } from "@mastra/evals/nlp";
 ```
 
 ## Metric Configuration
@@ -43,15 +43,15 @@ const metric = new TextualDifferenceMetric();
 Evaluate texts that are exactly the same:
 
 ```typescript copy showLineNumbers{7} filename="src/index.ts"
-const input1 = 'The quick brown fox jumps over the lazy dog';
-const output1 = 'The quick brown fox jumps over the lazy dog';
+const input1 = "The quick brown fox jumps over the lazy dog";
+const output1 = "The quick brown fox jumps over the lazy dog";
 
-console.log('Example 1 - Identical Texts:');
-console.log('Input:', input1);
-console.log('Output:', output1);
+console.log("Example 1 - Identical Texts:");
+console.log("Input:", input1);
+console.log("Output:", output1);
 
 const result1 = await metric.measure(input1, output1);
-console.log('Metric Result:', {
+console.log("Metric Result:", {
   score: result1.score,
   info: {
     confidence: result1.info.confidence,
@@ -72,15 +72,15 @@ console.log('Metric Result:', {
 Evaluate texts with small variations:
 
 ```typescript copy showLineNumbers{26} filename="src/index.ts"
-const input2 = 'Hello world! How are you?';
-const output2 = 'Hello there! How is it going?';
+const input2 = "Hello world! How are you?";
+const output2 = "Hello there! How is it going?";
 
-console.log('Example 2 - Minor Differences:');
-console.log('Input:', input2);
-console.log('Output:', output2);
+console.log("Example 2 - Minor Differences:");
+console.log("Input:", input2);
+console.log("Output:", output2);
 
 const result2 = await metric.measure(input2, output2);
-console.log('Metric Result:', {
+console.log("Metric Result:", {
   score: result2.score,
   info: {
     confidence: result2.info.confidence,
@@ -106,15 +106,15 @@ console.log('Metric Result:', {
 Evaluate texts with significant differences:
 
 ```typescript copy showLineNumbers{45} filename="src/index.ts"
-const input3 = 'Python is a high-level programming language';
-const output3 = 'JavaScript is used for web development';
+const input3 = "Python is a high-level programming language";
+const output3 = "JavaScript is used for web development";
 
-console.log('Example 3 - Major Differences:');
-console.log('Input:', input3);
-console.log('Output:', output3);
+console.log("Example 3 - Major Differences:");
+console.log("Input:", input3);
+console.log("Output:", output3);
 
 const result3 = await metric.measure(input3, output3);
-console.log('Metric Result:', {
+console.log("Metric Result:", {
   score: result3.score,
   info: {
     confidence: result3.info.confidence,
@@ -140,6 +140,7 @@ console.log('Metric Result:', {
 The metric provides:
 
 1. A similarity score between 0 and 1:
+
    - 1.0: Identical texts - no differences
    - 0.7-0.9: Minor differences - few changes needed
    - 0.4-0.6: Moderate differences - significant changes
@@ -147,6 +148,7 @@ The metric provides:
    - 0.0: Completely different texts
 
 2. Detailed metrics including:
+
    - Confidence: How reliable the comparison is based on text lengths
    - Ratio: Raw similarity score from sequence matching
    - Changes: Number of edit operations needed
@@ -167,4 +169,4 @@ The metric provides:
   link={
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/textual-difference"
   }
-/> 
+/>

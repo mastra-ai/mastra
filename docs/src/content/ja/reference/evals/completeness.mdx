@@ -16,7 +16,7 @@ const metric = new CompletenessMetric();
 
 const result = await metric.measure(
   "Explain how photosynthesis works in plants using sunlight, water, and carbon dioxide.",
-  "Plants use sunlight to convert water and carbon dioxide into glucose through photosynthesis."
+  "Plants use sunlight to convert water and carbon dioxide into glucose through photosynthesis.",
 );
 
 console.log(result.score); // 0-1の範囲のカバレッジスコア
@@ -38,7 +38,7 @@ console.log(result.info); // 要素カバレッジに関する詳細なメトリ
       type: "string",
       description: "完全性を評価するためのLLMの応答",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -49,7 +49,8 @@ console.log(result.info); // 要素カバレッジに関する詳細なメトリ
     {
       name: "score",
       type: "number",
-      description: "完全性スコア（0-1）で、入力要素が出力でカバーされている割合を表します",
+      description:
+        "完全性スコア（0-1）で、入力要素が出力でカバーされている割合を表します",
     },
     {
       name: "info",
@@ -63,8 +64,8 @@ console.log(result.info); // 要素カバレッジに関する詳細なメトリ
               name: "inputElements",
               type: "string[]",
               description: "入力から抽出された主要要素の配列",
-            }
-          ]
+            },
+          ],
         },
         {
           type: "string[]",
@@ -73,8 +74,8 @@ console.log(result.info); // 要素カバレッジに関する詳細なメトリ
               name: "outputElements",
               type: "string[]",
               description: "出力で見つかった主要要素の配列",
-            }
-          ]
+            },
+          ],
         },
         {
           type: "string[]",
@@ -83,8 +84,8 @@ console.log(result.info); // 要素カバレッジに関する詳細なメトリ
               name: "missingElements",
               type: "string[]",
               description: "出力で見つからなかった入力要素の配列",
-            }
-          ]
+            },
+          ],
         },
         {
           type: "object",
@@ -93,10 +94,10 @@ console.log(result.info); // 要素カバレッジに関する詳細なメトリ
               name: "elementCounts",
               type: "object",
               description: "入力と出力の要素数",
-            }
-          ]
-        }
-      ]
+            },
+          ],
+        },
+      ],
     },
   ]}
 />
@@ -104,12 +105,14 @@ console.log(result.info); // 要素カバレッジに関する詳細なメトリ
 ## 要素抽出の詳細
 
 このメトリックは、いくつかのタイプの要素を抽出して分析します：
+
 - 名詞：主要なオブジェクト、概念、エンティティ
 - 動詞：アクション及び状態（不定詞形に変換）
 - トピック：主要な主題とテーマ
 - 用語：個々の重要な単語
 
 抽出プロセスには以下が含まれます：
+
 - テキストの正規化（発音区別符号の削除、小文字への変換）
 - キャメルケース単語の分割
 - 単語境界の処理
@@ -123,6 +126,7 @@ console.log(result.info); // 要素カバレッジに関する詳細なメトリ
 ### スコアリングプロセス
 
 1. 主要な要素を抽出します：
+
    - 名詞と固有名詞
    - アクション動詞
    - トピック固有の用語
@@ -135,7 +139,9 @@ console.log(result.info); // 要素カバレッジに関する詳細なメトリ
 最終スコア: `(covered_elements / total_input_elements) * scale`
 
 ### スコアの解釈
+
 (0からスケール、デフォルト0-1)
+
 - 1.0: 完全なカバレッジ - すべての入力要素を含む
 - 0.7-0.9: 高いカバレッジ - ほとんどの主要要素を含む
 - 0.4-0.6: 部分的なカバレッジ - いくつかの主要要素を含む
@@ -151,7 +157,7 @@ const metric = new CompletenessMetric();
 
 const result = await metric.measure(
   "The quick brown fox jumps over the lazy dog",
-  "A brown fox jumped over a dog"
+  "A brown fox jumped over a dog",
 );
 
 // 例の出力:
@@ -170,5 +176,5 @@ const result = await metric.measure(
 
 - [回答関連性メトリック](./answer-relevancy)
 - [コンテンツ類似性メトリック](./content-similarity)
-- [テキスト差異メトリック](./textual-difference) 
+- [テキスト差異メトリック](./textual-difference)
 - [キーワードカバレッジメトリック](./keyword-coverage)

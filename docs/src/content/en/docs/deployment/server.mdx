@@ -40,7 +40,6 @@ export const mastra = new Mastra({
 });
 ```
 
-
 The `method` option can be one of `"GET"`, `"POST"`, `"PUT"`,
 `"DELETE"` or `"ALL"`. Using `"ALL"` will cause the handler to be
 invoked for any HTTP method that matches the path.
@@ -50,17 +49,17 @@ invoked for any HTTP method that matches the path.
 Mastra allows you to configure CORS (Cross-Origin Resource Sharing) settings for your server.
 
 ```typescript copy showLineNumbers
-import { Mastra } from '@mastra/core';
+import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
   server: {
     cors: {
-      origin: ['https://example.com'], // Allow specific origins or '*' for all
-      allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowHeaders: ['Content-Type', 'Authorization'],
+      origin: ["https://example.com"], // Allow specific origins or '*' for all
+      allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      allowHeaders: ["Content-Type", "Authorization"],
       credentials: false,
-    }
-  }
+    },
+  },
 });
 ```
 
