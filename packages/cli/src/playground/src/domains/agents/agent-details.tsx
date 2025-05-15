@@ -24,7 +24,7 @@ export function AgentDetails({ agent }: AgentDetailsProps) {
   const workflowsArray = Object.entries(agent?.workflows ?? {});
 
   return (
-    <ScrollArea className="h-[calc(100vh-126px)] px-4 pb-4 text-xs">
+    <ScrollArea className="h-[calc(100vh-126px)] px-5 pb-4 text-xs py-2">
       <div>
         <section className="space-y-7">
           <Entry label="Chat Method">
