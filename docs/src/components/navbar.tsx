@@ -10,7 +10,7 @@ import {
 import { Search } from "lucide-react";
 import Link from "next/link";
 import { Navbar } from "nextra-theme-docs";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { CustomSearch } from "./custom-search";
 import { getSearchPlaceholder } from "./search-placeholder";
 import { Button } from "./ui/button";
@@ -65,6 +65,7 @@ export const Logo = () => {
     </svg>
   );
 };
+
 export const Nav = ({ stars, locale }: { stars: number; locale: string }) => {
   return (
     <Navbar
@@ -87,40 +88,10 @@ export const Nav = ({ stars, locale }: { stars: number; locale: string }) => {
   );
 };
 
-const INPUTS = new Set(["INPUT", "SELECT", "BUTTON", "TEXTAREA"]);
-
 export const SearchWrapperMobile = ({ locale }: { locale: string }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isAgentMode, setIsAgentMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      const el = document.activeElement;
-      if (
-        !el ||
-        INPUTS.has(el.tagName) ||
-        (el as HTMLElement).isContentEditable
-      ) {
-        return;
-      }
-      if (
-        event.key === "/" ||
-        (event.key === "k" &&
-          !event.shiftKey &&
-          (navigator.userAgent.includes("Mac") ? event.metaKey : event.ctrlKey))
-      ) {
-        event.preventDefault();
-        // prevent to scroll to top
-        setIsOpen(true);
-      }
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, []);
 
   function open() {
     setIsOpen(true);
