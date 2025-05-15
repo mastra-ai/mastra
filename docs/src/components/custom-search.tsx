@@ -248,7 +248,7 @@ export const CustomSearch: FC<SearchProps> = ({
                                     </span>
                                   </span>
                                   <span className="text-icons-3 max-w-[150px] md:max-w-full truncate text-sm md:text-[15px] text-left font-normal">
-                                    Use AI to answer your question
+                                    Ask the Mastra docs agent
                                   </span>
                                 </span>
                               </div>
