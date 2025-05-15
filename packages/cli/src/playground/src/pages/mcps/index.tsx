@@ -105,45 +105,42 @@ const MCPs = () => {
           </ul>
         </div>
         <div className="flex flex-col gap-4 py-6 px-4 h-full overflow-y-scroll">
-          {selectedServer &&
-            (() => {
-              return (
-                <div className="mb-4 p-3 border border-mastra-border-1 rounded-md bg-mastra-bg-13">
-                  <h3 className="text-md font-semibold text-mastra-el-7 mb-2">
-                    Connection Endpoints for {selectedServer.name}
-                  </h3>
+          {selectedServer && (
+            <div className="mb-4 p-3 border border-mastra-border-1 rounded-md bg-mastra-bg-13">
+              <h3 className="text-md font-semibold text-mastra-el-7 mb-2">
+                Connection Endpoints for {selectedServer.name}
+              </h3>
 
-                  <div className="mb-2">
-                    <p className="text-xs text-mastra-el-3 mb-1">SSE Endpoint:</p>
-                    <div className="flex items-center gap-2">
-                      <code className="text-sm text-mastra-el-6 bg-mastra-bg-2 p-1 rounded text-nowrap overflow-x-auto">
-                        {sseUrl}
-                      </code>
-                      <Button variant="ghost" size="icon" onClick={() => copySSEUrlToClipboard()} title="Copy SSE URL">
-                        <CopyIcon className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="text-xs text-mastra-el-3 mb-1">Streamable HTTP Endpoint:</p>
-                    <div className="flex items-center gap-2">
-                      <code className="text-sm text-mastra-el-6 bg-mastra-bg-2 p-1 rounded text-nowrap overflow-x-auto">
-                        {httpStreamUrl}
-                      </code>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => copyStreamableHttpUrlToClipboard()}
-                        title="Copy HTTP Stream URL"
-                      >
-                        <CopyIcon className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
+              <div className="mb-2">
+                <p className="text-xs text-mastra-el-3 mb-1">SSE Endpoint:</p>
+                <div className="flex items-center gap-2">
+                  <code className="text-sm text-mastra-el-6 bg-mastra-bg-2 p-1 rounded text-nowrap overflow-x-auto">
+                    {sseUrl}
+                  </code>
+                  <Button variant="ghost" size="icon" onClick={() => copySSEUrlToClipboard()} title="Copy SSE URL">
+                    <CopyIcon className="h-4 w-4" />
+                  </Button>
                 </div>
-              );
-            })()}
+              </div>
+
+              <div>
+                <p className="text-xs text-mastra-el-3 mb-1">Streamable HTTP Endpoint:</p>
+                <div className="flex items-center gap-2">
+                  <code className="text-sm text-mastra-el-6 bg-mastra-bg-2 p-1 rounded text-nowrap overflow-x-auto">
+                    {httpStreamUrl}
+                  </code>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => copyStreamableHttpUrlToClipboard()}
+                    title="Copy HTTP Stream URL"
+                  >
+                    <CopyIcon className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
             {selectedServer && isLoadingServerTools ? (
@@ -159,7 +156,7 @@ const MCPs = () => {
                 ))}
               </>
             ) : selectedServer && Object.keys(selectedServerTools).length > 0 ? (
-              Object.entries(selectedServerTools).map(([toolIdAsKey, tool]) => (
+              Object.values(selectedServerTools).map(tool => (
                 <div
                   onClick={() => {
                     navigate(`/mcps/${selectedServer.id}/${tool.id}`, {

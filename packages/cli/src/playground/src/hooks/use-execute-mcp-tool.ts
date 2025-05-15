@@ -30,8 +30,8 @@ export const useExecuteTool = () => {
 
       return response;
     } catch (error) {
-      toast.error('Error executing dev tool');
-      console.error('Error executing dev tool:', error);
+      toast.error('Error executing MCP tool');
+      console.error('Error executing MCP tool:', error);
       throw error;
     } finally {
       setIsExecuting(false);

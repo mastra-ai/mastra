@@ -1515,8 +1515,6 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
               type: 'object',
               properties: {
                 data: { type: 'object' },
-                args: { type: 'object' },
-                input: { type: 'object' },
                 runtimeContext: { type: 'object' },
               },
             },

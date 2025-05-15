@@ -3,6 +3,7 @@ import { CodeBlockDemo } from '@/components/ui/code-block';
 import { CopyButton } from '@/components/ui/copy-button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Text } from '@/components/ui/text';
+import { ZodType } from 'zod';
 
 const ToolExecutor = ({
   isExecutingTool,
@@ -10,7 +11,7 @@ const ToolExecutor = ({
   handleExecuteTool,
   executionResult: result,
 }: {
-  zodInputSchema: any;
+  zodInputSchema: ZodType;
   isExecutingTool: boolean;
   handleExecuteTool: (data: any) => void;
   executionResult: any;

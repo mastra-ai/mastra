@@ -26,7 +26,10 @@ const MCPServerToolExecutor = () => {
   const [isExecuting, setIsExecuting] = useState(false);
 
   const handleExecuteTool = async (data: any) => {
-    if (!mcpTool || !mcpTool.instance) return;
+    if (!mcpTool || !mcpTool.instance) {
+      toast.error('Tool is not properly initialized');
+      return;
+    }
 
     setIsExecuting(true);
     setExecutionResult(null);

@@ -5,7 +5,7 @@ import type { Context } from 'hono';
 import { handleError } from './error';
 
 // Helper function to get the Mastra instance from the context
-const getMastra = (c: Context): Mastra => c.get('mastra') as Mastra;
+const getMastra = (c: Context): Mastra => c.get('mastra');
 
 /**
  * Handler for POST /api/mcp/:serverId/mcp
@@ -168,7 +168,7 @@ export const listMcpServerToolsHandler = async (c: Context) => {
     return c.json({ error: 'Mastra instance or getMCPServer method not available' }, 500);
   }
 
-  const server = mastra.getMCPServer(serverId) as MCPServerBase | undefined;
+  const server = mastra.getMCPServer(serverId);
 
   if (!server) {
     return c.json({ error: `MCP server with ID '${serverId}' not found` }, 404);
@@ -201,7 +201,7 @@ export const getMcpServerToolDetailHandler = async (c: Context) => {
     return c.json({ error: 'Mastra instance or getMCPServer method not available' }, 500);
   }
 
-  const server = mastra.getMCPServer(serverId) as MCPServerBase | undefined;
+  const server = mastra.getMCPServer(serverId);
 
   if (!server) {
     return c.json({ error: `MCP server with ID '${serverId}' not found` }, 404);
@@ -219,11 +219,9 @@ export const getMcpServerToolDetailHandler = async (c: Context) => {
     }
     return c.json(toolInfo);
   } catch (error: any) {
-    c
-      .get('logger')
-      ?.error(`Error in getMcpServerToolDetailHandler for serverId '${serverId}', toolId '${toolId}':`, {
-        error: error.message,
-      });
+    c.get('logger')?.error(`Error in getMcpServerToolDetailHandler for serverId '${serverId}', toolId '${toolId}':`, {
+      error: error.message,
+    });
     return handleError(error, `Error getting tool '${toolId}' details for MCP server '${serverId}'`);
   }
 };
@@ -241,7 +239,7 @@ export const executeMcpServerToolHandler = async (c: Context) => {
     return c.json({ error: 'Mastra instance or getMCPServer method not available' }, 500);
   }
 
-  const server = mastra.getMCPServer(serverId) as MCPServerBase | undefined;
+  const server = mastra.getMCPServer(serverId);
 
   if (!server) {
     return c.json({ error: `MCP server with ID '${serverId}' not found` }, 404);
@@ -254,8 +252,8 @@ export const executeMcpServerToolHandler = async (c: Context) => {
 
   try {
     const body = await c.req.json();
-    const args = body.data || body.args || body.input || body; // Accommodate different ways of sending args
-    const runtimeContext = body.runtimeContext; // Optional
+    const args = body?.data;
+    const runtimeContext = body?.runtimeContext; // Optional
 
     // The executeTool method in MCPServer is now responsible for arg validation
     const result = await server.executeTool(toolId, args, runtimeContext);
