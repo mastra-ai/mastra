@@ -85,7 +85,7 @@ export const CustomSearch: FC<SearchProps> = ({
       ? results.flatMap((r) => r.sub_results).length + 1
       : 1, // +1 for the AI option
     getScrollElement: () => resultsContainerRef.current,
-    estimateSize: () => isMobile ? 90 : 100, // Smaller size for mobile screens
+    estimateSize: () => (isMobile ? 90 : 100), // Smaller size for mobile screens
     overscan: 5,
   });
 
