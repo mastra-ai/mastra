@@ -41,7 +41,7 @@ const details = await workflow.details();
 トリガーデータでワークフロー実行を開始し、実行結果を待ちます：
 
 ```typescript
-const {runId} = workflow.createRun()
+const { runId } = workflow.createRun();
 
 const result = await workflow.startAsync({
   runId,
@@ -57,7 +57,7 @@ const result = await workflow.startAsync({
 一時停止されたワークフローステップを再開し、完全な実行結果を待ちます：
 
 ```typescript
-const {runId} = createRun({runId: prevRunId})
+const { runId } = createRun({ runId: prevRunId });
 
 const result = await workflow.resumeAsync({
   runId,
@@ -71,74 +71,76 @@ const result = await workflow.resumeAsync({
 ワークフローの遷移を監視します
 
 ```typescript
-try{
+try {
   // Get workflow instance
   const workflow = client.getWorkflow("workflow-id");
 
   // Create a workflow run
-  const {runId} = workflow.createRun()
+  const { runId } = workflow.createRun();
 
-  // Watch workflow run 
-     workflow.watch({runId},(record)=>{
-       // Every new record is the latest transition state of the workflow run
+  // Watch workflow run
+  workflow.watch({ runId }, (record) => {
+    // Every new record is the latest transition state of the workflow run
 
-        console.log({
-          activePaths: record.activePaths,
-          results: record.results,
-          timestamp: record.timestamp,
-          runId: record.runId
-        });
-     });
+    console.log({
+      activePaths: record.activePaths,
+      results: record.results,
+      timestamp: record.timestamp,
+      runId: record.runId,
+    });
+  });
 
   // Start workflow run
-     workflow.start({
-      runId,
-      triggerData: {
-        city: 'New York',
-      },
-    });
-}catch(e){
+  workflow.start({
+    runId,
+    triggerData: {
+      city: "New York",
+    },
+  });
+} catch (e) {
   console.error(e);
 }
 ```
+
 ### ワークフローの再開
 
 ワークフロー実行を再開し、ワークフローステップの遷移を監視します
 
 ```typescript
-try{
+try {
   //To resume a workflow run, when a step is suspended
-  const {run} = createRun({runId: prevRunId})
+  const { run } = createRun({ runId: prevRunId });
 
   //Watch run
-   workflow.watch({runId},(record)=>{
-   // Every new record is the latest transition state of the workflow run
+  workflow.watch({ runId }, (record) => {
+    // Every new record is the latest transition state of the workflow run
 
-        console.log({
-          activePaths: record.activePaths,
-          results: record.results,
-          timestamp: record.timestamp,
-          runId: record.runId
-        });
-   })
-
-   //resume run
-   workflow.resume({
-      runId,
-      stepId: "step-id",
-      contextData: { key: "value" },
+    console.log({
+      activePaths: record.activePaths,
+      results: record.results,
+      timestamp: record.timestamp,
+      runId: record.runId,
     });
-}catch(e){
+  });
+
+  //resume run
+  workflow.resume({
+    runId,
+    stepId: "step-id",
+    contextData: { key: "value" },
+  });
+} catch (e) {
   console.error(e);
 }
 ```
 
 ### ワークフロー実行結果
+
 ワークフロー実行結果は以下を提供します：
 
-| フィールド | 型 | 説明 |
-|-------|------|-------------|
+| フィールド    | 型                                                                             | 説明                                                     |
+| ------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------- |
 | `activePaths` | `Record<string, { status: string; suspendPayload?: any; stepPath: string[] }>` | 実行ステータスを含むワークフロー内の現在アクティブなパス |
-| `results` | `CoreWorkflowRunResult<any, any, any>['results']` | ワークフロー実行からの結果 |
-| `timestamp` | `number` | この遷移が発生した時のUnixタイムスタンプ |
-| `runId` | `string` | このワークフロー実行インスタンスの一意の識別子 |
+| `results`     | `CoreWorkflowRunResult<any, any, any>['results']`                              | ワークフロー実行からの結果                               |
+| `timestamp`   | `number`                                                                       | この遷移が発生した時のUnixタイムスタンプ                 |
+| `runId`       | `string`                                                                       | このワークフロー実行インスタンスの一意の識別子           |

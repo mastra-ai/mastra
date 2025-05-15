@@ -10,16 +10,17 @@ import { GithubLink } from "@/components/github-link";
 この例では、提供された天候条件に基づいてアクティビティを提案するAIエージェントを呼び出すワークフローを作成し、ワークフローステップ内で実行する方法を示しています。
 
 ## プランニングエージェントの定義
+
 場所と対応する天気状況を考慮して活動を計画するために、LLM呼び出しを活用するプランニングエージェントを定義します。
 
 ```ts showLineNumbers copy filename="agents/planning-agent.ts"
-import { Agent } from '@mastra/core/agent'
-import { openai } from '@ai-sdk/openai'
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
 
-const llm = openai('gpt-4o')
+const llm = openai("gpt-4o");
 
 const planningAgent = new Agent({
-  name: 'planningAgent',
+  name: "planningAgent",
   model: llm,
   instructions: `
         You are a local activities and travel expert who excels at weather-based planning. Analyze the weather data and provide practical activity recommendations.
@@ -62,14 +63,16 @@ const planningAgent = new Agent({
 
         Maintain this exact formatting for consistency, using the emoji and section headers as shown.
       `,
-})
+});
 
-export { planningAgent }
+export { planningAgent };
 ```
 
 ## 天気ワークフローの定義
+
 天気ワークフローを2つのステップで定義します：1つはネットワーク呼び出しを介して天気を取得するステップ、もう1つはプランニングエージェントを使用してアクティビティを計画するステップです。
-```ts showLineNumbers copy filename="workflows/agent-workflow.ts"
+
+````ts showLineNumbers copy filename="workflows/agent-workflow.ts"
 import { createWorkflow, createStep } from '@mastra/core/workflows/vNext'
 import { z } from 'zod'
 
@@ -241,17 +244,18 @@ const mastra = new Mastra({
 })
 
 export { mastra }
-```
+````
 
 ## Mastraインスタンスにエージェントとワークフローを登録する
+
 プランニングエージェントと天気ワークフローをmastraインスタンスに登録します。
 これは、天気ワークフロー内でプランニングエージェントへのアクセスを可能にするために重要です。
 
 ```ts showLineNumbers copy filename="index.ts"
-import { Mastra } from '@mastra/core/mastra'
-import { createLogger } from '@mastra/core/logger'
-import { weatherWorkflow } from './workflows'
-import { planningAgent } from './agents'
+import { Mastra } from "@mastra/core/mastra";
+import { createLogger } from "@mastra/core/logger";
+import { weatherWorkflow } from "./workflows";
+import { planningAgent } from "./agents";
 
 const mastra = new Mastra({
   vnext_workflows: {
@@ -261,27 +265,27 @@ const mastra = new Mastra({
     planningAgent,
   },
   logger: createLogger({
-    name: 'Mastra',
-    level: 'info',
+    name: "Mastra",
+    level: "info",
   }),
-})
+});
 
-export { mastra }
+export { mastra };
 ```
 
 ## 天気ワークフローを実行する
+
 ここでは、mastraインスタンスから天気ワークフローを取得し、実行を作成して、必要なinputDataで作成した実行を実行します。
 
 ```ts showLineNumbers copy filename="exec.ts"
-import { mastra } from "./"
+import { mastra } from "./";
 
-const workflow = mastra.vnext_getWorkflow('weatherWorkflow')
-const run = workflow.createRun()
+const workflow = mastra.vnext_getWorkflow("weatherWorkflow");
+const run = workflow.createRun();
 
-const result = await run.start({ inputData: { city: 'New York' } })
-console.dir(result, { depth: null })
+const result = await run.start({ inputData: { city: "New York" } });
+console.dir(result, { depth: null });
 ```
-
 
 <br />
 <br />
@@ -293,4 +297,3 @@ console.dir(result, { depth: null })
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/calling-agent"
   }
 />
-

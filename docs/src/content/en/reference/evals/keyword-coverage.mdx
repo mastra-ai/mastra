@@ -16,7 +16,7 @@ const metric = new KeywordCoverageMetric();
 
 const result = await metric.measure(
   "What are the key features of Python programming language?",
-  "Python is a high-level programming language known for its simple syntax and extensive libraries."
+  "Python is a high-level programming language known for its simple syntax and extensive libraries.",
 );
 
 console.log(result.score); // Coverage score from 0-1
@@ -38,7 +38,7 @@ console.log(result.info); // Object containing detailed metrics about keyword co
       type: "string",
       description: "The text to evaluate for keyword coverage",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -49,7 +49,8 @@ console.log(result.info); // Object containing detailed metrics about keyword co
     {
       name: "score",
       type: "number",
-      description: "Coverage score (0-1) representing the proportion of matched keywords",
+      description:
+        "Coverage score (0-1) representing the proportion of matched keywords",
     },
     {
       name: "info",
@@ -63,8 +64,8 @@ console.log(result.info); // Object containing detailed metrics about keyword co
               name: "matchedKeywords",
               type: "number",
               description: "Number of keywords found in the output",
-            }
-          ]
+            },
+          ],
         },
         {
           type: "number",
@@ -73,17 +74,18 @@ console.log(result.info); // Object containing detailed metrics about keyword co
               name: "totalKeywords",
               type: "number",
               description: "Total number of keywords from the input",
-            }
-          ]
-        }
-      ]
-    }
+            },
+          ],
+        },
+      ],
+    },
   ]}
 />
 
 ## Scoring Details
 
 The metric evaluates keyword coverage by matching keywords with the following features:
+
 - Common word and stop word filtering (e.g., "the", "a", "and")
 - Case-insensitive matching
 - Word form variation handling
@@ -92,6 +94,7 @@ The metric evaluates keyword coverage by matching keywords with the following fe
 ### Scoring Process
 
 1. Processes keywords from input and output:
+
    - Filters out common words and stop words
    - Normalizes case and word forms
    - Handles special terms and compounds
@@ -104,7 +107,9 @@ The metric evaluates keyword coverage by matching keywords with the following fe
 Final score: `(matched_keywords / total_keywords) * scale`
 
 ### Score interpretation
+
 (0 to scale, default 0-1)
+
 - 1.0: Perfect keyword coverage
 - 0.7-0.9: Good coverage with most keywords present
 - 0.4-0.6: Moderate coverage with some keywords missing
@@ -121,7 +126,7 @@ const metric = new KeywordCoverageMetric();
 // Perfect coverage example
 const result1 = await metric.measure(
   "The quick brown fox jumps over the lazy dog",
-  "A quick brown fox jumped over a lazy dog"
+  "A quick brown fox jumped over a lazy dog",
 );
 // {
 //   score: 1.0,
@@ -134,7 +139,7 @@ const result1 = await metric.measure(
 // Partial coverage example
 const result2 = await metric.measure(
   "Python features include easy syntax, dynamic typing, and extensive libraries",
-  "Python has simple syntax and many libraries"
+  "Python has simple syntax and many libraries",
 );
 // {
 //   score: 0.67,
@@ -147,7 +152,7 @@ const result2 = await metric.measure(
 // Technical terms example
 const result3 = await metric.measure(
   "Discuss React.js component lifecycle and state management",
-  "React components have lifecycle methods and manage state"
+  "React components have lifecycle methods and manage state",
 );
 // {
 //   score: 1.0,
@@ -161,6 +166,7 @@ const result3 = await metric.measure(
 ## Special Cases
 
 The metric handles several special cases:
+
 - Empty input/output: Returns score of 1.0 if both empty, 0.0 if only one is empty
 - Single word: Treated as a single keyword
 - Technical terms: Preserves compound technical terms (e.g., "React.js", "machine learning")

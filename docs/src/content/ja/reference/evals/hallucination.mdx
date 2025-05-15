@@ -118,8 +118,7 @@ console.log(result.info.reason); // Explanation of the score
             {
               name: "reason",
               type: "string",
-              description:
-                "スコアの詳細な説明と特定された矛盾点",
+              description: "スコアの詳細な説明と特定された矛盾点",
             },
           ],
         },
@@ -135,11 +134,13 @@ console.log(result.info.reason); // Explanation of the score
 ### スコアリングプロセス
 
 1. 事実の内容を分析します:
+
    - コンテキストからステートメントを抽出
    - 数値と日付を特定
    - ステートメントの関係をマッピング
 
 2. 出力を幻覚として分析します:
+
    - コンテキストのステートメントと比較
    - 直接の矛盾を幻覚としてマーク
    - サポートされていない主張を幻覚として特定
@@ -166,7 +167,9 @@ console.log(result.info.reason); // Explanation of the score
   - 明示的な精度の指標
 
 ### スコアの解釈
+
 (0からスケールまで、デフォルトは0-1)
+
 - 1.0: 完全な幻覚 - すべてのコンテキストステートメントと矛盾
 - 0.75: 高い幻覚 - 75%のコンテキストステートメントと矛盾
 - 0.5: 中程度の幻覚 - 半分のコンテキストステートメントと矛盾

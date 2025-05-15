@@ -3,7 +3,7 @@ title: Turn Taking
 description: Example of using Mastra to create a multi-agent debate with turn-taking conversation flow.
 ---
 
-import { GithubLink } from '@/components/github-link';
+import { GithubLink } from "@/components/github-link";
 
 # AI Debate with Turn Taking
 
@@ -14,26 +14,28 @@ The following code snippets demonstrate how to implement a multi-agent conversat
 First, we need to create two agents with distinct personalities and voice capabilities:
 
 ```typescript filename="src/mastra/agents/index.ts"
-import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
-import { OpenAIVoice } from '@mastra/voice-openai';
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { OpenAIVoice } from "@mastra/voice-openai";
 
 export const optimistAgent = new Agent({
-    name: "Optimist",
-    instructions: "You are an optimistic debater who sees the positive side of every topic. Keep your responses concise and engaging, about 2-3 sentences.",
-    model: openai("gpt-4o"),
-    voice: new OpenAIVoice({
-        speaker: "alloy"
-    }),
+  name: "Optimist",
+  instructions:
+    "You are an optimistic debater who sees the positive side of every topic. Keep your responses concise and engaging, about 2-3 sentences.",
+  model: openai("gpt-4o"),
+  voice: new OpenAIVoice({
+    speaker: "alloy",
+  }),
 });
 
 export const skepticAgent = new Agent({
-    name: "Skeptic",
-    instructions: "You are a RUDE skeptical debater who questions assumptions and points out potential issues. Keep your responses concise and engaging, about 2-3 sentences.",
-    model: openai("gpt-4o"),
-    voice: new OpenAIVoice({
-        speaker: "echo"
-    }),
+  name: "Skeptic",
+  instructions:
+    "You are a RUDE skeptical debater who questions assumptions and points out potential issues. Keep your responses concise and engaging, about 2-3 sentences.",
+  model: openai("gpt-4o"),
+  voice: new OpenAIVoice({
+    speaker: "echo",
+  }),
 });
 ```
 
@@ -42,18 +44,18 @@ export const skepticAgent = new Agent({
 Next, register both agents with your Mastra instance:
 
 ```typescript filename="src/mastra/index.ts"
-import { createLogger } from '@mastra/core/logger';
-import { Mastra } from '@mastra/core/mastra';
-import { optimistAgent, skepticAgent } from './agents';
+import { createLogger } from "@mastra/core/logger";
+import { Mastra } from "@mastra/core/mastra";
+import { optimistAgent, skepticAgent } from "./agents";
 
 export const mastra = new Mastra({
-  agents: { 
+  agents: {
     optimistAgent,
-    skepticAgent 
+    skepticAgent,
   },
   logger: createLogger({
-    name: 'Mastra',
-    level: 'info',
+    name: "Mastra",
+    level: "info",
   }),
 });
 ```
@@ -99,7 +101,7 @@ async function processTurn(
   agentName: "optimistAgent" | "skepticAgent",
   otherAgentName: string,
   topic: string,
-  previousResponse: string = ""
+  previousResponse: string = "",
 ) {
   const agent = mastra.getAgent(agentName);
   const spinner = p.spinner();
@@ -159,7 +161,7 @@ export async function runDebate(topic: string, turns: number = 3) {
   p.intro("AI Debate - Two Agents Discussing a Topic");
   p.log.info(`Starting a debate on: ${topic}`);
   p.log.info(
-    `The debate will continue for ${turns} turns each. Press Ctrl+C to exit at any time.`
+    `The debate will continue for ${turns} turns each. Press Ctrl+C to exit at any time.`,
   );
 
   let optimistResponse = "";
@@ -174,7 +176,7 @@ export async function runDebate(topic: string, turns: number = 3) {
       "optimistAgent",
       "Skeptic",
       topic,
-      skepticResponse
+      skepticResponse,
     );
 
     responses.push({
@@ -187,7 +189,7 @@ export async function runDebate(topic: string, turns: number = 3) {
       "skepticAgent",
       "Optimist",
       topic,
-      optimistResponse
+      optimistResponse,
     );
 
     responses.push({
@@ -208,54 +210,54 @@ export async function runDebate(topic: string, turns: number = 3) {
 Here's a simple script to run the debate from the command line:
 
 ```typescript filename="src/index.ts"
-import { runDebate } from './debate/turn-taking';
-import * as p from '@clack/prompts';
+import { runDebate } from "./debate/turn-taking";
+import * as p from "@clack/prompts";
 
 async function main() {
-    // Get the topic from the user
-    const topic = await p.text({
-        message: 'Enter a topic for the agents to discuss:',
-        placeholder: 'Climate change',
-        validate(value) {
-            if (!value) return 'Please enter a topic';
-            return;
-        },
-    });
+  // Get the topic from the user
+  const topic = await p.text({
+    message: "Enter a topic for the agents to discuss:",
+    placeholder: "Climate change",
+    validate(value) {
+      if (!value) return "Please enter a topic";
+      return;
+    },
+  });
 
-    // Exit if cancelled
-    if (p.isCancel(topic)) {
-        p.cancel('Operation cancelled.');
-        process.exit(0);
-    }
+  // Exit if cancelled
+  if (p.isCancel(topic)) {
+    p.cancel("Operation cancelled.");
+    process.exit(0);
+  }
 
-    // Get the number of turns
-    const turnsInput = await p.text({
-        message: 'How many turns should each agent have?',
-        placeholder: '3',
-        initialValue: '3',
-        validate(value) {
-            const num = parseInt(value);
-            if (isNaN(num) || num < 1) return 'Please enter a positive number';
-            return;
-        },
-    });
+  // Get the number of turns
+  const turnsInput = await p.text({
+    message: "How many turns should each agent have?",
+    placeholder: "3",
+    initialValue: "3",
+    validate(value) {
+      const num = parseInt(value);
+      if (isNaN(num) || num < 1) return "Please enter a positive number";
+      return;
+    },
+  });
 
-    // Exit if cancelled
-    if (p.isCancel(turnsInput)) {
-        p.cancel('Operation cancelled.');
-        process.exit(0);
-    }
+  // Exit if cancelled
+  if (p.isCancel(turnsInput)) {
+    p.cancel("Operation cancelled.");
+    process.exit(0);
+  }
 
-    const turns = parseInt(turnsInput as string);
+  const turns = parseInt(turnsInput as string);
 
-    // Run the debate
-    await runDebate(topic as string, turns);
+  // Run the debate
+  await runDebate(topic as string, turns);
 }
 
 main().catch((error) => {
-    p.log.error('An error occurred:');
-    console.error(error);
-    process.exit(1);
+  p.log.error("An error occurred:");
+  console.error(error);
+  process.exit(1);
 });
 ```
 
@@ -264,17 +266,17 @@ main().catch((error) => {
 For web applications, you can create a simple Next.js component that allows users to start a debate and listen to the agents' responses:
 
 ```tsx filename="app/components/DebateInterface.tsx"
-'use client';
+"use client";
 
-import { useState, useRef } from 'react';
-import { MastraClient } from '@mastra/client-js';
+import { useState, useRef } from "react";
+import { MastraClient } from "@mastra/client-js";
 
 const mastraClient = new MastraClient({
-  baseUrl: process.env.NEXT_PUBLIC_MASTRA_URL || 'http://localhost:4111',
+  baseUrl: process.env.NEXT_PUBLIC_MASTRA_URL || "http://localhost:4111",
 });
 
 export default function DebateInterface() {
-  const [topic, setTopic] = useState('');
+  const [topic, setTopic] = useState("");
   const [turns, setTurns] = useState(3);
   const [isDebating, setIsDebating] = useState(false);
   const [responses, setResponses] = useState<any[]>([]);
@@ -284,18 +286,18 @@ export default function DebateInterface() {
   // Function to start the debate
   const startDebate = async () => {
     if (!topic) return;
-    
+
     setIsDebating(true);
     setResponses([]);
-    
+
     try {
-      const optimist = mastraClient.getAgent('optimistAgent');
-      const skeptic = mastraClient.getAgent('skepticAgent');
-      
+      const optimist = mastraClient.getAgent("optimistAgent");
+      const skeptic = mastraClient.getAgent("skepticAgent");
+
       const newResponses = [];
       let optimistResponse = "";
       let skepticResponse = "";
-      
+
       for (let turn = 1; turn <= turns; turn++) {
         // Optimist's turn
         let prompt;
@@ -304,38 +306,38 @@ export default function DebateInterface() {
         } else {
           prompt = `The topic is: ${topic}. Skeptic just said: "${skepticResponse}". Respond to their points.`;
         }
-        
+
         const optimistResult = await optimist.generate({
-          messages: [{ role: 'user', content: prompt }],
+          messages: [{ role: "user", content: prompt }],
         });
-        
+
         optimistResponse = optimistResult.text;
         newResponses.push({
-          agent: 'Optimist',
-          text: optimistResponse
+          agent: "Optimist",
+          text: optimistResponse,
         });
-        
+
         // Update UI after each response
         setResponses([...newResponses]);
-        
+
         // Skeptic's turn
         prompt = `The topic is: ${topic}. Optimist just said: "${optimistResponse}". Respond to their points.`;
-        
+
         const skepticResult = await skeptic.generate({
-          messages: [{ role: 'user', content: prompt }],
+          messages: [{ role: "user", content: prompt }],
         });
-        
+
         skepticResponse = skepticResult.text;
         newResponses.push({
-          agent: 'Skeptic',
-          text: skepticResponse
+          agent: "Skeptic",
+          text: skepticResponse,
         });
-        
+
         // Update UI after each response
         setResponses([...newResponses]);
       }
     } catch (error) {
-      console.error('Error starting debate:', error);
+      console.error("Error starting debate:", error);
     } finally {
       setIsDebating(false);
     }
@@ -344,30 +346,32 @@ export default function DebateInterface() {
   // Function to play audio for a specific response
   const playAudio = async (text: string, agent: string) => {
     if (isPlaying) return;
-    
+
     try {
       setIsPlaying(true);
-      const agentClient = mastraClient.getAgent(agent === 'Optimist' ? 'optimistAgent' : 'skepticAgent');
-      
+      const agentClient = mastraClient.getAgent(
+        agent === "Optimist" ? "optimistAgent" : "skepticAgent",
+      );
+
       const audioResponse = await agentClient.voice.speak(text);
-      
+
       if (!audioResponse.body) {
-        throw new Error('No audio stream received');
+        throw new Error("No audio stream received");
       }
-      
+
       // Convert stream to blob
       const reader = audioResponse.body.getReader();
       const chunks = [];
-      
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         chunks.push(value);
       }
-      
-      const blob = new Blob(chunks, { type: 'audio/mpeg' });
+
+      const blob = new Blob(chunks, { type: "audio/mpeg" });
       const url = URL.createObjectURL(blob);
-      
+
       if (audioRef.current) {
         audioRef.current.src = url;
         audioRef.current.onended = () => {
@@ -377,7 +381,7 @@ export default function DebateInterface() {
         audioRef.current.play();
       }
     } catch (error) {
-      console.error('Error playing audio:', error);
+      console.error("Error playing audio:", error);
       setIsPlaying(false);
     }
   };
@@ -385,7 +389,7 @@ export default function DebateInterface() {
   return (
     <div className="max-w-4xl mx-auto p-4">
       <h1 className="text-2xl font-bold mb-4">AI Debate with Turn Taking</h1>
-      
+
       <div className="mb-6">
         <label className="block mb-2">Debate Topic:</label>
         <input
@@ -396,7 +400,7 @@ export default function DebateInterface() {
           placeholder="e.g., Climate change, AI ethics, Space exploration"
         />
       </div>
-      
+
       <div className="mb-6">
         <label className="block mb-2">Number of Turns (per agent):</label>
         <input
@@ -408,27 +412,27 @@ export default function DebateInterface() {
           className="w-full p-2 border rounded"
         />
       </div>
-      
+
       <button
         onClick={startDebate}
         disabled={isDebating || !topic}
         className="px-4 py-2 bg-blue-500 text-white rounded disabled:bg-gray-300"
       >
-        {isDebating ? 'Debate in Progress...' : 'Start Debate'}
+        {isDebating ? "Debate in Progress..." : "Start Debate"}
       </button>
-      
+
       <audio ref={audioRef} className="hidden" />
-      
+
       {responses.length > 0 && (
         <div className="mt-8">
           <h2 className="text-xl font-semibold mb-4">Debate Transcript</h2>
-          
+
           <div className="space-y-4">
             {responses.map((response, index) => (
-              <div 
+              <div
                 key={index}
                 className={`p-4 rounded ${
-                  response.agent === 'Optimist' ? 'bg-blue-100' : 'bg-gray-100'
+                  response.agent === "Optimist" ? "bg-blue-100" : "bg-gray-100"
                 }`}
               >
                 <div className="flex justify-between items-center">
@@ -438,7 +442,7 @@ export default function DebateInterface() {
                     disabled={isPlaying}
                     className="text-sm px-2 py-1 bg-blue-500 text-white rounded disabled:bg-gray-300"
                   >
-                    {isPlaying ? 'Playing...' : 'Play'}
+                    {isPlaying ? "Playing..." : "Play"}
                   </button>
                 </div>
                 <p className="mt-2">{response.text}</p>
@@ -465,4 +469,4 @@ You can view the complete implementation of the AI Debate with Turn Taking on ou
   link={
     "https://github.com/mastra-ai/voice-examples/tree/main/text-to-speech/turn-taking"
   }
-/> 
+/>

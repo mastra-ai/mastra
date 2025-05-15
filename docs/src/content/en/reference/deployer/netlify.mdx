@@ -10,14 +10,14 @@ The NetlifyDeployer deploys Mastra applications to Netlify Functions, handling s
 ## Usage Example
 
 ```typescript
-import { Mastra } from '@mastra/core';
-import { NetlifyDeployer } from '@mastra/deployer-netlify';
+import { Mastra } from "@mastra/core";
+import { NetlifyDeployer } from "@mastra/deployer-netlify";
 
 const mastra = new Mastra({
   deployer: new NetlifyDeployer({
-    scope: 'your-team-slug',
-    projectName: 'your-project-name',
-    token: 'your-netlify-token'
+    scope: "your-team-slug",
+    projectName: "your-project-name",
+    token: "your-netlify-token",
   }),
   // ... other Mastra configuration options
 });
@@ -38,7 +38,8 @@ const mastra = new Mastra({
     {
       name: "projectName",
       type: "string",
-      description: "Name of your Netlify site (will be created if it doesn't exist).",
+      description:
+        "Name of your Netlify site (will be created if it doesn't exist).",
       isOptional: false,
     },
     {
@@ -50,7 +51,6 @@ const mastra = new Mastra({
   ]}
 />
 
-
 ### Environment Variables
 
 The NetlifyDeployer handles environment variables from multiple sources:
@@ -60,7 +60,9 @@ The NetlifyDeployer handles environment variables from multiple sources:
 3. **Netlify Dashboard**: Variables can also be managed through Netlify's web interface.
 
 ## Lint Mastra Project
+
 Lint your Mastra project to make sure it's fine to build
+
 ```bash
 npx mastra lint
 ```
@@ -90,7 +92,7 @@ The NetlifyDeployer automatically generates a `netlify.toml` configuration file 
 
 ```toml
 [functions]
-node_bundler = "esbuild"            
+node_bundler = "esbuild"
 directory = "netlify/functions"
 
 [[redirects]]
@@ -105,6 +107,7 @@ to = "/.netlify/functions/api/:splat"
 After building, you can deploy your Mastra application `.mastra/output` to Netlify using any of these methods:
 
 1. **Netlify CLI**: Deploy directly using Netlify's official CLI tool
+
    - Install the CLI: `npm install -g netlify-cli`
    - Navigate to the output directory: `cd .mastra/output`
    - Deploy with functions directory specified: `netlify deploy --dir . --functions ./netlify/functions`

@@ -40,10 +40,10 @@ const stepTwo = new Step({
   id: "stepTwo",
   execute: async ({ context }) => {
     if (context.steps.stepOne.status !== "success") {
-      return { incrementedValue: 0 }
+      return { incrementedValue: 0 };
     }
 
-    return { incrementedValue: context.steps.stepOne.output.doubledValue + 1 }
+    return { incrementedValue: context.steps.stepOne.output.doubledValue + 1 };
   },
 });
 
@@ -58,10 +58,10 @@ const stepFour = new Step({
   id: "stepFour",
   execute: async ({ context }) => {
     if (context.steps.stepThree.status !== "success") {
-      return { isEven: false }
+      return { isEven: false };
     }
 
-    return { isEven: context.steps.stepThree.output.tripledValue % 2 === 0 }
+    return { isEven: context.steps.stepThree.output.tripledValue % 2 === 0 };
   },
 });
 
@@ -80,9 +80,9 @@ Now we can add the steps to the workflow. Note the `.then()` method is used to c
 ```ts showLineNumbers copy
 myWorkflow
   .step(stepOne)
-    .then(stepTwo) // chain one
+  .then(stepTwo) // chain one
   .step(stepThree)
-    .then(stepFour) // chain two
+  .then(stepFour) // chain two
   .commit();
 
 const { start } = myWorkflow.createRun();

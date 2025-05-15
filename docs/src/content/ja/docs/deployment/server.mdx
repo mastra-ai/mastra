@@ -73,17 +73,17 @@ export const mastra = new Mastra({
 Mastraを使用すると、サーバーのCORS（クロスオリジンリソースシェアリング）設定を構成できます。
 
 ```typescript copy showLineNumbers
-import { Mastra } from '@mastra/core';
+import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
   server: {
     cors: {
-      origin: ['https://example.com'], // 特定のオリジンを許可するか、すべての場合は '*'
-      allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowHeaders: ['Content-Type', 'Authorization'],
+      origin: ["https://example.com"], // 特定のオリジンを許可するか、すべての場合は '*'
+      allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      allowHeaders: ["Content-Type", "Authorization"],
       credentials: false,
-    }
-  }
+    },
+  },
 });
 ```
 
@@ -261,4 +261,3 @@ HTTPサーバーを起動します：
 ```bash copy
 node .mastra/output/index.mjs
 ```
-

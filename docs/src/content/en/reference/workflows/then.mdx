@@ -10,10 +10,7 @@ The `.then()` method creates a sequential dependency between workflow steps, ens
 ## Usage
 
 ```typescript
-workflow
-  .step(stepOne)
-  .then(stepTwo)
-  .then(stepThree);
+workflow.step(stepOne).then(stepTwo).then(stepThree);
 ```
 
 ## Parameters
@@ -23,9 +20,10 @@ workflow
     {
       name: "step",
       type: "Step | string",
-      description: "The step instance or step ID that should execute after the previous step completes",
-      isOptional: false
-    }
+      description:
+        "The step instance or step ID that should execute after the previous step completes",
+      isOptional: false,
+    },
   ]}
 />
 
@@ -36,14 +34,15 @@ workflow
     {
       name: "workflow",
       type: "Workflow",
-      description: "The workflow instance for method chaining"
-    }
+      description: "The workflow instance for method chaining",
+    },
   ]}
 />
 
 ## Validation
 
 When using `then`:
+
 - The previous step must exist in the workflow
 - Steps cannot form circular dependencies
 - Each step can only appear once in a sequential chain
@@ -71,4 +70,3 @@ try {
 - [after Reference](./after.mdx)
 - [Sequential Steps Example](../../examples/workflows/sequential-steps.mdx)
 - [Control Flow Guide](../../docs/workflows/control-flow.mdx)
-

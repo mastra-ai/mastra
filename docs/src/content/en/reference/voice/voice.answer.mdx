@@ -15,9 +15,9 @@ import { getMicrophoneStream } from "@mastra/node-audio";
 import Speaker from "@mastra/node-speaker";
 
 const speaker = new Speaker({
-  sampleRate: 24100,  // Audio sample rate in Hz - standard for high-quality audio on MacBook Pro
-  channels: 1,        // Mono audio output (as opposed to stereo which would be 2)
-  bitDepth: 16,       // Bit depth for audio quality - CD quality standard (16-bit resolution)
+  sampleRate: 24100, // Audio sample rate in Hz - standard for high-quality audio on MacBook Pro
+  channels: 1, // Mono audio output (as opposed to stereo which would be 2)
+  bitDepth: 16, // Bit depth for audio quality - CD quality standard (16-bit resolution)
 });
 
 // Initialize a real-time voice provider
@@ -42,9 +42,9 @@ await voice.send(microphoneStream);
 await voice.answer();
 ```
 
-
 ## Parameters
-<br/>
+
+<br />
 <PropertiesTable
   content={[
     {
@@ -52,7 +52,7 @@ await voice.answer();
       type: "Record<string, unknown>",
       description: "Provider-specific options for the response",
       isOptional: true,
-    }
+    },
   ]}
 />
 

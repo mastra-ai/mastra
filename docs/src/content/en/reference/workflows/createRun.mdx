@@ -34,17 +34,20 @@ const result = await start();
     {
       name: "watch",
       type: "(callback: (record: WorkflowResult) => void) => () => void",
-      description: "Function that accepts a callback function that will be called with each transition of the workflow run",
+      description:
+        "Function that accepts a callback function that will be called with each transition of the workflow run",
     },
     {
       name: "resume",
       type: "({stepId: string, context: Record<string, any>}) => Promise<WorkflowResult>",
-      description: "Function that resumes a workflow run from a given step ID and context",
+      description:
+        "Function that resumes a workflow run from a given step ID and context",
     },
     {
       name: "resumeWithEvent",
       type: "(eventName: string, data: any) => Promise<WorkflowResult>",
-      description: "Function that resumes a workflow run from a given event name and data",
+      description:
+        "Function that resumes a workflow run from a given event name and data",
     },
   ]}
 />
