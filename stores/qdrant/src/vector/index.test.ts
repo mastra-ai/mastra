@@ -118,7 +118,7 @@ describe('QdrantVector', () => {
         metadata: newMetaData,
       };
 
-      await qdrant.updateVector(testCollectionName, idToBeUpdated, update);
+      await qdrant.updateVector({ indexName: testCollectionName, id: idToBeUpdated, update });
 
       const results: QueryResult[] = await qdrant.query({
         indexName: testCollectionName,
@@ -146,7 +146,7 @@ describe('QdrantVector', () => {
         metadata: newMetaData,
       };
 
-      await qdrant.updateVector(testCollectionName, idToBeUpdated, update);
+      await qdrant.updateVector({ indexName: testCollectionName, id: idToBeUpdated, update });
 
       const results: QueryResult[] = await qdrant.query({
         indexName: testCollectionName,
@@ -171,7 +171,7 @@ describe('QdrantVector', () => {
         vector: newVector,
       };
 
-      await qdrant.updateVector(testCollectionName, idToBeUpdated, update);
+      await qdrant.updateVector({ indexName: testCollectionName, id: idToBeUpdated, update });
 
       const results: QueryResult[] = await qdrant.query({
         indexName: testCollectionName,
@@ -185,12 +185,16 @@ describe('QdrantVector', () => {
     });
 
     it('should throw exception when no updates are given', async () => {
-      await expect(qdrant.updateVector(testCollectionName, 'id', {})).rejects.toThrow('No updates provided');
+      await expect(qdrant.updateVector({ indexName: testCollectionName, id: 'id', update: {} })).rejects.toThrow(
+        'No updates provided',
+      );
     });
 
     it('should throw error for non-existent index', async () => {
       const nonExistentIndex = 'non-existent-index';
-      await expect(qdrant.updateVector(nonExistentIndex, 'test-id', { vector: [1, 2, 3] })).rejects.toThrow();
+      await expect(
+        qdrant.updateVector({ indexName: nonExistentIndex, id: 'test-id', update: { vector: [1, 2, 3] } }),
+      ).rejects.toThrow();
     });
 
     it('should throw error for invalid vector dimension', async () => {
@@ -201,7 +205,7 @@ describe('QdrantVector', () => {
       });
 
       await expect(
-        qdrant.updateVector(testCollectionName, id, { vector: [1, 2] }), // Wrong dimension
+        qdrant.updateVector({ indexName: testCollectionName, id, update: { vector: [1, 2] } }), // Wrong dimension
       ).rejects.toThrow();
     });
   });

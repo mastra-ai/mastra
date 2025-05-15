@@ -503,7 +503,7 @@ describe('OpenSearchVector', () => {
           metadata: newMetaData,
         };
 
-        await vectorDB.updateVector(testIndexName, idToBeUpdated, update);
+        await vectorDB.updateVector({ indexName: testIndexName, id: idToBeUpdated, update });
 
         const results: QueryResult[] = await vectorDB.query({
           indexName: testIndexName,
@@ -530,7 +530,7 @@ describe('OpenSearchVector', () => {
           metadata: newMetaData,
         };
 
-        await vectorDB.updateVector(testIndexName, idToBeUpdated, update);
+        await vectorDB.updateVector({ indexName: testIndexName, id: idToBeUpdated, update });
 
         const results: QueryResult[] = await vectorDB.query({
           indexName: testIndexName,
@@ -555,7 +555,7 @@ describe('OpenSearchVector', () => {
           vector: newVector,
         };
 
-        await vectorDB.updateVector(testIndexName, idToBeUpdated, update);
+        await vectorDB.updateVector({ indexName: testIndexName, id: idToBeUpdated, update });
 
         const results: QueryResult[] = await vectorDB.query({
           indexName: testIndexName,
@@ -569,7 +569,9 @@ describe('OpenSearchVector', () => {
       });
 
       it('should throw exception when no updates are given', async () => {
-        await expect(vectorDB.updateVector(testIndexName, 'id', {})).rejects.toThrow('No updates provided');
+        await expect(vectorDB.updateVector({ indexName: testIndexName, id: 'id', update: {} })).rejects.toThrow(
+          'No updates provided',
+        );
       });
     });
 

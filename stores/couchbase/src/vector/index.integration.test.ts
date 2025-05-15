@@ -431,7 +431,7 @@ describe('Integration Testing CouchbaseVector', async () => {
         metadata: newMetaData,
       };
 
-      await couchbase_client.updateVector(test_indexName, idToBeUpdated, update);
+      await couchbase_client.updateVector({ indexName: test_indexName, id: idToBeUpdated, update });
 
       const result = await collection.get(idToBeUpdated);
       expect(result.content.embedding).toEqual(newVector);
@@ -451,7 +451,7 @@ describe('Integration Testing CouchbaseVector', async () => {
         metadata: newMetaData,
       };
 
-      await couchbase_client.updateVector(test_indexName, idToBeUpdated, update);
+      await couchbase_client.updateVector({ indexName: test_indexName, id: idToBeUpdated, update });
 
       const result = await collection.get(idToBeUpdated);
       expect(result.content.embedding).toEqual(testVectors[0]);
@@ -469,14 +469,16 @@ describe('Integration Testing CouchbaseVector', async () => {
         vector: newVector,
       };
 
-      await couchbase_client.updateVector(test_indexName, idToBeUpdated, update);
+      await couchbase_client.updateVector({ indexName: test_indexName, id: idToBeUpdated, update });
 
       const result = await collection.get(idToBeUpdated);
       expect(result.content.embedding).toEqual(newVector);
     });
 
     it('should throw exception when no updates are given', async () => {
-      await expect(couchbase_client.updateVector(test_indexName, 'id', {})).rejects.toThrow('No updates provided');
+      await expect(couchbase_client.updateVector({ indexName: test_indexName, id: 'id', update: {} })).rejects.toThrow(
+        'No updates provided',
+      );
     });
 
     it('should delete the vector by id', async () => {

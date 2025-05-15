@@ -429,7 +429,7 @@ describe('CloudflareVector', () => {
         metadata: newMetaData,
       };
 
-      await vectorDB.updateVector(indexName1, idToBeUpdated, update);
+      await vectorDB.updateVector({ indexName: indexName1, id: idToBeUpdated, update });
 
       await waitUntilVectorsIndexed(vectorDB, indexName1, 3);
 
@@ -458,7 +458,7 @@ describe('CloudflareVector', () => {
         vector: newVector,
       };
 
-      await vectorDB.updateVector(indexName2, idToBeUpdated, update);
+      await vectorDB.updateVector({ indexName: indexName2, id: idToBeUpdated, update });
 
       await waitUntilVectorsIndexed(vectorDB, indexName2, 3);
 
@@ -477,7 +477,9 @@ describe('CloudflareVector', () => {
     });
 
     it('should throw exception when no updates are given', async () => {
-      await expect(vectorDB.updateVector(indexName3, 'id', {})).rejects.toThrow('No update data provided');
+      await expect(vectorDB.updateVector({ indexName: indexName3, id: 'id', update: {} })).rejects.toThrow(
+        'No update data provided',
+      );
     });
   });
 

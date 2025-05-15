@@ -282,7 +282,7 @@ describe.skip('PineconeVector Integration Tests', () => {
           metadata: newMetaData,
         };
 
-        await vectorDB.updateVector(indexNameUpdate, idToBeUpdated, update);
+        await vectorDB.updateVector({ indexName: indexNameUpdate, id: idToBeUpdated, update });
 
         await waitUntilVectorsIndexed(vectorDB, indexNameUpdate, 3);
 
@@ -311,7 +311,7 @@ describe.skip('PineconeVector Integration Tests', () => {
           metadata: newMetaData,
         };
 
-        await vectorDB.updateVector(indexNameUpdate, idToBeUpdated, update);
+        await vectorDB.updateVector({ indexName: indexNameUpdate, id: idToBeUpdated, update });
 
         await waitUntilVectorsIndexed(vectorDB, indexNameUpdate, 3);
 
@@ -338,7 +338,7 @@ describe.skip('PineconeVector Integration Tests', () => {
           vector: newVector,
         };
 
-        await vectorDB.updateVector(indexNameUpdate, idToBeUpdated, update);
+        await vectorDB.updateVector({ indexName: indexNameUpdate, id: idToBeUpdated, update });
 
         await waitUntilVectorsIndexed(vectorDB, indexNameUpdate, 3);
 
@@ -355,12 +355,16 @@ describe.skip('PineconeVector Integration Tests', () => {
       }, 500000);
 
       it('should throw exception when no updates are given', async () => {
-        await expect(vectorDB.updateVector(indexNameUpdate, 'id', {})).rejects.toThrow('No updates provided');
+        await expect(vectorDB.updateVector({ indexName: indexNameUpdate, id: 'id', update: {} })).rejects.toThrow(
+          'No updates provided',
+        );
       });
 
       it('should throw error for non-existent index', async () => {
         const nonExistentIndex = 'non-existent-index';
-        await expect(vectorDB.updateVector(nonExistentIndex, 'test-id', { vector: [1, 2, 3] })).rejects.toThrow();
+        await expect(
+          vectorDB.updateVector({ indexName: nonExistentIndex, id: 'test-id', update: { vector: [1, 2, 3] } }),
+        ).rejects.toThrow();
       });
 
       it('should throw error for invalid vector dimension', async () => {
@@ -371,7 +375,7 @@ describe.skip('PineconeVector Integration Tests', () => {
         });
 
         await expect(
-          vectorDB.updateVector(indexNameUpdate, id, { vector: [1, 2] }), // Wrong dimension
+          vectorDB.updateVector({ indexName: indexNameUpdate, id, update: { vector: [1, 2] } }), // Wrong dimension
         ).rejects.toThrow();
       }, 500000);
     });
@@ -490,7 +494,12 @@ describe.skip('PineconeVector Integration Tests', () => {
       await waitUntilVectorsIndexed(vectorDB, indexNameNamespace, 1);
 
       // Update in namespace1
-      await vectorDB.updateVector(indexNameNamespace, id, { metadata: { label: 'updated' } }, namespace1);
+      await vectorDB.updateVector({
+        indexName: indexNameNamespace,
+        id,
+        update: { metadata: { label: 'updated' } },
+        namespace: namespace1,
+      });
 
       await waitUntilVectorsIndexed(vectorDB, indexNameNamespace, 1);
 

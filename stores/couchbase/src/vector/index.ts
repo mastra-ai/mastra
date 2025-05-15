@@ -9,6 +9,7 @@ import type {
   ParamsToArgs,
   DeleteIndexParams,
   DeleteVectorParams,
+  UpdateVectorParams,
 } from '@mastra/core/vector';
 import type { Bucket, Cluster, Collection, Scope } from 'couchbase';
 import { MutateInSpec, connect, SearchRequest, VectorQuery, VectorSearch } from 'couchbase';
@@ -303,12 +304,10 @@ export class CouchbaseVector extends MastraVector {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector(
-    _indexName: string,
-    id: string,
-    updates: { vector?: number[]; metadata?: Record<string, any> },
-  ): Promise<void> {
-    if (!updates.vector && !updates.metadata) {
+  async updateVector(...args: ParamsToArgs<UpdateVectorParams>): Promise<void> {
+    const params = this.normalizeArgs<UpdateVectorParams>('updateVector', args);
+    const { id, update } = params;
+    if (!update.vector && !update.metadata) {
       throw new Error('No updates provided');
     }
     const collection = await this.getCollection();
@@ -324,8 +323,8 @@ export class CouchbaseVector extends MastraVector {
     }
 
     const specs: MutateInSpec[] = [];
-    if (updates.vector) specs.push(MutateInSpec.replace('embedding', updates.vector));
-    if (updates.metadata) specs.push(MutateInSpec.replace('metadata', updates.metadata));
+    if (update.vector) specs.push(MutateInSpec.replace('embedding', update.vector));
+    if (update.metadata) specs.push(MutateInSpec.replace('metadata', update.metadata));
 
     await collection.mutateIn(id, specs);
   }

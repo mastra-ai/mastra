@@ -7,6 +7,7 @@ import type {
   ParamsToArgs,
   QueryResult,
   QueryVectorParams,
+  UpdateVectorParams,
   UpsertVectorParams,
 } from '@mastra/core/vector';
 import { MastraVector } from '@mastra/core/vector';
@@ -264,11 +265,9 @@ export class TurbopufferVector extends MastraVector {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector(
-    indexName: string,
-    id: string,
-    updates: { vector?: number[]; metadata?: Record<string, any> },
-  ): Promise<void> {
+  async updateVector(...args: ParamsToArgs<UpdateVectorParams>): Promise<void> {
+    const params = this.normalizeArgs<UpdateVectorParams>('updateVector', args);
+    const { indexName, id, update } = params;
     try {
       const namespace = this.client.namespace(indexName);
       const createIndex = this.createIndexCache.get(indexName);
@@ -277,8 +276,8 @@ export class TurbopufferVector extends MastraVector {
       }
       const distanceMetric = createIndex.tpufDistanceMetric;
       const record: any = { id };
-      if (updates.vector) record.vector = updates.vector;
-      if (updates.metadata) record.attributes = updates.metadata;
+      if (update.vector) record.vector = update.vector;
+      if (update.metadata) record.attributes = update.metadata;
 
       await namespace.upsert({
         vectors: [record],

@@ -16,6 +16,7 @@ import type {
   DescribeIndexParams,
   DeleteIndexParams,
   DeleteVectorParams,
+  UpdateVectorParams,
 } from '../index';
 
 import { LibSQLFilterTranslator } from './filter';
@@ -354,7 +355,7 @@ export class LibSQLVector extends MastraVector {
       Please use updateVector() instead. 
       updateIndexById() will be removed on May 20th, 2025.`,
     );
-    await this.updateVector(indexName, id, update);
+    await this.updateVector({ indexName, id, update });
   }
 
   /**
@@ -368,11 +369,9 @@ export class LibSQLVector extends MastraVector {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector(
-    indexName: string,
-    id: string,
-    update: { vector?: number[]; metadata?: Record<string, any> },
-  ): Promise<void> {
+  async updateVector(...args: ParamsToArgs<UpdateVectorParams>): Promise<void> {
+    const params = this.normalizeArgs<UpdateVectorParams>('updateVector', args);
+    const { indexName, id, update } = params;
     try {
       const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
       const updates = [];

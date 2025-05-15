@@ -12,6 +12,7 @@ import type {
   DescribeIndexParams,
   DeleteIndexParams,
   DeleteVectorParams,
+  UpdateVectorParams,
 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import { Mutex } from 'async-mutex';
@@ -721,7 +722,7 @@ export class PgVector extends MastraVector {
       Please use updateVector() instead. 
       updateIndexById() will be removed on May 20th, 2025.`,
     );
-    await this.updateVector(indexName, id, update);
+    await this.updateVector({ indexName, id, update });
   }
 
   /**
@@ -734,14 +735,9 @@ export class PgVector extends MastraVector {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector(
-    indexName: string,
-    id: string,
-    update: {
-      vector?: number[];
-      metadata?: Record<string, any>;
-    },
-  ): Promise<void> {
+  async updateVector(...args: ParamsToArgs<UpdateVectorParams>): Promise<void> {
+    const params = this.normalizeArgs<UpdateVectorParams>('updateVector', args);
+    const { indexName, id, update } = params;
     if (!update.vector && !update.metadata) {
       throw new Error('No updates provided');
     }

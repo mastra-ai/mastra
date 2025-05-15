@@ -12,6 +12,8 @@ import type {
   DeleteIndexParams,
   DeleteVectorParams,
   DeleteVectorArgs,
+  UpdateVectorParams,
+  UpdateVectorArgs,
 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import { Pinecone } from '@pinecone-database/pinecone';
@@ -41,6 +43,12 @@ interface PineconeUpsertVectorParams extends UpsertVectorParams {
 }
 
 type PineconeUpsertVectorArgs = [...UpsertVectorArgs, string?, RecordSparseValues[]?];
+
+interface PineconeUpdateVectorParams extends UpdateVectorParams {
+  namespace?: string;
+}
+
+type PineconeUpdateVectorArgs = [...UpdateVectorArgs, string?];
 
 interface PineconeDeleteVectorParams extends DeleteVectorParams {
   namespace?: string;
@@ -238,7 +246,7 @@ export class PineconeVector extends MastraVector {
       Please use updateVector() instead. 
       updateIndexById() will be removed on May 20th, 2025.`,
     );
-    await this.updateVector(indexName, id, update, namespace);
+    await this.updateVector({ indexName, id, update, namespace });
   }
 
   /**
@@ -252,15 +260,11 @@ export class PineconeVector extends MastraVector {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector(
-    indexName: string,
-    id: string,
-    update: {
-      vector?: number[];
-      metadata?: Record<string, any>;
-    },
-    namespace?: string,
-  ): Promise<void> {
+  async updateVector(...args: ParamsToArgs<PineconeUpdateVectorParams> | PineconeUpdateVectorArgs): Promise<void> {
+    const params = this.normalizeArgs<PineconeUpdateVectorParams, PineconeUpdateVectorArgs>('updateVector', args, [
+      'namespace',
+    ]);
+    const { indexName, id, update, namespace } = params;
     try {
       if (!update.vector && !update.metadata) {
         throw new Error('No updates provided');
