@@ -15,10 +15,8 @@ interface UsePromptEnhancerResult {
   explanation: string;
   isEnhancing: boolean;
   userComment: string;
-  showCommentInput: boolean;
   enhancePrompt: () => Promise<void>;
   setUserComment: (comment: string) => void;
-  setShowCommentInput: (show: boolean) => void;
   clearEnhancement: () => void;
   applyChanges: () => void;
 }
@@ -33,7 +31,6 @@ export function usePromptEnhancer({
   const [enhancedPrompt, setEnhancedPrompt] = useState('');
   const [explanation, setExplanation] = useState('');
   const [isEnhancing, setIsEnhancing] = useState(false);
-  const [showCommentInput, setShowCommentInput] = useState(false);
   const [userComment, setUserComment] = useState('');
 
   const enhancePrompt = async () => {
@@ -62,7 +59,6 @@ export function usePromptEnhancer({
 
       // Clear the comment
       setUserComment('');
-      setShowCommentInput(false);
     } catch (error) {
       console.error('Failed to enhance prompt:', error);
     } finally {
@@ -107,10 +103,8 @@ export function usePromptEnhancer({
     explanation,
     isEnhancing,
     userComment,
-    showCommentInput,
     enhancePrompt,
     setUserComment,
-    setShowCommentInput,
     clearEnhancement,
     applyChanges,
   };
