@@ -238,7 +238,7 @@ const planActivities = createStep({
     activities: z.array(z.string())
   }),
   execute: async ({ inputData }) => {
-    console.log(`Planning activities for ${inputData.city} based on weather`);
+    mastra.getLogger()?..debug(`Planning activities for ${inputData.city} based on weather`);
     const activities = [];
     
     if (inputData.temperature > 20 && inputData.conditions === "Sunny") {
@@ -280,7 +280,7 @@ const activityPlannerTool = createTool({
     activities: z.array(z.string())
   }),
   execute: async ({ context: { city }, mastra }) => {
-    console.log(`Tool executing for city: ${city}`);
+    mastra.getLogger()?..debug(`Tool executing for city: ${city}`);
     
     const workflow = mastra?.vnext_getWorkflow("weatherWorkflow");
     if (!workflow) {
