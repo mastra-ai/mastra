@@ -23,7 +23,7 @@ export function AgentInformation({ agentId }: { agentId: string }) {
   const providerIcon = providerMapToIcon[(agent?.provider || 'openai.chat') as keyof typeof providerMapToIcon];
 
   return (
-    <div className="h-full">
+    <div className="h-full overflow-y-scroll pb-5">
       <div className="p-5 border-b-sm border-border1">
         <div className="text-icon6 flex items-center gap-2">
           <Icon size="lg" className="bg-surface4 rounded-md p-1">

@@ -23,7 +23,7 @@ export const AgentOverview = ({ agent, agentId }: AgentOverviewProps) => {
   }));
 
   return (
-    <div className="py-2">
+    <div className="py-2 overflow-y-auto h-full">
       <div className="px-5">
         <AgentPromptEnhancer agentId={agentId} />
       </div>
