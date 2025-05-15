@@ -11,7 +11,7 @@ import cn from "clsx";
 import { Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { FC, SyntheticEvent } from "react";
-import { useRef } from "react";
+import { useRef, useState, useEffect } from "react";
 import {
   PagefindResult,
   PagefindSearchOptions,
@@ -19,6 +19,24 @@ import {
 } from "../hooks/use-debounced-search";
 import { BookIcon, BurgerIcon, JarvisIcon } from "./svgs/Icons";
 import { SpinnerIcon } from "./svgs/spinner";
+
+// Custom hook for responsive design
+const useMediaQuery = (query: string): boolean => {
+  const [matches, setMatches] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    if (media.matches !== matches) {
+      setMatches(media.matches);
+    }
+
+    const listener = () => setMatches(media.matches);
+    media.addEventListener("change", listener);
+    return () => media.removeEventListener("change", listener);
+  }, [matches, query]);
+
+  return matches;
+};
 
 type SearchProps = {
   /**
@@ -58,13 +76,16 @@ export const CustomSearch: FC<SearchProps> = ({
   const inputRef = useRef<HTMLInputElement>(null!);
   const resultsContainerRef = useRef<HTMLDivElement>(null);
 
+  // Check if screen is mobile size
+  const isMobile = useMediaQuery("(max-width: 768px)");
+
   // Virtual list for search results
   const virtualizer = useVirtualizer({
     count: results.length
       ? results.flatMap((r) => r.sub_results).length + 1
       : 1, // +1 for the AI option
     getScrollElement: () => resultsContainerRef.current,
-    estimateSize: () => 100, // Approximate height of each result item
+    estimateSize: () => isMobile ? 90 : 100, // Smaller size for mobile screens
     overscan: 5,
   });
 
@@ -226,7 +247,7 @@ export const CustomSearch: FC<SearchProps> = ({
                                       {search}
                                     </span>
                                   </span>
-                                  <span className="text-icons-3 text-sm md:text-[15px] text-left font-normal">
+                                  <span className="text-icons-3 max-w-[150px] md:max-w-full truncate text-sm md:text-[15px] text-left font-normal">
                                     Use AI to answer your question
                                   </span>
                                 </span>
