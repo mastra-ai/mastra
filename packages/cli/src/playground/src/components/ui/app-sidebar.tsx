@@ -16,6 +16,7 @@ import {
   SidebarRail,
   useSidebar,
 } from '@/components/ui/sidebar';
+import { AgentIcon, Icon, ToolsIcon, WorkflowIcon } from '@mastra/playground-ui';
 
 export const LogoWithoutText = (props: { className: string }) => (
   <svg {...props} xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 21 21" fill="none">
@@ -132,7 +133,7 @@ const links = [
   {
     name: 'Agents',
     url: '/agents',
-    icon: Agent,
+    icon: AgentIcon,
   },
   {
     name: 'Networks',
@@ -142,7 +143,7 @@ const links = [
   {
     name: 'Tools',
     url: '/tools',
-    icon: DraftingCompass,
+    icon: ToolsIcon,
   },
   {
     name: 'MCP Servers',
@@ -152,7 +153,7 @@ const links = [
   {
     name: 'Workflows',
     url: '/workflows',
-    icon: Workflow,
+    icon: WorkflowIcon,
   },
   {
     name: 'Runtime Context',
@@ -168,7 +169,7 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="w-full pb-4 pl-1 pt-4">
+      <SidebarHeader className="w-full pb-3 pl-1 pt-3">
         <span className="flex shrink-0">
           {state === 'collapsed' ? (
             <LogoWithoutText className="h-10 w-10 shrink-0 pl-0" />
@@ -195,7 +196,9 @@ export function AppSidebar() {
                         className={`group/icon ${isActive ? 'text-primary bg-muted/50' : 'text-[#939393]'}`}
                         to={item.url}
                       >
-                        <item.icon />
+                        <Icon>
+                          <item.icon />
+                        </Icon>
                         <span className="text-[0.8rem] font-normal">{item.name}</span>
                       </Link>
                     </SidebarMenuButton>
