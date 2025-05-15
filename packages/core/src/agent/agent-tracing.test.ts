@@ -1,6 +1,6 @@
-import { createOpenAI } from '@ai-sdk/openai';
 import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import { MockLanguageModelV1 } from 'ai/test';
 import { config } from 'dotenv';
 import { describe, expect, it } from 'vitest';
 
@@ -10,14 +10,19 @@ import { Agent } from './index';
 
 config();
 
-const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
 describe('agent telemetry', () => {
   it('should use telemetry options when generating a response', async () => {
     const electionAgent = new Agent({
       name: 'US Election agent',
       instructions: 'You know about the past US elections',
-      model: openai('gpt-4o'),
+      model: new MockLanguageModelV1({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: `Donald Trump won the 2016 U.S. presidential election, defeating Hillary Clinton.`,
+        }),
+      }),
     });
 
     const memoryExporter = new InMemorySpanExporter();
@@ -28,6 +33,7 @@ describe('agent telemetry', () => {
 
     const mastra = new Mastra({
       agents: { electionAgent },
+      logger: false,
       telemetry: {
         enabled: true,
         serviceName: 'test-seppe',
