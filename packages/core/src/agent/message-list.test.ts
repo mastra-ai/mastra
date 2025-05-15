@@ -1,4 +1,6 @@
-import type { CoreMessage, Message } from 'ai';
+import { randomUUID } from 'crypto';
+import { appendClientMessage, appendResponseMessages } from 'ai';
+import type { UIMessage, CoreMessage, Message } from 'ai';
 import { describe, expect, it } from 'vitest';
 import type { MessageType } from '../memory';
 import type { MessageListItem } from './message-list';
@@ -32,7 +34,6 @@ describe('MessageList', () => {
         id: input.id,
         role: 'user',
         createdAt: input.createdAt,
-        originalMessage: input,
         contentSource: 'new-message',
         content: {
           format: 2,
@@ -62,11 +63,11 @@ describe('MessageList', () => {
         id: expect.any(String),
         role: 'user',
         createdAt: expect.any(Date),
-        originalMessage: input,
         contentSource: 'new-message',
         content: {
           format: 2,
-          parts: [{ type: 'text', text: 'Hello from Core!' }],
+          content: 'Hello from Core!',
+          parts: [{ type: 'step-start' }, { type: 'text', text: 'Hello from Core!' }],
         },
         threadId,
         resourceId,
@@ -96,18 +97,19 @@ describe('MessageList', () => {
       expect(list.toUIMessages()).toEqual([
         {
           id: expect.any(String),
-          content: '',
+          content: messageOne.content,
           role: `user` as const,
           experimental_attachments: [],
           createdAt: expect.any(Date),
-          parts: [{ type: 'text' as const, text: messageOne.content }],
+          parts: [{ type: 'step-start' }, { type: 'text' as const, text: messageOne.content }],
         },
         {
           id: expect.any(String),
           role: 'assistant',
           content: '',
           createdAt: expect.any(Date),
-          experimental_attachments: [],
+          reasoning: undefined,
+          toolInvocations: undefined,
           parts: [
             { type: 'step-start' },
             {
@@ -146,7 +148,6 @@ describe('MessageList', () => {
           id: inputV1Message.id,
           role: inputV1Message.role,
           createdAt: inputV1Message.createdAt,
-          originalMessage: inputV1Message,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -188,11 +189,11 @@ describe('MessageList', () => {
           id: inputV1Message.id,
           role: inputV1Message.role,
           createdAt: inputV1Message.createdAt,
-          originalMessage: inputV1Message,
           contentSource: 'new-message',
           content: {
             format: 2,
-            parts: [{ type: 'text', text: inputV1Message.content }],
+            content: 'Hello from V1!',
+            parts: [{ type: 'step-start' }, { type: 'text', text: inputV1Message.content }],
           },
           threadId,
           resourceId,
@@ -221,7 +222,6 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'assistant',
           createdAt: expect.any(Date),
-          originalMessage: inputCoreMessage,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -278,12 +278,11 @@ describe('MessageList', () => {
 
       const messageSequence = [msg1, msg2, msg3, msg4];
 
-      expect(new MessageList({ threadId, resourceId }).add(messageSequence, `new-message`).getMessages()).toEqual([
+      const expected = [
         {
           id: msg1.id,
           role: msg1.role,
           createdAt: msg1.createdAt,
-          originalMessage: msg1,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -297,7 +296,6 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'assistant',
           createdAt: msg4.createdAt,
-          originalMessage: msg2,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -323,7 +321,40 @@ describe('MessageList', () => {
           threadId,
           resourceId,
         },
-      ]);
+      ];
+      expect(new MessageList({ threadId, resourceId }).add(messageSequence, `new-message`).getMessages()).toEqual(
+        expected,
+      );
+
+      let messages: Message[] = [];
+      const list = new MessageList();
+
+      // msg1
+      messages = appendClientMessage({ messages, message: msg1 });
+      expect(new MessageList().add(messages, `new-message`).toUIMessages()).toEqual(messages);
+      list.add(messages, `new-message`);
+      expect(list.toUIMessages()).toEqual(messages);
+
+      // msg2
+      messages = appendResponseMessages({
+        messages,
+        responseMessages: [{ ...msg2, id: randomUUID() }],
+      });
+      expect(new MessageList().add(messages, `new-message`).toUIMessages()).toEqual(messages);
+      list.add(messages, `new-message`);
+      expect(list.toUIMessages()).toEqual(messages);
+
+      // msg3
+      messages = appendResponseMessages({ messages, responseMessages: [{ id: randomUUID(), ...msg3 }] });
+      expect(new MessageList().add(messages, `new-message`).toUIMessages()).toEqual(messages);
+      list.add(messages, `new-message`);
+      expect(list.toUIMessages()).toEqual(messages);
+
+      // msg4
+      messages = appendResponseMessages({ messages, responseMessages: [msg4] });
+      expect(new MessageList().add(messages, `new-message`).toUIMessages()).toEqual(messages);
+      list.add(messages, `new-message`);
+      expect(list.toUIMessages()).toEqual(messages);
     });
 
     it('should correctly convert and add a Vercel CoreMessage with reasoning and redacted-reasoning parts', () => {
@@ -343,7 +374,6 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'assistant',
           createdAt: expect.any(Date),
-          originalMessage: inputCoreMessage,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -380,7 +410,6 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'user',
           createdAt: expect.any(Date),
-          originalMessage: inputCoreMessage,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -417,7 +446,6 @@ describe('MessageList', () => {
           id: inputV1Message.id,
           role: inputV1Message.role,
           createdAt: inputV1Message.createdAt,
-          originalMessage: inputV1Message,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -459,7 +487,6 @@ describe('MessageList', () => {
           id: inputV1Message.id,
           role: inputV1Message.role,
           createdAt: inputV1Message.createdAt,
-          originalMessage: inputV1Message,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -511,7 +538,6 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'assistant',
           createdAt: expect.any(Date),
-          originalMessage: msg1,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -539,6 +565,7 @@ describe('MessageList', () => {
                   result: 'Result B',
                 },
               },
+              { type: 'step-start' },
               { type: 'text', text: 'Final response.' },
             ],
           },
@@ -589,7 +616,6 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'assistant',
           createdAt: expect.any(Date),
-          originalMessage: msg1,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -617,6 +643,7 @@ describe('MessageList', () => {
                   result: 'Result B',
                 },
               },
+              { type: 'step-start' },
               { type: 'text', text: 'Final response.' },
             ],
           },
@@ -627,11 +654,11 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'user',
           createdAt: expect.any(Date),
-          originalMessage: msg6,
           contentSource: 'new-message',
           content: {
             format: 2,
-            parts: [{ type: 'text', text: 'Thanks!' }],
+            content: 'Thanks!',
+            parts: [{ type: 'step-start' }, { type: 'text', text: 'Thanks!' }],
           },
           threadId,
           resourceId,
@@ -656,7 +683,6 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'assistant',
           createdAt: expect.any(Date),
-          originalMessage: inputCoreMessage,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -693,7 +719,6 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'user',
           createdAt: expect.any(Date),
-          originalMessage: inputCoreMessage,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -730,7 +755,6 @@ describe('MessageList', () => {
           id: inputV1Message.id,
           role: inputV1Message.role,
           createdAt: inputV1Message.createdAt,
-          originalMessage: inputV1Message,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -772,7 +796,6 @@ describe('MessageList', () => {
           id: inputV1Message.id,
           role: inputV1Message.role,
           createdAt: inputV1Message.createdAt,
-          originalMessage: inputV1Message,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -824,7 +847,6 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'assistant',
           createdAt: expect.any(Date),
-          originalMessage: msg1,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -852,6 +874,7 @@ describe('MessageList', () => {
                   result: 'Result B',
                 },
               },
+              { type: 'step-start' },
               { type: 'text', text: 'Final response.' },
             ],
           },
@@ -902,7 +925,6 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'assistant',
           createdAt: expect.any(Date),
-          originalMessage: msg1,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -930,6 +952,7 @@ describe('MessageList', () => {
                   result: 'Result B',
                 },
               },
+              { type: 'step-start' },
               { type: 'text', text: 'Final response.' },
             ],
           },
@@ -940,11 +963,11 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'user',
           createdAt: expect.any(Date),
-          originalMessage: msg6,
           contentSource: 'new-message',
           content: {
             format: 2,
-            parts: [{ type: 'text', text: 'Thanks!' }],
+            content: 'Thanks!',
+            parts: [{ type: 'step-start' }, { type: 'text', text: 'Thanks!' }],
           },
           threadId,
           resourceId,
@@ -991,11 +1014,11 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'user',
           createdAt: expect.any(Date),
-          originalMessage: userMsg,
           contentSource: 'new-message',
           content: {
             format: 2,
-            parts: [{ type: 'text', text: userMsg.content }],
+            content: userMsg.content,
+            parts: [{ type: 'step-start' }, { type: 'text', text: userMsg.content }],
           },
           threadId,
           resourceId,
@@ -1004,7 +1027,6 @@ describe('MessageList', () => {
           id: expect.any(String), // Should be the ID of the first assistant message in the sequence
           role: 'assistant',
           createdAt: expect.any(Date), // Should be the timestamp of the last message in the sequence
-          originalMessage: assistantMsgPart1, // Original message should be the first assistant message
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -1057,7 +1079,6 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'assistant',
           createdAt: expect.any(Date),
-          originalMessage: inputCoreMessage,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -1094,7 +1115,6 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'user',
           createdAt: expect.any(Date),
-          originalMessage: inputCoreMessage,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -1131,7 +1151,6 @@ describe('MessageList', () => {
           id: inputV1Message.id,
           role: inputV1Message.role,
           createdAt: inputV1Message.createdAt,
-          originalMessage: inputV1Message,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -1173,7 +1192,6 @@ describe('MessageList', () => {
           id: inputV1Message.id,
           role: inputV1Message.role,
           createdAt: inputV1Message.createdAt,
-          originalMessage: inputV1Message,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -1225,7 +1243,6 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'assistant',
           createdAt: expect.any(Date),
-          originalMessage: msg1,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -1253,6 +1270,7 @@ describe('MessageList', () => {
                   result: 'Result B',
                 },
               },
+              { type: 'step-start' },
               { type: 'text', text: 'Final response.' },
             ],
           },
@@ -1303,7 +1321,6 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'assistant',
           createdAt: expect.any(Date),
-          originalMessage: msg1,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -1331,6 +1348,7 @@ describe('MessageList', () => {
                   result: 'Result B',
                 },
               },
+              { type: 'step-start' },
               { type: 'text', text: 'Final response.' },
             ],
           },
@@ -1341,11 +1359,11 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'user',
           createdAt: expect.any(Date),
-          originalMessage: msg6,
           contentSource: 'new-message',
           content: {
             format: 2,
-            parts: [{ type: 'text', text: 'Thanks!' }],
+            content: 'Thanks!',
+            parts: [{ type: 'step-start' }, { type: 'text', text: 'Thanks!' }],
           },
           threadId,
           resourceId,
@@ -1370,7 +1388,6 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'assistant',
           createdAt: expect.any(Date),
-          originalMessage: inputCoreMessage,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -1407,7 +1424,6 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'user',
           createdAt: expect.any(Date),
-          originalMessage: inputCoreMessage,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -1444,7 +1460,6 @@ describe('MessageList', () => {
           id: inputV1Message.id,
           role: inputV1Message.role,
           createdAt: inputV1Message.createdAt,
-          originalMessage: inputV1Message,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -1486,7 +1501,6 @@ describe('MessageList', () => {
           id: inputV1Message.id,
           role: inputV1Message.role,
           createdAt: inputV1Message.createdAt,
-          originalMessage: inputV1Message,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -1538,7 +1552,6 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'assistant',
           createdAt: expect.any(Date),
-          originalMessage: msg1,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -1566,6 +1579,7 @@ describe('MessageList', () => {
                   result: 'Result B',
                 },
               },
+              { type: 'step-start' },
               { type: 'text', text: 'Final response.' },
             ],
           },
@@ -1616,7 +1630,6 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'assistant',
           createdAt: expect.any(Date),
-          originalMessage: msg1,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -1644,6 +1657,7 @@ describe('MessageList', () => {
                   result: 'Result B',
                 },
               },
+              { type: 'step-start' },
               { type: 'text', text: 'Final response.' },
             ],
           },
@@ -1654,11 +1668,11 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'user',
           createdAt: expect.any(Date),
-          originalMessage: msg6,
           contentSource: 'new-message',
           content: {
             format: 2,
-            parts: [{ type: 'text', text: 'Thanks!' }],
+            content: 'Thanks!',
+            parts: [{ type: 'step-start' }, { type: 'text', text: 'Thanks!' }],
           },
           threadId,
           resourceId,
@@ -1692,7 +1706,6 @@ describe('MessageList', () => {
           id: inputV1Message.id,
           role: inputV1Message.role,
           createdAt: inputV1Message.createdAt,
-          originalMessage: inputV1Message,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -1732,7 +1745,6 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'user',
           createdAt: expect.any(Date),
-          originalMessage: inputCoreMessage,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -1776,7 +1788,6 @@ describe('MessageList', () => {
         id: input.id,
         role: 'user',
         createdAt: input.createdAt,
-        originalMessage: input,
         contentSource: 'new-message',
         content: {
           format: 2,
@@ -1819,7 +1830,6 @@ describe('MessageList', () => {
         id: input.id,
         role: 'user',
         createdAt: input.createdAt,
-        originalMessage: input,
         contentSource: 'new-message',
         content: {
           format: 2,
@@ -1891,11 +1901,11 @@ describe('MessageList', () => {
           id: userMsgV1.id,
           role: 'user',
           createdAt: userMsgV1.createdAt,
-          originalMessage: userMsgV1,
           contentSource: 'new-message',
           content: {
             format: 2,
-            parts: [{ type: 'text', text: userMsgV1.content }],
+            content: userMsgV1.content,
+            parts: [{ type: 'step-start' }, { type: 'text', text: userMsgV1.content }],
           },
           threadId,
           resourceId,
@@ -1904,7 +1914,6 @@ describe('MessageList', () => {
           id: assistantMsgV1.id, // Should retain the original assistant message ID
           role: 'assistant',
           createdAt: assistantMsgUIV2.createdAt, // The last message's timestamp might be used for the merged message
-          originalMessage: assistantMsgV1, // Original message should be the first assistant message in the sequence
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -1970,11 +1979,11 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'user',
           createdAt: expect.any(Date),
-          originalMessage: userMsg,
           contentSource: 'new-message',
           content: {
             format: 2,
-            parts: [{ type: 'text', text: userMsg.content }],
+            content: userMsg.content,
+            parts: [{ type: 'step-start' }, { type: 'text', text: userMsg.content }],
           },
           threadId,
           resourceId,
@@ -1983,7 +1992,6 @@ describe('MessageList', () => {
           id: expect.any(String), // Should be the ID of the first assistant message in the sequence
           role: 'assistant',
           createdAt: expect.any(Date), // Should be the timestamp of the last message in the sequence
-          originalMessage: assistantMsgWithToolCall, // Original message should be the first assistant message
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -2000,6 +2008,7 @@ describe('MessageList', () => {
                   result: 'Task completed successfully.',
                 },
               },
+              { type: 'step-start' },
               { type: 'text', text: 'The task is now complete.' },
             ],
           },
@@ -2029,7 +2038,6 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'user',
           createdAt: expect.any(Date),
-          originalMessage: inputCoreMessage,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -2062,7 +2070,6 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'assistant',
           createdAt: expect.any(Date),
-          originalMessage: inputCoreMessage,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -2142,11 +2149,11 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'user',
           createdAt: expect.any(Date),
-          originalMessage: userMsg,
           contentSource: 'new-message',
           content: {
             format: 2,
-            parts: [{ type: 'text', text: userMsg.content }],
+            content: userMsg.content,
+            parts: [{ type: 'step-start' }, { type: 'text', text: userMsg.content }],
           },
           threadId,
           resourceId,
@@ -2155,7 +2162,6 @@ describe('MessageList', () => {
           id: expect.any(String), // Should be the ID of the first assistant message in the sequence
           role: 'assistant',
           createdAt: expect.any(Date), // Should be the timestamp of the last message in the sequence
-          originalMessage: assistantMsgWithCalls, // Original message should be the first assistant message
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -2183,6 +2189,7 @@ describe('MessageList', () => {
                   result: '15°C, cloudy',
                 },
               },
+              { type: 'step-start' },
               { type: 'text', text: "The weather in London is 20°C and sunny, and in Paris it's 15°C and cloudy." },
             ],
           },
@@ -2209,7 +2216,6 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'assistant',
           createdAt: expect.any(Date),
-          originalMessage: inputCoreMessage,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -2255,7 +2261,6 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'user',
           createdAt: expect.any(Date),
-          originalMessage: inputCoreMessage,
           contentSource: 'new-message',
           content: {
             format: 2,
@@ -2397,7 +2402,7 @@ describe('MessageList', () => {
             content: [
               {
                 type: 'text',
-                text: 'Hi there! What’s on your mind?',
+                text: "Hi there! What's on your mind?",
               },
             ],
             role: 'assistant',
@@ -2425,35 +2430,36 @@ describe('MessageList', () => {
       const uiMessages = list.toUIMessages();
 
       expect(uiMessages.length).toBe(9);
-      expect(uiMessages).toEqual([
+      const expectedMessages = [
         {
           id: 'c59c844b-0f1a-409a-995e-3382a3ee1eaa',
           role: 'user',
-          content: '',
+          content: 'hi',
           createdAt: new Date('2025-03-25T20:29:58.103Z'),
-          parts: [{ type: 'text', text: 'hi' }],
+          parts: [{ type: 'step-start' }, { type: 'text', text: 'hi' }],
           experimental_attachments: [],
         },
         {
           id: '7bb920f1-1a89-4f1a-8fb0-6befff982946',
           role: 'assistant',
-          content: '',
+          content: 'Hello! How can I assist you today?',
           createdAt: new Date('2025-03-25T20:29:58.717Z'),
           parts: [{ type: 'step-start' }, { type: 'text', text: 'Hello! How can I assist you today?' }],
-          experimental_attachments: [],
+          reasoning: undefined,
+          toolInvocations: undefined,
         },
         {
           id: '673b1279-9ce5-428e-a646-d19d83ed4d67',
           role: 'user',
-          content: '',
+          content: 'LA',
           createdAt: new Date('2025-03-25T20:30:01.911Z'),
-          parts: [{ type: 'text', text: 'LA' }],
+          parts: [{ type: 'step-start' }, { type: 'text', text: 'LA' }],
           experimental_attachments: [],
         },
         {
           id: '6a903ed0-1cf4-463d-8ea0-c13bd0896405',
           role: 'assistant',
-          content: '',
+          content: "Got it! You're in LA. What would you like to talk about or do today?",
           createdAt: new Date('2025-03-25T20:30:02.177Z'), // Merged message takes the latest timestamp
           parts: [
             { type: 'step-start' },
@@ -2472,12 +2478,13 @@ describe('MessageList', () => {
               text: "Got it! You're in LA. What would you like to talk about or do today?",
             },
           ],
-          experimental_attachments: [],
+          reasoning: undefined,
+          toolInvocations: undefined,
         },
         {
           id: '1b271c02-7762-4416-91e9-146a25ce9c73',
           role: 'user',
-          content: '',
+          content: 'Hello',
           createdAt: new Date('2025-05-13T22:23:26.584Z'),
           parts: [{ type: 'text', text: 'Hello' }],
           experimental_attachments: [],
@@ -2485,15 +2492,16 @@ describe('MessageList', () => {
         {
           id: 'msg-Cpo828mGmAc8dhWwQcD32Net',
           role: 'assistant',
-          content: '',
+          content: 'Hello again! How can I help you today?',
           createdAt: new Date('2025-05-13T22:23:26.585Z'),
           parts: [{ type: 'step-start' }, { type: 'text', text: 'Hello again! How can I help you today?' }],
-          experimental_attachments: [],
+          reasoning: undefined,
+          toolInvocations: undefined,
         },
         {
           id: 'eab9da82-6120-4630-b60e-0a7cb86b0718',
           role: 'user',
-          content: '',
+          content: 'Hi',
           createdAt: new Date('2025-05-13T22:24:51.608Z'),
           parts: [{ type: 'text', text: 'Hi' }],
           experimental_attachments: [],
@@ -2501,19 +2509,125 @@ describe('MessageList', () => {
         {
           id: 'msg-JpZvGeyqVaUo1wthbXf0EVSS',
           role: 'assistant',
-          content: '',
+          content: "Hi there! What's on your mind?",
           createdAt: new Date('2025-05-13T22:24:51.609Z'),
-          parts: [{ type: 'step-start' }, { type: 'text', text: 'Hi there! What’s on your mind?' }],
-          experimental_attachments: [],
+          parts: [{ type: 'step-start' }, { type: 'text', text: "Hi there! What's on your mind?" }],
+          reasoning: undefined,
+          toolInvocations: undefined,
         },
         {
           id: expect.any(String), // The last message doesn't have an ID in the input, so MessageList generates one
           role: 'user',
-          content: '',
+          content: 'hello',
           createdAt: expect.any(Date), // MessageList generates createdAt for messages without one
           parts: [{ type: 'text', text: 'hello' }],
           experimental_attachments: [],
         },
+      ];
+      expect(uiMessages).toEqual(expectedMessages);
+
+      let newId = randomUUID();
+      let newUIMessages = appendResponseMessages({
+        messages: uiMessages,
+        responseMessages: [
+          {
+            id: newId,
+            role: 'assistant' as const,
+            content: [{ type: 'text' as const, text: 'As a large language model...' }],
+          },
+        ],
+      });
+
+      expect(newUIMessages.length).toBe(uiMessages.length + 1);
+      const newUIMessages2 = list.add(newUIMessages, `new-message`).toUIMessages();
+      expect(newUIMessages2).toEqual([
+        ...uiMessages,
+        {
+          role: 'assistant',
+          id: newId,
+          content: 'As a large language model...',
+          createdAt: expect.any(Date),
+          parts: [{ type: 'step-start' }, { type: 'text', text: 'As a large language model...' }],
+          reasoning: undefined,
+          toolInvocations: [],
+        } satisfies UIMessage,
+      ]);
+
+      const newClientMessage = {
+        id: randomUUID(),
+        role: 'user',
+        content: 'Do it anyway please',
+        createdAt: new Date(),
+        experimental_attachments: [],
+        parts: [{ type: 'step-start' }, { type: 'text', text: 'Do it anyway please' }],
+      } satisfies Message;
+
+      const newUIMessages3 = appendClientMessage({
+        messages: newUIMessages2,
+        message: newClientMessage,
+      });
+
+      expect(newUIMessages3.length).toBe(newUIMessages2.length + 1);
+      const newUIMessages4 = list.add(newUIMessages3, 'new-message').toUIMessages();
+      expect(newUIMessages4).toEqual([
+        ...newUIMessages2,
+        {
+          ...newClientMessage,
+        } satisfies Message,
+      ]);
+
+      const newUIMessages5 = appendResponseMessages({
+        messages: newUIMessages3,
+        responseMessages: [
+          { id: randomUUID(), role: 'assistant', content: "Ok fine I'll call a tool then" },
+          {
+            id: randomUUID(),
+            role: 'assistant',
+            content: [{ type: 'tool-call', args: { ok: 'fine' }, toolCallId: 'ok-fine-1', toolName: 'okFineTool' }],
+          },
+          {
+            id: randomUUID(),
+            role: 'tool',
+            content: [{ type: 'tool-result', toolName: 'okFineTool', toolCallId: 'ok-fine-1', result: { lets: 'go' } }],
+          },
+        ],
+      });
+
+      expect(list.add(newUIMessages5, 'new-message').toUIMessages()).toEqual([
+        ...newUIMessages4,
+        {
+          role: 'assistant',
+          content: "Ok fine I'll call a tool then",
+          id: expect.any(String),
+          createdAt: expect.any(Date),
+          parts: [
+            { type: 'step-start' },
+            { type: 'text', text: "Ok fine I'll call a tool then" },
+            { type: 'step-start' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                result: { lets: 'go' },
+                toolCallId: 'ok-fine-1',
+                toolName: 'okFineTool',
+                args: { ok: 'fine' },
+                state: 'result',
+                step: 1,
+              },
+            },
+          ],
+          reasoning: undefined,
+          toolInvocations: [
+            {
+              result: { lets: 'go' },
+              toolCallId: 'ok-fine-1',
+              toolName: 'okFineTool',
+              args: { ok: 'fine' },
+              state: 'result',
+              step: 1,
+            },
+          ],
+        } satisfies Message,
       ]);
     });
 

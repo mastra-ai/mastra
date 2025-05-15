@@ -1,70 +1,39 @@
 import { randomUUID } from 'crypto';
-import type { CoreMessage, UIMessage } from 'ai';
+import type { CoreMessage, FilePart, Message, UIMessage } from 'ai';
 import type { MessageType } from '../memory';
 import { isCoreMessage, isUiMessage } from '../utils';
 
 export type MastraMessageContentV2 = {
-  format: 2;
+  format: 2; // format 2 === UIMessage in AI SDK v4
+  // TODO: When we bump to AI SDK v5 and make "format: 3" we might need to inline these types with a copy/paste
   parts: UIMessage['parts'];
   experimental_attachments?: UIMessage['experimental_attachments'];
+  content?: UIMessage['content'];
+  toolInvocations?: UIMessage['toolInvocations'];
+  reasoning?: UIMessage['reasoning'];
+  annotations?: UIMessage['annotations'];
 };
 
 export type MastraMessageV2 = {
   id: string;
   content: MastraMessageContentV2;
-  role: 'system' | 'user' | 'assistant' | 'data';
+  role: 'user' | 'assistant';
   createdAt: Date;
   threadId?: string;
   resourceId?: string;
 };
 
-type MessageInput = UIMessage | MessageType | CoreMessage | MastraMessageV2;
-// type MessageContentOriginal = UserContent | AssistantContent | ToolContent | MastraMessageContentV2;
+type MessageInput = UIMessage | Message | MessageType | CoreMessage | MastraMessageV2;
 
 export type MessageListItem = {
   id: MastraMessageV2['id'];
   role: MastraMessageV2['role'];
   createdAt: MastraMessageV2['createdAt'];
-  originalMessage: MessageInput;
   contentSource: 'memory' | 'new-message';
   content: MastraMessageContentV2;
   threadId?: string;
   resourceId?: string;
 };
-
-export function toBase64String(data: Uint8Array | ArrayBuffer | string | URL): string {
-  if (typeof data === 'string') {
-    // If it's a string, assume it's already base64 or should be treated as such.
-    return data;
-  }
-
-  if (data instanceof Uint8Array) {
-    return Buffer.from(data).toString('base64');
-  }
-
-  if (data instanceof ArrayBuffer) {
-    return Buffer.from(data).toString('base64');
-  }
-
-  if (data instanceof URL) {
-    // If it's a URL, check if it's a data URL and extract the base64 data
-    if (data.protocol === 'data:') {
-      const base64Match = data.toString().match(/^data:[^;]+;base64,(.+)$/);
-      if (base64Match && base64Match[1]) {
-        return base64Match[1];
-      } else {
-        throw new Error(`Invalid data URL format: ${data}`);
-      }
-    } else {
-      // If it's a non-data URL, throw an error or handle as needed
-      throw new Error(`Unsupported URL protocol for base64 conversion: ${data.protocol}`);
-    }
-  }
-
-  throw new Error(
-    `Unsupported data type for base64 conversion: ${typeof data}. Expected Uint8Array, ArrayBuffer, string, or URL.`,
-  );
-}
 
 export class MessageList {
   private messages: MessageListItem[] = [];
@@ -79,21 +48,6 @@ export class MessageList {
     }
   }
 
-  public toUIMessages(): UIMessage[] {
-    return this.messages.map(m => ({
-      id: m.id,
-      role: m.role,
-      content: '',
-      createdAt: m.createdAt,
-      parts: m.content.parts,
-      experimental_attachments: m.content.experimental_attachments || [],
-    }));
-  }
-
-  public getMessages(): MessageListItem[] {
-    return this.messages;
-  }
-
   public add(messages: MessageInput | MessageInput[], contentSource: MessageListItem['contentSource']) {
     if (Array.isArray(messages)) {
       for (const message of messages) {
@@ -105,15 +59,88 @@ export class MessageList {
 
     return this;
   }
+  public getMessages(): MessageListItem[] {
+    return this.messages;
+  }
+  public toUIMessages(): UIMessage[] {
+    return this.messages.map(MessageList.toUIMessage);
+  }
+  private static toUIMessage(m: MessageListItem): UIMessage {
+    const contentString =
+      typeof m.content.content === `string` && m.content.content !== ''
+        ? m.content.content
+        : m.content.parts.reduce((prev, part) => {
+            if (part.type === `text`) {
+              // return only the last text part like AI SDK does
+              return part.text;
+            }
+            return prev;
+          }, '');
 
+    if (m.role === `user`) {
+      return {
+        id: m.id,
+        role: m.role,
+        content: contentString,
+        createdAt: m.createdAt,
+        parts: m.content.parts,
+        experimental_attachments: m.content.experimental_attachments || [],
+      };
+    } else if (m.role === `assistant`) {
+      return {
+        id: m.id,
+        role: m.role,
+        content: contentString,
+        createdAt: m.createdAt,
+        parts: m.content.parts,
+        reasoning: undefined,
+        toolInvocations: `toolInvocations` in m.content ? m.content.toolInvocations : undefined,
+      };
+    }
+
+    return {
+      id: m.id,
+      role: m.role,
+      content: contentString,
+      createdAt: m.createdAt,
+      parts: m.content.parts,
+    };
+  }
+
+  private getMessageById(id: string) {
+    return this.messages.find(m => m.id === id);
+  }
+  private shouldUpdateMessage(message: MessageInput): { exists: boolean; shouldUpdate?: boolean; id?: string } {
+    if (!this.messages.length) return { exists: false };
+
+    if (!(`id` in message) || !message?.id) {
+      return { exists: false };
+    }
+
+    const existingMessage = this.getMessageById(message.id);
+    if (!existingMessage) return { exists: false };
+
+    return {
+      exists: true,
+      shouldUpdate: !MessageList.messagesAreEqual(existingMessage, message),
+      id: existingMessage.id,
+    };
+  }
   private addOne(message: MessageInput, contentSource: MessageListItem['contentSource']) {
+    if (message.role === `system`) {
+      // TODO: should we handle this more gracefully?
+      throw new Error(`Cannot add system messages to MessageList class.`);
+    }
+
     const messageV2 = this.inputToMastraMessageV2(message);
+
+    const { exists, shouldUpdate, id } = this.shouldUpdateMessage(message);
 
     const latestMessage = this.messages.at(-1);
 
     // Handle non-tool messages (user, assistant, system, data)
     // If the last message is an assistant message and the new message is also an assistant message, merge them.
-    if (latestMessage?.role === 'assistant' && messageV2.role === 'assistant') {
+    if (latestMessage?.role === 'assistant' && messageV2.role === 'assistant' && !shouldUpdate) {
       latestMessage.createdAt = messageV2.createdAt || latestMessage.createdAt;
 
       for (const part of messageV2.content.parts) {
@@ -133,6 +160,7 @@ export class MessageList {
             // Keep the existing args from the call part
           } else {
             // This indicates a tool result for a call not found in the preceding assistant message
+            // TODO: use logger
             console.warn(
               `Tool call part not found in preceding assistant message for result: ${part.toolInvocation.toolCallId}. Skipping result part.`,
               part,
@@ -145,15 +173,23 @@ export class MessageList {
       }
     } else {
       // Add new message if not merging with the last assistant message
-      if (messageV2.role === 'assistant') {
+      if (messageV2.role === 'assistant' && messageV2.content.parts[0]?.type !== `step-start`) {
         // Add step-start part for new assistant messages
         messageV2.content.parts.unshift({ type: 'step-start' });
       }
-      this.messages.push({
+
+      const listItem = {
         ...messageV2,
-        originalMessage: message,
         contentSource,
-      });
+      } satisfies MessageListItem;
+
+      const existingIndex = (shouldUpdate && this.messages.findIndex(m => m.id === id)) || -1;
+
+      if (shouldUpdate && existingIndex !== -1) {
+        this.messages[existingIndex] = listItem;
+      } else if (!exists) {
+        this.messages.push(listItem);
+      }
     }
 
     return this;
@@ -177,10 +213,10 @@ export class MessageList {
       );
     }
 
-    if (this.isMastraMessageV1(message)) return this.mastraMessageV1ToMastraMessageV2(message);
-    if (this.isMastraMessageV2(message)) return message;
-    if (this.isVercelCoreMessage(message)) return this.vercelCoreMessageToMastraMessageV2(message);
-    if (this.isVercelUIMessage(message)) return this.vercelUIMessageToMastraMessageV2(message);
+    if (MessageList.isMastraMessageV1(message)) return this.mastraMessageV1ToMastraMessageV2(message);
+    if (MessageList.isMastraMessageV2(message)) return message;
+    if (MessageList.isVercelCoreMessage(message)) return this.vercelCoreMessageToMastraMessageV2(message);
+    if (MessageList.isVercelUIMessage(message)) return this.vercelUIMessageToMastraMessageV2(message);
 
     throw new Error(`Found unhandled message ${JSON.stringify(message)}`);
   }
@@ -203,267 +239,42 @@ export class MessageList {
     return now;
   }
 
-  private isVercelUIMessage(msg: MessageInput): msg is UIMessage {
-    return !this.isMastraMessage(msg) && isUiMessage(msg);
-  }
-  private isVercelCoreMessage(msg: MessageInput): msg is CoreMessage {
-    return !this.isMastraMessage(msg) && isCoreMessage(msg);
-  }
-  private isMastraMessage(msg: MessageInput): msg is MastraMessageV2 | MessageType {
-    return this.isMastraMessageV2(msg) || this.isMastraMessageV1(msg);
-  }
-  private isMastraMessageV1(msg: MessageInput): msg is MessageType {
-    return !this.isMastraMessageV2(msg) && (`threadId` in msg || `resourceId` in msg);
-  }
-  private isMastraMessageV2(msg: MessageInput): msg is MastraMessageV2 {
-    return Boolean(
-      msg.content &&
-        !Array.isArray(msg.content) &&
-        typeof msg.content !== `string` &&
-        // any newly saved Mastra message v2 shape will have content: { format: 2 }
-        `format` in msg.content &&
-        msg.content.format === 2,
-    );
-  }
-
-  // TODO: need to differentiate AI SDK v4 and v5 messages?
   private mastraMessageV1ToMastraMessageV2(message: MessageType): MastraMessageV2 {
-    const createdAt = message.createdAt || this.generateCreatedAt();
-    const parts: UIMessage['parts'] = [];
-    const experimentalAttachments: UIMessage['experimental_attachments'] = [];
-
-    if (typeof message.content === 'string') {
-      parts.push({
-        type: 'text',
-        text: message.content,
-      });
-    } else if (Array.isArray(message.content)) {
-      for (const part of message.content) {
-        switch (part.type) {
-          case 'text':
-            parts.push({
-              type: 'text',
-              text: part.text,
-            });
-            break;
-          case 'tool-call':
-            parts.push({
-              type: 'tool-invocation',
-              toolInvocation: {
-                state: 'call',
-                toolCallId: part.toolCallId,
-                toolName: part.toolName,
-                args: part.args,
-              },
-            });
-            break;
-          case 'reasoning':
-            parts.push({
-              type: 'reasoning',
-              reasoning: part.text, // Assuming reasoning text is directly in text for V1
-              details: [{ type: 'text', text: part.text, signature: part.signature }], // Assuming simple text detail for V1
-            });
-            break;
-          case 'redacted-reasoning':
-            parts.push({
-              type: 'reasoning',
-              reasoning: '', // V1 might not have a separate reasoning field for redacted
-              details: [{ type: 'redacted', data: part.data }],
-            });
-            break;
-          case 'file':
-            // Mastra V1 file parts can have mimeType and data (binary/data URL, URL object, or URL string)
-
-            // Validate mimeType for non-image/text files
-            if (
-              !part.mimeType ||
-              (part.mimeType !== 'image/jpeg' &&
-                part.mimeType !== 'image/png' &&
-                part.mimeType !== 'image/gif' &&
-                part.mimeType !== 'text/plain' &&
-                part.mimeType !== 'text/html' &&
-                part.mimeType !== 'text/css' &&
-                part.mimeType !== 'text/javascript' &&
-                part.mimeType !== 'application/json' &&
-                part.mimeType !== 'application/xml' &&
-                part.mimeType !== 'application/pdf')
-            ) {
-              console.warn(
-                `Missing or unsupported mimeType for file part: ${part.mimeType}. Treating as generic file.`,
-              );
-              // Decide how to handle this - for now, proceed but maybe log a warning or use a default mimeType?
-              // For now, we'll proceed, but this might be a point for refinement.
-            }
-
-            if (part.data instanceof URL) {
-              try {
-                // Validate URL object
-                new URL(part.data.toString()); // Check if it's a valid URL format
-                if (part.data.protocol !== 'data:') {
-                  // If it's a non-data URL object, add it to experimental_attachments
-                  experimentalAttachments.push({
-                    name: part.filename, // Assuming V1 MessageType FilePart might have a name, or leave undefined
-                    url: part.data.toString(),
-                    contentType: part.mimeType, // Use mimeType as contentType
-                  });
-                } else {
-                  // If it's a data URL object, convert to base64 and add to parts
-                  parts.push({
-                    type: 'file',
-                    mimeType: part.mimeType,
-                    data: toBase64String(part.data),
-                  });
-                }
-              } catch (error) {
-                console.error(`Invalid URL in Mastra V1 file part: ${part.data}`, error);
-                // Decide how to handle invalid URLs - skip the part, throw an error?
-                // For now, we'll skip this part.
-              }
-            } else if (typeof part.data === 'string') {
-              try {
-                // Validate URL string or data URL string
-                if (part.data.startsWith('http://') || part.data.startsWith('https://')) {
-                  new URL(part.data); // Check if it's a valid URL format
-                  // If it's a non-data URL string, add it to experimental_attachments
-                  experimentalAttachments.push({
-                    name: part.filename, // Assuming V1 MessageType FilePart might have a name, or leave undefined
-                    url: part.data,
-                    contentType: part.mimeType, // Use mimeType as contentType
-                  });
-                } else if (part.data.startsWith('data:')) {
-                  // If it's a data URL string, convert to base64 and add to parts
-                  parts.push({
-                    type: 'file',
-                    mimeType: part.mimeType,
-                    data: toBase64String(part.data),
-                  });
-                } else {
-                  // Assume it's base64 data directly
-                  parts.push({
-                    type: 'file',
-                    mimeType: part.mimeType,
-                    data: part.data, // Assume it's already base64
-                  });
-                }
-              } catch (error) {
-                console.error(`Invalid URL or data URL string in Mastra V1 file part: ${part.data}`, error);
-                // Decide how to handle invalid URLs - skip the part, throw an error?
-                // For now, we'll skip this part.
-              }
-            } else {
-              // Otherwise (binary data), convert to base64 and add to parts
-              try {
-                parts.push({
-                  type: 'file',
-                  mimeType: part.mimeType,
-                  data: toBase64String(part.data),
-                });
-              } catch (error) {
-                console.error(`Failed to convert binary data to base64 in Mastra V1 file part: ${error}`, error);
-                // Decide how to handle conversion errors - skip the part, throw an error?
-                // For now, we'll skip this part.
-              }
-            }
-            break;
-          case 'tool-result':
-            parts.push({
-              type: 'tool-invocation',
-              toolInvocation: {
-                state: 'result',
-                toolCallId: part.toolCallId,
-                toolName: part.toolName,
-                result: part.result,
-                args: {}, // Args are unknown at this stage
-              },
-            });
-            break;
-          default:
-            // Ignore unknown part types for now
-            console.warn(`Ignoring unknown MessageType content part type: ${part.type}`);
-            break;
-        }
-      }
-    }
-
-    const content: MastraMessageV2['content'] = {
-      format: 2,
-      parts,
-    };
-    if (experimentalAttachments.length) content.experimental_attachments = experimentalAttachments;
+    const coreV2 = this.vercelCoreMessageToMastraMessageV2({
+      content: message.content,
+      role: message.role,
+    } as CoreMessage);
 
     return {
       id: message.id,
-      role: message.role === `tool` ? `assistant` : message.role,
-      createdAt,
+      role: coreV2.role,
+      createdAt: message.createdAt || this.generateCreatedAt(),
       threadId: message.threadId,
       resourceId: message.resourceId,
-      content,
+      content: coreV2.content,
     };
   }
 
   private vercelUIMessageToMastraMessageV2(message: UIMessage): MastraMessageV2 {
-    const experimentalAttachments: UIMessage['experimental_attachments'] = [];
+    const content: MastraMessageContentV2 = {
+      format: 2,
+      parts: message.parts,
+    };
 
-    if (message.experimental_attachments && Array.isArray(message.experimental_attachments)) {
-      for (const attachment of message.experimental_attachments) {
-        if (!attachment.url) {
-          console.warn('Skipping attachment with missing URL:', attachment);
-          continue;
-        }
-
-        try {
-          const url = new URL(attachment.url);
-
-          // Check for unsupported protocols
-          if (url.protocol !== 'http:' && url.protocol !== 'https:' && url.protocol !== 'data:') {
-            console.warn(`Skipping attachment with unsupported URL protocol: ${url.protocol}`, attachment);
-            continue;
-          }
-
-          // Check for invalid data URL format
-          if (url.protocol === 'data:') {
-            // The toBase64String function already validates data URL format,
-            // so we can rely on it throwing an error if invalid.
-            // Just calling it here to trigger potential validation error.
-            toBase64String(url);
-          }
-
-          // Check for missing contentType for non-image/text types (based on AI SDK test)
-          // Note: AI SDK test specifically checked for 'file' type without contentType.
-          // We'll do a broader check for non-image/text, but could refine if needed.
-          if (
-            !attachment.contentType &&
-            !attachment.url.startsWith('data:image/') &&
-            !attachment.url.startsWith('data:text/')
-          ) {
-            console.warn('Skipping attachment with missing contentType for non-image/text data:', attachment);
-            continue;
-          }
-
-          // If all checks pass, add the attachment
-          experimentalAttachments.push(attachment);
-        } catch (error) {
-          console.error(`Skipping attachment with invalid URL or data: ${attachment.url}`, error);
-          continue;
-        }
-      }
-    }
+    if (message.toolInvocations) content.toolInvocations = message.toolInvocations;
+    if (message.reasoning) content.reasoning = message.reasoning;
+    if (message.annotations) content.annotations = message.annotations;
+    if (message.experimental_attachments) content.experimental_attachments = message.experimental_attachments;
 
     return {
       id: message.id || randomUUID(),
-      role: message.role,
+      role: MessageList.getRole(message),
       createdAt: message.createdAt || this.generateCreatedAt(),
       threadId: this.memoryInfo?.threadId,
       resourceId: this.memoryInfo?.resourceId,
-      content: {
-        format: 2,
-        parts: message.parts || [], // Ensure parts is always an array
-        experimental_attachments: experimentalAttachments.length > 0 ? experimentalAttachments : [], // Only include if not empty
-      },
-    };
+      content,
+    } satisfies MastraMessageV2;
   }
-
-  // TODO: need to differentiate AI SDK v4 and v5 messages?
   private vercelCoreMessageToMastraMessageV2(coreMessage: CoreMessage): MastraMessageV2 {
     const id = randomUUID();
     const createdAt = this.generateCreatedAt();
@@ -471,6 +282,7 @@ export class MessageList {
     const experimentalAttachments: UIMessage['experimental_attachments'] = [];
 
     if (typeof coreMessage.content === 'string' && coreMessage.content !== ``) {
+      parts.push({ type: 'step-start' });
       parts.push({
         type: 'text',
         text: coreMessage.content,
@@ -528,96 +340,19 @@ export class MessageList {
             break;
           case 'file':
             // CoreMessage file parts can have mimeType and data (binary/data URL) or just a URL
-
-            // Validate mimeType for non-image/text files (CoreMessage file parts are typed, but defensive check)
-            if (
-              !part.mimeType ||
-              (part.mimeType !== 'image/jpeg' &&
-                part.mimeType !== 'image/png' &&
-                part.mimeType !== 'image/gif' &&
-                part.mimeType !== 'text/plain' &&
-                part.mimeType !== 'text/html' &&
-                part.mimeType !== 'text/css' &&
-                part.mimeType !== 'text/javascript' &&
-                part.mimeType !== 'application/json' &&
-                part.mimeType !== 'application/xml' &&
-                part.mimeType !== 'application/pdf')
-            ) {
-              console.warn(
-                `Missing or unsupported mimeType for CoreMessage file part: ${part.mimeType}. Treating as generic file.`,
-              );
-              // Decide how to handle this - for now, proceed but maybe log a warning or use a default mimeType?
-              // For now, we'll proceed, but this might be a point for refinement.
-            }
-
-            if (part.data instanceof URL) {
-              try {
-                // Validate URL object
-                new URL(part.data.toString()); // Check if it's a valid URL format
-                if (part.data.protocol !== 'data:') {
-                  // If it's a non-data URL, add it to experimental_attachments
-                  experimentalAttachments.push({
-                    name: part.filename, // Assuming CoreMessage FilePart might have a name, or leave undefined
-                    url: part.data.toString(),
-                    contentType: part.mimeType, // Use mimeType as contentType
-                  });
-                } else {
-                  // If it's a data URL object, convert to base64 and add to parts
-                  parts.push({
-                    type: 'file',
-                    mimeType: part.mimeType,
-                    data: toBase64String(part.data),
-                  });
-                }
-              } catch (error) {
-                console.error(`Invalid URL in CoreMessage file part: ${part.data}`, error);
-                // Decide how to handle invalid URLs - skip the part, throw an error?
-                // For now, we'll skip this part.
-              }
-            } else if (typeof part.data === 'string') {
-              try {
-                // Validate URL string or data URL string
-                if (part.data.startsWith('http://') || part.data.startsWith('https://')) {
-                  new URL(part.data); // Check if it's a valid URL format
-                  // If it's a non-data URL string, add it to experimental_attachments
-                  experimentalAttachments.push({
-                    name: part.filename, // Assuming CoreMessage FilePart might have a name, or leave undefined
-                    url: part.data,
-                    contentType: part.mimeType, // Use mimeType as contentType
-                  });
-                } else if (part.data.startsWith('data:')) {
-                  // If it's a data URL string, convert to base64 and add to parts
-                  parts.push({
-                    type: 'file',
-                    mimeType: part.mimeType,
-                    data: toBase64String(part.data),
-                  });
-                } else {
-                  // Assume it's base64 data directly
-                  parts.push({
-                    type: 'file',
-                    mimeType: part.mimeType,
-                    data: part.data, // Assume it's already base64
-                  });
-                }
-              } catch (error) {
-                console.error(`Invalid URL or data URL string in CoreMessage file part: ${part.data}`, error);
-                // Decide how to handle invalid URLs - skip the part, throw an error?
-                // For now, we'll skip this part.
-              }
-            } else {
-              // Otherwise (binary data), convert to base64 and add to parts
-              try {
-                parts.push({
-                  type: 'file',
-                  mimeType: part.mimeType,
-                  data: toBase64String(part.data),
-                });
-              } catch (error) {
-                console.error(`Failed to convert binary data to base64 in CoreMessage file part: ${error}`, error);
-                // Decide how to handle conversion errors - skip the part, throw an error?
-                // For now, we'll skip this part.
-              }
+            const { type, string } = MessageList.urlDataContentToString(part.data);
+            if (type === `file`) {
+              parts.push({
+                type: 'file',
+                mimeType: part.mimeType,
+                data: string,
+              });
+            } else if (type === `attachment`) {
+              experimentalAttachments.push({
+                name: part.filename,
+                url: string,
+                contentType: part.mimeType,
+              });
             }
             break;
           default:
@@ -631,15 +366,221 @@ export class MessageList {
       parts,
     };
 
+    if (typeof coreMessage.content === `string`) content.content = coreMessage.content;
     if (experimentalAttachments.length) content.experimental_attachments = experimentalAttachments;
 
     return {
       id,
-      role: coreMessage.role === `tool` ? `assistant` : coreMessage.role,
+      role: MessageList.getRole(coreMessage),
       createdAt,
       threadId: this.memoryInfo?.threadId,
       resourceId: this.memoryInfo?.resourceId,
       content,
     };
   }
+
+  private static isVercelUIMessage(msg: MessageInput): msg is UIMessage {
+    return !MessageList.isMastraMessage(msg) && isUiMessage(msg);
+  }
+  private static isVercelCoreMessage(msg: MessageInput): msg is CoreMessage {
+    return !MessageList.isMastraMessage(msg) && isCoreMessage(msg);
+  }
+  private static isMastraMessage(msg: MessageInput): msg is MastraMessageV2 | MessageType {
+    return MessageList.isMastraMessageV2(msg) || MessageList.isMastraMessageV1(msg);
+  }
+  private static isMastraMessageV1(msg: MessageInput): msg is MessageType {
+    return !MessageList.isMastraMessageV2(msg) && (`threadId` in msg || `resourceId` in msg);
+  }
+  private static isMastraMessageV2(msg: MessageInput): msg is MastraMessageV2 {
+    return Boolean(
+      msg.content &&
+        !Array.isArray(msg.content) &&
+        typeof msg.content !== `string` &&
+        // any newly saved Mastra message v2 shape will have content: { format: 2 }
+        `format` in msg.content &&
+        msg.content.format === 2,
+    );
+  }
+  private static getRole(message: MessageInput): MastraMessageV2['role'] {
+    if (message.role === `assistant` || message.role === `tool`) return `assistant`;
+    if (message.role === `user`) return `user`;
+    // TODO: how should we handle data role?
+    throw new Error(
+      `BUG: add handling for message role ${message.role} in message ${JSON.stringify(message, null, 2)}`,
+    );
+  }
+  private static cacheKeyFromParts(parts: UIMessage['parts']): string {
+    let key = ``;
+    for (const part of parts) {
+      key += part.type;
+      if (part.type === `text`) {
+        key += part.text.length;
+      }
+      if (part.type === `tool-invocation`) {
+        key += part.toolInvocation.toolCallId;
+        key += part.toolInvocation.state;
+      }
+      if (part.type === `reasoning`) {
+        key += part.reasoning.length;
+      }
+      if (part.type === `file`) {
+        key += part.data.length;
+        key += part.mimeType;
+      }
+    }
+    return key;
+  }
+  private static cacheKeyFromContent(content: CoreMessage['content']): string {
+    if (typeof content === `string`) return content;
+    let key = ``;
+    for (const part of content) {
+      key += part.type;
+      if (part.type === `text`) {
+        key += part.text.length;
+      }
+      if (part.type === `reasoning`) {
+        key += part.text.length;
+      }
+      if (part.type === `tool-call`) {
+        key += part.toolCallId;
+        key += part.toolName;
+      }
+      if (part.type === `tool-result`) {
+        key += part.toolCallId;
+        key += part.toolName;
+      }
+      if (part.type === `file`) {
+        key += part.filename;
+        key += part.mimeType;
+      }
+      if (part.type === `image`) {
+        key += part.image instanceof URL ? part.image.toString() : part.image.toString().length;
+        key += part.mimeType;
+      }
+      if (part.type === `redacted-reasoning`) {
+        key += part.data.length;
+      }
+    }
+    return key;
+  }
+  private static messagesAreEqual(one: MessageInput, two: MessageInput) {
+    const oneCreatedAt = `createdAt` in one ? one.createdAt?.getTime() || 0 : undefined;
+    const twoCreatedAt = `createdAt` in two ? two.createdAt?.getTime() || 0 : undefined;
+
+    if (oneCreatedAt !== twoCreatedAt) {
+      return false;
+    }
+
+    const oneUI = MessageList.isVercelUIMessage(one) && one;
+    const twoUI = MessageList.isVercelUIMessage(two) && two;
+    if (oneUI && !twoUI) return false;
+    if (oneUI && twoUI) {
+      return MessageList.cacheKeyFromParts(one.parts) === MessageList.cacheKeyFromParts(two.parts);
+    }
+
+    const oneCM = MessageList.isVercelCoreMessage(one) && one;
+    const twoCM = MessageList.isVercelCoreMessage(two) && two;
+    if (oneCM && !twoCM) return false;
+    if (oneCM && twoCM) {
+      return MessageList.cacheKeyFromContent(oneCM.content) === MessageList.cacheKeyFromContent(twoCM.content);
+    }
+
+    const oneMM1 = MessageList.isMastraMessageV1(one) && one;
+    const twoMM1 = MessageList.isMastraMessageV1(two) && two;
+    if (oneMM1 && !twoMM1) return false;
+    if (oneMM1 && twoMM1) {
+      return MessageList.cacheKeyFromContent(oneMM1.content) === MessageList.cacheKeyFromContent(twoMM1.content);
+    }
+
+    const oneMM2 = MessageList.isMastraMessageV2(one) && one;
+    const twoMM2 = MessageList.isMastraMessageV2(two) && two;
+    if (oneMM2 && !twoMM2) return false;
+    if (oneMM2 && twoMM2) {
+      return (
+        MessageList.cacheKeyFromParts(oneMM2.content.parts) === MessageList.cacheKeyFromParts(twoMM2.content.parts)
+      );
+    }
+
+    // default to it did change. we'll likely never reach this codepath
+    return true;
+  }
+  private static urlDataContentToString(data: FilePart['data']): { string: string; type: 'file' | 'attachment' } {
+    if (data instanceof URL) {
+      try {
+        // Validate URL object
+        new URL(data.toString()); // Check if it's a valid URL format
+        if (data.protocol !== 'data:') {
+          // If it's a non-data URL, add it to experimental_attachments
+          return { type: 'attachment', string: data.toString() };
+        } else {
+          // If it's a data URL object, convert to base64 and add to parts
+          return { type: 'file', string: toBase64String(data) };
+        }
+      } catch (error) {
+        console.error(`Invalid URL in CoreMessage file part`, error);
+      }
+    } else if (typeof data === 'string') {
+      try {
+        // Validate URL string or data URL string
+        if (data.startsWith('http://') || data.startsWith('https://')) {
+          // If it's a non-data URL string, add it to experimental_attachments
+          return { type: 'attachment', string: data };
+        } else if (data.startsWith('data:')) {
+          // If it's a data URL string, convert to base64 and add to parts
+          return { type: 'file', string: toBase64String(data) };
+        } else {
+          // Assume it's base64 data directly
+          return { type: 'file', string: data };
+        }
+      } catch (error) {
+        console.error(`Invalid URL or data URL string in CoreMessage file part`, error);
+      }
+    } else {
+      // Otherwise (binary data), convert to base64 and add to parts
+      try {
+        return { type: 'file', string: toBase64String(data) };
+      } catch (error) {
+        console.error(`Failed to convert binary data to base64 in CoreMessage file part: ${error}`, error);
+      }
+    }
+
+    throw new Error(`Unhandled DataContent URL in file part`);
+  }
+}
+
+export function toBase64String(data: Uint8Array | ArrayBuffer | string | URL): string {
+  if (typeof data === 'string') {
+    // If it's a string, assume it's already base64 or should be treated as such.
+    return data;
+  }
+
+  if (data instanceof Uint8Array) {
+    return Buffer.from(data).toString('base64');
+  }
+
+  if (data instanceof ArrayBuffer) {
+    return Buffer.from(data).toString('base64');
+  }
+
+  if (data instanceof URL) {
+    // If it's a URL, check if it's a data URL and extract the base64 data
+    if (data.protocol === 'data:') {
+      const base64Match = data.toString().match(/^data:[^;]+;base64,(.+)$/);
+      if (base64Match && base64Match[1]) {
+        return base64Match[1];
+      } else {
+        // TODO: is this right?
+        throw new Error(`Invalid data URL format: ${data}`);
+      }
+    } else {
+      // If it's a non-data URL, throw an error or handle as needed
+      // TODO: is this right?
+      throw new Error(`Unsupported URL protocol for base64 conversion: ${data.protocol}`);
+    }
+  }
+
+  // TODO: is this right?
+  throw new Error(
+    `Unsupported data type for base64 conversion: ${typeof data}. Expected Uint8Array, ArrayBuffer, string, or URL.`,
+  );
 }
