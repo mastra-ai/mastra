@@ -22,6 +22,15 @@ export const DISTANCE_MAPPING: Record<MastraMetric, CouchbaseMetric> = {
   dotproduct: 'dot_product',
 };
 
+export type CouchbaseVectorParams = {
+  connectionString: string;
+  username: string;
+  password: string;
+  bucketName: string;
+  scopeName: string;
+  collectionName: string;
+};
+
 export class CouchbaseVector extends MastraVector {
   private clusterPromise: Promise<Cluster>;
   private cluster: Cluster;
@@ -33,19 +42,66 @@ export class CouchbaseVector extends MastraVector {
   private scope: Scope;
   private vector_dimension: number;
 
+  /**
+   * @deprecated Passing parameters as positional arguments is deprecated.
+   * Use the object parameter instead. This signature will be removed on May 20th, 2025.
+   */
   constructor(
-    cnn_string: string,
+    connectionString: string,
     username: string,
     password: string,
     bucketName: string,
     scopeName: string,
     collectionName: string,
+  );
+  constructor(params: CouchbaseVectorParams);
+  constructor(
+    paramsOrConnectionString: CouchbaseVectorParams | string,
+    username?: string,
+    password?: string,
+    bucketName?: string,
+    scopeName?: string,
+    collectionName?: string,
   ) {
+    let connectionString_: string,
+      username_: string,
+      password_: string,
+      bucketName_: string,
+      scopeName_: string,
+      collectionName_: string;
+
+    if (
+      typeof paramsOrConnectionString === 'object' &&
+      paramsOrConnectionString !== null &&
+      'connectionString' in paramsOrConnectionString
+    ) {
+      // Object params (preferred)
+      connectionString_ = paramsOrConnectionString.connectionString as string;
+      username_ = paramsOrConnectionString.username;
+      password_ = paramsOrConnectionString.password;
+      bucketName_ = paramsOrConnectionString.bucketName;
+      scopeName_ = paramsOrConnectionString.scopeName;
+      collectionName_ = paramsOrConnectionString.collectionName;
+    } else {
+      // Positional args (deprecated)
+      if (arguments.length > 1) {
+        console.warn(
+          '[DEPRECATION] CouchbaseVector constructor positional arguments are deprecated. Please use a single object parameter instead. This signature will be removed on May 20th, 2025.',
+        );
+      }
+      connectionString_ = paramsOrConnectionString as string;
+      username_ = username!;
+      password_ = password!;
+      bucketName_ = bucketName!;
+      scopeName_ = scopeName!;
+      collectionName_ = collectionName!;
+    }
+
     super();
 
-    const baseClusterPromise = connect(cnn_string, {
-      username,
-      password,
+    const baseClusterPromise = connect(connectionString_, {
+      username: username_,
+      password: password_,
       configProfile: 'wanDevelopment',
     });
 
@@ -58,9 +114,9 @@ export class CouchbaseVector extends MastraVector {
         },
       }) ?? baseClusterPromise;
     this.cluster = null as unknown as Cluster;
-    this.bucketName = bucketName;
-    this.collectionName = collectionName;
-    this.scopeName = scopeName;
+    this.bucketName = bucketName_;
+    this.collectionName = collectionName_;
+    this.scopeName = scopeName_;
     this.collection = null as unknown as Collection;
     this.bucket = null as unknown as Bucket;
     this.scope = null as unknown as Scope;

@@ -165,14 +165,14 @@ describe('Unit Testing CouchbaseVector', () => {
     });
 
     it('should connect to couchbase', async () => {
-      couchbase_client = new CouchbaseVector(
-        'COUCHBASE_CONNECTION_STRING',
-        'COUCHBASE_USERNAME',
-        'COUCHBASE_PASSWORD',
-        test_bucketName,
-        test_scopeName,
-        test_collectionName,
-      );
+      couchbase_client = new CouchbaseVector({
+        connectionString: 'COUCHBASE_CONNECTION_STRING',
+        username: 'COUCHBASE_USERNAME',
+        password: 'COUCHBASE_PASSWORD',
+        bucketName: test_bucketName,
+        scopeName: test_scopeName,
+        collectionName: test_collectionName,
+      });
       expect(mockCouchbaseConnectFn).toHaveBeenCalledTimes(1);
       expect(mockCouchbaseConnectFn).toHaveBeenCalledWith('COUCHBASE_CONNECTION_STRING', {
         username: 'COUCHBASE_USERNAME',
@@ -200,14 +200,14 @@ describe('Unit Testing CouchbaseVector', () => {
   describe('Index Operations', () => {
     beforeAll(async () => {
       clearAllMocks();
-      couchbase_client = new CouchbaseVector(
-        'COUCHBASE_CONNECTION_STRING',
-        'COUCHBASE_USERNAME',
-        'COUCHBASE_PASSWORD',
-        test_bucketName,
-        test_scopeName,
-        test_collectionName,
-      );
+      couchbase_client = new CouchbaseVector({
+        connectionString: 'COUCHBASE_CONNECTION_STRING',
+        username: 'COUCHBASE_USERNAME',
+        password: 'COUCHBASE_PASSWORD',
+        bucketName: test_bucketName,
+        scopeName: test_scopeName,
+        collectionName: test_collectionName,
+      });
       await couchbase_client.getCollection();
     });
 
@@ -343,14 +343,14 @@ describe('Unit Testing CouchbaseVector', () => {
 
   describe('Vector Operations', () => {
     beforeAll(async () => {
-      couchbase_client = new CouchbaseVector(
-        'COUCHBASE_CONNECTION_STRING',
-        'COUCHBASE_USERNAME',
-        'COUCHBASE_PASSWORD',
-        test_bucketName,
-        test_scopeName,
-        test_collectionName,
-      );
+      couchbase_client = new CouchbaseVector({
+        connectionString: 'COUCHBASE_CONNECTION_STRING',
+        username: 'COUCHBASE_USERNAME',
+        password: 'COUCHBASE_PASSWORD',
+        bucketName: test_bucketName,
+        scopeName: test_scopeName,
+        collectionName: test_collectionName,
+      });
 
       await couchbase_client.getCollection();
     });
@@ -510,14 +510,14 @@ describe('Unit Testing CouchbaseVector', () => {
   describe('Error Cases and Edge Cases', () => {
     beforeAll(async () => {
       clearAllMocks();
-      couchbase_client = new CouchbaseVector(
-        'COUCHBASE_CONNECTION_STRING',
-        'COUCHBASE_USERNAME',
-        'COUCHBASE_PASSWORD',
-        test_bucketName,
-        test_scopeName,
-        test_collectionName,
-      );
+      couchbase_client = new CouchbaseVector({
+        connectionString: 'COUCHBASE_CONNECTION_STRING',
+        username: 'COUCHBASE_USERNAME',
+        password: 'COUCHBASE_PASSWORD',
+        bucketName: test_bucketName,
+        scopeName: test_scopeName,
+        collectionName: test_collectionName,
+      });
       await couchbase_client.getCollection();
     });
 
@@ -577,14 +577,14 @@ describe('Unit Testing CouchbaseVector', () => {
   describe('Vector Dimension Tracking', () => {
     beforeEach(async () => {
       clearAllMocks();
-      couchbase_client = new CouchbaseVector(
-        'COUCHBASE_CONNECTION_STRING',
-        'COUCHBASE_USERNAME',
-        'COUCHBASE_PASSWORD',
-        test_bucketName,
-        test_scopeName,
-        test_collectionName,
-      );
+      couchbase_client = new CouchbaseVector({
+        connectionString: 'COUCHBASE_CONNECTION_STRING',
+        username: 'COUCHBASE_USERNAME',
+        password: 'COUCHBASE_PASSWORD',
+        bucketName: test_bucketName,
+        scopeName: test_scopeName,
+        collectionName: test_collectionName,
+      });
       await couchbase_client.getCollection();
     });
 
@@ -647,14 +647,14 @@ describe('Unit Testing CouchbaseVector', () => {
   describe('Implementation Details', () => {
     beforeEach(async () => {
       clearAllMocks();
-      couchbase_client = new CouchbaseVector(
-        'COUCHBASE_CONNECTION_STRING',
-        'COUCHBASE_USERNAME',
-        'COUCHBASE_PASSWORD',
-        test_bucketName,
-        test_scopeName,
-        test_collectionName,
-      );
+      couchbase_client = new CouchbaseVector({
+        connectionString: 'COUCHBASE_CONNECTION_STRING',
+        username: 'COUCHBASE_USERNAME',
+        password: 'COUCHBASE_PASSWORD',
+        bucketName: test_bucketName,
+        scopeName: test_scopeName,
+        collectionName: test_collectionName,
+      });
       await couchbase_client.getCollection();
     });
 

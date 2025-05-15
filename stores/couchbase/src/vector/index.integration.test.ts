@@ -173,14 +173,14 @@ describe('Integration Testing CouchbaseVector', async () => {
 
   describe('Connection', () => {
     it('should connect to couchbase', async () => {
-      couchbase_client = new CouchbaseVector(
+      couchbase_client = new CouchbaseVector({
         connectionString,
         username,
         password,
-        test_bucketName,
-        test_scopeName,
-        test_collectionName,
-      );
+        bucketName: test_bucketName,
+        scopeName: test_scopeName,
+        collectionName: test_collectionName,
+      });
       expect(couchbase_client).toBeDefined();
       const collection = await couchbase_client.getCollection();
       expect(collection).toBeDefined();
