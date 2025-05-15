@@ -98,7 +98,6 @@ export class Agent extends BaseResource {
   generate<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
     params: GenerateParams<T>,
   ): Promise<GenerateReturn<T>> {
-    params.messages;
     const processedParams = {
       ...params,
       output: params.output ? zodToJsonSchema(params.output) : undefined,
