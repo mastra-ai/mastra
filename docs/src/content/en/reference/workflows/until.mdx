@@ -10,10 +10,7 @@ The `.until()` method repeats a step until a specified condition becomes true. T
 ## Usage
 
 ```typescript
-workflow
-  .step(incrementStep)
-  .until(condition, incrementStep)
-  .then(finalStep);
+workflow.step(incrementStep).until(condition, incrementStep).then(finalStep);
 ```
 
 ## Parameters
@@ -23,15 +20,16 @@ workflow
     {
       name: "condition",
       type: "Function | ReferenceCondition",
-      description: "A function or reference condition that determines when to stop looping",
-      isOptional: false
+      description:
+        "A function or reference condition that determines when to stop looping",
+      isOptional: false,
     },
     {
       name: "step",
       type: "Step",
       description: "The step to repeat until the condition is met",
-      isOptional: false
-    }
+      isOptional: false,
+    },
   ]}
 />
 
@@ -45,7 +43,7 @@ You can use a function that returns a boolean:
 workflow
   .step(incrementStep)
   .until(async ({ context }) => {
-    const result = context.getStepResult<{ value: number }>('increment');
+    const result = context.getStepResult<{ value: number }>("increment");
     return (result?.value ?? 0) >= 10; // Stop when value reaches or exceeds 10
   }, incrementStep)
   .then(finalStep);
@@ -60,10 +58,10 @@ workflow
   .step(incrementStep)
   .until(
     {
-      ref: { step: incrementStep, path: 'value' },
+      ref: { step: incrementStep, path: "value" },
       query: { $gte: 10 }, // Stop when value is greater than or equal to 10
     },
-    incrementStep
+    incrementStep,
   )
   .then(finalStep);
 ```
@@ -72,14 +70,14 @@ workflow
 
 When using reference-based conditions, you can use these comparison operators:
 
-| Operator | Description | Example |
-|----------|-------------|---------|
-| `$eq`    | Equal to    | `{ $eq: 10 }` |
-| `$ne`    | Not equal to | `{ $ne: 0 }` |
-| `$gt`    | Greater than | `{ $gt: 5 }` |
+| Operator | Description              | Example        |
+| -------- | ------------------------ | -------------- |
+| `$eq`    | Equal to                 | `{ $eq: 10 }`  |
+| `$ne`    | Not equal to             | `{ $ne: 0 }`   |
+| `$gt`    | Greater than             | `{ $gt: 5 }`   |
 | `$gte`   | Greater than or equal to | `{ $gte: 10 }` |
-| `$lt`    | Less than | `{ $lt: 20 }` |
-| `$lte`   | Less than or equal to | `{ $lte: 15 }` |
+| `$lt`    | Less than                | `{ $lt: 20 }`  |
+| `$lte`   | Less than or equal to    | `{ $lte: 15 }` |
 
 ## Returns
 
@@ -88,29 +86,29 @@ When using reference-based conditions, you can use these comparison operators:
     {
       name: "workflow",
       type: "Workflow",
-      description: "The workflow instance for chaining"
-    }
+      description: "The workflow instance for chaining",
+    },
   ]}
 />
 
 ## Example
 
 ```typescript
-import { Workflow, Step } from '@mastra/core';
-import { z } from 'zod';
+import { Workflow, Step } from "@mastra/core";
+import { z } from "zod";
 
 // Create a step that increments a counter
 const incrementStep = new Step({
-  id: 'increment',
-  description: 'Increments the counter by 1',
+  id: "increment",
+  description: "Increments the counter by 1",
   outputSchema: z.object({
     value: z.number(),
   }),
   execute: async ({ context }) => {
     // Get current value from previous execution or start at 0
     const currentValue =
-      context.getStepResult<{ value: number }>('increment')?.value ||
-      context.getStepResult<{ startValue: number }>('trigger')?.startValue ||
+      context.getStepResult<{ value: number }>("increment")?.value ||
+      context.getStepResult<{ startValue: number }>("trigger")?.startValue ||
       0;
 
     // Increment the value
@@ -123,10 +121,12 @@ const incrementStep = new Step({
 
 // Create a final step
 const finalStep = new Step({
-  id: 'final',
-  description: 'Final step after loop completes',
+  id: "final",
+  description: "Final step after loop completes",
   execute: async ({ context }) => {
-    const finalValue = context.getStepResult<{ value: number }>('increment')?.value;
+    const finalValue = context.getStepResult<{ value: number }>(
+      "increment",
+    )?.value;
     console.log(`Loop completed with final value: ${finalValue}`);
     return { finalValue };
   },
@@ -134,7 +134,7 @@ const finalStep = new Step({
 
 // Create the workflow
 const counterWorkflow = new Workflow({
-  name: 'counter-workflow',
+  name: "counter-workflow",
   triggerSchema: z.object({
     startValue: z.number(),
     targetValue: z.number(),
@@ -146,7 +146,8 @@ counterWorkflow
   .step(incrementStep)
   .until(async ({ context }) => {
     const targetValue = context.triggerData.targetValue;
-    const currentValue = context.getStepResult<{ value: number }>('increment')?.value ?? 0;
+    const currentValue =
+      context.getStepResult<{ value: number }>("increment")?.value ?? 0;
     return currentValue >= targetValue;
   }, incrementStep)
   .then(finalStep)
@@ -154,7 +155,9 @@ counterWorkflow
 
 // Execute the workflow
 const run = counterWorkflow.createRun();
-const result = await run.start({ triggerData: { startValue: 0, targetValue: 5 } });
+const result = await run.start({
+  triggerData: { startValue: 0, targetValue: 5 },
+});
 // Will increment from 0 to 5, then stop and execute finalStep
 ```
 

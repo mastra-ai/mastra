@@ -2,6 +2,7 @@
 title: "`mastra dev`でエージェントを検査する | Mastra ローカル開発ドキュメント"
 description: MastraアプリケーションのためのMastraローカル開発環境のドキュメント。
 ---
+
 import YouTube from "@/components/youtube";
 
 # ローカル開発環境
@@ -26,9 +27,9 @@ import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
   server: {
-   port: '4111',
-   host: '0.0.0.0'
-  }
+    port: "4111",
+    host: "0.0.0.0",
+  },
 });
 ```
 
@@ -62,6 +63,7 @@ export const mastra = new Mastra({
 - **ワークフローの視覚化**: ワークフローグラフの視覚化。
 
 - **ワークフローの実行**:
+
   - カスタム入力データでテストワークフローをトリガー。
   - ワークフローロジックと条件をデバッグ。
   - 異なる実行パスをシミュレート。
@@ -96,10 +98,10 @@ import { Mastra } from "@mastra/core";
 export const mastra = new Mastra({
   server: {
     build: {
-      openAPIDocs: true,  // Enable OpenAPI documentation
+      openAPIDocs: true, // Enable OpenAPI documentation
       // ... other build config options
-    }
-  }
+    },
+  },
 });
 ```
 
@@ -114,11 +116,11 @@ import { Mastra } from "@mastra/core";
 export const mastra = new Mastra({
   server: {
     build: {
-      openAPIDocs: true,  // Enable OpenAPI documentation
-      swaggerUI: true,  // Enable Swagger UI
+      openAPIDocs: true, // Enable OpenAPI documentation
+      swaggerUI: true, // Enable Swagger UI
       // ... other build config options
-    }
-  }
+    },
+  },
 });
 ```
 
@@ -127,6 +129,7 @@ export const mastra = new Mastra({
 `mastra dev` は、本番環境にデプロイする前に、自己完結型の環境でAIロジックを開発、デバッグ、反復することを容易にします。
 
 - [Mastra Dev リファレンス](../../reference/cli/dev.mdx)
+
 ## 概要
 
 `mastra dev` は、本番環境にデプロイする前に、自己完結型の環境でAIロジックを開発、デバッグ、反復することを容易にします。

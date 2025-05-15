@@ -56,44 +56,46 @@ For detailed configuration options, see the [`MCPClient` reference documentation
 
 `MCPClient` offers two approaches to retrieving tools from connected servers, suitable for different application architectures:
 
-| Feature          | Static Configuration (`await mcp.getTools()`) | Dynamic Configuration (`await mcp.getToolsets()`) |
-| :--------------- | :-------------------------------------------- | :---------------------------------------------------- |
-| **Use Case**     | Single-user, static config (e.g., CLI tool) | Multi-user, dynamic config (e.g., SaaS app)         |
-| **Configuration**| Fixed at agent initialization                 | Per-request, dynamic                                |
-| **Credentials**  | Shared across all uses                        | Can vary per user/request                             |
-| **Agent Setup**  | Tools added in `Agent` constructor            | Tools passed in `generate()` or `stream()` options  |
+| Feature           | Static Configuration (`await mcp.getTools()`) | Dynamic Configuration (`await mcp.getToolsets()`)  |
+| :---------------- | :-------------------------------------------- | :------------------------------------------------- |
+| **Use Case**      | Single-user, static config (e.g., CLI tool)   | Multi-user, dynamic config (e.g., SaaS app)        |
+| **Configuration** | Fixed at agent initialization                 | Per-request, dynamic                               |
+| **Credentials**   | Shared across all uses                        | Can vary per user/request                          |
+| **Agent Setup**   | Tools added in `Agent` constructor            | Tools passed in `generate()` or `stream()` options |
 
-*   **Static Configuration (`getTools()`):** Fetches all tools from all configured servers. Best when the tool configuration (like API keys) is static and shared across all users or requests. You typically call this once and pass the result to the `tools` property when defining your `Agent`.
-    [Reference: `getTools()`](/reference/tools/mcp-client#gettools)
+- **Static Configuration (`getTools()`):** Fetches all tools from all configured servers. Best when the tool configuration (like API keys) is static and shared across all users or requests. You typically call this once and pass the result to the `tools` property when defining your `Agent`.
+  [Reference: `getTools()`](/reference/tools/mcp-client#gettools)
 
-    ```typescript
-    import { Agent } from "@mastra/core/agent";
-    // ... mcp client setup
+  ```typescript
+  import { Agent } from "@mastra/core/agent";
+  // ... mcp client setup
 
-    const agent = new Agent({
-      // ... other agent config
-      tools: await mcp.getTools(),
+  const agent = new Agent({
+    // ... other agent config
+    tools: await mcp.getTools(),
+  });
+  ```
+
+- **Dynamic Configuration (`getToolsets()`):** Designed for scenarios where configuration might change per request or per user (e.g., different API keys for different tenants in a multi-user application). You pass the result of `getToolsets()` to the `toolsets` option in the agent's `generate()` or `stream()` method.
+  [Reference: `getToolsets()`](/reference/tools/mcp-client#gettoolsets)
+
+  ```typescript
+  import { Agent } from "@mastra/core/agent";
+  // ... agent setup without tools initially
+
+  async function handleRequest(userPrompt: string, userApiKey: string) {
+    const userMcp = new MCPClient({
+      /* config with userApiKey */
     });
-    ```
+    const toolsets = await userMcp.getToolsets();
 
-*   **Dynamic Configuration (`getToolsets()`):** Designed for scenarios where configuration might change per request or per user (e.g., different API keys for different tenants in a multi-user application). You pass the result of `getToolsets()` to the `toolsets` option in the agent's `generate()` or `stream()` method.
-    [Reference: `getToolsets()`](/reference/tools/mcp-client#gettoolsets)
-
-    ```typescript
-    import { Agent } from "@mastra/core/agent";
-    // ... agent setup without tools initially
-
-    async function handleRequest(userPrompt: string, userApiKey: string) {
-      const userMcp = new MCPClient({ /* config with userApiKey */ });
-      const toolsets = await userMcp.getToolsets();
-
-      const response = await agent.stream(userPrompt, {
-        toolsets, // Pass dynamic toolsets
-      });
-      // ... handle response
-      await userMcp.disconnect();
-    }
-    ```
+    const response = await agent.stream(userPrompt, {
+      toolsets, // Pass dynamic toolsets
+    });
+    // ... handle response
+    await userMcp.disconnect();
+  }
+  ```
 
 ## Connecting to an MCP registry
 

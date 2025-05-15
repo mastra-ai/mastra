@@ -18,10 +18,10 @@ const voice = new ElevenLabsVoice();
 // カスタム設定で初期化
 const voice = new ElevenLabsVoice({
   speechModel: {
-    name: 'eleven_multilingual_v2',
-    apiKey: 'your-api-key',
+    name: "eleven_multilingual_v2",
+    apiKey: "your-api-key",
   },
-  speaker: 'custom-speaker-id',
+  speaker: "custom-speaker-id",
 });
 
 // テキストから音声へ
@@ -40,7 +40,7 @@ const speakers = await voice.getSpeakers();
       type: "ElevenLabsVoiceConfig",
       description: "テキストから音声への機能のための設定。",
       isOptional: true,
-      defaultValue: "{ name: 'eleven_multilingual_v2' }"
+      defaultValue: "{ name: 'eleven_multilingual_v2' }",
     },
     {
       name: "speaker",
@@ -66,7 +66,8 @@ const speakers = await voice.getSpeakers();
     {
       name: "apiKey",
       type: "string",
-      description: "ElevenLabs APIキー。ELEVENLABS_API_KEY環境変数にフォールバックします",
+      description:
+        "ElevenLabs APIキー。ELEVENLABS_API_KEY環境変数にフォールバックします",
       isOptional: true,
     },
   ]}
@@ -83,7 +84,8 @@ const speakers = await voice.getSpeakers();
     {
       name: "input",
       type: "string | NodeJS.ReadableStream",
-      description: "音声に変換するテキスト。ストリームが提供された場合、最初にテキストに変換されます。",
+      description:
+        "音声に変換するテキスト。ストリームが提供された場合、最初にテキストに変換されます。",
       isOptional: false,
     },
     {
@@ -132,7 +134,7 @@ const speakers = await voice.getSpeakers();
       type: "string",
       description: "音声の性別",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -170,7 +172,8 @@ ElevenLabs Speech-to-Text APIを使用して音声入力をテキストに変換
     {
       name: "tag_audio_events",
       type: "boolean",
-      description: "[MUSIC]、[LAUGHTER]などの音声イベントをタグ付けするかどうか",
+      description:
+        "[MUSIC]、[LAUGHTER]などの音声イベントをタグ付けするかどうか",
       isOptional: true,
     },
     {
@@ -202,7 +205,7 @@ ElevenLabs Speech-to-Text APIを使用して音声入力をテキストに変換
       type: "AbortSignal",
       description: "リクエストを中止するためのシグナル",
       isOptional: true,
-    }
+    },
   ]}
 />
 

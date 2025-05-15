@@ -25,7 +25,8 @@ const voice = new OpenAIRealtimeVoice({
 // Create an agent with the voice provider
 const agent = new Agent({
   name: "Customer Support Agent",
-  instructions: "You are a helpful customer support agent for a software company.",
+  instructions:
+    "You are a helpful customer support agent for a software company.",
   model: openai("gpt-4o"),
   voice,
 });
@@ -44,7 +45,8 @@ await voice.connect();
 ```
 
 ## パラメータ
-<br/>
+
+<br />
 <PropertiesTable
   content={[
     {
@@ -52,7 +54,7 @@ await voice.connect();
       type: "string",
       description: "音声モデルの動作を導くための指示",
       isOptional: false,
-    }
+    },
   ]}
 />
 

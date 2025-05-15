@@ -17,13 +17,13 @@ const metric = new ToneConsistencyMetric();
 // 入力と出力のトーンを比較
 const result1 = await metric.measure(
   "I love this amazing product!",
-  "This product is wonderful and fantastic!"
+  "This product is wonderful and fantastic!",
 );
 
 // 単一のテキストでのトーンの安定性を分析
 const result2 = await metric.measure(
   "The service is excellent. The staff is friendly. The atmosphere is perfect.",
-  ""  // 単一テキスト分析のための空文字列
+  "", // 単一テキスト分析のための空文字列
 );
 
 console.log(result1.score); // 0-1のトーン一貫性スコア
@@ -43,9 +43,10 @@ console.log(result2.score); // 0-1のトーン安定性スコア
     {
       name: "output",
       type: "string",
-      description: "トーン比較のための参照テキスト（安定性分析のための空の文字列）",
+      description:
+        "トーン比較のための参照テキスト（安定性分析のための空の文字列）",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -62,7 +63,7 @@ console.log(result2.score); // 0-1のトーン安定性スコア
       name: "info",
       type: "object",
       description: "詳細なトーン情報",
-    }
+    },
   ]}
 />
 
@@ -84,7 +85,7 @@ console.log(result2.score); // 0-1のトーン安定性スコア
       name: "difference",
       type: "number",
       description: "感情スコア間の絶対差",
-    }
+    },
   ]}
 />
 
@@ -101,10 +102,9 @@ console.log(result2.score); // 0-1のトーン安定性スコア
       name: "sentimentVariance",
       type: "number",
       description: "文間の感情のばらつき",
-    }
+    },
   ]}
 />
-
 
 ## スコアリングの詳細
 
@@ -113,17 +113,20 @@ console.log(result2.score); // 0-1のトーン安定性スコア
 ### スコアリングプロセス
 
 1. トーンパターンを分析します:
+
    - 感情の特徴を抽出
    - 感情スコアを計算
    - トーンの変動を測定
 
 2. モード固有のスコアを計算します:
    **トーンの一貫性**（入力と出力）:
+
    - テキスト間の感情を比較
    - 感情の差を計算
    - スコア = 1 - (感情の差 / 最大差)
 
    **トーンの安定性**（単一入力）:
+
    - 文全体の感情を分析
    - 感情の分散を計算
    - スコア = 1 - (感情の分散 / 最大分散)
@@ -131,7 +134,9 @@ console.log(result2.score); // 0-1のトーン安定性スコア
 最終スコア: `mode_specific_score * scale`
 
 ### スコアの解釈
+
 (0からスケールまで、デフォルトは0-1)
+
 - 1.0: 完璧なトーンの一貫性/安定性
 - 0.7-0.9: 軽微な変動を伴う強い一貫性
 - 0.4-0.6: 顕著な変化を伴う中程度の一貫性
@@ -148,7 +153,7 @@ const metric = new ToneConsistencyMetric();
 // トーンの一貫性モード
 const consistencyResult = await metric.measure(
   "この製品は素晴らしくて驚くべきものです！",
-  "製品は優れていて素晴らしいです！"
+  "製品は優れていて素晴らしいです！",
 );
 // 例の出力:
 // {
@@ -163,7 +168,7 @@ const consistencyResult = await metric.measure(
 // トーンの安定性モード
 const stabilityResult = await metric.measure(
   "素晴らしいサービス！フレンドリーなスタッフ。完璧な雰囲気。",
-  ""
+  "",
 );
 // 例の出力:
 // {

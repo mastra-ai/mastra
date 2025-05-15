@@ -6,18 +6,19 @@ description: Example of using Mastra to create workflows with loops based on pro
 import { GithubLink } from "@/components/github-link";
 
 # Looping step execution
+
 This example demonstrates how to create a workflow that executes one or more of it's steps in a loop until a condition is met
 
-
 ## Define Looping workflow
+
 Defines a workflow which calls the executes a nested workflow until the provided condition is met.
 
 ```ts showLineNumbers copy filename="looping-workflow.ts"
-import { createWorkflow, createStep } from '@mastra/core/workflows/vNext'
-import { z } from 'zod'
+import { createWorkflow, createStep } from "@mastra/core/workflows/vNext";
+import { z } from "zod";
 
 const incrementStep = createStep({
-  id: 'increment',
+  id: "increment",
   inputSchema: z.object({
     value: z.number(),
   }),
@@ -25,12 +26,12 @@ const incrementStep = createStep({
     value: z.number(),
   }),
   execute: async ({ inputData }) => {
-    return { value: inputData.value + 1 }
+    return { value: inputData.value + 1 };
   },
-})
+});
 
 const sideEffectStep = createStep({
-  id: 'side-effect',
+  id: "side-effect",
   inputSchema: z.object({
     value: z.number(),
   }),
@@ -38,13 +39,13 @@ const sideEffectStep = createStep({
     value: z.number(),
   }),
   execute: async ({ inputData }) => {
-    console.log('log', inputData.value)
-    return { value: inputData.value }
+    console.log("log", inputData.value);
+    return { value: inputData.value };
   },
-})
+});
 
 const finalStep = createStep({
-  id: 'final',
+  id: "final",
   inputSchema: z.object({
     value: z.number(),
   }),
@@ -52,12 +53,12 @@ const finalStep = createStep({
     value: z.number(),
   }),
   execute: async ({ inputData }) => {
-    return { value: inputData.value }
+    return { value: inputData.value };
   },
-})
+});
 
 const workflow = createWorkflow({
-  id: 'increment-workflow',
+  id: "increment-workflow",
   inputSchema: z.object({
     value: z.number(),
   }),
@@ -67,7 +68,7 @@ const workflow = createWorkflow({
 })
   .dountil(
     createWorkflow({
-      id: 'increment-workflow',
+      id: "increment-workflow",
       inputSchema: z.object({
         value: z.number(),
       }),
@@ -79,51 +80,50 @@ const workflow = createWorkflow({
       .then(incrementStep)
       .then(sideEffectStep)
       .commit(),
-    async ({ inputData }) => inputData.value >= 10
+    async ({ inputData }) => inputData.value >= 10,
   )
-  .then(finalStep)
+  .then(finalStep);
 
-workflow.commit()
+workflow.commit();
 
-export { workflow as incrementWorkflow }
+export { workflow as incrementWorkflow };
 ```
 
-
 ## Register Workflow instance with Mastra class
+
 Register the workflow with the mastra instance.
 
 ```ts showLineNumbers copy filename="index.ts"
-import { Mastra } from '@mastra/core/mastra'
-import { createLogger } from '@mastra/core/logger'
-import { incrementWorkflow } from './workflows'
+import { Mastra } from "@mastra/core/mastra";
+import { createLogger } from "@mastra/core/logger";
+import { incrementWorkflow } from "./workflows";
 
 const mastra = new Mastra({
   vnext_workflows: {
     incrementWorkflow,
   },
   logger: createLogger({
-    name: 'Mastra',
-    level: 'info',
+    name: "Mastra",
+    level: "info",
   }),
-})
+});
 
-export { mastra }
+export { mastra };
 ```
 
-
 ## Execute the workflow
+
 Here, we'll get the increment workflow from the mastra instance, then create a run and execute the created run with the required inputData.
 
 ```ts showLineNumbers copy filename="exec.ts"
-import { mastra } from "./"
+import { mastra } from "./";
 
-const workflow = mastra.vnext_getWorkflow('incrementWorkflow')
-const run = workflow.createRun()
+const workflow = mastra.vnext_getWorkflow("incrementWorkflow");
+const run = workflow.createRun();
 
-const result = await run.start({ inputData: { value: 0 } })
-console.dir(result, { depth: null })
+const result = await run.start({ inputData: { value: 0 } });
+console.dir(result, { depth: null });
 ```
-
 
 <br />
 <br />
@@ -135,4 +135,3 @@ console.dir(result, { depth: null })
     "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/control-flow"
   }
 />
-

@@ -18,36 +18,36 @@ const voice = new OpenAIRealtimeVoice();
 
 // Or initialize with specific configuration
 const voiceWithConfig = new OpenAIRealtimeVoice({
-  apiKey: 'your-openai-api-key',
-  model: 'gpt-4o-mini-realtime-preview-2024-12-17',
-  speaker: 'alloy'  // Default voice
+  apiKey: "your-openai-api-key",
+  model: "gpt-4o-mini-realtime-preview-2024-12-17",
+  speaker: "alloy", // Default voice
 });
 
 voiceWithConfig.updateSession({
   turn_detection: {
-    type: 'server_vad',
+    type: "server_vad",
     threshold: 0.6,
-    silence_duration_ms: 1200
-  }
+    silence_duration_ms: 1200,
+  },
 });
 
 // Establish connection
 await voice.connect();
 
 // Set up event listeners
-voice.on('speaker', ({ audio }) => {
+voice.on("speaker", ({ audio }) => {
   // Handle audio data (Int16Array) pcm format by default
   playAudio(audio);
 });
 
-voice.on('writing', ({ text, role }) => {
+voice.on("writing", ({ text, role }) => {
   // Handle transcribed text
   console.log(`${role}: ${text}`);
 });
 
 // Convert text to speech
-await voice.speak('Hello, how can I help you today?', {
-  speaker: 'echo'  // Override default voice
+await voice.speak("Hello, how can I help you today?", {
+  speaker: "echo", // Override default voice
 });
 
 // Process audio input
@@ -74,7 +74,8 @@ voice.connect();
     {
       name: "apiKey",
       type: "string",
-      description: "OpenAI API key. Falls back to OPENAI_API_KEY environment variable.",
+      description:
+        "OpenAI API key. Falls back to OPENAI_API_KEY environment variable.",
       isOptional: true,
     },
     {
@@ -94,7 +95,8 @@ voice.connect();
     {
       name: "type",
       type: "string",
-      description: "Type of VAD to use. Server-side VAD provides better accuracy.",
+      description:
+        "Type of VAD to use. Server-side VAD provides better accuracy.",
       isOptional: true,
       defaultValue: "'server_vad'",
     },
@@ -108,7 +110,8 @@ voice.connect();
     {
       name: "prefix_padding_ms",
       type: "number",
-      description: "Milliseconds of audio to include before speech is detected.",
+      description:
+        "Milliseconds of audio to include before speech is detected.",
       isOptional: true,
       defaultValue: "1000",
     },
@@ -297,17 +300,20 @@ The OpenAIRealtimeVoice class emits the following events:
     {
       name: "speaking",
       type: "event",
-      description: "Emitted when audio data is received from the model. Callback receives { audio: Int16Array }.",
+      description:
+        "Emitted when audio data is received from the model. Callback receives { audio: Int16Array }.",
     },
     {
       name: "writing",
       type: "event",
-      description: "Emitted when transcribed text is available. Callback receives { text: string, role: string }.",
+      description:
+        "Emitted when transcribed text is available. Callback receives { text: string, role: string }.",
     },
     {
       name: "error",
       type: "event",
-      description: "Emitted when an error occurs. Callback receives the error object.",
+      description:
+        "Emitted when an error occurs. Callback receives the error object.",
     },
   ]}
 />

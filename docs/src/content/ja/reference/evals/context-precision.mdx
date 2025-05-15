@@ -40,8 +40,7 @@ console.log(result.info.reason); // スコアの説明
     {
       name: "model",
       type: "LanguageModel",
-      description:
-        "コンテキストの関連性を評価するために使用されるモデルの設定",
+      description: "コンテキストの関連性を評価するために使用されるモデルの設定",
       isOptional: false,
     },
     {
@@ -128,6 +127,7 @@ console.log(result.info.reason); // スコアの説明
 ### スコアリングプロセス
 
 1. バイナリ関連性スコアを割り当てます:
+
    - 関連するコンテキスト: 1
    - 関連しないコンテキスト: 0
 
@@ -139,7 +139,9 @@ console.log(result.info.reason); // スコアの説明
 最終スコア: `Mean Average Precision * scale`
 
 ### スコアの解釈
+
 (0 からスケールまで、デフォルトは 0-1)
+
 - 1.0: すべての関連するコンテキストが最適な順序で
 - 0.7-0.9: 主に関連するコンテキストが良好な順序で
 - 0.4-0.6: 関連性が混在または順序が最適でない
