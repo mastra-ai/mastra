@@ -140,7 +140,7 @@ export async function getWeatherInfo(city: string) {
 
   const result = await agent.generate(`What's the weather like in ${city}?`);
 
-  return result;
+  return result.text;
 }
 ```
 
@@ -180,7 +180,7 @@ export async function POST(req: Request) {
 
   const result = await agent.stream(`What's the weather like in ${city}?`);
 
-  return result.toDataStreamResponse();
+  return result.text.toDataStreamResponse();
 }
 ```
 
