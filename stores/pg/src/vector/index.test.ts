@@ -400,7 +400,7 @@ describe('PgVector', () => {
         });
 
         beforeEach(async () => {
-          await vectorDB.truncateIndex(indexName);
+          await vectorDB.truncateIndex({ indexName });
           const vectors = [
             [1, 0, 0],
             [0.8, 0.2, 0],
@@ -461,7 +461,7 @@ describe('PgVector', () => {
     });
 
     beforeEach(async () => {
-      await vectorDB.truncateIndex(indexName);
+      await vectorDB.truncateIndex({ indexName });
       const vectors = [
         [1, 0.1, 0],
         [0.9, 0.2, 0],
