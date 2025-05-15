@@ -59,7 +59,6 @@ export function usePromptEnhancer({
 
       // Clear the comment
       setUserComment('');
-      setShowCommentInput(false);
     } catch (error) {
       console.error('Failed to enhance prompt:', error);
     } finally {

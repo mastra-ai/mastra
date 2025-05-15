@@ -7,7 +7,7 @@ export interface VersionHistoryDialogProps {
   onDelete: (index: number) => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSetActive: (version: PromptVersion, index: number) => void;
+  onSetActive: (version: PromptVersion, index: number) => Promise<void>;
   isUpdating: boolean;
 }
 
@@ -31,7 +31,6 @@ export const VersionHistoryDialog = ({
           versions={versions}
           isUpdating={isUpdating}
           copiedVersions={{}}
-          onCopy={async () => {}}
           onSetActive={onSetActive}
           onDelete={onDelete}
         />
