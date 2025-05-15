@@ -241,7 +241,7 @@ export class SqlBuilder {
     if (this.whereAdded) {
       this.sql += ` AND ${parsedColumnName} LIKE ?`;
     } else {
-      this.sql += ` WHERE ${column} LIKE ?`;
+      this.sql += ` WHERE ${parsedColumnName} LIKE ?`;
       this.whereAdded = true;
     }
     this.params.push(jsonPattern);
@@ -277,7 +277,9 @@ export function createSqlBuilder(): SqlBuilder {
 }
 
 /** Represents a validated SQL SELECT column identifier (or '*', optionally with 'AS alias'). */
-export type SelectIdentifier = string & { __brand: 'SelectIdentifier' };
+type SelectIdentifier = string & { __brand: 'SelectIdentifier' };
+
+const SQL_IDENTIFIER_PATTERN = /^[a-zA-Z0-9_]+(\s+AS\s+[a-zA-Z0-9_]+)?$/;
 
 /**
  * Parses and returns a valid SQL SELECT column identifier.
@@ -294,7 +296,7 @@ export type SelectIdentifier = string & { __brand: 'SelectIdentifier' };
  * parseSelectIdentifier('user id'); // Throws error
  */
 export function parseSelectIdentifier(column: string): SelectIdentifier {
-  if (column !== '*' && !/^[a-zA-Z0-9_]+(\s+AS\s+[a-zA-Z0-9_]+)?$/i.test(column)) {
+  if (column !== '*' && !SQL_IDENTIFIER_PATTERN.test(column)) {
     throw new Error(
       `Invalid column name: "${column}". Must be "*" or a valid identifier (letters, numbers, underscores), optionally with "AS alias".`,
     );

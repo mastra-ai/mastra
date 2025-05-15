@@ -454,9 +454,11 @@ export function ensureAllMessagesAreCoreMessages(messages: (CoreMessage | AiMess
 }
 
 /** Represents a validated SQL identifier (e.g., table or column name). */
-export type SqlIdentifier = string & { __brand: 'SqlIdentifier' };
+type SqlIdentifier = string & { __brand: 'SqlIdentifier' };
 /** Represents a validated dot-separated SQL field key. */
-export type FieldKey = string & { __brand: 'FieldKey' };
+type FieldKey = string & { __brand: 'FieldKey' };
+
+const SQL_IDENTIFIER_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
 /**
  * Parses and returns a valid SQL identifier (such as a table or column name).
@@ -475,7 +477,7 @@ export type FieldKey = string & { __brand: 'FieldKey' };
  * parseSqlIdentifier('123table'); // Throws error
  */
 export function parseSqlIdentifier(name: string, kind = 'identifier'): SqlIdentifier {
-  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name) || name.length > 63) {
+  if (!SQL_IDENTIFIER_PATTERN.test(name) || name.length > 63) {
     throw new Error(
       `Invalid ${kind}: ${name}. Must start with a letter or underscore, contain only letters, numbers, or underscores, and be at most 63 characters long.`,
     );
@@ -503,7 +505,7 @@ export function parseFieldKey(key: string): FieldKey {
   if (!key) throw new Error('Field key cannot be empty');
   const segments = key.split('.');
   for (const segment of segments) {
-    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(segment) || segment.length > 63) {
+    if (!SQL_IDENTIFIER_PATTERN.test(segment) || segment.length > 63) {
       throw new Error(`Invalid field key segment: ${segment} in ${key}`);
     }
   }
