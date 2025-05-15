@@ -5,6 +5,7 @@ import type {
   UpsertVectorParams,
   QueryVectorParams,
   ParamsToArgs,
+  DescribeIndexParams,
 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import Cloudflare from 'cloudflare';
@@ -131,7 +132,10 @@ export class CloudflareVector extends MastraVector {
     return res?.result?.map(index => index.name!) || [];
   }
 
-  async describeIndex(indexName: string) {
+  async describeIndex(...args: ParamsToArgs<DescribeIndexParams>) {
+    const params = this.normalizeArgs<DescribeIndexParams>('describeIndex', args);
+    const { indexName } = params;
+
     const index = await this.client.vectorize.indexes.get(indexName, {
       account_id: this.accountId,
     });

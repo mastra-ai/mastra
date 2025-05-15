@@ -127,7 +127,7 @@ export async function describeIndex({
     }
 
     const vector = getVector(mastra, vectorName);
-    const stats: IndexStats = await vector.describeIndex(indexName);
+    const stats: IndexStats = await vector.describeIndex({ indexName });
 
     return {
       dimension: stats.dimension,

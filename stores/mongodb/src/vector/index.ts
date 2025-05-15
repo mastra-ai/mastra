@@ -8,6 +8,7 @@ import type {
   ParamsToArgs,
   QueryVectorArgs,
   UpsertVectorArgs,
+  DescribeIndexParams,
 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import { MongoClient } from 'mongodb';
@@ -143,7 +144,7 @@ export class MongoDBVector extends MastraVector {
     this.collectionForValidation = collection;
 
     // Get index stats to check dimension
-    const stats = await this.describeIndex(indexName);
+    const stats = await this.describeIndex({ indexName });
 
     // Validate vector dimensions
     await this.validateVectorDimensions(vectors, stats.dimension);
@@ -255,7 +256,10 @@ export class MongoDBVector extends MastraVector {
     return collections.map(col => col.name);
   }
 
-  async describeIndex(indexName: string): Promise<IndexStats> {
+  async describeIndex(...args: ParamsToArgs<DescribeIndexParams>): Promise<IndexStats> {
+    const params = this.normalizeArgs<DescribeIndexParams>('describeIndex', args);
+
+    const { indexName } = params;
     const collection = await this.getCollection(indexName, true);
 
     // Get the count of documents, excluding the metadata document
@@ -333,7 +337,7 @@ export class MongoDBVector extends MastraVector {
       const updateDoc: Record<string, any> = {};
 
       if (update.vector) {
-        const stats = await this.describeIndex(indexName);
+        const stats = await this.describeIndex({ indexName });
         await this.validateVectorDimensions([update.vector], stats.dimension);
         updateDoc[this.embeddingFieldName] = update.vector;
       }

@@ -311,7 +311,7 @@ describe('Unit Testing CouchbaseVector', () => {
     }, 50000);
 
     it('should describe index', async () => {
-      const stats = await couchbase_client.describeIndex(test_indexName);
+      const stats = await couchbase_client.describeIndex({ indexName: test_indexName });
 
       expect(mockScopeSearchIndexesFn).toHaveBeenCalledTimes(2);
 
@@ -542,7 +542,7 @@ describe('Unit Testing CouchbaseVector', () => {
     });
 
     it('should throw error when describing a non-existent index', async () => {
-      await expect(couchbase_client.describeIndex('non_existent_index')).rejects.toThrow(
+      await expect(couchbase_client.describeIndex({ indexName: 'non_existent_index' })).rejects.toThrow(
         `Index non_existent_index does not exist`,
       );
     });
@@ -713,7 +713,7 @@ describe('Unit Testing CouchbaseVector', () => {
           },
         });
 
-        const stats = await couchbase_client.describeIndex(test_indexName);
+        const stats = await couchbase_client.describeIndex({ indexName: test_indexName });
         expect(stats.metric).toBe(mastraMetric);
       }
     });

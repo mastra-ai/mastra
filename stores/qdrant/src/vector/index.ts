@@ -6,6 +6,7 @@ import type {
   UpsertVectorParams,
   QueryVectorParams,
   ParamsToArgs,
+  DescribeIndexParams,
 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import { QdrantClient } from '@qdrant/js-client-rest';
@@ -144,7 +145,9 @@ export class QdrantVector extends MastraVector {
     return response.collections.map(collection => collection.name) || [];
   }
 
-  async describeIndex(indexName: string): Promise<IndexStats> {
+  async describeIndex(...args: ParamsToArgs<DescribeIndexParams>): Promise<IndexStats> {
+    const params = this.normalizeArgs<DescribeIndexParams>('describeIndex', args);
+    const { indexName } = params;
     const { config, points_count } = await this.client.getCollection(indexName);
 
     const distance = config.params.vectors?.distance as Schemas['Distance'];

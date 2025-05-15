@@ -53,7 +53,7 @@ function waitUntilReady(vector: CloudflareVector, indexName: string) {
     let attempts = 0;
     const interval = setInterval(async () => {
       try {
-        const stats = await vector.describeIndex(indexName);
+        const stats = await vector.describeIndex({ indexName });
         if (!!stats) {
           clearInterval(interval);
           resolve(true);
@@ -94,7 +94,7 @@ function waitUntilVectorsIndexed(
 
     const interval = setInterval(async () => {
       try {
-        const stats = await vector.describeIndex(indexName);
+        const stats = await vector.describeIndex({ indexName });
         const check = exactCount ? stats?.count === expectedCount : stats?.count >= expectedCount;
         if (stats && check) {
           if (stats.count === lastCount) {
@@ -308,7 +308,7 @@ describe('CloudflareVector', () => {
       await waitUntilReady(vectorDB, tempIndexNameCreateDescribeDelete);
 
       // Describe
-      const stats = await vectorDB.describeIndex(tempIndexNameCreateDescribeDelete);
+      const stats = await vectorDB.describeIndex({ indexName: tempIndexNameCreateDescribeDelete });
       expect(stats).toEqual({
         dimension: VECTOR_DIMENSION,
         metric: 'cosine',
@@ -344,7 +344,7 @@ describe('CloudflareVector', () => {
       expect(vectorIds).toHaveLength(3);
 
       await waitUntilVectorsIndexed(vectorDB, testIndexName, 3);
-      const stats = await vectorDB.describeIndex(testIndexName);
+      const stats = await vectorDB.describeIndex({ indexName: testIndexName });
       expect(stats.count).toBeGreaterThan(0);
 
       const results = await waitForQueryResults({
@@ -754,7 +754,7 @@ describe('CloudflareVector', () => {
       await vectorDB.upsert({ indexName: testIndexName2, vectors, metadata });
       await waitUntilVectorsIndexed(vectorDB, testIndexName2, vectors.length);
 
-      const stats = await vectorDB.describeIndex(testIndexName2);
+      const stats = await vectorDB.describeIndex({ indexName: testIndexName2 });
       expect(stats.count).toBe(vectors.length);
     });
 

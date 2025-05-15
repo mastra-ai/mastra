@@ -8,6 +8,7 @@ import type {
   ParamsToArgs,
   QueryVectorArgs,
   UpsertVectorArgs,
+  DescribeIndexParams,
 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import { Pinecone } from '@pinecone-database/pinecone';
@@ -180,7 +181,9 @@ export class PineconeVector extends MastraVector {
     return indexesResult?.indexes?.map(index => index.name) || [];
   }
 
-  async describeIndex(indexName: string): Promise<PineconeIndexStats> {
+  async describeIndex(...args: ParamsToArgs<DescribeIndexParams>): Promise<PineconeIndexStats> {
+    const params = this.normalizeArgs<DescribeIndexParams>('describeIndex', args);
+    const { indexName } = params;
     const index = this.client.Index(indexName);
     const stats = await index.describeIndexStats();
     const description = await this.client.describeIndex(indexName);

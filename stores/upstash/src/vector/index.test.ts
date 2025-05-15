@@ -13,7 +13,7 @@ function waitUntilVectorsIndexed(vector: UpstashVector, indexName: string, expec
     let attempts = 0;
     const interval = setInterval(async () => {
       try {
-        const stats = await vector.describeIndex(indexName);
+        const stats = await vector.describeIndex({ indexName });
         if (stats && stats.count >= expectedCount) {
           clearInterval(interval);
           resolve(true);
@@ -246,7 +246,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
     });
 
     it('should describe an index correctly', async () => {
-      const stats = await vectorStore.describeIndex('mastra_default');
+      const stats = await vectorStore.describeIndex({ indexName: 'mastra_default' });
       expect(stats).toEqual({
         dimension: 1536,
         metric: 'cosine',

@@ -211,7 +211,7 @@ describe('Integration Testing CouchbaseVector', async () => {
     }, 50000);
 
     it('should describe index', async () => {
-      const stats = await couchbase_client.describeIndex(test_indexName);
+      const stats = await couchbase_client.describeIndex({ indexName: test_indexName });
       expect(stats.dimension).toBe(dimension);
       expect(stats.metric).toBe('euclidean'); // similiarity(=="l2_norm") is mapped to euclidean in couchbase
       expect(typeof stats.count).toBe('number');
@@ -387,7 +387,7 @@ describe('Integration Testing CouchbaseVector', async () => {
       ids.forEach(id => expect(typeof id).toBe('string'));
 
       // Count is not supported by Couchbase
-      const stats = await couchbase_client.describeIndex(test_indexName);
+      const stats = await couchbase_client.describeIndex({ indexName: test_indexName });
       expect(stats.count).toBe(-1);
     });
 
@@ -521,7 +521,7 @@ describe('Integration Testing CouchbaseVector', async () => {
       expect(allIndexes.find(idx => idx.name === nonExistentIndex)).toBeUndefined();
 
       // Now test the couchbase_client method
-      await expect(couchbase_client.describeIndex(nonExistentIndex)).rejects.toThrow();
+      await expect(couchbase_client.describeIndex({ indexName: nonExistentIndex })).rejects.toThrow();
     }, 50000);
 
     it('should throw error when deleting a non-existent index', async () => {
@@ -719,7 +719,7 @@ describe('Integration Testing CouchbaseVector', async () => {
         expect(similarityParam).toBe(couchbaseMetric);
 
         // Verify through our API
-        const stats = await couchbase_client.describeIndex(testIndexName);
+        const stats = await couchbase_client.describeIndex({ indexName: testIndexName });
         expect(stats.metric).toBe(mastraMetric);
 
         // Clean up

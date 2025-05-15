@@ -12,6 +12,7 @@ import type {
   UpsertVectorParams,
   ParamsToArgs,
   QueryVectorArgs,
+  DescribeIndexParams,
 } from '../index';
 
 import { LibSQLFilterTranslator } from './filter';
@@ -269,8 +270,9 @@ export class LibSQLVector extends MastraVector {
     }
   }
 
-  async describeIndex(indexName: string): Promise<IndexStats> {
+  async describeIndex(...args: ParamsToArgs<DescribeIndexParams>): Promise<IndexStats> {
     try {
+      const { indexName } = this.normalizeArgs<DescribeIndexParams>('describeIndex', args);
       // Get table info including column info
       const tableInfoQuery = `
         SELECT sql 

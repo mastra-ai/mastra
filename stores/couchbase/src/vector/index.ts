@@ -5,6 +5,8 @@ import type {
   CreateIndexParams,
   UpsertVectorParams,
   QueryVectorParams,
+  DescribeIndexParams,
+  ParamsToArgs,
 } from '@mastra/core/vector';
 import type { Bucket, Cluster, Collection, Scope } from 'couchbase';
 import { MutateInSpec, connect, SearchRequest, VectorQuery, VectorSearch } from 'couchbase';
@@ -255,7 +257,9 @@ export class CouchbaseVector extends MastraVector {
     return indexes?.map(index => index.name) || [];
   }
 
-  async describeIndex(indexName: string): Promise<IndexStats> {
+  async describeIndex(...args: ParamsToArgs<DescribeIndexParams>): Promise<IndexStats> {
+    const params = this.normalizeArgs<DescribeIndexParams>('describeIndex', args);
+    const { indexName } = params;
     await this.getCollection();
     if (!(await this.listIndexes()).includes(indexName)) {
       throw new Error(`Index ${indexName} does not exist`);

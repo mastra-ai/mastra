@@ -1,6 +1,7 @@
 import { MastraVector } from '@mastra/core/vector';
 import type {
   CreateIndexParams,
+  DescribeIndexParams,
   ParamsToArgs,
   QueryResult,
   QueryVectorParams,
@@ -80,7 +81,9 @@ export class UpstashVector extends MastraVector {
     return indexes.filter(Boolean);
   }
 
-  async describeIndex(indexName: string) {
+  async describeIndex(...args: ParamsToArgs<DescribeIndexParams>) {
+    const params = this.normalizeArgs<DescribeIndexParams>('describeIndex', args);
+    const { indexName } = params;
     const info = await this.client.info();
 
     return {

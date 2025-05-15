@@ -56,14 +56,14 @@ describe('OpenSearchVector', () => {
 
       it('should create a new vector table with specified dimensions', async () => {
         await vectorDB.createIndex({ indexName: testIndexName, dimension: 3 });
-        const stats = await vectorDB.describeIndex(testIndexName);
+        const stats = await vectorDB.describeIndex({ indexName: testIndexName });
         expect(stats?.dimension).toBe(3);
         expect(stats?.count).toBe(0);
       });
 
       it('should create index with specified metric', async () => {
         await vectorDB.createIndex({ indexName: testIndexName2, dimension: 3, metric: 'euclidean' });
-        const stats = await vectorDB.describeIndex(testIndexName2);
+        const stats = await vectorDB.describeIndex({ indexName: testIndexName2 });
         expect(stats.metric).toBe('euclidean');
       });
 
@@ -83,7 +83,7 @@ describe('OpenSearchVector', () => {
           dimension: 3,
           metric: 'cosine',
         });
-        const stats = await vectorDB.describeIndex(testIndex);
+        const stats = await vectorDB.describeIndex({ indexName: testIndex });
         expect(stats.metric).toBe('cosine');
       });
 
@@ -93,7 +93,7 @@ describe('OpenSearchVector', () => {
           dimension: 3,
           metric: 'euclidean',
         });
-        const stats = await vectorDB.describeIndex(testIndex);
+        const stats = await vectorDB.describeIndex({ indexName: testIndex });
         expect(stats.metric).toBe('euclidean');
       });
 
@@ -103,7 +103,7 @@ describe('OpenSearchVector', () => {
           dimension: 3,
           metric: 'dotproduct',
         });
-        const stats = await vectorDB.describeIndex(testIndex);
+        const stats = await vectorDB.describeIndex({ indexName: testIndex });
         expect(stats.metric).toBe('dotproduct');
       });
     });
@@ -147,7 +147,7 @@ describe('OpenSearchVector', () => {
         ];
         await vectorDB.upsert({ indexName, vectors });
 
-        const stats = await vectorDB.describeIndex(indexName);
+        const stats = await vectorDB.describeIndex({ indexName });
         expect(stats).toEqual({
           dimension: 3,
           count: 2,
@@ -156,7 +156,7 @@ describe('OpenSearchVector', () => {
       });
 
       it('should throw error for non-existent index', async () => {
-        await expect(vectorDB.describeIndex('non_existent')).rejects.toThrow();
+        await expect(vectorDB.describeIndex({ indexName: 'non_existent' })).rejects.toThrow();
       });
     });
 
@@ -432,7 +432,7 @@ describe('OpenSearchVector', () => {
         const ids = await vectorDB.upsert({ indexName: testIndexName, vectors });
 
         expect(ids).toHaveLength(2);
-        const stats = await vectorDB.describeIndex(testIndexName);
+        const stats = await vectorDB.describeIndex({ indexName: testIndexName });
         expect(stats.count).toBe(2);
       });
 

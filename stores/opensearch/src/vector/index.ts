@@ -1,4 +1,12 @@
-import type { CreateIndexParams, IndexStats, QueryResult, QueryVectorParams, UpsertVectorParams } from '@mastra/core';
+import type {
+  CreateIndexParams,
+  DescribeIndexParams,
+  IndexStats,
+  ParamsToArgs,
+  QueryResult,
+  QueryVectorParams,
+  UpsertVectorParams,
+} from '@mastra/core';
 import { MastraVector } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import { Client as OpenSearchClient } from '@opensearch-project/opensearch';
@@ -93,7 +101,10 @@ export class OpenSearchVector extends MastraVector {
     }
   }
 
-  async describeIndex(indexName: string): Promise<IndexStats> {
+  async describeIndex(...args: ParamsToArgs<DescribeIndexParams>): Promise<IndexStats> {
+    const params = this.normalizeArgs<DescribeIndexParams>('describeIndex', args);
+
+    const { indexName } = params;
     const { body: indexInfo } = await this.client.indices.get({ index: indexName });
     const mappings = indexInfo[indexName]?.mappings;
     const embedding: any = mappings?.properties?.embedding;
@@ -138,7 +149,7 @@ export class OpenSearchVector extends MastraVector {
     const operations = [];
 
     // Get index stats to check dimension
-    const indexInfo = await this.describeIndex(indexName);
+    const indexInfo = await this.describeIndex({ indexName });
 
     // Validate vector dimensions
     this.validateVectorDimensions(vectors, indexInfo.dimension);
@@ -313,7 +324,7 @@ export class OpenSearchVector extends MastraVector {
       // Update vector if provided
       if (update.vector) {
         // Get index stats to check dimension
-        const indexInfo = await this.describeIndex(indexName);
+        const indexInfo = await this.describeIndex({ indexName });
 
         // Validate vector dimensions
         this.validateVectorDimensions([update.vector], indexInfo.dimension);

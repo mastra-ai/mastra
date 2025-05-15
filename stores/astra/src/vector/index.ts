@@ -8,6 +8,7 @@ import type {
   UpsertVectorParams,
   QueryVectorParams,
   ParamsToArgs,
+  DescribeIndexParams,
 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 
@@ -141,7 +142,11 @@ export class AstraVector extends MastraVector {
     return this.#db.listCollections({ nameOnly: true });
   }
 
-  async describeIndex(indexName: string): Promise<IndexStats> {
+  async describeIndex(...args: ParamsToArgs<DescribeIndexParams>): Promise<IndexStats> {
+    const params = this.normalizeArgs<DescribeIndexParams>('describeIndex', args);
+
+    const { indexName } = params;
+
     const collection = this.#db.collection(indexName);
     const optionsPromise = collection.options();
     const countPromise = collection.countDocuments({}, 100);

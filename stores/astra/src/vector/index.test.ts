@@ -121,7 +121,7 @@ describe.skip('AstraVector Integration Tests', () => {
     expect(indexes).toContain(testIndexName);
 
     // 2. Get collection stats
-    const initialStats = await vectorDB.describeIndex(testIndexName);
+    const initialStats = await vectorDB.describeIndex({ indexName: testIndexName });
     expect(initialStats).toEqual({
       dimension: 4,
       metric: 'cosine',
@@ -144,7 +144,7 @@ describe.skip('AstraVector Integration Tests', () => {
     // Wait for document count to update (with timeout)
     const countUpdated = await waitForCondition(
       async () => {
-        const stats = await vectorDB.describeIndex(testIndexName);
+        const stats = await vectorDB.describeIndex({ indexName: testIndexName });
         console.log('Current count:', stats.count);
         return stats.count === 4;
       },
@@ -176,7 +176,7 @@ describe.skip('AstraVector Integration Tests', () => {
     expect(filteredResults?.[0]?.metadata).toEqual({ label: 'vector2' });
 
     // Get final stats
-    const finalStats = await vectorDB.describeIndex(testIndexName);
+    const finalStats = await vectorDB.describeIndex({ indexName: testIndexName });
     console.log('Final stats:', finalStats);
 
     // More lenient assertion for document count

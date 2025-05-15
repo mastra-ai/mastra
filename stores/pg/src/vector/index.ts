@@ -8,6 +8,7 @@ import type {
   ParamsToArgs,
   QueryVectorArgs,
   CreateIndexArgs,
+  DescribeIndexParams,
 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import { Mutex } from 'async-mutex';
@@ -169,9 +170,11 @@ export class PgVector extends MastraVector {
     return translator.translate(filter);
   }
 
-  async getIndexInfo(indexName: string): Promise<PGIndexStats> {
+  async getIndexInfo(...args: ParamsToArgs<DescribeIndexParams>): Promise<PGIndexStats> {
+    const params = this.normalizeArgs<DescribeIndexParams>('describeIndex', args);
+    const { indexName } = params;
     if (!this.describeIndexCache.has(indexName)) {
-      this.describeIndexCache.set(indexName, await this.describeIndex(indexName));
+      this.describeIndexCache.set(indexName, await this.describeIndex({ indexName }));
     }
     return this.describeIndexCache.get(indexName)!;
   }
@@ -552,7 +555,9 @@ export class PgVector extends MastraVector {
     }
   }
 
-  async describeIndex(indexName: string): Promise<PGIndexStats> {
+  async describeIndex(...args: ParamsToArgs<DescribeIndexParams>): Promise<PGIndexStats> {
+    const params = this.normalizeArgs<DescribeIndexParams>('describeIndex', args);
+    const { indexName } = params;
     const client = await this.pool.connect();
     try {
       const tableName = this.getTableName(indexName);

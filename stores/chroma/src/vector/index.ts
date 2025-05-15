@@ -8,6 +8,7 @@ import type {
   ParamsToArgs,
   QueryVectorArgs,
   UpsertVectorArgs,
+  DescribeIndexParams,
 } from '@mastra/core/vector';
 
 import type { VectorFilter } from '@mastra/core/vector/filter';
@@ -80,7 +81,7 @@ export class ChromaVector extends MastraVector {
     const collection = await this.getCollection(indexName);
 
     // Get index stats to check dimension
-    const stats = await this.describeIndex(indexName);
+    const stats = await this.describeIndex({ indexName });
 
     // Validate vector dimensions
     this.validateVectorDimensions(vectors, stats.dimension);
@@ -177,7 +178,10 @@ export class ChromaVector extends MastraVector {
     return collections.map(collection => collection);
   }
 
-  async describeIndex(indexName: string): Promise<IndexStats> {
+  async describeIndex(...args: ParamsToArgs<DescribeIndexParams>): Promise<IndexStats> {
+    const params = this.normalizeArgs<DescribeIndexParams>('describeIndex', args);
+    const { indexName } = params;
+
     const collection = await this.getCollection(indexName);
     const count = await collection.count();
     const metadata = collection.metadata;
@@ -246,7 +250,7 @@ export class ChromaVector extends MastraVector {
       const updateOptions: UpdateRecordsParams = { ids: [id] };
 
       if (update?.vector) {
-        const stats = await this.describeIndex(indexName);
+        const stats = await this.describeIndex({ indexName });
         this.validateVectorDimensions([update.vector], stats.dimension);
         updateOptions.embeddings = [update.vector];
       }

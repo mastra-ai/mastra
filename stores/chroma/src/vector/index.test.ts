@@ -39,7 +39,7 @@ describe('ChromaVector Integration Tests', () => {
     });
 
     it('should describe index correctly', async () => {
-      const stats: IndexStats = await vectorDB.describeIndex(testIndexName);
+      const stats: IndexStats = await vectorDB.describeIndex({ indexName: testIndexName });
       expect(stats.dimension).toBe(dimension);
       expect(stats.count).toBe(0);
       expect(stats.metric).toBe('cosine');
@@ -58,7 +58,7 @@ describe('ChromaVector Integration Tests', () => {
         const testIndex = `test-index-${metric}`;
         await vectorDB.createIndex({ indexName: testIndex, dimension, metric });
 
-        const stats = await vectorDB.describeIndex(testIndex);
+        const stats = await vectorDB.describeIndex({ indexName: testIndex });
         expect(stats.metric).toBe(metric);
 
         await vectorDB.deleteIndex(testIndex);
@@ -80,14 +80,14 @@ describe('ChromaVector Integration Tests', () => {
       expect(ids).toHaveLength(testVectors.length);
       ids.forEach(id => expect(typeof id).toBe('string'));
 
-      const stats = await vectorDB.describeIndex(testIndexName);
+      const stats = await vectorDB.describeIndex({ indexName: testIndexName });
       expect(stats.count).toBe(testVectors.length);
     });
 
     it('should upsert vectors with provided ids and metadata', async () => {
       await vectorDB.upsert({ indexName: testIndexName, vectors: testVectors, metadata: testMetadata, ids: testIds });
 
-      const stats = await vectorDB.describeIndex(testIndexName);
+      const stats = await vectorDB.describeIndex({ indexName: testIndexName });
       expect(stats.count).toBe(testVectors.length);
 
       // Query each vector to verify metadata
@@ -1627,7 +1627,7 @@ describe('ChromaVector Integration Tests', () => {
       });
 
       // Verify all vectors were inserted
-      const stats = await vectorDB.describeIndex(perfTestIndex);
+      const stats = await vectorDB.describeIndex({ indexName: perfTestIndex });
       expect(stats.count).toBe(batchSize);
 
       const results = await vectorDB.query({

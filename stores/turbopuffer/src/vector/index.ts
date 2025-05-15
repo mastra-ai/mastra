@@ -1,6 +1,8 @@
 import type {
   CreateIndexParams,
+  DescribeIndexParams,
   IndexStats,
+  ParamsToArgs,
   QueryResult,
   QueryVectorParams,
   UpsertVectorParams,
@@ -216,7 +218,9 @@ export class TurbopufferVector extends MastraVector {
     }
   }
 
-  async describeIndex(indexName: string): Promise<IndexStats> {
+  async describeIndex(...args: ParamsToArgs<DescribeIndexParams>): Promise<IndexStats> {
+    const params = this.normalizeArgs<DescribeIndexParams>('describeIndex', args);
+    const { indexName } = params;
     try {
       const namespace = this.client.namespace(indexName);
       const metadata = await namespace.metadata();

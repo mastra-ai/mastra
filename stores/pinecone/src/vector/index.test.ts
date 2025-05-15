@@ -36,7 +36,7 @@ function waitUntilReady(vectorDB: PineconeVector, indexName: string) {
   return new Promise(resolve => {
     const interval = setInterval(async () => {
       try {
-        const stats = await vectorDB.describeIndex(indexName);
+        const stats = await vectorDB.describeIndex({ indexName });
         if (!!stats) {
           clearInterval(interval);
           resolve(true);
@@ -86,7 +86,7 @@ function waitUntilVectorsIndexed(
 
     const interval = setInterval(async () => {
       try {
-        const stats = await vectorDB.describeIndex(indexName);
+        const stats = await vectorDB.describeIndex({ indexName });
         const check = exactCount ? stats?.count === expectedCount : stats?.count >= expectedCount;
         if (stats && check) {
           if (stats.count === lastCount) {
@@ -195,7 +195,7 @@ describe.skip('PineconeVector Integration Tests', () => {
     }, 500000);
 
     it('should describe index with correct properties', async () => {
-      const stats = await vectorDB.describeIndex(testIndexName);
+      const stats = await vectorDB.describeIndex({ indexName: testIndexName });
       expect(stats.dimension).toBe(dimension);
       expect(stats.metric).toBe('cosine');
       expect(typeof stats.count).toBe('number');
@@ -545,7 +545,7 @@ describe.skip('PineconeVector Integration Tests', () => {
       });
       await waitUntilVectorsIndexed(vectorDB, indexNameNamespace, 2);
 
-      const stats = await vectorDB.describeIndex(indexNameNamespace);
+      const stats = await vectorDB.describeIndex({ indexName: indexNameNamespace });
       expect(stats.namespaces).toBeDefined();
       expect(stats.namespaces?.[namespace1]).toBeDefined();
       expect(stats.namespaces?.[namespace2]).toBeDefined();

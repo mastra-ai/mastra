@@ -20,7 +20,7 @@ function waitUntilVectorsIndexed(vectorDB: TurbopufferVector, indexName: string,
     let attempts = 0;
     const interval = setInterval(async () => {
       try {
-        const stats = await vectorDB.describeIndex(indexName);
+        const stats = await vectorDB.describeIndex({ indexName });
         console.log(`Index ${indexName} has ${stats.count} vectors indexed, waiting for ${expectedCount}`);
         if (stats && stats.count >= expectedCount) {
           clearInterval(interval);
@@ -151,7 +151,7 @@ function waitUntilVectorsIndexed(vectorDB: TurbopufferVector, indexName: string,
     }, 500000);
 
     it('should describe index with correct properties', async () => {
-      const stats = await vectorDB.describeIndex(testIndexName);
+      const stats = await vectorDB.describeIndex({ indexName: testIndexName });
       expect(stats.dimension).toBe(dimension);
       expect(stats.metric).toBe('cosine');
       expect(typeof stats.count).toBe('number');

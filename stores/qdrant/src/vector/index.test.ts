@@ -27,7 +27,7 @@ describe('QdrantVector', () => {
     }, 50000);
 
     it('should describe index with correct properties', async () => {
-      const stats = await qdrant.describeIndex(testCollectionName);
+      const stats = await qdrant.describeIndex({ indexName: testCollectionName });
       expect(stats.dimension).toBe(dimension);
       expect(stats.metric).toBe('cosine');
       expect(typeof stats.count).toBe('number');
