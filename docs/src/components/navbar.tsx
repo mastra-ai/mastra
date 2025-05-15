@@ -1,7 +1,5 @@
 import { GithubStarCount } from "@/components/github-star-count";
 
-import Link from "next/link";
-import { Navbar } from "nextra-theme-docs";
 import DocsChat from "@/chatbot/components/chat-widget";
 import {
   Dialog,
@@ -10,6 +8,8 @@ import {
   DialogTitle,
 } from "@headlessui/react";
 import { Search } from "lucide-react";
+import Link from "next/link";
+import { Navbar } from "nextra-theme-docs";
 import { useEffect, useState } from "react";
 import { CustomSearch } from "./custom-search";
 import { getSearchPlaceholder } from "./search-placeholder";
@@ -155,7 +155,7 @@ export const SearchWrapperMobile = ({ locale }: { locale: string }) => {
       >
         <DialogBackdrop className="fixed inset-0 delay-[0ms] duration-300 ease-out bg-black/50 backdrop-blur-md" />
         <div className="fixed inset-0 z-10 w-screen overflow-y-auto">
-          <div className="flex items-start pt-[200px] justify-center min-h-full p-4">
+          <div className="flex items-center md:pt-[200px] justify-center min-h-full p-4">
             <DialogPanel
               transition
               className="w-full border-[0.5px] border-borders-2 h-fit max-w-[660px] mx-auto rounded-xl bg-surface-4 duration-300 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0"
@@ -173,8 +173,6 @@ export const SearchWrapperMobile = ({ locale }: { locale: string }) => {
                   <div className="p-[10px]">
                     <CustomSearch
                       placeholder={getSearchPlaceholder(locale)}
-                      isAgentMode={isAgentMode}
-                      setIsAgentMode={setIsAgentMode}
                       onUseAgent={handleUseAgent}
                       closeModal={close}
                     />

@@ -10,7 +10,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import cn from "clsx";
 import { Search } from "lucide-react";
 import { useRouter } from "next/navigation";
-import type { FC, ReactNode, SyntheticEvent } from "react";
+import type { FC, SyntheticEvent } from "react";
 import { useRef } from "react";
 import {
   PagefindResult,
@@ -22,21 +22,6 @@ import { SpinnerIcon } from "./svgs/spinner";
 
 type SearchProps = {
   /**
-   * Not found text.
-   * @default 'No results found.'
-   */
-  emptyResult?: ReactNode;
-  /**
-   * Error text.
-   * @default 'Failed to load search index.'
-   * */
-  errorText?: ReactNode;
-  /**
-   * Loading text.
-   * @default 'Loading…'
-   */
-  loading?: ReactNode;
-  /**
    * Placeholder text.
    * @default 'Search documentation…'
    */
@@ -44,10 +29,7 @@ type SearchProps = {
   /** CSS class name. */
   className?: string;
   searchOptions?: PagefindSearchOptions;
-  isAgentMode?: boolean;
-  setIsSearching?: (isSearching: boolean) => void;
   onUseAgent: ({ searchQuery }: { searchQuery: string }) => void;
-  setIsAgentMode: (isAgentMode: boolean) => void;
   closeModal: () => void;
 };
 
@@ -62,7 +44,6 @@ type SearchProps = {
  */
 export const CustomSearch: FC<SearchProps> = ({
   className,
-  emptyResult = "No results found.",
   placeholder = "Search or ask AI..",
   searchOptions,
   onUseAgent,
