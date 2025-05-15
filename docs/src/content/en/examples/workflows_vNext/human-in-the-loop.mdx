@@ -3,34 +3,43 @@ title: "Example: Human in the Loop | Workflows | Mastra Docs"
 description: Example of using Mastra to create workflows with human intervention points.
 ---
 
-import { GithubLink } from "@/components/github-link";
-
 # Human in the Loop Workflow
 
 Human-in-the-loop workflows allow you to pause execution at specific points to collect user input, make decisions, or perform actions that require human judgment.
 This example demonstrates how to create a workflow with human intervention points.
+
+
+## Setup
+
+```sh copy
+npm install @ai-sdk/openai @mastra/core @inquirer/prompts
+```
 
 ## Define Agents
 
 Define the travel agents.
 
 ```ts showLineNumbers copy filename="agents/travel-agents.ts"
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
-
-const llm = openai("gpt-4o");
-
+import { Agent } from '@mastra/core/agent'
+import { openai } from '@ai-sdk/openai'
+ 
+const llm = openai('gpt-4o')
+ 
+// Agent that generates multiple holiday options
+// Returns a JSON array of locations and descriptions
 export const summaryTravelAgent = new Agent({
   name: "summaryTravelAgent",
   model: llm,
   instructions: `
   You are a travel agent who is given a user prompt about what kind of holiday they want to go on.
   You then generate 3 different options for the holiday. Return the suggestions as a JSON array {"location": "string", "description": "string"}[]. Don't format as markdown.
-
   Make the options as different as possible from each other.
   Also make the plan very short and summarized.
   `,
-});
+})
+
+// Agent that creates detailed travel plans
+// Takes the selected option and generates a comprehensive itinerary
 export const travelAgent = new Agent({
   name: "travelAgent",
   model: llm,
@@ -46,10 +55,11 @@ export const travelAgent = new Agent({
 Defines a workflow which includes a suspending step: `humanInputStep`.
 
 ```ts showLineNumbers copy filename="workflows/human-in-the-loop-workflow.ts"
-import { createWorkflow, createStep } from "@mastra/core/workflows/vNext";
-
-import { z } from "zod";
-
+import { createWorkflow, createStep } from '@mastra/core/workflows/vNext'
+import { z } from 'zod'
+ 
+// Step that generates multiple holiday options based on user's vacation description
+// Uses the summaryTravelAgent to create diverse travel suggestions
 const generateSuggestionsStep = createStep({
   id: "generate-suggestions",
   inputSchema: z.object({
@@ -63,9 +73,9 @@ const generateSuggestionsStep = createStep({
     if (!mastra) {
       throw new Error("Mastra is not initialized");
     }
-
-    const { vacationDescription } = inputData;
-    const result = await mastra.getAgent("summaryTravelAgent").generate([
+ 
+    const { vacationDescription } = inputData
+    const result = await mastra.getAgent('summaryTravelAgent').generate([
       {
         role: "user",
         content: vacationDescription,
@@ -74,8 +84,11 @@ const generateSuggestionsStep = createStep({
     console.log(result.text);
     return { suggestions: JSON.parse(result.text), vacationDescription };
   },
-});
-
+})
+ 
+// Step that pauses the workflow to get user input
+// Allows the user to select their preferred holiday option from the suggestions
+// Uses suspend/resume mechanism to handle the interaction
 const humanInputStep = createStep({
   id: "human-input",
   inputSchema: z.object({
@@ -100,14 +113,16 @@ const humanInputStep = createStep({
         vacationDescription: inputData?.vacationDescription,
       };
     }
-
+ 
     return {
       selection: resumeData?.selection,
       vacationDescription: inputData?.vacationDescription,
     };
   },
-});
-
+})
+ 
+// Step that creates a detailed travel plan based on the user's selection
+// Uses the travelAgent to generate comprehensive holiday details
 const travelPlannerStep = createStep({
   id: "travel-planner",
   inputSchema: z.object({
@@ -122,8 +137,8 @@ const travelPlannerStep = createStep({
     if (!travelAgent) {
       throw new Error("Travel agent is not initialized");
     }
-
-    const { selection, vacationDescription } = inputData;
+ 
+    const { selection, vacationDescription } = inputData
     const result = await travelAgent.generate([
       { role: "assistant", content: vacationDescription },
       { role: "user", content: selection || "" },
@@ -131,8 +146,12 @@ const travelPlannerStep = createStep({
     console.log(result.text);
     return { travelPlan: result.text };
   },
-});
-
+})
+ 
+// Main workflow that orchestrates the holiday planning process:
+// 1. Generates multiple options
+// 2. Gets user input
+// 3. Creates detailed plan
 const travelAgentWorkflow = createWorkflow({
   id: "travel-agent-workflow",
   inputSchema: z.object({
@@ -144,11 +163,11 @@ const travelAgentWorkflow = createWorkflow({
 })
   .then(generateSuggestionsStep)
   .then(humanInputStep)
-  .then(travelPlannerStep);
-
-travelAgentWorkflow.commit();
-
-export { travelAgentWorkflow, humanInputStep };
+  .then(travelPlannerStep)
+ 
+travelAgentWorkflow.commit()
+ 
+export { travelAgentWorkflow, humanInputStep }
 ```
 
 ## Register Agent and Workflow instances with Mastra class
@@ -157,30 +176,30 @@ Register the agents and the weather workflow with the mastra instance.
 This is critical for enabling access to the agents within the workflow.
 
 ```ts showLineNumbers copy filename="index.ts"
-import { Mastra } from "@mastra/core/mastra";
-import { createLogger } from "@mastra/core/logger";
-import { LibSQLStore } from "@mastra/libsql";
-import { travelAgentWorkflow } from "./workflows";
-import { travelAgent, summaryTravelAgent } from "./agents";
-
+import { Mastra } from '@mastra/core/mastra'
+import { createLogger } from '@mastra/core/logger'
+import { travelAgentWorkflow } from './workflows/human-in-the-loop-workflow'
+import { summaryTravelAgent, travelAgent } from './agents/travel-agent'
+ 
+// Initialize Mastra instance with:
+// - The travel planning workflow
+// - Both travel agents (summary and detailed planning)
+// - Logging configuration
 const mastra = new Mastra({
   vnext_workflows: {
     travelAgentWorkflow,
   },
   agents: {
     travelAgent,
-    summaryTravelAgent,
+	  summaryTravelAgent
   },
-  storage: new LibSQLStore({
-    url: ":memory:",
-  }),
   logger: createLogger({
     name: "Mastra",
     level: "info",
   }),
-});
-
-export { mastra };
+})
+ 
+export { mastra }
 ```
 
 ## Execute the suspendable weather workflow
@@ -189,49 +208,53 @@ Here, we'll get the weather workflow from the mastra instance, then create a run
 In addition to this, we'll resume the `humanInputStep` after collecting user input with the readline package.
 
 ```ts showLineNumbers copy filename="exec.ts"
-import { mastra } from "./";
-import { select } from "@inquirer/prompts";
-import { createInterface } from "readline";
-import { humanInputStep } from "./workflows";
+import { mastra } from "./"
+import { select } from '@inquirer/prompts'
+import { humanInputStep } from './workflows/human-in-the-loop-workflow'
+ 
 
-const workflow = mastra.vnext_getWorkflow("travelAgentWorkflow");
-const run = workflow.createRun({});
+const workflow = mastra.vnext_getWorkflow('travelAgentWorkflow')
+const run = workflow.createRun({})
+
+// Start the workflow with initial vacation description
 const result = await run.start({
-  inputData: { vacationDescription: "I want to go to the beach" },
-});
-
-console.log("result", result);
-
-const suggStep = result?.steps?.["generate-suggestions"];
-
-if (suggStep.status === "success") {
-  const suggestions = suggStep.output?.suggestions;
+  inputData: { vacationDescription: 'I want to go to the beach' },
+})
+ 
+console.log('result', result)
+ 
+const suggStep = result?.steps?.['generate-suggestions']
+ 
+// If suggestions were generated successfully, proceed with user interaction
+if (suggStep.status === 'success') {
+  const suggestions = suggStep.output?.suggestions
+  
+  // Present options to user and get their selection
   const userInput = await select<string>({
     message: "Choose your holiday destination",
-    choices: suggestions.map(
-      ({ location, description }) => `- ${location}: ${description}`,
-    ),
-  });
-
-  console.log("Selected:", userInput);
-
-  console.log("resuming from", result, "with", {
+    choices: suggestions.map(({ location, description }: { location: string, description: string }) => `- ${location}: ${description}`)
+  })
+ 
+  console.log('Selected:', userInput)
+ 
+  // Prepare to resume the workflow with user's selection
+  console.log('resuming from', result, 'with', {
     inputData: {
       selection: userInput,
       vacationDescription: "I want to go to the beach",
       suggestions: suggStep?.output?.suggestions,
     },
     step: humanInputStep,
-  });
+  })
 
   const result2 = await run.resume({
     resumeData: {
       selection: userInput,
     },
     step: humanInputStep,
-  });
-
-  console.dir(result2, { depth: null });
+  })
+ 
+  console.dir(result2, { depth: null })
 }
 ```
 
@@ -242,13 +265,3 @@ Human-in-the-loop workflows are powerful for building systems that blend automat
 - Supervised AI systems
 - Customer service automation with escalation
 
-<br />
-<br />
-<hr className={"dark:border-[#404040] border-gray-300"} />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/human-in-the-loop"
-  }
-/>
