@@ -27,15 +27,45 @@ const DISTANCE_MAPPING: Record<string, Schemas['Distance']> = {
 export class QdrantVector extends MastraVector {
   private client: QdrantClient;
 
-  constructor(url: string, apiKey?: string, https?: boolean) {
+  /**
+   * @deprecated Passing url, apiKey, https as positional arguments is deprecated.
+   * Use the object parameter instead. This signature will be removed on May 20th, 2025.
+   */
+  constructor(url: string, apiKey?: string, https?: boolean);
+  /**
+   * Creates a new QdrantVector client.
+   * @param params - An object with url, optional apiKey, and optional https.
+   */
+  constructor(params: { url: string; apiKey?: string; https?: boolean });
+  constructor(
+    paramsOrUrl: { url: string; apiKey?: string; https?: boolean } | string,
+    apiKey?: string,
+    https?: boolean,
+  ) {
     super();
-
+    let url: string;
+    let key: string | undefined;
+    let secure: boolean | undefined;
+    if (typeof paramsOrUrl === 'string') {
+      // DEPRECATION WARNING
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn(
+          `Deprecation Warning: Passing url, apiKey, https as positional arguments to QdrantVector constructor is deprecated.\nPlease use an object parameter instead:\n  new QdrantVector({ url, apiKey, https })\nThis signature will be removed on May 20th, 2025.`,
+        );
+      }
+      url = paramsOrUrl;
+      key = apiKey;
+      secure = https;
+    } else {
+      url = paramsOrUrl.url;
+      key = paramsOrUrl.apiKey;
+      secure = paramsOrUrl.https;
+    }
     const baseClient = new QdrantClient({
       url,
-      apiKey,
-      https,
+      apiKey: key,
+      https: secure,
     });
-
     const telemetry = this.__getTelemetry();
     this.client =
       telemetry?.traceClass(baseClient, {

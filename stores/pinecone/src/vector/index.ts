@@ -59,15 +59,37 @@ type PineconeDeleteVectorArgs = [...DeleteVectorArgs, string?];
 export class PineconeVector extends MastraVector {
   private client: Pinecone;
 
-  constructor(apiKey: string, environment?: string) {
+  /**
+   * @deprecated Passing apiKey and environment as positional arguments is deprecated.
+   * Use the object parameter instead. This signature will be removed on May 20th, 2025.
+   */
+  constructor(apiKey: string, environment?: string);
+  /**
+   * Creates a new PineconeVector client.
+   * @param params - An object with apiKey and optional environment.
+   */
+  constructor(params: { apiKey: string; environment?: string });
+  constructor(paramsOrApiKey: { apiKey: string; environment?: string } | string, environment?: string) {
     super();
-
-    const opts: { apiKey: string; controllerHostUrl?: string } = { apiKey };
-
-    if (environment) {
-      opts['controllerHostUrl'] = environment;
+    let apiKey: string;
+    let env: string | undefined;
+    if (typeof paramsOrApiKey === 'string') {
+      // DEPRECATION WARNING
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn(
+          `Deprecation Warning: Passing apiKey and environment as positional arguments to PineconeVector constructor is deprecated.\nPlease use an object parameter instead:\n  new PineconeVector({ apiKey, environment })\nThis signature will be removed on May 20th, 2025.`,
+        );
+      }
+      apiKey = paramsOrApiKey;
+      env = environment;
+    } else {
+      apiKey = paramsOrApiKey.apiKey;
+      env = paramsOrApiKey.environment;
     }
-
+    const opts: { apiKey: string; controllerHostUrl?: string } = { apiKey };
+    if (env) {
+      opts['controllerHostUrl'] = env;
+    }
     const baseClient = new Pinecone(opts);
     const telemetry = this.__getTelemetry();
     this.client =

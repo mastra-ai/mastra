@@ -39,7 +39,7 @@ describe('OpenSearchVector', () => {
 
   beforeAll(async () => {
     // Initialize PgVector
-    vectorDB = new OpenSearchVector(url);
+    vectorDB = new OpenSearchVector({ url });
   });
 
   afterAll(async () => {

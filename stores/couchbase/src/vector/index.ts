@@ -86,7 +86,7 @@ export class CouchbaseVector extends MastraVector {
       // Positional args (deprecated)
       if (arguments.length > 1) {
         console.warn(
-          '[DEPRECATION] CouchbaseVector constructor positional arguments are deprecated. Please use a single object parameter instead. This signature will be removed on May 20th, 2025.',
+          'Deprecation Warning: CouchbaseVector constructor positional arguments are deprecated. Please use a single object parameter instead. This signature will be removed on May 20th, 2025.',
         );
       }
       connectionString_ = paramsOrConnectionString as string;

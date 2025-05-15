@@ -30,8 +30,33 @@ const REVERSE_METRIC_MAPPING = {
 export class OpenSearchVector extends MastraVector {
   private client: OpenSearchClient;
 
-  constructor(url: string) {
+  /**
+   * @deprecated Passing a string URL is deprecated. Use an object parameter: { url }.
+   * @param url - The OpenSearch node URL (deprecated)
+   */
+  constructor(url: string);
+  /**
+   * Creates a new OpenSearchVector client.
+   *
+   * @param params - An object with a url property specifying the OpenSearch node.
+   */
+  constructor(params: { url: string });
+  constructor(paramsOrUrl: { url: string } | string) {
     super();
+    let url: string;
+    if (typeof paramsOrUrl === 'string') {
+      // Deprecation warning for positional argument
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn(
+          'Deprecation Warning: OpenSearchVector constructor positional arguments are deprecated. Please use a single object parameter instead. This signature will be removed on May 20th, 2025.',
+        );
+      }
+      url = paramsOrUrl;
+    } else if (typeof paramsOrUrl === 'object' && paramsOrUrl !== null && 'url' in paramsOrUrl) {
+      url = paramsOrUrl.url;
+    } else {
+      throw new Error('Invalid parameters for OpenSearchVector constructor. Expected { url: string }.');
+    }
     this.client = new OpenSearchClient({ node: url });
   }
 
