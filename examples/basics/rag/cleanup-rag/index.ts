@@ -85,7 +85,7 @@ const ragAgent = new Agent({
   },
 });
 
-const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
+const pgVector = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING! });
 
 export const mastra = new Mastra({
   agents: { ragAgent },
