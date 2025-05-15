@@ -13,6 +13,7 @@ import type {
 } from '@mastra/core';
 
 import type { AgentGenerateOptions, AgentStreamOptions } from '@mastra/core/agent';
+import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type { ServerInfo } from '@mastra/core/mcp';
 import type { NewWorkflow, WatchEvent, WorkflowResult as VNextWorkflowResult } from '@mastra/core/workflows/vNext';
 import type { JSONSchema7 } from 'json-schema';
@@ -40,6 +41,16 @@ export interface RequestOptions {
   signal?: AbortSignal;
 }
 
+type WithoutMethods<T> = {
+  [K in keyof T as T[K] extends (...args: any[]) => any
+    ? never
+    : T[K] extends { (): any }
+      ? never
+      : T[K] extends undefined | ((...args: any[]) => any)
+        ? never
+        : K]: T[K];
+};
+
 export interface GetAgentResponse {
   name: string;
   instructions: string;
@@ -51,11 +62,17 @@ export interface GetAgentResponse {
 
 export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[];
-} & Partial<Omit<AgentGenerateOptions<T>, 'experimental_generateMessageId'>>;
+  output?: T;
+  experimental_output?: T;
+  runtimeContext?: RuntimeContext;
+} & WithoutMethods<Omit<AgentGenerateOptions<T>, 'output' | 'experimental_output' | 'runtimeContext'>>;
 
 export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[];
-} & Omit<AgentStreamOptions<T>, 'onFinish' | 'onStepFinish' | 'experimental_generateMessageId'>;
+  output?: T;
+  experimental_output?: T;
+  runtimeContext?: RuntimeContext;
+} & WithoutMethods<Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'runtimeContext'>>;
 
 export interface GetEvalsByAgentIdResponse extends GetAgentResponse {
   evals: any[];
