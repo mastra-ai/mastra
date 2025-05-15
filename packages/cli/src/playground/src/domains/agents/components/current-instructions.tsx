@@ -39,7 +39,7 @@ export function CurrentInstructions({
   return (
     <div>
       <div className="flex items-center justify-between gap-4 pb-1">
-        <Txt as="h3" variant="ui-sm" className="text-icon3 font-medium">
+        <Txt as="h3" variant="ui-md" className="text-icon3 pb-1">
           Current Instructions
         </Txt>
 
@@ -85,40 +85,42 @@ export function CurrentInstructions({
         <div className={clsx('p-[1px] rounded-lg overflow-hidden relative')}>
           <div
             className={clsx(
-              'absolute inset-0 bg-border1 transition-all',
+              'absolute inset-0 bg-surface4 transition-all',
               enhancedPrompt && 'bg-gradient-to-br from-accent1 to-accent3',
             )}
           />
 
-          <CodeDisplay
-            content={currentContent || ''}
-            isCopied={isCopied}
-            isDraft={!!enhancedPrompt}
-            onCopy={() => currentContent && handleCopy()}
-            className="border-none bg-surface3 z-10 relative"
-          />
-        </div>
-
-        <div className="px-3">
-          <div className="flex justify-between rounded-b-lg bg-surface4 disabled:bg-surface3 text-icon6 w-full py-2 px-3 gap-3">
-            <textarea
-              value={userComment}
-              onChange={e => onCommentChange(e.target.value)}
-              placeholder="Add your comments or requirements for enhancing your agent's prompt..."
-              className="resize-none text-ui-sm w-full placeholder:text-icon3 bg-transparent block disabled:text-icon3 outline-none focus-visible:ring-1 focus-visible:ring-accent3"
-              disabled={Boolean(isEnhancing || enhancedPrompt)}
+          <div className="relative z-10 bg-surface4 rounded-lg">
+            <CodeDisplay
+              content={currentContent || ''}
+              isCopied={isCopied}
+              isDraft={!!enhancedPrompt}
+              onCopy={() => currentContent && handleCopy()}
+              className="border-none bg-surface4 text-ui-sm p-2 !h-[260px]"
             />
 
-            <button onClick={onEnhance} disabled={isEnhancing || !instructions || Boolean(enhancedPrompt)}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Icon className="text-icon3 hover:text-icon6 disabled:hover:text-icon3">
-                    {isEnhancing ? <Loader className="animate-spin" /> : <Wand2 />}
-                  </Icon>
-                </TooltipTrigger>
-                <TooltipContent>{isEnhancing ? 'Enhancing...' : 'Enhance prompt'}</TooltipContent>
-              </Tooltip>
-            </button>
+            <div className="px-3 py-3">
+              <div className="flex justify-between rounded-lg border border-border1 bg-surface5 shadow-lg disabled:bg-surface3 text-icon6 w-full py-2 px-3 gap-3 relative z-10">
+                <textarea
+                  value={userComment}
+                  onChange={e => onCommentChange(e.target.value)}
+                  placeholder="Add your comments or requirements for enhancing your agent's prompt..."
+                  className="resize-none text-ui-sm w-full placeholder:text-icon3 bg-transparent block disabled:text-icon3 outline-none focus-visible:ring-1 focus-visible:ring-accent3"
+                  disabled={Boolean(isEnhancing || enhancedPrompt)}
+                />
+
+                <button onClick={onEnhance} disabled={isEnhancing || !instructions || Boolean(enhancedPrompt)}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Icon className="text-icon3 hover:text-icon6 disabled:hover:text-icon3">
+                        {isEnhancing ? <Loader className="animate-spin" /> : <Wand2 />}
+                      </Icon>
+                    </TooltipTrigger>
+                    <TooltipContent>{isEnhancing ? 'Enhancing...' : 'Enhance prompt'}</TooltipContent>
+                  </Tooltip>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>

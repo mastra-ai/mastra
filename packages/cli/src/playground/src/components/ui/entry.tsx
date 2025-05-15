@@ -9,7 +9,7 @@ export interface EntryProps {
 export const Entry = ({ label, children }: EntryProps) => {
   return (
     <div className="space-y-2">
-      <Txt as="p" variant="ui-sm" className="text-icon3">
+      <Txt as="p" variant="ui-md" className="text-icon3">
         {label}
       </Txt>
 

@@ -31,7 +31,7 @@ export const AgentOverview = ({ agent, agentId }: AgentOverviewProps) => {
       <hr className="border-border1 border-sm my-5" />
 
       <div className="px-5">
-        <Txt as="h3" variant="ui-sm" className="text-icon3 font-medium pb-1">
+        <Txt as="h3" variant="ui-md" className="text-icon3 pb-1">
           Agent Tools
         </Txt>
 
@@ -51,7 +51,7 @@ export const AgentOverview = ({ agent, agentId }: AgentOverviewProps) => {
       <hr className="border-border1 border-sm my-5" />
 
       <div className="px-5">
-        <Txt as="h3" variant="ui-sm" className="text-icon3 font-medium pb-1">
+        <Txt as="h3" variant="ui-md" className="text-icon3 pb-1">
           Agent Workflows
         </Txt>
 
