@@ -1,7 +1,19 @@
 import { GithubStarCount } from "@/components/github-star-count";
 
+import DocsChat from "@/chatbot/components/chat-widget";
+import {
+  Dialog,
+  DialogBackdrop,
+  DialogPanel,
+  DialogTitle,
+} from "@headlessui/react";
+import { Search } from "lucide-react";
 import Link from "next/link";
 import { Navbar } from "nextra-theme-docs";
+import { useState } from "react";
+import { CustomSearch } from "./custom-search";
+import { getSearchPlaceholder } from "./search-placeholder";
+import { Button } from "./ui/button";
 
 export const Logo = () => {
   return (
@@ -53,7 +65,8 @@ export const Logo = () => {
     </svg>
   );
 };
-export const Nav = ({ stars }: { stars: number }) => {
+
+export const Nav = ({ stars, locale }: { stars: number; locale: string }) => {
   return (
     <Navbar
       logo={<Logo />}
@@ -70,6 +83,77 @@ export const Nav = ({ stars }: { stars: number }) => {
       >
         Docs
       </Link>
+      <SearchWrapperMobile locale={locale} />
     </Navbar>
+  );
+};
+
+export const SearchWrapperMobile = ({ locale }: { locale: string }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [isAgentMode, setIsAgentMode] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  function open() {
+    setIsOpen(true);
+  }
+
+  function close() {
+    setIsOpen(false);
+    setIsAgentMode(false);
+  }
+
+  function handleUseAgent({ searchQuery }: { searchQuery: string }) {
+    setIsAgentMode(true);
+    setSearchQuery(searchQuery);
+  }
+
+  return (
+    <>
+      <Button
+        onClick={open}
+        size="sm"
+        variant="ghost"
+        className="block cursor-pointer md:hidden w-fit text-icons-3"
+      >
+        <Search className="w-4 h-4" />
+      </Button>
+      <Dialog
+        open={isOpen}
+        as="div"
+        className="relative md:hidden z-1000 focus:outline-none"
+        onClose={close}
+        unmount={true}
+      >
+        <DialogBackdrop className="fixed inset-0 delay-[0ms] duration-300 ease-out bg-black/50 backdrop-blur-md" />
+        <div className="fixed inset-0 z-10 w-screen overflow-y-auto">
+          <div className="flex items-center md:pt-[200px] justify-center min-h-full p-4">
+            <DialogPanel
+              transition
+              className="w-full border-[0.5px] border-borders-2 h-fit max-w-[660px] mx-auto rounded-xl bg-surface-4 duration-300 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0"
+            >
+              <DialogTitle as="h3" className="sr-only">
+                Search
+              </DialogTitle>
+              <div className="w-full">
+                {isAgentMode ? (
+                  <DocsChat
+                    setIsAgentMode={setIsAgentMode}
+                    searchQuery={searchQuery}
+                  />
+                ) : (
+                  <div className="p-[10px]">
+                    <CustomSearch
+                      placeholder={getSearchPlaceholder(locale)}
+                      onUseAgent={handleUseAgent}
+                      closeModal={close}
+                    />
+                  </div>
+                )}
+              </div>
+            </DialogPanel>
+          </div>
+        </div>
+      </Dialog>
+    </>
   );
 };
