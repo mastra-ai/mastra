@@ -73,7 +73,7 @@ export interface DeleteVectorParams {
 
 export type DeleteVectorArgs = [string, string];
 
-// Checks for object format, then checks for query vector args, then upsert vector args, then create index args
+// Checks for object format, followed by specific arg types for query, upsert, create, describe, delete, update, and delete vector operations
 export type ParamsToArgs<T> =
   | [T] // object format
   | (T extends QueryVectorParams ? QueryVectorArgs : never)
