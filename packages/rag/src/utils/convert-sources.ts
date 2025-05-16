@@ -14,30 +14,30 @@ export const convertToSources = (results: SourceInput[]) => {
     // RankedNode
     if ('content' in result) {
       return {
-        id: result?.id,
-        vector: result?.embedding || [],
-        score: result?.score,
-        metadata: result?.metadata,
-        document: result?.content || '',
+        id: result.id,
+        vector: result.embedding || [],
+        score: result.score,
+        metadata: result.metadata,
+        document: result.content || '',
       };
     }
     // RerankResult
     if ('result' in result) {
       return {
-        id: result?.result?.id,
-        vector: result?.result?.vector || [],
-        score: result?.score || result?.result?.score,
-        metadata: result?.result?.metadata,
-        document: result?.result?.document || '',
+        id: result.result.id,
+        vector: result.result.vector || [],
+        score: result.score,
+        metadata: result.result.metadata,
+        document: result.result.document || '',
       };
     }
     // QueryResult
     return {
-      id: result?.id,
-      vector: result?.vector || [],
-      score: result?.score,
-      metadata: result?.metadata,
-      document: result?.document || '',
+      id: result.id,
+      vector: result.vector || [],
+      score: result.score,
+      metadata: result.metadata,
+      document: result.document || '',
     };
   });
 };
