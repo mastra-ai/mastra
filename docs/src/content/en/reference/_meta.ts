@@ -7,7 +7,7 @@ const meta: Meta = {
   core: "Core",
   cli: "CLI",
   agents: "Agents",
-  tools: "Tools",
+  tools: "Tools & MCP",
   workflows: "Workflows",
   vNextWorkflows: "vNext Workflows",
   networks: "Networks",
