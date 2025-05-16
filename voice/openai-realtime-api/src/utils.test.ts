@@ -29,7 +29,7 @@ describe('transformTools', () => {
 
       // Assert the transformation results
       expect(transformedTools).toHaveLength(1);
-      const { openaiTool, execute } = transformedTools[0];
+      const { openaiTool } = transformedTools[0];
 
       expect(openaiTool).toMatchObject({
         type: 'function',
@@ -59,7 +59,7 @@ describe('transformTools', () => {
           },
           required: ['query'],
         },
-        execute: async (args: { query: string }) => {
+        execute: async (args: { query: string, limit?: number }) => {
           return `Searched for: ${args.query}`;
         },
       };
