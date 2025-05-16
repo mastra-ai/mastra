@@ -1,6 +1,6 @@
 ---
-title: "トレーシング | Mastra オブザーバビリティ ドキュメント"
-description: "Mastra アプリケーションのための OpenTelemetry トレーシングの設定"
+title: "トレーシング | Mastra 可観測性ドキュメント"
+description: "Mastraアプリケーション用のOpenTelemetryトレーシングをセットアップする"
 ---
 
 import Image from "next/image";
@@ -42,12 +42,12 @@ type OtelConfig = {
   // テレメトリの有効/無効（デフォルトはtrue）
   enabled?: boolean;
 
-  // トレースのサンプリング方法を制御
+  // サンプリングするトレースの数を制御
   sampling?: {
     type: "ratio" | "always_on" | "always_off" | "parent_based";
-    probability?: number; // ratio サンプリング用
+    probability?: number; // 比率サンプリング用
     root?: {
-      probability: number; // parent_based サンプリング用
+      probability: number; // 親ベースのサンプリング用
     };
   };
 
@@ -71,7 +71,7 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 OTEL_EXPORTER_OTLP_HEADERS=x-api-key=your-api-key
 ```
 
-そして設定内で：
+そして設定では：
 
 ```ts filename="mastra.config.ts" showLineNumbers copy
 export const mastra = new Mastra({
@@ -81,7 +81,7 @@ export const mastra = new Mastra({
     enabled: true,
     export: {
       type: "otlp",
-      // endpoint と headers は環境変数から取得されます
+      // エンドポイントとヘッダーは環境変数から取得されます
     },
   },
 });
@@ -89,11 +89,11 @@ export const mastra = new Mastra({
 
 ### 例：SigNoz連携
 
-[SigNoz](https://signoz.io)でのトレースされたエージェント連携の例：
+[SigNoz](https://signoz.io)でのトレースされたエージェントインタラクションの例です：
 
 <img
   src="/image/signoz-telemetry-demo.png"
-  alt="スパン、LLM呼び出し、ツール実行を示すエージェント連携トレース"
+  alt="スパン、LLM呼び出し、ツール実行を示すエージェントインタラクショントレース"
   style={{ maxWidth: "800px", width: "100%", margin: "8px 0" }}
   className="nextra-image rounded-md"
   data-zoom
@@ -103,7 +103,7 @@ export const mastra = new Mastra({
 
 ### その他のサポートされているプロバイダー
 
-サポートされている可観測性プロバイダーの完全なリストと設定の詳細については、[可観測性プロバイダーリファレンス](../../reference/observability/providers/)を参照してください。
+サポートされている監視プロバイダーの完全なリストとその設定の詳細については、[監視プロバイダーリファレンス](../../reference/observability/providers/)を参照してください。
 
 ### Next.js固有のトレーシング手順
 

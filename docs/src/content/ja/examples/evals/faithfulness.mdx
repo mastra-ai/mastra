@@ -1,28 +1,28 @@
 ---
-title: "例：忠実性 | Evals | Mastra Docs"
-description: 忠実性メトリックを使用して、レスポンスが文脈と比較してどれだけ事実に基づいているかを評価する例。
+title: "例: Faithfulness | Evals | Mastra Docs"
+description: Faithfulnessメトリクスを使用して、回答がコンテキストと比較してどれだけ事実に忠実であるかを評価する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
 # Faithfulness
 
-この例では、MastraのFaithfulnessメトリックを使用して、提供されたコンテキストと比較して応答がどれほど事実に基づいているかを評価する方法を示します。
+この例では、MastraのFaithfulnessメトリクスを使用して、回答が提供されたコンテキストと比較してどれだけ事実に忠実であるかを評価する方法を示します。
 
 ## 概要
 
-この例では、以下の方法を示します：
+この例では、以下の方法を示します。
 
-1. Faithfulnessメトリックを設定する
-2. 事実の正確性を評価する
-3. Faithfulnessスコアを分析する
-4. 異なる正確性レベルを処理する
+1. Faithfulnessメトリクスの設定
+2. 事実の正確性の評価
+3. Faithfulnessスコアの分析
+4. 異なる正確性レベルへの対応
 
 ## セットアップ
 
-### 環境セットアップ
+### 環境設定
 
-環境変数を設定してください：
+環境変数を必ず設定してください：
 
 ```bash filename=".env"
 OPENAI_API_KEY=your_api_key_here
@@ -39,9 +39,9 @@ import { FaithfulnessMetric } from "@mastra/evals/llm";
 
 ## 使用例
 
-### 高忠実度の例
+### 高い忠実度の例
 
-すべての主張が文脈によって裏付けられている応答を評価します：
+すべての主張がコンテキストによって裏付けられている応答を評価します：
 
 ```typescript copy showLineNumbers{5} filename="src/index.ts"
 const context1 = [
@@ -72,9 +72,9 @@ console.log("Metric Result:", {
 // Metric Result: { score: 1, reason: 'All claims are supported by the context.' }
 ```
 
-### 混合忠実度の例
+### 忠実度が混在している例
 
-いくつかの裏付けのない主張を含む応答を評価します：
+一部の主張がコンテキストで裏付けられていない応答を評価します：
 
 ```typescript copy showLineNumbers{31} filename="src/index.ts"
 const context2 = [
@@ -105,9 +105,9 @@ console.log("Metric Result:", {
 // Metric Result: { score: 0.5, reason: 'Only half of the claims are supported by the context.' }
 ```
 
-### 低忠実度の例
+### 低い忠実度の例
 
-文脈と矛盾する応答を評価します：
+コンテキストと矛盾する応答を評価します：
 
 ```typescript copy showLineNumbers{57} filename="src/index.ts"
 const context3 = [
@@ -142,19 +142,19 @@ console.log("Metric Result:", {
 
 この指標は以下を提供します：
 
-1. 0から1の間の忠実度スコア：
+1. 0から1の間のfaithfulnessスコア：
 
-   - 1.0: 完全な忠実度 - すべての主張が文脈によって支持されている
-   - 0.7-0.9: 高い忠実度 - ほとんどの主張が支持されている
-   - 0.4-0.6: 混合忠実度 - 一部の主張が支持されていない
-   - 0.1-0.3: 低い忠実度 - ほとんどの主張が支持されていない
-   - 0.0: 忠実度なし - 主張が文脈と矛盾している
+   - 1.0: 完全なfaithfulness - すべての主張が文脈によって裏付けられている
+   - 0.7-0.9: 高いfaithfulness - ほとんどの主張が裏付けられている
+   - 0.4-0.6: 混合的なfaithfulness - 一部の主張が裏付けられていない
+   - 0.1-0.3: 低いfaithfulness - ほとんどの主張が裏付けられていない
+   - 0.0: faithfulnessなし - 主張が文脈と矛盾している
 
-2. スコアの詳細な理由、以下を含む分析：
+2. スコアの詳細な理由、以下の分析を含む：
    - 主張の検証
    - 事実の正確性
    - 矛盾
-   - 全体的な忠実度
+   - 全体的なfaithfulness
 
 <br />
 <br />

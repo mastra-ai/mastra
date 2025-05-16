@@ -1,29 +1,29 @@
 ---
-title: "例：単語の包含 | Evals | Mastra Docs"
-description: 出力テキストにおける単語の包含を評価するためのカスタムメトリクスの作成例。
+title: "例: 単語の含有 | Evals | Mastra Docs"
+description: 出力テキストに単語が含まれているかを評価するカスタムメトリクスの作成例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
-# 単語包含評価
+# 単語含有評価
 
-この例では、出力テキストに特定の単語が含まれているかどうかを評価するカスタムメトリックをMastraで作成する方法を示します。
-これは、私たち自身の[キーワードカバレッジ評価](/reference/evals/keyword-coverage)の簡略版です。
+この例では、Mastraで特定の単語が出力テキストに含まれているかどうかを評価するカスタムメトリックの作成方法を示します。
+これは、私たち自身の [keyword coverage eval](/reference/evals/keyword-coverage) の簡易版です。
 
 ## 概要
 
 この例では、以下の方法を示します：
 
 1. カスタムメトリッククラスを作成する
-2. 応答における単語の存在を評価する
-3. 包含スコアを計算する
-4. 異なる包含シナリオを処理する
+2. 応答内の単語の存在を評価する
+3. インクルージョンスコアを計算する
+4. さまざまなインクルージョンのシナリオに対応する
 
 ## セットアップ
 
 ### 依存関係
 
-必要な依存関係をインポートします:
+必要な依存関係をインポートします：
 
 ```typescript copy showLineNumbers filename="src/index.ts"
 import { Metric, type MetricResult } from "@mastra/core/eval";
@@ -31,7 +31,7 @@ import { Metric, type MetricResult } from "@mastra/core/eval";
 
 ## メトリックの実装
 
-Word Inclusion メトリックを作成します:
+Word Inclusion メトリックを作成します：
 
 ```typescript copy showLineNumbers{3} filename="src/index.ts"
 interface WordInclusionResult extends MetricResult {
@@ -70,7 +70,7 @@ export class WordInclusionMetric extends Metric {
 
 ## 使用例
 
-### 完全な単語の含有例
+### すべての単語が含まれる例
 
 すべての単語が出力に含まれている場合のテスト：
 
@@ -90,7 +90,7 @@ console.log("Metric Result:", {
 // Metric Result: { score: 1, info: { totalWords: 3, matchedWords: 3 } }
 ```
 
-### 部分的な単語の含有例
+### 一部の単語が含まれる例
 
 いくつかの単語が含まれている場合のテスト：
 
@@ -110,9 +110,9 @@ console.log("Metric Result:", {
 // Metric Result: { score: 0.5, info: { totalWords: 4, matchedWords: 2 } }
 ```
 
-### 単語が含まれていない例
+### どの単語も含まれない例
 
-単語がまったく含まれていない場合のテスト：
+どの単語も含まれていない場合のテスト：
 
 ```typescript copy showLineNumbers{82} filename="src/index.ts"
 const words3 = ["cloud", "server", "database"];
@@ -136,12 +136,12 @@ console.log("Metric Result:", {
 
 1. 0から1の間の単語包含スコア：
 
-   - 1.0: 完全な包含 - すべての単語が存在
-   - 0.5-0.9: 部分的な包含 - 一部の単語が存在
-   - 0.0: 包含なし - 単語が見つからない
+   - 1.0: 完全包含 - すべての単語が含まれている
+   - 0.5-0.9: 部分的包含 - 一部の単語が含まれている
+   - 0.0: 含まれていない - 単語が見つからない
 
-2. 詳細な統計情報を含む：
-   - チェックする総単語数
+2. 詳細な統計情報：
+   - チェックする単語の総数
    - 一致した単語の数
    - 包含率の計算
    - 空の入力の処理

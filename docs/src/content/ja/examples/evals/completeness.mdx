@@ -1,34 +1,34 @@
 ---
-title: "例：完全性 | Evals | Mastra Docs"
-description: 完全性メトリックを使用して、レスポンスが入力要素をどれだけ徹底的にカバーしているかを評価する例。
+title: "例: 完全性 | Evals | Mastra Docs"
+description: Completenessメトリクスを使用して、回答が入力要素をどれだけ網羅しているかを評価する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
 # 完全性評価
 
-この例では、Mastraの完全性メトリックを使用して、応答が入力の主要な要素をどれだけ徹底的にカバーしているかを評価する方法を示します。
+この例では、Mastra の Completeness メトリクスを使用して、回答が入力の主要な要素をどれだけ網羅しているかを評価する方法を示します。
 
 ## 概要
 
-この例では、次の方法を示します：
+この例では、以下の方法を示します。
 
-1. Completenessメトリックを設定する
-2. 要素カバレッジのために応答を評価する
+1. Completenessメトリクスを設定する
+2. 要素の網羅性について回答を評価する
 3. カバレッジスコアを分析する
-4. 異なるカバレッジシナリオを処理する
+4. 異なるカバレッジシナリオに対応する
 
 ## セットアップ
 
 ### 依存関係
 
-必要な依存関係をインポートします:
+必要な依存関係をインポートします：
 
 ```typescript copy showLineNumbers filename="src/index.ts"
 import { CompletenessMetric } from "@mastra/evals/nlp";
 ```
 
-## メトリック設定
+## メトリックの設定
 
 Completenessメトリックを設定します：
 
@@ -40,7 +40,7 @@ const metric = new CompletenessMetric();
 
 ### 完全カバレッジの例
 
-すべての要素をカバーする応答を評価します：
+すべての要素をカバーしている応答を評価します：
 
 ```typescript copy showLineNumbers{7} filename="src/index.ts"
 const text1 = "The primary colors are red, blue, and yellow.";
@@ -62,9 +62,9 @@ console.log("Metric Result:", {
 // Metric Result: { score: 1, info: { missingElements: [], elementCounts: { input: 8, output: 8 } } }
 ```
 
-### 部分カバレッジの例
+### 部分的カバレッジの例
 
-いくつかの要素をカバーする応答を評価します：
+一部の要素のみカバーしている応答を評価します：
 
 ```typescript copy showLineNumbers{24} filename="src/index.ts"
 const text2 = "The primary colors are red and blue.";
@@ -86,9 +86,9 @@ console.log("Metric Result:", {
 // Metric Result: { score: 0.875, info: { missingElements: ['yellow'], elementCounts: { input: 8, output: 7 } } }
 ```
 
-### 最小カバレッジの例
+### 最小限カバレッジの例
 
-非常に少ない要素をカバーする応答を評価します：
+ごく少数の要素しかカバーしていない応答を評価します：
 
 ```typescript copy showLineNumbers{41} filename="src/index.ts"
 const text3 = "The seasons include summer.";
@@ -120,18 +120,18 @@ console.log("Metric Result:", {
 
 この指標は以下を提供します：
 
-1. 0から1のスコア：
+1. 0から1の間のスコア：
 
    - 1.0: 完全なカバレッジ - すべての入力要素を含む
-   - 0.7-0.9: 高いカバレッジ - ほとんどの主要要素を含む
-   - 0.4-0.6: 部分的なカバレッジ - いくつかの主要要素を含む
-   - 0.1-0.3: 低いカバレッジ - ほとんどの主要要素が欠けている
-   - 0.0: カバレッジなし - 出力にすべての入力要素が欠けている
+   - 0.7-0.9: 高いカバレッジ - 主要な要素のほとんどを含む
+   - 0.4-0.6: 部分的なカバレッジ - 一部の主要な要素を含む
+   - 0.1-0.3: 低いカバレッジ - 主要な要素のほとんどが欠落
+   - 0.0: カバレッジなし - 出力に入力要素が全く含まれていない
 
-2. 詳細な分析：
+2. 詳細な分析内容：
    - 見つかった入力要素のリスト
    - 一致した出力要素のリスト
-   - 入力から欠けている要素
+   - 入力から欠落している要素
    - 要素数の比較
 
 <br />

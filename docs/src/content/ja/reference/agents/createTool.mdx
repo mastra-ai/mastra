@@ -1,19 +1,19 @@
 ---
 title: "リファレンス: createTool() | ツール | エージェント | Mastra ドキュメント"
-description: MastraのcreateTool関数に関するドキュメントで、エージェントとワークフローのためのカスタムツールを作成します。
+description: Mastra の createTool 関数のドキュメント。エージェントやワークフロー用のカスタムツールを作成します。
 ---
 
 # `createTool()`
 
-`createTool()` 関数は、エージェントやワークフローによって実行される型付きツールを作成します。ツールには、組み込みのスキーマ検証、実行コンテキスト、およびMastraエコシステムとの統合が含まれています。
+`createTool()` 関数は、エージェントやワークフローによって実行可能な型付きツールを作成します。ツールには、組み込みのスキーマバリデーション、実行コンテキスト、そしてMastraエコシステムとの統合が備わっています。
 
 ## 概要
 
-ツールはMastraの基本的な構成要素であり、エージェントが外部システムと対話し、計算を実行し、データにアクセスすることを可能にします。各ツールには以下のものがあります：
+ツールは、Mastraにおける基本的な構成要素であり、エージェントが外部システムと連携したり、計算を実行したり、データへアクセスしたりすることを可能にします。各ツールには以下の特徴があります。
 
 - 一意の識別子
-- AIがツールをいつどのように使用するかを理解するのに役立つ説明
-- 検証のためのオプションの入力および出力スキーマ
+- AIがツールをいつ、どのように使うべきかを理解するための説明
+- バリデーションのためのオプションの入力および出力スキーマ
 - ツールのロジックを実装する実行関数
 
 ## 使用例
@@ -34,9 +34,9 @@ const getStockPrice = async (symbol: string) => {
 // Create a tool to get stock prices
 export const stockPriceTool = createTool({
   id: "getStockPrice",
-  description: "指定されたティッカーシンボルの現在の株価を取得します",
+  description: "Fetches the current stock price for a given ticker symbol",
   inputSchema: z.object({
-    symbol: z.string().describe("株式ティッカーシンボル（例: AAPL, MSFT）"),
+    symbol: z.string().describe("The stock ticker symbol (e.g., AAPL, MSFT)"),
   }),
   outputSchema: z.object({
     symbol: z.string(),
@@ -59,7 +59,7 @@ export const stockPriceTool = createTool({
 // Create a tool that uses the thread context
 export const threadInfoTool = createTool({
   id: "getThreadInfo",
-  description: "現在の会話スレッドに関する情報を返します",
+  description: "Returns information about the current conversation thread",
   inputSchema: z.object({
     includeResource: z.boolean().optional().default(false),
   }),
@@ -77,7 +77,7 @@ export const threadInfoTool = createTool({
 
 ### パラメータ
 
-`createTool()`は、以下のプロパティを持つ単一のオブジェクトを受け取ります:
+`createTool()` は、以下のプロパティを持つ単一のオブジェクトを受け取ります。
 
 <PropertiesTable
   content={[
@@ -86,14 +86,14 @@ export const threadInfoTool = createTool({
       type: "string",
       required: true,
       description:
-        "ツールのユニークな識別子。ツールの機能を説明するものであるべきです。",
+        "ツールの一意な識別子。この値はツールの機能を説明するものにしてください。",
     },
     {
       name: "description",
       type: "string",
       required: true,
       description:
-        "ツールが何をするのか、いつ使用すべきか、どのような入力が必要かの詳細な説明。これにより、AIがツールを効果的に使用する方法を理解するのに役立ちます。",
+        "ツールが何をするのか、いつ使用すべきか、どのような入力が必要かの詳細な説明。AIがツールを効果的に利用するための助けとなります。",
     },
     {
       name: "execute",
@@ -108,25 +108,28 @@ export const threadInfoTool = createTool({
             {
               name: "context",
               type: "object",
-              description: "inputSchemaに一致する検証済みの入力データ",
+              description:
+                "inputSchemaに一致する検証済みの入力データ",
             },
             {
               name: "threadId",
               type: "string",
               isOptional: true,
-              description: "会話スレッドの識別子（利用可能な場合）",
+              description:
+                "会話スレッドの識別子（利用可能な場合）",
             },
             {
               name: "resourceId",
               type: "string",
               isOptional: true,
-              description: "ツールと対話するユーザーまたはリソースの識別子",
+              description:
+                "ツールとやり取りするユーザーまたはリソースの識別子",
             },
             {
               name: "mastra",
               type: "Mastra",
               isOptional: true,
-              description: "Mastraインスタンスへの参照（利用可能な場合）",
+              description: "利用可能な場合のMastraインスタンスへの参照",
             },
           ],
         },
@@ -137,20 +140,20 @@ export const threadInfoTool = createTool({
               name: "toolCallId",
               type: "string",
               description:
-                "ツール呼び出しのID。例えば、ストリームデータと共にツール呼び出し関連情報を送信する際に使用できます。",
+                "ツール呼び出しのID。たとえば、ストリームデータとともにツール呼び出し関連情報を送信する際などに使用できます。",
             },
             {
               name: "messages",
               type: "CoreMessage[]",
               description:
-                "ツール呼び出しを含む応答を開始するために言語モデルに送信されたメッセージ。メッセージにはシステムプロンプトやツール呼び出しを含むアシスタントの応答は含まれません。",
+                "ツール呼び出しを含む応答を生成するために言語モデルに送信されたメッセージ。これらのメッセージにはsystemプロンプトやツール呼び出しを含むassistantの応答は含まれません。",
             },
             {
               name: "abortSignal",
               type: "AbortSignal",
               isOptional: true,
               description:
-                "全体の操作を中止すべきことを示すオプションの中止シグナル。",
+                "全体の操作を中止すべきことを示すオプションのアボートシグナル。",
             },
           ],
         },
@@ -161,14 +164,14 @@ export const threadInfoTool = createTool({
       type: "ZodSchema",
       required: false,
       description:
-        "ツールの入力パラメータを定義し、検証するZodスキーマ。提供されない場合、ツールは任意の入力を受け入れます。",
+        "ツールの入力パラメータを定義・検証するZodスキーマ。指定しない場合、ツールは任意の入力を受け付けます。",
     },
     {
       name: "outputSchema",
       type: "ZodSchema",
       required: false,
       description:
-        "ツールの出力を定義し、検証するZodスキーマ。ツールが期待される形式でデータを返すことを保証するのに役立ちます。",
+        "ツールの出力を定義・検証するZodスキーマ。ツールが期待される形式でデータを返すことを保証します。",
     },
   ]}
 />
@@ -181,7 +184,7 @@ export const threadInfoTool = createTool({
       name: "Tool",
       type: "Tool<TSchemaIn, TSchemaOut>",
       description:
-        "エージェント、ワークフローで使用したり、直接実行したりできるツールインスタンス。",
+        "エージェントやワークフローで使用したり、直接実行できるToolインスタンス。",
       properties: [
         {
           type: "Tool",
@@ -189,7 +192,7 @@ export const threadInfoTool = createTool({
             {
               name: "id",
               type: "string",
-              description: "ツールのユニークな識別子",
+              description: "ツールの一意な識別子",
             },
             {
               name: "description",
@@ -199,12 +202,12 @@ export const threadInfoTool = createTool({
             {
               name: "inputSchema",
               type: "ZodSchema | undefined",
-              description: "入力を検証するためのスキーマ",
+              description: "入力の検証用スキーマ",
             },
             {
               name: "outputSchema",
               type: "ZodSchema | undefined",
-              description: "出力を検証するためのスキーマ",
+              description: "出力の検証用スキーマ",
             },
             {
               name: "execute",
@@ -218,21 +221,21 @@ export const threadInfoTool = createTool({
   ]}
 />
 
-## 型の安全性
+## 型安全性
 
-`createTool()` 関数は、TypeScript のジェネリクスを通じて完全な型の安全性を提供します：
+`createTool()` 関数は、TypeScript のジェネリクスを通じて完全な型安全性を提供します。
 
-- 入力タイプは `inputSchema` から推論されます
-- 出力タイプは `outputSchema` から推論されます
-- 実行コンテキストは、入力スキーマに基づいて適切に型付けされます
+- 入力型は `inputSchema` から推論されます
+- 出力型は `outputSchema` から推論されます
+- 実行コンテキストは入力スキーマに基づいて正しく型付けされます
 
 これにより、アプリケーション全体でツールが型安全であることが保証されます。
 
 ## ベストプラクティス
 
-1. **説明的なID**: `getWeatherForecast` や `searchDatabase` のような明確でアクション指向のIDを使用する
-2. **詳細な説明**: ツールの使用時期と方法を説明する包括的な説明を提供する
-3. **入力検証**: Zodスキーマを使用して入力を検証し、役立つエラーメッセージを提供する
-4. **エラーハンドリング**: 実行関数で適切なエラーハンドリングを実装する
-5. **冪等性**: 可能であれば、ツールを冪等にする（同じ入力が常に同じ出力を生成する）
-6. **パフォーマンス**: ツールを軽量で迅速に実行できるように保つ
+1. **わかりやすいID**: `getWeatherForecast` や `searchDatabase` のような、明確で行動を示すIDを使用する
+2. **詳細な説明**: ツールの使用タイミングや方法を説明する、包括的な説明を提供する
+3. **入力バリデーション**: Zodスキーマを使って入力を検証し、わかりやすいエラーメッセージを提供する
+4. **エラーハンドリング**: execute関数で適切なエラーハンドリングを実装する
+5. **冪等性**: 可能であれば、ツールを冪等にする（同じ入力で常に同じ出力を返す）
+6. **パフォーマンス**: ツールは軽量で高速に実行できるようにする

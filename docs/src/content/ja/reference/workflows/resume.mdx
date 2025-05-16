@@ -1,13 +1,13 @@
 ---
 title: "リファレンス: run.resume() | ワークフローの実行 | Mastra ドキュメント"
-description: ワークフロー内の `.resume()` メソッドに関するドキュメントで、一時停止されたワークフローステップの実行を再開します。
+description: ワークフローにおける`.resume()`メソッドのドキュメント。一時停止されたワークフローステップの実行を継続します。
 ---
 
 # run.resume()
 
-`.resume()` メソッドは、一時停止されたワークフローステップの実行を再開し、オプションで新しいコンテキストデータを提供します。このデータは、inputData プロパティでステップによってアクセス可能です。
+`.resume()` メソッドは一時停止されたワークフローステップの実行を再開し、オプションで新しいコンテキストデータを提供することができます。このデータはステップの inputData プロパティからアクセスできます。
 
-## 使用法
+## 使用方法
 
 ```typescript copy showLineNumbers
 await run.resume({
@@ -19,7 +19,7 @@ await run.resume({
 });
 ```
 
-## パラメーター
+## パラメータ
 
 <PropertiesTable
   content={[
@@ -45,7 +45,7 @@ await run.resume({
     {
       name: "stepId",
       type: "string",
-      description: "再開する中断されたステップのID",
+      description: "再開する一時停止ステップのID",
       isOptional: false,
     },
     {
@@ -70,9 +70,9 @@ await run.resume({
   ]}
 />
 
-## 非同期/待機フロー
+## Async/Await フロー
 
-ワークフローが再開されると、実行はステップの実行関数内の `suspend()` 呼び出しの直後から続行されます。これにより、コード内で自然なフローが作成されます。
+ワークフローが再開されると、実行はステップの実行関数内の`suspend()`呼び出しの直後の地点から継続されます。これにより、コード内で自然なフローが作成されます：
 
 ```typescript
 // 中断ポイントを持つステップ定義
@@ -86,8 +86,8 @@ const reviewStep = new Step({
       // ここで実行を中断
       await suspend({ analysis: initialAnalysis });
 
-      // これは resume() が呼び出された後に実行されるコードです
-      // context.inputData は再開中に提供されたデータを含むようになります
+      // このコードはresume()が呼び出された後に実行される
+      // context.inputDataには再開時に提供されたデータが含まれる
       return {
         reviewedData: enhanceWithFeedback(
           initialAnalysis,
@@ -108,12 +108,12 @@ await start({
   },
 });
 
-// 後で、ワークフローを再開
+// 後でワークフローを再開
 const result = await resume({
   runId: "workflow-123",
   stepId: "review",
   context: {
-    // このデータは `context.inputData` で利用可能になります
+    // このデータは`context.inputData`で利用可能になる
     feedback: "良さそうですが、セクション3を改善してください",
   },
 });
@@ -121,17 +121,17 @@ const result = await resume({
 
 ### 実行フロー
 
-1. ワークフローは `review` ステップの `await suspend()` に達するまで実行されます
+1. ワークフローは`review`ステップ内の`await suspend()`に到達するまで実行されます
 2. ワークフローの状態が保存され、実行が一時停止します
-3. 後で、新しいコンテキストデータで `run.resume()` が呼び出されます
-4. `review` ステップの `suspend()` の後のポイントから実行が続行されます
-5. 新しいコンテキストデータ（`feedback`）は `inputData` プロパティでステップに利用可能です
-6. ステップが完了し、その結果を返します
-7. ワークフローは後続のステップで続行されます
+3. 後で、新しいコンテキストデータと共に`run.resume()`が呼び出されます
+4. 実行は`review`ステップの`suspend()`の後の地点から継続されます
+5. 新しいコンテキストデータ（`feedback`）は`inputData`プロパティを通じてステップで利用可能になります
+6. ステップが完了し、結果を返します
+7. ワークフローはその後のステップで継続します
 
-## エラーハンドリング
+## エラー処理
 
-resume 関数はいくつかのタイプのエラーをスローする可能性があります:
+resume関数はいくつかのタイプのエラーをスローする可能性があります：
 
 ```typescript
 try {
@@ -142,7 +142,7 @@ try {
   });
 } catch (error) {
   if (error.message === "No snapshot found for workflow run") {
-    // ワークフロー状態が見つからない場合の処理
+    // ワークフローの状態が見つからない場合の処理
   }
   if (error.message === "Failed to parse workflow snapshot") {
     // 破損したワークフロー状態の処理

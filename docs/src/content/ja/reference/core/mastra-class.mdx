@@ -1,13 +1,13 @@
 ---
 title: "Mastra Core"
-description: エージェント、ワークフロー、サーバーエンドポイントを管理するためのコアエントリーポイントであるMastraクラスのドキュメント。
+description: Mastraクラスのドキュメント。エージェント、ワークフロー、サーバーエンドポイントを管理するためのコアエントリーポイントです。
 ---
 
-# Mastraクラス
+# The Mastra Class
 
-Mastraクラスはアプリケーションの主要なエントリーポイントです。エージェント、ワークフロー、サーバーエンドポイントを管理します。
+Mastraクラスは、アプリケーションの中心的なエントリーポイントです。エージェント、ワークフロー、サーバーエンドポイントを管理します。
 
-## コンストラクタオプション
+## コンストラクターオプション
 
 <PropertiesTable
   content={[
@@ -22,7 +22,7 @@ Mastraクラスはアプリケーションの主要なエントリーポイン�
       name: "tools",
       type: "Record<string, ToolApi>",
       description:
-        "登録するカスタムツール。キーがツール名、値がツール関数であるキーと値のペアとして構成されます。",
+        "カスタムツールを登録します。ツール名をキー、ツール関数を値としたキー・バリュー形式で構成されます。",
       isOptional: true,
       defaultValue: "{}",
     },
@@ -36,13 +36,13 @@ Mastraクラスはアプリケーションの主要なエントリーポイン�
       name: "vectors",
       type: "Record<string, MastraVector>",
       description:
-        "セマンティック検索とベクトルベースのツール（例：Pinecone、PgVector、Qdrant）に使用されるベクトルストアインスタンス",
+        "ベクトルストアインスタンス。セマンティック検索やベクトルベースのツール（例：Pinecone、PgVector、Qdrant）に使用されます。",
       isOptional: true,
     },
     {
       name: "logger",
       type: "Logger",
-      description: "createLogger()で作成されたロガーインスタンス",
+      description: "createLogger()で作成されたLoggerインスタンス",
       isOptional: true,
       defaultValue: "INFOレベルのコンソールロガー",
     },
@@ -50,7 +50,7 @@ Mastraクラスはアプリケーションの主要なエントリーポイン�
       name: "workflows",
       type: "Record<string, Workflow>",
       description:
-        "登録するワークフロー。キーがワークフロー名、値がワークフローインスタンスであるキーと値のペアとして構成されます。",
+        "登録するワークフロー。ワークフロー名をキー、ワークフローインスタンスを値としたキー・バリュー形式で構成されます。",
       isOptional: true,
       defaultValue: "{}",
     },
@@ -58,7 +58,7 @@ Mastraクラスはアプリケーションの主要なエントリーポイン�
       name: "server",
       type: "ServerConfig",
       description:
-        "ポート、ホスト、タイムアウト、APIルート、ミドルウェア、CORS設定、Swagger UI、APIリクエストログ、OpenAPIドキュメントのビルドオプションを含むサーバー構成。",
+        "ポート、ホスト、タイムアウト、APIルート、ミドルウェア、CORS設定、Swagger UIのビルドオプション、APIリクエストのロギング、OpenAPIドキュメントなどを含むサーバー設定。",
       isOptional: true,
       defaultValue:
         "{ port: 4111, host: localhost,  cors: { origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type'], exposeHeaders: ['Content-Length', 'X-Requested-With'], credentials: false } }",
@@ -68,7 +68,7 @@ Mastraクラスはアプリケーションの主要なエントリーポイン�
 
 ## 初期化
 
-Mastraクラスは通常、`src/mastra/index.ts`ファイルで初期化されます：
+Mastra クラスは通常、`src/mastra/index.ts` ファイルで初期化されます。
 
 ```typescript copy filename=src/mastra/index.ts
 import { Mastra } from "@mastra/core";
@@ -92,7 +92,7 @@ export const mastra = new Mastra({
 });
 ```
 
-`Mastra`クラスは、トップレベルのレジストリと考えることができます。ツールをMastraに登録すると、登録されたエージェントやワークフローがそれらを使用できるようになります。統合機能をMastraに登録すると、エージェント、ワークフロー、ツールがそれらを使用できるようになります。
+`Mastra` クラスは、最上位のレジストリのようなものと考えることができます。Mastra にツールを登録すると、登録されたエージェントやワークフローがそれらを利用できるようになります。Mastra にインテグレーションを登録すると、エージェント、ワークフロー、ツールがそれらを利用できるようになります。
 
 ## メソッド
 
@@ -102,35 +102,34 @@ export const mastra = new Mastra({
       name: "getAgent(name)",
       type: "Agent",
       description:
-        "IDによってエージェントインスタンスを返します。エージェントが見つからない場合はエラーをスローします。",
+        "IDでエージェントインスタンスを返します。エージェントが見つからない場合は例外をスローします。",
       example: 'const agent = mastra.getAgent("agentOne");',
     },
     {
       name: "getAgents()",
       type: "Record<string, Agent>",
-      description:
-        "登録されているすべてのエージェントをキーと値のオブジェクトとして返します。",
+      description: "登録されているすべてのエージェントをキーと値のオブジェクトとして返します。",
       example: "const agents = mastra.getAgents();",
     },
     {
       name: "getWorkflow(id, { serialized })",
       type: "Workflow",
       description:
-        "IDによってワークフローインスタンスを返します。serializedオプション（デフォルト：false）は名前のみを含む簡略化された表現を返します。",
+        "IDでワークフローインスタンスを返します。serializedオプション（デフォルト: false）を指定すると、名前のみの簡易表現を返します。",
       example: 'const workflow = mastra.getWorkflow("myWorkflow");',
     },
     {
       name: "getWorkflows({ serialized })",
       type: "Record<string, Workflow>",
       description:
-        "登録されているすべてのワークフローを返します。serializedオプション（デフォルト：false）は簡略化された表現を返します。",
+        "登録されているすべてのワークフローを返します。serializedオプション（デフォルト: false）を指定すると、簡易表現を返します。",
       example: "const workflows = mastra.getWorkflows();",
     },
     {
       name: "getVector(name)",
       type: "MastraVector",
       description:
-        "名前によってベクトルストアインスタンスを返します。見つからない場合はエラーをスローします。",
+        "名前でベクトルストアインスタンスを返します。見つからない場合は例外をスローします。",
       example: 'const vectorStore = mastra.getVector("myVectorStore");',
     },
     {
@@ -143,8 +142,7 @@ export const mastra = new Mastra({
     {
       name: "getDeployer()",
       type: "MastraDeployer | undefined",
-      description:
-        "設定されているデプロイヤーインスタンスがあれば、それを返します。",
+      description: "設定されているデプロイヤーインスタンスを返します（存在する場合）。",
       example: "const deployer = mastra.getDeployer();",
     },
     {
@@ -157,14 +155,14 @@ export const mastra = new Mastra({
       name: "getMemory()",
       type: "MastraMemory | undefined",
       description:
-        "設定されているメモリインスタンスを返します。注意：これは非推奨であり、メモリは直接エージェントに追加すべきです。",
+        "設定されているメモリインスタンスを返します。注意: このメソッドは非推奨です。メモリはエージェントに直接追加してください。",
       example: "const memory = mastra.getMemory();",
     },
     {
       name: "getServer()",
       type: "ServerConfig | undefined",
       description:
-        "ポート、タイムアウト、APIルート、ミドルウェア、CORS設定、ビルドオプションを含むサーバー構成を返します。",
+        "ポート、タイムアウト、APIルート、ミドルウェア、CORS設定、ビルドオプションなどを含むサーバー設定を返します。",
       example: "const serverConfig = mastra.getServer();",
     },
     {
@@ -184,7 +182,7 @@ export const mastra = new Mastra({
     {
       name: "setTelemetry(telemetry)",
       type: "void",
-      description: "すべてのコンポーネントのテレメトリ設定を設定します。",
+      description: "すべてのコンポーネントのテレメトリー設定を行います。",
       example: 'mastra.setTelemetry({ export: { type: "console" } });',
     },
     {
@@ -196,21 +194,35 @@ export const mastra = new Mastra({
     {
       name: "getTelemetry()",
       type: "Telemetry | undefined",
-      description: "設定されているテレメトリインスタンスを取得します。",
+      description: "設定されているテレメトリーインスタンスを取得します。",
       example: "const telemetry = mastra.getTelemetry();",
     },
     {
       name: "getLogsByRunId({ runId, transportId })",
       type: "Promise<any>",
-      description: "特定の実行IDとトランスポートIDのログを取得します。",
+      description: "特定のrun IDおよびtransport IDのログを取得します。",
       example:
         'const logs = await mastra.getLogsByRunId({ runId: "123", transportId: "456" });',
     },
     {
       name: "getLogs(transportId)",
       type: "Promise<any>",
-      description: "特定のトランスポートIDのすべてのログを取得します。",
+      description: "特定のtransport IDのすべてのログを取得します。",
       example: 'const logs = await mastra.getLogs("transportId");',
     },
   ]}
 />
+
+## エラー処理
+
+Mastra クラスのメソッドは型付きエラーをスローし、キャッチすることができます。
+
+```typescript copy
+try {
+  const tool = mastra.getTool("nonexistentTool");
+} catch (error) {
+  if (error instanceof Error) {
+    console.log(error.message); // "Tool with name nonexistentTool not found"
+  }
+}
+```

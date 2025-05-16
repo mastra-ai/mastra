@@ -1,15 +1,15 @@
 ---
-title: "リファレンス: Dash0 統合 | Mastra オブザーバビリティ ドキュメント"
-description: MastraとDash0、Open Telementryネイティブのオブザーバビリティソリューションとの統合に関するドキュメント。
+title: "リファレンス: Dash0 統合 | Mastra Observability ドキュメント"
+description: Mastra を Open Telementry ネイティブのオブザーバビリティソリューションである Dash0 と統合するためのドキュメント。
 ---
 
 # Dash0
 
-Dash0は、PersesやPrometheusのような他のCNCFプロジェクトとの統合だけでなく、フルスタックの監視機能を提供するOpen Telementryネイティブの可観測性ソリューションです。
+Dash0は、Open Telementryネイティブのオブザーバビリティソリューションであり、フルスタックのモニタリング機能に加え、PersesやPrometheusなど他のCNCFプロジェクトとの統合も提供します。
 
 ## 設定
 
-Dash0をMastraで使用するには、これらの環境変数を設定してください:
+Dash0 を Mastra で使用するには、以下の環境変数を設定してください：
 
 ```env
 OTEL_EXPORTER_OTLP_ENDPOINT=https://ingress.<region>.dash0.com
@@ -18,7 +18,7 @@ OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer <your-auth-token>, Dash0-Dataset
 
 ## 実装
 
-MastraをDash0で使用するための設定方法は次のとおりです：
+Mastra を Dash0 で使用するための設定方法は以下の通りです。
 
 ```typescript
 import { Mastra } from "@mastra/core";
@@ -37,4 +37,4 @@ export const mastra = new Mastra({
 
 ## ダッシュボード
 
-[Dash0](https://www.dash0.com/) のダッシュボードにアクセスして、[Dash0 Integration Hub](https://www.dash0.com/hub/integrations) でより多くの [Distributed Tracing](https://www.dash0.com/distributed-tracing) 統合を行う方法を見つけてください。
+[Dash0](https://www.dash0.com/) であなたのDash0ダッシュボードにアクセスし、[Dash0 Integration Hub](https://www.dash0.com/hub/integrations)でさらに多くの[分散トレーシング](https://www.dash0.com/distributed-tracing)連携方法を見つけましょう。

@@ -1,11 +1,11 @@
 ---
 title: "リファレンス: Azure Voice | 音声プロバイダー | Mastra ドキュメント"
-description: "Azure Cognitive Servicesを使用してテキスト読み上げと音声認識機能を提供するAzureVoiceクラスのドキュメント。"
+description: "Azure Cognitive Services を使用したテキスト読み上げおよび音声認識機能を提供する AzureVoice クラスのドキュメント。"
 ---
 
 # Azure
 
-Mastra の AzureVoice クラスは、Microsoft Azure Cognitive Services を使用してテキスト読み上げと音声認識の機能を提供します。
+MastraのAzureVoiceクラスは、Microsoft Azure Cognitive Servicesを利用してテキスト読み上げ（テキスト・トゥ・スピーチ）および音声認識（スピーチ・トゥ・テキスト）機能を提供します。
 
 ## 使用例
 
@@ -42,26 +42,26 @@ const text = await voice.listen(audioStream, {
 
 ## 設定
 
-### コンストラクタオプション
+### コンストラクターオプション
 
 <PropertiesTable
   content={[
     {
       name: "speechModel",
       type: "AzureSpeechConfig",
-      description: "テキスト読み上げ合成の設定。",
+      description: "テキストから音声合成のための設定。",
       isOptional: true,
     },
     {
       name: "listeningModel",
       type: "AzureSpeechConfig",
-      description: "音声からテキストへの認識の設定。",
+      description: "音声からテキスト認識のための設定。",
       isOptional: true,
     },
     {
       name: "speaker",
       type: "string",
-      description: "音声合成のデフォルトの音声ID。",
+      description: "音声合成のデフォルト音声ID。",
       isOptional: true,
     },
   ]}
@@ -81,14 +81,14 @@ const text = await voice.listen(audioStream, {
       name: "apiKey",
       type: "string",
       description:
-        "Azure Speech ServicesのAPIキー。AZURE_SPEECH_KEY環境変数にフォールバックします。",
+        "Azure Speech ServicesのAPIキー。指定がない場合はAZURE_SPEECH_KEY環境変数が使用されます。",
       isOptional: true,
     },
     {
       name: "region",
       type: "string",
       description:
-        "Azureリージョン（例：'eastus'、'westeurope'）。AZURE_SPEECH_REGION環境変数にフォールバックします。",
+        "Azureリージョン（例: 'eastus', 'westeurope'）。指定がない場合はAZURE_SPEECH_REGION環境変数が使用されます。",
       isOptional: true,
     },
   ]}
@@ -98,7 +98,7 @@ const text = await voice.listen(audioStream, {
 
 ### speak()
 
-Azureのニューラルテキスト読み上げサービスを使用してテキストを音声に変換します。
+Azure のニューラルテキスト読み上げサービスを使用して、テキストを音声に変換します。
 
 <PropertiesTable
   content={[
@@ -111,26 +111,26 @@ Azureのニューラルテキスト読み上げサービスを使用してテキ
     {
       name: "options.speaker",
       type: "string",
-      description: "音声合成に使用する音声ID。",
+      description: "音声合成に使用するボイスID。",
       isOptional: true,
-      defaultValue: "コンストラクタのspeaker値",
+      defaultValue: "Constructor's speaker value",
     },
     {
       name: "options.style",
       type: "string",
-      description: "話し方のスタイル（例：'cheerful'、'sad'、'angry'）。",
+      description: "話し方のスタイル（例: 'cheerful', 'sad', 'angry'）。",
       isOptional: true,
     },
     {
       name: "options.rate",
       type: "string",
-      description: "話す速度（例：'slow'、'medium'、'fast'）。",
+      description: "話す速度（例: 'slow', 'medium', 'fast'）。",
       isOptional: true,
     },
     {
       name: "options.pitch",
       type: "string",
-      description: "声の高さ（例：'low'、'medium'、'high'）。",
+      description: "声のピッチ（例: 'low', 'medium', 'high'）。",
       isOptional: true,
     },
   ]}
@@ -140,14 +140,14 @@ Azureのニューラルテキスト読み上げサービスを使用してテキ
 
 ### listen()
 
-Azureの音声認識サービスを使用して音声を文字起こしします。
+Azure の音声認識サービスを使用して音声をテキストに書き起こします。
 
 <PropertiesTable
   content={[
     {
       name: "audioStream",
       type: "NodeJS.ReadableStream",
-      description: "文字起こしする音声ストリーム。",
+      description: "書き起こし対象の音声ストリーム。",
       isOptional: false,
     },
     {
@@ -160,7 +160,7 @@ Azureの音声認識サービスを使用して音声を文字起こしします
     {
       name: "options.language",
       type: "string",
-      description: "文字起こしの言語コード。",
+      description: "書き起こしに使用する言語コード。",
       isOptional: true,
       defaultValue: "'en-US'",
     },
@@ -171,14 +171,15 @@ Azureの音声認識サービスを使用して音声を文字起こしします
 
 ### getSpeakers()
 
-利用可能な音声オプションの配列を返します。各ノードには以下が含まれます：
+利用可能な音声オプションの配列を返します。各ノードには以下が含まれます:
 
 <PropertiesTable
   content={[
     {
       name: "voiceId",
       type: "string",
-      description: "音声の一意識別子（例：'en-US-JennyNeural'）",
+      description:
+        "音声の一意な識別子（例: 'en-US-JennyNeural'）",
       isOptional: false,
     },
     {
@@ -190,13 +191,13 @@ Azureの音声認識サービスを使用して音声を文字起こしします
     {
       name: "locale",
       type: "string",
-      description: "音声の言語ロケール（例：'en-US'）",
+      description: "音声の言語ロケール（例: 'en-US'）",
       isOptional: false,
     },
     {
       name: "gender",
       type: "string",
-      description: "音声の性別（'Male'または'Female'）",
+      description: "音声の性別（'Male' または 'Female'）",
       isOptional: false,
     },
     {
@@ -208,10 +209,10 @@ Azureの音声認識サービスを使用して音声を文字起こしします
   ]}
 />
 
-## メモ
+## 注意事項
 
-- APIキーはコンストラクタオプションまたは環境変数（AZURE_SPEECH_KEYとAZURE_SPEECH_REGION）を通じて提供できます
-- Azureは多くの言語にわたる幅広いニューラルボイスを提供しています
-- 一部の音声は、明るい、悲しい、怒りなどの話し方のスタイルをサポートしています
-- 音声認識は複数のオーディオフォーマットと言語をサポートしています
-- Azureの音声サービスは、自然な響きの高品質なニューラルボイスを提供しています
+- APIキーは、コンストラクタのオプションまたは環境変数（AZURE_SPEECH_KEY と AZURE_SPEECH_REGION）で指定できます
+- Azure は多くの言語で幅広いニューラルボイスを提供しています
+- 一部のボイスは、明るい、悲しい、怒っているなどの話し方スタイルに対応しています
+- 音声認識は複数の音声フォーマットと言語をサポートしています
+- Azure の音声サービスは、自然な音声の高品質なニューラルボイスを提供します

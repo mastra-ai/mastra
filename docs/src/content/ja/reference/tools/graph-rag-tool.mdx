@@ -1,11 +1,11 @@
 ---
 title: "リファレンス: createGraphRAGTool() | RAG | Mastra Tools ドキュメント"
-description: MastraのGraph RAG Toolのドキュメントで、ドキュメント間のセマンティック関係のグラフを構築することでRAGを強化します。
+description: Mastra の Graph RAG Tool のドキュメント。これは、ドキュメント間のセマンティックな関係のグラフを構築することで RAG を強化します。
 ---
 
 # createGraphRAGTool()
 
-`createGraphRAGTool()`は、ドキュメント間のセマンティックな関係のグラフを構築することでRAGを強化するツールを作成します。これは、`GraphRAG`システムを内部で使用して、グラフベースの検索を提供し、直接的な類似性と接続された関係の両方を通じて関連するコンテンツを見つけます。
+`createGraphRAGTool()` は、ドキュメント間のセマンティックな関係のグラフを構築することでRAGを強化するツールを作成します。内部的には `GraphRAG` システムを利用してグラフベースの検索を提供し、直接的な類似性だけでなく、関連する接続関係を通じて適切なコンテンツを見つけ出します。
 
 ## 使用例
 
@@ -26,20 +26,20 @@ const graphTool = createGraphRAGTool({
 });
 ```
 
-## パラメータ
+## パラメーター
 
 <PropertiesTable
   content={[
     {
       name: "vectorStoreName",
       type: "string",
-      description: "クエリを行うベクトルストアの名前",
+      description: "クエリを実行するベクトルストアの名前",
       isOptional: false,
     },
     {
       name: "indexName",
       type: "string",
-      description: "ベクトルストア内のインデックスの名前",
+      description: "ベクトルストア内のインデックス名",
       isOptional: false,
     },
     {
@@ -59,7 +59,7 @@ const graphTool = createGraphRAGTool({
       name: "description",
       type: "string",
       description:
-        "ツールのカスタム説明。デフォルトでは: '知識ベース内の情報間の関係をアクセスして分析し、接続やパターンに関する複雑な質問に答える'",
+        "ツールのカスタム説明。デフォルト: 'ナレッジベース内の情報間の関係性をアクセス・分析し、接続やパターンに関する複雑な質問に答えます'",
       isOptional: true,
     },
   ]}
@@ -72,21 +72,22 @@ const graphTool = createGraphRAGTool({
     {
       name: "dimension",
       type: "number",
-      description: "埋め込みベクトルの次元",
+      description: "埋め込みベクトルの次元数",
       isOptional: true,
       defaultValue: "1536",
     },
     {
       name: "threshold",
       type: "number",
-      description: "ノード間のエッジを作成するための類似性のしきい値 (0-1)",
+      description:
+        "ノード間のエッジ作成のための類似度しきい値（0-1）",
       isOptional: true,
       defaultValue: "0.7",
     },
     {
       name: "randomWalkSteps",
       type: "number",
-      description: "グラフトラバーサルのためのランダムウォークのステップ数",
+      description: "グラフ探索のためのランダムウォークのステップ数",
       isOptional: true,
       defaultValue: "100",
     },
@@ -110,20 +111,20 @@ const graphTool = createGraphRAGTool({
       name: "relevantContext",
       type: "string",
       description:
-        "グラフベースのランキングを使用して取得された、最も関連性の高いドキュメントチャンクからの結合テキスト",
+        "グラフベースのランキングを用いて取得した、最も関連性の高いドキュメントチャンクから結合されたテキスト",
     },
   ]}
 />
 
 ## デフォルトツールの説明
 
-デフォルトの説明は以下に焦点を当てています:
+デフォルトの説明は以下に重点を置いています：
 
-- ドキュメント間の関係を分析する
-- パターンと接続を見つける
-- 複雑なクエリに答える
+- ドキュメント間の関係性の分析
+- パターンやつながりの発見
+- 複雑なクエリへの回答
 
-## 高度な例
+## 応用例
 
 ```typescript
 const graphTool = createGraphRAGTool({
@@ -132,9 +133,9 @@ const graphTool = createGraphRAGTool({
   model: openai.embedding("text-embedding-3-small"),
   graphOptions: {
     dimension: 1536,
-    threshold: 0.8, // より高い類似性のしきい値
-    randomWalkSteps: 200, // より多くの探索ステップ
-    restartProb: 0.2, // より高い再開確率
+    threshold: 0.8, // Higher similarity threshold
+    randomWalkSteps: 200, // More exploration steps
+    restartProb: 0.2, // Higher restart probability
   },
 });
 ```
@@ -151,7 +152,7 @@ const graphTool = createGraphRAGTool({
 });
 ```
 
-この例は、関係分析の基本目的を維持しながら、特定の使用ケースに合わせてツールの説明をカスタマイズする方法を示しています。
+この例では、関係性分析という基本的な目的を維持しつつ、特定のユースケースに合わせてツールの説明をカスタマイズする方法を示しています。
 
 ## 関連
 

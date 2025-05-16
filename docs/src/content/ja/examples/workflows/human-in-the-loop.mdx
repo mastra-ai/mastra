@@ -1,26 +1,26 @@
 ---
-title: "例：ヒューマン・イン・ザ・ループ | ワークフロー | Mastra ドキュメント"
-description: 人間の介入ポイントを含むワークフローを作成するためのMastraの使用例。
+title: "例：Human in the Loop | ワークフロー | Mastra ドキュメント"
+description: Mastra を使って人間の介入ポイントを含むワークフローを作成する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
-# ヒューマン・イン・ザ・ループ ワークフロー
+# Human in the Loop Workflow
 
-ヒューマン・イン・ザ・ループ ワークフローでは、特定のポイントで実行を一時停止し、ユーザー入力を収集したり、意思決定を行ったり、人間の判断が必要なアクションを実行したりすることができます。この例では、人間の介入ポイントを含むワークフローの作成方法を示します。
+Human-in-the-loop ワークフローでは、特定のポイントで実行を一時停止し、ユーザーからの入力を収集したり、意思決定を行ったり、人間の判断が必要なアクションを実行したりすることができます。この例では、人間による介入ポイントを含むワークフローの作成方法を示します。
 
 ## 仕組み
 
-1. ワークフローステップは、`suspend()` 関数を使用して実行を**一時停止**でき、オプションで人間の意思決定者のためのコンテキストを含むペイロードを渡すことができます。
+1. ワークフローステップは、`suspend()` 関数を使って実行を**一時停止**することができ、オプションで人間の意思決定者のためのコンテキストを含むペイロードを渡すことができます。
 2. ワークフローが**再開**されると、人間の入力は `resume()` 呼び出しの `context` パラメータに渡されます。
-3. この入力は、ステップの `inputSchema` に従って型付けされた `context.inputData` としてステップの実行コンテキストで利用可能になります。
+3. この入力は、ステップの実行コンテキスト内で `context.inputData` として利用可能になり、ステップの `inputSchema` に従った型になります。
 4. その後、ステップは人間の入力に基づいて実行を続行できます。
 
-このパターンにより、自動化されたワークフローにおける安全で型チェックされた人間の介入が可能になります。
+このパターンにより、自動化されたワークフローにおいて、安全で型チェックされた人間の介入が可能になります。
 
-## Inquirerを使用したインタラクティブなターミナルの例
+## Inquirer を使った対話型ターミナル例
 
-この例では、[Inquirer](https://www.npmjs.com/package/@inquirer/prompts)ライブラリを使用して、ワークフローが一時停止されたときにターミナルから直接ユーザー入力を収集し、真にインタラクティブな人間参加型のエクスペリエンスを作成する方法を示しています。
+この例では、[Inquirer](https://www.npmjs.com/package/@inquirer/prompts) ライブラリを使用して、ワークフローが一時停止した際にターミナルから直接ユーザー入力を収集し、真にインタラクティブな human-in-the-loop 体験を実現する方法を示します。
 
 ```ts showLineNumbers copy
 import { Mastra } from "@mastra/core";
@@ -252,7 +252,7 @@ async function runRecommendationWorkflow() {
 
     // Let the agent select which products to recommend
     const approvedProducts = await checkbox({
-      message: "顧客にお勧めする製品を選択してください：",
+      message: "Select products to recommend to the customer:",
       choices: recommendations.map((product) => ({
         name: `${product.productName} ($${product.price.toFixed(2)})`,
         value: product.productId,
@@ -261,24 +261,24 @@ async function runRecommendationWorkflow() {
 
     // Let the agent add a personal note
     const includeNote = await confirm({
-      message: "個人的なメモを追加しますか？",
+      message: "Would you like to add a personal note?",
       default: false,
     });
 
     let customerNote = "";
     if (includeNote) {
       customerNote = await input({
-        message: "顧客へのパーソナライズされたメモを入力してください：",
+        message: "Enter your personalized note for the customer:",
       });
     }
 
     // Ask if a discount should be offered
     const offerDiscount = await confirm({
-      message: "この顧客に10%割引を提供しますか？",
+      message: "Offer a 10% discount to this customer?",
       default: false,
     });
 
-    console.log("\nレビューを送信しています...");
+    console.log("\nSubmitting your review...");
 
     // Resume the workflow with the agent's input
     const resumeResult = await run.resume({
@@ -291,12 +291,12 @@ async function runRecommendationWorkflow() {
     });
 
     console.log("\n===================================");
-    console.log("ワークフローが完了しました！");
-    console.log("メールの内容：");
+    console.log("Workflow completed!");
+    console.log("Email content:");
     console.log("===================================\n");
     console.log(
       resumeResult?.results?.sendRecommendations ||
-        "メールの内容が生成されていません",
+        "No email content generated",
     );
 
     return resumeResult;
@@ -311,7 +311,7 @@ runRecommendationWorkflow().catch(console.error);
 
 ## 複数のユーザー入力を伴う高度な例
 
-この例では、コンテンツモデレーションシステムのような、複数の人間の介入ポイントを必要とするより複雑なワークフローを示しています。
+この例では、コンテンツモデレーションシステムのように、複数回の人間による介入が必要となる、より複雑なワークフローを示します。
 
 ```ts showLineNumbers copy
 import { Mastra } from "@mastra/core";
@@ -518,10 +518,10 @@ async function runModerationDemo() {
   const run = registeredWorkflow.createRun();
 
   // Start the workflow with content that needs review
-  console.log("Starting content moderation workflow...");
+  console.log("コンテンツモデレーションワークフローを開始します...");
   const result = await run.start({
     triggerData: {
-      content: "This is some user-generated content that requires moderation.",
+      content: "これはモデレーションが必要なユーザー生成コンテンツです。",
     },
   });
 
@@ -537,20 +537,20 @@ async function runModerationDemo() {
     console.log(message);
     console.log("===================================\n");
 
-    console.log("Content to review:");
+    console.log("レビュー対象のコンテンツ:");
     console.log(content);
-    console.log(`\nAI Analysis Score: ${aiScore}`);
+    console.log(`\nAI分析スコア: ${aiScore}`);
     console.log(
-      `Flagged Categories: ${flaggedCategories?.join(", ") || "None"}\n`,
+      `フラグ付けされたカテゴリ: ${flaggedCategories?.join(", ") || "なし"}\n`,
     );
 
     // Collect moderator decision using Inquirer
     const moderatorDecision = await select({
-      message: "Select your moderation decision:",
+      message: "モデレーションの判断を選択してください:",
       choices: [
-        { name: "Approve content as is", value: "approve" },
-        { name: "Reject content completely", value: "reject" },
-        { name: "Modify content before publishing", value: "modify" },
+        { name: "このままコンテンツを承認する", value: "approve" },
+        { name: "コンテンツを完全に却下する", value: "reject" },
+        { name: "公開前にコンテンツを修正する", value: "modify" },
       ],
     });
 
@@ -559,17 +559,17 @@ async function runModerationDemo() {
     let modifiedContent = "";
 
     moderatorNotes = await input({
-      message: "Enter any notes about your decision:",
+      message: "判断に関するメモを入力してください:",
     });
 
     if (moderatorDecision === "modify") {
       modifiedContent = await input({
-        message: "Enter the modified content:",
+        message: "修正後のコンテンツを入力してください:",
         default: content,
       });
     }
 
-    console.log("\nSubmitting your moderation decision...");
+    console.log("\nモデレーションの判断を送信しています...");
 
     // Resume the workflow with the moderator's input
     const resumeResult = await run.resume({
@@ -584,12 +584,12 @@ async function runModerationDemo() {
     if (resumeResult?.results?.applyModeration?.status === "success") {
       console.log("\n===================================");
       console.log(
-        `Moderation complete: ${resumeResult?.results?.applyModeration?.output.finalStatus}`,
+        `モデレーション完了: ${resumeResult?.results?.applyModeration?.output.finalStatus}`,
       );
       console.log("===================================\n");
 
       if (resumeResult?.results?.applyModeration?.output.content) {
-        console.log("Published content:");
+        console.log("公開されたコンテンツ:");
         console.log(resumeResult.results.applyModeration.output.content);
       }
     }
@@ -598,7 +598,7 @@ async function runModerationDemo() {
   }
 
   console.log(
-    "Workflow completed without requiring human intervention:",
+    "人による介入なしでワークフローが完了しました:",
     result.results,
   );
   return result;
@@ -617,43 +617,43 @@ runModerationDemo().catch(console.error);
 
 ## 主要な概念
 
-1. **サスペンションポイント** - ステップの実行内で`suspend()`関数を使用してワークフローの実行を一時停止します。
+1. **サスペンションポイント** - ステップの `execute` 内で `suspend()` 関数を使用して、ワークフローの実行を一時停止します。
 
-2. **サスペンションペイロード** - 一時停止する際に関連データを渡して、人間の意思決定のためのコンテキストを提供します：
+2. **サスペンションペイロード** - サスペンド時に関連データを渡し、人間による意思決定のためのコンテキストを提供します：
 
 ```ts
 await suspend({
-  messageForHuman: "このデータを確認してください",
+  messageForHuman: "Please review this data",
   data: someImportantData,
 });
 ```
 
-3. **ワークフローステータスの確認** - ワークフローを開始した後、返されたステータスを確認して一時停止されているかどうかを確認します：
+3. **ワークフローステータスの確認** - ワークフロー開始後、返されたステータスを確認してサスペンドされているかどうかを判断します：
 
 ```ts
 const result = await workflow.start({ triggerData });
 if (result.status === "suspended" && result.suspendedStepId === "stepId") {
-  // サスペンションを処理する
-  console.log("ワークフローは入力待ちです:", result.suspendPayload);
+  // サスペンションの処理
+  console.log("Workflow is waiting for input:", result.suspendPayload);
 }
 ```
 
-4. **インタラクティブなターミナル入力** - Inquirerのようなライブラリを使用してインタラクティブなプロンプトを作成します：
+4. **対話型ターミナル入力** - Inquirer などのライブラリを使って対話型プロンプトを作成します：
 
 ```ts
 import { select, input, confirm } from "@inquirer/prompts";
 
-// ワークフローが一時停止されている場合
+// ワークフローがサスペンドされたとき
 if (result.status === "suspended") {
-  // サスペンドペイロードからの情報を表示
+  // サスペンドペイロードから情報を表示
   console.log(result.suspendPayload.message);
 
-  // ユーザー入力をインタラクティブに収集
+  // ユーザー入力を対話的に収集
   const decision = await select({
-    message: "何をしますか？",
+    message: "What would you like to do?",
     choices: [
-      { name: "承認", value: "approve" },
-      { name: "拒否", value: "reject" },
+      { name: "Approve", value: "approve" },
+      { name: "Reject", value: "reject" },
     ],
   });
 
@@ -665,39 +665,57 @@ if (result.status === "suspended") {
 }
 ```
 
-5. **ワークフローの再開** - `resume()`メソッドを使用して、人間の入力でワークフローの実行を継続します：
+5. **ワークフローの再開** - `resume()` メソッドを使って、人間の入力とともにワークフローの実行を続行します：
 
 ```ts
 const resumeResult = await run.resume({
   stepId: "suspendedStepId",
   context: {
-    // このデータは一時停止されたステップにcontext.inputDataとして渡され、
-    // ステップのinputSchemaに準拠している必要があります
+    // このデータは context.inputData としてサスペンドされたステップに渡されます
+    // また、ステップの inputSchema に準拠している必要があります
     userDecision: "approve",
   },
 });
 ```
 
-6. **人間のデータ用の入力スキーマ** - 人間の入力で再開される可能性のあるステップに入力スキーマを定義して、型の安全性を確保します：
+6. **人間のデータ用インプットスキーマ** - 人間の入力で再開される可能性のあるステップには、型安全性を確保するためにインプットスキーマを定義します：
 
 ```ts
 const myStep = new Step({
   id: "myStep",
   inputSchema: z.object({
-    // このスキーマはresumeのcontextで渡されるデータを検証し、
-    // context.inputDataとして利用可能にします
+    // このスキーマは resume の context で渡されるデータを検証します
+    // また、context.inputData として利用可能になります
     userDecision: z.enum(["approve", "reject"]),
     userComments: z.string().optional(),
   }),
   execute: async ({ context, suspend }) => {
-    // 以前の一時停止からユーザー入力があるかどうかを確認
+    // 以前のサスペンションからユーザー入力があるか確認
     if (context.inputData?.userDecision) {
       // ユーザーの決定を処理
-      return { result: `ユーザーの決定: ${context.inputData.userDecision}` };
+      return { result: `User decided: ${context.inputData.userDecision}` };
     }
 
-    // 入力がない場合、人間の判断のために一時停止
+    // 入力がなければ、人間の判断を待つためにサスペンド
     await suspend();
   },
 });
 ```
+
+Human-in-the-loop ワークフローは、自動化と人間の判断を組み合わせたシステムの構築に非常に有効です。例えば：
+
+- コンテンツモデレーションシステム
+- 承認ワークフロー
+- 監督付きAIシステム
+- エスカレーションを伴うカスタマーサービス自動化
+
+<br />
+<br />
+<hr className={"dark:border-[#404040] border-gray-300"} />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/human-in-the-loop"
+  }
+/>

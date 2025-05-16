@@ -1,11 +1,11 @@
 ---
-title: "PostgreSQL ストレージ | ストレージシステム | Mastra Core"
+title: "PostgreSQLストレージ | ストレージシステム | Mastra Core"
 description: MastraにおけるPostgreSQLストレージ実装のドキュメント。
 ---
 
-# PostgreSQL ストレージ
+# PostgreSQLストレージ
 
-PostgreSQL ストレージの実装は、PostgreSQL データベースを使用した本番環境対応のストレージソリューションを提供します。
+PostgreSQLストレージ実装は、PostgreSQLデータベースを使用した本番環境対応のストレージソリューションを提供します。
 
 ## インストール
 
@@ -13,7 +13,7 @@ PostgreSQL ストレージの実装は、PostgreSQL データベースを使用�
 npm install @mastra/pg@latest
 ```
 
-## 使用法
+## 使い方
 
 ```typescript copy showLineNumbers
 import { PostgresStore } from "@mastra/pg";
@@ -23,7 +23,7 @@ const storage = new PostgresStore({
 });
 ```
 
-## パラメータ
+## パラメーター
 
 <PropertiesTable
   content={[
@@ -31,14 +31,14 @@ const storage = new PostgresStore({
       name: "connectionString",
       type: "string",
       description:
-        "PostgreSQL接続文字列（例：postgresql://user:pass@host:5432/dbname）",
+        "PostgreSQL の接続文字列（例: postgresql://user:pass@host:5432/dbname）",
       isOptional: false,
     },
     {
       name: "schemaName",
       type: "string",
       description:
-        "ストレージが使用するスキーマの名前。提供されない場合はデフォルトのスキーマを使用します。",
+        "ストレージで使用したいスキーマ名。指定しない場合はデフォルトのスキーマが使用されます。",
       isOptional: true,
     },
   ]}
@@ -46,23 +46,23 @@ const storage = new PostgresStore({
 
 ## コンストラクタの例
 
-以下の方法で `PostgresStore` をインスタンス化できます：
+`PostgresStore` は以下の方法でインスタンス化できます。
 
 ```ts
 import { PostgresStore } from "@mastra/pg";
 
-// 接続文字列のみを使用
+// 接続文字列のみを使用する場合
 const store1 = new PostgresStore({
   connectionString: "postgresql://user:password@localhost:5432/mydb",
 });
 
-// カスタムスキーマ名を持つ接続文字列を使用
+// 接続文字列とカスタムスキーマ名を使用する場合
 const store2 = new PostgresStore({
   connectionString: "postgresql://user:password@localhost:5432/mydb",
   schemaName: "custom_schema", // オプション
 });
 
-// 個別の接続パラメータを使用
+// 個別の接続パラメータを使用する場合
 const store4 = new PostgresStore({
   host: "localhost",
   port: 5432,
@@ -71,7 +71,7 @@ const store4 = new PostgresStore({
   password: "password",
 });
 
-// スキーマ名を含む個別のパラメータ
+// 個別パラメータと schemaName を使用する場合
 const store5 = new PostgresStore({
   host: "localhost",
   port: 5432,
@@ -86,8 +86,8 @@ const store5 = new PostgresStore({
 
 ### スキーマ管理
 
-ストレージの実装は、スキーマの作成と更新を自動的に処理します。以下のテーブルを作成します：
+ストレージ実装はスキーマの作成と更新を自動的に処理します。以下のテーブルが作成されます：
 
-- `threads`: 会話スレッドを保存
-- `messages`: 個々のメッセージを保存
-- `metadata`: スレッドとメッセージの追加メタデータを保存
+- `threads`: 会話スレッドを保存します
+- `messages`: 個々のメッセージを保存します
+- `metadata`: スレッドやメッセージの追加メタデータを保存します

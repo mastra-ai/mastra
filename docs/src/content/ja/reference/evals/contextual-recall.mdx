@@ -1,13 +1,13 @@
 ---
-title: "リファレンス：文脈的再現性 | メトリクス | 評価 | Mastra ドキュメント"
-description: 文脈的再現性メトリックのドキュメント。これはLLMの応答が関連する文脈をどれだけ完全に取り入れているかを評価します。
+title: "リファレンス: コンテクスチュアルリコール | メトリクス | Evals | Mastra ドキュメント"
+description: コンテクスチュアルリコールメトリクスのドキュメント。関連するコンテキストを取り入れたLLMの応答の完全性を評価します。
 ---
 
 # ContextualRecallMetric
 
-`ContextualRecallMetric` クラスは、LLM の応答が提供されたコンテキストからすべての関連情報をどれだけ効果的に取り入れているかを評価します。これは、参照ドキュメントからの重要な情報が応答にうまく含まれているかどうかを測定し、精度ではなく完全性に焦点を当てています。
+`ContextualRecallMetric` クラスは、LLM の応答が提供されたコンテキストからどれだけ効果的に関連情報を取り入れているかを評価します。このクラスは、参照ドキュメントの重要な情報が応答にきちんと含まれているかどうかを測定し、精度よりも網羅性に重点を置いています。
 
-## 基本的な使用法
+## 基本的な使い方
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -40,7 +40,8 @@ console.log(result.score); // Score from 0-1
     {
       name: "model",
       type: "LanguageModel",
-      description: "コンテキストリコールを評価するために使用されるモデルの設定",
+      description:
+        "コンテキストリコールを評価するために使用されるモデルの設定",
       isOptional: false,
     },
     {
@@ -66,13 +67,14 @@ console.log(result.score); // Score from 0-1
     {
       name: "context",
       type: "string[]",
-      description: "参照ドキュメントまたは照合する情報の配列",
+      description:
+        "照合対象となる参照ドキュメントや情報の配列",
       isOptional: false,
     },
   ]}
 />
 
-## measure() パラメーター
+## measure() のパラメーター
 
 <PropertiesTable
   content={[
@@ -85,7 +87,7 @@ console.log(result.score); // Score from 0-1
     {
       name: "output",
       type: "string",
-      description: "評価するLLMの応答",
+      description: "評価対象となるLLMの応答",
       isOptional: false,
     },
   ]}
@@ -98,8 +100,7 @@ console.log(result.score); // Score from 0-1
     {
       name: "score",
       type: "number",
-      description:
-        "リコールスコア（0から指定されたスケールまで、デフォルトは0-1）",
+      description: "リコールスコア（0からスケール、デフォルトは0-1）",
     },
     {
       name: "info",
@@ -123,32 +124,32 @@ console.log(result.score); // Score from 0-1
 
 ## スコアリングの詳細
 
-このメトリックは、応答内容を関連するコンテキスト項目と比較することでリコールを評価します。
+このメトリックは、応答内容と関連するコンテキスト項目を比較することでリコールを評価します。
 
 ### スコアリングプロセス
 
-1. 情報のリコールを評価:
+1. 情報のリコールを評価します：
 
    - コンテキスト内の関連項目を特定
    - 正しくリコールされた情報を追跡
    - リコールの完全性を測定
 
-2. リコールスコアを計算:
+2. リコールスコアを計算：
    - 正しくリコールされた項目をカウント
-   - 総関連項目と比較
-   - カバレッジ比率を計算
+   - 総関連項目数と比較
+   - カバレッジ比率を算出
 
-最終スコア: `(correctly_recalled_items / total_relevant_items) * scale`
+最終スコア：`(correctly_recalled_items / total_relevant_items) * scale`
 
 ### スコアの解釈
 
-(0からスケールまで、デフォルトは0-1)
+（0 から scale、デフォルトは 0-1）
 
 - 1.0: 完全なリコール - すべての関連情報が含まれている
 - 0.7-0.9: 高いリコール - ほとんどの関連情報が含まれている
-- 0.4-0.6: 中程度のリコール - 一部の関連情報が欠けている
-- 0.1-0.3: 低いリコール - 重要な情報が欠けている
-- 0.0: リコールなし - 関連情報が含まれていない
+- 0.4-0.6: 中程度のリコール - 一部の関連情報が抜けている
+- 0.1-0.3: 低いリコール - 重要な情報が多く抜けている
+- 0.0: リコールなし - 関連情報がまったく含まれていない
 
 ## カスタム設定の例
 
@@ -156,35 +157,37 @@ console.log(result.score); // Score from 0-1
 import { openai } from "@ai-sdk/openai";
 import { ContextualRecallMetric } from "@mastra/evals/llm";
 
-// モデルを評価用に設定
+// Configure the model for evaluation
 const model = openai("gpt-4o-mini");
 
 const metric = new ContextualRecallMetric(model, {
-  scale: 100, // 0-1の代わりに0-100のスケールを使用
+  scale: 100, // Use 0-100 scale instead of 0-1
   context: [
-    "すべてのデータは保存時および転送時に暗号化されます",
-    "二要素認証（2FA）は必須です",
-    "定期的なセキュリティ監査が実施されます",
-    "インシデント対応チームが24/7で利用可能です",
+    "All data is encrypted at rest and in transit",
+    "Two-factor authentication (2FA) is mandatory",
+    "Regular security audits are performed",
+    "Incident response team available 24/7",
   ],
 });
 
 const result = await metric.measure(
-  "会社のセキュリティ対策を要約してください",
-  "会社はデータ保護のために暗号化を実施し、すべてのユーザーに2FAを要求しています。",
+  "Summarize the company's security measures",
+  "The company implements encryption for data protection and requires 2FA for all users.",
 );
 
-// 出力例:
+// Example output:
 // {
-//   score: 50, // セキュリティ対策の半分しか言及されていません
+//   score: 50, // Only half of the security measures were mentioned
 //   info: {
-//     reason: "スコアが50である理由は、応答でセキュリティ対策の半分しか言及されていないためです。応答には定期的なセキュリティ監査とインシデント対応チームの情報が欠けています。"
+//     reason: "The score is 50 because only half of the security measures were mentioned
+//           in the response. The response missed the regular security audits and incident
+//           response team information."
 //   }
 // }
 ```
 
 ## 関連
 
-- [コンテキスト関連性メトリック](./context-relevancy)
-- [完全性メトリック](./completeness)
-- [要約メトリック](./summarization)
+- [コンテキスト関連性メトリクス](./context-relevancy)
+- [完全性メトリクス](./completeness)
+- [要約メトリクス](./summarization)

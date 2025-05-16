@@ -1,13 +1,13 @@
 ---
 title: "リファレンス: テキスト差分 | Evals | Mastra ドキュメント"
-description: Mastraにおけるテキスト差分メトリックのドキュメントで、シーケンスマッチングを使用して文字列間のテキスト差分を測定します。
+description: Mastra におけるテキスト差分メトリクスのドキュメント。これはシーケンスマッチングを用いて文字列間のテキスト差分を測定します。
 ---
 
 # TextualDifferenceMetric
 
-`TextualDifferenceMetric` クラスは、シーケンスマッチングを使用して2つの文字列間のテキストの違いを測定します。これは、あるテキストを別のテキストに変換するために必要な操作の数を含む、変更に関する詳細な情報を提供します。
+`TextualDifferenceMetric` クラスは、シーケンスマッチングを使用して2つの文字列間のテキスト差分を測定します。このクラスは、一方のテキストをもう一方に変換するために必要な操作数を含む、変更に関する詳細な情報を提供します。
 
-## 基本的な使用法
+## 基本的な使い方
 
 ```typescript
 import { TextualDifferenceMetric } from "@mastra/evals/nlp";
@@ -19,11 +19,11 @@ const result = await metric.measure(
   "The fast brown fox",
 );
 
-console.log(result.score); // 0-1の類似度比率
+console.log(result.score); // 0〜1の類似度比率
 console.log(result.info); // 詳細な変更メトリクス
 ```
 
-## measure() パラメーター
+## measure() のパラメーター
 
 <PropertiesTable
   content={[
@@ -36,7 +36,7 @@ console.log(result.info); // 詳細な変更メトリクス
     {
       name: "output",
       type: "string",
-      description: "差異を評価するためのテキスト",
+      description: "差分を評価するテキスト",
       isOptional: false,
     },
   ]}
@@ -49,11 +49,11 @@ console.log(result.info); // 詳細な変更メトリクス
     {
       name: "score",
       type: "number",
-      description: "1が同一のテキストを示す類似度比率 (0-1)",
+      description: "類似度比率（0～1）。1はテキストが完全に一致していることを示します",
     },
     {
       name: "info",
-      description: "差異に関する詳細なメトリクス",
+      description: "差分に関する詳細な指標",
       properties: [
         {
           type: "number",
@@ -61,7 +61,8 @@ console.log(result.info); // 詳細な変更メトリクス
             {
               name: "confidence",
               type: "number",
-              description: "テキスト間の長さの違いに基づく信頼度スコア (0-1)",
+              description:
+                "テキスト間の長さの違いに基づく信頼度スコア（0～1）",
             },
           ],
         },
@@ -81,7 +82,8 @@ console.log(result.info); // 詳細な変更メトリクス
             {
               name: "changes",
               type: "number",
-              description: "変更操作の数（挿入、削除、置換）",
+              description:
+                "変更操作の回数（挿入、削除、置換）",
             },
           ],
         },
@@ -91,7 +93,8 @@ console.log(result.info); // 詳細な変更メトリクス
             {
               name: "lengthDiff",
               type: "number",
-              description: "入力と出力の長さの正規化された差 (0-1)",
+              description:
+                "入力と出力の長さの正規化された差分（0～1）",
             },
           ],
         },
@@ -102,37 +105,37 @@ console.log(result.info); // 詳細な変更メトリクス
 
 ## スコアリングの詳細
 
-このメトリックは、いくつかの測定を計算します：
+このメトリックは、いくつかの指標を計算します：
 
-- **類似度比**: テキスト間のシーケンスマッチングに基づく (0-1)
-- **変更**: 一致しない操作の必要数
-- **長さの差**: テキストの長さの正規化された差
-- **信頼度**: 長さの差に反比例
+- **類似度比**：テキスト間のシーケンスマッチングに基づく（0-1）
+- **変更数**：一致しない操作の回数
+- **長さの差**：テキスト長の正規化された差
+- **信頼度**：長さの差に反比例
 
 ### スコアリングプロセス
 
 1. テキストの違いを分析します：
 
-   - 入力と出力の間でシーケンスマッチングを行う
-   - 必要な変更操作の数を数える
-   - 長さの差を測定する
+   - 入力と出力の間でシーケンスマッチングを実行
+   - 必要な変更操作の数をカウント
+   - 長さの違いを測定
 
-2. メトリックを計算します：
-   - 類似度比を計算する
-   - 信頼度スコアを決定する
-   - 重み付けされたスコアに結合する
+2. 指標を計算します：
+   - 類似度比を算出
+   - 信頼度スコアを決定
+   - 重み付けされたスコアに統合
 
-最終スコア: `(similarity_ratio * confidence) * scale`
+最終スコア：`(similarity_ratio * confidence) * scale`
 
 ### スコアの解釈
 
-(0からスケールまで、デフォルトは0-1)
+（0 から scale、デフォルトは 0-1）
 
-- 1.0: 同一のテキスト - 違いなし
-- 0.7-0.9: 小さな違い - 少しの変更が必要
-- 0.4-0.6: 中程度の違い - かなりの変更
-- 0.1-0.3: 大きな違い - 大幅な変更
-- 0.0: 完全に異なるテキスト
+- 1.0：完全に同一のテキスト - 違いなし
+- 0.7-0.9：わずかな違い - 少しの変更のみ必要
+- 0.4-0.6：中程度の違い - かなりの変更が必要
+- 0.1-0.3：大きな違い - 大幅な変更が必要
+- 0.0：全く異なるテキスト
 
 ## 分析付きの例
 
@@ -160,6 +163,6 @@ const result = await metric.measure(
 
 ## 関連
 
-- [コンテンツ類似性メトリック](./content-similarity)
+- [コンテンツ類似度メトリック](./content-similarity)
 - [完全性メトリック](./completeness)
 - [キーワードカバレッジメトリック](./keyword-coverage)

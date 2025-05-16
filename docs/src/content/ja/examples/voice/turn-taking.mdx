@@ -1,17 +1,17 @@
 ---
-title: ターン制
-description: Mastraを使用して、ターン制の会話フローを持つマルチエージェントディベートを作成する例。
+title: 発言の順番
+description: Mastraを使用して、順番に発言するマルチエージェントのディベートを作成する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
-# ターン制のAIディベート
+# ターン制AIディベート
 
-以下のコードスニペットは、Mastraを使用してターン制の複数エージェント会話システムを実装する方法を示しています。この例では、ユーザーが提供したトピックについて議論する2つのAIエージェント（楽観主義者と懐疑論者）を作成し、お互いの意見に交互に応答するディベートを実現します。
+以下のコードスニペットは、Mastraを使ってターン制のマルチエージェント会話システムを実装する方法を示しています。この例では、2人のAIエージェント（楽観主義者と懐疑主義者）がユーザーが提供したトピックについてディベートを行い、お互いの意見に順番に応答します。
 
 ## 音声機能を持つエージェントの作成
 
-まず、異なる個性と音声機能を持つ2つのエージェントを作成する必要があります：
+まず、異なる個性と音声機能を持つ2つのエージェントを作成します。
 
 ```typescript filename="src/mastra/agents/index.ts"
 import { openai } from "@ai-sdk/openai";
@@ -39,9 +39,9 @@ export const skepticAgent = new Agent({
 });
 ```
 
-## Mastraにエージェントを登録する
+## Mastra へのエージェントの登録
 
-次に、両方のエージェントをMastraインスタンスに登録します：
+次に、両方のエージェントをあなたの Mastra インスタンスに登録します。
 
 ```typescript filename="src/mastra/index.ts"
 import { createLogger } from "@mastra/core/logger";
@@ -60,9 +60,9 @@ export const mastra = new Mastra({
 });
 ```
 
-## ディベートでのターン制の管理
+## ディベートにおけるターンテイキングの管理
 
-この例では、エージェント間のターン制の流れを管理し、各エージェントが前のエージェントの発言に応答することを確実にする方法を示しています：
+この例では、エージェント同士のターンテイキングの流れを管理し、各エージェントが前のエージェントの発言に応答することを確実にする方法を示します。
 
 ```typescript filename="src/debate/turn-taking.ts"
 import { mastra } from "../../mastra";
@@ -207,7 +207,7 @@ export async function runDebate(topic: string, turns: number = 3) {
 
 ## コマンドラインからディベートを実行する
 
-コマンドラインからディベートを実行するための簡単なスクリプトは次のとおりです：
+コマンドラインからディベートを実行するためのシンプルなスクリプトはこちらです：
 
 ```typescript filename="src/index.ts"
 import { runDebate } from "./debate/turn-taking";
@@ -261,9 +261,9 @@ main().catch((error) => {
 });
 ```
 
-## ディベートのためのウェブインターフェースの作成
+## ディベート用のウェブインターフェースを作成する
 
-ウェブアプリケーションでは、ユーザーがディベートを開始し、エージェントの応答を聞くことができるシンプルなNext.jsコンポーネントを作成できます：
+ウェブアプリケーションの場合、ユーザーがディベートを開始し、エージェントの応答を聞くことができるシンプルなNext.jsコンポーネントを作成できます。
 
 ```tsx filename="app/components/DebateInterface.tsx"
 "use client";
@@ -402,7 +402,7 @@ export default function DebateInterface() {
       </div>
 
       <div className="mb-6">
-        <label className="block mb-2">ターン数（エージェントごと）：</label>
+        <label className="block mb-2">各エージェントのターン数：</label>
         <input
           type="number"
           value={turns}
@@ -418,7 +418,7 @@ export default function DebateInterface() {
         disabled={isDebating || !topic}
         className="px-4 py-2 bg-blue-500 text-white rounded disabled:bg-gray-300"
       >
-        {isDebating ? "ディベート進行中..." : "ディベートを開始"}
+        {isDebating ? "ディベート進行中..." : "ディベート開始"}
       </button>
 
       <audio ref={audioRef} className="hidden" />
@@ -456,9 +456,9 @@ export default function DebateInterface() {
 }
 ```
 
-この例では、Mastraを使用してターン制の複数エージェント会話システムを作成する方法を示しています。エージェントはユーザーが選んだトピックについてディベートを行い、各エージェントは前のエージェントの発言に応答します。また、システムは各エージェントの応答を音声に変換し、没入感のあるディベート体験を提供します。
+この例では、Mastra を使用してターン制のマルチエージェント会話システムを作成する方法を示します。エージェントたちはユーザーが選んだトピックについてディベートを行い、それぞれが前のエージェントの発言に応答します。また、システムは各エージェントの応答を音声に変換し、没入感のあるディベート体験を提供します。
 
-ターン制AIディベートの完全な実装は、GitHubリポジトリで確認できます。
+AI Debate with Turn Taking の完全な実装は、私たちの GitHub リポジトリでご覧いただけます。
 
 <br />
 <br />

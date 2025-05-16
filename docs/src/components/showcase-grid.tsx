@@ -30,8 +30,16 @@ const ShowcaseCard = ({
   image,
   link,
 }: ShowcaseCardProps) => (
-  <div className="group showcase-item rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 overflow-hidden transition-all">
-    <a href={link} className="block" target="_blank" rel="noopener noreferrer">
+  <div className="group showcase-item rounded-lg border-[0.5px] border-[var(--light-border-muted)] dark:border-zinc-800 bg-white dark:bg-zinc-950 overflow-hidden transition-all">
+    <a
+      style={{
+        textDecoration: "none",
+      }}
+      href={link}
+      className="block"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
       <div className="aspect-video relative overflow-hidden bg-zinc-900">
         <Image
           src={image}
@@ -43,13 +51,13 @@ const ShowcaseCard = ({
       </div>
       <div className="p-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 group-hover:text-[hsl(var(--tag-green))]">
+          <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 group-hover:text-[var(--light-green-accent-2)] dark:group-hover:text-[hsl(var(--tag-green))]">
             {title}
           </h3>
           <ArrowUpRight className="h-4 w-4 opacity-0 -translate-y-1 translate-x-1 group-hover:opacity-100 group-hover:translate-y-0 group-hover:translate-x-0 transition-all text-zinc-600 dark:text-zinc-400" />
         </div>
         {description && (
-          <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+          <p className="mt-2 decoration-0 text-sm text-zinc-600 dark:text-zinc-400">
             {description}
           </p>
         )}

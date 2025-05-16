@@ -9,16 +9,20 @@ description: "ミドルウェアやその他のオプションでMastraサーバ
 
 ## サーバーアーキテクチャ
 
-Mastraは、その基盤となるHTTPサーバーフレームワークとして[Hono](https://hono.dev)を使用しています。`mastra build`を使用してMastraアプリケーションを構築すると、`.mastra`ディレクトリにHonoベースのHTTPサーバーが生成されます。
+Mastraは[Hono](https://hono.dev)を基盤となるHTTPサーバーフレームワークとして使用しています。`mastra build`を使用してMastraアプリケーションをビルドすると、`.mastra`ディレクトリにHonoベースのHTTPサーバーが生成されます。
 
 サーバーは以下を提供します：
 
-- 登録されたすべてのエージェントのためのAPIエンドポイント
-- 登録されたすべてのワークフローのためのAPIエンドポイント
+- 登録されたすべてのエージェント用のAPIエンドポイント
+- 登録されたすべてのワークフロー用のAPIエンドポイント
 - カスタムAPIルートのサポート
 - カスタムミドルウェアのサポート
 - タイムアウトの設定
 - ポートの設定
+- ボディリミットの設定
+
+追加のサーバー動作の追加については、[ミドルウェア](/docs/deployment/middleware)と
+[カスタムAPIルート](/docs/deployment/custom-api-routes)のページを参照してください。
 
 ## サーバー設定
 
@@ -29,48 +33,17 @@ import { Mastra } from "@mastra/core";
 
 export const mastra = new Mastra({
   server: {
-    port: 3000, // Defaults to 4111
-    timeout: 10000, // Defaults to 30000 (30s)
+    port: 3000, // デフォルトは4111
+    timeout: 10000, // デフォルトは30000（30秒）
   },
 });
 ```
 
-## カスタム API ルート
-
-Mastra は、登録されたエージェントとワークフローに基づいて自動生成される API ルートのリストを提供します。また、Mastra インスタンス上でカスタム API ルートを定義することもできます。
-
-これらのルートは、Mastra インスタンスと同じファイルに置くことも、別のファイルに置くこともできます。Mastra インスタンスをクリーンに保つために、別のファイルに置くことをお勧めします。
-
-```typescript copy showLineNumbers
-import { Mastra } from "@mastra/core";
-import { registerApiRoute } from "@mastra/core/server";
-
-export const mastra = new Mastra({
-  server: {
-    apiRoutes: [
-      registerApiRoute("/my-custom-route", {
-        method: "GET",
-        handler: async (c) => {
-          // you have access to mastra instance here
-          const mastra = c.get("mastra");
-
-          // you can use the mastra instance to get agents, workflows, etc.
-          const agents = await mastra.getAgent("my-agent");
-
-          return c.json({ message: "Hello, world!" });
-        },
-      }),
-    ],
-  },
-  // Other configuration options
-});
-```
-
-`method` \u306f `"GET"`, `"POST"`, `"PUT"`, `"DELETE"`, `"ALL"` \u306e\n+\u3044\u305a\u308c\u304b\u3092\u6307\u5b9a\u3067\u304d\u307e\u3059\u3002\u305f\u3068\u3048 `"ALL"` \u3092\u9078\u3076\u3068\u3001\u5bfe\u5fdc\u30d1\u30b9\u4ee5\u4e0a\u306e HTTP \u30e1\u30bd\u30c3\u30c9\u306b\u95a2\u4fc2\u306a\u304f\u540c\u4e00\u30cf\u30f3\u30c9\u30e9\u304c\u547c\u3073\u51fa\u3055\u308c\u307e\u3059\u3002
+`method`オプションは`"GET"`、`"POST"`、`"PUT"`、`"DELETE"`または`"ALL"`のいずれかです。`"ALL"`を使用すると、パスに一致する任意のHTTPメソッドに対してハンドラーが呼び出されます。
 
 ## カスタムCORS設定
 
-Mastraを使用すると、サーバーのCORS（クロスオリジンリソースシェアリング）設定を構成できます。
+Mastraでは、サーバーのCORS（クロスオリジンリソース共有）設定をカスタマイズすることができます。
 
 ```typescript copy showLineNumbers
 import { Mastra } from "@mastra/core";
@@ -78,7 +51,7 @@ import { Mastra } from "@mastra/core";
 export const mastra = new Mastra({
   server: {
     cors: {
-      origin: ["https://example.com"], // 特定のオリジンを許可するか、すべての場合は '*'
+      origin: ["https://example.com"], // 特定のオリジンを許可、または'*'ですべてを許可
       allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
       allowHeaders: ["Content-Type", "Authorization"],
       credentials: false,
@@ -86,97 +59,6 @@ export const mastra = new Mastra({
   },
 });
 ```
-
-## ミドルウェア
-
-Mastraでは、APIルートに適用されるカスタムミドルウェア関数を設定することができます。これは、認証、ログ記録、CORS、または他のHTTPレベルの機能をAPIエンドポイントに追加するのに役立ちます。
-
-```typescript copy showLineNumbers
-import { Mastra } from '@mastra/core';
-
-export const mastra = new Mastra({
-  // 他の設定オプション
-  server: {
-    middleware: [
-    {
-      handler: async (c, next) => {
-        // 例: 認証チェックを追加
-        const authHeader = c.req.header('Authorization');
-        if (!authHeader) {
-          return new Response('Unauthorized', { status: 401 });
-        }
-
-        // 次のミドルウェアまたはルートハンドラに進む
-        await next();
-      },
-      path: '/api/*'
-    },
-    // すべてのルートにミドルウェアを追加
-    async (c, next) => {
-      // 例: リクエストログを追加
-      console.log(`${c.req.method} ${c.req.url}`);
-      await next();
-    },
-  ]
-});
-```
-
-特定のルートにミドルウェアを追加したい場合は、`registerApiRoute`を使用してそれを指定することもできます。
-
-```typescript copy showLineNumbers
-registerApiRoute("/my-custom-route", {
-  method: "GET",
-  middleware: [
-    async (c, next) => {
-      // 例: リクエストログを追加
-      console.log(`${c.req.method} ${c.req.url}`);
-      await next();
-    },
-  ],
-  handler: async (c) => {
-    // ここでmastraインスタンスにアクセスできます
-    const mastra = c.get("mastra");
-
-    // mastraインスタンスを使用してエージェント、ワークフローなどを取得できます
-    const agents = await mastra.getAgent("my-agent");
-
-    return c.json({ message: "Hello, world!" });
-  },
-});
-```
-
-### ミドルウェアの動作
-
-各ミドルウェア関数は次のことができます：
-
-- Honoコンテキストオブジェクト（`c`）と`next`関数を受け取る
-- リクエスト処理をショートサーキットするために`Response`を返すことができる
-- 次のミドルウェアまたはルートハンドラに進むために`next()`を呼び出すことができる
-- パスパターンをオプションで指定できる（デフォルトは'/api/\*'）
-- エージェントツールの呼び出しやワークフローのためにリクエスト固有のデータを注入する
-
-### 一般的なミドルウェアの使用例
-
-#### 認証
-
-```typescript copy
-{
-  handler: async (c, next) => {
-    const authHeader = c.req.header('Authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return new Response('Unauthorized', { status: 401 });
-    }
-
-    const token = authHeader.split(' ')[1];
-    // ここでトークンを検証
-
-    await next();
-  },
-  path: '/api/*',
-}
-```
-
-#### CORSサポート
 
 ## デプロイメント
 
@@ -224,40 +106,8 @@ node .mastra/output/index.mjs
 node --import=./.mastra/output/instrumentation.mjs  .mastra/output/index.mjs
 ```
 
-## デプロイメント
+## サーバーレスデプロイメント
 
-Mastraは標準的なNode.jsサーバーにビルドされるため、Node.jsアプリケーションを実行するあらゆるプラットフォームにデプロイできます：
+MastraはCloudflare Workers、Vercel、Netlifyでのサーバーレスデプロイメントもサポートしています。
 
-- クラウドVM（AWS EC2、DigitalOcean Droplets、GCP Compute Engine）
-- コンテナプラットフォーム（Docker、Kubernetes）
-- Platform as a Service（Heroku、Railway）
-- 自己ホスト型サーバー
-
-### ビルド
-
-アプリケーションをビルドします：
-
-```bash copy
-# 現在のディレクトリからビルド
-mastra build
-
-# またはディレクトリを指定
-mastra build --dir ./my-project
-```
-
-ビルドプロセス：
-
-1. エントリーファイル（`src/mastra/index.ts`または`src/mastra/index.js`）を特定
-2. `.mastra`出力ディレクトリを作成
-3. ツリーシェイキングとソースマップを使用してRollupでコードをバンドル
-4. [Hono](https://hono.dev) HTTPサーバーを生成
-
-すべてのオプションについては[`mastra build`](/reference/cli/build)を参照してください。
-
-### サーバーの実行
-
-HTTPサーバーを起動します：
-
-```bash copy
-node .mastra/output/index.mjs
-```
+セットアップ手順については、[サーバーレスデプロイメント](/docs/deployment/deployment)ガイドをご覧ください。

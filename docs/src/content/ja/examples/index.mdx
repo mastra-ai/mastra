@@ -8,9 +8,9 @@ import { Tabs } from "nextra/components";
 
 # 例
 
-例のセクションは、Mastraを使用した基本的なAIエンジニアリングを示す短いプロジェクト例のリストで、テキスト生成、構造化された出力、ストリーミングレスポンス、検索拡張生成（RAG）、音声などが含まれています。
+例のセクションでは、Mastraを使用した基本的なAIエンジニアリングを示す短いプロジェクト例のリストを紹介しています。これには、テキスト生成、構造化された出力、ストリーミングレスポンス、検索拡張生成（RAG）、音声などが含まれます。
 
-<CardItems titles={["エージェント", "ワークフロー", "メモリ", "RAG", "評価", "音声"]} items={
+<CardItems titles={["Agent", "Workflow", "vNextWorkflow", "Memory", "RAG", "Evals", "Voice"]} items={
   {
     Agent: [
       {
@@ -62,6 +62,36 @@ import { Tabs } from "nextra/components";
         href: "/examples/workflows/suspend-and-resume",
       },
       { title: "エージェントの呼び出し", href: "/examples/workflows/calling-agent" },
+    ],
+    vNextWorkflow: [
+      {
+        title: "条件分岐",
+        href: "/examples/workflows_vNext/conditional-branching",
+      },
+      {
+        title: "並列ステップ",
+        href: "/examples/workflows_vNext/parallel-steps",
+      },
+      {
+        title: "エージェントの呼び出し",
+        href: "/examples/workflows_vNext/calling-agent",
+      },
+      {
+        title: "ステップとしてのツールとエージェント",
+        href: "/examples/workflows_vNext/agent-and-tool-interop",
+      },
+      {
+        title: "ヒューマンインザループ",
+        href: "/examples/workflows_vNext/human-in-the-loop",
+      },
+      {
+        title: "制御フロー",
+        href: "/examples/workflows_vNext/control-flow",
+      },
+      {
+        title: "配列を入力として",
+        href: "/examples/workflows_vNext/array-as-input",
+      }
     ],
     Memory:[
       {
@@ -169,7 +199,7 @@ import { Tabs } from "nextra/components";
       href: "/examples/evals/contextual-recall",
     },
     {
-      title: "LLMを審査員とするカスタム評価",
+      title: "LLMを審判とするカスタム評価",
       href: "/examples/evals/custom-eval",
     },
     {
@@ -193,11 +223,11 @@ import { Tabs } from "nextra/components";
       href: "/examples/evals/summarization",
     },
     {
-      title: "テキストの差異",
+      title: "テキスト差異",
       href: "/examples/evals/textual-difference",
     },
     {
-      title: "トーンの一貫性", 
+      title: "トーン一貫性", 
       href: "/examples/evals/tone-consistency",
     },
     {
@@ -205,7 +235,7 @@ import { Tabs } from "nextra/components";
       href: "/examples/evals/toxicity",
     },
     {
-      title: "単語の包含",
+      title: "単語包含",
       href: "/examples/evals/word-inclusion",
     },
   ],
@@ -230,3 +260,4 @@ import { Tabs } from "nextra/components";
 }}>
 
 </CardItems>
+

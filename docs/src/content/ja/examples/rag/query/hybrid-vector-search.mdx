@@ -1,37 +1,37 @@
 ---
-title: "例：ハイブリッドベクトル検索 | RAG | Mastra ドキュメント"
-description: Mastraでベクトル検索結果を強化するためにPGVectorでメタデータフィルターを使用する例。
+title: "例: ハイブリッドベクトル検索 | RAG | Mastra ドキュメント"
+description: PGVector でメタデータフィルターを使用し、Mastra のベクトル検索結果を強化する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
-# ハイブリッドベクトル検索
+# ハイブリッドベクター検索
 
-ベクトル類似性検索をメタデータフィルターと組み合わせると、より正確で効率的なハイブリッド検索を作成できます。
-このアプローチは次の要素を組み合わせます：
+ベクター類似性検索とメタデータフィルターを組み合わせることで、より精度が高く効率的なハイブリッド検索を実現できます。
+このアプローチは以下を組み合わせています：
 
-- 最も関連性の高いドキュメントを見つけるためのベクトル類似性検索
-- 追加の基準に基づいて検索結果を絞り込むためのメタデータフィルター
+- 最も関連性の高いドキュメントを見つけるためのベクター類似性検索
+- 追加の条件に基づいて検索結果を絞り込むためのメタデータフィルター
 
-この例では、MastraとPGVectorを使用したハイブリッドベクトル検索の方法を示します。
+この例では、Mastra と PGVector を使ったハイブリッドベクター検索の方法を示します。
 
 ## 概要
 
-このシステムはMastraとPGVectorを使用してフィルタリングされたベクトル検索を実装しています。以下がその機能です：
+このシステムは、Mastra と PGVector を使用したフィルタ付きベクトル検索を実装しています。主な機能は以下の通りです。
 
-1. メタデータフィルターを使用してPGVector内の既存の埋め込みをクエリする
-2. 異なるメタデータフィールドでフィルタリングする方法を示す
-3. ベクトル類似性とメタデータフィルタリングを組み合わせる方法を実演する
+1. PGVector に保存されている既存の埋め込みをメタデータフィルターで検索します
+2. 異なるメタデータフィールドでのフィルタリング方法を示します
+3. ベクトル類似度とメタデータフィルタリングの組み合わせを実演します
 
-> **注意**：ドキュメントからメタデータを抽出する方法の例については、[メタデータ抽出](../embedding/metadata-extraction.mdx)ガイドを参照してください。
+> **注意**: ドキュメントからメタデータを抽出する方法の例については、[Metadata Extraction](../embedding/metadata-extraction.mdx) ガイドをご覧ください。
 >
-> 埋め込みを作成して保存する方法については、[埋め込みのアップサート](/examples/rag/upsert/upsert-embeddings)ガイドを参照してください。
+> 埋め込みの作成と保存方法については、[Upsert Embeddings](/examples/rag/upsert/upsert-embeddings) ガイドをご参照ください。
 
 ## セットアップ
 
-### 環境セットアップ
+### 環境設定
 
-環境変数を設定してください：
+環境変数を必ず設定してください：
 
 ```bash filename=".env"
 OPENAI_API_KEY=your_openai_api_key_here
@@ -50,7 +50,7 @@ import { openai } from "@ai-sdk/openai";
 
 ## ベクターストアの初期化
 
-接続文字列を使用してPgVectorを初期化します:
+接続文字列を使ってPgVectorを初期化します：
 
 ```typescript copy showLineNumbers{4} filename="src/index.ts"
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
@@ -61,13 +61,13 @@ const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 ### メタデータ値でフィルタリング
 
 ```typescript copy showLineNumbers{6} filename="src/index.ts"
-// クエリの埋め込みを作成
+// Create embedding for the query
 const { embedding } = await embed({
   model: openai.embedding("text-embedding-3-small"),
-  value: "[ここにドキュメントに基づくクエリを挿入]",
+  value: "[Insert query based on document here]",
 });
 
-// メタデータフィルタを使用したクエリ
+// Query with metadata filter
 const result = await pgVector.query({
   indexName: "embeddings",
   queryVector: embedding,
@@ -79,7 +79,7 @@ const result = await pgVector.query({
   },
 });
 
-console.log("結果:", result);
+console.log("Results:", result);
 ```
 
 <br />

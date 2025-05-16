@@ -4,7 +4,7 @@ Mastraエージェントは音声機能で強化することができ、応答�
 
 ## 単一のプロバイダーを使用する
 
-エージェントに音声を追加する最も簡単な方法は、発話と聞き取りの両方に単一のプロバイダーを使用することです：
+エージェントに音声を追加する最も簡単な方法は、発話と聴取の両方に単一のプロバイダーを使用することです：
 
 ```typescript
 import { createReadStream } from "fs";
@@ -41,7 +41,7 @@ try {
 
 ## 複数のプロバイダーを使用する
 
-より柔軟性を高めるために、CompositeVoiceクラスを使用して話すことと聞くことに異なるプロバイダーを使用することができます：
+より柔軟性を高めるために、CompositeVoiceクラスを使用して発話と聴取に異なるプロバイダーを使用することができます：
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
@@ -180,18 +180,18 @@ agent.voice.on("error", (error) => {
 
 Mastraは、テキスト読み上げ（TTS）と音声認識（STT）機能のために複数の音声プロバイダーをサポートしています：
 
-| プロバイダー    | パッケージ                      | 機能                   | リファレンス                                     |
-| --------------- | ------------------------------- | ---------------------- | ------------------------------------------------ |
-| OpenAI          | `@mastra/voice-openai`          | TTS, STT               | [ドキュメント](/reference/voice/openai)          |
-| OpenAI Realtime | `@mastra/voice-openai-realtime` | リアルタイム音声対音声 | [ドキュメント](/reference/voice/openai-realtime) |
-| ElevenLabs      | `@mastra/voice-elevenlabs`      | 高品質TTS              | [ドキュメント](/reference/voice/elevenlabs)      |
-| PlayAI          | `@mastra/voice-playai`          | TTS                    | [ドキュメント](/reference/voice/playai)          |
-| Google          | `@mastra/voice-google`          | TTS, STT               | [ドキュメント](/reference/voice/google)          |
-| Deepgram        | `@mastra/voice-deepgram`        | STT                    | [ドキュメント](/reference/voice/deepgram)        |
-| Murf            | `@mastra/voice-murf`            | TTS                    | [ドキュメント](/reference/voice/murf)            |
-| Speechify       | `@mastra/voice-speechify`       | TTS                    | [ドキュメント](/reference/voice/speechify)       |
-| Sarvam          | `@mastra/voice-sarvam`          | TTS, STT               | [ドキュメント](/reference/voice/sarvam)          |
-| Azure           | `@mastra/voice-azure`           | TTS, STT               | [ドキュメント](/reference/voice/mastra-voice)    |
-| Cloudflare      | `@mastra/voice-cloudflare`      | TTS                    | [ドキュメント](/reference/voice/mastra-voice)    |
+| プロバイダー    | パッケージ                       | 機能                     | リファレンス                                      |
+| --------------- | ------------------------------- | ------------------------- | ------------------------------------------------- |
+| OpenAI          | `@mastra/voice-openai`          | TTS, STT                  | [ドキュメント](/reference/voice/openai)          |
+| OpenAI Realtime | `@mastra/voice-openai-realtime` | リアルタイム音声対音声    | [ドキュメント](/reference/voice/openai-realtime) |
+| ElevenLabs      | `@mastra/voice-elevenlabs`      | 高品質TTS                 | [ドキュメント](/reference/voice/elevenlabs)      |
+| PlayAI          | `@mastra/voice-playai`          | TTS                       | [ドキュメント](/reference/voice/playai)          |
+| Google          | `@mastra/voice-google`          | TTS, STT                  | [ドキュメント](/reference/voice/google)          |
+| Deepgram        | `@mastra/voice-deepgram`        | STT                       | [ドキュメント](/reference/voice/deepgram)        |
+| Murf            | `@mastra/voice-murf`            | TTS                       | [ドキュメント](/reference/voice/murf)            |
+| Speechify       | `@mastra/voice-speechify`       | TTS                       | [ドキュメント](/reference/voice/speechify)       |
+| Sarvam          | `@mastra/voice-sarvam`          | TTS, STT                  | [ドキュメント](/reference/voice/sarvam)          |
+| Azure           | `@mastra/voice-azure`           | TTS, STT                  | [ドキュメント](/reference/voice/mastra-voice)    |
+| Cloudflare      | `@mastra/voice-cloudflare`      | TTS                       | [ドキュメント](/reference/voice/mastra-voice)    |
 
-音声機能の詳細については、[音声APIリファレンス](/reference/voice/mastra-voice)を参照してください。
+音声機能の詳細については、[音声APIリファレンス](/reference/voice/mastra-voice)をご覧ください。

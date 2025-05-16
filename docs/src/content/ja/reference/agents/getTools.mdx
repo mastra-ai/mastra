@@ -13,7 +13,7 @@ description: "Mastraエージェントの`.getTools()`メソッドに関する�
 getTools({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}): ToolsInput | Promise<ToolsInput>
 ```
 
-## パラメータ
+## パラメーター
 
 <br />
 <PropertiesTable
@@ -23,7 +23,7 @@ getTools({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeCo
       type: "RuntimeContext",
       isOptional: true,
       description:
-        "依存性注入とコンテキスト情報のためのランタイムコンテキスト。",
+        "依存性注入やコンテキスト情報のためのランタイムコンテキスト。",
     },
   ]}
 />
@@ -34,18 +34,18 @@ getTools({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeCo
 
 ## 説明
 
-`getTools()`メソッドは、エージェントが使用できるツールにアクセスするために使用されます。これは、オブジェクトとして直接提供されるか、関数から返されるかにかかわらず、ツールを解決します。
+`getTools()` メソッドは、エージェントが使用できるツールにアクセスするために使われます。このメソッドは、ツールを解決し、ツールはオブジェクトとして直接提供される場合や、関数から返される場合があります。
 
-ツールはエージェントの能力の重要な構成要素であり、以下のことを可能にします：
+ツールはエージェントの能力の重要な要素であり、以下のことを可能にします：
 
-- 特定のアクション（データの取得や計算など）を実行する
+- 特定のアクション（データの取得や計算の実行など）を行う
 - 外部システムやAPIにアクセスする
 - コードやコマンドを実行する
-- データベースや他のサービスと対話する
+- データベースや他のサービスと連携する
 
 ## 例
 
-### 基本的な使用法
+### 基本的な使い方
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
@@ -97,7 +97,7 @@ const tools = await agent.getTools();
 console.log(Object.keys(tools)); // ["add", "multiply"]
 ```
 
-### RuntimeContextでの使用
+### RuntimeContextとの併用
 
 ```typescript
 import { Agent } from "@mastra/core/agent";

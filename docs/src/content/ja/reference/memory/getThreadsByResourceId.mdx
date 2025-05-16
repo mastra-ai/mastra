@@ -21,7 +21,7 @@ const threads = await memory.getThreadsByResourceId({
     {
       name: "resourceId",
       type: "string",
-      description: "スレッドを取得するリソースのID。",
+      description: "スレッドを取得したいリソースのID。",
       isOptional: false,
     },
   ]}
@@ -35,14 +35,14 @@ const threads = await memory.getThreadsByResourceId({
       name: "StorageThreadType[]",
       type: "Promise",
       description:
-        "指定されたリソースIDに関連付けられたスレッドの配列に解決されるプロミス。",
+        "指定されたリソースIDに関連付けられたスレッドの配列を解決するPromise。",
     },
   ]}
 />
 
-### 関連
+### 関連情報
 
 - [Memory クラスリファレンス](/reference/memory/Memory.mdx)
-- [Memory の始め方](/docs/memory/overview.mdx) (スレッド/リソースの概念をカバー)
+- [Memory のはじめ方](/docs/memory/overview.mdx)（スレッド／リソースの概念を解説）
 - [createThread](/reference/memory/createThread.mdx)
 - [getThreadById](/reference/memory/getThreadById.mdx)

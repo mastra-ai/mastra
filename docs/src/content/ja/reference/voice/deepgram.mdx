@@ -1,11 +1,11 @@
 ---
 title: "リファレンス: Deepgram Voice | 音声プロバイダー | Mastra ドキュメント"
-description: "Deepgramの音声実装に関するドキュメントで、複数の音声モデルと言語を使用したテキスト読み上げと音声認識機能を提供します。"
+description: "Deepgram voice の実装に関するドキュメント。複数の音声モデルと言語によるテキスト読み上げおよび音声認識機能を提供します。"
 ---
 
 # Deepgram
 
-MastraにおけるDeepgramの音声実装は、DeepgramのAPIを使用してテキスト読み上げ（TTS）と音声認識（STT）機能を提供します。複数の音声モデルと言語をサポートしており、音声合成と文字起こしの両方に対して設定可能なオプションがあります。
+MastraにおけるDeepgramの音声実装は、DeepgramのAPIを利用してテキスト読み上げ（TTS）および音声認識（STT）機能を提供します。複数の音声モデルと言語に対応しており、音声合成と文字起こしの両方で設定可能なオプションが用意されています。
 
 ## 使用例
 
@@ -35,28 +35,28 @@ const audioStream = await voice.speak("Hello, world!");
 const transcript = await voice.listen(audioStream);
 ```
 
-## コンストラクタパラメータ
+## コンストラクタのパラメーター
 
 <PropertiesTable
   content={[
     {
       name: "speechModel",
       type: "DeepgramVoiceConfig",
-      description: "テキストから音声への機能のための設定。",
+      description: "テキスト読み上げ機能のための設定。",
       isOptional: true,
       defaultValue: "{ name: 'aura' }",
     },
     {
       name: "listeningModel",
       type: "DeepgramVoiceConfig",
-      description: "音声からテキストへの機能のための設定。",
+      description: "音声認識機能のための設定。",
       isOptional: true,
       defaultValue: "{ name: 'nova' }",
     },
     {
       name: "speaker",
       type: "DeepgramVoiceId",
-      description: "テキストから音声へのデフォルトの声",
+      description: "テキスト読み上げで使用するデフォルトの音声",
       isOptional: true,
       defaultValue: "'asteria-en'",
     },
@@ -77,13 +77,13 @@ const transcript = await voice.listen(audioStream);
       name: "apiKey",
       type: "string",
       description:
-        "Deepgram APIキー。DEEPGRAM_API_KEY環境変数にフォールバックします",
+        "Deepgram APIキー。指定がない場合はDEEPGRAM_API_KEY環境変数が使用されます",
       isOptional: true,
     },
     {
       name: "properties",
       type: "Record<string, any>",
-      description: "Deepgram APIに渡す追加のプロパティ",
+      description: "Deepgram APIに渡す追加プロパティ",
       isOptional: true,
     },
     {
@@ -99,7 +99,7 @@ const transcript = await voice.listen(audioStream);
 
 ### speak()
 
-設定された音声モデルと声を使用してテキストを音声に変換します。
+設定された音声モデルとボイスを使用して、テキストを音声に変換します。
 
 <PropertiesTable
   content={[
@@ -107,13 +107,13 @@ const transcript = await voice.listen(audioStream);
       name: "input",
       type: "string | NodeJS.ReadableStream",
       description:
-        "音声に変換するテキスト。ストリームが提供された場合、最初にテキストに変換されます。",
+        "音声に変換するテキスト。ストリームが指定された場合は、最初にテキストへ変換されます。",
       isOptional: false,
     },
     {
       name: "options",
       type: "object",
-      description: "音声合成のための追加オプション",
+      description: "音声合成の追加オプション",
       isOptional: true,
     },
     {
@@ -129,20 +129,20 @@ const transcript = await voice.listen(audioStream);
 
 ### listen()
 
-設定されたリスニングモデルを使用して音声をテキストに変換します。
+設定されたリスニングモデルを使用して、音声をテキストに変換します。
 
 <PropertiesTable
   content={[
     {
       name: "audioStream",
       type: "NodeJS.ReadableStream",
-      description: "文字起こしする音声ストリーム",
+      description: "書き起こし対象の音声ストリーム",
       isOptional: false,
     },
     {
       name: "options",
       type: "object",
-      description: "Deepgram APIに渡す追加オプション",
+      description: "Deepgram API に渡す追加オプション",
       isOptional: true,
     },
   ]}
@@ -152,14 +152,14 @@ const transcript = await voice.listen(audioStream);
 
 ### getSpeakers()
 
-利用可能な音声オプションのリストを返します。
+利用可能なボイスオプションの一覧を返します。
 
 <PropertiesTable
   content={[
     {
       name: "voiceId",
       type: "string",
-      description: "音声の一意の識別子",
+      description: "ボイスの一意な識別子",
       isOptional: false,
     },
   ]}

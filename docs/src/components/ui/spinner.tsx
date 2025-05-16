@@ -1,12 +1,6 @@
 import { cn } from "@/lib/utils";
 
-function Spinner({
-  color = "#fff",
-  className,
-}: {
-  color?: string;
-  className?: string;
-}) {
+function Spinner({ className }: { color?: string; className?: string }) {
   return (
     <svg
       className={cn("animate-spin duration-700", className)}
@@ -20,7 +14,7 @@ function Spinner({
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      <path d="M21 12a9 9 0 1 1-6.219-8.56" stroke={color} />
+      <path d="M21 12a9 9 0 1 1-6.219-8.56" stroke="currentColor" />
     </svg>
   );
 }

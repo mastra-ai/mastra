@@ -1,6 +1,6 @@
 ---
-title: Mastraにおける音声認識 (STT) | Mastra ドキュメント
-description: Mastraにおける音声認識機能の概要、設定、使用法、音声プロバイダーとの統合について。
+title: Mastra における音声認識（STT） | Mastra ドキュメント
+description: Mastra の音声認識機能の概要、設定方法、使用方法、音声プロバイダーとの連携について説明します。
 ---
 
 # 音声認識（STT）
@@ -10,13 +10,13 @@ STTは、人間の音声に応答できる音声対応アプリケーション�
 
 ## 設定
 
-Mastraで音声認識（STT）を使用するには、音声プロバイダーを初期化する際に`listeningModel`を提供する必要があります。これには以下のようなパラメータが含まれます：
+MastraでSTTを使用するには、ボイスプロバイダーを初期化する際に`listeningModel`を指定する必要があります。これには以下のようなパラメータが含まれます：
 
-- **`name`**: 使用する特定の音声認識モデル。
+- **`name`**: 使用する特定のSTTモデル。
 - **`apiKey`**: 認証用のAPIキー。
-- **プロバイダー固有のオプション**: 特定の音声プロバイダーで必要または対応している追加オプション。
+- **プロバイダー固有のオプション**: 特定のボイスプロバイダーで必要またはサポートされている追加オプション。
 
-**注意**: これらのパラメータはすべてオプションです。使用している特定のプロバイダーによって異なる、音声プロバイダーが提供するデフォルト設定を使用することができます。
+**注意**: これらのパラメータはすべて省略可能です。使用しているボイスプロバイダーによって異なりますが、プロバイダーが提供するデフォルト設定を利用することもできます。
 
 ```typescript
 const voice = new OpenAIVoice({
@@ -26,31 +26,31 @@ const voice = new OpenAIVoice({
   },
 });
 
-// デフォルト設定を使用する場合、設定は以下のように簡略化できます：
+// If using default settings the configuration can be simplified to:
 const voice = new OpenAIVoice();
 ```
 
 ## 利用可能なプロバイダー
 
-Mastraはいくつかの音声認識（Speech-to-Text）プロバイダーをサポートしており、それぞれに独自の機能と強みがあります：
+Mastra は複数の Speech-to-Text プロバイダーをサポートしており、それぞれ独自の機能と強みがあります。
 
-- [**OpenAI**](/reference/voice/openai/) - Whisperモデルによる高精度の文字起こし
-- [**Azure**](/reference/voice/azure/) - Microsoftの企業グレードの信頼性を持つ音声認識
-- [**ElevenLabs**](/reference/voice/elevenlabs/) - 複数言語をサポートする高度な音声認識
-- [**Google**](/reference/voice/google/) - 幅広い言語サポートを持つGoogleの音声認識
-- [**Cloudflare**](/reference/voice/cloudflare/) - 低遅延アプリケーション向けにエッジ最適化された音声認識
-- [**Deepgram**](/reference/voice/deepgram/) - さまざまなアクセントに対応した高精度のAI駆動音声認識
+- [**OpenAI**](/reference/voice/openai/) - Whisper モデルによる高精度な文字起こし
+- [**Azure**](/reference/voice/azure/) - Microsoft のエンタープライズレベルの信頼性を持つ音声認識
+- [**ElevenLabs**](/reference/voice/elevenlabs/) - 複数言語対応の高度な音声認識
+- [**Google**](/reference/voice/google/) - 幅広い言語サポートを持つ Google の音声認識
+- [**Cloudflare**](/reference/voice/cloudflare/) - 低遅延アプリケーション向けのエッジ最適化音声認識
+- [**Deepgram**](/reference/voice/deepgram/) - 様々なアクセントに対応した高精度の AI 音声認識
 - [**Sarvam**](/reference/voice/sarvam/) - インド系言語とアクセントに特化
 
-各プロバイダーは、必要に応じてインストールできる別々のパッケージとして実装されています：
+各プロバイダーは、必要に応じてインストールできる個別のパッケージとして実装されています。
 
 ```bash
-pnpm add @mastra/voice-openai  # OpenAIの例
+pnpm add @mastra/voice-openai  # Example for OpenAI
 ```
 
-## Listen メソッドの使用
+## Listen メソッドの使用方法
 
-STTの主要なメソッドは、音声をテキストに変換する`listen()`メソッドです。使用方法は次のとおりです：
+STT の主なメソッドは `listen()` メソッドであり、話された音声をテキストに変換します。使い方は以下の通りです。
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
@@ -83,4 +83,4 @@ const { text } = await agent.generate(
 console.log(`Recommendation: ${text}`);
 ```
 
-STTをエージェントで使用する方法については、[エージェントに音声を追加する](../agents/adding-voice.mdx)のドキュメントをご覧ください。
+STT をエージェントで使用する方法については、[エージェントに音声を追加する](../agents/adding-voice.mdx) ドキュメントもご覧ください。

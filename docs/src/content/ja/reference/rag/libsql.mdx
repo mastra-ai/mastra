@@ -1,12 +1,12 @@
 ---
-title: "デフォルトベクターストア | ベクターデータベース | RAG | Mastra ドキュメント"
-description: LibSQLのベクター拡張を使用してベクター検索を提供するMastraのLibSQLVectorクラスのドキュメント。
+title: "デフォルトベクトルストア | ベクターデータベース | RAG | Mastra ドキュメント"
+description: Mastraにおける、ベクター拡張機能を持つLibSQLを使用したベクター検索を提供するLibSQLVectorクラスのドキュメント。
 ---
 
-# LibSQLVector Store
+# LibSQLVector ストア
 
-LibSQLストレージ実装は、ベクトル拡張を備えたSQLiteのフォークであるSQLite互換のベクトル検索[LibSQL](https://github.com/tursodatabase/libsql)と、ベクトル拡張を備えた[Turso](https://turso.tech/)を提供し、軽量で効率的なベクトルデータベースソリューションを提供します。
-これは`@mastra/core`パッケージの一部であり、メタデータフィルタリングを伴う効率的なベクトル類似性検索を提供します。
+LibSQLストレージ実装は、SQLite互換のベクトル検索[LibSQL](https://github.com/tursodatabase/libsql)（ベクトル拡張機能を持つSQLiteのフォーク）と、ベクトル拡張機能を持つ[Turso](https://turso.tech/)を提供し、軽量で効率的なベクトルデータベースソリューションを提供します。
+これは`@mastra/core`パッケージの一部であり、メタデータフィルタリングによる効率的なベクトル類似性検索を提供します。
 
 ## インストール
 
@@ -16,7 +16,7 @@ LibSQLストレージ実装は、ベクトル拡張を備えたSQLiteのフォ�
 npm install @mastra/core@latest
 ```
 
-## 使用法
+## 使用方法
 
 ```typescript copy showLineNumbers
 import { LibSQLVector } from "@mastra/core/vector/libsql";
@@ -64,25 +64,26 @@ const results = await store.query({
       name: "connectionUrl",
       type: "string",
       description:
-        "LibSQLデータベースのURL。インメモリデータベースには':memory:'を使用し、ローカルファイルには'file:dbname.db'を使用、または'libsql://your-database.turso.io'のようなLibSQL互換の接続文字列を使用します。",
+        "LibSQLデータベースURL。インメモリデータベースには':memory:'、ローカルファイルには'file:dbname.db'、または'libsql://your-database.turso.io'のようなLibSQL互換の接続文字列を使用します。",
     },
     {
       name: "authToken",
       type: "string",
       isOptional: true,
-      description: "Tursoクラウドデータベースの認証トークン",
+      description: "Tursoクラウドデータベース用の認証トークン",
     },
     {
       name: "syncUrl",
       type: "string",
       isOptional: true,
-      description: "データベースレプリケーションのためのURL（Turso特有）",
+      description: "データベースレプリケーション用のURL（Turso固有）",
     },
     {
       name: "syncInterval",
       type: "number",
       isOptional: true,
-      description: "データベース同期のためのミリ秒単位の間隔（Turso特有）",
+      description:
+        "データベース同期の間隔（ミリ秒）（Turso固有）",
     },
   ]}
 />
@@ -91,7 +92,7 @@ const results = await store.query({
 
 ### createIndex()
 
-新しいベクトルコレクションを作成します。インデックス名は文字またはアンダースコアで始まり、文字、数字、アンダースコアのみを含むことができます。次元は正の整数でなければなりません。
+新しいベクトルコレクションを作成します。インデックス名は文字またはアンダースコアで始まり、文字、数字、アンダースコアのみを含むことができます。次元は正の整数である必要があります。
 
 <PropertiesTable
   content={[
@@ -103,8 +104,7 @@ const results = await store.query({
     {
       name: "dimension",
       type: "number",
-      description:
-        "ベクトルの次元サイズ（埋め込みモデルに一致する必要があります）",
+      description: "ベクトルの次元サイズ（埋め込みモデルと一致する必要があります）",
     },
     {
       name: "metric",
@@ -112,21 +112,21 @@ const results = await store.query({
       isOptional: true,
       defaultValue: "cosine",
       description:
-        "類似性検索のための距離メトリック。注意: 現在、LibSQLがサポートしているのはコサイン類似度のみです。",
+        "類似性検索の距離メトリック。注意：現在、LibSQLではコサイン類似度のみがサポートされています。",
     },
   ]}
 />
 
 ### upsert()
 
-インデックスにベクトルとそのメタデータを追加または更新します。すべてのベクトルが原子性を持って挿入されるようにトランザクションを使用します - もし挿入が失敗した場合、全体の操作はロールバックされます。
+ベクトルとそのメタデータをインデックスに追加または更新します。トランザクションを使用して、すべてのベクトルが原子的に挿入されることを保証します - 挿入が失敗した場合、操作全体がロールバックされます。
 
 <PropertiesTable
   content={[
     {
       name: "indexName",
       type: "string",
-      description: "挿入するインデックスの名前",
+      description: "挿入先のインデックスの名前",
     },
     {
       name: "vectors",
@@ -162,7 +162,7 @@ const results = await store.query({
     {
       name: "queryVector",
       type: "number[]",
-      description: "類似ベクトルを見つけるためのクエリベクトル",
+      description: "類似ベクトルを検索するためのクエリベクトル",
     },
     {
       name: "topK",
@@ -175,7 +175,7 @@ const results = await store.query({
       name: "filter",
       type: "Filter",
       isOptional: true,
-      description: "メタデータフィルタ",
+      description: "メタデータフィルター",
     },
     {
       name: "includeVector",
@@ -208,7 +208,7 @@ const results = await store.query({
   ]}
 />
 
-戻り値:
+戻り値：
 
 ```typescript copy
 interface IndexStats {
@@ -236,11 +236,11 @@ interface IndexStats {
 
 データベース内のすべてのベクトルインデックスを一覧表示します。
 
-戻り値: `Promise<string[]>`
+戻り値：`Promise<string[]>`
 
 ### truncateIndex()
 
-インデックスの構造を保持しながら、すべてのベクトルを削除します。
+インデックス構造を維持しながら、インデックスからすべてのベクトルを削除します。
 
 <PropertiesTable
   content={[
@@ -254,7 +254,7 @@ interface IndexStats {
 
 ### updateVector()
 
-IDによって特定のベクトルエントリを新しいベクトルデータおよび/またはメタデータで更新します。
+IDによって特定のベクトルエントリを新しいベクトルデータやメタデータで更新します。
 
 <PropertiesTable
   content={[
@@ -271,7 +271,7 @@ IDによって特定のベクトルエントリを新しいベクトルデータ
     {
       name: "update",
       type: "object",
-      description: "ベクトルおよび/またはメタデータを含む更新データ",
+      description: "ベクトルやメタデータを含む更新データ",
     },
     {
       name: "update.vector",
@@ -309,20 +309,20 @@ IDによってインデックスから特定のベクトルエントリを削除
 
 ## レスポンスタイプ
 
-クエリ結果はこの形式で返されます:
+クエリ結果は以下の形式で返されます：
 
 ```typescript copy
 interface QueryResult {
   id: string;
   score: number;
   metadata: Record<string, any>;
-  vector?: number[]; // includeVector が true の場合のみ含まれます
+  vector?: number[]; // Only included if includeVector is true
 }
 ```
 
-## エラーハンドリング
+## エラー処理
 
-ストアは、異なる失敗ケースに対して特定のエラーをスローします：
+ストアは異なる失敗ケースに対して特定のエラーをスローします：
 
 ```typescript copy
 try {
@@ -331,15 +331,15 @@ try {
     queryVector: queryVector,
   });
 } catch (error) {
-  // 特定のエラーケースを処理
+  // Handle specific error cases
   if (error.message.includes("Invalid index name format")) {
     console.error(
-      "インデックス名は文字/アンダースコアで始まり、英数字のみを含む必要があります",
+      "Index name must start with a letter/underscore and contain only alphanumeric characters",
     );
   } else if (error.message.includes("Table not found")) {
-    console.error("指定されたインデックスは存在しません");
+    console.error("The specified index does not exist");
   } else {
-    console.error("ベクトルストアエラー:", error.message);
+    console.error("Vector store error:", error.message);
   }
 }
 ```
@@ -347,10 +347,10 @@ try {
 一般的なエラーケースには以下が含まれます：
 
 - 無効なインデックス名の形式
-- 無効なベクトルの次元
+- 無効なベクトル次元
 - テーブル/インデックスが見つからない
 - データベース接続の問題
-- アップサート中のトランザクションの失敗
+- アップサート中のトランザクション失敗
 
 ## 関連
 

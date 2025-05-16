@@ -1,13 +1,13 @@
 ---
-title: "リファレンス: コンテキストの関連性 | Evals | Mastra Docs"
-description: RAGパイプラインで取得されたコンテキストの関連性を評価するコンテキスト関連性メトリックのドキュメント。
+title: "リファレンス: コンテキスト関連性 | Evals | Mastra Docs"
+description: RAGパイプラインで取得されたコンテキストの関連性を評価する、コンテキスト関連性メトリクスのドキュメント。
 ---
 
 # ContextRelevancyMetric
 
-`ContextRelevancyMetric` クラスは、取得されたコンテキストが入力クエリにどれほど関連しているかを測定することによって、RAG (Retrieval-Augmented Generation) パイプラインのリトリーバーの品質を評価します。これは、まずコンテキストからステートメントを抽出し、それからそれらの入力に対する関連性を評価する、LLMベースの評価システムを使用します。
+`ContextRelevancyMetric` クラスは、RAG（Retrieval-Augmented Generation）パイプラインのリトリーバーが取得したコンテキストが入力クエリにどれだけ関連しているかを測定することで、その品質を評価します。このクラスは、まずコンテキストからステートメントを抽出し、それらが入力にどれだけ関連しているかを評価する、LLMベースの評価システムを使用します。
 
-## 基本的な使用法
+## 基本的な使い方
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -18,16 +18,16 @@ const model = openai("gpt-4o-mini");
 
 const metric = new ContextRelevancyMetric(model, {
   context: [
-    "すべてのデータは保存時および転送時に暗号化されます",
-    "二要素認証は必須です",
-    "プラットフォームは複数の言語をサポートしています",
-    "私たちのオフィスはサンフランシスコにあります",
+    "All data is encrypted at rest and in transit",
+    "Two-factor authentication is mandatory",
+    "The platform supports multiple languages",
+    "Our offices are located in San Francisco",
   ],
 });
 
 const result = await metric.measure(
-  "私たちの製品のセキュリティ機能は何ですか？",
-  "私たちの製品は暗号化を使用し、2FAを要求します。",
+  "What are our product's security features?",
+  "Our product uses encryption and requires 2FA.",
 );
 
 console.log(result.score); // Score from 0-1
@@ -41,7 +41,8 @@ console.log(result.info.reason); // Explanation of the relevancy assessment
     {
       name: "model",
       type: "LanguageModel",
-      description: "コンテキストの関連性を評価するために使用されるモデルの設定",
+      description:
+        "コンテキストの関連性を評価するために使用されるモデルの設定",
       isOptional: false,
     },
     {
@@ -60,7 +61,7 @@ console.log(result.info.reason); // Explanation of the relevancy assessment
     {
       name: "scale",
       type: "number",
-      description: "最大スコア値",
+      description: "スコアの最大値",
       isOptional: true,
       defaultValue: "1",
     },
@@ -68,13 +69,13 @@ console.log(result.info.reason); // Explanation of the relevancy assessment
       name: "context",
       type: "string[]",
       description:
-        "応答を生成するために使用される取得されたコンテキストドキュメントの配列",
+        "レスポンスを生成するために取得されたコンテキストドキュメントの配列",
       isOptional: false,
     },
   ]}
 />
 
-## measure() パラメーター
+## measure() のパラメーター
 
 <PropertiesTable
   content={[
@@ -87,7 +88,7 @@ console.log(result.info.reason); // Explanation of the relevancy assessment
     {
       name: "output",
       type: "string",
-      description: "評価するLLMの応答",
+      description: "評価対象となるLLMの応答",
       isOptional: false,
     },
   ]}
@@ -100,8 +101,7 @@ console.log(result.info.reason); // Explanation of the relevancy assessment
     {
       name: "score",
       type: "number",
-      description:
-        "コンテキストの関連性スコア（0からスケール、デフォルトは0-1）",
+      description: "コンテキスト関連性スコア（0からスケール、デフォルトは0-1）",
     },
     {
       name: "info",
@@ -125,29 +125,29 @@ console.log(result.info.reason); // Explanation of the relevancy assessment
 
 ## スコアリングの詳細
 
-このメトリックは、バイナリ関連性分類を通じて、取得されたコンテキストがクエリとどの程度一致しているかを評価します。
+このメトリックは、取得されたコンテキストがクエリにどれだけ適合しているかを、バイナリ関連性分類によって評価します。
 
 ### スコアリングプロセス
 
 1. コンテキストから文を抽出:
 
-   - コンテキストを意味のある単位に分解
-   - セマンティックな関係を保持
+   - コンテキストを意味のある単位に分割
+   - セマンティックな関係性を保持
 
 2. 文の関連性を評価:
-   - 各文をクエリに対して評価
+   - 各文をクエリと照合して評価
    - 関連する文をカウント
-   - 関連性の比率を計算
+   - 関連性の比率を算出
 
 最終スコア: `(relevant_statements / total_statements) * scale`
 
 ### スコアの解釈
 
-(0からスケールまで、デフォルトは0-1)
+(0 から scale、デフォルトは 0-1)
 
-- 1.0: 完全な関連性 - 取得されたすべてのコンテキストが関連している
+- 1.0: 完全な関連性 - 取得されたコンテキストがすべて関連している
 - 0.7-0.9: 高い関連性 - ほとんどのコンテキストが関連しており、無関係な部分は少ない
-- 0.4-0.6: 中程度の関連性 - 関連するコンテキストと無関係なコンテキストが混在
+- 0.4-0.6: 中程度の関連性 - 関連するコンテキストと無関係なコンテキストが混在している
 - 0.1-0.3: 低い関連性 - ほとんどが無関係なコンテキスト
 - 0.0: 関連性なし - 完全に無関係なコンテキスト
 
@@ -157,36 +157,37 @@ console.log(result.info.reason); // Explanation of the relevancy assessment
 import { openai } from "@ai-sdk/openai";
 import { ContextRelevancyMetric } from "@mastra/evals/llm";
 
-// モデルを評価用に設定
+// Configure the model for evaluation
 const model = openai("gpt-4o-mini");
 
 const metric = new ContextRelevancyMetric(model, {
-  scale: 100, // 0-1の代わりに0-100のスケールを使用
+  scale: 100, // Use 0-100 scale instead of 0-1
   context: [
-    "ベーシックプランは月額$10です",
-    "プロプランには月額$30の高度な機能が含まれています",
-    "エンタープライズプランはカスタム価格です",
-    "当社は2020年に設立されました",
-    "世界中にオフィスがあります",
+    "Basic plan costs $10/month",
+    "Pro plan includes advanced features at $30/month",
+    "Enterprise plan has custom pricing",
+    "Our company was founded in 2020",
+    "We have offices worldwide",
   ],
 });
 
 const result = await metric.measure(
-  "私たちの価格プランは何ですか？",
-  "ベーシック、プロ、エンタープライズプランを提供しています。",
+  "What are our pricing plans?",
+  "We offer Basic, Pro, and Enterprise plans.",
 );
 
-// 出力例:
+// Example output:
 // {
 //   score: 60,
 //   info: {
-//     reason: "5つのステートメントのうち3つが価格プランに関連しています。会社の設立やオフィスの場所に関するステートメントは価格の問い合わせには関連していません。"
+//     reason: "3 out of 5 statements are relevant to pricing plans. The statements about
+//           company founding and office locations are not relevant to the pricing query."
 //   }
 // }
 ```
 
 ## 関連
 
-- [コンテクストリコールメトリック](./contextual-recall)
-- [コンテクスト精度メトリック](./context-precision)
-- [コンテクスト位置メトリック](./context-position)
+- [コンテキストリコール指標](./contextual-recall)
+- [コンテキスト適合率指標](./context-precision)
+- [コンテキスト位置指標](./context-position)

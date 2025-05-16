@@ -1,29 +1,29 @@
 ---
-title: Mastraにおける音声対音声機能 | Mastra Docs
-description: Mastraにおける音声対音声機能の概要（リアルタイム対話とイベント駆動型アーキテクチャを含む）。
+title: Mastraにおける音声対音声機能 | Mastra ドキュメント
+description: Mastraの音声対音声機能の概要。リアルタイムの対話やイベント駆動型アーキテクチャについて説明します。
 ---
 
 # Mastraの音声対音声機能
 
 ## はじめに
 
-MastraのSpeech-to-Speech（STS）は、複数のプロバイダー間でリアルタイムの対話を行うための標準化されたインターフェースを提供します。  
-STSは、リアルタイムモデルからのイベントをリッスンすることで、継続的な双方向オーディオ通信を可能にします。個別のTTSとSTT操作とは異なり、STSは両方向で継続的に音声を処理するオープン接続を維持します。
+MastraのSpeech-to-Speech（STS）は、複数のプロバイダー間でリアルタイムなやり取りを可能にする標準化されたインターフェースを提供します。  
+STSは、Realtimeモデルからのイベントをリッスンすることで、継続的な双方向音声通信を実現します。個別のTTSやSTT操作とは異なり、STSは両方向の音声を継続的に処理するオープンな接続を維持します。
 
 ## 設定
 
 - **`apiKey`**: あなたのOpenAI APIキー。`OPENAI_API_KEY`環境変数にフォールバックします。
-- **`model`**: リアルタイム音声インタラクションに使用するモデルID（例：`gpt-4o-mini-realtime`）。
-- **`speaker`**: 音声合成のデフォルトボイスID。音声出力に使用するボイスを指定できます。
+- **`model`**: リアルタイム音声対話に使用するモデルID（例：`gpt-4o-mini-realtime`）。
+- **`speaker`**: 音声合成のデフォルトボイスID。音声出力に使用する声を指定できます。
 
 ```typescript
 const voice = new OpenAIRealtimeVoice({
   apiKey: "your-openai-api-key",
   model: "gpt-4o-mini-realtime",
-  speaker: "alloy", // デフォルトボイス
+  speaker: "alloy", // Default voice
 });
 
-// デフォルト設定を使用する場合、設定は以下のように簡略化できます：
+// If using default settings the configuration can be simplified to:
 const voice = new OpenAIRealtimeVoice();
 ```
 

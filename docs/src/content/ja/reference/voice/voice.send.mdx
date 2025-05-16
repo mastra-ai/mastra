@@ -1,11 +1,11 @@
 ---
-title: "リファレンス: voice.send() | Voice Providers | Mastra Docs"
-description: "リアルタイム音声プロバイダーで利用可能なsend()メソッドのドキュメントで、音声データをストリーミングして継続的に処理します。"
+title: "リファレンス: voice.send() | 音声プロバイダー | Mastra ドキュメント"
+description: "リアルタイム音声プロバイダーで利用可能なsend()メソッドのドキュメント。連続処理のための音声データをストリーミングします。"
 ---
 
 # voice.send()
 
-`send()` メソッドは、音声プロバイダーにリアルタイムで音声データをストリーミングし、継続的に処理します。このメソッドは、リアルタイムの音声対音声の会話に不可欠で、マイク入力を直接AIサービスに送信することができます。
+`send()` メソッドは、音声データをリアルタイムで音声プロバイダーにストリーミングし、継続的な処理を行います。このメソッドは、リアルタイムの音声対音声会話に不可欠であり、マイク入力を直接AIサービスに送信することができます。
 
 ## 使用例
 
@@ -15,12 +15,12 @@ import Speaker from "@mastra/node-speaker";
 import { getMicrophoneStream } from "@mastra/node-audio";
 
 const speaker = new Speaker({
-  sampleRate: 24100, // Audio sample rate in Hz - standard for high-quality audio on MacBook Pro
-  channels: 1, // Mono audio output (as opposed to stereo which would be 2)
-  bitDepth: 16, // Bit depth for audio quality - CD quality standard (16-bit resolution)
+  sampleRate: 24100, // オーディオのサンプルレート（Hz）- MacBook Proの高品質オーディオの標準
+  channels: 1, // モノラルオーディオ出力（ステレオの場合は2）
+  bitDepth: 16, // オーディオ品質のビット深度 - CD品質の標準（16ビット解像度）
 });
 
-// Initialize a real-time voice provider
+// リアルタイム音声プロバイダーを初期化
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
     model: "gpt-4o-mini-realtime",
@@ -28,10 +28,10 @@ const voice = new OpenAIRealtimeVoice({
   },
 });
 
-// Connect to the real-time service
+// リアルタイムサービスに接続
 await voice.connect();
 
-// Set up event listeners for responses
+// レスポンスのイベントリスナーを設定
 voice.on("writing", ({ text, role }) => {
   console.log(`${role}: ${text}`);
 });
@@ -40,14 +40,14 @@ voice.on("speaker", (stream) => {
   stream.pipe(speaker);
 });
 
-// Get microphone stream (implementation depends on your environment)
+// マイクストリームを取得（実装は環境によって異なります）
 const microphoneStream = getMicrophoneStream();
 
-// Send audio data to the voice provider
+// 音声データを音声プロバイダーに送信
 await voice.send(microphoneStream);
 
-// You can also send audio data as Int16Array
-const audioBuffer = getAudioBuffer(); // Assume this returns Int16Array
+// Int16Arrayとして音声データを送信することもできます
+const audioBuffer = getAudioBuffer(); // これはInt16Arrayを返すと仮定
 await voice.send(audioBuffer);
 ```
 
@@ -72,10 +72,10 @@ await voice.send(audioBuffer);
 
 ## 注意事項
 
-- このメソッドは、音声から音声への機能をサポートするリアルタイム音声プロバイダーでのみ実装されています
+- このメソッドは音声対音声機能をサポートするリアルタイム音声プロバイダーでのみ実装されています
 - この機能をサポートしていない音声プロバイダーで呼び出された場合、警告をログに記録して即座に解決します
-- WebSocket接続を確立するには、`send()`を使用する前に`connect()`を呼び出す必要があります
+- WebSocket接続を確立するために、`send()`を使用する前に`connect()`を呼び出す必要があります
 - 音声フォーマットの要件は、特定の音声プロバイダーによって異なります
-- 継続的な会話では、通常、ユーザーの音声を送信するために`send()`を呼び出し、AIの応答をトリガーするために`answer()`を呼び出します
+- 継続的な会話では、通常ユーザーの音声を送信するために`send()`を呼び出し、その後AIの応答をトリガーするために`answer()`を呼び出します
 - プロバイダーは通常、音声を処理する際に文字起こしされたテキストを含む「writing」イベントを発行します
 - AIが応答すると、プロバイダーは音声応答を含む「speaking」イベントを発行します

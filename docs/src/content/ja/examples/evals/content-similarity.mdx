@@ -1,34 +1,34 @@
 ---
-title: "例：コンテンツ類似性 | Evals | Mastra Docs"
-description: コンテンツ間のテキスト類似性を評価するためのコンテンツ類似性メトリックの使用例。
+title: "例: コンテンツ類似度 | Evals | Mastra Docs"
+description: コンテンツ類似度メトリクスを使用して、コンテンツ間のテキスト類似度を評価する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
-# コンテンツの類似性
+# コンテンツ類似度
 
-この例では、Mastraのコンテンツ類似性メトリックを使用して、2つのコンテンツ間のテキスト類似性を評価する方法を示します。
+この例では、Mastra のコンテンツ類似度メトリクスを使用して、2つのコンテンツ間のテキスト類似度を評価する方法を示します。
 
 ## 概要
 
-この例では、以下の方法を示します：
+この例では、以下の方法を示します。
 
-1. Content Similarity メトリックを設定する
-2. 異なるテキストのバリエーションを比較する
-3. 類似性スコアを分析する
-4. 異なる類似性のシナリオを処理する
+1. Content Similarityメトリクスの設定方法
+2. 異なるテキストバリエーションの比較方法
+3. 類似度スコアの分析方法
+4. 様々な類似度シナリオへの対応方法
 
 ## セットアップ
 
 ### 依存関係
 
-必要な依存関係をインポートします:
+必要な依存関係をインポートします：
 
 ```typescript copy showLineNumbers filename="src/index.ts"
 import { ContentSimilarityMetric } from "@mastra/evals/nlp";
 ```
 
-## メトリック設定
+## メトリックの設定
 
 Content Similarityメトリックを設定します：
 
@@ -38,9 +38,9 @@ const metric = new ContentSimilarityMetric();
 
 ## 使用例
 
-### 高い類似性の例
+### 高い類似度の例
 
-ほぼ同一のテキストを比較します：
+ほとんど同じテキストを比較します：
 
 ```typescript copy showLineNumbers{7} filename="src/index.ts"
 const text1 = "The quick brown fox jumps over the lazy dog.";
@@ -61,9 +61,9 @@ console.log("Metric Result:", {
 // Metric Result: { score: 0.7761194029850746, info: { similarity: 0.7761194029850746 } }
 ```
 
-### 中程度の類似性の例
+### 中程度の類似度の例
 
-意味は似ているが異なる表現のテキストを比較します：
+意味は似ているが表現が異なるテキストを比較します：
 
 ```typescript copy showLineNumbers{23} filename="src/index.ts"
 const text2 = "A brown fox quickly leaps across a sleeping dog.";
@@ -87,7 +87,7 @@ console.log("Metric Result:", {
 // }
 ```
 
-### 低い類似性の例
+### 低い類似度の例
 
 明らかに異なるテキストを比較します：
 
@@ -117,12 +117,12 @@ console.log("Metric Result:", {
 
 この指標は以下を提供します：
 
-1. 0から1の間の類似度スコア：
-   - 1.0: 完全一致 - テキストが同一
-   - 0.7-0.9: 高い類似性 - 言葉のわずかな違い
-   - 0.4-0.6: 中程度の類似性 - 同じトピックだが異なる表現
-   - 0.1-0.3: 低い類似性 - いくつかの共通の単語があるが意味が異なる
-   - 0.0: 類似性なし - 完全に異なるテキスト
+1. 0から1までの類似度スコア：
+   - 1.0: 完全一致 - テキストが全く同じ
+   - 0.7-0.9: 高い類似度 - 言い回しにわずかな違い
+   - 0.4-0.6: 中程度の類似度 - 同じトピックだが表現が異なる
+   - 0.1-0.3: 低い類似度 - 一部の単語は共通するが意味が異なる
+   - 0.0: 類似性なし - 全く異なるテキスト
 
 <br />
 <br />

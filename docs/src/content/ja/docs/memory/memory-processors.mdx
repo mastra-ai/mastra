@@ -1,16 +1,16 @@
 # メモリプロセッサ
 
-メモリプロセッサを使用すると、メモリから取得されたメッセージのリストを、エージェントのコンテキストウィンドウに追加されLLMに送信される*前に*変更することができます。これはコンテキストサイズの管理、コンテンツのフィルタリング、パフォーマンスの最適化に役立ちます。
+メモリプロセッサを使用すると、メモリから取得されたメッセージのリストを、エージェントのコンテキストウィンドウに追加されLLMに送信される_前に_変更することができます。これはコンテキストサイズの管理、コンテンツのフィルタリング、パフォーマンスの最適化に役立ちます。
 
 プロセッサは、メモリ設定（例：`lastMessages`、`semanticRecall`）に基づいて取得されたメッセージに対して動作します。新しく入ってくるユーザーメッセージには**影響しません**。
 
-## 組み込みプロセッサー
+## 組み込みプロセッサ
 
-Mastraには組み込みプロセッサーが提供されています：
+Mastra には組み込みプロセッサが用意されています。
 
 ### `TokenLimiter`
 
-このプロセッサーは、LLMのコンテキストウィンドウ制限を超えることによって引き起こされるエラーを防ぐために使用されます。取得されたメモリメッセージのトークン数をカウントし、合計数が指定された`limit`を下回るまで最も古いメッセージを削除します。
+このプロセッサは、LLM のコンテキストウィンドウの上限を超えることによるエラーを防ぐために使用されます。取得したメモリメッセージ内のトークン数をカウントし、合計が指定された `limit` 未満になるまで最も古いメッセージを削除します。
 
 ```typescript copy showLineNumbers {9-12}
 import { Memory } from "@mastra/memory";
@@ -29,7 +29,7 @@ const agent = new Agent({
 });
 ```
 
-`TokenLimiter`はデフォルトで`o200k_base`エンコーディングを使用します（GPT-4oに適しています）。異なるモデルに必要な場合は、他のエンコーディングを指定することができます：
+`TokenLimiter` はデフォルトで `o200k_base` エンコーディング（GPT-4o に適しています）を使用します。必要に応じて、他のモデル向けに別のエンコーディングを指定することもできます。
 
 ```typescript copy showLineNumbers {6-9}
 // Import the encoding you need (e.g., for older OpenAI models)
@@ -45,11 +45,11 @@ const memoryForOlderModel = new Memory({
 });
 ```
 
-エンコーディングについての詳細は、[OpenAI cookbook](https://cookbook.openai.com/examples/how_to_count_tokens_with_tiktoken#encodings)または[`js-tiktoken` リポジトリ](https://github.com/dqbd/tiktoken)を参照してください。
+エンコーディングの詳細については、[OpenAI cookbook](https://cookbook.openai.com/examples/how_to_count_tokens_with_tiktoken#encodings) や [`js-tiktoken` リポジトリ](https://github.com/dqbd/tiktoken) を参照してください。
 
 ### `ToolCallFilter`
 
-このプロセッサーは、LLMに送信されるメモリメッセージからツールコールを削除します。コンテキストから潜在的に冗長なツールの対話を除外することでトークンを節約します。これは、将来の対話のために詳細が必要ない場合に役立ちます。また、エージェントが常に特定のツールを再度呼び出し、メモリ内の以前のツール結果に依存しないようにしたい場合にも役立ちます。
+このプロセッサは、LLM に送信されるメモリメッセージからツールコールを削除します。これにより、コンテキストから冗長になりがちなツールのやり取りを除外してトークンを節約できます。今後のやり取りで詳細が不要な場合に便利です。また、常に特定のツールを再度呼び出したい場合や、メモリ内の以前のツール結果に依存させたくない場合にも有用です。
 
 ```typescript copy showLineNumbers {5-14}
 import { Memory } from "@mastra/memory";
@@ -71,9 +71,9 @@ const memoryFilteringTools = new Memory({
 
 ## 複数のプロセッサの適用
 
-複数のプロセッサをチェーンすることができます。これらは`processors`配列に表示される順序で実行されます。一つのプロセッサの出力が次のプロセッサの入力となります。
+複数のプロセッサを連結して使用することができます。これらは `processors` 配列に記載された順番で実行されます。あるプロセッサの出力が、次のプロセッサの入力となります。
 
-**順序が重要です！** 一般的なベストプラクティスとして、`TokenLimiter`をチェーンの**最後**に配置することをお勧めします。これにより、他のフィルタリングが行われた後の最終的なメッセージセットに対して動作し、最も正確なトークン制限の適用が可能になります。
+**順序は重要です！** 一般的には、`TokenLimiter` をチェーンの**最後**に配置するのがベストプラクティスです。これにより、他のフィルタリングが行われた後の最終的なメッセージセットに対して動作し、最も正確なトークン制限の適用が可能になります。
 
 ```typescript copy showLineNumbers {7-14}
 import { Memory } from "@mastra/memory";
@@ -95,7 +95,7 @@ const memoryWithMultipleProcessors = new Memory({
 
 ## カスタムプロセッサの作成
 
-基本の `MemoryProcessor` クラスを拡張することで、カスタムロジックを作成できます。
+`MemoryProcessor` 基底クラスを拡張することで、カスタムロジックを作成できます。
 
 ```typescript copy showLineNumbers {4-19,23-26}
 import { Memory, CoreMessage } from "@mastra/memory";
@@ -127,4 +127,4 @@ const memoryWithCustomFilter = new Memory({
 });
 ```
 
-カスタムプロセッサを作成する際は、入力の `messages` 配列やそのオブジェクトを直接変更しないようにしてください。
+カスタムプロセッサを作成する際は、入力として渡される `messages` 配列やそのオブジェクトを直接変更しないようにしてください。

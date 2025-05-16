@@ -1,13 +1,13 @@
 ---
 title: "リファレンス: ステップ | ワークフローの構築 | Mastra ドキュメント"
-description: ワークフロー内の個々の作業単位を定義するStepクラスのドキュメント。
+description: ワークフロー内の個々の作業単位を定義するステップクラスのドキュメント。
 ---
 
-# ステップ
+# Step
 
-Stepクラスは、ワークフロー内の個々の作業単位を定義し、実行ロジック、データ検証、および入出力処理をカプセル化します。
+Stepクラスは、ワークフロー内の個々の作業単位を定義し、実行ロジック、データ検証、入出力処理をカプセル化します。
 
-## 使用法
+## 使用方法
 
 ```typescript
 const processOrder = new Step({
@@ -29,7 +29,7 @@ const processOrder = new Step({
 });
 ```
 
-## コンストラクターパラメータ
+## コンストラクタパラメータ
 
 <PropertiesTable
   content={[
@@ -73,7 +73,7 @@ const processOrder = new Step({
     {
       name: "context",
       type: "StepContext",
-      description: "ワークフローのコンテキストとステップの結果へのアクセス",
+      description: "ワークフローコンテキストとステップ結果へのアクセス",
     },
     {
       name: "runId",
@@ -83,7 +83,7 @@ const processOrder = new Step({
     {
       name: "suspend",
       type: "() => Promise<void>",
-      description: "ステップの実行を一時停止する関数",
+      description: "ステップ実行を一時停止するための関数",
     },
     {
       name: "mastra",

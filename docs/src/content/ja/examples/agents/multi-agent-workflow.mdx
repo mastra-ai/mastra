@@ -1,20 +1,20 @@
 ---
-title: "例：マルチエージェントワークフロー | エージェント | Mastra ドキュメント"
-description: Mastraでエージェントワークフローを作成する例で、作業成果物が複数のエージェント間で受け渡しされます。
+title: "例: マルチエージェントワークフロー | Agents | Mastra ドキュメント"
+description: Mastra におけるエージェント間で成果物を受け渡すエージェントワークフローの例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
 # マルチエージェントワークフロー
 
-この例では、ワーカーエージェントとスーパーバイザーエージェントを使用して、複数のエージェント間で作業成果物を渡すエージェントワークフローを作成する方法を示します。
+この例では、ワーカーエージェントとスーパーバイザーエージェントの間で作業成果物を受け渡しながら、エージェントベースのワークフローを作成する方法を示します。
 
-この例では、2つのエージェントを順番に呼び出すシーケンシャルワークフローを作成します：
+この例では、2つのエージェントを順番に呼び出すシーケンシャルなワークフローを作成します。
 
-1. 初期のブログ投稿を書くコピーライターエージェント
-2. コンテンツを洗練するエディターエージェント
+1. 最初のブログ記事を書くCopywriterエージェント
+2. コンテンツを洗練させるEditorエージェント
 
-まず、必要な依存関係をインポートします：
+まず、必要な依存関係をインポートします。
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -24,25 +24,24 @@ import { Step, Workflow } from "@mastra/core/workflows";
 import { z } from "zod";
 ```
 
-初期のブログ投稿を生成するコピーライターエージェントを作成します：
+最初のブログ記事を生成するCopywriterエージェントを作成します。
 
 ```typescript
 const copywriterAgent = new Agent({
   name: "Copywriter",
-  instructions:
-    "あなたはブログ投稿のコピーを書くコピーライターエージェントです。",
+  instructions: "You are a copywriter agent that writes blog post copy.",
   model: anthropic("claude-3-5-sonnet-20241022"),
 });
 ```
 
-エージェントを実行し、応答を処理するコピーライターステップを定義します：
+エージェントを実行し、レスポンスを処理するCopywriterステップを定義します。
 
 ```typescript
 const copywriterStep = new Step({
   id: "copywriterStep",
   execute: async ({ context }) => {
     if (!context?.triggerData?.topic) {
-      throw new Error("トリガーデータにトピックが見つかりません");
+      throw new Error("Topic not found in trigger data");
     }
     const result = await copywriterAgent.generate(
       `Create a blog post about ${context.triggerData.topic}`,
@@ -55,18 +54,17 @@ const copywriterStep = new Step({
 });
 ```
 
-コピーライターのコンテンツを洗練するためにエディターエージェントを設定します：
+Copywriterのコンテンツを洗練させるEditorエージェントを設定します。
 
 ```typescript
 const editorAgent = new Agent({
   name: "Editor",
-  instructions:
-    "あなたはブログ投稿のコピーを編集するエディターエージェントです。",
+  instructions: "You are an editor agent that edits blog post copy.",
   model: openai("gpt-4o-mini"),
 });
 ```
 
-コピーライターの出力を処理するエディターステップを作成します：
+Copywriterの出力を処理するEditorステップを作成します。
 
 ```typescript
 const editorStep = new Step({
@@ -87,7 +85,7 @@ const editorStep = new Step({
 });
 ```
 
-ワークフローを設定し、ステップを実行します：
+ワークフローを構成し、ステップを実行します。
 
 ```typescript
 const myWorkflow = new Workflow({
@@ -97,7 +95,7 @@ const myWorkflow = new Workflow({
   }),
 });
 
-// ステップを順番に実行します。
+// Run steps sequentially.
 myWorkflow.step(copywriterStep).then(editorStep).commit();
 
 const { runId, start } = myWorkflow.createRun();

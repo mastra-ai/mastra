@@ -1,13 +1,13 @@
 ---
-title: "リファレンス: プロンプトアライメント | メトリクス | 評価 | Mastra ドキュメント"
-description: Mastraのプロンプトアライメントメトリクスに関するドキュメント。LLMの出力が与えられたプロンプト指示にどれだけ忠実に従っているかを評価します。
+title: "リファレンス: プロンプトアラインメント | メトリクス | Evals | Mastra ドキュメント"
+description: Mastra におけるプロンプトアラインメントメトリクスのドキュメント。LLM の出力が与えられたプロンプト指示にどれだけ従っているかを評価します。
 ---
 
 # PromptAlignmentMetric
 
-`PromptAlignmentMetric`クラスは、LLMの出力が与えられたプロンプト指示のセットにどれだけ厳密に従っているかを評価します。これは、各指示が正確に従われているかを検証するジャッジベースのシステムを使用し、逸脱がある場合には詳細な理由を提供します。
+`PromptAlignmentMetric` クラスは、LLM の出力が与えられたプロンプト指示にどれだけ厳密に従っているかを評価します。各指示が正確に守られているかを判定するジャッジベースのシステムを使用し、逸脱があった場合には詳細な理由を提供します。
 
-## 基本的な使用方法
+## 基本的な使い方
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -36,20 +36,21 @@ console.log(result.score); // Alignment score from 0-1
 console.log(result.info.reason); // Explanation of the score
 ```
 
-## コンストラクタパラメータ
+## コンストラクタのパラメータ
 
 <PropertiesTable
   content={[
     {
       name: "model",
       type: "LanguageModel",
-      description: "指示の整合性を評価するために使用されるモデルの設定",
+      description:
+        "命令整合性を評価するために使用されるモデルの設定",
       isOptional: false,
     },
     {
       name: "options",
       type: "PromptAlignmentOptions",
-      description: "メトリックの設定オプション",
+      description: "メトリクスの設定オプション",
       isOptional: false,
     },
   ]}
@@ -62,7 +63,7 @@ console.log(result.info.reason); // Explanation of the score
     {
       name: "instructions",
       type: "string[]",
-      description: "出力が従うべき指示の配列",
+      description: "出力が従うべき命令の配列",
       isOptional: false,
     },
     {
@@ -75,7 +76,7 @@ console.log(result.info.reason); // Explanation of the score
   ]}
 />
 
-## measure() パラメータ
+## measure() のパラメーター
 
 <PropertiesTable
   content={[
@@ -88,7 +89,7 @@ console.log(result.info.reason); // Explanation of the score
     {
       name: "output",
       type: "string",
-      description: "評価対象のLLMの応答",
+      description: "評価対象となるLLMの応答",
       isOptional: false,
     },
   ]}
@@ -101,13 +102,13 @@ console.log(result.info.reason); // Explanation of the score
     {
       name: "score",
       type: "number",
-      description:
-        "整合性スコア（0から指定されたスケールまで、デフォルトは0-1）",
+      description: "アラインメントスコア（0からスケールまで、デフォルトは0-1）",
     },
     {
       name: "info",
       type: "object",
-      description: "指示の遵守に関する詳細なメトリクスを含むオブジェクト",
+      description:
+        "指示遵守に関する詳細なメトリクスを含むオブジェクト",
       properties: [
         {
           type: "string",
@@ -115,7 +116,8 @@ console.log(result.info.reason); // Explanation of the score
             {
               name: "reason",
               type: "string",
-              description: "スコアと指示の遵守に関する詳細な説明",
+              description:
+                "スコアおよび指示遵守の詳細な説明",
             },
           ],
         },
@@ -126,65 +128,65 @@ console.log(result.info.reason); // Explanation of the score
 
 ## スコアリングの詳細
 
-このメトリックは以下を通じて指示の整合性を評価します：
+この指標は、以下の観点からインストラクションの整合性を評価します。
 
-- 各指示の適用可能性の評価
-- 適用可能な指示に対する厳格な遵守評価
-- すべての判定に対する詳細な根拠
-- 適用可能な指示に基づく比例スコアリング
+- 各インストラクションの適用可能性の評価
+- 適用可能なインストラクションに対する厳格な遵守評価
+- すべての判定に対する詳細な理由付け
+- 適用可能なインストラクションに基づく比例配点
 
-### 指示の判定
+### インストラクションの判定
 
-各指示は以下の3つの判定のいずれかを受けます：
+各インストラクションには、次のいずれかの判定が与えられます。
 
-- "yes"：指示が適用可能であり、完全に従っている
-- "no"：指示が適用可能だが、従っていないか部分的にしか従っていない
-- "n/a"：指示が与えられたコンテキストに適用できない
+- "yes"：インストラクションが適用可能で、完全に遵守されている
+- "no"：インストラクションが適用可能だが、遵守されていない、または部分的にしか遵守されていない
+- "n/a"：インストラクションが該当する状況に適用できない
 
 ### スコアリングプロセス
 
-1. 指示の適用可能性を評価：
+1. インストラクションの適用可能性を評価：
 
-   - 各指示がコンテキストに適用されるかどうかを判断
-   - 関連性のない指示を "n/a" としてマーク
+   - 各インストラクションが状況に適用できるかを判断
+   - 関連性のないインストラクションは "n/a" としてマーク
    - ドメイン固有の要件を考慮
 
-2. 適用可能な指示の遵守を評価：
+2. 適用可能なインストラクションの遵守状況を評価：
 
-   - 各適用可能な指示を独立して評価
+   - 各適用可能なインストラクションを個別に評価
    - "yes" の判定には完全な遵守が必要
-   - すべての判定に対する具体的な理由を文書化
+   - すべての判定に対して具体的な理由を記録
 
-3. 整合性スコアを計算：
-   - 従った指示（"yes" の判定）をカウント
-   - 適用可能な指示の総数（"n/a" を除く）で割る
+3. 整合性スコアを算出：
+   - 遵守されたインストラクション（"yes" 判定）の数をカウント
+   - 適用可能なインストラクションの総数（"n/a" を除く）で割る
    - 設定された範囲にスケーリング
 
 最終スコア：`(followed_instructions / applicable_instructions) * scale`
 
 ### 重要な考慮事項
 
-- 空の出力：
+- 出力が空の場合：
   - すべての書式指示は適用可能と見なされる
-  - 要件を満たすことができないため "no" とマークされる
-- ドメイン固有の指示：
-  - 照会されたドメインに関するものであれば常に適用可能
-  - 従っていない場合は "n/a" ではなく "no" とマークされる
+  - 要件を満たせないため "no" としてマーク
+- ドメイン固有のインストラクション：
+  - 問い合わせたドメインに関する場合は常に適用可能
+  - 遵守されていない場合は "no"、"n/a" にはしない
 - "n/a" の判定：
-  - 完全に異なるドメインに対してのみ使用
-  - 最終スコア計算に影響しない
+  - 完全に異なるドメインの場合のみ使用
+  - 最終スコアの計算には影響しない
 
 ### スコアの解釈
 
-（0からスケールまで、デフォルトは0-1）
+（0 から scale、デフォルトは 0-1）
 
-- 1.0：適用可能なすべての指示に完璧に従っている
-- 0.7-0.9：適用可能な指示のほとんどに従っている
-- 0.4-0.6：適用可能な指示への遵守が混在している
-- 0.1-0.3：適用可能な指示への遵守が限定的
-- 0.0：適用可能な指示に全く従っていない
+- 1.0：すべての適用可能なインストラクションが完全に遵守されている
+- 0.7-0.9：ほとんどの適用可能なインストラクションが遵守されている
+- 0.4-0.6：適用可能なインストラクションの遵守状況が混在している
+- 0.1-0.3：適用可能なインストラクションの遵守が限定的
+- 0.0：適用可能なインストラクションがまったく遵守されていない
 
-## 分析を含む例
+## 例と分析
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -236,7 +238,7 @@ const result2 = await metric.measure(
 // }
 ```
 
-## 関連項目
+## 関連
 
-- [回答関連性メトリック](./answer-relevancy)
-- [キーワードカバレッジメトリック](./keyword-coverage)
+- [Answer Relevancy Metric](./answer-relevancy)
+- [Keyword Coverage Metric](./keyword-coverage)

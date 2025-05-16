@@ -1,12 +1,12 @@
 ---
-title: "リファレンス: Chroma Vector Store | ベクターデータベース | RAG | Mastra ドキュメント"
-description: MastraのChromaVectorクラスのドキュメントで、ChromaDBを使用したベクター検索を提供します。
+title: "リファレンス: Chroma ベクトルストア | ベクトルデータベース | RAG | Mastra ドキュメント"
+description: Mastraにおける、ChromaDBを使用したベクトル検索を提供するChromaVectorクラスのドキュメント。
 ---
 
-# Chroma Vector Store
+# Chroma ベクトルストア
 
-ChromaVector クラスは、オープンソースの埋め込みデータベースである [ChromaDB](https://www.trychroma.com/) を使用したベクター検索を提供します。
-メタデータフィルタリングとハイブリッド検索機能を備えた効率的なベクター検索を提供します。
+ChromaVectorクラスは、[ChromaDB](https://www.trychroma.com/)を使用したベクトル検索を提供します。ChromaDBはオープンソースの埋め込みデータベースです。
+メタデータフィルタリングとハイブリッド検索機能を備えた効率的なベクトル検索を提供します。
 
 ## コンストラクタオプション
 
@@ -57,14 +57,14 @@ ChromaVector クラスは、オープンソースの埋め込みデータベー�
     {
       name: "dimension",
       type: "number",
-      description: "ベクトルの次元（埋め込みモデルに一致する必要があります）",
+      description: "ベクトルの次元数（埋め込みモデルと一致する必要があります）",
     },
     {
       name: "metric",
       type: "'cosine' | 'euclidean' | 'dotproduct'",
       isOptional: true,
       defaultValue: "cosine",
-      description: "類似検索のための距離メトリック",
+      description: "類似性検索の距離メトリック",
     },
   ]}
 />
@@ -93,14 +93,14 @@ ChromaVector クラスは、オープンソースの埋め込みデータベー�
       name: "ids",
       type: "string[]",
       isOptional: true,
-      description: "オプションのベクトルID（提供されない場合は自動生成）",
+      description: "オプションのベクトルID（提供されない場合は自動生成されます）",
     },
     {
       name: "documents",
       type: "string[]",
       isOptional: true,
       description:
-        "Chroma固有: ベクトルに関連付けられた元のテキストドキュメント",
+        "Chroma固有：ベクトルに関連付けられた元のテキストドキュメント",
     },
   ]}
 />
@@ -117,7 +117,7 @@ ChromaVector クラスは、オープンソースの埋め込みデータベー�
     {
       name: "queryVector",
       type: "number[]",
-      description: "類似ベクトルを見つけるためのクエリベクトル",
+      description: "類似ベクトルを検索するためのクエリベクトル",
     },
     {
       name: "topK",
@@ -143,14 +143,14 @@ ChromaVector クラスは、オープンソースの埋め込みデータベー�
       name: "documentFilter",
       type: "Record<string, any>",
       isOptional: true,
-      description: "Chroma固有: ドキュメント内容に適用するフィルター",
+      description: "Chroma固有：ドキュメントコンテンツに適用するフィルター",
     },
   ]}
 />
 
 ### listIndexes()
 
-文字列としてインデックス名の配列を返します。
+インデックス名の文字列配列を返します。
 
 ### describeIndex()
 
@@ -164,7 +164,7 @@ ChromaVector クラスは、オープンソースの埋め込みデータベー�
   ]}
 />
 
-返される内容:
+戻り値：
 
 ```typescript copy
 interface IndexStats {
@@ -208,7 +208,7 @@ interface IndexStats {
   ]}
 />
 
-`update` オブジェクトには以下を含めることができます:
+`update`オブジェクトには以下を含めることができます：
 
 <PropertiesTable
   content={[
@@ -216,7 +216,7 @@ interface IndexStats {
       name: "vector",
       type: "number[]",
       isOptional: true,
-      description: "既存のものを置き換える新しいベクトル",
+      description: "既存のベクトルを置き換える新しいベクトル",
     },
     {
       name: "metadata",
@@ -244,9 +244,9 @@ interface IndexStats {
   ]}
 />
 
-## 応答タイプ
+## レスポンスタイプ
 
-クエリ結果は次の形式で返されます:
+クエリ結果は以下の形式で返されます：
 
 ```typescript copy
 interface QueryResult {
@@ -258,9 +258,9 @@ interface QueryResult {
 }
 ```
 
-## エラーハンドリング
+## エラー処理
 
-ストアはキャッチ可能な型付きエラーをスローします：
+ストアは捕捉可能な型付きエラーをスローします：
 
 ```typescript copy
 try {
@@ -271,7 +271,7 @@ try {
 } catch (error) {
   if (error instanceof VectorStoreError) {
     console.log(error.code); // 'connection_failed' | 'invalid_dimension' | etc
-    console.log(error.details); // 追加のエラーコンテキスト
+    console.log(error.details); // Additional error context
   }
 }
 ```

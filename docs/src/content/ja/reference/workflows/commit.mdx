@@ -1,13 +1,13 @@
 ---
 title: "リファレンス: Workflow.commit() | ワークフローの実行 | Mastra ドキュメント"
-description: ワークフロー内の `.commit()` メソッドに関するドキュメントで、現在のステップ構成でワークフローマシンを再初期化します。
+description: ワークフローの `.commit()` メソッドに関するドキュメント。現在のステップ構成でワークフローマシンを再初期化します。
 ---
 
 # Workflow.commit()
 
-`.commit()` メソッドは、現在のステップ構成でワークフローの状態マシンを再初期化します。
+`.commit()` メソッドは、現在のステップ構成でワークフローのステートマシンを再初期化します。
 
-## 使用法
+## 使用方法
 
 ```typescript
 workflow.step(stepA).then(stepB).commit();
@@ -25,9 +25,9 @@ workflow.step(stepA).then(stepB).commit();
   ]}
 />
 
-## 関連項目
+## 関連
 
 - [分岐パスの例](../../examples/workflows/branching-paths.mdx)
-- [Workflowクラスリファレンス](./workflow.mdx)
-- [Stepリファレンス](./step-class.mdx)
+- [ワークフロークラスリファレンス](./workflow.mdx)
+- [ステップリファレンス](./step-class.mdx)
 - [制御フローガイド](../../docs/workflows/control-flow.mdx)

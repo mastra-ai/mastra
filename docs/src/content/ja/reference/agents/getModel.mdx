@@ -13,7 +13,7 @@ description: "エージェントを動かす言語モデルを取得するMastra
 getModel({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}): MastraLanguageModel | Promise<MastraLanguageModel>
 ```
 
-## パラメータ
+## パラメーター
 
 <br />
 <PropertiesTable
@@ -23,7 +23,7 @@ getModel({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeCo
       type: "RuntimeContext",
       isOptional: true,
       description:
-        "依存性注入とコンテキスト情報のためのランタイムコンテキスト。",
+        "依存性注入やコンテキスト情報のためのランタイムコンテキスト。",
     },
   ]}
 />
@@ -34,35 +34,35 @@ getModel({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeCo
 
 ## 説明
 
-`getModel()`メソッドは、エージェントを動かす言語モデルにアクセスするために使用されます。このメソッドは、直接提供されるか関数から返されるかにかかわらず、モデルを解決します。
+`getModel()` メソッドは、エージェントを動かす言語モデルにアクセスするために使用されます。このメソッドは、直接指定されたモデル、または関数から返されるモデルを解決します。
 
-言語モデルはエージェントの重要なコンポーネントであり、以下を決定します：
+言語モデルはエージェントの重要な構成要素であり、以下を決定します：
 
-- エージェントの応答の品質と能力
-- 利用可能な機能（関数呼び出し、構造化された出力など）
+- エージェントの応答の質と能力
+- 利用可能な機能（関数呼び出し、構造化出力など）
 - エージェントのコストとパフォーマンス特性
 
 ## 例
 
-### 基本的な使用法
+### 基本的な使い方
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 
-// 静的モデルでエージェントを作成
+// Create an agent with a static model
 const agent = new Agent({
   name: "assistant",
-  instructions: "あなたは役立つアシスタントです。",
+  instructions: "You are a helpful assistant.",
   model: openai("gpt-4o"),
 });
 
-// モデルを取得
+// Get the model
 const model = await agent.getModel();
 console.log(model.id); // "gpt-4o"
 ```
 
-### RuntimeContextでの使用
+### RuntimeContextとの併用
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
@@ -70,12 +70,12 @@ import { RuntimeContext } from "@mastra/core/runtime-context";
 import { openai } from "@ai-sdk/openai";
 import { anthropic } from "@ai-sdk/anthropic";
 
-// 動的モデル選択でエージェントを作成
+// Create an agent with dynamic model selection
 const agent = new Agent({
   name: "dynamic-model-assistant",
-  instructions: "あなたは役立つアシスタントです。",
+  instructions: "You are a helpful assistant.",
   model: ({ runtimeContext }) => {
-    // ランタイムコンテキストに基づく動的モデル選択
+    // Dynamic model selection based on runtime context
     const preferredProvider = runtimeContext.get("preferredProvider");
     const highQuality = runtimeContext.get("highQuality") === true;
 
@@ -85,17 +85,17 @@ const agent = new Agent({
         : anthropic("claude-3-sonnet");
     }
 
-    // デフォルトはOpenAI
+    // Default to OpenAI
     return highQuality ? openai("gpt-4o") : openai("gpt-3.5-turbo");
   },
 });
 
-// 設定を含むランタイムコンテキストを作成
+// Create a runtime context with preferences
 const context = new RuntimeContext();
 context.set("preferredProvider", "anthropic");
 context.set("highQuality", true);
 
-// ランタイムコンテキストを使用してモデルを取得
+// Get the model using the runtime context
 const model = await agent.getModel({ runtimeContext: context });
 console.log(model.id); // "claude-3-opus"
 ```

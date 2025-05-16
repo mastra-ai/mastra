@@ -1,26 +1,26 @@
 ---
-title: "例：要約 | Evals | Mastra Docs"
-description: 要約メトリックを使用して、LLMが生成した要約がどれだけ内容を捉えながら事実の正確性を維持しているかを評価する例。
+title: "例: 要約 | Evals | Mastra Docs"
+description: Summarizationメトリクスを使用して、LLMが生成した要約が内容をどれだけ正確に捉え、事実性を維持しているかを評価する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
 # 要約評価
 
-この例では、Mastraの要約メトリックを使用して、LLMが生成した要約がどの程度コンテンツを捉え、事実の正確性を維持しているかを評価する方法を示します。
+この例では、Mastraの要約メトリクスを使用して、LLMが生成した要約が内容をどれだけ正確に捉え、事実性を維持しているかを評価する方法を示します。
 
 ## 概要
 
 この例では、以下の方法を示します：
 
-1. LLMを使用して要約メトリックを設定する
+1. LLMを使ってSummarizationメトリクスを設定する
 2. 要約の品質と事実の正確性を評価する
-3. 整合性とカバレッジスコアを分析する
-4. 異なる要約シナリオを処理する
+3. アラインメントとカバレッジのスコアを分析する
+4. さまざまな要約シナリオに対応する
 
 ## セットアップ
 
-### 環境セットアップ
+### 環境のセットアップ
 
 環境変数を設定してください：
 
@@ -37,9 +37,9 @@ import { openai } from "@ai-sdk/openai";
 import { SummarizationMetric } from "@mastra/evals/llm";
 ```
 
-## メトリック設定
+## メトリックの設定
 
-OpenAIモデルを使用して要約メトリックを設定します:
+OpenAIモデルを使ってSummarizationメトリックを設定します：
 
 ```typescript copy showLineNumbers{4} filename="src/index.ts"
 const metric = new SummarizationMetric(openai("gpt-4o-mini"));
@@ -49,7 +49,7 @@ const metric = new SummarizationMetric(openai("gpt-4o-mini"));
 
 ### 高品質な要約の例
 
-事実の正確さと完全なカバレッジを維持する要約を評価します：
+事実の正確性と完全な網羅性の両方を維持している要約を評価します：
 
 ```typescript copy showLineNumbers{7} filename="src/index.ts"
 const input1 = `The electric car company Tesla was founded in 2003 by Martin Eberhard and Marc Tarpenning. 
@@ -83,9 +83,9 @@ console.log("Metric Result:", {
 // }
 ```
 
-### 部分的なカバレッジの例
+### 部分的な網羅性の例
 
-事実的には正確だが重要な情報を省略している要約を評価します：
+事実は正確だが、重要な情報が省略されている要約を評価します：
 
 ```typescript copy showLineNumbers{24} filename="src/index.ts"
 const input2 = `The Python programming language was created by Guido van Rossum and was first released 
@@ -122,7 +122,7 @@ console.log("Metric Result:", {
 
 ### 不正確な要約の例
 
-事実誤認や誤解を含む要約を評価します：
+事実誤認や誤った表現が含まれている要約を評価します：
 
 ```typescript copy showLineNumbers{41} filename="src/index.ts"
 const input3 = `The World Wide Web was invented by Tim Berners-Lee in 1989 while working at CERN. 
@@ -155,3 +155,35 @@ console.log("Metric Result:", {
 //   }
 // }
 ```
+
+## 結果の理解
+
+この指標は、要約を次の2つの要素で評価します。
+
+1. アライメントスコア（0-1）:
+
+   - 1.0: 完全な事実の正確性
+   - 0.7-0.9: 軽微な事実の不一致
+   - 0.4-0.6: いくつかの事実誤認
+   - 0.1-0.3: 重大な不正確さ
+   - 0.0: 完全な事実の誤表現
+
+2. カバレッジスコア（0-1）:
+   - 1.0: 情報が完全に網羅されている
+   - 0.7-0.9: 主要な情報のほとんどが含まれている
+   - 0.4-0.6: 主要なポイントの一部のみカバー
+   - 0.1-0.3: 最も重要な詳細がほとんど抜けている
+   - 0.0: 関連する情報が全く含まれていない
+
+最終スコアはこれら2つのスコアのうち低い方で決定されます。これにより、高品質な要約には事実の正確性と情報の網羅性の両方が必要となります。
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/evals/summarization"
+  }
+/>

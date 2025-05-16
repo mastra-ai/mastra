@@ -1,11 +1,11 @@
 ---
 title: "リファレンス: run.watch() | ワークフロー | Mastra ドキュメント"
-description: ワークフロー内の `.watch()` メソッドに関するドキュメントで、ワークフローの実行状況を監視します。
+description: ワークフロー実行のステータスを監視する `.watch()` メソッドのドキュメント。
 ---
 
 # run.watch()
 
-`.watch()` 関数は、mastra の実行における状態の変化を購読し、実行の進行状況を監視し、状態の更新に反応することを可能にします。
+`.watch()` 関数は mastra run の状態変化を購読し、実行の進行状況を監視したり、状態の更新に反応したりすることができます。
 
 ## 使用例
 
@@ -18,18 +18,18 @@ const workflow = new Workflow({
 
 const run = workflow.createRun();
 
-// 状態の変化を購読する
+// Subscribe to state changes
 const unsubscribe = run.watch(({ results, activePaths }) => {
-  console.log("結果:", results);
-  console.log("アクティブパス:", activePaths);
+  console.log("Results:", results);
+  console.log("Active paths:", activePaths);
 });
 
-// ワークフローを実行する
+// Run the workflow
 await run.start({
-  input: { text: "このドキュメントを処理する" },
+  input: { text: "Process this document" },
 });
 
-// 監視を停止する
+// Stop watching
 unsubscribe();
 ```
 
@@ -46,7 +46,7 @@ unsubscribe();
   ]}
 />
 
-### WorkflowState プロパティ
+### WorkflowState のプロパティ
 
 <PropertiesTable
   content={[
@@ -84,14 +84,14 @@ unsubscribe();
     {
       name: "unsubscribe",
       type: "() => void",
-      description: "ワークフローの状態変化の監視を停止する関数",
+      description: "ワークフローの状態変更の監視を停止する関数",
     },
   ]}
 />
 
 ## 追加の例
 
-特定のステップの完了を監視する：
+特定のステップの完了を監視する:
 
 ```typescript
 run.watch(({ results, activePaths }) => {
@@ -104,7 +104,7 @@ run.watch(({ results, activePaths }) => {
 });
 ```
 
-エラー処理：
+エラー処理:
 
 ```typescript
 run.watch(({ results, activePaths }) => {

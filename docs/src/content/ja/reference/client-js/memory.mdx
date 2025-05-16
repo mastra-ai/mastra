@@ -1,3 +1,8 @@
+---
+title: Mastra クライアントメモリAPI
+description: client-js SDKを使用してMastraで会話スレッドとメッセージ履歴を管理する方法を学びます。
+---
+
 # メモリーAPI
 
 メモリーAPIは、Mastraでの会話スレッドとメッセージ履歴を管理するためのメソッドを提供します。
@@ -12,9 +17,9 @@ const client = new MastraClient();
 
 ## メモリスレッド操作
 
-### すべてのスレッドを取得する
+### すべてのスレッドを取得
 
-特定のリソースのすべてのメモリスレッドを取得します：
+特定のリソースに対するすべてのメモリスレッドを取得します：
 
 ```typescript
 const threads = await client.getMemoryThreads({
@@ -23,7 +28,7 @@ const threads = await client.getMemoryThreads({
 });
 ```
 
-### 新しいスレッドを作成する
+### 新しいスレッドを作成
 
 新しいメモリスレッドを作成します：
 
@@ -36,7 +41,7 @@ const thread = await client.createMemoryThread({
 });
 ```
 
-### 特定のスレッドの操作
+### 特定のスレッドを操作する
 
 特定のメモリスレッドのインスタンスを取得します：
 
@@ -78,7 +83,7 @@ await thread.delete();
 
 ### メッセージの保存
 
-メモリにメッセージを保存します：
+メッセージをメモリに保存します：
 
 ```typescript
 const savedMessages = await client.saveMessageToMemory({

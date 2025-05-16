@@ -1,23 +1,23 @@
 ---
 title: "リファレンス: Agent.generate() | Agents | Mastra ドキュメント"
-description: "Mastra エージェントの `.generate()` メソッドに関するドキュメントで、テキストまたは構造化された応答を生成します。"
+description: "Mastra エージェントの `.generate()` メソッドのドキュメント。テキストや構造化された応答を生成します。"
 ---
 
 # Agent.generate()
 
-`generate()` メソッドは、エージェントと対話してテキストまたは構造化された応答を生成するために使用されます。このメソッドは、`messages` とオプションの `options` オブジェクトをパラメータとして受け取ります。
+`generate()` メソッドは、エージェントと対話してテキストや構造化された応答を生成するために使用されます。このメソッドは、`messages` とオプションの `options` オブジェクトをパラメータとして受け取ります。
 
 ## パラメータ
 
 ### `messages`
 
-`messages` パラメータは以下のいずれかです:
+`messages`パラメータは以下のいずれかです：
 
 - 単一の文字列
 - 文字列の配列
-- `role` と `content` プロパティを持つメッセージオブジェクトの配列
+- `role`と`content`プロパティを持つメッセージオブジェクトの配列
 
-メッセージオブジェクトの構造:
+メッセージオブジェクトの構造：
 
 ```typescript
 interface Message {
@@ -28,7 +28,7 @@ interface Message {
 
 ### `options` (オプション)
 
-出力構造、メモリ管理、ツール使用、テレメトリなどの設定を含めることができるオプションのオブジェクト。
+出力構造、メモリ管理、ツールの使用、テレメトリなどの設定を含むオプションのオブジェクトです。
 
 <PropertiesTable
   content={[
@@ -37,7 +37,7 @@ interface Message {
       type: "AbortSignal",
       isOptional: true,
       description:
-        "エージェントの実行を中止するためのシグナルオブジェクト。シグナルが中止されると、すべての進行中の操作が終了します。",
+        "エージェントの実行を中止できるシグナルオブジェクト。シグナルが中止されると、進行中のすべての操作が終了します。",
     },
     {
       name: "context",
@@ -50,28 +50,28 @@ interface Message {
       type: "Zod schema | JsonSchema7",
       isOptional: true,
       description:
-        "テキスト生成とツール呼び出しに加えて構造化出力生成を有効にします。モデルは提供されたスキーマに準拠した応答を生成します。",
+        "テキスト生成とツール呼び出しと共に構造化された出力生成を有効にします。モデルは提供されたスキーマに準拠した応答を生成します。",
     },
     {
       name: "instructions",
       type: "string",
       isOptional: true,
       description:
-        "この特定の生成のためにエージェントのデフォルトの指示を上書きするカスタム指示。新しいエージェントインスタンスを作成せずにエージェントの動作を動的に変更するのに便利です。",
+        "この特定の生成のためにエージェントのデフォルト指示を上書きするカスタム指示。新しいエージェントインスタンスを作成せずにエージェントの動作を動的に変更するのに役立ちます。",
     },
     {
       name: "output",
       type: "Zod schema | JsonSchema7",
       isOptional: true,
       description:
-        "出力の期待される構造を定義します。JSONスキーマオブジェクトまたはZodスキーマであることができます。",
+        "期待される出力の構造を定義します。JSONスキーマオブジェクトまたはZodスキーマを指定できます。",
     },
     {
       name: "maxSteps",
       type: "number",
       isOptional: true,
       defaultValue: "5",
-      description: "許可される最大実行ステップ数。",
+      description: "許可される実行ステップの最大数。",
     },
     {
       name: "maxRetries",
@@ -85,62 +85,70 @@ interface Message {
       type: "MemoryConfig",
       isOptional: true,
       description:
-        "メモリ管理のための設定オプション。詳細は以下のMemoryConfigセクションを参照してください。",
+        "メモリ管理の設定オプション。詳細は以下のMemoryConfigセクションを参照してください。",
     },
     {
       name: "onStepFinish",
       type: "GenerateTextOnStepFinishCallback<any> | never",
       isOptional: true,
       description:
-        "各実行ステップ後に呼び出されるコールバック関数。ステップの詳細をJSON文字列として受け取ります。構造化出力には利用できません。",
+        "各実行ステップ後に呼び出されるコールバック関数。ステップの詳細をJSON文字列として受け取ります。構造化出力では利用できません。",
     },
     {
       name: "resourceId",
       type: "string",
       isOptional: true,
       description:
-        "エージェントと対話するユーザーまたはリソースの識別子。threadIdが提供されている場合は必ず提供する必要があります。",
+        "エージェントと対話するユーザーまたはリソースの識別子。threadIdが提供される場合は必須です。",
     },
     {
       name: "telemetry",
       type: "TelemetrySettings",
       isOptional: true,
       description:
-        "生成中のテレメトリ収集のための設定。詳細は以下のTelemetrySettingsセクションを参照してください。",
+        "生成中のテレメトリ収集の設定。詳細は以下のTelemetrySettingsセクションを参照してください。",
     },
     {
       name: "temperature",
       type: "number",
       isOptional: true,
       description:
-        "モデルの出力のランダム性を制御します。高い値（例: 0.8）は出力をよりランダムにし、低い値（例: 0.2）はより集中し決定的にします。",
+        "モデルの出力のランダム性を制御します。高い値（例：0.8）は出力をよりランダムにし、低い値（例：0.2）はより焦点を絞った決定論的な出力にします。",
     },
     {
       name: "threadId",
       type: "string",
       isOptional: true,
       description:
-        "会話スレッドの識別子。複数の対話にわたってコンテキストを維持することを可能にします。resourceIdが提供されている場合は必ず提供する必要があります。",
+        "会話スレッドの識別子。複数のやり取りにわたってコンテキストを維持することができます。resourceIdが提供される場合は必須です。",
     },
     {
       name: "toolChoice",
       type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
       isOptional: true,
       defaultValue: "'auto'",
-      description: "生成中にエージェントがツールを使用する方法を制御します。",
+      description: "生成中にエージェントがツールをどのように使用するかを制御します。",
     },
     {
       name: "toolsets",
       type: "ToolsetsInput",
       isOptional: true,
-      description: "生成中にエージェントが利用できる追加のツールセット。",
+      description:
+        "生成中にエージェントが利用できるようにする追加のツールセット。",
+    },
+    {
+      name: "clientTools",
+      type: "ToolsInput",
+      isOptional: true,
+      description:
+        "リクエストの「クライアント」側で実行されるツール。これらのツールは定義内に実行関数を持ちません。",
     },
   ]}
 />
 
 #### MemoryConfig
 
-メモリ管理のための設定オプション:
+メモリ管理の設定オプション：
 
 <PropertiesTable
   content={[
@@ -149,14 +157,14 @@ interface Message {
       type: "number | false",
       isOptional: true,
       description:
-        "コンテキストに含める最新メッセージの数。無効にするにはfalseに設定します。",
+        "コンテキストに含める最新メッセージの数。falseに設定すると無効になります。",
     },
     {
       name: "semanticRecall",
       type: "boolean | object",
       isOptional: true,
       description:
-        "セマンティックメモリリコールの設定。booleanまたは詳細な設定が可能です。",
+        "セマンティックメモリ呼び出しの設定。ブール値または詳細な設定が可能です。",
       properties: [
         {
           type: "number",
@@ -166,7 +174,7 @@ interface Message {
               type: "number",
               isOptional: true,
               description:
-                "セマンティック的に最も類似したメッセージを取得する数。",
+                "取得する意味的に最も類似したメッセージの数。",
             },
           ],
         },
@@ -178,7 +186,7 @@ interface Message {
               type: "number | { before: number; after: number }",
               isOptional: true,
               description:
-                "セマンティック検索のために考慮するメッセージの範囲。単一の数値またはbefore/afterの設定が可能です。",
+                "セマンティック検索で考慮するメッセージの範囲。単一の数値または前後の設定が可能です。",
             },
           ],
         },
@@ -238,7 +246,8 @@ interface Message {
               name: "generateTitle",
               type: "boolean",
               isOptional: true,
-              description: "新しいスレッドのタイトルを自動生成するかどうか。",
+              description:
+                "新しいスレッドのタイトルを自動生成するかどうか。",
             },
           ],
         },
@@ -259,7 +268,7 @@ interface Message {
       isOptional: true,
       defaultValue: "false",
       description:
-        "テレメトリを有効または無効にします。実験的なためデフォルトでは無効です。",
+        "テレメトリを有効または無効にします。実験的な機能のため、デフォルトでは無効になっています。",
     },
     {
       name: "recordInputs",
@@ -267,7 +276,7 @@ interface Message {
       isOptional: true,
       defaultValue: "true",
       description:
-        "入力の記録を有効または無効にします。機密情報の記録を避けたり、データ転送を減らしたり、パフォーマンスを向上させるために無効にすることができます。",
+        "入力の記録を有効または無効にします。機密情報の記録を避けたり、データ転送を減らしたり、パフォーマンスを向上させたりするために無効にすることもできます。",
     },
     {
       name: "recordOutputs",
@@ -275,7 +284,7 @@ interface Message {
       isOptional: true,
       defaultValue: "true",
       description:
-        "出力の記録を有効または無効にします。機密情報の記録を避けたり、データ転送を減らしたり、パフォーマンスを向上させるために無効にすることができます。",
+        "出力の記録を有効または無効にします。機密情報の記録を避けたり、データ転送を減らしたり、パフォーマンスを向上させたりするために無効にすることもできます。",
     },
     {
       name: "functionId",
@@ -289,7 +298,7 @@ interface Message {
       type: "Record<string, AttributeValue>",
       isOptional: true,
       description:
-        "テレメトリデータに含める追加情報。AttributeValueは文字列、数値、ブール値、これらの型の配列、またはnullであることができます。",
+        "テレメトリデータに含める追加情報。AttributeValueは文字列、数値、ブール値、これらの型の配列、またはnullにすることができます。",
     },
     {
       name: "tracer",
@@ -354,4 +363,4 @@ interface Message {
 
 ## 関連メソッド
 
-リアルタイムストリーミング応答については、[`stream()`](./stream.mdx) メソッドのドキュメントを参照してください。
+リアルタイムのストリーミング応答については、[`stream()`](./stream.mdx) メソッドのドキュメントをご覧ください。

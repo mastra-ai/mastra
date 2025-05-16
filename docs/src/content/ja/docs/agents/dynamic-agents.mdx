@@ -1,0 +1,55 @@
+---
+title: "動的エージェント | エージェント | Mastra ドキュメント"
+description: ランタイムコンテキストを使用して、エージェントの指示、モデル、ツールを動的に設定します。
+---
+
+# 動的エージェント
+
+動的エージェントは、ユーザーIDやその他の重要なパラメータなどの[ランタイムコンテキスト](./runtime-variables)を使用して、リアルタイムで設定を調整します。
+
+これにより、使用するモデルの変更、指示の更新、必要に応じて異なるツールの選択が可能になります。
+
+このコンテキストを活用することで、エージェントは各ユーザーのニーズにより適切に対応できます。また、さらに情報を収集するために任意のAPIを呼び出すことができ、エージェントの機能を向上させるのに役立ちます。
+
+### 設定例
+
+以下は、ランタイムコンテキストを使用して動的エージェントを設定する例です。このエージェントは、ユーザーがプレミアム会員かどうかに応じて、指示、モデル、ツールを調整します：
+
+```typescript
+const dynamicAgent = new Agent({
+  name: "Master Chef Agent",
+  instructions: async ({ runtimeContext }) => {
+    // Fetch user preferences from an API using user ID from runtime context
+    const userId = runtimeContext.get("userId");
+    const prefs = await fetchUserPreferences(userId);
+    const premium = runtimeContext.get("premiumUser") === true;
+
+    const base = `The current user (${userId}) has the following preferences:
+    - Allergies: ${prefs.allergies.join(", ") || "None"}
+    - Preferred cuisines: ${prefs.cuisines.join(", ")}
+    - Dietary restrictions: ${prefs.restrictions.join(", ") || "None"}`;
+
+    return premium
+      ? `You are a master chef creating gourmet dishes.\n${base}`
+      : `You are a home cook giving simple recipes.\n${base}`;
+  },
+  model: ({ runtimeContext }) =>
+    runtimeContext.get("premiumUser") === true
+      ? openai("gpt-4o")
+      : openai("gpt-3.5-turbo"),
+  tools: ({ runtimeContext }) => {
+    const premium = runtimeContext.get("premiumUser") === true;
+    return premium
+      ? {
+          recipeDatabase,
+          ingredientSubstitutions,
+          nutritionalCalculator,
+        }
+      : {
+          recipeDatabase,
+        };
+  },
+});
+```
+
+この例では、エージェントの指示、モデル、ツールがランタイムコンテキストを使用して設定されており、非常に適応性が高く応答性のあるエージェントを実現しています。

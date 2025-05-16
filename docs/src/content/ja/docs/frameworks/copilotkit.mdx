@@ -1,0 +1,211 @@
+---
+title: "CopilotKitとの使用"
+description: "MastraがCopilotKitのAGUIライブラリをどのように活用しているか、そしてユーザーエクスペリエンスを構築するためにどのように活用できるかを学びましょう"
+---
+
+import { Tabs } from "nextra/components";
+import Image from "next/image";
+
+# React で CopilotKit を使用する
+
+CopilotKitは、カスタマイズ可能なAIコパイロットをアプリケーションに素早く統合するためのReactコンポーネントを提供します。
+Mastraと組み合わせることで、双方向の状態同期とインタラクティブなUIを備えた高度なAIアプリを構築できます。
+
+## Mastraプロジェクトを作成する
+
+`mastra` CLIを使用して新しいMastraプロジェクトを作成します：
+
+<Tabs items={["npx", "npm", "yarn", "pnpm"]}>
+  <Tabs.Tab>
+    ```bash copy
+    npx create-mastra@latest
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    npm create mastra
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    yarn create mastra
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    pnpm create mastra
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+プロジェクトの構築時にエージェントの例を選択してください。これにより、天気エージェントが提供されます。
+
+詳細なセットアップ手順については、[インストールガイド](/docs/getting-started/installation)を参照してください。
+
+## 基本的なセットアップ
+
+MastraとCopilotKitを統合するには、主に2つのステップがあります：バックエンドランタイムのセットアップとフロントエンドコンポーネントの設定です。
+
+<Tabs items={["npm", "yarn", "pnpm"]}>
+  <Tabs.Tab>
+    ```bash copy
+    npm install @copilotkit/runtime
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    yarn add @copilotkit/runtime
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    pnpm add @copilotkit/runtime
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+## ランタイムのセットアップ
+
+MastraのカスタムAPIルートを活用して、CopilotKitのランタイムをMastraサーバーに追加することができます。
+
+現在のバージョンの統合では、`MastraClient`を使用してMastraエージェントをCopilotKitのAGUI形式にフォーマットしています。
+
+<Tabs items={["npm", "yarn", "pnpm"]}>
+  <Tabs.Tab>
+    ```bash copy
+    npm install @mastra/client-js
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    yarn add @mastra/client-js
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    pnpm add @mastra/client-js
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+次に、CopilotKit用のカスタムAPIルートでMastraインスタンスを更新しましょう。
+
+```typescript copy
+import { Mastra } from "@mastra/core/mastra";
+import { createLogger } from "@mastra/core/logger";
+import { LibSQLStore } from "@mastra/libsql";
+import { registerApiRoute } from "@mastra/core/server";
+import {
+  CopilotRuntime,
+  copilotRuntimeNodeHttpEndpoint,
+  ExperimentalEmptyAdapter,
+} from "@copilotkit/runtime";
+import { MastraClient } from "@mastra/client-js";
+import { weatherAgent } from "./agents";
+
+const serviceAdapter = new ExperimentalEmptyAdapter();
+
+export const mastra = new Mastra({
+  agents: { weatherAgent },
+  storage: new LibSQLStore({
+    // stores telemetry, evals, ... into memory storage,
+    // if you need to persist, change to file:../mastra.db
+    url: ":memory:",
+  }),
+  logger: createLogger({
+    name: "Mastra",
+    level: "info",
+  }),
+  server: {
+    apiRoutes: [
+      registerApiRoute("/copilotkit", {
+        method: `POST`,
+        handler: async (c) => {
+          // N.B. Current integration leverages MastraClient to fetch AGUI.
+          // Future versions will support fetching AGUI from mastra context.
+          const client = new MastraClient({
+            baseUrl: "http://localhost:4111",
+          });
+
+          const runtime = new CopilotRuntime({
+            agents: await client.getAGUI({ resourceId: "weatherAgent" }),
+          });
+
+          const handler = copilotRuntimeNodeHttpEndpoint({
+            endpoint: "/copilotkit",
+            runtime,
+            serviceAdapter,
+          });
+
+          return handler.handle(c.req.raw, {});
+        },
+      }),
+    ],
+  },
+});
+```
+
+このセットアップにより、MastraサーバーでCopilotKitが実行されるようになりました。`mastra dev`コマンドでMastraサーバーを起動できます。
+
+## UIのセットアップ
+
+CopilotKitのReactコンポーネントをインストールします：
+
+<Tabs items={["npm", "yarn", "pnpm"]}>
+  <Tabs.Tab>
+    ```bash copy
+    npm install @copilotkit/react-core @copilotkit/react-ui
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    yarn add @copilotkit/react-core @copilotkit/react-ui
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    pnpm add @copilotkit/react-core @copilotkit/react-ui
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+次に、CopilotKitのReactコンポーネントをフロントエンドに追加します。
+
+```jsx copy
+import { CopilotChat } from "@copilotkit/react-ui";
+import { CopilotKit } from "@copilotkit/react-core";
+import "@copilotkit/react-ui/styles.css";
+
+export function CopilotKitComponent() {
+  return (
+    <CopilotKit
+      runtimeUrl="http://localhost:4111/copilotkit"
+      agent="weatherAgent"
+    >
+      <CopilotChat
+        labels={{
+          title: "Your Assistant",
+          initial: "Hi! 👋 How can I assist you today?",
+        }}
+      />
+    </CopilotKit>
+  );
+}
+```
+
+コンポーネントをレンダリングして、未来の構築を始めましょう！
+
+<br />
+
+<Image
+  className="rounded-lg"
+  src="/image/copilotkit/cpkoutput.jpg"
+  alt="CopilotKit出力"
+  width={700}
+  height={700}
+/>
+
+## 参考文献
+
+- [CopilotKit ドキュメント](https://docs.copilotkit.ai)
+- [CopilotKitを使用したReact Hooks](https://docs.copilotkit.ai/reference/hooks/useCoAgent)

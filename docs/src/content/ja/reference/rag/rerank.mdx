@@ -1,11 +1,11 @@
 ---
-title: "リファレンス: Rerank | ドキュメント検索 | RAG | Mastra Docs"
-description: Mastraのrerank関数のドキュメントで、ベクター検索結果の高度な再ランキング機能を提供します。
+title: "リファレンス: Rerank | ドキュメント検索 | RAG | Mastra ドキュメント"
+description: Mastra の rerank 機能に関するドキュメント。ベクトル検索結果に対して高度なリランキング機能を提供します。
 ---
 
 # rerank()
 
-`rerank()` 関数は、セマンティック関連性、ベクトル類似性、および位置ベースのスコアリングを組み合わせることにより、ベクトル検索結果の高度な再ランク付け機能を提供します。
+`rerank()` 関数は、セマンティックな関連性、ベクトル類似度、位置に基づくスコアリングを組み合わせることで、ベクトル検索結果に対して高度なリランキング機能を提供します。
 
 ```typescript
 function rerank(
@@ -39,14 +39,14 @@ const rerankedResults = await rerank(
 );
 ```
 
-## パラメータ
+## パラメーター
 
 <PropertiesTable
   content={[
     {
       name: "results",
       type: "QueryResult[]",
-      description: "再ランク付けするベクター検索結果",
+      description: "再ランク付けするベクトル検索結果",
       isOptional: false,
     },
     {
@@ -70,9 +70,9 @@ const rerankedResults = await rerank(
   ]}
 />
 
-rerank関数は、Vercel AI SDKの任意のLanguageModelを受け入れます。Cohereモデル`rerank-v3.5`を使用する場合、Cohereの再ランク付け機能が自動的に使用されます。
+rerank関数は、Vercel AI SDKの任意のLanguageModelを受け付けます。Cohereモデルの`rerank-v3.5`を使用する場合、自動的にCohereの再ランク付け機能が利用されます。
 
-> **注意:** 再ランク付け中にセマンティックスコアリングが正しく機能するためには、各結果に`metadata.text`フィールドにテキストコンテンツが含まれている必要があります。
+> **注意:** セマンティックスコアリングが再ランク付け時に正しく機能するためには、各結果の`metadata.text`フィールドにテキストコンテンツが含まれている必要があります。
 
 ### RerankerFunctionOptions
 
@@ -82,7 +82,7 @@ rerank関数は、Vercel AI SDKの任意のLanguageModelを受け入れます。
       name: "weights",
       type: "WeightConfig",
       description:
-        "異なるスコアリングコンポーネントの重み（合計が1になる必要があります）",
+        "異なるスコアリング要素の重み（合計が1になる必要があります）",
       isOptional: true,
       properties: [
         {
@@ -101,7 +101,7 @@ rerank関数は、Vercel AI SDKの任意のLanguageModelを受け入れます。
           parameters: [
             {
               name: "vector",
-              description: "ベクター類似性の重み",
+              description: "ベクトル類似度の重み",
               isOptional: true,
               type: "number (default: 0.4)",
             },
@@ -112,7 +112,7 @@ rerank関数は、Vercel AI SDKの任意のLanguageModelを受け入れます。
           parameters: [
             {
               name: "position",
-              description: "位置に基づくスコアリングの重み",
+              description: "位置ベースのスコアリングの重み",
               isOptional: true,
               type: "number (default: 0.2)",
             },
@@ -123,13 +123,13 @@ rerank関数は、Vercel AI SDKの任意のLanguageModelを受け入れます。
     {
       name: "queryEmbedding",
       type: "number[]",
-      description: "クエリの埋め込み",
+      description: "クエリの埋め込みベクトル",
       isOptional: true,
     },
     {
       name: "topK",
       type: "number",
-      description: "返すトップ結果の数",
+      description: "返す上位結果の数",
       isOptional: true,
       defaultValue: "3",
     },
@@ -138,7 +138,7 @@ rerank関数は、Vercel AI SDKの任意のLanguageModelを受け入れます。
 
 ## 戻り値
 
-この関数は `RerankResult` オブジェクトの配列を返します:
+この関数は `RerankResult` オブジェクトの配列を返します：
 
 <PropertiesTable
   content={[
@@ -150,7 +150,7 @@ rerank関数は、Vercel AI SDKの任意のLanguageModelを受け入れます。
     {
       name: "score",
       type: "number",
-      description: "再ランキングの総合スコア (0-1)",
+      description: "統合リランキングスコア (0-1)",
     },
     {
       name: "details",
@@ -167,17 +167,17 @@ rerank関数は、Vercel AI SDKの任意のLanguageModelを受け入れます。
     {
       name: "semantic",
       type: "number",
-      description: "セマンティック関連性スコア (0-1)",
+      description: "セマンティック関連度スコア (0-1)",
     },
     {
       name: "vector",
       type: "number",
-      description: "ベクトル類似性スコア (0-1)",
+      description: "ベクトル類似度スコア (0-1)",
     },
     {
       name: "position",
       type: "number",
-      description: "位置に基づくスコア (0-1)",
+      description: "ポジションベースのスコア (0-1)",
     },
     {
       name: "queryAnalysis",

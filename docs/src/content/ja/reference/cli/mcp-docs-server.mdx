@@ -1,0 +1,59 @@
+---
+title: "@mastra/mcp-docs-server"
+description: "MCP経由でMastraのドキュメント、例、ブログ投稿を提供する"
+---
+
+`@mastra/mcp-docs-server`パッケージは、小さな[Model Context Protocol](https://github.com/modelcontextprotocol/mcp)サーバーを実行し、Mastraのドキュメント、コード例、ブログ投稿、変更履歴をLLMエージェントが検索できるようにします。コマンドラインから手動で呼び出すことも、CursorやWindsurfなどのMCP対応IDEで設定することもできます。
+
+## CLIから実行する
+
+```bash
+npx -y @mastra/mcp-docs-server@latest
+```
+
+上記のコマンドは、stdioベースのMCPサーバーを実行します。このプロセスは`stdin`からリクエストを読み取り続け、`stdout`にレスポンスを返します。これはIDE統合が使用するのと同じコマンドです。手動で実行する場合は、探索のために`@wong2/mcp-cli`パッケージを指定することができます。
+
+### 例
+
+サービング前にドキュメントを再構築する（ローカルでドキュメントを変更した場合に便利）：
+
+```bash
+REBUILD_DOCS_ON_START=true npx -y @mastra/mcp-docs-server@latest
+```
+
+実験中に詳細なログを有効にする：
+
+```bash
+DEBUG=1 npx -y @mastra/mcp-docs-server@latest
+```
+
+カスタムドメインからブログ投稿を提供する：
+
+```bash
+BLOG_URL=https://my-blog.example npx -y @mastra/mcp-docs-server@latest
+```
+
+## 環境変数
+
+`@mastra/mcp-docs-server` は、その動作を調整するいくつかの環境変数に対応しています。
+
+- **`REBUILD_DOCS_ON_START`** - `true` に設定すると、サーバーは stdio にバインドする前に `.docs` ディレクトリを再構築します。これは、ローカルでドキュメントを編集または追加した後に役立ちます。
+- **`PREPARE`** - ドキュメントのビルドステップ（`pnpm mcp-docs-server prepare-docs`）は、リポジトリから `.docs` へ Markdown ソースをコピーするために `PREPARE=true` を探します。
+- **`BLOG_URL`** - ブログ記事を取得するために使用されるベースURLです。デフォルトは `https://mastra.ai` です。
+- **`DEBUG`** または **`NODE_ENV=development`** - `stderr` に書き込まれるログを増やします。
+
+基本的な実行には他の変数は必要ありません。サーバーには事前にビルドされたドキュメントディレクトリが付属しています。
+
+## カスタムドキュメントでの再構築
+
+このパッケージには、ドキュメントのプリコンパイルされたコピーが含まれています。追加のコンテンツを試してみたい場合は、`.docs`ディレクトリをローカルで再構築することができます：
+
+```bash
+pnpm mcp-docs-server prepare-docs
+```
+
+このスクリプトは、`mastra/docs/src/content/en/docs`と`mastra/docs/src/content/en/reference`からドキュメントをコピーしてパッケージに取り込みます。再構築後、`REBUILD_DOCS_ON_START=true`を設定してサーバーを起動すると、新しいコンテンツが提供されます。
+
+再構築が必要なのは、カスタマイズされたドキュメントを提供する必要がある場合のみです。通常の使用では、公開されているパッケージの内容に依存することができます。
+
+IDE設定の詳細については、[スタートガイド](/docs/getting-started/mcp-docs-server)を参照してください。

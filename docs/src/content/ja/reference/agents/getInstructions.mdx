@@ -13,7 +13,7 @@ description: "Mastraエージェントの`.getInstructions()`メソッドに関�
 getInstructions({ runtimeContext }: { runtimeContext?: RuntimeContext } = {}): string | Promise<string>
 ```
 
-## パラメータ
+## パラメーター
 
 <br />
 <PropertiesTable
@@ -23,7 +23,7 @@ getInstructions({ runtimeContext }: { runtimeContext?: RuntimeContext } = {}): s
       type: "RuntimeContext",
       isOptional: true,
       description:
-        "依存性注入とコンテキスト情報のためのランタイムコンテキスト。",
+        "依存性注入やコンテキスト情報のためのランタイムコンテキスト。",
     },
   ]}
 />
@@ -34,24 +34,24 @@ getInstructions({ runtimeContext }: { runtimeContext?: RuntimeContext } = {}): s
 
 ## 説明
 
-`getInstructions()`メソッドは、エージェントの行動を導く指示にアクセスするために使用されます。このメソッドは、文字列として直接提供されるか、関数から返される指示を解決します。
+`getInstructions()` メソッドは、エージェントの行動を導く指示にアクセスするために使用されます。このメソッドは、指示が文字列として直接提供される場合や、関数から返される場合のいずれにも対応して指示を解決します。
 
-指示はエージェント設定の重要な要素であり、以下を定義します：
+指示はエージェントの設定において重要な要素であり、以下を定義します：
 
-- エージェントの役割と個性
+- エージェントの役割と性格
 - タスク固有のガイダンス
 - エージェントの行動に対する制約
 - ユーザーリクエストを処理するためのコンテキスト
 
 ## 例
 
-### 基本的な使用法
+### 基本的な使い方
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 
-// 静的な指示でエージェントを作成
+// Create an agent with static instructions
 const agent = new Agent({
   name: "assistant",
   instructions:
@@ -59,23 +59,23 @@ const agent = new Agent({
   model: openai("gpt-4o"),
 });
 
-// 指示を取得
+// Get the instructions
 const instructions = await agent.getInstructions();
 console.log(instructions); // "You are a helpful assistant that provides concise and accurate information."
 ```
 
-### RuntimeContextでの使用
+### RuntimeContextとの併用
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
 import { RuntimeContext } from "@mastra/core/runtime-context";
 import { openai } from "@ai-sdk/openai";
 
-// 動的な指示でエージェントを作成
+// Create an agent with dynamic instructions
 const agent = new Agent({
   name: "contextual-assistant",
   instructions: ({ runtimeContext }) => {
-    // ランタイムコンテキストに基づく動的な指示
+    // Dynamic instructions based on runtime context
     const userPreference = runtimeContext.get("userPreference");
     const expertise = runtimeContext.get("expertise") || "general";
 
@@ -88,12 +88,12 @@ const agent = new Agent({
   model: openai("gpt-4o"),
 });
 
-// ユーザー設定を含むランタイムコンテキストを作成
+// Create a runtime context with user preferences
 const context = new RuntimeContext();
 context.set("userPreference", "technical");
 context.set("expertise", "machine learning");
 
-// ランタイムコンテキストを使用して指示を取得
+// Get the instructions using the runtime context
 const instructions = await agent.getInstructions({ runtimeContext: context });
 console.log(instructions); // "You are a technical assistant specializing in machine learning. Provide detailed technical explanations."
 ```

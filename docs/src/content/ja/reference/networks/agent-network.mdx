@@ -3,19 +3,19 @@ title: "AgentNetwork（実験的）"
 description: "AgentNetworkクラスのリファレンスドキュメント"
 ---
 
-# AgentNetwork (実験的)
+# AgentNetwork（実験的）
 
-> **注:** AgentNetwork機能は実験的であり、将来のリリースで変更される可能性があります。
+> **注意:** AgentNetwork機能は実験的であり、今後のリリースで変更される可能性があります。
 
-`AgentNetwork`クラスは、複雑なタスクを解決するために協力できる専門化されたエージェントのネットワークを作成する方法を提供します。実行パスを明示的に制御する必要があるWorkflowsとは異なり、AgentNetworkはLLMベースのルーターを使用して、次に呼び出すエージェントを動的に決定します。
+`AgentNetwork` クラスは、複雑なタスクを解決するために協力できる専門的なエージェントのネットワークを作成する方法を提供します。Workflowsが実行経路を明示的に制御する必要があるのに対し、AgentNetworkはLLMベースのルーターを使用して、次にどのエージェントを呼び出すかを動的に決定します。
 
 ## 主要な概念
 
-- **LLMベースのルーティング**: AgentNetworkは、エージェントを最適に活用する方法をLLMを用いて決定します
-- **エージェントの協力**: 複数の専門エージェントが協力して複雑なタスクを解決できます
-- **動的な意思決定**: ルーターはタスクの要件に基づいてどのエージェントを呼び出すかを決定します
+- **LLMベースのルーティング**: AgentNetworkは、エージェントの最適な活用方法を判断するためにLLMのみを使用します
+- **エージェントの協働**: 複数の専門エージェントが協力して複雑なタスクを解決できます
+- **動的な意思決定**: ルーターがタスクの要件に基づいてどのエージェントを呼び出すかを決定します
 
-## 使用法
+## 使い方
 
 ```typescript
 import { AgentNetwork } from "@mastra/core/network";
@@ -55,17 +55,17 @@ const result = await researchNetwork.generate(
 console.log(result.text);
 ```
 
-## コンストラクタ
+## コンストラクター
 
 ```typescript
 constructor(config: AgentNetworkConfig)
 ```
 
-### パラメータ
+### パラメーター
 
-- `config`: AgentNetworkの設定オブジェクト
+- `config`: AgentNetworkのための設定オブジェクト
   - `name`: ネットワークの名前
-  - `instructions`: ルーティングエージェントのための指示
+  - `instructions`: ルーティングエージェントへの指示
   - `model`: ルーティングに使用する言語モデル
   - `agents`: ネットワーク内の専門エージェントの配列
 
@@ -73,7 +73,7 @@ constructor(config: AgentNetworkConfig)
 
 ### generate()
 
-エージェントネットワークを使用して応答を生成します。このメソッドは、コードベースの他の部分との一貫性のために廃止された`run()`メソッドに取って代わりました。
+エージェントネットワークを使用して応答を生成します。このメソッドは、コードベース全体の一貫性のために非推奨となった `run()` メソッドの代わりとなります。
 
 ```typescript
 async generate(
@@ -84,7 +84,7 @@ async generate(
 
 ### stream()
 
-エージェントネットワークを使用して応答をストリームします。
+エージェントネットワークを使用して応答をストリーミングします。
 
 ```typescript
 async stream(
@@ -95,7 +95,7 @@ async stream(
 
 ### getRoutingAgent()
 
-ネットワークで使用されるルーティングエージェントを返します。
+ネットワークで使用されているルーティングエージェントを返します。
 
 ```typescript
 getRoutingAgent(): Agent
@@ -111,7 +111,7 @@ getAgents(): Agent[]
 
 ### getAgentHistory()
 
-特定のエージェントのインタラクション履歴を返します。
+特定のエージェントに対するやり取りの履歴を返します。
 
 ```typescript
 getAgentHistory(agentId: string): Array<{
@@ -123,7 +123,7 @@ getAgentHistory(agentId: string): Array<{
 
 ### getAgentInteractionHistory()
 
-ネットワーク内で発生したすべてのエージェントインタラクションの履歴を返します。
+ネットワーク内で発生したすべてのエージェントのやり取り履歴を返します。
 
 ```typescript
 getAgentInteractionHistory(): Record<
@@ -138,28 +138,28 @@ getAgentInteractionHistory(): Record<
 
 ### getAgentInteractionSummary()
 
-エージェントインタラクションの時系列順にフォーマットされた概要を返します。
+エージェントのやり取りを時系列でまとめたフォーマット済みのサマリーを返します。
 
 ```typescript
 getAgentInteractionSummary(): string
 ```
 
-## AgentNetworkとWorkflowsの使い分け
+## AgentNetwork と Workflows の使い分け
 
-- **AgentNetworkを使用する場合:** タスクの要件に基づいて動的なルーティングを行い、AIがエージェントの最適な使用方法を見つけることを望むとき。
+- **AgentNetwork を使う場合:** タスクの要件に基づいて、AI にエージェントの最適な使い方や動的なルーティングを任せたいとき。
 
-- **Workflowsを使用する場合:** エージェント呼び出しの事前に決められたシーケンスと条件ロジックを用いて、実行パスを明示的に制御する必要があるとき。
+- **Workflows を使う場合:** 実行経路を明確に制御したいときや、エージェントの呼び出し順序や条件分岐をあらかじめ決めておきたいとき。
 
 ## 内部ツール
 
-AgentNetworkは、ルーティングエージェントが専門のエージェントを呼び出すことを可能にする特別な`transmit`ツールを使用します。このツールは以下を処理します：
+AgentNetwork は、ルーティングエージェントが専門のエージェントを呼び出すことを可能にする特別な `transmit` ツールを使用します。このツールは以下を処理します：
 
 - 単一エージェントの呼び出し
-- 複数の並列エージェントの呼び出し
+- 複数エージェントの並列呼び出し
 - エージェント間のコンテキスト共有
 
 ## 制限事項
 
-- AgentNetworkアプローチは、同じタスクに対してよく設計されたWorkflowよりも多くのトークンを使用する可能性があります
-- ルーティングの決定がLLMによって行われるため、デバッグがより困難になることがあります
-- パフォーマンスは、ルーティング指示の品質や専門エージェントの能力に基づいて変動する可能性があります
+- AgentNetworkのアプローチは、同じタスクに対してよく設計されたWorkflowよりも多くのトークンを使用する場合があります
+- ルーティングの判断がLLMによって行われるため、デバッグがより困難になることがあります
+- パフォーマンスは、ルーティング指示の質や各専門エージェントの能力によって変動する可能性があります

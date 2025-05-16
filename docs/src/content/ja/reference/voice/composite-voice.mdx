@@ -1,13 +1,13 @@
 ---
 title: "リファレンス: CompositeVoice | Voice Providers | Mastra ドキュメント"
-description: "CompositeVoice クラスのドキュメントで、複数の音声プロバイダーを組み合わせて柔軟なテキスト読み上げと音声認識操作を可能にします。"
+description: "CompositeVoice クラスのドキュメント。複数の音声プロバイダーを組み合わせて、柔軟なテキスト読み上げおよび音声認識操作を可能にします。"
 ---
 
 # CompositeVoice
 
-CompositeVoiceクラスは、テキストから音声への変換や音声からテキストへの変換のために、異なる音声プロバイダーを組み合わせることができます。これは、各操作に最適なプロバイダーを使用したい場合に特に便利です。例えば、音声からテキストへの変換にはOpenAIを使用し、テキストから音声への変換にはPlayAIを使用する場合です。
+CompositeVoice クラスは、テキスト読み上げ（text-to-speech）や音声認識（speech-to-text）操作のために、異なる音声プロバイダーを組み合わせて利用することができます。これは、各操作ごとに最適なプロバイダーを使いたい場合に特に便利です。例えば、音声認識には OpenAI を、テキスト読み上げには PlayAI を使うといった使い方が可能です。
 
-CompositeVoiceは、Agentクラスによって内部的に使用され、柔軟な音声機能を提供します。
+CompositeVoice は、Agent クラスによって内部的に使用され、柔軟な音声機能を提供します。
 
 ## 使用例
 
@@ -40,19 +40,19 @@ const audio = await voice.speak("Hello, world!");
     {
       name: "config",
       type: "object",
-      description: "合成音声サービスのための設定オブジェクト",
+      description: "複合音声サービスのための設定オブジェクト",
       isOptional: false,
     },
     {
       name: "config.input",
       type: "MastraVoice",
-      description: "音声認識操作に使用する音声プロバイダー",
+      description: "音声認識処理に使用する音声プロバイダー",
       isOptional: true,
     },
     {
       name: "config.output",
       type: "MastraVoice",
-      description: "音声合成操作に使用する音声プロバイダー",
+      description: "音声合成処理に使用する音声プロバイダー",
       isOptional: true,
     },
   ]}
@@ -62,7 +62,7 @@ const audio = await voice.speak("Hello, world!");
 
 ### speak()
 
-設定されたスピーキングプロバイダーを使用してテキストを音声に変換します。
+設定されたスピーキングプロバイダーを使用して、テキストを音声に変換します。
 
 <PropertiesTable
   content={[
@@ -75,22 +75,21 @@ const audio = await voice.speak("Hello, world!");
     {
       name: "options",
       type: "object",
-      description:
-        "スピーキングプロバイダーに渡されるプロバイダー固有のオプション",
+      description: "スピーキングプロバイダーに渡されるプロバイダー固有のオプション",
       isOptional: true,
     },
   ]}
 />
 
-注意事項:
+注意:
 
 - スピーキングプロバイダーが設定されていない場合、このメソッドはエラーをスローします
-- オプションは設定されたスピーキングプロバイダーに渡されます
+- オプションは設定されたスピーキングプロバイダーにそのまま渡されます
 - 音声データのストリームを返します
 
 ### listen()
 
-設定されたリスニングプロバイダーを使用して音声をテキストに変換します。
+設定されたリスニングプロバイダーを使用して、音声をテキストに変換します。
 
 <PropertiesTable
   content={[
@@ -103,44 +102,43 @@ const audio = await voice.speak("Hello, world!");
     {
       name: "options",
       type: "object",
-      description:
-        "リスニングプロバイダーに渡されるプロバイダー固有のオプション",
+      description: "リスニングプロバイダーに渡されるプロバイダー固有のオプション",
       isOptional: true,
     },
   ]}
 />
 
-注意事項:
+注意:
 
 - リスニングプロバイダーが設定されていない場合、このメソッドはエラーをスローします
-- オプションは設定されたリスニングプロバイダーに渡されます
-- プロバイダーに応じて、文字列または転写されたテキストのストリームを返します
+- オプションは設定されたリスニングプロバイダーにそのまま渡されます
+- プロバイダーによって、文字列または書き起こされたテキストのストリームのいずれかを返します
 
 ### getSpeakers()
 
-スピーキングプロバイダーから利用可能な声のリストを返します。各ノードには以下が含まれます:
+スピーキングプロバイダーから利用可能な音声のリストを返します。各ノードには以下が含まれます:
 
 <PropertiesTable
   content={[
     {
       name: "voiceId",
       type: "string",
-      description: "声の一意の識別子",
+      description: "音声の一意の識別子",
       isOptional: false,
     },
     {
       name: "key",
       type: "value",
       description:
-        "プロバイダーによって異なる追加の声のプロパティ（例: 名前、言語）",
+        "プロバイダーごとに異なる追加の音声プロパティ（例: 名前、言語）",
       isOptional: true,
     },
   ]}
 />
 
-注意事項:
+注意:
 
-- スピーキングプロバイダーからのみ声を返します
+- スピーキングプロバイダーからのみ音声を返します
 - スピーキングプロバイダーが設定されていない場合、空の配列を返します
-- 各声オブジェクトには少なくともvoiceIdプロパティがあります
-- 追加の声のプロパティはスピーキングプロバイダーに依存します
+- 各音声オブジェクトには少なくとも voiceId プロパティが含まれます
+- 追加の音声プロパティはスピーキングプロバイダーによって異なります

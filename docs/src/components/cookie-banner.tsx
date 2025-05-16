@@ -43,6 +43,7 @@ export function CookieBanner({
       return;
     }
     onConsentChange(storedConsent === "true");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEU]);
 
   const handleAccept = () => {

@@ -1,14 +1,14 @@
 ---
-title: "リファレンス: Pinecone Vector Store | Vector DBs | RAG | Mastra ドキュメント"
-description: MastraのPineconeVectorクラスのドキュメントで、Pineconeのベクターデータベースへのインターフェースを提供します。
+title: "リファレンス: Pinecone Vector Store | ベクターデータベース | RAG | Mastra ドキュメント"
+description: Mastra における PineconeVector クラスのドキュメント。Pinecone のベクターデータベースへのインターフェースを提供します。
 ---
 
-# Pinecone Vector Store
+# Pinecone ベクターストア
 
 PineconeVector クラスは、[Pinecone](https://www.pinecone.io/) のベクターデータベースへのインターフェースを提供します。
-ハイブリッド検索、メタデータフィルタリング、ネームスペース管理などの機能を備えたリアルタイムベクター検索を提供します。
+リアルタイムのベクター検索を提供し、ハイブリッド検索、メタデータフィルタリング、ネームスペース管理などの機能を備えています。
 
-## コンストラクタオプション
+## コンストラクターオプション
 
 <PropertiesTable
   content={[
@@ -39,7 +39,7 @@ PineconeVector クラスは、[Pinecone](https://www.pinecone.io/) のベクタ�
     {
       name: "dimension",
       type: "number",
-      description: "ベクトルの次元（埋め込みモデルに一致する必要があります）",
+      description: "ベクトルの次元数（埋め込みモデルと一致する必要があります）",
     },
     {
       name: "metric",
@@ -47,7 +47,7 @@ PineconeVector クラスは、[Pinecone](https://www.pinecone.io/) のベクタ�
       isOptional: true,
       defaultValue: "cosine",
       description:
-        "類似性検索のための距離メトリック。ハイブリッド検索を使用する予定の場合は 'dotproduct' を使用します。",
+        "類似性検索の距離メトリック。ハイブリッド検索を使用する予定がある場合は 'dotproduct' を使用してください。",
     },
   ]}
 />
@@ -59,7 +59,7 @@ PineconeVector クラスは、[Pinecone](https://www.pinecone.io/) のベクタ�
     {
       name: "indexName",
       type: "string",
-      description: "Pinecone インデックスの名前",
+      description: "Pineconeインデックスの名前",
     },
     {
       name: "vectors",
@@ -71,7 +71,7 @@ PineconeVector クラスは、[Pinecone](https://www.pinecone.io/) のベクタ�
       type: "{ indices: number[], values: number[] }[]",
       isOptional: true,
       description:
-        "ハイブリッド検索用のスパースベクトルの配列。各ベクトルは一致するインデックスと値の配列を持つ必要があります。",
+        "ハイブリッド検索用のスパースベクトルの配列。各ベクトルには一致するインデックスと値の配列が必要です。",
     },
     {
       name: "metadata",
@@ -83,15 +83,14 @@ PineconeVector クラスは、[Pinecone](https://www.pinecone.io/) のベクタ�
       name: "ids",
       type: "string[]",
       isOptional: true,
-      description:
-        "オプションのベクトルID（提供されない場合は自動生成されます）",
+      description: "オプションのベクトルID（提供されない場合は自動生成されます）",
     },
     {
       name: "namespace",
       type: "string",
       isOptional: true,
       description:
-        "ベクトルを保存するためのオプションの名前空間。異なる名前空間のベクトルは互いに分離されています。",
+        "ベクトルを保存するオプションの名前空間。異なる名前空間のベクトルは互いに分離されています。",
     },
   ]}
 />
@@ -108,14 +107,14 @@ PineconeVector クラスは、[Pinecone](https://www.pinecone.io/) のベクタ�
     {
       name: "vector",
       type: "number[]",
-      description: "類似ベクトルを見つけるための密なクエリベクトル",
+      description: "類似ベクトルを検索するための密なクエリベクトル",
     },
     {
       name: "sparseVector",
       type: "{ indices: number[], values: number[] }",
       isOptional: true,
       description:
-        "ハイブリッド検索用のオプションのスパースベクトル。インデックスと値の配列が一致している必要があります。",
+        "ハイブリッド検索用のオプションのスパースベクトル。一致するインデックスと値の配列が必要です。",
     },
     {
       name: "topK",
@@ -142,14 +141,14 @@ PineconeVector クラスは、[Pinecone](https://www.pinecone.io/) のベクタ�
       type: "string",
       isOptional: true,
       description:
-        "クエリを実行するベクトルのオプションの名前空間。指定された名前空間からのみ結果を返します。",
+        "ベクトルをクエリするオプションの名前空間。指定された名前空間からの結果のみを返します。",
     },
   ]}
 />
 
 ### listIndexes()
 
-文字列としてインデックス名の配列を返します。
+インデックス名の文字列配列を返します。
 
 ### describeIndex()
 
@@ -163,7 +162,7 @@ PineconeVector クラスは、[Pinecone](https://www.pinecone.io/) のベクタ�
   ]}
 />
 
-返される内容:
+戻り値：
 
 ```typescript copy
 interface IndexStats {
@@ -238,7 +237,7 @@ interface IndexStats {
 
 ## レスポンスタイプ
 
-クエリ結果はこの形式で返されます:
+クエリ結果は次の形式で返されます：
 
 ```typescript copy
 interface QueryResult {
@@ -249,9 +248,9 @@ interface QueryResult {
 }
 ```
 
-## エラーハンドリング
+## エラー処理
 
-ストアは型付きエラーをスローし、キャッチすることができます:
+このストアは型付きエラーをスローし、キャッチすることができます。
 
 ```typescript copy
 try {
@@ -262,7 +261,7 @@ try {
 } catch (error) {
   if (error instanceof VectorStoreError) {
     console.log(error.code); // 'connection_failed' | 'invalid_dimension' | etc
-    console.log(error.details); // 追加のエラーコンテキスト
+    console.log(error.details); // Additional error context
   }
 }
 ```
@@ -276,11 +275,11 @@ try {
 
 ## ハイブリッド検索
 
-Pineconeは、密ベクトルとスパースベクトルを組み合わせることでハイブリッド検索をサポートします。ハイブリッド検索を使用するには：
+Pineconeは、密ベクトルと疎ベクトルを組み合わせることでハイブリッド検索をサポートしています。ハイブリッド検索を利用するには、以下の手順に従ってください。
 
-1. `metric: 'dotproduct'`でインデックスを作成します
-2. アップサート時に、`sparseVectors`パラメータを使用してスパースベクトルを提供します
-3. クエリ時に、`sparseVector`パラメータを使用してスパースベクトルを提供します
+1. `metric: 'dotproduct'` でインデックスを作成します
+2. アップサート時に、`sparseVectors` パラメータを使って疎ベクトルを指定します
+3. クエリ時に、`sparseVector` パラメータを使って疎ベクトルを指定します
 
 ## 関連
 

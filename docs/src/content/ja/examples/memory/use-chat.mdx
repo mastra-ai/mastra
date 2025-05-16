@@ -1,17 +1,17 @@
 ---
 title: AI SDK useChat フック
-description: Mastra メモリを Vercel AI SDK useChat フックと統合する方法を示す例。
+description: Mastra メモリを Vercel AI SDK useChat フックと統合する方法の例を示します。
 ---
 
-# 例: AI SDK `useChat` フック
+# 例：AI SDK `useChat` フック
 
-Vercel AI SDKの`useChat`フックを使用して、ReactのようなフロントエンドフレームワークとMastraのメモリを統合するには、メッセージ履歴を重複しないように注意深く扱う必要があります。この例では、推奨されるパターンを示しています。
+Mastraのメモリを、Vercel AI SDKの`useChat`フックを使ってReactのようなフロントエンドフレームワークと統合する際は、メッセージ履歴の重複を避けるために慎重な取り扱いが必要です。この例では、推奨されるパターンを示します。
 
-## `useChat`を使用したメッセージ重複の防止
+## `useChat`によるメッセージの重複防止
 
-`useChat`のデフォルトの動作は、各リクエストでチャット履歴全体を送信します。Mastraのメモリは`threadId`に基づいて履歴を自動的に取得するため、クライアントから完全な履歴を送信すると、コンテキストウィンドウとストレージに重複したメッセージが発生します。
+`useChat`のデフォルトの動作では、リクエストごとにチャット履歴全体が送信されます。Mastraのメモリは`threadId`に基づいて自動的に履歴を取得するため、クライアントから全履歴を送信すると、コンテキストウィンドウやストレージ内でメッセージが重複してしまいます。
 
-**解決策:** `useChat`を設定して、`threadId`と`resourceId`と共に**最新のメッセージのみ**を送信します。
+**解決策：** `useChat`を設定し、`threadId`と`resourceId`とともに**最新のメッセージのみ**を送信するようにしましょう。
 
 ```typescript
 // components/Chat.tsx (React Example)
@@ -84,42 +84,42 @@ export async function POST(request: Request) {
 }
 ```
 
-メッセージの永続性に関する詳細は、[AI SDKのドキュメント](https://sdk.vercel.ai/docs/ai-sdk-ui/chatbot-message-persistence)を参照してください。
+より詳しい背景については、[AI SDKのメッセージ永続化に関するドキュメント](https://sdk.vercel.ai/docs/ai-sdk-ui/chatbot-message-persistence)をご覧ください。
 
-## 基本スレッド管理UI
+## 基本的なスレッド管理UI
 
-このページは `useChat` に焦点を当てていますが、スレッドを管理するためのUI（リスト、作成、選択）を構築することもできます。これは通常、`memory.getThreadsByResourceId()` や `memory.createThread()` のようなMastraのメモリ機能とやり取りするバックエンドAPIエンドポイントを含みます。
+このページでは主に `useChat` に焦点を当てていますが、スレッドの管理（一覧表示、作成、選択）用のUIも構築できます。これには通常、Mastraのメモリ機能である `memory.getThreadsByResourceId()` や `memory.createThread()` などと連携するバックエンドAPIエンドポイントが関与します。
 
 ```typescript
-// スレッドリストの概念的なReactコンポーネント
+// Conceptual React component for a thread list
 import React, { useState, useEffect } from 'react';
 
-// API関数が存在すると仮定: fetchThreads, createNewThread
+// Assume API functions exist: fetchThreads, createNewThread
 async function fetchThreads(userId: string): Promise<{ id: string; title: string }[]> { /* ... */ }
 async function createNewThread(userId: string): Promise<{ id: string; title: string }> { /* ... */ }
 
 function ThreadList({ userId, currentThreadId, onSelectThread }) {
   const [threads, setThreads] = useState([]);
-  // ... ローディングとエラーステート ...
+  // ... loading and error states ...
 
   useEffect(() => {
-    // userIdのスレッドを取得
+    // Fetch threads for userId
   }, [userId]);
 
   const handleCreateThread = async () => {
-    // createNewThread APIを呼び出し、状態を更新し、新しいスレッドを選択
+    // Call createNewThread API, update state, select new thread
   };
 
-  // ... スレッドのリストと新しい会話ボタンでUIをレンダリング ...
+  // ... render UI with list of threads and New Conversation button ...
   return (
      <div>
-       <h2>会話</h2>
-       <button onClick={handleCreateThread}>新しい会話</button>
+       <h2>Conversations</h2>
+       <button onClick={handleCreateThread}>New Conversation</button>
        <ul>
          {threads.map(thread => (
            <li key={thread.id}>
              <button onClick={() => onSelectThread(thread.id)} disabled={thread.id === currentThreadId}>
-               {thread.title || `チャット ${thread.id.substring(0, 8)}...`}
+               {thread.title || `Chat ${thread.id.substring(0, 8)}...`}
              </button>
            </li>
          ))}
@@ -128,7 +128,7 @@ function ThreadList({ userId, currentThreadId, onSelectThread }) {
   );
 }
 
-// 親チャットコンポーネントでの使用例
+// Example Usage in a Parent Chat Component
 function ChatApp() {
   const userId = "user_123";
   const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
@@ -142,9 +142,9 @@ function ChatApp() {
       />
       <div style={{ flexGrow: 1 }}>
         {currentThreadId ? (
-          <Chat threadId={currentThreadId} resourceId={userId} /> // あなたのuseChatコンポーネント
+          <Chat threadId={currentThreadId} resourceId={userId} /> // Your useChat component
         ) : (
-          <div>会話を選択または開始してください。</div>
+          <div>Select or start a conversation.</div>
         )}
       </div>
     </div>
@@ -154,5 +154,5 @@ function ChatApp() {
 
 ## 関連
 
-- **[はじめに](../../docs/memory/overview.mdx)**: `resourceId` と `threadId` の基本概念を説明します。
-- **[メモリリファレンス](../../reference/memory/Memory.mdx)**: `Memory` クラスメソッドのAPI詳細。
+- **[はじめに](../../docs/memory/overview.mdx)**：`resourceId` と `threadId` の基本的な概念について説明します。
+- **[Memory リファレンス](../../reference/memory/Memory.mdx)**：`Memory` クラスのメソッドに関する API 詳細。

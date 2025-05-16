@@ -1,6 +1,6 @@
 ---
-title: "Netlify デプロイヤー"
-description: "NetlifyDeployer クラスのドキュメントで、Mastra アプリケーションを Netlify Functions にデプロイします。"
+title: "Netlify Deployer"
+description: "NetlifyDeployerクラスのドキュメント。MastraアプリケーションをNetlify Functionsにデプロイします。"
 ---
 
 # NetlifyDeployer
@@ -25,7 +25,7 @@ const mastra = new Mastra({
 
 ## パラメーター
 
-### コンストラクターパラメーター
+### コンストラクターのパラメーター
 
 <PropertiesTable
   content={[
@@ -53,21 +53,29 @@ const mastra = new Mastra({
 
 ### 環境変数
 
-NetlifyDeployerは複数のソースから環境変数を処理します：
+NetlifyDeployerは複数のソースから環境変数を扱います：
 
-1. **環境ファイル**: `.env.production`および`.env`ファイルからの変数。
-2. **設定**: Mastra設定を通じて渡される変数。
-3. **Netlifyダッシュボード**: Netlifyのウェブインターフェースを通じて管理することもできます。
+1. **環境ファイル**: `.env.production` および `.env` ファイルからの変数。
+2. **設定**: Mastraの設定を通じて渡された変数。
+3. **Netlifyダッシュボード**: Netlifyのウェブインターフェースからも変数を管理できます。
+
+## Mastraプロジェクトのリント
+
+Mastraプロジェクトをリントして、ビルドに問題がないことを確認します
+
+```bash
+npx mastra lint
+```
 
 ## Mastraプロジェクトのビルド
 
-Netlifyデプロイメント用にMastraプロジェクトをビルドするには：
+Netlifyへのデプロイ用にMastraプロジェクトをビルドするには、以下の手順を実行します。
 
 ```bash
 npx mastra build
 ```
 
-ビルドプロセスは、`.mastra/output`ディレクトリに以下の出力構造を生成します：
+ビルドプロセスにより、`.mastra/output`ディレクトリに次のような出力構造が生成されます。
 
 ```
 .mastra/output/
@@ -75,12 +83,12 @@ npx mastra build
 │   └── functions/
 │       └── api/
 │           └── index.mjs    # アプリケーションのエントリーポイント
-└── netlify.toml             # Netlify設定
+└── netlify.toml             # Netlifyの設定ファイル
 ```
 
-### Netlify設定
+### Netlifyの設定
 
-NetlifyDeployerは、`.mastra/output`に以下の設定で`netlify.toml`設定ファイルを自動生成します：
+NetlifyDeployerは、`.mastra/output`内に自動的に`netlify.toml`設定ファイルを次の内容で生成します。
 
 ```toml
 [functions]
@@ -94,22 +102,22 @@ status = 200
 to = "/.netlify/functions/api/:splat"
 ```
 
-## デプロイオプション
+## デプロイメントオプション
 
-ビルド後、Mastraアプリケーションの`.mastra/output`を以下のいずれかの方法でNetlifyにデプロイできます：
+ビルド後、Mastraアプリケーションの `.mastra/output` をNetlifyに以下のいずれかの方法でデプロイできます：
 
-1. **Netlify CLI**: Netlifyの公式CLIツールを使用して直接デプロイ
+1. **Netlify CLI**: Netlifyの公式CLIツールを使って直接デプロイ
 
    - CLIをインストール: `npm install -g netlify-cli`
    - 出力ディレクトリに移動: `cd .mastra/output`
-   - 関数ディレクトリを指定してデプロイ: `netlify deploy --dir . --functions ./netlify/functions`
-   - 本番環境へのデプロイには`--prod`フラグを追加: `netlify deploy --prod --dir . --functions ./netlify/functions`
+   - functionsディレクトリを指定してデプロイ: `netlify deploy --dir . --functions ./netlify/functions`
+   - 本番環境にデプロイする場合は `--prod` フラグを追加: `netlify deploy --prod --dir . --functions ./netlify/functions`
 
-2. **Netlifyダッシュボード**: Gitリポジトリを接続するか、Netlifyダッシュボードにビルド出力をドラッグ＆ドロップ
+2. **Netlifyダッシュボード**: Gitリポジトリを接続するか、Netlifyダッシュボードでビルド出力をドラッグ＆ドロップ
 
 3. **Netlify Dev**: Netlifyの開発環境でMastraアプリケーションをローカルで実行
 
-> 出力ディレクトリ`.mastra/output`で`netlify dev`を実行して、Mastraアプリケーションをローカルでテストすることもできます。
+> 出力ディレクトリ `.mastra/output` で `netlify dev` を実行することで、Mastraアプリケーションをローカルでテストすることもできます。
 
 ## プラットフォームドキュメント
 

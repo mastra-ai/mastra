@@ -1,29 +1,29 @@
 ---
 title: 音声から音声へ
-description: Mastraを使用して音声から音声へのアプリケーションを作成する例。
+description: Mastra を使って音声から音声へのアプリケーションを作成する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
-# Mastraを使用した通話分析
+# Mastraによる通話分析
 
-このガイドでは、Mastraを使用して完全な音声会話システムと分析機能を構築する方法を紹介します。この例には、リアルタイムの音声対音声会話、録音管理、および通話分析のためのRoark Analyticsとの統合が含まれています。
+このガイドでは、Mastraを使用して分析機能付きの音声会話システムを構築する方法を説明します。例として、リアルタイムの音声対話、録音管理、そして通話分析のためのRoark Analyticsとの連携が含まれています。
 
 ## 概要
 
-このシステムはMastraエージェントとの音声会話を作成し、すべてのやり取りを記録し、その録音をストレージのためにCloudinaryにアップロードし、その後、詳細な通話分析のために会話データをRoark Analyticsに送信します。
+このシステムは、Mastraエージェントとの音声会話を作成し、やり取り全体を録音して、その録音をCloudinaryにアップロードして保存します。その後、会話データをRoark Analyticsに送信し、詳細な通話分析を行います。
 
 ## セットアップ
 
 ### 前提条件
 
-1. 音声からテキスト、テキストから音声への変換機能のためのOpenAI APIキー
+1. 音声認識および音声合成機能のためのOpenAI APIキー
 2. 音声ファイル保存用のCloudinaryアカウント
-3. 通話分析用のRoark Analytics APIキー
+3. 通話分析のためのRoark Analytics APIキー
 
-### 環境設定
+### 環境構成
 
-提供されたサンプルに基づいて`.env`ファイルを作成してください：
+提供されたサンプルに基づいて `.env` ファイルを作成します：
 
 ```bash filename="speech-to-speech/call-analysis/sample.env" copy
 OPENAI_API_KEY=
@@ -45,7 +45,7 @@ npm install
 
 ### Mastraエージェントの作成
 
-まず、音声機能を持つエージェントを定義します：
+まず、音声機能を持つエージェントを定義します。
 
 ```ts filename="speech-to-speech/call-analysis/src/mastra/agents/index.ts" copy
 import { openai } from "@ai-sdk/openai";
@@ -76,7 +76,7 @@ export const speechToSpeechServer = new Agent({
 
 ### Mastraの初期化
 
-エージェントをMastraに登録します：
+エージェントをMastraに登録します。
 
 ```ts filename="speech-to-speech/call-analysis/src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core";
@@ -89,9 +89,9 @@ export const mastra = new Mastra({
 });
 ```
 
-### 音声ストレージのためのCloudinary統合
+### 音声ファイル保存のためのCloudinary連携
 
-録音ファイルを保存するためのCloudinaryをセットアップします：
+録音した音声ファイルを保存するためにCloudinaryを設定します。
 
 ```ts filename="speech-to-speech/call-analysis/src/upload.ts" copy
 import { v2 as cloudinary } from "cloudinary";
@@ -113,7 +113,7 @@ export async function uploadToCloudinary(path: string) {
 
 ### メインアプリケーションロジック
 
-メインアプリケーションは会話フロー、録音、分析統合を調整します：
+メインアプリケーションは会話の流れ、録音、分析連携を統括します。
 
 ```ts filename="speech-to-speech/call-analysis/src/base.ts" copy
 import { Roark } from "@roarkanalytics/sdk";
@@ -184,7 +184,7 @@ speechToSpeechServerExample().catch(console.error);
 
 ## 会話ユーティリティ
 
-`utils.ts`ファイルには、会話を管理するためのヘルパー関数が含まれています：
+`utils.ts` ファイルには、会話を管理するための補助関数が含まれています。主な内容は以下の通りです。
 
 1. 会話セッションの作成と管理
 2. 音声録音の処理
@@ -193,38 +193,38 @@ speechToSpeechServerExample().catch(console.error);
 
 ## サンプルの実行
 
-会話を開始するには：
+次のコマンドで会話を開始します:
 
 ```bash copy
 npm run dev
 ```
 
-アプリケーションは以下を行います：
+アプリケーションは以下の処理を行います:
 
 1. Mastraエージェントとのリアルタイム音声会話を開始します
 2. 会話全体を録音します
-3. 会話が終了すると録音をCloudinaryにアップロードします
-4. 会話データを分析のためにRoark Analyticsに送信します
+3. 会話終了時に録音をCloudinaryにアップロードします
+4. 会話データをRoark Analyticsに送信して分析します
 5. 分析結果を表示します
 
 ## 主な機能
 
-- **リアルタイム音声対音声**: OpenAIの音声モデルを使用して自然な会話を実現
-- **会話の録音**: 後の分析のために会話全体を記録
-- **ツール呼び出しの追跡**: 会話中にAIツールがいつどのように使用されたかを記録
-- **分析機能の統合**: 会話データをRoark Analyticsに送信して詳細な分析を行う
-- **クラウドストレージ**: 録音をCloudinaryにアップロードして安全な保存とアクセスを確保
+- **リアルタイム音声対音声変換**: OpenAIの音声モデルを使用し、自然な会話を実現
+- **会話録音**: 会話全体を記録し、後で分析可能
+- **ツール呼び出しの追跡**: 会話中にAIツールがいつ、どのように使われたかを記録
+- **分析ツール連携**: 会話データをRoark Analyticsに送信し、詳細な分析を実施
+- **クラウドストレージ**: 録音をCloudinaryにアップロードし、安全に保存・アクセス
 
 ## カスタマイズ
 
-このサンプルは以下の方法でカスタマイズできます：
+この例は、以下の方法でカスタマイズできます：
 
-- エージェントの指示と機能の修正
-- エージェントが使用する追加ツールの追加
-- 会話の流れや初期メッセージの変更
-- カスタムメタデータによる分析統合の拡張
+- エージェントの指示や機能を変更する
+- エージェントが使用する追加ツールを追加する
+- 会話の流れや最初のメッセージを変更する
+- カスタムメタデータで分析連携を拡張する
 
-完全なサンプルコードを確認するには、[Githubリポジトリ](https://github.com/mastra-ai/voice-examples/tree/main/speech-to-speech/call-analysis)をご覧ください。
+完全なサンプルコードを見るには、[Github リポジトリ](https://github.com/mastra-ai/voice-examples/tree/main/speech-to-speech/call-analysis)をご覧ください。
 
 <br />
 <br />

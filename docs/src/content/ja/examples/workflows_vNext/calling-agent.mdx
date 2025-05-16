@@ -3,15 +3,19 @@ title: "例：ワークフローからエージェントを呼び出す | Mastra
 description: ワークフローステップ内からAIエージェントを呼び出すためのMastraの使用例。
 ---
 
-import { GithubLink } from "@/components/github-link";
-
 # ワークフローからエージェントを呼び出す
 
 この例では、提供された天候条件に基づいてアクティビティを提案するAIエージェントを呼び出すワークフローを作成し、ワークフローステップ内で実行する方法を示しています。
 
+## セットアップ
+
+```sh copy
+npm install @ai-sdk/openai @mastra/core 
+```
+
 ## プランニングエージェントの定義
 
-場所と対応する天気状況を考慮して活動を計画するために、LLM呼び出しを活用するプランニングエージェントを定義します。
+場所と対応する気象条件に基づいて活動を計画するためにLLM呼び出しを活用するプランニングエージェントを定義します。
 
 ```ts showLineNumbers copy filename="agents/planning-agent.ts"
 import { Agent } from "@mastra/core/agent";
@@ -19,6 +23,7 @@ import { openai } from "@ai-sdk/openai";
 
 const llm = openai("gpt-4o");
 
+// Create a new agent for activity planning
 const planningAgent = new Agent({
   name: "planningAgent",
   model: llm,
@@ -68,36 +73,35 @@ const planningAgent = new Agent({
 export { planningAgent };
 ```
 
-## 天気ワークフローの定義
-
-天気ワークフローを2つのステップで定義します：1つはネットワーク呼び出しを介して天気を取得するステップ、もう1つはプランニングエージェントを使用してアクティビティを計画するステップです。
-
-````ts showLineNumbers copy filename="workflows/agent-workflow.ts"
+## アクティビティプランニングワークフローの定義
+アクティビティプランニングワークフローを2つのステップで定義します：1つはネットワーク呼び出しを介して天気を取得するステップ、もう1つはプランニングエージェントを使用してアクティビティを計画するステップです。
+```ts showLineNumbers copy filename="workflows/agent-workflow.ts"
 import { createWorkflow, createStep } from '@mastra/core/workflows/vNext'
 import { z } from 'zod'
-
+ 
+// 数値の天気コードを人間が読める説明に変換するヘルパー関数
 function getWeatherCondition(code: number): string {
   const conditions: Record<number, string> = {
-    0: 'Clear sky',
-    1: 'Mainly clear',
-    2: 'Partly cloudy',
-    3: 'Overcast',
-    45: 'Foggy',
-    48: 'Depositing rime fog',
-    51: 'Light drizzle',
-    53: 'Moderate drizzle',
-    55: 'Dense drizzle',
-    61: 'Slight rain',
-    63: 'Moderate rain',
-    65: 'Heavy rain',
-    71: 'Slight snow fall',
-    73: 'Moderate snow fall',
-    75: 'Heavy snow fall',
-    95: 'Thunderstorm',
-  }
-  return conditions[code] || 'Unknown'
+    0: "Clear sky",
+    1: "Mainly clear",
+    2: "Partly cloudy",
+    3: "Overcast",
+    45: "Foggy",
+    48: "Depositing rime fog",
+    51: "Light drizzle",
+    53: "Moderate drizzle",
+    55: "Dense drizzle",
+    61: "Slight rain",
+    63: "Moderate rain",
+    65: "Heavy rain",
+    71: "Slight snow fall",
+    73: "Moderate snow fall",
+    75: "Heavy snow fall",
+    95: "Thunderstorm",
+  };
+  return conditions[code] || "Unknown";
 }
-
+ 
 const forecastSchema = z.object({
   date: z.string(),
   maxTemp: z.number(),
@@ -106,45 +110,48 @@ const forecastSchema = z.object({
   condition: z.string(),
   location: z.string(),
 })
-
+ 
+// ステップ1：指定された都市の天気データを取得するステップを作成
 const fetchWeather = createStep({
-  id: 'fetch-weather',
-  description: '指定された都市の天気予報を取得する',
+  id: "fetch-weather",
+  description: "指定された都市の天気予報を取得します",
   inputSchema: z.object({
     city: z.string(),
   }),
   outputSchema: forecastSchema,
   execute: async ({ inputData }) => {
     if (!inputData) {
-      throw new Error('トリガーデータが見つかりません')
+      throw new Error("トリガーデータが見つかりません");
     }
-
-    const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(inputData.city)}&count=1`
+ 
+    // 最初のAPI呼び出し：都市名を緯度と経度に変換
+    const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(inputData.city)}&count=1`    
     const geocodingResponse = await fetch(geocodingUrl)
     const geocodingData = (await geocodingResponse.json()) as {
       results: { latitude: number; longitude: number; name: string }[]
     }
-
+ 
     if (!geocodingData.results?.[0]) {
-      throw new Error(`場所 '${inputData.city}' が見つかりません`)
+      throw new Error(`場所 '${inputData.city}' が見つかりません`);
     }
-
+ 
     const { latitude, longitude, name } = geocodingData.results[0]
-
+ 
+    // 2番目のAPI呼び出し：座標を使用して天気データを取得
     const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=precipitation,weathercode&timezone=auto,&hourly=precipitation_probability,temperature_2m`
     const response = await fetch(weatherUrl)
     const data = (await response.json()) as {
       current: {
-        time: string
-        precipitation: number
-        weathercode: number
-      }
+        time: string;
+        precipitation: number;
+        weathercode: number;
+      };
       hourly: {
         precipitation_probability: number[]
         temperature_2m: number[]
       }
     }
-
+ 
     const forecast = {
       date: new Date().toISOString(),
       maxTemp: Math.max(...data.hourly.temperature_2m),
@@ -153,62 +160,62 @@ const fetchWeather = createStep({
       location: name,
       precipitationChance: data.hourly.precipitation_probability.reduce(
         (acc, curr) => Math.max(acc, curr),
-        0
+        0,
       ),
     }
-
+ 
     return forecast
   },
 })
-
+ 
+// ステップ2：エージェントを使用してアクティビティの推奨事項を生成するステップを作成
 const planActivities = createStep({
-  id: 'plan-activities',
-  description: '天候に基づいてアクティビティを提案する',
+  id: "plan-activities",
+  description: "天候に基づいてアクティビティを提案します",
   inputSchema: forecastSchema,
   outputSchema: z.object({
     activities: z.string(),
   }),
   execute: async ({ inputData, mastra }) => {
     const forecast = inputData
-
+ 
     if (!forecast) {
-      throw new Error('予報データが見つかりません')
+      throw new Error("予報データが見つかりません");
     }
-
+ 
     const prompt = `${forecast.location}の以下の天気予報に基づいて、適切なアクティビティを提案してください：
       ${JSON.stringify(forecast, null, 2)}
       `
-
+ 
     const agent = mastra?.getAgent('planningAgent')
     if (!agent) {
-      throw new Error('プランニングエージェントが見つかりません')
+      throw new Error("プランニングエージェントが見つかりません");
     }
-
+ 
     const response = await agent.stream([
       {
-        role: 'user',
+        role: "user",
         content: prompt,
       },
     ])
-
+ 
     let activitiesText = ''
-
     for await (const chunk of response.textStream) {
-      process.stdout.write(chunk)
-      activitiesText += chunk
+      process.stdout.write(chunk);
+      activitiesText += chunk;
     }
-
+ 
     return {
       activities: activitiesText,
-    }
+    };
   },
 })
-
-const weatherWorkflow = createWorkflow({
+ 
+const activityPlanningWorkflow = createWorkflow({
   steps: [fetchWeather, planActivities],
-  id: 'weather-workflow-step1-single-day',
+  id: 'activity-planning-step1-single-day',
   inputSchema: z.object({
-    city: z.string().describe('天気を取得する都市'),
+    city: z.string().describe("天気を取得する都市"),
   }),
   outputSchema: z.object({
     activities: z.string(),
@@ -216,50 +223,28 @@ const weatherWorkflow = createWorkflow({
 })
   .then(fetchWeather)
   .then(planActivities)
+ 
+activityPlanningWorkflow.commit()
+ 
+export { activityPlanningWorkflow }
+```
 
-weatherWorkflow.commit()
 
-export { weatherWorkflow }
-```## Mastraクラスにエージェントとワークフローのインスタンスを登録する
-プランニングエージェントと天気ワークフローをmastraインスタンスに登録します。
-これは、天気ワークフロー内でプランニングエージェントへのアクセスを可能にするために重要です。
+
+## Mastraクラスにエージェントとワークフローのインスタンスを登録する
+プランニングエージェントとアクティビティプランニングワークフローをmastraインスタンスに登録します。
+これはアクティビティプランニングワークフロー内でプランニングエージェントへのアクセスを可能にするために重要です。
 
 ```ts showLineNumbers copy filename="index.ts"
 import { Mastra } from '@mastra/core/mastra'
 import { createLogger } from '@mastra/core/logger'
-import { weatherWorkflow } from './workflows'
-import { planningAgent } from './agents'
-
+import { activityPlanningWorkflow } from './workflows/agent-workflow'
+import { planningAgent } from './agents/planning-agent'
+ 
+// Create a new Mastra instance and register components
 const mastra = new Mastra({
   vnext_workflows: {
-    weatherWorkflow,
-  },
-  agents: {
-    planningAgent,
-  },
-  logger: createLogger({
-    name: 'Mastra',
-    level: 'info',
-  }),
-})
-
-export { mastra }
-````
-
-## Mastraインスタンスにエージェントとワークフローを登録する
-
-プランニングエージェントと天気ワークフローをmastraインスタンスに登録します。
-これは、天気ワークフロー内でプランニングエージェントへのアクセスを可能にするために重要です。
-
-```ts showLineNumbers copy filename="index.ts"
-import { Mastra } from "@mastra/core/mastra";
-import { createLogger } from "@mastra/core/logger";
-import { weatherWorkflow } from "./workflows";
-import { planningAgent } from "./agents";
-
-const mastra = new Mastra({
-  vnext_workflows: {
-    weatherWorkflow,
+    activityPlanningWorkflow,
   },
   agents: {
     planningAgent,
@@ -268,32 +253,21 @@ const mastra = new Mastra({
     name: "Mastra",
     level: "info",
   }),
-});
-
-export { mastra };
+})
+ 
+export { mastra }
 ```
 
-## 天気ワークフローを実行する
-
-ここでは、mastraインスタンスから天気ワークフローを取得し、実行を作成して、必要なinputDataで作成した実行を実行します。
+## アクティビティプランニングワークフローを実行する
+ここでは、mastraインスタンスからアクティビティプランニングワークフローを取得し、実行を作成して、必要なinputDataで作成した実行を実行します。
 
 ```ts showLineNumbers copy filename="exec.ts"
 import { mastra } from "./";
 
-const workflow = mastra.vnext_getWorkflow("weatherWorkflow");
-const run = workflow.createRun();
+const workflow = mastra.vnext_getWorkflow('activityPlanningWorkflow')
+const run = workflow.createRun()
 
-const result = await run.start({ inputData: { city: "New York" } });
-console.dir(result, { depth: null });
+// Start the workflow with New York as the city input
+const result = await run.start({ inputData: { city: 'New York' } })
+console.dir(result, { depth: null })
 ```
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/calling-agent"
-  }
-/>

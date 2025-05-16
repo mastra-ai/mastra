@@ -38,14 +38,14 @@ constructor(config: AgentConfig<TAgentId, TTools, TMetrics>)
       type: "string | ({ runtimeContext: RuntimeContext }) => string | Promise<string>",
       isOptional: false,
       description:
-        "エージェントの動作を導く指示。静的な文字列または文字列を返す関数のいずれかです。",
+        "エージェントの動作を導くための指示。静的な文字列または文字列を返す関数のいずれかです。",
     },
     {
       name: "model",
       type: "MastraLanguageModel | ({ runtimeContext: RuntimeContext }) => MastraLanguageModel | Promise<MastraLanguageModel>",
       isOptional: false,
       description:
-        "応答生成に使用する言語モデル。モデルインスタンスまたはモデルを返す関数のいずれかです。",
+        "レスポンス生成に使用する言語モデル。モデルインスタンスまたはモデルを返す関数のいずれかです。",
     },
     {
       name: "tools",
@@ -65,6 +65,13 @@ constructor(config: AgentConfig<TAgentId, TTools, TMetrics>)
       type: "AgentStreamOptions",
       isOptional: true,
       description: "stream()を呼び出す際に使用するデフォルトオプション。",
+    },
+    {
+      name: "workflows",
+      type: "Record<string, NewWorkflow> | ({ runtimeContext: RuntimeContext }) => Record<string, NewWorkflow> | Promise<Record<string, NewWorkflow>>",
+      isOptional: true,
+      description:
+        "エージェントが実行できるワークフロー。静的なオブジェクトまたはワークフローを返す関数のいずれかです。",
     },
     {
       name: "evals",

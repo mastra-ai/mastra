@@ -1,3 +1,8 @@
+---
+title: Mastra クライアントテレメトリAPI
+description: client-js SDKを使用して、監視やデバッグのためにMastraアプリケーションからトレースを取得し分析する方法を学びます。
+---
+
 # テレメトリーAPI
 
 テレメトリーAPIは、Mastraアプリケーションからトレースを取得して分析するためのメソッドを提供します。これにより、アプリケーションの動作とパフォーマンスを監視およびデバッグするのに役立ちます。
@@ -12,16 +17,16 @@ const client = new MastraClient();
 
 ## トレースの取得
 
-オプションのフィルタリングとページネーションを使用してトレースを取得します：
+オプションのフィルタリングやページネーションを使ってトレースを取得します：
 
 ```typescript
 const telemetry = await client.getTelemetry({
-  name: "trace-name", // オプション: トレース名でフィルタリング
-  scope: "scope-name", // オプション: スコープでフィルタリング
-  page: 1, // オプション: ページネーションのページ番号
-  perPage: 10, // オプション: 1ページあたりのアイテム数
+  name: "trace-name", // Optional: Filter by trace name
+  scope: "scope-name", // Optional: Filter by scope
+  page: 1, // Optional: Page number for pagination
+  perPage: 10, // Optional: Number of items per page
   attribute: {
-    // オプション: カスタム属性でフィルタリング
+    // Optional: Filter by custom attributes
     key: "value",
   },
 });

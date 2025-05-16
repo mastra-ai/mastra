@@ -1,54 +1,54 @@
 ---
-title: "リファレンス: PlayAI Voice | Voice Providers | Mastra Docs"
-description: "PlayAI音声実装のドキュメントで、テキスト読み上げ機能を提供します。"
+title: "リファレンス: PlayAI Voice | Voice Providers | Mastra ドキュメント"
+description: "PlayAI voice 実装のドキュメント。テキスト読み上げ機能を提供します。"
 ---
 
 # PlayAI
 
-MastraにおけるPlayAIの音声実装は、PlayAIのAPIを使用してテキスト読み上げ機能を提供します。
+MastraにおけるPlayAIの音声実装は、PlayAIのAPIを利用してテキスト読み上げ機能を提供します。
 
 ## 使用例
 
 ```typescript
 import { PlayAIVoice } from "@mastra/voice-playai";
 
-// Initialize with default configuration (uses PLAYAI_API_KEY environment variable and PLAYAI_USER_ID environment variable)
+// デフォルト設定で初期化（PLAYAI_API_KEY 環境変数と PLAYAI_USER_ID 環境変数を使用）
 const voice = new PlayAIVoice();
 
-// Initialize with default configuration
+// デフォルト設定で初期化
 const voice = new PlayAIVoice({
   speechModel: {
     name: "PlayDialog",
     apiKey: process.env.PLAYAI_API_KEY,
     userId: process.env.PLAYAI_USER_ID,
   },
-  speaker: "Angelo", // Default voice
+  speaker: "Angelo", // デフォルトの音声
 });
 
-// Convert text to speech with a specific voice
+// 特定の音声でテキストを音声に変換
 const audioStream = await voice.speak("Hello, world!", {
   speaker:
-    "s3://voice-cloning-zero-shot/b27bc13e-996f-4841-b584-4d35801aea98/original/manifest.json", // Dexter voice
+    "s3://voice-cloning-zero-shot/b27bc13e-996f-4841-b584-4d35801aea98/original/manifest.json", // Dexter の音声
 });
 ```
 
-## コンストラクターパラメータ
+## コンストラクタのパラメータ
 
 <PropertiesTable
   content={[
     {
       name: "speechModel",
       type: "PlayAIConfig",
-      description: "テキストから音声への機能の設定",
+      description: "テキスト読み上げ機能のための設定",
       isOptional: true,
       defaultValue: "{ name: 'PlayDialog' }",
     },
     {
       name: "speaker",
       type: "string",
-      description: "音声合成に使用するデフォルトの音声ID",
+      description: "音声合成で使用するデフォルトのボイスID",
       isOptional: true,
-      defaultValue: "最初に利用可能な音声ID",
+      defaultValue: "最初に利用可能なボイスID",
     },
   ]}
 />
@@ -67,13 +67,15 @@ const audioStream = await voice.speak("Hello, world!", {
     {
       name: "apiKey",
       type: "string",
-      description: "PlayAI APIキー。PLAYAI_API_KEY環境変数にフォールバック",
+      description:
+        "PlayAIのAPIキー。指定がない場合はPLAYAI_API_KEY環境変数が使用されます",
       isOptional: true,
     },
     {
       name: "userId",
       type: "string",
-      description: "PlayAIユーザーID。PLAYAI_USER_ID環境変数にフォールバック",
+      description:
+        "PlayAIのユーザーID。指定がない場合はPLAYAI_USER_ID環境変数が使用されます",
       isOptional: true,
     },
   ]}
@@ -83,7 +85,7 @@ const audioStream = await voice.speak("Hello, world!", {
 
 ### speak()
 
-設定された音声モデルと声を使用してテキストを音声に変換します。
+設定された音声モデルとボイスを使用して、テキストを音声に変換します。
 
 <PropertiesTable
   content={[
@@ -91,15 +93,15 @@ const audioStream = await voice.speak("Hello, world!", {
       name: "input",
       type: "string | NodeJS.ReadableStream",
       description:
-        "音声に変換するテキスト。ストリームが提供された場合、最初にテキストに変換されます。",
+        "音声に変換するテキスト。ストリームが指定された場合は、最初にテキストへ変換されます。",
       isOptional: false,
     },
     {
       name: "options.speaker",
       type: "string",
-      description: "このリクエストのデフォルトのスピーカーを上書きします",
+      description: "このリクエストのデフォルトスピーカーを上書きします",
       isOptional: true,
-      defaultValue: "Constructorのスピーカー値",
+      defaultValue: "Constructor's speaker value",
     },
   ]}
 />
@@ -108,54 +110,54 @@ const audioStream = await voice.speak("Hello, world!", {
 
 ### getSpeakers()
 
-利用可能な音声オプションの配列を返します。各ノードには以下が含まれます:
+利用可能なボイスオプションの配列を返します。各ノードには以下が含まれます:
 
 <PropertiesTable
   content={[
     {
       name: "name",
       type: "string",
-      description: "音声の名前",
+      description: "ボイスの名前",
       isOptional: false,
     },
     {
       name: "accent",
       type: "string",
-      description: "音声のアクセント（例: 'US', 'British', 'Australian'）",
+      description: "ボイスのアクセント（例: 'US', 'British', 'Australian'）",
       isOptional: false,
     },
     {
       name: "gender",
       type: "'M' | 'F'",
-      description: "音声の性別",
+      description: "ボイスの性別",
       isOptional: false,
     },
     {
       name: "age",
       type: "'Young' | 'Middle' | 'Old'",
-      description: "音声の年齢カテゴリ",
+      description: "ボイスの年齢カテゴリ",
       isOptional: false,
     },
     {
       name: "style",
       type: "'Conversational' | 'Narrative'",
-      description: "音声の話し方スタイル",
+      description: "ボイスの話し方スタイル",
       isOptional: false,
     },
     {
       name: "voiceId",
       type: "string",
-      description: "音声の一意識別子",
+      description: "ボイスのユニークな識別子",
       isOptional: false,
     },
   ]}
 />
 ### listen()
 
-このメソッドはPlayAIではサポートされておらず、エラーをスローします。PlayAIは音声認識機能を提供していません。
+このメソッドはPlayAIではサポートされておらず、エラーが発生します。PlayAIは音声認識（音声からテキストへの変換）機能を提供していません。
 
 ## メモ
 
-- PlayAIは認証にAPIキーとユーザーIDの両方が必要です
-- サービスは「PlayDialog」と「Play3.0-mini」の2つのモデルを提供しています
-- 各音声には、APIコールを行う際に使用する必要があるユニークなS3マニフェストIDがあります
+- PlayAIの認証には、APIキーとユーザーIDの両方が必要です
+- このサービスは「PlayDialog」と「Play3.0-mini」の2つのモデルを提供しています
+- 各ボイスには固有のS3マニフェストIDがあり、APIコール時に使用する必要があります

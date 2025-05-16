@@ -1,50 +1,50 @@
 ---
-title: "リファレンス: Speechify Voice | Voice Providers | Mastra Docs"
-description: "Speechify音声実装のドキュメントで、テキスト読み上げ機能を提供します。"
+title: "リファレンス: Speechify Voice | Voice Providers | Mastra ドキュメント"
+description: "Speechify voice 実装のドキュメント。テキスト読み上げ機能について説明します。"
 ---
 
 # Speechify
 
-MastraにおけるSpeechifyの音声実装は、SpeechifyのAPIを使用してテキスト読み上げ機能を提供します。
+MastraにおけるSpeechifyの音声実装は、SpeechifyのAPIを利用してテキスト読み上げ機能を提供します。
 
 ## 使用例
 
 ```typescript
 import { SpeechifyVoice } from "@mastra/voice-speechify";
 
-// デフォルトの設定で初期化（SPEECHIFY_API_KEY 環境変数を使用）
+// Initialize with default configuration (uses SPEECHIFY_API_KEY environment variable)
 const voice = new SpeechifyVoice();
 
-// カスタム設定で初期化
+// Initialize with custom configuration
 const voice = new SpeechifyVoice({
   speechModel: {
     name: "simba-english",
     apiKey: "your-api-key",
   },
-  speaker: "george", // デフォルトの声
+  speaker: "george", // Default voice
 });
 
-// テキストを音声に変換
+// Convert text to speech
 const audioStream = await voice.speak("Hello, world!", {
-  speaker: "henry", // デフォルトの声を上書き
+  speaker: "henry", // Override default voice
 });
 ```
 
-## コンストラクターパラメーター
+## コンストラクタのパラメータ
 
 <PropertiesTable
   content={[
     {
       name: "speechModel",
       type: "SpeechifyConfig",
-      description: "テキスト読み上げ機能の設定",
+      description: "テキスト読み上げ機能のための設定",
       isOptional: true,
       defaultValue: "{ name: 'simba-english' }",
     },
     {
       name: "speaker",
       type: "SpeechifyVoiceId",
-      description: "音声合成に使用するデフォルトの音声ID",
+      description: "音声合成で使用するデフォルトのボイスID",
       isOptional: true,
       defaultValue: "'george'",
     },
@@ -66,7 +66,7 @@ const audioStream = await voice.speak("Hello, world!", {
       name: "apiKey",
       type: "string",
       description:
-        "Speechify APIキー。SPEECHIFY_API_KEY環境変数にフォールバックします",
+        "SpeechifyのAPIキー。指定がない場合はSPEECHIFY_API_KEY環境変数が使用されます",
       isOptional: true,
     },
   ]}
@@ -76,7 +76,7 @@ const audioStream = await voice.speak("Hello, world!", {
 
 ### speak()
 
-設定された音声モデルと声を使用してテキストを音声に変換します。
+設定された音声モデルとボイスを使用して、テキストを音声に変換します。
 
 <PropertiesTable
   content={[
@@ -84,22 +84,22 @@ const audioStream = await voice.speak("Hello, world!", {
       name: "input",
       type: "string | NodeJS.ReadableStream",
       description:
-        "音声に変換するテキスト。ストリームが提供された場合、最初にテキストに変換されます。",
+        "音声に変換するテキスト。ストリームが指定された場合は、最初にテキストへ変換されます。",
       isOptional: false,
     },
     {
       name: "options.speaker",
       type: "string",
-      description: "このリクエストのデフォルトのスピーカーを上書きします",
+      description: "このリクエストのデフォルトスピーカーを上書きします",
       isOptional: true,
-      defaultValue: "Constructorのスピーカー値",
+      defaultValue: "Constructor's speaker value",
     },
     {
       name: "options.model",
       type: "VoiceModelName",
-      description: "このリクエストのデフォルトのモデルを上書きします",
+      description: "このリクエストのデフォルトモデルを上書きします",
       isOptional: true,
-      defaultValue: "Constructorのモデル値",
+      defaultValue: "Constructor's model value",
     },
   ]}
 />
@@ -108,40 +108,40 @@ const audioStream = await voice.speak("Hello, world!", {
 
 ### getSpeakers()
 
-利用可能な音声オプションの配列を返します。各ノードには以下が含まれます:
+利用可能なボイスオプションの配列を返します。各ノードには以下が含まれます:
 
 <PropertiesTable
   content={[
     {
       name: "voiceId",
       type: "string",
-      description: "音声の一意の識別子",
+      description: "ボイスの一意な識別子",
     },
     {
       name: "name",
       type: "string",
-      description: "音声の表示名",
+      description: "ボイスの表示名",
     },
     {
       name: "language",
       type: "string",
-      description: "音声の言語コード",
+      description: "ボイスの言語コード",
     },
     {
       name: "gender",
       type: "string",
-      description: "音声の性別",
+      description: "ボイスの性別",
     },
   ]}
 />
 
 ### listen()
 
-このメソッドはSpeechifyではサポートされておらず、エラーをスローします。Speechifyは音声認識機能を提供していません。
+このメソッドはSpeechifyではサポートされておらず、エラーが発生します。Speechifyは音声認識（音声からテキストへの変換）機能を提供していません。
 
-## メモ
+## 注意事項
 
-- Speechifyは認証にAPIキーを必要とします
-- デフォルトモデルは「simba-english」です
+- Speechifyは認証のためにAPIキーが必要です
+- デフォルトのモデルは「simba-english」です
 - 音声からテキストへの機能はサポートされていません
-- 追加のオーディオストリームオプションは、speak()メソッドのoptionsパラメータを通じて渡すことができます
+- 追加の音声ストリームオプションは、speak()メソッドのoptionsパラメータを通じて渡すことができます

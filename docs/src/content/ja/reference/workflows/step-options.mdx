@@ -1,13 +1,13 @@
 ---
 title: "リファレンス: StepOptions | ワークフローの構築 | Mastra ドキュメント"
-description: ワークフロー内のステップオプションに関するドキュメントで、変数マッピング、実行条件、その他のランタイム動作を制御します。
+description: ワークフローのステップオプションに関するドキュメント。変数マッピング、実行条件、その他のランタイム動作を制御します。
 ---
 
 # StepOptions
 
-ワークフローステップの構成オプションで、変数マッピング、実行条件、その他のランタイム動作を制御します。
+ワークフローステップの設定オプションで、変数マッピング、実行条件、その他のランタイム動作を制御します。
 
-## 使用法
+## 使用方法
 
 ```typescript
 workflow.step(processOrder, {
@@ -29,7 +29,7 @@ workflow.step(processOrder, {
     {
       name: "variables",
       type: "Record<string, VariableRef>",
-      description: "ステップ入力変数を他のステップからの値にマップします",
+      description: "ステップ入力変数を他のステップからの値にマッピングします",
       isOptional: true,
     },
     {
@@ -60,10 +60,10 @@ workflow.step(processOrder, {
   ]}
 />
 
-## 関連
+## 関連項目
 
 - [パス比較](../../docs/workflows/control-flow.mdx)
-- [Step関数リファレンス](./step-function.mdx)
-- [Stepクラスリファレンス](./step-class.mdx)
-- [Workflowクラスリファレンス](./workflow.mdx)
+- [ステップ関数リファレンス](./step-function.mdx)
+- [ステップクラスリファレンス](./step-class.mdx)
+- [ワークフロークラスリファレンス](./workflow.mdx)
 - [制御フローガイド](../../docs/workflows/control-flow.mdx)

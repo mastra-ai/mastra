@@ -1,3 +1,8 @@
+---
+title: Mastra クライアントワークフローAPI
+description: client-js SDKを使用してMastraで自動化されたワークフローを操作および実行する方法を学びます。
+---
+
 # ワークフローAPI
 
 ワークフローAPIは、Mastraの自動化されたワークフローを操作および実行するためのメソッドを提供します。
@@ -28,9 +33,9 @@ const workflow = client.getWorkflow("workflow-id");
 
 ## ワークフローメソッド
 
-### ワークフロー詳細の取得
+### ワークフローの詳細を取得
 
-ワークフローに関する詳細情報を取得します：
+ワークフローの詳細情報を取得します：
 
 ```typescript
 const details = await workflow.details();
@@ -38,7 +43,7 @@ const details = await workflow.details();
 
 ### ワークフロー実行を非同期で開始
 
-トリガーデータでワークフロー実行を開始し、実行結果を待ちます：
+triggerData を使ってワークフロー実行を開始し、実行結果を待ちます：
 
 ```typescript
 const { runId } = workflow.createRun();
@@ -54,7 +59,7 @@ const result = await workflow.startAsync({
 
 ### ワークフロー実行を非同期で再開
 
-一時停止されたワークフローステップを再開し、完全な実行結果を待ちます：
+一時停止中のワークフローステップを再開し、実行結果を待ちます：
 
 ```typescript
 const { runId } = createRun({ runId: prevRunId });
@@ -136,11 +141,11 @@ try {
 
 ### ワークフロー実行結果
 
-ワークフロー実行結果は以下を提供します：
+ワークフロー実行の結果は以下の内容を含みます：
 
-| フィールド    | 型                                                                             | 説明                                                     |
-| ------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------- |
-| `activePaths` | `Record<string, { status: string; suspendPayload?: any; stepPath: string[] }>` | 実行ステータスを含むワークフロー内の現在アクティブなパス |
-| `results`     | `CoreWorkflowRunResult<any, any, any>['results']`                              | ワークフロー実行からの結果                               |
-| `timestamp`   | `number`                                                                       | この遷移が発生した時のUnixタイムスタンプ                 |
-| `runId`       | `string`                                                                       | このワークフロー実行インスタンスの一意の識別子           |
+| フィールド       | 型                                                                               | 説明                                                         |
+| ------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------ |
+| `activePaths` | `Record<string, { status: string; suspendPayload?: any; stepPath: string[] }>` | ワークフロー内で現在アクティブなパスとその実行ステータス         |
+| `results`     | `CoreWorkflowRunResult<any, any, any>['results']`                              | ワークフロー実行からの結果                                    |
+| `timestamp`   | `number`                                                                       | この遷移が発生した Unix タイムスタンプ                        |
+| `runId`       | `string`                                                                       | このワークフロー実行インスタンスの一意な識別子                 |

@@ -1,13 +1,13 @@
 ---
-title: "例：MCPServerのデプロイ | エージェント | Mastra ドキュメント"
-description: stdioトランスポートを使用してMastra MCPServerをセットアップ、ビルド、デプロイし、NPMに公開する例。
+title: "例: MCPServer のデプロイ | Agents | Mastra ドキュメント"
+description: stdio トランスポートを使用して Mastra MCPServer をセットアップ、ビルド、デプロイし、NPM に公開する例です。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
-# 例：MCPServerのデプロイ
+# 例: MCPServer のデプロイ
 
-この例では、stdioトランスポートを使用した基本的なMastra MCPServerのセットアップ、ビルド、およびNPMへの公開などのデプロイ準備の手順を説明します。
+この例では、stdio トランスポートを使用した基本的な Mastra MCPServer のセットアップ方法、ビルド方法、そして NPM への公開などのデプロイ準備について説明します。
 
 ## 依存関係のインストール
 
@@ -17,11 +17,11 @@ import { GithubLink } from "@/components/github-link";
 pnpm add @mastra/mcp @mastra/core tsup
 ```
 
-## MCP サーバーのセットアップ
+## MCP Server のセットアップ
 
-1.  stdio サーバー用のファイルを作成します。例えば、`/src/mastra/stdio.ts` などです。
+1.  stdio サーバー用のファイルを作成します。例えば、`/src/mastra/stdio.ts` です。
 
-2.  以下のコードをファイルに追加します。実際の Mastra ツールをインポートし、サーバーに適切な名前を付けることを忘れないでください。
+2.  次のコードをファイルに追加します。実際の Mastra ツールをインポートし、サーバー名を適切に設定することを忘れないでください。
 
     ```typescript filename="src/mastra/stdio.ts" copy
     #!/usr/bin/env node
@@ -40,7 +40,7 @@ pnpm add @mastra/mcp @mastra/core tsup
     });
     ```
 
-3.  `package.json` を更新して、ビルドされたサーバーファイルを指す `bin` エントリとサーバーをビルドするためのスクリプトを含めます。
+3.  `package.json` を更新し、`bin` エントリでビルド済みサーバーファイルを指定し、サーバーをビルドするスクリプトを追加します。
 
 ```json filename="package.json" copy
 {
@@ -51,51 +51,51 @@ pnpm add @mastra/mcp @mastra/core tsup
 }
 ```
 
-4.  ビルドコマンドを実行します：
+4.  ビルドコマンドを実行します。
 
     ```bash
     pnpm run build:mcp
     ```
 
-    これによりサーバーコードがコンパイルされ、出力ファイルが実行可能になります。
+    これにより、サーバーコードがコンパイルされ、出力ファイルが実行可能になります。
 
-## NPMへのデプロイ
+## NPM へのデプロイ
 
-MCPサーバーを他の人（または自分自身）が`npx`経由で、または依存関係として使用できるようにするには、NPMに公開することができます。
+自分や他の人が `npx` や依存関係として MCP サーバーを利用できるようにするには、NPM に公開することができます。
 
-1.  NPMアカウントを持っていて、ログインしていることを確認してください（`npm login`）。
-2.  `package.json`のパッケージ名がユニークで利用可能であることを確認してください。
-3.  ビルド後、プロジェクトのルートから公開コマンドを実行します：
+1.  NPM アカウントを持ち、ログインしていることを確認します（`npm login`）。
+2.  `package.json` のパッケージ名がユニークで利用可能であることを確認します。
+3.  プロジェクトのルートディレクトリでビルド後、以下のコマンドを実行して公開します：
 
     ```bash
     npm publish --access public
     ```
 
-    パッケージの公開に関する詳細については、[NPMドキュメント](https://docs.npmjs.com/creating-and-publishing-scoped-public-packages)を参照してください。
+    パッケージの公開に関する詳細は、[NPM のドキュメント](https://docs.npmjs.com/creating-and-publishing-scoped-public-packages)を参照してください。
 
-## デプロイされたMCPサーバーを使用する
+## デプロイ済みのMCPサーバーを利用する
 
-公開後、あなたのMCPサーバーは、パッケージを実行するコマンドを指定することで`MCPClient`から使用できます。また、Claude デスクトップ、Cursor、Windsurfなど他のMCPクライアントも使用できます。
+公開が完了すると、`MCPClient` でコマンドを指定してあなたのパッケージを実行することで、MCPサーバーを利用できます。また、Claude desktop、Cursor、Windsurfなど、他のMCPクライアントも使用可能です。
 
 ```typescript
 import { MCPClient } from "@mastra/mcp";
 
 const mcp = new MCPClient({
   servers: {
-    // このMCPサーバーインスタンスに名前を付ける
+    // Give this MCP server instance a name
     yourServerName: {
       command: "npx",
-      args: ["-y", "@your-org-name/your-package-name@latest"], // あなたのパッケージ名に置き換えてください
+      args: ["-y", "@your-org-name/your-package-name@latest"], // Replace with your package name
     },
   },
 });
 
-// この設定からツールやツールセットを取得して、エージェントで使用できます
+// You can then get tools or toolsets from this configuration to use in your agent
 const tools = await mcp.getTools();
 const toolsets = await mcp.getToolsets();
 ```
 
-注意: 組織スコープなしで公開した場合、`args`は単に`["-y", "your-package-name@latest"]`になるかもしれません。
+注意: 組織スコープなしで公開した場合、`args` は `["-y", "your-package-name@latest"]` となる場合があります。
 
 <br />
 <br />

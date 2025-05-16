@@ -1,13 +1,13 @@
 ---
 title: "リファレンス: Faithfulness | メトリクス | Evals | Mastra ドキュメント"
-description: 提供されたコンテキストと比較して、LLM出力の事実の正確性を評価するMastraのFaithfulnessメトリクスのドキュメント。
+description: Mastra における Faithfulness メトリクスのドキュメント。提供されたコンテキストと比較して、LLM の出力の事実的な正確性を評価します。
 ---
 
 # FaithfulnessMetric リファレンス
 
-Mastraの`FaithfulnessMetric`は、提供されたコンテキストと比較してLLMの出力がどれほど事実に基づいているかを評価します。出力から主張を抽出し、それらをコンテキストと照合することで、RAGパイプラインの応答の信頼性を測定するために不可欠です。
+Mastra の `FaithfulnessMetric` は、LLM の出力が提供されたコンテキストと比較してどれだけ事実に忠実であるかを評価します。出力から主張を抽出し、それらをコンテキストと照合することで、RAG パイプラインの応答の信頼性を測定する上で重要な役割を果たします。
 
-## 基本的な使用法
+## 基本的な使い方
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -32,7 +32,7 @@ console.log(result.score); // 1.0
 console.log(result.info.reason); // "All claims are supported by the context."
 ```
 
-## コンストラクターパラメータ
+## コンストラクタのパラメータ
 
 <PropertiesTable
   content={[
@@ -58,33 +58,35 @@ console.log(result.info.reason); // "All claims are supported by the context."
     {
       name: "scale",
       type: "number",
-      description: "最大スコア値。最終スコアはこのスケールに正規化されます。",
+      description:
+        "最大スコア値。最終的なスコアはこのスケールに正規化されます。",
       isOptional: false,
       defaultValue: "1",
     },
     {
       name: "context",
       type: "string[]",
-      description: "出力の主張が検証されるコンテキストチャンクの配列。",
+      description:
+        "出力の主張が検証されるコンテキストチャンクの配列。",
       isOptional: false,
     },
   ]}
 />
 
-## measure() パラメータ
+## measure() のパラメーター
 
 <PropertiesTable
   content={[
     {
       name: "input",
       type: "string",
-      description: "LLMに与えられた元のクエリまたはプロンプト。",
+      description: "LLM に与えられた元のクエリまたはプロンプト。",
       isOptional: false,
     },
     {
       name: "output",
       type: "string",
-      description: "忠実性を評価するためのLLMの応答。",
+      description: "忠実性を評価するための LLM の応答。",
       isOptional: false,
     },
   ]}
@@ -98,7 +100,7 @@ console.log(result.info.reason); // "All claims are supported by the context."
       name: "score",
       type: "number",
       description:
-        "コンテキストによってサポートされている主張の割合を表す、0から設定されたスケールまでのスコア。",
+        "0から設定されたスケールまでのスコアで、文脈によって裏付けられた主張の割合を表します。",
     },
     {
       name: "info",
@@ -112,7 +114,7 @@ console.log(result.info.reason); // "All claims are supported by the context."
               name: "reason",
               type: "string",
               description:
-                "スコアの詳細な説明。どの主張がサポートされ、矛盾し、不確かであるとされたかを含む。",
+                "どの主張が裏付けられたか、矛盾していたか、または不明とされたかを含む、スコアの詳細な説明です。",
             },
           ],
         },
@@ -121,73 +123,74 @@ console.log(result.info.reason); // "All claims are supported by the context."
   ]}
 />
 
-## 採点の詳細
+## スコアリングの詳細
 
-このメトリクスは、提供されたコンテキストに対する主張の検証を通じて忠実性を評価します。
+このメトリックは、提供されたコンテキストに対するクレーム検証を通じて忠実性を評価します。
 
-### 採点プロセス
+### スコアリングプロセス
 
-1. 主張とコンテキストを分析します：
+1. クレームとコンテキストを分析します:
 
-   - すべての主張（事実的および推測的）を抽出
-   - 各主張をコンテキストに対して検証
-   - 以下の3つの判定のいずれかを割り当て：
-     - "yes" - 主張がコンテキストによって裏付けられている
-     - "no" - 主張がコンテキストと矛盾している
-     - "unsure" - 主張が検証不可能
+   - すべてのクレーム（事実および推測）を抽出
+   - 各クレームをコンテキストと照合して検証
+   - 3つの判定のいずれかを割り当てる:
+     - "yes" - クレームがコンテキストによって支持されている
+     - "no" - クレームがコンテキストと矛盾している
+     - "unsure" - クレームが検証できない
 
-2. 忠実性スコアを計算します：
-   - 裏付けられた主張をカウント
-   - 総主張数で割る
+2. 忠実性スコアを計算:
+   - 支持されたクレームの数をカウント
+   - 総クレーム数で割る
    - 設定された範囲にスケーリング
 
-最終スコア：`(supported_claims / total_claims) * scale`
+最終スコア: `(supported_claims / total_claims) * scale`
 
 ### スコアの解釈
 
-（0から設定値まで、デフォルトは0-1）
+(0 から scale、デフォルトは 0-1)
 
-- 1.0：すべての主張がコンテキストによって裏付けられている
-- 0.7-0.9：ほとんどの主張が裏付けられており、検証不可能なものはわずか
-- 0.4-0.6：裏付けと矛盾が混在している
-- 0.1-0.3：裏付けが限られており、多くの矛盾がある
-- 0.0：裏付けられた主張がない
+- 1.0: すべてのクレームがコンテキストによって支持されている
+- 0.7-0.9: ほとんどのクレームが支持されており、検証できないものは少数
+- 0.4-0.6: 支持と矛盾が混在
+- 0.1-0.3: 支持は限定的で、多くが矛盾
+- 0.0: 支持されたクレームがない
 
-## 高度な例
+## 応用例
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
 import { FaithfulnessMetric } from "@mastra/evals/llm";
 
-// 評価のためのモデルを設定
+// Configure the model for evaluation
 const model = openai("gpt-4o-mini");
 
 const metric = new FaithfulnessMetric(model, {
   context: [
-    "その会社は2020年に100人の従業員がいました。",
-    "現在の従業員数は約500人です。",
+    "The company had 100 employees in 2020.",
+    "Current employee count is approximately 500.",
   ],
 });
 
-// 混合された主張タイプの例
+// Example with mixed claim types
 const result = await metric.measure(
-  "会社の成長はどのようなものですか？",
-  "その会社は2020年に100人の従業員から現在500人に成長し、来年には1000人に拡大するかもしれません。",
+  "What's the company's growth like?",
+  "The company has grown from 100 employees in 2020 to 500 now, and might expand to 1000 by next year.",
 );
 
-// 出力例:
+// Example output:
 // {
 //   score: 0.67,
 //   info: {
-//     reason: "スコアが0.67である理由は、2つの主張がコンテキストによってサポートされているためです
-//           （2020年の初期従業員数100人と現在の500人の数）、
-//           将来の拡大の主張はコンテキストに対して検証できないため不確実とされています。"
+//     reason: "The score is 0.67 because two claims are supported by the context
+//           (initial employee count of 100 in 2020 and current count of 500),
+//           while the future expansion claim is marked as unsure as it cannot
+//           be verified against the context."
 //   }
 // }
 ```
 
-### 関連
+### 関連項目
 
-- [回答の関連性メトリック](./answer-relevancy)
-- [幻覚メトリック](./hallucination)
-- [コンテキストの関連性メトリック](./context-relevancy)
+- [Answer Relevancy Metric](./answer-relevancy)
+- [Hallucination Metric](./hallucination)
+- [Context Relevancy Metric](./context-relevancy)

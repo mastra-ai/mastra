@@ -1,13 +1,13 @@
 ---
 title: "リファレンス: 回答の関連性 | メトリクス | 評価 | Mastra ドキュメント"
-description: Mastraにおける回答関連性メトリクスのドキュメント。LLM出力がどれだけ適切に入力クエリに対応しているかを評価します。
+description: Mastra における回答の関連性メトリクスのドキュメント。LLM の出力が入力クエリにどれだけ適切に対応しているかを評価します。
 ---
 
 # AnswerRelevancyMetric
 
-`AnswerRelevancyMetric`クラスは、LLMの出力が入力クエリにどれだけ適切に回答または対応しているかを評価します。これは判定ベースのシステムを使用して関連性を判断し、詳細なスコアリングと根拠を提供します。
+`AnswerRelevancyMetric` クラスは、LLM の出力が入力クエリにどれだけ適切に回答または対応しているかを評価します。判定者ベースのシステムを用いて関連性を判断し、詳細なスコアリングと理由付けを提供します。
 
-## 基本的な使用方法
+## 基本的な使い方
 
 ```typescript
 import { openai } from "@ai-sdk/openai";
@@ -30,7 +30,7 @@ console.log(result.score); // Score from 0-1
 console.log(result.info.reason); // Explanation of the score
 ```
 
-## コンストラクタパラメータ
+## コンストラクタのパラメータ
 
 <PropertiesTable
   content={[
@@ -43,7 +43,7 @@ console.log(result.info.reason); // Explanation of the score
     {
       name: "options",
       type: "AnswerRelevancyMetricOptions",
-      description: "メトリックの設定オプション",
+      description: "このメトリクスの設定オプション",
       isOptional: true,
       defaultValue: "{ uncertaintyWeight: 0.3, scale: 1 }",
     },
@@ -57,21 +57,21 @@ console.log(result.info.reason); // Explanation of the score
     {
       name: "uncertaintyWeight",
       type: "number",
-      description: "スコアリングにおける「不確か」な判定に与える重み（0-1）",
+      description: "スコアリングにおいて「不確か」な判定に与える重み（0-1）",
       isOptional: true,
       defaultValue: "0.3",
     },
     {
       name: "scale",
       type: "number",
-      description: "最大スコア値",
+      description: "スコアの最大値",
       isOptional: true,
       defaultValue: "1",
     },
   ]}
 />
 
-## measure() パラメータ
+## measure() のパラメーター
 
 <PropertiesTable
   content={[
@@ -84,7 +84,7 @@ console.log(result.info.reason); // Explanation of the score
     {
       name: "output",
       type: "string",
-      description: "評価対象のLLMの応答",
+      description: "評価対象となるLLMの応答",
       isOptional: false,
     },
   ]}
@@ -97,7 +97,7 @@ console.log(result.info.reason); // Explanation of the score
     {
       name: "score",
       type: "number",
-      description: "関連性スコア（0から指定のスケールまで、デフォルトは0-1）",
+      description: "関連性スコア（0からスケール、デフォルトは0-1）",
     },
     {
       name: "info",
@@ -119,33 +119,33 @@ console.log(result.info.reason); // Explanation of the score
   ]}
 />
 
-## 採点の詳細
+## スコアリングの詳細
 
-このメトリックは、完全性、正確性、詳細レベルを考慮し、クエリと回答の一致度を通じて関連性を評価します。
+この指標は、クエリと回答の整合性を通じて関連性を評価し、完全性、正確性、詳細レベルを考慮します。
 
-### 採点プロセス
+### スコアリングプロセス
 
-1. ステートメント分析：
+1. ステートメント分析:
 
-   - 文脈を保持しながら出力を意味のあるステートメントに分解します
-   - 各ステートメントをクエリの要件に対して評価します
+   - 出力を意味のあるステートメントに分割し、文脈を保持する
+   - 各ステートメントをクエリの要件と照らし合わせて評価する
 
-2. 各ステートメントの関連性を評価：
-   - 「yes」：直接一致に対して完全な重み
-   - 「unsure」：おおよその一致に対して部分的な重み（デフォルト：0.3）
-   - 「no」：無関係なコンテンツに対してゼロの重み
+2. 各ステートメントの関連性を評価:
+   - "yes": 直接一致の場合は全加重
+   - "unsure": おおよその一致には部分加重（デフォルト: 0.3）
+   - "no": 無関係な内容には加重なし
 
-最終スコア：`((direct + uncertainty * partial) / total_statements) * scale`
+最終スコア: `((direct + uncertainty * partial) / total_statements) * scale`
 
 ### スコアの解釈
 
-（0からスケールまで、デフォルトは0-1）
+（0 から scale、デフォルトは 0-1）
 
-- 1.0：完璧な関連性 - 完全かつ正確
-- 0.7-0.9：高い関連性 - 軽微なギャップまたは不正確さ
-- 0.4-0.6：中程度の関連性 - 重大なギャップ
-- 0.1-0.3：低い関連性 - 大きな問題
-- 0.0：関連性なし - 不正確またはトピックから外れている
+- 1.0: 完全な関連性 - 完全かつ正確
+- 0.7-0.9: 高い関連性 - わずかな抜けや不正確さ
+- 0.4-0.6: 中程度の関連性 - 重要な抜け
+- 0.1-0.3: 低い関連性 - 重大な問題
+- 0.0: 関連性なし - 誤りまたは的外れ
 
 ## カスタム設定の例
 
@@ -181,6 +181,6 @@ const result = await metric.measure(
 
 ## 関連
 
-- [プロンプト整合性メトリック](./prompt-alignment)
-- [コンテキスト精度メトリック](./context-precision)
-- [忠実性メトリック](./faithfulness)
+- [プロンプト整合性メトリクス](./prompt-alignment)
+- [コンテキスト精度メトリクス](./context-precision)
+- [忠実性メトリクス](./faithfulness)

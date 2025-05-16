@@ -1,11 +1,11 @@
 ---
-title: "リファレンス: Upstash Vector Store | ベクターデータベース | RAG | Mastra ドキュメント"
-description: MastraのUpstashVectorクラスのドキュメントで、Upstash Vectorを使用したベクター検索を提供します。
+title: "リファレンス: Upstashベクトルストア | ベクトルデータベース | RAG | Mastraドキュメント"
+description: Mastraにおける、Upstash Vectorを使用したベクトル検索を提供するUpstashVectorクラスのドキュメント。
 ---
 
 # Upstash Vector Store
 
-UpstashVector クラスは、メタデータフィルタリング機能を備えたベクトル類似検索を提供するサーバーレスベクトルデータベースサービスである [Upstash Vector](https://upstash.com/vector) を使用してベクトル検索を提供します。
+UpstashVectorクラスは、[Upstash Vector](https://upstash.com/vector)を使用したベクトル検索を提供します。Upstash Vectorは、メタデータフィルタリング機能を備えたベクトル類似性検索を提供するサーバーレスベクトルデータベースサービスです。
 
 ## コンストラクタオプション
 
@@ -14,7 +14,7 @@ UpstashVector クラスは、メタデータフィルタリング機能を備え
     {
       name: "url",
       type: "string",
-      description: "Upstash Vector データベースのURL",
+      description: "Upstash Vectorデータベース URL",
     },
     {
       name: "token",
@@ -28,7 +28,7 @@ UpstashVector クラスは、メタデータフィルタリング機能を備え
 
 ### createIndex()
 
-注意: このメソッドはUpstashでは無操作です。インデックスは自動的に作成されます。
+注意：Upstashではインデックスは自動的に作成されるため、このメソッドは何も実行しません。
 
 <PropertiesTable
   content={[
@@ -40,14 +40,14 @@ UpstashVector クラスは、メタデータフィルタリング機能を備え
     {
       name: "dimension",
       type: "number",
-      description: "ベクトルの次元（埋め込みモデルに一致する必要があります）",
+      description: "ベクトルの次元数（埋め込みモデルと一致する必要があります）",
     },
     {
       name: "metric",
       type: "'cosine' | 'euclidean' | 'dotproduct'",
       isOptional: true,
       defaultValue: "cosine",
-      description: "類似性検索のための距離メトリック",
+      description: "類似性検索の距離メトリック",
     },
   ]}
 />
@@ -76,7 +76,7 @@ UpstashVector クラスは、メタデータフィルタリング機能を備え
       name: "ids",
       type: "string[]",
       isOptional: true,
-      description: "オプションのベクトルID（提供されない場合は自動生成）",
+      description: "オプションのベクトルID（提供されない場合は自動生成されます）",
     },
   ]}
 />
@@ -93,7 +93,7 @@ UpstashVector クラスは、メタデータフィルタリング機能を備え
     {
       name: "queryVector",
       type: "number[]",
-      description: "類似ベクトルを見つけるためのクエリベクトル",
+      description: "類似ベクトルを検索するためのクエリベクトル",
     },
     {
       name: "topK",
@@ -120,7 +120,7 @@ UpstashVector クラスは、メタデータフィルタリング機能を備え
 
 ### listIndexes()
 
-インデックス名（名前空間）の配列を文字列として返します。
+インデックス名（名前空間）の文字列配列を返します。
 
 ### describeIndex()
 
@@ -134,7 +134,7 @@ UpstashVector クラスは、メタデータフィルタリング機能を備え
   ]}
 />
 
-返される内容:
+戻り値：
 
 ```typescript copy
 interface IndexStats {
@@ -173,17 +173,17 @@ interface IndexStats {
     {
       name: "update",
       type: "object",
-      description: "ベクトルおよび/またはメタデータを含む更新オブジェクト",
+      description: "ベクトルやメタデータを含む更新オブジェクト",
     },
   ]}
 />
 
-`update` オブジェクトは以下のプロパティを持つことができます:
+`update`オブジェクトは以下のプロパティを持つことができます：
 
-- `vector` (オプション): 新しいベクトルを表す数値の配列。
-- `metadata` (オプション): メタデータのキーと値のペアのレコード。
+- `vector`（オプション）：新しいベクトルを表す数値の配列。
+- `metadata`（オプション）：メタデータのキーと値のペアのレコード。
 
-`vector` または `metadata` のいずれも提供されない場合、または `metadata` のみが提供された場合はエラーをスローします。
+`vector`も`metadata`も提供されない場合、または`metadata`のみが提供される場合はエラーがスローされます。
 
 ### deleteVector()
 
@@ -202,11 +202,11 @@ interface IndexStats {
   ]}
 />
 
-指定されたインデックスからIDによってアイテムを削除しようとします。削除が失敗した場合はエラーメッセージを記録します。
+指定されたインデックスからIDによってアイテムを削除しようとします。削除に失敗した場合はエラーメッセージをログに記録します。
 
 ## レスポンスタイプ
 
-クエリ結果はこの形式で返されます:
+クエリ結果は以下の形式で返されます：
 
 ```typescript copy
 interface QueryResult {
@@ -217,9 +217,9 @@ interface QueryResult {
 }
 ```
 
-## エラーハンドリング
+## エラー処理
 
-ストアは型付きエラーをスローし、キャッチすることができます：
+ストアは捕捉可能な型付きエラーをスローします：
 
 ```typescript copy
 try {
@@ -230,16 +230,16 @@ try {
 } catch (error) {
   if (error instanceof VectorStoreError) {
     console.log(error.code); // 'connection_failed' | 'invalid_dimension' | etc
-    console.log(error.details); // 追加のエラーコンテキスト
+    console.log(error.details); // Additional error context
   }
 }
 ```
 
 ## 環境変数
 
-必要な環境変数:
+必要な環境変数：
 
-- `UPSTASH_VECTOR_URL`: あなたのUpstash VectorデータベースURL
+- `UPSTASH_VECTOR_URL`: あなたのUpstash VectorデータベースのURL
 - `UPSTASH_VECTOR_TOKEN`: あなたのUpstash Vector APIトークン
 
 ## 関連

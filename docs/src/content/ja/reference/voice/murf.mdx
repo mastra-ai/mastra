@@ -1,18 +1,18 @@
 ---
-title: "リファレンス: Murf Voice | Voice Providers | Mastra Docs"
-description: "Murf音声実装のドキュメントで、テキスト読み上げ機能を提供します。"
+title: "リファレンス: Murf Voice | Voice Providers | Mastra ドキュメント"
+description: "Murf voice 実装のドキュメント。テキスト読み上げ機能を提供します。"
 ---
 
 # Murf
 
-MastraにおけるMurfの音声実装は、MurfのAI音声サービスを使用してテキスト読み上げ（TTS）機能を提供します。これは、異なる言語で複数の音声をサポートしています。
+MastraにおけるMurfの音声実装は、MurfのAI音声サービスを利用したテキスト読み上げ（TTS）機能を提供します。さまざまな言語で複数の音声に対応しています。
 
 ## 使用例
 
 ```typescript
 import { MurfVoice } from "@mastra/voice-murf";
 
-// デフォルトの設定で初期化（MURF_API_KEY環境変数を使用）
+// デフォルト設定で初期化（MURF_API_KEY 環境変数を使用）
 const voice = new MurfVoice();
 
 // カスタム設定で初期化
@@ -31,10 +31,10 @@ const voice = new MurfVoice({
   speaker: "en-US-cooper",
 });
 
-// デフォルト設定でのテキスト読み上げ
+// デフォルト設定でテキスト読み上げ
 const audioStream = await voice.speak("Hello, world!");
 
-// カスタムプロパティでのテキスト読み上げ
+// カスタムプロパティでテキスト読み上げ
 const audioStream = await voice.speak("Hello, world!", {
   speaker: "en-UK-hazel",
   properties: {
@@ -44,25 +44,25 @@ const audioStream = await voice.speak("Hello, world!", {
   },
 });
 
-// 利用可能な声を取得
+// 利用可能なボイスを取得
 const voices = await voice.getSpeakers();
 ```
 
-## コンストラクタパラメータ
+## コンストラクタのパラメータ
 
 <PropertiesTable
   content={[
     {
       name: "speechModel",
       type: "MurfConfig",
-      description: "テキスト読み上げ機能の設定",
+      description: "テキスト読み上げ機能のための設定",
       isOptional: true,
       defaultValue: "{ name: 'GEN2' }",
     },
     {
       name: "speaker",
       type: "string",
-      description: "テキスト読み上げに使用するデフォルトの声のID",
+      description: "テキスト読み上げに使用するデフォルトのボイスID",
       isOptional: true,
       defaultValue: "'en-UK-hazel'",
     },
@@ -83,13 +83,14 @@ const voices = await voice.getSpeakers();
     {
       name: "apiKey",
       type: "string",
-      description: "Murf APIキー。MURF_API_KEY環境変数にフォールバックします",
+      description:
+        "Murf APIキー。指定がない場合はMURF_API_KEY環境変数が使用されます",
       isOptional: true,
     },
     {
       name: "properties",
       type: "object",
-      description: "すべての音声合成リクエストのデフォルトプロパティ",
+      description: "すべての音声合成リクエストに対するデフォルトプロパティ",
       isOptional: true,
     },
   ]}
@@ -102,7 +103,7 @@ const voices = await voice.getSpeakers();
     {
       name: "style",
       type: "string",
-      description: "声の話し方スタイル",
+      description: "ボイスの話し方スタイル",
       isOptional: true,
     },
     {
@@ -114,25 +115,25 @@ const voices = await voice.getSpeakers();
     {
       name: "pitch",
       type: "number",
-      description: "声のピッチ調整",
+      description: "ボイスのピッチ調整",
       isOptional: true,
     },
     {
       name: "sampleRate",
       type: "8000 | 24000 | 44100 | 48000",
-      description: "Hz単位のオーディオサンプルレート",
+      description: "音声のサンプルレート（Hz）",
       isOptional: true,
     },
     {
       name: "format",
       type: "'MP3' | 'WAV' | 'FLAC' | 'ALAW' | 'ULAW'",
-      description: "出力オーディオフォーマット",
+      description: "出力音声フォーマット",
       isOptional: true,
     },
     {
       name: "channelType",
       type: "'STEREO' | 'MONO'",
-      description: "オーディオチャンネルの設定",
+      description: "音声チャンネルの構成",
       isOptional: true,
     },
     {
@@ -144,25 +145,25 @@ const voices = await voice.getSpeakers();
     {
       name: "encodeAsBase64",
       type: "boolean",
-      description: "オーディオをbase64としてエンコードするかどうか",
+      description: "音声をbase64でエンコードするかどうか",
       isOptional: true,
     },
     {
       name: "variation",
       type: "number",
-      description: "声のバリエーションパラメータ",
+      description: "ボイスのバリエーションパラメータ",
       isOptional: true,
     },
     {
       name: "audioDuration",
       type: "number",
-      description: "目標オーディオの長さ（秒）",
+      description: "目標とする音声の長さ（秒）",
       isOptional: true,
     },
     {
       name: "multiNativeLocale",
       type: "string",
-      description: "多言語サポートのためのロケール",
+      description: "多言語対応のためのロケール",
       isOptional: true,
     },
   ]}
@@ -172,7 +173,7 @@ const voices = await voice.getSpeakers();
 
 ### speak()
 
-MurfのAPIを使用してテキストを音声に変換します。
+Murf の API を使用してテキストを音声に変換します。
 
 <PropertiesTable
   content={[
@@ -180,7 +181,7 @@ MurfのAPIを使用してテキストを音声に変換します。
       name: "input",
       type: "string | NodeJS.ReadableStream",
       description:
-        "音声に変換するテキスト。ストリームが提供された場合、最初にテキストに変換されます。",
+        "音声に変換するテキスト。ストリームが指定された場合は、最初にテキストへ変換されます。",
       isOptional: false,
     },
     {
@@ -198,7 +199,7 @@ MurfのAPIを使用してテキストを音声に変換します。
     {
       name: "options.properties",
       type: "object",
-      description: "このリクエストのデフォルトの音声プロパティを上書きします",
+      description: "このリクエストのデフォルト音声プロパティを上書きします",
       isOptional: true,
     },
   ]}
@@ -215,7 +216,7 @@ MurfのAPIを使用してテキストを音声に変換します。
     {
       name: "voiceId",
       type: "string",
-      description: "音声の一意の識別子",
+      description: "音声の一意な識別子",
       isOptional: false,
     },
     {
@@ -241,12 +242,12 @@ MurfのAPIを使用してテキストを音声に変換します。
 
 ### listen()
 
-このメソッドはMurfではサポートされておらず、エラーをスローします。Murfは音声認識機能を提供していません。
+このメソッドは Murf ではサポートされておらず、エラーが発生します。Murf は音声認識機能を提供していません。
 
 ## 重要な注意事項
 
-1. Murf APIキーが必要です。`MURF_API_KEY` 環境変数を介して設定するか、コンストラクタで渡してください。
-2. サービスはデフォルトのモデルバージョンとしてGEN2を使用します。
+1. Murf APIキーが必要です。`MURF_API_KEY` 環境変数で設定するか、コンストラクタで渡してください。
+2. サービスはデフォルトでGEN2モデルバージョンを使用します。
 3. 音声プロパティはコンストラクタレベルで設定でき、リクエストごとに上書き可能です。
-4. サービスは、フォーマット、サンプルレート、チャンネルタイプなどのプロパティを通じて広範なオーディオカスタマイズをサポートします。
-5. 音声認識機能はサポートされていません。
+4. サービスは、フォーマット、サンプルレート、チャンネルタイプなどのプロパティを通じて幅広い音声カスタマイズに対応しています。
+5. 音声認識（Speech-to-text）機能には対応していません。

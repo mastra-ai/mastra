@@ -3,13 +3,15 @@ title: "例：制御フロー | ワークフロー | Mastra ドキュメント"
 description: 提供された条件に基づいてループを持つワークフローを作成するためにMastraを使用する例。
 ---
 
-import { GithubLink } from "@/components/github-link";
-
 # ステップ実行のループ処理
 
-この例では、条件が満たされるまで1つ以上のステップをループで実行するワークフローを作成する方法を示しています
+## セットアップ
 
-## ループワークフローの定義
+```sh copy
+npm install @ai-sdk/openai @mastra/core 
+```
+
+## ループ実行ワークフローの定義
 
 提供された条件が満たされるまでネストされたワークフローを実行するワークフローを定義します。
 
@@ -17,6 +19,7 @@ import { GithubLink } from "@/components/github-link";
 import { createWorkflow, createStep } from "@mastra/core/workflows/vNext";
 import { z } from "zod";
 
+// Step that increments the input value by 1
 const incrementStep = createStep({
   id: "increment",
   inputSchema: z.object({
@@ -30,6 +33,7 @@ const incrementStep = createStep({
   },
 });
 
+// Step that logs the current value (side effect)
 const sideEffectStep = createStep({
   id: "side-effect",
   inputSchema: z.object({
@@ -44,6 +48,7 @@ const sideEffectStep = createStep({
   },
 });
 
+// Final step that returns the final value
 const finalStep = createStep({
   id: "final",
   inputSchema: z.object({
@@ -57,6 +62,10 @@ const finalStep = createStep({
   },
 });
 
+// Create a workflow that:
+// 1. Increments a number until it reaches 10
+// 2. Logs each increment (side effect)
+// 3. Returns the final value
 const workflow = createWorkflow({
   id: "increment-workflow",
   inputSchema: z.object({
@@ -67,6 +76,7 @@ const workflow = createWorkflow({
   }),
 })
   .dountil(
+    // Nested workflow that performs the increment and logging
     createWorkflow({
       id: "increment-workflow",
       inputSchema: z.object({
@@ -80,7 +90,8 @@ const workflow = createWorkflow({
       .then(incrementStep)
       .then(sideEffectStep)
       .commit(),
-    async ({ inputData }) => inputData.value >= 10,
+    // Condition to check if we should stop the loop
+    async ({ inputData }) => inputData.value >= 10
   )
   .then(finalStep);
 
@@ -98,6 +109,8 @@ import { Mastra } from "@mastra/core/mastra";
 import { createLogger } from "@mastra/core/logger";
 import { incrementWorkflow } from "./workflows";
 
+// Initialize Mastra with the increment workflow
+// This enables the workflow to be executed
 const mastra = new Mastra({
   vnext_workflows: {
     incrementWorkflow,
@@ -121,17 +134,8 @@ import { mastra } from "./";
 const workflow = mastra.vnext_getWorkflow("incrementWorkflow");
 const run = workflow.createRun();
 
-const result = await run.start({ inputData: { value: 0 } });
-console.dir(result, { depth: null });
+// Start the workflow with initial value 0
+// This will increment until reaching 10
+const result = await run.start({ inputData: { value: 0 } })
+console.dir(result, { depth: null })
 ```
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/control-flow"
-  }
-/>
