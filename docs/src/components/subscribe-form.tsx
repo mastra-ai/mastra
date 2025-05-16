@@ -1,14 +1,6 @@
 "use client";
 import { useForm } from "react-hook-form";
 
-import { cn } from "@/lib/utils";
-import Spinner from "@/components/ui/spinner";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { AlertCircle } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
-import { useState } from "react";
-import { toast } from "sonner";
-import { z } from "zod";
 import {
   Form,
   FormControl,
@@ -17,8 +9,15 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/forms";
-import { useTheme } from "nextra-theme-docs";
+import Spinner from "@/components/ui/spinner";
+import { cn } from "@/lib/utils";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { T, Var } from "gt-next/client";
+import { AlertCircle } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { useState } from "react";
+import { toast } from "sonner";
+import { z } from "zod";
 
 export const formSchema = z.object({
   email: z.string().email(),
@@ -66,7 +65,6 @@ export const SubscribeForm = ({
     },
     reValidateMode: "onSubmit",
   });
-  const { theme } = useTheme();
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     if (buttonState === "success") return;
@@ -187,7 +185,6 @@ export const SubscribeForm = ({
                 buttonCopy({
                   idleIcon,
                   successIcon,
-                  isDark: theme === "dark",
                 })[buttonState as keyof typeof buttonCopy]
               }
             </motion.span>
