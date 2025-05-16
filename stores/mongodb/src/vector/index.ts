@@ -8,6 +8,10 @@ import type {
   ParamsToArgs,
   QueryVectorArgs,
   UpsertVectorArgs,
+  DescribeIndexParams,
+  DeleteIndexParams,
+  DeleteVectorParams,
+  UpdateVectorParams,
 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import { MongoClient } from 'mongodb';
@@ -28,6 +32,14 @@ export interface MongoDBUpsertVectorParams extends UpsertVectorParams {
 export interface MongoDBQueryVectorParams extends QueryVectorParams {
   documentFilter?: VectorFilter;
 }
+
+export interface MongoDBIndexReadyParams {
+  indexName: string;
+  timeoutMs?: number;
+  checkIntervalMs?: number;
+}
+
+type MongoDBIndexReadyArgs = [string, number?, number?];
 
 // Define the document interface
 interface MongoDBDocument extends Document {
@@ -118,7 +130,21 @@ export class MongoDBVector extends MastraVector {
     await collection.updateOne({ _id: '__index_metadata__' }, { $set: { dimension, metric } }, { upsert: true });
   }
 
-  async waitForIndexReady(indexName: string, timeoutMs: number = 60000, checkIntervalMs: number = 2000): Promise<void> {
+  /**
+   * Waits for the index to be ready.
+   *
+   * @param params - The parameters for waiting for the index to be ready
+   * @param params.indexName - The name of the index to wait for
+   * @param params.timeoutMs - The maximum time in milliseconds to wait for the index to be ready (default: 60000)
+   * @param params.checkIntervalMs - The interval in milliseconds at which to check if the index is ready (default: 2000)
+   * @returns A promise that resolves when the index is ready
+   */
+  async waitForIndexReady(...args: ParamsToArgs<MongoDBIndexReadyParams> | MongoDBIndexReadyArgs): Promise<void> {
+    const params = this.normalizeArgs<MongoDBIndexReadyParams, MongoDBIndexReadyArgs>('waitForIndexReady', args, [
+      'timeoutMs',
+      'checkIntervalMs',
+    ]);
+    const { indexName, timeoutMs = 60000, checkIntervalMs = 2000 } = params;
     const collection = await this.getCollection(indexName, true);
     const indexNameInternal = `${indexName}_vector_index`;
 
@@ -143,7 +169,7 @@ export class MongoDBVector extends MastraVector {
     this.collectionForValidation = collection;
 
     // Get index stats to check dimension
-    const stats = await this.describeIndex(indexName);
+    const stats = await this.describeIndex({ indexName });
 
     // Validate vector dimensions
     await this.validateVectorDimensions(vectors, stats.dimension);
@@ -255,7 +281,17 @@ export class MongoDBVector extends MastraVector {
     return collections.map(col => col.name);
   }
 
-  async describeIndex(indexName: string): Promise<IndexStats> {
+  /**
+   * Retrieves statistics about a vector index.
+   *
+   * @param params - The parameters for describing an index
+   * @param params.indexName - The name of the index to describe
+   * @returns A promise that resolves to the index statistics including dimension, count and metric
+   */
+  async describeIndex(...args: ParamsToArgs<DescribeIndexParams>): Promise<IndexStats> {
+    const params = this.normalizeArgs<DescribeIndexParams>('describeIndex', args);
+
+    const { indexName } = params;
     const collection = await this.getCollection(indexName, true);
 
     // Get the count of documents, excluding the metadata document
@@ -273,7 +309,10 @@ export class MongoDBVector extends MastraVector {
     };
   }
 
-  async deleteIndex(indexName: string): Promise<void> {
+  async deleteIndex(...args: ParamsToArgs<DeleteIndexParams>): Promise<void> {
+    const params = this.normalizeArgs<DeleteIndexParams>('deleteIndex', args);
+
+    const { indexName } = params;
     const collection = await this.getCollection(indexName, false); // Do not throw error if collection doesn't exist
     if (collection) {
       await collection.drop();
@@ -306,7 +345,7 @@ export class MongoDBVector extends MastraVector {
       Please use updateVector() instead. 
       updateIndexById() will be removed on May 20th, 2025.`,
     );
-    await this.updateVector(indexName, id, update);
+    await this.updateVector({ indexName, id, update });
   }
 
   /**
@@ -319,11 +358,9 @@ export class MongoDBVector extends MastraVector {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector(
-    indexName: string,
-    id: string,
-    update: { vector?: number[]; metadata?: Record<string, any> },
-  ): Promise<void> {
+  async updateVector(...args: ParamsToArgs<UpdateVectorParams>): Promise<void> {
+    const params = this.normalizeArgs<UpdateVectorParams>('updateVector', args);
+    const { indexName, id, update } = params;
     try {
       if (!update.vector && !update.metadata) {
         throw new Error('No updates provided');
@@ -333,7 +370,7 @@ export class MongoDBVector extends MastraVector {
       const updateDoc: Record<string, any> = {};
 
       if (update.vector) {
-        const stats = await this.describeIndex(indexName);
+        const stats = await this.describeIndex({ indexName });
         await this.validateVectorDimensions([update.vector], stats.dimension);
         updateDoc[this.embeddingFieldName] = update.vector;
       }
@@ -373,7 +410,7 @@ export class MongoDBVector extends MastraVector {
       Please use deleteVector() instead. 
       deleteIndexById() will be removed on May 20th, 2025.`,
     );
-    await this.deleteVector(indexName, id);
+    await this.deleteVector({ indexName, id });
   }
 
   /**
@@ -383,7 +420,9 @@ export class MongoDBVector extends MastraVector {
    * @returns A promise that resolves when the deletion is complete.
    * @throws Will throw an error if the deletion operation fails.
    */
-  async deleteVector(indexName: string, id: string): Promise<void> {
+  async deleteVector(...args: ParamsToArgs<DeleteVectorParams>): Promise<void> {
+    const params = this.normalizeArgs<DeleteVectorParams>('deleteVector', args);
+    const { indexName, id } = params;
     try {
       const collection = await this.getCollection(indexName, true);
       await collection.deleteOne({ _id: id });

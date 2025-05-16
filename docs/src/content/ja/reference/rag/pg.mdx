@@ -367,20 +367,20 @@ IDで既存のベクトルを更新します。ベクトルまたはメタデー
 
 ```typescript copy
 // ベクトルのみを更新
-await pgVector.updateVector("my_vectors", "vector123", {
+await pgVector.updateVector({ indexName: "my_vectors", id: "vector123", update: {
   vector: [0.1, 0.2, 0.3],
-});
+}});
 
 // メタデータのみを更新
-await pgVector.updateVector("my_vectors", "vector123", {
+await pgVector.updateVector({ indexName: "my_vectors", id: "vector123", update: {
   metadata: { label: "updated" },
-});
+}});
 
 // ベクトルとメタデータの両方を更新
-await pgVector.updateVector("my_vectors", "vector123", {
+await pgVector.updateVector({ indexName: "my_vectors", id: "vector123", update: {
   vector: [0.1, 0.2, 0.3],
   metadata: { label: "updated" },
-});
+}});
 ```
 
 ### deleteVector()
@@ -403,7 +403,7 @@ await pgVector.updateVector("my_vectors", "vector123", {
 指定されたインデックスからIDで単一のベクトルを削除します。
 
 ```typescript copy
-await pgVector.deleteVector("my_vectors", "vector123");
+await pgVector.deleteVector({ indexName: "my_vectors", id: "vector123" });
 ```
 
 ### disconnect()

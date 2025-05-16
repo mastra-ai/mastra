@@ -187,7 +187,7 @@ const { embeddings: cleanedEmbeddings } = await embedMany({
 });
 
 // Update the vector store with cleaned embeddings
-await vectorStore.deleteIndex("embeddings");
+await vectorStore.deleteIndex({ indexName: "embeddings" });
 await vectorStore.createIndex({
   indexName: "embeddings",
   dimension: 1536,

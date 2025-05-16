@@ -46,9 +46,40 @@ export interface QueryVectorParams {
 
 export type QueryVectorArgs = [string, number[], number, VectorFilter?, boolean?];
 
-// Checks for object format, then checks for query vector args, then upsert vector args, then create index args
+export interface DescribeIndexParams {
+  indexName: string;
+}
+
+export type DescribeIndexArgs = [string];
+
+export interface DeleteIndexParams {
+  indexName: string;
+}
+
+export type DeleteIndexArgs = [string];
+
+export interface UpdateVectorParams {
+  indexName: string;
+  id: string;
+  update: { vector?: number[]; metadata?: Record<string, any> };
+}
+
+export type UpdateVectorArgs = [string, string, { vector?: number[]; metadata?: Record<string, any> }];
+
+export interface DeleteVectorParams {
+  indexName: string;
+  id: string;
+}
+
+export type DeleteVectorArgs = [string, string];
+
+// Checks for object format, followed by specific arg types for query, upsert, create, describe, delete, update, and delete vector operations
 export type ParamsToArgs<T> =
   | [T] // object format
   | (T extends QueryVectorParams ? QueryVectorArgs : never)
   | (T extends UpsertVectorParams ? UpsertVectorArgs : never)
-  | (T extends CreateIndexParams ? CreateIndexArgs : never);
+  | (T extends CreateIndexParams ? CreateIndexArgs : never)
+  | (T extends DescribeIndexParams ? DescribeIndexArgs : never)
+  | (T extends DeleteIndexParams ? DeleteIndexArgs : never)
+  | (T extends UpdateVectorParams ? UpdateVectorArgs : never)
+  | (T extends DeleteVectorParams ? DeleteVectorArgs : never);

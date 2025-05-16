@@ -40,7 +40,9 @@ import { Tabs } from "nextra/components";
     ```ts filename="vector-store.ts" showLineNumbers copy
       import { PineconeVector } from '@mastra/pinecone'
 
-      const store = new PineconeVector(process.env.PINECONE_API_KEY)
+      const store = new PineconeVector({
+        apiKey: process.env.PINECONE_API_KEY,
+      })
       await store.createIndex({
         indexName: "myCollection",
         dimension: 1536,

@@ -69,7 +69,9 @@ After generating embeddings, you need to store them in a database that supports 
       model: openai.embedding('text-embedding-3-small'),
     });
 
-    const pinecone = new PineconeVector(process.env.PINECONE_API_KEY!);
+    const pinecone = new PineconeVector({
+      apiKey: process.env.PINECONE_API_KEY!,
+    });
 
     await pinecone.createIndex({
       indexName: 'testindex',
@@ -109,10 +111,10 @@ After generating embeddings, you need to store them in a database that supports 
       maxRetries: 3,
     });
 
-    const qdrant = new QdrantVector(
-      process.env.QDRANT_URL,
-      process.env.QDRANT_API_KEY,
-    );
+    const qdrant = new QdrantVector({
+      url: process.env.QDRANT_URL,
+      apiKey: process.env.QDRANT_API_KEY,
+    });
 
     await qdrant.createIndex({
       indexName: 'test_collection',

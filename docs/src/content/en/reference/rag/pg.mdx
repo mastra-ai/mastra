@@ -362,20 +362,20 @@ Updates an existing vector by ID. At least one of vector or metadata must be pro
 
 ```typescript copy
 // Update just the vector
-await pgVector.updateVector("my_vectors", "vector123", {
+await pgVector.updateVector({ indexName: "my_vectors", id: "vector123", update: {
   vector: [0.1, 0.2, 0.3],
-});
+}});
 
 // Update just the metadata
-await pgVector.updateVector("my_vectors", "vector123", {
+await pgVector.updateVector({ indexName: "my_vectors", id: "vector123", update: {
   metadata: { label: "updated" },
-});
+}});
 
 // Update both vector and metadata
-await pgVector.updateVector("my_vectors", "vector123", {
+await pgVector.updateVector({ indexName: "my_vectors", id: "vector123", update: {
   vector: [0.1, 0.2, 0.3],
   metadata: { label: "updated" },
-});
+}});
 ```
 
 ### deleteVector()
@@ -398,7 +398,7 @@ await pgVector.updateVector("my_vectors", "vector123", {
 Deletes a single vector by ID from the specified index.
 
 ```typescript copy
-await pgVector.deleteVector("my_vectors", "vector123");
+await pgVector.deleteVector({ indexName: "my_vectors", id: "vector123" });
 ```
 
 ### disconnect()
