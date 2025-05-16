@@ -92,7 +92,6 @@ export const refineTraces = (traces: Span[], isWorkflow: boolean = false): Refin
     const enrichedSpans = value.map(span => ({
       ...span,
       parentSpanId: parentSpan?.id === span.id ? null : span?.parentSpanId,
-      relativePercentage: parentSpan ? span.duration / parentSpan.duration : 0,
     }));
 
     const failedStatus = value.find(span => span.status.code !== 0)?.status;

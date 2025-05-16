@@ -14,7 +14,7 @@ import { GraphRAG } from "@mastra/rag";
 
 const graphRag = new GraphRAG({
   dimension: 1536,
-  threshold: 0.7
+  threshold: 0.7,
 });
 
 // チャンクと埋め込みからグラフを作成
@@ -25,7 +25,7 @@ const results = await graphRag.query({
   query: queryEmbedding,
   topK: 10,
   randomWalkSteps: 100,
-  restartProb: 0.15
+  restartProb: 0.15,
 });
 ```
 
@@ -46,7 +46,7 @@ const results = await graphRag.query({
       description: "ノード間のエッジを作成するための類似性の閾値 (0-1)",
       isOptional: true,
       defaultValue: "0.7",
-    }
+    },
   ]}
 />
 
@@ -61,6 +61,7 @@ createGraph(chunks: GraphChunk[], embeddings: GraphEmbedding[]): void
 ```
 
 #### パラメータ
+
 <PropertiesTable
   content={[
     {
@@ -74,7 +75,7 @@ createGraph(chunks: GraphChunk[], embeddings: GraphEmbedding[]): void
       type: "GraphEmbedding[]",
       description: "チャンクに対応する埋め込みの配列",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -97,6 +98,7 @@ query({
 ```
 
 #### パラメータ
+
 <PropertiesTable
   content={[
     {
@@ -125,11 +127,12 @@ query({
       description: "クエリノードからウォークを再開する確率",
       isOptional: true,
       defaultValue: "0.15",
-    }
+    },
   ]}
 />
 
 #### 戻り値
+
 `RankedNode` オブジェクトの配列を返します。各ノードには以下が含まれます：
 
 <PropertiesTable
@@ -153,7 +156,7 @@ query({
       name: "score",
       type: "number",
       description: "グラフトラバーサルからの結合関連性スコア",
-    }
+    },
   ]}
 />
 
@@ -162,7 +165,7 @@ query({
 ```typescript
 const graphRag = new GraphRAG({
   dimension: 1536,
-  threshold: 0.8  // より厳しい類似性の閾値
+  threshold: 0.8, // より厳しい類似性の閾値
 });
 
 // チャンクと埋め込みからグラフを作成
@@ -173,7 +176,7 @@ const results = await graphRag.query({
   query: queryEmbedding,
   topK: 5,
   randomWalkSteps: 200,
-  restartProb: 0.2
+  restartProb: 0.2,
 });
 ```
 

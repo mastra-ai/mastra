@@ -284,7 +284,7 @@ describe('Vector Handlers', () => {
         count: 100,
         metric: 'cosine',
       });
-      expect(mockVector.describeIndex).toHaveBeenCalledWith('test-index');
+      expect(mockVector.describeIndex).toHaveBeenCalledWith({ indexName: 'test-index' });
     });
   });
 
@@ -317,7 +317,7 @@ describe('Vector Handlers', () => {
       });
 
       expect(result).toEqual({ success: true });
-      expect(mockVector.deleteIndex).toHaveBeenCalledWith('test-index');
+      expect(mockVector.deleteIndex).toHaveBeenCalledWith({ indexName: 'test-index' });
     });
   });
 });

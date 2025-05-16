@@ -17,7 +17,7 @@ import { z } from "zod";
 import { openai } from "@ai-sdk/openai";
 
 const agent = new Agent({
-  name: 'Weather Agent',
+  name: "Weather Agent",
   instructions: `
         あなたは天気に基づいた計画に優れた地元のアクティビティと旅行の専門家です。天気データを分析し、実用的なアクティビティの推奨を提供してください。
         予報の各日に対して、次の形式で回答を構成してください：
@@ -52,7 +52,7 @@ const agent = new Agent({
         - 説明は簡潔でありながら情報豊かに保つ
         一貫性のために、この正確なフォーマットを維持し、示されている絵文字とセクションヘッダーを使用してください。
       `,
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
 });
 
 const fetchWeather = new Step({
@@ -114,9 +114,7 @@ const planActivities = new Step({
   inputSchema: forecastSchema,
   execute: async ({ context, mastra }) => {
     const forecast =
-      context?.getStepResult<z.infer<typeof forecastSchema>>(
-        "fetch-weather",
-      );
+      context?.getStepResult<z.infer<typeof forecastSchema>>("fetch-weather");
 
     if (!forecast) {
       throw new Error("予報データが見つかりません");
@@ -133,8 +131,8 @@ const planActivities = new Step({
       },
     ]);
 
-    let activitiesText = '';
-    
+    let activitiesText = "";
+
     for await (const chunk of response.textStream) {
       process.stdout.write(chunk);
       activitiesText += chunk;

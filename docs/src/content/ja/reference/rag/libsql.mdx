@@ -82,8 +82,7 @@ const results = await store.query({
       name: "syncInterval",
       type: "number",
       isOptional: true,
-      description:
-        "データベース同期のためのミリ秒単位の間隔（Turso特有）",
+      description: "データベース同期のためのミリ秒単位の間隔（Turso特有）",
     },
   ]}
 />
@@ -104,7 +103,8 @@ const results = await store.query({
     {
       name: "dimension",
       type: "number",
-      description: "ベクトルの次元サイズ（埋め込みモデルに一致する必要があります）",
+      description:
+        "ベクトルの次元サイズ（埋め込みモデルに一致する必要があります）",
     },
     {
       name: "metric",

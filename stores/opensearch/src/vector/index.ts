@@ -1,4 +1,15 @@
-import type { CreateIndexParams, IndexStats, QueryResult, QueryVectorParams, UpsertVectorParams } from '@mastra/core';
+import type {
+  CreateIndexParams,
+  DeleteIndexParams,
+  DeleteVectorParams,
+  DescribeIndexParams,
+  IndexStats,
+  ParamsToArgs,
+  QueryResult,
+  QueryVectorParams,
+  UpdateVectorParams,
+  UpsertVectorParams,
+} from '@mastra/core';
 import { MastraVector } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import { Client as OpenSearchClient } from '@opensearch-project/opensearch';
@@ -19,8 +30,33 @@ const REVERSE_METRIC_MAPPING = {
 export class OpenSearchVector extends MastraVector {
   private client: OpenSearchClient;
 
-  constructor(url: string) {
+  /**
+   * @deprecated Passing a string URL is deprecated. Use an object parameter: { url }.
+   * @param url - The OpenSearch node URL (deprecated)
+   */
+  constructor(url: string);
+  /**
+   * Creates a new OpenSearchVector client.
+   *
+   * @param params - An object with a url property specifying the OpenSearch node.
+   */
+  constructor(params: { url: string });
+  constructor(paramsOrUrl: { url: string } | string) {
     super();
+    let url: string;
+    if (typeof paramsOrUrl === 'string') {
+      // Deprecation warning for positional argument
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn(
+          'Deprecation Warning: OpenSearchVector constructor positional arguments are deprecated. Please use a single object parameter instead. This signature will be removed on May 20th, 2025.',
+        );
+      }
+      url = paramsOrUrl;
+    } else if (typeof paramsOrUrl === 'object' && paramsOrUrl !== null && 'url' in paramsOrUrl) {
+      url = paramsOrUrl.url;
+    } else {
+      throw new Error('Invalid parameters for OpenSearchVector constructor. Expected { url: string }.');
+    }
     this.client = new OpenSearchClient({ node: url });
   }
 
@@ -93,7 +129,17 @@ export class OpenSearchVector extends MastraVector {
     }
   }
 
-  async describeIndex(indexName: string): Promise<IndexStats> {
+  /**
+   * Retrieves statistics about a vector index.
+   *
+   * @param params - The parameters for describing an index
+   * @param params.indexName - The name of the index to describe
+   * @returns A promise that resolves to the index statistics including dimension, count and metric
+   */
+  async describeIndex(...args: ParamsToArgs<DescribeIndexParams>): Promise<IndexStats> {
+    const params = this.normalizeArgs<DescribeIndexParams>('describeIndex', args);
+
+    const { indexName } = params;
     const { body: indexInfo } = await this.client.indices.get({ index: indexName });
     const mappings = indexInfo[indexName]?.mappings;
     const embedding: any = mappings?.properties?.embedding;
@@ -114,7 +160,10 @@ export class OpenSearchVector extends MastraVector {
    * @param {string} indexName - The name of the index to delete.
    * @returns {Promise<void>} A promise that resolves when the index is deleted.
    */
-  async deleteIndex(indexName: string): Promise<void> {
+  async deleteIndex(...args: ParamsToArgs<DeleteIndexParams>): Promise<void> {
+    const params = this.normalizeArgs<DeleteIndexParams>('deleteIndex', args);
+
+    const { indexName } = params;
     try {
       await this.client.indices.delete({ index: indexName });
     } catch (error) {
@@ -138,7 +187,7 @@ export class OpenSearchVector extends MastraVector {
     const operations = [];
 
     // Get index stats to check dimension
-    const indexInfo = await this.describeIndex(indexName);
+    const indexInfo = await this.describeIndex({ indexName });
 
     // Validate vector dimensions
     this.validateVectorDimensions(vectors, indexInfo.dimension);
@@ -265,7 +314,7 @@ export class OpenSearchVector extends MastraVector {
       Please use updateVector() instead. 
       updateIndexById() will be removed on May 20th, 2025.`,
     );
-    await this.updateVector(indexName, id, update);
+    await this.updateVector({ indexName, id, update });
   }
 
   /**
@@ -278,14 +327,9 @@ export class OpenSearchVector extends MastraVector {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector(
-    indexName: string,
-    id: string,
-    update: {
-      vector?: number[];
-      metadata?: Record<string, any>;
-    },
-  ): Promise<void> {
+  async updateVector(...args: ParamsToArgs<UpdateVectorParams>): Promise<void> {
+    const params = this.normalizeArgs<UpdateVectorParams>('updateVector', args);
+    const { indexName, id, update } = params;
     if (!update.vector && !update.metadata) {
       throw new Error('No updates provided');
     }
@@ -313,7 +357,7 @@ export class OpenSearchVector extends MastraVector {
       // Update vector if provided
       if (update.vector) {
         // Get index stats to check dimension
-        const indexInfo = await this.describeIndex(indexName);
+        const indexInfo = await this.describeIndex({ indexName });
 
         // Validate vector dimensions
         this.validateVectorDimensions([update.vector], indexInfo.dimension);
@@ -358,7 +402,7 @@ export class OpenSearchVector extends MastraVector {
       Please use deleteVector() instead. 
       deleteIndexById() will be removed on May 20th, 2025.`,
     );
-    await this.deleteVector(indexName, id);
+    await this.deleteVector({ indexName, id });
   }
 
   /**
@@ -368,7 +412,9 @@ export class OpenSearchVector extends MastraVector {
    * @returns A promise that resolves when the deletion is complete.
    * @throws Will throw an error if the deletion operation fails.
    */
-  async deleteVector(indexName: string, id: string): Promise<void> {
+  async deleteVector(...args: ParamsToArgs<DeleteVectorParams>): Promise<void> {
+    const params = this.normalizeArgs<DeleteVectorParams>('deleteVector', args);
+    const { indexName, id } = params;
     try {
       await this.client.delete({
         index: indexName,

@@ -13,20 +13,20 @@ The `.watch()` function subscribes to state changes on a mastra run, allowing yo
 import { Workflow } from "@mastra/core/workflows";
 
 const workflow = new Workflow({
-  name: "document-processor"
+  name: "document-processor",
 });
 
 const run = workflow.createRun();
 
 // Subscribe to state changes
-const unsubscribe = run.watch(({results, activePaths}) => {
-  console.log('Results:', results);
-  console.log('Active paths:', activePaths);
+const unsubscribe = run.watch(({ results, activePaths }) => {
+  console.log("Results:", results);
+  console.log("Active paths:", activePaths);
 });
 
 // Run the workflow
 await run.start({
-  input: { text: "Process this document" }
+  input: { text: "Process this document" },
 });
 
 // Stop watching
@@ -41,8 +41,8 @@ unsubscribe();
       name: "callback",
       type: "(state: WorkflowState) => void",
       description: "Function called whenever the workflow state changes",
-      isOptional: false
-    }
+      isOptional: false,
+    },
   ]}
 />
 
@@ -54,26 +54,26 @@ unsubscribe();
       name: "results",
       type: "Record<string, any>",
       description: "Outputs from completed workflow steps",
-      isOptional: false
+      isOptional: false,
     },
     {
       name: "activePaths",
       type: "Map<string, { status: string; suspendPayload?: any; stepPath: string[] }>",
       description: "Current status of each step",
-      isOptional: false
+      isOptional: false,
     },
     {
       name: "runId",
       type: "string",
       description: "ID of the workflow run",
-      isOptional: false
+      isOptional: false,
     },
     {
       name: "timestamp",
       type: "number",
       description: "Timestamp of the workflow run",
-      isOptional: false
-    }
+      isOptional: false,
+    },
   ]}
 />
 
@@ -84,8 +84,8 @@ unsubscribe();
     {
       name: "unsubscribe",
       type: "() => void",
-      description: "Function to stop watching workflow state changes"
-    }
+      description: "Function to stop watching workflow state changes",
+    },
   ]}
 />
 
@@ -94,9 +94,12 @@ unsubscribe();
 Monitor specific step completion:
 
 ```typescript
-run.watch(({results, activePaths}) => {
-  if (activePaths.get('processDocument')?.status === 'completed') {
-    console.log('Document processing output:', results['processDocument'].output);
+run.watch(({ results, activePaths }) => {
+  if (activePaths.get("processDocument")?.status === "completed") {
+    console.log(
+      "Document processing output:",
+      results["processDocument"].output,
+    );
   }
 });
 ```
@@ -104,9 +107,12 @@ run.watch(({results, activePaths}) => {
 Error handling:
 
 ```typescript
-run.watch(({results, activePaths}) => {
-  if (activePaths.get('processDocument')?.status === 'failed') {
-    console.error('Document processing failed:', results['processDocument'].error);
+run.watch(({ results, activePaths }) => {
+  if (activePaths.get("processDocument")?.status === "failed") {
+    console.error(
+      "Document processing failed:",
+      results["processDocument"].error,
+    );
     // Implement error recovery logic
   }
 });

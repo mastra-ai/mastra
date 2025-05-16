@@ -13,7 +13,7 @@ function waitUntilVectorsIndexed(vector: UpstashVector, indexName: string, expec
     let attempts = 0;
     const interval = setInterval(async () => {
       try {
-        const stats = await vector.describeIndex(indexName);
+        const stats = await vector.describeIndex({ indexName });
         if (stats && stats.count >= expectedCount) {
           clearInterval(interval);
           resolve(true);
@@ -59,12 +59,12 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
 
     // Cleanup: delete test index
     try {
-      await vectorStore.deleteIndex(testIndexName);
+      await vectorStore.deleteIndex({ indexName: testIndexName });
     } catch (error) {
       console.warn('Failed to delete test index:', error);
     }
     try {
-      await vectorStore.deleteIndex(filterIndexName);
+      await vectorStore.deleteIndex({ indexName: filterIndexName });
     } catch (error) {
       console.warn('Failed to delete filter index:', error);
     }
@@ -122,7 +122,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       const testIndexName = 'test-index';
 
       afterEach(async () => {
-        await vectorStore.deleteIndex(testIndexName);
+        await vectorStore.deleteIndex({ indexName: testIndexName });
       });
 
       it('should update the vector by id', async () => {
@@ -140,7 +140,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
           metadata: newMetaData,
         };
 
-        await vectorStore.updateVector(testIndexName, idToBeUpdated, update);
+        await vectorStore.updateVector({ indexName: testIndexName, id: idToBeUpdated, update });
 
         await waitUntilVectorsIndexed(vectorStore, testIndexName, 3);
 
@@ -167,7 +167,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
           metadata: newMetaData,
         };
 
-        await expect(vectorStore.updateVector(testIndexName, 'id', update)).rejects.toThrow(
+        await expect(vectorStore.updateVector({ indexName: testIndexName, id: 'id', update })).rejects.toThrow(
           'Both vector and metadata must be provided for an update',
         );
       });
@@ -183,7 +183,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
           vector: newVector,
         };
 
-        await vectorStore.updateVector(testIndexName, idToBeUpdated, update);
+        await vectorStore.updateVector({ indexName: testIndexName, id: idToBeUpdated, update });
 
         await waitUntilVectorsIndexed(vectorStore, testIndexName, 3);
 
@@ -198,7 +198,9 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       }, 500000);
 
       it('should throw exception when no updates are given', async () => {
-        await expect(vectorStore.updateVector(testIndexName, 'id', {})).rejects.toThrow('No update data provided');
+        await expect(vectorStore.updateVector({ indexName: testIndexName, id: 'id', update: {} })).rejects.toThrow(
+          'No update data provided',
+        );
       });
     });
 
@@ -206,7 +208,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
       const testVectors = [createVector(0, 1.0), createVector(1, 1.0), createVector(2, 1.0)];
 
       afterEach(async () => {
-        await vectorStore.deleteIndex(testIndexName);
+        await vectorStore.deleteIndex({ indexName: testIndexName });
       });
 
       it('should delete the vector by id', async () => {
@@ -214,7 +216,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
         expect(ids).toHaveLength(3);
         const idToBeDeleted = ids[0];
 
-        await vectorStore.deleteVector(testIndexName, idToBeDeleted);
+        await vectorStore.deleteVector({ indexName: testIndexName, id: idToBeDeleted });
 
         const results: QueryResult[] = await vectorStore.query({
           indexName: testIndexName,
@@ -246,7 +248,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
     });
 
     it('should describe an index correctly', async () => {
-      const stats = await vectorStore.describeIndex('mastra_default');
+      const stats = await vectorStore.describeIndex({ indexName: 'mastra_default' });
       expect(stats).toEqual({
         dimension: 1536,
         metric: 'cosine',
@@ -262,7 +264,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
     });
 
     afterAll(async () => {
-      await vectorStore.deleteIndex(testIndexName);
+      await vectorStore.deleteIndex({ indexName: testIndexName });
     });
 
     it('should handle invalid dimension vectors', async () => {
@@ -1208,8 +1210,8 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
     let warnSpy;
 
     afterAll(async () => {
-      await vectorStore.deleteIndex(indexName);
-      await vectorStore.deleteIndex(indexName2);
+      await vectorStore.deleteIndex({ indexName });
+      await vectorStore.deleteIndex({ indexName: indexName2 });
     });
 
     beforeEach(async () => {
@@ -1218,7 +1220,7 @@ describe.skipIf(!process.env.UPSTASH_VECTOR_URL || !process.env.UPSTASH_VECTOR_T
 
     afterEach(async () => {
       warnSpy.mockRestore();
-      await vectorStore.deleteIndex(indexName2);
+      await vectorStore.deleteIndex({ indexName: indexName2 });
     });
 
     const createVector = (primaryDimension: number, value: number = 1.0): number[] => {

@@ -15,8 +15,8 @@ workflow.afterEvent(eventName: string): Workflow
 
 ## Parameters
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
+| Parameter | Type   | Description                                                                                              |
+| --------- | ------ | -------------------------------------------------------------------------------------------------------- |
 | eventName | string | The name of the event to wait for. Must match an event defined in the workflow's `events` configuration. |
 
 ## Return Value
@@ -50,7 +50,7 @@ This method is part of Mastra's event-driven workflow capabilities, allowing you
 ```typescript
 // Define workflow with events
 const workflow = new Workflow({
-  name: 'approval-workflow',
+  name: "approval-workflow",
   events: {
     approval: {
       schema: z.object({
@@ -64,10 +64,11 @@ const workflow = new Workflow({
 // Build workflow with event suspension point
 workflow
   .step(submitRequest)
-  .afterEvent('approval')    // Workflow suspends here
-  .step(processApproval)     // This step runs after the event occurs
+  .afterEvent("approval") // Workflow suspends here
+  .step(processApproval) // This step runs after the event occurs
   .commit();
 ```
+
 ## Related
 
 - [Event-Driven Workflows](./events.mdx)

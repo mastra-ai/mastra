@@ -54,6 +54,7 @@ import { GithubLink } from "@/components/github-link";
       "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-pgvector"
     }
     />
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -74,7 +75,9 @@ import { GithubLink } from "@/components/github-link";
       model: openai.embedding('text-embedding-3-small'),
     });
 
-    const pinecone = new PineconeVector(process.env.PINECONE_API_KEY!);
+    const pinecone = new PineconeVector({
+      apiKey: process.env.PINECONE_API_KEY!,
+    });
 
     await pinecone.createIndex({
       indexName: 'testindex',
@@ -95,6 +98,7 @@ import { GithubLink } from "@/components/github-link";
     <br />
 
     <GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-pinecone'} />
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -116,10 +120,10 @@ import { GithubLink } from "@/components/github-link";
       maxRetries: 3,
     });
 
-    const qdrant = new QdrantVector(
-      process.env.QDRANT_URL,
-      process.env.QDRANT_API_KEY,
-    );
+    const qdrant = new QdrantVector({
+      url: process.env.QDRANT_URL,
+      apiKey: process.env.QDRANT_API_KEY,
+    });
 
     await qdrant.createIndex({
       indexName: 'test_collection',
@@ -132,6 +136,7 @@ import { GithubLink } from "@/components/github-link";
       metadata: chunks?.map(chunk => ({ text: chunk.text })),
     });
     ```
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -176,6 +181,7 @@ import { GithubLink } from "@/components/github-link";
     <br />
 
     <GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-chroma'} />
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -213,6 +219,7 @@ import { GithubLink } from "@/components/github-link";
       metadata: chunks?.map(chunk => ({ text: chunk.text })),
     });
     ```
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -257,6 +264,7 @@ import { GithubLink } from "@/components/github-link";
     <br />
 
     <GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-libsql'} />
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -293,6 +301,7 @@ import { GithubLink } from "@/components/github-link";
       metadata: chunks?.map(chunk => ({ text: chunk.text })),
     });
     ```
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -329,6 +338,7 @@ import { GithubLink } from "@/components/github-link";
       metadata: chunks?.map(chunk => ({ text: chunk.text })),
     });
     ```
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -365,8 +375,6 @@ import { GithubLink } from "@/components/github-link";
       metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
     });
     ```
+
   </Tabs.Tab>
 </Tabs>
-
-
-

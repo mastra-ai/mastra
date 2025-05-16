@@ -16,7 +16,7 @@ npm install @mastra/mongodb
 ## Usage Example
 
 ```typescript copy showLineNumbers
-import { MongoDBVector } from '@mastra/mongodb';
+import { MongoDBVector } from "@mastra/mongodb";
 
 const store = new MongoDBVector({
   url: process.env.MONGODB_URL,
@@ -288,7 +288,7 @@ try {
   // Handle specific error cases
   if (error.message.includes("Invalid collection name")) {
     console.error(
-      "Collection name must start with a letter or underscore and contain only valid characters."
+      "Collection name must start with a letter or underscore and contain only valid characters.",
     );
   } else if (error.message.includes("Collection not found")) {
     console.error("The specified collection does not exist");

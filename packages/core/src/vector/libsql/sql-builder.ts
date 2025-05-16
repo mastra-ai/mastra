@@ -1,23 +1,22 @@
 import type { InValue } from '@libsql/client';
-
+import { parseFieldKey } from '../../utils';
 import type {
   BasicOperator,
   NumericOperator,
   ArrayOperator,
   ElementOperator,
   LogicalOperator,
-  RegexOperator,
   VectorFilter,
 } from '../filter';
 
-export type OperatorType =
+type OperatorType =
   | BasicOperator
   | NumericOperator
   | ArrayOperator
   | ElementOperator
   | LogicalOperator
   | '$contains'
-  | Exclude<RegexOperator, '$options'>;
+  | '$size';
 
 type FilterOperator = {
   sql: string;
@@ -29,21 +28,36 @@ type OperatorFn = (key: string, value?: any) => FilterOperator;
 
 // Helper functions to create operators
 const createBasicOperator = (symbol: string) => {
-  return (key: string, value: any): FilterOperator => ({
-    sql: `CASE 
-      WHEN ? IS NULL THEN json_extract(metadata, '$."${handleKey(key)}"') IS ${symbol === '=' ? '' : 'NOT'} NULL
-      ELSE json_extract(metadata, '$."${handleKey(key)}"') ${symbol} ?
-    END`,
-    needsValue: true,
-    transformValue: () => [value, value],
-  });
+  return (key: string, value: any): FilterOperator => {
+    const jsonPathKey = parseJsonPathKey(key);
+    return {
+      sql: `CASE 
+        WHEN ? IS NULL THEN json_extract(metadata, '$."${jsonPathKey}"') IS ${symbol === '=' ? '' : 'NOT'} NULL
+        ELSE json_extract(metadata, '$."${jsonPathKey}"') ${symbol} ?
+      END`,
+      needsValue: true,
+      transformValue: () => {
+        // Return the values directly, not in an object
+        return [value, value];
+      },
+    };
+  };
 };
 const createNumericOperator = (symbol: string) => {
-  return (key: string): FilterOperator => ({
-    sql: `CAST(json_extract(metadata, '$."${handleKey(key)}"') AS NUMERIC) ${symbol} ?`,
-    needsValue: true,
-  });
+  return (key: string): FilterOperator => {
+    const jsonPathKey = parseJsonPathKey(key);
+    return {
+      sql: `CAST(json_extract(metadata, '$."${jsonPathKey}"') AS NUMERIC) ${symbol} ?`,
+      needsValue: true,
+    };
+  };
 };
+
+const validateJsonArray = (key: string) =>
+  `json_valid(json_extract(metadata, '$."${key}"'))
+   AND json_type(json_extract(metadata, '$."${key}"')) = 'array'`;
+
+const pattern = /json_extract\(metadata, '\$\."[^"]*"(\."[^"]*")*'\)/g;
 
 function buildElemMatchConditions(value: any) {
   const conditions = Object.entries(value).map(([field, fieldValue]) => {
@@ -51,20 +65,19 @@ function buildElemMatchConditions(value: any) {
       // Direct operators on array elements ($in, $gt, etc)
       const { sql, values } = buildCondition('elem.value', { [field]: fieldValue }, '');
       // Replace the metadata path with elem.value
-      const pattern = /json_extract\(metadata, '\$\."[^"]*"(\."[^"]*")*'\)/g;
       const elemSql = sql.replace(pattern, 'elem.value');
       return { sql: elemSql, values };
     } else if (typeof fieldValue === 'object' && !Array.isArray(fieldValue)) {
       // Nested field with operators (count: { $gt: 20 })
       const { sql, values } = buildCondition(field, fieldValue, '');
       // Replace the field path with elem.value path
-      const pattern = /json_extract\(metadata, '\$\."[^"]*"(\."[^"]*")*'\)/g;
       const elemSql = sql.replace(pattern, `json_extract(elem.value, '$."${field}"')`);
       return { sql: elemSql, values };
     } else {
+      const parsedFieldKey = parseFieldKey(field);
       // Simple field equality (warehouse: 'A')
       return {
-        sql: `json_extract(elem.value, '$."${field}"') = ?`,
+        sql: `json_extract(elem.value, '$."${parsedFieldKey}"') = ?`,
         values: [fieldValue],
       };
     }
@@ -73,12 +86,8 @@ function buildElemMatchConditions(value: any) {
   return conditions;
 }
 
-const validateJsonArray = (key: string) =>
-  `json_valid(json_extract(metadata, '$."${handleKey(key)}"'))
-   AND json_type(json_extract(metadata, '$."${handleKey(key)}"')) = 'array'`;
-
 // Define all filter operators
-export const FILTER_OPERATORS: Record<string, OperatorFn> = {
+const FILTER_OPERATORS: Record<OperatorType, OperatorFn> = {
   $eq: createBasicOperator('='),
   $ne: createBasicOperator('!='),
   $gt: createNumericOperator('>'),
@@ -88,6 +97,7 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
 
   // Array Operators
   $in: (key: string, value: any) => {
+    const jsonPathKey = parseJsonPathKey(key);
     const arr = Array.isArray(value) ? value : [value];
     if (arr.length === 0) {
       return { sql: '1 = 0', needsValue: true, transformValue: () => [] };
@@ -96,12 +106,12 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
     return {
       sql: `(
       CASE
-        WHEN ${validateJsonArray(key)} THEN
+        WHEN ${validateJsonArray(jsonPathKey)} THEN
           EXISTS (
-            SELECT 1 FROM json_each(json_extract(metadata, '$."${handleKey(key)}"')) as elem
+            SELECT 1 FROM json_each(json_extract(metadata, '$."${jsonPathKey}"')) as elem
             WHERE elem.value IN (SELECT value FROM json_each(?))
           )
-        ELSE json_extract(metadata, '$."${handleKey(key)}"') IN (${paramPlaceholders})
+        ELSE json_extract(metadata, '$."${jsonPathKey}"') IN (${paramPlaceholders})
       END
     )`,
       needsValue: true,
@@ -110,6 +120,7 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
   },
 
   $nin: (key: string, value: any) => {
+    const jsonPathKey = parseJsonPathKey(key);
     const arr = Array.isArray(value) ? value : [value];
     if (arr.length === 0) {
       return { sql: '1 = 1', needsValue: true, transformValue: () => [] };
@@ -118,12 +129,12 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
     return {
       sql: `(
       CASE
-        WHEN ${validateJsonArray(key)} THEN
+        WHEN ${validateJsonArray(jsonPathKey)} THEN
           NOT EXISTS (
-            SELECT 1 FROM json_each(json_extract(metadata, '$."${handleKey(key)}"')) as elem
+            SELECT 1 FROM json_each(json_extract(metadata, '$."${jsonPathKey}"')) as elem
             WHERE elem.value IN (SELECT value FROM json_each(?))
           )
-        ELSE json_extract(metadata, '$."${handleKey(key)}"') NOT IN (${paramPlaceholders})
+        ELSE json_extract(metadata, '$."${jsonPathKey}"') NOT IN (${paramPlaceholders})
       END
     )`,
       needsValue: true,
@@ -131,6 +142,7 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
     };
   },
   $all: (key: string, value: any) => {
+    const jsonPathKey = parseJsonPathKey(key);
     let sql: string;
     const arrayValue = Array.isArray(value) ? value : [value];
 
@@ -140,13 +152,13 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
     } else {
       sql = `(
       CASE
-        WHEN ${validateJsonArray(key)} THEN
+        WHEN ${validateJsonArray(jsonPathKey)} THEN
           NOT EXISTS (
             SELECT value
             FROM json_each(?)
             WHERE value NOT IN (
               SELECT value
-              FROM json_each(json_extract(metadata, '$."${handleKey(key)}"'))
+              FROM json_each(json_extract(metadata, '$."${jsonPathKey}"'))
             )
           )
         ELSE FALSE
@@ -166,6 +178,7 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
     };
   },
   $elemMatch: (key: string, value: any) => {
+    const jsonPathKey = parseJsonPathKey(key);
     if (typeof value !== 'object' || Array.isArray(value)) {
       throw new Error('$elemMatch requires an object with conditions');
     }
@@ -176,10 +189,10 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
     return {
       sql: `(
         CASE
-          WHEN ${validateJsonArray(key)} THEN
+          WHEN ${validateJsonArray(jsonPathKey)} THEN
             EXISTS (
               SELECT 1
-              FROM json_each(json_extract(metadata, '$."${handleKey(key)}"')) as elem
+              FROM json_each(json_extract(metadata, '$."${jsonPathKey}"')) as elem
               WHERE ${conditions.map(c => c.sql).join(' AND ')}
             )
           ELSE FALSE
@@ -191,10 +204,13 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
   },
 
   // Element Operators
-  $exists: (key: string) => ({
-    sql: `json_extract(metadata, '$."${handleKey(key)}"') IS NOT NULL`,
-    needsValue: false,
-  }),
+  $exists: (key: string) => {
+    const jsonPathKey = parseJsonPathKey(key);
+    return {
+      sql: `json_extract(metadata, '$."${jsonPathKey}"') IS NOT NULL`,
+      needsValue: false,
+    };
+  },
 
   // Logical Operators
   $and: (key: string) => ({
@@ -210,27 +226,30 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
     sql: `NOT (${key})`,
     needsValue: false,
   }),
-  $size: (key: string, paramIndex: number) => ({
-    sql: `(
+  $size: (key: string, paramIndex: number) => {
+    const jsonPathKey = parseJsonPathKey(key);
+    return {
+      sql: `(
     CASE
-      WHEN json_type(json_extract(metadata, '$."${handleKey(key)}"')) = 'array' THEN 
-        json_array_length(json_extract(metadata, '$."${handleKey(key)}"')) = $${paramIndex}
+      WHEN json_type(json_extract(metadata, '$."${jsonPathKey}"')) = 'array' THEN 
+        json_array_length(json_extract(metadata, '$."${jsonPathKey}"')) = $${paramIndex}
       ELSE FALSE
     END
   )`,
-    needsValue: true,
-  }),
+      needsValue: true,
+    };
+  },
   //   /**
   //    * Regex Operators
   //    * Supports case insensitive and multiline
   //    */
   //   $regex: (key: string): FilterOperator => ({
-  //     sql: `json_extract(metadata, '$."${handleKey(key)}"') = ?`,
+  //     sql: `json_extract(metadata, '$."${toJsonPathKey(key)}"') = ?`,
   //     needsValue: true,
   //     transformValue: (value: any) => {
   //       const pattern = typeof value === 'object' ? value.$regex : value;
   //       const options = typeof value === 'object' ? value.$options || '' : '';
-  //       let sql = `json_extract(metadata, '$."${handleKey(key)}"')`;
+  //       let sql = `json_extract(metadata, '$."${toJsonPathKey(key)}"')`;
 
   //       // Handle multiline
   //       //   if (options.includes('m')) {
@@ -287,20 +306,21 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
   //     },
   //   }),
   $contains: (key: string, value: any) => {
+    const jsonPathKey = parseJsonPathKey(key);
     let sql;
     if (Array.isArray(value)) {
       sql = `(
-        SELECT ${validateJsonArray(key)}
+        SELECT ${validateJsonArray(jsonPathKey)}
         AND EXISTS (
           SELECT 1
-          FROM json_each(json_extract(metadata, '$."${handleKey(key)}"')) as m
+          FROM json_each(json_extract(metadata, '$."${jsonPathKey}"')) as m
           WHERE m.value IN (SELECT value FROM json_each(?))
         )
       )`;
     } else if (typeof value === 'string') {
-      sql = `lower(json_extract(metadata, '$."${handleKey(key)}"')) LIKE '%' || lower(?) || '%'`;
+      sql = `lower(json_extract(metadata, '$."${jsonPathKey}"')) LIKE '%' || lower(?) || '%' ESCAPE '\\'`;
     } else {
-      sql = `json_extract(metadata, '$."${handleKey(key)}"') = ?`;
+      sql = `json_extract(metadata, '$."${jsonPathKey}"') = ?`;
     }
     return {
       sql,
@@ -311,6 +331,9 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
         }
         if (typeof value === 'object' && value !== null) {
           return [JSON.stringify(value)];
+        }
+        if (typeof value === 'string') {
+          return [escapeLikePattern(value)];
         }
         return [value];
       },
@@ -324,21 +347,30 @@ export const FILTER_OPERATORS: Record<string, OperatorFn> = {
   //   sql: '', // Will be overridden by transformValue
   //   needsValue: true,
   //   transformValue: (value: any) => ({
-  //     sql: `json_type(json_extract(metadata, '$."${handleKey(key)}"')) = 'object'
-  //         AND json_patch(json_extract(metadata, '$."${handleKey(key)}"'), ?) = json_extract(metadata, '$."${handleKey(key)}"')`,
+  //     sql: `json_type(json_extract(metadata, '$."${toJsonPathKey(key)}"')) = 'object'
+  //         AND json_patch(json_extract(metadata, '$."${toJsonPathKey(key)}"'), ?) = json_extract(metadata, '$."${toJsonPathKey(key)}"')`,
   //     values: [JSON.stringify(value)],
   //   }),
   // }),
 };
 
-export interface FilterResult {
+interface FilterResult {
   sql: string;
   values: InValue[];
 }
 
-export const handleKey = (key: string) => {
-  return key.replace(/\./g, '"."');
+function isFilterResult(obj: any): obj is FilterResult {
+  return obj && typeof obj === 'object' && typeof obj.sql === 'string' && Array.isArray(obj.values);
+}
+
+const parseJsonPathKey = (key: string) => {
+  const parsedKey = parseFieldKey(key);
+  return parsedKey.replace(/\./g, '"."');
 };
+
+function escapeLikePattern(str: string): string {
+  return str.replace(/([%_\\])/g, '\\$1');
+}
 
 export function buildFilterQuery(filter: VectorFilter): FilterResult {
   if (!filter) {
@@ -454,13 +486,13 @@ function handleOperator(key: string, value: any): FilterResult {
       operator === '$not'
         ? {
             sql: `NOT (${Object.entries(operatorValue as Record<string, any>)
-              .map(([op, val]) => processOperator(key, op, val).sql)
+              .map(([op, val]) => processOperator(key, op as OperatorType, val).sql)
               .join(' AND ')})`,
             values: Object.entries(operatorValue as Record<string, any>).flatMap(
-              ([op, val]) => processOperator(key, op, val).values,
+              ([op, val]) => processOperator(key, op as OperatorType, val).values,
             ),
           }
-        : processOperator(key, operator, operatorValue),
+        : processOperator(key, operator as OperatorType, operatorValue),
     );
 
     return {
@@ -471,10 +503,10 @@ function handleOperator(key: string, value: any): FilterResult {
 
   // Handle single operator
   const [[operator, operatorValue] = []] = Object.entries(value);
-  return processOperator(key, operator as string, operatorValue);
+  return processOperator(key, operator as OperatorType, operatorValue);
 }
 
-const processOperator = (key: string, operator: string, operatorValue: any): FilterResult => {
+const processOperator = (key: string, operator: OperatorType, operatorValue: any): FilterResult => {
   if (!operator.startsWith('$') || !FILTER_OPERATORS[operator]) {
     throw new Error(`Invalid operator: ${operator}`);
   }
@@ -486,6 +518,10 @@ const processOperator = (key: string, operator: string, operatorValue: any): Fil
   }
 
   const transformed = operatorResult.transformValue ? operatorResult.transformValue() : operatorValue;
+
+  if (isFilterResult(transformed)) {
+    return transformed;
+  }
 
   return {
     sql: operatorResult.sql,
