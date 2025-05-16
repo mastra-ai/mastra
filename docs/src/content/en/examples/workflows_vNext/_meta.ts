@@ -6,6 +6,7 @@ const meta = {
   "human-in-the-loop": "Human in the Loop",
   "control-flow": "Control Flow",
   "array-as-input": "Array as Input",
+  "inngest-workflow": "Inngest Workflow",
   // "input-data-mapping": "Input Data Mapping",
 };
 
