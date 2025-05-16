@@ -1,41 +1,41 @@
 ---
-title: "リファレンス: MCPServer | MCP経由でMastraツールを公開する | Mastraドキュメント"
-description: MCPServerのAPIリファレンス - Mastraツールと機能をModel Context Protocolサーバーとして公開するためのクラス。
+title: "リファレンス: MCPServer | MCP を通じた Mastra ツールの公開 | Mastra ドキュメント"
+description: MCPServer の API リファレンス - Mastra ツールや機能を Model Context Protocol サーバーとして公開するためのクラス。
 ---
 
 # MCPServer
 
-`MCPServer`クラスは、既存のMastraツールをModel Context Protocol（MCP）サーバーとして公開する機能を提供します。これにより、任意のMCPクライアント（CursorやWindsurf、Claude Desktopなど）がツールに接続し、エージェントが利用できるようになります。
-Mastraエージェントでツールを使用するだけであれば、MCPサーバーを作成する必要はないことに注意してください。このAPIを使用すると、Mastraツールを外部MCPクライアントに公開できます。Mastraでは、MCPなしで直接ツールを使用できます。
+`MCPServer` クラスは、既存のMastraツールをModel Context Protocol (MCP) サーバーとして公開する機能を提供します。これにより、任意のMCPクライアント（Cursor、Windsurf、Claude Desktopなど）がツールに接続し、エージェントで利用できるようになります。
+なお、Mastraエージェント内でのみツールを使用する場合は、MCPサーバーを作成する必要はありません。このAPIは、Mastraツールを外部のMCPクライアントに公開するためのものです。Mastra内では、MCPを介さずにツールを直接利用できます。
 
-[stdio（サブプロセス）とSSE（HTTP）の両方のMCPトランスポート](https://modelcontextprotocol.io/docs/concepts/transports)をサポートしています。
+[stdio（サブプロセス）およびSSE（HTTP）MCPトランスポート](https://modelcontextprotocol.io/docs/concepts/transports) の両方に対応しています。
 
 ## プロパティ
 
-新しいMCPServerを作成するには、サーバーとそれが提供するツールに関する基本情報を提供する必要があります。
+新しいMCPServerを作成するには、サーバーと提供するツールに関する基本的な情報を入力する必要があります。
 
 <PropertiesTable
   content={[
     {
       name: "name",
       type: "string",
-      description: "サーバーの名前（「My Weather Server」など）。",
+      description: "サーバーの名前（例：「My Weather Server」など）。",
     },
     {
       name: "version",
       type: "string",
-      description: "サーバーのバージョン（「1.0.0」など）。",
+      description: "サーバーのバージョン（例：「1.0.0」など）。",
     },
     {
       name: "tools",
       type: "ToolsInput",
       description:
-        "利用可能にしたいツールを含むオブジェクト。これにはMastraやVercel AI SDKで作成されたツールを含めることができます。",
+        "利用可能にしたいツールを含むオブジェクトです。これにはMastraやVercel AI SDKで作成したツールを含めることができます。",
     },
   ]}
 />
 
-例えば、以下のように新しい`MCPServer`インスタンスを作成できます：
+例えば、新しい`MCPServer`インスタンスを作成する方法は次のとおりです。
 
 ```typescript
 import { MCPServer } from "@mastra/mcp";
@@ -50,17 +50,17 @@ const server = new MCPServer({
 
 ## メソッド
 
-これらは`MCPServer`インスタンスで呼び出すことができる関数で、その動作を制御し情報を取得するためのものです。
+これらは、`MCPServer` インスタンスで呼び出して動作を制御したり情報を取得したりできる関数です。
 
 ### startStdio()
 
-このメソッドを使用して、標準入出力（stdio）を使用して通信するようにサーバーを起動します。これは、サーバーをコマンドラインプログラムとして実行する場合の典型的な方法です。
+このメソッドを使うと、サーバーが標準入力および標準出力（stdio）を使って通信を開始します。これは、サーバーをコマンドラインプログラムとして実行する場合によく使われます。
 
 ```typescript
 async startStdio(): Promise<void>
 ```
 
-以下は、stdioを使用してサーバーを起動する方法です：
+stdio を使ってサーバーを起動する方法は次のとおりです：
 
 ```typescript
 const server = new MCPServer({
@@ -71,7 +71,7 @@ await server.startStdio();
 
 ### startSSE()
 
-このメソッドは、MCPサーバーを既存のWebサーバーと統合して、Server-Sent Events（SSE）を通信に使用するのに役立ちます。WebサーバーのコードからSSEまたはメッセージパスへのリクエストを受信したときに、これを呼び出します。
+このメソッドは、既存のウェブサーバーと MCP サーバーを統合し、Server-Sent Events（SSE）を使った通信を可能にします。ウェブサーバーのコード内で、SSE やメッセージ用のパスへのリクエストを受け取ったときにこのメソッドを呼び出します。
 
 ```typescript
 async startSSE({
@@ -89,7 +89,7 @@ async startSSE({
 }): Promise<void>
 ```
 
-以下は、HTTPサーバーのリクエストハンドラー内で`startSSE`を使用する例です。この例では、MCPクライアントは`http://localhost:1234/sse`であなたのMCPサーバーに接続できます：
+HTTP サーバーのリクエストハンドラー内で `startSSE` を使う例を以下に示します。この例では、MCP クライアントが `http://localhost:1234/sse` で MCP サーバーに接続できます：
 
 ```typescript
 import http from "http";
@@ -109,44 +109,44 @@ httpServer.listen(PORT, () => {
 });
 ```
 
-以下は、`startSSE`メソッドに必要な値の詳細です：
+`startSSE` メソッドで必要となる値の詳細は以下のとおりです：
 
 <PropertiesTable
   content={[
     {
       name: "url",
       type: "URL",
-      description: "ユーザーがリクエストしているWebアドレス。",
+      description: "ユーザーがリクエストしているウェブアドレス。",
     },
     {
       name: "ssePath",
       type: "string",
       description:
-        "クライアントがSSE接続するためのURLの特定の部分（例：'/sse'）。",
+        "クライアントが SSE 用に接続する URL の特定部分（例: '/sse'）。",
     },
     {
       name: "messagePath",
       type: "string",
       description:
-        "クライアントがメッセージを送信するためのURLの特定の部分（例：'/message'）。",
+        "クライアントがメッセージを送信する URL の特定部分（例: '/message'）。",
     },
     {
       name: "req",
       type: "any",
-      description: "Webサーバーからの着信リクエストオブジェクト。",
+      description: "ウェブサーバーからのリクエストオブジェクト。",
     },
     {
       name: "res",
       type: "any",
       description:
-        "Webサーバーからのレスポンスオブジェクト。データを送り返すために使用されます。",
+        "ウェブサーバーからのレスポンスオブジェクト。データを返すために使用します。",
     },
   ]}
 />
 
 ### getStdioTransport()
 
-`startStdio()`でサーバーを起動した場合、これを使用してstdio通信を管理するオブジェクトを取得できます。これは主に内部的なチェックやテスト用です。
+`startStdio()` でサーバーを起動した場合、stdio 通信を管理するオブジェクトを取得できます。これは主に内部チェックやテスト用です。
 
 ```typescript
 getStdioTransport(): StdioServerTransport | undefined
@@ -154,7 +154,7 @@ getStdioTransport(): StdioServerTransport | undefined
 
 ### getSseTransport()
 
-`startSSE()`でサーバーを起動した場合、これを使用してSSE通信を管理するオブジェクトを取得できます。`getStdioTransport`と同様に、これは主に内部チェックやテスト用です。
+`startSSE()` でサーバーを起動した場合、SSE 通信を管理するオブジェクトを取得できます。`getStdioTransport` と同様に、主に内部チェックやテスト用です。
 
 ```typescript
 getSseTransport(): SSEServerTransport | undefined
@@ -162,19 +162,17 @@ getSseTransport(): SSEServerTransport | undefined
 
 ### tools()
 
-このメソッドは、サーバーを作成したときに設定されたツールを確認できます。これは読み取り専用のリストで、デバッグ目的に役立ちます。
+このメソッドでは、サーバー作成時に設定されたツールの一覧を確認できます。これは読み取り専用リストで、デバッグ用途に便利です。
 
 ```typescript
 tools(): Readonly<Record<string, ConvertedTool>>
 ```
 
-このメソッドは、サーバーを作成したときに設定されたツールを確認できます。これは読み取り専用のリストで、デバッグ目的に役立ちます。
+## 例
 
-```typescript
-tools(): Readonly<Record<string, ConvertedTool>>
-```
+MCPServer のセットアップとデプロイの実践的な例については、[MCPServer のデプロイ例](/examples/agents/deploying-mcp-server)をご覧ください。
 
 ## 関連情報
 
-- Mastraで MCPサーバーに接続する方法については、[MCPClientのドキュメント](./mcp-client)を参照してください。
-- Model Context Protocolの詳細については、[@modelcontextprotocol/sdkのドキュメント](https://github.com/modelcontextprotocol/typescript-sdk)を参照してください。
+- MastraでMCPサーバーに接続する方法については、[MCPClientのドキュメント](./mcp-client)をご覧ください。
+- Model Context Protocolの詳細については、[@modelcontextprotocol/sdkのドキュメント](https://github.com/modelcontextprotocol/typescript-sdk)をご参照ください。

@@ -1,11 +1,11 @@
 ---
-title: "リファレンス: voice.connect() | Voice Providers | Mastra Docs"
-description: "リアルタイム音声プロバイダーで利用可能なconnect()メソッドのドキュメントで、音声間通信の接続を確立します。"
+title: "リファレンス: voice.connect() | 音声プロバイダー | Mastra Docs"
+description: "リアルタイム音声プロバイダーで利用可能なconnect()メソッドのドキュメント。音声対音声通信の接続を確立します。"
 ---
 
 # voice.connect()
 
-`connect()` メソッドは、リアルタイムの音声対音声通信のために WebSocket または WebRTC 接続を確立します。このメソッドは、`send()` や `answer()` などの他のリアルタイム機能を使用する前に呼び出す必要があります。
+`connect()` メソッドは、リアルタイムの音声対音声通信のためのWebSocketまたはWebRTC接続を確立します。このメソッドは、`send()`や`answer()`などの他のリアルタイム機能を使用する前に呼び出す必要があります。
 
 ## 使用例
 
@@ -14,12 +14,12 @@ import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
 import Speaker from "@mastra/node-speaker";
 
 const speaker = new Speaker({
-  sampleRate: 24100, // MacBook Proでの高品質オーディオの標準であるHz単位のオーディオサンプルレート
-  channels: 1, // モノラルオーディオ出力（ステレオの場合は2）
-  bitDepth: 16, // オーディオ品質のビット深度 - CD品質標準（16ビット解像度）
+  sampleRate: 24100, // Audio sample rate in Hz - standard for high-quality audio on MacBook Pro
+  channels: 1, // Mono audio output (as opposed to stereo which would be 2)
+  bitDepth: 16, // Bit depth for audio quality - CD quality standard (16-bit resolution)
 });
 
-// リアルタイム音声プロバイダーを初期化
+// Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
   realtimeConfig: {
     model: "gpt-4o-mini-realtime",
@@ -34,17 +34,17 @@ const voice = new OpenAIRealtimeVoice({
       },
     },
   },
-  speaker: "alloy", // デフォルトの音声
+  speaker: "alloy", // Default voice
 });
-// リアルタイムサービスに接続
+// Connect to the real-time service
 await voice.connect();
-// これでリアルタイム機能を使用できます
+// Now you can use real-time features
 voice.on("speaker", (stream) => {
   stream.pipe(speaker);
 });
-// 接続オプション付き
+// With connection options
 await voice.connect({
-  timeout: 10000, // 10秒のタイムアウト
+  timeout: 10000, // 10 seconds timeout
   reconnect: true,
 });
 ```
@@ -64,11 +64,11 @@ await voice.connect({
 
 ## 戻り値
 
-接続が正常に確立されると解決される`Promise<void>`を返します。
+接続が正常に確立されると解決する`Promise<void>`を返します。
 
 ## プロバイダー固有のオプション
 
-各リアルタイム音声プロバイダーは、`connect()` メソッドに対して異なるオプションをサポートする場合があります:
+各リアルタイム音声プロバイダーは、`connect()`メソッドに対して異なるオプションをサポートしている場合があります：
 
 ### OpenAI リアルタイム
 
@@ -77,23 +77,23 @@ await voice.connect({
     {
       name: "options.timeout",
       type: "number",
-      description: "ミリ秒単位の接続タイムアウト",
+      description: "接続タイムアウト（ミリ秒）",
       isOptional: true,
       defaultValue: "30000",
     },
     {
       name: "options.reconnect",
       type: "boolean",
-      description: "接続が失われた際に自動的に再接続するかどうか",
+      description: "接続が切れた場合に自動的に再接続するかどうか",
       isOptional: true,
       defaultValue: "false",
     },
   ]}
 />
 
-## CompositeVoiceとの使用
+## CompositeVoiceでの使用
 
-`CompositeVoice`を使用する場合、`connect()`メソッドは設定されたリアルタイムプロバイダーに委任されます:
+`CompositeVoice`を使用する場合、`connect()`メソッドは設定されたリアルタイムプロバイダーに委譲されます：
 
 ```typescript
 import { CompositeVoice } from "@mastra/core/voice";
@@ -106,18 +106,18 @@ const voice = new CompositeVoice({
 await voice.connect();
 ```
 
-## メモ
+## 注意事項
 
-- このメソッドは、音声から音声への機能をサポートするリアルタイム音声プロバイダーによってのみ実装されています
-- この機能をサポートしない音声プロバイダーで呼び出された場合、警告を記録し、即座に解決されます
+- このメソッドは、音声対音声機能をサポートするリアルタイム音声プロバイダーでのみ実装されています
+- この機能をサポートしていない音声プロバイダーで呼び出された場合、警告をログに記録して即座に解決します
 - `send()` や `answer()` などの他のリアルタイムメソッドを使用する前に、接続を確立する必要があります
-- 音声インスタンスの使用が終わったら、`close()` を呼び出してリソースを適切にクリーンアップしてください
-- プロバイダーによっては、実装に応じて接続が失われた際に自動的に再接続することがあります
-- 接続エラーは通常、例外としてスローされ、キャッチして処理する必要があります
+- 音声インスタンスの使用が終わったら、リソースを適切にクリーンアップするために `close()` を呼び出してください
+- 一部のプロバイダーは、その実装によって、接続が失われた場合に自動的に再接続することがあります
+- 接続エラーは通常、キャッチして処理すべき例外としてスローされます
 
 ## 関連メソッド
 
-- [voice.send()](./voice.send) - 音声プロバイダーに音声データを送信します
+- [voice.send()](./voice.send) - 音声データを音声プロバイダーに送信します
 - [voice.answer()](./voice.answer) - 音声プロバイダーに応答を促します
 - [voice.close()](./voice.close) - リアルタイムサービスから切断します
-- [voice.on()](./voice.on) - 音声イベントのためのイベントリスナーを登録します
+- [voice.on()](./voice.on) - 音声イベントのイベントリスナーを登録します

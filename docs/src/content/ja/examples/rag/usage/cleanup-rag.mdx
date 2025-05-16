@@ -1,37 +1,37 @@
 ---
-title: "例：情報密度の最適化 | RAG | Mastra ドキュメント"
-description: Mastraでのデータ重複排除とLLMベースの処理を使用して情報密度を最適化するRAGシステムの実装例。
+title: "例: 情報密度の最適化 | RAG | Mastra ドキュメント"
+description: LLMベースの処理を用いて、Mastraで情報密度を最適化し、データの重複を排除するRAGシステムの実装例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
 # 情報密度の最適化
 
-この例では、Mastra、OpenAIの埋め込み、およびベクトルストレージ用のPGVectorを使用して、Retrieval-Augmented Generation (RAG) システムを実装する方法を示します。
-このシステムは、情報密度を最適化し、データの重複を排除するために、エージェントを使用して初期チャンクをクリーンアップします。
+この例では、Mastra、OpenAIの埋め込み、PGVectorによるベクトルストレージを用いたRetrieval-Augmented Generation（RAG）システムの実装方法を示します。
+このシステムでは、エージェントが初期チャンクをクリーンアップし、情報密度を最適化しつつデータの重複を排除します。
 
 ## 概要
 
-システムは、MastraとOpenAIを使用してRAGを実装し、今回はLLMベースの処理を通じて情報密度を最適化します。以下がその内容です：
+このシステムは、Mastra と OpenAI を用いて RAG を実装しており、今回は LLM ベースの処理によって情報密度の最適化を行っています。主な処理内容は以下の通りです。
 
-1. クエリとドキュメントのクリーニングの両方を処理できるgpt-4o-miniを使用してMastraエージェントを設定します
-2. エージェントが使用するためのベクトルクエリとドキュメントチャンクツールを作成します
-3. 初期ドキュメントを処理します：
-   - テキストドキュメントを小さなセグメントに分割します
-   - チャンクの埋め込みを作成します
-   - それらをPostgreSQLベクトルデータベースに保存します
-4. ベースラインの応答品質を確立するために初期クエリを実行します
-5. データを最適化します：
-   - エージェントを使用してチャンクをクリーニングし、重複を排除します
-   - クリーニングされたチャンクの新しい埋め込みを作成します
-   - 最適化されたデータでベクトルストアを更新します
-6. 改善された応答品質を示すために、同じクエリを再度実行します
+1. gpt-4o-mini を搭載した Mastra エージェントをセットアップし、クエリとドキュメントのクリーニングの両方に対応
+2. エージェントが利用するためのベクトルクエリおよびドキュメント分割ツールを作成
+3. 初期ドキュメントの処理:
+   - テキストドキュメントを小さなセグメントに分割
+   - 各セグメントの埋め込みを作成
+   - それらを PostgreSQL ベクトルデータベースに保存
+4. 初回クエリを実行し、ベースラインとなる応答品質を確認
+5. データの最適化:
+   - エージェントを使ってセグメントのクリーニングと重複排除を実施
+   - クリーニング後のセグメントに対して新たに埋め込みを作成
+   - 最適化されたデータでベクトルストアを更新
+6. 同じクエリを再度実行し、応答品質の向上を確認
 
 ## セットアップ
 
-### 環境セットアップ
+### 環境のセットアップ
 
-環境変数を設定してください：
+環境変数を必ず設定してください：
 
 ```bash filename=".env"
 OPENAI_API_KEY=your_openai_api_key_here
@@ -59,7 +59,7 @@ import { embedMany } from "ai";
 
 ### ベクタークエリツール
 
-`@mastra/rag` からインポートされた `createVectorQueryTool` を使用して、ベクターデータベースをクエリできるツールを作成できます。
+@mastra/rag からインポートした createVectorQueryTool を使用すると、ベクターデータベースにクエリを実行するツールを作成できます。
 
 ```typescript copy showLineNumbers{8} filename="index.ts"
 const vectorQueryTool = createVectorQueryTool({
@@ -69,9 +69,9 @@ const vectorQueryTool = createVectorQueryTool({
 });
 ```
 
-### ドキュメントチャンクツール
+### ドキュメントチャンク化ツール
 
-`@mastra/rag` からインポートされた `createDocumentChunkerTool` を使用して、ドキュメントをチャンク化し、そのチャンクをエージェントに送信するツールを作成できます。
+@mastra/rag からインポートした createDocumentChunkerTool を使用すると、ドキュメントをチャンク化し、そのチャンクをエージェントに送信するツールを作成できます。
 
 ```typescript copy showLineNumbers{14} filename="index.ts"
 const doc = MDocument.fromText(yourText);
@@ -89,16 +89,16 @@ const documentChunkerTool = createDocumentChunkerTool({
 
 ## エージェント設定
 
-クエリとクリーニングの両方を処理できる単一のMastraエージェントを設定します:
+クエリとクリーニングの両方を処理できる単一のMastraエージェントをセットアップします。
 
 ```typescript copy showLineNumbers{26} filename="index.ts"
 const ragAgent = new Agent({
   name: "RAG Agent",
-  instructions: `あなたは、クエリとドキュメントのクリーニングの両方を処理する役立つアシスタントです。
-    クリーニング時: データを処理、クリーニング、ラベル付けし、関連性のない情報を削除し、重要な事実を保持しながら重複を排除します。
-    クエリ時: 利用可能なコンテキストに基づいて回答を提供します。回答は簡潔で関連性のあるものにしてください。
+  instructions: `You are a helpful assistant that handles both querying and cleaning documents.
+    When cleaning: Process, clean, and label data, remove irrelevant information and deduplicate content while preserving key facts.
+    When querying: Provide answers based on the available context. Keep your answers concise and relevant.
     
-    重要: 質問に答えるよう求められた場合、ツールで提供されたコンテキストのみに基づいて回答してください。コンテキストに質問に完全に答えるための十分な情報が含まれていない場合は、その旨を明示してください。
+    Important: When asked to answer a question, please base your answer only on the context provided in the tool. If the context doesn't contain enough information to fully answer the question, please state that explicitly.
     `,
   model: openai("gpt-4o-mini"),
   tools: {
@@ -108,9 +108,9 @@ const ragAgent = new Agent({
 });
 ```
 
-## PgVectorとMastraのインスタンス化
+## PgVector と Mastra のインスタンス化
 
-コンポーネントを使用してPgVectorとMastraをインスタンス化します:
+以下のコンポーネントを使って PgVector と Mastra をインスタンス化します。
 
 ```typescript copy showLineNumbers{41} filename="index.ts"
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
@@ -124,7 +124,7 @@ const agent = mastra.getAgent("ragAgent");
 
 ## ドキュメント処理
 
-初期ドキュメントを分割し、埋め込みを作成します:
+最初のドキュメントをチャンク化し、埋め込みを作成します：
 
 ```typescript copy showLineNumbers{49} filename="index.ts"
 const chunks = await doc.chunk({
@@ -154,7 +154,7 @@ await vectorStore.upsert({
 
 ## 初期クエリ
 
-生データをクエリしてベースラインを確立してみましょう：
+まずは、生データにクエリを実行してベースラインを確認してみましょう。
 
 ```typescript copy showLineNumbers{73} filename="index.ts"
 // Generate response using the original embeddings
@@ -166,7 +166,7 @@ console.log("Response:", originalResponse.text);
 
 ## データ最適化
 
-初期結果を確認した後、データの品質を向上させるためにクリーンアップを行います：
+初期結果を確認した後、データをクリーンアップして品質を向上させることができます：
 
 ```typescript copy showLineNumbers{79} filename="index.ts"
 const chunkPrompt = `Use the tool provided to clean the chunks. Make sure to filter out irrelevant information that is not space related and remove duplicates.`;
@@ -202,7 +202,7 @@ await vectorStore.upsert({
 
 ## 最適化されたクエリ
 
-データをクリーンアップした後に再度クエリを実行し、応答の違いを観察します:
+データをクリーンアップした後、再度クエリを実行してレスポンスに違いがあるか観察します。
 
 ```typescript copy showLineNumbers{109} filename="index.ts"
 // Query again with cleaned embeddings

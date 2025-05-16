@@ -69,9 +69,9 @@ const agent = new Agent({
 
 ワーキングメモリ機能により、エージェントは会話全体で永続的な情報を維持することができます。有効にすると、Memoryクラスはテキストストリームタグまたはツールコールを通じて、ワーキングメモリの更新を自動的に管理します。
 
-ワーキングメモリの更新を処理するには、2つのモードがあります：
+ワーキングメモリの更新を処理するには、次の2つのモードがあります：
 
-1. **text-stream**（デフォルト）：エージェントはMarkdownを含むXMLタグ（`<working_memory># User \n ## Preferences...</working_memory>`）を使用して、直接レスポンスにワーキングメモリの更新を含めます。これらのタグは自動的に処理され、表示される出力からは削除されます。
+1. **text-stream**（デフォルト）：エージェントはMarkdownを含むXMLタグ（`<working_memory># User \n ## Preferences...</working_memory>`）を使用して、応答に直接ワーキングメモリの更新を含めます。これらのタグは自動的に処理され、表示される出力からは削除されます。
 
 2. **tool-call**：エージェントはワーキングメモリを更新するための専用ツールを使用します。このモードは`toDataStream()`と連携する場合に使用すべきです。なぜならtext-streamモードはデータストリーミングと互換性がないためです。さらに、このモードはメモリ更新に対するより明示的な制御を提供し、テキストタグの管理よりもツールの使用が得意なエージェントと連携する場合に好まれることがあります。
 
@@ -89,7 +89,7 @@ const memory = new Memory({
 });
 ```
 
-テンプレートが提供されない場合、Memoryクラスはユーザーの詳細、設定、目標、およびその他の文脈情報をMarkdown形式で含むデフォルトのテンプレートを使用します。詳細な使用例とベストプラクティスについては、[ワーキングメモリガイド](/docs/memory/working-memory.mdx#designing-effective-templates)を参照してください。
+テンプレートが提供されない場合、Memoryクラスはユーザーの詳細、設定、目標、およびその他のコンテキスト情報をMarkdown形式で含むデフォルトのテンプレートを使用します。詳細な使用例とベストプラクティスについては、[ワーキングメモリガイド](/docs/memory/working-memory.mdx#designing-effective-templates)を参照してください。
 
 ### embedder
 
@@ -191,14 +191,16 @@ Mastraは[Vercel AI SDK](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings)を�
     {
       name: "topK",
       type: "number",
-      description: "セマンティック検索を使用する際に取得する類似メッセージの数",
+      description:
+        "セマンティック検索を使用する際に取得する類似メッセージの数",
       isOptional: true,
       defaultValue: "2",
     },
     {
       name: "messageRange",
       type: "number | { before: number; after: number }",
-      description: "セマンティック検索結果の周囲に含めるメッセージの範囲",
+      description:
+        "セマンティック検索結果の周囲に含めるメッセージの範囲",
       isOptional: true,
       defaultValue: "2",
     },
