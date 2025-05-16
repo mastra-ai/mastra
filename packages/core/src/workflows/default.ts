@@ -1,6 +1,7 @@
 import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
-import type { RuntimeContext } from '../di';
+import type { RuntimeContext } from '../../di';
+import { EMITTER_SYMBOL } from './constants';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
 import type { ExecuteFunction, Step } from './step';
@@ -311,7 +312,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             // @ts-ignore
             runId: stepResults[step.id]?.payload?.__workflow_meta?.runId,
           },
-          emitter,
+          [EMITTER_SYMBOL]: emitter,
         });
 
         if (suspended) {

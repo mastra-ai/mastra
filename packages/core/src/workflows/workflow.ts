@@ -9,6 +9,7 @@ import { RuntimeContext } from '../di';
 import { RegisteredLogger } from '../logger';
 import { Tool } from '../tools';
 import type { ToolExecutionContext } from '../tools/types';
+import { EMITTER_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import type { ExecuteFunction, Step } from './step';
@@ -171,14 +172,63 @@ export function createStep<
       outputSchema: z.object({
         text: z.string(),
       }),
-      execute: async ({ inputData }) => {
-        const result = await params.generate(inputData.prompt, {
+      execute: async ({ inputData, [EMITTER_SYMBOL]: emitter }) => {
+        let streamPromise = {} as {
+          promise: Promise<string>;
+          resolve: (value: string) => void;
+          reject: (reason?: any) => void;
+        };
+
+        streamPromise.promise = new Promise((resolve, reject) => {
+          streamPromise.resolve = resolve;
+          streamPromise.reject = reject;
+        });
+        const toolData = {
+          name: params.name,
+          args: inputData,
+        };
+        await emitter.emit('watch-v2', {
+          type: 'tool-call-streaming-start',
+          ...toolData,
+        });
+        const { fullStream } = await params.stream(inputData.prompt, {
           // resourceId: inputData.resourceId,
           // threadId: inputData.threadId,
+          onFinish: result => {
+            console.log('on finish', result.text);
+            streamPromise.resolve(result.text);
+          },
         });
 
+        for await (const chunk of fullStream) {
+          switch (chunk.type) {
+            case 'text-delta':
+              await emitter.emit('watch-v2', {
+                type: 'tool-call-delta',
+                ...toolData,
+                argsTextDelta: chunk.textDelta,
+              });
+              break;
+
+            case 'step-start':
+            case 'step-finish':
+            case 'finish':
+              break;
+
+            case 'tool-call':
+            case 'tool-result':
+            case 'tool-call-streaming-start':
+            case 'tool-call-delta':
+            case 'source':
+            case 'file':
+            default:
+              await emitter.emit('watch-v2', chunk);
+              break;
+          }
+        }
+
         return {
-          text: result.text,
+          text: await streamPromise.promise,
         };
       },
     };
@@ -195,8 +245,8 @@ export function createStep<
       id: params.id,
       inputSchema: params.inputSchema,
       outputSchema: params.outputSchema,
-      execute: async ({ inputData, mastra }) => {
-        return await params.execute({
+      execute: async ({ inputData, mastra, [EMITTER_SYMBOL]: emitter }) => {
+        return params.execute({
           context: inputData,
           mastra,
         });
@@ -786,7 +836,7 @@ export class Workflow<
     resumeData,
     suspend,
     resume,
-    emitter,
+    [EMITTER_SYMBOL]: emitter,
     mastra,
     runtimeContext,
   }: {
@@ -801,7 +851,7 @@ export class Workflow<
       resumePayload: any;
       runId?: string;
     };
-    emitter: { emit: (event: string, data: any) => void };
+    [EMITTER_SYMBOL]: { emit: (event: string, data: any) => void };
     mastra: Mastra;
     runtimeContext?: RuntimeContext;
   }): Promise<z.infer<TOutput>> {
@@ -955,9 +1005,8 @@ export class Run<
       graph: this.executionGraph,
       input: inputData,
       emitter: {
-        emit: (event: string, data: any) => {
+        emit: async (event: string, data: any) => {
           this.emitter.emit(event, data);
-          return Promise.resolve();
         },
       },
       retryConfig: this.retryConfig,
