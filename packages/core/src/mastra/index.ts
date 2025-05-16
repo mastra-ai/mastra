@@ -154,7 +154,7 @@ export class Mastra<
     */
     if (this.#telemetry) {
       this.#storage = this.#telemetry.traceClass(storage, {
-        excludeMethods: ['__setTelemetry', '__getTelemetry', 'batchTraceInsert'],
+        excludeMethods: ['__setTelemetry', '__getTelemetry', 'batchTraceInsert', 'getTraces', 'getEvalsByAgentName'],
       });
       this.#storage.__setTelemetry(this.#telemetry);
     } else {
