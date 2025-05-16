@@ -60,7 +60,7 @@ async function createIndexAndWait(
   metric: 'cosine' | 'euclidean' | 'dotproduct',
 ) {
   await vectorDB.createIndex({ indexName, dimension, metric });
-  await vectorDB.waitForIndexReady(indexName);
+  await vectorDB.waitForIndexReady({ indexName });
   const created = await waitForCondition(
     async () => {
       const cols = await vectorDB.listIndexes();
@@ -75,7 +75,7 @@ async function createIndexAndWait(
 // Delete index (collection) and wait until it is removed
 async function deleteIndexAndWait(vectorDB: MongoDBVector, indexName: string) {
   try {
-    await vectorDB.deleteIndex(indexName);
+    await vectorDB.deleteIndex({ indexName });
     const deleted = await waitForCondition(
       async () => {
         const cols = await vectorDB.listIndexes();
@@ -105,7 +105,7 @@ describe('MongoDBVector Integration Tests', () => {
     // Cleanup any existing collections
     try {
       const cols = await vectorDB.listIndexes();
-      await Promise.all(cols.map(c => vectorDB.deleteIndex(c)));
+      await Promise.all(cols.map(c => vectorDB.deleteIndex({ indexName: c })));
       const deleted = await waitForCondition(async () => (await vectorDB.listIndexes()).length === 0, 30000, 2000);
       if (!deleted) throw new Error('Timed out waiting for collections to be deleted');
     } catch (error) {
@@ -119,12 +119,12 @@ describe('MongoDBVector Integration Tests', () => {
 
   afterAll(async () => {
     try {
-      await vectorDB.deleteIndex(testIndexName);
+      await vectorDB.deleteIndex({ indexName: testIndexName });
     } catch (error) {
       console.error('Failed to delete test collection:', error);
     }
     try {
-      await vectorDB.deleteIndex(testIndexName2);
+      await vectorDB.deleteIndex({ indexName: testIndexName2 });
     } catch (error) {
       console.error('Failed to delete test collection:', error);
     }
@@ -137,7 +137,7 @@ describe('MongoDBVector Integration Tests', () => {
     expect(cols).toContain(testIndexName);
 
     // Check stats (should be zero docs initially)
-    const initialStats = await vectorDB.describeIndex(testIndexName);
+    const initialStats = await vectorDB.describeIndex({ indexName: testIndexName });
     expect(initialStats).toEqual({ dimension: 4, metric: 'cosine', count: 0 });
 
     // Upsert 4 vectors with metadata
@@ -153,7 +153,7 @@ describe('MongoDBVector Integration Tests', () => {
 
     // Wait for the document count to update (increased delay to 5000ms)
     await new Promise(resolve => setTimeout(resolve, 5000));
-    const updatedStats = await vectorDB.describeIndex(testIndexName);
+    const updatedStats = await vectorDB.describeIndex({ indexName: testIndexName });
     expect(updatedStats.count).toEqual(4);
 
     // Query for similar vectors (delay again to allow for index update)
@@ -175,7 +175,7 @@ describe('MongoDBVector Integration Tests', () => {
     expect(filteredResults[0]?.metadata).toEqual({ label: 'vector2' });
 
     // Final stats should show > 0 documents
-    const finalStats = await vectorDB.describeIndex(testIndexName);
+    const finalStats = await vectorDB.describeIndex({ indexName: testIndexName });
     expect(finalStats.count).toBeGreaterThan(0);
   });
 
@@ -379,7 +379,11 @@ describe('MongoDBVector Integration Tests', () => {
       const idToBeUpdated = ids[0];
       const newVector = [1, 2, 3, 4];
       const newMetaData = { test: 'updates' };
-      await vectorDB.updateVector(indexName, idToBeUpdated, { vector: newVector, metadata: newMetaData });
+      await vectorDB.updateVector({
+        indexName,
+        id: idToBeUpdated,
+        update: { vector: newVector, metadata: newMetaData },
+      });
       await new Promise(resolve => setTimeout(resolve, 5000));
       const results = await vectorDB.query({
         indexName,
@@ -399,7 +403,7 @@ describe('MongoDBVector Integration Tests', () => {
       expect(ids).toHaveLength(4);
       const idToBeUpdated = ids[0];
       const newMetaData = { test: 'metadata only update' };
-      await vectorDB.updateVector(indexName, idToBeUpdated, { metadata: newMetaData });
+      await vectorDB.updateVector({ indexName, id: idToBeUpdated, update: { metadata: newMetaData } });
       await new Promise(resolve => setTimeout(resolve, 5000));
       const results = await vectorDB.query({
         indexName,
@@ -419,7 +423,7 @@ describe('MongoDBVector Integration Tests', () => {
       expect(ids).toHaveLength(4);
       const idToBeUpdated = ids[0];
       const newVector = [1, 2, 3, 4];
-      await vectorDB.updateVector(indexName, idToBeUpdated, { vector: newVector });
+      await vectorDB.updateVector({ indexName, id: idToBeUpdated, update: { vector: newVector } });
       await new Promise(resolve => setTimeout(resolve, 5000));
       const results = await vectorDB.query({
         indexName,
@@ -434,21 +438,23 @@ describe('MongoDBVector Integration Tests', () => {
       expect(updatedResult?.vector).toEqual(newVector);
     });
     it('should throw exception when no updates are given', async () => {
-      await expect(vectorDB.updateVector(indexName, 'nonexistent-id', {})).rejects.toThrow('No updates provided');
+      await expect(vectorDB.updateVector({ indexName, id: 'nonexistent-id', update: {} })).rejects.toThrow(
+        'No updates provided',
+      );
     });
     it('should delete the vector by id', async () => {
       const ids = await vectorDB.upsert({ indexName, vectors: testVectors });
       expect(ids).toHaveLength(4);
       const idToBeDeleted = ids[0];
 
-      const initialStats = await vectorDB.describeIndex(indexName);
+      const initialStats = await vectorDB.describeIndex({ indexName });
 
-      await vectorDB.deleteVector(indexName, idToBeDeleted);
+      await vectorDB.deleteVector({ indexName, id: idToBeDeleted });
       const results = await vectorDB.query({ indexName, queryVector: [1, 0, 0, 0], topK: 2 });
       expect(results.map(res => res.id)).not.toContain(idToBeDeleted);
 
       await new Promise(resolve => setTimeout(resolve, 5000)); // Wait for count to update
-      const finalStats = await vectorDB.describeIndex(indexName);
+      const finalStats = await vectorDB.describeIndex({ indexName });
       expect(finalStats.count).toBe(initialStats.count - 1);
     });
   });

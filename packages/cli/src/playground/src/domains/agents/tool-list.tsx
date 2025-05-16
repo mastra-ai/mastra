@@ -9,7 +9,7 @@ export interface ToolListProps {
 
 export function ToolList({ tools, agentId }: ToolListProps) {
   return (
-    <ul>
+    <ul className="space-y-2">
       {tools.map(tool => (
         <li key={tool.id}>
           <ToolEntity tool={tool} agentId={agentId} />

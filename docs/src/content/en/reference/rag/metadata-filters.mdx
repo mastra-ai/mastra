@@ -12,7 +12,7 @@ Mastra provides a unified metadata filtering syntax across all vector stores, ba
 ```typescript
 import { PgVector } from "@mastra/pg";
 
-const store = new PgVector(connectionString);
+const store = new PgVector({ connectionString });
 
 const results = await store.query({
   indexName: "my_index",

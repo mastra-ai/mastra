@@ -85,7 +85,7 @@ const ragAgent = new Agent({
   },
 });
 
-const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
+const pgVector = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING! });
 
 export const mastra = new Mastra({
   agents: { ragAgent },
@@ -141,7 +141,7 @@ const { embeddings: cleanedEmbeddings } = await embedMany({
   model: openai.embedding('text-embedding-3-small'),
   values: updatedChunks.map(chunk => chunk.text),
 });
-await vectorStore.deleteIndex('embeddings');
+await vectorStore.deleteIndex({ indexName: 'embeddings' });
 await vectorStore.createIndex({
   indexName: 'embeddings',
   dimension: 1536,
