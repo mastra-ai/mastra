@@ -32,7 +32,7 @@ const step2 = createStep({
     result: z.string(),
   }),
   execute: async ({ inputData }) => {
-    return { result: inputData.outputValue };
+    return { result: inputData.unexpectedName };
   },
 });
 

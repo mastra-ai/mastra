@@ -126,7 +126,7 @@ const myStep = createStep({
   content={[
     {
       name: "result",
-      type: "Promise",
+      type: "Promise<z.infer<TOutput>>",
       description: "A promise that resolves to the output of the executed step",
     },
   ]}
