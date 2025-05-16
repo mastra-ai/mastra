@@ -1,11 +1,11 @@
 import { EventEmitter } from 'events';
 import { PassThrough } from 'stream';
 import type { ToolsInput } from '@mastra/core/agent';
+import type { RuntimeContext } from '@mastra/core/runtime-context';
 import { MastraVoice } from '@mastra/core/voice';
 import type { Realtime, RealtimeServerEvents } from 'openai-realtime-api';
 import { WebSocket } from 'ws';
 import { isReadableStream, transformTools } from './utils';
-import type { RuntimeContext } from '@mastra/core/runtime-context';
 
 /**
  * Event callback function type

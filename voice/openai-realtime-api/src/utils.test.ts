@@ -1,9 +1,9 @@
 import { createTool } from '@mastra/core/tools';
+import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import { transformTools } from './utils';
 
 // Vitest provides these globals automatically, but we can import them explicitly for clarity
-import { describe, it, expect } from 'vitest';
 
 describe('transformTools', () => {
   describe('Basic Tool Transformation', () => {
@@ -59,7 +59,7 @@ describe('transformTools', () => {
           },
           required: ['query'],
         },
-        execute: async (args: { query: string, limit?: number }) => {
+        execute: async (args: { query: string; limit?: number }) => {
           return `Searched for: ${args.query}`;
         },
       };
