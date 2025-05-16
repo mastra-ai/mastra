@@ -25,7 +25,7 @@ describe('MessageList', () => {
         experimental_attachments: [],
       } satisfies VercelUIMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(input, 'new-message');
+      const list = new MessageList({ threadId, resourceId }).add(input);
 
       const messages = list.getMessages();
       expect(messages.length).toBe(1);
@@ -34,7 +34,6 @@ describe('MessageList', () => {
         id: input.id,
         role: 'user',
         createdAt: input.createdAt,
-        contentSource: 'new-message',
         content: {
           format: 2,
           parts: [{ type: 'text', text: 'Hello from UI!' }],
@@ -54,7 +53,7 @@ describe('MessageList', () => {
       const list = new MessageList({
         threadId,
         resourceId,
-      }).add(input, 'new-message');
+      }).add(input);
 
       const messages = list.getMessages();
       expect(messages.length).toBe(1);
@@ -63,7 +62,6 @@ describe('MessageList', () => {
         id: expect.any(String),
         role: 'user',
         createdAt: expect.any(Date),
-        contentSource: 'new-message',
         content: {
           format: 2,
           content: 'Hello from Core!',
@@ -83,7 +81,7 @@ describe('MessageList', () => {
 
       const initialMessages = [messageOne, messageTwo];
 
-      const list = new MessageList().add(initialMessages[0], 'memory').add(initialMessages[1], 'new-message');
+      const list = new MessageList().add(initialMessages[0]).add(initialMessages[1]);
 
       const messageThree = {
         role: 'tool',
@@ -92,7 +90,7 @@ describe('MessageList', () => {
         ],
       } satisfies CoreMessage;
 
-      list.add(messageThree, 'new-message');
+      list.add(messageThree);
 
       expect(list.toUIMessages()).toEqual([
         {
@@ -141,14 +139,13 @@ describe('MessageList', () => {
         type: 'text',
       } satisfies MastraMessageV1;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(inputV1Message);
 
       expect(list.getMessages()).toEqual([
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
           createdAt: inputV1Message.createdAt,
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -182,14 +179,13 @@ describe('MessageList', () => {
         type: 'text',
       } satisfies MastraMessageV1;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(inputV1Message);
 
       expect(list.getMessages()).toEqual([
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
           createdAt: inputV1Message.createdAt,
-          contentSource: 'new-message',
           content: {
             format: 2,
             content: 'Hello from V1!',
@@ -215,14 +211,13 @@ describe('MessageList', () => {
         ],
       } satisfies VercelCoreMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage);
 
       expect(list.getMessages()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
           createdAt: expect.any(Date),
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -283,7 +278,6 @@ describe('MessageList', () => {
           id: msg1.id,
           role: msg1.role,
           createdAt: msg1.createdAt,
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [{ type: 'text', text: msg1.content }],
@@ -296,7 +290,6 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'assistant',
           createdAt: msg4.createdAt,
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -322,17 +315,15 @@ describe('MessageList', () => {
           resourceId,
         },
       ];
-      expect(new MessageList({ threadId, resourceId }).add(messageSequence, `new-message`).getMessages()).toEqual(
-        expected,
-      );
+      expect(new MessageList({ threadId, resourceId }).add(messageSequence).getMessages()).toEqual(expected);
 
       let messages: Message[] = [];
       const list = new MessageList();
 
       // msg1
       messages = appendClientMessage({ messages, message: msg1 });
-      expect(new MessageList().add(messages, `new-message`).toUIMessages()).toEqual(messages);
-      list.add(messages, `new-message`);
+      expect(new MessageList().add(messages).toUIMessages()).toEqual(messages);
+      list.add(messages);
       expect(list.toUIMessages()).toEqual(messages);
 
       // msg2
@@ -340,20 +331,20 @@ describe('MessageList', () => {
         messages,
         responseMessages: [{ ...msg2, id: randomUUID() }],
       });
-      expect(new MessageList().add(messages, `new-message`).toUIMessages()).toEqual(messages);
-      list.add(messages, `new-message`);
+      expect(new MessageList().add(messages).toUIMessages()).toEqual(messages);
+      list.add(messages);
       expect(list.toUIMessages()).toEqual(messages);
 
       // msg3
       messages = appendResponseMessages({ messages, responseMessages: [{ id: randomUUID(), ...msg3 }] });
-      expect(new MessageList().add(messages, `new-message`).toUIMessages()).toEqual(messages);
-      list.add(messages, `new-message`);
+      expect(new MessageList().add(messages).toUIMessages()).toEqual(messages);
+      list.add(messages);
       expect(list.toUIMessages()).toEqual(messages);
 
       // msg4
       messages = appendResponseMessages({ messages, responseMessages: [msg4] });
-      expect(new MessageList().add(messages, `new-message`).toUIMessages()).toEqual(messages);
-      list.add(messages, `new-message`);
+      expect(new MessageList().add(messages).toUIMessages()).toEqual(messages);
+      list.add(messages);
       expect(list.toUIMessages()).toEqual(messages);
     });
 
@@ -367,14 +358,13 @@ describe('MessageList', () => {
         ],
       } satisfies VercelCoreMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage);
 
       expect(list.getMessages()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
           createdAt: expect.any(Date),
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -403,14 +393,13 @@ describe('MessageList', () => {
         ],
       } satisfies VercelCoreMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage);
 
       expect(list.getMessages()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
           createdAt: expect.any(Date),
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -439,14 +428,13 @@ describe('MessageList', () => {
         type: 'text',
       } satisfies MastraMessageV1;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(inputV1Message);
 
       expect(list.getMessages()).toEqual([
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
           createdAt: inputV1Message.createdAt,
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -480,14 +468,13 @@ describe('MessageList', () => {
         type: 'text',
       } satisfies MastraMessageV1;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(inputV1Message);
 
       expect(list.getMessages()).toEqual([
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
           createdAt: inputV1Message.createdAt,
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -531,14 +518,13 @@ describe('MessageList', () => {
 
       const messageSequence = [msg1, msg2, msg3, msg4, msg5];
 
-      const list = new MessageList({ threadId, resourceId }).add(messageSequence, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence);
 
       expect(list.getMessages()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
           createdAt: expect.any(Date),
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -609,14 +595,13 @@ describe('MessageList', () => {
 
       const messageSequence = [msg1, msg2, msg3, msg4, msg5, msg6];
 
-      const list = new MessageList({ threadId, resourceId }).add(messageSequence, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence);
 
       expect(list.getMessages()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
           createdAt: expect.any(Date),
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -654,7 +639,6 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'user',
           createdAt: expect.any(Date),
-          contentSource: 'new-message',
           content: {
             format: 2,
             content: 'Thanks!',
@@ -676,14 +660,13 @@ describe('MessageList', () => {
         ],
       } satisfies VercelCoreMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage);
 
       expect(list.getMessages()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
           createdAt: expect.any(Date),
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -712,14 +695,13 @@ describe('MessageList', () => {
         ],
       } satisfies VercelCoreMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage);
 
       expect(list.getMessages()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
           createdAt: expect.any(Date),
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -748,14 +730,13 @@ describe('MessageList', () => {
         type: 'text',
       } satisfies MastraMessageV1;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(inputV1Message);
 
       expect(list.getMessages()).toEqual([
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
           createdAt: inputV1Message.createdAt,
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -789,14 +770,13 @@ describe('MessageList', () => {
         type: 'text',
       } satisfies MastraMessageV1;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(inputV1Message);
 
       expect(list.getMessages()).toEqual([
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
           createdAt: inputV1Message.createdAt,
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -840,14 +820,13 @@ describe('MessageList', () => {
 
       const messageSequence = [msg1, msg2, msg3, msg4, msg5];
 
-      const list = new MessageList({ threadId, resourceId }).add(messageSequence, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence);
 
       expect(list.getMessages()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
           createdAt: expect.any(Date),
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -918,14 +897,13 @@ describe('MessageList', () => {
 
       const messageSequence = [msg1, msg2, msg3, msg4, msg5, msg6];
 
-      const list = new MessageList({ threadId, resourceId }).add(messageSequence, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence);
 
       expect(list.getMessages()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
           createdAt: expect.any(Date),
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -963,7 +941,6 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'user',
           createdAt: expect.any(Date),
-          contentSource: 'new-message',
           content: {
             format: 2,
             content: 'Thanks!',
@@ -1007,14 +984,13 @@ describe('MessageList', () => {
 
       const messageSequence = [userMsg, assistantMsgPart1, toolResultMsg, assistantMsgPart2];
 
-      const list = new MessageList({ threadId, resourceId }).add(messageSequence, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence);
 
       expect(list.getMessages()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
           createdAt: expect.any(Date),
-          contentSource: 'new-message',
           content: {
             format: 2,
             content: userMsg.content,
@@ -1027,7 +1003,6 @@ describe('MessageList', () => {
           id: expect.any(String), // Should be the ID of the first assistant message in the sequence
           role: 'assistant',
           createdAt: expect.any(Date), // Should be the timestamp of the last message in the sequence
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -1072,14 +1047,13 @@ describe('MessageList', () => {
         ],
       } satisfies VercelCoreMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage);
 
       expect(list.getMessages()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
           createdAt: expect.any(Date),
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -1108,14 +1082,13 @@ describe('MessageList', () => {
         ],
       } satisfies VercelCoreMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage);
 
       expect(list.getMessages()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
           createdAt: expect.any(Date),
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -1144,14 +1117,13 @@ describe('MessageList', () => {
         type: 'text',
       } satisfies MastraMessageV1;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(inputV1Message);
 
       expect(list.getMessages()).toEqual([
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
           createdAt: inputV1Message.createdAt,
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -1185,14 +1157,13 @@ describe('MessageList', () => {
         type: 'text',
       } satisfies MastraMessageV1;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(inputV1Message);
 
       expect(list.getMessages()).toEqual([
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
           createdAt: inputV1Message.createdAt,
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -1236,14 +1207,13 @@ describe('MessageList', () => {
 
       const messageSequence = [msg1, msg2, msg3, msg4, msg5];
 
-      const list = new MessageList({ threadId, resourceId }).add(messageSequence, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence);
 
       expect(list.getMessages()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
           createdAt: expect.any(Date),
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -1314,14 +1284,13 @@ describe('MessageList', () => {
 
       const messageSequence = [msg1, msg2, msg3, msg4, msg5, msg6];
 
-      const list = new MessageList({ threadId, resourceId }).add(messageSequence, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence);
 
       expect(list.getMessages()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
           createdAt: expect.any(Date),
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -1359,7 +1328,6 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'user',
           createdAt: expect.any(Date),
-          contentSource: 'new-message',
           content: {
             format: 2,
             content: 'Thanks!',
@@ -1381,14 +1349,13 @@ describe('MessageList', () => {
         ],
       } satisfies VercelCoreMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage);
 
       expect(list.getMessages()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
           createdAt: expect.any(Date),
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -1417,14 +1384,13 @@ describe('MessageList', () => {
         ],
       } satisfies VercelCoreMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage);
 
       expect(list.getMessages()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
           createdAt: expect.any(Date),
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -1453,14 +1419,13 @@ describe('MessageList', () => {
         type: 'text',
       } satisfies MastraMessageV1;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(inputV1Message);
 
       expect(list.getMessages()).toEqual([
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
           createdAt: inputV1Message.createdAt,
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -1494,14 +1459,13 @@ describe('MessageList', () => {
         type: 'text',
       } satisfies MastraMessageV1;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(inputV1Message);
 
       expect(list.getMessages()).toEqual([
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
           createdAt: inputV1Message.createdAt,
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -1545,14 +1509,13 @@ describe('MessageList', () => {
 
       const messageSequence = [msg1, msg2, msg3, msg4, msg5];
 
-      const list = new MessageList({ threadId, resourceId }).add(messageSequence, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence);
 
       expect(list.getMessages()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
           createdAt: expect.any(Date),
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -1623,14 +1586,13 @@ describe('MessageList', () => {
 
       const messageSequence = [msg1, msg2, msg3, msg4, msg5, msg6];
 
-      const list = new MessageList({ threadId, resourceId }).add(messageSequence, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence);
 
       expect(list.getMessages()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
           createdAt: expect.any(Date),
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -1668,7 +1630,6 @@ describe('MessageList', () => {
           id: expect.any(String),
           role: 'user',
           createdAt: expect.any(Date),
-          contentSource: 'new-message',
           content: {
             format: 2,
             content: 'Thanks!',
@@ -1699,14 +1660,13 @@ describe('MessageList', () => {
         type: 'text',
       } satisfies MastraMessageV1;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(inputV1Message);
 
       expect(list.getMessages()).toEqual([
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
           createdAt: inputV1Message.createdAt,
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [{ type: 'text', text: 'Here is an image URL:' }],
@@ -1738,14 +1698,13 @@ describe('MessageList', () => {
         ],
       } satisfies VercelCoreMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage);
 
       expect(list.getMessages()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
           createdAt: expect.any(Date),
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [{ type: 'text', text: 'Here is another image URL:' }],
@@ -1779,7 +1738,7 @@ describe('MessageList', () => {
         ],
       } satisfies VercelUIMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(input, 'new-message');
+      const list = new MessageList({ threadId, resourceId }).add(input);
 
       const messages = list.getMessages();
       expect(messages.length).toBe(1);
@@ -1788,7 +1747,6 @@ describe('MessageList', () => {
         id: input.id,
         role: 'user',
         createdAt: input.createdAt,
-        contentSource: 'new-message',
         content: {
           format: 2,
           parts: [{ type: 'text', text: 'Message with attachment' }],
@@ -1821,7 +1779,7 @@ describe('MessageList', () => {
         ],
       } satisfies VercelUIMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(input, 'new-message');
+      const list = new MessageList({ threadId, resourceId }).add(input);
 
       const messages = list.getMessages();
       expect(messages.length).toBe(1);
@@ -1830,7 +1788,6 @@ describe('MessageList', () => {
         id: input.id,
         role: 'user',
         createdAt: input.createdAt,
-        contentSource: 'new-message',
         content: {
           format: 2,
           parts: [{ type: 'text', text: 'Check out this image:' }],
@@ -1894,14 +1851,13 @@ describe('MessageList', () => {
 
       const messageSequence = [userMsgV1, assistantMsgV1, toolResultMsgV1, assistantMsgUIV2];
 
-      const list = new MessageList({ threadId, resourceId }).add(messageSequence, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence);
 
       expect(list.getMessages()).toEqual([
         {
           id: userMsgV1.id,
           role: 'user',
           createdAt: userMsgV1.createdAt,
-          contentSource: 'new-message',
           content: {
             format: 2,
             content: userMsgV1.content,
@@ -1914,7 +1870,6 @@ describe('MessageList', () => {
           id: assistantMsgV1.id, // Should retain the original assistant message ID
           role: 'assistant',
           createdAt: assistantMsgUIV2.createdAt, // The last message's timestamp might be used for the merged message
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -1972,14 +1927,13 @@ describe('MessageList', () => {
 
       const messageSequence = [userMsg, assistantMsgWithToolCall, toolResultMsg, assistantMsgWithFinalText];
 
-      const list = new MessageList({ threadId, resourceId }).add(messageSequence, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence);
 
       expect(list.getMessages()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
           createdAt: expect.any(Date),
-          contentSource: 'new-message',
           content: {
             format: 2,
             content: userMsg.content,
@@ -1992,7 +1946,6 @@ describe('MessageList', () => {
           id: expect.any(String), // Should be the ID of the first assistant message in the sequence
           role: 'assistant',
           createdAt: expect.any(Date), // Should be the timestamp of the last message in the sequence
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -2031,14 +1984,13 @@ describe('MessageList', () => {
         ],
       } satisfies VercelCoreMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage);
 
       expect(list.getMessages()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
           createdAt: expect.any(Date),
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -2063,14 +2015,13 @@ describe('MessageList', () => {
         ],
       } satisfies VercelCoreMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage);
 
       expect(list.getMessages()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
           createdAt: expect.any(Date),
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -2142,14 +2093,13 @@ describe('MessageList', () => {
         assistantMsgWithFinalText,
       ];
 
-      const list = new MessageList({ threadId, resourceId }).add(messageSequence, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence);
 
       expect(list.getMessages()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
           createdAt: expect.any(Date),
-          contentSource: 'new-message',
           content: {
             format: 2,
             content: userMsg.content,
@@ -2162,7 +2112,6 @@ describe('MessageList', () => {
           id: expect.any(String), // Should be the ID of the first assistant message in the sequence
           role: 'assistant',
           createdAt: expect.any(Date), // Should be the timestamp of the last message in the sequence
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -2209,14 +2158,13 @@ describe('MessageList', () => {
         ],
       } satisfies VercelCoreMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage);
 
       expect(list.getMessages()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
           createdAt: expect.any(Date),
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [
@@ -2254,14 +2202,13 @@ describe('MessageList', () => {
         ],
       } satisfies VercelCoreMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, `new-message`);
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage);
 
       expect(list.getMessages()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
           createdAt: expect.any(Date),
-          contentSource: 'new-message',
           content: {
             format: 2,
             parts: [{ type: 'text', text: 'Here is another image URL:' }],
@@ -2425,7 +2372,7 @@ describe('MessageList', () => {
         createdAt: `createdAt` in m && m.createdAt ? new Date(m.createdAt) : new Date(),
       })) as MastraMessageV1[];
 
-      const list = new MessageList({ threadId: '68' }).add(history, 'memory');
+      const list = new MessageList({ threadId: '68' }).add(history);
 
       const uiMessages = list.toUIMessages();
 
@@ -2539,7 +2486,7 @@ describe('MessageList', () => {
       });
 
       expect(newUIMessages.length).toBe(uiMessages.length + 1);
-      const newUIMessages2 = list.add(newUIMessages, `new-message`).toUIMessages();
+      const newUIMessages2 = list.add(newUIMessages).toUIMessages();
       expect(newUIMessages2).toEqual([
         ...uiMessages,
         {
@@ -2568,7 +2515,7 @@ describe('MessageList', () => {
       });
 
       expect(newUIMessages3.length).toBe(newUIMessages2.length + 1);
-      const newUIMessages4 = list.add(newUIMessages3, 'new-message').toUIMessages();
+      const newUIMessages4 = list.add(newUIMessages3).toUIMessages();
       expect(newUIMessages4).toEqual([
         ...newUIMessages2,
         {
@@ -2593,7 +2540,7 @@ describe('MessageList', () => {
         ],
       });
 
-      expect(list.add(newUIMessages5, 'new-message').toUIMessages()).toEqual([
+      expect(list.add(newUIMessages5).toUIMessages()).toEqual([
         ...newUIMessages4,
         {
           role: 'assistant',

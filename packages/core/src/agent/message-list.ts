@@ -29,7 +29,6 @@ export type MessageListItem = {
   id: MastraMessageV2['id'];
   role: MastraMessageV2['role'];
   createdAt: MastraMessageV2['createdAt'];
-  contentSource: 'memory' | 'new-message';
   content: MastraMessageContentV2;
   threadId?: string;
   resourceId?: string;
@@ -48,13 +47,13 @@ export class MessageList {
     }
   }
 
-  public add(messages: MessageInput | MessageInput[], contentSource: MessageListItem['contentSource']) {
+  public add(messages: MessageInput | MessageInput[]) {
     if (Array.isArray(messages)) {
       for (const message of messages) {
-        this.addOne(message, contentSource);
+        this.addOne(message);
       }
     } else {
-      this.addOne(messages, contentSource);
+      this.addOne(messages);
     }
 
     return this;
@@ -126,7 +125,7 @@ export class MessageList {
       id: existingMessage.id,
     };
   }
-  private addOne(message: MessageInput, contentSource: MessageListItem['contentSource']) {
+  private addOne(message: MessageInput) {
     if (message.role === `system`) {
       // TODO: should we handle this more gracefully?
       throw new Error(`Cannot add system messages to MessageList class.`);
@@ -178,17 +177,12 @@ export class MessageList {
         messageV2.content.parts.unshift({ type: 'step-start' });
       }
 
-      const listItem = {
-        ...messageV2,
-        contentSource,
-      } satisfies MessageListItem;
-
       const existingIndex = (shouldUpdate && this.messages.findIndex(m => m.id === id)) || -1;
 
       if (shouldUpdate && existingIndex !== -1) {
-        this.messages[existingIndex] = listItem;
+        this.messages[existingIndex] = messageV2;
       } else if (!exists) {
-        this.messages.push(listItem);
+        this.messages.push(messageV2);
       }
     }
 
