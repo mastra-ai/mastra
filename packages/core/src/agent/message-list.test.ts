@@ -2226,7 +2226,7 @@ describe('MessageList', () => {
       ]);
     });
 
-    it('works with a copy/pasted conversation from useChat input messages', async () => {
+    it('works with a copy/pasted conversation from useChat input messages', () => {
       const history = (
         [
           {
