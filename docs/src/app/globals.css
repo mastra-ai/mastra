@@ -2,6 +2,8 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* TODO: use :root and .dark class to make theming easier */
+
 @theme inline {
   --primary-bg: #050505;
   --secondary-bg: #121212;
