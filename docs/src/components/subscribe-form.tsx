@@ -35,10 +35,7 @@ const buttonCopy = ({
 }) => ({
   idle: idleIcon ? idleIcon : "Subscribe",
   loading: (
-    <Spinner
-      className="w-4 h-4 !duration-300"
-      color={isDark ? "#000" : "#fff"}
-    />
+    <Spinner className="w-4 h-4 !duration-300 dark:text-white text-black" />
   ),
   success: successIcon ? successIcon : "Subscribed!",
 });
