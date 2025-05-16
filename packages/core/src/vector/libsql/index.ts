@@ -2,6 +2,7 @@ import { join, resolve, isAbsolute } from 'path';
 import { createClient } from '@libsql/client';
 import type { Client as TursoClient, InValue } from '@libsql/client';
 
+import { parseSqlIdentifier } from '../../utils';
 import type { VectorFilter } from '../filter';
 import { MastraVector } from '../index';
 import type {
@@ -102,11 +103,21 @@ export class LibSQLVector extends MastraVector {
     try {
       const { indexName, queryVector, topK = 10, filter, includeVector = false, minScore = 0 } = params;
 
+      if (!Number.isInteger(topK) || topK <= 0) {
+        throw new Error('topK must be a positive integer');
+      }
+      if (!Array.isArray(queryVector) || !queryVector.every(x => typeof x === 'number' && Number.isFinite(x))) {
+        throw new Error('queryVector must be an array of finite numbers');
+      }
+
+      const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
+
       const vectorStr = `[${queryVector.join(',')}]`;
 
       const translatedFilter = this.transformFilter(filter);
       const { sql: filterQuery, values: filterValues } = buildFilterQuery(translatedFilter);
       filterValues.push(minScore);
+      filterValues.push(topK);
 
       const query = `
         WITH vector_scores AS (
@@ -115,14 +126,14 @@ export class LibSQLVector extends MastraVector {
             (1-vector_distance_cos(embedding, '${vectorStr}')) as score,
             metadata
             ${includeVector ? ', vector_extract(embedding) as embedding' : ''}
-          FROM ${indexName}
+          FROM ${parsedIndexName}
           ${filterQuery}
         )
         SELECT *
         FROM vector_scores
         WHERE score > ?
         ORDER BY score DESC
-        LIMIT ${topK}`;
+        LIMIT ?`;
 
       const result = await this.turso.execute({
         sql: query,
@@ -147,11 +158,12 @@ export class LibSQLVector extends MastraVector {
     const tx = await this.turso.transaction('write');
 
     try {
+      const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
       const vectorIds = ids || vectors.map(() => crypto.randomUUID());
 
       for (let i = 0; i < vectors.length; i++) {
         const query = `
-          INSERT INTO ${indexName} (vector_id, embedding, metadata)
+          INSERT INTO ${parsedIndexName} (vector_id, embedding, metadata)
           VALUES (?, vector32(?), ?)
           ON CONFLICT(vector_id) DO UPDATE SET
             embedding = vector32(?),
@@ -202,17 +214,15 @@ export class LibSQLVector extends MastraVector {
     const { indexName, dimension } = params;
     try {
       // Validate inputs
-      if (!indexName.match(/^[a-zA-Z_][a-zA-Z0-9_]*$/)) {
-        throw new Error('Invalid index name format');
-      }
       if (!Number.isInteger(dimension) || dimension <= 0) {
         throw new Error('Dimension must be a positive integer');
       }
+      const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
 
       // Create the table with explicit schema
       await this.turso.execute({
         sql: `
-        CREATE TABLE IF NOT EXISTS ${indexName} (
+        CREATE TABLE IF NOT EXISTS ${parsedIndexName} (
           id SERIAL PRIMARY KEY,
           vector_id TEXT UNIQUE NOT NULL,
           embedding F32_BLOB(${dimension}),
@@ -224,8 +234,8 @@ export class LibSQLVector extends MastraVector {
 
       await this.turso.execute({
         sql: `
-        CREATE INDEX IF NOT EXISTS ${indexName}_vector_idx
-        ON ${indexName} (libsql_vector_idx(embedding))
+        CREATE INDEX IF NOT EXISTS ${parsedIndexName}_vector_idx
+        ON ${parsedIndexName} (libsql_vector_idx(embedding))
       `,
         args: [],
       });
@@ -239,9 +249,10 @@ export class LibSQLVector extends MastraVector {
 
   async deleteIndex(indexName: string): Promise<void> {
     try {
+      const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
       // Drop the table
       await this.turso.execute({
-        sql: `DROP TABLE IF EXISTS ${indexName}`,
+        sql: `DROP TABLE IF EXISTS ${parsedIndexName}`,
         args: [],
       });
     } catch (error: any) {
@@ -271,6 +282,7 @@ export class LibSQLVector extends MastraVector {
 
   async describeIndex(indexName: string): Promise<IndexStats> {
     try {
+      const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
       // Get table info including column info
       const tableInfoQuery = `
         SELECT sql 
@@ -280,11 +292,11 @@ export class LibSQLVector extends MastraVector {
       `;
       const tableInfo = await this.turso.execute({
         sql: tableInfoQuery,
-        args: [indexName],
+        args: [parsedIndexName],
       });
 
       if (!tableInfo.rows[0]?.sql) {
-        throw new Error(`Table ${indexName} not found`);
+        throw new Error(`Table ${parsedIndexName} not found`);
       }
 
       // Extract dimension from F32_BLOB definition
@@ -293,7 +305,7 @@ export class LibSQLVector extends MastraVector {
       // Get row count
       const countQuery = `
         SELECT COUNT(*) as count
-        FROM ${indexName};
+        FROM ${parsedIndexName};
       `;
       const countResult = await this.turso.execute({
         sql: countQuery,
@@ -331,7 +343,9 @@ export class LibSQLVector extends MastraVector {
     update: { vector?: number[]; metadata?: Record<string, any> },
   ): Promise<void> {
     this.logger.warn(
-      `Deprecation Warning: updateIndexById() is deprecated. Please use updateVector() instead. updateIndexById() will be removed on May 20th, 2025.`,
+      `Deprecation Warning: updateIndexById() is deprecated. 
+      Please use updateVector() instead. 
+      updateIndexById() will be removed on May 20th, 2025.`,
     );
     await this.updateVector(indexName, id, update);
   }
@@ -353,6 +367,7 @@ export class LibSQLVector extends MastraVector {
     update: { vector?: number[]; metadata?: Record<string, any> },
   ): Promise<void> {
     try {
+      const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
       const updates = [];
       const args: InValue[] = [];
 
@@ -373,7 +388,7 @@ export class LibSQLVector extends MastraVector {
       args.push(id);
 
       const query = `
-        UPDATE ${indexName}
+        UPDATE ${parsedIndexName}
         SET ${updates.join(', ')}
         WHERE vector_id = ?;
       `;
@@ -414,8 +429,9 @@ export class LibSQLVector extends MastraVector {
    */
   async deleteVector(indexName: string, id: string): Promise<void> {
     try {
+      const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
       await this.turso.execute({
-        sql: `DELETE FROM ${indexName} WHERE vector_id = ?`,
+        sql: `DELETE FROM ${parsedIndexName} WHERE vector_id = ?`,
         args: [id],
       });
     } catch (error: any) {
@@ -425,7 +441,7 @@ export class LibSQLVector extends MastraVector {
 
   async truncateIndex(indexName: string) {
     await this.turso.execute({
-      sql: `DELETE FROM ${indexName}`,
+      sql: `DELETE FROM ${parseSqlIdentifier(indexName, 'index name')}`,
       args: [],
     });
   }

@@ -15,6 +15,7 @@ export * from './ds/components/Header/index';
 export * from './ds/components/Logo/index';
 export * from './ds/components/Table/index';
 export * from './ds/components/Txt/index';
+export * from './ds/components/Entity/index';
 
 export * from './ds/icons/index';
 export * from './lib/polls';
