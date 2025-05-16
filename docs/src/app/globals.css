@@ -37,28 +37,21 @@
   --light-color-text-3: #7f7e7e;
   --light-color-text-2: #8f8f8f;
   --light-color-text-1: #929292;
+  --light-color-accent-3: hsla(0, 0%, 50%, 1);
   --light-border-muted: #ccc;
   --light-border-code: #b8b8b8;
   --light-green-accent: #0d8020;
   --light-green-code: #177326;
   --light-green-muted: #84d291;
   --light-blue-accent: #1565c0;
+  --light-green-accent-2: hsla(125, 66%, 50%, 1);
   --light-blue-code: #1565c0;
   --light-purple-accent: #7b1fa2;
   --light-purple-code: #7b1fa2;
   --light-red-accent: #d32f2f;
   --light-red-code: #d32f2f;
 
-  /* textmate grammar */
-  /* dark */
-  /* light */
 
-  --tag-blue: 211,69%,49%;
-  --tag-green: 143,97%,54%;
-  --tag-purple: 286,38%,52%;
-  --tag-blue: 211, 69%, 49%;
-  --tag-green: 143, 97%, 54%;
-  --tag-purple: 286, 38%, 52%;
   --color-icons-2: hsla(0, 0%, 44%, 1);
   --color-icons-3: hsla(0, 0%, 58%, 1);
   --color-icons-4: hsla(0, 0%, 66%, 1);
@@ -629,6 +622,12 @@ div[role="tablist"] button {
 }
 
 div[role="tablist"] button[aria-selected="true"]  {
-  --x-color-primary-600: var(--light-color-text-6);
-  border-color: hsla(125,66%,50%, 1);
+  &:is(html[class~="light"] *) {
+    --x-color-primary-600: var(--light-color-text-6);
+    border-color: hsla(125,66%,50%, 1);
+  }
+}
+
+div:has(> time){
+  font-family: var(--font-serif);
 }
