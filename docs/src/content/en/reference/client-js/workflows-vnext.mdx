@@ -48,7 +48,7 @@ Start a vNext workflow run with triggerData and await full run results:
 ```typescript
 const run = workflow.createRun();
 
-const result = await workflow.startAsync({
+const result = await run.startAsync({
   runId: run.runId,
   inputData: {
     param1: "value1",
@@ -64,7 +64,7 @@ Resume a suspended vNext workflow step and await full run result:
 ```typescript
 const run = workflow.createRun();
 
-const result = await workflow.resumeAsync({
+const result = await run.resumeAsync({
   runId: run.runId,
   step: "step-id",
   resumeData: { key: "value" },
@@ -84,7 +84,7 @@ try {
   const run = workflow.createRun();
 
   // Watch workflow run
-  workflow.watch({ runId: run.runId }, (record) => {
+  run.watch({ runId: run.runId }, (record) => {
     // Every new record is the latest transition state of the workflow run
 
     console.log({
@@ -96,7 +96,7 @@ try {
   });
 
   // Start workflow run
-  workflow.start({
+  run.start({
     runId: run.runId,
     inputData: {
       city: "New York",
@@ -120,7 +120,7 @@ try {
   const run = workflow.createRun({ runId: prevRunId });
 
   //Watch run
-  workflow.watch({ runId: run.runId }, (record) => {
+  run.watch({ runId: run.runId }, (record) => {
     // Every new record is the latest transition state of the workflow run
 
     console.log({
@@ -132,7 +132,7 @@ try {
   });
 
   //resume run
-  workflow.resume({
+  run.resume({
     runId: run.runId,
     step: "step-id",
     resumeData: { key: "value" },
@@ -141,6 +141,19 @@ try {
   console.error(e);
 }
 ```
+
+**Note:** don't destructure the `run` instance
+i.e. don't do
+```typescript
+const { start, resume, ... } = workflow.createRun();
+
+// NOR
+
+const run = workflow.createRun();
+const { start, resume, ... } = run;
+```
+it will break the connection to the workflow and prevent it from running
+
 
 ### vNext Workflow run result
 
