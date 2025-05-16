@@ -108,6 +108,7 @@
     "tailwindcss": "^3.0.0"
   },
   "devDependencies": {
+    "@mastra/core": "workspace:*",
     "@types/node": "^20.17.27",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
