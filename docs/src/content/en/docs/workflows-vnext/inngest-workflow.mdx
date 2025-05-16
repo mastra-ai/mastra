@@ -5,15 +5,7 @@ description: "Inngest workflow allows you to run Mastra vNext workflows with Inn
 
 # Inngest Workflow
 
-[Inngest](https://www.inngest.com/docs) is a developer platform for building and running reliable background workflows, without managing infrastructure. It provides a serverless job queue and workflow orchestration service that helps you process events, schedule jobs, and manage retries with zero infrastructure.
-
-Combining Inngest with Mastra brings powerful advantages for AI application workflows:
-
-- **Reliability**: Automatic retries and error handling ensure your workflows complete successfully
-- **Scalability**: Handle spikes in traffic without provisioning infrastructure
-- **Observability**: Monitor workflow executions with detailed logs and metrics
-- **Durability**: Long-running workflows resume exactly where they left off after failures
-- **Event-driven**: Trigger workflows from events across your entire stack
+[Inngest](https://www.inngest.com/docs) is a developer platform for building and running background workflows, without managing infrastructure.
 
 ## Setup
 
@@ -215,7 +207,7 @@ console.dir(result, { depth: null })
 srv.close()
 ```
 
-After starting your workflow, you can visit the [Inngest dashboard](http://localhost:8288) to monitor execution progress, view step outputs, and debug any issues. The dashboard provides real-time visibility into your workflow's execution, including loops, retries, and step-by-step progression.
+After starting your workflow, you can visit the [Inngest dashboard](http://localhost:8288) to monitor execution progress, view step outputs, and debug any issues.
 
 ## Running in Production
 
