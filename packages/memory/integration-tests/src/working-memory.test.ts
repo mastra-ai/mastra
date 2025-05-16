@@ -584,6 +584,8 @@ describe('Working Memory Tests', () => {
           },
         ],
         toolNames: ['updateWorkingMemory'],
+        createdAt: new Date(),
+        resourceId,
       },
       // Mixed content: tool-call + text (tool-call part should be filtered, text kept)
       {
@@ -602,6 +604,8 @@ describe('Working Memory Tests', () => {
             text: 'Normal message',
           },
         ],
+        createdAt: new Date(),
+        resourceId,
       },
       // Pure text message (should be kept)
       {
@@ -610,6 +614,8 @@ describe('Working Memory Tests', () => {
         role: 'assistant',
         type: 'text',
         content: 'Another normal message',
+        createdAt: new Date(),
+        resourceId,
       },
     ];
 
@@ -639,6 +645,15 @@ describe('Working Memory Tests', () => {
         return false;
       }),
     ).toBe(true);
+    // working memory should not be present
+    expect(
+      saved.some(
+        m =>
+          (m.type === 'tool-call' || m.type === 'tool-result') &&
+          Array.isArray(m.content) &&
+          m.content.some(c => (c as ToolCallPart).toolName === 'updateWorkingMemory'),
+      ),
+    ).toBe(false);
 
     // Pure text message should be present
     expect(saved.some(m => m.content === 'Another normal message')).toBe(true);
