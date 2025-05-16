@@ -19,19 +19,7 @@ import type {
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import Cloudflare from 'cloudflare';
 import { createSqlBuilder } from './sql-builder';
-import type { SqlParam } from './sql-builder';
-
-/**
- * Interface for SQL query options with generic type support
- */
-export interface SqlQueryOptions {
-  /** SQL query to execute */
-  sql: string;
-  /** Parameters to bind to the query */
-  params?: SqlParam[];
-  /** Whether to return only the first result */
-  first?: boolean;
-}
+import type { SqlParam, SqlQueryOptions } from './sql-builder';
 
 /**
  * Configuration for D1 using the REST API
@@ -79,6 +67,10 @@ export class D1Store extends MastraStorage {
    */
   constructor(config: D1StoreConfig) {
     super({ name: 'D1' });
+
+    if (config.tablePrefix && !/^[a-zA-Z0-9_]*$/.test(config.tablePrefix)) {
+      throw new Error('Invalid tablePrefix: only letters, numbers, and underscores are allowed.');
+    }
 
     this.tablePrefix = config.tablePrefix || '';
 
@@ -713,7 +705,7 @@ export class D1Store extends MastraStorage {
           m.role,
           m.type,
           m.createdAt,
-          m.thread_id AS "threadId"
+          m.thread_id AS threadId
         FROM ordered_messages m
         WHERE m.id IN (${includeIds.map(() => '?').join(',')})
         OR EXISTS (
@@ -741,7 +733,7 @@ export class D1Store extends MastraStorage {
       // Exclude already fetched ids
       const excludeIds = messages.map(m => m.id);
       let query = createSqlBuilder()
-        .select(['id', 'content', 'role', 'type', '"createdAt"', 'thread_id AS "threadId"'])
+        .select(['id', 'content', 'role', 'type', 'createdAt', 'thread_id AS threadId'])
         .from(fullTableName)
         .where('thread_id = ?', threadId)
         .andWhere(`id NOT IN (${excludeIds.map(() => '?').join(',')})`, ...excludeIds)

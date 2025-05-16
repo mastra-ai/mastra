@@ -3,10 +3,11 @@ import React from 'react';
 
 export interface IconProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
-  size?: 'default' | 'lg';
+  size?: 'default' | 'lg' | 'sm';
 }
 
 const sizes = {
+  sm: '[&>svg]:h-icon-sm [&>svg]:w-icon-sm',
   default: '[&>svg]:h-icon-default [&>svg]:w-icon-default',
   lg: '[&>svg]:h-icon-lg [&>svg]:w-icon-lg',
 };

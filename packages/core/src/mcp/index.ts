@@ -170,4 +170,31 @@ export abstract class MCPServerBase extends MastraBase {
    * @returns ServerDetailInfo object containing comprehensive server metadata.
    */
   public abstract getServerDetail(): ServerDetailInfo;
+
+  /**
+   * Gets a list of tools provided by this MCP server, including their schemas.
+   * @returns An object containing an array of tool information.
+   */
+  public abstract getToolListInfo(): { tools: Array<{ name: string; description?: string; inputSchema: string }> };
+
+  /**
+   * Gets information for a specific tool provided by this MCP server.
+   * @param toolId The ID/name of the tool to retrieve.
+   * @returns Tool information (name, description, inputSchema) or undefined if not found.
+   */
+  public abstract getToolInfo(toolId: string): { name: string; description?: string; inputSchema: string } | undefined;
+
+  /**
+   * Executes a specific tool provided by this MCP server.
+   * @param toolId The ID/name of the tool to execute.
+   * @param args The arguments to pass to the tool's execute function.
+   * @param executionContext Optional context for the tool execution (e.g., messages, toolCallId).
+   * @returns A promise that resolves to the result of the tool execution.
+   * @throws Error if the tool is not found, or if execution fails.
+   */
+  public abstract executeTool(
+    toolId: string,
+    args: any,
+    executionContext?: { messages?: any[]; toolCallId?: string },
+  ): Promise<any>;
 }
