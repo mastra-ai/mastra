@@ -10,6 +10,7 @@ import {
   resumeAsyncVNextWorkflowHandler as getOriginalResumeAsyncVNextWorkflowHandler,
   resumeVNextWorkflowHandler as getOriginalResumeVNextWorkflowHandler,
   getVNextWorkflowRunsHandler as getOriginalGetVNextWorkflowRunsHandler,
+  streamVNextWorkflowHandler as getOriginalStreamVNextWorkflowHandler,
 } from '@mastra/server/handlers/vNextWorkflows';
 import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
@@ -139,6 +140,44 @@ export function watchVNextWorkflowHandler(c: Context) {
 
           for await (const chunk of result) {
             await stream.write(chunk.toString() + '\x1E');
+          }
+        } catch (err) {
+          console.log(err);
+        }
+      },
+      async err => {
+        logger.error('Error in watch stream: ' + err?.message);
+      },
+    );
+  } catch (error) {
+    return handleError(error, 'Error watching workflow');
+  }
+}
+
+export async function streamVNextWorkflowHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const logger = mastra.getLogger();
+    const workflowId = c.req.param('workflowId');
+    const runtimeContext: RuntimeContext = c.get('runtimeContext');
+    const { inputData, runtimeContext: runtimeContextFromRequest } = await c.req.json();
+    const runId = c.req.query('runId');
+
+    return stream(
+      c,
+      async stream => {
+        try {
+          const result = getOriginalStreamVNextWorkflowHandler({
+            mastra,
+            workflowId,
+            runId,
+            inputData,
+            runtimeContext,
+            runtimeContextFromRequest,
+          });
+
+          for await (const chunk of result.stream) {
+            await stream.write(JSON.stringify(chunk) + '\x1E');
           }
         } catch (err) {
           console.log(err);
