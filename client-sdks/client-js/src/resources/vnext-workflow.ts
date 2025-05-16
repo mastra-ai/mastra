@@ -9,6 +9,7 @@ import type {
 } from '../types';
 
 import { BaseResource } from './base';
+import { parseClientRuntimeContext } from '../utils';
 
 const RECORD_SEPARATOR = '\x1E';
 
@@ -154,9 +155,9 @@ export class VNextWorkflow extends BaseResource {
   start(params: {
     runId: string;
     inputData: Record<string, any>;
-    runtimeContext?: RuntimeContext;
+    runtimeContext?: RuntimeContext | Record<string, any>;
   }): Promise<{ message: string }> {
-    const runtimeContext = params.runtimeContext ? Object.fromEntries(params.runtimeContext.entries()) : undefined;
+    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
     return this.request(`/api/workflows/v-next/${this.workflowId}/start?runId=${params.runId}`, {
       method: 'POST',
       body: { inputData: params?.inputData, runtimeContext },
@@ -177,9 +178,9 @@ export class VNextWorkflow extends BaseResource {
     step: string | string[];
     runId: string;
     resumeData?: Record<string, any>;
-    runtimeContext?: RuntimeContext;
+    runtimeContext?: RuntimeContext | Record<string, any>;
   }): Promise<{ message: string }> {
-    const runtimeContext = rest.runtimeContext ? Object.fromEntries(rest.runtimeContext.entries()) : undefined;
+    const runtimeContext = parseClientRuntimeContext(rest.runtimeContext);
     return this.request(`/api/workflows/v-next/${this.workflowId}/resume?runId=${runId}`, {
       method: 'POST',
       stream: true,
@@ -199,7 +200,7 @@ export class VNextWorkflow extends BaseResource {
   startAsync(params: {
     runId?: string;
     inputData: Record<string, any>;
-    runtimeContext?: RuntimeContext;
+    runtimeContext?: RuntimeContext | Record<string, any>;
   }): Promise<VNextWorkflowRunResult> {
     const searchParams = new URLSearchParams();
 
@@ -207,7 +208,8 @@ export class VNextWorkflow extends BaseResource {
       searchParams.set('runId', params.runId);
     }
 
-    const runtimeContext = params.runtimeContext ? Object.fromEntries(params.runtimeContext.entries()) : undefined;
+    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
+
     return this.request(`/api/workflows/v-next/${this.workflowId}/start-async?${searchParams.toString()}`, {
       method: 'POST',
       body: { inputData: params.inputData, runtimeContext },
@@ -223,9 +225,9 @@ export class VNextWorkflow extends BaseResource {
     runId: string;
     step: string | string[];
     resumeData?: Record<string, any>;
-    runtimeContext?: RuntimeContext;
+    runtimeContext?: RuntimeContext | Record<string, any>;
   }): Promise<VNextWorkflowRunResult> {
-    const runtimeContext = params.runtimeContext ? Object.fromEntries(params.runtimeContext.entries()) : undefined;
+    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
     return this.request(`/api/workflows/v-next/${this.workflowId}/resume-async?runId=${params.runId}`, {
       method: 'POST',
       body: {

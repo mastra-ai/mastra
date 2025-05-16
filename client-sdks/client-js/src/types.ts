@@ -64,14 +64,14 @@ export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undef
   messages: string | string[] | CoreMessage[] | AiMessageType[];
   output?: T;
   experimental_output?: T;
-  runtimeContext?: RuntimeContext;
+  runtimeContext?: RuntimeContext | Record<string, any>;
 } & WithoutMethods<Omit<AgentGenerateOptions<T>, 'output' | 'experimental_output' | 'runtimeContext'>>;
 
 export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[];
   output?: T;
   experimental_output?: T;
-  runtimeContext?: RuntimeContext;
+  runtimeContext?: RuntimeContext | Record<string, any>;
 } & WithoutMethods<Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'runtimeContext'>>;
 
 export interface GetEvalsByAgentIdResponse extends GetAgentResponse {
