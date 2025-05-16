@@ -31,9 +31,6 @@ export class OpenAIReasoningToolCompat extends ToolCompatibility {
   }
 
   processZodType<T extends z.AnyZodObject>(value: z.ZodTypeAny): ShapeValue<T> {
-    console.log(`typename`, JSON.stringify(value, null, 2));
-    console.log('typenameValue', value._def.typeName);
-
     switch (value._def.typeName) {
       case 'ZodOptional':
         const innerZodType = this.processZodType(value._def.innerType);
