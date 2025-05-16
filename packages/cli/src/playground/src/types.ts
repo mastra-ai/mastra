@@ -13,3 +13,31 @@ export interface ChatProps {
   memory?: boolean;
   url?: string;
 }
+
+type OpenaiType = 'string' | 'number' | 'object' | 'array' | 'boolean';
+
+export interface ApiEndpoint {
+  tags: string[];
+  endpoint: string;
+  description: string;
+  method: string;
+  parameters: Array<{
+    name: string;
+    in: 'path' | 'query';
+    required: boolean;
+    schema: {
+      type: OpenaiType;
+    };
+  }>;
+  body?: {
+    type: 'object';
+    properties: {
+      [key: string]: {
+        type?: OpenaiType;
+        oneOf?: {
+          type: OpenaiType;
+        }[];
+      };
+    };
+  };
+}
