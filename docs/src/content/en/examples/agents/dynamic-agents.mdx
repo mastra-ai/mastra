@@ -85,6 +85,7 @@ Let's set up the middleware to handle runtime context:
 
 ```typescript
 import { Mastra } from "@mastra/core";
+import { registerApiRoute } from "@mastra/core/server";
 
 export const mastra = new Mastra({
   agents: {
@@ -110,22 +111,22 @@ export const mastra = new Mastra({
         await next();
       },
     ],
+    apiRoutes: [
+      registerApiRoute("/support", {
+        method: "POST",
+        handler: async (c) => {
+          const { userId, message } = await c.req.json();
+          
+          try {
+            const response = await handleSupportRequest(userId, message);
+            return c.json({ response });
+          } catch (error) {
+            return c.json({ error: "Failed to process support request" }, 500);
+          }
+        },
+      }),
+    ],
   },
-});
-```
-
-Finally, let's create the API endpoint:
-
-```typescript
-app.post("/support", async (req, res) => {
-  const { userId, message } = req.body;
-  
-  try {
-    const response = await handleSupportRequest(userId, message);
-    res.json({ response });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to process support request" });
-  }
 });
 ```
 
