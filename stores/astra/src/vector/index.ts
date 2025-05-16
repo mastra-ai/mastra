@@ -8,6 +8,10 @@ import type {
   UpsertVectorParams,
   QueryVectorParams,
   ParamsToArgs,
+  DescribeIndexParams,
+  DeleteIndexParams,
+  DeleteVectorParams,
+  UpdateVectorParams,
 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 
@@ -141,13 +145,22 @@ export class AstraVector extends MastraVector {
     return this.#db.listCollections({ nameOnly: true });
   }
 
-  async describeIndex(indexName: string): Promise<IndexStats> {
+  /**
+   * Retrieves statistics about a vector index.
+   *
+   * @param params - The parameters for describing an index
+   * @param params.indexName - The name of the index to describe
+   * @returns A promise that resolves to the index statistics including dimension, count and metric
+   */
+  async describeIndex(...args: ParamsToArgs<DescribeIndexParams>): Promise<IndexStats> {
+    const params = this.normalizeArgs<DescribeIndexParams>('describeIndex', args);
+
+    const { indexName } = params;
+
     const collection = this.#db.collection(indexName);
     const optionsPromise = collection.options();
     const countPromise = collection.countDocuments({}, 100);
     const [options, count] = await Promise.all([optionsPromise, countPromise]);
-
-    console.log(options, count);
 
     const keys = Object.keys(metricMap) as (keyof typeof metricMap)[];
     const metric = keys.find(key => metricMap[key] === options.vector?.metric);
@@ -164,7 +177,10 @@ export class AstraVector extends MastraVector {
    * @param {string} indexName - The name of the collection to delete.
    * @returns {Promise<void>} A promise that resolves when the collection is deleted.
    */
-  async deleteIndex(indexName: string): Promise<void> {
+  async deleteIndex(...args: ParamsToArgs<DeleteIndexParams>): Promise<void> {
+    const params = this.normalizeArgs<DeleteIndexParams>('deleteIndex', args);
+
+    const { indexName } = params;
     const collection = this.#db.collection(indexName);
     await collection.drop();
   }
@@ -189,7 +205,7 @@ export class AstraVector extends MastraVector {
     this.logger.warn(
       `Deprecation Warning: updateIndexById() is deprecated. Please use updateVector() instead. updateIndexById() will be removed on May 20th, 2025.`,
     );
-    await this.updateVector(indexName, id, update);
+    await this.updateVector({ indexName, id, update });
   }
 
   /**
@@ -202,11 +218,9 @@ export class AstraVector extends MastraVector {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector(
-    indexName: string,
-    id: string,
-    update: { vector?: number[]; metadata?: Record<string, any> },
-  ): Promise<void> {
+  async updateVector(...args: ParamsToArgs<UpdateVectorParams>): Promise<void> {
+    const params = this.normalizeArgs<UpdateVectorParams>('updateVector', args);
+    const { indexName, id, update } = params;
     try {
       if (!update.vector && !update.metadata) {
         throw new Error('No updates provided');
@@ -244,7 +258,7 @@ export class AstraVector extends MastraVector {
       Please use deleteVector() instead. 
       deleteIndexById() will be removed on May 20th, 2025.`,
     );
-    await this.deleteVector(indexName, id);
+    await this.deleteVector({ indexName, id });
   }
 
   /**
@@ -254,7 +268,10 @@ export class AstraVector extends MastraVector {
    * @returns A promise that resolves when the deletion is complete.
    * @throws Will throw an error if the deletion operation fails.
    */
-  async deleteVector(indexName: string, id: string): Promise<void> {
+  async deleteVector(...args: ParamsToArgs<DeleteVectorParams>): Promise<void> {
+    const params = this.normalizeArgs<DeleteVectorParams>('deleteVector', args);
+
+    const { indexName, id } = params;
     try {
       const collection = this.#db.collection(indexName);
       await collection.deleteOne({ id });

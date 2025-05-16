@@ -36,7 +36,7 @@ function waitUntilReady(vectorDB: PineconeVector, indexName: string) {
   return new Promise(resolve => {
     const interval = setInterval(async () => {
       try {
-        const stats = await vectorDB.describeIndex(indexName);
+        const stats = await vectorDB.describeIndex({ indexName });
         if (!!stats) {
           clearInterval(interval);
           resolve(true);
@@ -86,7 +86,7 @@ function waitUntilVectorsIndexed(
 
     const interval = setInterval(async () => {
       try {
-        const stats = await vectorDB.describeIndex(indexName);
+        const stats = await vectorDB.describeIndex({ indexName });
         const check = exactCount ? stats?.count === expectedCount : stats?.count >= expectedCount;
         if (stats && check) {
           if (stats.count === lastCount) {
@@ -122,34 +122,36 @@ describe.skip('PineconeVector Integration Tests', () => {
   const dimension = 3;
 
   beforeAll(async () => {
-    vectorDB = new PineconeVector(PINECONE_API_KEY);
+    vectorDB = new PineconeVector({
+      apiKey: PINECONE_API_KEY,
+    });
     // Delete test index
     try {
-      await vectorDB.deleteIndex(testIndexName);
+      await vectorDB.deleteIndex({ indexName: testIndexName });
       await waitUntilIndexDeleted(vectorDB, testIndexName);
     } catch {
       // Ignore errors if index doesn't exist
     }
     try {
-      await vectorDB.deleteIndex(indexNameUpdate);
+      await vectorDB.deleteIndex({ indexName: indexNameUpdate });
       await waitUntilIndexDeleted(vectorDB, indexNameUpdate);
     } catch {
       // Ignore errors if index doesn't exist
     }
     try {
-      await vectorDB.deleteIndex(indexNameDelete);
+      await vectorDB.deleteIndex({ indexName: indexNameDelete });
       await waitUntilIndexDeleted(vectorDB, indexNameDelete);
     } catch {
       // Ignore errors if index doesn't exist
     }
     try {
-      await vectorDB.deleteIndex(indexNameNamespace);
+      await vectorDB.deleteIndex({ indexName: indexNameNamespace });
       await waitUntilIndexDeleted(vectorDB, indexNameNamespace);
     } catch {
       // Ignore errors if index doesn't exist
     }
     try {
-      await vectorDB.deleteIndex(indexNameHybrid);
+      await vectorDB.deleteIndex({ indexName: indexNameHybrid });
       await waitUntilIndexDeleted(vectorDB, indexNameHybrid);
     } catch {
       // Ignore errors if index doesn't exist
@@ -162,27 +164,27 @@ describe.skip('PineconeVector Integration Tests', () => {
   afterAll(async () => {
     // Cleanup: delete test index
     try {
-      await vectorDB.deleteIndex(testIndexName);
+      await vectorDB.deleteIndex({ indexName: testIndexName });
     } catch {
       // Ignore errors if index doesn't exist
     }
     try {
-      await vectorDB.deleteIndex(indexNameUpdate);
+      await vectorDB.deleteIndex({ indexName: indexNameUpdate });
     } catch {
       // Ignore errors if index doesn't exist
     }
     try {
-      await vectorDB.deleteIndex(indexNameDelete);
+      await vectorDB.deleteIndex({ indexName: indexNameDelete });
     } catch {
       // Ignore errors if index doesn't exist
     }
     try {
-      await vectorDB.deleteIndex(indexNameNamespace);
+      await vectorDB.deleteIndex({ indexName: indexNameNamespace });
     } catch {
       // Ignore errors if index doesn't exist
     }
     try {
-      await vectorDB.deleteIndex(indexNameHybrid);
+      await vectorDB.deleteIndex({ indexName: indexNameHybrid });
     } catch {
       // Ignore errors if index doesn't exist
     }
@@ -195,7 +197,7 @@ describe.skip('PineconeVector Integration Tests', () => {
     }, 500000);
 
     it('should describe index with correct properties', async () => {
-      const stats = await vectorDB.describeIndex(testIndexName);
+      const stats = await vectorDB.describeIndex({ indexName: testIndexName });
       expect(stats.dimension).toBe(dimension);
       expect(stats.metric).toBe('cosine');
       expect(typeof stats.count).toBe('number');
@@ -260,7 +262,7 @@ describe.skip('PineconeVector Integration Tests', () => {
 
       afterEach(async () => {
         try {
-          await vectorDB.deleteIndex(indexNameUpdate);
+          await vectorDB.deleteIndex({ indexName: indexNameUpdate });
           await waitUntilIndexDeleted(vectorDB, indexNameUpdate);
         } catch {
           // Ignore errors if index doesn't exist
@@ -282,7 +284,7 @@ describe.skip('PineconeVector Integration Tests', () => {
           metadata: newMetaData,
         };
 
-        await vectorDB.updateVector(indexNameUpdate, idToBeUpdated, update);
+        await vectorDB.updateVector({ indexName: indexNameUpdate, id: idToBeUpdated, update });
 
         await waitUntilVectorsIndexed(vectorDB, indexNameUpdate, 3);
 
@@ -311,7 +313,7 @@ describe.skip('PineconeVector Integration Tests', () => {
           metadata: newMetaData,
         };
 
-        await vectorDB.updateVector(indexNameUpdate, idToBeUpdated, update);
+        await vectorDB.updateVector({ indexName: indexNameUpdate, id: idToBeUpdated, update });
 
         await waitUntilVectorsIndexed(vectorDB, indexNameUpdate, 3);
 
@@ -338,7 +340,7 @@ describe.skip('PineconeVector Integration Tests', () => {
           vector: newVector,
         };
 
-        await vectorDB.updateVector(indexNameUpdate, idToBeUpdated, update);
+        await vectorDB.updateVector({ indexName: indexNameUpdate, id: idToBeUpdated, update });
 
         await waitUntilVectorsIndexed(vectorDB, indexNameUpdate, 3);
 
@@ -355,12 +357,16 @@ describe.skip('PineconeVector Integration Tests', () => {
       }, 500000);
 
       it('should throw exception when no updates are given', async () => {
-        await expect(vectorDB.updateVector(indexNameUpdate, 'id', {})).rejects.toThrow('No updates provided');
+        await expect(vectorDB.updateVector({ indexName: indexNameUpdate, id: 'id', update: {} })).rejects.toThrow(
+          'No updates provided',
+        );
       });
 
       it('should throw error for non-existent index', async () => {
         const nonExistentIndex = 'non-existent-index';
-        await expect(vectorDB.updateVector(nonExistentIndex, 'test-id', { vector: [1, 2, 3] })).rejects.toThrow();
+        await expect(
+          vectorDB.updateVector({ indexName: nonExistentIndex, id: 'test-id', update: { vector: [1, 2, 3] } }),
+        ).rejects.toThrow();
       });
 
       it('should throw error for invalid vector dimension', async () => {
@@ -371,7 +377,7 @@ describe.skip('PineconeVector Integration Tests', () => {
         });
 
         await expect(
-          vectorDB.updateVector(indexNameUpdate, id, { vector: [1, 2] }), // Wrong dimension
+          vectorDB.updateVector({ indexName: indexNameUpdate, id, update: { vector: [1, 2] } }), // Wrong dimension
         ).rejects.toThrow();
       }, 500000);
     });
@@ -390,7 +396,7 @@ describe.skip('PineconeVector Integration Tests', () => {
 
       afterEach(async () => {
         try {
-          await vectorDB.deleteIndex(indexNameDelete);
+          await vectorDB.deleteIndex({ indexName: indexNameDelete });
           await waitUntilIndexDeleted(vectorDB, indexNameDelete);
         } catch {
           // Ignore errors if index doesn't exist
@@ -402,7 +408,7 @@ describe.skip('PineconeVector Integration Tests', () => {
         expect(ids).toHaveLength(3);
         const idToBeDeleted = ids[0];
 
-        await vectorDB.deleteVector(indexNameDelete, idToBeDeleted);
+        await vectorDB.deleteVector({ indexName: indexNameDelete, id: idToBeDeleted });
         await waitUntilVectorsIndexed(vectorDB, indexNameDelete, 2, true);
 
         // Query all vectors similar to the deleted one
@@ -432,7 +438,7 @@ describe.skip('PineconeVector Integration Tests', () => {
 
     afterEach(async () => {
       try {
-        await vectorDB.deleteIndex(indexNameNamespace);
+        await vectorDB.deleteIndex({ indexName: indexNameNamespace });
         await waitUntilIndexDeleted(vectorDB, indexNameNamespace);
       } catch {
         // Ignore errors if index doesn't exist
@@ -490,7 +496,12 @@ describe.skip('PineconeVector Integration Tests', () => {
       await waitUntilVectorsIndexed(vectorDB, indexNameNamespace, 1);
 
       // Update in namespace1
-      await vectorDB.updateVector(indexNameNamespace, id, { metadata: { label: 'updated' } }, namespace1);
+      await vectorDB.updateVector({
+        indexName: indexNameNamespace,
+        id,
+        update: { metadata: { label: 'updated' } },
+        namespace: namespace1,
+      });
 
       await waitUntilVectorsIndexed(vectorDB, indexNameNamespace, 1);
 
@@ -515,7 +526,7 @@ describe.skip('PineconeVector Integration Tests', () => {
       await waitUntilVectorsIndexed(vectorDB, indexNameNamespace, 1);
 
       // Delete from namespace1
-      await vectorDB.deleteVector(indexNameNamespace, id, namespace1);
+      await vectorDB.deleteVector({ indexName: indexNameNamespace, id, namespace: namespace1 });
 
       await waitUntilVectorsIndexed(vectorDB, indexNameNamespace, 0, true);
 
@@ -545,7 +556,7 @@ describe.skip('PineconeVector Integration Tests', () => {
       });
       await waitUntilVectorsIndexed(vectorDB, indexNameNamespace, 2);
 
-      const stats = await vectorDB.describeIndex(indexNameNamespace);
+      const stats = await vectorDB.describeIndex({ indexName: indexNameNamespace });
       expect(stats.namespaces).toBeDefined();
       expect(stats.namespaces?.[namespace1]).toBeDefined();
       expect(stats.namespaces?.[namespace2]).toBeDefined();
@@ -561,7 +572,7 @@ describe.skip('PineconeVector Integration Tests', () => {
     });
 
     afterAll(async () => {
-      await vectorDB.deleteIndex(testIndexName);
+      await vectorDB.deleteIndex({ indexName: testIndexName });
     });
     it('should handle non-existent index query gracefully', async () => {
       const nonExistentIndex = 'non-existent-index';
@@ -623,7 +634,7 @@ describe.skip('PineconeVector Integration Tests', () => {
         infoSpy.mockRestore();
         warnSpy.mockRestore();
         // Cleanup
-        await vectorDB.deleteIndex(duplicateIndexName);
+        await vectorDB.deleteIndex({ indexName: duplicateIndexName });
       }
     });
   });
@@ -1402,7 +1413,7 @@ describe.skip('PineconeVector Integration Tests', () => {
 
     afterEach(async () => {
       try {
-        await vectorDB.deleteIndex(indexNameHybrid);
+        await vectorDB.deleteIndex({ indexName: indexNameHybrid });
         await waitUntilIndexDeleted(vectorDB, indexNameHybrid);
       } catch {
         // Ignore errors if index doesn't exist
@@ -1481,22 +1492,22 @@ describe.skip('PineconeVector Integration Tests', () => {
 
     beforeAll(async () => {
       try {
-        await vectorDB.deleteIndex(indexName);
+        await vectorDB.deleteIndex({ indexName });
       } catch {
         // Ignore errors if index doesn't exist
       }
       try {
-        await vectorDB.deleteIndex(indexName2);
+        await vectorDB.deleteIndex({ indexName: indexName2 });
       } catch {
         // Ignore errors if index doesn't exist
       }
       try {
-        await vectorDB.deleteIndex(indexName3);
+        await vectorDB.deleteIndex({ indexName: indexName3 });
       } catch {
         // Ignore errors if index doesn't exist
       }
       try {
-        await vectorDB.deleteIndex(indexName4);
+        await vectorDB.deleteIndex({ indexName: indexName4 });
       } catch {
         // Ignore errors if index doesn't exist
       }
@@ -1506,22 +1517,22 @@ describe.skip('PineconeVector Integration Tests', () => {
 
     afterAll(async () => {
       try {
-        await vectorDB.deleteIndex(indexName);
+        await vectorDB.deleteIndex({ indexName });
       } catch {
         // Ignore errors if index doesn't exist
       }
       try {
-        await vectorDB.deleteIndex(indexName2);
+        await vectorDB.deleteIndex({ indexName: indexName2 });
       } catch {
         // Ignore errors if index doesn't exist
       }
       try {
-        await vectorDB.deleteIndex(indexName3);
+        await vectorDB.deleteIndex({ indexName: indexName3 });
       } catch {
         // Ignore errors if index doesn't exist
       }
       try {
-        await vectorDB.deleteIndex(indexName4);
+        await vectorDB.deleteIndex({ indexName: indexName4 });
       } catch {
         // Ignore errors if index doesn't exist
       }

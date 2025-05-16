@@ -15,7 +15,7 @@ describe('LibSQLVector', () => {
 
   afterAll(async () => {
     // Clean up test tables
-    await vectorDB.deleteIndex(testIndexName);
+    await vectorDB.deleteIndex({ indexName: testIndexName });
   });
 
   // Index Management Tests
@@ -24,7 +24,7 @@ describe('LibSQLVector', () => {
       it('should create a new vector table with specified dimensions', async () => {
         await vectorDB.createIndex({ indexName: testIndexName, dimension: 3 });
 
-        const stats = await vectorDB.describeIndex(testIndexName);
+        const stats = await vectorDB.describeIndex({ indexName: testIndexName });
         expect(stats?.dimension).toBe(3);
         expect(stats?.count).toBe(0);
       });
@@ -49,7 +49,7 @@ describe('LibSQLVector', () => {
       });
 
       afterAll(async () => {
-        await vectorDB.deleteIndex(indexName);
+        await vectorDB.deleteIndex({ indexName });
       });
 
       it('should list all vector tables', async () => {
@@ -71,7 +71,7 @@ describe('LibSQLVector', () => {
       });
 
       afterAll(async () => {
-        await vectorDB.deleteIndex(indexName);
+        await vectorDB.deleteIndex({ indexName });
       });
 
       it('should return correct index stats', async () => {
@@ -82,7 +82,7 @@ describe('LibSQLVector', () => {
         ];
         await vectorDB.upsert({ indexName, vectors });
 
-        const stats = await vectorDB.describeIndex(indexName);
+        const stats = await vectorDB.describeIndex({ indexName });
         expect(stats).toEqual({
           dimension: 3,
           count: 2,
@@ -91,7 +91,7 @@ describe('LibSQLVector', () => {
       });
 
       it('should throw error for non-existent index', async () => {
-        await expect(vectorDB.describeIndex('non_existent')).rejects.toThrow();
+        await expect(vectorDB.describeIndex({ indexName: 'non_existent' })).rejects.toThrow();
       });
     });
   });
@@ -104,7 +104,7 @@ describe('LibSQLVector', () => {
       });
 
       afterEach(async () => {
-        await vectorDB.deleteIndex(testIndexName);
+        await vectorDB.deleteIndex({ indexName: testIndexName });
       });
 
       it('should insert new vectors', async () => {
@@ -115,7 +115,7 @@ describe('LibSQLVector', () => {
         const ids = await vectorDB.upsert({ indexName: testIndexName, vectors });
 
         expect(ids).toHaveLength(2);
-        const stats = await vectorDB.describeIndex(testIndexName);
+        const stats = await vectorDB.describeIndex({ indexName: testIndexName });
         expect(stats.count).toBe(2);
       });
 
@@ -165,7 +165,7 @@ describe('LibSQLVector', () => {
         expect(ids).toHaveLength(2);
         const id = ids[1];
 
-        await vectorDB.deleteVector(testIndexName, ids[0]);
+        await vectorDB.deleteVector({ indexName: testIndexName, id: ids[0] });
 
         const results = await vectorDB.query({ indexName: testIndexName, queryVector: [1, 2, 3] });
         expect(results).toHaveLength(1);
@@ -181,7 +181,7 @@ describe('LibSQLVector', () => {
           vector: [4, 5, 6],
           metadata: { test: 'updated' },
         };
-        await vectorDB.updateVector(testIndexName, id, update);
+        await vectorDB.updateVector({ indexName: testIndexName, id, update });
 
         const results = await vectorDB.query({
           indexName: testIndexName,
@@ -202,7 +202,7 @@ describe('LibSQLVector', () => {
         const update = {
           metadata: { test: 'updated' },
         };
-        await vectorDB.updateVector(testIndexName, id, update);
+        await vectorDB.updateVector({ indexName: testIndexName, id, update });
 
         const results = await vectorDB.query({ indexName: testIndexName, queryVector: [1, 2, 3], topK: 1 });
         expect(results[0]?.id).toBe(id);
@@ -218,7 +218,7 @@ describe('LibSQLVector', () => {
         const update = {
           vector: [4, 5, 6],
         };
-        await vectorDB.updateVector(testIndexName, id, update);
+        await vectorDB.updateVector({ indexName: testIndexName, id, update });
 
         const results = await vectorDB.query({
           indexName: testIndexName,
@@ -236,7 +236,9 @@ describe('LibSQLVector', () => {
         const metadata = [{ test: 'initial' }];
         const [id] = await vectorDB.upsert({ indexName: testIndexName, vectors, metadata });
 
-        await expect(vectorDB.updateVector(testIndexName, id, {})).rejects.toThrow('No updates provided');
+        await expect(vectorDB.updateVector({ indexName: testIndexName, id, update: {} })).rejects.toThrow(
+          'No updates provided',
+        );
       });
     });
 
@@ -258,7 +260,7 @@ describe('LibSQLVector', () => {
       });
 
       afterEach(async () => {
-        await vectorDB.deleteIndex(indexName);
+        await vectorDB.deleteIndex({ indexName });
       });
 
       it('should return closest vectors', async () => {
@@ -345,7 +347,7 @@ describe('LibSQLVector', () => {
     });
 
     afterEach(async () => {
-      await vectorDB.deleteIndex(indexName);
+      await vectorDB.deleteIndex({ indexName });
     });
 
     // Numeric Comparison Tests
@@ -1642,7 +1644,7 @@ describe('LibSQLVector', () => {
     });
 
     afterAll(async () => {
-      await vectorDB.deleteIndex(testIndexName);
+      await vectorDB.deleteIndex({ indexName: testIndexName });
     });
     it('should handle non-existent index queries', async () => {
       await expect(vectorDB.query({ indexName: 'non-existent-index', queryVector: [1, 2, 3] })).rejects.toThrow();
@@ -1674,7 +1676,7 @@ describe('LibSQLVector', () => {
       ).resolves.not.toThrow();
 
       // Cleanup
-      await vectorDB.deleteIndex(duplicateIndexName);
+      await vectorDB.deleteIndex({ indexName: duplicateIndexName });
     });
   });
 
@@ -1690,8 +1692,8 @@ describe('LibSQLVector', () => {
     });
 
     afterAll(async () => {
-      await vectorDB.deleteIndex(indexName);
-      await vectorDB.deleteIndex(indexName2);
+      await vectorDB.deleteIndex({ indexName });
+      await vectorDB.deleteIndex({ indexName: indexName2 });
     });
 
     beforeEach(async () => {
@@ -1700,7 +1702,7 @@ describe('LibSQLVector', () => {
 
     afterEach(async () => {
       warnSpy.mockRestore();
-      await vectorDB.deleteIndex(indexName2);
+      await vectorDB.deleteIndex({ indexName: indexName2 });
     });
 
     it('should show deprecation warning when using individual args for createIndex', async () => {
