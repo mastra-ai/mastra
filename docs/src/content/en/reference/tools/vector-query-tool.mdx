@@ -44,6 +44,27 @@ const queryTool = createVectorQueryTool({
       isOptional: false,
     },
     {
+      name: "enableFilter",
+      type: "boolean",
+      description: "Enable filtering of results based on metadata",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "includeVectors",
+      type: "boolean",
+      description: "Include the embedding vectors in the results",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "includeSources",
+      type: "boolean",
+      description: "Include the full retrieval objects in the results",
+      isOptional: true,
+      defaultValue: "true",
+    },
+    {
       name: "reranker",
       type: "RerankConfig",
       description: "Options for reranking results",
@@ -117,8 +138,25 @@ The tool returns an object with:
       type: "string",
       description: "Combined text from the most relevant document chunks",
     },
+    {
+      name: "sources",
+      type: "QueryResult[]",
+      description: "Array of full retrieval result objects. Each object contains all information needed to reference the original document, chunk, and similarity score.",
+    },
   ]}
 />
+
+### QueryResult object structure
+
+```typescript
+{
+  id: string;         // Unique chunk/document identifier
+  metadata: any;      // All metadata fields (document ID, etc.)
+  vector: number[];   // Embedding vector (if available)
+  score: number;      // Similarity score for this retrieval
+  document: string;   // Full chunk/document text (if available)
+}
+```
 
 ## Default Tool Description
 

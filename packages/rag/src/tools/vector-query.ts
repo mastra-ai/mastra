@@ -11,12 +11,15 @@ import {
   topKDescription,
   queryTextDescription,
 } from '../utils';
+import { convertToSources } from '../utils/convert-sources';
 
 export const createVectorQueryTool = ({
   vectorStoreName,
   indexName,
   model,
   enableFilter = false,
+  includeVectors = false,
+  includeSources = true,
   reranker,
   id,
   description,
@@ -25,6 +28,8 @@ export const createVectorQueryTool = ({
   indexName: string;
   model: EmbeddingModel<string>;
   enableFilter?: boolean;
+  includeVectors?: boolean;
+  includeSources?: boolean;
   reranker?: RerankConfig;
   id?: string;
   description?: string;
@@ -47,8 +52,22 @@ export const createVectorQueryTool = ({
   return createTool({
     id: toolId,
     inputSchema,
+    // Output schema includes `sources`, which exposes the full set of retrieved chunks (QueryResult objects)
+    // Each source contains all information needed to reference
+    // the original document, chunk, and similarity score.
     outputSchema: z.object({
+      // Array of metadata or content for compatibility with prior usage
       relevantContext: z.any(),
+      // Array of full retrieval result objects
+      sources: z.array(
+        z.object({
+          id: z.string(), // Unique chunk/document identifier
+          metadata: z.any(), // All metadata fields (document ID, etc.)
+          vector: z.array(z.number()), // Embedding vector (if available)
+          score: z.number(), // Similarity score for this retrieval
+          document: z.string(), // Full chunk/document text (if available)
+        }),
+      ),
     }),
     description: toolDescription,
     execute: async ({ context: { queryText, topK, filter }, mastra }) => {
@@ -75,7 +94,7 @@ export const createVectorQueryTool = ({
           if (logger) {
             logger.error('Vector store not found', { vectorStoreName });
           }
-          return { relevantContext: [] };
+          return { relevantContext: [], sources: [] };
         }
         // Get relevant chunks from the vector database
         let queryFilter = {};
@@ -103,6 +122,7 @@ export const createVectorQueryTool = ({
           model,
           queryFilter: Object.keys(queryFilter || {}).length > 0 ? queryFilter : undefined,
           topK: topKValue,
+          includeVectors,
         });
         if (logger) {
           logger.debug('vectorQuerySearch returned results', { count: results.length });
@@ -122,15 +142,19 @@ export const createVectorQueryTool = ({
           if (logger) {
             logger.debug('Returning reranked relevant context chunks', { count: relevantChunks.length });
           }
-          return { relevantContext: relevantChunks };
+          const sources = includeSources ? convertToSources(rerankedResults) : [];
+          return { relevantContext: relevantChunks, sources };
         }
 
         const relevantChunks = results.map(result => result?.metadata);
         if (logger) {
           logger.debug('Returning relevant context chunks', { count: relevantChunks.length });
         }
+        // `sources` exposes the full retrieval objects
+        const sources = includeSources ? convertToSources(results) : [];
         return {
           relevantContext: relevantChunks,
+          sources,
         };
       } catch (err) {
         if (logger) {
@@ -140,7 +164,7 @@ export const createVectorQueryTool = ({
             errorStack: err instanceof Error ? err.stack : undefined,
           });
         }
-        return { relevantContext: [] };
+        return { relevantContext: [], sources: [] };
       }
     },
   });
