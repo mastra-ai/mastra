@@ -217,6 +217,43 @@ export class Workflow extends BaseResource {
   }
 
   /**
+   * Starts a vNext workflow run and returns a stream
+   * @param params - Object containing the optional runId, inputData and runtimeContext
+   * @returns Promise containing the vNext workflow execution results
+   */
+  async stream(params: {
+    runId?: string;
+    inputData: Record<string, any>;
+    runtimeContext?: RuntimeContext;
+  }): Promise<AsyncGenerator<VNextWorkflowWatchResult, void, unknown>> {
+    const searchParams = new URLSearchParams();
+
+    if (!!params?.runId) {
+      searchParams.set('runId', params.runId);
+    }
+
+    const runtimeContext = params.runtimeContext ? Object.fromEntries(params.runtimeContext.entries()) : undefined;
+    const response: Response = await this.request(
+      `/api/workflows/${this.workflowId}/stream?${searchParams.toString()}`,
+      {
+        method: 'POST',
+        body: { inputData: params.inputData, runtimeContext },
+        stream: true,
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to stream vNext workflow: ${response.statusText}`);
+    }
+
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    return this.streamProcessor(response.body);
+  }
+
+  /**
    * Resumes a suspended workflow step asynchronously and returns a promise that resolves when the workflow is complete
    * @param params - Object containing the runId, step, resumeData and runtimeContext
    * @returns Promise containing the workflow resume results
