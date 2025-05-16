@@ -1,0 +1,221 @@
+---
+title: "Inngest Workflows | Workflows (vNext) | Mastra Docs"
+description: "Inngest workflow allows you to run Mastra vNext workflows with Inngest"
+---
+
+# Inngest Workflow
+
+[Inngest](https://www.inngest.com/docs) is a developer platform for building and running background workflows, without managing infrastructure.
+
+## Setup
+
+```sh
+npm install @mastra/inngest @mastra/core @mastra/deployer @hono/node-server
+```
+
+### Local Development Environment
+
+Inngest offers two methods for local development:
+
+#### Option 1: Using Docker
+
+Run Inngest locally using Docker on port 8288, configured to listen for events on port 3000:
+
+```sh
+docker run --rm -p 8288:8288 \
+  inngest/inngest \
+  inngest dev -u http://host.docker.internal:3000/inngest/api
+```
+
+#### Option 2: Inngest CLI
+
+Alternatively, you can use the Inngest CLI for local development by following the official [Inngest Dev Server guide](https://www.inngest.com/docs/dev-server).
+
+> **Tip**: Once Inngest is running, you can access the Inngest dashboard at [http://localhost:8288](http://localhost:8288) to monitor and debug your workflow runs in real-time.
+
+## Building an Inngest Workflow
+
+This guide walks through creating a workflow with Inngest and Mastra, demonstrating a counter application that increments a value until it reaches 10.
+
+### Inngest Initialization
+
+Initialize the Inngest integration to obtain Mastra-compatible workflow helpers:
+
+```ts showLineNumbers copy filename="src/mastra/workflows/inngest-workflow.ts"
+import { init } from '@mastra/inngest'
+import { Inngest } from 'inngest'
+
+// Initialize Inngest with Mastra, pointing to your local Inngest server
+const { createWorkflow, createStep } = init(
+  new Inngest({
+    id: 'mastra',
+    baseUrl: `http://localhost:8288`,
+  })
+)
+```
+
+### Creating Steps
+
+Define the individual steps that will compose your workflow:
+
+```ts showLineNumbers copy filename="src/mastra/workflows/inngest-workflow.ts"
+import { z } from 'zod'
+
+// Step 1: Increment the counter value
+const incrementStep = createStep({
+  id: 'increment',
+  inputSchema: z.object({
+    value: z.number(),
+  }),
+  outputSchema: z.object({
+    value: z.number(),
+  }),
+  execute: async ({ inputData }) => {
+    return { value: inputData.value + 1 }
+  },
+})
+
+// Step 2: Log the current value (side effect)
+const sideEffectStep = createStep({
+  id: 'side-effect',
+  inputSchema: z.object({
+    value: z.number(),
+  }),
+  outputSchema: z.object({
+    value: z.number(),
+  }),
+  execute: async ({ inputData }) => {
+    console.log('Current value:', inputData.value)
+    return { value: inputData.value }
+  },
+})
+
+// Step 3: Final step after loop completion
+const finalStep = createStep({
+  id: 'final',
+  inputSchema: z.object({
+    value: z.number(),
+  }),
+  outputSchema: z.object({
+    value: z.number(),
+  }),
+  execute: async ({ inputData }) => {
+    return { value: inputData.value }
+  },
+})
+```
+
+### Creating the Workflow
+
+Compose the steps into a workflow using the `dountil` loop pattern:
+
+```ts showLineNumbers copy filename="src/mastra/workflows/inngest-workflow.ts"
+// Create the main workflow that uses a do-until loop
+const workflow = createWorkflow({
+  id: 'increment-workflow',
+  inputSchema: z.object({
+    value: z.number(),
+  }),
+  outputSchema: z.object({
+    value: z.number(),
+  }),
+})
+  // Loop until the condition is met (value reaches 10)
+  .dountil(
+    createWorkflow({
+      id: 'increment-subworkflow',
+      inputSchema: z.object({
+        value: z.number(),
+      }),
+      outputSchema: z.object({
+        value: z.number(),
+      }),
+      steps: [incrementStep, sideEffectStep],
+    })
+      .then(incrementStep)
+      .then(sideEffectStep)
+      .commit(),
+    async ({ inputData }) => inputData.value >= 10
+  )
+  .then(finalStep)
+
+workflow.commit()
+
+export { workflow as incrementWorkflow }
+```
+
+### Configuring the Mastra Instance and Executing the Workflow
+
+Register the workflow with Mastra and configure the Inngest API endpoint:
+
+```ts showLineNumbers copy filename="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { serve as inngestServe } from '@mastra/inngest'
+import { createLogger } from '@mastra/core/logger'
+import { Inngest } from 'inngest'
+import { incrementWorkflow } from './workflows/inngest-workflow'
+import { realtimeMiddleware } from '@inngest/realtime'
+import { serve } from '@hono/node-server'
+import { createHonoServer } from '@mastra/deployer/server'
+
+
+// Create an Inngest instance with realtime middleware for development
+const inngest = new Inngest({
+  id: 'mastra',
+  baseUrl: `http://localhost:8288`,
+  isDev: true,
+  middleware: [realtimeMiddleware()],
+})
+
+// Configure Mastra with the workflow and Inngest API endpoint
+export const mastra = new Mastra({
+  vnext_workflows: {
+    incrementWorkflow
+  },
+  server: {
+    host: '0.0.0.0',
+    apiRoutes: [
+      {
+        path: '/api/inngest',
+        method: 'ALL',
+        createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+      },
+    ],
+  },
+  logger: createLogger({
+    name: 'Mastra',
+    level: 'info',
+  }),
+})
+
+
+// Create and start the Hono server
+const app = await createHonoServer(mastra)
+
+const srv = serve({
+    fetch: app.fetch,
+    port: 3000,
+})
+
+// Get the workflow, create a run, and start it with an initial value
+const workflow = mastra.vnext_getWorkflow('incrementWorkflow')
+const run = workflow.createRun({})
+const result = await run.start({ inputData: { value: 5 } })
+console.dir(result, { depth: null })
+
+// Close the server when done
+srv.close()
+```
+
+After starting your workflow, you can visit the [Inngest dashboard](http://localhost:8288) to monitor execution progress, view step outputs, and debug any issues.
+
+## Running in Production
+
+To deploy your Mastra workflow with Inngest Cloud and Vercel, follow these steps:
+
+1. Remove the `baseUrl` from Inngest initialisation.
+2. Deploy your Mastra application to Vercel. Follow the official Mastra deployment guide: [Deploying Mastra to Vercel](https://mastra.ai/en/reference/deployer/vercel)
+3. Go to [Inngest Cloud](https://app.inngest.com/).
+4. Use the official Vercel integration to connect your Vercel project: [Inngest Cloud Vercel Integration Guide](https://www.inngest.com/docs/apps/cloud)
+5. This will automatically sync your serverless functions and register your workflow endpoints.
+6. Use the Inngest Cloud dashboard to trigger events and monitor workflow executions, logs, and step outputs.

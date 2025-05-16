@@ -3,9 +3,11 @@ import { AlertDialog } from '@/components/ui/alert-dialog';
 import { useAgent } from '@/hooks/use-agents';
 
 import { CurrentInstructions } from './components/current-instructions';
-import { VersionHistory } from './components/version-history';
+
 import { usePromptEnhancer } from './hooks/use-prompt-enhancer';
 import { usePromptVersions } from './hooks/use-prompt-versions';
+import { VersionHistoryDialog } from './version-history-dialog';
+import { useState } from 'react';
 
 interface AgentPromptEnhancerProps {
   agentId: string;
@@ -13,6 +15,7 @@ interface AgentPromptEnhancerProps {
 
 export function AgentPromptEnhancer({ agentId }: AgentPromptEnhancerProps) {
   const { agent } = useAgent(agentId);
+  const [showVersionHistoryDialog, setShowVersionHistoryDialog] = useState(false);
 
   const {
     versions,
@@ -25,51 +28,42 @@ export function AgentPromptEnhancer({ agentId }: AgentPromptEnhancerProps) {
     setVersionActive,
   } = usePromptVersions(agentId, agent?.instructions);
 
-  const {
-    enhancedPrompt,
-    isEnhancing,
-    userComment,
-    showCommentInput,
-    enhancePrompt,
-    setUserComment,
-    setShowCommentInput,
-    clearEnhancement,
-    applyChanges,
-  } = usePromptEnhancer({
-    agentId,
-    instructions: agent?.instructions,
-    versions,
-    onVersionCreate: newVersion => {
-      setVersions(prev => [...prev, newVersion]);
-    },
-    onVersionUpdate: updateVersion,
-  });
+  const { enhancedPrompt, isEnhancing, userComment, enhancePrompt, setUserComment, clearEnhancement, applyChanges } =
+    usePromptEnhancer({
+      agentId,
+      instructions: agent?.instructions,
+      versions,
+      onVersionCreate: newVersion => {
+        setVersions(prev => [...prev, newVersion]);
+      },
+      onVersionUpdate: updateVersion,
+    });
+
+  if (!agent) return null;
 
   return (
-    <div className="grid p-4 h-full">
-      <div className="space-y-2">
-        <CurrentInstructions
-          instructions={agent?.instructions}
-          enhancedPrompt={enhancedPrompt}
-          isEnhancing={isEnhancing}
-          showCommentInput={showCommentInput}
-          userComment={userComment}
-          onEnhance={enhancePrompt}
-          onCancel={clearEnhancement}
-          onSave={applyChanges}
-          onCommentToggle={() => setShowCommentInput(!showCommentInput)}
-          onCommentChange={setUserComment}
-        />
+    <>
+      <CurrentInstructions
+        instructions={agent.instructions}
+        enhancedPrompt={enhancedPrompt}
+        isEnhancing={isEnhancing}
+        userComment={userComment}
+        onEnhance={enhancePrompt}
+        onCancel={clearEnhancement}
+        onSave={applyChanges}
+        onCommentChange={setUserComment}
+        agentId={agentId}
+        onShowHistory={() => setShowVersionHistoryDialog(true)}
+      />
 
-        <VersionHistory
-          versions={versions}
-          isUpdating={isUpdating}
-          copiedVersions={{}}
-          onCopy={async () => {}}
-          onSetActive={setVersionActive}
-          onDelete={setVersionToDelete}
-        />
-      </div>
+      <VersionHistoryDialog
+        versions={versions}
+        isUpdating={isUpdating}
+        onSetActive={setVersionActive}
+        onDelete={setVersionToDelete}
+        open={showVersionHistoryDialog}
+        onOpenChange={setShowVersionHistoryDialog}
+      />
 
       <AlertDialog open={versionToDelete !== null} onOpenChange={() => setVersionToDelete(null)}>
         <AlertDialog.Content>
@@ -94,6 +88,6 @@ export function AgentPromptEnhancer({ agentId }: AgentPromptEnhancerProps) {
           </AlertDialog.Footer>
         </AlertDialog.Content>
       </AlertDialog>
-    </div>
+    </>
   );
 }
