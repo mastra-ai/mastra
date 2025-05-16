@@ -40,13 +40,10 @@ const storageRest = new D1Store({
 
 And add the following to your `wrangler.toml` or `wrangler.jsonc` file:
 ```
-"d1_databases": [
-  {
-    "binding": "D1Database",
-    "database_name": "db-name",
-    "database_id": "db-id"
-  }
-]
+[[d1_databases]]
+binding = "D1Database"
+database_name = "db-name"
+database_id = "db-id"
 ```
 
 ## Parameters
