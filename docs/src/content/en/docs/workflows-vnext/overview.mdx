@@ -228,6 +228,19 @@ if (result.status === "success") {
 }
 ```
 
+**Note:** don't destructure the `run` instance
+i.e. don't do
+```typescript
+const { start, resume, ... } = myWorkflow.createRun();
+
+// NOR
+
+const run = myWorkflow.createRun();
+const { start, resume, ... } = run;
+```
+it will break the connection to the workflow and prevent it from running
+
+
 ## Workflow Execution Result Schema
 
 The result of running a workflow (either from `start()` or `resume()`) follows this TypeScript interface:
