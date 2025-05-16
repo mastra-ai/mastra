@@ -8,7 +8,7 @@ description: Example of building an inngest workflow with Mastra
 This example demonstrates how to build an Inngest workflow with Mastra.
 
 ## Setup
-```sh
+```sh copy
 npm install @mastra/inngest @mastra/core @mastra/deployer @hono/node-server @ai-sdk/openai
 
 docker run --rm -p 8288:8288 \
@@ -120,8 +120,13 @@ const forecastSchema = z.object({
   condition: z.string(),
   location: z.string(),
 })
- 
-// Step 1: Fetch weather data for a given city
+```
+
+
+#### Step 1: Fetch weather data for a given city
+
+```ts showLineNumbers copy filename="workflows/inngest-workflow.ts"
+
 const fetchWeather = createStep({
   id: 'fetch-weather',
   description: 'Fetches weather forecast for a given city',
@@ -177,8 +182,11 @@ const fetchWeather = createStep({
     return forecast
   },
 })
- 
-// Step 2: Suggest activities (indoor or outdoor) based on weather
+```
+
+#### Step 2: Suggest activities (indoor or outdoor) based on weather
+
+```ts showLineNumbers copy filename="workflows/inngest-workflow.ts"
 const planActivities = createStep({
   id: 'plan-activities',
   description: 'Suggests activities based on weather conditions',
@@ -221,8 +229,10 @@ const planActivities = createStep({
     }
   },
 })
- 
-// Step 3: Suggest indoor activities only (for rainy weather)
+```
+
+#### Step 3: Suggest indoor activities only (for rainy weather)
+```ts showLineNumbers copy filename="workflows/inngest-workflow.ts"
 const planIndoorActivities = createStep({
   id: 'plan-indoor-activities',
   description: 'Suggests indoor activities based on weather conditions',
@@ -263,8 +273,11 @@ const planIndoorActivities = createStep({
     }
   },
 })
+```
 
-// Compose the workflow with conditional branching
+## Define the activity planner workflow
+```ts showLineNumbers copy filename="workflows/inngest-workflow.ts"
+
 const activityPlanningWorkflow = createWorkflow({
   id: 'activity-planning-workflow-step2-if-else',
   inputSchema: z.object({
