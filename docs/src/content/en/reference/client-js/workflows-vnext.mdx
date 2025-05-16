@@ -48,7 +48,7 @@ Start a vNext workflow run with triggerData and await full run results:
 ```typescript
 const run = workflow.createRun();
 
-const result = await workflow.startAsync({
+const result = await run.startAsync({
   runId: run.runId,
   inputData: {
     param1: "value1",
@@ -64,7 +64,7 @@ Resume a suspended vNext workflow step and await full run result:
 ```typescript
 const run = workflow.createRun();
 
-const result = await workflow.resumeAsync({
+const result = await run.resumeAsync({
   runId: run.runId,
   step: "step-id",
   resumeData: { key: "value" },
@@ -96,7 +96,7 @@ try {
   });
 
   // Start workflow run
-  workflow.start({
+  run.start({
     runId: run.runId,
     inputData: {
       city: "New York",
@@ -132,7 +132,7 @@ try {
   });
 
   //resume run
-  workflow.resume({
+  run.resume({
     runId: run.runId,
     step: "step-id",
     resumeData: { key: "value" },
