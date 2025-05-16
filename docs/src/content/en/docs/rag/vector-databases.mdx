@@ -16,7 +16,7 @@ After generating embeddings, you need to store them in a database that supports 
   ```ts filename="vector-store.ts" showLineNumbers copy
   import { PgVector } from '@mastra/pg';
 
-const store = new PgVector(process.env.POSTGRES_CONNECTION_STRING)
+const store = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING })
 await store.createIndex({
 indexName: "myCollection",
 dimension: 1536,
