@@ -15,6 +15,7 @@ import type {
   StepResult,
   WorkflowResult,
 } from '@mastra/core/workflows/vNext';
+import { EMITTER_SYMBOL } from '@mastra/core/workflows/vNext/_constants';
 import type { Span } from '@opentelemetry/api';
 import type { Inngest, BaseContext } from 'inngest';
 import { serve as inngestServe } from 'inngest/hono';
@@ -898,7 +899,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
                 // TODO: this function shouldn't have suspend probably?
                 suspend: async (_suspendPayload: any) => {},
-                emitter,
+                [EMITTER_SYMBOL]: emitter,
               });
               return result ? index : null;
               // eslint-disable-next-line @typescript-eslint/no-unused-vars
