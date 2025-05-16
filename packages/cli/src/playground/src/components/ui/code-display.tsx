@@ -18,7 +18,7 @@ export function CodeDisplay({
   className = '',
 }: CodeDisplayProps) {
   return (
-    <div className={`rounded-md border bg-mastra-bg-2 ${className}`} style={{ height }}>
+    <div className={`rounded-md border ${className}`} style={{ height }}>
       <ScrollArea className="h-full">
         <div className="p-2 cursor-pointer hover:bg-mastra-bg-3/50 transition-colors group relative" onClick={onCopy}>
           <pre className="text-[10px] whitespace-pre-wrap font-mono">{content}</pre>

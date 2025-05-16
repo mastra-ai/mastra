@@ -1,6 +1,17 @@
 import type { AbstractAgent } from '@ag-ui/client';
 import { AGUIAdapter } from './adapters/agui';
-import { Agent, MemoryThread, Tool, Workflow, Vector, BaseResource, Network, VNextWorkflow, A2A } from './resources';
+import {
+  Agent,
+  MemoryThread,
+  Tool,
+  Workflow,
+  Vector,
+  BaseResource,
+  Network,
+  VNextWorkflow,
+  A2A,
+  MCPTool,
+} from './resources';
 import type {
   ClientOptions,
   CreateMemoryThreadParams,
@@ -20,6 +31,8 @@ import type {
   SaveMessageToMemoryParams,
   SaveMessageToMemoryResponse,
   McpServerListResponse,
+  McpServerToolListResponse,
+  McpToolInfo,
 } from './types';
 import type { ServerDetailInfo } from '@mastra/core/mcp';
 
@@ -289,6 +302,26 @@ export class MastraClient extends BaseResource {
     }
     const queryString = searchParams.toString();
     return this.request(`/api/mcp/v0/servers/${serverId}${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Retrieves a list of tools for a specific MCP server.
+   * @param serverId - The ID of the MCP server.
+   * @returns Promise containing the list of tools.
+   */
+  public getMcpServerTools(serverId: string): Promise<McpServerToolListResponse> {
+    return this.request(`/api/mcp/${serverId}/tools`);
+  }
+
+  /**
+   * Gets an MCPTool resource instance for a specific tool on an MCP server.
+   * This instance can then be used to fetch details or execute the tool.
+   * @param serverId - The ID of the MCP server.
+   * @param toolId - The ID of the tool.
+   * @returns MCPTool instance.
+   */
+  public getMcpServerTool(serverId: string, toolId: string): MCPTool {
+    return new MCPTool(this.options, serverId, toolId);
   }
 
   /**
