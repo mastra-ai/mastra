@@ -18,8 +18,8 @@ vNext workflows consist of:
 
 - **Schemas**: Type definitions for inputs and outputs using Zod
 - **Steps**: Individual units of work with defined inputs and outputs
-- **Workflows**: Orchestrations of steps with defined execution patterns. A workflow is also a step and can be used as such in other workflows.
-- **Workflow execution flow**: How steps are executed and connected to each other
+- **Workflow**: A structured sequence of steps designed to accomplish a specific task or process. Workflows define the order, dependencies, and logic for executing steps, and can themselves be reused as steps within other workflows.
+- **Workflow execution flow**: The path and logic followed during a workflow run, including how steps are executed, how data moves between them, and how conditions, branches, and errors are handled.
 
 Schemas are defined using Zod both for inputs and outputs of steps and workflows. Schemas can also dictate what data does a step take when resuming from a suspended state, as well as what contextual information should be passed when suspending a step's execution.
 
@@ -36,6 +36,7 @@ Primitives such as `.then()`, `.parallel()` and `.branch()` describe the executi
 Steps are the building blocks of workflows. Create a step using `createStep`:
 
 ```typescript
+// Create a step with defined input/output schemas and execution logic
 const myStep = createStep({
   id: "my-step",
   description: "Does something useful",
@@ -45,9 +46,11 @@ const myStep = createStep({
   outputSchema: z.object({
     outputValue: z.string(),
   }),
+  // Optional: Define the resume schema for step resumption
   resumeSchema: z.object({
     resumeValue: z.string(),
   }),
+  // Optional: Define the suspend schema for step suspension
   suspendSchema: z.object({
     suspendValue: z.string(),
   }),
@@ -90,11 +93,14 @@ The `execute` function receives a context object with:
 Create a workflow using `createWorkflow`:
 
 ```typescript
+// Create a workflow with defined steps and execution flow
 const myWorkflow = createWorkflow({
   id: "my-workflow",
+  // Define the expected input structure (should match the first step's inputSchema)
   inputSchema: z.object({
     startValue: z.string(),
   }),
+  // Define the expected output structure (should match the last step's outputSchema)
   outputSchema: z.object({
     result: z.string(),
   }),
@@ -105,12 +111,14 @@ const myWorkflow = createWorkflow({
   .then(step3)
   .commit();
 
+// Register workflow with Mastra instance
 const mastra = new Mastra({
   vnext_workflows: {
     myWorkflow,
   },
 });
 
+// Create a run instance of the workflow
 const run = mastra.vnext_getWorkflow("myWorkflow").createRun();
 ```
 
@@ -180,10 +188,10 @@ const parentWorkflow = createWorkflow({
   steps: [myWorkflow, step4],
 });
 parentWorkflow
-  .then(myWorkflow)
+  .then(myWorkflow) // nested workflow
   .then(step4)
-  .then(cloneWorkflow(myWorkflow, { id: "cloned-workflow" }))
-  .then(cloneStep(step4, { id: "cloned-step-4" }))
+  .then(cloneWorkflow(myWorkflow, { id: "cloned-workflow" })) // cloned workflow
+  .then(cloneStep(step4, { id: "cloned-step-4" })) // cloned step
   .commit();
 ```
 
