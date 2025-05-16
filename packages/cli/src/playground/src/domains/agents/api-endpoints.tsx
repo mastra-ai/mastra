@@ -26,16 +26,16 @@ export const ApiEndpoints = ({ agentId }: ApiEndpointsProps) => {
   if (isLoading) return <div>Loading...</div>;
   if (!allEndpoints.length) return <div>No endpoints found</div>;
 
-  return <ApiEndpointsInner endspoints={allEndpoints} agentId={agentId} />;
+  return <ApiEndpointsInner endpoints={allEndpoints} agentId={agentId} />;
 };
 
-const ApiEndpointsInner = ({ endspoints, agentId }: { endspoints: ApiEndpoint[]; agentId: string }) => {
+const ApiEndpointsInner = ({ endpoints, agentId }: { endpoints: ApiEndpoint[]; agentId: string }) => {
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   const onlyAgents = useMemo(
     () =>
-      endspoints.filter(endpoint => endpoint.tags.includes('agents')).sort((a, b) => a.method.localeCompare(b.method)),
-    [endspoints],
+      endpoints.filter(endpoint => endpoint.tags.includes('agents')).sort((a, b) => a.method.localeCompare(b.method)),
+    [endpoints],
   );
   const selectedEndpoint = onlyAgents[selectedIndex];
 
