@@ -27,7 +27,6 @@ export const formSchema = z.object({
 const buttonCopy = ({
   idleIcon,
   successIcon,
-  isDark,
 }: {
   idleIcon?: React.ReactNode;
   successIcon?: React.ReactNode;
