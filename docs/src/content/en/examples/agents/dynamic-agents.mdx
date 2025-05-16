@@ -1,0 +1,135 @@
+---
+title: Dynamic Agents Example | Agents | Mastra Docs
+description: Learn how to create and configure dynamic agents using runtime context in Mastra.
+---
+
+# Dynamic Agents Example
+
+First, let's define our runtime context type:
+
+```typescript
+import { Agent, RuntimeContext } from "@mastra/core";
+import { z } from "zod";
+
+type SupportRuntimeContext = {
+  "user-tier": "free" | "pro" | "enterprise";
+  "language": "en" | "es" | "fr";
+  "user-id": string;
+};
+```
+
+Next, let's create our dynamic support agent with its configuration:
+
+```typescript
+const supportAgent = new Agent({
+  name: "Dynamic Support Agent",
+  
+  instructions: async ({ runtimeContext }) => {
+    const userTier = runtimeContext.get("user-tier");
+    const language = runtimeContext.get("language");
+    
+    return `You are a customer support agent for our SaaS platform.
+    The current user is on the ${userTier} tier and prefers ${language} language.
+    
+    For ${userTier} tier users:
+    ${userTier === "free" ? "- Provide basic support and documentation links" : ""}
+    ${userTier === "pro" ? "- Offer detailed technical support and best practices" : ""}
+    ${userTier === "enterprise" ? "- Provide priority support with custom solutions" : ""}
+    
+    Always respond in ${language} language.`;
+  },
+
+  model: ({ runtimeContext }) => {
+    const userTier = runtimeContext.get("user-tier");
+    return userTier === "enterprise" 
+      ? openai("gpt-4") 
+      : openai("gpt-3.5-turbo");
+  },
+
+  tools: ({ runtimeContext }) => {
+    const userTier = runtimeContext.get("user-tier");
+    const baseTools = [knowledgeBase, ticketSystem];
+    
+    if (userTier === "pro" || userTier === "enterprise") {
+      baseTools.push(advancedAnalytics);
+    }
+    
+    if (userTier === "enterprise") {
+      baseTools.push(customIntegration);
+    }
+    
+    return baseTools;
+  },
+});
+```
+
+Now, let's create a function to handle support requests:
+
+```typescript
+async function handleSupportRequest(userId: string, message: string) {
+  const runtimeContext = new RuntimeContext<SupportRuntimeContext>();
+  
+  runtimeContext.set("user-id", userId);
+  runtimeContext.set("user-tier", await getUserTier(userId));
+  runtimeContext.set("language", await getUserLanguage(userId));
+
+  const response = await supportAgent.generate(message, {
+    runtimeContext,
+  });
+
+  return response.text;
+}
+```
+
+Let's set up the middleware to handle runtime context:
+
+```typescript
+import { Mastra } from "@mastra/core";
+import { registerApiRoute } from "@mastra/core/server";
+
+export const mastra = new Mastra({
+  agents: {
+    support: supportAgent,
+  },
+  server: {
+    middleware: [
+      async (c, next) => {
+        const userId = c.req.header("X-User-ID");
+        const runtimeContext = c.get<SupportRuntimeContext>("runtimeContext");
+
+        // Set user tier based on subscription
+        const userTier = await getUserTier(userId);
+        runtimeContext.set("user-tier", userTier);
+
+        // Set language based on user preferences
+        const language = await getUserLanguage(userId);
+        runtimeContext.set("language", language);
+
+        // Set user ID
+        runtimeContext.set("user-id", userId);
+
+        await next();
+      },
+    ],
+    apiRoutes: [
+      registerApiRoute("/support", {
+        method: "POST",
+        handler: async (c) => {
+          const { userId, message } = await c.req.json();
+          
+          try {
+            const response = await handleSupportRequest(userId, message);
+            return c.json({ response });
+          } catch (error) {
+            return c.json({ error: "Failed to process support request" }, 500);
+          }
+        },
+      }),
+    ],
+  },
+});
+```
+
+## Usage Example
+
+This example shows how a single agent can handle different types of users and scenarios by leveraging runtime context, making it more flexible and maintainable than creating separate agents for each use case.
