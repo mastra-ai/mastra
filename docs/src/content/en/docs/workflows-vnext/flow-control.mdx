@@ -8,10 +8,15 @@ description: "Control flow in Mastra (vNext) workflows allows you to manage bran
 Chain steps to execute in sequence using `.then()`:
 
 ```typescript
-myWorkflow.then(step1).then(step2).then(step3).commit();
+// Chain steps to execute in sequence
+myWorkflow
+  .then(step1) // First step
+  .then(step2) // Second step, receives output from step1
+  .then(step3) // Third step, receives output from step2
+  .commit();
 ```
 
-The output from each step is automatically passed to the next step if schemas match. If the schemas don't match, you can use the `map` function to transform the output to the expected schema.
+The output from each step is automatically passed to the next step if schemas match. If the schemas don't match, you can use the [`map` function](/docs/workflows-vnext/input-data-mapping.mdx) to transform the output to the expected schema.
 Step chaining is type-safe and checked at compile time.
 
 ## Parallel Execution
@@ -19,7 +24,12 @@ Step chaining is type-safe and checked at compile time.
 Execute steps in parallel using `.parallel()`:
 
 ```typescript
-myWorkflow.parallel([step1, step2]).then(step3).commit();
+// Execute step1 and step2 in parallel
+myWorkflow
+  .parallel([step1, step2])
+  // Continue with step3 after both parallel steps complete
+  .then(step3)
+  .commit();
 ```
 
 This executes all steps in the array concurrently, then continues to the next step after all parallel steps complete.
@@ -27,6 +37,7 @@ This executes all steps in the array concurrently, then continues to the next st
 You can also execute entire workflows in parallel:
 
 ```typescript
+// Execute nestedWorkflow1 and nestedWorkflow2 in parallel
 myWorkflow
   .parallel([nestedWorkflow1, nestedWorkflow2])
   .then(finalStep)
@@ -43,13 +54,17 @@ Create conditional branches using `.branch()`:
 myWorkflow
   .then(initialStep)
   .branch([
+    // If value > 50, run highValueStep
     [async ({ inputData }) => inputData.value > 50, highValueStep],
+    // If value is between 11 and 50, run lowValueStep
     [
       async ({ inputData }) => inputData.value > 10 && inputData.value <= 50,
       lowValueStep,
     ],
+    // If value <= 10, run extremelyLowValueStep
     [async ({ inputData }) => inputData.value <= 10, extremelyLowValueStep],
   ])
+  // After branching, continue with finalStep
   .then(finalStep)
   .commit();
 ```
@@ -65,6 +80,7 @@ vNext supports two types of loops. When looping a step (or nested workflow or an
 **Do-While Loop**: Executes a step repeatedly while a condition is true.
 
 ```typescript
+// Repeat incrementStep while value is less than 10
 myWorkflow
   .dowhile(incrementStep, async ({ inputData }) => inputData.value < 10)
   .then(finalStep)
@@ -74,24 +90,11 @@ myWorkflow
 **Do-Until Loop**: Executes a step repeatedly until a condition becomes true.
 
 ```typescript
+// Repeat incrementStep while value is more than 10
 myWorkflow
   .dountil(incrementStep, async ({ inputData }) => inputData.value >= 10)
   .then(finalStep)
   .commit();
-```
-
-```typescript
-const workflow = createWorkflow({
-  id: "increment-workflow",
-  inputSchema: z.object({
-    value: z.number(),
-  }),
-  outputSchema: z.object({
-    value: z.number(),
-  }),
-})
-  .dountil(incrementStep, async ({ inputData }) => inputData.value >= 10)
-  .then(finalStep);
 ```
 
 ## Foreach
@@ -99,6 +102,7 @@ const workflow = createWorkflow({
 Foreach is a step that executes a step for each item in an array type input.
 
 ```typescript
+// Step that adds 11 to the current value
 const mapStep = createStep({
   id: "map",
   description: "Maps (+11) on the current value",
@@ -113,6 +117,7 @@ const mapStep = createStep({
   },
 });
 
+// final step that prints the result
 const finalStep = createStep({
   id: "final",
   description: "Final step that prints the result",
@@ -134,6 +139,7 @@ const counterWorkflow = createWorkflow({
   }),
 });
 
+// Apply mapStep to each item in the input array, then run finalStep
 counterWorkflow.foreach(mapStep).then(finalStep).commit();
 
 const run = counterWorkflow.createRun();
@@ -173,9 +179,9 @@ const mainWorkflow = createWorkflow({
   inputSchema: z.object({...}),
   outputSchema: z.object({...}),
 })
-  .then(initialStep)
-  .then(nestedWorkflow)
-  .then(finalStep)
+  .then(initialStep)    // Run initialStep first
+  .then(nestedWorkflow) // Then run the nested workflow as a step
+  .then(finalStep)      // Finally, run finalStep
   .commit();
 ```
 
@@ -184,6 +190,7 @@ In the above example, the `nestedWorkflow` is used as a step in the `mainWorkflo
 Nested workflows are the main (and only) way compose execution flows beyond simple sequential execution. When using `.branch()` or `.parallel()` to compose execution flows, executing more than just one step necessarily requires a nested workflow, and as a byproduct, a description of how these steps are to be executed.
 
 ```typescript
+// Define a workflow that plans both indoor and outdoor activities in parallel, then synthesizes the results
 const planBothWorkflow = createWorkflow({
   id: "plan-both-workflow",
   inputSchema: forecastSchema,
@@ -192,10 +199,12 @@ const planBothWorkflow = createWorkflow({
   }),
   steps: [planActivities, planIndoorActivities, sythesizeStep],
 })
+  // Run planActivities and planIndoorActivities in parallel
   .parallel([planActivities, planIndoorActivities])
   .then(sythesizeStep)
   .commit();
 
+// Define the main weather workflow
 const weatherWorkflow = createWorkflow({
   id: "weather-workflow-step3-concurrency",
   inputSchema: z.object({
@@ -206,14 +215,17 @@ const weatherWorkflow = createWorkflow({
   }),
   steps: [fetchWeather, planBothWorkflow, planActivities],
 })
+  // First, fetch the weather for the given city
   .then(fetchWeather)
   .branch([
+    // If precipitationChance > 20, plan both indoor and outdoor activities (nested workflow)
     [
       async ({ inputData }) => {
         return inputData?.precipitationChance > 20;
       },
       planBothWorkflow,
     ],
+    // If precipitationChance <= 20, only plan outdoor activities
     [
       async ({ inputData }) => {
         return inputData?.precipitationChance <= 20;
