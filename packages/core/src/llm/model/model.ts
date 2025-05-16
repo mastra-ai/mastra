@@ -101,7 +101,7 @@ export class MastraLLM extends MastraLLMBase {
       toolChoice,
       maxSteps,
       onStepFinish: async (props: any) => {
-        void onStepFinish?.(props);
+        await onStepFinish?.(props);
 
         this.logger.debug('[LLM] - Step Change:', {
           text: props?.text,
@@ -183,7 +183,7 @@ export class MastraLLM extends MastraLLMBase {
       maxSteps,
       toolChoice,
       onStepFinish: async (props: any) => {
-        void onStepFinish?.(props);
+        await onStepFinish?.(props);
 
         this.logger.debug('[LLM] - Step Change:', {
           text: props?.text,
@@ -266,7 +266,7 @@ export class MastraLLM extends MastraLLMBase {
       maxSteps,
       toolChoice,
       onStepFinish: async (props: any) => {
-        void onStepFinish?.(props);
+        await onStepFinish?.(props);
 
         this.logger.debug('[LLM] - Stream Step Change:', {
           text: props?.text,
@@ -286,7 +286,7 @@ export class MastraLLM extends MastraLLMBase {
         }
       },
       onFinish: async (props: any) => {
-        void onFinish?.(props);
+        await onFinish?.(props);
 
         this.logger.debug('[LLM] - Stream Finished:', {
           text: props?.text,
@@ -369,7 +369,7 @@ export class MastraLLM extends MastraLLMBase {
       maxSteps,
       toolChoice,
       onStepFinish: async (props: any) => {
-        void onStepFinish?.(props);
+        await onStepFinish?.(props);
 
         this.logger.debug('[LLM] - Stream Step Change:', {
           text: props?.text,
@@ -391,7 +391,7 @@ export class MastraLLM extends MastraLLMBase {
         }
       },
       onFinish: async (props: any) => {
-        void onFinish?.(props);
+        await onFinish?.(props);
 
         this.logger.debug('[LLM] - Stream Finished:', {
           text: props?.text,
