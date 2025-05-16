@@ -142,7 +142,7 @@ export const createVectorQueryTool = ({
           if (logger) {
             logger.debug('Returning reranked relevant context chunks', { count: relevantChunks.length });
           }
-          const sources = includeSources ? convertToSources(results) : [];
+          const sources = includeSources ? convertToSources(rerankedResults) : [];
           return { relevantContext: relevantChunks, sources };
         }
 

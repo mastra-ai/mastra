@@ -172,7 +172,7 @@ export const createGraphRAGTool = ({
           logger.debug('Returning relevant context chunks', { count: relevantChunks.length });
         }
         // `sources` exposes the full retrieval objects
-        const sources = includeSources ? convertToSources(results) : [];
+        const sources = includeSources ? convertToSources(rerankedResults) : [];
         return {
           relevantContext: relevantChunks,
           sources,
