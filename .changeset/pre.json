@@ -69,5 +69,26 @@
     "@mastra/voice-speechify": "0.1.18",
     "@mastra/inngest": "0.0.3"
   },
-  "changesets": []
+  "changesets": [
+    "cool-pillows-flow",
+    "cute-clowns-dream",
+    "eighty-lizards-itch",
+    "evil-planes-take",
+    "fluffy-stars-marry",
+    "grumpy-chicken-push",
+    "honest-rocks-stop",
+    "light-mayflies-kiss",
+    "little-bees-slide",
+    "long-hands-punch",
+    "moody-cups-drum",
+    "new-teams-cover",
+    "old-items-hear",
+    "pink-ducks-fly",
+    "public-snakes-switch",
+    "quiet-olives-taste",
+    "ready-bees-sin",
+    "rich-swans-vanish",
+    "shy-parrots-hunt",
+    "tough-boats-hide"
+  ]
 }

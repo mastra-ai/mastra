@@ -1,5 +1,16 @@
 # create-mastra
 
+## 0.3.4-alpha.0
+
+### Patch Changes
+
+- 99552bc: revamp the UI of the tools page
+- db4211d: improve the UI/UX of the runtime context with formatting, copying, docs and syntax highlighting
+- 9b7294a: Revamp the UI for the right sidebar of the agents page
+- e2c2cf1: Persist playground agent settings across refresh
+- 1270183: Add waterfull traces instead of stacked progressbar (UI improvement mostly)
+- 392a14d: changing the empty state for threads in agent chat
+
 ## 0.3.3
 
 ### Patch Changes
