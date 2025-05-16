@@ -73,7 +73,7 @@ const response = await myMemoryAgent.stream("Hello, my name is Alice.", {
 
 ## Conversation History
 
-By default, the `Memory` instance includes the [last 40 messages](../../reference/memory/Memory.mdx) from the current Memory thread in each new request. This provides the agent with immediate conversational context.
+By default, the `Memory` instance includes the [last 10 messages](../../reference/memory/Memory.mdx) from the current Memory thread in each new request. This provides the agent with immediate conversational context.
 
 ```ts {3}
 const memory = new Memory({

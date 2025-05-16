@@ -1,6 +1,6 @@
 # Memory Class Reference
 
-The `Memory` class provides a robust system for managing conversation history and thread-based message storage in Mastra. It enables persistent storage of conversations, semantic search capabilities, and efficient message retrieval. By default, it uses LibSQL for storage and vector search, and FastEmbed for embeddings.
+The `Memory` class provides a robust system for managing conversation history and thread-based message storage in Mastra. It enables persistent storage of conversations, semantic search capabilities, and efficient message retrieval. You must configure a storage provider for conversation history, and if you enable semantic recall you will also need to provide a vector store and embedder.
 
 ## Basic Usage
 
@@ -67,13 +67,7 @@ const agent = new Agent({
 
 ### Working Memory
 
-The working memory feature allows agents to maintain persistent information across conversations. When enabled, the Memory class will automatically manage working memory updates through either text stream tags or tool calls.
-
-There are two modes for handling working memory updates:
-
-1. **text-stream** (default): The agent includes working memory updates directly in its responses using XML tags containing Markdown (`<working_memory># User \n ## Preferences...</working_memory>`). These tags are automatically processed and stripped from the visible output.
-
-2. **tool-call**: The agent uses a dedicated tool to update working memory. This mode should be used when working with `toDataStream()` as text-stream mode is not compatible with data streaming. Additionally, this mode provides more explicit control over memory updates and may be preferred when working with agents that are better at using tools than managing text tags.
+The working memory feature allows agents to maintain persistent information across conversations. When enabled, the Memory class automatically manages working memory updates using a dedicated tool call.
 
 Example configuration:
 
@@ -83,7 +77,6 @@ const memory = new Memory({
     workingMemory: {
       enabled: true,
       template: "# User\n- **First Name**:\n- **Last Name**:",
-      use: "tool-call", // or 'text-stream'
     },
   },
 });
@@ -156,7 +149,7 @@ Mastra supports many embedding models through the [Vercel AI SDK](https://sdk.ve
       name: "embedder",
       type: "EmbeddingModel",
       description:
-        "Embedder instance for vector embeddings. Uses FastEmbed (bge-small-en-v1.5) by default",
+        "Embedder instance for vector embeddings. Required when semantic recall is enabled",
       isOptional: true,
     },
     {
@@ -178,7 +171,7 @@ Mastra supports many embedding models through the [Vercel AI SDK](https://sdk.ve
       description:
         "Number of most recent messages to retrieve. Set to false to disable.",
       isOptional: true,
-      defaultValue: "40",
+      defaultValue: "10",
     },
     {
       name: "semanticRecall",
@@ -186,7 +179,7 @@ Mastra supports many embedding models through the [Vercel AI SDK](https://sdk.ve
       description:
         "Enable semantic search in message history. Automatically enabled when vector store is provided.",
       isOptional: true,
-      defaultValue: "false (true if vector store provided)",
+      defaultValue: "false",
     },
     {
       name: "topK",
@@ -206,12 +199,12 @@ Mastra supports many embedding models through the [Vercel AI SDK](https://sdk.ve
     },
     {
       name: "workingMemory",
-      type: "{ enabled: boolean; template?: string; use?: 'text-stream' | 'tool-call' }",
+      type: "{ enabled: boolean; template?: string }",
       description:
-        "Configuration for working memory feature that allows persistent storage of user information across conversations. The 'use' setting determines how working memory updates are handled - either through text stream tags or tool calls. Working memory uses Markdown format to structure and store continuously relevant information.",
+        "Configuration for working memory feature that allows persistent storage of user information across conversations. Working memory uses Markdown format to structure and store continuously relevant information.",
       isOptional: true,
       defaultValue:
-        "{ enabled: false, template: '# User Information\\n- **First Name**:\\n- **Last Name**:\\n...', use: 'text-stream' }",
+        "{ enabled: false, template: '# User Information\\n- **First Name**:\\n- **Last Name**:\\n...' }",
     },
     {
       name: "threads",
@@ -219,7 +212,7 @@ Mastra supports many embedding models through the [Vercel AI SDK](https://sdk.ve
       description:
         "Settings related to memory thread creation. `generateTitle` will cause the thread.title to be generated from an llm summary of the users first message.",
       isOptional: true,
-      defaultValue: "{ generateTitle: true }",
+      defaultValue: "{ generateTitle: false }",
     },
   ]}
 />
