@@ -1,4 +1,4 @@
-import type { z } from 'zod';
+import { z } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
 import { ToolCompatibility } from '..';
 import type { ShapeValue } from '..';
@@ -67,6 +67,11 @@ export class OpenAIReasoningToolCompat extends ToolCompatibility {
       }
       case 'ZodDate': {
         return this.defaultZodDateHandler(value);
+      }
+      case 'ZodAny': {
+        // It's bad practice in the tool to use any, it's not reasonable for models that don't support that OOTB, to cast every single possible type
+        // in the schema. Usually when it's "any" it could be a json object or a union of specific types.
+        return z.string();
       }
       default:
         return this.defaultUnsupportedZodTypeHandler(value);
