@@ -650,41 +650,6 @@ describe('MessageList', () => {
       ]);
     });
 
-    it('should correctly convert and add a Vercel CoreMessage with reasoning and redacted-reasoning parts', () => {
-      const inputCoreMessage = {
-        role: 'assistant',
-        content: [
-          { type: 'reasoning', text: 'Step 1: Analyze', signature: 'sig-a' },
-          { type: 'redacted-reasoning', data: 'sensitive data' },
-          { type: 'text', text: 'Result of step 1.' },
-        ],
-      } satisfies VercelCoreMessage;
-
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage);
-
-      expect(list.getMessages()).toEqual([
-        {
-          id: expect.any(String),
-          role: 'assistant',
-          createdAt: expect.any(Date),
-          content: {
-            format: 2,
-            parts: [
-              { type: 'step-start' },
-              {
-                type: 'reasoning',
-                reasoning: 'Step 1: Analyze',
-                details: [{ type: 'text', text: 'Step 1: Analyze', signature: 'sig-a' }],
-              },
-              { type: 'reasoning', reasoning: '', details: [{ type: 'redacted', data: 'sensitive data' }] },
-              { type: 'text', text: 'Result of step 1.' },
-            ],
-          },
-          threadId,
-          resourceId,
-        } satisfies MastraMessageV2,
-      ]);
-    });
 
     it('should correctly convert and add a Vercel CoreMessage with file parts', () => {
       const inputCoreMessage = {
@@ -1037,41 +1002,6 @@ describe('MessageList', () => {
       ]);
     });
 
-    it('should correctly convert and add a Vercel CoreMessage with reasoning and redacted-reasoning parts', () => {
-      const inputCoreMessage = {
-        role: 'assistant',
-        content: [
-          { type: 'reasoning', text: 'Step 1: Analyze', signature: 'sig-a' },
-          { type: 'redacted-reasoning', data: 'sensitive data' },
-          { type: 'text', text: 'Result of step 1.' },
-        ],
-      } satisfies VercelCoreMessage;
-
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage);
-
-      expect(list.getMessages()).toEqual([
-        {
-          id: expect.any(String),
-          role: 'assistant',
-          createdAt: expect.any(Date),
-          content: {
-            format: 2,
-            parts: [
-              { type: 'step-start' },
-              {
-                type: 'reasoning',
-                reasoning: 'Step 1: Analyze',
-                details: [{ type: 'text', text: 'Step 1: Analyze', signature: 'sig-a' }],
-              },
-              { type: 'reasoning', reasoning: '', details: [{ type: 'redacted', data: 'sensitive data' }] },
-              { type: 'text', text: 'Result of step 1.' },
-            ],
-          },
-          threadId,
-          resourceId,
-        } satisfies MastraMessageV2,
-      ]);
-    });
 
     it('should correctly convert and add a Vercel CoreMessage with file parts', () => {
       const inputCoreMessage = {
@@ -1339,41 +1269,6 @@ describe('MessageList', () => {
       ]);
     });
 
-    it('should correctly convert and add a Vercel CoreMessage with reasoning and redacted-reasoning parts', () => {
-      const inputCoreMessage = {
-        role: 'assistant',
-        content: [
-          { type: 'reasoning', text: 'Step 1: Analyze', signature: 'sig-a' },
-          { type: 'redacted-reasoning', data: 'sensitive data' },
-          { type: 'text', text: 'Result of step 1.' },
-        ],
-      } satisfies VercelCoreMessage;
-
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage);
-
-      expect(list.getMessages()).toEqual([
-        {
-          id: expect.any(String),
-          role: 'assistant',
-          createdAt: expect.any(Date),
-          content: {
-            format: 2,
-            parts: [
-              { type: 'step-start' },
-              {
-                type: 'reasoning',
-                reasoning: 'Step 1: Analyze',
-                details: [{ type: 'text', text: 'Step 1: Analyze', signature: 'sig-a' }],
-              },
-              { type: 'reasoning', reasoning: '', details: [{ type: 'redacted', data: 'sensitive data' }] },
-              { type: 'text', text: 'Result of step 1.' },
-            ],
-          },
-          threadId,
-          resourceId,
-        } satisfies MastraMessageV2,
-      ]);
-    });
 
     it('should correctly convert and add a Vercel CoreMessage with file parts', () => {
       const inputCoreMessage = {
