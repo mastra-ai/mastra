@@ -510,7 +510,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
               // TODO: this function shouldn't have suspend probably?
               suspend: async (_suspendPayload: any) => {},
-              emitter,
+              [EMITTER_SYMBOL]: emitter,
             });
             return result ? index : null;
           } catch (e: unknown) {
@@ -634,7 +634,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           return result?.status === 'success' ? result.output : null;
         },
         suspend: async (_suspendPayload: any) => {},
-        emitter,
+        [EMITTER_SYMBOL]: emitter,
       });
     } while (entry.loopType === 'dowhile' ? isTrue : !isTrue);
 
