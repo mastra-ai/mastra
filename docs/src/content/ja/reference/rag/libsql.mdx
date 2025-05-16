@@ -82,8 +82,7 @@ const results = await store.query({
       name: "syncInterval",
       type: "number",
       isOptional: true,
-      description:
-        "データベース同期のためのミリ秒単位の間隔（Turso特有）",
+      description: "データベース同期のためのミリ秒単位の間隔（Turso特有）",
     },
   ]}
 />
@@ -104,7 +103,8 @@ const results = await store.query({
     {
       name: "dimension",
       type: "number",
-      description: "ベクトルの次元サイズ（埋め込みモデルに一致する必要があります）",
+      description:
+        "ベクトルの次元サイズ（埋め込みモデルに一致する必要があります）",
     },
     {
       name: "metric",
@@ -252,7 +252,7 @@ interface IndexStats {
   ]}
 />
 
-### updateIndexById()
+### updateVector()
 
 IDによって特定のベクトルエントリを新しいベクトルデータおよび/またはメタデータで更新します。
 
@@ -288,7 +288,7 @@ IDによって特定のベクトルエントリを新しいベクトルデータ
   ]}
 />
 
-### deleteIndexById()
+### deleteVector()
 
 IDによってインデックスから特定のベクトルエントリを削除します。
 

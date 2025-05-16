@@ -28,6 +28,15 @@ import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/cl
 import { errorHandler } from './handlers/error';
 import { getLogsByRunIdHandler, getLogsHandler, getLogTransports } from './handlers/logs';
 import {
+  getMcpServerMessageHandler,
+  getMcpServerSseHandler,
+  listMcpRegistryServersHandler,
+  getMcpRegistryServerDetailHandler,
+  listMcpServerToolsHandler,
+  getMcpServerToolDetailHandler,
+  executeMcpServerToolHandler,
+} from './handlers/mcp';
+import {
   createThreadHandler,
   deleteThreadHandler,
   getMemoryStatusHandler,
@@ -727,122 +736,124 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
     streamGenerateHandler,
   );
 
-  app.post(
-    '/api/agents/:agentId/instructions',
-    bodyLimit(bodyLimitOptions),
-    describeRoute({
-      description: "Update an agent's instructions",
-      tags: ['agents'],
-      parameters: [
-        {
-          name: 'agentId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-      ],
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: {
-              type: 'object',
-              properties: {
-                instructions: {
-                  type: 'string',
-                  description: 'New instructions for the agent',
-                },
-              },
-              required: ['instructions'],
-            },
+  if (options.isDev) {
+    app.post(
+      '/api/agents/:agentId/instructions',
+      bodyLimit(bodyLimitOptions),
+      describeRoute({
+        description: "Update an agent's instructions",
+        tags: ['agents'],
+        parameters: [
+          {
+            name: 'agentId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
           },
-        },
-      },
-      responses: {
-        200: {
-          description: 'Instructions updated successfully',
-        },
-        403: {
-          description: 'Not allowed in non-playground environment',
-        },
-        404: {
-          description: 'Agent not found',
-        },
-      },
-    }),
-    setAgentInstructionsHandler,
-  );
-
-  app.post(
-    '/api/agents/:agentId/instructions/enhance',
-    bodyLimit(bodyLimitOptions),
-    describeRoute({
-      description: 'Generate an improved system prompt from instructions',
-      tags: ['agents'],
-      parameters: [
-        {
-          name: 'agentId',
-          in: 'path',
+        ],
+        requestBody: {
           required: true,
-          schema: { type: 'string' },
-          description: 'ID of the agent whose model will be used for prompt generation',
-        },
-      ],
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: {
-              type: 'object',
-              properties: {
-                instructions: {
-                  type: 'string',
-                  description: 'Instructions to generate a system prompt from',
-                },
-                comment: {
-                  type: 'string',
-                  description: 'Optional comment for the enhanced prompt',
-                },
-              },
-              required: ['instructions'],
-            },
-          },
-        },
-      },
-      responses: {
-        200: {
-          description: 'Generated system prompt and analysis',
           content: {
             'application/json': {
               schema: {
                 type: 'object',
                 properties: {
-                  explanation: {
+                  instructions: {
                     type: 'string',
-                    description: 'Detailed analysis of the instructions',
+                    description: 'New instructions for the agent',
                   },
-                  new_prompt: {
+                },
+                required: ['instructions'],
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Instructions updated successfully',
+          },
+          403: {
+            description: 'Not allowed in non-playground environment',
+          },
+          404: {
+            description: 'Agent not found',
+          },
+        },
+      }),
+      setAgentInstructionsHandler,
+    );
+
+    app.post(
+      '/api/agents/:agentId/instructions/enhance',
+      bodyLimit(bodyLimitOptions),
+      describeRoute({
+        description: 'Generate an improved system prompt from instructions',
+        tags: ['agents'],
+        parameters: [
+          {
+            name: 'agentId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+            description: 'ID of the agent whose model will be used for prompt generation',
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  instructions: {
                     type: 'string',
-                    description: 'The enhanced system prompt',
+                    description: 'Instructions to generate a system prompt from',
+                  },
+                  comment: {
+                    type: 'string',
+                    description: 'Optional comment for the enhanced prompt',
+                  },
+                },
+                required: ['instructions'],
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Generated system prompt and analysis',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    explanation: {
+                      type: 'string',
+                      description: 'Detailed analysis of the instructions',
+                    },
+                    new_prompt: {
+                      type: 'string',
+                      description: 'The enhanced system prompt',
+                    },
                   },
                 },
               },
             },
           },
+          400: {
+            description: 'Missing or invalid request parameters',
+          },
+          404: {
+            description: 'Agent not found',
+          },
+          500: {
+            description: 'Internal server error or model response parsing error',
+          },
         },
-        400: {
-          description: 'Missing or invalid request parameters',
-        },
-        404: {
-          description: 'Agent not found',
-        },
-        500: {
-          description: 'Internal server error or model response parsing error',
-        },
-      },
-    }),
-    generateSystemPromptHandler,
-  );
+      }),
+      generateSystemPromptHandler,
+    );
+  }
 
   app.get(
     '/api/agents/:agentId/speakers',
@@ -1271,6 +1282,255 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
     executeAgentToolHandler,
   );
 
+  // MCP server routes
+  app.post(
+    '/api/mcp/:serverId/mcp',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Send a message to an MCP server using Streamable HTTP',
+      tags: ['mcp'],
+      parameters: [
+        {
+          name: 'serverId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        content: { 'application/json': { schema: { type: 'object' } } },
+      },
+      responses: {
+        200: {
+          description: 'Streamable HTTP connection processed',
+        },
+        404: {
+          description: 'MCP server not found',
+        },
+      },
+    }),
+    getMcpServerMessageHandler,
+  );
+
+  // New MCP server routes for SSE
+  const mcpSseBasePath = '/api/mcp/:serverId/sse';
+  const mcpSseMessagePath = '/api/mcp/:serverId/messages';
+
+  // Route for establishing SSE connection
+  app.get(
+    mcpSseBasePath,
+    describeRoute({
+      description: 'Establish an MCP Server-Sent Events (SSE) connection with a server instance.',
+      tags: ['mcp'],
+      parameters: [
+        {
+          name: 'serverId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+          description: 'The ID of the MCP server instance.',
+        },
+      ],
+      responses: {
+        200: {
+          description:
+            'SSE connection established. The client will receive events over this connection. (Content-Type: text/event-stream)',
+        },
+        404: { description: 'MCP server instance not found.' },
+        500: { description: 'Internal server error establishing SSE connection.' },
+      },
+    }),
+    getMcpServerSseHandler,
+  );
+
+  // Route for POSTing messages over an established SSE connection
+  app.post(
+    mcpSseMessagePath,
+    bodyLimit(bodyLimitOptions), // Apply body limit for messages
+    describeRoute({
+      description: 'Send a message to an MCP server over an established SSE connection.',
+      tags: ['mcp'],
+      parameters: [
+        {
+          name: 'serverId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+          description: 'The ID of the MCP server instance.',
+        },
+      ],
+      requestBody: {
+        description: 'JSON-RPC message to send to the MCP server.',
+        required: true,
+        content: { 'application/json': { schema: { type: 'object' } } }, // MCP messages are typically JSON
+      },
+      responses: {
+        200: {
+          description:
+            'Message received and is being processed by the MCP server. The actual result or error will be sent as an SSE event over the established connection.',
+        },
+        400: { description: 'Bad request (e.g., invalid JSON payload or missing body).' },
+        404: { description: 'MCP server instance not found or SSE connection path incorrect.' },
+        503: { description: 'SSE connection not established with this server, or server unable to process message.' },
+      },
+    }),
+    getMcpServerSseHandler,
+  );
+
+  app.get(
+    '/api/mcp/v0/servers',
+    describeRoute({
+      description: 'List all available MCP server instances with basic information.',
+      tags: ['mcp'],
+      parameters: [
+        {
+          name: 'limit',
+          in: 'query',
+          description: 'Number of results per page.',
+          required: false,
+          schema: { type: 'integer', default: 50, minimum: 1, maximum: 5000 },
+        },
+        {
+          name: 'offset',
+          in: 'query',
+          description: 'Number of results to skip for pagination.',
+          required: false,
+          schema: { type: 'integer', default: 0, minimum: 0 },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'A list of MCP server instances.',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  servers: { type: 'array', items: { $ref: '#/components/schemas/ServerInfo' } },
+                  next: { type: 'string', format: 'uri', nullable: true },
+                  total_count: { type: 'integer' },
+                },
+              },
+            },
+          },
+        },
+      },
+    }),
+    listMcpRegistryServersHandler,
+  );
+
+  app.get(
+    '/api/mcp/v0/servers/:id',
+    describeRoute({
+      description: 'Get detailed information about a specific MCP server instance.',
+      tags: ['mcp'],
+      parameters: [
+        {
+          name: 'id',
+          in: 'path',
+          required: true,
+          description: 'Unique ID of the MCP server instance.',
+          schema: { type: 'string' },
+        },
+        {
+          name: 'version',
+          in: 'query',
+          required: false,
+          description: 'Desired MCP server version (currently informational, server returns its actual version).',
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Detailed information about the MCP server instance.',
+          content: {
+            'application/json': { schema: { $ref: '#/components/schemas/ServerDetailInfo' } },
+          },
+        },
+        404: {
+          description: 'MCP server instance not found.',
+          content: { 'application/json': { schema: { type: 'object', properties: { error: { type: 'string' } } } } },
+        },
+      },
+    }),
+    getMcpRegistryServerDetailHandler,
+  );
+
+  app.get(
+    '/api/mcp/:serverId/tools',
+    describeRoute({
+      description: 'List all tools available on a specific MCP server instance.',
+      tags: ['mcp'],
+      parameters: [
+        {
+          name: 'serverId',
+          in: 'path',
+          required: true,
+          description: 'Unique ID of the MCP server instance.',
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: { description: 'A list of tools for the MCP server.' }, // Define schema if you have one for McpServerToolListResponse
+        404: { description: 'MCP server instance not found.' },
+        501: { description: 'Server does not support listing tools.' },
+      },
+    }),
+    listMcpServerToolsHandler,
+  );
+
+  app.get(
+    '/api/mcp/:serverId/tools/:toolId',
+    describeRoute({
+      description: 'Get details for a specific tool on an MCP server.',
+      tags: ['mcp'],
+      parameters: [
+        { name: 'serverId', in: 'path', required: true, schema: { type: 'string' } },
+        { name: 'toolId', in: 'path', required: true, schema: { type: 'string' } },
+      ],
+      responses: {
+        200: { description: 'Details of the specified tool.' }, // Define schema for McpToolInfo
+        404: { description: 'MCP server or tool not found.' },
+        501: { description: 'Server does not support getting tool details.' },
+      },
+    }),
+    getMcpServerToolDetailHandler,
+  );
+
+  app.post(
+    '/api/mcp/:serverId/tools/:toolId/execute',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Execute a specific tool on an MCP server.',
+      tags: ['mcp'],
+      parameters: [
+        { name: 'serverId', in: 'path', required: true, schema: { type: 'string' } },
+        { name: 'toolId', in: 'path', required: true, schema: { type: 'string' } },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                data: { type: 'object' },
+                runtimeContext: { type: 'object' },
+              },
+            },
+          },
+        }, // Simplified schema
+      },
+      responses: {
+        200: { description: 'Result of the tool execution.' },
+        400: { description: 'Invalid tool arguments.' },
+        404: { description: 'MCP server or tool not found.' },
+        501: { description: 'Server does not support tool execution.' },
+      },
+    }),
+    executeMcpServerToolHandler,
+  );
+
   // Memory routes
   app.get(
     '/api/memory/status',
@@ -1370,6 +1630,13 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
           in: 'query',
           required: true,
           schema: { type: 'string' },
+        },
+        {
+          name: 'limit',
+          in: 'query',
+          required: false,
+          schema: { type: 'number' },
+          description: 'Limit the number of messages to retrieve (default: 40)',
         },
       ],
       responses: {
@@ -2697,7 +2964,7 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
     {
       fetch: app.fetch,
       port,
-      hostname: serverOptions?.host ?? 'localhost',
+      hostname: serverOptions?.host,
     },
     () => {
       const logger = mastra.getLogger();

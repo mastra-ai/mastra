@@ -1,6 +1,7 @@
 import { MastraBase } from '@mastra/core/base';
+import type { RuntimeContext } from '@mastra/core/di';
 import { createTool } from '@mastra/core/tools';
-import { isZodType, resolveSerializedZodOutput } from '@mastra/core/utils';
+import { isZodType } from '@mastra/core/utils';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import type { SSEClientTransportOptions } from '@modelcontextprotocol/sdk/client/sse.js';
@@ -14,9 +15,9 @@ import type { ClientCapabilities, LoggingLevel } from '@modelcontextprotocol/sdk
 import { CallToolResultSchema, ListResourcesResultSchema } from '@modelcontextprotocol/sdk/types.js';
 
 import { asyncExitHook, gracefulExit } from 'exit-hook';
-import jsonSchemaToZod from 'json-schema-to-zod';
-import type { JsonSchema } from 'json-schema-to-zod';
 import { z } from 'zod';
+import { jsonSchemaObjectToZodRawShape } from 'zod-from-json-schema';
+import type { JSONSchema } from 'zod-from-json-schema';
 
 // Re-export MCP SDK LoggingLevel for convenience
 export type { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
@@ -27,6 +28,7 @@ export interface LogMessage {
   timestamp: Date;
   serverName: string;
   details?: Record<string, any>;
+  runtimeContext?: RuntimeContext | null;
 }
 
 export type LogHandler = (logMessage: LogMessage) => void;
@@ -107,6 +109,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private enableServerLogs?: boolean;
   private serverConfig: MastraMCPServerDefinition;
   private transport?: Transport;
+  private currentOperationContext: RuntimeContext | null = null;
 
   constructor({
     name,
@@ -159,6 +162,7 @@ export class InternalMastraMCPClient extends MastraBase {
         timestamp: new Date(),
         serverName: this.name,
         details,
+        runtimeContext: this.currentOperationContext,
       });
     }
   }
@@ -323,11 +327,35 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   private convertInputSchema(
-    inputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['inputSchema'] | JsonSchema,
+    inputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['inputSchema'] | JSONSchema,
   ): z.ZodType {
-    return isZodType(inputSchema)
-      ? inputSchema
-      : resolveSerializedZodOutput(jsonSchemaToZod(inputSchema as JsonSchema));
+    if (isZodType(inputSchema)) {
+      return inputSchema;
+    }
+
+    try {
+      // Assuming inputSchema is a JSONSchema object type for tool inputs
+      const rawShape = jsonSchemaObjectToZodRawShape(inputSchema as JSONSchema);
+      return z.object(rawShape); // Wrap the raw shape to return a ZodType (object)
+    } catch (error: unknown) {
+      let errorDetails: string | undefined;
+      if (error instanceof Error) {
+        errorDetails = error.stack;
+      } else {
+        // Attempt to stringify, fallback to String()
+        try {
+          errorDetails = JSON.stringify(error);
+        } catch {
+          errorDetails = String(error);
+        }
+      }
+      this.log('error', 'Failed to convert JSON schema to Zod schema using zodFromJsonSchema', {
+        error: errorDetails,
+        originalJsonSchema: inputSchema,
+      });
+
+      throw new Error(errorDetails);
+    }
   }
 
   async tools() {
@@ -336,38 +364,49 @@ export class InternalMastraMCPClient extends MastraBase {
     const toolsRes: Record<string, any> = {};
     tools.forEach(tool => {
       this.log('debug', `Processing tool: ${tool.name}`);
+      try {
+        const mastraTool = createTool({
+          id: `${this.name}_${tool.name}`,
+          description: tool.description || '',
+          inputSchema: this.convertInputSchema(tool.inputSchema),
+          execute: async ({ context, runtimeContext }: { context: any; runtimeContext?: RuntimeContext | null }) => {
+            const previousContext = this.currentOperationContext;
+            this.currentOperationContext = runtimeContext || null; // Set current context
+            try {
+              this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: context });
+              const res = await this.client.callTool(
+                {
+                  name: tool.name,
+                  arguments: context,
+                },
+                CallToolResultSchema,
+                {
+                  timeout: this.timeout,
+                },
+              );
+              this.log('debug', `Tool executed successfully: ${tool.name}`);
+              return res;
+            } catch (e) {
+              this.log('error', `Error calling tool: ${tool.name}`, {
+                error: e instanceof Error ? e.stack : JSON.stringify(e, null, 2),
+                toolArgs: context,
+              });
+              throw e;
+            } finally {
+              this.currentOperationContext = previousContext; // Restore previous context
+            }
+          },
+        });
 
-      const mastraTool = createTool({
-        id: `${this.name}_${tool.name}`,
-        description: tool.description || '',
-        inputSchema: this.convertInputSchema(tool.inputSchema),
-        execute: async ({ context }) => {
-          try {
-            this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: context });
-            const res = await this.client.callTool(
-              {
-                name: tool.name,
-                arguments: context,
-              },
-              CallToolResultSchema,
-              {
-                timeout: this.timeout,
-              },
-            );
-            this.log('debug', `Tool executed successfully: ${tool.name}`);
-            return res;
-          } catch (e) {
-            this.log('error', `Error calling tool: ${tool.name}`, {
-              error: e instanceof Error ? e.stack : JSON.stringify(e, null, 2),
-              toolArgs: context,
-            });
-            throw e;
-          }
-        },
-      });
-
-      if (tool.name) {
-        toolsRes[tool.name] = mastraTool;
+        if (tool.name) {
+          toolsRes[tool.name] = mastraTool;
+        }
+      } catch (toolCreationError: unknown) {
+        // Catch errors during tool creation itself (e.g., if createTool has issues)
+        this.log('error', `Failed to create Mastra tool wrapper for MCP tool: ${tool.name}`, {
+          error: toolCreationError instanceof Error ? toolCreationError.stack : String(toolCreationError),
+          mcpToolDefinition: tool,
+        });
       }
     });
 

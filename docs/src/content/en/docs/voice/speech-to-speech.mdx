@@ -12,28 +12,15 @@ STS enables continuous bidirectional audio communication through listening to ev
 
 ## Configuration
 
-- **`chatModel`**: Configuration for the realtime model.
-  - **`apiKey`**: Your OpenAI API key. Falls back to the `OPENAI_API_KEY` environment variable.
-  - **`model`**: The model ID to use for real-time voice interactions (e.g., `gpt-4o-mini-realtime`).
-  - **`options`**: Additional options for the realtime client, such as session configuration.
+- **`apiKey`**: Your OpenAI API key. Falls back to the `OPENAI_API_KEY` environment variable.
+- **`model`**: The model ID to use for real-time voice interactions (e.g., `gpt-4o-mini-realtime`).
 - **`speaker`**: The default voice ID for speech synthesis. This allows you to specify which voice to use for the speech output.
 
 ```typescript
 const voice = new OpenAIRealtimeVoice({
-  chatModel: {
-    apiKey: 'your-openai-api-key',
-    model: 'gpt-4o-mini-realtime',
-    options: {
-      sessionConfig: {
-        turn_detection: {
-          type: 'server_vad',
-          threshold: 0.6,
-          silence_duration_ms: 1200,
-        },
-      },
-    },
-  },
-  speaker: 'alloy', // Default voice
+  apiKey: "your-openai-api-key",
+  model: "gpt-4o-mini-realtime",
+  speaker: "alloy", // Default voice
 });
 
 // If using default settings the configuration can be simplified to:
@@ -48,9 +35,9 @@ import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
 import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
 
 const agent = new Agent({
-  name: 'Agent',
+  name: "Agent",
   instructions: `You are a helpful assistant with real-time voice capabilities.`,
-  model: openai('gpt-4o'),
+  model: openai("gpt-4o"),
   voice: new OpenAIRealtimeVoice(),
 });
 
@@ -58,12 +45,12 @@ const agent = new Agent({
 await agent.voice.connect();
 
 // Listen for agent audio responses
-agent.voice.on('speaker', ({ audio }) => {
+agent.voice.on("speaker", ({ audio }) => {
   playAudio(audio);
 });
 
 // Initiate the conversation
-await agent.voice.speak('How can I help you today?');
+await agent.voice.speak("How can I help you today?");
 
 // Send continuous audio from the microphone
 const micStream = getMicrophoneStream();

@@ -16,7 +16,7 @@ npm install @mastra/mongodb
 ## 使用例
 
 ```typescript copy showLineNumbers
-import { MongoDBVector } from '@mastra/mongodb';
+import { MongoDBVector } from "@mastra/mongodb";
 
 const store = new MongoDBVector({
   url: process.env.MONGODB_URL,
@@ -139,7 +139,8 @@ MongoDBに新しいベクトルインデックス（コレクション）を作�
       name: "documentFilter",
       type: "Record<string, any>",
       isOptional: true,
-      description: "元のドキュメントフィールドに対するフィルター（メタデータだけでなく）",
+      description:
+        "元のドキュメントフィールドに対するフィルター（メタデータだけでなく）",
     },
     {
       name: "includeVector",
@@ -202,7 +203,7 @@ MongoDBデータベース内のすべてのベクトルコレクションを一�
 
 戻り値：`Promise<string[]>`
 
-### updateIndexById()
+### updateVector()
 
 IDによって特定のベクトルエントリを新しいベクトルデータやメタデータで更新します。
 
@@ -238,7 +239,7 @@ IDによって特定のベクトルエントリを新しいベクトルデータ
   ]}
 />
 
-### deleteIndexById()
+### deleteVector()
 
 IDによってインデックスから特定のベクトルエントリを削除します。
 
@@ -288,7 +289,7 @@ try {
   // Handle specific error cases
   if (error.message.includes("Invalid collection name")) {
     console.error(
-      "Collection name must start with a letter or underscore and contain only valid characters."
+      "Collection name must start with a letter or underscore and contain only valid characters.",
     );
   } else if (error.message.includes("Collection not found")) {
     console.error("The specified collection does not exist");

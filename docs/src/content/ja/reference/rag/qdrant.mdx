@@ -26,8 +26,7 @@ QdrantVector クラスは、ベクトル類似性検索エンジンである [Qd
     {
       name: "https",
       type: "boolean",
-      description:
-        "接続を設定する際にTLSを使用するかどうか。推奨されます。",
+      description: "接続を設定する際にTLSを使用するかどうか。推奨されます。",
     },
   ]}
 />
@@ -157,7 +156,7 @@ interface IndexStats {
   ]}
 />
 
-### updateIndexById()
+### updateVector()
 
 <PropertiesTable
   content={[
@@ -181,7 +180,7 @@ interface IndexStats {
 
 指定されたインデックス内のベクトルおよび/またはそのメタデータを更新します。ベクトルとメタデータの両方が提供された場合、両方が更新されます。どちらか一方のみが提供された場合は、その部分のみが更新されます。
 
-### deleteIndexById()
+### deleteVector()
 
 <PropertiesTable
   content={[

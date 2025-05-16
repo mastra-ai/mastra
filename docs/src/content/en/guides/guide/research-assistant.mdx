@@ -16,11 +16,13 @@ We'll use the foundational Transformer paper [Attention Is All You Need](https:/
 Let's understand how RAG works and how we'll implement each component:
 
 1. Knowledge Store/Index
+
    - Converting text into vector representations
    - Creating numerical representations of content
    - Implementation: We'll use OpenAI's text-embedding-3-small to create embeddings and store them in PgVector
 
 2. Retriever
+
    - Finding relevant content via similarity search
    - Matching query embeddings with stored vectors
    - Implementation: We'll use PgVector to perform similarity searches on our stored embeddings
@@ -31,6 +33,7 @@ Let's understand how RAG works and how we'll implement each component:
    - Implementation: We'll use GPT-4o-mini to generate answers based on retrieved content
 
 Our implementation will:
+
 1. Process the Transformer paper into embeddings
 2. Store them in PgVector for quick retrieval
 3. Use similarity search to find relevant sections
@@ -86,31 +89,31 @@ touch src/mastra/index.ts src/store.ts src/index.ts
 ### Create the Research Assistant Agent
 
 Now we'll create our RAG-enabled research assistant. The agent uses:
+
 - A [Vector Query Tool](/reference/tools/vector-query-tool) for performing semantic search over our vector store to find relevant content in our papers.
 - GPT-4o-mini for understanding queries and generating responses
 - Custom instructions that guide the agent on how to analyze papers, use retrieved content effectively, and acknowledge limitations
 
 ```ts copy showLineNumbers filename="src/mastra/agents/researchAgent.ts"
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { createVectorQueryTool } from '@mastra/rag';
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { createVectorQueryTool } from "@mastra/rag";
 
 // Create a tool for semantic search over our paper embeddings
 const vectorQueryTool = createVectorQueryTool({
-  vectorStoreName: 'pgVector',
-  indexName: 'papers',
-  model: openai.embedding('text-embedding-3-small'),
+  vectorStoreName: "pgVector",
+  indexName: "papers",
+  model: openai.embedding("text-embedding-3-small"),
 });
 
 export const researchAgent = new Agent({
-  name: 'Research Assistant',
-  instructions: 
-    `You are a helpful research assistant that analyzes academic papers and technical documents.
+  name: "Research Assistant",
+  instructions: `You are a helpful research assistant that analyzes academic papers and technical documents.
     Use the provided vector query tool to find relevant information from your knowledge base, 
     and provide accurate, well-supported answers based on the retrieved content.
     Focus on the specific content available in the tool and acknowledge if you cannot find sufficient information to answer a question.
     Base your responses only on the content provided, not on general knowledge.`,
-  model: openai('gpt-4o-mini'),
+  model: openai("gpt-4o-mini"),
   tools: {
     vectorQueryTool,
   },
@@ -120,10 +123,10 @@ export const researchAgent = new Agent({
 ### Set Up the Mastra Instance and Vector Store
 
 ```ts copy showLineNumbers filename="src/mastra/index.ts"
-import { Mastra } from '@mastra/core';
-import { PgVector } from '@mastra/pg';
+import { Mastra } from "@mastra/core";
+import { PgVector } from "@mastra/pg";
 
-import { researchAgent } from './agents/researchAgent';
+import { researchAgent } from "./agents/researchAgent";
 
 // Initialize Mastra instance
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
@@ -136,14 +139,15 @@ export const mastra = new Mastra({
 ### Load and Process the Paper
 
 This step handles the initial document processing. We:
+
 1. Fetch the research paper from its URL
 2. Convert it into a document object
 3. Split it into smaller, manageable chunks for better processing
 
 ```ts copy showLineNumbers filename="src/store.ts"
 import { openai } from "@ai-sdk/openai";
-import { MDocument } from '@mastra/rag';
-import { embedMany } from 'ai';
+import { MDocument } from "@mastra/rag";
+import { embedMany } from "ai";
 import { mastra } from "./mastra";
 
 // Load the paper
@@ -154,10 +158,10 @@ const paperText = await response.text();
 // Create document and chunk it
 const doc = MDocument.fromText(paperText);
 const chunks = await doc.chunk({
-  strategy: 'recursive',
+  strategy: "recursive",
   size: 512,
   overlap: 50,
-  separator: '\n',
+  separator: "\n",
 });
 
 console.log("Number of chunks:", chunks.length);
@@ -167,6 +171,7 @@ console.log("Number of chunks:", chunks.length);
 ### Create and Store Embeddings
 
 Finally, we'll prepare our content for RAG by:
+
 1. Generating embeddings for each chunk of text
 2. Creating a vector store index to hold our embeddings
 3. Storing both the embeddings and metadata (original text and source information) in our vector database
@@ -178,31 +183,32 @@ This allows our agent to efficiently search and retrieve relevant information.
 ```ts copy showLineNumbers{23} filename="src/store.ts"
 // Generate embeddings
 const { embeddings } = await embedMany({
-  model: openai.embedding('text-embedding-3-small'),
-  values: chunks.map(chunk => chunk.text),
+  model: openai.embedding("text-embedding-3-small"),
+  values: chunks.map((chunk) => chunk.text),
 });
 
 // Get the vector store instance from Mastra
-const vectorStore = mastra.getVector('pgVector');
+const vectorStore = mastra.getVector("pgVector");
 
 // Create an index for our paper chunks
 await vectorStore.createIndex({
-  indexName: 'papers',
+  indexName: "papers",
   dimension: 1536,
 });
 
 // Store embeddings
 await vectorStore.upsert({
-  indexName: 'papers',
+  indexName: "papers",
   vectors: embeddings,
-  metadata: chunks.map(chunk => ({
+  metadata: chunks.map((chunk) => ({
     text: chunk.text,
-    source: 'transformer-paper'
+    source: "transformer-paper",
   })),
 });
 ```
 
 This will:
+
 1. Load the paper from the URL
 2. Split it into manageable chunks
 3. Generate embeddings for each chunk
@@ -220,10 +226,11 @@ Let's test our research assistant with different types of queries:
 
 ```ts filename="src/index.ts" showLineNumbers copy
 import { mastra } from "./mastra";
-const agent = mastra.getAgent('researchAgent');
+const agent = mastra.getAgent("researchAgent");
 
 // Basic query about concepts
-const query1 = "What problems does sequence modeling face with neural networks?";
+const query1 =
+  "What problems does sequence modeling face with neural networks?";
 const response1 = await agent.generate(query1);
 console.log("\nQuery:", query1);
 console.log("Response:", response1.text);
@@ -236,6 +243,7 @@ npx bun src/index.ts
 ```
 
 You should see output like:
+
 ```
 Query: What problems does sequence modeling face with neural networks?
 Response: Sequence modeling with neural networks faces several key challenges:
@@ -246,6 +254,7 @@ Response: Sequence modeling with neural networks faces several key challenges:
 ```
 
 Let's try another question:
+
 ```ts filename="src/index.ts" showLineNumbers{10} copy
 // Query about specific findings
 const query2 = "What improvements were achieved in translation quality?";
@@ -255,10 +264,11 @@ console.log("Response:", response2.text);
 ```
 
 Output:
+
 ```
 Query: What improvements were achieved in translation quality?
-Response: The model showed significant improvements in translation quality, achieving more than 2.0 
-BLEU points improvement over previously reported models on the WMT 2014 English-to-German translation 
+Response: The model showed significant improvements in translation quality, achieving more than 2.0
+BLEU points improvement over previously reported models on the WMT 2014 English-to-German translation
 task, while also reducing training costs.
 ```
 
@@ -271,6 +281,7 @@ mastra dev
 ```
 
 Your research assistant will be available at:
+
 ```
 http://localhost:4111/api/agents/researchAgent/generate
 ```
@@ -286,11 +297,13 @@ curl -X POST http://localhost:4111/api/agents/researchAgent/generate \
     ]
   }'
 ```
+
 </Steps>
 
 ## Advanced RAG Examples
 
 Explore these examples for more advanced RAG techniques:
+
 - [Filter RAG](/examples/rag/usage/filter-rag) for filtering results using metadata
 - [Cleanup RAG](/examples/rag/usage/cleanup-rag) for optimizing information density
 - [Chain of Thought RAG](/examples/rag/usage/cot-rag) for complex reasoning queries using workflows

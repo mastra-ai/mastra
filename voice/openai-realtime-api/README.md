@@ -27,19 +27,15 @@ const voice = new OpenAIRealtimeVoice();
 
 // Create a voice instance with configuration
 const voice = new OpenAIRealtimeVoice({
-  chatModel: {
-    apiKey: 'your-api-key', // Optional, can use OPENAI_API_KEY env var
-    model: 'gpt-4o-mini-realtime', // Optional, uses latest model by default
-    options: {
-      sessionConfig: {
-        voice: 'alloy', // Default voice
-        turn_detection: {
-          type: 'server_vad',
-          threshold: 0.5,
-          silence_duration_ms: 1000,
-        },
-      },
-    },
+  apiKey: 'your-api-key', // Optional, can use OPENAI_API_KEY env var
+  model: 'gpt-4o-mini-realtime', // Optional, uses latest model by default
+});
+
+voice.updateSession({
+  turn_detection: {
+    type: 'server_vad',
+    threshold: 0.5,
+    silence_duration_ms: 1000,
   },
 });
 

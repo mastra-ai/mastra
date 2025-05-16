@@ -86,7 +86,7 @@ export async function listenHandler(c: Context) {
       },
     });
 
-    return c.json({ text: transcription });
+    return c.json({ text: transcription?.text });
   } catch (error) {
     return handleError(error, 'Error transcribing speech');
   }

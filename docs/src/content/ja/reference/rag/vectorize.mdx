@@ -75,7 +75,8 @@ CloudflareVector クラスは、Cloudflare のエッジネットワークと統�
       name: "ids",
       type: "string[]",
       isOptional: true,
-      description: "オプションのベクトルID（提供されない場合は自動生成されます）",
+      description:
+        "オプションのベクトルID（提供されない場合は自動生成されます）",
     },
   ]}
 />
@@ -212,7 +213,7 @@ interface IndexStats {
   ]}
 />
 
-### updateIndexById()
+### updateVector()
 
 インデックス内の特定のIDに対してベクトルまたはメタデータを更新します。
 
@@ -236,7 +237,7 @@ interface IndexStats {
   ]}
 />
 
-### deleteIndexById()
+### deleteVector()
 
 インデックス内の特定のIDに対するベクトルとその関連メタデータを削除します。
 

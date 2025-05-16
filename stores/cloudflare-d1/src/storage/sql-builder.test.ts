@@ -215,26 +215,6 @@ describe('SQL Builder', () => {
     });
   });
 
-  describe('Raw SQL', () => {
-    it('should handle raw SQL with parameters', () => {
-      const builder = createSqlBuilder().raw('SELECT * FROM users WHERE id = ? AND name = ?', 1, 'John');
-
-      const { sql, params } = builder.build();
-
-      expect(sql).toBe('SELECT * FROM users WHERE id = ? AND name = ?');
-      expect(params).toEqual([1, 'John']);
-    });
-
-    it('should handle raw SQL without parameters', () => {
-      const builder = createSqlBuilder().raw('SELECT COUNT(*) FROM users');
-
-      const { sql, params } = builder.build();
-
-      expect(sql).toBe('SELECT COUNT(*) FROM users');
-      expect(params).toEqual([]);
-    });
-  });
-
   describe('Reset and Reuse', () => {
     it('should reset the builder state', () => {
       const builder = createSqlBuilder().select('*').from('users').where('id = ?', 1);
@@ -265,6 +245,65 @@ describe('SQL Builder', () => {
   });
 
   describe('Edge Cases and Error Handling', () => {
+    // Validation tests for identifier safety
+    it('should throw on invalid column name in select', () => {
+      expect(() => createSqlBuilder().select(['id', 'name;DROP TABLE users']).from('users')).toThrow(
+        /Invalid column name/,
+      );
+    });
+    it('should throw on invalid table name in from', () => {
+      expect(() => createSqlBuilder().select().from('users;DROP TABLE foo')).toThrow(/Invalid table name/);
+    });
+    it('should throw on invalid column name in insert', () => {
+      expect(() => createSqlBuilder().insert('users', ['id', 'bad;col'], [1, 2])).toThrow(/Invalid column name/);
+    });
+    it('should throw on invalid table name in insert', () => {
+      expect(() => createSqlBuilder().insert('bad;table', ['id'], [1])).toThrow(/Invalid table name/);
+    });
+    it('should throw on invalid column name in update', () => {
+      expect(() => createSqlBuilder().update('users', ['id', 'bad;col'], [1, 2])).toThrow(/Invalid column name/);
+    });
+    it('should throw on invalid table name in update', () => {
+      expect(() => createSqlBuilder().update('bad;table', ['id'], [1])).toThrow(/Invalid table name/);
+    });
+    it('should throw on invalid table name in delete', () => {
+      expect(() => createSqlBuilder().delete('bad;table')).toThrow(/Invalid table name/);
+    });
+    it('should throw on invalid table name in createTable', () => {
+      expect(() => createSqlBuilder().createTable('bad;table', ['id TEXT'])).toThrow(/Invalid table name/);
+    });
+    it('should throw on invalid column name in createTable', () => {
+      expect(() => createSqlBuilder().createTable('users', ['bad;col TEXT'])).toThrow(/Invalid column name/);
+    });
+    it('should throw on invalid index name in createIndex', () => {
+      expect(() => createSqlBuilder().createIndex('bad;index', 'users', 'id')).toThrow(/Invalid index name/);
+    });
+    it('should throw on invalid table name in createIndex', () => {
+      expect(() => createSqlBuilder().createIndex('idx_id', 'bad;table', 'id')).toThrow(/Invalid table name/);
+    });
+    it('should throw on invalid column name in createIndex', () => {
+      expect(() => createSqlBuilder().createIndex('idx_id', 'users', 'bad;col')).toThrow(/Invalid column name/);
+    });
+    it('should throw on invalid column name in orderBy', () => {
+      expect(() => createSqlBuilder().select().from('users').orderBy('bad;col')).toThrow(/Invalid column name/);
+    });
+    it('should throw on invalid direction in orderBy', () => {
+      expect(() =>
+        createSqlBuilder()
+          .select()
+          .from('users')
+          .orderBy('id', 'BAD' as 'ASC' | 'DESC'),
+      ).toThrow(/Invalid sort direction/);
+    });
+    it('should throw on invalid column name in like', () => {
+      expect(() => createSqlBuilder().select().from('users').like('bad;col', 'foo')).toThrow(/Invalid column name/);
+    });
+    it('should throw on invalid column name in jsonLike', () => {
+      expect(() => createSqlBuilder().select().from('users').jsonLike('bad;col', 'key', 'val')).toThrow(
+        /Invalid column name/,
+      );
+    });
+
     it('should handle empty select columns', () => {
       const builder = createSqlBuilder().select().from('users');
 

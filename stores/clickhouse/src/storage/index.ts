@@ -337,7 +337,6 @@ export class ClickhouseStore extends MastraStorage {
           ${['id String'].concat(columns)}
         )
         ENGINE = ${TABLE_ENGINES[tableName]}
-        PARTITION BY "createdAt"
         PRIMARY KEY (createdAt, run_id, workflow_name)
         ORDER BY (createdAt, run_id, workflow_name)
         ${rowTtl ? `TTL toDateTime(${rowTtl.ttlKey ?? 'createdAt'}) + INTERVAL ${rowTtl.interval} ${rowTtl.unit}` : ''}
@@ -348,7 +347,6 @@ export class ClickhouseStore extends MastraStorage {
           ${columns}
         )
         ENGINE = ${TABLE_ENGINES[tableName]}
-        PARTITION BY "createdAt"
         PRIMARY KEY (createdAt, ${tableName === TABLE_EVALS ? 'run_id' : 'id'})
         ORDER BY (createdAt, ${tableName === TABLE_EVALS ? 'run_id' : 'id'})
         ${this.ttl?.[tableName]?.row ? `TTL toDateTime(createdAt) + INTERVAL ${this.ttl[tableName].row.interval} ${this.ttl[tableName].row.unit}` : ''}
@@ -627,7 +625,7 @@ export class ClickhouseStore extends MastraStorage {
     try {
       // First delete all messages associated with this thread
       await this.db.command({
-        query: `DELETE FROM "${TABLE_MESSAGES}" WHERE thread_id = '${threadId}';`,
+        query: `DELETE FROM "${TABLE_MESSAGES}" WHERE thread_id = {var_thread_id:String};`,
         query_params: { var_thread_id: threadId },
         clickhouse_settings: {
           output_format_json_quote_64bit_integers: 0,

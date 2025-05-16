@@ -14,9 +14,9 @@ description: ワークフローにおける `after()` メソッドのドキュ�
 ```typescript
 workflow
   .step(stepA)
-    .then(stepB)
-  .after(stepA)  // stepAが完了した後に新しいブランチを作成
-    .step(stepC);
+  .then(stepB)
+  .after(stepA) // stepAが完了した後に新しいブランチを作成
+  .step(stepC);
 ```
 
 ### 複数のブランチのマージ
@@ -24,11 +24,11 @@ workflow
 ```typescript
 workflow
   .step(stepA)
-    .then(stepB)
+  .then(stepB)
   .step(stepC)
-    .then(stepD)
-  .after([stepB, stepD])  // 複数のステップに依存するステップを作成
-    .step(stepE);
+  .then(stepD)
+  .after([stepB, stepD]) // 複数のステップに依存するステップを作成
+  .step(stepE);
 ```
 
 ## パラメーター
@@ -38,9 +38,10 @@ workflow
     {
       name: "steps",
       type: "Step | Step[]",
-      description: "続行する前に完了しなければならない単一のステップまたはステップの配列",
-      isOptional: false
-    }
+      description:
+        "続行する前に完了しなければならない単一のステップまたはステップの配列",
+      isOptional: false,
+    },
   ]}
 />
 
@@ -51,8 +52,8 @@ workflow
     {
       name: "workflow",
       type: "Workflow",
-      description: "メソッドチェーンのためのワークフローインスタンス"
-    }
+      description: "メソッドチェーンのためのワークフローインスタンス",
+    },
   ]}
 />
 
@@ -64,7 +65,7 @@ workflow
 workflow
   .step(fetchData)
   .then(processData)
-  .after(fetchData)  // fetchDataの後に分岐
+  .after(fetchData) // fetchDataの後に分岐
   .step(logData);
 ```
 
@@ -76,7 +77,7 @@ workflow
   .then(validateUserData)
   .step(fetchProductData)
   .then(validateProductData)
-  .after([validateUserData, validateProductData])  // 両方の検証が完了するのを待つ
+  .after([validateUserData, validateProductData]) // 両方の検証が完了するのを待つ
   .step(processOrder);
 ```
 

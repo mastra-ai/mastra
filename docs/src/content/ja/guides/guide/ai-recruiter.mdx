@@ -32,14 +32,14 @@ OPENAI_API_KEY=<your-openai-key>
 履歴書のテキストから候補者の詳細を抽出し、技術系または非技術系として分類したいと思います。このステップではLLMを呼び出して履歴書を解析し、名前、技術的ステータス、専門分野、および元の履歴書テキストを含む構造化されたJSONを返します。コードはトリガーデータからresumeTextを読み取り、LLMにプロンプトを送信し、後続のステップで使用するために整理されたフィールドを返します。
 
 ```ts filename="src/mastra/index.ts" copy
-import { Agent } from '@mastra/core/agent';
+import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 
 const recruiter = new Agent({
   name: "Recruiter Agent",
   instructions: `You are a recruiter.`,
   model: openai("gpt-4o-mini"),
-})
+});
 
 const gatherCandidateInfo = new Step({
   id: "gatherCandidateInfo",

@@ -15,9 +15,9 @@ workflow.afterEvent(eventName: string): Workflow
 
 ## パラメータ
 
-| パラメータ | 型 | 説明 |
-|-----------|------|-------------|
-| eventName | string | 待機するイベントの名前。ワークフローの `events` 設定で定義されたイベントと一致する必要があります。 |
+| パラメータ | 型     | 説明                                                                                               |
+| ---------- | ------ | -------------------------------------------------------------------------------------------------- |
+| eventName  | string | 待機するイベントの名前。ワークフローの `events` 設定で定義されたイベントと一致する必要があります。 |
 
 ## 戻り値
 
@@ -50,7 +50,7 @@ workflow.afterEvent(eventName: string): Workflow
 ```typescript
 // イベントを含むワークフローを定義
 const workflow = new Workflow({
-  name: 'approval-workflow',
+  name: "approval-workflow",
   events: {
     approval: {
       schema: z.object({
@@ -64,10 +64,11 @@ const workflow = new Workflow({
 // イベント中断ポイントを含むワークフローを構築
 workflow
   .step(submitRequest)
-  .afterEvent('approval')    // ワークフローはここで中断します
-  .step(processApproval)     // このステップはイベント発生後に実行されます
+  .afterEvent("approval") // ワークフローはここで中断します
+  .step(processApproval) // このステップはイベント発生後に実行されます
   .commit();
 ```
+
 ## 関連項目
 
 - [イベント駆動型ワークフロー](./events.mdx)

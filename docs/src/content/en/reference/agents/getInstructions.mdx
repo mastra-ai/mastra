@@ -22,7 +22,8 @@ getInstructions({ runtimeContext }: { runtimeContext?: RuntimeContext } = {}): s
       name: "runtimeContext",
       type: "RuntimeContext",
       isOptional: true,
-      description: "Runtime context for dependency injection and contextual information.",
+      description:
+        "Runtime context for dependency injection and contextual information.",
     },
   ]}
 />
@@ -36,6 +37,7 @@ Returns a string or a Promise that resolves to a string containing the agent's i
 The `getInstructions()` method is used to access the instructions that guide an agent's behavior. It resolves the instructions, which can be either directly provided as a string or returned from a function.
 
 Instructions are a critical component of an agent's configuration as they define:
+
 - The agent's role and personality
 - Task-specific guidance
 - Constraints on the agent's behavior
@@ -47,12 +49,13 @@ Instructions are a critical component of an agent's configuration as they define
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
-import { openai } from '@ai-sdk/openai';
+import { openai } from "@ai-sdk/openai";
 
 // Create an agent with static instructions
 const agent = new Agent({
   name: "assistant",
-  instructions: "You are a helpful assistant that provides concise and accurate information.",
+  instructions:
+    "You are a helpful assistant that provides concise and accurate information.",
   model: openai("gpt-4o"),
 });
 
@@ -66,7 +69,7 @@ console.log(instructions); // "You are a helpful assistant that provides concise
 ```typescript
 import { Agent } from "@mastra/core/agent";
 import { RuntimeContext } from "@mastra/core/runtime-context";
-import { openai } from '@ai-sdk/openai';
+import { openai } from "@ai-sdk/openai";
 
 // Create an agent with dynamic instructions
 const agent = new Agent({
@@ -75,11 +78,11 @@ const agent = new Agent({
     // Dynamic instructions based on runtime context
     const userPreference = runtimeContext.get("userPreference");
     const expertise = runtimeContext.get("expertise") || "general";
-    
+
     if (userPreference === "technical") {
       return `You are a technical assistant specializing in ${expertise}. Provide detailed technical explanations.`;
     }
-    
+
     return `You are a helpful assistant providing easy-to-understand information about ${expertise}.`;
   },
   model: openai("gpt-4o"),
