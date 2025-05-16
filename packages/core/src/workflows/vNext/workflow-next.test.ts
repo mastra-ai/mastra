@@ -1,6 +1,8 @@
 import { randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { openai } from '@ai-sdk/openai';
+import { simulateReadableStream } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -22,7 +24,7 @@ describe('Workflow', () => {
     vi.resetAllMocks();
 
     let counter = 0;
-    randomUUID.mockImplementation(() => {
+    (randomUUID as vi.Mock).mockImplementation(() => {
       return `mock-uuid-${++counter}`;
     });
   });
@@ -2125,7 +2127,7 @@ describe('Workflow', () => {
       expect(toolAction).toHaveBeenCalled();
       expect(result.steps.step1).toEqual({ status: 'success', output: { name: 'step1' } });
       expect(result.steps['random-tool']).toEqual({ status: 'success', output: { name: 'step1' } });
-    }, 10000);
+    });
   });
 
   describe('Watch', () => {
@@ -2404,9 +2406,11 @@ describe('Workflow', () => {
       const { stream, getWorkflowState } = run.stream({ inputData: {} });
 
       // Start watching the workflow
+      const collectedStreamData: WatchEvent[] = [];
       for await (const data of stream) {
-        watchData.push(JSON.parse(JSON.stringify(data)));
+        collectedStreamData.push(JSON.parse(JSON.stringify(data)));
       }
+      watchData = collectedStreamData;
 
       const executionResult = await getWorkflowState();
 
@@ -2618,13 +2622,21 @@ describe('Workflow', () => {
 
       const agent = new Agent({
         name: 'test-agent-1',
-        instructions: 'test agent instructions',
+        instructions: 'test agent instructions"',
         model: new MockLanguageModelV1({
-          doGenerate: async () => ({
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              chunks: [
+                { type: 'text-delta', textDelta: 'Paris' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  logprobs: undefined,
+                  usage: { completionTokens: 10, promptTokens: 3 },
+                },
+              ],
+            }),
             rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `Paris`,
           }),
         }),
       });
@@ -2633,11 +2645,19 @@ describe('Workflow', () => {
         name: 'test-agent-2',
         instructions: 'test agent instructions',
         model: new MockLanguageModelV1({
-          doGenerate: async () => ({
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              chunks: [
+                { type: 'text-delta', textDelta: 'London' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  logprobs: undefined,
+                  usage: { completionTokens: 10, promptTokens: 3 },
+                },
+              ],
+            }),
             rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `London`,
           }),
         }),
       });
@@ -2687,7 +2707,10 @@ describe('Workflow', () => {
         runId: 'test-run-id',
       });
       const { stream } = await run.stream({
-        inputData: { prompt1: 'Capital of France, just the name', prompt2: 'Capital of UK, just the name' },
+        inputData: {
+          prompt1: 'Capital of France, just the name',
+          prompt2: 'Capital of UK, just the name',
+        },
       });
 
       expect(await Array.fromAsync(stream.values())).toMatchInlineSnapshot(`
@@ -2752,6 +2775,21 @@ describe('Workflow', () => {
             "type": "step-start",
           },
           {
+            "args": {
+              "prompt": "Capital of France, just the name",
+            },
+            "name": "test-agent-1",
+            "type": "tool-call-streaming-start",
+          },
+          {
+            "args": {
+              "prompt": "Capital of France, just the name",
+            },
+            "argsTextDelta": "Paris",
+            "name": "test-agent-1",
+            "type": "tool-call-delta",
+          },
+          {
             "payload": {
               "id": "test-agent-1",
               "output": {
@@ -2798,6 +2836,21 @@ describe('Workflow', () => {
             "type": "step-start",
           },
           {
+            "args": {
+              "prompt": "Capital of UK, just the name",
+            },
+            "name": "test-agent-2",
+            "type": "tool-call-streaming-start",
+          },
+          {
+            "args": {
+              "prompt": "Capital of UK, just the name",
+            },
+            "argsTextDelta": "London",
+            "name": "test-agent-2",
+            "type": "tool-call-delta",
+          },
+          {
             "payload": {
               "id": "test-agent-2",
               "output": {
@@ -2822,6 +2875,111 @@ describe('Workflow', () => {
           },
         ]
       `);
+    });
+
+    it('should be able to use all action types in a workflow', async () => {
+      const step1Action = vi.fn<any>().mockResolvedValue({ name: 'step1' });
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: step1Action,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ name: z.string() }),
+      });
+
+      // @ts-ignore
+      const toolAction = vi.fn<any>().mockImplementation(async ({ context }) => {
+        console.log('tool call context', context);
+        return { name: context.name };
+      });
+
+      const randomTool = createTool({
+        id: 'random-tool',
+        execute: toolAction,
+        description: 'random-tool',
+        inputSchema: z.object({ name: z.string() }),
+        outputSchema: z.object({ name: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ name: z.string() }),
+      });
+
+      workflow.then(step1).then(createStep(randomTool)).commit();
+
+      const { stream, getWorkflowState } = await workflow.createRun().stream({ inputData: {} });
+
+      expect(await Array.fromAsync(stream.values())).toMatchInlineSnapshot(`
+        [
+          {
+            "payload": {
+              "runId": "mock-uuid-3",
+            },
+            "type": "start",
+          },
+          {
+            "payload": {
+              "id": "step1",
+            },
+            "type": "step-start",
+          },
+          {
+            "payload": {
+              "id": "step1",
+              "output": {
+                "name": "step1",
+              },
+              "status": "success",
+            },
+            "type": "step-result",
+          },
+          {
+            "payload": {
+              "id": "step1",
+              "metadata": {},
+            },
+            "type": "step-finish",
+          },
+          {
+            "payload": {
+              "id": "random-tool",
+            },
+            "type": "step-start",
+          },
+          {
+            "payload": {
+              "id": "random-tool",
+              "output": {
+                "name": "step1",
+              },
+              "status": "success",
+            },
+            "type": "step-result",
+          },
+          {
+            "payload": {
+              "id": "random-tool",
+              "metadata": {},
+            },
+            "type": "step-finish",
+          },
+          {
+            "payload": {
+              "runId": "mock-uuid-3",
+            },
+            "type": "finish",
+          },
+        ]
+      `);
+
+      const result = await getWorkflowState();
+
+      expect(step1Action).toHaveBeenCalled();
+      expect(toolAction).toHaveBeenCalled();
+      expect(result.steps.step1).toEqual({ status: 'success', output: { name: 'step1' } });
+      expect(result.steps['random-tool']).toEqual({ status: 'success', output: { name: 'step1' } });
     });
   });
 
@@ -3616,11 +3774,19 @@ describe('Workflow', () => {
         name: 'test-agent-1',
         instructions: 'test agent instructions',
         model: new MockLanguageModelV1({
-          doGenerate: async () => ({
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              chunks: [
+                { type: 'text-delta', textDelta: 'Paris' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  logprobs: undefined,
+                  usage: { completionTokens: 10, promptTokens: 3 },
+                },
+              ],
+            }),
             rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `Paris`,
           }),
         }),
       });
@@ -3629,11 +3795,19 @@ describe('Workflow', () => {
         name: 'test-agent-2',
         instructions: 'test agent instructions',
         model: new MockLanguageModelV1({
-          doGenerate: async () => ({
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              chunks: [
+                { type: 'text-delta', textDelta: 'London' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  logprobs: undefined,
+                  usage: { completionTokens: 10, promptTokens: 3 },
+                },
+              ],
+            }),
             rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `London`,
           }),
         }),
       });
@@ -3726,11 +3900,19 @@ describe('Workflow', () => {
         name: 'test-agent-1',
         instructions: 'test agent instructions',
         model: new MockLanguageModelV1({
-          doGenerate: async () => ({
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              chunks: [
+                { type: 'text-delta', textDelta: 'Paris' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  logprobs: undefined,
+                  usage: { completionTokens: 10, promptTokens: 3 },
+                },
+              ],
+            }),
             rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `Paris`,
           }),
         }),
       });
@@ -3739,11 +3921,19 @@ describe('Workflow', () => {
         name: 'test-agent-2',
         instructions: 'test agent instructions',
         model: new MockLanguageModelV1({
-          doGenerate: async () => ({
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              chunks: [
+                { type: 'text-delta', textDelta: 'London' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  logprobs: undefined,
+                  usage: { completionTokens: 10, promptTokens: 3 },
+                },
+              ],
+            }),
             rawCall: { rawPrompt: null, rawSettings: {} },
-            finishReason: 'stop',
-            usage: { promptTokens: 10, completionTokens: 20 },
-            text: `London`,
           }),
         }),
       });
@@ -3959,6 +4149,7 @@ describe('Workflow', () => {
           }),
         }),
       });
+
       const agent2 = new Agent({
         name: 'test-agent-2',
         instructions: 'test agent instructions',
@@ -3971,6 +4162,7 @@ describe('Workflow', () => {
           }),
         }),
       });
+
       new Mastra({
         logger: false,
         vnext_workflows: { 'test-workflow': workflow },

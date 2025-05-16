@@ -1,6 +1,7 @@
 import type { z } from 'zod';
 import type { Mastra } from '../..';
 import type { RuntimeContext } from '../../di';
+import type { EMITTER_SYMBOL } from './constants';
 import type { NewWorkflow } from './workflow';
 
 // Define a type for the execute function
@@ -21,7 +22,7 @@ export type ExecuteFunction<TStepInput, TStepOutput, TResumeSchema, TSuspendSche
     steps: string[];
     resumePayload: any;
   };
-  emitter: { emit: (event: string, data: any) => Promise<void> };
+  [EMITTER_SYMBOL]: { emit: (event: string, data: any) => Promise<void> };
 }) => Promise<TStepOutput>;
 
 // Define a Step interface
