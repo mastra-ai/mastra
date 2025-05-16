@@ -8,8 +8,8 @@ import {
 import { useEffect, useState } from "react";
 import { CustomSearch } from "./custom-search";
 import { getSearchPlaceholder } from "./search-placeholder";
-import { Button } from "./ui/button";
 import { Shortcut } from "./shortcut";
+import { Button } from "./ui/button";
 
 const INPUTS = new Set(["INPUT", "SELECT", "BUTTON", "TEXTAREA"]);
 
@@ -78,14 +78,13 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
         as="div"
         className="relative hidden md:block z-1000 focus:outline-none"
         onClose={close}
-        unmount={true}
       >
-        <DialogBackdrop className="fixed inset-0 delay-[0ms] duration-300 ease-out bg-black/50 backdrop-blur-md" />
+        <DialogBackdrop className="fixed inset-0 transition duration-250 data-closed:opacity-0 ease-out bg-black/20 backdrop-blur-md" />
         <div className="fixed inset-0 z-10 w-screen overflow-y-auto">
           <div className="flex items-start pt-[200px] justify-center min-h-full p-4">
             <DialogPanel
               transition
-              className="w-full border-[0.5px] border-borders-2 h-fit max-w-[660px] mx-auto rounded-xl bg-surface-4 duration-300 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0"
+              className="w-full border-[0.5px] border-[var(--light-border-code)] dark:border-borders-2 h-fit max-w-[660px] mx-auto rounded-xl bg-[var(--light-color-surface-15)] dark:bg-surface-4 transition duration-250 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0"
             >
               <DialogTitle as="h3" className="sr-only">
                 Search
