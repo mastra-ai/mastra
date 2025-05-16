@@ -1,4 +1,4 @@
-import { deepMerge, memoryDefaultOptions } from '@mastra/core';
+import { deepMerge } from '@mastra/core';
 import type { AiMessageType, CoreMessage, CoreTool } from '@mastra/core';
 import { MastraMemory } from '@mastra/core/memory';
 import type { MessageType, MemoryConfig, SharedMemoryConfig, StorageThreadType } from '@mastra/core/memory';
@@ -12,6 +12,9 @@ import { reorderToolCallsAndResults } from './utils';
 
 // Average characters per token based on OpenAI's tokenization
 const CHARS_PER_TOKEN = 4;
+
+const DEFAULT_MESSAGE_RANGE = { before: 2, after: 2 } as const;
+const DEFAULT_TOP_K = 2;
 
 /**
  * Concrete implementation of MastraMemory that adds support for thread configuration
@@ -70,8 +73,8 @@ export class Memory extends MastraMemory {
 
     const config = this.getMergedThreadConfig(threadConfig || {});
 
-    const defaultRange = memoryDefaultOptions.semanticRecall.messageRange;
-    const defaultTopK = memoryDefaultOptions.semanticRecall.topK;
+    const defaultRange = DEFAULT_MESSAGE_RANGE;
+    const defaultTopK = DEFAULT_TOP_K;
 
     const vectorConfig =
       typeof config?.semanticRecall === `boolean`
@@ -511,11 +514,7 @@ export class Memory extends MastraMemory {
       return null;
     }
 
-    if (config.workingMemory.use === 'tool-call') {
-      return this.getWorkingMemoryToolInstruction(workingMemory);
-    }
-
-    return this.getWorkingMemoryWithInstruction(workingMemory);
+    return this.getWorkingMemoryToolInstruction(workingMemory);
   }
 
   public defaultWorkingMemoryTemplate = `
@@ -580,7 +579,7 @@ Notes:
 
   public getTools(config?: MemoryConfig): Record<string, CoreTool> {
     const mergedConfig = this.getMergedThreadConfig(config);
-    if (mergedConfig.workingMemory?.enabled && mergedConfig.workingMemory.use === 'tool-call') {
+    if (mergedConfig.workingMemory?.enabled) {
       return {
         updateWorkingMemory: updateWorkingMemoryTool,
       };
