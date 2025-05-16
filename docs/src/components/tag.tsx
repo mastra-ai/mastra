@@ -15,7 +15,7 @@ type TagProps = {
     }
 );
 
-export const Tag = ({ children, text = "new", showAbbr }: TagProps) => {
+export const Tag = ({ children, text, showAbbr }: TagProps) => {
   const isDark = useThemeDetector();
 
   // Set default showAbbr based on text type
