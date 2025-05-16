@@ -2,9 +2,8 @@ import { v4 as uuid } from '@lukeed/uuid';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { Threads, ThreadList, ThreadItem, ThreadLink, Icon, ThreadDeleteButton } from '@mastra/playground-ui';
+import { Threads, ThreadList, ThreadItem, ThreadLink, Icon, ThreadDeleteButton, Txt } from '@mastra/playground-ui';
 import { AlertDialog } from '@/components/ui/alert-dialog';
-import { Button } from '@/components/ui/button';
 
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -57,21 +56,7 @@ export function AgentSidebar({
     );
   }
 
-  if (!threads?.length) {
-    return (
-      <div className="p-4 w-full space-y-2 h-full">
-        <div className="flex justify-between items-center">
-          <div className="text-sm text-mastra-el-5">Chat history</div>
-          <Button onClick={() => navigate(`/agents/${agentId}/chat/${uuid()}`)}>
-            <Plus />
-          </Button>
-        </div>
-        <div className="text-sm text-mastra-el-3">Your conversations will appear here once you start chatting!</div>
-      </div>
-    );
-  }
-
-  const reverseThreads = [...threads].reverse();
+  const reverseThreads = [...(threads || [])].reverse();
 
   return (
     <>
@@ -87,6 +72,12 @@ export function AgentSidebar({
               </span>
             </ThreadLink>
           </ThreadItem>
+
+          {reverseThreads.length === 0 && (
+            <Txt as="p" variant="ui-sm" className="text-icon3 py-3 px-5">
+              Your conversations will appear here once you start chatting!
+            </Txt>
+          )}
 
           {reverseThreads.map(thread => {
             const isActive = thread.id === threadId;

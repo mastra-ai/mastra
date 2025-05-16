@@ -29,7 +29,7 @@ export const NextraLayout = ({
       search={<SearchWrapper locale={locale} />}
       navbar={
         <div className="flex  sticky top-0 z-30 bg-[var(--primary-bg)] flex-col">
-          <Nav stars={stars} />
+          <Nav stars={stars} locale={locale} />
           <TabSwitcher />
         </div>
       }
