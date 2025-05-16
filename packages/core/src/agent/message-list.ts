@@ -25,17 +25,8 @@ export type MastraMessageV2 = {
 
 type MessageInput = UIMessage | Message | MessageType | CoreMessage | MastraMessageV2;
 
-export type MessageListItem = {
-  id: MastraMessageV2['id'];
-  role: MastraMessageV2['role'];
-  createdAt: MastraMessageV2['createdAt'];
-  content: MastraMessageContentV2;
-  threadId?: string;
-  resourceId?: string;
-};
-
 export class MessageList {
-  private messages: MessageListItem[] = [];
+  private messages: MastraMessageV2[] = [];
   private memoryInfo: null | { threadId: string; resourceId?: string } = null;
 
   constructor({
@@ -58,13 +49,13 @@ export class MessageList {
 
     return this;
   }
-  public getMessages(): MessageListItem[] {
+  public getMessages(): MastraMessageV2[] {
     return this.messages;
   }
   public toUIMessages(): UIMessage[] {
     return this.messages.map(MessageList.toUIMessage);
   }
-  private static toUIMessage(m: MessageListItem): UIMessage {
+  private static toUIMessage(m: MastraMessageV2): UIMessage {
     const contentString =
       typeof m.content.content === `string` && m.content.content !== ''
         ? m.content.content

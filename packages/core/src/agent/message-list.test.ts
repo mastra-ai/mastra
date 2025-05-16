@@ -3,7 +3,7 @@ import { appendClientMessage, appendResponseMessages } from 'ai';
 import type { UIMessage, CoreMessage, Message } from 'ai';
 import { describe, expect, it } from 'vitest';
 import type { MessageType } from '../memory';
-import type { MessageListItem } from './message-list';
+import type { MastraMessageV2 } from './message-list';
 import { MessageList, toBase64String } from './message-list';
 
 type VercelUIMessage = Message;
@@ -41,7 +41,7 @@ describe('MessageList', () => {
         },
         threadId,
         resourceId,
-      } satisfies MessageListItem);
+      } satisfies MastraMessageV2);
     });
 
     it('should correctly convert and add a Vercel CoreMessage with string content', () => {
@@ -69,7 +69,7 @@ describe('MessageList', () => {
         },
         threadId,
         resourceId,
-      } satisfies MessageListItem);
+      } satisfies MastraMessageV2);
     });
 
     it('should correctly merge a tool result CoreMessage with the preceding assistant message', () => {
@@ -164,7 +164,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -193,7 +193,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -236,7 +236,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -380,7 +380,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -409,7 +409,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -450,7 +450,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -484,7 +484,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -557,7 +557,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -634,7 +634,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
         {
           id: expect.any(String),
           role: 'user',
@@ -646,7 +646,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -682,7 +682,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -711,7 +711,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -752,7 +752,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -786,7 +786,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -859,7 +859,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -936,7 +936,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
         {
           id: expect.any(String),
           role: 'user',
@@ -948,7 +948,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -998,7 +998,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
         {
           id: expect.any(String), // Should be the ID of the first assistant message in the sequence
           role: 'assistant',
@@ -1033,7 +1033,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -1069,7 +1069,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -1098,7 +1098,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -1139,7 +1139,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -1173,7 +1173,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -1246,7 +1246,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -1323,7 +1323,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
         {
           id: expect.any(String),
           role: 'user',
@@ -1335,7 +1335,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -1371,7 +1371,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -1400,7 +1400,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -1441,7 +1441,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -1475,7 +1475,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -1548,7 +1548,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -1625,7 +1625,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
         {
           id: expect.any(String),
           role: 'user',
@@ -1637,7 +1637,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -1680,7 +1680,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -1718,7 +1718,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -1760,7 +1760,7 @@ describe('MessageList', () => {
         },
         threadId,
         resourceId,
-      } satisfies MessageListItem);
+      } satisfies MastraMessageV2);
     });
 
     it('should correctly convert and add a Vercel UIMessage with text and experimental_attachments', () => {
@@ -1801,7 +1801,7 @@ describe('MessageList', () => {
         },
         threadId,
         resourceId,
-      } satisfies MessageListItem);
+      } satisfies MastraMessageV2);
     });
 
     it('should correctly handle a mixed sequence of Mastra V1 and Vercel UIMessages with tool calls and results', () => {
@@ -1865,7 +1865,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
         {
           id: assistantMsgV1.id, // Should retain the original assistant message ID
           role: 'assistant',
@@ -1890,7 +1890,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -1941,7 +1941,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
         {
           id: expect.any(String), // Should be the ID of the first assistant message in the sequence
           role: 'assistant',
@@ -1967,7 +1967,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -2000,7 +2000,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -2050,7 +2050,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -2107,7 +2107,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
         {
           id: expect.any(String), // Should be the ID of the first assistant message in the sequence
           role: 'assistant',
@@ -2144,7 +2144,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -2184,7 +2184,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
@@ -2222,7 +2222,7 @@ describe('MessageList', () => {
           },
           threadId,
           resourceId,
-        } satisfies MessageListItem,
+        } satisfies MastraMessageV2,
       ]);
     });
 
