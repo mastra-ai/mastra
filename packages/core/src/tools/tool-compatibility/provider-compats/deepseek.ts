@@ -19,6 +19,8 @@ export class DeepSeekToolCompat extends ToolCompatibility {
 
   processZodType<T extends z.AnyZodObject>(value: z.ZodTypeAny): ShapeValue<T> {
     switch (value._def.typeName) {
+      case 'ZodOptional':
+        return this.defaultZodOptionalHandler(value, ['ZodObject', 'ZodArray', 'ZodUnion', 'ZodString', 'ZodNumber']);
       case 'ZodObject': {
         return this.defaultZodObjectHandler(value);
       }
