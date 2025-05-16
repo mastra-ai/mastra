@@ -13,8 +13,12 @@
     "dev": "tsup --watch",
     "clean": "rm -rf dist",
     "lint": "eslint .",
+    "pretest": "docker compose up -d",
     "test": "vitest run",
+    "posttest": "docker compose down -v",
+    "pretest:watch": "docker compose up -d",
     "test:watch": "vitest watch",
+    "posttest:watch": "docker compose down -v",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
