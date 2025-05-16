@@ -5,6 +5,7 @@ import { MastraVoice } from '@mastra/core/voice';
 import type { Realtime, RealtimeServerEvents } from 'openai-realtime-api';
 import { WebSocket } from 'ws';
 import { isReadableStream, transformTools } from './utils';
+import type { RuntimeContext } from '@mastra/core/runtime-context';
 
 /**
  * Event callback function type
@@ -113,7 +114,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
   private debug: boolean;
   private queue: unknown[] = [];
   private transcriber: Realtime.AudioTranscriptionModel;
-
+  private runtimeContext?: RuntimeContext;
   /**
    * Creates a new instance of OpenAIRealtimeVoice.
    *
@@ -363,9 +364,11 @@ export class OpenAIRealtimeVoice extends MastraVoice {
    * // Now ready for voice interactions
    * ```
    */
-  async connect() {
+  async connect({ runtimeContext }: { runtimeContext?: RuntimeContext } = {}) {
     const url = `${this.options.url || DEFAULT_URL}?model=${this.options.model || DEFAULT_MODEL}`;
     const apiKey = this.options.apiKey || process.env.OPENAI_API_KEY;
+    this.runtimeContext = runtimeContext;
+
     this.ws = new WebSocket(url, undefined, {
       headers: {
         Authorization: 'Bearer ' + apiKey,
@@ -634,7 +637,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
       }
 
       const result = await tool?.execute?.(
-        { context },
+        { context, runtimeContext: this.runtimeContext },
         {
           toolCallId: output.call_id,
           messages: [],
