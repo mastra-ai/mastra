@@ -56,6 +56,40 @@ const results = await vectorDB.query({
 await vectorDB.disconnect();
 ```
 
+### Storage
+
+```typescript
+import { MongoDBStore } from '@mastra/mongodb';
+
+const store = new MongoDBStore({
+  uri: 'mongodb://mongodb:mongodb@localhost:27018/?authSource=admin&directConnection=true',
+  dbName: 'mastra',
+});
+
+// Create a thread
+await store.saveThread({
+  id: 'thread-123',
+  resourceId: 'resource-456',
+  title: 'My Thread',
+  metadata: { key: 'value' },
+});
+
+// Add messages to thread
+await store.saveMessages([
+  {
+    id: 'msg-789',
+    threadId: 'thread-123',
+    role: 'user',
+    type: 'text',
+    content: [{ type: 'text', text: 'Hello' }],
+  },
+]);
+
+// Query threads and messages
+const savedThread = await store.getThread('thread-123');
+const messages = await store.getMessages('thread-123');
+```
+
 ## Configuration
 
 The MongoDB vector store is initialized with:
@@ -82,6 +116,13 @@ const vectorDB = new MongoDBVector({
 - Automatic UUID generation for vectors
 - Collection (index) management: create, list, describe, delete
 - Atlas Search readiness checks for reliable testing
+
+### Storage Features
+
+- Thread and message storage with JSON support
+- Efficient batch operations
+- Rich metadata support
+- Timestamp tracking
 
 ## Supported Filter Operators
 
@@ -120,6 +161,15 @@ The following distance metrics are supported:
 - `deleteIndexById(indexName, id)`: Delete a vector by ID
 - `deleteIndex(indexName)`: Delete a collection
 - `disconnect()`: Close the MongoDB connection
+
+## Storage Methods
+
+- `saveThread(thread)`: Create or update a thread
+- `getThread(threadId)`: Get a thread by ID
+- `deleteThread(threadId)`: Delete a thread and its messages
+- `saveMessages(messages)`: Save multiple messages in a transaction
+- `getMessages(threadId)`: Get all messages for a thread
+- `deleteMessages(messageIds)`: Delete specific messages
 
 ## Query Response Format
 

@@ -35,6 +35,7 @@
     "generate:integration": "pnpx tsx ./integration-generator/index.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",
+    "test:watch:combined-stores": "pnpm --filter \"./stores/*\" test:watch",
     "test:cli": "pnpm --filter ./packages/cli test",
     "test:core": "pnpm --filter ./packages/core test --exclude \"./src/tools/tool-compatibility/**\"",
     "test:mcp": "pnpm --filter ./packages/mcp test",
