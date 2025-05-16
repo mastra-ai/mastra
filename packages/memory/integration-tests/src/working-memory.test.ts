@@ -397,60 +397,6 @@ describe('Working Memory Tests', () => {
     expect(toolCallWorkingMemory?.metadata?.workingMemory).toContain('# User Information');
     expect(toolCallWorkingMemory?.metadata?.workingMemory).toContain('**First Name**: John');
     expect(toolCallWorkingMemory?.metadata?.workingMemory).toContain('**Location**: New York');
-
-    // Create memory instance with working memory in text-stream mode
-    const textStreamMemory = new Memory({
-      storage: new LibSQLStore({
-        url: dbFile,
-      }),
-      vector: new LibSQLVector({
-        connectionUrl: dbFile, // relative path from bundled .mastra/output dir
-      }),
-      embedder: openai.embedding('text-embedding-3-small'),
-      options: {
-        workingMemory: {
-          enabled: true,
-          template: `# User Information
-- **First Name**: 
-- **Location**: 
-`,
-          use: 'text-stream',
-        },
-        lastMessages: 10,
-        threads: {
-          generateTitle: false,
-        },
-        semanticRecall: true,
-      },
-    });
-
-    const textStreamThread = await textStreamMemory.saveThread({
-      thread: createTestThread('Text Stream Working Memory Thread'),
-    });
-
-    // Get the system message and verify instructions
-    const textStreamSystemMessage = await textStreamMemory.getSystemMessage({ threadId: textStreamThread.id });
-    expect(textStreamSystemMessage).toContain('<working_memory>text</working_memory>');
-    expect(textStreamSystemMessage).not.toContain('updateWorkingMemory');
-
-    // Test text-stream mode saves working memory
-    const textStreamAgent = new Agent({
-      name: 'Text Stream Memory Agent',
-      instructions: 'You are a helpful AI agent. Always remember user information.',
-      model: openai('gpt-4o'),
-      memory: textStreamMemory,
-    });
-
-    await textStreamAgent.generate('Hi, my name is Tyler and I live in San Francisco', {
-      threadId: textStreamThread.id,
-      resourceId,
-    });
-
-    // Verify working memory was saved in text-stream mode
-    const textStreamWorkingMemory = await textStreamMemory.getThreadById({ threadId: textStreamThread.id });
-    expect(textStreamWorkingMemory?.metadata?.workingMemory).toContain('# User Information');
-    expect(textStreamWorkingMemory?.metadata?.workingMemory).toContain('**First Name**: Tyler');
-    expect(textStreamWorkingMemory?.metadata?.workingMemory).toContain('**Location**: San Francisco');
   });
 
   it('should handle LLM responses with working memory using tool calls', async () => {

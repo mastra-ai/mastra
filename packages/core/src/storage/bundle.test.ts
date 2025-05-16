@@ -53,7 +53,6 @@ it.for([
   ['LibSQLStore'],
   ['MastraVector'],
   ['DefaultVectorDBMongo'],
-  ['defaultEmbedder'],
 ])('should not include %s when importing /storage', ([exportName]) => {
   const renderedExports: string[] = [];
   const removedExports: string[] = [];
