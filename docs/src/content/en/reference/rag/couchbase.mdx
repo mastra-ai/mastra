@@ -1,0 +1,316 @@
+---
+title: "Reference: Couchbase Vector Store | Vector Databases | RAG | Mastra Docs"
+description: Documentation for the CouchbaseVector class in Mastra, which provides vector search using Couchbase Vector Search.
+---
+
+# Couchbase Vector Store
+
+The `CouchbaseVector` class provides vector search using [Couchbase Vector Search](https://docs.couchbase.com/server/current/vector-search/vector-search.html). It enables efficient similarity search and metadata filtering within your Couchbase collections.
+
+## Installation
+
+```bash copy
+npm install @mastra/couchbase
+```
+
+## Usage Example
+
+```typescript copy showLineNumbers
+import { CouchbaseVector } from '@mastra/couchbase';
+
+const store = new CouchbaseVector({
+  connectionString: process.env.COUCHBASE_CONNECTION_STRING,
+  username: process.env.COUCHBASE_USERNAME,
+  password: process.env.COUCHBASE_PASSWORD,
+  bucketName: process.env.COUCHBASE_BUCKET,
+});
+```
+
+## Constructor Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "connectionString",
+      type: "string",
+      description: "Couchbase connection string",
+    },
+    {
+      name: "username",
+      type: "string",
+      description: "Couchbase username",
+    },
+    {
+      name: "password",
+      type: "string",
+      description: "Couchbase password",
+    },
+    {
+      name: "bucketName",
+      type: "string",
+      description: "Name of the Couchbase bucket to use",
+    },
+    {
+      name: "options",
+      type: "CouchbaseClientOptions",
+      isOptional: true,
+      description: "Optional Couchbase client options",
+    },
+  ]}
+/>
+
+## Methods
+
+### createIndex()
+
+Creates a new vector index in Couchbase.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to create (see naming rules below)",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "Vector dimension (must match your embedding model)",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description: "Distance metric for similarity search",
+    },
+  ]}
+/>
+
+### upsert()
+
+Adds or updates vectors and their metadata in the collection.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to insert into",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "Array of embedding vectors",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "Metadata for each vector",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "Optional vector IDs (auto-generated if not provided)",
+    },
+  ]}
+/>
+
+### query()
+
+Searches for similar vectors with optional metadata filtering.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to search in",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "Query vector to find similar vectors for",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "Number of results to return",
+    },
+    {
+      name: "filter",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "Metadata filters",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "Whether to include vector data in results",
+    },
+    {
+      name: "minScore",
+      type: "number",
+      isOptional: true,
+      defaultValue: "0",
+      description: "Minimum similarity score threshold",
+    },
+  ]}
+/>
+
+### describeIndex()
+
+Returns information about the index.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to describe",
+    },
+  ]}
+/>
+
+Returns:
+
+```typescript copy
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+### deleteIndex()
+
+Deletes an index and all its data.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index to delete",
+    },
+  ]}
+/>
+
+### listIndexes()
+
+Lists all vector indexes in the Couchbase bucket.
+
+Returns: `Promise<string[]>`
+
+### updateIndexById()
+
+Updates a specific vector entry by its ID with new vector data and/or metadata.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the vector",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "ID of the vector entry to update",
+    },
+    {
+      name: "update",
+      type: "object",
+      description: "Update data containing vector and/or metadata",
+    },
+    {
+      name: "update.vector",
+      type: "number[]",
+      isOptional: true,
+      description: "New vector data to update",
+    },
+    {
+      name: "update.metadata",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "New metadata to update",
+    },
+  ]}
+/>
+
+### deleteIndexById()
+
+Deletes a specific vector entry from an index by its ID.
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the index containing the vector",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "ID of the vector entry to delete",
+    },
+  ]}
+/>
+
+### disconnect()
+
+Closes the Couchbase client connection. Should be called when done using the store.
+
+## Response Types
+
+Query results are returned in this format:
+
+```typescript copy
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  vector?: number[]; // Only included if includeVector is true
+}
+```
+
+## Error Handling
+
+The store throws typed errors that can be caught:
+
+```typescript copy
+try {
+  await store.query({
+    indexName: "my_index",
+    queryVector: queryVector,
+  });
+} catch (error) {
+  // Handle specific error cases
+  if (error.message.includes("Invalid index name")) {
+    console.error(
+      "Index name must start with a letter or underscore and contain only valid characters."
+    );
+  } else if (error.message.includes("Index not found")) {
+    console.error("The specified index does not exist");
+  } else {
+    console.error("Vector store error:", error.message);
+  }
+}
+```
+
+## Best Practices
+
+- Index metadata fields used in filters for optimal query performance
+- Use consistent field naming in metadata to avoid unexpected query results
+- Regularly monitor index statistics to ensure efficient search
+- Consider using Couchbase's built-in replication and persistence features for data durability
+
+## Related
+
+- [Metadata Filters](./metadata-filters) 

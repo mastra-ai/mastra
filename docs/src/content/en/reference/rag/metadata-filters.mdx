@@ -316,6 +316,20 @@ const results = await store.query({
 - No artificial limits on filter size or complexity (subject to MongoDB query limits)
 - Indexing metadata fields is recommended for optimal performance
 
+### Couchbase
+- Supports all standard comparison, array, logical, and element operators
+- Metadata fields must be explicitly indexed for optimal filtering performance
+- Nested field queries are supported using dot notation
+- Array fields must be explicitly defined as arrays in the metadata
+- Metadata values are case-sensitive
+- Filter JSON must be under 2048 bytes
+- Field names cannot contain dots (.) or start with $
+- Field names limited to 512 characters
+- Vectors must be re-upserted after creating new metadata indexes to be included in filtered results
+- Supports complex queries with multiple conditions and nested operators
+- Efficient handling of array operations using native array functions
+- Proper type handling for numbers, strings, and booleans
+
 ## Related
 
 - [Astra](./astra)

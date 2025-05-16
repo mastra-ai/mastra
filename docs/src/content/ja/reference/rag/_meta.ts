@@ -12,6 +12,7 @@ export default {
   pg: "PgVector",
   libsql: "LibSQLVector",
   pinecone: "PineconeVector",
+  couchbase: "CouchbaseVector",
   qdrant: "QdrantVector",
   turbopuffer: "TurboPuffer",
   upstash: "UpstashVector",

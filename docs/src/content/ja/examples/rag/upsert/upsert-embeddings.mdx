@@ -10,7 +10,7 @@ import { GithubLink } from "@/components/github-link";
 
 埋め込みを生成した後、それらをベクトル類似検索をサポートするデータベースに保存する必要があります。この例では、後で取得するために埋め込みをさまざまなベクトルデータベースに保存する方法を示します。
 
-<Tabs items={['PgVector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra DB', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB']}>
+<Tabs items={['PgVector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra DB', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB', 'Couchbase']}>
   <Tabs.Tab>
     `PgVector`クラスは、pgvector拡張機能を使用してPostgreSQLにインデックスを作成し、埋め込みを挿入するためのメソッドを提供します。
 
@@ -376,5 +376,53 @@ import { GithubLink } from "@/components/github-link";
     });
     ```
 
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    `CouchbaseVector`クラスは、ベクトル検索機能を備えた分散型NoSQLデータベースであるCouchbaseに埋め込みを保存するためのメソッドを提供します。
+
+    ```tsx copy
+    import { openai } from '@ai-sdk/openai';
+    import { CouchbaseVector } from '@mastra/couchbase';
+    import { MDocument } from '@mastra/rag';
+    import { embedMany } from 'ai';
+
+    const doc = MDocument.fromText('テキストコンテンツ...');
+
+    const chunks = await doc.chunk();
+
+    const { embeddings } = await embedMany({
+      values: chunks.map(chunk => chunk.text),
+      model: openai.embedding('text-embedding-3-small'),
+    });
+
+    const couchbase = new CouchbaseVector({
+      connectionString: process.env.COUCHBASE_CONNECTION_STRING,
+      username: process.env.COUCHBASE_USERNAME,
+      password: process.env.COUCHBASE_PASSWORD,
+      bucketName: process.env.COUCHBASE_BUCKET,
+    });
+
+    await couchbase.createIndex({
+      indexName: 'test_collection',
+      dimension: 1536,
+    });
+
+    await couchbase.upsert({
+      indexName: 'test_collection',
+      vectors: embeddings,
+      metadata: chunks?.map(chunk => ({ text: chunk.text })),
+    });
+    ```
+
+    <br />
+
+    <hr className="dark:border-[#404040] border-gray-300" />
+
+    <br />
+
+    <GithubLink 
+      link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-couchbase'} 
+    />
   </Tabs.Tab>
 </Tabs>
