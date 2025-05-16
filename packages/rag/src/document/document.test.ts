@@ -114,7 +114,7 @@ describe('MDocument', () => {
         isSeparatorRegex: false,
         size: 50,
         overlap: 5,
-        keepSeparator: 'end',
+        separatorPosition: 'end',
       });
       const chunks = doc.getText();
 
@@ -134,7 +134,7 @@ describe('MDocument', () => {
           isSeparatorRegex: false,
           size: 50,
           overlap: 5,
-          keepSeparator: 'end',
+          separatorPosition: 'end',
         });
 
         const chunks = doc.getText();
@@ -155,7 +155,7 @@ describe('MDocument', () => {
           isSeparatorRegex: false,
           size: 50,
           overlap: 5,
-          keepSeparator: 'start',
+          separatorPosition: 'start',
         });
 
         const chunks = doc.getText();
@@ -177,7 +177,7 @@ describe('MDocument', () => {
           isSeparatorRegex: false,
           size: 50,
           overlap: 5,
-          keepSeparator: 'end',
+          separatorPosition: 'end',
         });
 
         const chunks = doc.getText();
@@ -197,7 +197,7 @@ describe('MDocument', () => {
           isSeparatorRegex: false,
           size: 50,
           overlap: 5,
-          keepSeparator: 'end',
+          separatorPosition: 'end',
         });
 
         const chunks = doc.getText();
@@ -217,7 +217,7 @@ describe('MDocument', () => {
           isSeparatorRegex: false,
           size: 50,
           overlap: 5,
-          keepSeparator: 'start',
+          separatorPosition: 'start',
         });
 
         const chunks = doc.getText();

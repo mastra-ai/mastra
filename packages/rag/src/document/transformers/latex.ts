@@ -9,6 +9,7 @@ export class LatexTransformer extends RecursiveCharacterTransformer {
       overlap?: number;
       lengthFunction?: (text: string) => number;
       keepSeparator?: boolean | 'start' | 'end';
+      separatorPosition?: 'start' | 'end';
       addStartIndex?: boolean;
       stripWhitespace?: boolean;
     } = {},

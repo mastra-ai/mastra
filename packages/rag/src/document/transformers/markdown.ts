@@ -22,6 +22,7 @@ export class MarkdownTransformer extends RecursiveCharacterTransformer {
       chunkOverlap?: number;
       lengthFunction?: (text: string) => number;
       keepSeparator?: boolean | 'start' | 'end';
+      separatorPosition?: 'start' | 'end';
       addStartIndex?: boolean;
       stripWhitespace?: boolean;
     } = {},

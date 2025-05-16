@@ -9,6 +9,7 @@ export abstract class TextTransformer implements Transformer {
   protected overlap: number;
   protected lengthFunction: (text: string) => number;
   protected keepSeparator: boolean | 'start' | 'end';
+  protected separatorPosition?: 'start' | 'end';
   protected addStartIndex: boolean;
   protected stripWhitespace: boolean;
 
@@ -17,16 +18,27 @@ export abstract class TextTransformer implements Transformer {
     overlap = 200,
     lengthFunction = (text: string) => text.length,
     keepSeparator = false,
+    separatorPosition,
     addStartIndex = false,
     stripWhitespace = true,
   }: ChunkOptions) {
     if (overlap > size) {
       throw new Error(`Got a larger chunk overlap (${overlap}) than chunk size ` + `(${size}), should be smaller.`);
     }
+    if (keepSeparator !== undefined) {
+      // Runtime warning for deprecated usage
+      console.warn(
+        '[DEPRECATION] `keepSeparator` is deprecated and will be removed after May 20th, 2025. Use `separatorPosition` instead.',
+      );
+      if (keepSeparator === 'end') separatorPosition = 'end';
+      else if (keepSeparator === 'start') separatorPosition = 'start';
+      else if (keepSeparator === true) separatorPosition = 'start';
+    }
     this.size = size;
     this.overlap = overlap;
     this.lengthFunction = lengthFunction;
     this.keepSeparator = keepSeparator;
+    this.separatorPosition = separatorPosition;
     this.addStartIndex = addStartIndex;
     this.stripWhitespace = stripWhitespace;
   }

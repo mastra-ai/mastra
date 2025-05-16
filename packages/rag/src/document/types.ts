@@ -54,7 +54,19 @@ export type ChunkOptions = {
   minSize?: number;
   overlap?: number;
   lengthFunction?: (text: string) => number;
+  /**
+   * @deprecated Use `separatorPosition` instead. This option will be removed after May 20th, 2025.
+   * If provided, a runtime warning should be emitted.
+   */
   keepSeparator?: boolean | 'start' | 'end';
+
+  /**
+   * Controls where the separator appears in the chunk. Replaces `keepSeparator`.
+   * - 'start': separator appears at the start of the chunk
+   * - 'end': separator appears at the end of the chunk
+   * If not provided, the separator is omitted.
+   */
+  separatorPosition?: 'start' | 'end';
   addStartIndex?: boolean;
   stripWhitespace?: boolean;
   language?: Language;

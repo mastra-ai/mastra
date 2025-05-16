@@ -81,11 +81,11 @@ const chunksWithMetadata = await doc.chunk({
       description: "Whether the separator is a regex pattern",
     },
     {
-      name: "keepSeparator",
+      name: "separatorPosition",
       type: "'start' | 'end'",
       isOptional: true,
       description:
-        "Whether to keep the separator at the start or end of chunks",
+        "Whether to keep the separator at the start or end of chunks. Defaults to 'none' if not specified.",
     },
     {
       name: "extract",
