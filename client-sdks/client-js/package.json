@@ -29,14 +29,14 @@
   "dependencies": {
     "@ag-ui/client": "^0.0.27",
     "@ai-sdk/ui-utils": "^1.1.19",
-    "@mastra/core": "workspace:^",
     "json-schema": "^0.4.0",
     "rxjs": "7.8.1",
     "zod": "^3.24.3",
     "zod-to-json-schema": "^3.24.5"
   },
   "peerDependencies": {
-    "zod": "^3.0.0"
+    "zod": "^3.0.0",
+    "@mastra/core": "^0.9.4"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.26.9",
@@ -47,6 +47,7 @@
     "@types/node": "^20.17.27",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
-    "vitest": "^3.1.2"
+    "vitest": "^3.1.2",
+    "@mastra/core": "workspace:*"
   }
 }

@@ -34,7 +34,6 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@mastra/core": "workspace:^",
     "async-mutex": "^0.5.0",
     "pg": "^8.13.3",
     "pg-promise": "^11.11.0",
@@ -48,6 +47,10 @@
     "eslint": "^9.23.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
-    "vitest": "^3.1.2"
+    "vitest": "^3.1.2",
+    "@mastra/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@mastra/core": "^0.9.4"
   }
 }

@@ -26,7 +26,6 @@
   },
   "license": "Elastic-2.0",
   "dependencies": {
-    "@mastra/core": "workspace:^",
     "microsoft-cognitiveservices-speech-sdk": "^1.43.0"
   },
   "devDependencies": {
@@ -36,6 +35,10 @@
     "eslint": "^9.23.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
-    "vitest": "^2.1.9"
+    "vitest": "^2.1.9",
+    "@mastra/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@mastra/core": "^0.9.4"
   }
 }

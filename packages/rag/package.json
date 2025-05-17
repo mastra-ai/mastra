@@ -27,7 +27,6 @@
   "author": "",
   "license": "Elastic-2.0",
   "dependencies": {
-    "@mastra/core": "workspace:^",
     "@paralleldrive/cuid2": "^2.2.2",
     "js-tiktoken": "^1.0.19",
     "node-html-better-parser": "^1.4.7",
@@ -35,7 +34,8 @@
     "zod": "^3.24.3"
   },
   "peerDependencies": {
-    "ai": "^4.0.0"
+    "ai": "^4.0.0",
+    "@mastra/core": "^0.9.4"
   },
   "devDependencies": {
     "@ai-sdk/cohere": "latest",
@@ -48,7 +48,8 @@
     "eslint": "^9.23.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
-    "vitest": "^3.1.2"
+    "vitest": "^3.1.2",
+    "@mastra/core": "workspace:*"
   },
   "keywords": [
     "rag",

@@ -29,7 +29,6 @@
   },
   "license": "Elastic-2.0",
   "dependencies": {
-    "@mastra/core": "workspace:^",
     "elevenlabs": "^1.57.0",
     "zod": "^3.24.3"
   },
@@ -40,6 +39,10 @@
     "eslint": "^9.25.1",
     "tsup": "^8.4.0",
     "typescript": "^5.8.3",
-    "vitest": "^2.1.9"
+    "vitest": "^2.1.9",
+    "@mastra/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@mastra/core": "^0.9.4"
   }
 }

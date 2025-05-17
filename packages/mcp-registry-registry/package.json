@@ -30,7 +30,6 @@
   "author": "",
   "license": "Elastic-2.0",
   "dependencies": {
-    "@mastra/core": "workspace:^",
     "@modelcontextprotocol/sdk": "^1.9.0",
     "uuid": "^11.1.0",
     "zod": "^3.24.3",
@@ -48,6 +47,10 @@
     "tsup": "^8.4.0",
     "tsx": "^4.19.3",
     "typescript": "^5.3.3",
-    "vitest": "^3.1.2"
+    "vitest": "^3.1.2",
+    "@mastra/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@mastra/core": "^0.9.4"
   }
 }

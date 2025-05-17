@@ -30,7 +30,6 @@
   },
   "license": "Elastic-2.0",
   "dependencies": {
-    "@mastra/core": "workspace:^",
     "cloudflare": "^4.2.0",
     "zod": "^3.24.3"
   },
@@ -42,7 +41,8 @@
     "eslint": "^9.23.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
-    "vitest": "^2.1.9"
+    "vitest": "^2.1.9",
+    "@mastra/core": "workspace:*"
   },
   "keywords": [
     "mastra",
@@ -53,5 +53,8 @@
     "speech-to-text",
     "text-to-speech",
     "speech-recognition"
-  ]
+  ],
+  "peerDependencies": {
+    "@mastra/core": "^0.9.4"
+  }
 }

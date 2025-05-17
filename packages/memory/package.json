@@ -41,7 +41,6 @@
   "author": "",
   "license": "Elastic-2.0",
   "dependencies": {
-    "@mastra/core": "workspace:^",
     "@upstash/redis": "^1.34.5",
     "ai": "^4.2.2",
     "js-tiktoken": "^1.0.19",
@@ -62,6 +61,10 @@
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
     "typescript-eslint": "^8.26.1",
-    "vitest": "^3.1.2"
+    "vitest": "^3.1.2",
+    "@mastra/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@mastra/core": "^0.9.4"
   }
 }

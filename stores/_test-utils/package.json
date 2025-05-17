@@ -12,10 +12,11 @@
   "keywords": [],
   "author": "",
   "license": "Elastic-2.0",
-  "dependencies": {
-    "@mastra/core": "workspace:*"
-  },
   "peerDependencies": {
-    "vitest": "*"
+    "vitest": "*",
+    "@mastra/core": "^0.9.4"
+  },
+  "devDependencies": {
+    "@mastra/core": "workspace:*"
   }
 }

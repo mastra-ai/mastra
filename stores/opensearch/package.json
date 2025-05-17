@@ -30,7 +30,6 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@mastra/core": "workspace:^",
     "@opensearch-project/opensearch": "^3.4.0"
   },
   "devDependencies": {
@@ -40,6 +39,10 @@
     "eslint": "^9.22.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
-    "vitest": "^3.0.8"
+    "vitest": "^3.0.8",
+    "@mastra/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@mastra/core": "^0.9.4"
   }
 }
