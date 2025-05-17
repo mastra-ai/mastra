@@ -55,6 +55,7 @@ const createSampleTrace = () => ({
 
 const createSampleEval = () => ({
   agent_name: 'test-agent',
+  agent_version: '1.0.0',
   run_id: 'test-run-1',
   result: '{ "score": 1 }',
   createdAt: new Date(),

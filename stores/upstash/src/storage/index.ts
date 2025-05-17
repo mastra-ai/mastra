@@ -118,6 +118,7 @@ export class UpstashStore extends MastraStorage {
 
     return {
       agentName: record.agent_name,
+      agentVersion: record.agent_version,
       input: record.input,
       output: record.output,
       result: result as MetricResult,

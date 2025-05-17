@@ -120,6 +120,7 @@ export class CloudflareDeployer extends Deployer {
             output: traceObject.output,
             result: JSON.stringify(traceObject.result || {}),
             agent_name: traceObject.agentName,
+            agent_version: traceObject.agentVersion,
             metric_name: traceObject.metricName,
             instructions: traceObject.instructions,
             test_info: null,

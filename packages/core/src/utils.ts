@@ -367,6 +367,7 @@ export function checkEvalStorageFields(traceObject: any, logger?: Logger) {
   if (!traceObject.input) missingFields.push('input');
   if (!traceObject.output) missingFields.push('output');
   if (!traceObject.agentName) missingFields.push('agent_name');
+  if (!traceObject.agentVersion) missingFields.push('agent_version');
   if (!traceObject.metricName) missingFields.push('metric_name');
   if (!traceObject.instructions) missingFields.push('instructions');
   if (!traceObject.globalRunId) missingFields.push('global_run_id');

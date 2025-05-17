@@ -422,6 +422,7 @@ export class LibSQLStore extends MastraStorage {
       output: row.output as string,
       result: resultValue as MetricResult,
       agentName: row.agent_name as string,
+      agentVersion: row.agent_version as string,
       metricName: row.metric_name as string,
       instructions: row.instructions as string,
       testInfo: testInfoValue as TestInfo,
