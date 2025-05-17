@@ -23,6 +23,7 @@ import type { MastraLanguageModel } from '../agent/types';
 import type { Run } from '../run/types';
 import type { RuntimeContext } from '../runtime-context';
 import type { CoreTool } from '../tools/types';
+import type { Prettify } from '../utils';
 
 export { createMockModel } from './model/mock';
 
@@ -111,29 +112,40 @@ type MastraCustomLLMOptions<Z extends ZodSchema | JSONSchema7 | undefined = unde
   runtimeContext: RuntimeContext;
 } & Run;
 
-export type LLMTextOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
-  messages: CoreMessage[];
-} & MastraCustomLLMOptions<Z> &
-  DefaultLLMTextOptions;
+export type LLMTextOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> =
+  Prettify<
+    {
+      messages: CoreMessage[];
+    } & MastraCustomLLMOptions<Z> &
+      DefaultLLMTextOptions
+  >;
 
-export type LLMTextObjectOptions<T extends ZodSchema | JSONSchema7 | undefined = undefined> = LLMTextOptions<T> &
-  DefaultLLMTextObjectOptions & {
+export type LLMTextObjectOptions<T extends ZodSchema | JSONSchema7 | undefined = undefined> = Prettify<
+  LLMTextOptions<T> &
+    DefaultLLMTextObjectOptions & {
+      structuredOutput: JSONSchema7 | z.ZodType<T> | StructuredOutput;
+    }
+>;
+
+export type LLMStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = Prettify<
+  {
+    output?: OutputType | Z;
+    onFinish?: (result: string) => Promise<void> | void;
+  } & MastraCustomLLMOptions<Z> &
+    DefaultLLMStreamOptions
+>;
+
+export type LLMInnerStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = Prettify<
+  {
+    messages: CoreMessage[];
+    onFinish?: (result: string) => Promise<void> | void;
+  } & MastraCustomLLMOptions<Z> &
+    DefaultLLMStreamOptions
+>;
+
+export type LLMStreamObjectOptions<T extends ZodSchema | JSONSchema7 | undefined = undefined> = Prettify<
+  {
     structuredOutput: JSONSchema7 | z.ZodType<T> | StructuredOutput;
-  };
-
-export type LLMStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
-  output?: OutputType | Z;
-  onFinish?: (result: string) => Promise<void> | void;
-} & MastraCustomLLMOptions<Z> &
-  DefaultLLMStreamOptions;
-
-export type LLMInnerStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
-  messages: CoreMessage[];
-  onFinish?: (result: string) => Promise<void> | void;
-} & MastraCustomLLMOptions<Z> &
-  DefaultLLMStreamOptions;
-
-export type LLMStreamObjectOptions<T extends ZodSchema | JSONSchema7 | undefined = undefined> = {
-  structuredOutput: JSONSchema7 | z.ZodType<T> | StructuredOutput;
-} & LLMInnerStreamOptions<T> &
-  DefaultLLMStreamObjectOptions;
+  } & LLMInnerStreamOptions<T> &
+    DefaultLLMStreamObjectOptions
+>;

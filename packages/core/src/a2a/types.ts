@@ -280,17 +280,23 @@ export interface FileContentBase {
   uri?: string | null;
 }
 
-export type FileContentBytes = FileContentBase & {
-  /* File content encoded as a Base64 string. Use this OR `uri`. */
-  bytes: string;
-  uri?: never;
-};
+import type { Prettify } from '../utils';
 
-export type FileContentUri = FileContentBase & {
-  /** URI pointing to the file content. */
-  uri: string;
-  bytes?: never;
-};
+export type FileContentBytes = Prettify<
+  FileContentBase & {
+    /* File content encoded as a Base64 string. Use this OR `uri`. */
+    bytes: string;
+    uri?: never;
+  }
+>;
+
+export type FileContentUri = Prettify<
+  FileContentBase & {
+    /** URI pointing to the file content. */
+    uri: string;
+    bytes?: never;
+  }
+>;
 
 /**
  * Represents the content of a file, either as base64 encoded bytes or a URI.

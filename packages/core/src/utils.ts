@@ -14,6 +14,10 @@ import { Tool } from './tools';
 import type { CoreTool, ToolAction, VercelTool } from './tools';
 import { CoreToolBuilder } from './tools/tool-compatibility/builder';
 
+export type Prettify<T> = {
+  [K in keyof T]: T[K];
+} & {};
+
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
