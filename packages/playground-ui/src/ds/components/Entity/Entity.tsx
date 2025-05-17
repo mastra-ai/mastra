@@ -20,7 +20,7 @@ export const Entity = ({ children, className, onClick }: EntityProps) => {
         }
       }}
       className={clsx(
-        'flex gap-3 group/entity bg-surface3 rounded-lg border-sm border-border1 py-3 px-4 items-center',
+        'flex gap-3 group/entity bg-surface3 rounded-lg border-sm border-border1 py-3 px-4',
         onClick && 'cursor-pointer hover:bg-surface4 transition-all',
         className,
       )}
@@ -33,7 +33,7 @@ export const Entity = ({ children, className, onClick }: EntityProps) => {
 
 export const EntityIcon = ({ children, className }: EntityProps) => {
   return (
-    <Icon size="lg" className={clsx('text-icon3', className)}>
+    <Icon size="lg" className={clsx('text-icon3 mt-1', className)}>
       {children}
     </Icon>
   );

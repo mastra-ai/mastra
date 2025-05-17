@@ -570,6 +570,7 @@ describe('Working Memory Tests', () => {
     const threadId = thread.id;
     const messages = [
       createTestMessage(threadId, 'User says something'),
+      // Pure tool-call message (should be removed)
       {
         id: randomUUID(),
         threadId,
@@ -583,20 +584,45 @@ describe('Working Memory Tests', () => {
           },
         ],
         toolNames: ['updateWorkingMemory'],
+        createdAt: new Date(),
+        resourceId,
       },
+      // Mixed content: tool-call + text (tool-call part should be filtered, text kept)
       {
         id: randomUUID(),
         threadId,
         role: 'assistant',
         type: 'text',
-        content: 'Normal message',
+        content: [
+          {
+            type: 'tool-call',
+            toolName: 'updateWorkingMemory',
+            args: { memory: 'should not persist' },
+          },
+          {
+            type: 'text',
+            text: 'Normal message',
+          },
+        ],
+        createdAt: new Date(),
+        resourceId,
+      },
+      // Pure text message (should be kept)
+      {
+        id: randomUUID(),
+        threadId,
+        role: 'assistant',
+        type: 'text',
+        content: 'Another normal message',
+        createdAt: new Date(),
+        resourceId,
       },
     ];
 
     // Save messages
     const saved = await memory.saveMessages({ messages: messages as MessageType[] });
 
-    // Should not include the updateWorkingMemory tool-call message
+    // Should not include any updateWorkingMemory tool-call messages (pure or mixed)
     expect(
       saved.some(
         m =>
@@ -606,8 +632,32 @@ describe('Working Memory Tests', () => {
       ),
     ).toBe(false);
 
-    // Should still include the user and normal text message
-    expect(saved.some(m => m.content === 'Normal message')).toBe(true);
+    // Mixed content message: should only keep the text part
+    const assistantMessages = saved.filter(m => m.role === 'assistant');
+    expect(
+      assistantMessages.some(m => {
+        if (typeof m.content === 'string') {
+          return m.content.includes('Normal message');
+        }
+        if (Array.isArray(m.content)) {
+          return m.content.some(c => c.type === 'text' && c.text === 'Normal message');
+        }
+        return false;
+      }),
+    ).toBe(true);
+    // working memory should not be present
+    expect(
+      saved.some(
+        m =>
+          (m.type === 'tool-call' || m.type === 'tool-result') &&
+          Array.isArray(m.content) &&
+          m.content.some(c => (c as ToolCallPart).toolName === 'updateWorkingMemory'),
+      ),
+    ).toBe(false);
+
+    // Pure text message should be present
+    expect(saved.some(m => m.content === 'Another normal message')).toBe(true);
+    // User message should be present
     expect(saved.some(m => typeof m.content === 'string' && m.content.includes('User says something'))).toBe(true);
   });
 });
