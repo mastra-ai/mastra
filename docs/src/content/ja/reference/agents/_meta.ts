@@ -6,6 +6,7 @@ const meta = {
   stream: "stream()",
   getVoice: "getVoice()",
   getInstructions: "getInstructions()",
+  getVersion: "getVersion()",
   getTools: "getTools()",
   getModel: "getModel()",
   getMemory: "getMemory()",

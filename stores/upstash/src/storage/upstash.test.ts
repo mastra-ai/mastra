@@ -82,6 +82,7 @@ const createSampleEval = (agentName: string, isTest = false) => {
 
   return {
     agent_name: agentName,
+    agent_version: '1.0.0',
     input: 'Sample input',
     output: 'Sample output',
     result: JSON.stringify({ score: 0.8 }),

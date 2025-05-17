@@ -9,17 +9,21 @@ import { createNodeServer } from '#server';
 // @ts-ignore
 await createNodeServer(mastra, { playground: true, isDev: true });
 
-registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName, instructions }) => {
-  evaluate({
-    agentName,
-    input,
-    metric,
-    output,
-    runId,
-    globalRunId: runId,
-    instructions,
-  });
-});
+registerHook(
+  AvailableHooks.ON_GENERATION,
+  ({ input, output, metric, runId, agentName, instructions, agentVersion }) => {
+    evaluate({
+      agentName,
+      input,
+      metric,
+      output,
+      runId,
+      globalRunId: runId,
+      instructions,
+      agentVersion,
+    });
+  },
+);
 
 if (mastra.getStorage()) {
   // start storage init in the background
@@ -41,6 +45,7 @@ registerHook(AvailableHooks.ON_EVALUATION, async traceObject => {
         output: traceObject.output,
         result: JSON.stringify(traceObject.result || {}),
         agent_name: traceObject.agentName,
+        agent_version: traceObject.agentVersion,
         metric_name: traceObject.metricName,
         instructions: traceObject.instructions,
         test_info: null,

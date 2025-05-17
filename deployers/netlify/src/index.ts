@@ -106,7 +106,7 @@ to = "/.netlify/functions/api/:splat"
     import { TABLE_EVALS } from '@mastra/core/storage';
     import { checkEvalStorageFields } from '@mastra/core/utils';
 
-    registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName, instructions }) => {
+    registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName, instructions, agentVersion }) => {
       evaluate({
         agentName,
         input,
@@ -115,6 +115,7 @@ to = "/.netlify/functions/api/:splat"
         runId,
         globalRunId: runId,
         instructions,
+        agentVersion,
       });
     });
 
@@ -138,6 +139,7 @@ to = "/.netlify/functions/api/:splat"
             output: traceObject.output,
             result: JSON.stringify(traceObject.result || {}),
             agent_name: traceObject.agentName,
+            agent_version: traceObject.agentVersion,
             metric_name: traceObject.metricName,
             instructions: traceObject.instructions,
             test_info: null,

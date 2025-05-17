@@ -34,6 +34,7 @@ const AgentEvalsContext = createContext<AgentEvalsContextType>({ handleRefresh: 
 
 type GroupedEvals = {
   metricName: string;
+  agentVersion: string;
   averageScore: number;
   evals: Evals[];
 };
@@ -152,6 +153,7 @@ function EvalTable({ evals, isCIMode = false }: { evals: Evals[]; isCIMode?: boo
               >
                 <div className="flex items-center">Metric {getSortIcon('metricName')}</div>
               </TableHead>
+              <TableHead className="flex-1 text-mastra-el-3">Agent Version</TableHead>
               <TableHead className="flex-1 text-mastra-el-3" />
               <TableHead className="w-48 text-mastra-el-3 cursor-pointer" onClick={() => toggleSort('averageScore')}>
                 <div className="flex items-center">Average Score {getSortIcon('averageScore')}</div>
@@ -213,6 +215,9 @@ function EvalTable({ evals, isCIMode = false }: { evals: Evals[]; isCIMode?: boo
                       </TableCell>
                       <TableCell className="min-w-[200px] max-w-[30%] font-medium text-mastra-el-5">
                         {group.metricName}
+                      </TableCell>
+                      <TableCell className="flex-1 text-mastra-el-5">
+                        <Badge variant="secondary">{group.agentVersion}</Badge>
                       </TableCell>
                       <TableCell className="flex-1 text-mastra-el-5" />
                       <TableCell className="w-48 text-mastra-el-5">
@@ -345,7 +350,9 @@ function EvalTable({ evals, isCIMode = false }: { evals: Evals[]; isCIMode?: boo
 
   function groupEvals(evaluations: Evals[]): GroupedEvals[] {
     let groups = evaluations.reduce((groups: GroupedEvals[], evaluation) => {
-      const existingGroup = groups.find(g => g.metricName === evaluation.metricName);
+      const existingGroup = groups.find(
+        g => g.metricName === evaluation.metricName && g.agentVersion === evaluation.agentVersion,
+      );
       if (existingGroup) {
         existingGroup.evals.push(evaluation);
         existingGroup.averageScore =
@@ -354,6 +361,7 @@ function EvalTable({ evals, isCIMode = false }: { evals: Evals[]; isCIMode?: boo
         groups.push({
           metricName: evaluation.metricName,
           averageScore: evaluation.result.score,
+          agentVersion: evaluation.agentVersion,
           evals: [evaluation],
         });
       }
