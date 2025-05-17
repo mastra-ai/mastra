@@ -12,7 +12,7 @@ const { embeddings } = await embedMany({
   values: chunks.map(chunk => chunk.text),
 });
 
-const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
+const pgVector = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING! });
 
 await pgVector.createIndex({
   indexName: 'test_index',

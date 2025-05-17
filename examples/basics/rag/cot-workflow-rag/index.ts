@@ -153,7 +153,7 @@ ragWorkflow.step(analyzeContext).then(breakdownThoughts).then(connectPieces).the
 
 ragWorkflow.commit();
 
-const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
+const pgVector = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING! });
 
 export const mastra = new Mastra({
   agents: { ragAgent },
