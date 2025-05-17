@@ -103,44 +103,6 @@ const chunksWithMetadata = await doc.chunk({
   ]}
 />
 
-## Strategy-Specific Options
-
-Strategy-specific options are passed as top-level parameters alongside the strategy parameter. For example:
-
-```typescript showLineNumbers copy
-// HTML strategy example
-const chunks = await doc.chunk({
-  strategy: "html",
-  headers: [
-    ["h1", "title"],
-    ["h2", "subtitle"],
-  ], // HTML-specific option
-  sections: [["div.content", "main"]], // HTML-specific option
-  size: 500, // general option
-});
-
-// Markdown strategy example
-const chunks = await doc.chunk({
-  strategy: "markdown",
-  headers: [
-    ["#", "title"],
-    ["##", "section"],
-  ], // Markdown-specific option
-  stripHeaders: true, // Markdown-specific option
-  overlap: 50, // general option
-});
-
-// Token strategy example
-const chunks = await doc.chunk({
-  strategy: "token",
-  encodingName: "gpt2", // Token-specific option
-  modelName: "gpt-3.5-turbo", // Token-specific option
-  size: 1000, // general option
-});
-```
-
-The options documented below are passed directly at the top level of the configuration object, not nested within a separate options object.
-
 ### Common Chunking Options
 
 These options are available to all chunking strategies:
@@ -201,6 +163,82 @@ These options are available to all chunking strategies:
     }
   ]}
 />
+
+> **Note:** Both the common chunking options and strategy-specific options may be provided directly at the top level (not nested) when letting the system infer the strategy. However, for clarity and maintainability, it is recommended to explicitly set a `strategy` and use the matching options field.
+
+<br/>
+
+## Strategy-Specific Options
+
+Strategy-specific options are passed as top-level parameters or nested within the strategy-specific options object. For example:
+
+```typescript showLineNumbers copy
+// HTML strategy example (top-level)
+const chunks = await doc.chunk({
+  strategy: "html",
+  headers: [
+    ["h1", "title"],
+    ["h2", "subtitle"],
+  ], // HTML-specific option
+  sections: [["div.content", "main"]], // HTML-specific option
+  size: 500, // general option
+});
+
+// HTML strategy example (nested)
+const chunks = await doc.chunk({
+  strategy: "html",
+  htmlOptions: {
+    headers: [
+      ["h1", "title"],
+      ["h2", "subtitle"],
+    ], // HTML-specific option
+    sections: [["div.content", "main"]], // HTML-specific option
+    size: 500, // general option
+  },
+});
+
+// Markdown strategy example (top-level)
+const chunks = await doc.chunk({
+  strategy: "markdown",
+  headers: [
+    ["#", "title"],
+    ["##", "section"],
+  ], // Markdown-specific option
+  stripHeaders: true, // Markdown-specific option
+  overlap: 50, // general option
+});
+
+// Markdown strategy example (nested)
+const chunks = await doc.chunk({
+  strategy: "markdown",
+  markdownOptions: {
+    headers: [
+      ["#", "title"],
+      ["##", "section"],
+    ], // Markdown-specific option
+    stripHeaders: true, // Markdown-specific option
+    overlap: 50, // general option
+  },
+});
+
+// Token strategy example (top-level)
+const chunks = await doc.chunk({
+  strategy: "token",
+  encodingName: "gpt2", // Token-specific option
+  modelName: "gpt-3.5-turbo", // Token-specific option
+  size: 1000, // general option
+});
+
+// Token strategy example (nested)
+const chunks = await doc.chunk({
+  strategy: "token",
+  tokenOptions: {
+    encodingName: "gpt2", // Token-specific option
+    modelName: "gpt-3.5-turbo", // Token-specific option
+    size: 1000, // general option
+  },
+});
+```
 
 > **Note:** Other than `html`, all strategies use the [Common Chunking Options](#common-chunking-options), as well as the strategy-specific options documented below.
 

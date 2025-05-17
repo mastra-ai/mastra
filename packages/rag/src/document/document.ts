@@ -163,15 +163,6 @@ export class MDocument {
 
     const restObj = rest as Record<string, unknown>;
 
-    const legacyFields = Object.keys(restObj).filter(
-      key => !['strategy', 'extract'].includes(key) && restObj[key] !== undefined,
-    );
-    if (legacyFields.length > 0) {
-      console.warn(
-        '[DEPRECATION] Passing chunking options directly to ChunkParams is deprecated. Use the dedicated strategy-specific options fields instead. Support will be removed after May 20th, 2025.',
-        { deprecatedFields: legacyFields },
-      );
-    }
     switch (strategy) {
       case 'recursive':
         await this.chunkRecursive({ ...restObj, ...recursiveOptions });

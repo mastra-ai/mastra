@@ -43,8 +43,10 @@ export type ExtractParams = {
 };
 
 /**
- * @deprecated Use dedicated strategy-specific options fields on {@link ChunkParams} instead.
- * This type will be removed after May 20th, 2025.
+ * Legacy chunking options for backward compatibility and ergonomic defaults.
+ *
+ * This type is still supported, especially when the chunking strategy is inferred from document type.
+ * For new code, prefer using the dedicated strategy-specific options fields on {@link ChunkParams}.
  */
 export type ChunkOptions = {
   headers?: [string, string][];
