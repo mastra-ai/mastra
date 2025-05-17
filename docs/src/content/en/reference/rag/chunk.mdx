@@ -52,48 +52,54 @@ const chunksWithMetadata = await doc.chunk({
         "The chunking strategy to use. If not specified, defaults based on document type. Depending on the chunking strategy, there are additional optionals. Defaults: .md files → 'markdown', .html/.htm → 'html', .json → 'json', .tex → 'latex', others → 'recursive'",
     },
     {
-      name: "size",
-      type: "number",
-      isOptional: true,
-      defaultValue: "512",
-      description: "Maximum size of each chunk",
-    },
-    {
-      name: "overlap",
-      type: "number",
-      isOptional: true,
-      defaultValue: "50",
-      description: "Number of characters/tokens that overlap between chunks.",
-    },
-    {
-      name: "separator",
-      type: "string",
-      isOptional: true,
-      defaultValue: "\\n\\n",
-      description:
-        "Character(s) to split on. Defaults to double newline for text content.",
-    },
-    {
-      name: "isSeparatorRegex",
-      type: "boolean",
-      isOptional: true,
-      defaultValue: "false",
-      description: "Whether the separator is a regex pattern",
-    },
-    {
-      name: "separatorPosition",
-      type: "'start' | 'end'",
-      isOptional: true,
-      description:
-        "Whether to keep the separator at the start or end of chunks. Defaults to 'none' if not specified.",
-    },
-    {
       name: "extract",
       type: "ExtractParams",
       isOptional: true,
       description:
         "Metadata extraction configuration. See [ExtractParams reference](./extract-params) for details.",
     },
+    {
+      name: "characterOptions",
+      type: "CharacterChunkOptions",
+      isOptional: true,
+      description: "Options specific to the 'character' strategy. See below."
+    },
+    {
+      name: "tokenOptions",
+      type: "TokenChunkOptions",
+      isOptional: true,
+      description: "Options specific to the 'token' strategy. See below."
+    },
+    {
+      name: "markdownOptions",
+      type: "MarkdownChunkOptions",
+      isOptional: true,
+      description: "Options specific to the 'markdown' strategy. See below."
+    },
+    {
+      name: "htmlOptions",
+      type: "HtmlChunkOptions",
+      isOptional: true,
+      description: "Options specific to the 'html' strategy. See below."
+    },
+    {
+      name: "recursiveOptions",
+      type: "RecursiveChunkOptions",
+      isOptional: true,
+      description: "Options specific to the 'recursive' strategy. See below."
+    },
+    {
+      name: "jsonOptions",
+      type: "JsonChunkOptions",
+      isOptional: true,
+      description: "Options specific to the 'json' strategy. See below."
+    },
+    {
+      name: "latexOptions",
+      type: "LatexChunkOptions",
+      isOptional: true,
+      description: "Options specific to the 'latex' strategy. See below."
+    }
   ]}
 />
 
@@ -135,7 +141,122 @@ const chunks = await doc.chunk({
 
 The options documented below are passed directly at the top level of the configuration object, not nested within a separate options object.
 
+### Common Chunking Options
+
+These options are available to all chunking strategies:
+
+<PropertiesTable
+  content={[
+    {
+      name: "size",
+      type: "number",
+      isOptional: true,
+      defaultValue: "512",
+      description: "Maximum size of each chunk."
+    },
+    {
+      name: "overlap",
+      type: "number",
+      isOptional: true,
+      defaultValue: "50",
+      description: "Number of characters/tokens that overlap between chunks."
+    },
+    {
+      name: "separator",
+      type: "string",
+      isOptional: true,
+      defaultValue: "\\n\\n",
+      description: "Character(s) to split on. Defaults to double newline for text content."
+    },
+    {
+      name: "isSeparatorRegex",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "Whether the separator is a regex pattern."
+    },
+    {
+      name: "separatorPosition",
+      type: "'start' | 'end'",
+      isOptional: true,
+      description: "Whether to keep the separator at the start or end of chunks."
+    },
+    {
+      name: "addStartIndex",
+      type: "boolean",
+      isOptional: true,
+      description: "Whether to add the start index of each chunk to the metadata."
+    },
+    {
+      name: "stripWhitespace",
+      type: "boolean",
+      isOptional: true,
+      description: "Whether to strip whitespace from the start/end of each chunk."
+    },
+    {
+      name: "keepSeparator",
+      type: "boolean | 'start' | 'end'",
+      isOptional: true,
+      description: "Deprecated. Use `separatorPosition` instead."
+    }
+  ]}
+/>
+
+> **Note:** Other than `html`, all strategies use the [Common Chunking Options](#common-chunking-options), as well as the strategy-specific options documented below.
+
+### Recursive
+
+<br/>
+
+<PropertiesTable
+  content={[
+    {
+      name: "separators",
+      type: "string[]",
+      isOptional: true,
+      description: "The separators to use when splitting the text."
+    },
+    {
+      name: "isSeparatorRegex",
+      type: "boolean",
+      isOptional: true,
+      description: "Whether the separators are regular expressions."
+    },
+    {
+      name: "language",
+      type: "Language",
+      isOptional: true,
+      description: "The language to use when splitting the text."
+    }
+  ]}
+/>
+
+### Character
+
+<br/>
+
+<PropertiesTable
+  content={[
+    {
+      name: "separator",
+      type: "string",
+      isOptional: true,
+      defaultValue: "\\n\\n",
+      description: "Character(s) to split on. Defaults to double newline for text content."
+    },
+    {
+      name: "isSeparatorRegex",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "Whether the separator is a regex pattern."
+    }
+  ]}
+/>
+
 ### HTML
+
+<br/>
 
 <PropertiesTable
   content={[
@@ -162,6 +283,8 @@ The options documented below are passed directly at the top level of the configu
 
 ### Markdown
 
+<br/>
+
 <PropertiesTable
   content={[
     {
@@ -185,6 +308,8 @@ The options documented below are passed directly at the top level of the configu
 />
 
 ### Token
+
+<br/>
 
 <PropertiesTable
   content={[
@@ -217,6 +342,8 @@ The options documented below are passed directly at the top level of the configu
 
 ### JSON
 
+<br/>
+
 <PropertiesTable
   content={[
     {
@@ -244,6 +371,10 @@ The options documented below are passed directly at the top level of the configu
     },
   ]}
 />
+
+### Latex
+
+The Latex strategy only uses the [Common Chunking Options](#common-chunking-options).
 
 ## Return Value
 
