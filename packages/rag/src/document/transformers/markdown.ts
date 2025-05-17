@@ -1,6 +1,7 @@
 import { Document } from '../schema';
 
 import { Language } from '../types';
+import type { MarkdownChunkOptions } from '../types';
 
 import { RecursiveCharacterTransformer } from './character';
 
@@ -16,19 +17,9 @@ interface HeaderType {
 }
 
 export class MarkdownTransformer extends RecursiveCharacterTransformer {
-  constructor(
-    options: {
-      chunkSize?: number;
-      chunkOverlap?: number;
-      lengthFunction?: (text: string) => number;
-      keepSeparator?: boolean | 'start' | 'end';
-      separatorPosition?: 'start' | 'end';
-      addStartIndex?: boolean;
-      stripWhitespace?: boolean;
-    } = {},
-  ) {
+  constructor(options: MarkdownChunkOptions = {}) {
     const separators = RecursiveCharacterTransformer.getSeparatorsForLanguage(Language.MARKDOWN);
-    super({ separators, isSeparatorRegex: true, options });
+    super({ ...options, separators, isSeparatorRegex: true });
   }
 }
 
@@ -37,8 +28,8 @@ export class MarkdownHeaderTransformer {
   private returnEachLine: boolean;
   private stripHeaders: boolean;
 
-  constructor(headersToSplitOn: [string, string][], returnEachLine: boolean = false, stripHeaders: boolean = true) {
-    this.headersToSplitOn = [...headersToSplitOn].sort((a, b) => b[0].length - a[0].length);
+  constructor({ headers = [], returnEachLine = false, stripHeaders = true }: MarkdownChunkOptions = {}) {
+    this.headersToSplitOn = [...headers].sort((a, b) => b[0].length - a[0].length);
     this.returnEachLine = returnEachLine;
     this.stripHeaders = stripHeaders;
   }

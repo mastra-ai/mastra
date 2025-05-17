@@ -200,6 +200,18 @@ The options documented below are passed directly at the top level of the configu
       isOptional: true,
       description: "Name of the model for tokenization",
     },
+    {
+      name: "allowedSpecial",
+      type: "Set<string> | 'all'",
+      isOptional: true,
+      description: "Set of allowed special tokens",
+    },
+    {
+      name: "disallowedSpecial",
+      type: "Set<string> | 'all'",
+      isOptional: true,
+      description: "Set of disallowed special tokens",
+    },
   ]}
 />
 

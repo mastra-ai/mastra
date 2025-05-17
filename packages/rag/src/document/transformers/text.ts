@@ -1,6 +1,6 @@
 import { Document } from '../schema';
 
-import type { ChunkOptions } from '../types';
+import type { BaseChunkOptions } from '../types';
 
 import type { Transformer } from './transformer';
 
@@ -21,11 +21,11 @@ export abstract class TextTransformer implements Transformer {
     separatorPosition,
     addStartIndex = false,
     stripWhitespace = true,
-  }: ChunkOptions) {
+  }: BaseChunkOptions) {
     if (overlap > size) {
       throw new Error(`Got a larger chunk overlap (${overlap}) than chunk size ` + `(${size}), should be smaller.`);
     }
-    if (keepSeparator !== undefined) {
+    if (keepSeparator !== undefined && keepSeparator !== false) {
       // Runtime warning for deprecated usage
       console.warn(
         '[DEPRECATION] `keepSeparator` is deprecated and will be removed after May 20th, 2025. Use `separatorPosition` instead.',

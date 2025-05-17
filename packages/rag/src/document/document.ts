@@ -8,7 +8,19 @@ import { RecursiveJsonTransformer } from './transformers/json';
 import { LatexTransformer } from './transformers/latex';
 import { MarkdownHeaderTransformer, MarkdownTransformer } from './transformers/markdown';
 import { TokenTransformer } from './transformers/token';
-import type { ChunkOptions, ChunkParams, ChunkStrategy, ExtractParams } from './types';
+import type {
+  CharacterChunkOptions,
+  ChunkParams,
+  ChunkStrategy,
+  ExtractParams,
+  HtmlChunkOptions,
+  JsonChunkOptions,
+  LatexChunkOptions,
+  MarkdownChunkOptions,
+  RecursiveChunkOptions,
+  StrategyOptions,
+  TokenChunkOptions,
+} from './types';
 
 export class MDocument {
   private chunks: Chunk[];
@@ -135,64 +147,80 @@ export class MDocument {
     }
   }
 
-  private async chunkBy(strategy: ChunkStrategy, options?: ChunkOptions): Promise<void> {
+  private async chunkBy(strategy: ChunkStrategy, options?: StrategyOptions): Promise<void> {
+    // Warn if deprecated flat ChunkOptions fields are present
+    const {
+      characterOptions,
+      tokenOptions,
+      markdownOptions,
+      htmlOptions,
+      recursiveOptions,
+      jsonOptions,
+      latexOptions,
+      ...rest
+    } = options || {};
+    // Remove known non-option fields (strategy, extract, etc.) from rest if needed
+
+    const restObj = rest as Record<string, unknown>;
+
+    const legacyFields = Object.keys(restObj).filter(
+      key => !['strategy', 'extract'].includes(key) && restObj[key] !== undefined,
+    );
+    if (legacyFields.length > 0) {
+      console.warn(
+        '[DEPRECATION] Passing chunking options directly to ChunkParams is deprecated. Use the dedicated strategy-specific options fields instead. Support will be removed after May 20th, 2025.',
+        { deprecatedFields: legacyFields },
+      );
+    }
     switch (strategy) {
       case 'recursive':
-        await this.chunkRecursive(options);
+        await this.chunkRecursive({ ...restObj, ...recursiveOptions });
         break;
       case 'character':
-        await this.chunkCharacter(options);
+        await this.chunkCharacter({ ...restObj, ...characterOptions });
         break;
       case 'token':
-        await this.chunkToken(options);
+        await this.chunkToken({ ...restObj, ...tokenOptions });
         break;
       case 'markdown':
-        await this.chunkMarkdown(options);
+        await this.chunkMarkdown({ ...restObj, ...markdownOptions });
         break;
       case 'html':
-        await this.chunkHTML(options);
+        await this.chunkHTML({ ...restObj, ...htmlOptions });
         break;
       case 'json':
-        await this.chunkJSON(options);
+        await this.chunkJSON({ ...restObj, ...jsonOptions });
         break;
       case 'latex':
-        await this.chunkLatex(options);
+        await this.chunkLatex({ ...restObj, ...latexOptions });
         break;
       default:
         throw new Error(`Unknown strategy: ${strategy}`);
     }
   }
 
-  async chunkRecursive(options?: ChunkOptions): Promise<void> {
+  async chunkRecursive(options?: RecursiveChunkOptions): Promise<void> {
     if (options?.language) {
-      const rt = RecursiveCharacterTransformer.fromLanguage(options.language, options);
+      const rt = RecursiveCharacterTransformer.fromLanguage(options);
       const textSplit = rt.transformDocuments(this.chunks);
       this.chunks = textSplit;
       return;
     }
 
-    const rt = new RecursiveCharacterTransformer({
-      separators: options?.separators,
-      isSeparatorRegex: options?.isSeparatorRegex,
-      options,
-    });
+    const rt = new RecursiveCharacterTransformer(options);
     const textSplit = rt.transformDocuments(this.chunks);
     this.chunks = textSplit;
   }
 
-  async chunkCharacter(options?: ChunkOptions): Promise<void> {
-    const rt = new CharacterTransformer({
-      separator: options?.separator,
-      isSeparatorRegex: options?.isSeparatorRegex,
-      options,
-    });
+  async chunkCharacter(options?: CharacterChunkOptions): Promise<void> {
+    const rt = new CharacterTransformer(options);
     const textSplit = rt.transformDocuments(this.chunks);
     this.chunks = textSplit;
   }
 
-  async chunkHTML(options?: ChunkOptions): Promise<void> {
+  async chunkHTML(options?: HtmlChunkOptions): Promise<void> {
     if (options?.headers?.length) {
-      const rt = new HTMLHeaderTransformer(options.headers, options?.returnEachLine);
+      const rt = new HTMLHeaderTransformer(options);
 
       const textSplit = rt.transformDocuments(this.chunks);
       this.chunks = textSplit;
@@ -200,7 +228,7 @@ export class MDocument {
     }
 
     if (options?.sections?.length) {
-      const rt = new HTMLSectionTransformer(options.sections);
+      const rt = new HTMLSectionTransformer(options);
 
       const textSplit = rt.transformDocuments(this.chunks);
       this.chunks = textSplit;
@@ -210,15 +238,12 @@ export class MDocument {
     throw new Error('HTML chunking requires either headers or sections to be specified');
   }
 
-  async chunkJSON(options?: ChunkOptions): Promise<void> {
+  async chunkJSON(options?: JsonChunkOptions): Promise<void> {
     if (!options?.maxSize) {
       throw new Error('JSON chunking requires maxSize to be specified');
     }
 
-    const rt = new RecursiveJsonTransformer({
-      maxSize: options?.maxSize,
-      minSize: options?.minSize,
-    });
+    const rt = new RecursiveJsonTransformer(options);
 
     const textSplit = rt.transformDocuments({
       documents: this.chunks,
@@ -229,25 +254,21 @@ export class MDocument {
     this.chunks = textSplit;
   }
 
-  async chunkLatex(options?: ChunkOptions): Promise<void> {
+  async chunkLatex(options?: LatexChunkOptions): Promise<void> {
     const rt = new LatexTransformer(options);
     const textSplit = rt.transformDocuments(this.chunks);
     this.chunks = textSplit;
   }
 
-  async chunkToken(options?: ChunkOptions): Promise<void> {
-    const rt = TokenTransformer.fromTikToken({
-      options,
-      encodingName: options?.encodingName,
-      modelName: options?.modelName,
-    });
+  async chunkToken(options?: TokenChunkOptions): Promise<void> {
+    const rt = TokenTransformer.fromTikToken(options);
     const textSplit = rt.transformDocuments(this.chunks);
     this.chunks = textSplit;
   }
 
-  async chunkMarkdown(options?: ChunkOptions): Promise<void> {
+  async chunkMarkdown(options?: MarkdownChunkOptions): Promise<void> {
     if (options?.headers) {
-      const rt = new MarkdownHeaderTransformer(options.headers, options?.returnEachLine, options?.stripHeaders);
+      const rt = new MarkdownHeaderTransformer(options);
       const textSplit = rt.transformDocuments(this.chunks);
       this.chunks = textSplit;
       return;

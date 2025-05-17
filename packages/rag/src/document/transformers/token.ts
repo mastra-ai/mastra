@@ -1,6 +1,7 @@
-import type { TiktokenModel, TiktokenEncoding, Tiktoken } from 'js-tiktoken';
+import type { Tiktoken } from 'js-tiktoken';
 import { encodingForModel, getEncoding } from 'js-tiktoken';
 
+import type { TokenChunkOptions } from '../types';
 import { TextTransformer } from './text';
 
 interface Tokenizer {
@@ -40,23 +41,9 @@ export class TokenTransformer extends TextTransformer {
     modelName,
     allowedSpecial = new Set(),
     disallowedSpecial = 'all',
-    options = {},
-  }: {
-    encodingName: TiktokenEncoding;
-    modelName?: TiktokenModel;
-    allowedSpecial?: Set<string> | 'all';
-    disallowedSpecial?: Set<string> | 'all';
-    options: {
-      size?: number;
-      overlap?: number;
-      lengthFunction?: (text: string) => number;
-      keepSeparator?: boolean | 'start' | 'end';
-      separatorPosition?: 'start' | 'end';
-      addStartIndex?: boolean;
-      stripWhitespace?: boolean;
-    };
-  }) {
-    super(options);
+    ...rest
+  }: TokenChunkOptions = {}) {
+    super(rest);
 
     try {
       this.tokenizer = modelName ? encodingForModel(modelName) : getEncoding(encodingName);
@@ -94,20 +81,8 @@ export class TokenTransformer extends TextTransformer {
     return splitTextOnTokens({ text, tokenizer });
   }
 
-  static fromTikToken({
-    encodingName = 'cl100k_base',
-    modelName,
-    options = {},
-  }: {
-    encodingName?: TiktokenEncoding;
-    modelName?: TiktokenModel;
-    options?: {
-      size?: number;
-      overlap?: number;
-      allowedSpecial?: Set<string> | 'all';
-      disallowedSpecial?: Set<string> | 'all';
-    };
-  }): TokenTransformer {
+  static fromTikToken(options?: TokenChunkOptions): TokenTransformer {
+    const { encodingName = 'cl100k_base', modelName, allowedSpecial, disallowedSpecial } = options || {};
     let tokenizer: Tiktoken;
 
     try {
@@ -121,29 +96,16 @@ export class TokenTransformer extends TextTransformer {
     }
 
     const tikTokenEncoder = (text: string): number => {
-      const allowed =
-        options.allowedSpecial === 'all' ? 'all' : options.allowedSpecial ? Array.from(options.allowedSpecial) : [];
+      const allowed = allowedSpecial === 'all' ? 'all' : allowedSpecial ? Array.from(allowedSpecial) : [];
 
-      const disallowed =
-        options.disallowedSpecial === 'all'
-          ? 'all'
-          : options.disallowedSpecial
-            ? Array.from(options.disallowedSpecial)
-            : [];
+      const disallowed = disallowedSpecial === 'all' ? 'all' : disallowedSpecial ? Array.from(disallowedSpecial) : [];
 
       return tokenizer.encode(text, allowed, disallowed).length;
     };
 
     return new TokenTransformer({
-      encodingName,
-      modelName,
-      allowedSpecial: options.allowedSpecial,
-      disallowedSpecial: options.disallowedSpecial,
-      options: {
-        size: options.size,
-        overlap: options.overlap,
-        lengthFunction: tikTokenEncoder,
-      },
+      ...options,
+      lengthFunction: tikTokenEncoder,
     });
   }
 }

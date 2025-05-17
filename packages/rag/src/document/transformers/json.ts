@@ -1,10 +1,11 @@
 import { Document } from '../schema';
+import type { JsonChunkOptions } from '../types';
 
 export class RecursiveJsonTransformer {
   private maxSize: number;
   private minSize: number;
 
-  constructor({ maxSize = 2000, minSize }: { maxSize: number; minSize?: number }) {
+  constructor({ maxSize = 2000, minSize }: JsonChunkOptions = {}) {
     this.maxSize = maxSize;
     this.minSize = minSize ?? Math.max(maxSize - 200, 50);
   }

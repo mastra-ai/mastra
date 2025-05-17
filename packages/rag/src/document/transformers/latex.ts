@@ -1,20 +1,11 @@
 import { Language } from '../types';
 
+import type { LatexChunkOptions } from '../types';
 import { RecursiveCharacterTransformer } from './character';
 
 export class LatexTransformer extends RecursiveCharacterTransformer {
-  constructor(
-    options: {
-      size?: number;
-      overlap?: number;
-      lengthFunction?: (text: string) => number;
-      keepSeparator?: boolean | 'start' | 'end';
-      separatorPosition?: 'start' | 'end';
-      addStartIndex?: boolean;
-      stripWhitespace?: boolean;
-    } = {},
-  ) {
+  constructor(options: LatexChunkOptions = {}) {
     const separators = RecursiveCharacterTransformer.getSeparatorsForLanguage(Language.LATEX);
-    super({ separators, isSeparatorRegex: true, options });
+    super({ ...options, separators, isSeparatorRegex: true });
   }
 }

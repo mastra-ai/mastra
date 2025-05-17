@@ -42,6 +42,10 @@ export type ExtractParams = {
   keywords?: KeywordExtractArgs | boolean;
 };
 
+/**
+ * @deprecated Use dedicated strategy-specific options fields on {@link ChunkParams} instead.
+ * This type will be removed after May 20th, 2025.
+ */
 export type ChunkOptions = {
   headers?: [string, string][];
   returnEachLine?: boolean;
@@ -81,7 +85,156 @@ export type ChunkOptions = {
 
 export type ChunkStrategy = 'recursive' | 'character' | 'token' | 'markdown' | 'html' | 'json' | 'latex';
 
-export interface ChunkParams extends ChunkOptions {
-  strategy?: ChunkStrategy;
-  extract?: ExtractParams;
+// Shared base chunk options
+export interface BaseChunkOptions {
+  /**
+   * The size of each chunk.
+   */
+  size?: number;
+  /**
+   * The overlap between chunks.
+   */
+  overlap?: number;
+  /**
+   * Function to calculate the length of a chunk.
+   */
+  lengthFunction?: (text: string) => number;
+  /**
+   * @deprecated Use `separatorPosition` instead. This option will be removed after May 20th, 2025.
+   * If provided, a runtime warning should be emitted.
+   */
+  keepSeparator?: boolean | 'start' | 'end';
+  /**
+   * Controls where the separator appears in the chunk. Replaces `keepSeparator`.
+   * - 'start': separator appears at the start of the chunk
+   * - 'end': separator appears at the end of the chunk
+   * If not provided, the separator is omitted.
+   */
+  separatorPosition?: 'start' | 'end';
+  /**
+   * Whether to add the start index of each chunk to the metadata.
+   */
+  addStartIndex?: boolean;
+  /**
+   * Whether to strip whitespace from the start and end of each chunk.
+   */
+  stripWhitespace?: boolean;
 }
+
+// Dedicated option types for each strategy
+export interface CharacterChunkOptions extends BaseChunkOptions {
+  /**
+   * The separator to use when splitting the text.
+   */
+  separator?: string;
+  /**
+   * Whether the separator is a regular expression.
+   */
+  isSeparatorRegex?: boolean;
+}
+
+export interface TokenChunkOptions extends BaseChunkOptions {
+  /**
+   * The name of the encoding to use for tokenization.
+   */
+  encodingName?: TiktokenEncoding;
+  /**
+   * The name of the model to use for tokenization.
+   */
+  modelName?: TiktokenModel;
+  /**
+   * The set of allowed special tokens.
+   */
+  allowedSpecial?: Set<string> | 'all';
+  /**
+   * The set of disallowed special tokens.
+   */
+  disallowedSpecial?: Set<string> | 'all';
+}
+
+export interface MarkdownChunkOptions extends BaseChunkOptions {
+  /**
+   * The headers to use when splitting the text.
+   */
+  headers?: [string, string][];
+  /**
+   * Whether to return each line as a separate chunk.
+   */
+  returnEachLine?: boolean;
+  /**
+   * Whether to strip headers from the text.
+   */
+  stripHeaders?: boolean;
+}
+
+export interface HtmlChunkOptions {
+  /**
+   * The headers to use when splitting the text.
+   */
+  headers?: [string, string][];
+  /**
+   * Whether to return each line as a separate chunk.
+   */
+  returnEachLine?: boolean;
+  /**
+   * The sections to use when splitting the text.
+   */
+  sections?: [string, string][];
+}
+
+export interface RecursiveChunkOptions extends BaseChunkOptions {
+  /**
+   * The separators to use when splitting the text.
+   */
+  separators?: string[];
+  /**
+   * Whether the separators are regular expressions.
+   */
+  isSeparatorRegex?: boolean;
+  /**
+   * The language to use when splitting the text.
+   */
+  language?: Language;
+}
+
+export interface JsonChunkOptions {
+  /**
+   * The maximum size of each chunk.
+   */
+  maxSize?: number;
+  /**
+   * The minimum size of each chunk.
+   */
+  minSize?: number;
+  /**
+   * Whether to ensure ASCII characters only.
+   */
+  ensureAscii?: boolean;
+  /**
+   * Whether to convert lists to arrays.
+   */
+  convertLists?: boolean;
+}
+
+export interface LatexChunkOptions extends BaseChunkOptions {}
+
+export interface StrategyOptions extends ChunkOptions {
+  characterOptions?: CharacterChunkOptions;
+  tokenOptions?: TokenChunkOptions;
+  markdownOptions?: MarkdownChunkOptions;
+  htmlOptions?: HtmlChunkOptions;
+  recursiveOptions?: RecursiveChunkOptions;
+  jsonOptions?: JsonChunkOptions;
+  latexOptions?: LatexChunkOptions;
+}
+
+export type ChunkParams =
+  | { strategy: 'character'; characterOptions: CharacterChunkOptions; extract?: ExtractParams }
+  | { strategy: 'token'; tokenOptions: TokenChunkOptions; extract?: ExtractParams }
+  | { strategy: 'markdown'; markdownOptions: MarkdownChunkOptions; extract?: ExtractParams }
+  | { strategy: 'html'; htmlOptions: HtmlChunkOptions; extract?: ExtractParams }
+  | { strategy: 'recursive'; recursiveOptions: RecursiveChunkOptions; extract?: ExtractParams }
+  | { strategy: 'json'; jsonOptions: JsonChunkOptions; extract?: ExtractParams }
+  | { strategy: 'latex'; latexOptions: LatexChunkOptions; extract?: ExtractParams }
+  // Deprecated: flat options for backward compatibility
+  | ({ strategy?: ChunkStrategy; extract?: ExtractParams } & ChunkOptions);
