@@ -212,7 +212,21 @@ export function convertMessagesToMastraMessages(messages: Message[]): CoreMessag
 
 export function getAGUI({ mastra, resourceId }: { mastra: Mastra; resourceId?: string }) {
   const agents = mastra.getAgents() || {};
-  return Object.entries(agents).reduce(
+  const networks = mastra.getNetworks() || [];
+
+  const networkAGUI = networks.reduce(
+    (acc, network) => {
+      acc[network.name!] = new AGUIAdapter({
+        agentId: network.name!,
+        agent: network as unknown as Agent,
+        resourceId,
+      });
+      return acc;
+    },
+    {} as Record<string, AGUIAdapter>,
+  );
+
+  const agentAGUI = Object.entries(agents).reduce(
     (acc, [agentId, agent]) => {
       acc[agentId] = new AGUIAdapter({
         agentId,
@@ -223,29 +237,80 @@ export function getAGUI({ mastra, resourceId }: { mastra: Mastra; resourceId?: s
     },
     {} as Record<string, AGUIAdapter>,
   );
+
+  return {
+    ...agentAGUI,
+    ...networkAGUI,
+  };
+}
+
+export function getAGUIAgent({
+  mastra,
+  agentId,
+  resourceId,
+}: {
+  mastra: Mastra;
+  agentId: string;
+  resourceId?: string;
+}) {
+  const agent = mastra.getAgent(agentId);
+  if (!agent) {
+    throw new Error(`Agent ${agentId} not found`);
+  }
+  return new AGUIAdapter({
+    agentId,
+    agent,
+    resourceId,
+  });
+}
+
+export function getAGUINetwork({
+  mastra,
+  networkId,
+  resourceId,
+}: {
+  mastra: Mastra;
+  networkId: string;
+  resourceId?: string;
+}) {
+  const network = mastra.getNetwork(networkId);
+  if (!network) {
+    throw new Error(`Network ${networkId} not found`);
+  }
+  return new AGUIAdapter({
+    agentId: network.name!,
+    agent: network as unknown as Agent,
+    resourceId,
+  });
 }
 
 export function registerCopilotKit({
   path,
   resourceId,
   serviceAdapter = new ExperimentalEmptyAdapter(),
+  agents,
 }: {
   path: string;
   resourceId: string;
   serviceAdapter?: CopilotServiceAdapter;
+  agents?: Record<string, AGUIAdapter>;
 }) {
   return registerApiRoute(path, {
     method: `ALL`,
     handler: async c => {
       const mastra = c.get('mastra');
 
-      const agents = getAGUI({
-        resourceId,
-        mastra,
-      });
+      const aguiAgents =
+        agents ||
+        getAGUI({
+          resourceId,
+          mastra,
+        });
+
+      console.log('aguiAgents', aguiAgents);
 
       const runtime = new CopilotRuntime({
-        agents,
+        agents: aguiAgents,
       });
 
       const handler = copilotRuntimeNodeHttpEndpoint({
