@@ -3,7 +3,7 @@ import { CopilotChat } from '@copilotkit/react-ui';
 import '@copilotkit/react-ui/styles.css';
 import { CopilotKit } from '@copilotkit/react-core';
 
-function YourComponent() {
+function WeatherAgentChat() {
   return (
     <CopilotChat
       className="container"
@@ -22,7 +22,7 @@ function App(): React.ReactElement {
   return (
     <div>
       <CopilotKit runtimeUrl="http://localhost:4111/copilotkit" agent="weatherAgent">
-        <YourComponent />
+        <WeatherAgentChat />
       </CopilotKit>
     </div>
   );

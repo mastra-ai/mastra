@@ -1,9 +1,8 @@
 import { Mastra } from '@mastra/core/mastra';
 import { createLogger } from '@mastra/core/logger';
 import { LibSQLStore } from '@mastra/libsql';
-import { getAGUI, registerCopilotKit } from '@mastra/agui';
+import { registerCopilotKit } from '@mastra/agui';
 import { weatherAgent } from './agents';
-import { registerApiRoute } from '@mastra/core/server';
 
 export const mastra = new Mastra({
   agents: { weatherAgent },
