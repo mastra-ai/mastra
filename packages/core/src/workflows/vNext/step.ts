@@ -9,6 +9,7 @@ export type ExecuteFunction<TStepInput, TStepOutput, TResumeSchema, TSuspendSche
   runtimeContext: RuntimeContext;
   inputData: TStepInput;
   resumeData?: TResumeSchema;
+  getInitData<T extends z.ZodType<any>>(): z.infer<T>;
   getInitData<T extends NewWorkflow<any, any, any, any, any>>(): T extends undefined
     ? unknown
     : z.infer<NonNullable<T['inputSchema']>>;
