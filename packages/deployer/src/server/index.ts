@@ -27,7 +27,15 @@ import {
 import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import { getLogsByRunIdHandler, getLogsHandler, getLogTransports } from './handlers/logs';
-import { getMcpServerMessageHandler, getMcpServerSseHandler } from './handlers/mcp';
+import {
+  getMcpServerMessageHandler,
+  getMcpServerSseHandler,
+  listMcpRegistryServersHandler,
+  getMcpRegistryServerDetailHandler,
+  listMcpServerToolsHandler,
+  getMcpServerToolDetailHandler,
+  executeMcpServerToolHandler,
+} from './handlers/mcp';
 import {
   createThreadHandler,
   deleteThreadHandler,
@@ -1276,7 +1284,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
 
   // MCP server routes
   app.post(
-    '/api/servers/:serverId/mcp',
+    '/api/mcp/:serverId/mcp',
     bodyLimit(bodyLimitOptions),
     describeRoute({
       description: 'Send a message to an MCP server using Streamable HTTP',
@@ -1305,8 +1313,8 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
   );
 
   // New MCP server routes for SSE
-  const mcpSseBasePath = '/api/servers/:serverId/sse';
-  const mcpSseMessagePath = '/api/servers/:serverId/messages';
+  const mcpSseBasePath = '/api/mcp/:serverId/sse';
+  const mcpSseMessagePath = '/api/mcp/:serverId/messages';
 
   // Route for establishing SSE connection
   app.get(
@@ -1367,6 +1375,160 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
       },
     }),
     getMcpServerSseHandler,
+  );
+
+  app.get(
+    '/api/mcp/v0/servers',
+    describeRoute({
+      description: 'List all available MCP server instances with basic information.',
+      tags: ['mcp'],
+      parameters: [
+        {
+          name: 'limit',
+          in: 'query',
+          description: 'Number of results per page.',
+          required: false,
+          schema: { type: 'integer', default: 50, minimum: 1, maximum: 5000 },
+        },
+        {
+          name: 'offset',
+          in: 'query',
+          description: 'Number of results to skip for pagination.',
+          required: false,
+          schema: { type: 'integer', default: 0, minimum: 0 },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'A list of MCP server instances.',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  servers: { type: 'array', items: { $ref: '#/components/schemas/ServerInfo' } },
+                  next: { type: 'string', format: 'uri', nullable: true },
+                  total_count: { type: 'integer' },
+                },
+              },
+            },
+          },
+        },
+      },
+    }),
+    listMcpRegistryServersHandler,
+  );
+
+  app.get(
+    '/api/mcp/v0/servers/:id',
+    describeRoute({
+      description: 'Get detailed information about a specific MCP server instance.',
+      tags: ['mcp'],
+      parameters: [
+        {
+          name: 'id',
+          in: 'path',
+          required: true,
+          description: 'Unique ID of the MCP server instance.',
+          schema: { type: 'string' },
+        },
+        {
+          name: 'version',
+          in: 'query',
+          required: false,
+          description: 'Desired MCP server version (currently informational, server returns its actual version).',
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Detailed information about the MCP server instance.',
+          content: {
+            'application/json': { schema: { $ref: '#/components/schemas/ServerDetailInfo' } },
+          },
+        },
+        404: {
+          description: 'MCP server instance not found.',
+          content: { 'application/json': { schema: { type: 'object', properties: { error: { type: 'string' } } } } },
+        },
+      },
+    }),
+    getMcpRegistryServerDetailHandler,
+  );
+
+  app.get(
+    '/api/mcp/:serverId/tools',
+    describeRoute({
+      description: 'List all tools available on a specific MCP server instance.',
+      tags: ['mcp'],
+      parameters: [
+        {
+          name: 'serverId',
+          in: 'path',
+          required: true,
+          description: 'Unique ID of the MCP server instance.',
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: { description: 'A list of tools for the MCP server.' }, // Define schema if you have one for McpServerToolListResponse
+        404: { description: 'MCP server instance not found.' },
+        501: { description: 'Server does not support listing tools.' },
+      },
+    }),
+    listMcpServerToolsHandler,
+  );
+
+  app.get(
+    '/api/mcp/:serverId/tools/:toolId',
+    describeRoute({
+      description: 'Get details for a specific tool on an MCP server.',
+      tags: ['mcp'],
+      parameters: [
+        { name: 'serverId', in: 'path', required: true, schema: { type: 'string' } },
+        { name: 'toolId', in: 'path', required: true, schema: { type: 'string' } },
+      ],
+      responses: {
+        200: { description: 'Details of the specified tool.' }, // Define schema for McpToolInfo
+        404: { description: 'MCP server or tool not found.' },
+        501: { description: 'Server does not support getting tool details.' },
+      },
+    }),
+    getMcpServerToolDetailHandler,
+  );
+
+  app.post(
+    '/api/mcp/:serverId/tools/:toolId/execute',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Execute a specific tool on an MCP server.',
+      tags: ['mcp'],
+      parameters: [
+        { name: 'serverId', in: 'path', required: true, schema: { type: 'string' } },
+        { name: 'toolId', in: 'path', required: true, schema: { type: 'string' } },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                data: { type: 'object' },
+                runtimeContext: { type: 'object' },
+              },
+            },
+          },
+        }, // Simplified schema
+      },
+      responses: {
+        200: { description: 'Result of the tool execution.' },
+        400: { description: 'Invalid tool arguments.' },
+        404: { description: 'MCP server or tool not found.' },
+        501: { description: 'Server does not support tool execution.' },
+      },
+    }),
+    executeMcpServerToolHandler,
   );
 
   // Memory routes
@@ -2802,7 +2964,7 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
     {
       fetch: app.fetch,
       port,
-      hostname: serverOptions?.host ?? 'localhost',
+      hostname: serverOptions?.host,
     },
     () => {
       const logger = mastra.getLogger();

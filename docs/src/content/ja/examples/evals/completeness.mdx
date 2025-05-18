@@ -25,7 +25,7 @@ import { GithubLink } from "@/components/github-link";
 必要な依存関係をインポートします:
 
 ```typescript copy showLineNumbers filename="src/index.ts"
-import { CompletenessMetric } from '@mastra/evals/nlp';
+import { CompletenessMetric } from "@mastra/evals/nlp";
 ```
 
 ## メトリック設定
@@ -43,15 +43,15 @@ const metric = new CompletenessMetric();
 すべての要素をカバーする応答を評価します：
 
 ```typescript copy showLineNumbers{7} filename="src/index.ts"
-const text1 = 'The primary colors are red, blue, and yellow.';
-const reference1 = 'The primary colors are red, blue, and yellow.';
+const text1 = "The primary colors are red, blue, and yellow.";
+const reference1 = "The primary colors are red, blue, and yellow.";
 
-console.log('Example 1 - Complete Coverage:');
-console.log('Text:', text1);
-console.log('Reference:', reference1);
+console.log("Example 1 - Complete Coverage:");
+console.log("Text:", text1);
+console.log("Reference:", reference1);
 
 const result1 = await metric.measure(reference1, text1);
-console.log('Metric Result:', {
+console.log("Metric Result:", {
   score: result1.score,
   info: {
     missingElements: result1.info.missingElements,
@@ -67,15 +67,15 @@ console.log('Metric Result:', {
 いくつかの要素をカバーする応答を評価します：
 
 ```typescript copy showLineNumbers{24} filename="src/index.ts"
-const text2 = 'The primary colors are red and blue.';
-const reference2 = 'The primary colors are red, blue, and yellow.';
+const text2 = "The primary colors are red and blue.";
+const reference2 = "The primary colors are red, blue, and yellow.";
 
-console.log('Example 2 - Partial Coverage:');
-console.log('Text:', text2);
-console.log('Reference:', reference2);
+console.log("Example 2 - Partial Coverage:");
+console.log("Text:", text2);
+console.log("Reference:", reference2);
 
 const result2 = await metric.measure(reference2, text2);
-console.log('Metric Result:', {
+console.log("Metric Result:", {
   score: result2.score,
   info: {
     missingElements: result2.info.missingElements,
@@ -91,15 +91,15 @@ console.log('Metric Result:', {
 非常に少ない要素をカバーする応答を評価します：
 
 ```typescript copy showLineNumbers{41} filename="src/index.ts"
-const text3 = 'The seasons include summer.';
-const reference3 = 'The four seasons are spring, summer, fall, and winter.';
+const text3 = "The seasons include summer.";
+const reference3 = "The four seasons are spring, summer, fall, and winter.";
 
-console.log('Example 3 - Minimal Coverage:');
-console.log('Text:', text3);
-console.log('Reference:', reference3);
+console.log("Example 3 - Minimal Coverage:");
+console.log("Text:", text3);
+console.log("Reference:", reference3);
 
 const result3 = await metric.measure(reference3, text3);
-console.log('Metric Result:', {
+console.log("Metric Result:", {
   score: result3.score,
   info: {
     missingElements: result3.info.missingElements,
@@ -121,6 +121,7 @@ console.log('Metric Result:', {
 この指標は以下を提供します：
 
 1. 0から1のスコア：
+
    - 1.0: 完全なカバレッジ - すべての入力要素を含む
    - 0.7-0.9: 高いカバレッジ - ほとんどの主要要素を含む
    - 0.4-0.6: 部分的なカバレッジ - いくつかの主要要素を含む

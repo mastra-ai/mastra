@@ -10,24 +10,24 @@ The CloudflareDeployer deploys Mastra applications to Cloudflare Workers, handli
 ## Usage Example
 
 ```typescript
-import { Mastra } from '@mastra/core';
-import { CloudflareDeployer } from '@mastra/deployer-cloudflare';
+import { Mastra } from "@mastra/core";
+import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
 
 const mastra = new Mastra({
   deployer: new CloudflareDeployer({
-    scope: 'your-account-id',
-    projectName: 'your-project-name',
+    scope: "your-account-id",
+    projectName: "your-project-name",
     routes: [
       {
-        pattern: 'example.com/*',
-        zone_name: 'example.com',
+        pattern: "example.com/*",
+        zone_name: "example.com",
         custom_domain: true,
       },
     ],
-    workerNamespace: 'your-namespace',
+    workerNamespace: "your-namespace",
     auth: {
-      apiToken: 'your-api-token',
-      apiEmail: 'your-email',
+      apiToken: "your-api-token",
+      apiEmail: "your-email",
     },
   }),
   // ... other Mastra configuration options
@@ -68,7 +68,8 @@ const mastra = new Mastra({
     {
       name: "env",
       type: "Record<string, any>",
-      description: "Environment variables to be included in the worker configuration.",
+      description:
+        "Environment variables to be included in the worker configuration.",
       isOptional: true,
     },
     {
@@ -132,13 +133,13 @@ The CloudflareDeployer handles environment variables from multiple sources:
 1. **Environment Files**: Variables from `.env.production` and `.env` files.
 2. **Configuration**: Variables passed through the `env` parameter.
 
-
 ## Lint Mastra Project
+
 Lint your Mastra project to make sure it's fine to build
+
 ```bash
 npx mastra lint
 ```
-
 
 ## Build Mastra Project
 
@@ -150,11 +151,13 @@ npx mastra build
 The build process generates the following output structure in the `.mastra/output` directory:
 
 ```
+
 .mastra/output/
-├── index.mjs        # Main worker entry point
-├── wrangler.json    # Cloudflare Worker configuration
-└── assets/          # Static assets and dependencies
-```
+├── index.mjs # Main worker entry point
+├── wrangler.json # Cloudflare Worker configuration
+└── assets/ # Static assets and dependencies
+
+````
 
 ### Wrangler Configuration
 
@@ -178,7 +181,7 @@ The CloudflareDeployer automatically generates a `wrangler.json` configuration f
     // Route configurations if specified
   ]
 }
-```
+````
 
 ### Route Configuration
 
@@ -187,23 +190,23 @@ Routes can be configured to direct traffic to your worker based on URL patterns 
 ```typescript
 const routes = [
   {
-    pattern: 'api.example.com/*',
-    zone_name: 'example.com',
+    pattern: "api.example.com/*",
+    zone_name: "example.com",
     custom_domain: true,
   },
   {
-    pattern: 'example.com/api/*',
-    zone_name: 'example.com',
+    pattern: "example.com/api/*",
+    zone_name: "example.com",
   },
 ];
 ```
 
-
 ## Deployment Options
 
-After building, you can deploy your Mastra application `.mastra/output`  to Cloudflare Workers using any of these methods:
+After building, you can deploy your Mastra application `.mastra/output` to Cloudflare Workers using any of these methods:
 
 1. **Wrangler CLI**: Deploy directly using Cloudflare's official CLI tool
+
    - Install the CLI: `npm install -g wrangler`
    - Navigate to the output directory: `cd .mastra/output`
    - Login to your Cloudflare account: `wrangler login`

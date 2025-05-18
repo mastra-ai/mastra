@@ -4,7 +4,14 @@ import type { InternalCoreTool } from '@mastra/core';
 import { makeCoreTool } from '@mastra/core';
 import type { ToolsInput } from '@mastra/core/agent';
 import { MCPServerBase } from '@mastra/core/mcp';
-import type { MCPServerSSEOptions, ConvertedTool, MCPServerHonoSSEOptions } from '@mastra/core/mcp';
+import type {
+  MCPServerConfig,
+  ServerInfo,
+  ServerDetailInfo,
+  ConvertedTool,
+  MCPServerHonoSSEOptions,
+  MCPServerSSEOptions,
+} from '@mastra/core/mcp';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
@@ -56,17 +63,18 @@ export class MCPServer extends MCPServerBase {
 
   /**
    * Construct a new MCPServer instance.
-   * @param opts.name - Server name
-   * @param opts.version - Server version
-   * @param opts.tools - Tool definitions to register
+   * @param opts - Configuration options for the server, including registry metadata.
    */
-  constructor({ name, version, tools }: { name: string; version: string; tools: ToolsInput }) {
-    super({ name, version, tools });
+  constructor(opts: MCPServerConfig) {
+    super(opts);
 
-    this.server = new Server({ name, version }, { capabilities: { tools: {}, logging: { enabled: true } } });
+    this.server = new Server(
+      { name: this.name, version: this.version },
+      { capabilities: { tools: {}, logging: { enabled: true } } },
+    );
 
     this.logger.info(
-      `Initialized MCPServer '${name}' v${version} with tools: ${Object.keys(this.convertedTools).join(', ')}`,
+      `Initialized MCPServer '${this.name}' v${this.version} (ID: ${this.id}) with tools: ${Object.keys(this.convertedTools).join(', ')}`,
     );
 
     this.sseHonoTransports = new Map();
@@ -107,7 +115,7 @@ export class MCPServer extends MCPServerBase {
         name: toolName,
         description: coreTool.description,
         parameters: coreTool.parameters,
-        execute: coreTool.execute,
+        execute: coreTool.execute!,
       };
       this.logger.info(`Registered tool: '${toolName}' [${toolInstance?.description || 'No description'}]`);
     }
@@ -428,6 +436,132 @@ export class MCPServer extends MCPServerBase {
       this.logger.info('MCP server closed.');
     } catch (error) {
       this.logger.error('Error closing MCP server:', { error });
+    }
+  }
+
+  /**
+   * Gets the basic information about the server, conforming to the Server schema.
+   * @returns ServerInfo object.
+   */
+  public getServerInfo(): ServerInfo {
+    return {
+      id: this.id,
+      name: this.name,
+      description: this.description,
+      repository: this.repository,
+      version_detail: {
+        version: this.version,
+        release_date: this.releaseDate,
+        is_latest: this.isLatest,
+      },
+    };
+  }
+
+  /**
+   * Gets detailed information about the server, conforming to the ServerDetail schema.
+   * @returns ServerDetailInfo object.
+   */
+  public getServerDetail(): ServerDetailInfo {
+    return {
+      ...this.getServerInfo(),
+      package_canonical: this.packageCanonical,
+      packages: this.packages,
+      remotes: this.remotes,
+    };
+  }
+
+  /**
+   * Gets a list of tools provided by this MCP server, including their schemas.
+   * This leverages the same tool information used by the internal ListTools MCP request.
+   * @returns An object containing an array of tool information.
+   */
+  public getToolListInfo(): { tools: Array<{ name: string; description?: string; inputSchema: any }> } {
+    this.logger.debug(`Getting tool list information for MCPServer '${this.name}'`);
+    return {
+      tools: Object.entries(this.convertedTools).map(([toolId, tool]) => ({
+        id: toolId,
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.parameters?.jsonSchema || tool.parameters,
+      })),
+    };
+  }
+
+  /**
+   * Gets information for a specific tool provided by this MCP server.
+   * @param toolId The ID/name of the tool to retrieve.
+   * @returns Tool information (name, description, inputSchema) or undefined if not found.
+   */
+  public getToolInfo(toolId: string): { name: string; description?: string; inputSchema: any } | undefined {
+    const tool = this.convertedTools[toolId];
+    if (!tool) {
+      this.logger.debug(`Tool '${toolId}' not found on MCPServer '${this.name}'`);
+      return undefined;
+    }
+    this.logger.debug(`Getting info for tool '${toolId}' on MCPServer '${this.name}'`);
+    return {
+      name: tool.name,
+      description: tool.description,
+      inputSchema: tool.parameters?.jsonSchema || tool.parameters,
+    };
+  }
+
+  /**
+   * Executes a specific tool provided by this MCP server.
+   * @param toolId The ID/name of the tool to execute.
+   * @param args The arguments to pass to the tool's execute function.
+   * @param executionContext Optional context for the tool execution.
+   * @returns A promise that resolves to the result of the tool execution.
+   * @throws Error if the tool is not found, validation fails, or execution fails.
+   */
+  public async executeTool(
+    toolId: string,
+    args: any,
+    executionContext?: { messages?: any[]; toolCallId?: string },
+  ): Promise<any> {
+    const tool = this.convertedTools[toolId];
+    if (!tool) {
+      this.logger.warn(`ExecuteTool: Unknown tool '${toolId}' requested on MCPServer '${this.name}'.`);
+      throw new Error(`Unknown tool: ${toolId}`);
+    }
+
+    this.logger.debug(`ExecuteTool: Invoking '${toolId}' with arguments:`, args);
+
+    let validatedArgs = args;
+    if (tool.parameters instanceof z.ZodType && typeof tool.parameters.safeParse === 'function') {
+      const validation = tool.parameters.safeParse(args ?? {});
+      if (!validation.success) {
+        const errorMessages = validation.error.errors
+          .map((e: z.ZodIssue) => `${e.path.join('.')}: ${e.message}`)
+          .join(', ');
+        this.logger.warn(`ExecuteTool: Invalid tool arguments for '${toolId}': ${errorMessages}`, {
+          errors: validation.error.format(),
+        });
+        throw new z.ZodError(validation.error.issues);
+      }
+      validatedArgs = validation.data;
+    } else {
+      this.logger.debug(
+        `ExecuteTool: Tool '${toolId}' parameters is not a Zod schema with safeParse or is undefined. Skipping validation.`,
+      );
+    }
+
+    if (!tool.execute) {
+      this.logger.error(`ExecuteTool: Tool '${toolId}' does not have an execute function.`);
+      throw new Error(`Tool '${toolId}' cannot be executed.`);
+    }
+
+    try {
+      const finalExecutionContext = {
+        messages: executionContext?.messages || [],
+        toolCallId: executionContext?.toolCallId || randomUUID(),
+      };
+      const result = await tool.execute(validatedArgs, finalExecutionContext);
+      this.logger.info(`ExecuteTool: Tool '${toolId}' executed successfully.`);
+      return result;
+    } catch (error) {
+      this.logger.error(`ExecuteTool: Tool execution failed for '${toolId}':`, { error });
+      throw error instanceof Error ? error : new Error(`Execution of tool '${toolId}' failed: ${String(error)}`);
     }
   }
 }

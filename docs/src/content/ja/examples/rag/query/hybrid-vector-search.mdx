@@ -24,7 +24,7 @@ import { GithubLink } from "@/components/github-link";
 3. ベクトル類似性とメタデータフィルタリングを組み合わせる方法を実演する
 
 > **注意**：ドキュメントからメタデータを抽出する方法の例については、[メタデータ抽出](../embedding/metadata-extraction.mdx)ガイドを参照してください。
-> 
+>
 > 埋め込みを作成して保存する方法については、[埋め込みのアップサート](/examples/rag/upsert/upsert-embeddings)ガイドを参照してください。
 
 ## セットアップ
@@ -43,9 +43,9 @@ POSTGRES_CONNECTION_STRING=your_connection_string_here
 必要な依存関係をインポートします：
 
 ```typescript copy showLineNumbers filename="src/index.ts"
-import { embed } from 'ai';
-import { PgVector } from '@mastra/pg';
-import { openai } from '@ai-sdk/openai';
+import { embed } from "ai";
+import { PgVector } from "@mastra/pg";
+import { openai } from "@ai-sdk/openai";
 ```
 
 ## ベクターストアの初期化
@@ -63,23 +63,23 @@ const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
 ```typescript copy showLineNumbers{6} filename="src/index.ts"
 // クエリの埋め込みを作成
 const { embedding } = await embed({
-  model: openai.embedding('text-embedding-3-small'),
-  value: '[ここにドキュメントに基づくクエリを挿入]',
+  model: openai.embedding("text-embedding-3-small"),
+  value: "[ここにドキュメントに基づくクエリを挿入]",
 });
 
 // メタデータフィルタを使用したクエリ
 const result = await pgVector.query({
-  indexName: 'embeddings',
+  indexName: "embeddings",
   queryVector: embedding,
   topK: 3,
   filter: {
-    'path.to.metadata': {
-      $eq: 'value',
+    "path.to.metadata": {
+      $eq: "value",
     },
   },
 });
 
-console.log('結果:', result);
+console.log("結果:", result);
 ```
 
 <br />

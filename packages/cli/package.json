@@ -53,6 +53,7 @@
     "@lukeed/uuid": "^2.0.1",
     "@mastra/core": "workspace:^",
     "@mastra/deployer": "workspace:^",
+    "@mastra/mcp": "workspace:^",
     "@opentelemetry/instrumentation": "^0.57.2",
     "@webcontainer/env": "^1.1.1",
     "commander": "^12.1.0",

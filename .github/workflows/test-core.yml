@@ -1,6 +1,7 @@
 name: Core Package Tests
 
 on:
+  workflow_dispatch:
   pull_request:
     branches: [main]
     paths:

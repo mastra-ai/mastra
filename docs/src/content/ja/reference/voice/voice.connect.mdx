@@ -14,9 +14,9 @@ import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
 import Speaker from "@mastra/node-speaker";
 
 const speaker = new Speaker({
-  sampleRate: 24100,  // MacBook Proでの高品質オーディオの標準であるHz単位のオーディオサンプルレート
-  channels: 1,        // モノラルオーディオ出力（ステレオの場合は2）
-  bitDepth: 16,       // オーディオ品質のビット深度 - CD品質標準（16ビット解像度）
+  sampleRate: 24100, // MacBook Proでの高品質オーディオの標準であるHz単位のオーディオサンプルレート
+  channels: 1, // モノラルオーディオ出力（ステレオの場合は2）
+  bitDepth: 16, // オーディオ品質のビット深度 - CD品質標準（16ビット解像度）
 });
 
 // リアルタイム音声プロバイダーを初期化
@@ -49,7 +49,6 @@ await voice.connect({
 });
 ```
 
-
 ## パラメータ
 
 <PropertiesTable
@@ -59,7 +58,7 @@ await voice.connect({
       type: "Record<string, unknown>",
       description: "プロバイダー固有の接続オプション",
       isOptional: true,
-    }
+    },
   ]}
 />
 
@@ -88,7 +87,7 @@ await voice.connect({
       description: "接続が失われた際に自動的に再接続するかどうか",
       isOptional: true,
       defaultValue: "false",
-    }
+    },
   ]}
 />
 

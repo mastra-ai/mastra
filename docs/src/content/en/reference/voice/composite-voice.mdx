@@ -23,7 +23,7 @@ const playai = new PlayAIVoice();
 // Use OpenAI for listening (speech-to-text) and PlayAI for speaking (text-to-speech)
 const voice = new CompositeVoice({
   input: openai,
-  output: playai
+  output: playai,
 });
 
 // Convert speech to text using OpenAI
@@ -82,6 +82,7 @@ Converts text to speech using the configured speaking provider.
 />
 
 Notes:
+
 - If no speaking provider is configured, this method will throw an error
 - Options are passed through to the configured speaking provider
 - Returns a stream of audio data
@@ -108,6 +109,7 @@ Converts speech to text using the configured listening provider.
 />
 
 Notes:
+
 - If no listening provider is configured, this method will throw an error
 - Options are passed through to the configured listening provider
 - Returns either a string or a stream of transcribed text, depending on the provider
@@ -127,13 +129,15 @@ Returns a list of available voices from the speaking provider, where each node c
     {
       name: "key",
       type: "value",
-      description: "Additional voice properties that vary by provider (e.g., name, language)",
+      description:
+        "Additional voice properties that vary by provider (e.g., name, language)",
       isOptional: true,
     },
   ]}
 />
 
 Notes:
+
 - Returns voices from the speaking provider only
 - If no speaking provider is configured, returns an empty array
 - Each voice object will have at least a voiceId property

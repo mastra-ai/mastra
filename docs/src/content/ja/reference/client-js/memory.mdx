@@ -19,7 +19,7 @@ const client = new MastraClient();
 ```typescript
 const threads = await client.getMemoryThreads({
   resourceId: "resource-1",
-  agentId: "agent-1"
+  agentId: "agent-1",
 });
 ```
 
@@ -32,7 +32,7 @@ const thread = await client.createMemoryThread({
   title: "New Conversation",
   metadata: { category: "support" },
   resourceid: "resource-1",
-  agentId: "agent-1"
+  agentId: "agent-1",
 });
 ```
 
@@ -92,7 +92,7 @@ const savedMessages = await client.saveMessageToMemory({
       type: "text",
     },
   ],
-  agentId: "agent-1"
+  agentId: "agent-1",
 });
 ```
 

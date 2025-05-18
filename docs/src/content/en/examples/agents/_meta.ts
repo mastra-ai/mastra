@@ -7,6 +7,7 @@ const meta = {
   "bird-checker": "Bird Checker",
   "adding-voice-capabilities": "Give your Agent a voice",
   "deploying-mcp-server": "Deploying an MCPServer",
+  "dynamic-agents": "Dynamic Agents",
 };
 
 export default meta;

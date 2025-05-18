@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { CustomSearch } from "./custom-search";
 import { getSearchPlaceholder } from "./search-placeholder";
 import { Button } from "./ui/button";
+import { Shortcut } from "./shortcut";
 
 const INPUTS = new Set(["INPUT", "SELECT", "BUTTON", "TEXTAREA"]);
 
@@ -61,7 +62,7 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
 
   return (
     <>
-      <div className="absolute inset-0 m-auto w-[460px] h-fit">
+      <div className="hidden md:block absolute inset-0 m-auto w-[460px] h-fit">
         <Button
           onClick={open}
           size="sm"
@@ -75,7 +76,7 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
       <Dialog
         open={isOpen}
         as="div"
-        className="relative z-1000 focus:outline-none"
+        className="relative hidden md:block z-1000 focus:outline-none"
         onClose={close}
         unmount={true}
       >
@@ -99,8 +100,6 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
                   <div className="p-[10px]">
                     <CustomSearch
                       placeholder={getSearchPlaceholder(locale)}
-                      isAgentMode={isAgentMode}
-                      setIsAgentMode={setIsAgentMode}
                       onUseAgent={handleUseAgent}
                       closeModal={close}
                     />
@@ -114,17 +113,3 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
     </>
   );
 };
-
-function Shortcut() {
-  return (
-    <kbd className="flex items-center gap-1 text-xs font-medium text-icons-3">
-      {navigator.userAgent.includes("Mac") ? (
-        <>
-          <span className="text-base">⌘</span>K
-        </>
-      ) : (
-        "CTRL K"
-      )}
-    </kbd>
-  );
-}

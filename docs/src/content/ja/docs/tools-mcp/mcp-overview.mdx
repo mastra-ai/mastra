@@ -56,44 +56,46 @@ const mcp = new MCPClient({
 
 `MCPClient`は、接続されたサーバーからツールを取得するための2つのアプローチを提供しており、異なるアプリケーションアーキテクチャに適しています：
 
-| 機能          | 静的設定 (`await mcp.getTools()`) | 動的設定 (`await mcp.getToolsets()`) |
-| :--------------- | :-------------------------------------------- | :---------------------------------------------------- |
-| **ユースケース**     | 単一ユーザー、静的設定（CLIツールなど） | マルチユーザー、動的設定（SaaSアプリなど）         |
-| **設定**| エージェント初期化時に固定                 | リクエストごとに動的                                |
-| **認証情報**  | すべての使用で共有                        | ユーザー/リクエストごとに変更可能                             |
-| **エージェント設定**  | `Agent`コンストラクタでツールを追加            | `generate()`または`stream()`オプションでツールを渡す  |
+| 機能                 | 静的設定 (`await mcp.getTools()`)       | 動的設定 (`await mcp.getToolsets()`)                 |
+| :------------------- | :-------------------------------------- | :--------------------------------------------------- |
+| **ユースケース**     | 単一ユーザー、静的設定（CLIツールなど） | マルチユーザー、動的設定（SaaSアプリなど）           |
+| **設定**             | エージェント初期化時に固定              | リクエストごとに動的                                 |
+| **認証情報**         | すべての使用で共有                      | ユーザー/リクエストごとに変更可能                    |
+| **エージェント設定** | `Agent`コンストラクタでツールを追加     | `generate()`または`stream()`オプションでツールを渡す |
 
-*   **静的設定（`getTools()`）：** 設定されたすべてのサーバーからすべてのツールを取得します。ツール設定（APIキーなど）が静的で、すべてのユーザーまたはリクエスト間で共有される場合に最適です。通常、これを一度呼び出し、結果を`Agent`を定義する際の`tools`プロパティに渡します。
-    [リファレンス：`getTools()`](/reference/tools/mcp-client#gettools)
+- **静的設定（`getTools()`）：** 設定されたすべてのサーバーからすべてのツールを取得します。ツール設定（APIキーなど）が静的で、すべてのユーザーまたはリクエスト間で共有される場合に最適です。通常、これを一度呼び出し、結果を`Agent`を定義する際の`tools`プロパティに渡します。
+  [リファレンス：`getTools()`](/reference/tools/mcp-client#gettools)
 
-    ```typescript
-    import { Agent } from "@mastra/core/agent";
-    // ... mcpクライアントの設定
+  ```typescript
+  import { Agent } from "@mastra/core/agent";
+  // ... mcpクライアントの設定
 
-    const agent = new Agent({
-      // ... その他のエージェント設定
-      tools: await mcp.getTools(),
+  const agent = new Agent({
+    // ... その他のエージェント設定
+    tools: await mcp.getTools(),
+  });
+  ```
+
+- **動的設定（`getToolsets()`）：** リクエストごとまたはユーザーごとに設定が変更される可能性があるシナリオ（例：マルチユーザーアプリケーションで異なるテナントに対して異なるAPIキー）向けに設計されています。`getToolsets()`の結果をエージェントの`generate()`または`stream()`メソッドの`toolsets`オプションに渡します。
+  [リファレンス：`getToolsets()`](/reference/tools/mcp-client#gettoolsets)
+
+  ```typescript
+  import { Agent } from "@mastra/core/agent";
+  // ... 最初にツールなしでエージェントを設定
+
+  async function handleRequest(userPrompt: string, userApiKey: string) {
+    const userMcp = new MCPClient({
+      /* userApiKeyを含む設定 */
     });
-    ```
+    const toolsets = await userMcp.getToolsets();
 
-*   **動的設定（`getToolsets()`）：** リクエストごとまたはユーザーごとに設定が変更される可能性があるシナリオ（例：マルチユーザーアプリケーションで異なるテナントに対して異なるAPIキー）向けに設計されています。`getToolsets()`の結果をエージェントの`generate()`または`stream()`メソッドの`toolsets`オプションに渡します。
-    [リファレンス：`getToolsets()`](/reference/tools/mcp-client#gettoolsets)
-
-    ```typescript
-    import { Agent } from "@mastra/core/agent";
-    // ... 最初にツールなしでエージェントを設定
-
-    async function handleRequest(userPrompt: string, userApiKey: string) {
-      const userMcp = new MCPClient({ /* userApiKeyを含む設定 */ });
-      const toolsets = await userMcp.getToolsets();
-
-      const response = await agent.stream(userPrompt, {
-        toolsets, // 動的ツールセットを渡す
-      });
-      // ... レスポンスを処理
-      await userMcp.disconnect();
-    }
-    ```
+    const response = await agent.stream(userPrompt, {
+      toolsets, // 動的ツールセットを渡す
+    });
+    // ... レスポンスを処理
+    await userMcp.disconnect();
+  }
+  ```
 
 ## MCPレジストリへの接続
 

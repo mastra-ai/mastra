@@ -14,13 +14,14 @@ MDocumentクラスはRAGアプリケーションのためにドキュメント�
     {
       name: "docs",
       type: "Array<{ text: string, metadata?: Record<string, any> }>",
-      description: "テキストコンテンツとオプションのメタデータを含むドキュメントチャンクの配列",
+      description:
+        "テキストコンテンツとオプションのメタデータを含むドキュメントチャンクの配列",
     },
     {
       name: "type",
       type: "'text' | 'html' | 'markdown' | 'json' | 'latex'",
       description: "ドキュメントコンテンツのタイプ",
-    }
+    },
   ]}
 />
 
@@ -42,7 +43,7 @@ HTMLコンテンツからドキュメントを作成します。
 static fromHTML(html: string, metadata?: Record<string, any>): MDocument
 ```
 
-### fromMarkdown() 
+### fromMarkdown()
 
 Markdownコンテンツからドキュメントを作成します。
 
@@ -105,19 +106,22 @@ async extractMetadata(params: ExtractParams): Promise<MDocument>
 ## 例
 
 ```typescript
-import { MDocument } from '@mastra/rag';
+import { MDocument } from "@mastra/rag";
 
 // Create document from text
-const doc = MDocument.fromText('Your content here');
+const doc = MDocument.fromText("Your content here");
 
 // Split into chunks with metadata extraction
 const chunks = await doc.chunk({
-  strategy: 'markdown',
-  headers: [['#', 'title'], ['##', 'section']],
+  strategy: "markdown",
+  headers: [
+    ["#", "title"],
+    ["##", "section"],
+  ],
   extract: {
     summary: true, // Extract summaries with default settings
-    keywords: true  // Extract keywords with default settings
-  }
+    keywords: true, // Extract keywords with default settings
+  },
 });
 
 // Get processed chunks
