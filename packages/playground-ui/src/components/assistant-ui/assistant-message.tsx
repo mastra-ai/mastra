@@ -5,7 +5,6 @@ import { FC } from 'react';
 import { MarkdownText } from './markdown-text';
 import { TooltipIconButton } from './tooltip-icon-button';
 import { ToolFallback } from '@/components/assistant-ui/tool-fallback';
-import { ImageComponent } from './image-component';
 
 export const AssistantMessage: FC<{ ToolFallback?: ToolCallContentPartComponent }> = ({
   ToolFallback: ToolFallbackCustom,
@@ -20,7 +19,6 @@ export const AssistantMessage: FC<{ ToolFallback?: ToolCallContentPartComponent 
           components={{
             Text: MarkdownText,
             tools: { Fallback: ToolFallbackCustom || ToolFallback },
-            Image: ImageComponent,
           }}
         />
       </div>

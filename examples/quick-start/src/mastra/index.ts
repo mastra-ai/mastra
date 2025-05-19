@@ -1,11 +1,11 @@
 import { createLogger, Mastra } from '@mastra/core';
 
-import { catOne, catTwo } from './agents/agent';
+import { catOne } from './agents/agent';
 import { logCatWorkflow } from './workflow';
 import { logCatWorkflow as vnext_logCatWorkflow } from './vnext-workflows';
 
 export const mastra = new Mastra({
-  agents: { catOne, catTwo },
+  agents: { catOne },
   workflows: {
     logCatWorkflow,
   },

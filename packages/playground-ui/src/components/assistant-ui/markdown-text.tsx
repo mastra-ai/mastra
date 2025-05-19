@@ -24,6 +24,7 @@ const SyntaxHighlighter = makePrismAsyncSyntaxHighlighter({
 import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button';
 
 import { cn } from '@/lib/utils';
+import { ImageWithFallback } from './image-with-fallback';
 
 const MarkdownTextImpl = () => {
   return <MarkdownTextPrimitive remarkPlugins={[remarkGfm]} className="aui-md" components={defaultComponents} />;
@@ -234,4 +235,5 @@ const defaultComponents = memoizeMarkdownComponents({
   },
   CodeHeader,
   SyntaxHighlighter,
+  img: ImageWithFallback,
 });
