@@ -32,7 +32,7 @@ export function CardItemsInner({
       <div className="mt-6">
         <CardItem
           links={
-            items[titles.find((tab) => sluggify(tab) === activeTab)!] || []
+            items[titles.find((tab) => sluggify(tab) === activeTab)?.toString()] ?? []
           }
         />
       </div>
