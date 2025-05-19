@@ -160,7 +160,20 @@ export class Agent<
   }
 
   public getMemory(): MastraMemory | undefined {
-    return this.#memory ?? this.#mastra?.memory;
+    const memory = this.#memory;
+
+    if (memory && !memory.storage && this.#mastra) {
+      const storage = this.#mastra.getStorage();
+      if (storage) {
+        memory.setStorage(storage);
+      } else {
+        throw new Error(
+          `Agent attempted to use Memory instance that has no attached storage adapter. Please add storage to your Memory or Mastra class instances.`,
+        );
+      }
+    }
+
+    return memory;
   }
 
   get voice() {

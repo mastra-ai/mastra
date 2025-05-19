@@ -9,8 +9,8 @@ import type {
 } from 'ai';
 
 import { MastraBase } from '../base';
+import type { Mastra } from '../mastra';
 import type { MastraStorage, StorageGetMessagesArg } from '../storage';
-import { DefaultProxyStorage } from '../storage/default-proxy-storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { CoreTool } from '../tools';
 import { deepMerge } from '../utils';
@@ -61,7 +61,6 @@ export const memoryDefaultOptions = {
   },
 } satisfies MemoryConfig;
 
-
 /**
  * Abstract Memory class that defines the interface for storing and retrieving
  * conversation threads and messages.
@@ -69,84 +68,47 @@ export const memoryDefaultOptions = {
 export abstract class MastraMemory extends MastraBase {
   MAX_CONTEXT_TOKENS?: number;
 
-  storage: MastraStorage;
+  _storage?: MastraStorage;
   vector?: MastraVector;
   embedder?: EmbeddingModel<string>;
   private processors: MemoryProcessor[] = [];
-
-  private deprecationWarnings: string[] = [];
-
   protected threadConfig: MemoryConfig = { ...memoryDefaultOptions };
 
   constructor(config: { name: string } & SharedMemoryConfig) {
     super({ component: 'MEMORY', name: config.name });
 
-    if (config.options) {
-      this.threadConfig = this.getMergedThreadConfig(config.options);
-    }
-    if (config.storage) {
-      this.storage = config.storage;
-    } else if (this.mastra?.storage) {
-      this.storage = this.mastra.storage;
-    } else {
-      throw new Error(`Memory requires a storage provider to function. Add a storage configuration to Memory or to your Mastra instance`);
-    }
+    if (config.options) this.threadConfig = this.getMergedThreadConfig(config.options);
+    if (config.storage) this._storage = augmentWithInit(config.storage);
+    if (config.processors) this.processors = config.processors;
 
-    this.storage = augmentWithInit(this.storage);
-
-
-    const semanticRecallIsEnabled = this.threadConfig.semanticRecall !== false; // default is to have it enabled, so any value except false means it's on
-    if (config.vector && semanticRecallIsEnabled) {
+    if (this.threadConfig.semanticRecall) {
+      if (!config.vector) {
+        throw new Error(
+          `Semantic recall requires a vector store to be configured.\n\nhttps://mastra.ai/en/docs/memory/semantic-recall`,
+        );
+      }
       this.vector = config.vector;
-    } else if (config.vector !== false && semanticRecallIsEnabled) {
-      throw new Error(`Semantic recall requires a vector store to be configured.`);
-    }
 
-    if (config.embedder) {
+      if (!config.embedder) {
+        throw new Error(
+          `Semantic recall requires an embedder to be configured.\n\nhttps://mastra.ai/en/docs/memory/semantic-recall`,
+        );
+      }
       this.embedder = config.embedder;
-    } else if (
-      // if there's no configured embedder
-      // and there's a vector store
-      typeof this.vector !== `undefined` &&
-      // and semanticRecall is enabled
-      semanticRecallIsEnabled
-    ) {
-      throw new Error(`Semantic recall requires an embedder to be configured.`);
-    }
-
-    // Initialize processors if provided
-    if (config.processors) {
-      this.processors = config.processors;
-    }
-
-
-    if (this.deprecationWarnings.length > 0) {
-      setTimeout(() => {
-        this.logger?.warn(`
-
-!MEMORY DEPRECATION WARNING!
-${this.deprecationWarnings.map((w, i) => `${this.deprecationWarnings.length > 1 ? `Warning ${i + 1}:\n` : ``}${w}`).join(`\n\n`)}
-!END MEMORY DEPRECATION WARNING!
-
-`);
-      }, 1000);
     }
   }
 
+  get storage() {
+    if (!this._storage) {
+      throw new Error(
+        `Memory requires a storage provider to function. Add a storage configuration to Memory or to your Mastra instance.\n\nhttps://mastra.ai/en/docs/memory/overview`,
+      );
+    }
+    return this._storage;
+  }
 
   public setStorage(storage: MastraStorage) {
-    if (storage instanceof DefaultProxyStorage) {
-      this.deprecationWarnings.push(`Importing "DefaultStorage" from '@mastra/core/storage/libsql' is deprecated.
-
-Instead of:
-  import { DefaultStorage } from '@mastra/core/storage/libsql';
-
-Do:
-  import { LibSQLStore } from '@mastra/libsql';
-`);
-    }
-
-    this.storage = storage;
+    this._storage = storage;
   }
 
   public setVector(vector: MastraVector) {
@@ -196,9 +158,7 @@ Do:
 
   public getMergedThreadConfig(config?: MemoryConfig): MemoryConfig {
     if (config?.workingMemory && 'use' in config.workingMemory) {
-      throw new Error(
-        'The workingMemory.use option has been removed. Working memory always uses tool-call mode.'
-      );
+      throw new Error('The workingMemory.use option has been removed. Working memory always uses tool-call mode.');
     }
     return deepMerge(this.threadConfig, config || {});
   }
