@@ -34,50 +34,51 @@ export const PropertiesTable: React.FC<PropertiesTableProps> = ({
     properties = [],
   }: {
     properties: Property[] | undefined;
-  properties: Property[];
-    if (!properties.length) return null;
-    return (
-      <div className="flex flex-col">
-        {properties.map((prop, idx) => (
-          <div
-            key={idx}
-            className="m-2 rounded-lg flex flex-col relative my-4 border border-neutral-300 dark:border-neutral-900"
-          >
-            <div className="flex flex-col">
-              <div className="cursor-pointer font-mono text-xs absolute -top-3 right-2 bg-zinc-200 dark:bg-neutral-700 dark:text-zinc-400 px-2 py-1 rounded-md text-zinc-600 z-20">
-                {prop.type}
-              </div>
-              {prop.parameters &&
-                prop.parameters.map((param, paramIdx) => (
-                  <div
-                    key={paramIdx}
-                    className="flex flex-col border-b p-3 gap-1 last:border-none dark:border-neutral-700"
-                  >
-                    <div className="relative flex flex-row items-start gap-2 group">
-                      <h3 className="font-mono text-sm font-medium cursor-pointer">
-                        {param.name}
-                        <span>
-                          {param.isOptional ? (
-                            <T id="components.properties_table.0">{"?:"}</T>
-                          ) : (
-                            <T id="components.properties_table.1">{":"}</T>
-                          )}
-                        </span>
-                      </h3>
-                      <div className="font-mono text-zinc-500 text-sm w-full">
-                        {param.type}
+  }) => {
+    if (properties && properties.length > 0) {
+      return (
+        <div className="flex flex-col">
+          {properties.map((prop, idx) => (
+            <div
+              key={idx}
+              className="m-2 rounded-lg flex flex-col relative my-4 border border-neutral-300 dark:border-neutral-900"
+            >
+              <div className="flex flex-col">
+                <div className="cursor-pointer font-mono text-xs absolute -top-3 right-2 bg-zinc-200 dark:bg-neutral-700 dark:text-zinc-400 px-2 py-1 rounded-md text-zinc-600 z-20">
+                  {prop.type}
+                </div>
+                {prop.parameters &&
+                  prop.parameters.map((param, paramIdx) => (
+                    <div
+                      key={paramIdx}
+                      className="flex flex-col border-b p-3 gap-1 last:border-none dark:border-neutral-700"
+                    >
+                      <div className="relative flex flex-row items-start gap-2 group">
+                        <h3 className="font-mono text-sm font-medium cursor-pointer">
+                          {param.name}
+                          <span>
+                            {param.isOptional ? (
+                              <T id="components.properties_table.0">{"?:"}</T>
+                            ) : (
+                              <T id="components.properties_table.1">{":"}</T>
+                            )}
+                          </span>
+                        </h3>
+                        <div className="font-mono text-zinc-500 text-sm w-full">
+                          {param.type}
+                        </div>
+                      </div>
+                      <div className="text-sm leading-5 text-zinc-500">
+                        {param.description}
                       </div>
                     </div>
-                    <div className="text-sm leading-5 text-zinc-500">
-                      {param.description}
-                    </div>
-                  </div>
-                ))}
+                  ))}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
-    );
+          ))}
+        </div>
+      );
+    }
   };
 
   return (
