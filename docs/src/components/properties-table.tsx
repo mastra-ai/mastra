@@ -34,7 +34,7 @@ export const PropertiesTable: React.FC<PropertiesTableProps> = ({
     properties = [],
   }: {
     properties: Property[] | undefined;
-  }) => {
+  properties: Property[];
     if (!properties.length) return null;
     return (
       <div className="flex flex-col">
