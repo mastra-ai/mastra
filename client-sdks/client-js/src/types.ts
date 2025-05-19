@@ -11,6 +11,7 @@ import type {
   VNextWorkflowRuns,
   WorkflowRuns,
 } from '@mastra/core';
+import type { Prettify } from '@mastra/core';
 
 import type { AgentGenerateOptions, AgentStreamOptions } from '@mastra/core/agent';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
@@ -60,19 +61,29 @@ export interface GetAgentResponse {
   modelId: string;
 }
 
-export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
-  messages: string | string[] | CoreMessage[] | AiMessageType[];
-  output?: T;
-  experimental_output?: T;
-  runtimeContext?: RuntimeContext;
-} & WithoutMethods<Omit<AgentGenerateOptions<T>, 'output' | 'experimental_output' | 'runtimeContext'>>;
+export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = Prettify<
+  {
+    messages: string | string[] | CoreMessage[] | AiMessageType[];
+    output?: T;
+    experimental_output?: T;
+    runtimeContext?: RuntimeContext;
+  } & WithoutMethods<Omit<
+    AgentGenerateOptions<T>,
+    'output' | 'experimental_output' | 'runtimeContext'
+  >>
+>;
 
-export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
-  messages: string | string[] | CoreMessage[] | AiMessageType[];
-  output?: T;
-  experimental_output?: T;
-  runtimeContext?: RuntimeContext;
-} & WithoutMethods<Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'runtimeContext'>>;
+export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = Prettify<
+  {
+    messages: string | string[] | CoreMessage[] | AiMessageType[];
+    output?: T;
+    experimental_output?: T;
+    runtimeContext?: RuntimeContext;
+  } & WithoutMethods<Omit<
+    AgentStreamOptions<T>,
+    'output' | 'experimental_output' | 'runtimeContext'
+  >>
+>;
 
 export interface GetEvalsByAgentIdResponse extends GetAgentResponse {
   evals: any[];
@@ -133,7 +144,7 @@ export interface GetVNextWorkflowResponse {
   outputSchema: string;
 }
 
-export type VNextWorkflowWatchResult = WatchEvent & { runId: string };
+export type VNextWorkflowWatchResult = Prettify<WatchEvent & { runId: string }>;
 
 export type VNextWorkflowRunResult = VNextWorkflowResult<any, any>;
 export interface UpsertVectorParams {
