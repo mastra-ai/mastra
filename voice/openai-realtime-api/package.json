@@ -26,7 +26,6 @@
   },
   "license": "Elastic-2.0",
   "dependencies": {
-    "@mastra/core": "workspace:^",
     "openai-realtime-api": "^1.0.7",
     "ws": "^8.18.1",
     "zod-to-json-schema": "^3.24.5"
@@ -40,6 +39,11 @@
     "tsup": "^8.4.0",
     "typescript": "^5.8.3",
     "vitest": "^2.1.9",
-    "zod": "^3.24.4"
+    "@mastra/core": "workspace:*",
+    "zod": "^3.24.3"
+  },
+  "peerDependencies": {
+    "@mastra/core": "^0.9.4",
+    "zod": "^3.0.0"
   }
 }
