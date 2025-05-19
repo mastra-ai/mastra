@@ -12,7 +12,7 @@ export function CardTitle({
 }) {
   return (
     <div className="flex flex-wrap mt-6 items-center gap-2">
-      {titles?.map((title) => (
+      {titles.map((title) => (
         <button
           onClick={() => setActiveTab(title)}
           key={title}
