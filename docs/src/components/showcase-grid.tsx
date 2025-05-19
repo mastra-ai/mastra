@@ -3,7 +3,6 @@ import { ArrowUpRight } from "lucide-react";
 
 import { T, Var } from "gt-next/client";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
 
 interface ShowcaseCardProps {
   title: string;
@@ -55,9 +54,6 @@ const ShowcaseCard = ({
 );
 
 export const ShowcaseGrid = () => {
-  const pathname = usePathname();
-  const locale = pathname.split("/")[1];
-  console.log(locale);
   const showcaseItems: ShowcaseCardProps[] = [
     {
       title: "Olive",
