@@ -44,7 +44,7 @@ async function createIndexAndWait(
 }
 
 async function deleteIndexAndWait(vectorDB: AstraVector, indexName: string) {
-  await vectorDB.deleteIndex(indexName);
+  await vectorDB.deleteIndex({ indexName });
   const deleted = await waitForCondition(
     async () => {
       const newCollections = await vectorDB.listIndexes();
@@ -80,7 +80,7 @@ describe.skip('AstraVector Integration Tests', () => {
     });
     try {
       const collections = await vectorDB.listIndexes();
-      await Promise.all(collections.map(c => vectorDB.deleteIndex(c)));
+      await Promise.all(collections.map(c => vectorDB.deleteIndex({ indexName: c })));
       const deleted = await waitForCondition(
         async () => {
           const remainingCollections = await vectorDB.listIndexes();
@@ -104,12 +104,12 @@ describe.skip('AstraVector Integration Tests', () => {
   afterAll(async () => {
     // Cleanup: delete test collection
     try {
-      await vectorDB.deleteIndex(testIndexName);
+      await vectorDB.deleteIndex({ indexName: testIndexName });
     } catch (error) {
       console.error('Failed to delete test collection:', error);
     }
     try {
-      await vectorDB.deleteIndex(testIndexName2);
+      await vectorDB.deleteIndex({ indexName: testIndexName2 });
     } catch (error) {
       console.error('Failed to delete test collection:', error);
     }
@@ -121,7 +121,7 @@ describe.skip('AstraVector Integration Tests', () => {
     expect(indexes).toContain(testIndexName);
 
     // 2. Get collection stats
-    const initialStats = await vectorDB.describeIndex(testIndexName);
+    const initialStats = await vectorDB.describeIndex({ indexName: testIndexName });
     expect(initialStats).toEqual({
       dimension: 4,
       metric: 'cosine',
@@ -144,7 +144,7 @@ describe.skip('AstraVector Integration Tests', () => {
     // Wait for document count to update (with timeout)
     const countUpdated = await waitForCondition(
       async () => {
-        const stats = await vectorDB.describeIndex(testIndexName);
+        const stats = await vectorDB.describeIndex({ indexName: testIndexName });
         console.log('Current count:', stats.count);
         return stats.count === 4;
       },
@@ -176,7 +176,7 @@ describe.skip('AstraVector Integration Tests', () => {
     expect(filteredResults?.[0]?.metadata).toEqual({ label: 'vector2' });
 
     // Get final stats
-    const finalStats = await vectorDB.describeIndex(testIndexName);
+    const finalStats = await vectorDB.describeIndex({ indexName: testIndexName });
     console.log('Final stats:', finalStats);
 
     // More lenient assertion for document count
@@ -1224,12 +1224,12 @@ describe.skip('AstraVector Integration Tests', () => {
         metadata: newMetaData,
       };
 
-      await vectorDB.updateVector(indexName, idToBeUpdated, update);
+      await vectorDB.updateVector({ indexName, id: idToBeUpdated, update });
 
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       const results = await vectorDB.query({
-        indexName: indexName,
+        indexName,
         queryVector: newVector,
         topK: 2,
         includeVector: true,
@@ -1256,11 +1256,11 @@ describe.skip('AstraVector Integration Tests', () => {
         metadata: newMetaData,
       };
 
-      await vectorDB.updateVector(indexName, idToBeUpdated, update);
+      await vectorDB.updateVector({ indexName, id: idToBeUpdated, update });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       const results = await vectorDB.query({
-        indexName: indexName,
+        indexName,
         queryVector: testVectors[0],
         topK: 2,
         includeVector: true,
@@ -1285,11 +1285,11 @@ describe.skip('AstraVector Integration Tests', () => {
         vector: newVector,
       };
 
-      await vectorDB.updateVector(indexName, idToBeUpdated, update);
+      await vectorDB.updateVector({ indexName, id: idToBeUpdated, update });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       const results = await vectorDB.query({
-        indexName: indexName,
+        indexName,
         queryVector: newVector,
         topK: 2,
         includeVector: true,
@@ -1303,7 +1303,7 @@ describe.skip('AstraVector Integration Tests', () => {
     });
 
     it('should throw exception when no updates are given', async () => {
-      await expect(vectorDB.updateVector(indexName, 'id', {})).rejects.toThrow('No updates provided');
+      await expect(vectorDB.updateVector({ indexName, id: 'id', update: {} })).rejects.toThrow('No updates provided');
     });
 
     it('should delete the vector by id', async () => {
@@ -1311,7 +1311,7 @@ describe.skip('AstraVector Integration Tests', () => {
       expect(ids).toHaveLength(4);
 
       const idToBeDeleted = ids[0];
-      await vectorDB.deleteVector(indexName, idToBeDeleted);
+      await vectorDB.deleteVector({ indexName, id: idToBeDeleted });
 
       const results = await vectorDB.query({
         indexName: indexName,
@@ -1331,7 +1331,7 @@ describe.skip('AstraVector Integration Tests', () => {
     });
 
     afterAll(async () => {
-      await vectorDB.deleteIndex(testIndexName);
+      await vectorDB.deleteIndex({ indexName: testIndexName });
     });
 
     it('should handle non-existent index queries', async () => {
@@ -1376,7 +1376,7 @@ describe.skip('AstraVector Integration Tests', () => {
         );
       } finally {
         // Cleanup
-        await vectorDB.deleteIndex(duplicateIndexName);
+        await vectorDB.deleteIndex({ indexName: duplicateIndexName });
       }
     });
   });

@@ -6,6 +6,10 @@ import type {
   UpsertVectorParams,
   QueryVectorParams,
   ParamsToArgs,
+  DescribeIndexParams,
+  DeleteIndexParams,
+  DeleteVectorParams,
+  UpdateVectorParams,
 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import { QdrantClient } from '@qdrant/js-client-rest';
@@ -23,15 +27,45 @@ const DISTANCE_MAPPING: Record<string, Schemas['Distance']> = {
 export class QdrantVector extends MastraVector {
   private client: QdrantClient;
 
-  constructor(url: string, apiKey?: string, https?: boolean) {
+  /**
+   * @deprecated Passing url, apiKey, https as positional arguments is deprecated.
+   * Use the object parameter instead. This signature will be removed on May 20th, 2025.
+   */
+  constructor(url: string, apiKey?: string, https?: boolean);
+  /**
+   * Creates a new QdrantVector client.
+   * @param params - An object with url, optional apiKey, and optional https.
+   */
+  constructor(params: { url: string; apiKey?: string; https?: boolean });
+  constructor(
+    paramsOrUrl: { url: string; apiKey?: string; https?: boolean } | string,
+    apiKey?: string,
+    https?: boolean,
+  ) {
     super();
-
+    let url: string;
+    let key: string | undefined;
+    let secure: boolean | undefined;
+    if (typeof paramsOrUrl === 'string') {
+      // DEPRECATION WARNING
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn(
+          `Deprecation Warning: Passing url, apiKey, https as positional arguments to QdrantVector constructor is deprecated.\nPlease use an object parameter instead:\n  new QdrantVector({ url, apiKey, https })\nThis signature will be removed on May 20th, 2025.`,
+        );
+      }
+      url = paramsOrUrl;
+      key = apiKey;
+      secure = https;
+    } else {
+      url = paramsOrUrl.url;
+      key = paramsOrUrl.apiKey;
+      secure = paramsOrUrl.https;
+    }
     const baseClient = new QdrantClient({
       url,
-      apiKey,
-      https,
+      apiKey: key,
+      https: secure,
     });
-
     const telemetry = this.__getTelemetry();
     this.client =
       telemetry?.traceClass(baseClient, {
@@ -144,7 +178,16 @@ export class QdrantVector extends MastraVector {
     return response.collections.map(collection => collection.name) || [];
   }
 
-  async describeIndex(indexName: string): Promise<IndexStats> {
+  /**
+   * Retrieves statistics about a vector index.
+   *
+   * @param params - The parameters for describing an index
+   * @param params.indexName - The name of the index to describe
+   * @returns A promise that resolves to the index statistics including dimension, count and metric
+   */
+  async describeIndex(...args: ParamsToArgs<DescribeIndexParams>): Promise<IndexStats> {
+    const params = this.normalizeArgs<DescribeIndexParams>('describeIndex', args);
+    const { indexName } = params;
     const { config, points_count } = await this.client.getCollection(indexName);
 
     const distance = config.params.vectors?.distance as Schemas['Distance'];
@@ -156,7 +199,9 @@ export class QdrantVector extends MastraVector {
     };
   }
 
-  async deleteIndex(indexName: string): Promise<void> {
+  async deleteIndex(...args: ParamsToArgs<DeleteIndexParams>): Promise<void> {
+    const params = this.normalizeArgs<DeleteIndexParams>('deleteIndex', args);
+    const { indexName } = params;
     await this.client.deleteCollection(indexName);
   }
 
@@ -182,7 +227,7 @@ export class QdrantVector extends MastraVector {
       Please use updateVector() instead. 
       updateIndexById() will be removed on May 20th, 2025.`,
     );
-    await this.updateVector(indexName, id, update);
+    await this.updateVector({ indexName, id, update });
   }
 
   /**
@@ -195,14 +240,9 @@ export class QdrantVector extends MastraVector {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector(
-    indexName: string,
-    id: string,
-    update: {
-      vector?: number[];
-      metadata?: Record<string, any>;
-    },
-  ): Promise<void> {
+  async updateVector(...args: ParamsToArgs<UpdateVectorParams>): Promise<void> {
+    const params = this.normalizeArgs<UpdateVectorParams>('updateVector', args);
+    const { indexName, id, update } = params;
     if (!update.vector && !update.metadata) {
       throw new Error('No updates provided');
     }
@@ -264,7 +304,7 @@ export class QdrantVector extends MastraVector {
       Please use deleteVector() instead. 
       deleteIndexById() will be removed on May 20th, 2025.`,
     );
-    await this.deleteVector(indexName, id);
+    await this.deleteVector({ indexName, id });
   }
 
   /**
@@ -274,7 +314,9 @@ export class QdrantVector extends MastraVector {
    * @returns A promise that resolves when the deletion is complete.
    * @throws Will throw an error if the deletion operation fails.
    */
-  async deleteVector(indexName: string, id: string): Promise<void> {
+  async deleteVector(...args: ParamsToArgs<DeleteVectorParams>): Promise<void> {
+    const params = this.normalizeArgs<DeleteVectorParams>('deleteVector', args);
+    const { indexName, id } = params;
     try {
       // Parse the ID - Qdrant supports both string and numeric IDs
       const pointId = this.parsePointId(id);

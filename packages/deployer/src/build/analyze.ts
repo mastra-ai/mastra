@@ -16,7 +16,17 @@ import { tsConfigPaths } from './plugins/tsconfig-paths';
 import { writeFile } from 'node:fs/promises';
 
 // TODO: Make thie extendable or find a rollup plugin that can do this
-const globalExternals = ['pino', 'pino-pretty', '@libsql/client', 'pg', 'libsql', 'jsdom', 'sqlite3', 'fastembed'];
+const globalExternals = [
+  'pino',
+  'pino-pretty',
+  '@libsql/client',
+  'pg',
+  'libsql',
+  'jsdom',
+  'sqlite3',
+  'fastembed',
+  'nodemailer',
+];
 
 function findExternalImporter(module: OutputChunk, external: string, allOutputs: OutputChunk[]): OutputChunk | null {
   const capturedFiles = new Set();

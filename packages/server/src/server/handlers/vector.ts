@@ -127,7 +127,7 @@ export async function describeIndex({
     }
 
     const vector = getVector(mastra, vectorName);
-    const stats: IndexStats = await vector.describeIndex(indexName);
+    const stats: IndexStats = await vector.describeIndex({ indexName });
 
     return {
       dimension: stats.dimension,
@@ -151,7 +151,7 @@ export async function deleteIndex({
     }
 
     const vector = getVector(mastra, vectorName);
-    await vector.deleteIndex(indexName);
+    await vector.deleteIndex({ indexName });
     return { success: true };
   } catch (error) {
     return handleError(error, 'Error deleting index');
