@@ -118,6 +118,7 @@ export type WorkflowRunResult = {
 
 export interface GetVNextWorkflowResponse {
   name: string;
+  description?: string;
   steps: {
     [key: string]: {
       id: string;
