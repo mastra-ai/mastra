@@ -39,7 +39,7 @@ export const messageEntity = new Entity({
             if (value.startsWith('{') || value.startsWith('[')) {
               return JSON.parse(value);
             }
-          } catch (e) {
+          } catch {
             // Ignore parse error, return original string
             return value;
           }
@@ -73,7 +73,7 @@ export const messageEntity = new Entity({
         if (value && typeof value === 'string') {
           try {
             return JSON.parse(value);
-          } catch (e) {
+          } catch {
             // Return raw value on error, consistent with 'content' field
             return value;
           }
@@ -96,7 +96,7 @@ export const messageEntity = new Entity({
         if (value && typeof value === 'string') {
           try {
             return JSON.parse(value);
-          } catch (e) {
+          } catch {
             // Return raw value on error, consistent with 'content' field
             return value;
           }
@@ -119,7 +119,7 @@ export const messageEntity = new Entity({
         if (value && typeof value === 'string') {
           try {
             return JSON.parse(value);
-          } catch (e) {
+          } catch {
             // Return raw value on error, consistent with 'content' field
             return value;
           }
