@@ -1,5 +1,17 @@
 # @mastra/core
 
+## 0.9.5-alpha.0
+
+### Patch Changes
+
+- f53a6ac: Add VNextWorkflowRuns type
+- eabdcd9: [MASTRA-3451] SQL Injection Protection
+- 90be034: Pass zod schema directly to getInitData
+- 99f050a: Bumped a workspace package zod version to attempt to prevent duplicate dep installs of @mastra/core
+- d0ee3c6: Change all public functions and constructors in vector stores to use named args and prepare to phase out positional args
+- 23f258c: Add new list and get routes for mcp servers. Changed route make-up for more consistency with existing API routes. Lastly, added in a lot of extra detail that can be optionally passed to the mcp server per the mcp spec.
+- 2672a05: Add MCP servers and tool call execution to playground
+
 ## 0.9.4
 
 ### Patch Changes

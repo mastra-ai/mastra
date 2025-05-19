@@ -1,5 +1,20 @@
 # @mastra/mcp
 
+## 0.5.1-alpha.0
+
+### Patch Changes
+
+- 23f258c: Add new list and get routes for mcp servers. Changed route make-up for more consistency with existing API routes. Lastly, added in a lot of extra detail that can be optionally passed to the mcp server per the mcp spec.
+- 2672a05: Add MCP servers and tool call execution to playground
+- Updated dependencies [f53a6ac]
+- Updated dependencies [eabdcd9]
+- Updated dependencies [90be034]
+- Updated dependencies [99f050a]
+- Updated dependencies [d0ee3c6]
+- Updated dependencies [23f258c]
+- Updated dependencies [2672a05]
+  - @mastra/core@0.9.5-alpha.0
+
 ## 0.5.0
 
 ### Minor Changes

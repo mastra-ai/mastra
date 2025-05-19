@@ -118,3 +118,12 @@ try {
   console.error("Development error:", error);
 }
 ```
+## Debug
+
+- Sometimes when using MastraClient on the server instead of the client e.g `/api/chat`,
+ you might need to recreate the response to your client:
+
+ ```typescript
+ const result = agent.stream(/* get your agent stream */)
+ return new Response(result.body);
+```
