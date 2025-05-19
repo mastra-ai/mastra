@@ -6,11 +6,13 @@ import { CopyIcon } from 'lucide-react';
 import { useState } from 'react';
 import { CodeBlockDemo } from '@/components/ui/code-block';
 
+import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 export interface WorkflowResultProps {
   jsonResult: string;
 }
 
 export const WorkflowResult = ({ jsonResult }: WorkflowResultProps) => {
+  const { handleCopy } = useCopyToClipboard({ text: jsonResult });
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -26,7 +28,10 @@ export const WorkflowResult = ({ jsonResult }: WorkflowResultProps) => {
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <button className="p-2 rounded-lg hover:bg-surface5 transition-colors duration-150 ease-in-out text-icon3 hover:text-icon6">
+              <button
+                className="p-2 rounded-lg hover:bg-surface5 transition-colors duration-150 ease-in-out text-icon3 hover:text-icon6"
+                onClick={() => handleCopy()}
+              >
                 <Icon size="sm">
                   <CopyIcon />
                 </Icon>
