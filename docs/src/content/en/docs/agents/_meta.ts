@@ -4,7 +4,7 @@ const meta = {
   "using-tools-and-mcp": "Tools and MCP",
   "adding-voice": "Adding Voice",
   "runtime-variables": "Runtime Context",
-  "dynamic-agents", "Dynamic Agents"
+  "dynamic-agents": "Dynamic Agents",
 };
 
 export default meta;
