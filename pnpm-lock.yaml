@@ -3283,6 +3283,9 @@ importers:
       vitest:
         specifier: ^2.1.9
         version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.17.32)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+      zod:
+        specifier: ^3.24.4
+        version: 3.24.4
 
   voice/playai:
     dependencies:
