@@ -107,3 +107,24 @@ const agent = new Agent({
 ```
 
 `MCPClient`の設定や静的および動的MCPサーバー設定の違いについての詳細は、[MCP概要](/docs/tools-mcp/mcp-overview)をご覧ください。
+
+## MCPリソースへのアクセス
+
+ツールに加えて、MCPサーバーはリソース（アプリケーションで取得して使用できるデータやコンテンツ）も公開できます。
+
+```typescript filename="src/mastra/resources.ts" {3-8}
+import { mcp } from "./mcp";
+
+// Get resources from all connected MCP servers
+const resources = await mcp.getResources();
+
+// Access resources from a specific server
+if (resources.filesystem) {
+  const resource = resources.filesystem.find(
+    (r) => r.uri === "filesystem://Downloads",
+  );
+  console.log(`Resource: ${resource?.name}`);
+}
+```
+
+各リソースにはURI、名前、説明、MIMEタイプがあります。`getResources()`メソッドはエラーを適切に処理します - サーバーが失敗したり、リソースをサポートしていない場合、結果から除外されます。

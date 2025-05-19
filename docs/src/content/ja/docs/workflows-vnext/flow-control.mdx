@@ -37,7 +37,7 @@ myWorkflow
 
 ## 条件分岐
 
-`.branch()`を使用して条件分岐を作成します：
+`.branch()` を使って条件分岐を作成します：
 
 ```typescript
 myWorkflow
@@ -54,9 +54,9 @@ myWorkflow
   .commit();
 ```
 
-分岐条件は順番に評価され、一致する条件を持つすべてのステップが並行して実行されます。`inputData.value`が`5`の場合、`lowValueStep`と`extremelyLowValueStep`の両方が実行されます。
+分岐条件は順番に評価され、一致するすべての条件のステップが並列で実行されます。もし `inputData.value` が `5` の場合、`lowValueStep` と `extremelyLowValueStep` の両方が実行されます。
 
-各条件付きステップ（`highValueStep`や`lowValueStep`など）は、前のステップ（この場合は`initialStep`）の出力を入力として受け取ります。一致する各条件付きステップの出力が収集されます。分岐後の次のステップ（`finalStep`）は、分岐で実行されたすべてのステップの出力を含むオブジェクトを受け取ります。このオブジェクトのキーはステップIDであり、値はそれらのステップの出力です（`{ lowValueStep: <lowValueStepの出力>, extremelyLowValueStep: <extremelyLowValueStepの出力> }`）。
+各条件付きステップ（`highValueStep` や `lowValueStep` など）は、前のステップ（この場合は `initialStep`）の出力を入力として受け取ります。一致した各条件付きステップの出力が収集されます。分岐の後の次のステップ（`finalStep`）は、分岐内で実行されたすべてのステップの出力を含むオブジェクトを受け取ります。このオブジェクトのキーはステップIDであり、値はそれぞれのステップの出力です（`{ lowValueStep: <output of lowValueStep>, extremelyLowValueStep: <output of extremelyLowValueStep> }`）。
 
 ## ループ
 

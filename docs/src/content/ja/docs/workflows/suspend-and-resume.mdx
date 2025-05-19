@@ -239,10 +239,7 @@ const resumeResult = await run.resumeWithEvent("approvalReceived", {
   approverName: "Jane Doe",
 });
 
-console.log(
-  "イベントデータでワークフローが再開されました:",
-  resumeResult.results,
-);
+console.log("イベントデータでワークフローが再開されました:", resumeResult.results);
 // 出力は完了したワークフローを示します：
 // {
 //   getUserInput: { status: 'success', output: { userInput: 'initial input' } },
@@ -383,3 +380,4 @@ watch(async ({ activePaths }) => {
 // ワークフローを開始
 await start({ triggerData: { requestId: "auto-123" } });
 ```
+

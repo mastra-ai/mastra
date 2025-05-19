@@ -1,28 +1,28 @@
 ---
-title: "例：回答の関連性 | 評価 | Mastra ドキュメント"
-description: 回答の関連性メトリックを使用してクエリに対する応答の関連性を評価する例。
+title: "例: 回答の関連性 | Evals | Mastra Docs"
+description: Answer Relevancyメトリクスを使用してクエリへの回答の関連性を評価する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
 # 回答の関連性評価
 
-この例では、Mastraの回答関連性メトリックを使用して、応答が入力クエリにどの程度対応しているかを評価する方法を示します。
+この例では、Mastra の回答関連性指標を使用して、応答が入力クエリにどれだけ適切に対応しているかを評価する方法を示します。
 
 ## 概要
 
-この例では、次の方法を示します：
+この例では、以下の方法を示します。
 
-1. Answer Relevancy メトリックを設定する
+1. Answer Relevancyメトリクスの設定
 2. クエリに対する応答の関連性を評価する
 3. 関連性スコアを分析する
-4. 異なる関連性シナリオを処理する
+4. 様々な関連性シナリオへの対応
 
 ## セットアップ
 
-### 環境セットアップ
+### 環境設定
 
-環境変数を設定してください：
+環境変数を必ず設定してください：
 
 ```bash filename=".env"
 OPENAI_API_KEY=your_api_key_here
@@ -43,8 +43,8 @@ import { AnswerRelevancyMetric } from "@mastra/evals/llm";
 
 ```typescript copy showLineNumbers{5} filename="src/index.ts"
 const metric = new AnswerRelevancyMetric(openai("gpt-4o-mini"), {
-  uncertaintyWeight: 0.3, // 'unsure' の判定に対する重み
-  scale: 1, // 最終スコアのスケール
+  uncertaintyWeight: 0.3, // Weight for 'unsure' verdicts
+  scale: 1, // Scale for the final score
 });
 ```
 
@@ -52,7 +52,7 @@ const metric = new AnswerRelevancyMetric(openai("gpt-4o-mini"), {
 
 ### 高い関連性の例
 
-非常に関連性の高い応答を評価する：
+非常に関連性の高い回答を評価します：
 
 ```typescript copy showLineNumbers{11} filename="src/index.ts"
 const query1 = "What are the health benefits of regular exercise?";
@@ -74,7 +74,7 @@ console.log("Metric Result:", {
 
 ### 部分的な関連性の例
 
-部分的に関連性のある応答を評価する：
+部分的に関連性のある回答を評価します：
 
 ```typescript copy showLineNumbers{26} filename="src/index.ts"
 const query2 = "What should a healthy breakfast include?";
@@ -96,7 +96,7 @@ console.log("Metric Result:", {
 
 ### 低い関連性の例
 
-関連性のない応答を評価する：
+関連性の低い回答を評価します：
 
 ```typescript copy showLineNumbers{41} filename="src/index.ts"
 const query3 = "What are the benefits of meditation?";
@@ -122,17 +122,17 @@ console.log("Metric Result:", {
 
 1. 0から1の間の関連性スコア：
 
-   - 1.0: 完全な関連性 - 応答がクエリに直接対応
-   - 0.7-0.9: 高い関連性 - 応答が主にクエリに対応
-   - 0.4-0.6: 中程度の関連性 - 応答が部分的にクエリに対応
+   - 1.0: 完全な関連性 - 応答がクエリに直接対応している
+   - 0.7-0.9: 高い関連性 - 応答が主にクエリに対応している
+   - 0.4-0.6: 中程度の関連性 - 応答が部分的にクエリに対応している
    - 0.1-0.3: 低い関連性 - 応答がほとんどクエリに対応していない
-   - 0.0: 関連性なし - 応答がクエリに全く対応していない
+   - 0.0: 関連性なし - 応答が全くクエリに対応していない
 
-2. スコアの詳細な理由、以下を含む分析：
+2. スコアの詳細な理由、以下の分析を含む：
    - クエリと応答の整合性
    - トピックの焦点
    - 情報の関連性
-   - 改善の提案
+   - 改善提案
 
 <br />
 <br />
