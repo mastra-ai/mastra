@@ -11,6 +11,10 @@ import type {
   UpsertVectorParams,
   ParamsToArgs,
   QueryVectorArgs,
+  DescribeIndexParams,
+  DeleteIndexParams,
+  DeleteVectorParams,
+  UpdateVectorParams,
 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import { LibSQLFilterTranslator } from './filter';
@@ -208,7 +212,10 @@ export class LibSQLVector extends MastraVector {
     }
   }
 
-  async deleteIndex(indexName: string): Promise<void> {
+  async deleteIndex(...args: ParamsToArgs<DeleteIndexParams>): Promise<void> {
+    const params = this.normalizeArgs<DeleteIndexParams>('deleteIndex', args);
+
+    const { indexName } = params;
     try {
       const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
       // Drop the table
@@ -241,7 +248,17 @@ export class LibSQLVector extends MastraVector {
     }
   }
 
-  async describeIndex(indexName: string): Promise<IndexStats> {
+  /**
+   * Retrieves statistics about a vector index.
+   *
+   * @param params - The parameters for describing an index
+   * @param params.indexName - The name of the index to describe
+   * @returns A promise that resolves to the index statistics including dimension, count and metric
+   */
+  async describeIndex(...args: ParamsToArgs<DescribeIndexParams>): Promise<IndexStats> {
+    const params = this.normalizeArgs<DescribeIndexParams>('describeIndex', args);
+
+    const { indexName } = params;
     try {
       const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
       // Get table info including column info
@@ -308,7 +325,7 @@ export class LibSQLVector extends MastraVector {
       Please use updateVector() instead. 
       updateIndexById() will be removed on May 20th, 2025.`,
     );
-    await this.updateVector(indexName, id, update);
+    await this.updateVector({ indexName, id, update });
   }
 
   /**
@@ -322,11 +339,9 @@ export class LibSQLVector extends MastraVector {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector(
-    indexName: string,
-    id: string,
-    update: { vector?: number[]; metadata?: Record<string, any> },
-  ): Promise<void> {
+  async updateVector(...args: ParamsToArgs<UpdateVectorParams>): Promise<void> {
+    const params = this.normalizeArgs<UpdateVectorParams>('updateVector', args);
+    const { indexName, id, update } = params;
     try {
       const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
       const updates = [];
@@ -378,7 +393,7 @@ export class LibSQLVector extends MastraVector {
       Please use deleteVector() instead. 
       deleteIndexById() will be removed on May 20th, 2025.`,
     );
-    await this.deleteVector(indexName, id);
+    await this.deleteVector({ indexName, id });
   }
 
   /**
@@ -388,7 +403,10 @@ export class LibSQLVector extends MastraVector {
    * @returns A promise that resolves when the deletion is complete.
    * @throws Will throw an error if the deletion operation fails.
    */
-  async deleteVector(indexName: string, id: string): Promise<void> {
+  async deleteVector(...args: ParamsToArgs<DeleteVectorParams>): Promise<void> {
+    const params = this.normalizeArgs<DeleteVectorParams>('deleteVector', args);
+
+    const { indexName, id } = params;
     try {
       const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
       await this.turso.execute({
@@ -400,7 +418,9 @@ export class LibSQLVector extends MastraVector {
     }
   }
 
-  async truncateIndex(indexName: string) {
+  async truncateIndex(...args: ParamsToArgs<DeleteIndexParams>): Promise<void> {
+    const params = this.normalizeArgs<DeleteIndexParams>('truncateIndex', args);
+    const { indexName } = params;
     await this.turso.execute({
       sql: `DELETE FROM ${parseSqlIdentifier(indexName, 'index name')}`,
       args: [],

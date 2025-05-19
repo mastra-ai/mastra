@@ -116,11 +116,11 @@ describe('PostgreSQL Index Performance', () => {
     vectorDB = new PGPerformanceVector(connectionString);
   });
   beforeEach(async () => {
-    await vectorDB.deleteIndex(testIndexName);
+    await vectorDB.deleteIndex({ indexName: testIndexName });
   });
 
   afterEach(async () => {
-    await vectorDB.deleteIndex(testIndexName);
+    await vectorDB.deleteIndex({ indexName: testIndexName });
   });
 
   afterAll(async () => {
