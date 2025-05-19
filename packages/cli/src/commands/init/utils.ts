@@ -481,7 +481,7 @@ export const writeAPIKey = async ({
   apiKey?: string;
 }) => {
   const key = await getAPIKey(provider);
-  await exec(`echo ${key}=${apiKey} >> .env.development`);
+  await exec(`echo ${key}=${apiKey} >> .env`);
 };
 export const createMastraDir = async (directory: string): Promise<{ ok: true; dirPath: string } | { ok: false }> => {
   let dir = directory
