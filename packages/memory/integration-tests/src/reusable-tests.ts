@@ -1,10 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { fastembed } from '@mastra/fastembed';
-import { Memory } from '@mastra/memory';
+import type { Memory } from '@mastra/memory';
 import type { TextPart, ImagePart, FilePart, ToolCallPart } from 'ai';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { reorderToolCallsAndResults } from '../../src/utils';
-import { LibSQLVector } from '@mastra/libsql';
 
 const resourceId = 'resource';
 // Test helpers
