@@ -23,6 +23,8 @@ import { VNextWorkflowLayout } from './domains/workflows/v-next-workflow-layout'
 import Network from './pages/networks/network';
 import { PostHogProvider } from './lib/analytics';
 import RuntimeContext from './pages/runtime-context';
+import MCPs from './pages/mcps';
+import MCPServerToolExecutor from './pages/mcps/tool';
 
 function App() {
   return (
@@ -77,6 +79,9 @@ function App() {
             <Route path="/tools/all/:toolId" element={<Tool />} />
             <Route path="/workflows" element={<Workflows />} />
             <Route path="/workflows/:workflowId" element={<Navigate to="/workflows/:workflowId/graph" />} />
+            <Route path="/mcps" element={<MCPs />} />
+            <Route path="/mcps/:serverId/:toolId" element={<MCPServerToolExecutor />} />
+
             <Route
               path="/workflows/:workflowId"
               element={

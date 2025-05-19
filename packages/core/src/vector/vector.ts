@@ -9,6 +9,10 @@ import type {
   CreateIndexArgs,
   UpsertVectorArgs,
   QueryVectorArgs,
+  UpdateVectorParams,
+  DeleteVectorParams,
+  DescribeIndexParams,
+  DeleteIndexParams,
 } from './types';
 
 export abstract class MastraVector extends MastraBase {
@@ -64,22 +68,18 @@ export abstract class MastraVector extends MastraBase {
 
   abstract listIndexes(): Promise<string[]>;
 
-  abstract describeIndex(indexName: string): Promise<IndexStats>;
+  abstract describeIndex(...args: ParamsToArgs<DescribeIndexParams>): Promise<IndexStats>;
 
-  abstract deleteIndex(indexName: string): Promise<void>;
+  abstract deleteIndex(...args: ParamsToArgs<DeleteIndexParams>): Promise<void>;
 
-  abstract updateVector(
-    indexName: string,
-    id: string,
-    update: { vector?: number[]; metadata?: Record<string, any> },
-  ): Promise<void>;
+  abstract updateVector(...args: ParamsToArgs<UpdateVectorParams>): Promise<void>;
 
-  abstract deleteVector(indexName: string, id: string): Promise<void>;
+  abstract deleteVector(...args: ParamsToArgs<DeleteVectorParams>): Promise<void>;
 
   protected async validateExistingIndex(indexName: string, dimension: number, metric: string) {
     let info: IndexStats;
     try {
-      info = await this.describeIndex(indexName);
+      info = await this.describeIndex({ indexName });
     } catch (infoError) {
       const message = `Index "${indexName}" already exists, but failed to fetch index info for dimension check: ${infoError}`;
       this.logger?.error(message);

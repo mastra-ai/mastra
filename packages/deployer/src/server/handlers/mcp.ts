@@ -5,7 +5,7 @@ import type { Context } from 'hono';
 import { handleError } from './error';
 
 // Helper function to get the Mastra instance from the context
-const getMastra = (c: Context): Mastra => c.get('mastra') as Mastra;
+const getMastra = (c: Context): Mastra => c.get('mastra');
 
 /**
  * Handler for POST /api/mcp/:serverId/mcp
@@ -154,4 +154,117 @@ export const getMcpRegistryServerDetailHandler = async (c: Context) => {
   }
 
   return c.json(serverDetailInfo);
+};
+
+/**
+ * Handler for GET /api/mcp/:serverId/tools - List tools for a specific MCP Server
+ */
+export const listMcpServerToolsHandler = async (c: Context) => {
+  const mastra = getMastra(c);
+  const serverId = c.req.param('serverId');
+
+  if (!mastra || typeof mastra.getMCPServer !== 'function') {
+    c.get('logger')?.error('Mastra instance or getMCPServer method not available in listMcpServerToolsHandler');
+    return c.json({ error: 'Mastra instance or getMCPServer method not available' }, 500);
+  }
+
+  const server = mastra.getMCPServer(serverId);
+
+  if (!server) {
+    return c.json({ error: `MCP server with ID '${serverId}' not found` }, 404);
+  }
+
+  if (typeof server.getToolListInfo !== 'function') {
+    c.get('logger')?.error(`MCPServer with ID '${serverId}' does not support getToolListInfo.`);
+    return c.json({ error: `Server '${serverId}' cannot list tools in this way.` }, 501);
+  }
+
+  try {
+    const toolListInfo = server.getToolListInfo();
+    return c.json(toolListInfo);
+  } catch (error: any) {
+    c.get('logger')?.error(`Error in listMcpServerToolsHandler for serverId '${serverId}':`, { error: error.message });
+    return handleError(error, `Error listing tools for MCP server '${serverId}'`);
+  }
+};
+
+/**
+ * Handler for GET /api/mcp/:serverId/tools/:toolId - Get details for a specific tool on an MCP Server
+ */
+export const getMcpServerToolDetailHandler = async (c: Context) => {
+  const mastra = getMastra(c);
+  const serverId = c.req.param('serverId');
+  const toolId = c.req.param('toolId');
+
+  if (!mastra || typeof mastra.getMCPServer !== 'function') {
+    c.get('logger')?.error('Mastra instance or getMCPServer method not available in getMcpServerToolDetailHandler');
+    return c.json({ error: 'Mastra instance or getMCPServer method not available' }, 500);
+  }
+
+  const server = mastra.getMCPServer(serverId);
+
+  if (!server) {
+    return c.json({ error: `MCP server with ID '${serverId}' not found` }, 404);
+  }
+
+  if (typeof server.getToolInfo !== 'function') {
+    c.get('logger')?.error(`MCPServer with ID '${serverId}' does not support getToolInfo.`);
+    return c.json({ error: `Server '${serverId}' cannot provide tool details in this way.` }, 501);
+  }
+
+  try {
+    const toolInfo = server.getToolInfo(toolId);
+    if (!toolInfo) {
+      return c.json({ error: `Tool with ID '${toolId}' not found on MCP server '${serverId}'` }, 404);
+    }
+    return c.json(toolInfo);
+  } catch (error: any) {
+    c.get('logger')?.error(`Error in getMcpServerToolDetailHandler for serverId '${serverId}', toolId '${toolId}':`, {
+      error: error.message,
+    });
+    return handleError(error, `Error getting tool '${toolId}' details for MCP server '${serverId}'`);
+  }
+};
+
+/**
+ * Handler for POST /api/mcp/:serverId/tools/:toolId/execute - Execute a tool on an MCP Server
+ */
+export const executeMcpServerToolHandler = async (c: Context) => {
+  const mastra = getMastra(c);
+  const serverId = c.req.param('serverId');
+  const toolId = c.req.param('toolId');
+
+  if (!mastra || typeof mastra.getMCPServer !== 'function') {
+    c.get('logger')?.error('Mastra instance or getMCPServer method not available in executeMcpServerToolHandler');
+    return c.json({ error: 'Mastra instance or getMCPServer method not available' }, 500);
+  }
+
+  const server = mastra.getMCPServer(serverId);
+
+  if (!server) {
+    return c.json({ error: `MCP server with ID '${serverId}' not found` }, 404);
+  }
+
+  if (typeof server.executeTool !== 'function') {
+    c.get('logger')?.error(`MCPServer with ID '${serverId}' does not support executeTool.`);
+    return c.json({ error: `Server '${serverId}' cannot execute tools in this way.` }, 501);
+  }
+
+  try {
+    const body = await c.req.json();
+    const args = body?.data;
+    const runtimeContext = body?.runtimeContext; // Optional
+
+    // The executeTool method in MCPServer is now responsible for arg validation
+    const result = await server.executeTool(toolId, args, runtimeContext);
+    return c.json({ result }); // Or return result directly if it's already the desired JSON structure
+  } catch (error: any) {
+    c.get('logger')?.error(`Error executing tool '${toolId}' on server '${serverId}':`, { error: error.message });
+    // Handle ZodError specifically for bad requests if thrown from MCPServer.executeTool
+    if (error.name === 'ZodError') {
+      // Relies on ZodError having a 'name' property
+      return c.json({ error: 'Invalid tool arguments', details: error.errors }, 400);
+    }
+    return handleError(error, `Error executing tool '${toolId}' on MCP server '${serverId}'`);
+  }
 };

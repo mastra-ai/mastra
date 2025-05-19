@@ -5,6 +5,11 @@ import type {
   UpsertVectorParams,
   QueryVectorParams,
   ParamsToArgs,
+  DescribeIndexParams,
+  DeleteIndexParams,
+  DeleteVectorParams,
+  UpdateVectorParams,
+  IndexStats,
 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import Cloudflare from 'cloudflare';
@@ -131,7 +136,17 @@ export class CloudflareVector extends MastraVector {
     return res?.result?.map(index => index.name!) || [];
   }
 
-  async describeIndex(indexName: string) {
+  /**
+   * Retrieves statistics about a vector index.
+   *
+   * @param params - The parameters for describing an index
+   * @param params.indexName - The name of the index to describe
+   * @returns A promise that resolves to the index statistics including dimension, count and metric
+   */
+  async describeIndex(...args: ParamsToArgs<DescribeIndexParams>): Promise<IndexStats> {
+    const params = this.normalizeArgs<DescribeIndexParams>('describeIndex', args);
+    const { indexName } = params;
+
     const index = await this.client.vectorize.indexes.get(indexName, {
       account_id: this.accountId,
     });
@@ -149,7 +164,10 @@ export class CloudflareVector extends MastraVector {
     };
   }
 
-  async deleteIndex(indexName: string): Promise<void> {
+  async deleteIndex(...args: ParamsToArgs<DeleteIndexParams>): Promise<void> {
+    const params = this.normalizeArgs<DeleteIndexParams>('deleteIndex', args);
+    const { indexName } = params;
+
     await this.client.vectorize.indexes.delete(indexName, {
       account_id: this.accountId,
     });
@@ -200,7 +218,7 @@ export class CloudflareVector extends MastraVector {
       Please use updateVector() instead. 
       updateIndexById() will be removed on May 20th, 2025.`,
     );
-    await this.updateVector(indexName, id, update);
+    await this.updateVector({ indexName, id, update });
   }
 
   /**
@@ -213,14 +231,9 @@ export class CloudflareVector extends MastraVector {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector(
-    indexName: string,
-    id: string,
-    update: {
-      vector?: number[];
-      metadata?: Record<string, any>;
-    },
-  ): Promise<void> {
+  async updateVector(...args: ParamsToArgs<UpdateVectorParams>): Promise<void> {
+    const params = this.normalizeArgs<UpdateVectorParams>('updateVector', args);
+    const { indexName, id, update } = params;
     try {
       if (!update.vector && !update.metadata) {
         throw new Error('No update data provided');
@@ -259,7 +272,7 @@ export class CloudflareVector extends MastraVector {
       Please use deleteVector() instead. 
       deleteIndexById() will be removed on May 20th, 2025.`,
     );
-    await this.deleteVector(indexName, id);
+    await this.deleteVector({ indexName, id });
   }
 
   /**
@@ -269,7 +282,10 @@ export class CloudflareVector extends MastraVector {
    * @returns A promise that resolves when the deletion is complete.
    * @throws Will throw an error if the deletion operation fails.
    */
-  async deleteVector(indexName: string, id: string): Promise<void> {
+  async deleteVector(...args: ParamsToArgs<DeleteVectorParams>): Promise<void> {
+    const params = this.normalizeArgs<DeleteVectorParams>('deleteVector', args);
+    const { indexName, id } = params;
+
     try {
       await this.client.vectorize.indexes.deleteByIds(indexName, {
         ids: [id],

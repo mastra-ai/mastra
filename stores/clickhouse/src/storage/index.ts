@@ -625,7 +625,7 @@ export class ClickhouseStore extends MastraStorage {
     try {
       // First delete all messages associated with this thread
       await this.db.command({
-        query: `DELETE FROM "${TABLE_MESSAGES}" WHERE thread_id = '${threadId}';`,
+        query: `DELETE FROM "${TABLE_MESSAGES}" WHERE thread_id = {var_thread_id:String};`,
         query_params: { var_thread_id: threadId },
         clickhouse_settings: {
           output_format_json_quote_64bit_integers: 0,

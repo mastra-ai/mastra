@@ -8,6 +8,10 @@ import type {
   ParamsToArgs,
   QueryVectorArgs,
   UpsertVectorArgs,
+  DescribeIndexParams,
+  DeleteIndexParams,
+  DeleteVectorParams,
+  UpdateVectorParams,
 } from '@mastra/core/vector';
 
 import type { VectorFilter } from '@mastra/core/vector/filter';
@@ -80,7 +84,7 @@ export class ChromaVector extends MastraVector {
     const collection = await this.getCollection(indexName);
 
     // Get index stats to check dimension
-    const stats = await this.describeIndex(indexName);
+    const stats = await this.describeIndex({ indexName });
 
     // Validate vector dimensions
     this.validateVectorDimensions(vectors, stats.dimension);
@@ -177,7 +181,17 @@ export class ChromaVector extends MastraVector {
     return collections.map(collection => collection);
   }
 
-  async describeIndex(indexName: string): Promise<IndexStats> {
+  /**
+   * Retrieves statistics about a vector index.
+   *
+   * @param params - The parameters for describing an index
+   * @param params.indexName - The name of the index to describe
+   * @returns A promise that resolves to the index statistics including dimension, count and metric
+   */
+  async describeIndex(...args: ParamsToArgs<DescribeIndexParams>): Promise<IndexStats> {
+    const params = this.normalizeArgs<DescribeIndexParams>('describeIndex', args);
+    const { indexName } = params;
+
     const collection = await this.getCollection(indexName);
     const count = await collection.count();
     const metadata = collection.metadata;
@@ -191,7 +205,9 @@ export class ChromaVector extends MastraVector {
     };
   }
 
-  async deleteIndex(indexName: string): Promise<void> {
+  async deleteIndex(...args: ParamsToArgs<DeleteIndexParams>): Promise<void> {
+    const params = this.normalizeArgs<DeleteIndexParams>('deleteIndex', args);
+    const { indexName } = params;
     await this.client.deleteCollection({ name: indexName });
     this.collections.delete(indexName);
   }
@@ -218,7 +234,7 @@ export class ChromaVector extends MastraVector {
     Please use updateVector() instead. 
     updateIndexById() will be removed on May 20th, 2025.`,
     );
-    await this.updateVector(indexName, id, update);
+    await this.updateVector({ indexName, id, update });
   }
 
   /**
@@ -231,11 +247,9 @@ export class ChromaVector extends MastraVector {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector(
-    indexName: string,
-    id: string,
-    update: { vector?: number[]; metadata?: Record<string, any> },
-  ): Promise<void> {
+  async updateVector(...args: ParamsToArgs<UpdateVectorParams>): Promise<void> {
+    const params = this.normalizeArgs<UpdateVectorParams>('updateVector', args);
+    const { indexName, id, update } = params;
     try {
       if (!update.vector && !update.metadata) {
         throw new Error('No updates provided');
@@ -246,7 +260,7 @@ export class ChromaVector extends MastraVector {
       const updateOptions: UpdateRecordsParams = { ids: [id] };
 
       if (update?.vector) {
-        const stats = await this.describeIndex(indexName);
+        const stats = await this.describeIndex({ indexName });
         this.validateVectorDimensions([update.vector], stats.dimension);
         updateOptions.embeddings = [update.vector];
       }
@@ -284,7 +298,10 @@ export class ChromaVector extends MastraVector {
    * @returns A promise that resolves when the deletion is complete.
    * @throws Will throw an error if the deletion operation fails.
    */
-  async deleteVector(indexName: string, id: string): Promise<void> {
+  async deleteVector(...args: ParamsToArgs<DeleteVectorParams>): Promise<void> {
+    const params = this.normalizeArgs<DeleteVectorParams>('deleteVector', args);
+
+    const { indexName, id } = params;
     try {
       const collection: Collection = await this.getCollection(indexName, true);
       await collection.delete({ ids: [id] });

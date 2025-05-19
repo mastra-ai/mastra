@@ -1,6 +1,6 @@
 import { Link } from 'react-router';
 
-import { Header, Breadcrumb, Crumb, HeaderGroup, Button } from '@mastra/playground-ui';
+import { Header, Breadcrumb, Crumb, HeaderGroup, Button, DividerIcon } from '@mastra/playground-ui';
 
 export function AgentHeader({ agentName, agentId }: { agentName: string; agentId: string }) {
   return (
@@ -18,6 +18,8 @@ export function AgentHeader({ agentName, agentId }: { agentName: string; agentId
         <Button as={Link} to={`/agents/${agentId}/chat`}>
           Chat
         </Button>
+
+        <DividerIcon />
 
         <Button as={Link} to={`/agents/${agentId}/traces`}>
           Traces
