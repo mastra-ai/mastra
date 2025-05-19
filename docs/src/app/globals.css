@@ -51,7 +51,6 @@
   --light-red-accent: #d32f2f;
   --light-red-code: #d32f2f;
 
-
   --color-icons-2: hsla(0, 0%, 44%, 1);
   --color-icons-3: hsla(0, 0%, 58%, 1);
   --color-icons-4: hsla(0, 0%, 66%, 1);
@@ -78,7 +77,6 @@
   --copilot-kit-primary-color: var(--tag-green);
 }
 
-
 body {
   &:is(html[class~="light"] *) {
     background: var(--light-color-surface-15);
@@ -89,14 +87,14 @@ body {
   }
 }
 
-html[class~="light"] *::selection{
+html[class~="light"] *::selection {
   background: #e3e3e3 !important;
-  color: #158D29 !important;
+  color: #158d29 !important;
 }
 
-html[class~="dark"] *::selection{
+html[class~="dark"] *::selection {
   background: #2a2a2a !important;
-  color: #46F488 !important;
+  color: #46f488 !important;
 }
 
 .copilotKitWindow {
@@ -204,7 +202,6 @@ header nav:nth-child(2) {
   }
 }
 
-
 /* mobile nav */
 .nextra-mobile-nav {
   padding-block-start: calc(var(--nextra-navbar-height) * 2);
@@ -258,7 +255,6 @@ header nav:nth-child(2) {
     background: var(--primary-bg);
   }
 }
-
 
 .nextra-navbar nav {
   position: relative;
@@ -346,7 +342,6 @@ article strong > a {
   border-radius: 0.375rem;
 }
 
-
 pre code {
   --x-text-sm: 13px;
   &:is(html[class~="light"] *) {
@@ -357,7 +352,6 @@ pre code {
     --x-color-gray-500: var(--color-el-2);
   }
 }
-
 
 pre,
 div:has(+ pre) {
@@ -388,14 +382,13 @@ button[title="Copy code"] {
   border: none;
 }
 
-pre code.nextra-code:not([class*="twoslash-"]) > span[data-highlighted-line]{
+pre code.nextra-code:not([class*="twoslash-"]) > span[data-highlighted-line] {
   --bg-color: var(--light-color-surface-5);
   background-color: color-mix(in oklab, var(--bg-color) 90%, transparent);
 
   &:is(html[class~="dark"] *) {
-   background-color: var(--color-surface-5);
+    background-color: var(--color-surface-5);
   }
-  
 }
 main h3:has(+ div.nextra-code) {
   display: none;
@@ -589,7 +582,6 @@ aside > div:nth-child(1) button {
     --x-color-gray-400: var(--light-color-text-3);
     --x-color-primary-600: var(--light-color-text-6);
     --x-color-gray-600: var(--light-color-text-4);
- 
   }
 
   &:is(html[class~="dark"] *) {
@@ -597,8 +589,6 @@ aside > div:nth-child(1) button {
     --x-color-primary-600: var(--color-primary);
     --x-color-gray-600: var(--color-el-3);
   }
-
-
 }
 
 .showcase-item > * {
@@ -609,7 +599,6 @@ aside > div:nth-child(1) button {
 
 /** one off utility **/
 
-
 a:focus-visible {
   border-radius: 4px;
 }
@@ -617,18 +606,18 @@ a:focus-visible {
 /* Tab selector */
 
 div[role="tablist"] button {
- &:is(html[class~="light"] *):not([aria-selected="true"]) {
-  --x-color-primary-600: var(--light-color-text-3);
- }
-}
-
-div[role="tablist"] button[aria-selected="true"]  {
-  &:is(html[class~="light"] *) {
-    --x-color-primary-600: var(--light-color-text-6);
-    border-color: hsla(125,66%,50%, 1);
+  &:is(html[class~="light"] *):not([aria-selected="true"]) {
+    --x-color-primary-600: var(--light-color-text-3);
   }
 }
 
-div:has(> time){
+div[role="tablist"] button[aria-selected="true"] {
+  &:is(html[class~="light"] *) {
+    --x-color-primary-600: var(--light-color-text-6);
+    border-color: hsla(125, 66%, 50%, 1);
+  }
+}
+
+div:has(> time) {
   font-family: var(--font-serif);
 }
