@@ -17,7 +17,10 @@ export function CardItem({
           <Link
             key={`${item.title}-${item.href}`}
             href={item.href}
-            className="flex bg-[#1a1a1a]/50 mb-0 border-[0.5px]  rounded-md dark:border-[#343434] items-center group justify-between p-2 px-4 text-sm"
+            style={{
+              textDecoration: "none",
+            }}
+            className="flex bg-[var(--light-color-surface-3)]  dark:bg-[#1a1a1a]/50 mb-0 border-[0.5px]  rounded-md dark:border-[#343434] border-[var(--light-border-muted)] items-center group justify-between p-2 px-4 text-sm"
           >
             {item.title}
           </Link>
@@ -57,6 +60,7 @@ function CardItemsInner({
     if (match && match !== activeTab) {
       setActiveTab(match);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listParam, titles]);
 
   const handleTabChange = (tab: string) => {
@@ -106,9 +110,9 @@ export function CardTitle({
           onClick={() => setActiveTab(title)}
           key={title}
           className={cn(
-            "capitalize  rounded-full text-sm bg-gray-100 dark:bg-[#1a1a1a] px-3 py-1",
+            "capitalize text-[var(--light-color-text-4)] rounded-full text-sm bg-[var(--light-color-surface-3)] dark:bg-[#1a1a1a] dark:text-[var(--color-el-3)] px-3 py-1",
             activeTab === title &&
-              "dark:bg-gray-100 text-white bg-slate-800 dark:text-black",
+              "dark:bg-gray-100 text-white bg-[var(--light-color-text-5)] dark:text-black",
           )}
         >
           {title}

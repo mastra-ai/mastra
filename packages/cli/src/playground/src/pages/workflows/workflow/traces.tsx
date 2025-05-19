@@ -15,7 +15,7 @@ function WorkflowTracesContent() {
 
   if (isWorkflowLoading) {
     return (
-      <main className="flex-1 relative grid grid-cols-[1fr_325px] divide-x">
+      <main className="flex-1 relative grid grid-cols-[1fr_325px] divide-x h-full">
         <div className="p-4">
           <Skeleton className="h-[600px]" />
         </div>

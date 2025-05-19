@@ -1,13 +1,13 @@
 ---
-title: "リファレンス: 完全性 | メトリクス | 評価 | Mastra ドキュメント"
-description: Mastraの完全性メトリクスに関するドキュメント。LLM出力が入力に含まれる重要な要素をどれだけ網羅しているかを評価します。
+title: "リファレンス: 完全性 | メトリクス | Evals | Mastra ドキュメント"
+description: Mastraにおける完全性メトリクスのドキュメント。これは、LLMの出力が入力に含まれる主要な要素をどれだけ網羅しているかを評価します。
 ---
 
 # CompletenessMetric
 
-`CompletenessMetric`クラスは、LLMの出力が入力に含まれる重要な要素をどれだけ網羅しているかを評価します。名詞、動詞、トピック、用語を分析してカバレッジを判断し、詳細な完全性スコアを提供します。
+`CompletenessMetric` クラスは、LLM の出力が入力に含まれる主要な要素をどれだけ網羅しているかを評価します。名詞、動詞、トピック、用語を分析し、カバレッジを判定して詳細な網羅度スコアを提供します。
 
-## 基本的な使用法
+## 基本的な使い方
 
 ```typescript
 import { CompletenessMetric } from "@mastra/evals/nlp";
@@ -19,11 +19,11 @@ const result = await metric.measure(
   "Plants use sunlight to convert water and carbon dioxide into glucose through photosynthesis.",
 );
 
-console.log(result.score); // 0-1の範囲のカバレッジスコア
-console.log(result.info); // 要素カバレッジに関する詳細なメトリクスを含むオブジェクト
+console.log(result.score); // Coverage score from 0-1
+console.log(result.info); // Object containing detailed metrics about element coverage
 ```
 
-## measure() パラメーター
+## measure() のパラメーター
 
 <PropertiesTable
   content={[
@@ -50,12 +50,12 @@ console.log(result.info); // 要素カバレッジに関する詳細なメトリ
       name: "score",
       type: "number",
       description:
-        "完全性スコア（0-1）で、入力要素が出力でカバーされている割合を表します",
+        "出力でカバーされている入力要素の割合を表す完全性スコア（0-1）",
     },
     {
       name: "info",
       type: "object",
-      description: "要素のカバレッジに関する詳細なメトリクスを含むオブジェクト",
+      description: "要素カバレッジに関する詳細な指標を含むオブジェクト",
       properties: [
         {
           type: "string[]",
@@ -93,7 +93,7 @@ console.log(result.info); // 要素カバレッジに関する詳細なメトリ
             {
               name: "elementCounts",
               type: "object",
-              description: "入力と出力の要素数",
+              description: "入力および出力内の要素数",
             },
           ],
         },
@@ -104,17 +104,17 @@ console.log(result.info); // 要素カバレッジに関する詳細なメトリ
 
 ## 要素抽出の詳細
 
-このメトリックは、いくつかのタイプの要素を抽出して分析します：
+このメトリックは、いくつかの種類の要素を抽出し分析します：
 
 - 名詞：主要なオブジェクト、概念、エンティティ
-- 動詞：アクション及び状態（不定詞形に変換）
-- トピック：主要な主題とテーマ
+- 動詞：動作や状態（不定詞形に変換）
+- トピック：主な主題やテーマ
 - 用語：個々の重要な単語
 
 抽出プロセスには以下が含まれます：
 
-- テキストの正規化（発音区別符号の削除、小文字への変換）
-- キャメルケース単語の分割
+- テキストの正規化（ダイアクリティクスの除去、小文字化）
+- camelCase単語の分割
 - 単語境界の処理
 - 短い単語（3文字以下）の特別な処理
 - 要素の重複排除
@@ -127,26 +127,26 @@ console.log(result.info); // 要素カバレッジに関する詳細なメトリ
 
 1. 主要な要素を抽出します：
 
-   - 名詞と固有名詞
-   - アクション動詞
+   - 名詞および固有表現
+   - 動作動詞
    - トピック固有の用語
-   - 正規化された単語形
+   - 正規化された語形
 
 2. 入力要素のカバレッジを計算します：
-   - 短い用語（≤3文字）の正確な一致
-   - 長い用語の実質的な重複（>60%）
+   - 短い用語（3文字以下）は完全一致
+   - 長い用語は大部分の重複（60%以上）
 
-最終スコア: `(covered_elements / total_input_elements) * scale`
+最終スコア：`(covered_elements / total_input_elements) * scale`
 
 ### スコアの解釈
 
-(0からスケール、デフォルト0-1)
+（0からscale、デフォルトは0-1）
 
-- 1.0: 完全なカバレッジ - すべての入力要素を含む
-- 0.7-0.9: 高いカバレッジ - ほとんどの主要要素を含む
-- 0.4-0.6: 部分的なカバレッジ - いくつかの主要要素を含む
-- 0.1-0.3: 低いカバレッジ - ほとんどの主要要素が欠けている
-- 0.0: カバレッジなし - 出力にすべての入力要素が欠けている
+- 1.0：完全なカバレッジ - すべての入力要素を含む
+- 0.7-0.9：高いカバレッジ - 主要な要素のほとんどを含む
+- 0.4-0.6：部分的なカバレッジ - 一部の主要な要素を含む
+- 0.1-0.3：低いカバレッジ - ほとんどの主要な要素が欠落
+- 0.0：カバレッジなし - 出力に入力要素が全く含まれていない
 
 ## 分析付きの例
 
@@ -160,7 +160,7 @@ const result = await metric.measure(
   "A brown fox jumped over a dog",
 );
 
-// 例の出力:
+// Example output:
 // {
 //   score: 0.75,
 //   info: {
@@ -172,9 +172,9 @@ const result = await metric.measure(
 // }
 ```
 
-## 関連項目
+## 関連
 
-- [回答関連性メトリック](./answer-relevancy)
-- [コンテンツ類似性メトリック](./content-similarity)
-- [テキスト差異メトリック](./textual-difference)
-- [キーワードカバレッジメトリック](./keyword-coverage)
+- [Answer Relevancy Metric](./answer-relevancy)
+- [Content Similarity Metric](./content-similarity)
+- [Textual Difference Metric](./textual-difference)
+- [Keyword Coverage Metric](./keyword-coverage)

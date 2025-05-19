@@ -129,43 +129,29 @@ export function WorkflowTrigger({
   const { sanitizedOutput, ...restResult } = result ?? {};
 
   return (
-    <ScrollArea className="h-[calc(100vh-126px)] pt-2 px-4 pb-4 text-xs w-full">
+    <div className="h-full px-5 py-3">
       <div className="space-y-4">
+        {isResumingWorkflow && (
+          <span className="flex items-center gap-1">
+            <Loader2 className="w-3 h-3 animate-spin text-mastra-el-accent" /> Resuming workflow
+          </span>
+        )}
+
         {!isSuspendedSteps && (
           <>
             {zodInputSchema ? (
-              <div className="flex flex-col">
-                <div className="flex items-center justify-between w-full">
-                  <Text variant="secondary" className="px-4 text-mastra-el-3" size="xs">
-                    Input
-                  </Text>
-                  {isResumingWorkflow ? (
-                    <span className="flex items-center gap-1">
-                      <Loader2 className="w-3 h-3 animate-spin text-mastra-el-accent" /> Resuming workflow
-                    </span>
-                  ) : (
-                    <></>
-                  )}
-                </div>
-                <DynamicForm
-                  schema={zodInputSchema}
-                  defaultValues={payload}
-                  isSubmitLoading={isWatchingWorkflow}
-                  onSubmit={data => {
-                    setPayload(data);
-                    handleExecuteWorkflow(data);
-                  }}
-                />
-              </div>
+              <DynamicForm
+                schema={zodInputSchema}
+                defaultValues={payload}
+                isSubmitLoading={isWatchingWorkflow}
+                submitButtonLabel="Run"
+                onSubmit={data => {
+                  setPayload(data);
+                  handleExecuteWorkflow(data);
+                }}
+              />
             ) : (
               <div className="px-4 space-y-4">
-                {isResumingWorkflow ? (
-                  <span className="flex items-center gap-1">
-                    <Loader2 className="w-3 h-3 animate-spin text-mastra-el-accent" /> Resuming workflow
-                  </span>
-                ) : (
-                  <></>
-                )}
                 <Button className="w-full" disabled={isRunning} onClick={() => handleExecuteWorkflow(null)}>
                   {isRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Trigger'}
                 </Button>
@@ -279,6 +265,6 @@ export function WorkflowTrigger({
           </div>
         )}
       </div>
-    </ScrollArea>
+    </div>
   );
 }

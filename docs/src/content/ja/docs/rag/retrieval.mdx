@@ -7,23 +7,23 @@ import { Tabs } from "nextra/components";
 
 ## RAGシステムにおける検索
 
-埋め込みを保存した後、ユーザークエリに回答するために関連するチャンクを検索する必要があります。
+埋め込みを保存した後、ユーザーのクエリに答えるために関連するチャンクを検索する必要があります。
 
-Mastraは、セマンティック検索、フィルタリング、再ランキングをサポートする柔軟な検索オプションを提供します。
+Mastraは、セマンティック検索、フィルタリング、再ランキングに対応した柔軟な検索オプションを提供します。
 
 ## 検索の仕組み
 
-1. ユーザーのクエリは、ドキュメント埋め込みに使用されるのと同じモデルを使用して埋め込みに変換されます
-2. この埋め込みはベクトル類似性を使用して保存された埋め込みと比較されます
-3. 最も類似したチャンクが取得され、オプションで以下の処理が可能です：
+1. ユーザーのクエリは、ドキュメント埋め込みと同じモデルを使って埋め込みに変換されます
+2. この埋め込みは、ベクトル類似度を用いて保存された埋め込みと比較されます
+3. 最も類似したチャンクが取得され、必要に応じて以下の処理が行われます:
 
-- メタデータによるフィルタリング
-- より良い関連性のための再ランク付け
-- ナレッジグラフを通じた処理
+- メタデータでフィルタリング
+- より高い関連性のために再ランク付け
+- ナレッジグラフを通じて処理
 
 ## 基本的な検索
 
-最もシンプルなアプローチは直接的な意味検索です。この方法では、ベクトル類似性を使用してクエリに意味的に類似したチャンクを見つけます：
+最もシンプルな方法は、直接的なセマンティック検索です。この方法では、ベクトル類似度を利用して、クエリと意味的に類似したチャンクを見つけます。
 
 ```ts showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -48,7 +48,7 @@ const results = await pgVector.query({
 console.log(results);
 ```
 
-結果にはテキストコンテンツと類似度スコアの両方が含まれます：
+結果には、テキストコンテンツと類似度スコアの両方が含まれます。
 
 ```ts showLineNumbers copy
 [
@@ -66,20 +66,20 @@ console.log(results);
 ];
 ```
 
-基本的な検索方法の使用例については、[結果の取得](../../examples/rag/query/retrieve-results.mdx)の例を参照してください。
+基本的な検索方法の使い方については、[Retrieve Results](../../examples/rag/query/retrieve-results.mdx) の例をご覧ください。
 
 ## 高度な検索オプション
 
 ### メタデータフィルタリング
 
-メタデータフィールドに基づいて結果をフィルタリングし、検索範囲を絞り込みます。これは、異なるソース、時間帯、または特定の属性を持つドキュメントがある場合に役立ちます。Mastraは、サポートされているすべてのベクトルストアで動作する統一されたMongoDB形式のクエリ構文を提供しています。
+メタデータフィールドに基づいて結果をフィルタリングし、検索範囲を絞り込みます。これは、異なるソースや時期、特定の属性を持つドキュメントがある場合に便利です。Mastra は、すべての対応ベクトルストアで動作する統一された MongoDB 形式のクエリ構文を提供します。
 
-利用可能な演算子と構文の詳細については、[メタデータフィルターリファレンス](/reference/rag/metadata-filters)を参照してください。
+利用可能な演算子や構文の詳細については、[メタデータフィルタリファレンス](/reference/rag/metadata-filters)をご覧ください。
 
-基本的なフィルタリングの例：
+基本的なフィルタリング例：
 
 ```ts showLineNumbers copy
-// Simple equality filter
+// シンプルな等価フィルタ
 const results = await pgVector.query({
   indexName: "embeddings",
   queryVector: embedding,
@@ -89,7 +89,7 @@ const results = await pgVector.query({
   },
 });
 
-// Numeric comparison
+// 数値比較
 const results = await pgVector.query({
   indexName: "embeddings",
   queryVector: embedding,
@@ -99,7 +99,7 @@ const results = await pgVector.query({
   },
 });
 
-// Multiple conditions
+// 複数条件
 const results = await pgVector.query({
   indexName: "embeddings",
   queryVector: embedding,
@@ -111,7 +111,7 @@ const results = await pgVector.query({
   },
 });
 
-// Array operations
+// 配列操作
 const results = await pgVector.query({
   indexName: "embeddings",
   queryVector: embedding,
@@ -121,7 +121,7 @@ const results = await pgVector.query({
   },
 });
 
-// Logical operators
+// 論理演算子
 const results = await pgVector.query({
   indexName: "embeddings",
   queryVector: embedding,
@@ -133,20 +133,20 @@ const results = await pgVector.query({
 });
 ```
 
-メタデータフィルタリングの一般的なユースケース：
+メタデータフィルタリングの主なユースケース：
 
-- ドキュメントのソースまたはタイプによるフィルタリング
-- 日付範囲によるフィルタリング
-- 特定のカテゴリやタグによるフィルタリング
-- 数値範囲（例：価格、評価）によるフィルタリング
-- 精密なクエリのための複数の条件の組み合わせ
-- ドキュメント属性（例：言語、著者）によるフィルタリング
+- ドキュメントのソースや種類でフィルタリング
+- 日付範囲でフィルタリング
+- 特定のカテゴリやタグでフィルタリング
+- 数値範囲（例：価格、評価）でフィルタリング
+- 複数の条件を組み合わせて精密なクエリを実行
+- ドキュメント属性（例：言語、著者）でフィルタリング
 
-メタデータフィルタリングの使用例については、[ハイブリッドベクトル検索](../../examples/rag/query/hybrid-vector-search.mdx)の例を参照してください。
+メタデータフィルタリングの使用例については、[ハイブリッドベクトル検索](../../examples/rag/query/hybrid-vector-search.mdx)の例をご覧ください。
 
 ### ベクトルクエリツール
 
-エージェントにベクトルデータベースを直接クエリする能力を与えたい場合があります。ベクトルクエリツールを使用すると、エージェントが検索の決定を担当し、ユーザーのニーズに対するエージェントの理解に基づいて、意味検索とオプションのフィルタリングおよび再ランク付けを組み合わせることができます。
+エージェントにベクトルデータベースへ直接クエリを実行させたい場合があります。ベクトルクエリツールを使うことで、エージェントが検索の判断を担い、セマンティック検索とオプションのフィルタリング、さらにユーザーのニーズに基づいたリランキングを組み合わせることができます。
 
 ```ts showLineNumbers copy
 const vectorQueryTool = createVectorQueryTool({
@@ -156,20 +156,20 @@ const vectorQueryTool = createVectorQueryTool({
 });
 ```
 
-ツールを作成する際は、ツールの名前と説明に特に注意してください - これらはエージェントが検索機能をいつどのように使用するかを理解するのに役立ちます。例えば、「SearchKnowledgeBase」と名付け、「Xトピックに関連する情報を見つけるために私たちのドキュメントを検索する」と説明することができます。
+ツールを作成する際は、ツールの名前と説明に特に注意してください。これらはエージェントがいつ、どのように検索機能を使うべきかを理解する助けになります。たとえば、「SearchKnowledgeBase」と名付け、「ドキュメント内からXトピックに関する関連情報を検索します」と説明することができます。
 
-これは特に以下の場合に役立ちます：
+この機能が特に有用なのは次のような場合です：
 
-- エージェントが取得する情報を動的に決定する必要がある場合
-- 検索プロセスが複雑な意思決定を必要とする場合
-- コンテキストに基づいて複数の検索戦略を組み合わせたい場合
+- エージェントが動的に取得すべき情報を判断する必要がある場合
+- 検索プロセスに複雑な意思決定が必要な場合
+- エージェントに文脈に応じて複数の検索戦略を組み合わせてほしい場合
 
-詳細な設定オプションと高度な使用法については、[ベクトルクエリツールリファレンス](/reference/tools/vector-query-tool)を参照してください。
+詳細な設定オプションや高度な使い方については、[ベクトルクエリツールリファレンス](/reference/tools/vector-query-tool)をご覧ください。
 
 ### ベクトルストアプロンプト
 
-ベクトルストアプロンプトは、各ベクトルデータベース実装のクエリパターンとフィルタリング機能を定義します。
-フィルタリングを実装する場合、これらのプロンプトは各ベクトルストア実装の有効な演算子と構文を指定するためにエージェントの指示に必要です。
+ベクトルストアプロンプトは、各ベクトルデータベース実装のためのクエリパターンやフィルタリング機能を定義します。
+フィルタリングを実装する際、これらのプロンプトはエージェントの指示内で必要となり、各ベクトルストア実装における有効な演算子や構文を指定します。
 
 <Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB']}>
   <Tabs.Tab>
@@ -187,7 +187,6 @@ const vectorQueryTool = createVectorQueryTool({
       tools: { vectorQueryTool },
     });
     ```
-
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -205,7 +204,6 @@ const vectorQueryTool = createVectorQueryTool({
       tools: { vectorQueryTool },
     });
     ```
-
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -223,7 +221,6 @@ const vectorQueryTool = createVectorQueryTool({
       tools: { vectorQueryTool },
     });
     ```
-
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -241,7 +238,6 @@ const vectorQueryTool = createVectorQueryTool({
       tools: { vectorQueryTool },
     });
     ```
-
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -259,7 +255,6 @@ const vectorQueryTool = createVectorQueryTool({
       tools: { vectorQueryTool },
     });
     ```
-
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -277,7 +272,6 @@ const vectorQueryTool = createVectorQueryTool({
       tools: { vectorQueryTool },
     });
     ```
-
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -295,7 +289,6 @@ const vectorQueryTool = createVectorQueryTool({
       tools: { vectorQueryTool },
     });
     ```
-
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -313,7 +306,6 @@ const vectorQueryTool = createVectorQueryTool({
       tools: { vectorQueryTool },
     });
     ```
-
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -331,19 +323,19 @@ const vectorQueryTool = createVectorQueryTool({
       tools: { vectorQueryTool },
     });
     ```
-
   </Tabs.Tab>
 </Tabs>
 
+
 ### 再ランキング
 
-初期のベクトル類似性検索では、微妙な関連性を見逃すことがあります。再ランキングはより計算コストが高いプロセスですが、より正確なアルゴリズムで結果を改善します：
+初期のベクトル類似検索では、微妙な関連性を見逃すことがあります。再ランキングは、より計算コストが高いものの、より正確なアルゴリズムであり、以下の方法で結果を改善します：
 
-- 単語の順序と完全一致を考慮
-- より洗練された関連性スコアリングを適用
-- クエリとドキュメント間のクロスアテンションと呼ばれる方法を使用
+- 単語の順序や完全一致を考慮する
+- より高度な関連性スコアリングを適用する
+- クエリとドキュメント間でクロスアテンションと呼ばれる手法を使用する
 
-再ランキングの使用方法は次のとおりです：
+再ランキングの使い方は次の通りです：
 
 ```ts showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -364,21 +356,21 @@ const rerankedResults = await rerank(
 );
 ```
 
-> **注意:** 再ランキング中にセマンティックスコアリングが正しく機能するためには、各結果に`metadata.text`フィールドにテキストコンテンツが含まれている必要があります。
+> **注:** 再ランキング時にセマンティックスコアリングが正しく機能するためには、各結果が`metadata.text`フィールドにテキストコンテンツを含んでいる必要があります。
 
-再ランキングされた結果は、ベクトル類似性とセマンティック理解を組み合わせて検索品質を向上させます。
+再ランキングされた結果は、ベクトル類似性と意味的理解を組み合わせて、検索品質を向上させます。
 
-再ランキングの詳細については、[rerank()](/reference/rag/rerank)メソッドを参照してください。
+再ランキングの詳細については、[rerank()](/reference/rag/rerank) メソッドをご覧ください。
 
-再ランキングメソッドの使用例については、[結果の再ランキング](../../examples/rag/rerank/rerank.mdx)の例を参照してください。
+再ランキングメソッドの使用例については、[Re-ranking Results](../../examples/rag/rerank/rerank.mdx) の例をご参照ください。
 
-### グラフベースの検索
+### グラフベース検索
 
-複雑な関係を持つドキュメントの場合、グラフベースの検索はチャンク間の接続をたどることができます。これは以下の場合に役立ちます：
+複雑な関係を持つドキュメントの場合、グラフベース検索はチャンク間の接続をたどることができます。これは次のような場合に役立ちます：
 
 - 情報が複数のドキュメントに分散している
-- ドキュメントが互いに参照している
-- 完全な回答を見つけるために関係性をたどる必要がある
+- ドキュメント同士が相互に参照している
+- 完全な答えを見つけるために関係をたどる必要がある
 
 セットアップ例：
 
@@ -393,6 +385,6 @@ const graphQueryTool = createGraphQueryTool({
 });
 ```
 
-グラフベースの検索の詳細については、[GraphRAG](/reference/rag/graph-rag)クラスと[createGraphQueryTool()](/reference/tools/graph-rag-tool)関数を参照してください。
+グラフベース検索の詳細については、[GraphRAG](/reference/rag/graph-rag) クラスおよび [createGraphQueryTool()](/reference/tools/graph-rag-tool) 関数をご覧ください。
 
-グラフベースの検索方法の使用例については、[グラフベースの検索](../../examples/rag/usage/graph-rag.mdx)の例を参照してください。
+グラフベース検索メソッドの使用例については、[Graph-based Retrieval](../../examples/rag/usage/graph-rag.mdx) の例をご参照ください。

@@ -36,8 +36,25 @@ description: インタラクティブなセットアップオプションで新�
    ```
    オプション：
    - `-d, --dir`：Mastraファイルのディレクトリ（デフォルトはsrc/mastra）
-   - `-c, --components`：コンマ区切りのコンポーネントリスト（agents, tools, workflows）
+   - `-c, --components`：コンポーネントのカンマ区切りリスト（agents, tools, workflows）
    - `-l, --llm`：デフォルトのモデルプロバイダー（openai, anthropic, groq, google または cerebras）
    - `-k, --llm-api-key`：選択したLLMプロバイダーのAPIキー（.envファイルに追加されます）
    - `-e, --example`：サンプルコードを含める
    - `-ne, --no-example`：サンプルコードをスキップする
+
+## 高度な使用法
+
+### 分析機能を無効にする
+
+匿名の使用状況データを送信したくない場合は、コマンドを実行する際に
+`MASTRA_TELEMETRY_DISABLED=1` 環境変数を設定してください：
+
+```bash
+MASTRA_TELEMETRY_DISABLED=1 mastra init
+```
+
+### カスタムプロバイダーエンドポイント
+
+初期化されたプロジェクトは、`OPENAI_BASE_URL`および
+`ANTHROPIC_BASE_URL`変数が存在する場合、それらを尊重します。これにより、後で開発サーバーを起動する際に、
+プロバイダーのトラフィックをプロキシやプライベートゲートウェイを通じてルーティングすることができます。

@@ -33,6 +33,7 @@ const useMediaQuery = (query: string): boolean => {
     const listener = () => setMatches(media.matches);
     media.addEventListener("change", listener);
     return () => media.removeEventListener("change", listener);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
 
   return matches;
@@ -142,7 +143,7 @@ export const CustomSearch: FC<SearchProps> = ({
         )}
       >
         <span className="relative" onClick={() => inputRef.current.focus()}>
-          <Search className="w-4 h-4 md:w-5 md:h-5 text-icons-3" />
+          <Search className="w-4 h-4 md:w-5 md:h-5 dark:text-icons-3 text-[var(--light-color-accent-3)]" />
         </span>
         <ComboboxInput
           ref={inputRef}
@@ -150,7 +151,7 @@ export const CustomSearch: FC<SearchProps> = ({
           className={() =>
             cn(
               "x:[&::-webkit-search-cancel-button]:appearance-none",
-              "outline-none caret-accent-green text-icons-6 focus:outline-none w-full placeholder:text-icons-4 placeholder:text-base md:placeholder:text-lg placeholder:font-normal",
+              "outline-none caret-[var(--light-green-accent-2)]  dark:caret-accent-green dark:text-icons-6 text-[var(--light-color-text-4)] focus:outline-none w-full placeholder-[var(--light-color-text-4)] dark:placeholder:text-icons-4 placeholder:text-base md:placeholder:text-lg placeholder:font-normal",
             )
           }
           autoComplete="off"
@@ -223,27 +224,32 @@ export const CustomSearch: FC<SearchProps> = ({
                         }}
                       >
                         <div className="mt-3">
-                          <div className="border-t-[0.5px] border-borders-1 pt-3">
+                          <div className="border-t-[0.5px] border-[var(--light-border-code)] dark:border-borders-1 pt-3">
                             <ComboboxOption
                               className={({ focus }) =>
                                 cn(
                                   "w-full flex items-center font-medium justify-between gap-2 cursor-pointer text-base rounded-md px-2 md:px-4 py-2 bg-[url('/image/bloom-2.png')] bg-cover mb-2 bg-right",
-                                  focus ? "bg-surface-5" : "bg-surface-4",
+                                  focus
+                                    ? "dark:bg-surface-5 bg-[var(--light-color-surface-2)]"
+                                    : "dark:bg-surface-4 bg-[var(--light-color-surface-2)]",
                                 )
                               }
                               value={{ url: "use-ai" }}
                             >
                               <div className="flex items-center gap-2">
-                                <span className="text-accent-green shrink-0">
+                                <span className="dark:text-accent-green text-[var(--light-green-accent-2)] shrink-0">
                                   <JarvisIcon className="w-4.5 h-4.5 md:w-6 md:h-6 shrink-0" />
                                 </span>
                                 <span className="flex flex-col text-base font-medium text-left md:text-lg text-icons-5">
                                   <span
                                     id="use-ai-text"
-                                    className="truncate text-icons-5 max-w-[200px] md:max-w-full"
+                                    className="truncate  max-w-[200px] md:max-w-full"
                                   >
-                                    Tell me about{" "}
-                                    <span className="text-accent-green">
+                                    <span className="dark:text-icons-5 text-[var(--light-color-text-4)]">
+                                      {" "}
+                                      Tell me about{" "}
+                                    </span>
+                                    <span className="dark:text-accent-green text-[var(--light-green-accent-2)]">
                                       {search}
                                     </span>
                                   </span>
@@ -252,7 +258,7 @@ export const CustomSearch: FC<SearchProps> = ({
                                   </span>
                                 </span>
                               </div>
-                              <span className="flex items-center h-6 px-2 text-xs font-medium rounded-sm md:h-8 md:px-3 md:text-sm bg-tag-green-2 text-accent-green justify-self-end">
+                              <span className="flex items-center opacity-90 dark:opacity-100 h-6 px-2 text-xs font-medium rounded-sm md:h-8 md:px-3 md:text-sm dark:bg-tag-green-2 bg-[var(--light-color-surface-15)] dark:text-accent-green text-[var(--light-color-text-4)] justify-self-end">
                                 experimental
                               </span>
                             </ComboboxOption>
@@ -285,20 +291,22 @@ export const CustomSearch: FC<SearchProps> = ({
                         className={({ focus }) =>
                           cn(
                             "flex flex-col gap-2 md:gap-3 p-2 md:p-4 rounded-md cursor-pointer",
-                            focus ? "bg-surface-5" : "bg-surface-4",
+                            focus
+                              ? "dark:bg-surface-5 bg-[var(--light-color-surface-2)] "
+                              : "bg-[var(--light-color-surface-15)] dark:bg-surface-4",
                           )
                         }
                       >
                         <div className="flex gap-2 md:gap-[14px] items-center">
                           <BookIcon className="w-4 h-4 md:w-5 md:h-5 text-icons-3" />
-                          <span className="text-base font-medium truncate md:text-lg text-icons-6">
+                          <span className="text-base font-medium truncate md:text-lg dark:text-icons-6 text-[var(--light-color-text-4)]">
                             {subResult.title}
                           </span>
                         </div>
-                        <div className="ml-2 flex items-center gap-2 md:gap-[14px] truncate border-l-2 border-borders-2 pl-2 md:pl-4">
+                        <div className="ml-2 flex items-center gap-2 md:gap-[14px] truncate border-l-2 dark:border-borders-2 border-[var(--light-border-code)] pl-2 md:pl-4">
                           <BurgerIcon className="w-3.5 h-3.5 md:w-4 md:h-4 shrink-0 text-icons-3" />
                           <div
-                            className="text-base md:text-lg font-normal truncate text-icons-3 [&_mark]:text-accent-green [&_mark]:bg-transparent"
+                            className="text-base md:text-lg font-normal truncate text-icons-3 [&_mark]:text-[var(--light-green-accent-2)] dark:[&_mark]:text-accent-green [&_mark]:bg-transparent"
                             dangerouslySetInnerHTML={{
                               __html: subResult.excerpt,
                             }}

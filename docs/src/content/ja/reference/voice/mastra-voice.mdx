@@ -1,18 +1,18 @@
 ---
-title: "リファレンス: MastraVoice | ボイスプロバイダー | Mastra ドキュメント"
-description: "Mastra のすべての音声サービスのコアインターフェースを定義する MastraVoice 抽象基底クラスのドキュメントで、音声間変換機能を含みます。"
+title: "リファレンス: MastraVoice | Voice Providers | Mastra ドキュメント"
+description: "Mastra のすべての音声サービスのコアインターフェースを定義する抽象基底クラス MastraVoice のドキュメント。音声から音声への機能も含まれます。"
 ---
 
 # MastraVoice
 
-MastraVoiceクラスは、Mastraにおける音声サービスのコアインターフェースを定義する抽象基底クラスです。すべての音声プロバイダー実装（OpenAI、Deepgram、PlayAI、Speechifyなど）は、このクラスを拡張して特定の機能を提供します。このクラスには、WebSocket接続を通じたリアルタイムの音声対音声機能のサポートが含まれています。
+MastraVoice クラスは、Mastra における音声サービスのコアインターフェースを定義する抽象基底クラスです。すべての音声プロバイダー実装（OpenAI、Deepgram、PlayAI、Speechify など）は、このクラスを継承して、それぞれの機能を提供します。このクラスには、WebSocket 接続を通じたリアルタイム音声対音声機能のサポートも追加されています。
 
 ## 使用例
 
 ```typescript
 import { MastraVoice } from "@mastra/core/voice";
 
-// 音声プロバイダーの実装を作成
+// Create a voice provider implementation
 class MyVoiceProvider extends MastraVoice {
   constructor(config: {
     speechModel?: BuiltInModelConfig;
@@ -32,84 +32,84 @@ class MyVoiceProvider extends MastraVoice {
     });
   }
 
-  // 必須の抽象メソッドを実装
+  // Implement required abstract methods
   async speak(
     input: string | NodeJS.ReadableStream,
     options?: { speaker?: string },
   ): Promise<NodeJS.ReadableStream | void> {
-    // テキストから音声への変換を実装
+    // Implement text-to-speech conversion
   }
 
   async listen(
     audioStream: NodeJS.ReadableStream,
     options?: unknown,
   ): Promise<string | NodeJS.ReadableStream | void> {
-    // 音声からテキストへの変換を実装
+    // Implement speech-to-text conversion
   }
 
   async getSpeakers(): Promise<
     Array<{ voiceId: string; [key: string]: unknown }>
   > {
-    // 利用可能な音声のリストを返す
+    // Return list of available voices
   }
 
-  // オプションの音声から音声へのメソッド
+  // Optional speech-to-speech methods
   async connect(): Promise<void> {
-    // 音声から音声への通信のためのWebSocket接続を確立
+    // Establish WebSocket connection for speech-to-speech communication
   }
 
   async send(audioData: NodeJS.ReadableStream | Int16Array): Promise<void> {
-    // 音声から音声へのオーディオデータをストリーム
+    // Stream audio data in speech-to-speech
   }
 
   async answer(): Promise<void> {
-    // 音声プロバイダーに応答を促す
+    // Trigger voice provider to respond
   }
 
   addTools(tools: Array<unknown>): void {
-    // 音声プロバイダーが使用するツールを追加
+    // Add tools for the voice provider to use
   }
 
   close(): void {
-    // WebSocket接続を閉じる
+    // Close WebSocket connection
   }
 
   on(event: string, callback: (data: unknown) => void): void {
-    // イベントリスナーを登録
+    // Register event listener
   }
 
   off(event: string, callback: (data: unknown) => void): void {
-    // イベントリスナーを削除
+    // Remove event listener
   }
 }
 ```
 
-## コンストラクタパラメータ
+## コンストラクタのパラメータ
 
 <PropertiesTable
   content={[
     {
       name: "config",
       type: "VoiceConfig",
-      description: "音声サービスのための設定オブジェクト",
+      description: "音声サービスの設定オブジェクト",
       isOptional: true,
     },
     {
       name: "config.speechModel",
       type: "BuiltInModelConfig",
-      description: "テキストから音声へのモデルの設定",
+      description: "テキスト読み上げモデルの設定",
       isOptional: true,
     },
     {
       name: "config.listeningModel",
       type: "BuiltInModelConfig",
-      description: "音声からテキストへのモデルの設定",
+      description: "音声認識モデルの設定",
       isOptional: true,
     },
     {
       name: "config.speaker",
       type: "string",
-      description: "使用するデフォルトのスピーカー/音声ID",
+      description: "デフォルトで使用する話者／音声ID",
       isOptional: true,
     },
     {
@@ -121,7 +121,7 @@ class MyVoiceProvider extends MastraVoice {
     {
       name: "config.realtimeConfig",
       type: "object",
-      description: "リアルタイム音声間通信機能の設定",
+      description: "リアルタイム音声変換機能の設定",
       isOptional: true,
     },
   ]}
@@ -140,7 +140,7 @@ class MyVoiceProvider extends MastraVoice {
     {
       name: "apiKey",
       type: "string",
-      description: "モデルサービスのAPIキー",
+      description: "モデルサービス用のAPIキー",
       isOptional: true,
     },
   ]}
@@ -153,19 +153,19 @@ class MyVoiceProvider extends MastraVoice {
     {
       name: "model",
       type: "string",
-      description: "リアルタイム音声間通信機能のために使用するモデル",
+      description: "リアルタイム音声変換機能で使用するモデル",
       isOptional: true,
     },
     {
       name: "apiKey",
       type: "string",
-      description: "リアルタイムサービスのAPIキー",
+      description: "リアルタイムサービス用のAPIキー",
       isOptional: true,
     },
     {
       name: "options",
       type: "unknown",
-      description: "リアルタイム機能のためのプロバイダー固有のオプション",
+      description: "リアルタイム機能のプロバイダー固有のオプション",
       isOptional: true,
     },
   ]}
@@ -173,7 +173,7 @@ class MyVoiceProvider extends MastraVoice {
 
 ## 抽象メソッド
 
-これらのメソッドは、MastraVoiceを拡張する未知のクラスによって実装される必要があります。
+これらのメソッドは、MastraVoice を拡張する未知のクラスによって実装される必要があります。
 
 ### speak()
 
@@ -189,13 +189,13 @@ abstract speak(
 ): Promise<NodeJS.ReadableStream | void>
 ```
 
-目的:
+目的：
 
-- テキスト入力を受け取り、プロバイダーのテキスト読み上げサービスを使用して音声に変換します
-- 柔軟性のために文字列とストリーム入力の両方をサポートします
-- オプションを通じてデフォルトのスピーカー/声を上書きすることができます
-- 再生または保存可能な音声データのストリームを返します
-- 音声が「speaking」イベントを発生させることで処理される場合、voidを返すことがあります
+- テキスト入力を受け取り、プロバイダーのテキスト読み上げサービスを使って音声に変換します
+- 柔軟性のため、文字列とストリームの両方の入力に対応しています
+- オプションでデフォルトの話者や声を上書きできます
+- 再生や保存が可能な音声データのストリームを返します
+- 音声が 'speaking' イベントの発火によって処理される場合は void を返すことがあります
 
 ### listen()
 
@@ -210,13 +210,13 @@ abstract listen(
 ): Promise<string | NodeJS.ReadableStream | void>
 ```
 
-目的:
+目的：
 
-- 音声ストリームを受け取り、プロバイダーの音声認識サービスを使用してテキストに変換します
-- トランスクリプション設定のためのプロバイダー固有のオプションをサポートします
-- 完全なテキストトランスクリプションまたはトランスクリプションされたテキストのストリームを返すことができます
-- すべてのプロバイダーがこの機能をサポートしているわけではありません（例: PlayAI, Speechify）
-- トランスクリプションが「writing」イベントを発生させることで処理される場合、voidを返すことがあります
+- 音声ストリームを受け取り、プロバイダーの音声認識サービスを使ってテキストに変換します
+- 書き起こし設定のためにプロバイダー固有のオプションに対応しています
+- 完全なテキスト書き起こし、または書き起こしテキストのストリームのいずれかを返すことができます
+- すべてのプロバイダーがこの機能に対応しているわけではありません（例：PlayAI、Speechify）
+- 書き起こしが 'writing' イベントの発火によって処理される場合は void を返すことがあります
 
 ### getSpeakers()
 
@@ -226,60 +226,60 @@ abstract listen(
 abstract getSpeakers(): Promise<Array<{ voiceId: string; [key: string]: unknown }>>
 ```
 
-目的:
+目的：
 
-- プロバイダーから利用可能な声/スピーカーのリストを取得します
-- 各声には少なくともvoiceIdプロパティが必要です
+- プロバイダーから利用可能な声や話者のリストを取得します
+- 各声には少なくとも voiceId プロパティが必要です
 - プロバイダーは各声に関する追加のメタデータを含めることができます
-- テキスト読み上げ変換のために利用可能な声を発見するために使用されます
+- テキスト読み上げ変換のために利用可能な声を見つける際に使用されます
 
 ## オプションのメソッド
 
-これらのメソッドはデフォルトの実装を持っていますが、音声プロバイダーが音声間の機能をサポートしている場合、上書きすることができます。
+これらのメソッドにはデフォルトの実装がありますが、音声から音声への機能をサポートするプロバイダーによってオーバーライドすることができます。
 
 ### connect()
 
-通信のためのWebSocketまたはWebRTC接続を確立します。
+通信のために WebSocket または WebRTC 接続を確立します。
 
 ```typescript
 connect(config?: unknown): Promise<void>
 ```
 
-目的:
+目的：
 
 - 通信のために音声サービスへの接続を初期化します
-- send()やanswer()のような機能を使用する前に呼び出す必要があります
-- 接続が確立されると解決されるPromiseを返します
-- 設定はプロバイダー固有です
+- send() や answer() などの機能を使用する前に呼び出す必要があります
+- 接続が確立されたときに解決される Promise を返します
+- 設定内容はプロバイダーごとに異なります
 
 ### send()
 
-音声プロバイダーにリアルタイムで音声データをストリーミングします。
+音声データをリアルタイムで音声プロバイダーにストリーミングします。
 
 ```typescript
 send(audioData: NodeJS.ReadableStream | Int16Array): Promise<void>
 ```
 
-目的:
+目的：
 
-- 音声プロバイダーに音声データをリアルタイムで送信し、処理します
-- ライブマイク入力のような連続音声ストリーミングシナリオに便利です
-- ReadableStreamとInt16Arrayの両方の音声フォーマットをサポートします
+- 音声データをリアルタイムで音声プロバイダーに送信します
+- ライブマイク入力など、継続的な音声ストリーミングのシナリオに便利です
+- ReadableStream と Int16Array の両方の音声フォーマットをサポートします
 - このメソッドを呼び出す前に接続状態である必要があります
 
 ### answer()
 
-音声プロバイダーに応答を生成させます。
+音声プロバイダーに応答の生成を促します。
 
 ```typescript
 answer(): Promise<void>
 ```
 
-目的:
+目的：
 
-- 音声プロバイダーに応答を生成する信号を送信します
-- リアルタイムの会話でAIに応答を促すために使用されます
-- 応答はイベントシステム（例: 'speaking'イベント）を通じて発信されます
+- 音声プロバイダーに応答を生成するシグナルを送信します
+- AI に応答を促すリアルタイム会話で使用されます
+- 応答はイベントシステム（例: 'speaking' イベント）を通じて発信されます
 
 ### addTools()
 
@@ -289,29 +289,29 @@ answer(): Promise<void>
 addTools(tools: Array<Tool>): void
 ```
 
-目的:
+目的：
 
 - 会話中に音声プロバイダーが使用できるツールを追加します
-- ツールは音声プロバイダーの機能を拡張できます
-- 実装はプロバイダー固有です
+- ツールによって音声プロバイダーの機能を拡張できます
+- 実装はプロバイダーごとに異なります
 
 ### close()
 
-WebSocketまたはWebRTC接続を切断します。
+WebSocket または WebRTC 接続を切断します。
 
 ```typescript
 close(): void
 ```
 
-目的:
+目的：
 
 - 音声サービスへの接続を閉じます
 - リソースをクリーンアップし、進行中のリアルタイム処理を停止します
-- 音声インスタンスを終了する際に呼び出すべきです
+- 音声インスタンスの利用が終わったら呼び出すべきです
 
 ### on()
 
-音声イベントのためのイベントリスナーを登録します。
+音声イベントのイベントリスナーを登録します。
 
 ```typescript
 on<E extends VoiceEventType>(
@@ -320,12 +320,12 @@ on<E extends VoiceEventType>(
 ): void
 ```
 
-目的:
+目的：
 
-- 指定されたイベントが発生したときに呼び出されるコールバック関数を登録します
-- 標準イベントには'speaking'、'writing'、'error'が含まれます
-- プロバイダーはカスタムイベントも発信できます
-- イベントデータの構造はイベントタイプに依存します
+- 指定したイベントが発生したときに呼び出されるコールバック関数を登録します
+- 標準イベントには 'speaking'、'writing'、'error' などがあります
+- プロバイダーはカスタムイベントも発行できます
+- イベントデータの構造はイベントタイプによって異なります
 
 ### off()
 
@@ -338,14 +338,14 @@ off<E extends VoiceEventType>(
 ): void
 ```
 
-目的:
+目的：
 
-- 以前に登録されたイベントリスナーを削除します
-- イベントハンドラーが不要になったときにクリーンアップするために使用されます
+- 以前に登録したイベントリスナーを削除します
+- もう必要なくなったイベントハンドラーのクリーンアップに使用します
 
 ## イベントシステム
 
-MastraVoiceクラスには、リアルタイム通信のためのイベントシステムが含まれています。標準的なイベントタイプには以下が含まれます：
+MastraVoice クラスには、リアルタイム通信のためのイベントシステムが含まれています。標準的なイベントタイプは以下の通りです。
 
 <PropertiesTable
   content={[
@@ -387,7 +387,7 @@ MastraVoiceクラスには、リアルタイム通信のためのイベントシ
     {
       name: "speaker",
       type: "string | undefined",
-      description: "デフォルトのスピーカー/ボイスID",
+      description: "デフォルトの話者／ボイスID",
       isOptional: true,
     },
     {
@@ -401,13 +401,13 @@ MastraVoiceクラスには、リアルタイム通信のためのイベントシ
 
 ## テレメトリーサポート
 
-MastraVoiceには、パフォーマンスの追跡とエラーモニタリングを伴うメソッド呼び出しをラップする`traced`メソッドを通じて、組み込みのテレメトリーサポートが含まれています。
+MastraVoice には、パフォーマンスの追跡とエラー監視を行う `traced` メソッドを通じて、組み込みのテレメトリーサポートが含まれています。
 
-## メモ
+## 注意事項
 
 - MastraVoiceは抽象クラスであり、直接インスタンス化することはできません
-- 実装はすべての抽象メソッドに対して具体的な実装を提供する必要があります
-- このクラスは異なる音声サービスプロバイダー間で一貫したインターフェースを提供します
-- 音声から音声への機能はオプションであり、プロバイダー固有です
-- イベントシステムはリアルタイムの対話のための非同期通信を可能にします
-- テレメトリはすべてのメソッド呼び出しに対して自動的に処理されます
+- 実装クラスは、すべての抽象メソッドに対して具体的な実装を提供する必要があります
+- このクラスは、さまざまな音声サービスプロバイダー間で一貫したインターフェースを提供します
+- 音声から音声への機能はオプションであり、プロバイダーごとに異なります
+- イベントシステムにより、リアルタイムのやり取りのための非同期通信が可能になります
+- テレメトリはすべてのメソッド呼び出しで自動的に処理されます

@@ -25,7 +25,6 @@
   },
   "license": "Elastic-2.0",
   "dependencies": {
-    "@mastra/core": "workspace:^",
     "zod": "^3.24.3"
   },
   "devDependencies": {
@@ -34,6 +33,10 @@
     "@types/node": "^20.17.32",
     "eslint": "^9.25.1",
     "tsup": "^8.4.0",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "@mastra/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@mastra/core": "^0.9.4"
   }
 }

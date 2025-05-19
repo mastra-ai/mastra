@@ -11,33 +11,33 @@ import { Tabs } from "nextra/components";
 
 ## サポートされているデータベース
 
-<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB']}>
+<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB', 'OpenSearch']}>
   <Tabs.Tab>
     ```ts filename="vector-store.ts" showLineNumbers copy
       import { PgVector } from '@mastra/pg';
 
-      const store = new PgVector(process.env.POSTGRES_CONNECTION_STRING)
-      await store.createIndex({
-        indexName: "myCollection",
-        dimension: 1536,
-      });
-      await store.upsert({
-        indexName: "myCollection",
-        vectors: embeddings,
-        metadata: chunks.map(chunk => ({ text: chunk.text })),
-      });
+    const store = new PgVector(process.env.POSTGRES_CONNECTION_STRING)
+    await store.createIndex({
+    indexName: "myCollection",
+    dimension: 1536,
+    });
+    await store.upsert({
+    indexName: "myCollection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+    });
 
     ```
 
     ### pgvectorを使用したPostgreSQLの利用
 
-    pgvector拡張機能を備えたPostgreSQLは、すでにPostgreSQLを使用しているチームにとって、インフラの複雑さを最小限に抑えるための良い解決策です。
-    詳細なセットアップ手順とベストプラクティスについては、[公式pgvectorリポジトリ](https://github.com/pgvector/pgvector)を参照してください。
-
+    pgvector拡張機能を備えたPostgreSQLは、すでにPostgreSQLを使用しているチームがインフラの複雑さを最小限に抑えたい場合に適したソリューションです。
+    詳細なセットアップ手順とベストプラクティスについては、[pgvectorの公式リポジトリ](https://github.com/pgvector/pgvector)を参照してください。
   </Tabs.Tab>
 
   <Tabs.Tab>
     ```ts filename="vector-store.ts" showLineNumbers copy
+
       import { PineconeVector } from '@mastra/pinecone'
 
       const store = new PineconeVector({
@@ -53,154 +53,170 @@ import { Tabs } from "nextra/components";
         metadata: chunks.map(chunk => ({ text: chunk.text })),
       });
     ```
-
   </Tabs.Tab>
 
   <Tabs.Tab>
     ```ts filename="vector-store.ts" showLineNumbers copy
       import { QdrantVector } from '@mastra/qdrant'
 
-      const store = new QdrantVector({
-        url: process.env.QDRANT_URL,
-        apiKey: process.env.QDRANT_API_KEY
-      })
-      await store.createIndex({
-        indexName: "myCollection",
-        dimension: 1536,
-      });
-      await store.upsert({
-        indexName: "myCollection",
-        vectors: embeddings,
-        metadata: chunks.map(chunk => ({ text: chunk.text })),
-      });
-    ```
+    const store = new QdrantVector({
+    url: process.env.QDRANT_URL,
+    apiKey: process.env.QDRANT_API_KEY
+    })
+    await store.createIndex({
+    indexName: "myCollection",
+    dimension: 1536,
+    });
+    await store.upsert({
+    indexName: "myCollection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+    });
 
+    ```
   </Tabs.Tab>
 
   <Tabs.Tab>
     ```ts filename="vector-store.ts" showLineNumbers copy
-      import { ChromaVector } from '@mastra/chroma'
+    import { ChromaVector } from '@mastra/chroma'
 
-      const store = new ChromaVector()
-      await store.createIndex({
-        indexName: "myCollection",
-        dimension: 1536,
-      });
-      await store.upsert({
-        indexName: "myCollection",
-        vectors: embeddings,
-        metadata: chunks.map(chunk => ({ text: chunk.text })),
-      });
+    const store = new ChromaVector()
+    await store.createIndex({
+      indexName: "myCollection",
+      dimension: 1536,
+    });
+    await store.upsert({
+      indexName: "myCollection",
+      vectors: embeddings,
+      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    });
     ```
-
   </Tabs.Tab>
 
   <Tabs.Tab>
     ```ts filename="vector-store.ts" showLineNumbers copy
       import { AstraVector } from '@mastra/astra'
 
-      const store = new AstraVector({
-        token: process.env.ASTRA_DB_TOKEN,
-        endpoint: process.env.ASTRA_DB_ENDPOINT,
-        keyspace: process.env.ASTRA_DB_KEYSPACE
-      })
-      await store.createIndex({
-        indexName: "myCollection",
-        dimension: 1536,
-      });
-      await store.upsert({
-        indexName: "myCollection",
-        vectors: embeddings,
-        metadata: chunks.map(chunk => ({ text: chunk.text })),
-      });
-    ```
+    const store = new AstraVector({
+    token: process.env.ASTRA_DB_TOKEN,
+    endpoint: process.env.ASTRA_DB_ENDPOINT,
+    keyspace: process.env.ASTRA_DB_KEYSPACE
+    })
+    await store.createIndex({
+    indexName: "myCollection",
+    dimension: 1536,
+    });
+    await store.upsert({
+    indexName: "myCollection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+    });
 
+    ```
   </Tabs.Tab>
 
   <Tabs.Tab>
     ```ts filename="vector-store.ts" showLineNumbers copy
     import { LibSQLVector } from "@mastra/core/vector/libsql";
 
-      const store = new LibSQLVector({
-        connectionUrl: process.env.DATABASE_URL,
-        authToken: process.env.DATABASE_AUTH_TOKEN // Optional: for Turso cloud databases
-      })
-      await store.createIndex({
-        indexName: "myCollection",
-        dimension: 1536,
-      });
-      await store.upsert({
-        indexName: "myCollection",
-        vectors: embeddings,
-        metadata: chunks.map(chunk => ({ text: chunk.text })),
-      });
+    const store = new LibSQLVector({
+      connectionUrl: process.env.DATABASE_URL,
+      authToken: process.env.DATABASE_AUTH_TOKEN // Optional: for Turso cloud databases
+    })
+    await store.createIndex({
+      indexName: "myCollection",
+      dimension: 1536,
+    });
+    await store.upsert({
+      indexName: "myCollection",
+      vectors: embeddings,
+      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    });
     ```
-
   </Tabs.Tab>
 
   <Tabs.Tab>
     ```ts filename="vector-store.ts" showLineNumbers copy
       import { UpstashVector } from '@mastra/upstash'
 
-      const store = new UpstashVector({
-        url: process.env.UPSTASH_URL,
-        token: process.env.UPSTASH_TOKEN
-      })
-      await store.createIndex({
-        indexName: "myCollection",
-        dimension: 1536,
-      });
-      await store.upsert({
-        indexName: "myCollection",
-        vectors: embeddings,
-        metadata: chunks.map(chunk => ({ text: chunk.text })),
-      });
-    ```
+    const store = new UpstashVector({
+    url: process.env.UPSTASH_URL,
+    token: process.env.UPSTASH_TOKEN
+    })
+    await store.createIndex({
+    indexName: "myCollection",
+    dimension: 1536,
+    });
+    await store.upsert({
+    indexName: "myCollection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+    });
 
+    ```
   </Tabs.Tab>
 
   <Tabs.Tab>
     ```ts filename="vector-store.ts" showLineNumbers copy
-      import { CloudflareVector } from '@mastra/vectorize'
+    import { CloudflareVector } from '@mastra/vectorize'
 
-      const store = new CloudflareVector({
-        accountId: process.env.CF_ACCOUNT_ID,
-        apiToken: process.env.CF_API_TOKEN
-      })
-      await store.createIndex({
-        indexName: "myCollection",
-        dimension: 1536,
-      });
-      await store.upsert({
-        indexName: "myCollection",
-        vectors: embeddings,
-        metadata: chunks.map(chunk => ({ text: chunk.text })),
-      });
+    const store = new CloudflareVector({
+      accountId: process.env.CF_ACCOUNT_ID,
+      apiToken: process.env.CF_API_TOKEN
+    })
+    await store.createIndex({
+      indexName: "myCollection",
+      dimension: 1536,
+    });
+    await store.upsert({
+      indexName: "myCollection",
+      vectors: embeddings,
+      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    });
     ```
-
   </Tabs.Tab>
 
   <Tabs.Tab>
     ```ts filename="vector-store.ts" showLineNumbers copy
       import { MongoDBVector } from '@mastra/mongodb'
 
-      const store = new MongoDBVector({
-        url: process.env.MONGODB_URL,
-        database: process.env.MONGODB_DATABASE
-      })
-      await store.createIndex({
-        indexName: "myCollection",
-        dimension: 1536,
-      });
-      await store.upsert({
-        indexName: "myCollection",
-        vectors: embeddings,
-        metadata: chunks.map(chunk => ({ text: chunk.text })),
-      });
-    ```
+    const store = new MongoDBVector({
+    url: process.env.MONGODB_URL,
+    database: process.env.MONGODB_DATABASE
+    })
+    await store.createIndex({
+    indexName: "myCollection",
+    dimension: 1536,
+    });
+    await store.upsert({
+    indexName: "myCollection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+    });
 
+    ```
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```ts filename="vector-store.ts" showLineNumbers copy
+    import { OpenSearchVector } from '@mastra/opensearch'
+
+    const store = new OpenSearchVector(process.env.OPENSEARCH_URL)
+    await store.createIndex({
+      indexName: "my-collection",
+      dimension: 1536,
+    });
+    await store.upsert({
+      indexName: "my-collection",
+      vectors: embeddings,
+      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    });
+    ```
   </Tabs.Tab>
 </Tabs>
+
+
+
 
 ## ベクトルストレージの使用
 
@@ -230,7 +246,7 @@ await store.createIndex({
 
 各ベクトルデータベースは、互換性を確保し競合を防ぐために、インデックスとコレクションに特定の命名規則を適用しています。
 
-<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB']}>
+<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB', 'OpenSearch']}>
   <Tabs.Tab>
     インデックス名は以下の条件を満たす必要があります：
     - 文字またはアンダースコアで始まる
@@ -289,7 +305,7 @@ await store.createIndex({
       - 英数字（a-z、A-Z、0-9）
       - アンダースコア、ハイフン、ドット
     - 特殊文字（_、-、.）で始まらない、または終わらない
-    - 大文字と小文字は区別される場合がある
+    - 大文字と小文字は区別される
     - 例：`MyNamespace123` は有効
     - 例：`_namespace` は無効（アンダースコアで始まる）
   </Tabs.Tab>
@@ -312,11 +328,21 @@ await store.createIndex({
     - 例：`my-index` は無効（ハイフンを含む）
     - 例：`My$Collection` は無効（`$`を含む）
   </Tabs.Tab>
+  <Tabs.Tab>
+    インデックス名は以下の条件を満たす必要があります：
+    - 小文字のみを使用
+    - アンダースコアやハイフンで始まらない
+    - スペース、カンマを含まない
+    - 特殊文字（例：`:`、`"`、`*`、`+`、`/`、`\`、`|`、`?`、`#`、`>`、`<`）を含まない
+    - 例：`my-index-123` は有効
+    - 例：`My_Index` は無効（大文字を含む）
+    - 例：`_myindex` は無効（アンダースコアで始まる）
+  </Tabs.Tab>
 </Tabs>
 
-### エンベディングのアップサート
+### 埋め込みのアップサート
 
-インデックスを作成した後、エンベディングとその基本的なメタデータを保存できます：
+インデックスを作成した後、埋め込みとその基本的なメタデータを保存できます：
 
 ```ts filename="store-embeddings.ts" showLineNumbers copy
 // Store embeddings with their corresponding metadata
@@ -330,14 +356,14 @@ await store.upsert({
 });
 ```
 
-upsert操作：
+upsert操作は以下を行います：
 
-- 埋め込みベクトルとそれに対応するメタデータの配列を取ります
-- 同じIDを共有する既存のベクトルを更新します
+- 埋め込みベクトルとそれに対応するメタデータの配列を受け取ります
+- 同じIDを持つ既存のベクトルを更新します
 - 存在しないベクトルを新規作成します
 - 大規模なデータセットのバッチ処理を自動的に処理します
 
-異なるベクトルストアへの埋め込みのupsertの完全な例については、[埋め込みのUpsert](../../examples/rag/upsert/upsert-embeddings.mdx)ガイドを参照してください。
+異なるベクトルストアでの埋め込みのupsertの完全な例については、[埋め込みのUpsert](../../examples/rag/upsert/upsert-embeddings.mdx)ガイドを参照してください。
 
 ## メタデータの追加
 

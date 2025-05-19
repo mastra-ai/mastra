@@ -62,7 +62,6 @@
   "author": "",
   "license": "Elastic-2.0",
   "dependencies": {
-    "@mastra/core": "workspace:^",
     "compromise": "^14.14.4",
     "difflib": "^0.2.4",
     "fs-extra": "^11.3.0",
@@ -72,7 +71,8 @@
     "zod": "^3.24.3"
   },
   "peerDependencies": {
-    "ai": "^4.0.0"
+    "ai": "^4.0.0",
+    "@mastra/core": "^0.9.4"
   },
   "devDependencies": {
     "@ai-sdk/openai": "latest",
@@ -87,6 +87,7 @@
     "eslint": "^9.23.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
-    "vitest": "^3.1.2"
+    "vitest": "^3.1.2",
+    "@mastra/core": "workspace:*"
   }
 }

@@ -1,12 +1,12 @@
 ---
-title: "リファレンス: Astra Vector Store | ベクターデータベース | RAG | Mastra ドキュメント"
-description: DataStax Astra DBを使用したベクター検索を提供するMastraのAstraVectorクラスのドキュメント。
+title: "リファレンス: Astra ベクトルストア | ベクトルデータベース | RAG | Mastra ドキュメント"
+description: Mastraの中のAstraVectorクラスのドキュメント。DataStax Astra DBを使用したベクトル検索を提供します。
 ---
 
 # Astra Vector Store
 
-AstraVector クラスは、Apache Cassandra 上に構築されたクラウドネイティブでサーバーレスのデータベースである [DataStax Astra DB](https://www.datastax.com/products/datastax-astra) を使用したベクター検索を提供します。
-エンタープライズグレードのスケーラビリティと高可用性を備えたベクター検索機能を提供します。
+AstraVectorクラスは、[DataStax Astra DB](https://www.datastax.com/products/datastax-astra)を使用したベクトル検索を提供します。これはApache Cassandraをベースにしたクラウドネイティブでサーバーレスなデータベースです。
+エンタープライズグレードのスケーラビリティと高可用性を備えたベクトル検索機能を提供します。
 
 ## コンストラクタオプション
 
@@ -15,12 +15,12 @@ AstraVector クラスは、Apache Cassandra 上に構築されたクラウドネ
     {
       name: "token",
       type: "string",
-      description: "Astra DB API トークン",
+      description: "Astra DBのAPIトークン",
     },
     {
       name: "endpoint",
       type: "string",
-      description: "Astra DB API エンドポイント",
+      description: "Astra DBのAPIエンドポイント",
     },
     {
       name: "keyspace",
@@ -45,7 +45,7 @@ AstraVector クラスは、Apache Cassandra 上に構築されたクラウドネ
     {
       name: "dimension",
       type: "number",
-      description: "ベクトルの次元（埋め込みモデルに一致する必要があります）",
+      description: "ベクトルの次元数（埋め込みモデルと一致する必要があります）",
     },
     {
       name: "metric",
@@ -53,7 +53,7 @@ AstraVector クラスは、Apache Cassandra 上に構築されたクラウドネ
       isOptional: true,
       defaultValue: "cosine",
       description:
-        "類似性検索のための距離メトリック（dotproductの場合はdot_productにマップされます）",
+        "類似性検索の距離メトリック（dotproductの場合はdot_productにマッピングされます）",
     },
   ]}
 />
@@ -82,8 +82,7 @@ AstraVector クラスは、Apache Cassandra 上に構築されたクラウドネ
       name: "ids",
       type: "string[]",
       isOptional: true,
-      description:
-        "オプションのベクトルID（提供されない場合は自動生成されます）",
+      description: "オプションのベクトルID（提供されない場合は自動生成されます）",
     },
   ]}
 />
@@ -100,7 +99,7 @@ AstraVector クラスは、Apache Cassandra 上に構築されたクラウドネ
     {
       name: "queryVector",
       type: "number[]",
-      description: "類似ベクトルを見つけるためのクエリベクトル",
+      description: "類似ベクトルを検索するためのクエリベクトル",
     },
     {
       name: "topK",
@@ -127,7 +126,7 @@ AstraVector クラスは、Apache Cassandra 上に構築されたクラウドネ
 
 ### listIndexes()
 
-文字列としてインデックス名の配列を返します。
+インデックス名の文字列配列を返します。
 
 ### describeIndex()
 
@@ -141,7 +140,7 @@ AstraVector クラスは、Apache Cassandra 上に構築されたクラウドネ
   ]}
 />
 
-返される内容:
+戻り値：
 
 ```typescript copy
 interface IndexStats {
@@ -180,20 +179,19 @@ interface IndexStats {
     {
       name: "update",
       type: "object",
-      description:
-        "ベクトルおよび/またはメタデータの変更を含む更新オブジェクト",
+      description: "ベクトルやメタデータの変更を含む更新オブジェクト",
       properties: [
         {
           name: "vector",
           type: "number[]",
           isOptional: true,
-          description: "新しいベクトルの値",
+          description: "新しいベクトル値",
         },
         {
           name: "metadata",
           type: "Record<string, any>",
           isOptional: true,
-          description: "新しいメタデータの値",
+          description: "新しいメタデータ値",
         },
       ],
     },
@@ -219,7 +217,7 @@ interface IndexStats {
 
 ## レスポンスタイプ
 
-クエリ結果はこの形式で返されます:
+クエリ結果は以下の形式で返されます：
 
 ```typescript copy
 interface QueryResult {
@@ -230,9 +228,9 @@ interface QueryResult {
 }
 ```
 
-## エラーハンドリング
+## エラー処理
 
-ストアはキャッチ可能な型付きエラーをスローします:
+ストアは捕捉可能な型付きエラーをスローします：
 
 ```typescript copy
 try {
@@ -243,17 +241,17 @@ try {
 } catch (error) {
   if (error instanceof VectorStoreError) {
     console.log(error.code); // 'connection_failed' | 'invalid_dimension' | etc
-    console.log(error.details); // 追加のエラーコンテキスト
+    console.log(error.details); // Additional error context
   }
 }
 ```
 
 ## 環境変数
 
-必要な環境変数:
+必要な環境変数：
 
-- `ASTRA_DB_TOKEN`: あなたのAstra DB APIトークン
-- `ASTRA_DB_ENDPOINT`: あなたのAstra DB APIエンドポイント
+- `ASTRA_DB_TOKEN`: Astra DBのAPIトークン
+- `ASTRA_DB_ENDPOINT`: Astra DBのAPIエンドポイント
 
 ## 関連
 

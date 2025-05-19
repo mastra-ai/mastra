@@ -1,0 +1,50 @@
+---
+title: "カスタムAPIルート"
+description: "Mastraサーバーから追加のHTTPエンドポイントを公開します。"
+---
+
+# カスタムAPIルート
+
+デフォルトでは、Mastraは登録されたエージェントとワークフローをサーバーを通じて自動的に公開します。追加の動作を実装するには、独自のHTTPルートを定義することができます。
+
+ルートは`@mastra/core/server`から提供される`registerApiRoute`ヘルパーを使用して設定します。ルートは`Mastra`インスタンスと同じファイルに配置することもできますが、分離することで設定をより簡潔に保つことができます。
+
+```typescript copy showLineNumbers
+import { Mastra } from "@mastra/core";
+import { registerApiRoute } from "@mastra/core/server";
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      registerApiRoute("/my-custom-route", {
+        method: "GET",
+        handler: async (c) => {
+          const mastra = c.get("mastra");
+          const agents = await mastra.getAgent("my-agent");
+
+          return c.json({ message: "Hello, world!" });
+        },
+      }),
+    ],
+  },
+});
+```
+
+各ルートのハンドラーはHonoの`Context`を受け取ります。ハンドラー内では、`Mastra`インスタンスにアクセスしてエージェントやワークフローを取得したり呼び出したりすることができます。
+
+ルート固有のミドルウェアを追加するには、`registerApiRoute`を呼び出す際に`middleware`配列を渡します。
+
+```typescript copy showLineNumbers
+registerApiRoute("/my-custom-route", {
+  method: "GET",
+  middleware: [
+    async (c, next) => {
+      console.log(`${c.req.method} ${c.req.url}`);
+      await next();
+    },
+  ],
+  handler: async (c) => {
+    return c.json({ message: "My route with custom middleware" });
+  },
+});
+```
