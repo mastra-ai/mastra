@@ -280,7 +280,12 @@ button[title="Copy code"] {
   border: none;
 }
 
-.nextra-code span {
+.nextra-code {
+  white-space: nowrap;
+}
+
+.nextra-code > span {
+  white-space-collapse: preserve;
   color: var(--color-primary);
 }
 
