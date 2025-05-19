@@ -1,11 +1,11 @@
 ---
-title: "リファレンス: voice.on() | Voice Providers | Mastra Docs"
-description: "音声プロバイダーで利用可能な on() メソッドのドキュメントで、音声イベントのイベントリスナーを登録します。"
+title: "リファレンス: voice.on() | 音声プロバイダー | Mastra ドキュメント"
+description: "音声プロバイダーで利用可能なon()メソッドのドキュメント。音声イベントのイベントリスナーを登録します。"
 ---
 
 # voice.on()
 
-`on()` メソッドは、さまざまな音声イベントのためのイベントリスナーを登録します。これは、音声をリアルタイムで提供するプロバイダーにとって特に重要であり、イベントは文字起こしされたテキスト、音声応答、その他の状態変化を伝えるために使用されます。
+`on()` メソッドは、さまざまな音声イベントのイベントリスナーを登録します。これは特にリアルタイム音声プロバイダーにとって重要であり、イベントは文字起こしされたテキスト、音声応答、その他の状態変更を伝えるために使用されます。
 
 ## 使用例
 
@@ -92,9 +92,9 @@ voice.on("error", ({ message, code, details }) => {
 
 異なる音声プロバイダーは、異なるイベントセットと様々なペイロード構造をサポートしている場合があります。
 
-## CompositeVoiceとの使用
+## CompositeVoiceでの使用
 
-`CompositeVoice`を使用する場合、`on()`メソッドは設定されたリアルタイムプロバイダーに委任されます:
+`CompositeVoice`を使用する場合、`on()`メソッドは設定されたリアルタイムプロバイダーに委譲されます：
 
 ```typescript
 import { CompositeVoice } from "@mastra/core/voice";
@@ -102,9 +102,9 @@ import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
 import Speaker from "@mastra/node-speaker";
 
 const speaker = new Speaker({
-  sampleRate: 24100, // MacBook Proでの高品質オーディオの標準であるHz単位のオーディオサンプルレート
+  sampleRate: 24100, // オーディオサンプルレート（Hz）- MacBook Proの高品質オーディオの標準
   channels: 1, // モノラルオーディオ出力（ステレオの場合は2）
-  bitDepth: 16, // オーディオ品質のビット深度 - CD品質の標準（16ビット解像度）
+  bitDepth: 16, // オーディオ品質のビット深度 - CD品質標準（16ビット解像度）
 });
 
 const realtimeVoice = new OpenAIRealtimeVoice();
@@ -115,7 +115,7 @@ const voice = new CompositeVoice({
 // リアルタイムサービスに接続
 await voice.connect();
 
-// これにより、OpenAIRealtimeVoiceプロバイダーにイベントリスナーが登録されます
+// これはOpenAIRealtimeVoiceプロバイダーにイベントリスナーを登録します
 voice.on("speaker", (stream) => {
   stream.pipe(speaker);
 });

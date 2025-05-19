@@ -1,13 +1,13 @@
 ---
 title: "リファレンス: .after() | ワークフローの構築 | Mastra ドキュメント"
-description: ワークフローにおける `after()` メソッドのドキュメントで、分岐と統合のパスを可能にします。
+description: ワークフロー内で分岐や統合パスを可能にする `after()` メソッドのドキュメント。
 ---
 
 # .after()
 
-`.after()` メソッドは、ワークフローのステップ間に明示的な依存関係を定義し、ワークフローの実行における分岐と統合のパスを可能にします。
+`.after()` メソッドは、ワークフローステップ間の明示的な依存関係を定義し、ワークフロー実行におけるパスの分岐と結合を可能にします。
 
-## 使用法
+## 使用方法
 
 ### 基本的な分岐
 
@@ -15,11 +15,11 @@ description: ワークフローにおける `after()` メソッドのドキュ�
 workflow
   .step(stepA)
   .then(stepB)
-  .after(stepA) // stepAが完了した後に新しいブランチを作成
+  .after(stepA) // stepAが完了した後に新しい分岐を作成
   .step(stepC);
 ```
 
-### 複数のブランチのマージ
+### 複数の分岐のマージ
 
 ```typescript
 workflow
@@ -31,7 +31,7 @@ workflow
   .step(stepE);
 ```
 
-## パラメーター
+## パラメータ
 
 <PropertiesTable
   content={[
@@ -39,7 +39,7 @@ workflow
       name: "steps",
       type: "Step | Step[]",
       description:
-        "続行する前に完了しなければならない単一のステップまたはステップの配列",
+        "続行する前に完了する必要がある単一のステップまたはステップの配列",
       isOptional: false,
     },
   ]}
@@ -52,7 +52,7 @@ workflow
     {
       name: "workflow",
       type: "Workflow",
-      description: "メソッドチェーンのためのワークフローインスタンス",
+      description: "メソッドチェーン用のワークフローインスタンス",
     },
   ]}
 />
@@ -69,7 +69,7 @@ workflow
   .step(logData);
 ```
 
-### 複数の依存関係（ブランチのマージ）
+### 複数の依存関係（ブランチの統合）
 
 ```typescript
 workflow

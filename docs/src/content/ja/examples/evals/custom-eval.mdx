@@ -1,28 +1,28 @@
 ---
-title: "例：カスタム評価 | 評価 | Mastra ドキュメント"
-description: MastraでカスタムのLLMベース評価指標を作成する例。
+title: "例: カスタム評価 | Evals | Mastra Docs"
+description: MastraでカスタムLLMベースの評価指標を作成する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
-# LLMを審査員とするカスタム評価
+# LLMを審査員としたカスタム評価
 
-この例では、AIシェフエージェントを使用してレシピのグルテン含有量を確認するための、MastraでのカスタムLLMベースの評価指標の作成方法を示します。
+この例では、AIシェフエージェントを使ってレシピのグルテン含有量をチェックするために、MastraでカスタムのLLMベース評価指標を作成する方法を示します。
 
 ## 概要
 
-この例では、以下の方法を示します：
+この例では、以下の方法を示します。
 
-1. カスタムLLMベースのメトリックを作成する
-2. エージェントを使用してレシピを生成し評価する
-3. レシピのグルテン含有量を確認する
-4. グルテンの供給源について詳細なフィードバックを提供する
+1. カスタムのLLMベースの指標を作成する
+2. エージェントを使ってレシピを生成し評価する
+3. レシピにグルテンが含まれているか確認する
+4. グルテンの由来について詳細なフィードバックを提供する
 
 ## セットアップ
 
-### 環境セットアップ
+### 環境設定
 
-環境変数を設定してください：
+環境変数を必ず設定してください：
 
 ```bash filename=".env"
 OPENAI_API_KEY=your_api_key_here
@@ -30,11 +30,11 @@ OPENAI_API_KEY=your_api_key_here
 
 ## プロンプトの定義
 
-評価システムは、特定の目的に応じて3つの異なるプロンプトを使用します。
+評価システムでは、3つの異なるプロンプトが使用されており、それぞれ特定の目的を持っています。
 
-#### 1. 指示プロンプト
+#### 1. インストラクションプロンプト
 
-このプロンプトは、判定者の役割とコンテキストを設定します：
+このプロンプトは、判定者の役割とコンテキストを設定します。
 
 ```typescript copy showLineNumbers filename="src/mastra/evals/recipe-completeness/prompts.ts"
 export const GLUTEN_INSTRUCTIONS = `You are a Master Chef that identifies if recipes contain gluten.`;
@@ -42,7 +42,7 @@ export const GLUTEN_INSTRUCTIONS = `You are a Master Chef that identifies if rec
 
 #### 2. グルテン評価プロンプト
 
-このプロンプトは、特定の成分をチェックしてグルテン含有量の構造化された評価を作成します：
+このプロンプトは、グルテンの含有を構造的に評価し、特定の成分をチェックします。
 
 ```typescript copy showLineNumbers{3} filename="src/mastra/evals/recipe-completeness/prompts.ts"
 export const generateGlutenPrompt = ({
@@ -83,7 +83,7 @@ Return your response in this format:
 
 #### 3. 推論プロンプト
 
-このプロンプトは、レシピが完全または不完全と見なされる理由についての詳細な説明を生成します：
+このプロンプトは、レシピが完全か不完全かについての詳細な説明を生成します。
 
 ```typescript copy showLineNumbers{34} filename="src/mastra/evals/recipe-completeness/prompts.ts"
 export const generateReasonPrompt = ({
@@ -104,7 +104,7 @@ Return your response in this format:
 
 ## ジャッジの作成
 
-レシピのグルテン含有量を評価する専門のジャッジを作成できます。上記で定義されたプロンプトをインポートし、ジャッジで使用します:
+レシピのグルテン含有量を評価するための専門的なジャッジを作成できます。上記で定義したプロンプトをインポートし、ジャッジで使用します。
 
 ```typescript copy showLineNumbers filename="src/mastra/evals/gluten-checker/metricJudge.ts"
 import { type LanguageModel } from "@mastra/core/llm";
@@ -152,14 +152,14 @@ export class RecipeCompletenessJudge extends MastraAgentJudge {
 }
 ```
 
-ジャッジクラスは、2つの主要なメソッドを通じてコア評価ロジックを処理します:
+このジャッジクラスは、主に2つのメソッドを通じてコアとなる評価ロジックを処理します。
 
-- `evaluate()`: レシピのグルテン含有量を分析し、判定と共にグルテン含有量を返します
-- `getReason()`: 評価結果の人間が読める説明を提供します
+- `evaluate()`: レシピのグルテン含有量を分析し、グルテンの有無と判定結果を返します
+- `getReason()`: 評価結果に対する人間が理解しやすい説明を提供します
 
 ## メトリックの作成
 
-判定者を使用するメトリッククラスを作成します：
+ジャッジを使用するメトリッククラスを作成します：
 
 ```typescript copy showLineNumbers filename="src/mastra/evals/gluten-checker/index.ts"
 export interface MetricResultWithInfo extends MetricResult {
@@ -200,14 +200,14 @@ export class GlutenCheckerMetric extends Metric {
 }
 ```
 
-メトリッククラスは、以下のメソッドを持つグルテン含有量評価のための主要なインターフェースとして機能します：
+このメトリッククラスは、グルテン含有量の評価のためのメインインターフェースとして機能し、以下のメソッドを持ちます：
 
-- `measure()`: 全体の評価プロセスを調整し、包括的な結果を返します
-- `calculateScore()`: 評価の判定をバイナリスコアに変換します（グルテンフリーの場合は1、グルテンを含む場合は0）
+- `measure()`: 評価プロセス全体を統括し、包括的な結果を返します
+- `calculateScore()`: 評価の判定をバイナリスコア（グルテンフリーなら1、グルテン含有なら0）に変換します
 
-## エージェントの設定
+## エージェントのセットアップ
 
-エージェントを作成し、メトリックを添付します:
+エージェントを作成し、メトリックを追加します：
 
 ```typescript copy showLineNumbers filename="src/mastra/agents/chefAgent.ts"
 import { openai } from "@ai-sdk/openai";
@@ -218,8 +218,8 @@ import { GlutenCheckerMetric } from "../evals";
 export const chefAgent = new Agent({
   name: "chef-agent",
   instructions:
-    "あなたはMichel、実用的で経験豊富な家庭料理のシェフです" +
-    "あなたは人々が手元にある材料で料理をするのを手伝います。",
+    "You are Michel, a practical and experienced home chef" +
+    "You help people cook with whatever ingredients they have available.",
   model: openai("gpt-4o-mini"),
   evals: {
     glutenChecker: new GlutenCheckerMetric(openai("gpt-4o-mini")),
@@ -229,7 +229,7 @@ export const chefAgent = new Agent({
 
 ## 使用例
 
-エージェントと一緒にメトリックを使用する方法は次のとおりです：
+このメトリックをエージェントで使用する方法は次のとおりです：
 
 ```typescript copy showLineNumbers filename="src/index.ts"
 import { mastra } from "./mastra";
@@ -237,19 +237,19 @@ import { mastra } from "./mastra";
 const chefAgent = mastra.getAgent("chefAgent");
 const metric = chefAgent.evals.glutenChecker;
 
-// 例: レシピを評価する
-const input = "ご飯と豆を素早く作る方法は？";
+// Example: Evaluate a recipe
+const input = "What is a quick way to make rice and beans?";
 const response = await chefAgent.generate(input);
 const result = await metric.measure(input, response.text);
 
-console.log("メトリック結果:", {
+console.log("Metric Result:", {
   score: result.score,
   glutenSources: result.info.glutenSources,
   reason: result.info.reason,
 });
 
-// 出力例:
-// メトリック結果: { score: 1, glutenSources: [], reason: 'このレシピはグルテンを含む成分が含まれていないため、グルテンフリーです。' }
+// Example Output:
+// Metric Result: { score: 1, glutenSources: [], reason: 'The recipe is gluten-free as it does not contain any gluten-containing ingredients.' }
 ```
 
 ## 結果の理解
@@ -257,8 +257,8 @@ console.log("メトリック結果:", {
 この指標は以下を提供します：
 
 - グルテンフリーのレシピには1、グルテンを含むレシピには0のスコア
-- グルテン源のリスト（ある場合）
-- レシピのグルテン含有量に関する詳細な理由
+- グルテン源のリスト（該当する場合）
+- レシピのグルテン含有量に関する詳細な理由付け
 - 以下に基づく評価：
   - 材料リスト
 

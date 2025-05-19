@@ -1,13 +1,13 @@
 ---
 title: "リファレンス: OtelConfig | Mastra Observability ドキュメント"
-description: OpenTelemetry の計装、トレース、およびエクスポートの動作を設定する OtelConfig オブジェクトのドキュメント。
+description: OpenTelemetry のインストルメンテーション、トレーシング、およびエクスポート動作を設定する OtelConfig オブジェクトのドキュメント。
 ---
 
 # `OtelConfig`
 
-`OtelConfig` オブジェクトは、アプリケーション内で OpenTelemetry の計装、トレース、およびエクスポートの動作を設定するために使用されます。そのプロパティを調整することで、テレメトリデータ（トレースなど）がどのように収集、サンプリング、およびエクスポートされるかを制御できます。
+`OtelConfig` オブジェクトは、アプリケーション内で OpenTelemetry のインストルメンテーション、トレーシング、およびエクスポートの動作を設定するために使用されます。そのプロパティを調整することで、テレメトリーデータ（トレースなど）の収集、サンプリング、エクスポート方法を制御できます。
 
-Mastra 内で `OtelConfig` を使用するには、Mastra を初期化する際に `telemetry` キーの値として渡します。これにより、Mastra はトレースと計装のためにカスタムの OpenTelemetry 設定を使用するように構成されます。
+Mastra で `OtelConfig` を使用するには、Mastra の初期化時に `telemetry` キーの値として渡します。これにより、Mastra はトレーシングとインストルメンテーションのためにカスタムの OpenTelemetry 設定を使用するように構成されます。
 
 ```typescript showLineNumbers copy
 import { Mastra } from "mastra";
@@ -39,21 +39,21 @@ const otelConfig: OtelConfig = {
       isOptional: true,
       default: "default-service",
       description:
-        "テレメトリバックエンドでサービスを識別するために使用される人間が読める名前。",
+        "テレメトリーバックエンドでサービスを識別するために使用される人間が読める名前です。",
     },
     {
       name: "enabled",
       type: "boolean",
       isOptional: true,
       default: "true",
-      description: "テレメトリの収集とエクスポートが有効かどうか。",
+      description: "テレメトリーの収集とエクスポートが有効かどうかを示します。",
     },
     {
       name: "sampling",
       type: "SamplingStrategy",
       isOptional: true,
       description:
-        "トレースのサンプリング戦略を定義し、どの程度のデータが収集されるかを制御します。",
+        "トレースのサンプリング戦略を定義し、どれだけのデータを収集するかを制御します。",
       properties: [
         {
           name: "type",
@@ -65,7 +65,7 @@ const otelConfig: OtelConfig = {
           type: "number (0.0 to 1.0)",
           isOptional: true,
           description:
-            "`ratio` または `parent_based` 戦略の場合、サンプリングの確率を定義します。",
+            "`ratio` または `parent_based` 戦略の場合、サンプリング確率を定義します。",
         },
         {
           name: "root",
@@ -79,7 +79,7 @@ const otelConfig: OtelConfig = {
               type: "number (0.0 to 1.0)",
               isOptional: true,
               description:
-                "`parent_based` 戦略におけるルートトレースのサンプリング確率。",
+                "`parent_based` 戦略におけるルートトレースのサンプリング確率です。",
             },
           ],
         },
@@ -89,27 +89,27 @@ const otelConfig: OtelConfig = {
       name: "export",
       type: "object",
       isOptional: true,
-      description: "収集されたテレメトリデータをエクスポートするための設定。",
+      description: "収集したテレメトリーデータのエクスポート設定です。",
       properties: [
         {
           name: "type",
           type: `'otlp' | 'console'`,
           description:
-            "エクスポーターのタイプを指定します。外部エクスポーターには `otlp` を、開発には `console` を使用します。",
+            "エクスポーターのタイプを指定します。外部エクスポーターには `otlp`、開発用には `console` を使用します。",
         },
         {
           name: "endpoint",
           type: "string",
           isOptional: true,
           description:
-            "`otlp` タイプの場合、トレースを送信する OTLP エンドポイント URL。",
+            "`otlp` タイプの場合、トレースを送信する OTLP エンドポイントの URL です。",
         },
         {
           name: "headers",
           type: "Record<string, string>",
           isOptional: true,
           description:
-            "OTLP リクエストと共に送信する追加のヘッダー。認証やルーティングに役立ちます。",
+            "OTLP リクエストと共に送信する追加ヘッダーです。認証やルーティングに便利です。",
         },
       ],
     },
