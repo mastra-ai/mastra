@@ -1,0 +1,40 @@
+{
+  "name": "@mastra/dynamodb",
+  "version": "0.0.1",
+  "description": "DynamoDB storage adapter for Mastra",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --clean --treeshake=smallest --splitting",
+    "dev": "tsup --watch",
+    "clean": "rm -rf dist",
+    "lint": "eslint .",
+    "pretest": "docker compose up -d",
+    "test": "vitest run",
+    "posttest": "docker compose down -v",
+    "pretest:watch": "docker compose up -d",
+    "test:watch": "vitest watch",
+    "posttest:watch": "docker compose down -v",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.0.0",
+    "@aws-sdk/lib-dynamodb": "^3.0.0",
+    "@mastra/core": "workspace:*",
+    "electrodb": "^3.4.1"
+  },
+  "devDependencies": {
+    "@internal/storage-test-utils": "workspace:*",
+    "@types/node": "^20.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -36,7 +36,7 @@ export class AgentNetwork extends MastraBase {
   > = {};
 
   constructor(config: AgentNetworkConfig) {
-    super({ component: RegisteredLogger.NETWORK, name: 'AgentNetwork' });
+    super({ component: RegisteredLogger.NETWORK, name: config.name || 'AgentNetwork' });
 
     this.#instructions = config.instructions;
     this.#agents = config.agents;

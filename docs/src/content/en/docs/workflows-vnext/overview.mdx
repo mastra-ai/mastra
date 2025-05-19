@@ -37,12 +37,14 @@ Steps are the building blocks of workflows. Create a step using `createStep`:
 
 ```typescript
 // Create a step with defined input/output schemas and execution logic
+const inputSchema = z.object({
+  inputValue: z.string(),
+});
+
 const myStep = createStep({
   id: "my-step",
   description: "Does something useful",
-  inputSchema: z.object({
-    inputValue: z.string(),
-  }),
+  inputSchema,
   outputSchema: z.object({
     outputValue: z.string(),
   }),
@@ -62,7 +64,7 @@ const myStep = createStep({
     runtimeContext,
   }) => {
     const otherStepOutput = getStepResult(step2);
-    const initData = getInitData<typeof workflow>(); // typed as the workflow input schema
+    const initData = getInitData<typeof inputSchema>(); // typed as the input schema variable (zod schema)
     return {
       outputValue: `Processed: ${inputData.inputValue}, ${initData.startValue} (runtimeContextValue: ${runtimeContext.get("runtimeContextValue")})`,
     };

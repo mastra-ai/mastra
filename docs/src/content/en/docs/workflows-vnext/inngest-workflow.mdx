@@ -208,14 +208,3 @@ srv.close()
 ```
 
 After starting your workflow, you can visit the [Inngest dashboard](http://localhost:8288) to monitor execution progress, view step outputs, and debug any issues.
-
-## Running in Production
-
-To deploy your Mastra workflow with Inngest Cloud and Vercel, follow these steps:
-
-1. Remove the `baseUrl` from Inngest initialisation.
-2. Deploy your Mastra application to Vercel. Follow the official Mastra deployment guide: [Deploying Mastra to Vercel](https://mastra.ai/en/reference/deployer/vercel)
-3. Go to [Inngest Cloud](https://app.inngest.com/).
-4. Use the official Vercel integration to connect your Vercel project: [Inngest Cloud Vercel Integration Guide](https://www.inngest.com/docs/apps/cloud)
-5. This will automatically sync your serverless functions and register your workflow endpoints.
-6. Use the Inngest Cloud dashboard to trigger events and monitor workflow executions, logs, and step outputs.

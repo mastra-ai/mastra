@@ -78,6 +78,8 @@ const allSchemas = {
   default: z.string().default('test'),
 
   // Uncategorized types, not supported by OpenAI reasoning models
+  anyOptional: z.any().optional(),
+  any: z.any(),
   intersection: z.intersection(z.string().min(1), z.string().max(4)),
   never: z.never() as any,
   null: z.null(),
