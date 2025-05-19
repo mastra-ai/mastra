@@ -1,18 +1,17 @@
+import { DynamoDBClient, DescribeTableCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+import type { StorageThreadType, MessageType, WorkflowRunState } from '@mastra/core';
 import {
   MastraStorage,
-  TABLE_NAMES,
   TABLE_THREADS,
   TABLE_MESSAGES,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_EVALS,
   TABLE_TRACES,
 } from '@mastra/core/storage';
-import { type StorageThreadType, type MessageType, type WorkflowRunState } from '@mastra/core';
-import { DynamoDBClient, DescribeTableCommand } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import { Service } from 'electrodb';
+import type { EvalRow, StorageGetMessagesArg, WorkflowRun, WorkflowRuns, TABLE_NAMES } from '@mastra/core/storage';
+import type { Service } from 'electrodb';
 import { getElectroDbService } from '../entities';
-import type { EvalRow, StorageGetMessagesArg, WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
 
 export interface DynamoDBStoreConfig {
   region?: string;
@@ -352,7 +351,7 @@ export class DynamoDBStore extends MastraStorage {
       if (data.metadata && typeof data.metadata === 'string') {
         try {
           // data.metadata = JSON.parse(data.metadata); // REMOVED by AI
-        } catch (e) {
+        } catch {
           /* ignore parse error */
         }
       }
