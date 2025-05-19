@@ -1,0 +1,1 @@
+export { PinoLogger } from './pino';

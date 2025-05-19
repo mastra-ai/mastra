@@ -52,6 +52,7 @@
     "@clack/prompts": "^0.8.2",
     "@lukeed/uuid": "^2.0.1",
     "@mastra/deployer": "workspace:^",
+    "@mastra/loggers": "workspace:^",
     "@mastra/mcp": "workspace:^",
     "@opentelemetry/instrumentation": "^0.57.2",
     "@webcontainer/env": "^1.1.1",

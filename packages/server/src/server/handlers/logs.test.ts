@@ -1,5 +1,4 @@
-import type { BaseLogMessage } from '@mastra/core/logger';
-import { Logger } from '@mastra/core/logger';
+import type { BaseLogMessage, IMastraLogger } from '@mastra/core/logger';
 import { Mastra } from '@mastra/core/mastra';
 import type { Mock } from 'vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -9,8 +8,8 @@ import { getLogsHandler, getLogsByRunIdHandler, getLogTransports } from './logs'
 vi.mock('@mastra/core/logger');
 
 type MockedLogger = {
-  getLogsByRunId: Mock<Logger['getLogsByRunId']>;
-  getLogs: Mock<Logger['getLogs']>;
+  getLogsByRunId: Mock<IMastraLogger['getLogsByRunId']>;
+  getLogs: Mock<IMastraLogger['getLogs']>;
 };
 
 function createLog(args: Partial<BaseLogMessage>): BaseLogMessage {
@@ -27,7 +26,7 @@ function createLog(args: Partial<BaseLogMessage>): BaseLogMessage {
 }
 
 describe('Logs Handlers', () => {
-  let mockLogger: Omit<Logger, keyof MockedLogger> &
+  let mockLogger: Omit<IMastraLogger, keyof MockedLogger> &
     MockedLogger & {
       transports: Record<string, unknown>;
     };
@@ -35,10 +34,12 @@ describe('Logs Handlers', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockLogger = new Logger() as any;
+    mockLogger = { getLogsByRunId: vi.fn(), getLogs: vi.fn(), transports: {} } as unknown as MockedLogger & {
+      transports: Record<string, unknown>;
+    };
 
     mastra = new Mastra({
-      logger: mockLogger as unknown as Logger,
+      logger: mockLogger as unknown as IMastraLogger,
     });
   });
 
