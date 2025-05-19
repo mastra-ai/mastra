@@ -237,19 +237,46 @@ export { activityPlanningWorkflow }
 
 ```ts showLineNumbers copy filename="index.ts"
 import { Mastra } from '@mastra/core/mastra'
-import { createLogger } from '@mastra/core/logger'
+import { PinoLogger } from "@mastra/loggers";
 import { activityPlanningWorkflow } from './workflows/agent-workflow'
 import { planningAgent } from './agents/planning-agent'
  
 // Create a new Mastra instance and register components
 const mastra = new Mastra({
   vnext_workflows: {
-    activityPlanningWorkflow,
+    weatherWorkflow,
   },
   agents: {
     planningAgent,
   },
-  logger: createLogger({
+  logger: new PinoLogger({
+    name: "Mastra",
+    level: "info",
+  }),
+})
+
+export { mastra }
+````
+
+## Mastraインスタンスにエージェントとワークフローを登録する
+
+プランニングエージェントと天気ワークフローをmastraインスタンスに登録します。
+これは、天気ワークフロー内でプランニングエージェントへのアクセスを可能にするために重要です。
+
+```ts showLineNumbers copy filename="index.ts"
+import { Mastra } from "@mastra/core/mastra";
+import { PinoLogger } from "@mastra/loggers";
+import { weatherWorkflow } from "./workflows";
+import { planningAgent } from "./agents";
+
+const mastra = new Mastra({
+  vnext_workflows: {
+    weatherWorkflow,
+  },
+  agents: {
+    planningAgent,
+  },
+  logger: new PinoLogger({
     name: "Mastra",
     level: "info",
   }),

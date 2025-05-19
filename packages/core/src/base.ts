@@ -1,6 +1,6 @@
 import type { IMastraLogger } from './logger';
-import { ConsoleLogger } from './logger/default-logger';
 import { RegisteredLogger } from './logger/constants';
+import { ConsoleLogger } from './logger/default-logger';
 
 import type { Telemetry } from './telemetry';
 

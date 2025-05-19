@@ -15,11 +15,11 @@ Mastraでは、ログは特定の関数がいつ実行されるか、どのよ�
 
 ```typescript filename="mastra.config.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core";
-import { createLogger } from "@mastra/core/logger";
+import { PinoLogger } from "@mastra/loggers";
 
 export const mastra = new Mastra({
   // Other Mastra configuration...
-  logger: createLogger({
+  logger: new PinoLogger({
     name: "Mastra",
     level: "info",
   }),

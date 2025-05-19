@@ -72,7 +72,7 @@ Mastra クラスは通常、`src/mastra/index.ts` ファイルで初期化され
 
 ```typescript copy filename=src/mastra/index.ts
 import { Mastra } from "@mastra/core";
-import { createLogger } from "@mastra/core/logger";
+import { PinoLogger } from "@mastra/loggers";
 
 // Basic initialization
 export const mastra = new Mastra({});
@@ -82,7 +82,7 @@ export const mastra = new Mastra({
   agents: {},
   workflows: [],
   integrations: [],
-  logger: createLogger({
+  logger: new PinoLogger({
     name: "My Project",
     level: "info",
   }),
