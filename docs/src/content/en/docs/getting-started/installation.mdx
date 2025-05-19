@@ -18,8 +18,11 @@ You can also run Mastra with a local LLM using:
 
 ## What You'll Build
 
-By the end of this guide, you'll have built a weather agent that generates weather reports using OpenAI's [gpt-4o-mini](https://platform.openai.com/docs/models/gpt-4o-mini) and the Open-Meteo [forecast](https://open-meteo.com/en/docs#api_documentation) endpoint. You can run it directly from the command line or test it in the Mastra Playground.
+By the end of this guide, you'll have built a Weather Agent that generates weather reports using OpenAI's [gpt-4o-mini](https://platform.openai.com/docs/models/gpt-4o-mini) and the Open-Meteo [forecast](https://open-meteo.com/en/docs#api_documentation) endpoint. You can run it directly from the command line or test it in the Mastra Playground. With the Weather agent running you can ask questions like:
 
+> What is the weather in London? <br/>
+> Suggest indoor alternatives in Berlin if it rains tomorrow. <br />
+> Is it windy in San Francisco today?
 
 ## Prerequisites
 
@@ -125,16 +128,16 @@ npx create-mastra@latest
 **Example One-Liner**
 
 ```bash copy
-npx create-mastra@latest --project-name hello-mastra --example --components tools,agents --llm openai
+npx create-mastra@latest --project-name hello-mastra --example --components tools,agents,workflows --llm openai
 ```
 
 > Providing all required flags lets the CLI run without any prompts.
 
 ### Set Up your API Key
 
-Create a `.env.development` file in your project root directory and add your API key:
+Create a `.env` file in your project root directory and add your API key:
 
-```bash filename=".env.development" copy
+```bash filename=".env" copy
 OPENAI_API_KEY=<your-api-key>
 ```
 > Replace `your-api-key` with your API key.
@@ -206,7 +209,7 @@ Add the `dev` and `build` scripts to `package.json`:
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "mastra dev",
-    "build": "mastra build",
+    "build": "mastra build"
   },
 }
 ```
@@ -236,9 +239,9 @@ Create a `tsconfig.json` file in your project root with the following configurat
 
 ### Set Up your API Key
 
-Create a `.env.development` file in your project root directory and add your API key:
+Create a `.env` file in your project root directory and add your API key:
 
-```bash filename=".env.development" copy
+```bash filename=".env" copy
 OPENAI_API_KEY=<your-openai-key>
 ```
 
@@ -383,6 +386,205 @@ Use the weatherTool to fetch current weather data.`,
 });
 ```
 
+### Create a Workflow
+
+Create a `weather-workflow.ts` file:
+
+```bash copy
+mkdir -p src/mastra/workflows && touch src/mastra/workflows/weather-workflow.ts
+```
+
+Add the following code:
+
+```ts filename="src/mastra/workflows/weather-workflow.ts" showLineNumbers copy
+import { openai } from '@ai-sdk/openai';
+import { Agent } from '@mastra/core/agent';
+import { Step, Workflow } from '@mastra/core/workflows';
+import { z } from 'zod';
+
+const llm = openai('gpt-4o');
+
+const agent = new Agent({
+  name: 'Weather Agent',
+  model: llm,
+  instructions: `
+        You are a local activities and travel expert who excels at weather-based planning. Analyze the weather data and provide practical activity recommendations.
+
+        For each day in the forecast, structure your response exactly as follows:
+
+        📅 [Day, Month Date, Year]
+        ═══════════════════════════
+
+        🌡️ WEATHER SUMMARY
+        • Conditions: [brief description]
+        • Temperature: [X°C/Y°F to A°C/B°F]
+        • Precipitation: [X% chance]
+
+        🌅 MORNING ACTIVITIES
+        Outdoor:
+        • [Activity Name] - [Brief description including specific location/route]
+          Best timing: [specific time range]
+          Note: [relevant weather consideration]
+
+        🌞 AFTERNOON ACTIVITIES
+        Outdoor:
+        • [Activity Name] - [Brief description including specific location/route]
+          Best timing: [specific time range]
+          Note: [relevant weather consideration]
+
+        🏠 INDOOR ALTERNATIVES
+        • [Activity Name] - [Brief description including specific venue]
+          Ideal for: [weather condition that would trigger this alternative]
+
+        ⚠️ SPECIAL CONSIDERATIONS
+        • [Any relevant weather warnings, UV index, wind conditions, etc.]
+
+        Guidelines:
+        - Suggest 2-3 time-specific outdoor activities per day
+        - Include 1-2 indoor backup options
+        - For precipitation >50%, lead with indoor activities
+        - All activities must be specific to the location
+        - Include specific venues, trails, or locations
+        - Consider activity intensity based on temperature
+        - Keep descriptions concise but informative
+
+        Maintain this exact formatting for consistency, using the emoji and section headers as shown.
+      `,
+});
+
+const forecastSchema = z.array(
+  z.object({
+    date: z.string(),
+    maxTemp: z.number(),
+    minTemp: z.number(),
+    precipitationChance: z.number(),
+    condition: z.string(),
+    location: z.string(),
+  }),
+);
+
+const fetchWeather = new Step({
+  id: 'fetch-weather',
+  description: 'Fetches weather forecast for a given city',
+  inputSchema: z.object({
+    city: z.string().describe('The city to get the weather for'),
+  }),
+  outputSchema: forecastSchema,
+  execute: async ({ context }) => {
+    const triggerData = context?.getStepResult<{ city: string }>('trigger');
+
+    if (!triggerData) {
+      throw new Error('Trigger data not found');
+    }
+
+    const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(triggerData.city)}&count=1`;
+    const geocodingResponse = await fetch(geocodingUrl);
+    const geocodingData = (await geocodingResponse.json()) as {
+      results: { latitude: number; longitude: number; name: string }[];
+    };
+
+    if (!geocodingData.results?.[0]) {
+      throw new Error(`Location '${triggerData.city}' not found`);
+    }
+
+    const { latitude, longitude, name } = geocodingData.results[0];
+
+    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_mean,weathercode&timezone=auto`;
+    const response = await fetch(weatherUrl);
+    const data = (await response.json()) as {
+      daily: {
+        time: string[];
+        temperature_2m_max: number[];
+        temperature_2m_min: number[];
+        precipitation_probability_mean: number[];
+        weathercode: number[];
+      };
+    };
+
+    const forecast = data.daily.time.map((date: string, index: number) => ({
+      date,
+      maxTemp: data.daily.temperature_2m_max[index],
+      minTemp: data.daily.temperature_2m_min[index],
+      precipitationChance: data.daily.precipitation_probability_mean[index],
+      condition: getWeatherCondition(data.daily.weathercode[index]!),
+      location: name,
+    }));
+
+    return forecast;
+  },
+});
+
+const planActivities = new Step({
+  id: 'plan-activities',
+  description: 'Suggests activities based on weather conditions',
+  execute: async ({ context, mastra }) => {
+    const forecast = context?.getStepResult(fetchWeather);
+
+    if (!forecast || forecast.length === 0) {
+      throw new Error('Forecast data not found');
+    }
+
+    const prompt = `Based on the following weather forecast for ${forecast[0]?.location}, suggest appropriate activities:
+      ${JSON.stringify(forecast, null, 2)}
+      `;
+
+    const response = await agent.stream([
+      {
+        role: 'user',
+        content: prompt,
+      },
+    ]);
+
+    let activitiesText = '';
+
+    for await (const chunk of response.textStream) {
+      process.stdout.write(chunk);
+      activitiesText += chunk;
+    }
+
+    return {
+      activities: activitiesText,
+    };
+  },
+});
+
+function getWeatherCondition(code: number): string {
+  const conditions: Record<number, string> = {
+    0: 'Clear sky',
+    1: 'Mainly clear',
+    2: 'Partly cloudy',
+    3: 'Overcast',
+    45: 'Foggy',
+    48: 'Depositing rime fog',
+    51: 'Light drizzle',
+    53: 'Moderate drizzle',
+    55: 'Dense drizzle',
+    61: 'Slight rain',
+    63: 'Moderate rain',
+    65: 'Heavy rain',
+    71: 'Slight snow fall',
+    73: 'Moderate snow fall',
+    75: 'Heavy snow fall',
+    95: 'Thunderstorm',
+  };
+  return conditions[code] || 'Unknown';
+}
+
+const weatherWorkflow = new Workflow({
+  name: 'weather-workflow',
+  triggerSchema: z.object({
+    city: z.string().describe('The city to get the weather for'),
+  }),
+})
+  .step(fetchWeather)
+  .then(planActivities);
+
+weatherWorkflow.commit();
+
+export { weatherWorkflow };
+
+```
+
 ### Register Agent
 
 Create the Mastra entry point and register agent:
@@ -395,11 +597,22 @@ Add the following code:
 
 ```ts filename="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core";
-
+import { createLogger } from '@mastra/core/logger';
+import { LibSQLStore } from '@mastra/libsql';
+import { weatherWorkflow } from "./agents/weather-workflow";
 import { weatherAgent } from "./agents/weather-agent";
 
 export const mastra = new Mastra({
+  workflows: { weatherWorkflow },
   agents: { weatherAgent },
+  storage: new LibSQLStore({
+    // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
+    url: ":memory:",
+  }),
+  logger: createLogger({
+    name: 'Mastra',
+    level: 'info',
+  }),
 });
 ```
 
@@ -506,8 +719,7 @@ Install `dotenv` to load environment variables (e.g. your API keys):
 Add the following code:
 
 ```ts filename="src/test-agent.ts" showLineNumbers copy
-import { config } from 'dotenv';
-config({ path: '.env.development' });
+import 'dotenv/config';
 
 import { mastra } from "./mastra";
 
