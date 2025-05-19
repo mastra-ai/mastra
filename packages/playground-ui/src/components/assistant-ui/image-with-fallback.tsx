@@ -28,9 +28,9 @@ export const ImageWithFallback = ({ alt, src, ...rest }: ImgHTMLAttributes<HTMLI
     </div>
   ) : (
     <img
-      {...rest}
       src={src}
       alt={alt}
+      {...rest}
       onError={() => {
         setError(true);
       }}
