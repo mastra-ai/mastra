@@ -193,7 +193,7 @@ header nav > div:nth-child(2) {
   display: none;
 }
 
-nav:nth-child(2) {
+header nav:nth-child(2) {
   &:is(html[class~="light"] *) {
     border-bottom: 0.5px solid var(--light-border-muted);
   }
@@ -203,6 +203,7 @@ nav:nth-child(2) {
     border-bottom: 0.5px solid var(--border);
   }
 }
+
 
 /* mobile nav */
 .nextra-mobile-nav {
