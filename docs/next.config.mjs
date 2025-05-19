@@ -8,17 +8,17 @@ const withNextra = nextra({
   },
   mdxOptions: {
     rehypePrettyCodeOptions: {
-       theme: {
+      theme: {
         light: {
           displayName: "Mastra Light",
           name: "mastra-light",
           semanticHighlighting: true,
           tokenColors: [
             {
-              scope: ['string.unquoted.argument.shell'],
+              scope: ["string.unquoted.argument.shell"],
               settings: {
-                foreground: 'var(--light-color-text-6)'
-              }
+                foreground: "var(--light-color-text-6)",
+              },
             },
             {
               scope: "constant",
@@ -27,7 +27,12 @@ const withNextra = nextra({
               },
             },
             {
-              scope: ["string", "string.expression", "punctuation.definition.string.template.begin.ts", "punctuation.definition.string.template.end.ts"],
+              scope: [
+                "string",
+                "string.expression",
+                "punctuation.definition.string.template.begin.ts",
+                "punctuation.definition.string.template.end.ts",
+              ],
               settings: {
                 foreground: "#158D29",
               },
@@ -65,7 +70,7 @@ const withNextra = nextra({
             {
               scope: ["function", "meta.function-call"],
               settings: {
-                foreground: '#9829C7',
+                foreground: "#9829C7",
               },
             },
             {
