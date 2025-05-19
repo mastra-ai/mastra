@@ -9,7 +9,6 @@ import type {
 } from 'ai';
 
 import { MastraBase } from '../base';
-import type { Mastra } from '../mastra';
 import type { MastraStorage, StorageGetMessagesArg } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { CoreTool } from '../tools';
@@ -78,8 +77,11 @@ export abstract class MastraMemory extends MastraBase {
     super({ component: 'MEMORY', name: config.name });
 
     if (config.options) this.threadConfig = this.getMergedThreadConfig(config.options);
-    if (config.storage) this._storage = augmentWithInit(config.storage);
     if (config.processors) this.processors = config.processors;
+    if (config.storage) {
+      this._storage = augmentWithInit(config.storage);
+      this._hasOwnStorage = true;
+    }
 
     if (this.threadConfig.semanticRecall) {
       if (!config.vector) {
@@ -96,6 +98,11 @@ export abstract class MastraMemory extends MastraBase {
       }
       this.embedder = config.embedder;
     }
+  }
+
+  protected _hasOwnStorage = false;
+  get hasOwnStorage() {
+    return this._hasOwnStorage;
   }
 
   get storage() {

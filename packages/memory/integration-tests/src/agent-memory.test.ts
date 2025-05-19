@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { openai } from '@ai-sdk/openai';
+import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
@@ -10,6 +11,29 @@ import { weatherTool } from './mastra/tools/weather';
 
 describe('Agent Memory Tests', () => {
   const dbFile = 'file:mastra-agent.db';
+
+  it(`inherits storage from Mastra instance`, async () => {
+    const agent = new Agent({
+      name: 'test',
+      instructions: '',
+      model: openai('gpt-4o-mini'),
+      memory: new Memory({
+        options: {
+          lastMessages: 10,
+        },
+      }),
+    });
+    const mastra = new Mastra({
+      agents: {
+        agent,
+      },
+      storage: new LibSQLStore({
+        url: dbFile,
+      }),
+    });
+    await expect(mastra.getAgent('agent').getMemory()!.query({ threadId: '1' })).resolves.not.toThrow();
+    await expect(agent.getMemory()!.query({ threadId: '1' })).resolves.not.toThrow();
+  });
 
   describe('Agent memory message persistence', () => {
     // making a separate memory for agent to avoid conflicts with other tests
