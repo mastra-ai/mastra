@@ -7,6 +7,7 @@ import fsExtra from 'fs-extra/esm';
 import color from 'picocolors';
 import prettier from 'prettier';
 import yoctoSpinner from 'yocto-spinner';
+import shellQuote from 'shell-quote';
 
 import { DepsService } from '../../services/service.deps';
 import { FileService } from '../../services/service.file';
@@ -481,7 +482,9 @@ export const writeAPIKey = async ({
   apiKey?: string;
 }) => {
   const key = await getAPIKey(provider);
-  await exec(`echo ${key}=${apiKey} >> .env`);
+  const escapedKey = shellQuote.quote([key]);
+  const escapedApiKey = shellQuote.quote([apiKey]);
+  await exec(`echo ${escapedKey}=${escapedApiKey} >> .env`);
 };
 export const createMastraDir = async (directory: string): Promise<{ ok: true; dirPath: string } | { ok: false }> => {
   let dir = directory
