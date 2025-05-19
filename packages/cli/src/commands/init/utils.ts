@@ -82,7 +82,7 @@ ${providerImport}
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { LibSQLStore } from '@mastra/libsql';
-${addExampleTool ? `import { weatherTool } from '../tools';` : ''}
+${addExampleTool ? `import { weatherTool } from '../tools/weather-tool';` : ''}
 
 export const weatherAgent = new Agent({
   name: 'Weather Agent',
@@ -377,8 +377,8 @@ export const mastra = new Mastra()
 import { Mastra } from '@mastra/core/mastra';
 import { createLogger } from '@mastra/core/logger';
 import { LibSQLStore } from '@mastra/libsql';
-${addWorkflow ? `import { weatherWorkflow } from './workflows';` : ''}
-${addAgent ? `import { weatherAgent } from './agents';` : ''}
+${addWorkflow ? `import { weatherWorkflow } from './workflows/weather-workflow';` : ''}
+${addAgent ? `import { weatherAgent } from './agents/weather-agent';` : ''}
 
 export const mastra = new Mastra({
   ${filteredExports.join('\n  ')}
@@ -506,7 +506,7 @@ export const writeCodeSample = async (
   llmProvider: LLMProvider,
   importComponents: Components[],
 ) => {
-  const destPath = dirPath + `/${component}/index.ts`;
+  const destPath = dirPath + `/${component}/weather-${component.slice(0, -1)}.ts`;
 
   try {
     await writeCodeSampleForComponents(llmProvider, component, destPath, importComponents);
