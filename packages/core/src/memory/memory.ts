@@ -400,6 +400,7 @@ export abstract class MastraMemory extends MastraBase {
     metadata?: Record<string, unknown>;
     memoryConfig?: MemoryConfig;
   }): Promise<StorageThreadType> {
+    await this.storage.init();
     const thread: StorageThreadType = {
       id: threadId || this.generateId(),
       title: title || `New Thread ${new Date().toISOString()}`,
