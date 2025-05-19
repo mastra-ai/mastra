@@ -769,7 +769,6 @@ describe('PostgresStore', () => {
         tableName: TABLE_EVALS,
         record: {
           agent_name: liveEval.agentName,
-          agent_version: liveEval.agentVersion,
           input: liveEval.input,
           output: liveEval.output,
           result: liveEval.result,
@@ -787,7 +786,6 @@ describe('PostgresStore', () => {
         tableName: TABLE_EVALS,
         record: {
           agent_name: testEval.agentName,
-          agent_version: testEval.agentVersion,
           input: testEval.input,
           output: testEval.output,
           result: testEval.result,
@@ -805,7 +803,6 @@ describe('PostgresStore', () => {
         tableName: TABLE_EVALS,
         record: {
           agent_name: otherAgentEval.agentName,
-          agent_version: otherAgentEval.agentVersion,
           input: otherAgentEval.input,
           output: otherAgentEval.output,
           result: otherAgentEval.result,

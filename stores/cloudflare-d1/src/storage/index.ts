@@ -1008,7 +1008,6 @@ export class D1Store extends MastraStorage {
               output: row.output || '',
               result,
               agentName: row.agent_name || '',
-              agentVersion: row.agent_version || '',
               metricName: row.metric_name || '',
               instructions: row.instructions || '',
               runId: row.run_id || '',

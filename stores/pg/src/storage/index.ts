@@ -135,7 +135,6 @@ export class PostgresStore extends MastraStorage {
 
     return {
       agentName: row.agent_name as string,
-      agentVersion: row.agent_version as string,
       input: row.input as string,
       output: row.output as string,
       result: row.result as MetricResult,

@@ -13,7 +13,6 @@ export async function evaluate<T extends Agent>({
   globalRunId,
   testInfo,
   instructions,
-  agentVersion,
 }: {
   agentName: string;
   input: Parameters<T['generate']>[0];
@@ -23,7 +22,6 @@ export async function evaluate<T extends Agent>({
   runId?: string;
   testInfo?: TestInfo;
   instructions: string;
-  agentVersion: string;
 }): Promise<EvaluationResult> {
   const runIdToUse = runId || crypto.randomUUID();
 
@@ -38,7 +36,6 @@ export async function evaluate<T extends Agent>({
     globalRunId,
     runId: runIdToUse,
     testInfo,
-    agentVersion,
   };
 
   executeHook(AvailableHooks.ON_EVALUATION, traceObject);

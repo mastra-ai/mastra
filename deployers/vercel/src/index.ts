@@ -124,7 +124,7 @@ registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agen
     runId,
     globalRunId: runId,
     instructions,
-    agentVersion,
+    testInfo: { agentVersion },
   });
 });
 
@@ -148,10 +148,9 @@ registerHook(AvailableHooks.ON_EVALUATION, async traceObject => {
         output: traceObject.output,
         result: JSON.stringify(traceObject.result || {}),
         agent_name: traceObject.agentName,
-        agent_version: traceObject.agentVersion,
         metric_name: traceObject.metricName,
         instructions: traceObject.instructions,
-        test_info: null,
+        test_info: traceObject.testInfo,
         global_run_id: traceObject.globalRunId,
         run_id: traceObject.runId,
         created_at: new Date().toISOString(),

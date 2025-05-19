@@ -21,7 +21,6 @@ type EvaluationHookData = {
   runId: string;
   globalRunId: string;
   testInfo?: TestInfo;
-  agentVersion: string;
 };
 
 type GenerationHookData = {

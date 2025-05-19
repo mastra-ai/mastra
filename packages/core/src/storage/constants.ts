@@ -45,9 +45,6 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     agent_name: {
       type: 'text',
     },
-    agent_version: {
-      type: 'text',
-    },
     metric_name: {
       type: 'text',
     },

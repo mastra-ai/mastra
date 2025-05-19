@@ -7,7 +7,6 @@ export type Evals = {
   output: string;
   result: MetricResult;
   agentName: string;
-  agentVersion: string;
   createdAt: string;
   metricName: string;
   instructions: string;

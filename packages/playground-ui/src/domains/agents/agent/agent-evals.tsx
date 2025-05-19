@@ -351,7 +351,7 @@ function EvalTable({ evals, isCIMode = false }: { evals: Evals[]; isCIMode?: boo
   function groupEvals(evaluations: Evals[]): GroupedEvals[] {
     let groups = evaluations.reduce((groups: GroupedEvals[], evaluation) => {
       const existingGroup = groups.find(
-        g => g.metricName === evaluation.metricName && g.agentVersion === evaluation.agentVersion,
+        g => g.metricName === evaluation.metricName && g.agentVersion === (evaluation.testInfo?.agentVersion ?? ''),
       );
       if (existingGroup) {
         existingGroup.evals.push(evaluation);
@@ -361,7 +361,7 @@ function EvalTable({ evals, isCIMode = false }: { evals: Evals[]; isCIMode?: boo
         groups.push({
           metricName: evaluation.metricName,
           averageScore: evaluation.result.score,
-          agentVersion: evaluation.agentVersion,
+          agentVersion: evaluation.testInfo?.agentVersion ?? '',
           evals: [evaluation],
         });
       }

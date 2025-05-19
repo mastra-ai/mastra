@@ -78,11 +78,10 @@ const createSampleTrace = (name: string, scope?: string, attributes?: Record<str
 });
 
 const createSampleEval = (agentName: string, isTest = false) => {
-  const testInfo = isTest ? { testPath: 'test/path.ts', testName: 'Test Name' } : undefined;
+  const testInfo = isTest ? { testPath: 'test/path.ts', testName: 'Test Name', agentVersion: '1.0.0' } : undefined;
 
   return {
     agent_name: agentName,
-    agent_version: '1.0.0',
     input: 'Sample input',
     output: 'Sample output',
     result: JSON.stringify({ score: 0.8 }),
