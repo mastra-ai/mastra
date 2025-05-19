@@ -491,14 +491,14 @@ export function ProviderTable() {
             <TableCell className="font-medium">
               <Link
                 href={model.providerUrl}
-                className="dark:text-green-400  text-[var(--light-green-accent-2)] hover:underline whitespace-nowrap"
+                className="dark:text-green-400  text-[var(--light-green-accent-2)] hover:underline"
               >
                 {model.provider}
               </Link>
             </TableCell>
             <TableCell className="font-medium">
               <Badge
-                className="dark:bg-neutral-900 bg-[var(--light-color-surface-1)] whitespace-nowrap"
+                className="dark:bg-neutral-900 bg-[var(--light-color-surface-1)]"
                 variant="secondary"
               >
                 {model.model}
