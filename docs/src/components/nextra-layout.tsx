@@ -28,15 +28,12 @@ export const NextraLayout = ({
     <Layout
       search={<SearchWrapper locale={locale} />}
       navbar={
-        <div className="flex  sticky top-0 z-30 bg-[var(--primary-bg)] flex-col">
+        <div className="flex  sticky top-0 z-30 bg-light-color-surface-15 dark:bg-[var(--primary-bg)] flex-col">
           <Nav stars={stars} locale={locale} />
           <TabSwitcher />
         </div>
       }
       pageMap={pageMap}
-      nextThemes={{
-        forcedTheme: "dark",
-      }}
       toc={{
         title: <T id="_locale_.layout.toc">On This Page</T>,
         extraContent: (
@@ -47,6 +44,9 @@ export const NextraLayout = ({
             />
           </div>
         ),
+      }}
+      nextThemes={{
+        attribute: "class",
       }}
       docsRepositoryBase="https://github.com/mastra-ai/mastra/blob/main/docs"
       footer={footer}

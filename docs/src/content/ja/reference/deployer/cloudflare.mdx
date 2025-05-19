@@ -34,9 +34,9 @@ const mastra = new Mastra({
 });
 ```
 
-## パラメータ
+## パラメーター
 
-### コンストラクタパラメータ
+### コンストラクタのパラメーター
 
 <PropertiesTable
   content={[
@@ -56,7 +56,7 @@ const mastra = new Mastra({
     {
       name: "routes",
       type: "CFRoute[]",
-      description: "ワーカーのルート設定の配列。",
+      description: "ワーカー用のルート設定の配列。",
       isOptional: true,
     },
     {
@@ -68,19 +68,20 @@ const mastra = new Mastra({
     {
       name: "env",
       type: "Record<string, any>",
-      description: "ワーカー設定に含める環境変数。",
+      description:
+        "ワーカーの設定に含める環境変数。",
       isOptional: true,
     },
     {
       name: "auth",
       type: "object",
-      description: "Cloudflare認証の詳細。",
+      description: "Cloudflare認証情報。",
       isOptional: false,
     },
   ]}
 />
 
-### authオブジェクト
+### auth オブジェクト
 
 <PropertiesTable
   content={[
@@ -99,14 +100,14 @@ const mastra = new Mastra({
   ]}
 />
 
-### CFRouteオブジェクト
+### CFRoute オブジェクト
 
 <PropertiesTable
   content={[
     {
       name: "pattern",
       type: "string",
-      description: "一致するURLパターン（例：'example.com/*'）。",
+      description: "マッチさせるURLパターン（例: 'example.com/*'）。",
       isOptional: false,
     },
     {
@@ -127,32 +128,40 @@ const mastra = new Mastra({
 
 ### 環境変数
 
-CloudflareDeployerは複数のソースから環境変数を処理します：
+CloudflareDeployerは複数のソースから環境変数を扱います：
 
-1. **環境ファイル**：`.env.production`と`.env`ファイルからの変数。
-2. **設定**：`env`パラメータを通じて渡される変数。
+1. **環境ファイル**: `.env.production` および `.env` ファイルからの変数。
+2. **設定**: `env` パラメーターを通じて渡された変数。
+
+## Mastraプロジェクトのリント
+
+Mastraプロジェクトをリントして、ビルドに問題がないことを確認します
+
+```bash
+npx mastra lint
+```
 
 ## Mastraプロジェクトのビルド
 
-Cloudflareデプロイメント用にMastraプロジェクトをビルドするには：
+Cloudflareへのデプロイ用にMastraプロジェクトをビルドするには、以下の手順を実行します。
 
 ```bash
 npx mastra build
 
-ビルドプロセスは`.mastra/output`ディレクトリに以下の出力構造を生成します：
+ビルドプロセスは、`.mastra/output` ディレクトリに次のような出力構造を生成します。
 
 ```
 
 .mastra/output/
 ├── index.mjs # メインワーカーのエントリーポイント
-├── wrangler.json # Cloudflare Workerの設定
-└── assets/ # 静的アセットと依存関係
+├── wrangler.json # Cloudflare Workerの設定ファイル
+└── assets/ # 静的アセットおよび依存ファイル
 
 ````
 
 ### Wranglerの設定
 
-CloudflareDeployerは以下の設定で`wrangler.json`設定ファイルを自動的に生成します：
+CloudflareDeployerは、以下の設定を含む `wrangler.json` 設定ファイルを自動的に生成します。
 
 ```json
 {
@@ -166,17 +175,17 @@ CloudflareDeployerは以下の設定で`wrangler.json`設定ファイルを自�
     }
   },
   "vars": {
-    // .envファイルと設定からの環境変数
+    // .envファイルや設定からの環境変数
   },
   "routes": [
-    // 指定された場合のルート設定
+    // 指定されていればルート設定
   ]
 }
 ````
 
 ### ルート設定
 
-ルートは、URLパターンとドメインに基づいてトラフィックをワーカーに転送するように設定できます：
+ルートは、URLパターンやドメインに基づいてトラフィックをワーカーに振り分けるよう設定できます。
 
 ```typescript
 const routes = [
@@ -192,11 +201,11 @@ const routes = [
 ];
 ```
 
-## デプロイオプション
+## デプロイメントオプション
 
-ビルド後、Mastraアプリケーションの`.mastra/output`をCloudflare Workersに以下のいずれかの方法でデプロイできます：
+ビルド後、Mastraアプリケーションの `.mastra/output` をCloudflare Workersに以下のいずれかの方法でデプロイできます：
 
-1. **Wrangler CLI**: Cloudflareの公式CLIツールを使用して直接デプロイ
+1. **Wrangler CLI**: Cloudflare公式のCLIツールを使って直接デプロイ
 
    - CLIをインストール: `npm install -g wrangler`
    - 出力ディレクトリに移動: `cd .mastra/output`
@@ -204,9 +213,9 @@ const routes = [
    - プレビュー環境にデプロイ: `wrangler deploy`
    - 本番環境へのデプロイ: `wrangler deploy --env production`
 
-2. **Cloudflareダッシュボード**: Cloudflareダッシュボードを通じてビルド出力を手動でアップロード
+2. **Cloudflareダッシュボード**: Cloudflareダッシュボードからビルド出力を手動でアップロード
 
-> 出力ディレクトリ`.mastra/output`で`wrangler dev`を実行して、Mastraアプリケーションをローカルでテストすることもできます。
+> 出力ディレクトリ `.mastra/output` で `wrangler dev` を実行することで、Mastraアプリケーションをローカルでテストすることもできます。
 
 ## プラットフォームドキュメント
 

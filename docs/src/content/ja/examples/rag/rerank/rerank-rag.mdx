@@ -1,28 +1,28 @@
 ---
-title: "例: ツールを使用した結果の再ランク付け | 検索 | RAG | Mastra ドキュメント"
-description: OpenAI埋め込みとベクトルストレージにPGVectorを使用して、Mastraで再ランク付けを行うRAGシステムを実装する例。
+title: "例: ツールを使った再ランキング結果 | 検索 | RAG | Mastra ドキュメント"
+description: OpenAI の埋め込みと PGVector を使って、Mastra で再ランキングを実装した RAG システムの例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
-# ツールを使用した結果の再ランキング
+# ツールを使った再ランキング結果
 
-この例では、Mastra のベクトルクエリツールを使用して、OpenAI の埋め込みと PGVector をベクトルストレージとして使用した再ランキングを伴う Retrieval-Augmented Generation (RAG) システムを実装する方法を示します。
+この例では、Mastra のベクトルクエリツールを使用して、OpenAI の埋め込みと PGVector をベクトルストレージとして活用し、再ランキングを行う Retrieval-Augmented Generation（RAG）システムを実装する方法を示します。
 
 ## 概要
 
-このシステムは、MastraとOpenAIを使用した再ランキングを伴うRAGを実装しています。以下がその機能です：
+このシステムは、Mastra と OpenAI を用いた再ランク付き RAG を実装しています。主な機能は以下の通りです。
 
-1. 応答生成のためにgpt-4o-miniを使用してMastraエージェントを設定
-2. 再ランキング機能を備えたベクトルクエリツールを作成
-3. テキストドキュメントを小さなセグメントに分割し、それらから埋め込みを作成
-4. それらをPostgreSQLベクトルデータベースに保存
-5. クエリに基づいて関連するチャンクを取得し再ランキング
-6. Mastraエージェントを使用してコンテキストに応じた応答を生成
+1. 応答生成のために gpt-4o-mini を使った Mastra エージェントをセットアップします
+2. 再ランク機能を備えたベクトルクエリツールを作成します
+3. テキストドキュメントを小さなセグメントに分割し、それらから埋め込みを作成します
+4. それらを PostgreSQL ベクトルデータベースに保存します
+5. クエリに基づいて関連するチャンクを取得し、再ランクします
+6. Mastra エージェントを使ってコンテキストに応じた応答を生成します
 
 ## セットアップ
 
-### 環境セットアップ
+### 環境設定
 
 環境変数を設定してください：
 
@@ -44,9 +44,9 @@ import { MDocument, createVectorQueryTool } from "@mastra/rag";
 import { embedMany } from "ai";
 ```
 
-## 再ランキングを使用したベクトルクエリツールの作成
+## リランキング付きベクタークエリツールの作成
 
-@mastra/rag からインポートされた createVectorQueryTool を使用して、ベクトルデータベースをクエリし、結果を再ランキングするツールを作成できます:
+@mastra/rag からインポートした createVectorQueryTool を使用すると、ベクターデータベースにクエリを実行し、結果をリランキングするツールを作成できます。
 
 ```typescript copy showLineNumbers{8} filename="index.ts"
 const vectorQueryTool = createVectorQueryTool({
@@ -61,7 +61,7 @@ const vectorQueryTool = createVectorQueryTool({
 
 ## エージェント設定
 
-応答を処理するMastraエージェントを設定します:
+応答を処理するMastraエージェントを設定します：
 
 ```typescript copy showLineNumbers{17} filename="index.ts"
 export const ragAgent = new Agent({
@@ -76,9 +76,9 @@ export const ragAgent = new Agent({
 });
 ```
 
-## PgVectorとMastraのインスタンス化
+## PgVector と Mastra のインスタンス化
 
-コンポーネントを使用してPgVectorとMastraをインスタンス化します:
+以下のコンポーネントを使って PgVector と Mastra をインスタンス化します。
 
 ```typescript copy showLineNumbers{29} filename="index.ts"
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
@@ -92,7 +92,7 @@ const agent = mastra.getAgent("ragAgent");
 
 ## ドキュメント処理
 
-ドキュメントを作成し、チャンクに処理します：
+ドキュメントを作成し、チャンクに分割します：
 
 ```typescript copy showLineNumbers{38} filename="index.ts"
 const doc1 = MDocument.fromText(`
@@ -126,7 +126,7 @@ const chunks = await doc1.chunk({
 
 ## 埋め込みの作成と保存
 
-チャンクの埋め込みを生成し、それらをベクターデータベースに保存します:
+チャンクの埋め込みを生成し、ベクターデータベースに保存します。
 
 ```typescript copy showLineNumbers{66} filename="index.ts"
 const { embeddings } = await embedMany({
@@ -147,9 +147,9 @@ await vectorStore.upsert({
 });
 ```
 
-## 再ランキングを用いたクエリ
+## リランキングによるクエリ
 
-再ランキングが結果にどのように影響するかを確認するために、さまざまなクエリを試してください:
+リランキングが結果にどのように影響するか、さまざまなクエリを試してみましょう。
 
 ```typescript copy showLineNumbers{82} filename="index.ts"
 const queryOne = "explain technical trading analysis";

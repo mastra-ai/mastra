@@ -10,8 +10,9 @@ import { Callout } from "nextra/components";
 Mastraは依存性注入に基づいた`RuntimeContext`システムを提供しており、実行中にツールに動的なリクエスト固有の設定を渡すことができます。これは、ツールの中核コードを変更することなく、ユーザーIDやリクエストヘッダー、その他のランタイム要因に基づいてツールの動作を変更する必要がある場合に役立ちます。
 
 <Callout>
-  **注意:**
-  `RuntimeContext`は主にツール実行に*データを渡す*ために使用されます。これは、複数の呼び出しにわたって会話履歴と状態の永続性を処理するエージェントメモリとは異なります。
+  **注意:** `RuntimeContext`は主にツール実行に*データを渡す*ために使用されます。
+  これは会話履歴や複数の呼び出しにわたる状態の永続性を処理するエージェントメモリとは
+  異なります。
 </Callout>
 
 ## 基本的な使用方法
@@ -81,11 +82,11 @@ export const weatherTool = createTool({
 });
 ```
 
-エージェントが`weatherTool`を使用する際、`agent.generate()`呼び出し中に`runtimeContext`に設定された`temperature-scale`の値がツールの`execute`関数内で利用可能になります。
+エージェントが`weatherTool`を使用する場合、`agent.generate()`呼び出し中に`runtimeContext`に設定された`temperature-scale`の値がツールの`execute`関数内で利用可能になります。
 
 ## サーバーミドルウェアでの使用
 
-サーバー環境（ExpressやNext.jsなど）では、ミドルウェアを使用して、ヘッダーやユーザーセッションなどの受信リクエストデータに基づいて自動的に`RuntimeContext`を設定できます。
+サーバー環境（ExpressやNext.jsなど）では、ミドルウェアを使用して、ヘッダーやユーザーセッションなどの受信リクエストデータに基づいて自動的に`RuntimeContext`を設定することができます。
 
 以下は、Mastraの組み込みサーバーミドルウェアサポート（内部的にHonoを使用）を使用して、Cloudflareの`CF-IPCountry`ヘッダーに基づいて温度スケールを設定する例です：
 
@@ -127,4 +128,4 @@ export const mastra = new Mastra({
 });
 ```
 
-このミドルウェアを設置すると、このMastraサーバーインスタンスによって処理されるすべてのエージェント呼び出しは、ユーザーの推測された国に基づいて自動的に`RuntimeContext`に`temperature-scale`が設定され、`weatherTool`のようなツールはそれに応じて使用されます。
+このミドルウェアを設置することで、このMastraサーバーインスタンスによって処理されるエージェント呼び出しは、ユーザーの推測された国に基づいて自動的に`RuntimeContext`に`temperature-scale`が設定され、`weatherTool`のようなツールはそれに応じて使用されます。

@@ -1,11 +1,11 @@
 ---
-title: "リファレンス: MongoDB ベクトルストア | ベクトルデータベース | RAG | Mastra ドキュメント"
-description: Mastraの MongoDBVector クラスのドキュメント。MongoDB Atlas と Atlas Vector Search を使用したベクトル検索を提供します。
+title: "リファレンス: MongoDB ベクターストア | ベクターデータベース | RAG | Mastra ドキュメント"
+description: Mastra の MongoDBVector クラスのドキュメント。MongoDB Atlas および Atlas Vector Search を使用したベクター検索を提供します。
 ---
 
-# MongoDB ベクトルストア
+# MongoDB Vector Store
 
-`MongoDBVector` クラスは [MongoDB Atlas Vector Search](https://www.mongodb.com/docs/atlas/atlas-vector-search/) を使用してベクトル検索を提供します。これにより、MongoDB コレクション内で効率的な類似性検索とメタデータフィルタリングが可能になります。
+`MongoDBVector` クラスは、[MongoDB Atlas Vector Search](https://www.mongodb.com/docs/atlas/atlas-vector-search/) を使用したベクター検索を提供します。これにより、MongoDB コレクション内で効率的な類似性検索とメタデータフィルタリングが可能になります。
 
 ## インストール
 
@@ -24,25 +24,25 @@ const store = new MongoDBVector({
 });
 ```
 
-## コンストラクタオプション
+## コンストラクターオプション
 
 <PropertiesTable
   content={[
     {
       name: "url",
       type: "string",
-      description: "MongoDBの接続文字列（URI）",
+      description: "MongoDB 接続文字列 (URI)",
     },
     {
       name: "database",
       type: "string",
-      description: "使用するMongoDBデータベースの名前",
+      description: "使用する MongoDB データベース名",
     },
     {
       name: "options",
       type: "MongoClientOptions",
       isOptional: true,
-      description: "オプションのMongoDBクライアントオプション",
+      description: "オプションの MongoDB クライアントオプション",
     },
   ]}
 />
@@ -115,7 +115,7 @@ MongoDBに新しいベクトルインデックス（コレクション）を作�
     {
       name: "indexName",
       type: "string",
-      description: "検索するコレクションの名前",
+      description: "検索対象のコレクション名",
     },
     {
       name: "queryVector",
@@ -139,8 +139,7 @@ MongoDBに新しいベクトルインデックス（コレクション）を作�
       name: "documentFilter",
       type: "Record<string, any>",
       isOptional: true,
-      description:
-        "元のドキュメントフィールドに対するフィルター（メタデータだけでなく）",
+      description: "元のドキュメントフィールドに対するフィルター（メタデータだけでなく）",
     },
     {
       name: "includeVector",
@@ -205,7 +204,7 @@ MongoDBデータベース内のすべてのベクトルコレクションを一�
 
 ### updateVector()
 
-IDによって特定のベクトルエントリを新しいベクトルデータやメタデータで更新します。
+IDで特定のベクトルエントリを新しいベクトルデータやメタデータで更新します。
 
 <PropertiesTable
   content={[
@@ -260,11 +259,11 @@ IDによってインデックスから特定のベクトルエントリを削除
 
 ### disconnect()
 
-MongoDBクライアント接続を閉じます。ストアの使用が終わったら呼び出す必要があります。
+MongoDBクライアントの接続を閉じます。ストアの使用が終わったら呼び出す必要があります。
 
 ## レスポンスタイプ
 
-クエリ結果は以下の形式で返されます：
+クエリ結果は次の形式で返されます：
 
 ```typescript copy
 interface QueryResult {
@@ -301,9 +300,9 @@ try {
 
 ## ベストプラクティス
 
-- 最適なクエリパフォーマンスを得るために、フィルターで使用されるメタデータフィールドにインデックスを作成してください。
-- 予期しないクエリ結果を避けるために、メタデータでは一貫したフィールド命名を使用してください。
-- 効率的な検索を確保するために、インデックスとコレクションの統計を定期的に監視してください。
+- クエリのパフォーマンスを最適化するために、フィルターで使用するメタデータフィールドにインデックスを作成してください。
+- 予期しないクエリ結果を避けるために、メタデータ内のフィールド名を一貫して使用してください。
+- 効率的な検索を維持するために、インデックスやコレクションの統計情報を定期的に監視してください。
 
 ## 関連
 

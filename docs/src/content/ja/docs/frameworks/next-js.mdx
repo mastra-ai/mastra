@@ -1,6 +1,6 @@
 ---
-title: "Mastraとの連携を始める - NextJS編 | Mastraガイド"
-description: MastraとNextJSを連携するためのガイド。
+title: "Mastra と NextJS のはじめ方 | Mastra ガイド"
+description: Mastra を NextJS と統合するためのガイド。
 ---
 
 import { Callout, Steps, Tabs } from "nextra/components";
@@ -11,18 +11,18 @@ MastraをNext.jsアプリケーションに統合する主な方法は2つあり
 
 ## 1. バックエンドの個別統合
 
-以下のような場合に最適な大規模プロジェクト向け：
+以下を実現したい大規模プロジェクトに最適：
 
-- AIバックエンドを独立してスケーリングしたい
-- 明確な関心の分離を維持したい
-- より柔軟なデプロイメントが必要
+- AIバックエンドを独立してスケーリング
+- 明確な関心の分離を維持
+- より柔軟なデプロイメント
 
 <Steps>
 ### Mastraバックエンドの作成
 
 CLIを使用して新しいMastraプロジェクトを作成します：
 
-<Tabs>
+<Tabs items={["npx", "npm", "yarn", "pnpm"]}>
   <Tabs.Tab>
     ```bash copy
     npx create-mastra@latest
@@ -49,7 +49,7 @@ CLIを使用して新しいMastraプロジェクトを作成します：
 
 ### MastraClientのインストール
 
-<Tabs>
+<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
   <Tabs.Tab>
     ```bash copy
     npm install @mastra/client-js@latest
@@ -138,7 +138,7 @@ cd your-nextjs-app
 
 次に初期化コマンドを実行します：
 
-<Tabs>
+<Tabs items={["npm", "yarn", "pnpm"]}>
   <Tabs.Tab>
     ```bash copy
     npx mastra@latest init
@@ -199,7 +199,7 @@ export function Weather() {
   async function handleSubmit(formData: FormData) {
     const city = formData.get('city') as string
     const result = await getWeatherInfo(city)
-    // 結果の処理
+    // 結果を処理する
     console.log(result)
   }
 
@@ -238,12 +238,12 @@ export async function POST(req: Request) {
 
 </Steps>
 
-## 可観測性
+## オブザーバビリティ
 
-Mastraは、AIオペレーションの監視、デバッグ、最適化に役立つ組み込みの可観測性機能を提供しています。これには以下が含まれます：
+Mastra は、AI オペレーションの監視、デバッグ、最適化を支援するための組み込みオブザーバビリティ機能を提供します。これには以下が含まれます：
 
-- AIオペレーションとそのパフォーマンスのトレース
-- プロンプト、完了、エラーのロギング
-- LangfuseやLangSmithなどの可観測性プラットフォームとの統合
+- AI オペレーションとそのパフォーマンスのトレーシング
+- プロンプト、コンプリーション、エラーのロギング
+- Langfuse や LangSmith などのオブザーバビリティプラットフォームとの統合
 
-Next.jsローカル開発に特化した詳細なセットアップ手順と設定オプションについては、[Next.js可観測性設定ガイド](/docs/observability/nextjs-tracing)をご覧ください。
+Next.js のローカル開発に特化した詳細なセットアップ手順や設定オプションについては、[Next.js オブザーバビリティ設定ガイド](/docs/observability/nextjs-tracing)をご覧ください。

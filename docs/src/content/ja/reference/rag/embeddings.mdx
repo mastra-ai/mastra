@@ -5,11 +5,11 @@ description: MastraでAI SDKを使用した埋め込み機能のドキュメン�
 
 # 埋め込み
 
-Mastraは、AI SDKの`embed`および`embedMany`関数を使用してテキスト入力のベクトル埋め込みを生成し、類似性検索とRAGワークフローを可能にします。
+Mastraは、AI SDKの`embed`および`embedMany`関数を使用してテキスト入力のベクトル埋め込みを生成し、類似性検索やRAGワークフローを実現します。
 
 ## 単一埋め込み
 
-`embed` 関数は、単一のテキスト入力に対してベクトル埋め込みを生成します:
+`embed` 関数は、単一のテキスト入力に対してベクトル埋め込みを生成します。
 
 ```typescript
 import { embed } from "ai";
@@ -29,7 +29,7 @@ const result = await embed({
       name: "model",
       type: "EmbeddingModel",
       description:
-        "使用する埋め込みモデル (例: openai.embedding('text-embedding-3-small'))",
+        "使用する埋め込みモデル（例: openai.embedding('text-embedding-3-small')）",
     },
     {
       name: "value",
@@ -40,21 +40,21 @@ const result = await embed({
       name: "maxRetries",
       type: "number",
       description:
-        "埋め込み呼び出しごとの最大リトライ回数。リトライを無効にするには0に設定します。",
+        "埋め込み呼び出しごとの最大リトライ回数。リトライを無効にするには0を設定します。",
       isOptional: true,
       defaultValue: "2",
     },
     {
       name: "abortSignal",
       type: "AbortSignal",
-      description: "リクエストをキャンセルするためのオプションの中止シグナル",
+      description: "リクエストをキャンセルするためのオプションのアボートシグナル",
       isOptional: true,
     },
     {
       name: "headers",
       type: "Record<string, string>",
       description:
-        "リクエストの追加HTTPヘッダー (HTTPベースのプロバイダーのみ)",
+        "リクエストに追加するHTTPヘッダー（HTTPベースのプロバイダーのみ）",
       isOptional: true,
     },
   ]}
@@ -67,14 +67,14 @@ const result = await embed({
     {
       name: "embedding",
       type: "number[]",
-      description: "入力の埋め込みベクトル",
+      description: "入力に対する埋め込みベクトル",
     },
   ]}
 />
 
 ## 複数の埋め込み
 
-複数のテキストを一度に埋め込むには、`embedMany` 関数を使用します:
+複数のテキストを一度に埋め込むには、`embedMany` 関数を使用します。
 
 ```typescript
 import { embedMany } from "ai";
@@ -94,7 +94,7 @@ const result = await embedMany({
       name: "model",
       type: "EmbeddingModel",
       description:
-        "使用する埋め込みモデル (例: openai.embedding('text-embedding-3-small'))",
+        "使用する埋め込みモデル（例: openai.embedding('text-embedding-3-small')）",
     },
     {
       name: "values",
@@ -105,21 +105,21 @@ const result = await embedMany({
       name: "maxRetries",
       type: "number",
       description:
-        "埋め込み呼び出しごとの最大リトライ回数。リトライを無効にするには0に設定します。",
+        "埋め込み呼び出しごとの最大リトライ回数。リトライを無効にするには0を設定します。",
       isOptional: true,
       defaultValue: "2",
     },
     {
       name: "abortSignal",
       type: "AbortSignal",
-      description: "リクエストをキャンセルするためのオプションの中止シグナル",
+      description: "リクエストをキャンセルするためのオプションのアボートシグナル",
       isOptional: true,
     },
     {
       name: "headers",
       type: "Record<string, string>",
       description:
-        "リクエストの追加HTTPヘッダー (HTTPベースのプロバイダーのみ)",
+        "リクエスト用の追加HTTPヘッダー（HTTPベースのプロバイダーのみ）",
       isOptional: true,
     },
   ]}
@@ -132,7 +132,8 @@ const result = await embedMany({
     {
       name: "embeddings",
       type: "number[][]",
-      description: "入力値に対応する埋め込みベクトルの配列",
+      description:
+        "入力値に対応する埋め込みベクトルの配列",
     },
   ]}
 />
@@ -160,8 +161,8 @@ const multipleResult = await embedMany({
 });
 ```
 
-Vercel AI SDKにおける埋め込みの詳細情報については、以下を参照してください:
+Vercel AI SDK における埋め込みの詳細については、以下をご覧ください：
 
-- [AI SDK 埋め込み概要](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings)
+- [AI SDK 埋め込みの概要](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings)
 - [embed()](https://sdk.vercel.ai/docs/reference/ai-sdk-core/embed)
 - [embedMany()](https://sdk.vercel.ai/docs/reference/ai-sdk-core/embed-many)
