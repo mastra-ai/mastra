@@ -1,5 +1,23 @@
 # @mastra/deployer
 
+## 0.3.5-alpha.0
+
+### Patch Changes
+
+- aaf0e48: Add nodemailer to mastra bundler external deps
+- 48e5910: Mastra server hostname, fallback to undefined
+- 23f258c: Add new list and get routes for mcp servers. Changed route make-up for more consistency with existing API routes. Lastly, added in a lot of extra detail that can be optionally passed to the mcp server per the mcp spec.
+- 2672a05: Add MCP servers and tool call execution to playground
+- Updated dependencies [f53a6ac]
+- Updated dependencies [eabdcd9]
+- Updated dependencies [90be034]
+- Updated dependencies [99f050a]
+- Updated dependencies [d0ee3c6]
+- Updated dependencies [23f258c]
+- Updated dependencies [2672a05]
+  - @mastra/server@2.0.5-alpha.0
+  - @mastra/core@0.9.5-alpha.0
+
 ## 0.3.4
 
 ### Patch Changes
