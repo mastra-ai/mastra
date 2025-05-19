@@ -1,5 +1,8 @@
-import type { MessageType, StorageThreadType, WorkflowRuns } from '@mastra/core';
+import type { MessageType, StorageThreadType, WorkflowRuns, TraceType } from '@mastra/core';
 import { MastraStorage, TABLE_MESSAGES, TABLE_THREADS } from '@mastra/core/storage';
+const TABLE_TRACES = 'traces';
+const TABLE_EVALS = 'evals';
+const TABLE_WORKFLOW_RUNS = 'workflow_runs';
 import type { StorageColumn, EvalRow, StorageGetMessagesArg, TABLE_NAMES } from '@mastra/core/storage';
 import type {
   CheckHealthResponse,
@@ -399,6 +402,10 @@ export class MilvusStorage extends MastraStorage {
 
   async getMessages({ threadId, selectBy, threadConfig }: StorageGetMessagesArg): Promise<MessageType[]> {
     try {
+      if (threadConfig) {
+        this.logger.info('Thread config is not supported: ', threadConfig);
+      }
+
       await this.ensureCollectionLoaded(TABLE_MESSAGES);
       let filter = `thread_id == "${threadId}"`;
 
@@ -579,7 +586,7 @@ export class MilvusStorage extends MastraStorage {
     }
   }
 
-  getTraces({
+  async getTraces({
     name,
     scope,
     page,
@@ -593,15 +600,143 @@ export class MilvusStorage extends MastraStorage {
     perPage: number;
     attributes?: Record<string, string>;
     filters?: Record<string, any>;
-  }): Promise<any[]> {
-    throw new Error(
-      `Method not implemented. ${name}, ${scope}, ${page}, ${perPage}, ${JSON.stringify(attributes)}, ${JSON.stringify(filters)}`,
-    );
+  }): Promise<TraceType[]> {
+    try {
+      await this.ensureCollectionLoaded(TABLE_TRACES as any);
+
+      let filter = '';
+      const filters_arr: string[] = [];
+
+      // Add name filter if provided
+      if (name) {
+        filters_arr.push(`name == "${name}"`);
+      }
+
+      // Add scope filter if provided
+      if (scope) {
+        filters_arr.push(`scope == "${scope}"`);
+      }
+
+      // Add attributes filter if provided
+      if (attributes && Object.keys(attributes).length > 0) {
+        for (const [key, value] of Object.entries(attributes)) {
+          if (typeof value === 'string') {
+            filters_arr.push(`attributes["${key}"] == "${value}"`);
+          }
+        }
+      }
+
+      // Add custom filters if provided
+      if (filters && Object.keys(filters).length > 0) {
+        for (const [key, value] of Object.entries(filters)) {
+          if (typeof value === 'string') {
+            filters_arr.push(`${key} == "${value}"`);
+          } else if (typeof value === 'number' || typeof value === 'boolean') {
+            filters_arr.push(`${key} == ${value}`);
+          }
+        }
+      }
+
+      // Combine all filters with AND
+      if (filters_arr.length > 0) {
+        filter = filters_arr.join(' AND ');
+      }
+
+      // Calculate pagination
+      const offset = (page - 1) * perPage;
+
+      const queryOptions: any = {
+        collection_name: TABLE_TRACES,
+        output_fields: ['*'],
+        limit: perPage,
+        offset: offset,
+      };
+
+      if (filter) {
+        queryOptions.filter = filter;
+      }
+
+      const response = await this.client.query(queryOptions);
+
+      if (response.status.error_code !== 'Success') {
+        throw new Error('Error status code: ' + response.status.reason);
+      }
+
+      if (!response.data || response.data.length === 0) {
+        return [];
+      }
+
+      return response.data.map((trace: any) => ({
+        id: trace.id,
+        name: trace.name,
+        scope: trace.scope,
+        kind: trace.kind,
+        parentSpanId: trace.parentSpanId,
+        traceId: trace.traceId,
+        attributes: typeof trace.attributes === 'string' ? JSON.parse(trace.attributes) : trace.attributes,
+        status: typeof trace.status === 'string' ? JSON.parse(trace.status) : trace.status,
+        events: typeof trace.events === 'string' ? JSON.parse(trace.events) : trace.events,
+        links: typeof trace.links === 'string' ? JSON.parse(trace.links) : trace.links,
+        other: typeof trace.other === 'string' ? JSON.parse(trace.other) : trace.other,
+        startTime: Number(trace.startTime),
+        endTime: Number(trace.endTime),
+        createdAt: new Date(Number(trace.createdAt)),
+      }));
+    } catch (error) {
+      throw new Error('Failed to get traces: ' + error);
+    }
   }
-  getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
-    throw new Error(`Method not implemented. ${agentName}, ${type}`);
+
+  async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
+    try {
+      await this.ensureCollectionLoaded(TABLE_EVALS as any);
+
+      let filter = `agentName == "${agentName}"`;
+
+      // Add type filter if provided
+      if (type) {
+        // For type filter, we need to check the testInfo.testPath field
+        // If type is 'test', we want records with testInfo.testPath
+        // If type is 'live', we want records without testInfo.testPath or where it's empty
+        if (type === 'test') {
+          filter += ` AND testInfo["testPath"] != ""`;
+        } else if (type === 'live') {
+          filter += ` AND testInfo["testPath"] == ""`;
+        }
+      }
+
+      const response = await this.client.query({
+        collection_name: TABLE_EVALS,
+        filter,
+        output_fields: ['*'],
+      });
+
+      if (response.status.error_code !== 'Success') {
+        throw new Error('Error status code: ' + response.status.reason);
+      }
+
+      if (!response.data || response.data.length === 0) {
+        return [];
+      }
+
+      return response.data.map((eval_row: any) => ({
+        input: eval_row.input,
+        output: eval_row.output,
+        result: typeof eval_row.result === 'string' ? JSON.parse(eval_row.result) : eval_row.result,
+        agentName: eval_row.agentName,
+        metricName: eval_row.metricName,
+        instructions: eval_row.instructions,
+        testInfo: typeof eval_row.testInfo === 'string' ? JSON.parse(eval_row.testInfo) : eval_row.testInfo,
+        runId: eval_row.runId,
+        globalRunId: eval_row.globalRunId,
+        createdAt: eval_row.createdAt,
+      }));
+    } catch (error) {
+      throw new Error('Failed to get evals by agent name: ' + error);
+    }
   }
-  getWorkflowRuns(args?: {
+
+  async getWorkflowRuns(args?: {
     namespace?: string;
     workflowName?: string;
     fromDate?: Date;
@@ -609,6 +744,85 @@ export class MilvusStorage extends MastraStorage {
     limit?: number;
     offset?: number;
   }): Promise<WorkflowRuns> {
-    throw new Error(`Method not implemented. ${JSON.stringify(args)}`);
+    try {
+      await this.ensureCollectionLoaded(TABLE_WORKFLOW_RUNS as any);
+
+      const filters_arr: string[] = [];
+
+      // Add namespace filter if provided
+      if (args?.namespace) {
+        filters_arr.push(`namespace == "${args.namespace}"`);
+      }
+
+      // Add workflowName filter if provided
+      if (args?.workflowName) {
+        filters_arr.push(`workflowName == "${args.workflowName}"`);
+      }
+
+      // Add fromDate filter if provided
+      if (args?.fromDate) {
+        const fromTimestamp = args.fromDate.getTime();
+        filters_arr.push(`createdAt >= ${fromTimestamp}`);
+      }
+
+      // Add toDate filter if provided
+      if (args?.toDate) {
+        const toTimestamp = args.toDate.getTime();
+        filters_arr.push(`createdAt <= ${toTimestamp}`);
+      }
+
+      // Build the query options
+      const queryOptions: any = {
+        collection_name: TABLE_WORKFLOW_RUNS,
+        output_fields: ['*'],
+        limit: args?.limit || 50,
+        offset: args?.offset || 0,
+      };
+
+      // Combine all filters with AND if any
+      if (filters_arr.length > 0) {
+        queryOptions.filter = filters_arr.join(' AND ');
+      }
+
+      // First, get the total count
+      const countResponse = await this.client.query({
+        collection_name: TABLE_WORKFLOW_RUNS,
+        filter: queryOptions.filter,
+        output_fields: ['count(*)'],
+      });
+
+      if (countResponse.status.error_code !== 'Success') {
+        throw new Error('Error getting count: ' + countResponse.status.reason);
+      }
+
+      const total = countResponse.data[0]?.count || 0;
+
+      // Then get the actual data with pagination
+      const response = await this.client.query(queryOptions);
+
+      if (response.status.error_code !== 'Success') {
+        throw new Error('Error status code: ' + response.status.reason);
+      }
+
+      if (!response.data || response.data.length === 0) {
+        return { runs: [], total: 0 };
+      }
+
+      const runs = response.data.map((run: any) => ({
+        workflowName: run.workflowName,
+        runId: run.runId,
+        namespace: run.namespace,
+        snapshot: run.snapshot,
+        createdAt: new Date(Number(run.createdAt)),
+        updatedAt: new Date(Number(run.updatedAt)),
+      }));
+
+      return {
+        runs,
+        total: Number(total),
+      };
+    } catch (error) {
+      throw new Error('Failed to get workflow runs: ' + error);
+    }
   }
 }
