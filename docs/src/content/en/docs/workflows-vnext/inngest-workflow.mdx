@@ -7,31 +7,50 @@ description: "Inngest workflow allows you to run Mastra vNext workflows with Inn
 
 [Inngest](https://www.inngest.com/docs) is a developer platform for building and running background workflows, without managing infrastructure.
 
+## How Inngest Works with Mastra
+
+Inngest provides an event delivery and orchestration layer for running Mastra vNext workflows in response to events. The integration connects Inngest’s event system to Mastra’s workflow engine, enabling event-driven execution, step-level monitoring, and suspend/resume functionality.
+
+### Integration Architecture
+
+- **Workflow Registration:**  
+  Workflows are defined using the `createWorkflow` and `createStep` helpers from `@mastra/inngest`. These helpers produce workflow and step objects compatible with both Mastra and Inngest.
+
+- **Event Handling:**  
+  Each workflow is registered as an Inngest function. When an event matching the workflow’s trigger is received, Inngest invokes the workflow handler. The handler starts or resumes a workflow run using the event payload as input.
+
+- **Run Management:**  
+  Workflow runs are managed by the `InngestRun` class. This class sends events to Inngest to start or resume runs, polls for run status, and retrieves results. Workflow state is persisted using Mastra’s storage system.
+
+- **Suspend and Resume:**  
+  If a workflow step suspends (for example, waiting for external input), the run is paused. To resume, a new event is sent to Inngest with the required resume data and step information. The workflow continues from the suspended step.
+
+- **Real-Time Monitoring:**  
+  The `watch` method on a workflow run subscribes to Inngest’s realtime API. This provides step-level execution updates, including status changes and outputs, which can be used for dashboards or debugging.
+
+### Data Flow
+
+1. **Event Trigger:**  
+   An event is sent to Inngest Cloud (or a local Inngest dev server) with a payload matching the workflow’s input schema.
+
+2. **Function Invocation:**  
+   Inngest matches the event to a registered workflow function and invokes it, passing the event data to the workflow handler.
+
+3. **Workflow Execution:**  
+   The handler creates a workflow run and starts execution. Each step is executed in order, and state is persisted after each step.
+
+4. **Suspend/Resume:**  
+   If a step suspends, the workflow run is paused. To continue, a new event is sent with resume data, and the workflow resumes from the suspended step.
+
+5. **Result Retrieval:**
+   When the workflow completes, fails, or suspends, the result is available via Inngest’s API and dashboard. The result includes the status, step outputs, and any error or suspension information.
+
+
 ## Setup
 
 ```sh
 npm install @mastra/inngest @mastra/core @mastra/deployer @hono/node-server
 ```
-
-### Local Development Environment
-
-Inngest offers two methods for local development:
-
-#### Option 1: Using Docker
-
-Run Inngest locally using Docker on port 8288, configured to listen for events on port 3000:
-
-```sh
-docker run --rm -p 8288:8288 \
-  inngest/inngest \
-  inngest dev -u http://host.docker.internal:3000/inngest/api
-```
-
-#### Option 2: Inngest CLI
-
-Alternatively, you can use the Inngest CLI for local development by following the official [Inngest Dev Server guide](https://www.inngest.com/docs/dev-server).
-
-> **Tip**: Once Inngest is running, you can access the Inngest dashboard at [http://localhost:8288](http://localhost:8288) to monitor and debug your workflow runs in real-time.
 
 ## Building an Inngest Workflow
 
@@ -39,7 +58,7 @@ This guide walks through creating a workflow with Inngest and Mastra, demonstrat
 
 ### Inngest Initialization
 
-Initialize the Inngest integration to obtain Mastra-compatible workflow helpers:
+Initialize the Inngest integration to obtain Mastra-compatible workflow helpers. The createWorkflow and createStep functions are used to create workflow and step objects that are compatible with Mastra and inngest.
 
 ```ts showLineNumbers copy filename="src/mastra/workflows/inngest-workflow.ts"
 import { init } from '@mastra/inngest'
@@ -49,7 +68,6 @@ import { Inngest } from 'inngest'
 const { createWorkflow, createStep } = init(
   new Inngest({
     id: 'mastra',
-    baseUrl: `http://localhost:8288`,
   })
 )
 ```
@@ -107,10 +125,10 @@ const finalStep = createStep({
 
 ### Creating the Workflow
 
-Compose the steps into a workflow using the `dountil` loop pattern:
+Compose the steps into a workflow using the `dountil` loop pattern. The createWorkflow function creates a function on inngest server that is invokable.
 
 ```ts showLineNumbers copy filename="src/mastra/workflows/inngest-workflow.ts"
-// Create the main workflow that uses a do-until loop
+// workflow that is registered as a function on inngest server
 const workflow = createWorkflow({
   id: 'increment-workflow',
   inputSchema: z.object({
@@ -154,9 +172,9 @@ import { serve as inngestServe } from '@mastra/inngest'
 import { createLogger } from '@mastra/core/logger'
 import { Inngest } from 'inngest'
 import { incrementWorkflow } from './workflows/inngest-workflow'
+// realtime middleware is used to enable real-time event streaming and 
+// live updates between your application and the Inngest Dev/ Production Server.
 import { realtimeMiddleware } from '@inngest/realtime'
-import { serve } from '@hono/node-server'
-import { createHonoServer } from '@mastra/deployer/server'
 
 
 // Create an Inngest instance with realtime middleware for development
@@ -175,6 +193,7 @@ export const mastra = new Mastra({
   server: {
     host: '0.0.0.0',
     apiRoutes: [
+      // This API route is used to register the Mastra workflow (inngest function) on the inngest server
       {
         path: '/api/inngest',
         method: 'ALL',
@@ -187,24 +206,33 @@ export const mastra = new Mastra({
     level: 'info',
   }),
 })
-
-
-// Create and start the Hono server
-const app = await createHonoServer(mastra)
-
-const srv = serve({
-    fetch: app.fetch,
-    port: 3000,
-})
-
-// Get the workflow, create a run, and start it with an initial value
-const workflow = mastra.vnext_getWorkflow('incrementWorkflow')
-const run = workflow.createRun({})
-const result = await run.start({ inputData: { value: 5 } })
-console.dir(result, { depth: null })
-
-// Close the server when done
-srv.close()
 ```
 
-After starting your workflow, you can visit the [Inngest dashboard](http://localhost:8288) to monitor execution progress, view step outputs, and debug any issues.
+### Running the Workflow locally
+
+1. Run `npx mastra dev` to start the Mastra server on local to serve the server on port 4111.
+2. Run inngest dev server locally using docker 
+```sh
+docker run --rm -p 8288:8288 \
+  inngest/inngest \
+  inngest dev -u http://host.docker.internal:4111/inngest/api
+# The url after the -u flag is used to tell the inngest dev server to find the `/api/inngest` endpoint.
+```
+3. You can now visit [Inngest dashboard](http://localhost:8288) and navigate to "Apps" section in the sidebar to see your Mastra workflow registered successfully.
+![Inngest Dashboard](/inngest-apps-dashboard.png)
+
+4. Next you can visit the Function section in the sidebar to see the Mastra workflow registered as an inngest function and click on invoke to trigger the workflow with the input data.
+```json
+{
+  "data": {
+    "inputData" : {
+        "value": 5
+    }
+  }
+}
+```
+![Inngest Function](/inngest-function-dashboard.png)
+
+5. You can monitor the function execution progress by clicking on the Runs tab in the sidebar and click on the latest run to see the step by step execution progress.
+![Inngest Function Run](/inngest-runs-dashboard.png)
+
