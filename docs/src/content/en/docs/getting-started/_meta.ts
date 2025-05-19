@@ -1,7 +1,7 @@
 const meta = {
   installation: "Installation",
   "project-structure": "Project Structure",
-  "mcp-docs-server": "Using with Cursor/Windsurf",
+  "mcp-docs-server": "MCP Server",
   "model-capability": "Model Capabilities",
 };
 
