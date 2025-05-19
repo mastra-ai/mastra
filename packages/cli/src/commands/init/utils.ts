@@ -6,8 +6,8 @@ import * as p from '@clack/prompts';
 import fsExtra from 'fs-extra/esm';
 import color from 'picocolors';
 import prettier from 'prettier';
-import yoctoSpinner from 'yocto-spinner';
 import shellQuote from 'shell-quote';
+import yoctoSpinner from 'yocto-spinner';
 
 import { DepsService } from '../../services/service.deps';
 import { FileService } from '../../services/service.file';
