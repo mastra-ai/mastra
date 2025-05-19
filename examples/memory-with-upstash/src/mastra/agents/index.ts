@@ -9,7 +9,7 @@ const memory = new Memory({
     url: 'http://localhost:8089',
     token: 'test_token',
   }),
-  vector: new PgVector(`postgresql://postgres:postgres@localhost:5433`),
+  vector: new PgVector({ connectionString: `postgresql://postgres:postgres@localhost:5433` }),
   options: {
     lastMessages: 1,
     semanticRecall: {

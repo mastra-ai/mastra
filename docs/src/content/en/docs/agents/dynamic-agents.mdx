@@ -1,47 +1,69 @@
 ---
-
-title: Dynamic Agents | Agents | Mastra Docs
+title: "Dynamic Agents"
 description: Dynamically configure your agent's instruction, model and tools using runtime context.
+---
 
 # Dynamic Agents
 
-Dynamic agents use [runtime context](./runtime-variables), like user IDs and other important parameters, to adjust their settings in real-time. This means they can change the model they use, update their instructions, and select different tools as needed. By using this context, agents can better respond to each user's needs. They can also call any API to gather more information, which helps improve what the agents can do.
+Dynamic agents use [runtime context](./runtime-variables), like user IDs and other important parameters, to adjust their settings in real-time.
 
-## Key Benefits
+This means they can change the model they use, update their instructions, and select different tools as needed.
 
-- **Flexibility**: Adjust agent behavior dynamically without altering the core code.
-- **Efficiency**: Consolidate multiple agents into a single dynamic agent.
-- **Scalability**: Easily scale agent capabilities by modifying runtime context.
+By using this context, agents can better respond to each user's needs. They can also call any API to gather more information, which helps improve what the agents can do.
 
 ### Example Configuration
 
-Here's an example of how to configure a dynamic agent with model, instructions, and tools:
+Here's an example of a dynamic support agent that adjusts its behavior based on the user's subscription tier and language preferences:
 
 ```typescript
-const dynamicAgent = new Agent({
-  name: "Master Chef Agent",
+const supportAgent = new Agent({
+  name: "Dynamic Support Agent",
+  
   instructions: async ({ runtimeContext }) => {
-    // Fetch user preferences from API using user ID from runtime context
-    const userId = runtimeContext.get("userId");
-    const userPreferences = await fetchUserPreferences(userId);
-
-    return `You are a master chef specializing in personalized recipes. 
-    The current user (${userId}) has the following dietary preferences:
-    - Allergies: ${userPreferences.allergies.join(", ") || "None"}
-    - Preferred cuisines: ${userPreferences.cuisines.join(", ")}
-    - Dietary restrictions: ${userPreferences.restrictions.join(", ") || "None"}
+    const userTier = runtimeContext.get("user-tier");
+    const language = runtimeContext.get("language");
     
-    Tailor your cooking advice and recipes to match these preferences.`;
+    return `You are a customer support agent for our SaaS platform.
+    The current user is on the ${userTier} tier and prefers ${language} language.
+    
+    For ${userTier} tier users:
+    ${userTier === "free" ? "- Provide basic support and documentation links" : ""}
+    ${userTier === "pro" ? "- Offer detailed technical support and best practices" : ""}
+    ${userTier === "enterprise" ? "- Provide priority support with custom solutions" : ""}
+    
+    Always respond in ${language} language.`;
   },
-  model: ({ runtimeContext }) => openai("gpt-4o-mini"),
+
+  model: ({ runtimeContext }) => {
+    const userTier = runtimeContext.get("user-tier");
+    return userTier === "enterprise" 
+      ? openai("gpt-4") 
+      : openai("gpt-3.5-turbo");
+  },
+
   tools: ({ runtimeContext }) => {
-    return {
-      recipeDatabase,
-      ingredientSubstitutions,
-      nutritionalCalculator,
-    };
+    const userTier = runtimeContext.get("user-tier");
+    const baseTools = [knowledgeBase, ticketSystem];
+    
+    if (userTier === "pro" || userTier === "enterprise") {
+      baseTools.push(advancedAnalytics);
+    }
+    
+    if (userTier === "enterprise") {
+      baseTools.push(customIntegration);
+    }
+    
+    return baseTools;
   },
 });
 ```
 
-In this example, the agent's instructions, model, and tools are configured using the runtime context, allowing for a highly adaptable and responsive agent.
+In this example, the agent:
+- Adjusts its instructions based on the user's subscription tier (free, pro, or enterprise)
+- Uses a more powerful model (GPT-4) for enterprise users
+- Provides different sets of tools based on the user's tier
+- Responds in the user's preferred language
+
+This demonstrates how a single agent can handle different types of users and scenarios by leveraging runtime context, making it more flexible and maintainable than creating separate agents for each use case.
+
+For a complete implementation example including API routes, middleware setup, and runtime context handling, see our [Dynamic Agents Example](/examples/agents/dynamic-agents).

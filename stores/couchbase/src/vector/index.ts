@@ -5,6 +5,11 @@ import type {
   CreateIndexParams,
   UpsertVectorParams,
   QueryVectorParams,
+  DescribeIndexParams,
+  ParamsToArgs,
+  DeleteIndexParams,
+  DeleteVectorParams,
+  UpdateVectorParams,
 } from '@mastra/core/vector';
 import type { Bucket, Cluster, Collection, Scope } from 'couchbase';
 import { MutateInSpec, connect, SearchRequest, VectorQuery, VectorSearch } from 'couchbase';
@@ -15,6 +20,15 @@ export const DISTANCE_MAPPING: Record<MastraMetric, CouchbaseMetric> = {
   cosine: 'cosine',
   euclidean: 'l2_norm',
   dotproduct: 'dot_product',
+};
+
+export type CouchbaseVectorParams = {
+  connectionString: string;
+  username: string;
+  password: string;
+  bucketName: string;
+  scopeName: string;
+  collectionName: string;
 };
 
 export class CouchbaseVector extends MastraVector {
@@ -28,19 +42,66 @@ export class CouchbaseVector extends MastraVector {
   private scope: Scope;
   private vector_dimension: number;
 
+  /**
+   * @deprecated Passing parameters as positional arguments is deprecated.
+   * Use the object parameter instead. This signature will be removed on May 20th, 2025.
+   */
   constructor(
-    cnn_string: string,
+    connectionString: string,
     username: string,
     password: string,
     bucketName: string,
     scopeName: string,
     collectionName: string,
+  );
+  constructor(params: CouchbaseVectorParams);
+  constructor(
+    paramsOrConnectionString: CouchbaseVectorParams | string,
+    username?: string,
+    password?: string,
+    bucketName?: string,
+    scopeName?: string,
+    collectionName?: string,
   ) {
+    let connectionString_: string,
+      username_: string,
+      password_: string,
+      bucketName_: string,
+      scopeName_: string,
+      collectionName_: string;
+
+    if (
+      typeof paramsOrConnectionString === 'object' &&
+      paramsOrConnectionString !== null &&
+      'connectionString' in paramsOrConnectionString
+    ) {
+      // Object params (preferred)
+      connectionString_ = paramsOrConnectionString.connectionString as string;
+      username_ = paramsOrConnectionString.username;
+      password_ = paramsOrConnectionString.password;
+      bucketName_ = paramsOrConnectionString.bucketName;
+      scopeName_ = paramsOrConnectionString.scopeName;
+      collectionName_ = paramsOrConnectionString.collectionName;
+    } else {
+      // Positional args (deprecated)
+      if (arguments.length > 1) {
+        console.warn(
+          'Deprecation Warning: CouchbaseVector constructor positional arguments are deprecated. Please use a single object parameter instead. This signature will be removed on May 20th, 2025.',
+        );
+      }
+      connectionString_ = paramsOrConnectionString as string;
+      username_ = username!;
+      password_ = password!;
+      bucketName_ = bucketName!;
+      scopeName_ = scopeName!;
+      collectionName_ = collectionName!;
+    }
+
     super();
 
-    const baseClusterPromise = connect(cnn_string, {
-      username,
-      password,
+    const baseClusterPromise = connect(connectionString_, {
+      username: username_,
+      password: password_,
       configProfile: 'wanDevelopment',
     });
 
@@ -53,9 +114,9 @@ export class CouchbaseVector extends MastraVector {
         },
       }) ?? baseClusterPromise;
     this.cluster = null as unknown as Cluster;
-    this.bucketName = bucketName;
-    this.collectionName = collectionName;
-    this.scopeName = scopeName;
+    this.bucketName = bucketName_;
+    this.collectionName = collectionName_;
+    this.scopeName = scopeName_;
     this.collection = null as unknown as Collection;
     this.bucket = null as unknown as Bucket;
     this.scope = null as unknown as Scope;
@@ -255,7 +316,16 @@ export class CouchbaseVector extends MastraVector {
     return indexes?.map(index => index.name) || [];
   }
 
-  async describeIndex(indexName: string): Promise<IndexStats> {
+  /**
+   * Retrieves statistics about a vector index.
+   *
+   * @param params - The parameters for describing an index
+   * @param params.indexName - The name of the index to describe
+   * @returns A promise that resolves to the index statistics including dimension, count and metric
+   */
+  async describeIndex(...args: ParamsToArgs<DescribeIndexParams>): Promise<IndexStats> {
+    const params = this.normalizeArgs<DescribeIndexParams>('describeIndex', args);
+    const { indexName } = params;
     await this.getCollection();
     if (!(await this.listIndexes()).includes(indexName)) {
       throw new Error(`Index ${indexName} does not exist`);
@@ -276,7 +346,9 @@ export class CouchbaseVector extends MastraVector {
     };
   }
 
-  async deleteIndex(indexName: string): Promise<void> {
+  async deleteIndex(...args: ParamsToArgs<DeleteIndexParams>): Promise<void> {
+    const params = this.normalizeArgs<DeleteIndexParams>('deleteIndex', args);
+    const { indexName } = params;
     await this.getCollection();
     if (!(await this.listIndexes()).includes(indexName)) {
       throw new Error(`Index ${indexName} does not exist`);
@@ -295,13 +367,14 @@ export class CouchbaseVector extends MastraVector {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector(
-    _indexName: string,
-    id: string,
-    updates: { vector?: number[]; metadata?: Record<string, any> },
-  ): Promise<void> {
-    if (!updates.vector && !updates.metadata) {
+  async updateVector(...args: ParamsToArgs<UpdateVectorParams>): Promise<void> {
+    const params = this.normalizeArgs<UpdateVectorParams>('updateVector', args);
+    const { id, update } = params;
+    if (!update.vector && !update.metadata) {
       throw new Error('No updates provided');
+    }
+    if (update.vector && this.vector_dimension && update.vector.length !== this.vector_dimension) {
+      throw new Error('Vector dimension mismatch');
     }
     const collection = await this.getCollection();
 
@@ -316,8 +389,8 @@ export class CouchbaseVector extends MastraVector {
     }
 
     const specs: MutateInSpec[] = [];
-    if (updates.vector) specs.push(MutateInSpec.replace('embedding', updates.vector));
-    if (updates.metadata) specs.push(MutateInSpec.replace('metadata', updates.metadata));
+    if (update.vector) specs.push(MutateInSpec.replace('embedding', update.vector));
+    if (update.metadata) specs.push(MutateInSpec.replace('metadata', update.metadata));
 
     await collection.mutateIn(id, specs);
   }
@@ -329,7 +402,10 @@ export class CouchbaseVector extends MastraVector {
    * @returns A promise that resolves when the deletion is complete.
    * @throws Will throw an error if the deletion operation fails.
    */
-  async deleteVector(_indexName: string, id: string): Promise<void> {
+  async deleteVector(...args: ParamsToArgs<DeleteVectorParams>): Promise<void> {
+    const params = this.normalizeArgs<DeleteVectorParams>('deleteVector', args);
+
+    const { id } = params;
     const collection = await this.getCollection();
 
     // Check if document exists

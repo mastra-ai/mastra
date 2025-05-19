@@ -67,7 +67,32 @@
     "@mastra/voice-playai": "0.1.18",
     "@mastra/voice-sarvam": "0.1.13",
     "@mastra/voice-speechify": "0.1.18",
-    "@mastra/inngest": "0.0.3"
+    "@mastra/inngest": "0.0.3",
+    "@mastra/agui": "0.0.1-alpha.1"
   },
-  "changesets": []
+  "changesets": [
+    "cool-pillows-flow",
+    "cute-clowns-dream",
+    "eager-deer-attack",
+    "eighty-lizards-itch",
+    "evil-planes-take",
+    "fluffy-stars-marry",
+    "grumpy-chicken-push",
+    "honest-rocks-stop",
+    "light-mayflies-kiss",
+    "little-bees-slide",
+    "little-months-appear",
+    "long-hands-punch",
+    "moody-cups-drum",
+    "new-teams-cover",
+    "old-items-hear",
+    "pink-ducks-fly",
+    "public-snakes-switch",
+    "quiet-olives-taste",
+    "ready-bees-sin",
+    "red-cooks-pump",
+    "rich-swans-vanish",
+    "shy-parrots-hunt",
+    "tough-boats-hide"
+  ]
 }

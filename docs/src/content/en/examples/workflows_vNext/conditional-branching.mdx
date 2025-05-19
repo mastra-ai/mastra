@@ -3,12 +3,16 @@ title: "Example: Conditional Branching | Workflows | Mastra Docs"
 description: Example of using Mastra to create conditional branches in workflows using the `branch` statement .
 ---
 
-import { GithubLink } from "@/components/github-link";
-
 # Workflow with Conditional Branching
 
 Workflows often need to follow different paths based on some condition.
 This example demonstrates how to use the `branch` construct to create conditional flows within your workflows.
+
+## Setup
+
+```sh copy
+npm install @ai-sdk/openai @mastra/core 
+```
 
 ## Define Planning Agent
 
@@ -20,6 +24,8 @@ import { openai } from "@ai-sdk/openai";
 
 const llm = openai("gpt-4o");
 
+// Define the planning agent that generates activity recommendations
+// based on weather conditions and location
 const planningAgent = new Agent({
   name: "planningAgent",
   model: llm,
@@ -69,15 +75,15 @@ const planningAgent = new Agent({
 export { planningAgent };
 ```
 
-## Define Weather Workflow
-
-Define the weather workflow with 3 steps: one to fetch the weather via a network call, one to plan activities, and another to plan only indoor activities.
+## Define Activity Planning Workflow
+Define the planning workflow with 3 steps: one to fetch the weather via a network call, one to plan activities, and another to plan only indoor activities.
 Both using the planning agent.
 
 ```ts showLineNumbers copy filename="workflows/conditional-workflow.ts"
-import { z } from "zod";
-import { createStep, createWorkflow } from "./vNext";
+import { z } from 'zod'
+import { createWorkflow, createStep } from "@mastra/core/workflows/vNext";
 
+// Helper function to convert weather codes to human-readable conditions
 function getWeatherCondition(code: number): string {
   const conditions: Record<number, string> = {
     0: "Clear sky",
@@ -109,7 +115,8 @@ const forecastSchema = z.object({
   location: z.string(),
 });
 
-// Fetch weather step
+// Step to fetch weather data for a given city
+// Makes API calls to get current weather conditions and forecast
 const fetchWeather = createStep({
   id: "fetch-weather",
   description: "Fetches weather forecast for a given city",
@@ -164,7 +171,8 @@ const fetchWeather = createStep({
   },
 });
 
-// Plan activities indorrs or outdoors
+// Step to plan activities based on weather conditions
+// Uses the planning agent to generate activity recommendations
 const planActivities = createStep({
   id: "plan-activities",
   description: "Suggests activities based on weather conditions",
@@ -173,8 +181,7 @@ const planActivities = createStep({
     activities: z.string(),
   }),
   execute: async ({ inputData, mastra }) => {
-    console.log("planActivities");
-    const forecast = inputData;
+    const forecast = inputData
 
     if (!forecast) {
       throw new Error("Forecast data not found");
@@ -209,7 +216,8 @@ const planActivities = createStep({
   },
 });
 
-// Plan indoor activities only
+// Step to plan indoor activities only
+// Used when precipitation chance is high
 const planIndoorActivities = createStep({
   id: "plan-indoor-activities",
   description: "Suggests indoor activities based on weather conditions",
@@ -218,8 +226,7 @@ const planIndoorActivities = createStep({
     activities: z.string(),
   }),
   execute: async ({ inputData, mastra }) => {
-    console.log("planIndoorActivities");
-    const forecast = inputData;
+    const forecast = inputData
 
     if (!forecast) {
       throw new Error("Forecast data not found");
@@ -252,8 +259,13 @@ const planIndoorActivities = createStep({
   },
 });
 
-const weatherWorkflow = createWorkflow({
-  id: "weather-workflow-step2-if-else",
+// Main workflow that:
+// 1. Fetches weather data
+// 2. Branches based on precipitation chance:
+//    - If >50%: Plans indoor activities
+//    - If <=50%: Plans outdoor activities
+const activityPlanningWorkflow = createWorkflow({
+  id: 'activity-planning-workflow-step2-if-else',
   inputSchema: z.object({
     city: z.string().describe("The city to get the weather for"),
   }),
@@ -263,12 +275,14 @@ const weatherWorkflow = createWorkflow({
 })
   .then(fetchWeather)
   .branch([
+    // Branch for high precipitation (indoor activities)
     [
       async ({ inputData }) => {
         return inputData?.precipitationChance > 50;
       },
       planIndoorActivities,
     ],
+    // Branch for low precipitation (outdoor activities)
     [
       async ({ inputData }) => {
         return inputData?.precipitationChance <= 50;
@@ -277,31 +291,9 @@ const weatherWorkflow = createWorkflow({
     ],
   ]);
 
-weatherWorkflow.commit();
+activityPlanningWorkflow.commit()
 
-export { weatherWorkflow };
-```
-
-```ts showLineNumbers copy filename="index.ts"
-import { Mastra } from "@mastra/core/mastra";
-import { createLogger } from "@mastra/core/logger";
-import { weatherWorkflow } from "./workflows";
-import { planningAgent } from "./agents";
-
-const mastra = new Mastra({
-  vnext_workflows: {
-    weatherWorkflow,
-  },
-  agents: {
-    planningAgent,
-  },
-  logger: createLogger({
-    name: "Mastra",
-    level: "info",
-  }),
-});
-
-export { mastra };
+export { activityPlanningWorkflow }
 ```
 
 ## Register Agent and Workflow instances with Mastra class
@@ -310,14 +302,16 @@ Register the agents and workflow with the mastra instance.
 This is critical for enabling access to the agents within the workflow.
 
 ```ts showLineNumbers copy filename="index.ts"
-import { Mastra } from "@mastra/core/mastra";
-import { createLogger } from "@mastra/core/logger";
-import { weatherWorkflow } from "./workflows";
-import { planningAgent } from "./agents";
-
+import { Mastra } from '@mastra/core/mastra'
+import { createLogger } from '@mastra/core/logger'
+import { activityPlanningWorkflow } from './workflows/conditional-workflow'
+import { planningAgent } from './agents/planning-agent'
+ 
+// Initialize Mastra with the activity planning workflow
+// This enables the workflow to be executed and access the planning agent
 const mastra = new Mastra({
   vnext_workflows: {
-    weatherWorkflow,
+    activityPlanningWorkflow,
   },
   agents: {
     planningAgent,
@@ -326,32 +320,22 @@ const mastra = new Mastra({
     name: "Mastra",
     level: "info",
   }),
-});
-
-export { mastra };
+})
+ 
+export { mastra }
 ```
 
-## Execute the weather workflow
-
-Here, we'll get the weather workflow from the mastra instance, then create a run and execute the created run with the required inputData.
+## Execute the activity planning workflow
+Here, we'll get the activity planning workflow from the mastra instance, then create a run and execute the created run with the required inputData.
 
 ```ts showLineNumbers copy filename="exec.ts"
 import { mastra } from "./";
 
-const workflow = mastra.vnext_getWorkflow("weatherWorkflow");
-const run = workflow.createRun();
+const workflow = mastra.vnext_getWorkflow('activityPlanningWorkflow')
+const run = workflow.createRun()
 
-const result = await run.start({ inputData: { city: "New York" } });
-console.dir(result, { depth: null });
+// Start the workflow with a city
+// This will fetch weather and plan activities based on conditions
+const result = await run.start({ inputData: { city: 'New York' } })
+console.dir(result, { depth: null })
 ```
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/conditional-branching"
-  }
-/>

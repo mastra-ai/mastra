@@ -29,18 +29,12 @@ It provides robust vector similarity search capabilities within your existing Po
 
 ## Constructor Examples
 
-You can instantiate `PgVector` in two ways:
+You can instantiate `PgVector` using a config object (with optional schemaName):
 
 ```ts
 import { PgVector } from "@mastra/pg";
 
-// Using a connection string (string form)
-const vectorStore1 = new PgVector(
-  "postgresql://user:password@localhost:5432/mydb",
-);
-
-// Using a config object (with optional schemaName)
-const vectorStore2 = new PgVector({
+const vectorStore = new PgVector({
   connectionString: "postgresql://user:password@localhost:5432/mydb",
   schemaName: "custom_schema", // optional
 });
@@ -368,20 +362,20 @@ Updates an existing vector by ID. At least one of vector or metadata must be pro
 
 ```typescript copy
 // Update just the vector
-await pgVector.updateVector("my_vectors", "vector123", {
+await pgVector.updateVector({ indexName: "my_vectors", id: "vector123", update: {
   vector: [0.1, 0.2, 0.3],
-});
+}});
 
 // Update just the metadata
-await pgVector.updateVector("my_vectors", "vector123", {
+await pgVector.updateVector({ indexName: "my_vectors", id: "vector123", update: {
   metadata: { label: "updated" },
-});
+}});
 
 // Update both vector and metadata
-await pgVector.updateVector("my_vectors", "vector123", {
+await pgVector.updateVector({ indexName: "my_vectors", id: "vector123", update: {
   vector: [0.1, 0.2, 0.3],
   metadata: { label: "updated" },
-});
+}});
 ```
 
 ### deleteVector()
@@ -404,7 +398,7 @@ await pgVector.updateVector("my_vectors", "vector123", {
 Deletes a single vector by ID from the specified index.
 
 ```typescript copy
-await pgVector.deleteVector("my_vectors", "vector123");
+await pgVector.deleteVector({ indexName: "my_vectors", id: "vector123" });
 ```
 
 ### disconnect()

@@ -394,15 +394,19 @@ export class Memory extends MastraMemory {
           content: message.content.replace(workingMemoryRegex, ``).trim(),
         });
       } else if (Array.isArray(message?.content)) {
-        const contentIsWorkingMemory = message.content.some(
+        // Filter out updateWorkingMemory tool-call/result content items
+        const filteredContent = message.content.filter(
           content =>
-            (content.type === `tool-call` || content.type === `tool-result`) &&
-            content.toolName === `updateWorkingMemory`,
+            !(
+              (content.type === 'tool-call' || content.type === 'tool-result') &&
+              content.toolName === 'updateWorkingMemory'
+            ),
         );
-        if (contentIsWorkingMemory) {
+        if (filteredContent.length === 0) {
+          // If nothing left, skip this message
           continue;
         }
-        const newContent = message.content.map(content => {
+        const newContent = filteredContent.map(content => {
           if (content.type === 'text') {
             return {
               ...content,

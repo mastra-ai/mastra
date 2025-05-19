@@ -1,15 +1,15 @@
 ---
-title: "リファレンス: Workflow.createRun() | ワークフローの実行 | Mastra ドキュメント"
-description: "ワークフロー内の `.createRun()` メソッドのドキュメントで、新しいワークフロー実行インスタンスを初期化します。"
+title: "リファレンス: Workflow.createRun() | ワークフローの実行 | Mastra Docs"
+description: "ワークフローの `.createRun()` メソッドのドキュメント。新しいワークフロー実行インスタンスを初期化します。"
 ---
 
 # Workflow.createRun()
 
-`.createRun()` メソッドは、新しいワークフロー実行インスタンスを初期化します。追跡用のユニークな実行IDを生成し、呼び出されたときにワークフローの実行を開始するスタート関数を返します。
+`.createRun()`メソッドは、新しいワークフローの実行インスタンスを初期化します。追跡のための一意の実行IDを生成し、呼び出されるとワークフローの実行を開始するスタート関数を返します。
 
-`.createRun()` を `.execute()` と比較して使用する理由の一つは、追跡、ログ記録、または `.watch()` を介した購読のためのユニークな実行IDを取得することです。
+`.createRun()`を`.execute()`の代わりに使用する理由の1つは、追跡、ログ記録、または`.watch()`を介したサブスクライブのための一意の実行IDを取得することです。
 
-## 使用法
+## 使用方法
 
 ```typescript
 const { runId, start, watch } = workflow.createRun();
@@ -24,18 +24,18 @@ const result = await start();
     {
       name: "runId",
       type: "string",
-      description: "このワークフロー実行を追跡するための一意の識別子",
+      description: "このワークフローの実行を追跡するための一意の識別子",
     },
     {
       name: "start",
       type: "() => Promise<WorkflowResult>",
-      description: "呼び出されたときにワークフローの実行を開始する関数",
+      description: "呼び出されるとワークフローの実行を開始する関数",
     },
     {
       name: "watch",
       type: "(callback: (record: WorkflowResult) => void) => () => void",
       description:
-        "ワークフロー実行の各遷移で呼び出されるコールバック関数を受け取る関数",
+        "ワークフロー実行の各遷移時に呼び出されるコールバック関数を受け取る関数",
     },
     {
       name: "resume",
@@ -52,9 +52,9 @@ const result = await start();
   ]}
 />
 
-## エラーハンドリング
+## エラー処理
 
-ワークフロー構成が無効な場合、start 関数はバリデーションエラーをスローすることがあります:
+start関数は、ワークフローの設定が無効な場合、バリデーションエラーをスローする可能性があります：
 
 ```typescript
 try {
@@ -73,7 +73,7 @@ try {
 
 - [Workflow クラスリファレンス](./workflow.mdx)
 - [Step クラスリファレンス](./step-class.mdx)
-- 完全な使用例については、[ワークフローの作成](../../../examples/workflows/creating-a-workflow.mdx)の例を参照してください
+- 完全な使用方法については[ワークフローの作成](../../../examples/workflows/creating-a-workflow.mdx)の例を参照してください
 
 ```
 

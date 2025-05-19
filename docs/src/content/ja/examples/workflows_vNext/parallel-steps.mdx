@@ -1,18 +1,23 @@
 ---
-title: "例：並列実行 | ワークフロー | Mastra ドキュメント"
+title: "例: 並列実行 | ワークフロー | Mastra ドキュメント"
 description: Mastraを使用してワークフロー内で複数の独立したタスクを並列実行する例。
 ---
-
-import { GithubLink } from "@/components/github-link";
 
 # ステップによる並列実行
 
 AI アプリケーションを構築する際、効率を向上させるために複数の独立したタスクを同時に処理する必要がよくあります。
 私たちはこの機能を `.parallel` メソッドを通じてワークフローの中核部分としています。
 
+
+## セットアップ
+
+```sh copy
+npm install @ai-sdk/openai @mastra/core
+```
+
 ## プランニングエージェントの定義
 
-場所と対応する気象条件を考慮して活動を計画するために、LLM呼び出しを活用するプランニングエージェントを定義します。
+場所と対応する天気状況を考慮して活動を計画するために、LLM呼び出しを活用するプランニングエージェントを定義します。
 
 ```ts showLineNumbers copy filename="agents/planning-agent.ts"
 import { Agent } from "@mastra/core/agent";
@@ -20,6 +25,8 @@ import { openai } from "@ai-sdk/openai";
 
 const llm = openai("gpt-4o");
 
+// Define the planning agent with specific instructions for formatting
+// and structuring weather-based activity recommendations
 const planningAgent = new Agent({
   name: "planningAgent",
   model: llm,
@@ -79,6 +86,8 @@ import { openai } from "@ai-sdk/openai";
 
 const llm = openai("gpt-4o");
 
+// Define the synthesize agent that combines indoor and outdoor activity plans
+// into a comprehensive report, considering weather conditions and alternatives
 const synthesizeAgent = new Agent({
   name: "synthesizeAgent",
   model: llm,
@@ -96,10 +105,8 @@ export { synthesizeAgent };
 ここでは、プランニングステップと合成ステップの間の並列→逐次フローを調整するワークフローを定義します。
 
 ```ts showLineNumbers copy filename="workflows/parallel-workflow.ts"
-import { Step, Workflow } from "@mastra/core/workflows";
-import { z } from "zod";
-import { activityPlannerAgent } from "../agents";
-import { createStep, createWorkflow } from "@mastra/core/workflows/vNext";
+import { z } from 'zod'
+import { createStep, createWorkflow } from '@mastra/core/workflows/vNext'
 
 const forecastSchema = z.object({
   date: z.string(),
@@ -110,9 +117,11 @@ const forecastSchema = z.object({
   location: z.string(),
 });
 
+// 指定された都市の天気データを取得するステップ
+// 現在の天気状況と予報を取得するためのAPI呼び出しを行います
 const fetchWeather = createStep({
   id: "fetch-weather",
-  description: "指定された都市の天気予報を取得する",
+  description: "指定された都市の天気予報を取得します",
   inputSchema: z.object({
     city: z.string(),
   }),
@@ -121,21 +130,21 @@ const fetchWeather = createStep({
     if (!inputData) {
       throw new Error("トリガーデータが見つかりません");
     }
-
-    const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(inputData.city)}&count=1`;
-    const geocodingResponse = await fetch(geocodingUrl);
+ 
+    const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(inputData.city)}&count=1`
+    const geocodingResponse = await fetch(geocodingUrl)
     const geocodingData = (await geocodingResponse.json()) as {
-      results: { latitude: number; longitude: number; name: string }[];
-    };
+      results: { latitude: number; longitude: number; name: string }[]
+    }
 
     if (!geocodingData.results?.[0]) {
       throw new Error(`場所 '${inputData.city}' が見つかりません`);
     }
-
-    const { latitude, longitude, name } = geocodingData.results[0];
-
-    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=precipitation,weathercode&timezone=auto,&hourly=precipitation_probability,temperature_2m`;
-    const response = await fetch(weatherUrl);
+ 
+    const { latitude, longitude, name } = geocodingData.results[0]
+ 
+    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=precipitation,weathercode&timezone=auto,&hourly=precipitation_probability,temperature_2m`
+    const response = await fetch(weatherUrl)
     const data = (await response.json()) as {
       current: {
         time: string;
@@ -143,10 +152,10 @@ const fetchWeather = createStep({
         weathercode: number;
       };
       hourly: {
-        precipitation_probability: number[];
-        temperature_2m: number[];
-      };
-    };
+        precipitation_probability: number[]
+        temperature_2m: number[]
+      }
+    }
 
     const forecast = {
       date: new Date().toISOString(),
@@ -158,65 +167,65 @@ const fetchWeather = createStep({
         (acc, curr) => Math.max(acc, curr),
         0,
       ),
-    };
+    }
+ 
+    return forecast
 
-    return forecast;
   },
 });
 
+// 天気状況に基づいて屋外活動を計画するステップ
+// プランニングエージェントを使用してアクティビティの推奨事項を生成します
 const planActivities = createStep({
   id: "plan-activities",
-  description: "天候に基づいてアクティビティを提案する",
+  description: "天気状況に基づいてアクティビティを提案します",
   inputSchema: forecastSchema,
   outputSchema: z.object({
     activities: z.string(),
   }),
   execute: async ({ inputData, mastra }) => {
-    console.log("mastra", mastra);
-    console.log("planActivities", inputData);
-    const forecast = inputData;
+    const forecast = inputData
 
     if (!forecast) {
       throw new Error("予報データが見つかりません");
     }
-
+ 
     const prompt = `${forecast.location}の以下の天気予報に基づいて、適切なアクティビティを提案してください：
       ${JSON.stringify(forecast, null, 2)}
-      `;
-
-    const agent = mastra?.getAgent("planningAgent");
+      `
+ 
+    const agent = mastra?.getAgent('planningAgent')
     if (!agent) {
       throw new Error("プランニングエージェントが見つかりません");
     }
-
+ 
     const response = await agent.stream([
       {
         role: "user",
         content: prompt,
       },
-    ]);
-
-    let activitiesText = "";
+    ])
+ 
+    let activitiesText = ''
 
     for await (const chunk of response.textStream) {
       process.stdout.write(chunk);
       activitiesText += chunk;
     }
-
-    console.log("planActivities", activitiesText);
-
     return {
       activities: activitiesText,
     };
   },
-});
-
+})
+ 
+// 天気コードを人間が読める状態に変換するヘルパー関数
+// 天気APIからの数値コードを説明的な文字列にマッピングします
 function getWeatherCondition(code: number): string {
   const conditions: Record<number, string> = {
     0: "快晴",
     1: "ほぼ晴れ",
     2: "部分的に曇り",
-    3: "曇天",
+    3: "曇り",
     45: "霧",
     48: "着氷性の霧",
     51: "軽い霧雨",
@@ -233,51 +242,52 @@ function getWeatherCondition(code: number): string {
   return conditions[code] || "不明";
 }
 
+// 悪天候に備えて室内アクティビティを計画するステップ
+// 悪天候の場合の代替室内アクティビティを生成します
 const planIndoorActivities = createStep({
   id: "plan-indoor-activities",
-  description: "天候状況に基づいて屋内アクティビティを提案する",
+  description: "天候状況に基づいて室内アクティビティを提案します",
   inputSchema: forecastSchema,
   outputSchema: z.object({
     activities: z.string(),
   }),
   execute: async ({ inputData, mastra }) => {
-    console.log("planIndoorActivities", inputData);
-    const forecast = inputData;
+    const forecast = inputData
 
     if (!forecast) {
       throw new Error("Forecast data not found");
     }
-
-    const prompt = `雨が降った場合に備えて、${forecast.location}の${forecast.date}のための屋内アクティビティを計画してください`;
-
-    const agent = mastra?.getAgent("planningAgent");
+ 
+    const prompt = `雨が降った場合、${forecast.location}の${forecast.date}のための室内アクティビティを計画してください`
+ 
+    const agent = mastra?.getAgent('planningAgent')
     if (!agent) {
       throw new Error("Planning agent not found");
     }
-
+ 
     const response = await agent.stream([
       {
         role: "user",
         content: prompt,
       },
-    ]);
-
-    let activitiesText = "";
+    ])
+ 
+    let activitiesText = ''
 
     for await (const chunk of response.textStream) {
       activitiesText += chunk;
     }
-
-    console.log("planIndoorActivities", activitiesText);
     return {
       activities: activitiesText,
     };
   },
 });
 
-const sythesizeStep = createStep({
-  id: "sythesize-step",
-  description: "屋内と屋外のアクティビティの結果を統合する",
+// 室内/屋外アクティビティ計画を統合するステップ
+// 両方のオプションを考慮した包括的な計画を作成します
+const synthesizeStep = createStep({
+  id: 'sythesize-step',
+  description: '室内と屋外のアクティビティの結果を統合します',
   inputSchema: z.object({
     "plan-activities": z.object({
       activities: z.string(),
@@ -290,59 +300,61 @@ const sythesizeStep = createStep({
     activities: z.string(),
   }),
   execute: async ({ inputData, mastra }) => {
-    console.log("sythesizeStep", inputData);
-    const indoorActivities = inputData?.["plan-indoor-activities"];
-    const outdoorActivities = inputData?.["plan-activities"];
-
-    const prompt = `屋内アクティビティ:
+    const indoorActivities = inputData?.['plan-indoor-activities']
+    const outdoorActivities = inputData?.['plan-activities']
+ 
+    const prompt = `室内アクティビティ:
       ${indoorActivities?.activities}
-
+ 
       屋外アクティビティ:
       ${outdoorActivities?.activities}
-
-      雨が降る可能性があるので、必要に応じて屋内アクティビティを行う準備をしておいてください。`;
-
-    const agent = mastra?.getAgent("synthesizeAgent");
+ 
+      雨が降る可能性があるので、必要に応じて室内アクティビティを行う準備をしておいてください。`
+ 
+    const agent = mastra?.getAgent('synthesizeAgent')
     if (!agent) {
-      throw new Error("Planning agent not found");
+      throw new Error('Synthesize agent not found')
     }
-
+ 
     const response = await agent.stream([
       {
         role: "user",
         content: prompt,
       },
-    ]);
-
-    let activitiesText = "";
+    ])
+ 
+    let activitiesText = ''
 
     for await (const chunk of response.textStream) {
       process.stdout.write(chunk);
       activitiesText += chunk;
     }
-
+ 
     return {
       activities: activitiesText,
     };
   },
-});
-
-const weatherWorkflow = createWorkflow({
-  id: "plan-both-workflow",
-  inputSchema: forecastSchema,
+})
+ 
+const activityPlanningWorkflow = createWorkflow({
+  id: 'plan-both-workflow',
+  inputSchema: z.object({
+    city: z.string(),
+  }),
   outputSchema: z.object({
     activities: z.string(),
   }),
-  steps: [planActivities, planIndoorActivities, sythesizeStep],
+  steps: [fetchWeather, planActivities, planIndoorActivities, synthesizeStep]
 })
-  // `planActivities`と`planIndoorActivities`を並列で実行
-  // `synthesizeStep`は両方のステップが完了するのを待ってから実行される
+  .then(fetchWeather)
   .parallel([planActivities, planIndoorActivities])
-  .then(sythesizeStep)
-  .commit();
-
-export { weatherWorkflow };
+  .then(synthesizeStep)
+  .commit()
+ 
+export { activityPlanningWorkflow }
 ```
+
+
 
 ## Mastraクラスでエージェントとワークフローのインスタンスを登録する
 
@@ -350,14 +362,17 @@ export { weatherWorkflow };
 これはワークフロー内でエージェントへのアクセスを可能にするために重要です。
 
 ```ts showLineNumbers copy filename="index.ts"
-import { Mastra } from "@mastra/core/mastra";
-import { createLogger } from "@mastra/core/logger";
-import { weatherWorkflow } from "./workflows";
-import { planningAgent, synthesizeAgent } from "./agents";
+import { Mastra } from '@mastra/core/mastra'
+import { createLogger } from '@mastra/core/logger'
+import { activityPlanningWorkflow } from './workflows/parallel-workflow'
+import { planningAgent } from './agents/planning-agent'
+import { synthesizeAgent } from './agents/synthesize-agent'
 
+// Initialize Mastra with required agents and workflows
+// This setup enables agent access within the workflow steps
 const mastra = new Mastra({
   vnext_workflows: {
-    weatherWorkflow,
+    activityPlanningWorkflow,
   },
   agents: {
     planningAgent,
@@ -367,32 +382,23 @@ const mastra = new Mastra({
     name: "Mastra",
     level: "info",
   }),
-});
-
-export { mastra };
+})
+ 
+export { mastra }
 ```
 
-## 天気ワークフローを実行する
+## アクティビティプランニングワークフローを実行する
 
 ここでは、mastraインスタンスから天気ワークフローを取得し、実行を作成して、必要なinputDataで作成した実行を実行します。
 
 ```ts showLineNumbers copy filename="exec.ts"
 import { mastra } from "./";
 
-const workflow = mastra.vnext_getWorkflow("weatherWorkflow");
-const run = workflow.createRun();
+const workflow = mastra.vnext_getWorkflow('activityPlanningWorkflow')
+const run = workflow.createRun()
 
-const result = await run.start({ inputData: { city: "Ibiza" } });
-console.dir(result, { depth: null });
+// Execute the workflow with a specific city
+// This will run through all steps and generate activity recommendations
+const result = await run.start({ inputData: { city: 'Ibiza' } })
+console.dir(result, { depth: null })
 ```
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/parallel-steps"
-  }
-/>

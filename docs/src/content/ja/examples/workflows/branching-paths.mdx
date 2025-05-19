@@ -1,28 +1,28 @@
 ---
-title: "例：分岐パス | ワークフロー | Mastra ドキュメント"
-description: 中間結果に基づいて分岐パスを持つワークフローを作成するためのMastraの使用例。
+title: "例: 分岐パス | ワークフロー | Mastra ドキュメント"
+description: 中間結果に基づいて分岐パスを持つワークフローを作成するために Mastra を使用する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
 # 分岐パス
 
-データを処理する際には、中間結果に基づいて異なるアクションを取る必要があることがよくあります。この例では、ワークフローを作成して別々のパスに分岐し、各パスが前のステップの出力に基づいて異なるステップを実行する方法を示します。
+データを処理する際、中間結果に基づいて異なる処理を行う必要がよくあります。この例では、ワークフローが複数のパスに分岐し、それぞれのパスが前のステップの出力に基づいて異なる処理を実行する方法を示します。
 
-## 制御フローダイアグラム
+## フロー制御ダイアグラム
 
-この例では、ワークフローが別々のパスに分岐し、各パスが前のステップの出力に基づいて異なるステップを実行する方法を示します。
+この例では、ワークフローが分岐し、それぞれのパスが前のステップの出力に基づいて異なる処理を実行する方法を示しています。
 
-こちらが制御フローダイアグラムです：
+フロー制御ダイアグラムは次のとおりです：
 
 <img
   src="/subscribed-chains.png"
-  alt="分岐パスを持つワークフローを示すダイアグラム"
+  alt="分岐パスを持つワークフローのダイアグラム"
 />
 
 ## ステップの作成
 
-ステップを作成し、ワークフローを初期化しましょう。
+まず、ステップを作成し、ワークフローを初期化しましょう。
 
 {/* prettier-ignore */}
 ```ts showLineNumbers copy
@@ -73,11 +73,11 @@ const stepFour = new Step({
   }
 });
 
-// 両方のブランチに依存する新しいステップ
+// New step that depends on both branches
 const finalStep = new Step({
   id: "finalStep",
   execute: async ({ context }) => {
-    // getStepResultを使用して両方のブランチから結果を取得
+    // Get results from both branches using getStepResult
     const stepTwoResult = context.getStepResult<{ isDivisibleByFive: boolean }>("stepTwo");
     const stepFourResult = context.getStepResult<{ isDivisibleByThree: boolean }>("stepFour");
 
@@ -85,14 +85,14 @@ const finalStep = new Step({
     const isDivisibleByThree = stepFourResult?.isDivisibleByThree || false;
 
     return {
-      summary: `数値 ${context.triggerData.inputValue} は倍にすると5で${isDivisibleByFive ? '割り切れます' : '割り切れません'}、倍にして1を加えると3で${isDivisibleByThree ? '割り切れます' : '割り切れません'}.`,
+      summary: `The number ${context.triggerData.inputValue} when doubled ${isDivisibleByFive ? 'is' : 'is not'} divisible by 5, and when doubled and incremented ${isDivisibleByThree ? 'is' : 'is not'} divisible by 3.`,
       isDivisibleByFive,
       isDivisibleByThree
     }
   }
 });
 
-// ワークフローを構築
+// Build the workflow
 const myWorkflow = new Workflow({
   name: "my-workflow",
   triggerSchema: z.object({
@@ -101,23 +101,23 @@ const myWorkflow = new Workflow({
 });
 ```
 
-## 分岐パスとチェーンステップ
+## 分岐パスとステップの連結
 
-次に、分岐パスを使用してワークフローを構成し、複合 `.after([])` 構文を使用してそれらをマージします。
+それでは、分岐パスを持つワークフローを設定し、複合的な `.after([])` 構文を使ってそれらを統合してみましょう。
 
 ```ts showLineNumbers copy
-// 2つの並列ブランチを作成
+// Create two parallel branches
 myWorkflow
-  // 最初のブランチ
+  // First branch
   .step(stepOne)
   .then(stepTwo)
 
-  // 2番目のブランチ
+  // Second branch
   .after(stepOne)
   .step(stepThree)
   .then(stepFour)
 
-  // 複合 after 構文を使用して両方のブランチをマージ
+  // Merge both branches using compound after syntax
   .after([stepTwo, stepFour])
   .step(finalStep)
   .commit();
@@ -126,12 +126,12 @@ const { start } = myWorkflow.createRun();
 
 const result = await start({ triggerData: { inputValue: 3 } });
 console.log(result.steps.finalStep.output.summary);
-// 出力: "The number 3 when doubled is not divisible by 5, and when doubled and incremented is divisible by 3."
+// Output: "The number 3 when doubled is not divisible by 5, and when doubled and incremented is divisible by 3."
 ```
 
 ## 高度なブランチとマージ
 
-複数のブランチとマージポイントを使用して、より複雑なワークフローを作成できます：
+複数のブランチやマージポイントを使って、より複雑なワークフローを作成できます。
 
 ```ts showLineNumbers copy
 const complexWorkflow = new Workflow({
