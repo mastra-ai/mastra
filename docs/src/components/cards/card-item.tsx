@@ -16,7 +16,7 @@ export function CardItem({
             style={{
               textDecoration: "none",
             }}
-            className="flex-1 flex text-center bg-[var(--light-color-surface-3)]  dark:bg-[#1a1a1a]/50 mb-0 border-[0.5px]  rounded-md dark:border-[#343434] border-[var(--light-border-muted)] items-center group justify-center p-2 px-4 text-sm"
+            className="flex-1 flex text-center bg-[var(--light-color-surface-3)] dark:bg-[#1a1a1a]/50 mb-0 border-[0.5px] rounded-md dark:border-[#343434] border-[var(--light-border-muted)] items-center group justify-center p-2 px-4 text-sm"
           >
             {item.title}
           </Link>
