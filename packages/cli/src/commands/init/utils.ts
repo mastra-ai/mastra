@@ -45,7 +45,7 @@ export const getProviderImportAndModelItem = (llmProvider: LLMProvider) => {
 
   if (llmProvider === 'openai') {
     providerImport = `import { openai } from '${getAISDKPackage(llmProvider)}';`;
-    modelItem = `openai('gpt-4o')`;
+    modelItem = `openai('gpt-4o-mini')`;
   } else if (llmProvider === 'anthropic') {
     providerImport = `import { anthropic } from '${getAISDKPackage(llmProvider)}';`;
     modelItem = `anthropic('claude-3-5-sonnet-20241022')`;
