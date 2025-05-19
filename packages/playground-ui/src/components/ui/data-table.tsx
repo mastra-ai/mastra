@@ -55,6 +55,7 @@ export interface DataTableProps<TData, TValue> {
    * text to display when there are no results
    */
   emptyText?: string;
+  onClick?: (row: TData) => void;
 }
 
 export const DataTable = <TData, TValue>({
@@ -67,6 +68,7 @@ export const DataTable = <TData, TValue>({
   selectedRowId,
   isLoading,
   emptyText,
+  onClick,
 }: DataTableProps<TData, TValue>) => {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [{ pageIndex, pageSize }, setPagination] = useState<PaginationState>({
@@ -127,7 +129,7 @@ export const DataTable = <TData, TValue>({
           {isLoading ? (
             <>
               {Array.from({ length: 3 }).map((_, rowIndex) => (
-                <Row key={rowIndex}>
+                <Row key={rowIndex} onClick={() => {}}>
                   {Array.from({ length: columns.length }).map((_, cellIndex) => (
                     <Cell key={`row-${rowIndex}-cell-${cellIndex}`}>
                       <Skeleton className="h-4 w-1/2" />
@@ -138,7 +140,11 @@ export const DataTable = <TData, TValue>({
             </>
           ) : rows?.length > 0 ? (
             rows.map(row => (
-              <Row key={row.id} data-state={(row.getIsSelected() || row.id === selectedRowId) && 'selected'}>
+              <Row
+                key={row.id}
+                data-state={(row.getIsSelected() || row.id === selectedRowId) && 'selected'}
+                onClick={() => onClick?.(row.original)}
+              >
                 {row.getVisibleCells().map(cell => flexRender(cell.column.columnDef.cell, cell.getContext()))}
               </Row>
             ))
