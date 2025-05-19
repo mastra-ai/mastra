@@ -79,7 +79,7 @@ export const ShowcaseGrid = () => {
       title: "Dalus",
       description:
         "AI-Powered Systems Engineering for Mission-Critical Hardware",
-      image: "dalus-io.png",
+      image: "dalus-io.webp",
       link: "https://www.dalus.io/",
     },
     {
