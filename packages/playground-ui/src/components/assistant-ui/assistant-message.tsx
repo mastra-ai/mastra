@@ -5,6 +5,7 @@ import { FC } from 'react';
 import { MarkdownText } from './markdown-text';
 import { TooltipIconButton } from './tooltip-icon-button';
 import { ToolFallback } from '@/components/assistant-ui/tool-fallback';
+import { ImageComponent } from './image-component';
 
 export const AssistantMessage: FC<{ ToolFallback?: ToolCallContentPartComponent }> = ({
   ToolFallback: ToolFallbackCustom,
@@ -16,7 +17,11 @@ export const AssistantMessage: FC<{ ToolFallback?: ToolCallContentPartComponent 
     <MessagePrimitive.Root className="max-w-full">
       <div className="text-icon6 text-ui-lg leading-ui-lg">
         <MessagePrimitive.Content
-          components={{ Text: MarkdownText, tools: { Fallback: ToolFallbackCustom || ToolFallback } }}
+          components={{
+            Text: MarkdownText,
+            tools: { Fallback: ToolFallbackCustom || ToolFallback },
+            Image: ImageComponent,
+          }}
         />
       </div>
 
