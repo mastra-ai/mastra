@@ -51,7 +51,6 @@
   "dependencies": {
     "@clack/prompts": "^0.8.2",
     "@lukeed/uuid": "^2.0.1",
-    "@mastra/core": "workspace:^",
     "@mastra/deployer": "workspace:^",
     "@mastra/mcp": "workspace:^",
     "@opentelemetry/instrumentation": "^0.57.2",
@@ -91,6 +90,10 @@
     "tsup": "^8.4.0",
     "type-fest": "^4.37.0",
     "typescript": "^5.8.2",
-    "vitest": "^3.1.2"
+    "vitest": "^3.1.2",
+    "@mastra/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@mastra/core": "^0.9.4"
   }
 }

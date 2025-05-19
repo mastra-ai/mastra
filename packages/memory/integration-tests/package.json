@@ -30,7 +30,6 @@
   "dependencies": {
     "@ai-sdk/openai": "^1.3.0",
     "@ai-sdk/react": "^1.2.1",
-    "@mastra/core": "workspace:*",
     "@mastra/fastembed": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/libsql": "workspace:*",
@@ -50,6 +49,10 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "typescript": "^5.8.2",
-    "vitest": "^1.6.1"
+    "vitest": "^1.6.1",
+    "@mastra/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@mastra/core": "^0.9.4"
   }
 }
