@@ -1425,7 +1425,7 @@ export class Agent<
         messages: messageObjects,
         tools: convertedTools,
         onStepFinish: (result: any) => {
-          void onStepFinish?.(result);
+          return onStepFinish?.(result);
         },
         maxSteps: maxSteps,
         runId: runIdToUse,
@@ -1464,7 +1464,7 @@ export class Agent<
         messages: messageObjects,
         tools: convertedTools,
         onStepFinish: (result: any) => {
-          void onStepFinish?.(result);
+          return onStepFinish?.(result);
         },
         maxSteps,
         runId: runIdToUse,
@@ -1499,7 +1499,7 @@ export class Agent<
       tools: convertedTools,
       structuredOutput: output,
       onStepFinish: (result: any) => {
-        void onStepFinish?.(result);
+        return onStepFinish?.(result);
       },
       maxSteps,
       runId: runIdToUse,
@@ -1623,7 +1623,7 @@ export class Agent<
         temperature,
         tools: convertedTools,
         onStepFinish: (result: any) => {
-          void onStepFinish?.(result);
+          return onStepFinish?.(result);
         },
         onFinish: async (result: any) => {
           try {
@@ -1644,7 +1644,7 @@ export class Agent<
               runId,
             });
           }
-          void onFinish?.(result);
+          await onFinish?.(result);
         },
         maxSteps,
         runId: runIdToUse,
@@ -1667,7 +1667,7 @@ export class Agent<
         temperature,
         tools: convertedTools,
         onStepFinish: (result: any) => {
-          void onStepFinish?.(result);
+          return onStepFinish?.(result);
         },
         onFinish: async (result: any) => {
           try {
@@ -1688,7 +1688,7 @@ export class Agent<
               runId,
             });
           }
-          void onFinish?.(result);
+          await onFinish?.(result);
         },
         maxSteps,
         runId: runIdToUse,
@@ -1710,7 +1710,7 @@ export class Agent<
       temperature,
       structuredOutput: output,
       onStepFinish: (result: any) => {
-        void onStepFinish?.(result);
+        return onStepFinish?.(result);
       },
       onFinish: async (result: any) => {
         try {
@@ -1731,7 +1731,7 @@ export class Agent<
             runId,
           });
         }
-        void onFinish?.(result);
+        await onFinish?.(result);
       },
       runId: runIdToUse,
       toolChoice,

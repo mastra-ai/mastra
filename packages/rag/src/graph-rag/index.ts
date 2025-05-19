@@ -16,7 +16,7 @@ export interface GraphNode {
   metadata?: Record<string, any>;
 }
 
-interface RankedNode extends GraphNode {
+export interface RankedNode extends GraphNode {
   score: number;
 }
 

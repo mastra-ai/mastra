@@ -1,11 +1,11 @@
 ---
-title: ドキュメントのチャンク化と埋め込み | RAG | Mastra ドキュメント
-description: 効率的な処理と取得のためのMastraにおけるドキュメントのチャンク化と埋め込みに関するガイド。
+title: 文書のチャンキングと埋め込み | RAG | Mastra ドキュメント
+description: Mastraでの効率的な処理と検索のための文書のチャンキングと埋め込みに関するガイド。
 ---
 
 ## ドキュメントのチャンク化と埋め込み
 
-処理の前に、コンテンツからMDocumentインスタンスを作成します。さまざまな形式から初期化できます：
+処理を行う前に、コンテンツからMDocumentインスタンスを作成します。様々な形式から初期化することができます：
 
 ```ts showLineNumbers copy
 const docFromText = MDocument.fromText("Your plain text content...");
@@ -14,19 +14,19 @@ const docFromMarkdown = MDocument.fromMarkdown("# Your Markdown content...");
 const docFromJSON = MDocument.fromJSON(`{ "key": "value" }`);
 ```
 
-## ステップ 1: ドキュメント処理
+## ステップ1：ドキュメント処理
 
-`chunk` を使用して、ドキュメントを管理しやすい部分に分割します。Mastra は、異なるドキュメントタイプに最適化された複数のチャンク戦略をサポートしています:
+`chunk`を使用してドキュメントを管理しやすい部分に分割します。Mastraは異なるドキュメントタイプに最適化された複数のチャンキング戦略をサポートしています：
 
-- `recursive`: コンテンツ構造に基づくスマートな分割
-- `character`: 単純な文字ベースの分割
-- `token`: トークン認識の分割
-- `markdown`: Markdown 認識の分割
-- `html`: HTML 構造認識の分割
-- `json`: JSON 構造認識の分割
-- `latex`: LaTeX 構造認識の分割
+- `recursive`：コンテンツ構造に基づくスマートな分割
+- `character`：シンプルな文字ベースの分割
+- `token`：トークンを考慮した分割
+- `markdown`：Markdownを考慮した分割
+- `html`：HTML構造を考慮した分割
+- `json`：JSON構造を考慮した分割
+- `latex`：LaTeX構造を考慮した分割
 
-以下は、`recursive` 戦略を使用する例です:
+以下は`recursive`戦略を使用する例です：
 
 ```ts showLineNumbers copy
 const chunks = await doc.chunk({
@@ -40,15 +40,15 @@ const chunks = await doc.chunk({
 });
 ```
 
-**注意:** メタデータの抽出には LLM コールが使用される場合があるため、API キーが設定されていることを確認してください。
+**注意：** メタデータ抽出にはLLM呼び出しが使用される場合があるため、APIキーが設定されていることを確認してください。
 
-チャンク戦略については、[チャンクドキュメント](/reference/rag/chunk.mdx)で詳しく説明しています。
+チャンキング戦略についての詳細は[チャンクドキュメント](/reference/rag/chunk.mdx)で説明しています。
 
-## ステップ2：埋め込み生成
+## ステップ 2: 埋め込み生成
 
-チャンクを好みのプロバイダーを使用して埋め込みに変換します。MastraはOpenAIやCohereを含む多くの埋め込みプロバイダーをサポートしています：
+チャンクをお好みのプロバイダーを使って埋め込みに変換します。Mastra は OpenAI や Cohere など、多くの埋め込みプロバイダーをサポートしています。
 
-### OpenAIを使用する
+### OpenAI を使う場合
 
 ```ts showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -60,7 +60,7 @@ const { embeddings } = await embedMany({
 });
 ```
 
-### Cohereを使用する
+### Cohere を使う場合
 
 ```ts showLineNumbers copy
 import { cohere } from "@ai-sdk/cohere";
@@ -72,47 +72,47 @@ const { embeddings } = await embedMany({
 });
 ```
 
-埋め込み関数はベクトル（テキストの意味的な意味を表す数値の配列）を返し、ベクターデータベースでの類似性検索に使用できる状態になります。
+埋め込み関数は、テキストの意味的な内容を表す数値の配列（ベクトル）を返します。これらはベクトルデータベースでの類似検索にすぐに利用できます。
 
-### 埋め込みの次元数の設定
+### 埋め込み次元数の設定
 
-埋め込みモデルは通常、固定された次元数のベクトルを出力します（例：OpenAIの`text-embedding-3-small`では1536次元）。
-一部のモデルではこの次元数を削減することができ、以下のような利点があります：
+埋め込みモデルは通常、固定された次元数（例: OpenAI の `text-embedding-3-small` なら 1536）のベクトルを出力します。
+一部のモデルではこの次元数を減らすことができ、以下のような利点があります:
 
-- ベクターデータベースでの保存要件の削減
-- 類似性検索の計算コストの削減
+- ベクトルデータベースでの保存容量を削減できる
+- 類似検索時の計算コストを抑えられる
 
-以下はサポートされているモデルの例です：
+以下はサポートされているモデルの例です:
 
-OpenAI（text-embedding-3モデル）：
+OpenAI（text-embedding-3 モデル）:
 
 ```ts
 const { embeddings } = await embedMany({
   model: openai.embedding("text-embedding-3-small", {
-    dimensions: 256, // text-embedding-3以降のモデルでのみサポート
+    dimensions: 256, // text-embedding-3 以降でのみサポート
   }),
   values: chunks.map((chunk) => chunk.text),
 });
 ```
 
-Google（text-embedding-004）：
+Google（text-embedding-004）:
 
 ```ts
 const { embeddings } = await embedMany({
   model: google.textEmbeddingModel("text-embedding-004", {
-    outputDimensionality: 256, // 末尾から過剰な値を切り捨てる
+    outputDimensionality: 256, // 末尾から余分な値を切り捨てます
   }),
   values: chunks.map((chunk) => chunk.text),
 });
 ```
 
-### ベクターデータベースの互換性
+### ベクトルデータベースの互換性
 
-埋め込みを保存する際、ベクターデータベースのインデックスは埋め込みモデルの出力サイズに合わせて設定する必要があります。次元数が一致しない場合、エラーやデータ破損が発生する可能性があります。
+埋め込みを保存する際は、ベクトルデータベースのインデックスが埋め込みモデルの出力サイズと一致するように設定する必要があります。次元数が一致しない場合、エラーやデータの破損が発生することがあります。
 
-## 例: 完全なパイプライン
+## 例：完全なパイプライン
 
-こちらは、両方のプロバイダーを使用したドキュメント処理と埋め込み生成の例です:
+以下は、両方のプロバイダーを使用したドキュメント処理と埋め込み生成の例です：
 
 ```ts showLineNumbers copy
 import { embedMany } from "ai";
@@ -157,7 +157,7 @@ await vectorStore.upsert({
 
 ##
 
-さまざまなチャンキング戦略と埋め込み設定の例については、以下を参照してください：
+異なるチャンキング戦略と埋め込み設定の例については、以下を参照してください：
 
 - [チャンクサイズの調整](/reference/rag/chunk.mdx#adjust-chunk-size)
 - [チャンク区切り文字の調整](/reference/rag/chunk.mdx#adjust-chunk-delimiters)

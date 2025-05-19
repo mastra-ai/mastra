@@ -1,13 +1,13 @@
 ---
 title: "リファレンス: Workflow.step() | ワークフロー | Mastra ドキュメント"
-description: ワークフロー内の `.step()` メソッドに関するドキュメントで、ワークフローに新しいステップを追加します。
+description: ワークフローに新しいステップを追加する`.step()`メソッドのドキュメント。
 ---
 
 # Workflow.step()
 
 `.step()` メソッドは、ワークフローに新しいステップを追加し、オプションでその変数と実行条件を設定します。
 
-## 使用法
+## 使用方法
 
 ```typescript
 workflow.step({
@@ -21,7 +21,7 @@ workflow.step({
 });
 ```
 
-## パラメーター
+## パラメータ
 
 <PropertiesTable
   content={[
@@ -79,7 +79,7 @@ workflow.step({
     {
       name: "when",
       type: "StepCondition",
-      description: "ステップを実行するために満たすべき条件",
+      description: "ステップを実行するために満たす必要がある条件",
       isOptional: true,
     },
   ]}
@@ -87,7 +87,7 @@ workflow.step({
 
 ## 関連
 
-- [ステップインスタンスの基本的な使い方](../../docs/workflows/steps.mdx)
+- [ステップインスタンスの基本的な使用方法](../../docs/workflows/steps.mdx)
 - [ステップクラスリファレンス](./step-class.mdx)
 - [ワークフロークラスリファレンス](./workflow.mdx)
 - [制御フローガイド](../../docs/workflows/control-flow.mdx)

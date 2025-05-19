@@ -3,10 +3,18 @@ import type { ToolsInput } from '@mastra/core/agent';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
 export type OpenAIExecuteFunction = (args: any) => Promise<any>;
+type ToolDefinition = {
+  type: 'function';
+  name: string;
+  description: string;
+  parameters: {
+    [key: string]: any;
+  };
+};
 
 type TTools = ToolsInput;
 export const transformTools = (tools?: TTools) => {
-  const openaiTools = [];
+  const openaiTools: { openaiTool: ToolDefinition; execute: OpenAIExecuteFunction }[] = [];
   for (const [name, tool] of Object.entries(tools || {})) {
     let parameters: { [key: string]: any };
 
@@ -28,7 +36,7 @@ export const transformTools = (tools?: TTools) => {
       console.warn(`Tool ${name} has neither inputSchema nor parameters, skipping`);
       continue;
     }
-    const openaiTool = {
+    const openaiTool: ToolDefinition = {
       type: 'function',
       name,
       description: tool.description || `Tool: ${name}`,

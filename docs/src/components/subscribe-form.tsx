@@ -1,14 +1,6 @@
 "use client";
 import { useForm } from "react-hook-form";
 
-import { cn } from "@/lib/utils";
-import Spinner from "@/components/ui/spinner";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { AlertCircle } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
-import { useState } from "react";
-import { toast } from "sonner";
-import { z } from "zod";
 import {
   Form,
   FormControl,
@@ -17,8 +9,15 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/forms";
-import { useTheme } from "nextra-theme-docs";
+import Spinner from "@/components/ui/spinner";
+import { cn } from "@/lib/utils";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { T, Var } from "gt-next/client";
+import { AlertCircle } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { useState } from "react";
+import { toast } from "sonner";
+import { z } from "zod";
 
 export const formSchema = z.object({
   email: z.string().email(),
@@ -27,7 +26,6 @@ export const formSchema = z.object({
 const buttonCopy = ({
   idleIcon,
   successIcon,
-  isDark,
 }: {
   idleIcon?: React.ReactNode;
   successIcon?: React.ReactNode;
@@ -35,10 +33,7 @@ const buttonCopy = ({
 }) => ({
   idle: idleIcon ? idleIcon : "Subscribe",
   loading: (
-    <Spinner
-      className="w-4 h-4 !duration-300"
-      color={isDark ? "#000" : "#fff"}
-    />
+    <Spinner className="w-4 h-4 !duration-300 dark:text-white text-black" />
   ),
   success: successIcon ? successIcon : "Subscribed!",
 });
@@ -70,7 +65,6 @@ export const SubscribeForm = ({
     },
     reValidateMode: "onSubmit",
   });
-  const { theme } = useTheme();
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     if (buttonState === "success") return;
@@ -153,7 +147,7 @@ export const SubscribeForm = ({
                   placeholder={placeholder || "you@example.com"}
                   {...field}
                   className={cn(
-                    "bg-transparent placeholder:text-text-[#939393] text-sm placeholder:text-sm flex-1 focus:outline-none focus:ring-1 h-[35px] focus:ring-[hsl(var(--tag-green))] w-full py-[0.56rem] px-4 dark:border-[#343434] border rounded-md",
+                    "bg-transparent placeholder:text-[#939393] text-sm placeholder:text-sm flex-1 focus:outline-none focus:ring-1 h-[35px] focus:ring-[hsl(var(--tag-green))] w-full py-[0.56rem] px-4 dark:border-[#343434] border border-[var(--light-border-muted)] rounded-md",
                     inputClassName,
                   )}
                 />
@@ -170,7 +164,7 @@ export const SubscribeForm = ({
 
         <button
           className={cn(
-            "dark:bg-[#121212] bg-[#2a2a2a] w-full rounded-md hover:opacity-90 h-[32px] justify-center flex items-center px-4 text-white dark:text-white text-[14px]",
+            "dark:bg-[#121212] bg-[var(--light-color-surface-3)] w-full rounded-md hover:opacity-90 h-[32px] justify-center flex items-center px-4 text-[var(--light-color-text-5)] dark:text-white text-[14px]",
             buttonClassName,
           )}
           onClick={(e) => {
@@ -191,7 +185,6 @@ export const SubscribeForm = ({
                 buttonCopy({
                   idleIcon,
                   successIcon,
-                  isDark: theme === "dark",
                 })[buttonState as keyof typeof buttonCopy]
               }
             </motion.span>

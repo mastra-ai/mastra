@@ -79,7 +79,7 @@ const myStep = createStep({
 `execute`関数は以下を含むコンテキストオブジェクトを受け取ります：
 
 - `inputData`: inputSchemaに一致する入力データ
-- `resumeData`: 一時停止状態からステップを再開する際のresumeSchemaに一致する再開データ。ステップが再開される場合にのみ存在します。
+- `resumeData`: 一時停止状態からステップを再開する際に、resumeSchemaに一致する再開データ。ステップが再開される場合にのみ存在します。
 - `mastra`: mastraサービス（エージェント、ツールなど）へのアクセス
 - `getStepResult`: 他のステップの結果にアクセスするための関数
 - `getInitData`: どのステップでもワークフローの初期入力データにアクセスするための関数
@@ -99,7 +99,11 @@ const myWorkflow = createWorkflow({
     result: z.string(),
   }),
   steps: [step1, step2, step3], // Declare steps used in this workflow
-});
+})
+  .then(step1)
+  .then(step2)
+  .then(step3)
+  .commit();
 
 const mastra = new Mastra({
   vnext_workflows: {
@@ -119,7 +123,10 @@ const workflow = createWorkflow({
   inputSchema: z.object({}),
   outputSchema: z.object({}),
   steps: [step1, step2], // TypeScript knows these steps exist
-});
+})
+  .then(step1)
+  .then(step2)
+  .commit();
 
 const result = await workflow.createRun().start({ inputData: {} });
 if (result.status === "success") {

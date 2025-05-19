@@ -18,7 +18,7 @@ export async function getCreateVersionTag(): Promise<string | undefined> {
     const json = await fsExtra.readJSON(pkgPath);
 
     const { stdout } = await execa('npm', ['dist-tag', 'create-mastra']);
-    const tagLine = stdout.split('\n').find(distLine => distLine.includes(`: ${json.version}`));
+    const tagLine = stdout.split('\n').find(distLine => distLine.endsWith(`: ${json.version}`));
     const tag = tagLine ? tagLine.split(':')[0].trim() : 'latest';
 
     return tag;

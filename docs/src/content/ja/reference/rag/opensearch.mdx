@@ -1,0 +1,200 @@
+---
+title: "リファレンス: OpenSearch ベクトルストア | ベクトルデータベース | RAG | Mastra ドキュメント"
+description: Mastraの OpenSearchVector クラスに関するドキュメント。OpenSearchを使用したベクトル検索を提供します。
+---
+
+# OpenSearch ベクトルストア
+
+OpenSearchVectorクラスは、[OpenSearch](https://opensearch.org/)を使用してベクトル検索を提供します。OpenSearchは強力なオープンソースの検索・分析エンジンです。このクラスはOpenSearchのk-NN機能を活用して、効率的なベクトル類似性検索を実行します。
+
+## コンストラクタオプション
+
+<PropertiesTable
+  content={[
+    {
+      name: "url",
+      type: "string",
+      description: "OpenSearch接続URL（例：'http://localhost:9200'）",
+    },
+  ]}
+/>
+
+## メソッド
+
+### createIndex()
+
+指定された設定で新しいインデックスを作成します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "作成するインデックスの名前",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "インデックスに格納されるベクトルの次元",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      description: "ベクトル類似性に使用する距離メトリック",
+      defaultValue: "'cosine'",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### listIndexes()
+
+OpenSearchインスタンス内のすべてのインデックスを一覧表示します。
+
+戻り値: `Promise<string[]>`
+
+### describeIndex()
+
+インデックスに関する情報を取得します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "説明するインデックスの名前",
+    },
+  ]}
+/>
+
+### deleteIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "削除するインデックスの名前",
+    },
+  ]}
+/>
+
+### upsert()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "ベクトルをアップサートするインデックスの名前",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "挿入するベクトル埋め込みの配列",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      description: "各ベクトルに対応するメタデータオブジェクトの配列",
+      isOptional: true,
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      description:
+        "ベクトルのIDの任意の配列。提供されない場合、ランダムなIDが生成されます",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### query()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "クエリを実行するインデックスの名前",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "類似ベクトルを検索するためのクエリベクトル",
+    },
+    {
+      name: "topK",
+      type: "number",
+      description: "返す結果の数",
+      defaultValue: "10",
+      isOptional: true,
+    },
+    {
+      name: "filter",
+      type: "VectorFilter",
+      description:
+        "クエリに適用するオプションのフィルター（MongoDBスタイルのクエリ構文）",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### updateVector()
+
+IDによって特定のベクトルエントリを新しいベクトルデータやメタデータで更新します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "ベクトルを更新するインデックスの名前",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "更新するベクトルのID",
+    },
+    {
+      name: "update",
+      type: "object",
+      description: "ベクトルやメタデータを含む更新データ",
+    },
+    {
+      name: "update.vector",
+      type: "number[]",
+      description: "新しいベクトル埋め込み",
+      isOptional: true,
+    },
+    {
+      name: "update.metadata",
+      type: "Record<string, any>",
+      description: "新しいメタデータ",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### deleteVector()
+
+インデックスから特定のベクトルエントリをIDによって削除します。
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "ベクトルを削除するインデックスの名前",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      description: "削除するベクトルIDの配列",
+    },
+  ]}
+/>
+
+## 関連
+
+- [メタデータフィルター](./metadata-filters)

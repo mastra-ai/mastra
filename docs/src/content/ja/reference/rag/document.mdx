@@ -1,11 +1,11 @@
 ---
 title: "リファレンス: MDocument | ドキュメント処理 | RAG | Mastra Docs"
-description: MastraのMDocumentクラスのドキュメントで、ドキュメントの処理とチャンク化を扱います。
+description: ドキュメント処理とチャンク化を担当するMastraのMDocumentクラスのドキュメントです。
 ---
 
 # MDocument
 
-MDocumentクラスはRAGアプリケーションのためにドキュメントを処理します。主なメソッドは`.chunk()`と`.extractMetadata()`です。
+MDocumentクラスは、RAGアプリケーション向けにドキュメントを処理します。主なメソッドは `.chunk()` と `.extractMetadata()` です。
 
 ## コンストラクタ
 
@@ -20,7 +20,7 @@ MDocumentクラスはRAGアプリケーションのためにドキュメント�
     {
       name: "type",
       type: "'text' | 'html' | 'markdown' | 'json' | 'latex'",
-      description: "ドキュメントコンテンツのタイプ",
+      description: "ドキュメントコンテンツの種類",
     },
   ]}
 />
@@ -29,7 +29,7 @@ MDocumentクラスはRAGアプリケーションのためにドキュメント�
 
 ### fromText()
 
-プレーンテキストコンテンツからドキュメントを作成します。
+プレーンテキストの内容からドキュメントを作成します。
 
 ```typescript
 static fromText(text: string, metadata?: Record<string, any>): MDocument
@@ -69,11 +69,11 @@ static fromJSON(json: string, metadata?: Record<string, any>): MDocument
 async chunk(params?: ChunkParams): Promise<Chunk[]>
 ```
 
-詳細なオプションについては、[chunk() リファレンス](./chunk)を参照してください。
+詳細なオプションについては、[chunk() リファレンス](./chunk) を参照してください。
 
 ### getDocs()
 
-処理されたドキュメントチャンクの配列を返します。
+処理済みドキュメントチャンクの配列を返します。
 
 ```typescript
 getDocs(): Chunk[]
@@ -97,7 +97,7 @@ getMetadata(): Record<string, any>[]
 
 ### extractMetadata()
 
-指定された抽出器を使用してメタデータを抽出します。詳細については、[ExtractParams リファレンス](./extract-params)を参照してください。
+指定したエクストラクターを使用してメタデータを抽出します。詳細は [ExtractParams リファレンス](./extract-params) を参照してください。
 
 ```typescript
 async extractMetadata(params: ExtractParams): Promise<MDocument>
