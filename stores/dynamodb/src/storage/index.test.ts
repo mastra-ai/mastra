@@ -1,3 +1,5 @@
+import { spawn } from 'child_process';
+import { randomUUID } from 'crypto';
 import {
   BatchWriteItemCommand,
   CreateTableCommand,
@@ -11,8 +13,6 @@ import {
 } from '@aws-sdk/client-dynamodb';
 import type { MessageType, StorageThreadType, WorkflowRun, WorkflowRunState } from '@mastra/core';
 import { TABLE_EVALS, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
-import { spawn } from 'child_process';
-import { randomUUID } from 'crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
 import { DynamoDBStore } from '..';
 
