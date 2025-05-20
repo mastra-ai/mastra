@@ -6,9 +6,8 @@ import { z } from 'zod';
 
 import { DynamicForm } from '@/components/dynamic-form';
 import { resolveSerializedZodOutput } from '@/components/dynamic-form/utils';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/ds/components/Button';
 import { CodeBlockDemo } from '@/components/ui/code-block';
-import { CopyButton } from '@/components/ui/copy-button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
@@ -17,6 +16,10 @@ import { useExecuteWorkflow, useWatchWorkflow, useResumeWorkflow, useWorkflow } 
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { toast } from 'sonner';
 import { usePlaygroundStore } from '@/store/playground-store';
+import { Icon } from '@/ds/icons';
+import { Txt } from '@/ds/components/Txt';
+import { WorkflowStatus } from './workflow-status';
+import { WorkflowResult } from './workflow-result';
 interface SuspendedStep {
   stepId: string;
   runId: string;
@@ -126,89 +129,50 @@ export function WorkflowTrigger({
 
   const { sanitizedOutput, ...restResult } = result ?? {};
 
+  const hasWorkflowActivePaths = Object.values(workflowActivePaths).length > 0;
+
   return (
-    <ScrollArea className="h-[calc(100vh-126px)] pt-2 px-4 pb-4 text-xs w-full">
+    <div className="h-full px-5 pt-3 pb-12">
       <div className="space-y-4">
+        {isResumingWorkflow && (
+          <div className="py-2 px-5 flex items-center gap-2 bg-surface5 -mx-5 -mt-5 border-b-sm border-border1">
+            <Icon>
+              <Loader2 className="animate-spin text-icon6" />
+            </Icon>
+            <Txt>Resuming workflow</Txt>
+          </div>
+        )}
+
         {!isSuspendedSteps && (
           <>
             {zodInputSchema ? (
-              <div className="flex flex-col">
-                <div className="flex items-center justify-between w-full">
-                  <Text variant="secondary" className="px-4 text-mastra-el-3" size="xs">
-                    Input
-                  </Text>
-                  {isResumingWorkflow ? (
-                    <span className="flex items-center gap-1">
-                      <Loader2 className="w-3 h-3 animate-spin text-mastra-el-accent" /> Resuming workflow
-                    </span>
-                  ) : (
-                    <></>
-                  )}
-                </div>
-                <DynamicForm
-                  schema={zodInputSchema}
-                  defaultValues={payload}
-                  isSubmitLoading={isWatchingWorkflow}
-                  onSubmit={data => {
-                    setPayload(data);
-                    handleExecuteWorkflow(data);
-                  }}
-                />
-              </div>
+              <DynamicForm
+                schema={zodInputSchema}
+                defaultValues={payload}
+                isSubmitLoading={isWatchingWorkflow}
+                submitButtonLabel="Run"
+                onSubmit={data => {
+                  setPayload(data);
+                  handleExecuteWorkflow(data);
+                }}
+              />
             ) : (
-              <div className="px-4 space-y-4">
-                {isResumingWorkflow ? (
-                  <span className="flex items-center gap-1">
-                    <Loader2 className="w-3 h-3 animate-spin text-mastra-el-accent" /> Resuming workflow
-                  </span>
+              <Button
+                className="w-full"
+                variant="light"
+                disabled={isRunning}
+                onClick={() => handleExecuteWorkflow(null)}
+              >
+                {isRunning ? (
+                  <Icon>
+                    <Loader2 className="animate-spin" />
+                  </Icon>
                 ) : (
-                  <></>
+                  'Trigger'
                 )}
-                <Button className="w-full" disabled={isRunning} onClick={() => handleExecuteWorkflow(null)}>
-                  {isRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Trigger'}
-                </Button>
-              </div>
+              </Button>
             )}
           </>
-        )}
-
-        {Object.values(workflowActivePaths).length > 0 && (
-          <div className="flex flex-col gap-2">
-            <Text variant="secondary" className="px-4 text-mastra-el-3" size="xs">
-              Status
-            </Text>
-            <div className="px-4 flex flex-col gap-4">
-              {Object.entries(workflowActivePaths)
-                ?.filter(([key, _]) => key !== 'input' && !key.endsWith('.input'))
-                ?.map(([stepId, { status }]) => {
-                  const statusIcon =
-                    status === 'success' ? (
-                      <div className="w-2 h-2 bg-green-500 rounded-full" />
-                    ) : status === 'failed' ? (
-                      <div className="w-2 h-2 bg-red-500 rounded-full" />
-                    ) : (
-                      <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
-                    );
-                  return (
-                    <div className="flex flex-col gap-1">
-                      <div key={stepId} className="flex flex-col overflow-hidden rounded-md border">
-                        <div className={`flex items-center justify-between p-3`}>
-                          <Text variant="secondary" className="text-mastra-el-3" size="xs">
-                            {stepId.charAt(0).toUpperCase() + stepId.slice(1)}
-                          </Text>
-                          <span className="flex items-center gap-2 capitalize">
-                            <Text variant="secondary" className="text-mastra-el-3" size="xs">
-                              {statusIcon}
-                            </Text>
-                            {status}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-            </div>
-          </div>
         )}
 
         {!isWatchingWorkflow &&
@@ -249,25 +213,31 @@ export function WorkflowTrigger({
             );
           })}
 
-        {result && (
-          <div className="flex flex-col group relative">
-            <Text variant="secondary" className="px-4 text-mastra-el-3" size="xs">
-              Output
-            </Text>
+        {hasWorkflowActivePaths && (
+          <>
+            <hr className="border-border1 border-sm my-5" />
             <div className="flex flex-col gap-2">
-              <CopyButton
-                classname="absolute z-40 w-8 h-8 p-0 transition-opacity duration-150 ease-in-out opacity-0 top-4 right-4 group-hover:opacity-100"
-                content={JSON.stringify(restResult, null, 2)}
-              />
+              <Text variant="secondary" className="px-4 text-mastra-el-3" size="xs">
+                Status
+              </Text>
+              <div className="px-4 flex flex-col gap-4">
+                {Object.entries(workflowActivePaths)
+                  ?.filter(([key, _]) => key !== 'input' && !key.endsWith('.input'))
+                  ?.map(([stepId, { status }]) => {
+                    return <WorkflowStatus stepId={stepId} status={status} />;
+                  })}
+              </div>
             </div>
-            <CodeBlockDemo
-              className="w-full overflow-x-auto"
-              code={sanitizedOutput || JSON.stringify(restResult, null, 2)}
-              language="json"
-            />
-          </div>
+          </>
+        )}
+
+        {result && (
+          <>
+            <hr className="border-border1 border-sm my-5" />
+            <WorkflowResult sanitizedJsonResult={sanitizedOutput} jsonResult={JSON.stringify(restResult, null, 2)} />
+          </>
         )}
       </div>
-    </ScrollArea>
+    </div>
   );
 }

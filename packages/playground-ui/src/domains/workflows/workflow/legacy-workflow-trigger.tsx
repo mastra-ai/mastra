@@ -18,7 +18,7 @@ import { WorkflowRunContext } from '../context/workflow-run-context';
 import { toast } from 'sonner';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons';
-import { WorkflowStatus } from './workflow-status';
+import { LegacyWorkflowStatus } from './legacy-workflow-status';
 
 import { WorkflowResult } from './workflow-result';
 
@@ -226,7 +226,7 @@ export function LegacyWorkflowTrigger({
                 return (
                   <div className="flex flex-col gap-1" key={stepId}>
                     {stepPath?.map((path, idx) => {
-                      return <WorkflowStatus stepId={stepId} pathStatus={pathStatus} path={path} key={idx} />;
+                      return <LegacyWorkflowStatus stepId={stepId} pathStatus={pathStatus} path={path} key={idx} />;
                     })}
                   </div>
                 );
@@ -238,7 +238,7 @@ export function LegacyWorkflowTrigger({
         {result && (
           <>
             <hr className="border-border1 border-sm my-5" />
-            <WorkflowResult jsonResult={JSON.stringify(restResult, null, 2)} />
+            <WorkflowResult sanitizedJsonResult={sanitizedOutput} jsonResult={JSON.stringify(restResult, null, 2)} />
           </>
         )}
       </div>

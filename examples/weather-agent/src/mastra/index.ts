@@ -5,5 +5,5 @@ import { weatherWorkflow } from './workflows';
 
 export const mastra = new Mastra({
   agents: { weatherAgent },
-  workflows: { weatherWorkflow },
+  legacy_workflows: { weatherWorkflow },
 });
