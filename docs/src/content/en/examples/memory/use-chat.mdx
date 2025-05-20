@@ -51,8 +51,9 @@ export function Chat({ threadId, resourceId }) {
 // app/api/chat/route.ts (Next.js Example)
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
 import { openai } from "@ai-sdk/openai";
-import { CoreMessage } from "@mastra/core"; // Import CoreMessage
+import { CoreMessage } from "@mastra/core";
 
 const agent = new Agent({
   name: "ChatAgent",

@@ -36,7 +36,7 @@ export class MockStore extends MastraStorage {
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
     this.logger.debug(`MockStore: batchInsert called for ${tableName} with ${records.length} records`);
     for (const record of records) {
-      this.data[tableName][record.run_id] = record;
+      this.data[tableName][record.run_id] = JSON.parse(JSON.stringify(record)); // simple clone - fine for mocking
     }
   }
 
