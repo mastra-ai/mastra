@@ -103,10 +103,14 @@ MCP servers can be discovered through registries. Here’s how to connect to som
 
 <Tabs items={["Ampersand","mcp.run", "Composio.dev", "Smithery.ai"]}>
   <Tabs.Tab>
-    [Ampersand](https://withampersand.com?utm_source=mastra-docs) offers a single multi-tenant [MCP Server](https://www.npmjs.com/package/@amp-labs/mcp-server) that allows you to connect your agent to 150+ B2B Integrations. 
-    
-    Sign up at [Ampersand](https://withampersand.com?utm_source=mastra-docs) to get your `AMPERSAND_PROJECT_ID`, `AMPERSAND_INTEGRATION_ID` & set the `groupRef` to the unique customerId inside your application. 
 
+    [Ampersand](https://withampersand.com?utm_source=mastra-docs) is deep integration platform for AI developers to add enterprise-grade CRM & GTM integrations with your agents. 
+
+    It offers a single multi-tenant [MCP Server](https://www.npmjs.com/package/@amp-labs/mcp-server) that allows you to connect your agent to 150+ B2B Integrations. 
+    
+    Sign up at [Ampersand](https://withampersand.com?utm_source=mastra-docs) to get your `AMPERSAND_PROJECT_ID`, `AMPERSAND_INTEGRATION_ID_OR_NAME` & set the `groupRef` to the unique customerId inside your application. 
+
+    To check out how Ampersand works, check out their [documentation](https://docs.withampersand.com/)
 
     ```typescript
 
@@ -114,7 +118,12 @@ MCP servers can be discovered through registries. Here’s how to connect to som
     export const mcp = new MCPClient({
         servers: {
         "@amp-labs/mcp-server": {
-          "url": "https://mcp.withampersand.com/sse?apiKey=<AMPERSAND_API_KEY>&project=<AMPERSAND_PROJECT_ID>&integrationId=<AMPERSAND_INTEGRATION_ID>&groupRef=<AMPERSAND_GROUP_REF>"
+          "url": `https://mcp.withampersand.com/sse?${new URLSearchParams({
+            apiKey: process.env.AMPERSAND_API_KEY,
+            project: process.env.AMPERSAND_PROJECT_ID,
+            integrationId: process.env.AMPERSAND_INTEGRATION_ID_OR_NAME,
+            groupRef: process.env.AMPERSAND_GROUP_REF
+          })}`
         }
       }
     });
@@ -139,7 +148,7 @@ MCP servers can be discovered through registries. Here’s how to connect to som
               "--project",
               process.env.AMPERSAND_PROJECT_ID,
               "--integrationId",
-              process.env.AMPERSAND_INTEGRATION_ID,
+              process.env.AMPERSAND_INTEGRATION_ID_OR_NAME,
               "--groupRef",
               process.env.AMPERSAND_GROUP_REF, // optional
             ],
