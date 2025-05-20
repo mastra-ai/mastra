@@ -541,7 +541,7 @@ describe('ClickhouseStore', () => {
       expect(runs[1]!.workflowName).toBe(workflowName1);
       const firstSnapshot = runs[0]!.snapshot;
       const secondSnapshot = runs[1]!.snapshot;
-      checkWorkflowSnapshot(firstSnapshot, stepId2, 'waiting');
+      checkWorkflowSnapshot(firstSnapshot, stepId2, 'suspended');
       checkWorkflowSnapshot(secondSnapshot, stepId1, 'success');
     });
 
@@ -627,8 +627,8 @@ describe('ClickhouseStore', () => {
       expect(runs[1]!.workflowName).toBe(workflowName2);
       const firstSnapshot = runs[0]!.snapshot;
       const secondSnapshot = runs[1]!.snapshot;
-      checkWorkflowSnapshot(firstSnapshot, stepId3, 'skipped');
-      checkWorkflowSnapshot(secondSnapshot, stepId2, 'waiting');
+      checkWorkflowSnapshot(firstSnapshot, stepId3, 'failed');
+      checkWorkflowSnapshot(secondSnapshot, stepId2, 'suspended');
     });
 
     it('handles pagination', async () => {
@@ -669,8 +669,8 @@ describe('ClickhouseStore', () => {
       expect(page1.runs[1]!.workflowName).toBe(workflowName2);
       const firstSnapshot = page1.runs[0]!.snapshot;
       const secondSnapshot = page1.runs[1]!.snapshot;
-      checkWorkflowSnapshot(firstSnapshot, stepId3, 'skipped');
-      checkWorkflowSnapshot(secondSnapshot, stepId2, 'waiting');
+      checkWorkflowSnapshot(firstSnapshot, stepId3, 'failed');
+      checkWorkflowSnapshot(secondSnapshot, stepId2, 'suspended');
 
       // Get second page
       const page2 = await store.getWorkflowRuns({

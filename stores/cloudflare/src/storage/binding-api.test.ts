@@ -972,7 +972,7 @@ describe('CloudflareStore Workers Binding', () => {
       if (typeof snapshot === 'string') {
         throw new Error('Expected WorkflowRunState, got string');
       }
-      expect(snapshot.context?.steps[stepId1]?.status).toBe('success');
+      expect(snapshot.context?.[stepId1]?.status).toBe('success');
     });
 
     it('filters by date range', async () => {
