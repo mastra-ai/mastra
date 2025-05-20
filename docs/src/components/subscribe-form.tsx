@@ -1,6 +1,5 @@
 "use client";
 import { useForm } from "react-hook-form";
-
 import {
   Form,
   FormControl,
@@ -16,7 +15,7 @@ import { T, Var } from "gt-next/client";
 import { AlertCircle } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
-import { toast } from "sonner";
+import { toast } from "./custom-toast";
 import { z } from "zod";
 
 export const formSchema = z.object({
@@ -71,10 +70,12 @@ export const SubscribeForm = ({
 
     const sanitizedEmail = values.email.trim();
     if (!sanitizedEmail) {
-      return toast.error("Please enter an email");
+      return toast({
+        title: "Error Validating Email",
+        description: "Please enter an email",
+      });
     }
     setButtonState("loading");
-
     try {
       const response = await fetch(
         `https://api.hsforms.com/submissions/v3/integration/submit/${process.env.NEXT_PUBLIC_HS_PORTAL_ID}/${process.env.NEXT_PUBLIC_HS_FORM_GUID}`,
@@ -107,7 +108,10 @@ export const SubscribeForm = ({
       await new Promise((resolve) => setTimeout(resolve, 1750));
     } catch (error) {
       console.error("Error submitting form:", error);
-      toast.error("Error submitting form");
+      toast({
+        title: "Error Submitting Form",
+        description: "Please try again",
+      });
       setButtonState("idle");
     } finally {
       setButtonState("idle");
