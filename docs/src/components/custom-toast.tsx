@@ -13,7 +13,7 @@ function Toast(props: ToastProps) {
   const { title, description, id } = props;
 
   return (
-    <div className="flex rounded-md ring-1 ring-black/5 dark:ring-borders-2 w-full md:max-w-[364px] items-center p-4">
+    <div className="flex rounded-md justify-between ring-1 ring-black/5 dark:ring-borders-2 w-full md:max-w-[364px] items-start p-4">
       <div className="flex items-center rounded-md">
         <div className="w-full">
           <p className="text-sm font-medium text-gray-900 dark:text-white">
@@ -24,9 +24,10 @@ function Toast(props: ToastProps) {
           </p>
         </div>
       </div>
-      <div className="absolute top-2 right-4 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:outline-hidden">
+      <div>
         <button
-          className="bg-[var(--color-green-accent-2)]/15 dark:bg-transparent text-black dark:text-white  size-5 grid place-items-center text-sm rounded-full"
+          type="button"
+          className="bg-[var(--color-green-accent-2)]/15 focus:outline-0 focus:ring-accent-green focus:ring-1 dark:bg-transparent text-black dark:text-white  size-5 grid place-items-center text-sm rounded-full"
           onClick={() => {
             sonnerToast.dismiss(id);
           }}
