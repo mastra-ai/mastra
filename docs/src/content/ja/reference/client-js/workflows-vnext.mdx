@@ -1,0 +1,153 @@
+---
+title: Mastra クライアントワークフロー (vNext) API
+description: client-js SDKを使用してMastraで自動化されたvNextワークフローを操作および実行する方法を学びます。
+---
+
+# ワークフロー（vNext）API
+
+ワークフロー（vNext）APIは、Mastraで自動化されたvNextワークフローを操作および実行するためのメソッドを提供します。
+
+## Mastraクライアントの初期化
+
+```typescript
+import { MastraClient } from "@mastra/client-js";
+
+const client = new MastraClient();
+```
+
+## vNextワークフローの取得
+
+利用可能なすべてのvNextワークフローのリストを取得します：
+
+```typescript
+const workflows = await client.getVNextWorkflows();
+```
+
+## 特定のvNextワークフローの操作
+
+特定のvNextワークフローのインスタンスを取得します：
+
+```typescript
+const workflow = client.getVNextWorkflow("workflow-id");
+```
+
+## vNext ワークフローメソッド
+
+### vNext ワークフローの詳細を取得
+
+vNext ワークフローの詳細情報を取得します：
+
+```typescript
+const details = await workflow.details();
+```
+
+### vNext ワークフロー実行を非同期で開始
+
+triggerData を使って vNext ワークフロー実行を開始し、実行結果を待ちます：
+
+```typescript
+const run = workflow.createRun();
+
+const result = await workflow.startAsync({
+  runId: run.runId,
+  inputData: {
+    param1: "value1",
+    param2: "value2",
+  },
+});
+```
+
+### vNext ワークフロー実行を非同期で再開
+
+一時停止中の vNext ワークフローステップを再開し、実行結果を待ちます：
+
+```typescript
+const run = workflow.createRun();
+
+const result = await workflow.resumeAsync({
+  runId: run.runId,
+  step: "step-id",
+  resumeData: { key: "value" },
+});
+```
+
+### vNext ワークフローの監視
+
+vNext ワークフローの遷移を監視します
+
+```typescript
+try {
+  // Get workflow instance
+  const workflow = client.getVNextWorkflow("workflow-id");
+
+  // Create a workflow run
+  const run = workflow.createRun();
+
+  // Watch workflow run
+  workflow.watch({ runId: run.runId }, (record) => {
+    // Every new record is the latest transition state of the workflow run
+
+    console.log({
+      currentStep: record.payload.currentStep,
+      workflowState: record.payload.workflowState,
+      eventTimestamp: record.eventTimestamp,
+      runId: record.runId,
+    });
+  });
+
+  // Start workflow run
+  workflow.start({
+    runId: run.runId,
+    inputData: {
+      city: "New York",
+    },
+  });
+} catch (e) {
+  console.error(e);
+}
+```
+
+### vNext ワークフローの再開
+
+vNext ワークフロー実行を再開し、vNext ワークフローステップの遷移を監視します
+
+```typescript
+try {
+  // Get workflow instance
+  const workflow = client.getVNextWorkflow("workflow-id");
+
+  //To resume a workflow run, when a step is suspended
+  const run = workflow.createRun({ runId: prevRunId });
+
+  //Watch run
+  workflow.watch({ runId: run.runId }, (record) => {
+    // Every new record is the latest transition state of the workflow run
+
+    console.log({
+      currentStep: record.payload.currentStep,
+      workflowState: record.payload.workflowState,
+      eventTimestamp: record.eventTimestamp,
+      runId: record.runId,
+    });
+  });
+
+  //resume run
+  workflow.resume({
+    runId: run.runId,
+    step: "step-id",
+    resumeData: { key: "value" },
+  });
+} catch (e) {
+  console.error(e);
+}
+```
+
+### vNext ワークフロー実行結果
+
+vNext ワークフロー実行結果は以下の内容を含みます：
+
+| フィールド         | 型                                                                                                                                                                                                                                               | 説明                                             |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `payload`          | `{currentStep?: {id: string, status: string, output?: Record<string, any>, payload?: Record<string, any>}, workflowState: {status: string, steps: Record<string, {status: string, output?: Record<string, any>, payload?: Record<string, any>}>}}` | 実行中のステップとワークフローの状態             |
+| `eventTimestamp`   | `Date`                                                                                                                                                                                                                                             | イベントのタイムスタンプ                         |
+| `runId`            | `string`                                                                                                                                                                                                                                           | このワークフロー実行インスタンスの一意識別子     |

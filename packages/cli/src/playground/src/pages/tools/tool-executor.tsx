@@ -1,28 +1,37 @@
-import { DynamicForm } from '@mastra/playground-ui';
-import { CodeBlockDemo } from '@/components/ui/code-block';
+import { DynamicForm, Txt } from '@mastra/playground-ui';
 import { CopyButton } from '@/components/ui/copy-button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Text } from '@/components/ui/text';
 import { ZodType } from 'zod';
+import { ToolInformation } from '@/domains/tools/ToolInformation';
+import { jsonLanguage } from '@codemirror/lang-json';
+import { useCodemirrorTheme } from '@/components/syntax-highlighter';
+import CodeMirror from '@uiw/react-codemirror';
+export interface ToolExecutorProps {
+  isExecutingTool: boolean;
+  zodInputSchema: ZodType;
+  handleExecuteTool: (data: any) => void;
+  executionResult: any;
+  toolDescription: string;
+  toolId: string;
+}
 
 const ToolExecutor = ({
   isExecutingTool,
   zodInputSchema,
   handleExecuteTool,
   executionResult: result,
-}: {
-  zodInputSchema: ZodType;
-  isExecutingTool: boolean;
-  handleExecuteTool: (data: any) => void;
-  executionResult: any;
-}) => {
+  toolDescription,
+  toolId,
+}: ToolExecutorProps) => {
+  const theme = useCodemirrorTheme();
+  const code = JSON.stringify(result ?? {}, null, 2);
+
   return (
-    <div className="w-full h-full grid grid-cols-[300px_1fr] p-2 gap-2">
-      <div className="flex flex-col gap-4 border-[0.5px] border-mastra-border-1 rounded-[0.25rem] bg-mastra-bg-2 p-4 py-6">
-        <Text variant="secondary" className="text-mastra-el-3 px-4" size="xs">
-          Input
-        </Text>
-        <div className="w-full h-[calc(100vh-126px)] ">
+    <div className="w-full h-full grid grid-cols-[300px_1fr] bg-surface1">
+      <div className="border-r-sm border-border1 bg-surface2">
+        <ToolInformation toolDescription={toolDescription} toolId={toolId} />
+
+        <div className="w-full h-[calc(100vh-144px)] p-5 overflow-y-scroll">
           <DynamicForm
             isSubmitLoading={isExecutingTool}
             schema={zodInputSchema}
@@ -32,18 +41,24 @@ const ToolExecutor = ({
           />
         </div>
       </div>
-      <div className="flex relative group flex-col gap-4 border-[0.5px] border-mastra-border-1 rounded-[0.25rem] bg-mastra-bg-2 p-4 py-6">
-        <Text variant="secondary" className="text-mastra-el-3  px-4" size="xs">
-          Output
-        </Text>
-        <div className="flex flex-col  gap-2">
-          <CopyButton
-            classname="absolute z-40 top-4 right-4 w-8 h-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150 ease-in-out"
-            content={JSON.stringify(result ?? {}, null, 2)}
-          />
+
+      <div className="p-5">
+        <div className="flex items-center gap-2">
+          <Txt variant="ui-sm" className="text-icon3">
+            Output
+          </Txt>
+
+          <CopyButton content={code} tooltip="Copy JSON result to clipboard" />
         </div>
-        <ScrollArea className="h-[calc(100vh-120px)] w-full">
-          <CodeBlockDemo code={JSON.stringify(result ?? {}, null, 2)} language="json" />
+
+        <ScrollArea className="h-[calc(100vh-120px)] w-full pt-2">
+          <CodeMirror
+            value={code}
+            editable={false}
+            theme={theme}
+            extensions={[jsonLanguage]}
+            className="overflow-y-scroll bg-surface2 rounded-lg p-5"
+          />
         </ScrollArea>
       </div>
     </div>

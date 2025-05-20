@@ -1,6 +1,6 @@
 ---
-title: "例：埋め込みのアップサート | RAG | Mastra ドキュメント"
-description: 類似性検索のために様々なベクトルデータベースに埋め込みを保存するMastraの使用例。
+title: "例: 埋め込みのアップサート | RAG | Mastra ドキュメント"
+description: 類似性検索のために、Mastra を使ってさまざまなベクトルデータベースに埋め込みを保存する例。
 ---
 
 import { Tabs } from "nextra/components";
@@ -8,11 +8,11 @@ import { GithubLink } from "@/components/github-link";
 
 # 埋め込みのアップサート
 
-埋め込みを生成した後、それらをベクトル類似検索をサポートするデータベースに保存する必要があります。この例では、後で取得するために埋め込みをさまざまなベクトルデータベースに保存する方法を示します。
+埋め込みを生成した後、それらをベクトル類似検索をサポートするデータベースに保存する必要があります。この例では、後で検索できるように、さまざまなベクトルデータベースに埋め込みを保存する方法を示します。
 
 <Tabs items={['PgVector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra DB', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB']}>
   <Tabs.Tab>
-    `PgVector`クラスは、pgvector拡張機能を使用してPostgreSQLにインデックスを作成し、埋め込みを挿入するためのメソッドを提供します。
+    `PgVector` クラスは、pgvector拡張機能を持つPostgreSQLにインデックスを作成し、埋め込みを挿入するためのメソッドを提供します。
 
     ```tsx copy
     import { openai } from "@ai-sdk/openai";
@@ -54,11 +54,10 @@ import { GithubLink } from "@/components/github-link";
       "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-pgvector"
     }
     />
-
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `PineconeVector`クラスは、マネージドベクトルデータベースサービスであるPineconeにインデックスを作成し、埋め込みを挿入するためのメソッドを提供します。
+    `PineconeVector` クラスは、Pinecone（マネージド型ベクトルデータベースサービス）にインデックスを作成し、埋め込みを挿入するためのメソッドを提供します。
 
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -98,11 +97,10 @@ import { GithubLink } from "@/components/github-link";
     <br />
 
     <GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-pinecone'} />
-
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `QdrantVector`クラスは、高性能ベクトルデータベースであるQdrantにコレクションを作成し、埋め込みを挿入するためのメソッドを提供します。
+    `QdrantVector` クラスは、高性能ベクトルデータベースであるQdrantにコレクションを作成し、埋め込みを挿入するためのメソッドを提供します。
 
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -136,11 +134,10 @@ import { GithubLink } from "@/components/github-link";
       metadata: chunks?.map(chunk => ({ text: chunk.text })),
     });
     ```
-
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `ChromaVector`クラスは、オープンソースの埋め込みデータベースであるChromaにコレクションを作成し、埋め込みを挿入するためのメソッドを提供します。
+    `ChromaVector` クラスは、コレクションの作成や Chroma（オープンソースの埋め込みデータベース）への埋め込みの挿入を行うためのメソッドを提供します。
 
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -181,11 +178,10 @@ import { GithubLink } from "@/components/github-link";
     <br />
 
     <GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-chroma'} />
-
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `AstraVector`クラスは、クラウドネイティブなベクトルデータベースであるDataStax Astra DBにコレクションを作成し、埋め込みを挿入するためのメソッドを提供します。
+    `AstraVector` クラスは、コレクションの作成や DataStax Astra DB（クラウドネイティブなベクターデータベース）への埋め込みの挿入を行うためのメソッドを提供します。
 
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -219,11 +215,10 @@ import { GithubLink } from "@/components/github-link";
       metadata: chunks?.map(chunk => ({ text: chunk.text })),
     });
     ```
-
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `LibSQLVector`クラスは、ベクトル拡張機能を持つSQLiteのフォークであるLibSQLにコレクションを作成し、埋め込みを挿入するためのメソッドを提供します。
+    `LibSQLVector` クラスは、コレクションの作成や LibSQL（ベクター拡張機能を持つ SQLite のフォーク）への埋め込みの挿入を行うためのメソッドを提供します。
 
     ```tsx copy
     import { openai } from "@ai-sdk/openai";
@@ -264,11 +259,10 @@ import { GithubLink } from "@/components/github-link";
     <br />
 
     <GithubLink link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-libsql'} />
-
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `UpstashVector`クラスは、サーバーレスベクトルデータベースであるUpstash Vectorにコレクションを作成し、埋め込みを挿入するためのメソッドを提供します。
+    `UpstashVector` クラスは、コレクションの作成や埋め込みを Upstash Vector（サーバーレスベクターデータベース）に挿入するためのメソッドを提供します。
 
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -301,11 +295,10 @@ import { GithubLink } from "@/components/github-link";
       metadata: chunks?.map(chunk => ({ text: chunk.text })),
     });
     ```
-
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `CloudflareVector`クラスは、サーバーレスベクトルデータベースサービスであるCloudflare Vectorizeにコレクションを作成し、埋め込みを挿入するためのメソッドを提供します。
+    `CloudflareVector` クラスは、コレクションの作成や埋め込みを Cloudflare Vectorize（サーバーレスベクターデータベースサービス）に挿入するためのメソッドを提供します。
 
     ```tsx copy
     import { openai } from '@ai-sdk/openai';
@@ -338,11 +331,10 @@ import { GithubLink } from "@/components/github-link";
       metadata: chunks?.map(chunk => ({ text: chunk.text })),
     });
     ```
-
   </Tabs.Tab>
 
   <Tabs.Tab>
-    `MongoDBVector`クラスは、Atlas SearchでMongoDBにインデックスを作成し、埋め込みを挿入するためのメソッドを提供します。
+    `MongoDBVector` クラスは、インデックスの作成や埋め込みを MongoDB（Atlas Search を利用）に挿入するためのメソッドを提供します。
 
     ```tsx copy
     import { openai } from "@ai-sdk/openai";
@@ -375,6 +367,7 @@ import { GithubLink } from "@/components/github-link";
       metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
     });
     ```
-
   </Tabs.Tab>
 </Tabs>
+
+

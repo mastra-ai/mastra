@@ -23,18 +23,12 @@ describe('PgVector', () => {
 
   // --- Validation tests ---
   describe('Validation', () => {
-    it('throws if connectionString is empty (string)', () => {
-      expect(() => new PgVector('')).toThrow(/connectionString must be provided and cannot be empty/);
-    });
-    it('throws if connectionString is empty (object)', () => {
+    it('throws if connectionString is empty', () => {
       expect(() => new PgVector({ connectionString: '' })).toThrow(
         /connectionString must be provided and cannot be empty/,
       );
     });
-    it('does not throw on non-empty connection string (string)', () => {
-      expect(() => new PgVector(connectionString)).not.toThrow();
-    });
-    it('does not throw on non-empty connection string (object)', () => {
+    it('does not throw on non-empty connection string', () => {
       expect(() => new PgVector({ connectionString })).not.toThrow();
     });
   });
@@ -152,7 +146,7 @@ describe('PgVector', () => {
       });
 
       it('should throw error for non-existent index', async () => {
-        await expect(vectorDB.describeIndex('non_existent')).rejects.toThrow();
+        await expect(vectorDB.describeIndex({ indexName: 'non_existent' })).rejects.toThrow();
       });
     });
 
@@ -1839,124 +1833,6 @@ describe('PgVector', () => {
       });
     });
   });
-  describe('Deprecation Warnings', () => {
-    const indexName = 'testdeprecationwarnings';
-
-    const indexName2 = 'testdeprecationwarnings2';
-
-    let warnSpy;
-
-    beforeAll(async () => {
-      await vectorDB.createIndex({ indexName, dimension: 3 });
-    });
-
-    afterAll(async () => {
-      await vectorDB.deleteIndex({ indexName });
-      await vectorDB.deleteIndex({ indexName: indexName2 });
-    });
-
-    beforeEach(async () => {
-      warnSpy = vi.spyOn(vectorDB['logger'], 'warn');
-    });
-
-    afterEach(async () => {
-      warnSpy.mockRestore();
-      await vectorDB.deleteIndex({ indexName: indexName2 });
-    });
-
-    it('should show deprecation warning when using individual args for createIndex', async () => {
-      await vectorDB.createIndex(indexName2, 3, 'cosine');
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Deprecation Warning: Passing individual arguments to createIndex() is deprecated'),
-      );
-    });
-
-    it('should show deprecation warning when using individual args for upsert', async () => {
-      await vectorDB.upsert(indexName, [[1, 2, 3]], [{ test: 'data' }]);
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Deprecation Warning: Passing individual arguments to upsert() is deprecated'),
-      );
-    });
-
-    it('should show deprecation warning when using individual args for query', async () => {
-      await vectorDB.query(indexName, [1, 2, 3], 5);
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Deprecation Warning: Passing individual arguments to query() is deprecated'),
-      );
-    });
-
-    it('should show deprecation warning when using individual args for buildIndex', async () => {
-      await vectorDB.buildIndex(indexName, 'cosine', { type: 'flat' });
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Deprecation Warning: Passing individual arguments to buildIndex() is deprecated'),
-      );
-    });
-
-    it('should not show deprecation warning when using object param for buildIndex', async () => {
-      await vectorDB.buildIndex({
-        indexName: indexName,
-        metric: 'cosine',
-        indexConfig: { type: 'flat' },
-      });
-
-      expect(warnSpy).not.toHaveBeenCalled();
-    });
-
-    it('should not show deprecation warning when using object param for query', async () => {
-      await vectorDB.query({
-        indexName,
-        queryVector: [1, 2, 3],
-        topK: 5,
-      });
-
-      expect(warnSpy).not.toHaveBeenCalled();
-    });
-
-    it('should not show deprecation warning when using object param for createIndex', async () => {
-      await vectorDB.createIndex({
-        indexName: indexName2,
-        dimension: 3,
-        metric: 'cosine',
-      });
-
-      expect(warnSpy).not.toHaveBeenCalled();
-    });
-
-    it('should not show deprecation warning when using object param for upsert', async () => {
-      await vectorDB.upsert({
-        indexName,
-        vectors: [[1, 2, 3]],
-        metadata: [{ test: 'data' }],
-      });
-
-      expect(warnSpy).not.toHaveBeenCalled();
-    });
-
-    it('should maintain backward compatibility with individual args', async () => {
-      // Query
-      const queryResults = await vectorDB.query(indexName, [1, 2, 3], 5);
-      expect(Array.isArray(queryResults)).toBe(true);
-
-      // CreateIndex
-      await expect(vectorDB.createIndex(indexName2, 3, 'cosine')).resolves.not.toThrow();
-
-      // Upsert
-      const upsertResults = await vectorDB.upsert({
-        indexName,
-        vectors: [[1, 2, 3]],
-        metadata: [{ test: 'data' }],
-      });
-      expect(Array.isArray(upsertResults)).toBe(true);
-      expect(upsertResults).toHaveLength(1);
-
-      // BuildIndex
-      await expect(vectorDB.buildIndex(indexName, 'cosine', { type: 'flat' })).resolves.not.toThrow();
-    });
-  });
 
   describe('Concurrent Operations', () => {
     it('should handle concurrent index creation attempts', async () => {
@@ -2055,11 +1931,6 @@ describe('PgVector', () => {
     });
 
     describe('Constructor', () => {
-      it('should accept connectionString directly', () => {
-        const db = new PgVector(connectionString);
-        expect(db).toBeInstanceOf(PgVector);
-      });
-
       it('should accept config object with connectionString', () => {
         const db = new PgVector({ connectionString });
         expect(db).toBeInstanceOf(PgVector);

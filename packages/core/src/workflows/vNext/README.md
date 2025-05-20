@@ -93,12 +93,14 @@ vNext workflows consist of:
 Steps are the building blocks of workflows. Create a step using `createStep`:
 
 ```typescript
+const inputSchema = z.object({
+  inputValue: z.string(),
+});
+
 const myStep = createStep({
   id: 'my-step',
   description: 'Does something useful',
-  inputSchema: z.object({
-    inputValue: z.string(),
-  }),
+  inputSchema,
   outputSchema: z.object({
     outputValue: z.string(),
   }),
@@ -110,7 +112,7 @@ const myStep = createStep({
   }),
   execute: async ({ inputData, mastra, getStepResult, getInitData, runtimeContext }) => {
     const otherStepOutput = getStepResult(step2);
-    const initData = getInitData<typeof workflow>(); // typed as the workflow input schema
+    const initData = getInitData<typeof inputSchema>(); // typed as the workflow input schema
     return {
       outputValue: `Processed: ${inputData.inputValue}, ${initData.startValue} (runtimeContextValue: ${runtimeContext.get('runtimeContextValue')})`,
     };
@@ -848,6 +850,7 @@ The vNext workflow API introduces several improvements over the original impleme
    execute: async ({ inputData, getStepResult, getInitData }) => {
      const previousStepOutput = getStepResult(step1);
      const initDataAny = getInitData(); // typed as any
+     const initDataTyped = getInitData<typeof inputSchema>(); // typed as the input schema
      const initDataTyped = getInitData<typeof workflow>(); // typed as the workflow input schema
      return {
        /* ... */

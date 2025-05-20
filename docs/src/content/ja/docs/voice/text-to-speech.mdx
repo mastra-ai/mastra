@@ -1,26 +1,26 @@
 ---
-title: Mastraのテキスト読み上げ (TTS) | Mastra ドキュメント
-description: Mastraにおけるテキスト読み上げ機能の概要、設定、使用法、音声プロバイダーとの統合について。
+title: Mastra におけるテキスト読み上げ（TTS） | Mastra ドキュメント
+description: Mastra のテキスト読み上げ機能の概要、設定方法、使用方法、音声プロバイダーとの連携について説明します。
 ---
 
-# テキスト読み上げ（TTS）
+# Text-to-Speech (TTS)
 
-Mastraのテキスト読み上げ（TTS）は、様々なプロバイダーを使用してテキストから音声を合成するための統一APIを提供しています。
-アプリケーションにTTSを組み込むことで、自然な音声インタラクションによるユーザー体験の向上、視覚障害のあるユーザーのためのアクセシビリティの改善、そしてよりエンゲージメントの高いマルチモーダルインターフェースを作成することができます。
+MastraのText-to-Speech (TTS)は、さまざまなプロバイダーを利用してテキストから音声を合成するための統一APIを提供します。
+TTSをアプリケーションに組み込むことで、自然な音声によるインタラクションでユーザー体験を向上させたり、視覚障害のあるユーザーのアクセシビリティを改善したり、より魅力的なマルチモーダルインターフェースを作成したりできます。
 
-TTSは音声アプリケーションの中核コンポーネントです。STT（音声認識）と組み合わせることで、音声インタラクションシステムの基盤を形成します。新しいモデルはSTS（[音声から音声へ](./speech-to-speech)）をサポートしており、リアルタイムのインタラクションに使用できますが、高コスト（$）がかかります。
+TTSは、あらゆる音声アプリケーションの中核となるコンポーネントです。STT（Speech-to-Text）と組み合わせることで、音声インタラクションシステムの基盤を形成します。新しいモデルではSTS（[Speech-to-Speech](./speech-to-speech)）もサポートされており、リアルタイムのインタラクションに利用できますが、コストが高い（$）という特徴があります。
 
 ## 設定
 
-Mastraでテキスト読み上げ（TTS）を使用するには、音声プロバイダーを初期化する際に`speechModel`を提供する必要があります。これには以下のようなパラメータが含まれます：
+MastraでTTSを使用するには、ボイスプロバイダーを初期化する際に`speechModel`を指定する必要があります。これには以下のようなパラメータが含まれます：
 
 - **`name`**: 使用する特定のTTSモデル。
 - **`apiKey`**: 認証用のAPIキー。
-- **プロバイダー固有のオプション**: 特定の音声プロバイダーで必要または対応している追加オプション。
+- **プロバイダー固有のオプション**: 特定のボイスプロバイダーで必要またはサポートされている追加オプション。
 
-**`speaker`**オプションを使用すると、音声合成に異なる声を選択できます。各プロバイダーは、**声の多様性**、**品質**、**声の個性**、**多言語サポート**に関して異なる特性を持つ様々な音声オプションを提供しています。
+**`speaker`**オプションを使用すると、音声合成のために異なる声を選択できます。各プロバイダーは、**音声の多様性**、**品質**、**声の個性**、**多言語対応**など、さまざまな特徴を持つボイスオプションを提供しています。
 
-**注意**: これらのパラメータはすべてオプションです。使用している特定のプロバイダーによって異なる、音声プロバイダーが提供するデフォルト設定を使用することができます。
+**注意**: これらのパラメータはすべて任意です。使用しているボイスプロバイダーによって異なりますが、プロバイダーが提供するデフォルト設定を利用することもできます。
 
 ```typescript
 const voice = new OpenAIVoice({
@@ -31,34 +31,34 @@ const voice = new OpenAIVoice({
   speaker: "alloy",
 });
 
-// デフォルト設定を使用する場合、設定は以下のように簡略化できます：
+// If using default settings the configuration can be simplified to:
 const voice = new OpenAIVoice();
 ```
 
 ## 利用可能なプロバイダー
 
-Mastraは、それぞれ独自の機能と音声オプションを持つ幅広いテキスト読み上げプロバイダーをサポートしています。アプリケーションのニーズに最適なプロバイダーを選択できます：
+Mastra は幅広い Text-to-Speech プロバイダーに対応しており、それぞれ独自の機能や音声オプションを提供しています。アプリケーションのニーズに最適なプロバイダーを選択できます。
 
-- [**OpenAI**](/reference/voice/openai/) - 自然なイントネーションと表現を持つ高品質の音声
-- [**Azure**](/reference/voice/azure/) - Microsoftの音声サービスで、幅広い音声と言語をサポート
-- [**ElevenLabs**](/reference/voice/elevenlabs/) - 感情と細かい制御が可能な超リアルな音声
+- [**OpenAI**](/reference/voice/openai/) - 自然なイントネーションと表現力を持つ高品質な音声
+- [**Azure**](/reference/voice/azure/) - Microsoft の音声サービスで、多様な音声と言語に対応
+- [**ElevenLabs**](/reference/voice/elevenlabs/) - 感情表現や細かなコントロールが可能な超リアルな音声
 - [**PlayAI**](/reference/voice/playai/) - 様々なスタイルの自然な音声に特化
-- [**Google**](/reference/voice/google/) - 多言語サポートを備えたGoogleの音声合成
-- [**Cloudflare**](/reference/voice/cloudflare/) - 低遅延アプリケーション向けにエッジ最適化された音声合成
-- [**Deepgram**](/reference/voice/deepgram/) - 高精度のAI駆動音声技術
-- [**Speechify**](/reference/voice/speechify/) - 読みやすさとアクセシビリティに最適化されたテキスト読み上げ
-- [**Sarvam**](/reference/voice/sarvam/) - インド系言語とアクセントに特化
-- [**Murf**](/reference/voice/murf/) - カスタマイズ可能なパラメータを持つスタジオ品質の音声ナレーション
+- [**Google**](/reference/voice/google/) - Google の多言語対応音声合成
+- [**Cloudflare**](/reference/voice/cloudflare/) - 低遅延アプリケーション向けのエッジ最適化音声合成
+- [**Deepgram**](/reference/voice/deepgram/) - 高精度な AI 音声技術
+- [**Speechify**](/reference/voice/speechify/) - 読みやすさとアクセシビリティに最適化された Text-to-Speech
+- [**Sarvam**](/reference/voice/sarvam/) - インド系言語やアクセントに特化
+- [**Murf**](/reference/voice/murf/) - パラメータをカスタマイズ可能なスタジオ品質のナレーション
 
-各プロバイダーは、必要に応じてインストールできる別々のパッケージとして実装されています：
+各プロバイダーは、必要に応じてインストールできる個別のパッケージとして実装されています。
 
 ```bash
-pnpm add @mastra/voice-openai  # OpenAIの例
+pnpm add @mastra/voice-openai  # Example for OpenAI
 ```
 
-## Speak メソッドの使用
+## speak メソッドの使用
 
-TTSの主要なメソッドは、テキストを音声に変換する`speak()`メソッドです。このメソッドはオプションを受け付けることができ、話者やその他のプロバイダー固有のオプションを指定できます。使用方法は次のとおりです：
+TTS の主なメソッドは `speak()` メソッドであり、テキストを音声に変換します。このメソッドは、話者やその他のプロバイダー固有のオプションを指定できるオプションを受け取ることができます。使い方は以下の通りです：
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
@@ -87,4 +87,4 @@ const readableStream = await voice.speak(text, {
 });
 ```
 
-エージェントに音声を追加する方法については、[エージェントへの音声の追加](../agents/adding-voice.mdx)のドキュメントをご覧ください。
+TTS をエージェントで使用する方法については、[Adding Voice to Agents](../agents/adding-voice.mdx) のドキュメントもご覧ください。
