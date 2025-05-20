@@ -88,7 +88,7 @@ export const PropertiesTable: React.FC<PropertiesTableProps> = ({
           <div
             key={index}
             id={item.name}
-            className="flex flex-col gap-1 py-3 border-b first:pt-0 first:pb-3 border-neutral-300 dark:border-neutral-900"
+            className="flex flex-col gap-1 py-3 border-b first:pt-2 first:pb-3 border-neutral-300 dark:border-neutral-900"
           >
             <div className="flex flex-row gap-2 group items-start">
               <h3 className="font-mono text-sm font-medium cursor-pointer">
