@@ -28,6 +28,7 @@
   "license": "Elastic-2.0",
   "dependencies": {
     "@paralleldrive/cuid2": "^2.2.2",
+    "big.js": "^7.0.1",
     "js-tiktoken": "^1.0.19",
     "node-html-better-parser": "^1.4.7",
     "pathe": "^2.0.3",
@@ -42,6 +43,7 @@
     "@ai-sdk/openai": "latest",
     "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.52.5",
+    "@types/big.js": "^6.2.2",
     "@types/node": "^20.17.27",
     "ai": "^4.2.2",
     "dotenv": "^16.4.7",

@@ -33,7 +33,7 @@ export const createVectorQueryTool = ({
   reranker?: RerankConfig;
   id?: string;
   description?: string;
-}): ReturnType<typeof createTool> => {
+}) => {
   const toolId = id || `VectorQuery ${vectorStoreName} ${indexName} Tool`;
   const toolDescription = description || defaultVectorQueryDescription();
   // Create base schema with required fields

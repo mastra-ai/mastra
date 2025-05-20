@@ -18,6 +18,8 @@ import { Link } from 'react-router';
 import { startTransition, useMemo, useRef, useState } from 'react';
 import { GetAgentResponse } from '@mastra/client-js';
 import { SearchIcon } from 'lucide-react';
+import { useTools } from '@/hooks/use-all-tools';
+import { Tool } from '@mastra/core/tools';
 
 interface ToolWithAgents {
   id: string;
@@ -25,8 +27,8 @@ interface ToolWithAgents {
   agents: Array<{ id: string; name: string }>;
 }
 
-const prepareAgents = (agents: Record<string, GetAgentResponse>) => {
-  const tools = new Map<string, ToolWithAgents>();
+const prepareAgents = (tools: Record<string, Tool>, agents: Record<string, GetAgentResponse>) => {
+  const toolsWithAgents = new Map<string, ToolWithAgents>();
   const agentsKeys = Object.keys(agents);
 
   for (const k of agentsKeys) {
@@ -37,26 +39,32 @@ const prepareAgents = (agents: Record<string, GetAgentResponse>) => {
     for (const key of agentToolsKeys) {
       const tool = agentToolsDict[key];
 
-      if (!tools.has(tool.id)) {
-        tools.set(tool.id, {
+      if (!toolsWithAgents.has(tool.id)) {
+        toolsWithAgents.set(tool.id, {
           ...tool,
           agents: [],
         });
       }
 
-      tools.get(tool.id)!.agents.push({ id: k, name: agent.name });
+      toolsWithAgents.get(tool.id)!.agents.push({ id: k, name: agent.name });
     }
   }
 
-  return Array.from(tools.values());
+  const actualTools = Object.entries(tools).map(([_, tool]) => ({
+    ...tool,
+    agents: toolsWithAgents.get(tool.id)?.agents || [],
+  }));
+
+  return actualTools;
 };
 
 const Tools = () => {
   const { agents: agentsRecord, isLoading: isLoadingAgents } = useAgents();
+  const { tools, isLoading: isLoadingTools } = useTools();
 
-  const memoizedToolsWithAgents = useMemo(() => prepareAgents(agentsRecord), [agentsRecord]);
+  const memoizedToolsWithAgents = useMemo(() => prepareAgents(tools, agentsRecord), [agentsRecord, tools]);
 
-  if (isLoadingAgents) return null;
+  if (isLoadingAgents || isLoadingTools) return null;
 
   return <ToolsInner toolsWithAgents={memoizedToolsWithAgents} />;
 };

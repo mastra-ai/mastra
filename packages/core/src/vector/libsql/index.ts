@@ -1,20 +1,22 @@
+import { join, resolve, isAbsolute } from 'path';
 import { createClient } from '@libsql/client';
 import type { Client as TursoClient, InValue } from '@libsql/client';
 
-import { parseSqlIdentifier } from '@mastra/core/utils';
-import { MastraVector } from '@mastra/core/vector';
+import { parseSqlIdentifier } from '../../utils';
+import type { VectorFilter } from '../filter';
+import { MastraVector } from '../index';
 import type {
-  IndexStats,
-  QueryResult,
-  QueryVectorParams,
   CreateIndexParams,
+  IndexStats,
+  QueryVectorParams,
+  QueryResult,
   UpsertVectorParams,
   DescribeIndexParams,
   DeleteIndexParams,
   DeleteVectorParams,
   UpdateVectorParams,
-} from '@mastra/core/vector';
-import type { VectorFilter } from '@mastra/core/vector/filter';
+} from '../index';
+
 import { LibSQLFilterTranslator } from './filter';
 import { buildFilterQuery } from './sql-builder';
 
@@ -39,7 +41,7 @@ export class LibSQLVector extends MastraVector {
     super();
 
     this.turso = createClient({
-      url: connectionUrl,
+      url: this.rewriteDbUrl(connectionUrl),
       syncUrl: syncUrl,
       authToken,
       syncInterval,
@@ -51,6 +53,43 @@ export class LibSQLVector extends MastraVector {
         args: {},
       });
     }
+  }
+
+  // If we're in the .mastra/output directory, use the dir outside .mastra dir
+  // reason we need to do this is libsql relative file paths are based on cwd, not current file path
+  // since mastra dev sets cwd to .mastra/output this means running an agent directly vs running with mastra dev
+  // will put db files in different locations, leading to an inconsistent experience between the two.
+  // Ex: with `file:ex.db`
+  // 1. `mastra dev`: ${cwd}/.mastra/output/ex.db
+  // 2. `tsx src/index.ts`: ${cwd}/ex.db
+  // so if we're in .mastra/output we need to rewrite the file url to be relative to the project root dir
+  // or the experience will be inconsistent
+  // this means `file:` urls are always relative to project root
+  // TODO: can we make this easier via bundling? https://github.com/mastra-ai/mastra/pull/2783#pullrequestreview-2662444241
+  protected rewriteDbUrl(url: string): string {
+    if (url.startsWith('file:')) {
+      const pathPart = url.slice('file:'.length);
+
+      if (isAbsolute(pathPart)) {
+        return url;
+      }
+
+      const cwd = process.cwd();
+
+      if (cwd.includes('.mastra') && (cwd.endsWith(`output`) || cwd.endsWith(`output/`) || cwd.endsWith(`output\\`))) {
+        const baseDir = join(cwd, `..`, `..`); // <- .mastra/output/../../
+
+        const fullPath = resolve(baseDir, pathPart);
+
+        this.logger.debug(
+          `Initializing LibSQL db with url ${url} with relative file path from inside .mastra/output directory. Rewriting relative file url to "file:${fullPath}". This ensures it's outside the .mastra/output directory.`,
+        );
+
+        return `file:${fullPath}`;
+      }
+    }
+
+    return url;
   }
 
   transformFilter(filter?: VectorFilter) {
@@ -241,7 +280,8 @@ export class LibSQLVector extends MastraVector {
   /**
    * Retrieves statistics about a vector index.
    *
-   * @param {string} indexName - The name of the index to describe
+   * @param params - The parameters for describing an index
+   * @param params.indexName - The name of the index to describe
    * @returns A promise that resolves to the index statistics including dimension, count and metric
    */
   async describeIndex({ indexName }: DescribeIndexParams): Promise<IndexStats> {
@@ -363,3 +403,5 @@ export class LibSQLVector extends MastraVector {
     });
   }
 }
+
+export { LibSQLVector as DefaultVectorDB };
