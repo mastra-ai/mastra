@@ -1,3 +1,5 @@
+import { fastembed } from '@mastra/fastembed';
+import { LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { UpstashStore } from '@mastra/upstash';
 import { describe } from 'vitest';
@@ -10,6 +12,11 @@ describe('Memory with UpstashStore Integration', () => {
       url: 'http://localhost:8079',
       token: 'test_token',
     }),
+    vector: new LibSQLVector({
+      // TODO: use upstash vector in tests
+      connectionUrl: 'file:upstash-test-vector.db',
+    }),
+    embedder: fastembed,
     options: {
       lastMessages: 10,
       semanticRecall: {

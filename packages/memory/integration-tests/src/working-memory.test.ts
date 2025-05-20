@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { createOpenAI } from '@ai-sdk/openai';
+import { openai } from '@ai-sdk/openai';
 import type { MessageType } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
+import { fastembed } from '@mastra/fastembed';
 import { LibSQLVector, LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import type { ToolCallPart } from 'ai';
@@ -36,8 +37,6 @@ const createTestMessage = (threadId: string, content: string, role: 'user' | 'as
 
 dotenv.config({ path: '.env.test' });
 
-const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
 describe('Working Memory Tests', () => {
   let memory: Memory;
   let thread: any;
@@ -55,7 +54,6 @@ describe('Working Memory Tests', () => {
 - **Location**: 
 - **Interests**: 
 `,
-          use: 'tool-call',
         },
         lastMessages: 10,
         semanticRecall: {
@@ -72,7 +70,7 @@ describe('Working Memory Tests', () => {
       vector: new LibSQLVector({
         connectionUrl: dbFile, // relative path from bundled .mastra/output dir
       }),
-      embedder: openai.embedding('text-embedding-3-small'),
+      embedder: fastembed,
     });
     // Reset message counter
     messageCounter = 0;
@@ -327,7 +325,6 @@ describe('Working Memory Tests', () => {
 - **First Name**: 
 - **Last Name**:
 `,
-          use: 'tool-call',
         },
         lastMessages: 10,
         semanticRecall: {
@@ -367,90 +364,6 @@ describe('Working Memory Tests', () => {
     // Thread metadata should not contain working memory
     const updatedThread = await disabledMemory.getThreadById({ threadId: thread.id });
     expect(updatedThread?.metadata?.workingMemory).toBeUndefined();
-  });
-
-  it('should respect working memory use setting', async () => {
-    const toolCallThread = await memory.saveThread({
-      thread: createTestThread('Tool Call Working Memory Thread'),
-    });
-
-    // Get the system message and verify instructions
-    const systemMessage = await memory.getSystemMessage({ threadId: toolCallThread.id });
-    expect(systemMessage).not.toContain('<working_memory>text</working_memory>');
-    expect(systemMessage).toContain('updateWorkingMemory');
-
-    // Test tool-call mode saves working memory
-    const toolCallAgent = new Agent({
-      name: 'Tool Call Memory Agent',
-      instructions: 'You are a helpful AI agent. Always remember user information.',
-      model: openai('gpt-4o'),
-      memory,
-    });
-
-    await toolCallAgent.generate('Hi, my name is John and I live in New York', {
-      threadId: toolCallThread.id,
-      resourceId,
-    });
-
-    // Verify working memory was saved in tool-call mode
-    const toolCallWorkingMemory = await memory.getThreadById({ threadId: toolCallThread.id });
-    expect(toolCallWorkingMemory?.metadata?.workingMemory).toContain('# User Information');
-    expect(toolCallWorkingMemory?.metadata?.workingMemory).toContain('**First Name**: John');
-    expect(toolCallWorkingMemory?.metadata?.workingMemory).toContain('**Location**: New York');
-
-    // Create memory instance with working memory in text-stream mode
-    const textStreamMemory = new Memory({
-      storage: new LibSQLStore({
-        url: dbFile,
-      }),
-      vector: new LibSQLVector({
-        connectionUrl: dbFile, // relative path from bundled .mastra/output dir
-      }),
-      embedder: openai.embedding('text-embedding-3-small'),
-      options: {
-        workingMemory: {
-          enabled: true,
-          template: `# User Information
-- **First Name**: 
-- **Location**: 
-`,
-          use: 'text-stream',
-        },
-        lastMessages: 10,
-        threads: {
-          generateTitle: false,
-        },
-        semanticRecall: true,
-      },
-    });
-
-    const textStreamThread = await textStreamMemory.saveThread({
-      thread: createTestThread('Text Stream Working Memory Thread'),
-    });
-
-    // Get the system message and verify instructions
-    const textStreamSystemMessage = await textStreamMemory.getSystemMessage({ threadId: textStreamThread.id });
-    expect(textStreamSystemMessage).toContain('<working_memory>text</working_memory>');
-    expect(textStreamSystemMessage).not.toContain('updateWorkingMemory');
-
-    // Test text-stream mode saves working memory
-    const textStreamAgent = new Agent({
-      name: 'Text Stream Memory Agent',
-      instructions: 'You are a helpful AI agent. Always remember user information.',
-      model: openai('gpt-4o'),
-      memory: textStreamMemory,
-    });
-
-    await textStreamAgent.generate('Hi, my name is Tyler and I live in San Francisco', {
-      threadId: textStreamThread.id,
-      resourceId,
-    });
-
-    // Verify working memory was saved in text-stream mode
-    const textStreamWorkingMemory = await textStreamMemory.getThreadById({ threadId: textStreamThread.id });
-    expect(textStreamWorkingMemory?.metadata?.workingMemory).toContain('# User Information');
-    expect(textStreamWorkingMemory?.metadata?.workingMemory).toContain('**First Name**: Tyler');
-    expect(textStreamWorkingMemory?.metadata?.workingMemory).toContain('**Location**: San Francisco');
   });
 
   it('should handle LLM responses with working memory using tool calls', async () => {

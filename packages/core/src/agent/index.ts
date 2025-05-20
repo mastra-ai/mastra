@@ -160,7 +160,17 @@ export class Agent<
   }
 
   public getMemory(): MastraMemory | undefined {
-    return this.#memory ?? this.#mastra?.memory;
+    const memory = this.#memory;
+
+    if (memory && !memory.hasOwnStorage && this.#mastra) {
+      const storage = this.#mastra.getStorage();
+
+      if (storage) {
+        memory.setStorage(storage);
+      }
+    }
+
+    return memory;
   }
 
   get voice() {
