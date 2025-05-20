@@ -340,7 +340,7 @@ article span.m-tag {
   display: none;
 }
 
-article a {
+article a:not(.showcase-link) {
   text-underline-offset: 1px;
   display: inline-flex;
   align-items: center;
