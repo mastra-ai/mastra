@@ -3,11 +3,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useWorkflow } from '@/hooks/use-workflows';
 import '../../../index.css';
 
-import { WorkflowGraphInner } from './workflow-graph-inner';
 import { lodashTitleCase } from '@/lib/string';
 import { AlertCircleIcon } from 'lucide-react';
-import { WorkflowNestedGraphProvider } from '../context/workflow-nested-graph-context';
 import { ReactFlowProvider } from '@xyflow/react';
+import { WorkflowGraphInner } from './workflow-graph-inner';
+import { WorkflowNestedGraphProvider } from '../context/workflow-nested-graph-context';
 
 export function WorkflowGraph({ workflowId, baseUrl }: { workflowId: string; baseUrl: string }) {
   const { workflow, isLoading } = useWorkflow(workflowId, baseUrl);

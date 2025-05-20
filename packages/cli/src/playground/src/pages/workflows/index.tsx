@@ -4,22 +4,23 @@ import { useWorkflows } from '@/hooks/use-workflows';
 import { DataTable, Header, HeaderTitle } from '@mastra/playground-ui';
 import { workflowsTableColumns } from '@/domains/workflows/table.columns';
 import { useNavigate } from 'react-router';
+
 function Workflows() {
   const navigate = useNavigate();
-  const { workflows, vNextWorkflows, isLoading } = useWorkflows();
+  const { workflows, legacyWorkflows, isLoading } = useWorkflows();
+
+  const legacyWorkflowList = Object.entries(legacyWorkflows).map(([key, workflow]) => ({
+    id: key,
+    name: workflow.name,
+    stepsCount: Object.keys(workflow.steps)?.length,
+    isLegacy: true,
+  }));
 
   const workflowList = Object.entries(workflows).map(([key, workflow]) => ({
     id: key,
     name: workflow.name,
-    stepsCount: Object.keys(workflow.steps)?.length,
-    isVNext: false,
-  }));
-
-  const vNextWorkflowList = Object.entries(vNextWorkflows).map(([key, workflow]) => ({
-    id: key,
-    name: workflow.name,
     stepsCount: Object.keys(workflow.steps ?? {})?.length,
-    isVNext: true,
+    isLegacy: false,
   }));
 
   return (
@@ -33,8 +34,8 @@ function Workflows() {
             emptyText="Workflows"
             isLoading={isLoading}
             columns={workflowsTableColumns}
-            data={[...workflowList, ...vNextWorkflowList]}
-            onClick={row => navigate(`/workflows${row.isVNext ? '/v-next' : ''}/${row.id}/graph`)}
+            data={[...workflowList, ...legacyWorkflowList]}
+            onClick={row => navigate(`/workflows${row.isLegacy ? '/legacy' : ''}/${row.id}/graph`)}
           />
         </ScrollArea>
       </section>

@@ -67,7 +67,7 @@ export class LegacyWorkflow extends BaseResource {
       searchParams.set('runId', params.runId);
     }
 
-    return this.request(`/api/workflows/legacy/${this.workflowId}/createRun?${searchParams.toString()}`, {
+    return this.request(`/api/workflows/legacy/${this.workflowId}/create-run?${searchParams.toString()}`, {
       method: 'POST',
     });
   }

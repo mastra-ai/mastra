@@ -22,7 +22,7 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
             </HeaderTitle>
           </Header>
         ) : (
-          <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId!} />
+          <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId!} isVNext />
         )}
         {children}
       </div>
