@@ -1,5 +1,6 @@
 import { Mastra } from '@mastra/core';
 import { RuntimeContext } from '@mastra/core/runtime-context';
+import { MockStore } from '@mastra/core/storage';
 import { Step, Workflow } from '@mastra/core/workflows';
 import { stringify } from 'superjson';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -17,7 +18,6 @@ import {
   resumeWorkflowHandler,
   getWorkflowRunsHandler,
 } from './workflows';
-import { MockStore } from '@mastra/core/storage';
 
 function createMockWorkflow(name: string) {
   const stepA = new Step({
