@@ -2,6 +2,7 @@ import type { MastraLanguageModel } from '@mastra/core/agent';
 import { MastraAgentRelevanceScorer, CohereRelevanceScorer } from '@mastra/core/relevance';
 import type { RelevanceScoreProvider } from '@mastra/core/relevance';
 import type { QueryResult } from '@mastra/core/vector';
+import { Big } from 'big.js';
 
 // Default weights for different scoring components (must add up to 1)
 const DEFAULT_WEIGHTS = {
@@ -102,9 +103,9 @@ export async function rerank(
   };
 
   //weights must add up to 1
-  const totalWeights = Object.values(weights).reduce((sum, weight) => sum + weight, 0);
-  if (totalWeights !== 1) {
-    throw new Error('Weights must add up to 1');
+  const sum = Object.values(weights).reduce((acc: Big, w: number) => acc.plus(w.toString()), new Big(0));
+  if (!sum.eq(1)) {
+    throw new Error(`Weights must add up to 1. Got ${sum} from ${weights}`);
   }
 
   const resultLength = results.length;
