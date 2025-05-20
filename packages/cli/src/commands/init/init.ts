@@ -101,7 +101,7 @@ export const init = async ({
       ${color.green('Mastra initialized successfully!')}
 
       Add your ${color.cyan(key)} as an environment variable
-      in your ${color.cyan('.env.development')} file
+      in your ${color.cyan('.env')} file
       `);
     } else {
       p.note(`
