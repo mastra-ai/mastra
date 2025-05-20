@@ -23,7 +23,7 @@ const ShowcaseCard = ({
         textDecoration: "none",
       }}
       href={link}
-      className="block"
+      className="block showcase-link"
       target="_blank"
       rel="noopener noreferrer"
     >
