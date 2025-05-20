@@ -103,7 +103,7 @@ export type DefaultLLMStreamObjectOptions = Omit<StreamObjectOptions, MastraCust
 
 type MastraCustomLLMOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
   tools?: Record<string, CoreTool>;
-  onStepFinish?: (step: unknown) => void;
+  onStepFinish?: (step: unknown) => Promise<void> | void;
   experimental_output?: Z;
   telemetry?: TelemetrySettings;
   threadId?: string;

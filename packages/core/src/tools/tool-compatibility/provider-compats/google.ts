@@ -1,6 +1,6 @@
 import type { z } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
-import { ToolCompatibility } from '..';
+import { ToolCompatibility, UNSUPPORTED_ZOD_TYPES } from '..';
 import type { ShapeValue } from '..';
 import type { MastraLanguageModel } from '../../../agent';
 
@@ -19,6 +19,15 @@ export class GoogleToolCompat extends ToolCompatibility {
 
   processZodType<T extends z.AnyZodObject>(value: z.ZodTypeAny): ShapeValue<T> {
     switch (value._def.typeName) {
+      case 'ZodOptional':
+        return this.defaultZodOptionalHandler(value, [
+          'ZodObject',
+          'ZodArray',
+          'ZodUnion',
+          'ZodString',
+          'ZodNumber',
+          ...UNSUPPORTED_ZOD_TYPES,
+        ]);
       case 'ZodObject': {
         return this.defaultZodObjectHandler(value);
       }

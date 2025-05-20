@@ -2,7 +2,7 @@ import type { z } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
 import { ToolCompatibility } from '..';
 import type { MastraLanguageModel } from '../../../agent';
-import type { ShapeValue } from '../index';
+import type { ShapeValue, AllZodType } from '../index';
 
 export class AnthropicToolCompat extends ToolCompatibility {
   constructor(model: MastraLanguageModel) {
@@ -19,6 +19,12 @@ export class AnthropicToolCompat extends ToolCompatibility {
 
   processZodType<T extends z.AnyZodObject>(value: z.ZodTypeAny): ShapeValue<T> {
     switch (value._def.typeName) {
+      case 'ZodOptional':
+        const handleTypes: AllZodType[] = ['ZodObject', 'ZodArray', 'ZodUnion', 'ZodNever', 'ZodUndefined'];
+        if (this.getModel().modelId.includes('claude-3.5-haiku')) handleTypes.push('ZodString');
+        if (this.getModel().modelId.includes('claude-3.7')) handleTypes.push('ZodTuple');
+
+        return this.defaultZodOptionalHandler(value, handleTypes);
       case 'ZodObject': {
         return this.defaultZodObjectHandler(value);
       }

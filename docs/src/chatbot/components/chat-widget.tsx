@@ -80,7 +80,7 @@ export function CustomChatInterface({
       <div className="flex w-full p-5">
         <Button
           variant="ghost"
-          className="cursor-pointer hover:bg-surface-6 text-icons-3 bg-surface-5"
+          className="cursor-pointer hover:bg-surface-6 dark:text-icons-3 text-[var(--light-color-text-4)] dark:bg-surface-5 bg-[var(--light-color-surface-4)]"
           size="slim"
           onClick={handleBackToSearch}
         >
@@ -111,12 +111,12 @@ export function CustomChatInterface({
               className={`mb-4 w-full flex ${isUser ? "justify-end" : "justify-start"}`}
             >
               {isUser && (
-                <div className="px-4 text-[13px] py-2 rounded-lg max-w-[80%] bg-surface-3 text-icons-6 rounded-br-none">
+                <div className="px-4 text-[13px] py-2 rounded-lg max-w-[80%] dark:bg-surface-3 bg-[var(--light-color-surface-4)] dark:text-icons-6 text-[var(--light-color-text-4)]  rounded-br-none">
                   {messageContent}
                 </div>
               )}
               {isAssistant && (
-                <div className="px-4 text-[13px] py-2 bg-transparent relative w-full text-icons-6">
+                <div className="px-4 text-[13px] py-2 bg-transparent relative w-full dark:text-icons-6 text-[var(--light-color-text-4)]">
                   <Markdown content={messageContent} />
                 </div>
               )}
@@ -131,7 +131,7 @@ export function CustomChatInterface({
       <div className="p-4 ">
         <form
           onSubmit={handleSendMessage}
-          className="border-t border-borders-1"
+          className="border-t dark:border-borders-2 border-[var(--light-border-code)] "
         >
           <div className="flex items-center">
             <Textarea
@@ -151,19 +151,19 @@ export function CustomChatInterface({
                 }
               }}
               placeholder="Enter your message..."
-              className="border-none shadow-none resize-none text-icons-6 placeholder:text-icons-2 focus-visible:ring-0"
+              className="border-none shadow-none resize-none dark:text-icons-6 text-[var(--light-color-text-4)] placeholder:text-icons-2 focus-visible:ring-0"
             />
             <Button
               type="submit"
               variant="ghost"
               size="icon-sm"
               disabled={isLoading || inputValue.trim() === ""}
-              className="relative self-end p-2 rounded-full cursor-pointer bg-surface-5 ring-borders-2 ring"
+              className="relative self-end p-2 rounded-full cursor-pointer dark:bg-surface-5 bg-[var(--light-color-surface-1)] dark:ring-borders-2 dark:ring"
             >
               {isLoading ? (
-                <Spinner />
+                <Spinner className="dark:text-accent-green text-[var(--light-green-accent-2)]" />
               ) : (
-                <ArrowUp className="w-4 h-4 text-accent-green" />
+                <ArrowUp className="w-4 h-4 dark:text-accent-green text-[var(--light-green-accent)]" />
               )}
             </Button>
           </div>

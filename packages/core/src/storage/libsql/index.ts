@@ -4,6 +4,7 @@ import type { Client, InValue, Config as LibSQLConfig } from '@libsql/client';
 import type { MetricResult, TestInfo } from '../../eval';
 import type { Logger } from '../../logger';
 import type { MessageType, StorageThreadType } from '../../memory/types';
+import { parseSqlIdentifier } from '../../utils';
 import type { WorkflowRunState } from '../../workflows';
 import { MastraStorage } from '../base';
 import { TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS, TABLE_TRACES, TABLE_WORKFLOW_SNAPSHOT } from '../constants';
@@ -92,7 +93,9 @@ export class LibSQLStore extends MastraStorage {
   }
 
   private getCreateTableSQL(tableName: TABLE_NAMES, schema: Record<string, StorageColumn>): string {
+    const parsedTableName = parseSqlIdentifier(tableName, 'table name');
     const columns = Object.entries(schema).map(([name, col]) => {
+      const parsedName = parseSqlIdentifier(name, 'column name');
       let type = col.type.toUpperCase();
       if (type === 'TEXT') type = 'TEXT';
       if (type === 'TIMESTAMP') type = 'TEXT'; // Store timestamps as ISO strings
@@ -101,19 +104,19 @@ export class LibSQLStore extends MastraStorage {
       const nullable = col.nullable ? '' : 'NOT NULL';
       const primaryKey = col.primaryKey ? 'PRIMARY KEY' : '';
 
-      return `${name} ${type} ${nullable} ${primaryKey}`.trim();
+      return `${parsedName} ${type} ${nullable} ${primaryKey}`.trim();
     });
 
     // For workflow_snapshot table, create a composite primary key
     if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
-      const stmnt = `CREATE TABLE IF NOT EXISTS ${tableName} (
+      const stmnt = `CREATE TABLE IF NOT EXISTS ${parsedTableName} (
                 ${columns.join(',\n')},
                 PRIMARY KEY (workflow_name, run_id)
             )`;
       return stmnt;
     }
 
-    return `CREATE TABLE IF NOT EXISTS ${tableName} (${columns.join(', ')})`;
+    return `CREATE TABLE IF NOT EXISTS ${parsedTableName} (${columns.join(', ')})`;
   }
 
   async createTable({
@@ -134,8 +137,9 @@ export class LibSQLStore extends MastraStorage {
   }
 
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
+    const parsedTableName = parseSqlIdentifier(tableName, 'table name');
     try {
-      await this.client.execute(`DELETE FROM ${tableName}`);
+      await this.client.execute(`DELETE FROM ${parsedTableName}`);
     } catch (e) {
       if (e instanceof Error) {
         this.logger.error(e.message);
@@ -147,7 +151,8 @@ export class LibSQLStore extends MastraStorage {
     sql: string;
     args: InValue[];
   } {
-    const columns = Object.keys(record);
+    const parsedTableName = parseSqlIdentifier(tableName, 'table name');
+    const columns = Object.keys(record).map(col => parseSqlIdentifier(col, 'column name'));
     const values = Object.values(record).map(v => {
       if (typeof v === `undefined`) {
         // returning an undefined value will cause libsql to throw
@@ -161,7 +166,7 @@ export class LibSQLStore extends MastraStorage {
     const placeholders = values.map(() => '?').join(', ');
 
     return {
-      sql: `INSERT OR REPLACE INTO ${tableName} (${columns.join(', ')}) VALUES (${placeholders})`,
+      sql: `INSERT OR REPLACE INTO ${parsedTableName} (${columns.join(', ')}) VALUES (${placeholders})`,
       args: values,
     };
   }
@@ -197,13 +202,15 @@ export class LibSQLStore extends MastraStorage {
   }
 
   async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
-    const conditions = Object.entries(keys)
-      .map(([key]) => `${key} = ?`)
-      .join(' AND ');
+    const parsedTableName = parseSqlIdentifier(tableName, 'table name');
+
+    const parsedKeys = Object.keys(keys).map(key => parseSqlIdentifier(key, 'column name'));
+
+    const conditions = parsedKeys.map(key => `${key} = ?`).join(' AND ');
     const values = Object.values(keys);
 
     const result = await this.client.execute({
-      sql: `SELECT * FROM ${tableName} WHERE ${conditions} ORDER BY createdAt DESC LIMIT 1`,
+      sql: `SELECT * FROM ${parsedTableName} WHERE ${conditions} ORDER BY createdAt DESC LIMIT 1`,
       args: values,
     });
 

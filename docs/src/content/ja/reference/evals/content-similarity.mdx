@@ -1,13 +1,13 @@
 ---
-title: "リファレンス: コンテンツ類似性 | Evals | Mastra Docs"
-description: Mastraのコンテンツ類似性メトリックに関するドキュメント。文字列間のテキスト類似性を測定し、マッチングスコアを提供します。
+title: "リファレンス: コンテンツ類似度 | Evals | Mastra ドキュメント"
+description: Mastra のコンテンツ類似度メトリクスに関するドキュメント。これは文字列間のテキスト類似度を測定し、マッチングスコアを提供します。
 ---
 
 # ContentSimilarityMetric
 
-`ContentSimilarityMetric` クラスは、2つの文字列間のテキスト類似性を測定し、それらがどれほど一致しているかを示すスコアを提供します。大文字と小文字の区別や空白の処理に関する設定可能なオプションをサポートしています。
+`ContentSimilarityMetric` クラスは、2つの文字列間のテキスト類似度を測定し、それらがどれだけ一致しているかを示すスコアを提供します。大文字と小文字の区別や空白の扱いについて、設定可能なオプションをサポートしています。
 
-## 基本的な使用法
+## 基本的な使い方
 
 ```typescript
 import { ContentSimilarityMetric } from "@mastra/evals/nlp";
@@ -19,18 +19,18 @@ const metric = new ContentSimilarityMetric({
 
 const result = await metric.measure("Hello, world!", "hello world");
 
-console.log(result.score); // 0から1までの類似度スコア
+console.log(result.score); // 類似度スコア（0〜1）
 console.log(result.info); // 詳細な類似度メトリクス
 ```
 
-## コンストラクタのパラメータ
+## コンストラクタのパラメーター
 
 <PropertiesTable
   content={[
     {
       name: "options",
       type: "ContentSimilarityOptions",
-      description: "類似性比較のための設定オプション",
+      description: "類似度比較のための設定オプション",
       isOptional: true,
       defaultValue: "{ ignoreCase: true, ignoreWhitespace: true }",
     },
@@ -58,20 +58,20 @@ console.log(result.info); // 詳細な類似度メトリクス
   ]}
 />
 
-## measure() パラメーター
+## measure() のパラメーター
 
 <PropertiesTable
   content={[
     {
       name: "input",
       type: "string",
-      description: "比較対象の参照テキスト",
+      description: "比較対象となる参照テキスト",
       isOptional: false,
     },
     {
       name: "output",
       type: "string",
-      description: "類似性を評価するテキスト",
+      description: "類似度を評価するテキスト",
       isOptional: false,
     },
   ]}
@@ -84,12 +84,13 @@ console.log(result.info); // 詳細な類似度メトリクス
     {
       name: "score",
       type: "number",
-      description: "1が完全な類似性を示す類似スコア (0-1)",
+      description:
+        "類似度スコア（0～1）。1は完全な類似を示します",
     },
     {
       name: "info",
       type: "object",
-      description: "詳細な類似性メトリクス",
+      description: "詳細な類似度指標",
       properties: [
         {
           type: "number",
@@ -97,7 +98,7 @@ console.log(result.info); // 詳細な類似度メトリクス
             {
               name: "similarity",
               type: "number",
-              description: "2つのテキスト間の生の類似スコア",
+              description: "2つのテキスト間の生の類似度スコア",
             },
           ],
         },
@@ -108,18 +109,18 @@ console.log(result.info); // 詳細な類似度メトリクス
 
 ## スコアリングの詳細
 
-このメトリックは、文字レベルのマッチングと設定可能なテキスト正規化を通じてテキストの類似性を評価します。
+このメトリックは、文字レベルでの一致と設定可能なテキスト正規化を通じて、テキストの類似性を評価します。
 
 ### スコアリングプロセス
 
 1. テキストを正規化します:
 
-   - 大文字小文字の正規化（ignoreCase: true の場合）
+   - 大文字・小文字の正規化（ignoreCase: true の場合）
    - 空白の正規化（ignoreWhitespace: true の場合）
 
-2. 処理された文字列を文字列類似性アルゴリズムで比較します:
-   - 文字シーケンスを分析
-   - 単語の境界を整列
+2. 処理済みの文字列を文字列類似度アルゴリズムで比較します:
+   - 文字の並びを分析
+   - 単語の境界を揃える
    - 相対的な位置を考慮
    - 長さの違いを考慮
 
@@ -127,26 +128,26 @@ console.log(result.info); // 詳細な類似度メトリクス
 
 ### スコアの解釈
 
-(0 から scale、デフォルト 0-1)
+（0 から scale、デフォルトは 0-1）
 
-- 1.0: 完全一致 - 同一のテキスト
-- 0.7-0.9: 高い類似性 - ほとんど一致する内容
-- 0.4-0.6: 中程度の類似性 - 部分的な一致
-- 0.1-0.3: 低い類似性 - 一部の一致パターン
-- 0.0: 類似性なし - 完全に異なるテキスト
+- 1.0: 完全一致 - テキストが全く同じ
+- 0.7-0.9: 高い類似度 - ほとんど一致する内容
+- 0.4-0.6: 中程度の類似度 - 部分的な一致
+- 0.1-0.3: 低い類似度 - 一致するパターンが少ない
+- 0.0: 類似性なし - 全く異なるテキスト
 
-## 異なるオプションの例
+## 異なるオプションを使った例
 
 ```typescript
 import { ContentSimilarityMetric } from "@mastra/evals/nlp";
 
-// 大文字と小文字を区別する比較
+// 大文字・小文字を区別する比較
 const caseSensitiveMetric = new ContentSimilarityMetric({
   ignoreCase: false,
   ignoreWhitespace: true,
 });
 
-const result1 = await caseSensitiveMetric.measure("Hello World", "hello world"); // 大文字と小文字の違いによりスコアが低くなる
+const result1 = await caseSensitiveMetric.measure("Hello World", "hello world"); // 大文字・小文字の違いによりスコアが低くなる
 
 // 出力例:
 // {
@@ -154,7 +155,7 @@ const result1 = await caseSensitiveMetric.measure("Hello World", "hello world");
 //   info: { similarity: 0.75 }
 // }
 
-// 厳密な空白の比較
+// 空白文字を厳密に比較
 const strictWhitespaceMetric = new ContentSimilarityMetric({
   ignoreCase: true,
   ignoreWhitespace: false,

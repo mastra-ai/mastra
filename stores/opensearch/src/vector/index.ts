@@ -1,4 +1,14 @@
-import type { CreateIndexParams, IndexStats, QueryResult, QueryVectorParams, UpsertVectorParams } from '@mastra/core';
+import type {
+  CreateIndexParams,
+  DeleteIndexParams,
+  DeleteVectorParams,
+  DescribeIndexParams,
+  IndexStats,
+  QueryResult,
+  QueryVectorParams,
+  UpdateVectorParams,
+  UpsertVectorParams,
+} from '@mastra/core';
 import { MastraVector } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import { Client as OpenSearchClient } from '@opensearch-project/opensearch';
@@ -19,7 +29,12 @@ const REVERSE_METRIC_MAPPING = {
 export class OpenSearchVector extends MastraVector {
   private client: OpenSearchClient;
 
-  constructor(url: string) {
+  /**
+   * Creates a new OpenSearchVector client.
+   *
+   * @param {string} url - The url of the OpenSearch node.
+   */
+  constructor({ url }: { url: string }) {
     super();
     this.client = new OpenSearchClient({ node: url });
   }
@@ -32,9 +47,7 @@ export class OpenSearchVector extends MastraVector {
    * @param {'cosine' | 'euclidean' | 'dotproduct'} [metric=cosine] - The metric to use to sort vectors in the collection.
    * @returns {Promise<void>} A promise that resolves when the collection is created.
    */
-  async createIndex(params: CreateIndexParams): Promise<void> {
-    const { indexName, dimension, metric = 'cosine' } = params;
-
+  async createIndex({ indexName, dimension, metric = 'cosine' }: CreateIndexParams): Promise<void> {
     if (!Number.isInteger(dimension) || dimension <= 0) {
       throw new Error('Dimension must be a positive integer');
     }
@@ -93,7 +106,13 @@ export class OpenSearchVector extends MastraVector {
     }
   }
 
-  async describeIndex(indexName: string): Promise<IndexStats> {
+  /**
+   * Retrieves statistics about a vector index.
+   *
+   * @param {string} indexName - The name of the index to describe
+   * @returns A promise that resolves to the index statistics including dimension, count and metric
+   */
+  async describeIndex({ indexName }: DescribeIndexParams): Promise<IndexStats> {
     const { body: indexInfo } = await this.client.indices.get({ index: indexName });
     const mappings = indexInfo[indexName]?.mappings;
     const embedding: any = mappings?.properties?.embedding;
@@ -114,7 +133,7 @@ export class OpenSearchVector extends MastraVector {
    * @param {string} indexName - The name of the index to delete.
    * @returns {Promise<void>} A promise that resolves when the index is deleted.
    */
-  async deleteIndex(indexName: string): Promise<void> {
+  async deleteIndex({ indexName }: DeleteIndexParams): Promise<void> {
     try {
       await this.client.indices.delete({ index: indexName });
     } catch (error) {
@@ -131,14 +150,12 @@ export class OpenSearchVector extends MastraVector {
    * @param {string[]} [ids] - An optional array of IDs corresponding to each vector. If not provided, new IDs will be generated.
    * @returns {Promise<string[]>} A promise that resolves to an array of IDs of the upserted vectors.
    */
-  async upsert(params: UpsertVectorParams): Promise<string[]> {
-    const { indexName, vectors, metadata = [], ids } = params;
-
+  async upsert({ indexName, vectors, metadata = [], ids }: UpsertVectorParams): Promise<string[]> {
     const vectorIds = ids || vectors.map(() => crypto.randomUUID());
     const operations = [];
 
     // Get index stats to check dimension
-    const indexInfo = await this.describeIndex(indexName);
+    const indexInfo = await this.describeIndex({ indexName });
 
     // Validate vector dimensions
     this.validateVectorDimensions(vectors, indexInfo.dimension);
@@ -183,9 +200,13 @@ export class OpenSearchVector extends MastraVector {
    * @param {boolean} [includeVectors=false] - Whether to include the vectors in the response.
    * @returns {Promise<QueryResult[]>} A promise that resolves to an array of query results.
    */
-  async query(params: QueryVectorParams): Promise<QueryResult[]> {
-    const { indexName, queryVector, filter, topK = 10, includeVector = false } = params;
-
+  async query({
+    indexName,
+    queryVector,
+    filter,
+    topK = 10,
+    includeVector = false,
+  }: QueryVectorParams): Promise<QueryResult[]> {
     try {
       const translatedFilter = this.transformFilter(filter);
 
@@ -244,8 +265,6 @@ export class OpenSearchVector extends MastraVector {
   }
 
   /**
-   * @deprecated Use {@link updateVector} instead. This method will be removed on May 20th, 2025.
-   *
    * Updates a vector by its ID with the provided vector and/or metadata.
    * @param indexName - The name of the index containing the vector.
    * @param id - The ID of the vector to update.
@@ -255,37 +274,7 @@ export class OpenSearchVector extends MastraVector {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateIndexById(
-    indexName: string,
-    id: string,
-    update: { vector?: number[]; metadata?: Record<string, any> },
-  ): Promise<void> {
-    this.logger.warn(
-      `Deprecation Warning: updateIndexById() is deprecated. 
-      Please use updateVector() instead. 
-      updateIndexById() will be removed on May 20th, 2025.`,
-    );
-    await this.updateVector(indexName, id, update);
-  }
-
-  /**
-   * Updates a vector by its ID with the provided vector and/or metadata.
-   * @param indexName - The name of the index containing the vector.
-   * @param id - The ID of the vector to update.
-   * @param update - An object containing the vector and/or metadata to update.
-   * @param update.vector - An optional array of numbers representing the new vector.
-   * @param update.metadata - An optional record containing the new metadata.
-   * @returns A promise that resolves when the update is complete.
-   * @throws Will throw an error if no updates are provided or if the update operation fails.
-   */
-  async updateVector(
-    indexName: string,
-    id: string,
-    update: {
-      vector?: number[];
-      metadata?: Record<string, any>;
-    },
-  ): Promise<void> {
+  async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
     if (!update.vector && !update.metadata) {
       throw new Error('No updates provided');
     }
@@ -313,7 +302,7 @@ export class OpenSearchVector extends MastraVector {
       // Update vector if provided
       if (update.vector) {
         // Get index stats to check dimension
-        const indexInfo = await this.describeIndex(indexName);
+        const indexInfo = await this.describeIndex({ indexName });
 
         // Validate vector dimensions
         this.validateVectorDimensions([update.vector], indexInfo.dimension);
@@ -344,31 +333,13 @@ export class OpenSearchVector extends MastraVector {
   }
 
   /**
-   * @deprecated Use {@link deleteVector} instead. This method will be removed on May 20th, 2025.
-   *
    * Deletes a vector by its ID.
    * @param indexName - The name of the index containing the vector.
    * @param id - The ID of the vector to delete.
    * @returns A promise that resolves when the deletion is complete.
    * @throws Will throw an error if the deletion operation fails.
    */
-  async deleteIndexById(indexName: string, id: string): Promise<void> {
-    this.logger.warn(
-      `Deprecation Warning: deleteIndexById() is deprecated. 
-      Please use deleteVector() instead. 
-      deleteIndexById() will be removed on May 20th, 2025.`,
-    );
-    await this.deleteVector(indexName, id);
-  }
-
-  /**
-   * Deletes a vector by its ID.
-   * @param indexName - The name of the index containing the vector.
-   * @param id - The ID of the vector to delete.
-   * @returns A promise that resolves when the deletion is complete.
-   * @throws Will throw an error if the deletion operation fails.
-   */
-  async deleteVector(indexName: string, id: string): Promise<void> {
+  async deleteVector({ indexName, id }: DeleteVectorParams): Promise<void> {
     try {
       await this.client.delete({
         index: indexName,

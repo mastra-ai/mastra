@@ -1,31 +1,31 @@
 ---
-title: "分岐、マージ、条件 | ワークフロー | Mastra ドキュメント"
-description: "Mastraワークフローの制御フローでは、分岐、マージ、条件を管理して、ロジック要件を満たすワークフローを構築することができます。"
+title: "分岐、マージ、条件分岐 | ワークフロー | Mastra ドキュメント"
+description: "Mastra のワークフローにおける制御フローを使うことで、分岐、マージ、条件分岐を管理し、ロジック要件に合ったワークフローを構築できます。"
 ---
 
-# ワークフローの制御フロー：分岐、マージ、条件
+# ワークフローにおける制御フロー：分岐、マージ、条件
 
-複数ステップのプロセスを作成する場合、ステップを並行して実行したり、順番に連鎖させたり、結果に基づいて異なるパスをたどる必要があるかもしれません。このページでは、論理的要件を満たすワークフローを構築するために、分岐、マージ、条件をどのように管理できるかを説明します。コードスニペットは、複雑な制御フローを構築するための主要なパターンを示しています。
+複数のステップからなるプロセスを作成する際、ステップを並列で実行したり、順番に連鎖させたり、結果に応じて異なる経路をたどる必要がある場合があります。このページでは、分岐、マージ、条件を管理して、ロジック要件を満たすワークフローを構築する方法について説明します。コードスニペットでは、複雑な制御フローを構成するための主要なパターンを示しています。
 
 ## 並列実行
 
-互いに依存関係のないステップを同時に実行することができます。ステップが独立したタスクを実行する場合、このアプローチによってワークフローを高速化できます。以下のコードは、2つのステップを並列に追加する方法を示しています：
+互いに依存しない複数のステップを同時に実行することができます。この方法を使うことで、各ステップが独立したタスクを実行する場合、ワークフローの処理速度を向上させることができます。以下のコードは、2つのステップを並列で追加する方法を示しています。
 
 ```typescript
 myWorkflow.step(fetchUserData).step(fetchOrderData);
 ```
 
-詳細については、[並列ステップ](../../examples/workflows/parallel-steps.mdx)の例を参照してください。
+詳細については、[Parallel Steps](../../examples/workflows/parallel-steps.mdx) の例をご覧ください。
 
 ## 順次実行
 
-時には、あるステップの出力が次のステップの入力になるように、厳密な順序でステップを実行する必要があります。依存する操作をリンクするには .then() を使用します。以下のコードは、ステップを順番に連鎖させる方法を示しています：
+ある処理の出力を次の処理の入力として利用するために、手順を厳密な順序で実行する必要がある場合があります。依存する操作をつなげるには、.then() を使用します。以下のコードは、手順を順番に連結する方法を示しています。
 
 ```typescript
 myWorkflow.step(fetchOrderData).then(validateData).then(processOrder);
 ```
 
-詳細については、[順次ステップ](../../examples/workflows/sequential-steps.mdx)の例を参照してください。
+詳細については、[順次ステップ](../../examples/workflows/sequential-steps.mdx) の例をご覧ください。
 
 ## 分岐と合流パス
 
@@ -53,7 +53,7 @@ myWorkflow
 
 ## 複数のブランチのマージ
 
-時には、複数の他のステップが完了した後にのみステップを実行する必要があります。Mastraは、ステップに対して複数の依存関係を指定できる複合的な`.after([])`構文を提供しています。
+複数の他のステップが完了した後にのみ実行されるステップが必要な場合があります。Mastra では、複数の依存関係をステップに指定できる複合的な `.after([])` 構文が用意されています。
 
 ```typescript
 myWorkflow
@@ -61,52 +61,52 @@ myWorkflow
   .then(validateUserData)
   .step(fetchProductData)
   .then(validateProductData)
-  // このステップは、validateUserDataとvalidateProductDataの両方が完了した後にのみ実行されます
+  // This step will only run after BOTH validateUserData AND validateProductData have completed
   .after([validateUserData, validateProductData])
   .step(processOrder);
 ```
 
 この例では：
 
-- `fetchUserData`と`fetchProductData`は並列ブランチで実行されます
-- 各ブランチには独自の検証ステップがあります
-- `processOrder`ステップは、両方の検証ステップが正常に完了した後にのみ実行されます
+- `fetchUserData` と `fetchProductData` は並列のブランチで実行されます
+- 各ブランチには独自のバリデーションステップがあります
+- `processOrder` ステップは、両方のバリデーションステップが正常に完了した後にのみ実行されます
 
-このパターンは特に以下の場合に役立ちます：
+このパターンは特に以下の場合に便利です：
 
 - 並列実行パスの結合
-- ワークフローに同期ポイントを実装する
-- 進行する前にすべての必要なデータが利用可能であることを確認する
+- ワークフロー内での同期ポイントの実装
+- すべての必要なデータが揃ってから次に進むことの保証
 
-複数の`.after([])`呼び出しを組み合わせることで、複雑な依存関係パターンを作成することもできます：
+複数の `.after([])` 呼び出しを組み合わせることで、より複雑な依存関係パターンを作成することもできます：
 
 ```typescript
 myWorkflow
-  // 最初のブランチ
+  // First branch
   .step(stepA)
   .then(stepB)
   .then(stepC)
 
-  // 2番目のブランチ
+  // Second branch
   .step(stepD)
   .then(stepE)
 
-  // 3番目のブランチ
+  // Third branch
   .step(stepF)
   .then(stepG)
 
-  // このステップは複数のブランチの完了に依存しています
+  // This step depends on the completion of multiple branches
   .after([stepC, stepE, stepG])
   .step(finalStep);
 ```
 
-## 循環依存とループ
+## 循環依存関係とループ
 
-ワークフローでは、特定の条件が満たされるまでステップを繰り返す必要があることがよくあります。Mastraはループを作成するための2つの強力な方法を提供しています：`until`と`while`です。これらのメソッドは、繰り返しタスクを実装するための直感的な方法を提供します。
+ワークフローでは、特定の条件が満たされるまでステップを繰り返す必要がよくあります。Mastra では、ループを作成するための強力な2つの方法、`until` と `while` を提供しています。これらのメソッドは、繰り返しタスクを直感的に実装する方法を提供します。
 
-### 手動循環依存の使用（レガシーアプローチ）
+### 手動による循環依存関係の利用（従来のアプローチ）
 
-以前のバージョンでは、条件付きの循環依存関係を手動で定義してループを作成することができました：
+以前のバージョンでは、条件付きで循環依存関係を手動で定義することでループを作成できました。
 
 ```typescript
 myWorkflow
@@ -121,18 +121,18 @@ myWorkflow
   });
 ```
 
-このアプローチは引き続き機能しますが、新しい`until`および`while`メソッドは、ループを作成するためのよりクリーンで保守しやすい方法を提供します。
+この方法も引き続き利用できますが、より新しい `until` や `while` メソッドを使うことで、よりシンプルで保守しやすいループを作成できます。
 
-### 条件ベースのループに`until`を使用する
+### `until` を使った条件付きループ
 
-`until`メソッドは、指定された条件が真になるまでステップを繰り返します。以下の引数を取ります：
+`until` メソッドは、指定した条件が真になるまでステップを繰り返します。引数は以下の通りです。
 
-1. ループを停止するタイミングを決定する条件
+1. ループを終了する条件
 2. 繰り返すステップ
-3. 繰り返されるステップに渡すオプションの変数
+3. 繰り返しステップに渡すオプションの変数
 
 ```typescript
-// ターゲットに達するまでカウンターをインクリメントするステップ
+// 目標値に達するまでカウンターをインクリメントするステップ
 const incrementStep = new Step({
   id: "increment",
   inputSchema: z.object({
@@ -159,7 +159,7 @@ workflow
     },
     incrementStep,
     {
-      // 現在のカウンターを次の反復に渡す
+      // 現在のカウンターを次のイテレーションに渡す
       counter: {
         step: incrementStep,
         path: "updatedCounter",
@@ -169,7 +169,7 @@ workflow
   .then(finalStep);
 ```
 
-参照ベースの条件を使用することもできます：
+参照ベースの条件も利用できます。
 
 ```typescript
 workflow
@@ -190,16 +190,16 @@ workflow
   .then(finalStep);
 ```
 
-### 条件ベースのループに`while`を使用する
+### `while` を使った条件付きループ
 
-`while`メソッドは、指定された条件が真である限りステップを繰り返します。`until`と同じ引数を取ります：
+`while` メソッドは、指定した条件が真である間ステップを繰り返します。引数は `until` と同じです。
 
-1. ループを継続するタイミングを決定する条件
+1. ループを継続する条件
 2. 繰り返すステップ
-3. 繰り返されるステップに渡すオプションの変数
+3. 繰り返しステップに渡すオプションの変数
 
 ```typescript
-// ターゲット未満の間カウンターをインクリメントするステップ
+// 目標値未満の間カウンターをインクリメントするステップ
 const incrementStep = new Step({
   id: "increment",
   inputSchema: z.object({
@@ -226,7 +226,7 @@ workflow
     },
     incrementStep,
     {
-      // 現在のカウンターを次の反復に渡す
+      // 現在のカウンターを次のイテレーションに渡す
       counter: {
         step: incrementStep,
         path: "updatedCounter",
@@ -236,7 +236,7 @@ workflow
   .then(finalStep);
 ```
 
-参照ベースの条件を使用することもできます：
+参照ベースの条件も利用できます。
 
 ```typescript
 workflow
@@ -257,18 +257,18 @@ workflow
   .then(finalStep);
 ```
 
-### 参照条件の比較演算子
+### 参照条件で使える比較演算子
 
-参照ベースの条件を使用する場合、以下の比較演算子を使用できます：
+参照ベースの条件を使う場合、以下の比較演算子が利用できます。
 
-| 演算子 | 説明       |
-| ------ | ---------- |
-| `$eq`  | 等しい     |
-| `$ne`  | 等しくない |
-| `$gt`  | より大きい |
-| `$gte` | 以上       |
-| `$lt`  | より小さい |
-| `$lte` | 以下       |
+| 演算子   | 説明                       |
+| -------- | -------------------------- |
+| `$eq`    | 等しい                     |
+| `$ne`    | 等しくない                 |
+| `$gt`    | より大きい                 |
+| `$gte`   | 以上                       |
+| `$lt`    | より小さい                 |
+| `$lte`   | 以下                       |
 
 ## 条件
 
@@ -492,12 +492,12 @@ workflow
   .commit();
 ```
 
-変数マッピングの詳細については、[ワークフロー変数によるデータマッピング](./variables.mdx)のドキュメントを参照してください。
+変数マッピングの詳細については、[ワークフロー変数によるデータマッピング](./variables.mdx)のドキュメントをご覧ください。
 
-### コンテキストオブジェクトの使用
+### Contextオブジェクトの利用
 
-コンテキストオブジェクトは、すべてのステップの結果とその出力に直接アクセスできます。このアプローチはより柔軟ですが、型の安全性を維持するために慎重な取り扱いが必要です。
-`context.steps`オブジェクトを通じてステップの結果に直接アクセスできます：
+contextオブジェクトは、すべてのステップ結果とその出力に直接アクセスする手段を提供します。この方法はより柔軟ですが、型安全性を維持するためには注意が必要です。
+ステップの結果には `context.steps` オブジェクトを通じて直接アクセスできます:
 
 ```typescript showLineNumbers filename="src/mastra/workflows/context-access.ts" copy
 import { Step, Workflow } from "@mastra/core/workflows";
@@ -529,10 +529,10 @@ const workflow = new Workflow({
 workflow.step(fetchUserStep).then(processOrderStep).commit();
 ```
 
-### ワークフローレベルの型安全性
+### ワークフロー全体の型安全性
 
-ワークフロー全体で包括的な型安全性を確保するには、すべてのステップの型を定義し、それらをワークフローに渡すことができます。
-これにより、条件のコンテキストオブジェクト、および最終的なワークフロー出力のステップ結果に対して型安全性を確保できます。
+ワークフロー全体で包括的な型安全性を確保するために、すべてのステップの型を定義し、それらをWorkflowに渡すことができます。
+これにより、条件や最終的なワークフロー出力でcontextオブジェクトやステップ結果に対して型安全性を得ることができます。
 
 ```typescript showLineNumbers filename="src/mastra/workflows/workflow-typing.ts" copy
 import { Step, Workflow } from "@mastra/core/workflows";
@@ -585,7 +585,7 @@ workflow
 
 ### トリガーデータへのアクセス
 
-ステップ結果に加えて、ワークフローを開始した元のトリガーデータにアクセスできます：
+ステップ結果に加えて、ワークフローを開始した元のトリガーデータにもアクセスできます:
 
 ```typescript showLineNumbers filename="src/mastra/workflows/trigger-data.ts" copy
 import { Step, Workflow } from "@mastra/core/workflows";
@@ -621,9 +621,9 @@ const workflow = new Workflow({
 workflow.step(processOrderStep).commit();
 ```
 
-### 再開データへのアクセス
+### レジュームデータへのアクセス
 
-ステップに注入されたデータは`context.inputData`オブジェクトで利用でき、ステップの`inputSchema`に基づいて型付けされています。
+ステップに注入されたデータは `context.inputData` オブジェクトで利用でき、ステップの `inputSchema` に基づいて型付けされます。
 
 ```typescript showLineNumbers filename="src/mastra/workflows/resume-data.ts" copy
 import { Step, Workflow } from "@mastra/core/workflows";
@@ -669,9 +669,9 @@ const resumedResult = await workflow.resume({
 console.log({ resumedResult });
 ```
 
-### ワークフローの結果へのアクセス
+### ワークフロー結果へのアクセス
 
-ワークフローの結果に型付きでアクセスするには、ステップの型を`Workflow`型パラメータに注入します：
+`Workflow` 型パラメータにステップ型を注入することで、ワークフローの結果に型安全にアクセスできます。
 
 ```typescript showLineNumbers filename="src/mastra/workflows/get-results.ts" copy
 import { Workflow } from "@mastra/core/workflows";
@@ -716,10 +716,10 @@ workflow.step(fetchUserStep).then(processOrderStep).commit();
 const run = workflow.createRun();
 const result = await run.start();
 
-// 結果はステップ結果の判別共用体です
-// そのためステータスチェックによって絞り込む必要があります
+// The result is a discriminated union of the step results
+// So it needs to be narrowed down via status checks
 if (result.results.processOrder.status === "success") {
-  // TypeScriptは結果の形状を認識します
+  // TypeScript will know the shape of the results
   const orderId = result.results.processOrder.output.orderId;
   console.log({ orderId });
 }
@@ -732,37 +732,37 @@ if (result.results.fetchUser.status === "success") {
 
 ### データフローのベストプラクティス
 
-1. **型安全性のためにステップ参照でgetStepResultを使用する**
+1. **型安全性のために Step 参照とともに getStepResult を使用する**
 
-   - TypeScriptが正しい型を推論できるようにします
-   - コンパイル時に型エラーを検出します
+   - TypeScript が正しい型を推論できるようにする
+   - コンパイル時に型エラーを検出できる
 
-2. **明示的な依存関係のために変数マッピングを使用する**
+2. \*_明示的な依存関係のために変数マッピングを使用する_
 
-   - データフローを明確で保守しやすくします
-   - ステップの依存関係の良いドキュメントを提供します
+   - データフローが明確かつ保守しやすくなる
+   - ステップ間の依存関係を良いドキュメントとして提供できる
 
-3. **ステップの出力スキーマを定義する**
+3. **各ステップに出力スキーマを定義する**
 
-   - 実行時にデータを検証します
-   - `execute`関数の戻り値の型を検証します
-   - TypeScriptでの型推論を改善します
+   - 実行時にデータを検証できる
+   - `execute` 関数の戻り値の型を検証できる
+   - TypeScript での型推論が向上する
 
-4. **欠落データを適切に処理する**
+4. **データが存在しない場合も適切に処理する**
 
-   - プロパティにアクセスする前に常にステップ結果が存在するかチェックします
-   - オプションデータにフォールバック値を提供します
+   - ステップの結果にアクセスする前に必ず存在を確認する
+   - オプションデータにはフォールバック値を用意する
 
-5. **データ変換をシンプルに保つ**
-   - 変数マッピングではなく専用のステップでデータを変換します
-   - ワークフローのテストとデバッグが容易になります
+5. **データ変換はシンプルに保つ**
+   - 変数マッピング内ではなく、専用のステップでデータを変換する
+   - ワークフローのテストやデバッグが容易になる
 
 ### データフロー手法の比較
 
-| 手法           | 型安全性 | 明示性 | ユースケース                                               |
-| -------------- | -------- | ------ | ---------------------------------------------------------- |
-| getStepResult  | 最高     | 高     | 厳格な型要件を持つ複雑なワークフロー                       |
-| 変数マッピング | 高       | 高     | 依存関係を明確かつ明示的にする必要がある場合               |
-| context.steps  | 中       | 低     | シンプルなワークフローでのステップデータへの迅速なアクセス |
+| 手法              | 型安全性     | 明示性        | ユースケース                                         |
+| ----------------- | ----------- | ------------ | ---------------------------------------------------- |
+| getStepResult     | 最高        | 高い         | 厳格な型付けが必要な複雑なワークフロー               |
+| 変数マッピング    | 高い        | 高い         | 依存関係を明確かつ明示的にしたい場合                 |
+| context.steps     | 中程度      | 低い         | シンプルなワークフローでステップデータに素早くアクセスしたい場合 |
 
-ユースケースに適したデータフロー手法を選択することで、型安全で保守しやすいワークフローを作成できます。
+ユースケースに合ったデータフロー手法を選択することで、型安全かつ保守性の高いワークフローを構築できます。

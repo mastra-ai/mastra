@@ -6,7 +6,7 @@ import { WorkflowInformation } from '@/domains/workflows/workflow-information';
 function Workflow() {
   const { workflowId } = useParams();
   return (
-    <main className="flex-1 relative divide-x flex w-full">
+    <main className="flex-1 relative divide-x flex w-full h-full">
       <div className="min-w-[325px] grow">
         <VNextWorkflowGraph workflowId={workflowId!} baseUrl="" />
       </div>

@@ -1,5 +1,29 @@
 # mastra
 
+## 0.6.4-alpha.0
+
+### Patch Changes
+
+- 99552bc: revamp the UI of the tools page
+- db4211d: improve the UI/UX of the runtime context with formatting, copying, docs and syntax highlighting
+- 9b7294a: Revamp the UI for the right sidebar of the agents page
+- e2c2cf1: Persist playground agent settings across refresh
+- 1270183: Add waterfull traces instead of stacked progressbar (UI improvement mostly)
+- 392a14d: changing the empty state for threads in agent chat
+- 2672a05: Add MCP servers and tool call execution to playground
+- Updated dependencies [f53a6ac]
+- Updated dependencies [eabdcd9]
+- Updated dependencies [90be034]
+- Updated dependencies [aaf0e48]
+- Updated dependencies [99f050a]
+- Updated dependencies [d0ee3c6]
+- Updated dependencies [48e5910]
+- Updated dependencies [23f258c]
+- Updated dependencies [2672a05]
+  - @mastra/core@0.9.5-alpha.0
+  - @mastra/deployer@0.3.5-alpha.0
+  - @mastra/mcp@0.5.1-alpha.0
+
 ## 0.6.3
 
 ### Patch Changes

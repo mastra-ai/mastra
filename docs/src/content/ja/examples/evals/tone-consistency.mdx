@@ -1,28 +1,28 @@
 ---
-title: "例：トーンの一貫性 | 評価 | Mastra ドキュメント"
-description: トーンの一貫性メトリックを使用して、テキスト内の感情的なトーンパターンと感情の一貫性を評価する例。
+title: "例: トーンの一貫性 | Evals | Mastra Docs"
+description: トーンの一貫性メトリクスを使用して、テキスト内の感情的なトーンパターンや感情の一貫性を評価する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
-# トーンの一貫性評価
+# トーン一貫性評価
 
-この例では、Mastraのトーンの一貫性メトリックを使用して、テキストの感情的なトーンパターンと感情の一貫性を評価する方法を示します。
+この例では、Mastra のトーン一貫性メトリックを使用して、テキスト内の感情的なトーンパターンや感情の一貫性を評価する方法を示します。
 
 ## 概要
 
-この例では、以下の方法を示します：
+この例では、以下の方法を示します。
 
-1. Tone Consistency メトリックを設定する
-2. テキスト間の感情を比較する
-3. テキスト内のトーンの安定性を分析する
-4. 異なるトーンのシナリオを処理する
+1. Tone Consistencyメトリクスの設定方法
+2. テキスト間の感情の比較
+3. テキスト内のトーンの安定性の分析
+4. 異なるトーンのシナリオへの対応
 
 ## セットアップ
 
 ### 依存関係
 
-必要な依存関係をインポートします:
+必要な依存関係をインポートします：
 
 ```typescript copy showLineNumbers filename="src/index.ts"
 import { ToneConsistencyMetric } from "@mastra/evals/nlp";
@@ -30,7 +30,7 @@ import { ToneConsistencyMetric } from "@mastra/evals/nlp";
 
 ## メトリック設定
 
-トーン一貫性メトリックを設定します:
+トーンの一貫性メトリックを設定します：
 
 ```typescript copy showLineNumbers{4} filename="src/index.ts"
 const metric = new ToneConsistencyMetric();
@@ -68,11 +68,11 @@ console.log("Metric Result:", {
 
 ### トーンの安定性の例
 
-単一のテキスト内での感情の一貫性を評価します：
+単一のテキスト内で感情の一貫性を評価します：
 
 ```typescript copy showLineNumbers{21} filename="src/index.ts"
 const input2 = "Great service! Friendly staff. Perfect atmosphere.";
-const output2 = ""; // 安定性分析のための空の文字列
+const output2 = ""; // Empty string for stability analysis
 
 console.log("Example 2 - Tone Stability:");
 console.log("Input:", input2);
@@ -125,27 +125,27 @@ console.log("Metric Result:", {
 
 ## 結果の理解
 
-この指標はモードに基づいて異なる出力を提供します：
+この指標は、モードに応じて異なる出力を提供します。
 
 1. 比較モード（出力テキストが提供されている場合）:
 
-   - トーンの一貫性を示す0から1のスコア
-   - 応答感情: 入力の感情的トーン (-1から1)
-   - 参照感情: 出力の感情的トーン (-1から1)
-   - 差異: 感情間の絶対差
+   - 0から1のスコアでトーンの一貫性を示す
+   - 入力の感情: 入力テキストの感情的トーン（-1から1）
+   - 参照の感情: 出力テキストの感情的トーン（-1から1）
+   - 差分: 感情値の絶対差
 
    スコアの解釈:
 
    - 0.8-1.0: 非常に一貫したトーン
-   - 0.6-0.7: 一般的に一貫している
-   - 0.4-0.5: 混合トーン
+   - 0.6-0.7: おおむね一貫している
+   - 0.4-0.5: 混在したトーン
    - 0.0-0.3: 矛盾したトーン
 
-2. 安定性モード（単一のテキストを分析する場合）:
+2. 安定性モード（単一テキストを分析する場合）:
 
-   - 内部の一貫性を示す0から1のスコア
-   - 平均感情: 全体的な感情的トーン
-   - 感情の分散: 文間でトーンがどれだけ変化するか
+   - 0から1のスコアで内部一貫性を示す
+   - 平均感情: 全体的な感情トーン
+   - 感情の分散: 文ごとのトーンの変動度
 
    スコアの解釈:
 

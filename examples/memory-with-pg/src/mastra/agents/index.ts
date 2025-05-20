@@ -18,7 +18,7 @@ export const memory = new Memory({
     database,
     password,
   }),
-  vector: new PgVector(connectionString),
+  vector: new PgVector({ connectionString }),
   options: {
     lastMessages: 10,
     semanticRecall: {

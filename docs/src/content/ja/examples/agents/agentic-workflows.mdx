@@ -7,7 +7,7 @@ import { GithubLink } from "@/components/github-link";
 
 # エージェンティックワークフロー
 
-AIアプリケーションを構築する際、互いの出力に依存する複数のステップを調整する必要がよくあります。この例では、天気データを取得し、それを使用してアクティビティを提案するAIワークフローを作成する方法を示し、外部APIをLLM駆動の計画と統合する方法を示しています。
+AI アプリケーションを構築する際、互いの出力に依存する複数のステップを調整する必要がよくあります。この例では、天気データを取得し、それを使用してアクティビティを提案する AI ワークフローを作成する方法を示しています。外部 API と LLM を活用した計画をどのように統合するかを実演しています。
 
 ```ts showLineNumbers copy
 import { Mastra } from "@mastra/core";
@@ -19,47 +19,47 @@ import { openai } from "@ai-sdk/openai";
 const agent = new Agent({
   name: "Weather Agent",
   instructions: `
-        あなたは天気に基づいた計画に優れた地元のアクティビティと旅行の専門家です。天気データを分析し、実用的なアクティビティの推奨を提供してください。
-        予報の各日に対して、次の形式で回答を構成してください：
-        📅 [曜日, 月 日, 年]
+        あなたは天気に基づいた計画を立てるのに優れた地元のアクティビティと旅行の専門家です。天気データを分析し、実用的なアクティビティの推奨事項を提供してください。
+        予報の各日について、以下の形式で正確に回答してください：
+        📅 [曜日、月 日付、年]
         ═══════════════════════════
-        🌡️ 天気概要
-        • 状況: [簡単な説明]
-        • 気温: [X°C/Y°F から A°C/B°F]
-        • 降水確率: [X% の確率]
+        🌡️ 天気の概要
+        • 状態：[簡単な説明]
+        • 気温：[X°C/Y°F から A°C/B°F]
+        • 降水確率：[X%]
         🌅 午前のアクティビティ
-        屋外:
+        屋外：
         • [アクティビティ名] - [特定の場所/ルートを含む簡単な説明]
-          最適な時間帯: [特定の時間範囲]
-          注意: [関連する天気の考慮事項]
+          最適な時間帯：[具体的な時間帯]
+          注意：[関連する天気の考慮事項]
         🌞 午後のアクティビティ
-        屋外:
+        屋外：
         • [アクティビティ名] - [特定の場所/ルートを含む簡単な説明]
-          最適な時間帯: [特定の時間範囲]
-          注意: [関連する天気の考慮事項]
-        🏠 屋内の代替案
+          最適な時間帯：[具体的な時間帯]
+          注意：[関連する天気の考慮事項]
+        🏠 室内の代替案
         • [アクティビティ名] - [特定の会場を含む簡単な説明]
-          理想的な条件: [この代替案を引き起こす天気条件]
-        ⚠️ 特別な考慮事項
-        • [関連する天気警報、UV指数、風の状況など]
-        ガイドライン:
-        - 1日あたり2〜3つの時間特定の屋外アクティビティを提案
-        - 1〜2つの屋内バックアップオプションを含める
-        - 降水確率が50％を超える場合は、屋内アクティビティを優先
-        - すべてのアクティビティは特定の場所に特化する必要があります
+          最適な条件：[この代替案が必要となる天気条件]
+        ⚠️ 特別な注意事項
+        • [関連する天気警報、UV指数、風の状態など]
+        ガイドライン：
+        - 1日あたり2〜3つの時間指定の屋外アクティビティを提案する
+        - 1〜2つの室内バックアップオプションを含める
+        - 降水確率が50%を超える場合は、室内アクティビティを優先する
+        - すべてのアクティビティはその場所に特化したものであること
         - 特定の会場、トレイル、または場所を含める
         - 気温に基づいてアクティビティの強度を考慮する
-        - 説明は簡潔でありながら情報豊かに保つ
-        一貫性のために、この正確なフォーマットを維持し、示されている絵文字とセクションヘッダーを使用してください。
+        - 説明は簡潔かつ有益であること
+        一貫性のために、絵文字とセクションヘッダーを示されたとおりに使用して、この正確な書式を維持してください。
       `,
   model: openai("gpt-4o-mini"),
 });
 
 const fetchWeather = new Step({
   id: "fetch-weather",
-  description: "指定された都市の天気予報を取得します",
+  description: "Fetches weather forecast for a given city",
   inputSchema: z.object({
-    city: z.string().describe("天気を取得する都市"),
+    city: z.string().describe("The city to get the weather for"),
   }),
   execute: async ({ context }) => {
     const triggerData = context?.getStepResult<{
@@ -67,7 +67,7 @@ const fetchWeather = new Step({
     }>("trigger");
 
     if (!triggerData) {
-      throw new Error("トリガーデータが見つかりません");
+      throw new Error("Trigger data not found");
     }
 
     const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(triggerData.city)}&count=1`;
@@ -75,7 +75,7 @@ const fetchWeather = new Step({
     const geocodingData = await geocodingResponse.json();
 
     if (!geocodingData.results?.[0]) {
-      throw new Error(`場所 '${triggerData.city}' が見つかりません`);
+      throw new Error(`Location '${triggerData.city}' not found`);
     }
 
     const { latitude, longitude, name } = geocodingData.results[0];
@@ -110,17 +110,17 @@ const forecastSchema = z.array(
 
 const planActivities = new Step({
   id: "plan-activities",
-  description: "天気条件に基づいてアクティビティを提案します",
+  description: "Suggests activities based on weather conditions",
   inputSchema: forecastSchema,
   execute: async ({ context, mastra }) => {
     const forecast =
       context?.getStepResult<z.infer<typeof forecastSchema>>("fetch-weather");
 
     if (!forecast) {
-      throw new Error("予報データが見つかりません");
+      throw new Error("Forecast data not found");
     }
 
-    const prompt = `次の天気予報に基づいて、${forecast[0].location}で適切なアクティビティを提案してください:
+    const prompt = `以下の${forecast[0].location}の天気予報に基づいて、適切なアクティビティを提案してください：
       ${JSON.stringify(forecast, null, 2)}
       `;
 
@@ -146,20 +146,20 @@ const planActivities = new Step({
 
 function getWeatherCondition(code: number): string {
   const conditions: Record<number, string> = {
-    0: "晴天",
-    1: "主に晴れ",
-    2: "部分的に曇り",
+    0: "快晴",
+    1: "おおむね晴れ",
+    2: "所々曇り",
     3: "曇り",
     45: "霧",
-    48: "霧氷の霧",
-    51: "小雨",
-    53: "適度な霧雨",
-    55: "濃い霧雨",
+    48: "着氷性の霧",
+    51: "軽い霧雨",
+    53: "中程度の霧雨",
+    55: "強い霧雨",
     61: "小雨",
-    63: "適度な雨",
+    63: "中程度の雨",
     65: "大雨",
     71: "小雪",
-    73: "適度な降雪",
+    73: "中程度の雪",
     75: "大雪",
     95: "雷雨",
   };

@@ -1,18 +1,18 @@
 ---
-title: "リファレンス: ElevenLabs Voice | 音声プロバイダー | Mastra ドキュメント"
-description: "ElevenLabs の音声実装に関するドキュメントで、複数の音声モデルと自然な音声合成を備えた高品質なテキスト読み上げ機能を提供します。"
+title: "リファレンス: ElevenLabs Voice | Voice Providers | Mastra ドキュメント"
+description: "ElevenLabsの音声実装に関するドキュメント。複数の音声モデルと自然な音声合成による高品質なテキスト読み上げ機能を提供します。"
 ---
 
 # ElevenLabs
 
-MastraにおけるElevenLabsの音声実装は、ElevenLabs APIを使用して高品質なテキスト読み上げ（TTS）および音声認識（STT）機能を提供します。
+MastraにおけるElevenLabsの音声実装は、ElevenLabs APIを利用して高品質なテキスト読み上げ（TTS）および音声認識（STT）機能を提供します。
 
 ## 使用例
 
 ```typescript
 import { ElevenLabsVoice } from "@mastra/voice-elevenlabs";
 
-// デフォルトの設定で初期化（ELEVENLABS_API_KEY環境変数を使用）
+// デフォルト設定で初期化（ELEVENLABS_API_KEY 環境変数を使用）
 const voice = new ElevenLabsVoice();
 
 // カスタム設定で初期化
@@ -24,28 +24,28 @@ const voice = new ElevenLabsVoice({
   speaker: "custom-speaker-id",
 });
 
-// テキストから音声へ
+// テキスト読み上げ
 const audioStream = await voice.speak("Hello, world!");
 
 // 利用可能なスピーカーを取得
 const speakers = await voice.getSpeakers();
 ```
 
-## コンストラクタパラメータ
+## コンストラクタのパラメーター
 
 <PropertiesTable
   content={[
     {
       name: "speechModel",
       type: "ElevenLabsVoiceConfig",
-      description: "テキストから音声への機能のための設定。",
+      description: "テキスト読み上げ機能のための設定。",
       isOptional: true,
       defaultValue: "{ name: 'eleven_multilingual_v2' }",
     },
     {
       name: "speaker",
       type: "string",
-      description: "テキストから音声への変換に使用するスピーカーのID",
+      description: "テキスト読み上げに使用するスピーカーのID",
       isOptional: true,
       defaultValue: "'9BWtsMINqrJLrRacOk9x' (Aria voice)",
     },
@@ -67,7 +67,7 @@ const speakers = await voice.getSpeakers();
       name: "apiKey",
       type: "string",
       description:
-        "ElevenLabs APIキー。ELEVENLABS_API_KEY環境変数にフォールバックします",
+        "ElevenLabsのAPIキー。指定がない場合はELEVENLABS_API_KEY環境変数が使用されます。",
       isOptional: true,
     },
   ]}
@@ -77,7 +77,7 @@ const speakers = await voice.getSpeakers();
 
 ### speak()
 
-設定された音声モデルと声を使用してテキストを音声に変換します。
+設定された音声モデルとボイスを使用してテキストを音声に変換します。
 
 <PropertiesTable
   content={[
@@ -85,19 +85,19 @@ const speakers = await voice.getSpeakers();
       name: "input",
       type: "string | NodeJS.ReadableStream",
       description:
-        "音声に変換するテキスト。ストリームが提供された場合、最初にテキストに変換されます。",
+        "音声に変換するテキスト。ストリームが指定された場合は、最初にテキストへ変換されます。",
       isOptional: false,
     },
     {
       name: "options",
       type: "object",
-      description: "音声合成のための追加オプション",
+      description: "音声合成の追加オプション",
       isOptional: true,
     },
     {
       name: "options.speaker",
       type: "string",
-      description: "このリクエストのデフォルトのスピーカーIDを上書きします",
+      description: "このリクエストでデフォルトのスピーカーIDを上書きします",
       isOptional: true,
     },
   ]}
@@ -107,32 +107,32 @@ const speakers = await voice.getSpeakers();
 
 ### getSpeakers()
 
-利用可能な音声オプションの配列を返します。各ノードには以下が含まれます:
+利用可能なボイスオプションの配列を返します。各ノードには以下が含まれます:
 
 <PropertiesTable
   content={[
     {
       name: "voiceId",
       type: "string",
-      description: "音声の一意の識別子",
+      description: "ボイスの一意の識別子",
       isOptional: false,
     },
     {
       name: "name",
       type: "string",
-      description: "音声の表示名",
+      description: "ボイスの表示名",
       isOptional: false,
     },
     {
       name: "language",
       type: "string",
-      description: "音声の言語コード",
+      description: "ボイスの言語コード",
       isOptional: false,
     },
     {
       name: "gender",
       type: "string",
-      description: "音声の性別",
+      description: "ボイスの性別",
       isOptional: false,
     },
   ]}
@@ -140,26 +140,26 @@ const speakers = await voice.getSpeakers();
 
 ### listen()
 
-ElevenLabs Speech-to-Text APIを使用して音声入力をテキストに変換します。
+ElevenLabs Speech-to-Text API を使用して音声入力をテキストに変換します。
 
 <PropertiesTable
   content={[
     {
       name: "input",
       type: "NodeJS.ReadableStream",
-      description: "文字起こしする音声データを含む読み取り可能なストリーム",
+      description: "書き起こし対象の音声データを含むリーダブルストリーム",
       isOptional: false,
     },
     {
       name: "options",
       type: "object",
-      description: "文字起こしのための設定オプション",
+      description: "書き起こしの設定オプション",
       isOptional: true,
     },
   ]}
 />
 
-オプションオブジェクトは以下のプロパティをサポートします:
+options オブジェクトは以下のプロパティをサポートします:
 
 <PropertiesTable
   content={[
@@ -172,8 +172,7 @@ ElevenLabs Speech-to-Text APIを使用して音声入力をテキストに変換
     {
       name: "tag_audio_events",
       type: "boolean",
-      description:
-        "[MUSIC]、[LAUGHTER]などの音声イベントをタグ付けするかどうか",
+      description: "[MUSIC]、[LAUGHTER] などの音声イベントをタグ付けするかどうか",
       isOptional: true,
     },
     {
@@ -203,17 +202,17 @@ ElevenLabs Speech-to-Text APIを使用して音声入力をテキストに変換
     {
       name: "abortSignal",
       type: "AbortSignal",
-      description: "リクエストを中止するためのシグナル",
+      description: "リクエストを中断するためのシグナル",
       isOptional: true,
     },
   ]}
 />
 
-戻り値: `Promise<string>` - 文字起こしされたテキストに解決されるPromise
+戻り値: `Promise<string>` - 書き起こされたテキストを解決する Promise
 
 ## 重要な注意事項
 
-1. ElevenLabs APIキーが必要です。`ELEVENLABS_API_KEY` 環境変数を介して設定するか、コンストラクタで渡してください。
+1. ElevenLabsのAPIキーが必要です。`ELEVENLABS_API_KEY`環境変数で設定するか、コンストラクタに渡してください。
 2. デフォルトのスピーカーはAria（ID: '9BWtsMINqrJLrRacOk9x'）に設定されています。
-3. ElevenLabsは音声からテキストへの機能をサポートしていません。
-4. 利用可能なスピーカーは、各声の言語や性別を含む詳細情報を返す `getSpeakers()` メソッドを使用して取得できます。
+3. ElevenLabsでは音声からテキストへの機能はサポートされていません。
+4. 利用可能なスピーカーは、`getSpeakers()`メソッドを使用して取得できます。このメソッドは、各ボイスの言語や性別などの詳細情報を返します。

@@ -1,3 +1,8 @@
+---
+title: Mastra クライアントログ API
+description: client-js SDKを使用してMastraでシステムログとデバッグ情報にアクセスし、クエリを実行する方法を学びます。
+---
+
 # ログ API
 
 ログ API は、Mastra のシステムログとデバッグ情報にアクセスして照会するためのメソッドを提供します。
@@ -20,9 +25,9 @@ const logs = await client.getLogs({
 });
 ```
 
-## 特定の実行のログを取得する
+## 特定の実行ランのログを取得する
 
-特定の実行のログを取得します：
+特定の実行ランのログを取得します：
 
 ```typescript
 const runLogs = await client.getLogForRun({

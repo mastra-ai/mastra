@@ -20,7 +20,7 @@ function waitUntilVectorsIndexed(vectorDB: TurbopufferVector, indexName: string,
     let attempts = 0;
     const interval = setInterval(async () => {
       try {
-        const stats = await vectorDB.describeIndex(indexName);
+        const stats = await vectorDB.describeIndex({ indexName });
         console.log(`Index ${indexName} has ${stats.count} vectors indexed, waiting for ${expectedCount}`);
         if (stats && stats.count >= expectedCount) {
           clearInterval(interval);
@@ -84,7 +84,7 @@ function waitUntilVectorsIndexed(vectorDB: TurbopufferVector, indexName: string,
         console.log(`Deleting test index: ${testIndexName}`);
         try {
           // Cleanup: delete test index
-          await vectorDB.deleteIndex(testIndexName);
+          await vectorDB.deleteIndex({ indexName: testIndexName });
           console.log(`Successfully deleted test index: ${testIndexName}`);
         } catch (deleteError) {
           console.error(`Error deleting test index ${testIndexName}:`, deleteError);
@@ -151,7 +151,7 @@ function waitUntilVectorsIndexed(vectorDB: TurbopufferVector, indexName: string,
     }, 500000);
 
     it('should describe index with correct properties', async () => {
-      const stats = await vectorDB.describeIndex(testIndexName);
+      const stats = await vectorDB.describeIndex({ indexName: testIndexName });
       expect(stats.dimension).toBe(dimension);
       expect(stats.metric).toBe('cosine');
       expect(typeof stats.count).toBe('number');
@@ -165,7 +165,7 @@ function waitUntilVectorsIndexed(vectorDB: TurbopufferVector, indexName: string,
     });
 
     afterAll(async () => {
-      await vectorDB.deleteIndex(testIndexName);
+      await vectorDB.deleteIndex({ indexName: testIndexName });
     });
 
     it('should handle non-existent index query gracefully', async () => {
@@ -201,7 +201,7 @@ function waitUntilVectorsIndexed(vectorDB: TurbopufferVector, indexName: string,
       ).resolves.not.toThrow();
 
       // Cleanup
-      await vectorDB.deleteIndex(duplicateIndexName);
+      await vectorDB.deleteIndex({ indexName: duplicateIndexName });
     });
   });
 
