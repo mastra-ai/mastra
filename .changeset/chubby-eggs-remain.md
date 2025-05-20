@@ -3,6 +3,7 @@
 '@mastra/client-js': patch
 '@mastra/cloudflare-d1': patch
 '@mastra/deployer': patch
+'@mastra/firecrawl': patch
 '@mastra/clickhouse': patch
 '@mastra/cloudflare': patch
 '@mastra/inngest': patch
