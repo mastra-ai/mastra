@@ -208,7 +208,7 @@ MCP servers can be discovered through registries. Here’s how to connect to som
           "url": `https://mcp.withampersand.com/sse?${new URLSearchParams({
             apiKey: process.env.AMPERSAND_API_KEY,
             project: process.env.AMPERSAND_PROJECT_ID,
-            integrationId: process.env.AMPERSAND_INTEGRATION_NAME,
+            integrationName: process.env.AMPERSAND_INTEGRATION_NAME,
             groupRef: process.env.AMPERSAND_GROUP_REF
           })}`
         }
@@ -234,7 +234,7 @@ MCP servers can be discovered through registries. Here’s how to connect to som
               "stdio",
               "--project",
               process.env.AMPERSAND_PROJECT_ID,
-              "--integrationId",
+              "--integrationName",
               process.env.AMPERSAND_INTEGRATION_NAME,
               "--groupRef",
               process.env.AMPERSAND_GROUP_REF, // optional
