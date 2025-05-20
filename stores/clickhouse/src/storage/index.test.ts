@@ -87,7 +87,7 @@ const checkWorkflowSnapshot = (snapshot: WorkflowRunState | string, stepId: stri
   if (typeof snapshot === 'string') {
     throw new Error('Expected WorkflowRunState, got string');
   }
-  expect(snapshot.context?.steps[stepId]?.status).toBe(status);
+  expect(snapshot.context?.[stepId]?.status).toBe(status);
 };
 
 describe('ClickhouseStore', () => {
