@@ -327,6 +327,8 @@ article span.m-tag {
 
 article a {
   text-underline-offset: 1px;
+  display: inline-flex;
+  align-items: center;
 }
 
 article strong > a {
@@ -392,6 +394,14 @@ pre code.nextra-code:not([class*="twoslash-"]) > span[data-highlighted-line] {
 }
 main h3:has(+ div.nextra-code) {
   display: none;
+}
+
+.nextra-code {
+  white-space: nowrap;
+}
+
+.nextra-code > span {
+  white-space-collapse: preserve;
 }
 
 /*****Sidebar******/

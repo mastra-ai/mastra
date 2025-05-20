@@ -4,6 +4,7 @@ description: "Learn how to use the Mastra MCP documentation server in your IDE t
 ---
 
 import YouTube from "@/components/youtube";
+import { Tabs } from "nextra/components";
 
 # Mastra Tools for your agentic IDE
 
@@ -42,31 +43,17 @@ Once it's installed in your IDE you can write prompts and assume the agent will 
 
 ## Automatic Installation
 
-The MCP docs server can be installed by using the `-m` flag with the `create-mastra` command.
+For **new** projects, the MCP Docs Server can be added during installation either through the [interactive](/docs/getting-started/installation#interactive) setup prompts, or by specifying the `-m` flag using the [non-interactive](/docs/getting-started/installation#non-interactive) command.
 
-```bash npm2yarn
-npm create mastra@latest --default -m cursor
-```
-
-The mcp options include:
-
-- `cursor-global` - install the MCP server globally
-- `windsurf` - install the MCP server for Windsurf
-- `cursor` - install the MCP server for Cursor
-- `vscode` - install the MCP server for VSCode
-
-Alternatively, you can install the MCP server manually by following the instructions below.
-
-Run `pnpm create mastra@latest` and select Cursor or Windsurf when prompted to install the MCP server. For other IDEs, or if you already have a Mastra project, install the MCP server by following the instructions below.
 
 ## Manual Installation
+
+To add the MCP Docs Server to an existing project, install it manually.
 
 - **Cursor**: Edit `.cursor/mcp.json` in your project root, or `~/.cursor/mcp.json` for global configuration
 - **Windsurf**: Edit `~/.codeium/windsurf/mcp_config.json` (only supports global configuration)
 - **VSCode**: Edit `~/.vscode/mcp.json` in your project root
   Add the following configuration:
-
-import { Tabs } from "nextra/components";
 
 ### MacOS/Linux
 

@@ -8,7 +8,23 @@ import YouTube from "@/components/youtube";
 
 # Installing Mastra Locally
 
-To run Mastra, you need access to an LLM. Typically, you'll want to get an API key from an LLM provider such as [OpenAI](https://platform.openai.com/), [Anthropic](https://console.anthropic.com/settings/keys), or [Google Gemini](https://ai.google.dev/gemini-api/docs). You can also run Mastra with a local LLM using [Ollama](https://ollama.ai/).
+To run Mastra, you need access to an LLM. Typically, you'll want to get an API key from an LLM provider such as:
+
+- [OpenAI](https://platform.openai.com/)
+- [Anthropic](https://console.anthropic.com/settings/keys)
+- [Google Gemini](https://ai.google.dev/gemini-api/docs)
+
+You can also run Mastra with a local LLM using:
+
+- [Ollama](https://ollama.ai/).
+
+## What You'll Build
+
+By the end of this guide, you'll have built a Weather Agent that generates weather reports using OpenAI's [gpt-4o-mini](https://platform.openai.com/docs/models/gpt-4o-mini) and the Open-Meteo [forecast](https://open-meteo.com/en/docs#api_documentation) endpoint. You can run it directly from the command line or test it in the Mastra Playground. With the Weather agent running you can ask questions like:
+
+> What is the weather in London? <br/>
+> Suggest indoor alternatives in Berlin if it rains tomorrow. <br />
+> Is it windy in San Francisco today?
 
 ## Prerequisites
 
@@ -23,10 +39,18 @@ To run Mastra, you need access to an LLM. Typically, you'll want to get an API k
 
 ### Create a New Project
 
-We recommend starting a new Mastra project using `create-mastra`, which will scaffold your project. To create
-a project, run:
+There are two options when creating a new project with our CLI:
 
-<Tabs items={["npx", "npm", "yarn", "pnpm"]}>
+- [Interactive](#interactive)
+- [Non-Interactive](#non-interactive)
+
+> We recommend starting a new Mastra project using the interactive setup, which guides you through scaffolding your project step by step.
+
+#### Interactive
+
+To create a project, run:
+
+<Tabs items={["npx", "npm", "yarn", "pnpm", "bun"]}>
 
   <Tabs.Tab>
   ```bash copy 
@@ -46,6 +70,11 @@ yarn create mastra@latest
   <Tabs.Tab>
   ```bash copy
 pnpm create mastra@latest
+  ```
+  </Tabs.Tab>
+<Tabs.Tab>
+  ```bash copy
+bun create mastra@latest
   ```
   </Tabs.Tab>
 </Tabs>
@@ -76,117 +105,130 @@ After the prompts, `create-mastra` will:
 3. Configure your selected components and LLM provider
 4. Configure the MCP server in your IDE (if selected) for instant access to docs, examples, and help while you code
 
-**MCP Note:** If you're using a different IDE, you can install the MCP server manually by following the instructions in the [MCP server docs](/docs/getting-started/mcp-docs-server). **Also** note that there are additional steps for [Cursor and Windsurf](/docs/getting-started/mcp-docs-server#after-configuration) to activate the MCP server.
+> If you're using a different IDE, you can install the MCP server manually by following the instructions in the [MCP server docs](/docs/getting-started/mcp-docs-server). **Also** note that there are additional steps for [Cursor and Windsurf](/docs/getting-started/mcp-docs-server#after-configuration) to activate the MCP server.
+
+#### Non-Interactive
+
+You can run the Mastra CLI in fully non-interactive mode by passing all required flags. Start with:
+
+```bash copy
+npx create-mastra@latest
+```
+
+**Required Flags**
+
+| Short | Long            | Description                                                             |
+| ----- | --------------- | ----------------------------------------------------------------------- |
+| `-d`  | `--dir`         | Directory for Mastra files (defaults to `src/mastra`)                   |
+| `-c`  | `--components`  | Comma-separated list of components (`agents`, `tools`, `workflows`)     |
+| `-l`  | `--llm`         | Model provider (`openai`, `anthropic`, `groq`, `google`, or `cerebras`) |
+| `-k`  | `--llm-api-key` | API key for the selected LLM provider (added to `.env` file)            |
+| `-e`  | `--example`     | Include example code                                                    |
+| `-ne` | `--no-example`  | Skip example code                                                       |
+
+**Optional Flags**
+
+| Short | Long             | Description                                           |
+| ----- | ---------------- | ----------------------------------------------------- |
+| `-m`  | `--mcp`          | IDE (`windsurf`, `cursor`, `cursor-global`, `vscode`) |
+| `-p`  | `--project-name` | Project name                                          |
+| `-d`  | `--dir`          | Target directory for generated code (default: `src/`) |
+| `-t`  | `--timeout`      | Set timeout in milliseconds for installation steps    |
+| `-h`  | `--help`         | Display available flags                               |
+
+**Example One-Liner**
+
+```bash copy
+npx create-mastra@latest --project-name hello-mastra --example --components tools,agents,workflows --llm openai
+```
+
+> Providing all required flags lets the CLI run without any prompts.
 
 ### Set Up your API Key
 
-Add the API key for your configured LLM provider in your `.env` file.
+Create a `.env` file in your project root directory and add your API key:
 
 ```bash filename=".env" copy
-OPENAI_API_KEY=<your-openai-key>
+OPENAI_API_KEY=<your-api-key>
 ```
+
+> Replace `your-api-key` with your API key.
 
 </Steps>
 
-**Non-Interactive mode**:
-
-You can now specify the project name as either a positional argument or with the `-p, --project-name` option. This works consistently in both the Mastra CLI (`mastra create`) and `create-mastra` package. If both are provided, the argument takes precedence over the option.
-
-**Examples:**
-
-```bash copy
-npx create-mastra@latest my-app --components agents,tools --llm openai --example
-npx create-mastra@latest --project-name my-app --components agents,tools --llm openai --example
-# If both are provided, the argument wins:
-npx create-mastra@latest my-app --project-name ignored-name --components agents,tools --llm openai --example
-# Project will be created as "my-app"
-```
-
-To explicitly exclude example code, use the `--no-example` or `-n` flag:
-
-```bash copy
-npx create-mastra@latest my-app --components agents,tools --llm openai --no-example
-# or using the shorthand
-npx create-mastra@latest my-app --components agents,tools --llm openai -n
-```
-
-You can also specify the target directory for your source code using the optional `--dir` or `-d` flag (default: `src/`):
-
-```bash copy
-npx create-mastra@latest my-app --components agents,tools --llm openai --dir src/
-```
-
-**Configure Installation Timeout**:
-To configure and specify a timeout if installation takes too long use the timeout flag:
-
-```bash copy
-npx create-mastra@latest --timeout 120000
-```
-
-**Note for LLMs**:
-For a quick one-liner that includes examples you can run:
-
-```bash copy
-npx -y mastra@latest --project-name <your-project> --example --components "tools,agents,workflows" --llm <llm-provider>
-```
-
-The available options for the `--llm` flag are: `openai|anthropic|groq|google|cerebras`.
-
-> **Tip:** As long as you provide all required flags (project name as an argument or with `-p, --project-name`, `--components`, `--llm`, and either `--example` or `--no-example`), the CLI will run fully non-interactively with no prompts.
-
 ## Manual Installation
-
-<br/>
-<Steps>
 
 If you prefer to set up your Mastra project manually, follow these steps:
 
+<Steps>
+
 ### Create a New Project
 
-Create a project directory and navigate into it:
+Create a new project and change directory:
 
 ```bash copy
 mkdir hello-mastra
+
 cd hello-mastra
 ```
 
-Then, initialize a TypeScript project including the `@mastra/core` package:
+Initialize a TypeScript project including the `@mastra/core` package:
 
 <Tabs items={["npm", "pnpm", "yarn", "bun"]}>
 
   <Tabs.Tab>
     ```bash copy
     npm init -y
+
     npm install typescript tsx @types/node mastra@latest --save-dev
+
     npm install @mastra/core@latest zod @ai-sdk/openai
-    npx tsc --init
     ```
+
   </Tabs.Tab>
   <Tabs.Tab>
     ```bash copy
     pnpm init
+
     pnpm add typescript tsx @types/node mastra@latest --save-dev
+
     pnpm add @mastra/core@latest zod @ai-sdk/openai
-    pnpm dlx tsc --init
     ```
+
   </Tabs.Tab>
   <Tabs.Tab>
-    ```bash copy 
+    ```bash copy
     yarn init -y
+
     yarn add typescript tsx @types/node mastra@latest --dev
+
     yarn add @mastra/core@latest zod @ai-sdk/openai
-    yarn dlx tsc --init
     ```
+
   </Tabs.Tab>
   <Tabs.Tab>
     ```bash copy
     bun init -y
+
     bun add typescript tsx @types/node mastra@latest --dev
+
     bun add @mastra/core@latest zod @ai-sdk/openai
-    bunx tsc --init
     ```
+
   </Tabs.Tab>
 </Tabs>
+
+Add the `dev` and `build` scripts to `package.json`:
+
+```json copy
+{
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "mastra dev",
+    "build": "mastra build"
+  }
+}
+```
 
 ### Initialize TypeScript
 
@@ -209,27 +251,27 @@ Create a `tsconfig.json` file in your project root with the following configurat
 }
 ```
 
-This TypeScript configuration is optimized for Mastra projects, using modern module resolution and strict type checking.
+> This TypeScript configuration is optimized for Mastra projects, using modern module resolution and strict type checking.
 
 ### Set Up your API Key
 
 Create a `.env` file in your project root directory and add your API key:
 
 ```bash filename=".env" copy
-OPENAI_API_KEY=<your-openai-key>
+OPENAI_API_KEY=<your-api-key>
 ```
 
-Replace your_openai_api_key with your actual API key.
+> Replace `your-api-key` with your API key.
 
 ### Create a Tool
 
-Create a `weather-tool` tool file:
+Create a `weather-tool.ts` file:
 
 ```bash copy
 mkdir -p src/mastra/tools && touch src/mastra/tools/weather-tool.ts
 ```
 
-Then, add the following code to `src/mastra/tools/weather-tool.ts`:
+Add the following code:
 
 ```ts filename="src/mastra/tools/weather-tool.ts" showLineNumbers copy
 import { createTool } from "@mastra/core/tools";
@@ -331,15 +373,15 @@ function getWeatherCondition(code: number): string {
 
 ### Create an Agent
 
-Create a `weather` agent file:
+Create a `weather-agent.ts` file:
 
 ```bash copy
-mkdir -p src/mastra/agents && touch src/mastra/agents/weather.ts
+mkdir -p src/mastra/agents && touch src/mastra/agents/weather-agent.ts
 ```
 
-Then, add the following code to `src/mastra/agents/weather.ts`:
+Add the following code:
 
-```ts filename="src/mastra/agents/weather.ts" showLineNumbers copy
+```ts filename="src/mastra/agents/weather-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { weatherTool } from "../tools/weather-tool";
@@ -360,29 +402,238 @@ Use the weatherTool to fetch current weather data.`,
 });
 ```
 
+### Create a Workflow
+
+Create a `weather-workflow.ts` file:
+
+```bash copy
+mkdir -p src/mastra/workflows && touch src/mastra/workflows/weather-workflow.ts
+```
+
+Add the following code:
+
+```ts filename="src/mastra/workflows/weather-workflow.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { Step, Workflow } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const llm = openai("gpt-4o-mini");
+
+const agent = new Agent({
+  name: "Weather Agent",
+  model: llm,
+  instructions: `
+        You are a local activities and travel expert who excels at weather-based planning. Analyze the weather data and provide practical activity recommendations.
+
+        For each day in the forecast, structure your response exactly as follows:
+
+        📅 [Day, Month Date, Year]
+        ═══════════════════════════
+
+        🌡️ WEATHER SUMMARY
+        • Conditions: [brief description]
+        • Temperature: [X°C/Y°F to A°C/B°F]
+        • Precipitation: [X% chance]
+
+        🌅 MORNING ACTIVITIES
+        Outdoor:
+        • [Activity Name] - [Brief description including specific location/route]
+          Best timing: [specific time range]
+          Note: [relevant weather consideration]
+
+        🌞 AFTERNOON ACTIVITIES
+        Outdoor:
+        • [Activity Name] - [Brief description including specific location/route]
+          Best timing: [specific time range]
+          Note: [relevant weather consideration]
+
+        🏠 INDOOR ALTERNATIVES
+        • [Activity Name] - [Brief description including specific venue]
+          Ideal for: [weather condition that would trigger this alternative]
+
+        ⚠️ SPECIAL CONSIDERATIONS
+        • [Any relevant weather warnings, UV index, wind conditions, etc.]
+
+        Guidelines:
+        - Suggest 2-3 time-specific outdoor activities per day
+        - Include 1-2 indoor backup options
+        - For precipitation >50%, lead with indoor activities
+        - All activities must be specific to the location
+        - Include specific venues, trails, or locations
+        - Consider activity intensity based on temperature
+        - Keep descriptions concise but informative
+
+        Maintain this exact formatting for consistency, using the emoji and section headers as shown.
+      `,
+});
+
+const forecastSchema = z.array(
+  z.object({
+    date: z.string(),
+    maxTemp: z.number(),
+    minTemp: z.number(),
+    precipitationChance: z.number(),
+    condition: z.string(),
+    location: z.string(),
+  }),
+);
+
+const fetchWeather = new Step({
+  id: "fetch-weather",
+  description: "Fetches weather forecast for a given city",
+  inputSchema: z.object({
+    city: z.string().describe("The city to get the weather for"),
+  }),
+  outputSchema: forecastSchema,
+  execute: async ({ context }) => {
+    const triggerData = context?.getStepResult<{ city: string }>("trigger");
+
+    if (!triggerData) {
+      throw new Error("Trigger data not found");
+    }
+
+    const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(triggerData.city)}&count=1`;
+    const geocodingResponse = await fetch(geocodingUrl);
+    const geocodingData = (await geocodingResponse.json()) as {
+      results: { latitude: number; longitude: number; name: string }[];
+    };
+
+    if (!geocodingData.results?.[0]) {
+      throw new Error(`Location '${triggerData.city}' not found`);
+    }
+
+    const { latitude, longitude, name } = geocodingData.results[0];
+
+    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_mean,weathercode&timezone=auto`;
+    const response = await fetch(weatherUrl);
+    const data = (await response.json()) as {
+      daily: {
+        time: string[];
+        temperature_2m_max: number[];
+        temperature_2m_min: number[];
+        precipitation_probability_mean: number[];
+        weathercode: number[];
+      };
+    };
+
+    const forecast = data.daily.time.map((date: string, index: number) => ({
+      date,
+      maxTemp: data.daily.temperature_2m_max[index],
+      minTemp: data.daily.temperature_2m_min[index],
+      precipitationChance: data.daily.precipitation_probability_mean[index],
+      condition: getWeatherCondition(data.daily.weathercode[index]!),
+      location: name,
+    }));
+
+    return forecast;
+  },
+});
+
+const planActivities = new Step({
+  id: "plan-activities",
+  description: "Suggests activities based on weather conditions",
+  execute: async ({ context, mastra }) => {
+    const forecast = context?.getStepResult(fetchWeather);
+
+    if (!forecast || forecast.length === 0) {
+      throw new Error("Forecast data not found");
+    }
+
+    const prompt = `Based on the following weather forecast for ${forecast[0]?.location}, suggest appropriate activities:
+      ${JSON.stringify(forecast, null, 2)}
+      `;
+
+    const response = await agent.stream([
+      {
+        role: "user",
+        content: prompt,
+      },
+    ]);
+
+    let activitiesText = "";
+
+    for await (const chunk of response.textStream) {
+      process.stdout.write(chunk);
+      activitiesText += chunk;
+    }
+
+    return {
+      activities: activitiesText,
+    };
+  },
+});
+
+function getWeatherCondition(code: number): string {
+  const conditions: Record<number, string> = {
+    0: "Clear sky",
+    1: "Mainly clear",
+    2: "Partly cloudy",
+    3: "Overcast",
+    45: "Foggy",
+    48: "Depositing rime fog",
+    51: "Light drizzle",
+    53: "Moderate drizzle",
+    55: "Dense drizzle",
+    61: "Slight rain",
+    63: "Moderate rain",
+    65: "Heavy rain",
+    71: "Slight snow fall",
+    73: "Moderate snow fall",
+    75: "Heavy snow fall",
+    95: "Thunderstorm",
+  };
+  return conditions[code] || "Unknown";
+}
+
+const weatherWorkflow = new Workflow({
+  name: "weather-workflow",
+  triggerSchema: z.object({
+    city: z.string().describe("The city to get the weather for"),
+  }),
+})
+  .step(fetchWeather)
+  .then(planActivities);
+
+weatherWorkflow.commit();
+
+export { weatherWorkflow };
+```
+
 ### Register Agent
 
-Finally, create the Mastra entry point in `src/mastra/index.ts` and register agent:
+Create the Mastra entry point and register agent:
+
+```bash copy
+touch src/mastra/index.ts
+```
+
+Add the following code:
 
 ```ts filename="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core";
-
-import { weatherAgent } from "./agents/weather";
+import { createLogger } from "@mastra/core/logger";
+import { LibSQLStore } from "@mastra/libsql";
+import { weatherWorkflow } from "./agents/weather-workflow";
+import { weatherAgent } from "./agents/weather-agent";
 
 export const mastra = new Mastra({
+  workflows: { weatherWorkflow },
   agents: { weatherAgent },
+  storage: new LibSQLStore({
+    // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
+    url: ":memory:",
+  }),
+  logger: createLogger({
+    name: "Mastra",
+    level: "info",
+  }),
 });
 ```
 
-This registers your agent with Mastra so that `mastra dev` can discover and serve it.
+> This registers your agent with Mastra so that `mastra dev` can discover and serve it.
 
 </Steps>
-
-## Existing Project Installation
-
-To add Mastra to an existing project, see our Local development docs on [adding mastra to an existing project](/docs/local-dev/add-to-existing-project).
-
-You can also checkout our framework specific docs e.g [Next.js](/docs/frameworks/next-js)
 
 ## Start the Mastra Server
 
@@ -402,11 +653,16 @@ If you have the mastra CLI installed, run:
 mastra dev
 ```
 
-This command creates REST API endpoints for your agents.
+This command creates REST API endpoints for your agents which are available on the following links:
+
+- Playground: [http://localhost:4111/](http://localhost:4111/)
+- Mastra API: [http://localhost:4111/api](http://localhost:4111/api)
+- OpenAPI Spec: [http://localhost:4111/openapi.json](http://localhost:4111/openapi.json)
+- Swagger UI – API explorer: [http://localhost:4111/swagger-ui](http://localhost:4111/swagger-ui)
 
 ### Test the Endpoint
 
-You can test the agent's endpoint using `curl` or `fetch`:
+You can also test the agent's endpoint using `curl` or `fetch`:
 
 <Tabs items={['curl', 'fetch']}>
   <Tabs.Tab>
@@ -438,18 +694,46 @@ fetch('http://localhost:4111/api/agents/weatherAgent/generate', {
   </Tabs.Tab>
 </Tabs>
 
-## Use Mastra on the Client
+### Run from the command line
 
-To use Mastra in your frontend applications, you can use our type-safe client SDK to
-interact with your Mastra REST APIs.
+If you'd like to call agents directly from the command line, create a simple script to get and invoke an agent.
 
-See the [Mastra Client SDK documentation](/docs/deployment/client) for detailed usage instructions.
+Create a test file:
 
-## Run from the command line
+```bash copy
+touch src/test-agent.ts
+```
 
-If you'd like to directly call agents from the command line, you can create a script to get an agent and call it:
+Install `dotenv` to load environment variables (e.g. your API keys):
 
-```ts filename="src/index.ts" showLineNumbers copy
+<Tabs items={["npm", "pnpm", "yarn", "bun"]}>
+  <Tabs.Tab>
+    ```bash copy
+    npm install dotenv --save-dev
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    pnpm add dotenv --save-dev
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    yarn add dotenv --dev
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    bun add dotenv --dev
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+If you're using a `.env` file, add the following code:
+
+```ts filename="src/test-agent.ts" showLineNumbers copy
+import "dotenv/config";
+
 import { mastra } from "./mastra";
 
 async function main() {
@@ -463,10 +747,58 @@ async function main() {
 main();
 ```
 
-Then, run the script to test that everything is set up correctly:
+Or, if you're using a `.env.development` file, add the following code:
 
-```bash copy
-npx tsx src/index.ts
+```ts filename="src/test-agent.ts" showLineNumbers copy
+import { config } from 'dotenv';
+config({ path: '.env.development' });
+
+import { mastra } from "./mastra";
+
+async function main() {
+  const agent = await mastra.getAgent("weatherAgent");
+
+  const result = await agent.generate("What is the weather in London?");
+
+  console.log("Agent response:", result.text);
+}
+
+main();
 ```
 
-This should output the agent's response to your console.
+Run the script to test the agent:
+
+```bash copy
+npx tsx src/test-agent.ts
+```
+
+You should see output similar to this in your console:
+
+```bash
+Agent response: The current weather in London is as follows:
+
+- **Temperature:** 12.9°C (Feels like 9.7°C)
+- **Humidity:** 63%
+- **Wind Speed:** 14.7 km/h
+- **Wind Gusts:** 32.4 km/h
+- **Conditions:** Overcast
+
+Let me know if you need more information!
+```
+
+## Use Mastra on the Client
+
+To use Mastra in your frontend applications, use our type-safe client SDK to call your agents via the Mastra REST API.
+
+- [Mastra Client SDK](/docs/deployment/client)
+
+## Existing Project Installation
+
+To add Mastra to an existing project, see our Local development docs:
+
+- [Adding to an Existing Project](/docs/local-dev/add-to-existing-project)
+
+## Next Steps
+
+- [Deploy your Agent to Mastra Cloud](/docs/deployment/overview)
+- [Integrate Mastra in your Next.js project](/docs/frameworks/next-js)
