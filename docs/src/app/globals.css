@@ -8,6 +8,8 @@
   --border: hsla(0, 0%, 80%, 1);
   --color-text-icon-5: hsla(0, 0%, 8%, 1);
   --color-text-icon-6: hsla(0, 0%, 4%, 1);
+  --color-green-accent: hsla(130deg, 81.6%, 27.6%, 1);
+  --color-green-accent-2: hsla(125, 66%, 50%, 1);
   --border-2: hsla(0, 0%, 72%, 1);
   --border-radius-lg: 0.5rem;
 }
