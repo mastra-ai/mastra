@@ -1,4 +1,5 @@
 import type { AbstractAgent } from '@ag-ui/client';
+import type { ServerDetailInfo } from '@mastra/core/mcp';
 import { AGUIAdapter } from './adapters/agui';
 import {
   Agent,
@@ -34,7 +35,6 @@ import type {
   McpServerToolListResponse,
   McpToolInfo,
 } from './types';
-import type { ServerDetailInfo } from '@mastra/core/mcp';
 
 export class MastraClient extends BaseResource {
   constructor(options: ClientOptions) {
