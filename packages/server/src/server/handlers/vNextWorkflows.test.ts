@@ -1,4 +1,5 @@
 import { Mastra } from '@mastra/core';
+import { MockStore } from '@mastra/core/storage';
 import { createStep, createWorkflow } from '@mastra/core/workflows/vNext';
 import type { NewWorkflow } from '@mastra/core/workflows/vNext';
 import { stringify } from 'superjson';
@@ -118,6 +119,7 @@ describe('vNext Workflow Handlers', () => {
     mockMastra = new Mastra({
       logger: false,
       vnext_workflows: { 'test-workflow': mockWorkflow, 'reusable-workflow': reusableWorkflow },
+      storage: new MockStore(),
     });
   });
 
