@@ -6,9 +6,6 @@ import type {
   QueryVectorParams,
   CreateIndexParams,
   UpsertVectorParams,
-  ParamsToArgs,
-  QueryVectorArgs,
-  CreateIndexArgs,
   DescribeIndexParams,
   DeleteIndexParams,
   DeleteVectorParams,
@@ -47,22 +44,16 @@ interface PgQueryVectorParams extends QueryVectorParams {
   probes?: number;
 }
 
-type PgQueryVectorArgs = [...QueryVectorArgs, number?, number?, number?];
-
 interface PgCreateIndexParams extends CreateIndexParams {
   indexConfig?: IndexConfig;
   buildIndex?: boolean;
 }
-
-type PgCreateIndexArgs = [...CreateIndexArgs, IndexConfig?, boolean?];
 
 interface PgDefineIndexParams {
   indexName: string;
   metric: 'cosine' | 'euclidean' | 'dotproduct';
   indexConfig: IndexConfig;
 }
-
-type PgDefineIndexArgs = [string, 'cosine' | 'euclidean' | 'dotproduct', IndexConfig];
 
 export class PgVector extends MastraVector {
   private pool: pg.Pool;
@@ -75,48 +66,15 @@ export class PgVector extends MastraVector {
   private vectorExtensionInstalled: boolean | undefined = undefined;
   private schemaSetupComplete: boolean | undefined = undefined;
 
-  /**
-   * @deprecated Passing connectionString as a string is deprecated.
-   * Use the object parameter instead. This signature will be removed on May 20th, 2025.
-   */
-  constructor(connectionString: string);
-  constructor(config: {
+  constructor({
+    connectionString,
+    schemaName,
+    pgPoolOptions,
+  }: {
     connectionString: string;
     schemaName?: string;
     pgPoolOptions?: Omit<pg.PoolConfig, 'connectionString'>;
-  });
-  constructor(
-    config:
-      | string
-      | {
-          connectionString: string;
-          schemaName?: string;
-          pgPoolOptions?: Omit<pg.PoolConfig, 'connectionString'>;
-        },
-  ) {
-    let connectionString: string;
-    let pgPoolOptions: Omit<pg.PoolConfig, 'connectionString'> | undefined;
-    let schemaName: string | undefined;
-
-    if (typeof config === 'string') {
-      // DEPRECATION WARNING
-      console.warn(
-        `DEPRECATION WARNING: Passing connectionString as a string to PgVector constructor is deprecated.
-
-        Please use an object parameter instead:
-        new PgVector({ connectionString })
-
-        The string signature will be removed on May 20th, 2025.`,
-      );
-      connectionString = config;
-      schemaName = undefined;
-      pgPoolOptions = undefined;
-    } else {
-      connectionString = config.connectionString;
-      schemaName = config.schemaName;
-      pgPoolOptions = config.pgPoolOptions;
-    }
-
+  }) {
     if (!connectionString || connectionString.trim() === '') {
       throw new Error(
         'PgVector: connectionString must be provided and cannot be empty. Passing an empty string may cause fallback to local Postgres defaults.',
@@ -176,23 +134,23 @@ export class PgVector extends MastraVector {
     return translator.translate(filter);
   }
 
-  async getIndexInfo(...args: ParamsToArgs<DescribeIndexParams>): Promise<PGIndexStats> {
-    const params = this.normalizeArgs<DescribeIndexParams>('getIndexInfo', args);
-    const { indexName } = params;
+  async getIndexInfo({ indexName }: DescribeIndexParams): Promise<PGIndexStats> {
     if (!this.describeIndexCache.has(indexName)) {
       this.describeIndexCache.set(indexName, await this.describeIndex({ indexName }));
     }
     return this.describeIndexCache.get(indexName)!;
   }
 
-  async query(...args: ParamsToArgs<PgQueryVectorParams> | PgQueryVectorArgs): Promise<QueryResult[]> {
-    const params = this.normalizeArgs<PgQueryVectorParams, PgQueryVectorArgs>('query', args, [
-      'minScore',
-      'ef',
-      'probes',
-    ]);
-    const { indexName, queryVector, topK = 10, filter, includeVector = false, minScore = 0, ef, probes } = params;
-
+  async query({
+    indexName,
+    queryVector,
+    topK = 10,
+    filter,
+    includeVector = false,
+    minScore = 0,
+    ef,
+    probes,
+  }: PgQueryVectorParams): Promise<QueryResult[]> {
     if (!Number.isInteger(topK) || topK <= 0) {
       throw new Error('topK must be a positive integer');
     }
@@ -251,10 +209,7 @@ export class PgVector extends MastraVector {
     }
   }
 
-  async upsert(...args: ParamsToArgs<UpsertVectorParams>): Promise<string[]> {
-    const params = this.normalizeArgs<UpsertVectorParams>('upsert', args);
-
-    const { indexName, vectors, metadata, ids } = params;
+  async upsert({ indexName, vectors, metadata, ids }: UpsertVectorParams): Promise<string[]> {
     const tableName = this.getTableName(indexName);
 
     // Start a transaction
@@ -286,7 +241,7 @@ export class PgVector extends MastraVector {
         if (match) {
           const [, expected, actual] = match;
           throw new Error(
-            `Vector dimension mismatch: Index "${params.indexName}" expects ${expected} dimensions but got ${actual} dimensions. ` +
+            `Vector dimension mismatch: Index "${indexName}" expects ${expected} dimensions but got ${actual} dimensions. ` +
               `Either use a matching embedding model or delete and recreate the index with the new dimension.`,
           );
         }
@@ -298,8 +253,13 @@ export class PgVector extends MastraVector {
   }
 
   private hasher = xxhash();
-  private async getIndexCacheKey(params: CreateIndexParams & { type: IndexType | undefined }) {
-    const input = params.indexName + params.dimension + params.metric + (params.type || 'ivfflat'); // ivfflat is default
+  private async getIndexCacheKey({
+    indexName,
+    dimension,
+    metric,
+    type,
+  }: CreateIndexParams & { type: IndexType | undefined }) {
+    const input = indexName + dimension + metric + (type || 'ivfflat'); // ivfflat is default
     return (await this.hasher).h32(input);
   }
   private cachedIndexExists(indexName: string, newKey: number) {
@@ -357,13 +317,13 @@ export class PgVector extends MastraVector {
     await this.setupSchemaPromise;
   }
 
-  async createIndex(...args: ParamsToArgs<PgCreateIndexParams> | PgCreateIndexArgs): Promise<void> {
-    const params = this.normalizeArgs<PgCreateIndexParams, PgCreateIndexArgs>('createIndex', args, [
-      'indexConfig',
-      'buildIndex',
-    ]);
-
-    const { indexName, dimension, metric = 'cosine', indexConfig = {}, buildIndex = true } = params;
+  async createIndex({
+    indexName,
+    dimension,
+    metric = 'cosine',
+    indexConfig = {},
+    buildIndex = true,
+  }: PgCreateIndexParams): Promise<void> {
     const tableName = this.getTableName(indexName);
 
     // Validate inputs
@@ -418,27 +378,7 @@ export class PgVector extends MastraVector {
     });
   }
 
-  /**
-   * @deprecated This function is deprecated. Use buildIndex instead
-   * This function will be removed on May 20th, 2025
-   */
-  async defineIndex(
-    indexName: string,
-    metric: 'cosine' | 'euclidean' | 'dotproduct' = 'cosine',
-    indexConfig: IndexConfig,
-  ): Promise<void> {
-    console.warn('defineIndex is deprecated. Use buildIndex instead. This function will be removed on May 20th, 2025');
-    return this.buildIndex({ indexName, metric, indexConfig });
-  }
-
-  async buildIndex(...args: ParamsToArgs<PgDefineIndexParams> | PgDefineIndexArgs): Promise<void> {
-    const params = this.normalizeArgs<PgDefineIndexParams, PgDefineIndexArgs>('buildIndex', args, [
-      'metric',
-      'indexConfig',
-    ]);
-
-    const { indexName, metric = 'cosine', indexConfig } = params;
-
+  async buildIndex({ indexName, metric = 'cosine', indexConfig }: PgDefineIndexParams): Promise<void> {
     const client = await this.pool.connect();
     try {
       await this.setupIndex({ indexName, metric, indexConfig }, client);
@@ -571,13 +511,10 @@ export class PgVector extends MastraVector {
   /**
    * Retrieves statistics about a vector index.
    *
-   * @param params - The parameters for describing an index
-   * @param params.indexName - The name of the index to describe
+   * @param {string} indexName - The name of the index to describe
    * @returns A promise that resolves to the index statistics including dimension, count and metric
    */
-  async describeIndex(...args: ParamsToArgs<DescribeIndexParams>): Promise<PGIndexStats> {
-    const params = this.normalizeArgs<DescribeIndexParams>('describeIndex', args);
-    const { indexName } = params;
+  async describeIndex({ indexName }: DescribeIndexParams): Promise<PGIndexStats> {
     const client = await this.pool.connect();
     try {
       const tableName = this.getTableName(indexName);
@@ -673,9 +610,7 @@ export class PgVector extends MastraVector {
     }
   }
 
-  async deleteIndex(...args: ParamsToArgs<DeleteIndexParams>): Promise<void> {
-    const params = this.normalizeArgs<DeleteIndexParams>('deleteIndex', args);
-    const { indexName } = params;
+  async deleteIndex({ indexName }: DeleteIndexParams): Promise<void> {
     const client = await this.pool.connect();
     try {
       const tableName = this.getTableName(indexName);
@@ -690,9 +625,7 @@ export class PgVector extends MastraVector {
     }
   }
 
-  async truncateIndex(...args: ParamsToArgs<DeleteIndexParams>): Promise<void> {
-    const params = this.normalizeArgs<DeleteIndexParams>('truncateIndex', args);
-    const { indexName } = params;
+  async truncateIndex({ indexName }: DeleteIndexParams): Promise<void> {
     const client = await this.pool.connect();
     try {
       const tableName = this.getTableName(indexName);
@@ -710,8 +643,6 @@ export class PgVector extends MastraVector {
   }
 
   /**
-   * @deprecated Use {@link updateVector} instead. This method will be removed on May 20th, 2025.
-   *
    * Updates a vector by its ID with the provided vector and/or metadata.
    * @param indexName - The name of the index containing the vector.
    * @param id - The ID of the vector to update.
@@ -721,32 +652,7 @@ export class PgVector extends MastraVector {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateIndexById(
-    indexName: string,
-    id: string,
-    update: { vector?: number[]; metadata?: Record<string, any> },
-  ): Promise<void> {
-    this.logger.warn(
-      `Deprecation Warning: updateIndexById() is deprecated. 
-      Please use updateVector() instead. 
-      updateIndexById() will be removed on May 20th, 2025.`,
-    );
-    await this.updateVector({ indexName, id, update });
-  }
-
-  /**
-   * Updates a vector by its ID with the provided vector and/or metadata.
-   * @param indexName - The name of the index containing the vector.
-   * @param id - The ID of the vector to update.
-   * @param update - An object containing the vector and/or metadata to update.
-   * @param update.vector - An optional array of numbers representing the new vector.
-   * @param update.metadata - An optional record containing the new metadata.
-   * @returns A promise that resolves when the update is complete.
-   * @throws Will throw an error if no updates are provided or if the update operation fails.
-   */
-  async updateVector(...args: ParamsToArgs<UpdateVectorParams>): Promise<void> {
-    const params = this.normalizeArgs<UpdateVectorParams>('updateVector', args);
-    const { indexName, id, update } = params;
+  async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
     if (!update.vector && !update.metadata) {
       throw new Error('No updates provided');
     }
@@ -791,33 +697,13 @@ export class PgVector extends MastraVector {
   }
 
   /**
-   * @deprecated Use {@link deleteVector} instead. This method will be removed on May 20th, 2025.
-   *
    * Deletes a vector by its ID.
    * @param indexName - The name of the index containing the vector.
    * @param id - The ID of the vector to delete.
    * @returns A promise that resolves when the deletion is complete.
    * @throws Will throw an error if the deletion operation fails.
    */
-  async deleteIndexById(indexName: string, id: string): Promise<void> {
-    this.logger.warn(
-      `Deprecation Warning: deleteIndexById() is deprecated. 
-      Please use deleteVector() instead. 
-      deleteIndexById() will be removed on May 20th, 2025.`,
-    );
-    await this.deleteVector({ indexName, id });
-  }
-
-  /**
-   * Deletes a vector by its ID.
-   * @param indexName - The name of the index containing the vector.
-   * @param id - The ID of the vector to delete.
-   * @returns A promise that resolves when the deletion is complete.
-   * @throws Will throw an error if the deletion operation fails.
-   */
-  async deleteVector(...args: ParamsToArgs<DeleteVectorParams>): Promise<void> {
-    const params = this.normalizeArgs<DeleteVectorParams>('deleteVector', args);
-    const { indexName, id } = params;
+  async deleteVector({ indexName, id }: DeleteVectorParams): Promise<void> {
     const client = await this.pool.connect();
     try {
       const tableName = this.getTableName(indexName);
