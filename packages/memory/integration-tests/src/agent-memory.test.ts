@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { openai } from '@ai-sdk/openai';
+import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
+import { fastembed } from '@mastra/fastembed';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { describe, expect, it } from 'vitest';
@@ -10,14 +12,34 @@ import { weatherTool } from './mastra/tools/weather';
 describe('Agent Memory Tests', () => {
   const dbFile = 'file:mastra-agent.db';
 
+  it(`inherits storage from Mastra instance`, async () => {
+    const agent = new Agent({
+      name: 'test',
+      instructions: '',
+      model: openai('gpt-4o-mini'),
+      memory: new Memory({
+        options: {
+          lastMessages: 10,
+        },
+      }),
+    });
+    const mastra = new Mastra({
+      agents: {
+        agent,
+      },
+      storage: new LibSQLStore({
+        url: dbFile,
+      }),
+    });
+    await expect(mastra.getAgent('agent').getMemory()!.query({ threadId: '1' })).resolves.not.toThrow();
+    await expect(agent.getMemory()!.query({ threadId: '1' })).resolves.not.toThrow();
+  });
+
   describe('Agent memory message persistence', () => {
     // making a separate memory for agent to avoid conflicts with other tests
     const memory = new Memory({
       options: {
         lastMessages: 10,
-        threads: {
-          generateTitle: false,
-        },
         semanticRecall: true,
       },
       storage: new LibSQLStore({
@@ -26,7 +48,7 @@ describe('Agent Memory Tests', () => {
       vector: new LibSQLVector({
         connectionUrl: dbFile,
       }),
-      embedder: openai.embedding('text-embedding-3-small'),
+      embedder: fastembed,
     });
     const agent = new Agent({
       name: 'test',
@@ -112,7 +134,7 @@ describe('Agent Memory Tests', () => {
       },
       storage: new LibSQLStore({ url: dbFile }),
       vector: new LibSQLVector({ connectionUrl: dbFile }),
-      embedder: openai.embedding('text-embedding-3-small'),
+      embedder: fastembed,
     });
     const agentWithTitle = new Agent({
       name: 'title-on',
@@ -131,7 +153,7 @@ describe('Agent Memory Tests', () => {
       },
       storage: new LibSQLStore({ url: dbFile }),
       vector: new LibSQLVector({ connectionUrl: dbFile }),
-      embedder: openai.embedding('text-embedding-3-small'),
+      embedder: fastembed,
     });
     const agentNoTitle = new Agent({
       name: 'title-off',

@@ -145,6 +145,8 @@ const MCPServerToolExecutor = () => {
         isExecutingTool={isExecuting}
         zodInputSchema={zodInputSchema}
         handleExecuteTool={handleExecuteTool}
+        toolDescription={toolActualName || ''}
+        toolId={toolId || ''}
       />
     </div>
   );

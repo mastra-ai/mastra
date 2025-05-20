@@ -1,10 +1,11 @@
 import { DynamicForm } from '@mastra/playground-ui';
-import { CodeBlockDemo } from '@/components/ui/code-block';
+import CodeMirror from '@uiw/react-codemirror';
 import { CopyButton } from '@/components/ui/copy-button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Text } from '@/components/ui/text';
 import { ZodType } from 'zod';
-
+import { jsonLanguage } from '@codemirror/lang-json';
+import { useCodemirrorTheme } from '@/components/syntax-highlighter';
 const ToolExecutor = ({
   isExecutingTool,
   zodInputSchema,
@@ -16,6 +17,7 @@ const ToolExecutor = ({
   handleExecuteTool: (data: any) => void;
   executionResult: any;
 }) => {
+  const theme = useCodemirrorTheme();
   return (
     <div className="w-full h-full grid grid-cols-[300px_1fr] p-2 gap-2">
       <div className="flex flex-col gap-4 border-[0.5px] border-mastra-border-1 rounded-[0.25rem] bg-mastra-bg-2 p-4 py-6">
@@ -43,7 +45,12 @@ const ToolExecutor = ({
           />
         </div>
         <ScrollArea className="h-[calc(100vh-120px)] w-full">
-          <CodeBlockDemo code={JSON.stringify(result ?? {}, null, 2)} language="json" />
+          <CodeMirror
+            value={JSON.stringify(result ?? {}, null, 2)}
+            theme={theme}
+            extensions={[jsonLanguage]}
+            className="h-[400px] overflow-y-scroll bg-surface3 rounded-lg overflow-hidden p-3"
+          />
         </ScrollArea>
       </div>
     </div>

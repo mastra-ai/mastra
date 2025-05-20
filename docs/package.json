@@ -37,6 +37,7 @@
     "next-sitemap": "^4.2.3",
     "nextra": "^4.2.17",
     "nextra-theme-docs": "^4.2.17",
+    "nuqs": "^2.4.3",
     "posthog-js": "^1.232.7",
     "react": "^18",
     "react-dom": "^18",
