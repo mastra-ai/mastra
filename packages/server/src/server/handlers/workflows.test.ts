@@ -17,6 +17,7 @@ import {
   resumeWorkflowHandler,
   getWorkflowRunsHandler,
 } from './workflows';
+import { MockStore } from '@mastra/core/storage';
 
 function createMockWorkflow(name: string) {
   const stepA = new Step({
@@ -91,6 +92,7 @@ describe('Workflow Handlers', () => {
     mockMastra = new Mastra({
       logger: false,
       workflows: { 'test-workflow': mockWorkflow, 'reusable-workflow': reusableWorkflow },
+      storage: new MockStore(),
     });
   });
 
