@@ -2,7 +2,22 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Move all colors to :root and unify dark mode */
 /* TODO: use :root and .dark class to make theming easier */
+:root {
+  --border: hsla(0, 0%, 80%, 1);
+  --color-text-icon-5: hsla(0, 0%, 8%, 1);
+  --color-text-icon-6: hsla(0, 0%, 4%, 1);
+  --border-2: hsla(0, 0%, 72%, 1);
+  --border-radius-lg: 0.5rem;
+}
+
+.dark {
+  --border: hsla(0, 0%, 19%, 1);
+  --color-text-icon-5: hsla(0, 0%, 90%, 1);
+  --color-text-icon-6: hsla(0, 0%, 100%, 1);
+  --border-2: hsla(0, 0%, 26%, 1);
+}
 
 @theme inline {
   --primary-bg: #050505;
@@ -630,4 +645,48 @@ div[role="tablist"] button[aria-selected="true"] {
 
 div:has(> time) {
   font-family: var(--font-serif);
+}
+
+/* tables */
+table {
+  border: none;
+  --x-color-gray-300: var(--border);
+  --x-color-gray-600: var(--border);
+}
+
+table:not(:has(caption)) * {
+  border: none;
+  background: transparent;
+}
+
+thead th {
+  text-align: left;
+  color: var(--color-text-icon-6);
+}
+
+table thead tr {
+  border-bottom: 1px solid var(--border);
+}
+
+table tbody tr {
+  border-bottom: 1px solid var(--border);
+}
+
+table tbody td {
+  padding-block: 0.8rem;
+  color: var(--color-text-icon-5);
+}
+
+table td code.nextra-code:not([class*="twoslash-"]) {
+  border: 1px solid var(--border-2);
+  border-radius: var(--border-radius-lg);
+  background: transparent;
+  padding-inline: 0.62rem;
+  padding-block: 0.31rem 0.44rem;
+  font-size: 0.875rem;
+  height: 1.625rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
 }
