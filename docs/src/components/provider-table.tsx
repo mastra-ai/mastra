@@ -457,8 +457,8 @@ export function ProviderTable() {
       <TableCaption>AI Model Capabilities by Provider</TableCaption>
       <TableHeader>
         <TableRow className="dark:border-neutral-700 border-[var(--light-border-muted)]">
-          <TableHead className="w-[200px] font-bold pb-2">API Key</TableHead>
           <TableHead className="w-[200px] font-bold pb-2">Provider</TableHead>
+          <TableHead className="w-[200px] font-bold pb-2">API Key</TableHead>
           <TableHead className="w-[250px] font-bold pb-2">Model</TableHead>
           <TableHead className="pb-2 font-bold text-center">
             Image Input
@@ -481,14 +481,6 @@ export function ProviderTable() {
             key={index}
           >
             <TableCell className="font-medium">
-              <Badge
-                className="dark:bg-neutral-900 bg-[var(--light-color-surface-1)]"
-                variant="secondary"
-              >
-                {model.apiKey}
-              </Badge>
-            </TableCell>
-            <TableCell className="font-medium">
               <Link
                 href={model.providerUrl}
                 className="dark:text-green-400  text-[var(--light-green-accent-2)] hover:underline"
@@ -498,7 +490,15 @@ export function ProviderTable() {
             </TableCell>
             <TableCell className="font-medium">
               <Badge
-                className="dark:bg-neutral-900 bg-[var(--light-color-surface-1)]"
+                className="dark:bg-neutral-900 font-normal bg-[var(--light-color-surface-1)]"
+                variant="secondary"
+              >
+                {model.apiKey}
+              </Badge>
+            </TableCell>
+            <TableCell className="font-medium">
+              <Badge
+                className="dark:bg-neutral-900 font-mono font-normal max-w-[300px] bg-[var(--light-color-surface-1)]"
                 variant="secondary"
               >
                 {model.model}
