@@ -588,7 +588,7 @@ importers:
         version: 1.2.11(zod@3.24.4)
       '@copilotkit/runtime':
         specifier: ^1.8.11
-        version: 1.8.11(cz6k3v33cvpqpw3ul7o64ojvle)
+        version: 1.8.11(2ee2af8930600401929539d4da19b296)
       rxjs:
         specifier: 7.8.1
         version: 7.8.1
@@ -828,6 +828,9 @@ importers:
       '@radix-ui/react-tooltip':
         specifier: ^1.1.8
         version: 1.1.8(@types/react-dom@19.0.4(@types/react@19.0.10))(@types/react@19.0.10)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      '@tanstack/react-query':
+        specifier: ^5.76.1
+        version: 5.76.1(react@19.1.0)
       '@tanstack/react-virtual':
         specifier: ^3.13.2
         version: 3.13.4(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
@@ -2674,7 +2677,7 @@ importers:
         version: 20.17.32
       '@vitest/coverage-v8':
         specifier: 3.0.9
-        version: 3.0.9(vitest@3.1.2(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.17.32)(@vitest/ui@3.0.9)(jiti@2.4.2)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.3)(yaml@2.7.0))
+        version: 3.0.9(vitest@3.1.2)
       '@vitest/ui':
         specifier: 3.0.9
         version: 3.0.9(vitest@3.1.2)
@@ -2720,7 +2723,7 @@ importers:
         version: 20.17.32
       '@vitest/coverage-v8':
         specifier: 3.0.9
-        version: 3.0.9(vitest@3.1.2(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.17.32)(@vitest/ui@3.0.9)(jiti@2.4.2)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.3)(yaml@2.7.0))
+        version: 3.0.9(vitest@3.1.2)
       '@vitest/ui':
         specifier: 3.0.9
         version: 3.0.9(vitest@3.1.2)
@@ -9629,6 +9632,14 @@ packages:
   '@szmarczak/http-timer@5.0.1':
     resolution: {integrity: sha512-+PmQX0PiAYPMeVYe237LJAYvOMYW1j2rH5YROyS3b4CTVJum34HfRvKvAzozHAQG0TnHNdUfY9nCeUyRAs//cw==}
     engines: {node: '>=14.16'}
+
+  '@tanstack/query-core@5.76.0':
+    resolution: {integrity: sha512-FN375hb8ctzfNAlex5gHI6+WDXTNpe0nbxp/d2YJtnP+IBM6OUm7zcaoCW6T63BawGOYZBbKC0iPvr41TteNVg==}
+
+  '@tanstack/react-query@5.76.1':
+    resolution: {integrity: sha512-YxdLZVGN4QkT5YT1HKZQWiIlcgauIXEIsMOTSjvyD5wLYK8YVvKZUPAysMqossFJJfDpJW3pFn7WNZuPOqq+fw==}
+    peerDependencies:
+      react: ^18 || ^19
 
   '@tanstack/react-table@8.21.2':
     resolution: {integrity: sha512-11tNlEDTdIhMJba2RBH+ecJ9l1zgS2kjmexDPAraulc8jeNA4xocSNeyzextT0XJyASil4XsCYlJmf5jEWAtYg==}
@@ -22239,7 +22250,7 @@ snapshots:
 
   '@colors/colors@1.6.0': {}
 
-  '@copilotkit/runtime@1.8.11(cz6k3v33cvpqpw3ul7o64ojvle)':
+  '@copilotkit/runtime@1.8.11(2ee2af8930600401929539d4da19b296)':
     dependencies:
       '@ag-ui/client': 0.0.27
       '@ag-ui/core': 0.0.27
@@ -22248,7 +22259,7 @@ snapshots:
       '@anthropic-ai/sdk': 0.27.3(encoding@0.1.13)
       '@copilotkit/shared': 1.8.11(encoding@0.1.13)
       '@graphql-yoga/plugin-defer-stream': 3.13.4(graphql-yoga@5.13.4(graphql@16.11.0))(graphql@16.11.0)
-      '@langchain/community': 0.3.42(bjusfk4gwfoife3vjpnf7zhcnm)
+      '@langchain/community': 0.3.42(f26fac280f5e5ab878973848e720d100)
       '@langchain/core': 0.3.55(openai@4.96.0(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.4))
       '@langchain/google-gauth': 0.1.8(@langchain/core@0.3.55(openai@4.96.0(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.4)))(encoding@0.1.13)(zod@3.24.4)
       '@langchain/langgraph-sdk': 0.0.70(@langchain/core@0.3.55(openai@4.96.0(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.4)))(react@19.1.0)
@@ -23815,7 +23826,7 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
-  '@langchain/community@0.3.42(bjusfk4gwfoife3vjpnf7zhcnm)':
+  '@langchain/community@0.3.42(f26fac280f5e5ab878973848e720d100)':
     dependencies:
       '@browserbasehq/stagehand': 1.14.0(@playwright/test@1.52.0)(bufferutil@4.0.9)(deepmerge@4.3.1)(dotenv@16.5.0)(encoding@0.1.13)(openai@4.96.0(encoding@0.1.13)(ws@8.18.1(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.4))(utf-8-validate@6.0.5)(zod@3.24.4)
       '@ibm-cloud/watsonx-ai': 1.6.5
@@ -27220,6 +27231,13 @@ snapshots:
     dependencies:
       defer-to-connect: 2.0.1
 
+  '@tanstack/query-core@5.76.0': {}
+
+  '@tanstack/react-query@5.76.1(react@19.1.0)':
+    dependencies:
+      '@tanstack/query-core': 5.76.0
+      react: 19.1.0
+
   '@tanstack/react-table@8.21.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
     dependencies:
       '@tanstack/table-core': 8.21.2
@@ -28152,7 +28170,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@vitest/coverage-v8@3.0.9(vitest@3.1.2(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.17.32)(@vitest/ui@3.0.9)(jiti@2.4.2)(jsdom@26.0.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.3)(yaml@2.7.0))':
+  '@vitest/coverage-v8@3.0.9(vitest@3.1.2)':
     dependencies:
       '@ampproject/remapping': 2.3.0
       '@bcoe/v8-coverage': 1.0.2
@@ -32814,7 +32832,7 @@ snapshots:
       isstream: 0.1.2
       jsonwebtoken: 9.0.2
       mime-types: 2.1.35
-      retry-axios: 2.6.0(axios@1.8.4)
+      retry-axios: 2.6.0(axios@1.8.4(debug@4.4.0))
       tough-cookie: 4.1.4
     transitivePeerDependencies:
       - supports-color
@@ -32834,7 +32852,7 @@ snapshots:
       isstream: 0.1.2
       jsonwebtoken: 9.0.2
       mime-types: 2.1.35
-      retry-axios: 2.6.0(axios@1.8.4)
+      retry-axios: 2.6.0(axios@1.8.4(debug@4.4.0))
       tough-cookie: 4.1.4
     transitivePeerDependencies:
       - supports-color
@@ -37044,7 +37062,7 @@ snapshots:
 
   ret@0.4.3: {}
 
-  retry-axios@2.6.0(axios@1.8.4):
+  retry-axios@2.6.0(axios@1.8.4(debug@4.4.0)):
     dependencies:
       axios: 1.8.4(debug@4.4.0)
 
