@@ -784,6 +784,7 @@ export class Workflow<
     resume,
     emitter,
     mastra,
+    runtimeContext,
   }: {
     inputData: z.infer<TInput>;
     resumeData?: any;
@@ -798,6 +799,7 @@ export class Workflow<
     };
     emitter: { emit: (event: string, data: any) => void };
     mastra: Mastra;
+    runtimeContext?: RuntimeContext;
   }): Promise<z.infer<TOutput>> {
     this.__registerMastra(mastra);
 
@@ -806,8 +808,8 @@ export class Workflow<
       emitter.emit('nested-watch', { event, workflowId: this.id, runId: run.runId, isResume: !!resume?.steps?.length });
     });
     const res = resume?.steps?.length
-      ? await run.resume({ resumeData, step: resume.steps as any })
-      : await run.start({ inputData });
+      ? await run.resume({ resumeData, step: resume.steps as any, runtimeContext })
+      : await run.start({ inputData, runtimeContext });
     unwatch();
     const suspendedSteps = Object.entries(res.steps).filter(([_stepName, stepResult]) => {
       const stepRes: StepResult<any> = stepResult as StepResult<any>;
