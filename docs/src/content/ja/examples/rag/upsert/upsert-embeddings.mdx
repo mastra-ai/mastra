@@ -10,7 +10,7 @@ import { GithubLink } from "@/components/github-link";
 
 埋め込みを生成した後、それらをベクトル類似検索をサポートするデータベースに保存する必要があります。この例では、後で取得するために埋め込みをさまざまなベクトルデータベースに保存する方法を示します。
 
-<Tabs items={['PgVector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra DB', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB']}>
+<Tabs items={['PgVector', 'Milvus', 'Pinecone', 'Qdrant', 'Chroma', 'Astra DB', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB']}>
   <Tabs.Tab>
     `PgVector`クラスは、pgvector拡張機能を使用してPostgreSQLにインデックスを作成し、埋め込みを挿入するためのメソッドを提供します。
 
@@ -53,6 +53,51 @@ import { GithubLink } from "@/components/github-link";
       link={
       "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-pgvector"
     }
+    />
+
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+  `MilvusStore`クラスは、高性能なベクトルデータベースであるMilvusにコレクションを作成し、埋め込みを挿入するためのメソッドを提供します。
+    ```tsx copy
+    import { openai } from "@ai-sdk/openai";
+    import { MilvusStore } from "@mastra/milvus";
+    import { MDocument } from "@mastra/rag";
+    import { embedMany } from "ai";
+
+    const doc = MDocument.fromText("Your text content...");
+
+    const chunks = await doc.chunk();
+
+    const { embeddings } = await embedMany({
+      values: chunks.map(chunk => chunk.text),
+      model: openai.embedding("text-embedding-3-small"),
+    });
+
+    const milvus = new MilvusStore({
+      address: 'localhost:19530',  // デフォルト
+      username: process.env.MILVUS_USERNAME, // オプション
+      password: process.env.MILVUS_PASSWORD  // オプション
+    });
+
+    await milvus.createIndex({
+      indexName: "test_collection",
+      dimension: 1536,
+    });
+
+    await milvus.upsert({
+      indexName: "test_collection",
+      vectors: embeddings,
+      metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
+    });
+    ```
+    <br />
+    <hr className="dark:border-[#404040] border-gray-300" />
+    <br />
+    <GithubLink
+      link={
+        "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-milvus"
+      }
     />
 
   </Tabs.Tab>

@@ -10,7 +10,7 @@ import { GithubLink } from "@/components/github-link";
 
 After generating embeddings, you need to store them in a database that supports vector similarity search. This example shows how to store embeddings in various vector databases for later retrieval.
 
-<Tabs items={['PgVector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra DB', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB']}>
+<Tabs items={['PgVector', 'Milvus', 'Pinecone', 'Qdrant', 'Chroma', 'Astra DB', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB']}>
   <Tabs.Tab>
   The `PgVector` class provides methods to create indexes and insert embeddings into PostgreSQL with the pgvector extension.
     ```tsx copy
@@ -47,6 +47,51 @@ After generating embeddings, you need to store them in a database that supports 
     <GithubLink
       link={
         "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-pgvector"
+      }
+    />
+
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+  The `MilvusStore` class provides methods to create collections and insert embeddings into Milvus, a high-performance vector database.
+    ```tsx copy
+    import { openai } from "@ai-sdk/openai";
+    import { MilvusStore } from "@mastra/milvus";
+    import { MDocument } from "@mastra/rag";
+    import { embedMany } from "ai";
+
+    const doc = MDocument.fromText("Your text content...");
+
+    const chunks = await doc.chunk();
+
+    const { embeddings } = await embedMany({
+      values: chunks.map(chunk => chunk.text),
+      model: openai.embedding("text-embedding-3-small"),
+    });
+
+    const milvus = new MilvusStore({
+      address: 'localhost:19530',  // Default
+      username: process.env.MILVUS_USERNAME, // Optional
+      password: process.env.MILVUS_PASSWORD  // Optional
+    });
+
+    await milvus.createIndex({
+      indexName: "test_collection",
+      dimension: 1536,
+    });
+
+    await milvus.upsert({
+      indexName: "test_collection",
+      vectors: embeddings,
+      metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
+    });
+    ```
+    <br />
+    <hr className="dark:border-[#404040] border-gray-300" />
+    <br />
+    <GithubLink
+      link={
+        "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-milvus"
       }
     />
 

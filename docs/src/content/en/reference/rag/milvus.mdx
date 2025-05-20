@@ -1,0 +1,298 @@
+---
+title: "Reference: Milvus Vector Store | Vector Databases | RAG | Mastra Docs"
+description: Documentation for the MilvusStore class in Mastra, which provides an interface to Milvus vector database.
+---
+
+# Milvus Vector Store
+
+The MilvusStore class provides an interface to [Milvus](https://milvus.io/), an open-source vector database designed for scalable similarity search and AI applications.
+It offers high-performance vector search capabilities with robust filtering and real-time data management.
+
+## Constructor Options
+
+<PropertiesTable
+  content={[
+    {
+      name: "address",
+      type: "string",
+      defaultValue: "'localhost:19530'",
+      description: "Milvus server address",
+    },
+    {
+      name: "username",
+      type: "string",
+      isOptional: true,
+      description: "Username for authentication",
+    },
+    {
+      name: "password",
+      type: "string",
+      isOptional: true,
+      description: "Password for authentication",
+    },
+    {
+      name: "ssl",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "Whether to use SSL for connection",
+    },
+    {
+      name: "consistencyLevel",
+      type: "'Strong' | 'Session' | 'Bounded' | 'Eventually'",
+      isOptional: true,
+      defaultValue: "'Strong'",
+      description: "Consistency level for queries",
+    },
+  ]}
+/>
+
+## Methods
+
+### createIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the collection to create",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "Vector dimension (must match your embedding model)",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description:
+        "Distance metric for similarity search (cosine maps to COSINE, euclidean maps to L2, dotproduct maps to IP in Milvus)",
+    },
+  ]}
+/>
+
+### upsert()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of your Milvus collection",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "Array of dense embedding vectors",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "Metadata for each vector, stored as dynamic fields",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "Optional vector IDs (auto-generated if not provided)",
+    },
+  ]}
+/>
+
+### query()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the collection to query",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "Query vector to find similar vectors",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "Number of results to return",
+    },
+    {
+      name: "filter",
+      type: "VectorFilter",
+      isOptional: true,
+      description: "Metadata filters for the query",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "Whether to include the vector in the result",
+    },
+  ]}
+/>
+
+### listIndexes()
+
+Returns an array of collection names as strings.
+
+### describeIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the collection to describe",
+    },
+  ]}
+/>
+
+Returns:
+
+```typescript copy
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+### deleteIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the collection to delete",
+    },
+  ]}
+/>
+
+### updateVector()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the collection containing the vector",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "ID of the vector to update",
+    },
+    {
+      name: "update",
+      type: "object",
+      description: "Update parameters",
+    },
+    {
+      name: "update.vector",
+      type: "number[]",
+      isOptional: true,
+      description: "New vector values to update",
+    },
+    {
+      name: "update.metadata",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "New metadata to update",
+    },
+  ]}
+/>
+
+### deleteVector()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Name of the collection containing the vector",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "ID of the vector to delete",
+    },
+  ]}
+/>
+
+## Response Types
+
+Query results are returned in this format:
+
+```typescript copy
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  vector?: number[]; // Only included if includeVector is true
+}
+```
+
+## Example Usage
+
+```ts filename="milvus-example.ts" showLineNumbers copy
+import { MilvusStore } from '@mastra/milvus';
+
+// Initialize the Milvus store
+const store = new MilvusStore(
+  'localhost:19530',  // Milvus server address
+  'username',         // Optional username
+  'password',         // Optional password
+  false,              // SSL (default: false)
+  'Strong'            // Consistency level (default: 'Strong')
+);
+
+// Create a collection
+await store.createIndex({
+  indexName: "documents",
+  dimension: 1536,    // Must match your embedding model's dimension
+  metric: "cosine",   // Other options: "euclidean", "dotproduct"
+});
+
+// Insert vectors with metadata
+const vectors = [
+  [0.1, 0.2, 0.3, ...], // Your embedding vectors
+  [0.4, 0.5, 0.6, ...],
+];
+const metadata = [
+  { text: "Document 1 content", tags: ["doc", "example"] },
+  { text: "Document 2 content", tags: ["doc", "sample"] },
+];
+
+await store.upsert({
+  indexName: "documents",
+  vectors: vectors,
+  metadata: metadata,
+  // Optional: provide IDs
+  // ids: ["doc1", "doc2"]
+});
+
+// Query vectors
+const queryResults = await store.query({
+  indexName: "documents",
+  queryVector: [0.1, 0.2, 0.3, ...], // Your query vector
+  topK: 5,
+  filter: {
+    and: [
+      { eq: ["tags", "doc"] }
+    ]
+  },
+  includeVector: false,
+});
+
+console.log("Query results:", queryResults);
+``` 

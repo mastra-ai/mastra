@@ -11,6 +11,7 @@ export default {
   vectorize: "CloudflareVector",
   pg: "PgVector",
   libsql: "LibSQLVector",
+  milvus: "MilvusStore",
   mongodb: "MongoDBVector",
   opensearch: "OpenSearchVector",
   pinecone: "PineconeVector",

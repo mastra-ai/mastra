@@ -171,7 +171,7 @@ const vectorQueryTool = createVectorQueryTool({
 ベクトルストアプロンプトは、各ベクトルデータベース実装のクエリパターンとフィルタリング機能を定義します。
 フィルタリングを実装する場合、これらのプロンプトは各ベクトルストア実装の有効な演算子と構文を指定するためにエージェントの指示に必要です。
 
-<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB']}>
+<Tabs items={['Pg Vector', 'Milvus', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB']}>
   <Tabs.Tab>
     ```ts showLineNumbers copy
     import { openai } from '@ai-sdk/openai';
@@ -187,7 +187,23 @@ const vectorQueryTool = createVectorQueryTool({
       tools: { vectorQueryTool },
     });
     ```
+  </Tabs.Tab>
 
+  <Tabs.Tab>
+    ```ts showLineNumbers copy
+    import { openai } from '@ai-sdk/openai';
+    import { MILVUS_PROMPT } from "@mastra/milvus";
+
+    export const ragAgent = new Agent({
+      name: 'RAG Agent',
+      model: openai('gpt-4o-mini'),
+      instructions: `
+      Process queries using the provided context. Structure responses to be concise and relevant.
+      ${MILVUS_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    });
+    ```
   </Tabs.Tab>
 
   <Tabs.Tab>

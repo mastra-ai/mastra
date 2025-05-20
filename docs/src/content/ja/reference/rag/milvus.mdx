@@ -1,0 +1,298 @@
+---
+title: "リファレンス: Milvusベクトルストア | ベクタデータベース | RAG | Mastra Docs"
+description: MastraのMilvusStoreクラスのドキュメント。Milvusベクトルデータベースへのインターフェースを提供します。
+---
+
+# Milvusベクトルストア
+
+MilvusStoreクラスは、[Milvus](https://milvus.io/)へのインターフェースを提供します。Milvusは、スケーラブルな類似性検索とAIアプリケーション向けに設計されたオープンソースのベクトルデータベースです。
+高性能なベクトル検索機能と堅牢なフィルタリング、リアルタイムデータ管理を提供します。
+
+## コンストラクタオプション
+
+<PropertiesTable
+  content={[
+    {
+      name: "address",
+      type: "string",
+      defaultValue: "'localhost:19530'",
+      description: "Milvusサーバーアドレス",
+    },
+    {
+      name: "username",
+      type: "string",
+      isOptional: true,
+      description: "認証用のユーザー名",
+    },
+    {
+      name: "password",
+      type: "string",
+      isOptional: true,
+      description: "認証用のパスワード",
+    },
+    {
+      name: "ssl",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "接続にSSLを使用するかどうか",
+    },
+    {
+      name: "consistencyLevel",
+      type: "'Strong' | 'Session' | 'Bounded' | 'Eventually'",
+      isOptional: true,
+      defaultValue: "'Strong'",
+      description: "クエリの一貫性レベル",
+    },
+  ]}
+/>
+
+## メソッド
+
+### createIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "作成するコレクションの名前",
+    },
+    {
+      name: "dimension",
+      type: "number",
+      description: "ベクトルの次元数（埋め込みモデルと一致する必要があります）",
+    },
+    {
+      name: "metric",
+      type: "'cosine' | 'euclidean' | 'dotproduct'",
+      isOptional: true,
+      defaultValue: "cosine",
+      description:
+        "類似性検索の距離メトリック（cosineはCOSINE、euclideanはL2、dotproductはIPにMilvusで対応）",
+    },
+  ]}
+/>
+
+### upsert()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "Milvusコレクションの名前",
+    },
+    {
+      name: "vectors",
+      type: "number[][]",
+      description: "密な埋め込みベクトルの配列",
+    },
+    {
+      name: "metadata",
+      type: "Record<string, any>[]",
+      isOptional: true,
+      description: "各ベクトルのメタデータ、動的フィールドとして保存",
+    },
+    {
+      name: "ids",
+      type: "string[]",
+      isOptional: true,
+      description: "オプションのベクトルID（提供されない場合は自動生成）",
+    },
+  ]}
+/>
+
+### query()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "クエリするコレクションの名前",
+    },
+    {
+      name: "queryVector",
+      type: "number[]",
+      description: "類似したベクトルを見つけるためのクエリベクトル",
+    },
+    {
+      name: "topK",
+      type: "number",
+      isOptional: true,
+      defaultValue: "10",
+      description: "返す結果の数",
+    },
+    {
+      name: "filter",
+      type: "VectorFilter",
+      isOptional: true,
+      description: "クエリのメタデータフィルター",
+    },
+    {
+      name: "includeVector",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "false",
+      description: "結果にベクトルを含めるかどうか",
+    },
+  ]}
+/>
+
+### listIndexes()
+
+コレクション名の文字列配列を返します。
+
+### describeIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "説明するコレクションの名前",
+    },
+  ]}
+/>
+
+戻り値:
+
+```typescript copy
+interface IndexStats {
+  dimension: number;
+  count: number;
+  metric: "cosine" | "euclidean" | "dotproduct";
+}
+```
+
+### deleteIndex()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "削除するコレクションの名前",
+    },
+  ]}
+/>
+
+### updateVector()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "ベクトルを含むコレクションの名前",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "更新するベクトルのID",
+    },
+    {
+      name: "update",
+      type: "object",
+      description: "更新パラメータ",
+    },
+    {
+      name: "update.vector",
+      type: "number[]",
+      isOptional: true,
+      description: "更新する新しいベクトル値",
+    },
+    {
+      name: "update.metadata",
+      type: "Record<string, any>",
+      isOptional: true,
+      description: "更新する新しいメタデータ",
+    },
+  ]}
+/>
+
+### deleteVector()
+
+<PropertiesTable
+  content={[
+    {
+      name: "indexName",
+      type: "string",
+      description: "ベクトルを含むコレクションの名前",
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "削除するベクトルのID",
+    },
+  ]}
+/>
+
+## レスポンスタイプ
+
+クエリ結果は次の形式で返されます:
+
+```typescript copy
+interface QueryResult {
+  id: string;
+  score: number;
+  metadata: Record<string, any>;
+  vector?: number[]; // includeVectorがtrueの場合のみ含まれる
+}
+```
+
+## 使用例
+
+```ts filename="milvus-example.ts" showLineNumbers copy
+import { MilvusStore } from '@mastra/milvus';
+
+// Milvusストアを初期化
+const store = new MilvusStore(
+  'localhost:19530',  // Milvusサーバーアドレス
+  'username',         // オプションのユーザー名
+  'password',         // オプションのパスワード
+  false,              // SSL (デフォルト: false)
+  'Strong'            // 一貫性レベル (デフォルト: 'Strong')
+);
+
+// コレクションを作成
+await store.createIndex({
+  indexName: "documents",
+  dimension: 1536,    // 埋め込みモデルの次元数と一致させる必要があります
+  metric: "cosine",   // その他のオプション: "euclidean", "dotproduct"
+});
+
+// メタデータ付きでベクトルを挿入
+const vectors = [
+  [0.1, 0.2, 0.3, ...], // 埋め込みベクトル
+  [0.4, 0.5, 0.6, ...],
+];
+const metadata = [
+  { text: "Document 1 content", tags: ["doc", "example"] },
+  { text: "Document 2 content", tags: ["doc", "sample"] },
+];
+
+await store.upsert({
+  indexName: "documents",
+  vectors: vectors,
+  metadata: metadata,
+  // オプション: IDを提供
+  // ids: ["doc1", "doc2"]
+});
+
+// ベクトルをクエリ
+const queryResults = await store.query({
+  indexName: "documents",
+  queryVector: [0.1, 0.2, 0.3, ...], // クエリベクトル
+  topK: 5,
+  filter: {
+    and: [
+      { eq: ["tags", "doc"] }
+    ]
+  },
+  includeVector: false,
+});
+
+console.log("Query results:", queryResults);
+``` 

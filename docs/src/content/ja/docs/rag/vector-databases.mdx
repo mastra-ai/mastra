@@ -11,7 +11,7 @@ import { Tabs } from "nextra/components";
 
 ## サポートされているデータベース
 
-<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB']}>
+<Tabs items={['Pg Vector', 'Milvus', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB', 'OpenSearch']}>
   <Tabs.Tab>
     ```ts filename="vector-store.ts" showLineNumbers copy
       import { PgVector } from '@mastra/pg';
@@ -33,6 +33,34 @@ import { Tabs } from "nextra/components";
 
     pgvector拡張機能を備えたPostgreSQLは、すでにPostgreSQLを使用しているチームにとって、インフラの複雑さを最小限に抑えるための良い解決策です。
     詳細なセットアップ手順とベストプラクティスについては、[公式pgvectorリポジトリ](https://github.com/pgvector/pgvector)を参照してください。
+
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ```ts filename="vector-store.ts" showLineNumbers copy
+      import { MilvusStore } from '@mastra/milvus'
+
+      const store = new MilvusStore({
+        address: 'localhost:19530',  // デフォルト
+        username: process.env.MILVUS_USERNAME, // オプション
+        password: process.env.MILVUS_PASSWORD  // オプション
+      })
+      await store.createIndex({
+        indexName: "myCollection",
+        dimension: 1536,
+      });
+      await store.upsert({
+        indexName: "myCollection",
+        vectors: embeddings,
+        metadata: chunks.map(chunk => ({ text: chunk.text })),
+      });
+    ```
+
+    ### ベクトル検索にMilvusを使用する
+
+    Milvusは、AI アプリケーションと類似性検索のために設計された高性能なオープンソースのベクトルデータベースです。優れたスケーラビリティ、高スループット、高度なフィルタリングのサポートを提供します。
+
+    詳細なデプロイメントオプションとベストプラクティスについては、[公式Milvusドキュメント](https://milvus.io/docs)を参照してください。
 
   </Tabs.Tab>
 
@@ -230,13 +258,21 @@ await store.createIndex({
 
 各ベクトルデータベースは、互換性を確保し競合を防ぐために、インデックスとコレクションに特定の命名規則を適用しています。
 
-<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB']}>
+<Tabs items={['Pg Vector', 'Milvus', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB', 'OpenSearch']}>
   <Tabs.Tab>
     インデックス名は以下の条件を満たす必要があります：
     - 文字またはアンダースコアで始まる
     - 文字、数字、アンダースコアのみを含む
     - 例：`my_index_123` は有効
     - 例：`my-index` は無効（ハイフンを含む）
+  </Tabs.Tab>
+  <Tabs.Tab>
+    コレクション名は以下の条件を満たす必要があります：
+    - 1〜255文字を含む
+    - 文字またはアンダースコアで始まる
+    - 文字、数字、アンダースコアのみを含む
+    - 例：`my_collection_123` は有効
+    - 例：`my-collection` は無効（ハイフンを含む）
   </Tabs.Tab>
   <Tabs.Tab>
     インデックス名は以下の条件を満たす必要があります：

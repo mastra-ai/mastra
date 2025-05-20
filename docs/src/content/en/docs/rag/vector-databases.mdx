@@ -11,7 +11,7 @@ After generating embeddings, you need to store them in a database that supports 
 
 ## Supported Databases
 
-<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB', 'OpenSearch']}>
+<Tabs items={['Pg Vector', 'Milvus', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB', 'OpenSearch']}>
   <Tabs.Tab>
   ```ts filename="vector-store.ts" showLineNumbers copy
   import { PgVector } from '@mastra/pg';
@@ -33,6 +33,33 @@ metadata: chunks.map(chunk => ({ text: chunk.text })),
 
 PostgreSQL with the pgvector extension is a good solution for teams already using PostgreSQL who want to minimize infrastructure complexity.
 For detailed setup instructions and best practices, see the [official pgvector repository](https://github.com/pgvector/pgvector).
+</Tabs.Tab>
+<Tabs.Tab>
+```ts filename="vector-store.ts" showLineNumbers copy
+import { MilvusStore } from '@mastra/milvus'
+
+const store = new MilvusStore({
+  address: 'localhost:19530',  // Default
+  username: process.env.MILVUS_USERNAME, // Optional
+  password: process.env.MILVUS_PASSWORD  // Optional
+})
+await store.createIndex({
+  indexName: "myCollection",
+  dimension: 1536,
+});
+await store.upsert({
+  indexName: "myCollection",
+  vectors: embeddings,
+  metadata: chunks.map(chunk => ({ text: chunk.text })),
+});
+
+```
+
+### Using Milvus for Vector Search
+
+Milvus is a high-performance, open-source vector database designed for AI applications and similarity search. It offers excellent scalability, high throughput, and support for advanced filtering.
+
+For detailed deployment options and best practices, see the [official Milvus documentation](https://milvus.io/docs).
 </Tabs.Tab>
 <Tabs.Tab>
 ```ts filename="vector-store.ts" showLineNumbers copy
@@ -238,13 +265,21 @@ The dimension size must match the output dimension of your chosen embedding mode
 
 Each vector database enforces specific naming conventions for indexes and collections to ensure compatibility and prevent conflicts.
 
-<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB', 'OpenSearch']}>
+<Tabs items={['Pg Vector', 'Milvus', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB', 'OpenSearch']}>
   <Tabs.Tab>
     Index names must:
     - Start with a letter or underscore
     - Contain only letters, numbers, and underscores
     - Example: `my_index_123` is valid
     - Example: `my-index` is not valid (contains hyphen)
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Collection names must:
+    - Contain 1-255 characters
+    - Start with a letter or underscore
+    - Contain only letters, numbers, and underscores
+    - Example: `my_collection_123` is valid
+    - Example: `my-collection` is not valid (contains hyphen)
   </Tabs.Tab>
   <Tabs.Tab>
     Index names must:

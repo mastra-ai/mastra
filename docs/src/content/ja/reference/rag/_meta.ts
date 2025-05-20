@@ -9,6 +9,7 @@ export default {
   astra: "AstraVector",
   chroma: "ChromaVector",
   vectorize: "CloudflareVector",
+  milvus: "MilvusStore",
   pg: "PgVector",
   libsql: "LibSQLVector",
   pinecone: "PineconeVector",
