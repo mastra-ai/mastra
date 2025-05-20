@@ -17,6 +17,7 @@ First, we'll configure the memory system with a short context window since we'll
 
 ```typescript
 import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
 
 const memory = new Memory({
   options: {
