@@ -6,6 +6,7 @@ import * as p from '@clack/prompts';
 import fsExtra from 'fs-extra/esm';
 import color from 'picocolors';
 import prettier from 'prettier';
+import shellQuote from 'shell-quote';
 import yoctoSpinner from 'yocto-spinner';
 
 import { DepsService } from '../../services/service.deps';
@@ -45,7 +46,7 @@ export const getProviderImportAndModelItem = (llmProvider: LLMProvider) => {
 
   if (llmProvider === 'openai') {
     providerImport = `import { openai } from '${getAISDKPackage(llmProvider)}';`;
-    modelItem = `openai('gpt-4o')`;
+    modelItem = `openai('gpt-4o-mini')`;
   } else if (llmProvider === 'anthropic') {
     providerImport = `import { anthropic } from '${getAISDKPackage(llmProvider)}';`;
     modelItem = `anthropic('claude-3-5-sonnet-20241022')`;
@@ -82,7 +83,7 @@ ${providerImport}
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { LibSQLStore } from '@mastra/libsql';
-${addExampleTool ? `import { weatherTool } from '../tools';` : ''}
+${addExampleTool ? `import { weatherTool } from '../tools/weather-tool';` : ''}
 
 export const weatherAgent = new Agent({
   name: 'Weather Agent',
@@ -377,8 +378,8 @@ export const mastra = new Mastra()
 import { Mastra } from '@mastra/core/mastra';
 import { createLogger } from '@mastra/core/logger';
 import { LibSQLStore } from '@mastra/libsql';
-${addWorkflow ? `import { weatherWorkflow } from './workflows';` : ''}
-${addAgent ? `import { weatherAgent } from './agents';` : ''}
+${addWorkflow ? `import { weatherWorkflow } from './workflows/weather-workflow';` : ''}
+${addAgent ? `import { weatherAgent } from './agents/weather-agent';` : ''}
 
 export const mastra = new Mastra({
   ${filteredExports.join('\n  ')}
@@ -481,7 +482,9 @@ export const writeAPIKey = async ({
   apiKey?: string;
 }) => {
   const key = await getAPIKey(provider);
-  await exec(`echo ${key}=${apiKey} >> .env.development`);
+  const escapedKey = shellQuote.quote([key]);
+  const escapedApiKey = shellQuote.quote([apiKey]);
+  await exec(`echo ${escapedKey}=${escapedApiKey} >> .env`);
 };
 export const createMastraDir = async (directory: string): Promise<{ ok: true; dirPath: string } | { ok: false }> => {
   let dir = directory
@@ -506,7 +509,7 @@ export const writeCodeSample = async (
   llmProvider: LLMProvider,
   importComponents: Components[],
 ) => {
-  const destPath = dirPath + `/${component}/index.ts`;
+  const destPath = dirPath + `/${component}/weather-${component.slice(0, -1)}.ts`;
 
   try {
     await writeCodeSampleForComponents(llmProvider, component, destPath, importComponents);

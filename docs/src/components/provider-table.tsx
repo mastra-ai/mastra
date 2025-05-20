@@ -21,6 +21,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "XAI_API_KEY",
   },
   {
     provider: "xAI Grok",
@@ -30,6 +31,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "XAI_API_KEY",
   },
   {
     provider: "xAI Grok",
@@ -39,6 +41,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "XAI_API_KEY",
   },
   {
     provider: "xAI Grok",
@@ -48,6 +51,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "XAI_API_KEY",
   },
   {
     provider: "xAI Grok",
@@ -57,6 +61,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "XAI_API_KEY",
   },
   {
     provider: "xAI Grok",
@@ -66,6 +71,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "XAI_API_KEY",
   },
   {
     provider: "xAI Grok",
@@ -75,6 +81,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "XAI_API_KEY",
   },
   {
     provider: "xAI Grok",
@@ -84,6 +91,7 @@ const modelData = [
     objectGeneration: false,
     toolUsage: false,
     toolStreaming: false,
+    apiKey: "XAI_API_KEY",
   },
   {
     provider: "OpenAI",
@@ -93,6 +101,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "OPENAI_API_KEY",
   },
   {
     provider: "OpenAI",
@@ -102,6 +111,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "OPENAI_API_KEY",
   },
   {
     provider: "OpenAI",
@@ -111,6 +121,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "OPENAI_API_KEY",
   },
   {
     provider: "OpenAI",
@@ -120,6 +131,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "OPENAI_API_KEY",
   },
   {
     provider: "OpenAI",
@@ -129,6 +141,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "OPENAI_API_KEY",
   },
   {
     provider: "OpenAI",
@@ -138,6 +151,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "OPENAI_API_KEY",
   },
   {
     provider: "OpenAI",
@@ -147,6 +161,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "OPENAI_API_KEY",
   },
   {
     provider: "OpenAI",
@@ -156,6 +171,7 @@ const modelData = [
     objectGeneration: false,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "OPENAI_API_KEY",
   },
   {
     provider: "OpenAI",
@@ -165,6 +181,7 @@ const modelData = [
     objectGeneration: false,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "OPENAI_API_KEY",
   },
   {
     provider: "OpenAI",
@@ -174,6 +191,7 @@ const modelData = [
     objectGeneration: false,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "OPENAI_API_KEY",
   },
   {
     provider: "OpenAI",
@@ -183,6 +201,7 @@ const modelData = [
     objectGeneration: false,
     toolUsage: false,
     toolStreaming: false,
+    apiKey: "OPENAI_API_KEY",
   },
   {
     provider: "Anthropic",
@@ -192,6 +211,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "ANTHROPIC_API_KEY",
   },
   {
     provider: "Anthropic",
@@ -201,6 +221,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "ANTHROPIC_API_KEY",
   },
   {
     provider: "Anthropic",
@@ -210,6 +231,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "ANTHROPIC_API_KEY",
   },
   {
     provider: "Anthropic",
@@ -219,6 +241,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "ANTHROPIC_API_KEY",
   },
   {
     provider: "Mistral",
@@ -228,6 +251,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "MISTRAL_API_KEY",
   },
   {
     provider: "Mistral",
@@ -237,6 +261,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "MISTRAL_API_KEY",
   },
   {
     provider: "Mistral",
@@ -246,6 +271,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "MISTRAL_API_KEY",
   },
   {
     provider: "Mistral",
@@ -255,6 +281,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "MISTRAL_API_KEY",
   },
   {
     provider: "Google Generative AI",
@@ -265,6 +292,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "GOOGLE_API_KEY",
   },
   {
     provider: "Google Generative AI",
@@ -275,6 +303,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "GOOGLE_API_KEY",
   },
   {
     provider: "Google Generative AI",
@@ -285,6 +314,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "GOOGLE_API_KEY",
   },
   {
     provider: "Google Vertex",
@@ -295,6 +325,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "GOOGLE_VERTEX_API_KEY",
   },
   {
     provider: "Google Vertex",
@@ -305,6 +336,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "GOOGLE_VERTEX_API_KEY",
   },
   {
     provider: "Google Vertex",
@@ -315,6 +347,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "GOOGLE_VERTEX_API_KEY",
   },
   {
     provider: "DeepSeek",
@@ -324,6 +357,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "DEEPSEEK_API_KEY",
   },
   {
     provider: "DeepSeek",
@@ -333,6 +367,7 @@ const modelData = [
     objectGeneration: false,
     toolUsage: false,
     toolStreaming: false,
+    apiKey: "DEEPSEEK_API_KEY",
   },
   {
     provider: "Cerebras",
@@ -342,6 +377,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "CEREBRAS_API_KEY",
   },
   {
     provider: "Cerebras",
@@ -351,6 +387,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "CEREBRAS_API_KEY",
   },
   {
     provider: "Cerebras",
@@ -360,6 +397,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "CEREBRAS_API_KEY",
   },
   {
     provider: "Groq",
@@ -369,6 +407,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "GROQ_API_KEY",
   },
   {
     provider: "Groq",
@@ -378,6 +417,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "GROQ_API_KEY",
   },
   {
     provider: "Groq",
@@ -387,6 +427,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "GROQ_API_KEY",
   },
   {
     provider: "Groq",
@@ -396,6 +437,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "GROQ_API_KEY",
   },
   {
     provider: "Groq",
@@ -405,6 +447,7 @@ const modelData = [
     objectGeneration: true,
     toolUsage: true,
     toolStreaming: true,
+    apiKey: "GROQ_API_KEY",
   },
 ];
 
@@ -414,6 +457,7 @@ export function ProviderTable() {
       <TableCaption>AI Model Capabilities by Provider</TableCaption>
       <TableHeader>
         <TableRow className="dark:border-neutral-700 border-[var(--light-border-muted)]">
+          <TableHead className="w-[200px] font-bold pb-2">API Key</TableHead>
           <TableHead className="w-[200px] font-bold pb-2">Provider</TableHead>
           <TableHead className="w-[250px] font-bold pb-2">Model</TableHead>
           <TableHead className="pb-2 font-bold text-center">
@@ -436,6 +480,14 @@ export function ProviderTable() {
             className="dark:border-neutral-700 border-[var(--light-border-muted)]"
             key={index}
           >
+            <TableCell className="font-medium">
+              <Badge
+                className="dark:bg-neutral-900 bg-[var(--light-color-surface-1)]"
+                variant="secondary"
+              >
+                {model.apiKey}
+              </Badge>
+            </TableCell>
             <TableCell className="font-medium">
               <Link
                 href={model.providerUrl}
