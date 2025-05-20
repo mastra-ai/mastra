@@ -1,13 +1,19 @@
 import { get } from 'radash';
 import { z } from 'zod';
-import type { Mastra } from '..';
-import type { ToolsInput } from '../agent';
-import { Agent } from '../agent';
-import type { Metric } from '../eval';
-import type { Logger } from '../logger';
-import type { Step } from './step';
-import type { StepAction, StepResult, VariableReference, WorkflowContext, WorkflowRunResult } from './types';
-import { Workflow } from './workflow';
+import type { Mastra } from '../..';
+import type { ToolsInput } from '../../agent';
+import { Agent } from '../../agent';
+import type { Metric } from '../../eval';
+import type { Logger } from '../../logger';
+import type { LegacyStep as Step } from './step';
+import type {
+  StepAction,
+  StepResult,
+  VariableReference,
+  WorkflowContext,
+  LegacyWorkflowRunResult as WorkflowRunResult,
+} from './types';
+import { LegacyWorkflow } from './workflow';
 
 export function isErrorEvent(stateEvent: any): stateEvent is {
   type: `xstate.error.actor.${string}`;
@@ -181,14 +187,14 @@ export function getResultActivePaths(state: {
 }
 
 export function isWorkflow(
-  step: Step<any, any, any, any> | Workflow<any, any, any, any> | Agent<any, any, any>,
-): step is Workflow<any, any, any, any> {
+  step: Step<any, any, any, any> | LegacyWorkflow<any, any, any, any> | Agent<any, any, any>,
+): step is LegacyWorkflow<any, any, any, any> {
   // @ts-ignore
-  return step instanceof Workflow;
+  return step instanceof LegacyWorkflow;
 }
 
 export function isAgent(
-  step: Step<any, any, any, any> | Agent<any, any, any> | Workflow<any, any, any, any>,
+  step: Step<any, any, any, any> | Agent<any, any, any> | LegacyWorkflow<any, any, any, any>,
 ): step is Agent<any, any, any> {
   // @ts-ignore
   return step instanceof Agent;
@@ -291,7 +297,7 @@ export function workflowToStep<
   TTriggerSchema extends z.ZodObject<any> = any,
   TResultSchema extends z.ZodObject<any> = any,
 >(
-  workflow: Workflow<TSteps, TStepId, TTriggerSchema, TResultSchema>,
+  workflow: LegacyWorkflow<TSteps, TStepId, TTriggerSchema, TResultSchema>,
   { mastra }: { mastra?: Mastra },
 ): StepAction<TStepId, TTriggerSchema, z.ZodType<WorkflowRunResult<TTriggerSchema, TSteps, TResultSchema>>, any> {
   workflow.setNested(true);
@@ -329,7 +335,7 @@ export function workflowToStep<
 
       unwatch();
       if (!awaitedResult) {
-        throw new Error('Workflow run failed');
+        throw new Error('LegacyWorkflow run failed');
       }
 
       if (awaitedResult.activePaths?.size > 0) {

@@ -316,28 +316,13 @@ describe('DynamoDBStore Integration Tests', () => {
           // ... (rest of the large snapshot definition) ...
           value: { state: 'test' },
           context: {
-            steps: { step1: { status: 'success', payload: { data: 'test' } } },
-            triggerData: { source: 'test' },
-            attempts: { step1: 1 },
-          },
+            input: { source: 'test' },
+            step1: { status: 'success', output: { data: 'test' } },
+          } as unknown as WorkflowRunState['context'],
           activePaths: [{ stepPath: ['test'], stepId: 'step1', status: 'success' }],
           suspendedPaths: { test: [1] },
           runId: 'test-run-large', // Use unique runId
           timestamp: now,
-          childStates: {
-            largeState: {
-              value: { state: 'test' },
-              context: {
-                steps: { step1: { status: 'success', payload: { data: 'x'.repeat(380000) } } }, // Just under 400KB limit
-                triggerData: { source: 'test' },
-                attempts: { step1: 1 },
-              },
-              activePaths: [{ stepPath: ['test'], stepId: 'step1', status: 'success' }],
-              suspendedPaths: { test: [1] },
-              runId: 'test-run-large-child',
-              timestamp: now,
-            },
-          },
         };
 
         await expect(
@@ -471,10 +456,9 @@ describe('DynamoDBStore Integration Tests', () => {
           // ...(snapshot definition)
           value: { state: 'test' },
           context: {
-            steps: { step1: { status: 'success', payload: { data: 'test' } } },
-            triggerData: { source: 'test' },
-            attempts: { step1: 1 },
-          },
+            step1: { status: 'success', output: { data: 'test' } },
+            input: { source: 'test' },
+          } as unknown as WorkflowRunState['context'],
           activePaths: [{ stepPath: ['test'], stepId: 'step1', status: 'success' }],
           suspendedPaths: { test: [1] },
           runId: 'mixed-run',
@@ -720,10 +704,9 @@ describe('DynamoDBStore Integration Tests', () => {
       const snapshot: WorkflowRunState = {
         value: { currentState: status },
         context: {
-          steps: { step1: { status: 'success' } },
-          triggerData: { source: 'test' },
-          attempts: { step1: 1 },
-        },
+          step1: { status: 'success', output: { data: 'test' } },
+          input: { source: 'test' },
+        } as unknown as WorkflowRunState['context'],
         activePaths: [],
         suspendedPaths: {},
         runId: runId,

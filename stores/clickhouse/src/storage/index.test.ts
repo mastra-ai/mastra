@@ -60,10 +60,7 @@ const createSampleEval = () => ({
   createdAt: new Date(),
 });
 
-const createSampleWorkflowSnapshot = (
-  status: WorkflowRunState['context']['steps'][string]['status'],
-  createdAt?: Date,
-) => {
+const createSampleWorkflowSnapshot = (status: WorkflowRunState['context']['steps']['status'], createdAt?: Date) => {
   const runId = `run-${randomUUID()}`;
   const stepId = `step-${randomUUID()}`;
   const timestamp = createdAt || new Date();
@@ -71,21 +68,18 @@ const createSampleWorkflowSnapshot = (
     result: { success: true },
     value: {},
     context: {
-      steps: {
-        [stepId]: {
-          status,
-          payload: {},
-          error: undefined,
-        },
+      [stepId]: {
+        status,
+        payload: {},
+        error: undefined,
       },
-      triggerData: {},
-      attempts: {},
+      input: {},
     },
     activePaths: [],
     suspendedPaths: {},
     runId,
     timestamp: timestamp.getTime(),
-  };
+  } as unknown as WorkflowRunState;
   return { snapshot, runId, stepId };
 };
 
@@ -371,17 +365,14 @@ describe('ClickhouseStore', () => {
       const snapshot = {
         status: 'running',
         context: {
-          steps: {},
-          stepResults: {},
-          attempts: {},
-          triggerData: { type: 'manual' },
+          input: { type: 'manual' },
         },
         value: {},
         activePaths: [],
         suspendedPaths: {},
         runId,
         timestamp: new Date().getTime(),
-      };
+      } as unknown as WorkflowRunState;
 
       await store.persistWorkflowSnapshot({
         workflowName,
@@ -412,17 +403,14 @@ describe('ClickhouseStore', () => {
       const initialSnapshot = {
         status: 'running',
         context: {
-          steps: {},
-          stepResults: {},
-          attempts: {},
-          triggerData: { type: 'manual' },
+          input: { type: 'manual' },
         },
         value: {},
         activePaths: [],
         suspendedPaths: {},
         runId,
         timestamp: new Date().getTime(),
-      };
+      } as unknown as WorkflowRunState;
 
       await store.persistWorkflowSnapshot({
         workflowName,
@@ -433,19 +421,15 @@ describe('ClickhouseStore', () => {
       const updatedSnapshot = {
         status: 'completed',
         context: {
-          steps: {},
-          stepResults: {
-            'step-1': { status: 'success', result: { data: 'test' } },
-          },
-          attempts: { 'step-1': 1 },
-          triggerData: { type: 'manual' },
+          input: { type: 'manual' },
+          'step-1': { status: 'success', result: { data: 'test' } },
         },
         value: {},
         activePaths: [],
         suspendedPaths: {},
         runId,
         timestamp: new Date().getTime(),
-      };
+      } as unknown as WorkflowRunState;
 
       await store.persistWorkflowSnapshot({
         workflowName,
@@ -467,25 +451,21 @@ describe('ClickhouseStore', () => {
       const complexSnapshot = {
         value: { currentState: 'running' },
         context: {
-          stepResults: {
-            'step-1': {
-              status: 'success',
-              result: {
-                nestedData: {
-                  array: [1, 2, 3],
-                  object: { key: 'value' },
-                  date: new Date().toISOString(),
-                },
+          'step-1': {
+            status: 'success',
+            output: {
+              nestedData: {
+                array: [1, 2, 3],
+                object: { key: 'value' },
+                date: new Date().toISOString(),
               },
             },
-            'step-2': {
-              status: 'waiting',
-              dependencies: ['step-3', 'step-4'],
-            },
           },
-          steps: {},
-          attempts: { 'step-1': 1, 'step-2': 0 },
-          triggerData: {
+          'step-2': {
+            status: 'waiting',
+            dependencies: ['step-3', 'step-4'],
+          },
+          input: {
             type: 'scheduled',
             metadata: {
               schedule: '0 0 * * *',
@@ -508,7 +488,7 @@ describe('ClickhouseStore', () => {
         suspendedPaths: {},
         runId: runId,
         timestamp: Date.now(),
-      };
+      } as unknown as WorkflowRunState;
 
       await store.persistWorkflowSnapshot({
         workflowName,
@@ -540,7 +520,7 @@ describe('ClickhouseStore', () => {
       const workflowName2 = 'default_test_2';
 
       const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = createSampleWorkflowSnapshot('success');
-      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot('waiting');
+      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot('suspended');
 
       await store.persistWorkflowSnapshot({
         workflowName: workflowName1,
@@ -603,8 +583,8 @@ describe('ClickhouseStore', () => {
       const workflowName3 = 'date_test_3';
 
       const { snapshot: workflow1, runId: runId1 } = createSampleWorkflowSnapshot('success');
-      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot('waiting');
-      const { snapshot: workflow3, runId: runId3, stepId: stepId3 } = createSampleWorkflowSnapshot('skipped');
+      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot('suspended');
+      const { snapshot: workflow3, runId: runId3, stepId: stepId3 } = createSampleWorkflowSnapshot('failed');
 
       await store.insert({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
@@ -657,8 +637,8 @@ describe('ClickhouseStore', () => {
       const workflowName3 = 'page_test_3';
 
       const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = createSampleWorkflowSnapshot('success');
-      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot('waiting');
-      const { snapshot: workflow3, runId: runId3, stepId: stepId3 } = createSampleWorkflowSnapshot('skipped');
+      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot('suspended');
+      const { snapshot: workflow3, runId: runId3, stepId: stepId3 } = createSampleWorkflowSnapshot('failed');
 
       await store.persistWorkflowSnapshot({
         workflowName: workflowName1,
@@ -754,7 +734,7 @@ describe('ClickhouseStore', () => {
       // Insert multiple workflow runs for the same resourceId
       resourceId = 'resource-shared';
       for (const status of ['completed', 'running']) {
-        const sample = createSampleWorkflowSnapshot(status as WorkflowRunState['context']['steps'][string]['status']);
+        const sample = createSampleWorkflowSnapshot(status as WorkflowRunState['context']['steps']['status']);
         runIds.push(sample.runId);
         await store.insert({
           tableName: TABLE_WORKFLOW_SNAPSHOT,
@@ -769,7 +749,7 @@ describe('ClickhouseStore', () => {
         });
       }
       // Insert a run with a different resourceId
-      const other = createSampleWorkflowSnapshot('waiting');
+      const other = createSampleWorkflowSnapshot('suspended');
       await store.insert({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         record: {

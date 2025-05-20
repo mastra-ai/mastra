@@ -1,7 +1,7 @@
-import type { Mastra } from '../..';
-import { MastraBase } from '../../base';
-import type { RuntimeContext } from '../../di';
-import { RegisteredLogger } from '../../logger';
+import type { Mastra } from '..';
+import { MastraBase } from '../base';
+import type { RuntimeContext } from '../di';
+import { RegisteredLogger } from '../logger';
 import type { StepResult } from './types';
 import type { StepFlowEntry } from '.';
 
