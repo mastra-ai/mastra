@@ -1,7 +1,7 @@
 import type { QueryResult } from '@mastra/core/vector';
 import dotenv from 'dotenv';
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 
 import { UpstashVector } from './';
 
