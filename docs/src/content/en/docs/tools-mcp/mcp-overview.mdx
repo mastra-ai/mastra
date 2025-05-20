@@ -101,66 +101,7 @@ For detailed configuration options, see the [`MCPClient` reference documentation
 
 MCP servers can be discovered through registries. Here’s how to connect to some popular ones using `MCPClient`:
 
-<Tabs items={["Ampersand","mcp.run", "Composio.dev", "Smithery.ai"]}>
-  <Tabs.Tab>
-
-    [Ampersand](https://withampersand.com?utm_source=mastra-docs) is deep integration platform for AI developers to add enterprise-grade CRM & GTM integrations with your agents. 
-
-    It offers a single multi-tenant [MCP Server](https://www.npmjs.com/package/@amp-labs/mcp-server) that allows you to connect your agent to 150+ B2B Integrations. 
-    
-    Sign up at [Ampersand](https://withampersand.com?utm_source=mastra-docs) to get your `AMPERSAND_PROJECT_ID`, `AMPERSAND_INTEGRATION_ID_OR_NAME` & set the `groupRef` to the unique customerId inside your application. 
-
-    To check out how Ampersand works, check out their [documentation](https://docs.withampersand.com/)
-
-    ```typescript
-
-    // MCPClient with Ampersand MCP Server with SSE
-    export const mcp = new MCPClient({
-        servers: {
-        "@amp-labs/mcp-server": {
-          "url": `https://mcp.withampersand.com/sse?${new URLSearchParams({
-            apiKey: process.env.AMPERSAND_API_KEY,
-            project: process.env.AMPERSAND_PROJECT_ID,
-            integrationId: process.env.AMPERSAND_INTEGRATION_ID_OR_NAME,
-            groupRef: process.env.AMPERSAND_GROUP_REF
-          })}`
-        }
-      }
-    });
-
-    ```
-
-    If you prefer to run the MCP server locally:
-
-    ```typescript
-    import { MCPClient } from "@mastra/mcp";
-
-    // MCPClient with Ampersand MCP Server using stdio transport
-    export const mcp = new MCPClient({
-        servers: {
-          "@amp-labs/mcp-server": {
-            command: "npx",
-            args: [
-              "-y",
-              "@amp-labs/mcp-server@latest",
-              "--transport",
-              "stdio",
-              "--project",
-              process.env.AMPERSAND_PROJECT_ID,
-              "--integrationId",
-              process.env.AMPERSAND_INTEGRATION_ID_OR_NAME,
-              "--groupRef",
-              process.env.AMPERSAND_GROUP_REF, // optional
-            ],
-            env: {
-              AMPERSAND_API_KEY: process.env.AMPERSAND_API_KEY,
-            },
-          },
-        },
-    });
-    ```
-
-  </Tabs.Tab>
+<Tabs items={["mcp.run", "Composio.dev", "Smithery.ai", "Ampersand"]}>
   <Tabs.Tab>
     [mcp.run](https://www.mcp.run/) provides pre-authenticated, managed MCP servers. Tools are grouped into Profiles, each with a unique, signed URL.
 
@@ -249,6 +190,60 @@ MCP servers can be discovered through registries. Here’s how to connect to som
           ],
         },
       },
+    });
+    ```
+
+  </Tabs.Tab>
+    <Tabs.Tab>
+
+    [Ampersand](https://withampersand.com?utm_source=mastra-docs) offers a single multi-tenant [MCP Server](https://www.npmjs.com/package/@amp-labs/mcp-server) that allows you to connect your agent to 150+ B2B Integrations. 
+    
+
+    ```typescript
+
+    // MCPClient with Ampersand MCP Server with SSE
+    export const mcp = new MCPClient({
+        servers: {
+        "@amp-labs/mcp-server": {
+          "url": `https://mcp.withampersand.com/sse?${new URLSearchParams({
+            apiKey: process.env.AMPERSAND_API_KEY,
+            project: process.env.AMPERSAND_PROJECT_ID,
+            integrationId: process.env.AMPERSAND_INTEGRATION_NAME,
+            groupRef: process.env.AMPERSAND_GROUP_REF
+          })}`
+        }
+      }
+    });
+
+    ```
+
+    ```typescript
+    // If you prefer to run the MCP server locally:
+    
+    import { MCPClient } from "@mastra/mcp";
+
+    // MCPClient with Ampersand MCP Server using stdio transport
+    export const mcp = new MCPClient({
+        servers: {
+          "@amp-labs/mcp-server": {
+            command: "npx",
+            args: [
+              "-y",
+              "@amp-labs/mcp-server@latest",
+              "--transport",
+              "stdio",
+              "--project",
+              process.env.AMPERSAND_PROJECT_ID,
+              "--integrationId",
+              process.env.AMPERSAND_INTEGRATION_NAME,
+              "--groupRef",
+              process.env.AMPERSAND_GROUP_REF, // optional
+            ],
+            env: {
+              AMPERSAND_API_KEY: process.env.AMPERSAND_API_KEY,
+            },
+          },
+        },
     });
     ```
 
