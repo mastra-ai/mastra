@@ -11,7 +11,7 @@ export interface HeaderProps {
 export const Header = ({ children, border = true }: HeaderProps) => {
   return (
     <header
-      className={clsx('h-header-default z-50 flex w-full items-center gap-[18px] bg-transparent px-5', {
+      className={clsx('h-header-default z-50 flex w-full items-center gap-[18px] bg-transparent pl-5 pr-3', {
         'border-b-sm border-border1': border,
       })}
     >
