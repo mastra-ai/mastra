@@ -5,8 +5,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import { getLogsHandler, getLogsByRunIdHandler, getLogTransports } from './logs';
 
-vi.mock('@mastra/core/logger');
-
 type MockedLogger = {
   getLogsByRunId: Mock<IMastraLogger['getLogsByRunId']>;
   getLogs: Mock<IMastraLogger['getLogs']>;
@@ -34,9 +32,10 @@ describe('Logs Handlers', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockLogger = { getLogsByRunId: vi.fn(), getLogs: vi.fn(), transports: {} } as unknown as MockedLogger & {
+    mockLogger = { getLogsByRunId: vi.fn(), getLogs: vi.fn(), transports: new Map<string, unknown>() } as unknown as MockedLogger & {
       transports: Record<string, unknown>;
     };
+    mockLogger.getTransports = vi.fn(() => mockLogger.transports ?? new Map<string, unknown>())
 
     mastra = new Mastra({
       logger: mockLogger as unknown as IMastraLogger,
@@ -103,10 +102,7 @@ describe('Logs Handlers', () => {
 
   describe('getLogTransports', () => {
     it('should get log transports successfully', async () => {
-      mockLogger.transports = {
-        console: {},
-        file: {},
-      } as any;
+      mockLogger.transports = new Map([['console', {}], ['file', {}]]) as unknown as Record<string, unknown>;
 
       const result = await getLogTransports({ mastra });
 
@@ -116,7 +112,7 @@ describe('Logs Handlers', () => {
     });
 
     it('should handle empty transports', async () => {
-      mockLogger.transports = {};
+      mockLogger.transports = new Map<string, unknown>();
 
       const result = await getLogTransports({ mastra });
 
