@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeAll, afterAll, test, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeAll, afterAll, test } from 'vitest';
 
 import { AstraVector } from './';
 
@@ -1091,103 +1091,6 @@ describe.skip('AstraVector Integration Tests', () => {
         expect(results[0]?.metadata?.arrays?.multiple).toContain('two');
         expect(results[0]?.metadata?.arrays?.multiple).toHaveLength(3);
       });
-    });
-  });
-  describe('Deprecation Warnings', () => {
-    const indexName = 'testdeprecationwarnings';
-
-    const indexName2 = 'testdeprecationwarnings2';
-
-    let warnSpy;
-
-    beforeAll(async () => {
-      await createIndexAndWait(vectorDB, indexName, 3, 'cosine');
-    });
-
-    afterAll(async () => {
-      await deleteIndexAndWait(vectorDB, indexName);
-      await deleteIndexAndWait(vectorDB, indexName2);
-    });
-
-    beforeEach(async () => {
-      warnSpy = vi.spyOn(vectorDB['logger'], 'warn');
-    });
-
-    afterEach(async () => {
-      warnSpy.mockRestore();
-      await deleteIndexAndWait(vectorDB, indexName2);
-    });
-
-    it('should show deprecation warning when using individual args for createIndex', async () => {
-      await vectorDB.createIndex(indexName2, 3, 'cosine');
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Deprecation Warning: Passing individual arguments to createIndex() is deprecated'),
-      );
-    });
-
-    it('should show deprecation warning when using individual args for upsert', async () => {
-      await vectorDB.upsert(indexName, [[1, 2, 3]], [{ test: 'data' }]);
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Deprecation Warning: Passing individual arguments to upsert() is deprecated'),
-      );
-    });
-
-    it('should show deprecation warning when using individual args for query', async () => {
-      await vectorDB.query(indexName, [1, 2, 3], 5);
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Deprecation Warning: Passing individual arguments to query() is deprecated'),
-      );
-    });
-
-    it('should not show deprecation warning when using object param for query', async () => {
-      await vectorDB.query({
-        indexName,
-        queryVector: [1, 2, 3],
-        topK: 5,
-      });
-
-      expect(warnSpy).not.toHaveBeenCalled();
-    });
-
-    it('should not show deprecation warning when using object param for createIndex', async () => {
-      await vectorDB.createIndex({
-        indexName: indexName2,
-        dimension: 3,
-        metric: 'cosine',
-      });
-
-      expect(warnSpy).not.toHaveBeenCalled();
-    });
-
-    it('should not show deprecation warning when using object param for upsert', async () => {
-      await vectorDB.upsert({
-        indexName,
-        vectors: [[1, 2, 3]],
-        metadata: [{ test: 'data' }],
-      });
-
-      expect(warnSpy).not.toHaveBeenCalled();
-    });
-
-    it('should maintain backward compatibility with individual args', async () => {
-      // Query
-      const queryResults = await vectorDB.query(indexName, [1, 2, 3], 5);
-      expect(Array.isArray(queryResults)).toBe(true);
-
-      // CreateIndex
-      await expect(vectorDB.createIndex(indexName2, 3, 'cosine')).resolves.not.toThrow();
-
-      // Upsert
-      const upsertResults = await vectorDB.upsert({
-        indexName,
-        vectors: [[1, 2, 3]],
-        metadata: [{ test: 'data' }],
-      });
-      expect(Array.isArray(upsertResults)).toBe(true);
-      expect(upsertResults).toHaveLength(1);
     });
   });
 
