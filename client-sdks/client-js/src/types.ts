@@ -3,19 +3,21 @@ import type {
   AiMessageType,
   CoreMessage,
   QueryResult,
-  StepAction,
-  StepGraph,
   StorageThreadType,
   BaseLogMessage,
-  WorkflowRunResult as CoreWorkflowRunResult,
-  VNextWorkflowRuns,
   WorkflowRuns,
+  LegacyWorkflowRuns,
 } from '@mastra/core';
 
 import type { AgentGenerateOptions, AgentStreamOptions } from '@mastra/core/agent';
-import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type { ServerInfo } from '@mastra/core/mcp';
-import type { NewWorkflow, WatchEvent, WorkflowResult as VNextWorkflowResult } from '@mastra/core/workflows/vNext';
+import type { RuntimeContext } from '@mastra/core/runtime-context';
+import type { Workflow, WatchEvent, WorkflowResult } from '@mastra/core/workflows';
+import type {
+  StepAction,
+  StepGraph,
+  LegacyWorkflowRunResult as CoreLegacyWorkflowRunResult,
+} from '@mastra/core/workflows/legacy';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 
@@ -88,7 +90,7 @@ export interface GetToolResponse {
   outputSchema: string;
 }
 
-export interface GetWorkflowResponse {
+export interface GetLegacyWorkflowResponse {
   name: string;
   triggerSchema: string;
   steps: Record<string, StepAction<any, any, any, any>>;
@@ -105,18 +107,18 @@ export interface GetWorkflowRunsParams {
   resourceId?: string;
 }
 
+export type GetLegacyWorkflowRunsResponse = LegacyWorkflowRuns;
+
 export type GetWorkflowRunsResponse = WorkflowRuns;
 
-export type GetVNextWorkflowRunsResponse = VNextWorkflowRuns;
-
-export type WorkflowRunResult = {
+export type LegacyWorkflowRunResult = {
   activePaths: Record<string, { status: string; suspendPayload?: any; stepPath: string[] }>;
-  results: CoreWorkflowRunResult<any, any, any>['results'];
+  results: CoreLegacyWorkflowRunResult<any, any, any>['results'];
   timestamp: number;
   runId: string;
 };
 
-export interface GetVNextWorkflowResponse {
+export interface GetWorkflowResponse {
   name: string;
   description?: string;
   steps: {
@@ -129,14 +131,14 @@ export interface GetVNextWorkflowResponse {
       suspendSchema: string;
     };
   };
-  stepGraph: NewWorkflow['serializedStepGraph'];
+  stepGraph: Workflow['serializedStepGraph'];
   inputSchema: string;
   outputSchema: string;
 }
 
-export type VNextWorkflowWatchResult = WatchEvent & { runId: string };
+export type WorkflowWatchResult = WatchEvent & { runId: string };
 
-export type VNextWorkflowRunResult = VNextWorkflowResult<any, any>;
+export type WorkflowRunResult = WorkflowResult<any, any>;
 export interface UpsertVectorParams {
   indexName: string;
   vectors: number[][];
