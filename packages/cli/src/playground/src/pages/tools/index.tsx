@@ -55,8 +55,6 @@ const prepareAgents = (tools: Record<string, Tool>, agents: Record<string, GetAg
     agents: toolsWithAgents.get(tool.id)?.agents || [],
   }));
 
-  console.log(actualTools, toolsWithAgents);
-
   return actualTools;
 };
 
