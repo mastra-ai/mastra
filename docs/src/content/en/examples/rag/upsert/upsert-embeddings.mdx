@@ -28,7 +28,7 @@ After generating embeddings, you need to store them in a database that supports 
       model: openai.embedding("text-embedding-3-small"),
     });
 
-    const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
+    const pgVector = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING! });
 
     await pgVector.createIndex({
       indexName: "test_index",
@@ -49,6 +49,7 @@ After generating embeddings, you need to store them in a database that supports 
         "https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-pgvector"
       }
     />
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -68,7 +69,9 @@ After generating embeddings, you need to store them in a database that supports 
       model: openai.embedding('text-embedding-3-small'),
     });
 
-    const pinecone = new PineconeVector(process.env.PINECONE_API_KEY!);
+    const pinecone = new PineconeVector({
+      apiKey: process.env.PINECONE_API_KEY!,
+    });
 
     await pinecone.createIndex({
       indexName: 'testindex',
@@ -84,9 +87,10 @@ After generating embeddings, you need to store them in a database that supports 
     <br />
     <hr className="dark:border-[#404040] border-gray-300" />
     <br />
-    <GithubLink 
-      link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-pinecone'} 
+    <GithubLink
+      link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-pinecone'}
     />
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -107,10 +111,10 @@ After generating embeddings, you need to store them in a database that supports 
       maxRetries: 3,
     });
 
-    const qdrant = new QdrantVector(
-      process.env.QDRANT_URL,
-      process.env.QDRANT_API_KEY,
-    );
+    const qdrant = new QdrantVector({
+      url: process.env.QDRANT_URL,
+      apiKey: process.env.QDRANT_API_KEY,
+    });
 
     await qdrant.createIndex({
       indexName: 'test_collection',
@@ -123,6 +127,7 @@ After generating embeddings, you need to store them in a database that supports 
       metadata: chunks?.map(chunk => ({ text: chunk.text })),
     });
     ```
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -161,9 +166,10 @@ After generating embeddings, you need to store them in a database that supports 
     <br />
     <hr className="dark:border-[#404040] border-gray-300" />
     <br />
-    <GithubLink 
-      link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-chroma'} 
+    <GithubLink
+      link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-chroma'}
     />
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -200,6 +206,7 @@ After generating embeddings, you need to store them in a database that supports 
       metadata: chunks?.map(chunk => ({ text: chunk.text })),
     });
     ```
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -239,9 +246,10 @@ After generating embeddings, you need to store them in a database that supports 
     <br />
     <hr className="dark:border-[#404040] border-gray-300" />
     <br />
-    <GithubLink 
-      link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-libsql'} 
+    <GithubLink
+      link={'https://github.com/mastra-ai/mastra/blob/main/examples/basics/rag/insert-embedding-in-libsql'}
     />
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -277,6 +285,7 @@ After generating embeddings, you need to store them in a database that supports 
       metadata: chunks?.map(chunk => ({ text: chunk.text })),
     });
     ```
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -312,6 +321,7 @@ After generating embeddings, you need to store them in a database that supports 
       metadata: chunks?.map(chunk => ({ text: chunk.text })),
     });
     ```
+
   </Tabs.Tab>
   <Tabs.Tab>
   The `MongoDBVector` class provides methods to create indexes and insert embeddings into MongoDB with Atlas Search.
@@ -346,5 +356,6 @@ After generating embeddings, you need to store them in a database that supports 
       metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
     });
     ```
+
   </Tabs.Tab>
 </Tabs>

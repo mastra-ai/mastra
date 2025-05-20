@@ -32,6 +32,9 @@ import {
   getMcpServerSseHandler,
   listMcpRegistryServersHandler,
   getMcpRegistryServerDetailHandler,
+  listMcpServerToolsHandler,
+  getMcpServerToolDetailHandler,
+  executeMcpServerToolHandler,
 } from './handlers/mcp';
 import {
   createThreadHandler,
@@ -1451,6 +1454,81 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
       },
     }),
     getMcpRegistryServerDetailHandler,
+  );
+
+  app.get(
+    '/api/mcp/:serverId/tools',
+    describeRoute({
+      description: 'List all tools available on a specific MCP server instance.',
+      tags: ['mcp'],
+      parameters: [
+        {
+          name: 'serverId',
+          in: 'path',
+          required: true,
+          description: 'Unique ID of the MCP server instance.',
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: { description: 'A list of tools for the MCP server.' }, // Define schema if you have one for McpServerToolListResponse
+        404: { description: 'MCP server instance not found.' },
+        501: { description: 'Server does not support listing tools.' },
+      },
+    }),
+    listMcpServerToolsHandler,
+  );
+
+  app.get(
+    '/api/mcp/:serverId/tools/:toolId',
+    describeRoute({
+      description: 'Get details for a specific tool on an MCP server.',
+      tags: ['mcp'],
+      parameters: [
+        { name: 'serverId', in: 'path', required: true, schema: { type: 'string' } },
+        { name: 'toolId', in: 'path', required: true, schema: { type: 'string' } },
+      ],
+      responses: {
+        200: { description: 'Details of the specified tool.' }, // Define schema for McpToolInfo
+        404: { description: 'MCP server or tool not found.' },
+        501: { description: 'Server does not support getting tool details.' },
+      },
+    }),
+    getMcpServerToolDetailHandler,
+  );
+
+  app.post(
+    '/api/mcp/:serverId/tools/:toolId/execute',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Execute a specific tool on an MCP server.',
+      tags: ['mcp'],
+      parameters: [
+        { name: 'serverId', in: 'path', required: true, schema: { type: 'string' } },
+        { name: 'toolId', in: 'path', required: true, schema: { type: 'string' } },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                data: { type: 'object' },
+                runtimeContext: { type: 'object' },
+              },
+            },
+          },
+        }, // Simplified schema
+      },
+      responses: {
+        200: { description: 'Result of the tool execution.' },
+        400: { description: 'Invalid tool arguments.' },
+        404: { description: 'MCP server or tool not found.' },
+        501: { description: 'Server does not support tool execution.' },
+      },
+    }),
+    executeMcpServerToolHandler,
   );
 
   // Memory routes

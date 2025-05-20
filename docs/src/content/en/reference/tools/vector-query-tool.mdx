@@ -10,13 +10,13 @@ The `createVectorQueryTool()` function creates a tool for semantic search over v
 ## Basic Usage
 
 ```typescript
-import { openai } from '@ai-sdk/openai';
+import { openai } from "@ai-sdk/openai";
 import { createVectorQueryTool } from "@mastra/rag";
 
 const queryTool = createVectorQueryTool({
   vectorStoreName: "pinecone",
   indexName: "docs",
-  model: openai.embedding('text-embedding-3-small'),
+  model: openai.embedding("text-embedding-3-small"),
 });
 ```
 
@@ -27,7 +27,8 @@ const queryTool = createVectorQueryTool({
     {
       name: "vectorStoreName",
       type: "string",
-      description: "Name of the vector store to query (must be configured in Mastra)",
+      description:
+        "Name of the vector store to query (must be configured in Mastra)",
       isOptional: false,
     },
     {
@@ -43,6 +44,27 @@ const queryTool = createVectorQueryTool({
       isOptional: false,
     },
     {
+      name: "enableFilter",
+      type: "boolean",
+      description: "Enable filtering of results based on metadata",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "includeVectors",
+      type: "boolean",
+      description: "Include the embedding vectors in the results",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "includeSources",
+      type: "boolean",
+      description: "Include the full retrieval objects in the results",
+      isOptional: true,
+      defaultValue: "true",
+    },
+    {
       name: "reranker",
       type: "RerankConfig",
       description: "Options for reranking results",
@@ -51,15 +73,17 @@ const queryTool = createVectorQueryTool({
     {
       name: "id",
       type: "string",
-      description: "Custom ID for the tool (defaults to 'VectorQuery {vectorStoreName} {indexName} Tool')",
+      description:
+        "Custom ID for the tool (defaults to 'VectorQuery {vectorStoreName} {indexName} Tool')",
       isOptional: true,
     },
     {
       name: "description",
       type: "string",
-      description: "Custom description for the tool. By default: 'Access the knowledge base to find information needed to answer user questions'",
+      description:
+        "Custom description for the tool. By default: 'Access the knowledge base to find information needed to answer user questions'",
       isOptional: true,
-    }
+    },
   ]}
 />
 
@@ -84,7 +108,8 @@ const queryTool = createVectorQueryTool({
           parameters: [
             {
               name: "weights",
-              description: "Weights for scoring components (semantic: 0.4, vector: 0.4, position: 0.2)",
+              description:
+                "Weights for scoring components (semantic: 0.4, vector: 0.4, position: 0.2)",
               isOptional: true,
               type: "WeightConfig",
             },
@@ -93,12 +118,12 @@ const queryTool = createVectorQueryTool({
               description: "Number of top results to return",
               isOptional: true,
               type: "number",
-              defaultValue: "3"
-            }
-          ]
-        }
-      ]
-    }
+              defaultValue: "3",
+            },
+          ],
+        },
+      ],
+    },
   ]}
 />
 
@@ -112,13 +137,31 @@ The tool returns an object with:
       name: "relevantContext",
       type: "string",
       description: "Combined text from the most relevant document chunks",
-    }
+    },
+    {
+      name: "sources",
+      type: "QueryResult[]",
+      description: "Array of full retrieval result objects. Each object contains all information needed to reference the original document, chunk, and similarity score.",
+    },
   ]}
 />
+
+### QueryResult object structure
+
+```typescript
+{
+  id: string;         // Unique chunk/document identifier
+  metadata: any;      // All metadata fields (document ID, etc.)
+  vector: number[];   // Embedding vector (if available)
+  score: number;      // Similarity score for this retrieval
+  document: string;   // Full chunk/document text (if available)
+}
+```
 
 ## Default Tool Description
 
 The default description focuses on:
+
 - Finding relevant information in stored knowledge
 - Answering user questions
 - Retrieving factual content
@@ -133,7 +176,7 @@ The tool determines the number of results to return based on the user's query, w
 const queryTool = createVectorQueryTool({
   vectorStoreName: "pinecone",
   indexName: "docs",
-  model: openai.embedding('text-embedding-3-small'),
+  model: openai.embedding("text-embedding-3-small"),
   enableFilter: true,
 });
 ```
@@ -149,6 +192,7 @@ With filtering enabled, the tool processes queries to construct metadata filters
    ```
 
 This agent-driven approach:
+
 - Processes natural language queries into filter specifications
 - Implements vector store-specific filter syntax
 - Translates query terms to filter operators
@@ -163,22 +207,23 @@ For an example of how agent-driven filtering works, see the [Agent-Driven Metada
 const queryTool = createVectorQueryTool({
   vectorStoreName: "milvus",
   indexName: "documentation",
-  model: openai.embedding('text-embedding-3-small'),
+  model: openai.embedding("text-embedding-3-small"),
   reranker: {
-    model: openai('gpt-4o-mini'),
+    model: openai("gpt-4o-mini"),
     options: {
       weights: {
-        semantic: 0.5,  // Semantic relevance weight
-        vector: 0.3,    // Vector similarity weight
-        position: 0.2   // Original position weight
+        semantic: 0.5, // Semantic relevance weight
+        vector: 0.3, // Vector similarity weight
+        position: 0.2, // Original position weight
       },
-      topK: 5
-    }
-  }
+      topK: 5,
+    },
+  },
 });
 ```
 
 Reranking improves result quality by combining:
+
 - Semantic relevance: Using LLM-based scoring of text similarity
 - Vector similarity: Original vector distance scores
 - Position bias: Consideration of original result ordering
@@ -192,8 +237,9 @@ The reranker processes the initial vector search results and returns a reordered
 const queryTool = createVectorQueryTool({
   vectorStoreName: "pinecone",
   indexName: "docs",
-  model: openai.embedding('text-embedding-3-small'),
-  description: "Search through document archives to find relevant information for answering questions about company policies and procedures"
+  model: openai.embedding("text-embedding-3-small"),
+  description:
+    "Search through document archives to find relevant information for answering questions about company policies and procedures",
 });
 ```
 
@@ -202,11 +248,12 @@ This example shows how to customize the tool description for a specific use case
 ## Tool Details
 
 The tool is created with:
+
 - **ID**: `VectorQuery {vectorStoreName} {indexName} Tool`
 - **Input Schema**: Requires queryText and filter objects
 - **Output Schema**: Returns relevantContext string
 
 ## Related
 
-- [rerank()](../rag/rerank) 
-- [createGraphRAGTool](./graph-rag-tool) 
+- [rerank()](../rag/rerank)
+- [createGraphRAGTool](./graph-rag-tool)

@@ -1,6 +1,7 @@
 import React from 'react';
-import { Label } from '@/components/ui/label';
+
 import { FieldWrapperProps } from '@autoform/react';
+import { Txt } from '@/ds/components/Txt';
 
 const DISABLED_LABELS = ['boolean', 'object', 'array'];
 
@@ -8,18 +9,27 @@ export const FieldWrapper: React.FC<FieldWrapperProps> = ({ label, children, id,
   const isDisabled = DISABLED_LABELS.includes(field.type);
 
   return (
-    <div className="space-y-2">
+    <div className="pb-4 last:pb-0">
       {!isDisabled && (
-        <Label htmlFor={id}>
+        <Txt as="label" variant="ui-sm" className="text-icon3 pb-1 block" htmlFor={id}>
           {label}
-          {field.required && <span className="text-destructive"> *</span>}
-        </Label>
+          {field.required && <span className="text-accent2"> *</span>}
+        </Txt>
       )}
+
       {children}
+
       {field.fieldConfig?.description && (
-        <p className="text-sm text-muted-foreground">{field.fieldConfig.description}</p>
+        <Txt as="p" variant="ui-sm" className="text-icon6">
+          {field.fieldConfig.description}
+        </Txt>
       )}
-      {error && <p className="text-sm text-destructive">{error}</p>}
+
+      {error && (
+        <Txt as="p" variant="ui-sm" className="text-accent2">
+          {error}
+        </Txt>
+      )}
     </div>
   );
 };

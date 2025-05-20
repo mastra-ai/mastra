@@ -22,6 +22,7 @@ constructor(config: AgentConfig<TAgentId, TTools, TMetrics>)
 ```
 
 ### パラメータ
+
 <br />
 
 <PropertiesTable
@@ -36,19 +37,22 @@ constructor(config: AgentConfig<TAgentId, TTools, TMetrics>)
       name: "instructions",
       type: "string | ({ runtimeContext: RuntimeContext }) => string | Promise<string>",
       isOptional: false,
-      description: "エージェントの動作を導く指示。静的な文字列または文字列を返す関数のいずれかです。",
+      description:
+        "エージェントの動作を導くための指示。静的な文字列または文字列を返す関数のいずれかです。",
     },
     {
       name: "model",
       type: "MastraLanguageModel | ({ runtimeContext: RuntimeContext }) => MastraLanguageModel | Promise<MastraLanguageModel>",
       isOptional: false,
-      description: "応答生成に使用する言語モデル。モデルインスタンスまたはモデルを返す関数のいずれかです。",
+      description:
+        "レスポンス生成に使用する言語モデル。モデルインスタンスまたはモデルを返す関数のいずれかです。",
     },
     {
       name: "tools",
       type: "ToolsInput | ({ runtimeContext: RuntimeContext }) => ToolsInput | Promise<ToolsInput>",
       isOptional: true,
-      description: "エージェントが使用できるツール。静的なオブジェクトまたはツールを返す関数のいずれかです。",
+      description:
+        "エージェントが使用できるツール。静的なオブジェクトまたはツールを返す関数のいずれかです。",
     },
     {
       name: "defaultGenerateOptions",
@@ -63,6 +67,13 @@ constructor(config: AgentConfig<TAgentId, TTools, TMetrics>)
       description: "stream()を呼び出す際に使用するデフォルトオプション。",
     },
     {
+      name: "workflows",
+      type: "Record<string, NewWorkflow> | ({ runtimeContext: RuntimeContext }) => Record<string, NewWorkflow> | Promise<Record<string, NewWorkflow>>",
+      isOptional: true,
+      description:
+        "エージェントが実行できるワークフロー。静的なオブジェクトまたはワークフローを返す関数のいずれかです。",
+    },
+    {
       name: "evals",
       type: "Record<string, Metric>",
       isOptional: true,
@@ -72,13 +83,15 @@ constructor(config: AgentConfig<TAgentId, TTools, TMetrics>)
       name: "memory",
       type: "MastraMemory",
       isOptional: true,
-      description: "エージェントが情報を保存および取得するためのメモリシステム。",
+      description:
+        "エージェントが情報を保存および取得するためのメモリシステム。",
     },
     {
       name: "voice",
       type: "CompositeVoice",
       isOptional: true,
-      description: "音声テキスト変換およびテキスト音声変換機能のための音声機能。",
+      description:
+        "音声テキスト変換およびテキスト音声変換機能のための音声機能。",
     },
   ]}
 />

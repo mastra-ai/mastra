@@ -4,6 +4,7 @@ const meta = {
   upstash: "Upstash Storage",
   cloudflare: "Cloudflare KV Storage",
   "cloudflare-d1": "Cloudflare D1 Storage",
+  dynamodb: "DynamoDB Storage",
 };
 
 export default meta;

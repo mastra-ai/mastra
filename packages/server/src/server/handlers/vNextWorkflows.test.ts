@@ -1,4 +1,5 @@
 import { Mastra } from '@mastra/core';
+import { MockStore } from '@mastra/core/storage';
 import { createStep, createWorkflow } from '@mastra/core/workflows/vNext';
 import type { NewWorkflow } from '@mastra/core/workflows/vNext';
 import { stringify } from 'superjson';
@@ -42,6 +43,7 @@ function createMockWorkflow(name: string) {
 
   const workflow = createWorkflow({
     id: name,
+    description: 'mock test workflow',
     steps: [stepA],
     inputSchema: z.object({}),
     outputSchema: z.object({ result: z.string() }),
@@ -74,6 +76,7 @@ function createReusableMockWorkflow(name: string) {
 
   return createWorkflow({
     id: name,
+    description: 'mock reusable test workflow',
     steps: [stepA, stepB],
     inputSchema: z.object({}),
     outputSchema: z.object({ result: z.string() }),
@@ -86,6 +89,7 @@ function createReusableMockWorkflow(name: string) {
 function serializeWorkflow(workflow: NewWorkflow) {
   return {
     name: workflow.id,
+    description: workflow.description,
     steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
       acc[key] = {
         id: step.id,
@@ -115,6 +119,7 @@ describe('vNext Workflow Handlers', () => {
     mockMastra = new Mastra({
       logger: false,
       vnext_workflows: { 'test-workflow': mockWorkflow, 'reusable-workflow': reusableWorkflow },
+      storage: new MockStore(),
     });
   });
 

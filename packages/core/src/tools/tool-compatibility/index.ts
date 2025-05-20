@@ -18,11 +18,24 @@ export const ALL_NUMBER_CHECKS = [
 
 export const ALL_ARRAY_CHECKS = ['min', 'max', 'length'] as const;
 export const UNSUPPORTED_ZOD_TYPES = ['ZodIntersection', 'ZodNever', 'ZodNull', 'ZodTuple', 'ZodUndefined'] as const;
+export const SUPPORTED_ZOD_TYPES = [
+  'ZodObject',
+  'ZodArray',
+  'ZodUnion',
+  'ZodString',
+  'ZodNumber',
+  'ZodDate',
+  'ZodAny',
+  'ZodDefault',
+] as const;
+export const ALL_ZOD_TYPES = [...SUPPORTED_ZOD_TYPES, ...UNSUPPORTED_ZOD_TYPES] as const;
 
 export type StringCheckType = (typeof ALL_STRING_CHECKS)[number];
 export type NumberCheckType = (typeof ALL_NUMBER_CHECKS)[number];
 export type ArrayCheckType = (typeof ALL_ARRAY_CHECKS)[number];
 export type UnsupportedZodType = (typeof UNSUPPORTED_ZOD_TYPES)[number];
+export type SupportedZodType = (typeof SUPPORTED_ZOD_TYPES)[number];
+export type AllZodType = (typeof ALL_ZOD_TYPES)[number];
 
 export type ZodShape<T extends z.AnyZodObject> = T['shape'];
 export type ShapeKey<T extends z.AnyZodObject> = keyof ZodShape<T>;
@@ -341,6 +354,17 @@ export abstract class ToolCompatibility extends MastraBase {
       result = result.describe(description);
     }
     return result as ShapeValue<T>;
+  }
+
+  public defaultZodOptionalHandler<T extends z.AnyZodObject>(
+    value: z.ZodTypeAny,
+    handleTypes: readonly AllZodType[] = SUPPORTED_ZOD_TYPES,
+  ): ShapeValue<T> {
+    if (handleTypes.includes(value._def.innerType._def.typeName as AllZodType)) {
+      return this.processZodType(value._def.innerType).optional();
+    } else {
+      return value as ShapeValue<T>;
+    }
   }
 
   public process(tool: ToolToConvert): {

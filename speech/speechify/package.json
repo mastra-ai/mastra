@@ -1,6 +1,6 @@
 {
   "name": "@mastra/speech-speechify",
-  "version": "0.1.23",
+  "version": "0.1.24-alpha.0",
   "description": "Mastra Speechify speech integration (DEPRECATED - use @mastra/voice-speechify instead)",
   "type": "module",
   "main": "dist/index.js",
@@ -25,7 +25,6 @@
   },
   "license": "Elastic-2.0",
   "dependencies": {
-    "@mastra/core": "workspace:^",
     "@speechify/api-sdk": "^2.4.1",
     "zod": "^3.24.3"
   },
@@ -35,6 +34,10 @@
     "@types/node": "^20.17.27",
     "eslint": "^9.23.0",
     "tsup": "^8.4.0",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "@mastra/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@mastra/core": "^0.9.4"
   }
 }

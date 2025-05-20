@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { openai } from '@ai-sdk/openai';
+import { MockLanguageModelV1 } from 'ai/test';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
@@ -9,7 +9,7 @@ import { createLogger } from '../logger';
 import { Mastra } from '../mastra';
 import { RuntimeContext } from '../runtime-context';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../storage';
-import { DefaultStorage } from '../storage/libsql';
+import { MockStore } from '../storage/mock';
 import { Telemetry } from '../telemetry';
 import { createTool } from '../tools';
 
@@ -18,11 +18,7 @@ import type { WorkflowContext, WorkflowResumeResult } from './types';
 import { WhenConditionReturnValue } from './types';
 import { Workflow } from './workflow';
 
-const storage = new DefaultStorage({
-  config: {
-    url: 'file::memory:?cache=shared',
-  },
-});
+const storage = new MockStore();
 
 const logger = createLogger({
   level: 'info',
@@ -2540,11 +2536,7 @@ describe('Workflow', async () => {
         .commit();
 
       // Create a new storage instance for initial run
-      const initialStorage = new DefaultStorage({
-        config: {
-          url: 'file::memory:',
-        },
-      });
+      const initialStorage = new MockStore();
       await initialStorage.init();
 
       const mastra = new Mastra({
@@ -3083,6 +3075,7 @@ describe('Workflow', async () => {
       const mastra = new Mastra({
         logger,
         workflows: { 'test-workflow': promptEvalWorkflow },
+        storage: new MockStore(),
       });
 
       const wf = mastra.getWorkflow('test-workflow');
@@ -3255,13 +3248,27 @@ describe('Workflow', async () => {
       const agent = new Agent({
         name: 'test-agent-1',
         instructions: 'test agent instructions',
-        model: openai('gpt-4'),
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: `Paris`,
+          }),
+        }),
       });
 
       const agent2 = new Agent({
         name: 'test-agent-2',
         instructions: 'test agent instructions',
-        model: openai('gpt-4'),
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: `London`,
+          }),
+        }),
       });
 
       new Mastra({
@@ -3295,8 +3302,6 @@ describe('Workflow', async () => {
         triggerData: { prompt1: 'Capital of France, just the name', prompt2: 'Capital of UK, just the name' },
       });
 
-      console.log(result);
-
       expect(result.results['test-agent-1']).toEqual({
         status: 'success',
         output: { text: 'Paris' },
@@ -3323,13 +3328,27 @@ describe('Workflow', async () => {
       const agent = new Agent({
         name: 'test-agent-1',
         instructions: 'test agent instructions',
-        model: openai('gpt-4'),
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: `Paris`,
+          }),
+        }),
       });
 
       const agent2 = new Agent({
         name: 'test-agent-2',
         instructions: 'test agent instructions',
-        model: openai('gpt-4'),
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: `London`,
+          }),
+        }),
       });
 
       new Mastra({
@@ -4338,6 +4357,7 @@ describe('Workflow', async () => {
         new Mastra({
           logger,
           workflows: { counterWorkflow },
+          storage: new MockStore(),
         });
 
         const run = counterWorkflow.createRun();
@@ -4468,6 +4488,7 @@ describe('Workflow', async () => {
         new Mastra({
           logger,
           workflows: { counterWorkflow },
+          storage,
         });
 
         const run = counterWorkflow.createRun();

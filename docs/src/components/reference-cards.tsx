@@ -1,4 +1,4 @@
-import { CardItems } from "./example-cards";
+import { CardItems } from "./cards/card-items";
 
 export const ReferenceCards = () => {
   return (

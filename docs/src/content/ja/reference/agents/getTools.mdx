@@ -13,7 +13,7 @@ description: "Mastraエージェントの`.getTools()`メソッドに関する�
 getTools({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}): ToolsInput | Promise<ToolsInput>
 ```
 
-## パラメータ
+## パラメーター
 
 <br />
 <PropertiesTable
@@ -22,7 +22,8 @@ getTools({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeCo
       name: "runtimeContext",
       type: "RuntimeContext",
       isOptional: true,
-      description: "依存性注入とコンテキスト情報のためのランタイムコンテキスト。",
+      description:
+        "依存性注入やコンテキスト情報のためのランタイムコンテキスト。",
     },
   ]}
 />
@@ -33,22 +34,23 @@ getTools({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeCo
 
 ## 説明
 
-`getTools()`メソッドは、エージェントが使用できるツールにアクセスするために使用されます。これは、オブジェクトとして直接提供されるか、関数から返されるかにかかわらず、ツールを解決します。
+`getTools()` メソッドは、エージェントが使用できるツールにアクセスするために使われます。このメソッドは、ツールを解決し、ツールはオブジェクトとして直接提供される場合や、関数から返される場合があります。
 
-ツールはエージェントの能力の重要な構成要素であり、以下のことを可能にします：
-- 特定のアクション（データの取得や計算など）を実行する
+ツールはエージェントの能力の重要な要素であり、以下のことを可能にします：
+
+- 特定のアクション（データの取得や計算の実行など）を行う
 - 外部システムやAPIにアクセスする
 - コードやコマンドを実行する
-- データベースや他のサービスと対話する
+- データベースや他のサービスと連携する
 
 ## 例
 
-### 基本的な使用法
+### 基本的な使い方
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
 import { createTool } from "@mastra/core/tools";
-import { openai } from '@ai-sdk/openai';
+import { openai } from "@ai-sdk/openai";
 import { z } from "zod";
 
 // Create tools using createTool
@@ -57,7 +59,7 @@ const addTool = createTool({
   description: "Add two numbers",
   inputSchema: z.object({
     a: z.number().describe("First number"),
-    b: z.number().describe("Second number")
+    b: z.number().describe("Second number"),
   }),
   outputSchema: z.number(),
   execute: async ({ context }) => {
@@ -70,7 +72,7 @@ const multiplyTool = createTool({
   description: "Multiply two numbers",
   inputSchema: z.object({
     a: z.number().describe("First number"),
-    b: z.number().describe("Second number")
+    b: z.number().describe("Second number"),
   }),
   outputSchema: z.number(),
   execute: async ({ context }) => {
@@ -81,7 +83,8 @@ const multiplyTool = createTool({
 // Create an agent with the tools
 const agent = new Agent({
   name: "calculator",
-  instructions: "You are a calculator assistant that can perform mathematical operations.",
+  instructions:
+    "You are a calculator assistant that can perform mathematical operations.",
   model: openai("gpt-4o"),
   tools: {
     add: addTool,
@@ -94,46 +97,49 @@ const tools = await agent.getTools();
 console.log(Object.keys(tools)); // ["add", "multiply"]
 ```
 
-### RuntimeContextでの使用
+### RuntimeContextとの併用
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
 import { createTool } from "@mastra/core/tools";
 import { RuntimeContext } from "@mastra/core/runtime-context";
-import { openai } from '@ai-sdk/openai';
+import { openai } from "@ai-sdk/openai";
 import { z } from "zod";
 
 // Create an agent with dynamic tools
 const agent = new Agent({
   name: "weather-assistant",
-  instructions: "You are a weather assistant that can provide weather information.",
+  instructions:
+    "You are a weather assistant that can provide weather information.",
   model: openai("gpt-4o"),
   tools: ({ runtimeContext }) => {
     // Get API key from runtime context
     const apiKey = runtimeContext.get("weatherApiKey");
-    
+
     // Create a weather tool with the API key from context
     const weatherTool = createTool({
       id: "getWeather",
       description: "Get the current weather for a location",
       inputSchema: z.object({
-        location: z.string().describe("City name")
+        location: z.string().describe("City name"),
       }),
       outputSchema: z.object({
         temperature: z.number(),
         conditions: z.string(),
         humidity: z.number(),
-        windSpeed: z.number()
+        windSpeed: z.number(),
       }),
       execute: async ({ context }) => {
         // Use the API key from runtime context
-        const response = await fetch(`https://api.weather.com/current?location=${context.location}&apiKey=${apiKey}`);
+        const response = await fetch(
+          `https://api.weather.com/current?location=${context.location}&apiKey=${apiKey}`,
+        );
         return response.json();
       },
     });
-    
+
     return {
-      getWeather: weatherTool
+      getWeather: weatherTool,
     };
   },
 });

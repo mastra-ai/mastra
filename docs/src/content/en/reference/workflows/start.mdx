@@ -11,8 +11,8 @@ The start function begins execution of a workflow run. It processes all steps in
 
 ```typescript copy showLineNumbers
 const { runId, start } = workflow.createRun();
-const result = await start({ 
-  triggerData: { inputValue: 42 } 
+const result = await start({
+  triggerData: { inputValue: 42 },
 });
 ```
 
@@ -24,8 +24,8 @@ const result = await start({
       name: "config",
       type: "object",
       description: "Configuration for starting the workflow run",
-      isOptional: true
-    }
+      isOptional: true,
+    },
   ]}
 />
 
@@ -37,8 +37,8 @@ const result = await start({
       name: "triggerData",
       type: "Record<string, any>",
       description: "Initial data that matches the workflow's triggerSchema",
-      isOptional: false
-    }
+      isOptional: false,
+    },
   ]}
 />
 
@@ -49,13 +49,13 @@ const result = await start({
     {
       name: "results",
       type: "Record<string, any>",
-      description: "Combined output from all completed workflow steps"
+      description: "Combined output from all completed workflow steps",
     },
     {
       name: "status",
       type: "'completed' | 'error' | 'suspended'",
-      description: "Final status of the workflow run"
-    }
+      description: "Final status of the workflow run",
+    },
   ]}
 />
 
@@ -81,4 +81,7 @@ try {
 - [createRun Reference](./createRun.mdx)
 - [Workflow Class Reference](./workflow.mdx)
 - [Step Class Reference](./step-class.mdx)
+
+```
+
 ```

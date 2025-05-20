@@ -1,14 +1,17 @@
 import fs from 'fs';
 import path from 'path';
-import { openai } from '@ai-sdk/openai';
-import { afterAll, describe, expect, it, vi } from 'vitest';
+import { MockLanguageModelV1 } from 'ai/test';
+import { afterAll, describe, expect, it, vi, beforeEach } from 'vitest';
+
 import { z } from 'zod';
 import { createTool, Mastra, Telemetry } from '../..';
 import { Agent } from '../../agent';
 import { RuntimeContext } from '../../di';
-import { DefaultStorage } from '../../storage/libsql';
+import { MockStore } from '../../storage/mock';
 import type { WatchEvent } from './types';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow } from './workflow';
+
+const testStorage = new MockStore();
 
 describe('Workflow', () => {
   describe('Basic Workflow Execution', () => {
@@ -331,6 +334,50 @@ describe('Workflow', () => {
       });
 
       it('should resolve trigger data from getInitData', async () => {
+        const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+        const triggerSchema = z.object({
+          cool: z.string(),
+        });
+
+        const step1 = createStep({
+          id: 'step1',
+          execute,
+          inputSchema: triggerSchema,
+          outputSchema: z.object({ result: z.string() }),
+        });
+
+        const step2 = createStep({
+          id: 'step2',
+          execute: async ({ getInitData }) => {
+            const initData = getInitData<typeof triggerSchema>();
+            return { result: initData };
+          },
+          inputSchema: z.object({ result: z.string() }),
+          outputSchema: z.object({ result: z.object({ cool: z.string() }) }),
+        });
+
+        const workflow = createWorkflow({
+          id: 'test-workflow',
+          inputSchema: triggerSchema,
+          outputSchema: z.object({ result: z.string() }),
+          steps: [step1, step2],
+        });
+
+        workflow.then(step1).then(step2).commit();
+
+        const run = workflow.createRun();
+        const result = await run.start({ inputData: { cool: 'test-input' } });
+
+        expect(execute).toHaveBeenCalledWith(
+          expect.objectContaining({
+            inputData: { cool: 'test-input' },
+          }),
+        );
+
+        expect(result.steps.step2).toEqual({ status: 'success', output: { result: { cool: 'test-input' } } });
+      });
+
+      it('should resolve trigger data from getInitData with workflow schema', async () => {
         const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
         const triggerSchema = z.object({
           cool: z.string(),
@@ -2009,6 +2056,8 @@ describe('Workflow', () => {
       });
 
       new Mastra({
+        logger: false,
+        storage: testStorage,
         vnext_workflows: {
           'test-workflow': workflow,
         },
@@ -2051,6 +2100,8 @@ describe('Workflow', () => {
       });
 
       new Mastra({
+        logger: false,
+        storage: testStorage,
         vnext_workflows: {
           'test-workflow': workflow,
         },
@@ -2455,14 +2506,11 @@ describe('Workflow', () => {
         .commit();
 
       // Create a new storage instance for initial run
-      const initialStorage = new DefaultStorage({
-        config: {
-          url: 'file::memory:',
-        },
-      });
+      const initialStorage = new MockStore();
       await initialStorage.init();
 
       new Mastra({
+        logger: false,
         storage: initialStorage,
         vnext_workflows: { 'test-workflow': promptEvalWorkflow },
       });
@@ -2582,7 +2630,9 @@ describe('Workflow', () => {
         .commit();
 
       new Mastra({
+        logger: false,
         vnext_workflows: { 'test-workflow': workflow },
+        storage: testStorage,
       });
 
       const run = workflow.createRun();
@@ -2753,7 +2803,9 @@ describe('Workflow', () => {
         .commit();
 
       new Mastra({
+        logger: false,
         vnext_workflows: { 'test-workflow': workflow },
+        storage: testStorage,
       });
 
       const run = workflow.createRun();
@@ -2921,6 +2973,8 @@ describe('Workflow', () => {
         .commit();
 
       new Mastra({
+        logger: false,
+        storage: testStorage,
         vnext_workflows: { 'test-workflow': promptEvalWorkflow },
       });
 
@@ -2999,6 +3053,12 @@ describe('Workflow', () => {
   });
 
   describe('Workflow Runs', () => {
+    let testStorage: MockStore;
+
+    beforeEach(async () => {
+      testStorage = new MockStore();
+    });
+
     it('should return empty result when mastra is not initialized', async () => {
       const workflow = createWorkflow({ id: 'test', inputSchema: z.object({}), outputSchema: z.object({}) });
       const result = await workflow.getWorkflowRuns();
@@ -3029,6 +3089,8 @@ describe('Workflow', () => {
         vnext_workflows: {
           'test-workflow': workflow,
         },
+        logger: false,
+        storage: testStorage,
       });
 
       // Create a few runs
@@ -3068,6 +3130,8 @@ describe('Workflow', () => {
       workflow.then(step1).then(step2).commit();
 
       new Mastra({
+        logger: false,
+        storage: testStorage,
         vnext_workflows: {
           'test-workflow': workflow,
         },
@@ -3108,6 +3172,8 @@ describe('Workflow', () => {
       workflow.then(step1).commit();
 
       new Mastra({
+        logger: false,
+        storage: testStorage,
         vnext_workflows: { 'test-workflow': workflow },
       });
 
@@ -3134,13 +3200,27 @@ describe('Workflow', () => {
       const agent = new Agent({
         name: 'test-agent-1',
         instructions: 'test agent instructions',
-        model: openai('gpt-4'),
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: `Paris`,
+          }),
+        }),
       });
 
       const agent2 = new Agent({
         name: 'test-agent-2',
         instructions: 'test agent instructions',
-        model: openai('gpt-4'),
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: `London`,
+          }),
+        }),
       });
 
       const startStep = createStep({
@@ -3161,8 +3241,9 @@ describe('Workflow', () => {
       new Mastra({
         vnext_workflows: { 'test-workflow': workflow },
         agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
+        logger: false,
+        storage: testStorage,
       });
-
       const agentStep1 = createStep(agent);
       const agentStep2 = createStep(agent2);
 
@@ -3229,13 +3310,27 @@ describe('Workflow', () => {
       const agent = new Agent({
         name: 'test-agent-1',
         instructions: 'test agent instructions',
-        model: openai('gpt-4'),
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: `Paris`,
+          }),
+        }),
       });
 
       const agent2 = new Agent({
         name: 'test-agent-2',
         instructions: 'test agent instructions',
-        model: openai('gpt-4'),
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: `London`,
+          }),
+        }),
       });
 
       const startStep = createStep({
@@ -3254,6 +3349,8 @@ describe('Workflow', () => {
       });
 
       new Mastra({
+        logger: false,
+        storage: testStorage,
         vnext_workflows: { 'test-workflow': workflow },
         agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
       });
@@ -3325,13 +3422,27 @@ describe('Workflow', () => {
       const agent = new Agent({
         name: 'test-agent-1',
         instructions: 'test agent instructions',
-        model: openai('gpt-4'),
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: `Paris`,
+          }),
+        }),
       });
 
       const agent2 = new Agent({
         name: 'test-agent-2',
         instructions: 'test agent instructions',
-        model: openai('gpt-4'),
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: `London`,
+          }),
+        }),
       });
 
       const startStep = createStep({
@@ -3350,10 +3461,11 @@ describe('Workflow', () => {
       });
 
       new Mastra({
+        logger: false,
+        storage: testStorage,
         vnext_workflows: { 'test-workflow': workflow },
         agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
       });
-
       workflow
         .then(startStep)
         .map({
@@ -3424,16 +3536,30 @@ describe('Workflow', () => {
       const agent = new Agent({
         name: 'test-agent-1',
         instructions: 'test agent instructions',
-        model: openai('gpt-4'),
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: `Paris`,
+          }),
+        }),
       });
-
       const agent2 = new Agent({
         name: 'test-agent-2',
         instructions: 'test agent instructions',
-        model: openai('gpt-4'),
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: `London`,
+          }),
+        }),
       });
-
       new Mastra({
+        logger: false,
+        storage: testStorage,
         vnext_workflows: { 'test-workflow': workflow },
         agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
       });
@@ -4343,12 +4469,13 @@ describe('Workflow', () => {
           .commit();
 
         new Mastra({
+          logger: false,
+          storage: testStorage,
           vnext_workflows: { counterWorkflow },
         });
 
         const run = counterWorkflow.createRun();
         const result = await run.start({ inputData: { startValue: 0 } });
-
         expect(begin).toHaveBeenCalledTimes(1);
         expect(start).toHaveBeenCalledTimes(1);
         expect(other).toHaveBeenCalledTimes(1);
@@ -4607,6 +4734,8 @@ describe('Workflow', () => {
         .commit();
 
       new Mastra({
+        logger: false,
+        storage: testStorage,
         vnext_workflows: { counterWorkflow },
       });
 
@@ -4671,11 +4800,7 @@ describe('Workflow', () => {
     });
 
     it('should inject runtimeContext dependencies into steps during resume', async () => {
-      const initialStorage = new DefaultStorage({
-        config: {
-          url: 'file::memory:',
-        },
-      });
+      const initialStorage = new MockStore();
       await initialStorage.init();
 
       const runtimeContext = new RuntimeContext();
@@ -4684,7 +4809,7 @@ describe('Workflow', () => {
 
       const mastra = new Mastra({
         logger: false,
-        storage: initialStorage,
+        storage: testStorage,
       });
 
       const execute = vi.fn(async ({ runtimeContext, suspend, resumeData }) => {

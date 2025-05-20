@@ -1,8 +1,12 @@
 import type {
   CreateIndexParams,
+  DeleteIndexParams,
+  DeleteVectorParams,
+  DescribeIndexParams,
   IndexStats,
   QueryResult,
   QueryVectorParams,
+  UpdateVectorParams,
   UpsertVectorParams,
 } from '@mastra/core/vector';
 import { MastraVector } from '@mastra/core/vector';
@@ -216,7 +220,13 @@ export class TurbopufferVector extends MastraVector {
     }
   }
 
-  async describeIndex(indexName: string): Promise<IndexStats> {
+  /**
+   * Retrieves statistics about a vector index.
+   *
+   * @param {string} indexName - The name of the index to describe
+   * @returns A promise that resolves to the index statistics including dimension, count and metric
+   */
+  async describeIndex({ indexName }: DescribeIndexParams): Promise<IndexStats> {
     try {
       const namespace = this.client.namespace(indexName);
       const metadata = await namespace.metadata();
@@ -236,7 +246,7 @@ export class TurbopufferVector extends MastraVector {
     }
   }
 
-  async deleteIndex(indexName: string): Promise<void> {
+  async deleteIndex({ indexName }: DeleteIndexParams): Promise<void> {
     try {
       const namespace = this.client.namespace(indexName);
       await namespace.deleteAll();
@@ -256,11 +266,7 @@ export class TurbopufferVector extends MastraVector {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector(
-    indexName: string,
-    id: string,
-    updates: { vector?: number[]; metadata?: Record<string, any> },
-  ): Promise<void> {
+  async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
     try {
       const namespace = this.client.namespace(indexName);
       const createIndex = this.createIndexCache.get(indexName);
@@ -269,8 +275,8 @@ export class TurbopufferVector extends MastraVector {
       }
       const distanceMetric = createIndex.tpufDistanceMetric;
       const record: any = { id };
-      if (updates.vector) record.vector = updates.vector;
-      if (updates.metadata) record.attributes = updates.metadata;
+      if (update.vector) record.vector = update.vector;
+      if (update.metadata) record.attributes = update.metadata;
 
       await namespace.upsert({
         vectors: [record],
@@ -288,7 +294,7 @@ export class TurbopufferVector extends MastraVector {
    * @returns A promise that resolves when the deletion is complete.
    * @throws Will throw an error if the deletion operation fails.
    */
-  async deleteVector(indexName: string, id: string): Promise<void> {
+  async deleteVector({ indexName, id }: DeleteVectorParams): Promise<void> {
     try {
       const namespace = this.client.namespace(indexName);
       await namespace.delete({ ids: [id] });

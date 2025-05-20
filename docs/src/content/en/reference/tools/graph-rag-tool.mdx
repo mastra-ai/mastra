@@ -16,13 +16,13 @@ import { createGraphRAGTool } from "@mastra/rag";
 const graphTool = createGraphRAGTool({
   vectorStoreName: "pinecone",
   indexName: "docs",
-  model: openai.embedding('text-embedding-3-small'),
+  model: openai.embedding("text-embedding-3-small"),
   graphOptions: {
     dimension: 1536,
     threshold: 0.7,
     randomWalkSteps: 100,
-    restartProb: 0.15
-  }
+    restartProb: 0.15,
+  },
 });
 ```
 
@@ -49,6 +49,20 @@ const graphTool = createGraphRAGTool({
       isOptional: false,
     },
     {
+      name: "enableFilter",
+      type: "boolean",
+      description: "Enable filtering of results based on metadata",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "includeSources",
+      type: "boolean",
+      description: "Include the full retrieval objects in the results",
+      isOptional: true,
+      defaultValue: "true",
+    },
+    {
       name: "graphOptions",
       type: "GraphOptions",
       description: "Configuration for the graph-based retrieval",
@@ -58,9 +72,10 @@ const graphTool = createGraphRAGTool({
     {
       name: "description",
       type: "string",
-      description: "Custom description for the tool. By default: 'Access and analyze relationships between information in the knowledge base to answer complex questions about connections and patterns'",
+      description:
+        "Custom description for the tool. By default: 'Access and analyze relationships between information in the knowledge base to answer complex questions about connections and patterns'",
       isOptional: true,
-    }
+    },
   ]}
 />
 
@@ -78,7 +93,8 @@ const graphTool = createGraphRAGTool({
     {
       name: "threshold",
       type: "number",
-      description: "Similarity threshold for creating edges between nodes (0-1)",
+      description:
+        "Similarity threshold for creating edges between nodes (0-1)",
       isOptional: true,
       defaultValue: "0.7",
     },
@@ -95,11 +111,12 @@ const graphTool = createGraphRAGTool({
       description: "Probability of restarting random walk from query node",
       isOptional: true,
       defaultValue: "0.15",
-    }
+    },
   ]}
 />
 
 ## Returns
+
 The tool returns an object with:
 
 <PropertiesTable
@@ -107,14 +124,33 @@ The tool returns an object with:
     {
       name: "relevantContext",
       type: "string",
-      description: "Combined text from the most relevant document chunks, retrieved using graph-based ranking",
-    }
+      description:
+        "Combined text from the most relevant document chunks, retrieved using graph-based ranking",
+    },
+    {
+      name: "sources",
+      type: "QueryResult[]",
+      description: "Array of full retrieval result objects. Each object contains all information needed to reference the original document, chunk, and similarity score.",
+    },
   ]}
 />
+
+### QueryResult object structure
+
+```typescript
+{
+  id: string;         // Unique chunk/document identifier
+  metadata: any;      // All metadata fields (document ID, etc.)
+  vector: number[];   // Embedding vector (if available)
+  score: number;      // Similarity score for this retrieval
+  document: string;   // Full chunk/document text (if available)
+}
+```
 
 ## Default Tool Description
 
 The default description focuses on:
+
 - Analyzing relationships between documents
 - Finding patterns and connections
 - Answering complex queries
@@ -125,13 +161,13 @@ The default description focuses on:
 const graphTool = createGraphRAGTool({
   vectorStoreName: "pinecone",
   indexName: "docs",
-  model: openai.embedding('text-embedding-3-small'),
+  model: openai.embedding("text-embedding-3-small"),
   graphOptions: {
     dimension: 1536,
-    threshold: 0.8,        // Higher similarity threshold
-    randomWalkSteps: 200,  // More exploration steps
-    restartProb: 0.2      // Higher restart probability
-  }
+    threshold: 0.8, // Higher similarity threshold
+    randomWalkSteps: 200, // More exploration steps
+    restartProb: 0.2, // Higher restart probability
+  },
 });
 ```
 
@@ -141,8 +177,9 @@ const graphTool = createGraphRAGTool({
 const graphTool = createGraphRAGTool({
   vectorStoreName: "pinecone",
   indexName: "docs",
-  model: openai.embedding('text-embedding-3-small'),
-  description: "Analyze document relationships to find complex patterns and connections in our company's historical data"
+  model: openai.embedding("text-embedding-3-small"),
+  description:
+    "Analyze document relationships to find complex patterns and connections in our company's historical data",
 });
 ```
 
