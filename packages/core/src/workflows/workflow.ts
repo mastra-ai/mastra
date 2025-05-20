@@ -975,7 +975,7 @@ export class Run<
         const { type, payload, eventTimestamp } = event;
         const prefixedSteps = Object.fromEntries(
           Object.entries(payload?.workflowState?.steps ?? {}).map(([stepId, step]) => [
-            `${this.workflowId}.${stepId}`,
+            `${workflowId}.${stepId}`,
             step,
           ]),
         );

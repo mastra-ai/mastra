@@ -22,7 +22,7 @@ export const LegacyWorkflowLayout = ({ children }: { children: React.ReactNode }
             </HeaderTitle>
           </Header>
         ) : (
-          <WorkflowHeader workflowName={legacyWorkflow?.name || ''} workflowId={workflowId!} />
+          <WorkflowHeader workflowName={legacyWorkflow?.name || ''} workflowId={workflowId!} isLegacy />
         )}
         {children}
       </div>

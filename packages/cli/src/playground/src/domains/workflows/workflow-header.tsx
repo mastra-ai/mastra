@@ -5,11 +5,11 @@ import { Crumb, Header, HeaderGroup, Button, Breadcrumb } from '@mastra/playgrou
 export function WorkflowHeader({
   workflowName,
   workflowId,
-  isVNext,
+  isLegacy,
 }: {
   workflowName: string;
   workflowId: string;
-  isVNext?: boolean;
+  isLegacy?: boolean;
 }) {
   return (
     <Header>
@@ -17,16 +17,16 @@ export function WorkflowHeader({
         <Crumb as={Link} to={`/workflows`}>
           Workflows
         </Crumb>
-        <Crumb as={Link} to={`/workflows${isVNext ? '/v-next' : ''}/${workflowId}`} isCurrent>
+        <Crumb as={Link} to={`/workflows${isLegacy ? '/legacy' : ''}/${workflowId}`} isCurrent>
           {workflowName}
         </Crumb>
       </Breadcrumb>
 
       <HeaderGroup>
-        <Button as="a" href={`/workflows${isVNext ? '/v-next' : ''}/${workflowId}/graph`}>
+        <Button as="a" href={`/workflows${isLegacy ? '/legacy' : ''}/${workflowId}/graph`}>
           Graph
         </Button>
-        <Button as="a" href={`/workflows${isVNext ? '/v-next' : ''}/${workflowId}/traces`}>
+        <Button as="a" href={`/workflows${isLegacy ? '/legacy' : ''}/${workflowId}/traces`}>
           Traces
         </Button>
       </HeaderGroup>
