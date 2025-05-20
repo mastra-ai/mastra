@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { fastembed } from '@mastra/fastembed';
-import { Memory } from '@mastra/memory';
+import type { Memory } from '@mastra/memory';
 import type { TextPart, ImagePart, FilePart, ToolCallPart } from 'ai';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { reorderToolCallsAndResults } from '../../src/utils';
@@ -109,20 +108,6 @@ export function getResuableTests(memory: Memory) {
 
     describe('Semantic Search', () => {
       it('should chunk long messages before embedding', async () => {
-        const memory = new Memory({
-          embedder: fastembed,
-          options: {
-            semanticRecall: {
-              topK: 1,
-              messageRange: 1,
-            },
-            lastMessages: 10,
-            threads: {
-              generateTitle: false,
-            },
-          },
-        });
-
         const thread = await memory.createThread({
           resourceId,
           title: 'Long chunking test',

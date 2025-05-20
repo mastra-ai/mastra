@@ -9,29 +9,33 @@ Agents in Mastra can leverage a powerful memory system to store conversation his
 
 ## Enabling Memory for an Agent
 
-To enable memory, simply instantiate the `Memory` class and pass it to your agent's configuration. You also need to install the memory package:
+To enable memory, simply instantiate the `Memory` class and pass it to your agent's configuration. You also need to install the memory package and a storage adapter:
 
 ```bash npm2yarn copy
-npm install @mastra/memory@latest
+npm install @mastra/memory@latest @mastra/libsql@latest
 ```
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
 import { openai } from "@ai-sdk/openai";
 
-// Basic memory setup
-const memory = new Memory();
+const memory = new Memory({
+  storage: new LibSQLStore({
+    url: "file:../../memory.db",
+  }),
+});
 
 const agent = new Agent({
   name: "MyMemoryAgent",
   instructions: "You are a helpful assistant with memory.",
   model: openai("gpt-4o"),
-  memory: memory, // Attach the memory instance
+  memory, // Attach the memory instance
 });
 ```
 
-This basic setup uses default settings, including LibSQL for storage and FastEmbed for embeddings. For detailed setup instructions, see [Memory](/docs/memory/overview).
+This basic setup uses the default settings. Visit the [Memory documentation](/docs/memory/overview) for more configuration info.
 
 ## Using Memory in Agent Calls
 

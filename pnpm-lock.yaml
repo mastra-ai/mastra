@@ -1046,9 +1046,6 @@ importers:
       dotenv:
         specifier: ^16.4.7
         version: 16.5.0
-      fastembed:
-        specifier: ^1.14.4
-        version: 1.14.4
       hono:
         specifier: ^4.5.1
         version: 4.7.7
