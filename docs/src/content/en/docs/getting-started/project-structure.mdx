@@ -9,13 +9,13 @@ import { FileTree } from "nextra/components";
 
 This page provides a guide for organizing folders and files in Mastra. Mastra is a modular framework, and you can use any of the modules separately or together.
 
-You could write everything in a single file (as we showed in the quick start), or separate each agent, tool, and workflow into their own files.
+You could write everything in a single file, or separate each agent, tool, and workflow into their own files.
 
 We don't enforce a specific folder structure, but we do recommend some best practices, and the CLI will scaffold a project with a sensible structure.
 
 ## Using the CLI
 
-`mastra init` is an interactive CLI that allows you to:
+The Mastra CLI is [interactive](/docs/getting-started/installation#interactive) and allows you to:
 
 - **Choose a directory for Mastra files**: Specify where you want the Mastra files to be placed (default is `src/mastra`).
 - **Select components to install**: Choose which components you want to include in your project:
@@ -31,23 +31,23 @@ We don't enforce a specific folder structure, but we do recommend some best prac
 Assuming you select all components and include example code, your project structure will look like this:
 
 <FileTree>
-  <FileTree.Folder name="root" defaultOpen>
-    <FileTree.Folder name="src" defaultOpen>
-      <FileTree.Folder name="mastra" defaultOpen>
-        <FileTree.Folder name="agents" defaultOpen>
-          <FileTree.File name="index.ts" />
-        </FileTree.Folder>
-        <FileTree.Folder name="tools" defaultOpen>
-          <FileTree.File name="index.ts" />
-        </FileTree.Folder>
-        <FileTree.Folder name="workflows" defaultOpen>
-          <FileTree.File name="index.ts" />
-        </FileTree.Folder>
-        <FileTree.File name="index.ts" />
+  <FileTree.Folder name="src" defaultOpen>
+    <FileTree.Folder name="mastra" defaultOpen>
+      <FileTree.Folder name="agents" defaultOpen>
+        <FileTree.File name="agent-name.ts" />
       </FileTree.Folder>
+      <FileTree.Folder name="tools" defaultOpen>
+        <FileTree.File name="tool-name.ts" />
+      </FileTree.Folder>
+      <FileTree.Folder name="workflows" defaultOpen>
+        <FileTree.File name="workflow-name.ts" />
+      </FileTree.Folder>
+      <FileTree.File name="index.ts" />
     </FileTree.Folder>
-    <FileTree.File name=".env" />
   </FileTree.Folder>
+  <FileTree.File name=".env" />
+  <FileTree.File name="package.json" />
+  <FileTree.File name="tsconfig.json" />
 </FileTree>
 {/* 
 ```
@@ -62,6 +62,8 @@ root/
 │       │   └── index.ts
 │       ├── index.ts
 ├── .env
+├── package.json
+├── tssconfig.json
 ``` */}
 
 ### Top-level Folders
@@ -75,7 +77,9 @@ root/
 
 ### Top-level Files
 
-| File                  | Description                        |
-| --------------------- | ---------------------------------- |
-| `src/mastra/index.ts` | Main configuration file for Mastra |
-| `.env`                | Environment variables              |
+| File                  | Description                                         |
+| --------------------- | --------------------------------------------------- |
+| `src/mastra/index.ts` | Main configuration file for Mastra                  |
+| `.env`                | Environment variables                               |
+| `package.json`        | Node.js project metadata, scripts, and dependencies |
+| `tsconfig.json`       | TypeScript compiler configuration                   |
