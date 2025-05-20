@@ -480,7 +480,7 @@ export function createTestSuite(storage: MastraStorage) {
         expect(total).toBe(1);
         expect(runs[0]!.workflowName).toBe(workflowName1);
         const snapshot = runs[0]!.snapshot as WorkflowRunState;
-        expect(snapshot.context?.[stepId1]?.status).toBe('success');
+        expect(snapshot.context?.[stepId1]?.status).toBe('completed');
       });
 
       it('filters by date range', async () => {
