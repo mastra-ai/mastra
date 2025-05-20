@@ -147,7 +147,7 @@ export const SubscribeForm = ({
                   placeholder={placeholder || "you@example.com"}
                   {...field}
                   className={cn(
-                    "bg-transparent placeholder:text-[#939393] text-sm placeholder:text-sm flex-1 focus:outline-none focus:ring-1 h-[35px] focus:ring-[hsl(var(--tag-green))] w-full py-[0.56rem] px-4 dark:border-[#343434] border border-[var(--light-border-muted)] rounded-md",
+                    "bg-transparent dark:text-white placeholder:text-[#939393] text-sm placeholder:text-sm flex-1 focus:outline-none focus:ring-1 h-[35px] focus:ring-[hsl(var(--tag-green))] w-full py-[0.56rem] px-4 dark:border-[#343434] border border-[var(--light-border-muted)] rounded-md",
                     inputClassName,
                   )}
                 />
