@@ -2,7 +2,7 @@ import type { Span } from '@opentelemetry/api';
 import { context as otlpContext, trace } from '@opentelemetry/api';
 import { z } from 'zod';
 
-import type { Mastra } from '../..';
+import type { LegacyWorkflowRuns, Mastra } from '../..';
 import type { MastraPrimitives } from '../../action';
 import type { Agent } from '../../agent';
 import { MastraBase } from '../../base';
@@ -1016,7 +1016,7 @@ export class LegacyWorkflow<
       return { runs: [], total: 0 };
     }
 
-    return storage.getWorkflowRuns({ workflowName: this.name, ...(args ?? {}) });
+    return storage.getWorkflowRuns({ workflowName: this.name, ...(args ?? {}) }) as unknown as LegacyWorkflowRuns;
   }
 
   getExecutionSpan(runId: string) {
