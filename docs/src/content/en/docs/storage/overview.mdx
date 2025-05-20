@@ -41,14 +41,9 @@ const mastra = new Mastra({
 });
 ```
 
-If you do not specify any `storage` configuration, Mastra automatically falls
-back to a local `LibSQLStore` (`file:mastra.db`). This **default storage** is
-great for development and quick prototypes. The data survives page refreshes but
-is lost when the server process restarts or you deploy to an ephemeral
-environment. Most real applications should provide an explicit storage
-instance. Any `Memory` configured on your agents will use whichever storage you
-provide to `Mastra`. If you omit it from both places the default storage
-described above is used.
+If you do not specify any `storage` configuration, Mastra will not persist data across application restarts or deployments. For any
+    deployment beyond local testing you should provide your own storage
+    configuration either on `Mastra` or directly within `new Memory()`.
 
 ## Data Schema
 

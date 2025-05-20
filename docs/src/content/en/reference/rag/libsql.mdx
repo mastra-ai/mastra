@@ -6,20 +6,20 @@ description: Documentation for the LibSQLVector class in Mastra, which provides 
 # LibSQLVector Store
 
 The LibSQL storage implementation provides a SQLite-compatible vector search [LibSQL](https://github.com/tursodatabase/libsql), a fork of SQLite with vector extensions, and [Turso](https://turso.tech/) with vector extensions, offering a lightweight and efficient vector database solution.
-It's part of the `@mastra/core` package and offers efficient vector similarity search with metadata filtering.
+It's part of the `@mastra/libsql` package and offers efficient vector similarity search with metadata filtering.
 
 ## Installation
 
 Default vector store is included in the core package:
 
 ```bash copy
-npm install @mastra/core@latest
+npm install @mastra/libsql@latest
 ```
 
 ## Usage
 
 ```typescript copy showLineNumbers
-import { LibSQLVector } from "@mastra/core/vector/libsql";
+import { LibSQLVector } from "@mastra/libsql";
 
 // Create a new vector store instance
 const store = new LibSQLVector({

@@ -58,7 +58,11 @@ const agent = new Agent({
   name: "ChatAgent",
   instructions: "You are a helpful assistant.",
   model: openai("gpt-4o"),
-  memory: new Memory(), // Assumes default memory setup
+  memory: new Memory({
+    storage: new LibSQLStore({
+      url: "file:../mastra.db", // Or your database URL
+    }),
+  });
 });
 
 export async function POST(request: Request) {
