@@ -31,9 +31,9 @@ export const registryData: RegistryFile = {
     {
       id: 'apify',
       name: 'Apify',
-      description: 'Your full‑stack platform for web scraping',
-      url: 'https://apify.com/',
-      servers_url: 'https://api.apify.com/v2/store',
+      description: "A Model Context Protocol (MCP) server for Apify enabling AI agents to use 5,000+ ready-made Actors for use cases such as extracting data from websites, social media, search engines, online maps, and more.",
+      url: 'https://mcp.apify.com',
+      servers_url: 'https://apify.com/apify/actors-mcp-server',
       tags: ['verified'],
       postProcessServers: processApifyServers,
     },
