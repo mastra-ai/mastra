@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { Button, Icon } from '@mastra/playground-ui';
-import { Textarea } from '@/components/ui/textarea';
 
 import { toast } from 'sonner';
 import { Header, HeaderTitle, Txt, usePlaygroundStore } from '@mastra/playground-ui';
