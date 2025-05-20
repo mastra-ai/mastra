@@ -3,11 +3,15 @@ title: "Example: Calling an Agent from a Workflow | Mastra Docs"
 description: Example of using Mastra to call an AI agent from within a workflow step.
 ---
 
-import { GithubLink } from "@/components/github-link";
-
 # Calling an Agent From a Workflow
 
-This example demonstrates how to create a workflow that calls an AI agent to sugest activities for the provided weather conditions, and execute it within a workflow step.
+This example demonstrates how to create a workflow that calls an AI agent to suggest activities for the provided weather conditions, and execute it within a workflow step.
+
+## Setup
+
+```sh copy
+npm install @ai-sdk/openai @mastra/core 
+```
 
 ## Define Planning Agent
 
@@ -19,6 +23,7 @@ import { openai } from "@ai-sdk/openai";
 
 const llm = openai("gpt-4o");
 
+// Create a new agent for activity planning
 const planningAgent = new Agent({
   name: "planningAgent",
   model: llm,
@@ -68,14 +73,13 @@ const planningAgent = new Agent({
 export { planningAgent };
 ```
 
-## Define Weather Workflow
-
-Define the weather workflow with 2 steps: one to fetch the weather via a network call, and another to plan activities using the planning agent.
-
+## Define Activity Planning Workflow
+Define the activity planning workflow with 2 steps: one to fetch the weather via a network call, and another to plan activities using the planning agent.
 ```ts showLineNumbers copy filename="workflows/agent-workflow.ts"
-import { createWorkflow, createStep } from "@mastra/core/workflows/vNext";
-import { z } from "zod";
-
+import { createWorkflow, createStep } from '@mastra/core/workflows/vNext'
+import { z } from 'zod'
+ 
+// Helper function to convert numeric weather codes to human-readable descriptions
 function getWeatherCondition(code: number): string {
   const conditions: Record<number, string> = {
     0: "Clear sky",
@@ -97,7 +101,7 @@ function getWeatherCondition(code: number): string {
   };
   return conditions[code] || "Unknown";
 }
-
+ 
 const forecastSchema = z.object({
   date: z.string(),
   maxTemp: z.number(),
@@ -105,8 +109,9 @@ const forecastSchema = z.object({
   precipitationChance: z.number(),
   condition: z.string(),
   location: z.string(),
-});
-
+})
+ 
+// Step 1: Create a step to fetch weather data for a given city
 const fetchWeather = createStep({
   id: "fetch-weather",
   description: "Fetches weather forecast for a given city",
@@ -118,21 +123,23 @@ const fetchWeather = createStep({
     if (!inputData) {
       throw new Error("Trigger data not found");
     }
-
-    const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(inputData.city)}&count=1`;
-    const geocodingResponse = await fetch(geocodingUrl);
+ 
+    // First API call: Convert city name to latitude and longitude
+    const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(inputData.city)}&count=1`    
+    const geocodingResponse = await fetch(geocodingUrl)
     const geocodingData = (await geocodingResponse.json()) as {
-      results: { latitude: number; longitude: number; name: string }[];
-    };
-
+      results: { latitude: number; longitude: number; name: string }[]
+    }
+ 
     if (!geocodingData.results?.[0]) {
       throw new Error(`Location '${inputData.city}' not found`);
     }
-
-    const { latitude, longitude, name } = geocodingData.results[0];
-
-    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=precipitation,weathercode&timezone=auto,&hourly=precipitation_probability,temperature_2m`;
-    const response = await fetch(weatherUrl);
+ 
+    const { latitude, longitude, name } = geocodingData.results[0]
+ 
+    // Second API call: Get weather data using coordinates
+    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=precipitation,weathercode&timezone=auto,&hourly=precipitation_probability,temperature_2m`
+    const response = await fetch(weatherUrl)
     const data = (await response.json()) as {
       current: {
         time: string;
@@ -140,11 +147,11 @@ const fetchWeather = createStep({
         weathercode: number;
       };
       hourly: {
-        precipitation_probability: number[];
-        temperature_2m: number[];
-      };
-    };
-
+        precipitation_probability: number[]
+        temperature_2m: number[]
+      }
+    }
+ 
     const forecast = {
       date: new Date().toISOString(),
       maxTemp: Math.max(...data.hourly.temperature_2m),
@@ -155,12 +162,13 @@ const fetchWeather = createStep({
         (acc, curr) => Math.max(acc, curr),
         0,
       ),
-    };
-
-    return forecast;
+    }
+ 
+    return forecast
   },
-});
-
+})
+ 
+// Step 2: Create a step to generate activity recommendations using the agent
 const planActivities = createStep({
   id: "plan-activities",
   description: "Suggests activities based on weather conditions",
@@ -169,44 +177,43 @@ const planActivities = createStep({
     activities: z.string(),
   }),
   execute: async ({ inputData, mastra }) => {
-    const forecast = inputData;
-
+    const forecast = inputData
+ 
     if (!forecast) {
       throw new Error("Forecast data not found");
     }
-
+ 
     const prompt = `Based on the following weather forecast for ${forecast.location}, suggest appropriate activities:
       ${JSON.stringify(forecast, null, 2)}
-      `;
-
-    const agent = mastra?.getAgent("planningAgent");
+      `
+ 
+    const agent = mastra?.getAgent('planningAgent')
     if (!agent) {
       throw new Error("Planning agent not found");
     }
-
+ 
     const response = await agent.stream([
       {
         role: "user",
         content: prompt,
       },
-    ]);
-
-    let activitiesText = "";
-
+    ])
+ 
+    let activitiesText = ''
     for await (const chunk of response.textStream) {
       process.stdout.write(chunk);
       activitiesText += chunk;
     }
-
+ 
     return {
       activities: activitiesText,
     };
   },
-});
-
-const weatherWorkflow = createWorkflow({
+})
+ 
+const activityPlanningWorkflow = createWorkflow({
   steps: [fetchWeather, planActivities],
-  id: "weather-workflow-step1-single-day",
+  id: 'activity-planning-step1-single-day',
   inputSchema: z.object({
     city: z.string().describe("The city to get the weather for"),
   }),
@@ -215,27 +222,27 @@ const weatherWorkflow = createWorkflow({
   }),
 })
   .then(fetchWeather)
-  .then(planActivities);
-
-weatherWorkflow.commit();
-
-export { weatherWorkflow };
+  .then(planActivities)
+ 
+activityPlanningWorkflow.commit()
+ 
+export { activityPlanningWorkflow }
 ```
 
 ## Register Agent and Workflow instances with Mastra class
-
-Register the planning agent and weather workflow with the mastra instance.
-This is critical for enabling access to the planning agent within the weather workflow.
+Register the planning agent and activity planning workflow with the mastra instance.
+This is critical for enabling access to the planning agent within the activity planning workflow.
 
 ```ts showLineNumbers copy filename="index.ts"
-import { Mastra } from "@mastra/core/mastra";
-import { createLogger } from "@mastra/core/logger";
-import { weatherWorkflow } from "./workflows";
-import { planningAgent } from "./agents";
-
+import { Mastra } from '@mastra/core/mastra'
+import { createLogger } from '@mastra/core/logger'
+import { activityPlanningWorkflow } from './workflows/agent-workflow'
+import { planningAgent } from './agents/planning-agent'
+ 
+// Create a new Mastra instance and register components
 const mastra = new Mastra({
   vnext_workflows: {
-    weatherWorkflow,
+    activityPlanningWorkflow,
   },
   agents: {
     planningAgent,
@@ -244,36 +251,21 @@ const mastra = new Mastra({
     name: "Mastra",
     level: "info",
   }),
-});
-
-export { mastra };
+})
+ 
+export { mastra }
 ```
 
-## Execute the weather workflow
-
-Here, we'll get the weather workflow from the mastra instance, then create a run and execute the created run with the required inputData.
-
-## Execute the weather workflow
-
-Here, we'll get the weather workflow from the mastra instance, then create a run and execute the created run with the required inputData.
+## Execute the activity planning workflow
+Here, we'll get the activity planning workflow from the mastra instance, then create a run and execute the created run with the required inputData.
 
 ```ts showLineNumbers copy filename="exec.ts"
 import { mastra } from "./";
 
-const workflow = mastra.vnext_getWorkflow("weatherWorkflow");
-const run = workflow.createRun();
+const workflow = mastra.vnext_getWorkflow('activityPlanningWorkflow')
+const run = workflow.createRun()
 
-const result = await run.start({ inputData: { city: "New York" } });
-console.dir(result, { depth: null });
+// Start the workflow with New York as the city input
+const result = await run.start({ inputData: { city: 'New York' } })
+console.dir(result, { depth: null })
 ```
-
-<br />
-<br />
-<hr className="dark:border-[#404040] border-gray-300" />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/calling-agent"
-  }
-/>

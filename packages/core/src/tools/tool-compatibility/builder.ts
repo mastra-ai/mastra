@@ -3,7 +3,7 @@ import { jsonSchema } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema, ZodType } from 'zod';
 import { z } from 'zod';
-import { jsonSchemaObjectToZodRawShape } from 'zod-from-json-schema';
+import { convertJsonSchemaToZod } from 'zod-from-json-schema';
 import type { JSONSchema as ZodFromJSONSchema_JSONSchema } from 'zod-from-json-schema';
 import type { Targets } from 'zod-to-json-schema';
 import { zodToJsonSchema } from 'zod-to-json-schema';
@@ -56,8 +56,7 @@ export function convertVercelToolParameters(tool: VercelTool): z.ZodType {
   } else {
     const jsonSchemaToConvert = ('jsonSchema' in schema ? schema.jsonSchema : schema) as ZodFromJSONSchema_JSONSchema;
     try {
-      const rawShape = jsonSchemaObjectToZodRawShape(jsonSchemaToConvert);
-      return z.object(rawShape);
+      return convertJsonSchemaToZod(jsonSchemaToConvert);
     } catch (e: unknown) {
       const errorMessage = `[CoreToolBuilder] Failed to convert Vercel tool JSON schema parameters to Zod. Original schema: ${JSON.stringify(jsonSchemaToConvert)}`;
       console.error(errorMessage, e);
@@ -72,8 +71,7 @@ function convertInputSchema(tool: ToolAction<any, any, any>): z.ZodType {
     return schema;
   } else {
     try {
-      const rawShape = jsonSchemaObjectToZodRawShape(schema as ZodFromJSONSchema_JSONSchema);
-      return z.object(rawShape);
+      return convertJsonSchemaToZod(schema as ZodFromJSONSchema_JSONSchema);
     } catch (e: unknown) {
       const errorMessage = `[CoreToolBuilder] Failed to convert tool input JSON schema to Zod. Original schema: ${JSON.stringify(schema)}`;
       console.error(errorMessage, e);

@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { createOpenAI } from '@ai-sdk/openai';
+import { openai } from '@ai-sdk/openai';
 import type { MessageType } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
+import { fastembed } from '@mastra/fastembed';
 import { LibSQLVector, LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import type { ToolCallPart } from 'ai';
@@ -36,8 +37,6 @@ const createTestMessage = (threadId: string, content: string, role: 'user' | 'as
 
 dotenv.config({ path: '.env.test' });
 
-const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
 describe('Working Memory Tests', () => {
   let memory: Memory;
   let thread: any;
@@ -55,7 +54,6 @@ describe('Working Memory Tests', () => {
 - **Location**: 
 - **Interests**: 
 `,
-          use: 'tool-call',
         },
         lastMessages: 10,
         semanticRecall: {
@@ -72,7 +70,7 @@ describe('Working Memory Tests', () => {
       vector: new LibSQLVector({
         connectionUrl: dbFile, // relative path from bundled .mastra/output dir
       }),
-      embedder: openai.embedding('text-embedding-3-small'),
+      embedder: fastembed,
     });
     // Reset message counter
     messageCounter = 0;
@@ -327,7 +325,6 @@ describe('Working Memory Tests', () => {
 - **First Name**: 
 - **Last Name**:
 `,
-          use: 'tool-call',
         },
         lastMessages: 10,
         semanticRecall: {
@@ -367,90 +364,6 @@ describe('Working Memory Tests', () => {
     // Thread metadata should not contain working memory
     const updatedThread = await disabledMemory.getThreadById({ threadId: thread.id });
     expect(updatedThread?.metadata?.workingMemory).toBeUndefined();
-  });
-
-  it('should respect working memory use setting', async () => {
-    const toolCallThread = await memory.saveThread({
-      thread: createTestThread('Tool Call Working Memory Thread'),
-    });
-
-    // Get the system message and verify instructions
-    const systemMessage = await memory.getSystemMessage({ threadId: toolCallThread.id });
-    expect(systemMessage).not.toContain('<working_memory>text</working_memory>');
-    expect(systemMessage).toContain('updateWorkingMemory');
-
-    // Test tool-call mode saves working memory
-    const toolCallAgent = new Agent({
-      name: 'Tool Call Memory Agent',
-      instructions: 'You are a helpful AI agent. Always remember user information.',
-      model: openai('gpt-4o'),
-      memory,
-    });
-
-    await toolCallAgent.generate('Hi, my name is John and I live in New York', {
-      threadId: toolCallThread.id,
-      resourceId,
-    });
-
-    // Verify working memory was saved in tool-call mode
-    const toolCallWorkingMemory = await memory.getThreadById({ threadId: toolCallThread.id });
-    expect(toolCallWorkingMemory?.metadata?.workingMemory).toContain('# User Information');
-    expect(toolCallWorkingMemory?.metadata?.workingMemory).toContain('**First Name**: John');
-    expect(toolCallWorkingMemory?.metadata?.workingMemory).toContain('**Location**: New York');
-
-    // Create memory instance with working memory in text-stream mode
-    const textStreamMemory = new Memory({
-      storage: new LibSQLStore({
-        url: dbFile,
-      }),
-      vector: new LibSQLVector({
-        connectionUrl: dbFile, // relative path from bundled .mastra/output dir
-      }),
-      embedder: openai.embedding('text-embedding-3-small'),
-      options: {
-        workingMemory: {
-          enabled: true,
-          template: `# User Information
-- **First Name**: 
-- **Location**: 
-`,
-          use: 'text-stream',
-        },
-        lastMessages: 10,
-        threads: {
-          generateTitle: false,
-        },
-        semanticRecall: true,
-      },
-    });
-
-    const textStreamThread = await textStreamMemory.saveThread({
-      thread: createTestThread('Text Stream Working Memory Thread'),
-    });
-
-    // Get the system message and verify instructions
-    const textStreamSystemMessage = await textStreamMemory.getSystemMessage({ threadId: textStreamThread.id });
-    expect(textStreamSystemMessage).toContain('<working_memory>text</working_memory>');
-    expect(textStreamSystemMessage).not.toContain('updateWorkingMemory');
-
-    // Test text-stream mode saves working memory
-    const textStreamAgent = new Agent({
-      name: 'Text Stream Memory Agent',
-      instructions: 'You are a helpful AI agent. Always remember user information.',
-      model: openai('gpt-4o'),
-      memory: textStreamMemory,
-    });
-
-    await textStreamAgent.generate('Hi, my name is Tyler and I live in San Francisco', {
-      threadId: textStreamThread.id,
-      resourceId,
-    });
-
-    // Verify working memory was saved in text-stream mode
-    const textStreamWorkingMemory = await textStreamMemory.getThreadById({ threadId: textStreamThread.id });
-    expect(textStreamWorkingMemory?.metadata?.workingMemory).toContain('# User Information');
-    expect(textStreamWorkingMemory?.metadata?.workingMemory).toContain('**First Name**: Tyler');
-    expect(textStreamWorkingMemory?.metadata?.workingMemory).toContain('**Location**: San Francisco');
   });
 
   it('should handle LLM responses with working memory using tool calls', async () => {
@@ -570,6 +483,7 @@ describe('Working Memory Tests', () => {
     const threadId = thread.id;
     const messages = [
       createTestMessage(threadId, 'User says something'),
+      // Pure tool-call message (should be removed)
       {
         id: randomUUID(),
         threadId,
@@ -583,20 +497,45 @@ describe('Working Memory Tests', () => {
           },
         ],
         toolNames: ['updateWorkingMemory'],
+        createdAt: new Date(),
+        resourceId,
       },
+      // Mixed content: tool-call + text (tool-call part should be filtered, text kept)
       {
         id: randomUUID(),
         threadId,
         role: 'assistant',
         type: 'text',
-        content: 'Normal message',
+        content: [
+          {
+            type: 'tool-call',
+            toolName: 'updateWorkingMemory',
+            args: { memory: 'should not persist' },
+          },
+          {
+            type: 'text',
+            text: 'Normal message',
+          },
+        ],
+        createdAt: new Date(),
+        resourceId,
+      },
+      // Pure text message (should be kept)
+      {
+        id: randomUUID(),
+        threadId,
+        role: 'assistant',
+        type: 'text',
+        content: 'Another normal message',
+        createdAt: new Date(),
+        resourceId,
       },
     ];
 
     // Save messages
     const saved = await memory.saveMessages({ messages: messages as MessageType[] });
 
-    // Should not include the updateWorkingMemory tool-call message
+    // Should not include any updateWorkingMemory tool-call messages (pure or mixed)
     expect(
       saved.some(
         m =>
@@ -606,8 +545,32 @@ describe('Working Memory Tests', () => {
       ),
     ).toBe(false);
 
-    // Should still include the user and normal text message
-    expect(saved.some(m => m.content === 'Normal message')).toBe(true);
+    // Mixed content message: should only keep the text part
+    const assistantMessages = saved.filter(m => m.role === 'assistant');
+    expect(
+      assistantMessages.some(m => {
+        if (typeof m.content === 'string') {
+          return m.content.includes('Normal message');
+        }
+        if (Array.isArray(m.content)) {
+          return m.content.some(c => c.type === 'text' && c.text === 'Normal message');
+        }
+        return false;
+      }),
+    ).toBe(true);
+    // working memory should not be present
+    expect(
+      saved.some(
+        m =>
+          (m.type === 'tool-call' || m.type === 'tool-result') &&
+          Array.isArray(m.content) &&
+          m.content.some(c => (c as ToolCallPart).toolName === 'updateWorkingMemory'),
+      ),
+    ).toBe(false);
+
+    // Pure text message should be present
+    expect(saved.some(m => m.content === 'Another normal message')).toBe(true);
+    // User message should be present
     expect(saved.some(m => typeof m.content === 'string' && m.content.includes('User says something'))).toBe(true);
   });
 });

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 
 import { LibSQLVector } from './index.js';
 
@@ -15,7 +15,7 @@ describe('LibSQLVector', () => {
 
   afterAll(async () => {
     // Clean up test tables
-    await vectorDB.deleteIndex(testIndexName);
+    await vectorDB.deleteIndex({ indexName: testIndexName });
   });
 
   // Index Management Tests
@@ -24,7 +24,7 @@ describe('LibSQLVector', () => {
       it('should create a new vector table with specified dimensions', async () => {
         await vectorDB.createIndex({ indexName: testIndexName, dimension: 3 });
 
-        const stats = await vectorDB.describeIndex(testIndexName);
+        const stats = await vectorDB.describeIndex({ indexName: testIndexName });
         expect(stats?.dimension).toBe(3);
         expect(stats?.count).toBe(0);
       });
@@ -49,7 +49,7 @@ describe('LibSQLVector', () => {
       });
 
       afterAll(async () => {
-        await vectorDB.deleteIndex(indexName);
+        await vectorDB.deleteIndex({ indexName });
       });
 
       it('should list all vector tables', async () => {
@@ -58,7 +58,7 @@ describe('LibSQLVector', () => {
       });
 
       it('should not return created index in list if it is deleted', async () => {
-        await vectorDB.deleteIndex(indexName);
+        await vectorDB.deleteIndex({ indexName });
         const indexes = await vectorDB.listIndexes();
         expect(indexes).not.toContain(indexName);
       });
@@ -71,7 +71,7 @@ describe('LibSQLVector', () => {
       });
 
       afterAll(async () => {
-        await vectorDB.deleteIndex(indexName);
+        await vectorDB.deleteIndex({ indexName });
       });
 
       it('should return correct index stats', async () => {
@@ -82,7 +82,7 @@ describe('LibSQLVector', () => {
         ];
         await vectorDB.upsert({ indexName, vectors });
 
-        const stats = await vectorDB.describeIndex(indexName);
+        const stats = await vectorDB.describeIndex({ indexName });
         expect(stats).toEqual({
           dimension: 3,
           count: 2,
@@ -91,7 +91,7 @@ describe('LibSQLVector', () => {
       });
 
       it('should throw error for non-existent index', async () => {
-        await expect(vectorDB.describeIndex('non_existent')).rejects.toThrow();
+        await expect(vectorDB.describeIndex({ indexName: 'non_existent' })).rejects.toThrow();
       });
     });
   });
@@ -104,7 +104,7 @@ describe('LibSQLVector', () => {
       });
 
       afterEach(async () => {
-        await vectorDB.deleteIndex(testIndexName);
+        await vectorDB.deleteIndex({ indexName: testIndexName });
       });
 
       it('should insert new vectors', async () => {
@@ -115,7 +115,7 @@ describe('LibSQLVector', () => {
         const ids = await vectorDB.upsert({ indexName: testIndexName, vectors });
 
         expect(ids).toHaveLength(2);
-        const stats = await vectorDB.describeIndex(testIndexName);
+        const stats = await vectorDB.describeIndex({ indexName: testIndexName });
         expect(stats.count).toBe(2);
       });
 
@@ -165,7 +165,7 @@ describe('LibSQLVector', () => {
         expect(ids).toHaveLength(2);
         const id = ids[1];
 
-        await vectorDB.deleteVector(testIndexName, ids[0]);
+        await vectorDB.deleteVector({ indexName: testIndexName, id: ids[0] });
 
         const results = await vectorDB.query({ indexName: testIndexName, queryVector: [1, 2, 3] });
         expect(results).toHaveLength(1);
@@ -181,7 +181,7 @@ describe('LibSQLVector', () => {
           vector: [4, 5, 6],
           metadata: { test: 'updated' },
         };
-        await vectorDB.updateVector(testIndexName, id, update);
+        await vectorDB.updateVector({ indexName: testIndexName, id, update });
 
         const results = await vectorDB.query({
           indexName: testIndexName,
@@ -202,7 +202,7 @@ describe('LibSQLVector', () => {
         const update = {
           metadata: { test: 'updated' },
         };
-        await vectorDB.updateVector(testIndexName, id, update);
+        await vectorDB.updateVector({ indexName: testIndexName, id, update });
 
         const results = await vectorDB.query({ indexName: testIndexName, queryVector: [1, 2, 3], topK: 1 });
         expect(results[0]?.id).toBe(id);
@@ -218,7 +218,7 @@ describe('LibSQLVector', () => {
         const update = {
           vector: [4, 5, 6],
         };
-        await vectorDB.updateVector(testIndexName, id, update);
+        await vectorDB.updateVector({ indexName: testIndexName, id, update });
 
         const results = await vectorDB.query({
           indexName: testIndexName,
@@ -236,7 +236,9 @@ describe('LibSQLVector', () => {
         const metadata = [{ test: 'initial' }];
         const [id] = await vectorDB.upsert({ indexName: testIndexName, vectors, metadata });
 
-        await expect(vectorDB.updateVector(testIndexName, id, {})).rejects.toThrow('No updates provided');
+        await expect(vectorDB.updateVector({ indexName: testIndexName, id, update: {} })).rejects.toThrow(
+          'No updates provided',
+        );
       });
     });
 
@@ -258,7 +260,7 @@ describe('LibSQLVector', () => {
       });
 
       afterEach(async () => {
-        await vectorDB.deleteIndex(indexName);
+        await vectorDB.deleteIndex({ indexName });
       });
 
       it('should return closest vectors', async () => {
@@ -345,7 +347,7 @@ describe('LibSQLVector', () => {
     });
 
     afterEach(async () => {
-      await vectorDB.deleteIndex(indexName);
+      await vectorDB.deleteIndex({ indexName });
     });
 
     // Numeric Comparison Tests
@@ -357,7 +359,7 @@ describe('LibSQLVector', () => {
         const results = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
-          filter: { numericString: { $gt: '100' } }, // Compare strings numerically
+          filter: { numericString: { $gt: '100' } },
         });
         expect(results.length).toBeGreaterThan(0);
         expect(results[0]?.metadata?.numericString).toBe('123');
@@ -437,7 +439,7 @@ describe('LibSQLVector', () => {
 
     // Array Operator Tests
     describe('Array Operators', () => {
-      it('should filter with $in operator', async () => {
+      it('should filter with $in operator for scalar field', async () => {
         const results = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
@@ -449,7 +451,25 @@ describe('LibSQLVector', () => {
         });
       });
 
-      it('should filter with $nin operator', async () => {
+      it('should filter with $in operator for array field', async () => {
+        // Insert a record with tags as array
+        await vectorDB.upsert({
+          indexName,
+          vectors: [[2, 0.2, 0]],
+          metadata: [{ tags: ['featured', 'sale', 'new'] }],
+        });
+        const results = await vectorDB.query({
+          indexName,
+          queryVector: [1, 0, 0],
+          filter: { tags: { $in: ['sale', 'clearance'] } },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.tags.some((tag: string) => ['sale', 'clearance'].includes(tag))).toBe(true);
+        });
+      });
+
+      it('should filter with $nin operator for scalar field', async () => {
         const results = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
@@ -458,6 +478,24 @@ describe('LibSQLVector', () => {
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
           expect(['electronics', 'books']).not.toContain(result.metadata?.category);
+        });
+      });
+
+      it('should filter with $nin operator for array field', async () => {
+        // Insert a record with tags as array
+        await vectorDB.upsert({
+          indexName,
+          vectors: [[2, 0.3, 0]],
+          metadata: [{ tags: ['clearance', 'used'] }],
+        });
+        const results = await vectorDB.query({
+          indexName,
+          queryVector: [1, 0, 0],
+          filter: { tags: { $nin: ['new', 'sale'] } },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.tags.every((tag: string) => !['new', 'sale'].includes(tag))).toBe(true);
         });
       });
 
@@ -491,17 +529,57 @@ describe('LibSQLVector', () => {
         });
       });
 
+      it('should filter with $contains operator for string substring', async () => {
+        const results = await vectorDB.query({
+          indexName,
+          queryVector: [1, 0, 0],
+          filter: { category: { $contains: 'lectro' } },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.category).toContain('lectro');
+        });
+      });
+
+      it('should not match deep object containment with $contains', async () => {
+        // Insert a record with a nested object
+        await vectorDB.upsert({
+          indexName,
+          vectors: [[1, 0.1, 0]],
+          metadata: [{ details: { color: 'red', size: 'large' }, category: 'clothing' }],
+        });
+        // $contains does NOT support deep object containment in Postgres
+        const results = await vectorDB.query({
+          indexName,
+          queryVector: [1, 0.1, 0],
+          filter: { details: { $contains: { color: 'red' } } },
+        });
+        expect(results.length).toBe(0);
+      });
+
+      it('should fallback to direct equality for non-array, non-string', async () => {
+        // Insert a record with a numeric field
+        await vectorDB.upsert({
+          indexName,
+          vectors: [[1, 0.2, 0]],
+          metadata: [{ price: 123 }],
+        });
+        const results = await vectorDB.query({
+          indexName,
+          queryVector: [1, 0, 0],
+          filter: { price: { $contains: 123 } },
+        });
+        expect(results.length).toBeGreaterThan(0);
+        results.forEach(result => {
+          expect(result.metadata?.price).toBe(123);
+        });
+      });
+
       it('should filter with $elemMatch operator', async () => {
         const results = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
-          filter: {
-            tags: {
-              $elemMatch: {
-                $in: ['new', 'premium'],
-              },
-            },
-          },
+          filter: { tags: { $elemMatch: { $in: ['new', 'premium'] } } },
         });
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
@@ -513,13 +591,7 @@ describe('LibSQLVector', () => {
         const results = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
-          filter: {
-            tags: {
-              $elemMatch: {
-                $eq: 'sale',
-              },
-            },
-          },
+          filter: { tags: { $elemMatch: { $eq: 'sale' } } },
         });
         expect(results).toHaveLength(1);
         expect(results[0]?.metadata?.tags).toContain('sale');
@@ -529,14 +601,7 @@ describe('LibSQLVector', () => {
         const results = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
-          filter: {
-            ratings: {
-              $elemMatch: {
-                $gt: 4,
-                $lt: 4.5,
-              },
-            },
-          },
+          filter: { ratings: { $elemMatch: { $gt: 4, $lt: 4.5 } } },
         });
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
@@ -549,14 +614,7 @@ describe('LibSQLVector', () => {
         const results = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
-          filter: {
-            stock: {
-              $elemMatch: {
-                location: 'A',
-                count: { $gt: 20 },
-              },
-            },
-          },
+          filter: { stock: { $elemMatch: { location: 'A', count: { $gt: 20 } } } },
         });
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
@@ -569,13 +627,7 @@ describe('LibSQLVector', () => {
         const results = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
-          filter: {
-            reviews: {
-              $elemMatch: {
-                score: { $gt: 4 },
-              },
-            },
-          },
+          filter: { reviews: { $elemMatch: { score: { $gt: 4 } } } },
         });
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
@@ -587,14 +639,7 @@ describe('LibSQLVector', () => {
         const results = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
-          filter: {
-            reviews: {
-              $elemMatch: {
-                score: { $gte: 4 },
-                verified: true,
-              },
-            },
-          },
+          filter: { reviews: { $elemMatch: { score: { $gte: 4 }, verified: true } } },
         });
         expect(results.length).toBeGreaterThan(0);
         results.forEach(result => {
@@ -606,13 +651,7 @@ describe('LibSQLVector', () => {
         const results = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
-          filter: {
-            reviews: {
-              $elemMatch: {
-                user: 'alice',
-              },
-            },
-          },
+          filter: { reviews: { $elemMatch: { user: 'alice' } } },
         });
         expect(results).toHaveLength(1);
         expect(results[0].metadata?.reviews.some(r => r.user === 'alice')).toBe(true);
@@ -622,13 +661,7 @@ describe('LibSQLVector', () => {
         const results = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
-          filter: {
-            reviews: {
-              $elemMatch: {
-                score: 10, // No review has score 10
-              },
-            },
-          },
+          filter: { reviews: { $elemMatch: { score: 10 } } },
         });
         expect(results).toHaveLength(0);
       });
@@ -669,11 +702,7 @@ describe('LibSQLVector', () => {
 
       it('should handle non-array field $all', async () => {
         // First insert a record with non-array field
-        await vectorDB.upsert({
-          indexName,
-          vectors: [[1, 0.1, 0]],
-          metadata: [{ tags: 'not-an-array' }],
-        });
+        await vectorDB.upsert({ indexName, vectors: [[1, 0.1, 0]], metadata: [{ tags: 'not-an-array' }] });
 
         const results = await vectorDB.query({
           indexName,
@@ -696,29 +725,29 @@ describe('LibSQLVector', () => {
         });
       });
 
-      it('should filter with $contains operator for nested objects', async () => {
-        // First insert a record with nested object
-        await vectorDB.upsert({
-          indexName,
-          vectors: [[1, 0.1, 0]],
-          metadata: [
-            {
-              details: { color: 'red', size: 'large' },
-              category: 'clothing',
-            },
-          ],
-        });
+      // it('should filter with $objectContains operator for nested objects', async () => {
+      //   // First insert a record with nested object
+      //   await vectorDB.upsert({
+      //     indexName,
+      //     vectors: [[1, 0.1, 0]],
+      //     metadata: [
+      //       {
+      //         details: { color: 'red', size: 'large' },
+      //         category: 'clothing',
+      //       },
+      //     ],
+      //   });
 
-        const results = await vectorDB.query({
-          indexName,
-          queryVector: [1, 0.1, 0],
-          filter: { details: { $contains: { color: 'red' } } },
-        });
-        expect(results.length).toBeGreaterThan(0);
-        results.forEach(result => {
-          expect(result.metadata?.details.color).toBe('red');
-        });
-      });
+      //   const results = await vectorDB.query({
+      //     indexName,
+      //     queryVector: [1, 0.1, 0],
+      //     filter: { details: { $objectContains: { color: 'red' } } },
+      //   });
+      //   expect(results.length).toBeGreaterThan(0);
+      //   results.forEach(result => {
+      //     expect(result.metadata?.details.color).toBe('red');
+      //   });
+      // });
 
       // String Pattern Tests
       it('should handle exact string matches', async () => {
@@ -758,11 +787,7 @@ describe('LibSQLVector', () => {
       });
 
       it('should handle $size with nested arrays', async () => {
-        await vectorDB.upsert({
-          indexName,
-          vectors: [[1, 0.1, 0]],
-          metadata: [{ nested: { array: [1, 2, 3, 4] } }],
-        });
+        await vectorDB.upsert({ indexName, vectors: [[1, 0.1, 0]], metadata: [{ nested: { array: [1, 2, 3, 4] } }] });
         const results = await vectorDB.query({
           indexName,
           queryVector: [1, 0, 0],
@@ -900,8 +925,12 @@ describe('LibSQLVector', () => {
           filter: {
             $not: {
               $or: [
-                { $and: [{ category: 'electronics' }, { price: { $gt: 90 } }] },
-                { $and: [{ category: 'books' }, { price: { $lt: 30 } }] },
+                {
+                  $and: [{ category: 'electronics' }, { price: { $gt: 90 } }],
+                },
+                {
+                  $and: [{ category: 'books' }, { price: { $lt: 30 } }],
+                },
               ],
             },
           },
@@ -1306,8 +1335,14 @@ describe('LibSQLVector', () => {
           queryVector: [1, 0, 0],
           filter: {
             $and: [
-              { $or: [{ category: 'electronics' }, { $and: [{ category: 'books' }, { price: { $lt: 30 } }] }] },
-              { $not: { $or: [{ active: false }, { price: { $gt: 100 } }] } },
+              {
+                $or: [{ category: 'electronics' }, { $and: [{ category: 'books' }, { price: { $lt: 30 } }] }],
+              },
+              {
+                $not: {
+                  $or: [{ active: false }, { price: { $gt: 100 } }],
+                },
+              },
             ],
           },
         });
@@ -1609,7 +1644,7 @@ describe('LibSQLVector', () => {
     });
 
     afterAll(async () => {
-      await vectorDB.deleteIndex(testIndexName);
+      await vectorDB.deleteIndex({ indexName: testIndexName });
     });
     it('should handle non-existent index queries', async () => {
       await expect(vectorDB.query({ indexName: 'non-existent-index', queryVector: [1, 2, 3] })).rejects.toThrow();
@@ -1641,105 +1676,7 @@ describe('LibSQLVector', () => {
       ).resolves.not.toThrow();
 
       // Cleanup
-      await vectorDB.deleteIndex(duplicateIndexName);
-    });
-  });
-
-  describe('Deprecation Warnings', () => {
-    const indexName = 'testdeprecationwarnings';
-
-    const indexName2 = 'testdeprecationwarnings2';
-
-    let warnSpy;
-
-    beforeAll(async () => {
-      await vectorDB.createIndex({ indexName: indexName, dimension: 3 });
-    });
-
-    afterAll(async () => {
-      await vectorDB.deleteIndex(indexName);
-      await vectorDB.deleteIndex(indexName2);
-    });
-
-    beforeEach(async () => {
-      warnSpy = vi.spyOn(vectorDB['logger'], 'warn');
-    });
-
-    afterEach(async () => {
-      warnSpy.mockRestore();
-      await vectorDB.deleteIndex(indexName2);
-    });
-
-    it('should show deprecation warning when using individual args for createIndex', async () => {
-      await vectorDB.createIndex(indexName2, 3, 'cosine');
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Deprecation Warning: Passing individual arguments to createIndex() is deprecated'),
-      );
-    });
-
-    it('should show deprecation warning when using individual args for upsert', async () => {
-      await vectorDB.upsert(indexName, [[1, 2, 3]], [{ test: 'data' }]);
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Deprecation Warning: Passing individual arguments to upsert() is deprecated'),
-      );
-    });
-
-    it('should show deprecation warning when using individual args for query', async () => {
-      await vectorDB.query(indexName, [1, 2, 3], 5);
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Deprecation Warning: Passing individual arguments to query() is deprecated'),
-      );
-    });
-
-    it('should not show deprecation warning when using object param for query', async () => {
-      await vectorDB.query({
-        indexName,
-        queryVector: [1, 2, 3],
-        topK: 5,
-      });
-
-      expect(warnSpy).not.toHaveBeenCalled();
-    });
-
-    it('should not show deprecation warning when using object param for createIndex', async () => {
-      await vectorDB.createIndex({
-        indexName: indexName2,
-        dimension: 3,
-        metric: 'cosine',
-      });
-
-      expect(warnSpy).not.toHaveBeenCalled();
-    });
-
-    it('should not show deprecation warning when using object param for upsert', async () => {
-      await vectorDB.upsert({
-        indexName,
-        vectors: [[1, 2, 3]],
-        metadata: [{ test: 'data' }],
-      });
-
-      expect(warnSpy).not.toHaveBeenCalled();
-    });
-
-    it('should maintain backward compatibility with individual args', async () => {
-      // Query
-      const queryResults = await vectorDB.query(indexName, [1, 2, 3], 5);
-      expect(Array.isArray(queryResults)).toBe(true);
-
-      // CreateIndex
-      await expect(vectorDB.createIndex(indexName2, 3, 'cosine')).resolves.not.toThrow();
-
-      // Upsert
-      const upsertResults = await vectorDB.upsert({
-        indexName,
-        vectors: [[1, 2, 3]],
-        metadata: [{ test: 'data' }],
-      });
-      expect(Array.isArray(upsertResults)).toBe(true);
-      expect(upsertResults).toHaveLength(1);
+      await vectorDB.deleteIndex({ indexName: duplicateIndexName });
     });
   });
 });

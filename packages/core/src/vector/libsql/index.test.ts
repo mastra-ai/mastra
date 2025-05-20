@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 
 import { DefaultVectorDB } from './index.js';
 
@@ -15,7 +15,7 @@ describe('DefaultVectorDB', () => {
 
   afterAll(async () => {
     // Clean up test tables
-    await vectorDB.deleteIndex(testIndexName);
+    await vectorDB.deleteIndex({ indexName: testIndexName });
   });
 
   // Index Management Tests
@@ -24,7 +24,7 @@ describe('DefaultVectorDB', () => {
       it('should create a new vector table with specified dimensions', async () => {
         await vectorDB.createIndex({ indexName: testIndexName, dimension: 3 });
 
-        const stats = await vectorDB.describeIndex(testIndexName);
+        const stats = await vectorDB.describeIndex({ indexName: testIndexName });
         expect(stats?.dimension).toBe(3);
         expect(stats?.count).toBe(0);
       });
@@ -49,7 +49,7 @@ describe('DefaultVectorDB', () => {
       });
 
       afterAll(async () => {
-        await vectorDB.deleteIndex(indexName);
+        await vectorDB.deleteIndex({ indexName });
       });
 
       it('should list all vector tables', async () => {
@@ -58,7 +58,7 @@ describe('DefaultVectorDB', () => {
       });
 
       it('should not return created index in list if it is deleted', async () => {
-        await vectorDB.deleteIndex(indexName);
+        await vectorDB.deleteIndex({ indexName });
         const indexes = await vectorDB.listIndexes();
         expect(indexes).not.toContain(indexName);
       });
@@ -71,7 +71,7 @@ describe('DefaultVectorDB', () => {
       });
 
       afterAll(async () => {
-        await vectorDB.deleteIndex(indexName);
+        await vectorDB.deleteIndex({ indexName });
       });
 
       it('should return correct index stats', async () => {
@@ -82,7 +82,7 @@ describe('DefaultVectorDB', () => {
         ];
         await vectorDB.upsert({ indexName, vectors });
 
-        const stats = await vectorDB.describeIndex(indexName);
+        const stats = await vectorDB.describeIndex({ indexName });
         expect(stats).toEqual({
           dimension: 3,
           count: 2,
@@ -91,7 +91,7 @@ describe('DefaultVectorDB', () => {
       });
 
       it('should throw error for non-existent index', async () => {
-        await expect(vectorDB.describeIndex('non_existent')).rejects.toThrow();
+        await expect(vectorDB.describeIndex({ indexName: 'non_existent' })).rejects.toThrow();
       });
     });
   });
@@ -104,7 +104,7 @@ describe('DefaultVectorDB', () => {
       });
 
       afterEach(async () => {
-        await vectorDB.deleteIndex(testIndexName);
+        await vectorDB.deleteIndex({ indexName: testIndexName });
       });
 
       it('should insert new vectors', async () => {
@@ -115,7 +115,7 @@ describe('DefaultVectorDB', () => {
         const ids = await vectorDB.upsert({ indexName: testIndexName, vectors });
 
         expect(ids).toHaveLength(2);
-        const stats = await vectorDB.describeIndex(testIndexName);
+        const stats = await vectorDB.describeIndex({ indexName: testIndexName });
         expect(stats.count).toBe(2);
       });
 
@@ -165,7 +165,7 @@ describe('DefaultVectorDB', () => {
         expect(ids).toHaveLength(2);
         const id = ids[1];
 
-        await vectorDB.deleteVector(testIndexName, ids[0]);
+        await vectorDB.deleteVector({ indexName: testIndexName, id: ids[0] });
 
         const results = await vectorDB.query({ indexName: testIndexName, queryVector: [1, 2, 3] });
         expect(results).toHaveLength(1);
@@ -181,7 +181,7 @@ describe('DefaultVectorDB', () => {
           vector: [4, 5, 6],
           metadata: { test: 'updated' },
         };
-        await vectorDB.updateVector(testIndexName, id, update);
+        await vectorDB.updateVector({ indexName: testIndexName, id, update });
 
         const results = await vectorDB.query({
           indexName: testIndexName,
@@ -202,7 +202,7 @@ describe('DefaultVectorDB', () => {
         const update = {
           metadata: { test: 'updated' },
         };
-        await vectorDB.updateVector(testIndexName, id, update);
+        await vectorDB.updateVector({ indexName: testIndexName, id, update });
 
         const results = await vectorDB.query({ indexName: testIndexName, queryVector: [1, 2, 3], topK: 1 });
         expect(results[0]?.id).toBe(id);
@@ -218,7 +218,7 @@ describe('DefaultVectorDB', () => {
         const update = {
           vector: [4, 5, 6],
         };
-        await vectorDB.updateVector(testIndexName, id, update);
+        await vectorDB.updateVector({ indexName: testIndexName, id, update });
 
         const results = await vectorDB.query({
           indexName: testIndexName,
@@ -236,7 +236,9 @@ describe('DefaultVectorDB', () => {
         const metadata = [{ test: 'initial' }];
         const [id] = await vectorDB.upsert({ indexName: testIndexName, vectors, metadata });
 
-        await expect(vectorDB.updateVector(testIndexName, id, {})).rejects.toThrow('No updates provided');
+        await expect(vectorDB.updateVector({ indexName: testIndexName, id, update: {} })).rejects.toThrow(
+          'No updates provided',
+        );
       });
     });
 
@@ -258,7 +260,7 @@ describe('DefaultVectorDB', () => {
       });
 
       afterEach(async () => {
-        await vectorDB.deleteIndex(indexName);
+        await vectorDB.deleteIndex({ indexName });
       });
 
       it('should return closest vectors', async () => {
@@ -345,7 +347,7 @@ describe('DefaultVectorDB', () => {
     });
 
     afterEach(async () => {
-      await vectorDB.deleteIndex(indexName);
+      await vectorDB.deleteIndex({ indexName });
     });
 
     // Numeric Comparison Tests
@@ -1633,103 +1635,5 @@ describe('DefaultVectorDB', () => {
     // });
 
     // });
-  });
-
-  describe('Deprecation Warnings', () => {
-    const indexName = 'testdeprecationwarnings';
-
-    const indexName2 = 'testdeprecationwarnings2';
-
-    let warnSpy;
-
-    beforeAll(async () => {
-      await vectorDB.createIndex({ indexName: indexName, dimension: 3 });
-    });
-
-    afterAll(async () => {
-      await vectorDB.deleteIndex(indexName);
-      await vectorDB.deleteIndex(indexName2);
-    });
-
-    beforeEach(async () => {
-      warnSpy = vi.spyOn(vectorDB['logger'], 'warn');
-    });
-
-    afterEach(async () => {
-      warnSpy.mockRestore();
-      await vectorDB.deleteIndex(indexName2);
-    });
-
-    it('should show deprecation warning when using individual args for createIndex', async () => {
-      await vectorDB.createIndex(indexName2, 3, 'cosine');
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Deprecation Warning: Passing individual arguments to createIndex() is deprecated'),
-      );
-    });
-
-    it('should show deprecation warning when using individual args for upsert', async () => {
-      await vectorDB.upsert(indexName, [[1, 2, 3]], [{ test: 'data' }]);
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Deprecation Warning: Passing individual arguments to upsert() is deprecated'),
-      );
-    });
-
-    it('should show deprecation warning when using individual args for query', async () => {
-      await vectorDB.query(indexName, [1, 2, 3], 5);
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Deprecation Warning: Passing individual arguments to query() is deprecated'),
-      );
-    });
-
-    it('should not show deprecation warning when using object param for query', async () => {
-      await vectorDB.query({
-        indexName,
-        queryVector: [1, 2, 3],
-        topK: 5,
-      });
-
-      expect(warnSpy).not.toHaveBeenCalled();
-    });
-
-    it('should not show deprecation warning when using object param for createIndex', async () => {
-      await vectorDB.createIndex({
-        indexName: indexName2,
-        dimension: 3,
-        metric: 'cosine',
-      });
-
-      expect(warnSpy).not.toHaveBeenCalled();
-    });
-
-    it('should not show deprecation warning when using object param for upsert', async () => {
-      await vectorDB.upsert({
-        indexName,
-        vectors: [[1, 2, 3]],
-        metadata: [{ test: 'data' }],
-      });
-
-      expect(warnSpy).not.toHaveBeenCalled();
-    });
-
-    it('should maintain backward compatibility with individual args', async () => {
-      // Query
-      const queryResults = await vectorDB.query(indexName, [1, 2, 3], 5);
-      expect(Array.isArray(queryResults)).toBe(true);
-
-      // CreateIndex
-      await expect(vectorDB.createIndex(indexName2, 3, 'cosine')).resolves.not.toThrow();
-
-      // Upsert
-      const upsertResults = await vectorDB.upsert({
-        indexName,
-        vectors: [[1, 2, 3]],
-        metadata: [{ test: 'data' }],
-      });
-      expect(Array.isArray(upsertResults)).toBe(true);
-      expect(upsertResults).toHaveLength(1);
-    });
   });
 });

@@ -1,3 +1,8 @@
+---
+title: Mastra クライアントエージェント API
+description: Mastra AIエージェントとの対話方法を学びましょう。レスポンスの生成、ストリーミング対話、client-js SDKを使用したエージェントツールの管理などが含まれます。
+---
+
 # Agents API
 
 Agents APIは、Mastra AIエージェントと対話するためのメソッドを提供し、レスポンスの生成、ストリーミング対話、エージェントツールの管理などが含まれます。
@@ -28,17 +33,17 @@ const agent = client.getAgent("agent-id");
 
 ## エージェントメソッド
 
-### エージェント詳細の取得
+### エージェントの詳細を取得
 
-エージェントに関する詳細情報を取得します：
+エージェントの詳細情報を取得します：
 
 ```typescript
 const details = await agent.details();
 ```
 
-### レスポンスの生成
+### 応答を生成
 
-エージェントからレスポンスを生成します：
+エージェントから応答を生成します：
 
 ```typescript
 const response = await agent.generate({
@@ -48,15 +53,15 @@ const response = await agent.generate({
       content: "Hello, how are you?",
     },
   ],
-  threadId: "thread-1", // Optional: Thread ID for conversation context
-  resourceid: "resource-1", // Optional: Resource ID
-  output: {}, // Optional: Output configuration
+  threadId: "thread-1", // オプション: 会話コンテキスト用のスレッドID
+  resourceid: "resource-1", // オプション: リソースID
+  output: {}, // オプション: 出力設定
 });
 ```
 
-### レスポンスのストリーミング
+### 応答をストリーム
 
-リアルタイムのやり取りのためにエージェントからのレスポンスをストリーミングします：
+リアルタイムのやり取りのために、エージェントからの応答をストリーミングします：
 
 ```typescript
 const response = await agent.stream({
@@ -68,7 +73,7 @@ const response = await agent.stream({
   ],
 });
 
-// Process data stream with the processDataStream util
+// processDataStreamユーティリティでデータストリームを処理
 response.processDataStream({
   onTextPart: (text) => {
     process.stdout.write(text);
@@ -84,7 +89,7 @@ response.processDataStream({
   },
 });
 
-// You can also read from response body directly
+// response bodyから直接読み取ることも可能です
 const reader = response.body.getReader();
 while (true) {
   const { done, value } = await reader.read();
@@ -93,22 +98,22 @@ while (true) {
 }
 ```
 
-### エージェントツールの取得
+### エージェントツールを取得
 
-エージェントが利用できる特定のツールに関する情報を取得します：
+エージェントが利用可能な特定のツールの情報を取得します：
 
 ```typescript
 const tool = await agent.getTool("tool-id");
 ```
 
-### エージェント評価の取得
+### エージェント評価を取得
 
 エージェントの評価結果を取得します：
 
 ```typescript
-// Get CI evaluations
+// CI評価を取得
 const evals = await agent.evals();
 
-// Get live evaluations
+// ライブ評価を取得
 const liveEvals = await agent.liveEvals();
 ```

@@ -1,13 +1,13 @@
 ---
-title: "リファレンス: Workflow.while() | ワークフロー内のループ | Mastra ドキュメント"
-description: "Mastra ワークフローにおける `.while()` メソッドのドキュメントで、指定された条件が真である限りステップを繰り返します。"
+title: "リファレンス: Workflow.while() | ワークフロー内のループ処理 | Mastra ドキュメント"
+description: "Mastra ワークフローにおける `.while()` メソッドのドキュメント。指定した条件が真である限り、ステップを繰り返します。"
 ---
 
 # Workflow.while()
 
-`.while()` メソッドは、指定された条件が真である限りステップを繰り返します。これにより、条件が偽になるまで指定されたステップを実行し続けるループが作成されます。
+`.while()` メソッドは、指定した条件が真である限り、ステップを繰り返します。これにより、条件が偽になるまで指定したステップを実行し続けるループが作成されます。
 
-## 使用法
+## 使い方
 
 ```typescript
 workflow.step(incrementStep).while(condition, incrementStep).then(finalStep);
@@ -20,13 +20,14 @@ workflow.step(incrementStep).while(condition, incrementStep).then(finalStep);
     {
       name: "condition",
       type: "Function | ReferenceCondition",
-      description: "ループを続けるかどうかを決定する関数または参照条件",
+      description:
+        "ループを継続するかどうかを判定する関数または参照条件",
       isOptional: false,
     },
     {
       name: "step",
       type: "Step",
-      description: "条件が真である間に繰り返すステップ",
+      description: "条件が真の間に繰り返すステップ",
       isOptional: false,
     },
   ]}
@@ -36,21 +37,21 @@ workflow.step(incrementStep).while(condition, incrementStep).then(finalStep);
 
 ### 関数条件
 
-ブール値を返す関数を使用できます：
+真偽値を返す関数を使用できます：
 
 ```typescript
 workflow
   .step(incrementStep)
   .while(async ({ context }) => {
     const result = context.getStepResult<{ value: number }>("increment");
-    return (result?.value ?? 0) < 10; // 値が10未満である限り続行
+    return (result?.value ?? 0) < 10; // valueが10未満の間は継続
   }, incrementStep)
   .then(finalStep);
 ```
 
 ### 参照条件
 
-比較演算子を使用した参照ベースの条件を使用できます：
+比較演算子を使った参照ベースの条件を使用できます：
 
 ```typescript
 workflow
@@ -58,7 +59,7 @@ workflow
   .while(
     {
       ref: { step: incrementStep, path: "value" },
-      query: { $lt: 10 }, // 値が10未満である限り続行
+      query: { $lt: 10 }, // valueが10未満の間は継続
     },
     incrementStep,
   )
@@ -67,16 +68,16 @@ workflow
 
 ## 比較演算子
 
-参照ベースの条件を使用する場合、次の比較演算子を使用できます：
+参照ベースの条件を使用する場合、次の比較演算子を使用できます。
 
-| 演算子 | 説明       | 例             |
-| ------ | ---------- | -------------- |
-| `$eq`  | 等しい     | `{ $eq: 10 }`  |
-| `$ne`  | 等しくない | `{ $ne: 0 }`   |
-| `$gt`  | より大きい | `{ $gt: 5 }`   |
-| `$gte` | 以上       | `{ $gte: 10 }` |
-| `$lt`  | より小さい | `{ $lt: 20 }`  |
-| `$lte` | 以下       | `{ $lte: 15 }` |
+| 演算子    | 説明                     | 例              |
+| -------- | ------------------------ | -------------- |
+| `$eq`    | 等しい                   | `{ $eq: 10 }`  |
+| `$ne`    | 等しくない               | `{ $ne: 0 }`   |
+| `$gt`    | より大きい                | `{ $gt: 5 }`   |
+| `$gte`   | 以上                      | `{ $gte: 10 }` |
+| `$lt`    | より小さい                | `{ $lt: 20 }`  |
+| `$lte`   | 以下                      | `{ $lte: 15 }` |
 
 ## 戻り値
 
@@ -85,7 +86,7 @@ workflow
     {
       name: "workflow",
       type: "Workflow",
-      description: "チェーン用のワークフローインスタンス",
+      description: "連鎖処理のためのワークフローインスタンス",
     },
   ]}
 />
@@ -99,7 +100,7 @@ import { z } from "zod";
 // Create a step that increments a counter
 const incrementStep = new Step({
   id: "increment",
-  description: "カウンターを1増やします",
+  description: "Increments the counter by 1",
   outputSchema: z.object({
     value: z.number(),
   }),
@@ -121,12 +122,12 @@ const incrementStep = new Step({
 // Create a final step
 const finalStep = new Step({
   id: "final",
-  description: "ループ完了後の最終ステップ",
+  description: "Final step after loop completes",
   execute: async ({ context }) => {
     const finalValue = context.getStepResult<{ value: number }>(
       "increment",
     )?.value;
-    console.log(`ループは最終値: ${finalValue} で完了しました`);
+    console.log(`Loop completed with final value: ${finalValue}`);
     return { finalValue };
   },
 });
@@ -164,4 +165,4 @@ const result = await run.start({
 
 - [.until()](./until.mdx) - 条件が真になるまでループする
 - [制御フローガイド](../../docs/workflows/control-flow.mdx)
-- [Workflowクラスリファレンス](./workflow.mdx)
+- [Workflow クラスリファレンス](./workflow.mdx)

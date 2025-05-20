@@ -1,11 +1,11 @@
 ---
 title: "Cloudflare D1 ストレージ | ストレージシステム | Mastra Core"
-description: Mastraにおける Cloudflare D1 SQL ストレージ実装のドキュメント。
+description: Mastra における Cloudflare D1 SQL ストレージ実装のドキュメントです。
 ---
 
-# Cloudflare D1 ストレージ
+# Cloudflare D1 Storage
 
-Cloudflare D1ストレージの実装は、Cloudflare D1を使用したサーバーレスSQLデータベースソリューションを提供し、リレーショナル操作とトランザクションの一貫性をサポートします。
+Cloudflare D1ストレージの実装は、Cloudflare D1を利用したサーバーレスのSQLデータベースソリューションを提供し、リレーショナル操作とトランザクションの一貫性をサポートします。
 
 ## インストール
 
@@ -33,58 +33,58 @@ const storageRest = new D1Store({
 });
 ```
 
-## パラメータ
+## パラメーター
 
 <PropertiesTable
   content={[
     {
       name: "binding",
       type: "D1Database",
-      description: "Cloudflare D1 Workersバインディング（Workersランタイム用）",
+      description: "Cloudflare D1 Workers バインディング（Workers ランタイム用）",
       isOptional: true,
     },
     {
       name: "accountId",
       type: "string",
-      description: "CloudflareアカウントID（REST API用）",
+      description: "Cloudflare アカウント ID（REST API 用）",
       isOptional: true,
     },
     {
       name: "databaseId",
       type: "string",
-      description: "Cloudflare D1データベースID（REST API用）",
+      description: "Cloudflare D1 データベース ID（REST API 用）",
       isOptional: true,
     },
     {
       name: "apiToken",
       type: "string",
-      description: "Cloudflare APIトークン（REST API用）",
+      description: "Cloudflare API トークン（REST API 用）",
       isOptional: true,
     },
     {
       name: "tablePrefix",
       type: "string",
       description:
-        "すべてのテーブル名のオプションのプレフィックス（環境分離に役立ちます）",
+        "すべてのテーブル名に付与する任意のプレフィックス（環境ごとの分離に便利）",
       isOptional: true,
     },
   ]}
 />
 
-## 追加情報
+## 追加の注意事項
 
 ### スキーマ管理
 
-ストレージの実装はスキーマの作成と更新を自動的に処理します。以下のテーブルが作成されます：
+このストレージ実装は、スキーマの作成と更新を自動的に処理します。以下のテーブルが作成されます：
 
 - `threads`: 会話スレッドを保存します
 - `messages`: 個々のメッセージを保存します
-- `metadata`: スレッドとメッセージの追加メタデータを保存します
+- `metadata`: スレッドやメッセージの追加メタデータを保存します
 
 ### トランザクションと一貫性
 
-Cloudflare D1は単一行操作のトランザクション保証を提供します。これにより、複数の操作を単一の全か無かの作業単位として実行できます。
+Cloudflare D1 は、単一行の操作に対してトランザクション保証を提供します。これにより、複数の操作をすべて成功するかすべて失敗するかの単位でまとめて実行できます。
 
 ### テーブル作成とマイグレーション
 
-テーブルはストレージが初期化されるときに自動的に作成されます（`tablePrefix`オプションを使用して環境ごとに分離できます）が、列の追加、データ型の変更、インデックスの修正などの高度なスキーマ変更には、データ損失を避けるために手動のマイグレーションと慎重な計画が必要です。
+テーブルはストレージの初期化時に自動的に作成されます（`tablePrefix` オプションを使って環境ごとに分離することも可能です）が、カラムの追加やデータ型の変更、インデックスの修正などの高度なスキーマ変更には、手動でのマイグレーションとデータ損失を避けるための慎重な計画が必要です。

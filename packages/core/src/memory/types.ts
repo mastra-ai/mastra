@@ -42,18 +42,12 @@ export type MemoryConfig = {
         topK: number;
         messageRange: number | { before: number; after: number };
       };
-  workingMemory?:
-    | {
-        enabled: boolean;
-        template?: string;
-        use: 'tool-call';
-      }
-    | {
-        enabled: boolean;
-        template?: string;
-        /** @deprecated the 'text-stream' working memory option (which is the current default) will be full removed in favor of the 'tool-call' option in a future breaking change. */
-        use?: 'text-stream';
-      };
+  workingMemory?: {
+    enabled: boolean;
+    template?: string;
+    /** @deprecated The `use` option has been removed. Working memory always uses tool-call mode. */
+    use?: never;
+  };
   threads?: {
     generateTitle?: boolean;
   };
