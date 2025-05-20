@@ -1,7 +1,7 @@
-import type { MessageType, StorageThreadType } from '../../memory/types';
-import { MastraStorage } from '../base';
-import type { TABLE_NAMES } from '../constants';
-import type { EvalRow, StorageColumn, StorageGetMessagesArg, WorkflowRun, WorkflowRuns } from '../types';
+import type { MessageType, StorageThreadType } from '../memory/types';
+import { MastraStorage } from './base';
+import type { TABLE_NAMES } from './constants';
+import type { EvalRow, StorageColumn, StorageGetMessagesArg, WorkflowRun, WorkflowRuns } from './types';
 
 export class MockStore extends MastraStorage {
   private data: Record<TABLE_NAMES, Record<string, any>> = {

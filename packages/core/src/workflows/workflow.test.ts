@@ -9,7 +9,7 @@ import { createLogger } from '../logger';
 import { Mastra } from '../mastra';
 import { RuntimeContext } from '../runtime-context';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../storage';
-import { MockStore } from '../storage/mock/index';
+import { MockStore } from '../storage/mock';
 import { Telemetry } from '../telemetry';
 import { createTool } from '../tools';
 

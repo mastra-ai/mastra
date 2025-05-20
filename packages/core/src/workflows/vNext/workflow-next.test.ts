@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { createTool, Mastra, Telemetry } from '../..';
 import { Agent } from '../../agent';
 import { RuntimeContext } from '../../di';
-import { MockStore } from '../../storage/mock/index';
+import { MockStore } from '../../storage/mock';
 import type { WatchEvent } from './types';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow } from './workflow';
 
