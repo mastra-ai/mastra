@@ -12,6 +12,7 @@ import { CookieConsent } from "@/components/cookie-consent";
 import { NextraLayout } from "@/components/nextra-layout";
 import { GTProvider } from "gt-next";
 import { CustomHead } from "@/components/custom-head";
+import { NuqsAdapter } from "nuqs/adapters/next/app";
 
 const fetchStars = async () => {
   try {
@@ -62,7 +63,7 @@ export default async function RootLayout({
         <GTProvider locale={locale}>
           <PostHogProvider>
             <NextraLayout stars={stars} locale={locale} pageMap={pageMap}>
-              {children}
+              <NuqsAdapter>{children}</NuqsAdapter>
               {/* {<DocsChat />} */}
             </NextraLayout>
           </PostHogProvider>

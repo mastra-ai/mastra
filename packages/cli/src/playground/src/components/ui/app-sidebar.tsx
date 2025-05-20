@@ -19,6 +19,7 @@ import {
 import { AgentIcon, GithubIcon, Icon, ToolsIcon, WorkflowIcon } from '@mastra/playground-ui';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip';
+import clsx from 'clsx';
 
 export const LogoWithoutText = (props: { className: string }) => (
   <svg {...props} xmlns="http://www.w3.org/2000/svg" width="21" height="21" viewBox="0 0 21 21" fill="none">
@@ -178,18 +179,18 @@ export function AppSidebar() {
           )}
         </div>
 
-        <div className="pl-1">
-          {state === 'collapsed' ? (
-            <SidebarMenuButton onClick={() => toggleSidebar()} tooltip="Expand sidebar" className="w-8 text-icon3">
-              <ArrowLeftFromLine className="rotate-180" />
-            </SidebarMenuButton>
-          ) : (
-            <div className="h-8" aria-hidden />
-          )}
-        </div>
+        {state === 'collapsed' && (
+          <SidebarMenuButton
+            onClick={() => toggleSidebar()}
+            tooltip="Expand sidebar"
+            className="w-8 text-icon3 ml-1 absolute mt-[52px]"
+          >
+            <ArrowLeftFromLine className="rotate-180" />
+          </SidebarMenuButton>
+        )}
       </SidebarHeader>
 
-      <SidebarContent>
+      <SidebarContent className={clsx('transition-transform', state === 'collapsed' && 'translate-y-10')}>
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
