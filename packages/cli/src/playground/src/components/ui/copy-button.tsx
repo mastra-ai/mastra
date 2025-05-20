@@ -10,11 +10,10 @@ import { Icon } from '@mastra/playground-ui';
 type CopyButtonProps = {
   content: string;
   copyMessage?: string;
-  classname?: string;
   tooltip?: string;
 };
 
-export function CopyButton({ content, copyMessage, classname, tooltip = 'Copy to clipboard' }: CopyButtonProps) {
+export function CopyButton({ content, copyMessage, tooltip = 'Copy to clipboard' }: CopyButtonProps) {
   const { handleCopy } = useCopyToClipboard({
     text: content,
     copyMessage,
@@ -23,7 +22,7 @@ export function CopyButton({ content, copyMessage, classname, tooltip = 'Copy to
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button onClick={handleCopy}>
+        <button onClick={handleCopy} type="button">
           <Icon className="transition-colors hover:bg-surface4 rounded-lg text-icon3 hover:text-icon6">
             <CopyIcon />
           </Icon>

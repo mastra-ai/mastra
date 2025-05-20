@@ -1,6 +1,5 @@
-import { Tooltip, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 
-import { TooltipContent } from '@/components/ui/tooltip';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { Icon, Txt, ToolsIcon } from '@mastra/playground-ui';
 import { CopyIcon } from 'lucide-react';

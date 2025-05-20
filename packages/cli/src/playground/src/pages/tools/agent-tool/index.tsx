@@ -60,7 +60,7 @@ const AgentTool = () => {
       {isAgentLoading ? null : shouldShowEmpty ? (
         <div className="py-12 text-center px-6">
           <Txt variant="header-md" className="text-icon3">
-            Agent or not not found
+            Agent or tool not found
           </Txt>
         </div>
       ) : (
