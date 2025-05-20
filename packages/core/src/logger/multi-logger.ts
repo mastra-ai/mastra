@@ -30,11 +30,25 @@ export class MultiLogger implements IMastraLogger {
     return new Map(transports);
   }
 
-  async getLogs(_transportId: string) {
+  async getLogs(transportId: string) {
+    for (const logger of this.loggers) {
+      const logs = await logger.getLogs(transportId);
+      if (logs.length > 0) {
+        return logs;
+      }
+    }
+
     return [];
   }
 
-  async getLogsByRunId(_args: { transportId: string; runId: string }) {
+  async getLogsByRunId(args: { transportId: string; runId: string }) {
+    for (const logger of this.loggers) {
+      const logs = await logger.getLogsByRunId(args);
+      if (logs.length > 0) {
+        return logs;
+      }
+    }
+
     return [];
   }
 }

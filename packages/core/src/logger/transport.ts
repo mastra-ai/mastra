@@ -10,9 +10,7 @@ export interface BaseLogMessage {
   name: string;
 }
 
-export type TransportMap = Record<string, LoggerTransport>;
-
-export class LoggerTransport extends Transform {
+export abstract class LoggerTransport extends Transform {
   constructor(opts: any = {}) {
     super({ ...opts, objectMode: true });
   }

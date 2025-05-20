@@ -125,9 +125,9 @@ export class Mastra<
       if (config?.logger) {
         logger = config.logger;
       } else {
-        const levleOnEnv =
+        const levelOnEnv =
           process.env.NODE_ENV === 'production' && process.env.MASTRA_DEV !== 'true' ? LogLevel.WARN : LogLevel.INFO;
-        logger = new ConsoleLogger({ name: 'Mastra', level: levleOnEnv }) as unknown as TLogger;
+        logger = new ConsoleLogger({ name: 'Mastra', level: levelOnEnv }) as unknown as TLogger;
       }
     }
     this.#logger = logger;

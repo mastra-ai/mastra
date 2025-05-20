@@ -254,33 +254,6 @@ const mastra = new Mastra({
     level: "info",
   }),
 })
-
-export { mastra }
-````
-
-## Mastraインスタンスにエージェントとワークフローを登録する
-
-プランニングエージェントと天気ワークフローをmastraインスタンスに登録します。
-これは、天気ワークフロー内でプランニングエージェントへのアクセスを可能にするために重要です。
-
-```ts showLineNumbers copy filename="index.ts"
-import { Mastra } from "@mastra/core/mastra";
-import { PinoLogger } from "@mastra/loggers";
-import { weatherWorkflow } from "./workflows";
-import { planningAgent } from "./agents";
-
-const mastra = new Mastra({
-  vnext_workflows: {
-    weatherWorkflow,
-  },
-  agents: {
-    planningAgent,
-  },
-  logger: new PinoLogger({
-    name: "Mastra",
-    level: "info",
-  }),
-})
  
 export { mastra }
 ```

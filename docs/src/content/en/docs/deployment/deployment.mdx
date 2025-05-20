@@ -46,14 +46,14 @@ Configure the deployer in your entry file:
 
 ```typescript copy showLineNumbers
 import { Mastra } from "@mastra/core";
-import { createLogger } from "@mastra/core/logger";
+import { PinoLogger } from "@mastra/loggers";
 import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
 
-export const mastra = new Mastra({
+export const mastra = new Mastra({  
   agents: {
     /* your agents here */
   },
-  logger: createLogger({ name: "MyApp", level: "debug" }),
+  logger: new PinoLogger({ name: "MyApp", level: "debug" }),
   deployer: new CloudflareDeployer({
     scope: "your-cloudflare-scope",
     projectName: "your-project-name",
