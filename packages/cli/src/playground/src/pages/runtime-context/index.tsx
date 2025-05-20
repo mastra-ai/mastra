@@ -64,7 +64,7 @@ export default function RuntimeContext() {
         <HeaderTitle>Runtime Context</HeaderTitle>
       </Header>
 
-      <div className="max-w-3xl p-5">
+      <div className="max-w-3xl p-5 overflow-y-scroll h-full">
         <div className="rounded-lg p-4 pb-2 bg-surface4 shadow-md space-y-3 border border-border1">
           <Txt as="p" variant="ui-lg" className="text-icon3">
             Mastra provides runtime context, which is a system based on dependency injection that enables you to
