@@ -1,29 +1,29 @@
 ---
-title: "例: 結果の再ランク付け | 検索 | RAG | Mastra ドキュメント"
-description: OpenAI埋め込みとベクトル保存のためのPGVectorを使用して、Mastraでセマンティック再ランク付けを実装する例。
+title: "例: 結果の再ランキング | 検索 | RAG | Mastra ドキュメント"
+description: OpenAI の埋め込みと PGVector を使ったベクトルストレージによる、Mastra でのセマンティック再ランキング実装例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
 # 再ランキング結果
 
-この例では、Mastra、OpenAIの埋め込み、およびベクトルストレージ用のPGVectorを使用して、再ランキングを伴う検索強化生成（RAG）システムを実装する方法を示します。
+この例では、Mastra、OpenAIの埋め込み、そしてベクトルストレージとしてPGVectorを使用し、再ランキングを取り入れたRetrieval-Augmented Generation（RAG）システムの実装方法を示します。
 
 ## 概要
 
-このシステムは、MastraとOpenAIを使用した再ランキングを伴うRAGを実装しています。以下のことを行います：
+このシステムは、Mastra と OpenAI を用いた再ランキング付き RAG を実装しています。主な処理内容は以下の通りです。
 
 1. テキストドキュメントを小さなセグメントに分割し、それらから埋め込みを作成します
-2. ベクトルをPostgreSQLデータベースに保存します
-3. 初期のベクトル類似性検索を実行します
-4. Mastraのrerank関数を使用して結果を再ランキングし、ベクトル類似性、意味的関連性、および位置スコアを組み合わせます
-5. 初期結果と再ランキングされた結果を比較して改善を示します
+2. ベクトルを PostgreSQL データベースに保存します
+3. 初期のベクトル類似度検索を実行します
+4. Mastra の rerank 関数を使い、ベクトル類似度・セマンティック関連性・位置スコアを組み合わせて結果を再ランキングします
+5. 初期結果と再ランキング後の結果を比較し、改善点を表示します
 
 ## セットアップ
 
-### 環境セットアップ
+### 環境設定
 
-環境変数を設定してください：
+環境変数を必ず設定してください：
 
 ```bash filename=".env"
 OPENAI_API_KEY=your_openai_api_key_here
@@ -43,7 +43,7 @@ import { embedMany, embed } from "ai";
 
 ## ドキュメント処理
 
-ドキュメントを作成し、チャンクに処理します：
+ドキュメントを作成し、チャンクに分割します：
 
 ```typescript copy showLineNumbers{7} filename="src/index.ts"
 const doc1 = MDocument.fromText(`
@@ -64,7 +64,7 @@ const chunks = await doc1.chunk({
 
 ## 埋め込みの作成と保存
 
-チャンクの埋め込みを生成し、それをベクターデータベースに保存します:
+チャンクの埋め込みを生成し、それらをベクターデータベースに保存します。
 
 ```typescript copy showLineNumbers{36} filename="src/index.ts"
 const { embeddings } = await embedMany({
@@ -84,9 +84,9 @@ await pgVector.upsert({
 });
 ```
 
-## ベクトル検索と再ランキング
+## ベクター検索とリランキング
 
-ベクトル検索を実行し、結果を再ランキングします：
+ベクター検索を実行し、結果をリランキングします：
 
 ```typescript copy showLineNumbers{51} filename="src/index.ts"
 const query = "explain technical trading analysis";
@@ -120,15 +120,15 @@ const rerankedResults = await rerank(
 );
 ```
 
-重みは、最終的なランキングにどのように異なる要因が影響を与えるかを制御します：
+重み付けによって、さまざまな要素が最終的なランキングにどのように影響するかを制御します：
 
-- `semantic`: 高い値は、クエリに対する意味的理解と関連性を優先します
-- `vector`: 高い値は、元のベクトル類似性スコアを優先します
-- `position`: 高い値は、結果の元の順序を維持するのに役立ちます
+- `semantic`: 値が高いほど、クエリとの意味的な理解や関連性が優先されます
+- `vector`: 値が高いほど、元のベクター類似度スコアが重視されます
+- `position`: 値が高いほど、元の結果の順序が維持されやすくなります
 
 ## 結果の比較
 
-初期結果と再ランク付けされた結果の両方を印刷して、改善を確認します:
+初期結果と再ランク付け後の結果の両方を表示して、改善点を確認しましょう。
 
 ```typescript copy showLineNumbers{72} filename="src/index.ts"
 console.log("Initial Results:");
@@ -151,12 +151,12 @@ rerankedResults.forEach(({ result, score, details }, index) => {
 });
 ```
 
-再ランク付けされた結果は、ベクトル類似性とセマンティックな理解を組み合わせることで、検索品質がどのように向上するかを示しています。各結果には以下が含まれます:
+再ランク付け後の結果は、ベクトル類似度とセマンティックな理解を組み合わせることで、検索品質がどのように向上するかを示しています。各結果には以下が含まれます：
 
 - すべての要素を組み合わせた総合スコア
-- 言語モデルからのセマンティック関連性スコア
-- 埋め込み比較からのベクトル類似性スコア
-- 適切な場合に元の順序を維持するための位置ベースのスコア
+- 言語モデルによるセマンティック関連度スコア
+- 埋め込み比較によるベクトル類似度スコア
+- 必要に応じて元の順序を維持するための位置ベースのスコア
 
 <br />
 <br />

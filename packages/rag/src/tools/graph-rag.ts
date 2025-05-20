@@ -10,12 +10,14 @@ import {
   topKDescription,
   queryTextDescription,
 } from '../utils';
+import { convertToSources } from '../utils/convert-sources';
 
 export const createGraphRAGTool = ({
   vectorStoreName,
   indexName,
   model,
   enableFilter = false,
+  includeSources = true,
   graphOptions = {
     dimension: 1536,
     randomWalkSteps: 100,
@@ -29,6 +31,7 @@ export const createGraphRAGTool = ({
   indexName: string;
   model: EmbeddingModel<string>;
   enableFilter?: boolean;
+  includeSources?: boolean;
   graphOptions?: {
     dimension?: number;
     randomWalkSteps?: number;
@@ -59,8 +62,22 @@ export const createGraphRAGTool = ({
   return createTool({
     id: toolId,
     inputSchema,
+    // Output schema includes `sources`, which exposes the full set of retrieved chunks (QueryResult objects)
+    // Each source contains all information needed to reference
+    // the original document, chunk, and similarity score.
     outputSchema: z.object({
+      // Array of metadata or content for compatibility with prior usage
       relevantContext: z.any(),
+      // Array of full retrieval result objects
+      sources: z.array(
+        z.object({
+          id: z.string(), // Unique chunk/document identifier
+          metadata: z.any(), // All metadata fields (document ID, etc.)
+          vector: z.array(z.number()), // Embedding vector (if available)
+          score: z.number(), // Similarity score for this retrieval
+          document: z.string(), // Full chunk/document text (if available)
+        }),
+      ),
     }),
     description: toolDescription,
     execute: async ({ context: { queryText, topK, filter }, mastra }) => {
@@ -86,7 +103,7 @@ export const createGraphRAGTool = ({
           if (logger) {
             logger.error('Vector store not found', { vectorStoreName });
           }
-          return { relevantContext: [] };
+          return { relevantContext: [], sources: [] };
         }
 
         let queryFilter = {};
@@ -154,8 +171,11 @@ export const createGraphRAGTool = ({
         if (logger) {
           logger.debug('Returning relevant context chunks', { count: relevantChunks.length });
         }
+        // `sources` exposes the full retrieval objects
+        const sources = includeSources ? convertToSources(rerankedResults) : [];
         return {
           relevantContext: relevantChunks,
+          sources,
         };
       } catch (err) {
         if (logger) {
@@ -165,7 +185,7 @@ export const createGraphRAGTool = ({
             errorStack: err instanceof Error ? err.stack : undefined,
           });
         }
-        return { relevantContext: [] };
+        return { relevantContext: [], sources: [] };
       }
     },
   });

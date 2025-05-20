@@ -42,6 +42,7 @@ function createMockWorkflow(name: string) {
 
   const workflow = createWorkflow({
     id: name,
+    description: 'mock test workflow',
     steps: [stepA],
     inputSchema: z.object({}),
     outputSchema: z.object({ result: z.string() }),
@@ -74,6 +75,7 @@ function createReusableMockWorkflow(name: string) {
 
   return createWorkflow({
     id: name,
+    description: 'mock reusable test workflow',
     steps: [stepA, stepB],
     inputSchema: z.object({}),
     outputSchema: z.object({ result: z.string() }),
@@ -86,6 +88,7 @@ function createReusableMockWorkflow(name: string) {
 function serializeWorkflow(workflow: NewWorkflow) {
   return {
     name: workflow.id,
+    description: workflow.description,
     steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
       acc[key] = {
         id: step.id,

@@ -1,12 +1,12 @@
 ---
 title: "リファレンス: PG Vector Store | ベクターデータベース | RAG | Mastra ドキュメント"
-description: PostgreSQLのpgvector拡張機能を使用してベクター検索を提供するMastraのPgVectorクラスのドキュメント。
+description: Mastra の PgVector クラスのドキュメント。pgvector 拡張機能を使用した PostgreSQL によるベクター検索を提供します。
 ---
 
 # PG Vector Store
 
-PgVectorクラスは、[PostgreSQL](https://www.postgresql.org/)と[pgvector](https://github.com/pgvector/pgvector)拡張機能を使用してベクトル検索を提供します。
-既存のPostgreSQLデータベース内で強力なベクトル類似性検索機能を提供します。
+PgVectorクラスは、[PostgreSQL](https://www.postgresql.org/)と[pgvector](https://github.com/pgvector/pgvector)拡張機能を使用したベクトル検索を提供します。
+既存のPostgreSQLデータベース内で堅牢なベクトル類似性検索機能を実現します。
 
 ## コンストラクタオプション
 
@@ -60,21 +60,21 @@ const vectorStore2 = new PgVector({
     {
       name: "dimension",
       type: "number",
-      description: "ベクトルの次元（埋め込みモデルに一致する必要があります）",
+      description: "ベクトルの次元数（埋め込みモデルと一致する必要があります）",
     },
     {
       name: "metric",
       type: "'cosine' | 'euclidean' | 'dotproduct'",
       isOptional: true,
       defaultValue: "cosine",
-      description: "類似性検索のための距離メトリック",
+      description: "類似検索に使用する距離メトリック",
     },
     {
       name: "indexConfig",
       type: "IndexConfig",
       isOptional: true,
       defaultValue: "{ type: 'ivfflat' }",
-      description: "インデックス設定",
+      description: "インデックスの設定",
     },
     {
       name: "buildIndex",
@@ -109,13 +109,13 @@ const vectorStore2 = new PgVector({
               name: "ivfflat",
               type: "ivfflat",
               description:
-                "近似検索のためにベクトルをリストにクラスタリングします。",
+                "ベクトルをリストにクラスタリングし、近似検索を行います。",
             },
             {
               name: "hnsw",
               type: "hnsw",
               description:
-                "高速な検索時間と高い再現率を提供するグラフベースのインデックス。",
+                "高速な検索と高いリコールを実現するグラフベースのインデックス。",
             },
           ],
         },
@@ -125,7 +125,7 @@ const vectorStore2 = new PgVector({
       name: "ivf",
       type: "IVFConfig",
       isOptional: true,
-      description: "IVF設定",
+      description: "IVFの設定",
       properties: [
         {
           type: "object",
@@ -134,7 +134,7 @@ const vectorStore2 = new PgVector({
               name: "lists",
               type: "number",
               description:
-                "リストの数。指定しない場合、データセットサイズに基づいて自動計算されます。（最小100、最大4000）",
+                "リスト数。指定しない場合はデータセットサイズに基づき自動計算されます。（最小100、最大4000）",
               isOptional: true,
             },
           ],
@@ -145,7 +145,7 @@ const vectorStore2 = new PgVector({
       name: "hnsw",
       type: "HNSWConfig",
       isOptional: true,
-      description: "HNSW設定",
+      description: "HNSWの設定",
       properties: [
         {
           type: "object",
@@ -153,13 +153,14 @@ const vectorStore2 = new PgVector({
             {
               name: "m",
               type: "number",
-              description: "ノードごとの最大接続数（デフォルト: 8）",
+              description:
+                "ノードごとの最大接続数（デフォルト: 8）",
               isOptional: true,
             },
             {
               name: "efConstruction",
               type: "number",
-              description: "構築時の複雑さ（デフォルト: 32）",
+              description: "構築時の複雑度（デフォルト: 32）",
               isOptional: true,
             },
           ],
@@ -171,13 +172,13 @@ const vectorStore2 = new PgVector({
 
 #### メモリ要件
 
-HNSWインデックスは構築時にかなりの共有メモリを必要とします。100Kベクトルの場合：
+HNSWインデックスの構築時には多くの共有メモリが必要です。100Kベクトルの場合：
 
-- 小さな次元 (64d): デフォルト設定で約60MB
-- 中程度の次元 (256d): デフォルト設定で約180MB
-- 大きな次元 (384d+): デフォルト設定で約250MB以上
+- 小さい次元（64d）：デフォルト設定で約60MB
+- 中程度の次元（256d）：デフォルト設定で約180MB
+- 大きい次元（384d以上）：デフォルト設定で約250MB以上
 
-M値やefConstruction値が高いと、メモリ要件が大幅に増加します。必要に応じてシステムの共有メモリ制限を調整してください。
+M値やefConstruction値を大きくすると、必要なメモリも大幅に増加します。必要に応じてシステムの共有メモリ上限を調整してください。
 
 ### upsert()
 
@@ -215,7 +216,7 @@ M値やefConstruction値が高いと、メモリ要件が大幅に増加しま�
     {
       name: "indexName",
       type: "string",
-      description: "クエリするインデックスの名前",
+      description: "クエリを実行するインデックスの名前",
     },
     {
       name: "vector",
@@ -247,7 +248,7 @@ M値やefConstruction値が高いと、メモリ要件が大幅に増加しま�
       type: "number",
       isOptional: true,
       defaultValue: "0",
-      description: "最小類似度スコアの閾値",
+      description: "最小類似度スコアのしきい値",
     },
     {
       name: "options",
@@ -279,7 +280,7 @@ M値やefConstruction値が高いと、メモリ要件が大幅に増加しま�
 
 ### listIndexes()
 
-インデックス名を文字列として配列で返します。
+インデックス名の文字列配列を返します。
 
 ### describeIndex()
 
@@ -293,7 +294,7 @@ M値やefConstruction値が高いと、メモリ要件が大幅に増加しま�
   ]}
 />
 
-返される内容:
+戻り値：
 
 ```typescript copy
 interface PGIndexStats {
@@ -363,7 +364,7 @@ interface PGIndexStats {
   ]}
 />
 
-IDで既存のベクトルを更新します。ベクトルまたはメタデータのいずれかを提供する必要があります。
+IDによって既存のベクトルを更新します。ベクトルまたはメタデータの少なくとも一方を提供する必要があります。
 
 ```typescript copy
 // ベクトルのみを更新
@@ -400,7 +401,7 @@ await pgVector.updateVector({ indexName: "my_vectors", id: "vector123", update: 
   ]}
 />
 
-指定されたインデックスからIDで単一のベクトルを削除します。
+指定されたインデックスからIDによって単一のベクトルを削除します。
 
 ```typescript copy
 await pgVector.deleteVector({ indexName: "my_vectors", id: "vector123" });
@@ -424,17 +425,17 @@ await pgVector.deleteVector({ indexName: "my_vectors", id: "vector123" });
       type: "'cosine' | 'euclidean' | 'dotproduct'",
       isOptional: true,
       defaultValue: "cosine",
-      description: "類似性検索のための距離メトリック",
+      description: "類似検索に使用する距離メトリック",
     },
     {
       name: "indexConfig",
       type: "IndexConfig",
-      description: "インデックスタイプとパラメータの設定",
+      description: "インデックスタイプおよびパラメータの設定",
     },
   ]}
 />
 
-指定されたメトリックと設定でインデックスを構築または再構築します。新しいインデックスを作成する前に、既存のインデックスを削除します。
+指定したメトリックと設定でインデックスを作成または再作成します。新しいインデックスを作成する前に、既存のインデックスは削除されます。
 
 ```typescript copy
 // Define HNSW index
@@ -462,7 +463,7 @@ await pgVector.buildIndex("my_vectors", "cosine", {
 
 ## レスポンスタイプ
 
-クエリ結果はこの形式で返されます:
+クエリ結果は次の形式で返されます：
 
 ```typescript copy
 interface QueryResult {
@@ -473,9 +474,9 @@ interface QueryResult {
 }
 ```
 
-## エラーハンドリング
+## エラー処理
 
-ストアは型付きエラーをスローし、キャッチすることができます：
+このストアは型付きエラーをスローし、キャッチすることができます。
 
 ```typescript copy
 try {
@@ -486,7 +487,7 @@ try {
 } catch (error) {
   if (error instanceof VectorStoreError) {
     console.log(error.code); // 'connection_failed' | 'invalid_dimension' | etc
-    console.log(error.details); // 追加のエラーコンテキスト
+    console.log(error.details); // Additional error context
   }
 }
 ```
@@ -494,8 +495,8 @@ try {
 ## ベストプラクティス
 
 - 最適なパフォーマンスを確保するために、インデックス設定を定期的に評価してください。
-- データセットのサイズやクエリの要件に基づいて、`lists` や `m` などのパラメータを調整してください。
-- 特に大幅なデータ変更後には、効率を維持するために定期的にインデックスを再構築してください。
+- データセットのサイズやクエリ要件に応じて、`lists` や `m` などのパラメータを調整しましょう。
+- 特に大きなデータ変更の後は、効率を維持するためにインデックスを定期的に再構築してください。
 
 ## 関連
 

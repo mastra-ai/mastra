@@ -19,6 +19,7 @@ export async function getVNextWorkflowsHandler({ mastra }: VNextWorkflowContext)
     const _workflows = Object.entries(workflows).reduce<any>((acc, [key, workflow]) => {
       acc[key] = {
         name: workflow.name,
+        description: workflow.description,
         steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
           acc[key] = {
             id: step.id,
@@ -54,6 +55,7 @@ type SerializedStep = {
 export async function getVNextWorkflowByIdHandler({ mastra, workflowId }: VNextWorkflowContext): Promise<{
   steps: SerializedStep[];
   name: string | undefined;
+  description: string | undefined;
   stepGraph: SerializedStepFlowEntry[];
   inputSchema: string | undefined;
   outputSchema: string | undefined;
@@ -82,6 +84,7 @@ export async function getVNextWorkflowByIdHandler({ mastra, workflowId }: VNextW
         return acc;
       }, {}),
       name: workflow.name,
+      description: workflow.description,
       stepGraph: workflow.serializedStepGraph,
       inputSchema: workflow.inputSchema ? stringify(zodToJsonSchema(workflow.inputSchema)) : undefined,
       outputSchema: workflow.outputSchema ? stringify(zodToJsonSchema(workflow.outputSchema)) : undefined,

@@ -5,19 +5,19 @@ import * as React from 'react';
 import { cn } from '../../lib/utils';
 
 const inputVariants = cva(
-  'flex w-full text-mastra-el-6 rounded-sm border bg-transparent shadow-sm focus-visible:ring-ring transition-colors focus-visible:outline-none focus-visible:ring-1 disabled:cursor-not-allowed disabled:opacity-50',
+  'flex w-full text-icon6 rounded-lg border bg-transparent shadow-sm focus-visible:ring-ring transition-colors focus-visible:outline-none focus-visible:ring-1 disabled:cursor-not-allowed disabled:opacity-50',
   {
     variants: {
       variant: {
-        default: 'border-mastra-border-1 border-border-1 placeholder:text-muted-foreground',
-        filled: 'bg-inputFill border-border-1 placeholder:text-muted-foreground',
+        default: 'border-sm border-border1 placeholder:text-icon3',
+        filled: 'border-sm bg-inputFill border-border1 placeholder:text-icon3',
         unstyled:
-          'border-0 bg-transparent placeholder:text-muted-foreground focus-visible:ring-transparent focus-visible:outline-none',
+          'border-0 bg-transparent placeholder:text-icon3 focus-visible:ring-transparent focus-visible:outline-none',
       },
       customSize: {
-        default: 'px-[13px] text-[calc(13_/_16_*_1rem)] h-[34px]',
+        default: 'px-[13px] text-[calc(13_/_16_*_1rem)] h-8',
         sm: 'h-[30px] px-[13px] text-xs',
-        lg: 'h-10 px-[17px] rounded-md text-[calc(13_/_16_*_1rem)]',
+        lg: 'h-10 px-[17px] text-[calc(13_/_16_*_1rem)]',
       },
     },
     defaultVariants: {

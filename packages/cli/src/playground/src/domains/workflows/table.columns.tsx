@@ -1,5 +1,6 @@
-import { Badge, Button, Cell, EntryCell, Icon, WorkflowIcon } from '@mastra/playground-ui';
+import { Badge, Cell, EntryCell, WorkflowIcon } from '@mastra/playground-ui';
 import { Footprints } from 'lucide-react';
+import { Link } from 'react-router';
 
 type ColumnDef<T> = {
   id: string;
@@ -15,7 +16,16 @@ export const workflowsTableColumns: ColumnDef<{ id: string; name: string; stepsC
   {
     id: 'name',
     header: 'Name',
-    cell: ({ row }) => <EntryCell icon={<WorkflowIcon />} name={row.original.name} />,
+    cell: ({ row }) => (
+      <EntryCell
+        icon={<WorkflowIcon />}
+        name={
+          <Link to={`/workflows${row.original.isVNext ? '/v-next' : ''}/${row.original.id}/graph`}>
+            {row.original.name}
+          </Link>
+        }
+      />
+    ),
     meta: {
       width: 'auto',
     },
@@ -30,13 +40,6 @@ export const workflowsTableColumns: ColumnDef<{ id: string; name: string; stepsC
           <Badge icon={<Footprints />} className="!h-button-md">
             {row.original.stepsCount} step{row.original.stepsCount > 1 ? 's' : ''}
           </Badge>
-
-          <Button as="a" href={`/workflows${row.original.isVNext ? '/v-next' : ''}/${row.original.id}/graph`}>
-            <Icon>
-              <WorkflowIcon />
-            </Icon>
-            View Workflow
-          </Button>
 
           {row.original.isVNext ? <Badge className="!text-accent1 !h-button-md">vNext</Badge> : null}
         </div>

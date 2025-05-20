@@ -1,13 +1,13 @@
 ---
-title: "例：循環依存関係 | ワークフロー | Mastra ドキュメント"
-description: 循環依存関係と条件付きループを持つワークフローを作成するためのMastraの使用例。
+title: "例: 循環依存関係 | ワークフロー | Mastra ドキュメント"
+description: Mastra を使用して循環依存関係や条件付きループを持つワークフローを作成する例。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
 # 循環依存関係を持つワークフロー
 
-ワークフローは、条件に基づいてステップがループバックできる循環依存関係をサポートしています。以下の例は、条件付きロジックを使用してループを作成し、繰り返し実行を処理する方法を示しています。
+ワークフローは、条件に基づいてステップがループバックできる循環依存関係をサポートしています。以下の例では、条件付きロジックを使ってループを作成し、繰り返し実行を処理する方法を示しています。
 
 ```ts showLineNumbers copy
 import { Workflow, Step } from "@mastra/core";
@@ -16,7 +16,7 @@ import { z } from "zod";
 async function main() {
   const doubleValue = new Step({
     id: "doubleValue",
-    description: "入力値を2倍にします",
+    description: "Doubles the input value",
     inputSchema: z.object({
       inputValue: z.number(),
     }),
@@ -31,7 +31,7 @@ async function main() {
 
   const incrementByOne = new Step({
     id: "incrementByOne",
-    description: "入力値に1を加えます",
+    description: "Adds 1 to the input value",
     outputSchema: z.object({
       incrementedValue: z.number(),
     }),
@@ -39,8 +39,7 @@ async function main() {
       const valueToIncrement = context?.getStepResult<{ firstValue: number }>(
         "trigger",
       )?.firstValue;
-      if (!valueToIncrement)
-        throw new Error("インクリメントする値が提供されていません");
+      if (!valueToIncrement) throw new Error("No value to increment provided");
       const incrementedValue = valueToIncrement + 1;
       return { incrementedValue };
     },

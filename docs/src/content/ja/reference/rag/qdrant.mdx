@@ -1,12 +1,12 @@
 ---
-title: "リファレンス: Qdrant ベクターストア | ベクターデータベース | RAG | Mastra ドキュメント"
-description: ベクターとペイロードを管理するためのベクター類似検索エンジンであるQdrantをMastraと統合するためのドキュメント。
+title: "リファレンス: Qdrant ベクトルストア | ベクトルデータベース | RAG | Mastra ドキュメント"
+description: Mastraとの統合のためのQdrantのドキュメント。Qdrantはベクトルとペイロードを管理するためのベクトル類似性検索エンジンです。
 ---
 
-# Qdrant Vector Store
+# Qdrant ベクトルストア
 
-QdrantVector クラスは、ベクトル類似性検索エンジンである [Qdrant](https://qdrant.tech/) を使用したベクトル検索を提供します。
-これは、追加のペイロードと拡張フィルタリングサポートを備えたベクトルを保存、検索、管理するための便利なAPIを備えた、プロダクション対応のサービスを提供します。
+QdrantVectorクラスは、[Qdrant](https://qdrant.tech/)を使用したベクトル検索を提供します。Qdrantはベクトル類似性検索エンジンです。
+これは、追加のペイロードと拡張フィルタリングサポートを備えたベクトルの保存、検索、管理を行うための便利なAPIを持つ、本番環境対応のサービスを提供します。
 
 ## コンストラクタオプション
 
@@ -16,7 +16,7 @@ QdrantVector クラスは、ベクトル類似性検索エンジンである [Qd
       name: "url",
       type: "string",
       description:
-        "QdrantインスタンスのREST URL。例: https://xyz-example.eu-central.aws.cloud.qdrant.io:6333",
+        "QdrantインスタンスのREST URL。例：https://xyz-example.eu-central.aws.cloud.qdrant.io:6333",
     },
     {
       name: "apiKey",
@@ -26,7 +26,8 @@ QdrantVector クラスは、ベクトル類似性検索エンジンである [Qd
     {
       name: "https",
       type: "boolean",
-      description: "接続を設定する際にTLSを使用するかどうか。推奨されます。",
+      description:
+        "接続を設定する際にTLSを使用するかどうか。推奨されています。",
     },
   ]}
 />
@@ -45,14 +46,14 @@ QdrantVector クラスは、ベクトル類似性検索エンジンである [Qd
     {
       name: "dimension",
       type: "number",
-      description: "ベクトルの次元（埋め込みモデルに一致する必要があります）",
+      description: "ベクトルの次元数（埋め込みモデルと一致する必要があります）",
     },
     {
       name: "metric",
       type: "'cosine' | 'euclidean' | 'dotproduct'",
       isOptional: true,
       defaultValue: "cosine",
-      description: "類似性検索のための距離メトリック",
+      description: "類似性検索の距離メトリック",
     },
   ]}
 />
@@ -76,7 +77,7 @@ QdrantVector クラスは、ベクトル類似性検索エンジンである [Qd
       name: "ids",
       type: "string[]",
       isOptional: true,
-      description: "オプションのベクトルID（提供されない場合は自動生成）",
+      description: "オプションのベクトルID（提供されない場合は自動生成されます）",
     },
   ]}
 />
@@ -93,7 +94,7 @@ QdrantVector クラスは、ベクトル類似性検索エンジンである [Qd
     {
       name: "queryVector",
       type: "number[]",
-      description: "類似ベクトルを見つけるためのクエリベクトル",
+      description: "類似ベクトルを検索するためのクエリベクトル",
     },
     {
       name: "topK",
@@ -120,7 +121,7 @@ QdrantVector クラスは、ベクトル類似性検索エンジンである [Qd
 
 ### listIndexes()
 
-文字列としてインデックス名の配列を返します。
+インデックス名の文字列配列を返します。
 
 ### describeIndex()
 
@@ -134,7 +135,7 @@ QdrantVector クラスは、ベクトル類似性検索エンジンである [Qd
   ]}
 />
 
-返される内容:
+戻り値：
 
 ```typescript copy
 interface IndexStats {
@@ -173,12 +174,12 @@ interface IndexStats {
     {
       name: "update",
       type: "{ vector?: number[]; metadata?: Record<string, any>; }",
-      description: "更新するベクトルおよび/またはメタデータを含むオブジェクト",
+      description: "更新するベクトルやメタデータを含むオブジェクト",
     },
   ]}
 />
 
-指定されたインデックス内のベクトルおよび/またはそのメタデータを更新します。ベクトルとメタデータの両方が提供された場合、両方が更新されます。どちらか一方のみが提供された場合は、その部分のみが更新されます。
+指定されたインデックス内のベクトルやそのメタデータを更新します。ベクトルとメタデータの両方が提供された場合、両方が更新されます。一方のみが提供された場合、そのみが更新されます。
 
 ### deleteVector()
 
@@ -197,11 +198,11 @@ interface IndexStats {
   ]}
 />
 
-指定されたインデックスからIDによってベクトルを削除します。
+IDによって指定されたインデックスからベクトルを削除します。
 
 ## レスポンスタイプ
 
-クエリ結果はこの形式で返されます:
+クエリ結果は以下の形式で返されます：
 
 ```typescript copy
 interface QueryResult {
@@ -212,9 +213,9 @@ interface QueryResult {
 }
 ```
 
-## エラーハンドリング
+## エラー処理
 
-ストアはキャッチ可能な型付きエラーをスローします:
+ストアは捕捉できる型付きエラーをスローします：
 
 ```typescript copy
 try {
@@ -225,7 +226,7 @@ try {
 } catch (error) {
   if (error instanceof VectorStoreError) {
     console.log(error.code); // 'connection_failed' | 'invalid_dimension' | etc
-    console.log(error.details); // 追加のエラーコンテキスト
+    console.log(error.details); // Additional error context
   }
 }
 ```

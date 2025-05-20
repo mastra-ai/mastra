@@ -5,7 +5,7 @@ const meta = {
   "suspend-and-resume": "Suspend & Resume",
   "input-data-mapping": "Input Data Mapping",
   "using-with-agents-and-tools": "Using with Agents and Tools",
-  "inngest-workflow": "Inngest Workflow",
+  "inngest-workflow": <Tag text="experimental">Inngest Workflow</Tag>,
 };
 
 export default meta;
