@@ -1,4 +1,5 @@
 import type { Agent } from '../agent';
+import type { BundlerConfig } from '../bundler/types';
 import type { MastraDeployer } from '../deployer';
 import { LogLevel, createLogger, noopLogger } from '../logger';
 import type { Logger } from '../logger';
@@ -38,6 +39,7 @@ export interface Config<
   deployer?: MastraDeployer;
   server?: ServerConfig;
   mcpServers?: TMCPServers;
+  bundler?: BundlerConfig;
 
   /**
    * Server middleware functions to be applied to API routes
@@ -84,6 +86,7 @@ export class Mastra<
   #networks?: TNetworks;
   #server?: ServerConfig;
   #mcpServers?: TMCPServers;
+  #bundler?: BundlerConfig;
 
   /**
    * @deprecated use getTelemetry() instead
@@ -564,6 +567,10 @@ Do:
 
   public getServer() {
     return this.#server;
+  }
+
+  public getBundlerConfig() {
+    return this.#bundler;
   }
 
   /**
