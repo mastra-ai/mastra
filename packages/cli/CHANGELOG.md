@@ -1,5 +1,62 @@
 # mastra
 
+## 0.10.0
+
+### Minor Changes
+
+- 83da932: Move @mastra/core to peerdeps
+- 5eb5a99: Remove pino from @mastra/core into @mastra/loggers
+- 0dcb9f0: Memory breaking changes: storage, vector, and embedder are now required. Working memory text streaming has been removed, only tool calling is supported for working memory updates now. Default settings have changed (lastMessages: 40->10, semanticRecall: true->false, threads.generateTitle: true->false)
+
+### Patch Changes
+
+- bdb7934: fix tools not showing (discoverability)
+- b3a3d63: BREAKING: Make vnext workflow the default worklow, and old workflow legacy_workflow
+- ae122cc: show the entities ID close to the copy button
+- 99552bc: revamp the UI of the tools page
+- f2d3352: fix overflow scroll in runtime context
+- db4211d: improve the UI/UX of the runtime context with formatting, copying, docs and syntax highlighting
+- 9b7294a: Revamp the UI for the right sidebar of the agents page
+- e2c2cf1: Persist playground agent settings across refresh
+- 47776b4: update the mcp pages
+- fd69cc3: revamp UI of workflow "Run" pane
+- 1270183: Add waterfull traces instead of stacked progressbar (UI improvement mostly)
+- 392a14d: changing the empty state for threads in agent chat
+- 8d9feae: Add missing x-mastra-dev-playground headers
+- cbf153f: Handle broken images on the playground
+- 0cae9b1: sidebar adjustments (storing status + showing the action of collapsing / expanding)
+- d2b595a: a better tools playground page
+- 1f6886f: bring back the memory not activated warning in agent chat
+- 8a68886: revamp the UI of the workflow form input
+- 8332970: Rename agents, tools, workflow example files.
+- 2672a05: Add MCP servers and tool call execution to playground
+- Updated dependencies [b3a3d63]
+- Updated dependencies [344f453]
+- Updated dependencies [0a3ae6d]
+- Updated dependencies [95911be]
+- Updated dependencies [83da932]
+- Updated dependencies [f53a6ac]
+- Updated dependencies [5eb5a99]
+- Updated dependencies [7e632c5]
+- Updated dependencies [1e9fbfa]
+- Updated dependencies [eabdcd9]
+- Updated dependencies [90be034]
+- Updated dependencies [129b5f5]
+- Updated dependencies [8d9feae]
+- Updated dependencies [aaf0e48]
+- Updated dependencies [99f050a]
+- Updated dependencies [d0ee3c6]
+- Updated dependencies [b2ae5aa]
+- Updated dependencies [48e5910]
+- Updated dependencies [23f258c]
+- Updated dependencies [a7292b0]
+- Updated dependencies [0dcb9f0]
+- Updated dependencies [2672a05]
+  - @mastra/deployer@0.10.0
+  - @mastra/core@0.10.0
+  - @mastra/mcp@0.10.0
+  - @mastra/loggers@0.10.0
+
 ## 0.7.0-alpha.2
 
 ### Patch Changes

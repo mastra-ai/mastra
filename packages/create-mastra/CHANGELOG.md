@@ -1,5 +1,28 @@
 # create-mastra
 
+## 0.10.0
+
+### Patch Changes
+
+- bdb7934: fix tools not showing (discoverability)
+- b3a3d63: BREAKING: Make vnext workflow the default worklow, and old workflow legacy_workflow
+- ae122cc: show the entities ID close to the copy button
+- 99552bc: revamp the UI of the tools page
+- f2d3352: fix overflow scroll in runtime context
+- 95911be: Fixed an issue where if @mastra/core was not released at the same time as create-mastra, create-mastra would match the alpha tag instead of latest tag when running npm create mastra@latest
+- db4211d: improve the UI/UX of the runtime context with formatting, copying, docs and syntax highlighting
+- 9b7294a: Revamp the UI for the right sidebar of the agents page
+- e2c2cf1: Persist playground agent settings across refresh
+- 47776b4: update the mcp pages
+- fd69cc3: revamp UI of workflow "Run" pane
+- 1270183: Add waterfull traces instead of stacked progressbar (UI improvement mostly)
+- 392a14d: changing the empty state for threads in agent chat
+- cbf153f: Handle broken images on the playground
+- 0cae9b1: sidebar adjustments (storing status + showing the action of collapsing / expanding)
+- d2b595a: a better tools playground page
+- 1f6886f: bring back the memory not activated warning in agent chat
+- 8a68886: revamp the UI of the workflow form input
+
 ## 0.3.4-alpha.2
 
 ### Patch Changes

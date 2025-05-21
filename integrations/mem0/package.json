@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mem0",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0",
   "description": "Mem0 is a memory-based AI platform that allows you to store, search your memories based on the user's query.",
   "type": "module",
   "keywords": [],
@@ -49,6 +49,6 @@
     "zod": "^3.24.3"
   },
   "peerDependencies": {
-    "@mastra/core": "^0.9.4"
+    "@mastra/core": "^0.10.0"
   }
 }
