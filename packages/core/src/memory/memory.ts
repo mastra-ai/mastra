@@ -214,133 +214,18 @@ export abstract class MastraMemory extends MastraBase {
     threadId,
     resourceId,
     vectorMessageSearch,
-    systemMessage,
     config,
   }: {
     threadId: string;
     resourceId?: string;
     vectorMessageSearch?: string;
-    systemMessage?: CoreMessage;
     config?: MemoryConfig;
-  }): Promise<{
-    threadId: string;
-    messages: CoreMessage[];
-    uiMessages: AiMessageType[];
-  }>;
+  }): Promise<{ messages: MastraMessageV2[] }>;
 
   estimateTokens(text: string): number {
     return Math.ceil(text.split(' ').length * 1.3);
   }
 
-  protected parseMessages(messages: MessageType[]): CoreMessage[] {
-    return messages.map(msg => {
-      let content = msg.content;
-      if (typeof content === 'string' && (content.startsWith('[') || content.startsWith('{'))) {
-        try {
-          content = JSON.parse(content);
-        } catch {
-          // Keep the original string if it's not valid JSON
-        }
-      } else if (typeof content === 'number') {
-        content = String(content);
-      }
-      return {
-        ...msg,
-        content,
-      };
-    }) as CoreMessage[];
-  }
-
-  protected convertToUIMessages(messages: MessageType[]): AiMessageType[] {
-    function addToolMessageToChat({
-      toolMessage,
-      messages,
-      toolResultContents,
-    }: {
-      toolMessage: CoreToolMessage;
-      messages: Array<AiMessageType>;
-      toolResultContents: Array<ToolResultPart>;
-    }): { chatMessages: Array<AiMessageType>; toolResultContents: Array<ToolResultPart> } {
-      const chatMessages = messages.map(message => {
-        if (message.toolInvocations) {
-          return {
-            ...message,
-            toolInvocations: message.toolInvocations.map(toolInvocation => {
-              const toolResult = toolMessage.content.find(tool => tool.toolCallId === toolInvocation.toolCallId);
-
-              if (toolResult) {
-                return {
-                  ...toolInvocation,
-                  state: 'result',
-                  result: toolResult.result,
-                };
-              }
-
-              return toolInvocation;
-            }),
-          };
-        }
-
-        return message;
-      }) as Array<AiMessageType>;
-
-      const resultContents = [...toolResultContents, ...toolMessage.content];
-
-      return { chatMessages, toolResultContents: resultContents };
-    }
-
-    const { chatMessages } = messages.reduce(
-      (obj: { chatMessages: Array<AiMessageType>; toolResultContents: Array<ToolResultPart> }, message) => {
-        if (message.role === 'tool') {
-          return addToolMessageToChat({
-            toolMessage: message as CoreToolMessage,
-            messages: obj.chatMessages,
-            toolResultContents: obj.toolResultContents,
-          });
-        }
-
-        let textContent = '';
-        let toolInvocations: Array<ToolInvocation> = [];
-
-        if (typeof message.content === 'string') {
-          textContent = message.content;
-        } else if (typeof message.content === 'number') {
-          textContent = String(message.content);
-        } else if (Array.isArray(message.content)) {
-          for (const content of message.content) {
-            if (content.type === 'text') {
-              textContent += content.text;
-            } else if (content.type === 'tool-call') {
-              const toolResult = obj.toolResultContents.find(tool => tool.toolCallId === content.toolCallId);
-              toolInvocations.push({
-                state: toolResult ? 'result' : 'call',
-                toolCallId: content.toolCallId,
-                toolName: content.toolName,
-                args: content.args,
-                result: toolResult?.result,
-              });
-            }
-          }
-        }
-
-        obj.chatMessages.push({
-          id: (message as MessageType).id,
-          role: message.role as AiMessageType['role'],
-          content: textContent,
-          toolInvocations,
-          createdAt: message.createdAt,
-        });
-
-        return obj;
-      },
-      { chatMessages: [], toolResultContents: [] } as {
-        chatMessages: Array<AiMessageType>;
-        toolResultContents: Array<ToolResultPart>;
-      },
-    );
-
-    return chatMessages;
-  }
 
   /**
    * Retrieves a specific thread by its ID
@@ -373,9 +258,9 @@ export abstract class MastraMemory extends MastraBase {
     messages,
     memoryConfig,
   }: {
-    messages: MessageType[];
+    messages: MastraMessageV2[];
     memoryConfig: MemoryConfig | undefined;
-  }): Promise<MessageType[]>;
+  }): Promise<MastraMessageV2[]>;
 
   /**
    * Retrieves all messages for a specific thread
@@ -386,7 +271,7 @@ export abstract class MastraMemory extends MastraBase {
     threadId,
     resourceId,
     selectBy,
-  }: StorageGetMessagesArg): Promise<{ messages: CoreMessage[]; uiMessages: AiMessageType[] }>;
+  }: StorageGetMessagesArg): Promise<{ messages: MastraMessageV2[] }>;
 
   /**
    * Helper method to create a new thread
@@ -443,32 +328,43 @@ export abstract class MastraMemory extends MastraBase {
     config,
     content,
     role,
-    type,
-    toolNames,
-    toolCallArgs,
-    toolCallIds,
-  }: {
+  }: // type, toolNames, toolCallArgs, toolCallIds parameters are removed as they are inferred from MastraMessageV2.content.parts
+  {
     threadId: string;
     resourceId: string;
     config?: MemoryConfig;
-    content: UserContent | AssistantContent;
+    content: UserContent | AssistantContent; // This will be simplified to string for now
     role: 'user' | 'assistant';
-    type: 'text' | 'tool-call' | 'tool-result';
-    toolNames?: string[];
-    toolCallArgs?: Record<string, unknown>[];
-    toolCallIds?: string[];
-  }): Promise<MessageType> {
-    const message: MessageType = {
-      id: this.generateId(),
-      content,
+  }): Promise<MastraMessageV2> {
+    const messageId = this.generateId();
+    const createdAt = new Date();
+
+    // Simplified content handling: assumes text content for now.
+    // A more robust version would map UserContent/AssistantContent to MastraMessageContentV2.parts
+    let textContent = '';
+    if (typeof content === 'string') {
+      textContent = content;
+    } else if (Array.isArray(content)) {
+      // Join text parts, ignore others for this simplified version
+      textContent = content
+        .filter(part => part.type === 'text')
+        .map(part => (part as any).text)
+        .join('\n');
+    }
+
+    const mastraMessageV2Content: MastraMessageContentV2 = {
+      format: 2,
+      parts: [{ type: 'text', text: textContent }],
+      content: textContent, // Also store the simple string content if applicable
+    };
+
+    const message: MastraMessageV2 = {
+      id: messageId,
       role,
-      createdAt: new Date(),
+      createdAt,
       threadId,
       resourceId,
-      type,
-      toolNames,
-      toolCallArgs,
-      toolCallIds,
+      content: mastraMessageV2Content,
     };
 
     const savedMessages = await this.saveMessages({ messages: [message], memoryConfig: config });

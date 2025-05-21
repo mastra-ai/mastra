@@ -1,29 +1,25 @@
-import type { MessageType } from '@mastra/core/memory';
+import type { MastraMessageV2 } from '@mastra/core'; // Updated import
 
-const isToolCallWithId = (message: MessageType | undefined, targetToolCallId: string): boolean => {
-  if (!message || !Array.isArray(message.content)) return false;
-  return message.content.some(
+const isToolCallWithId = (message: MastraMessageV2 | undefined, targetToolCallId: string): boolean => {
+  if (!message || !message.content || !Array.isArray(message.content.parts)) return false;
+  return message.content.parts.some(
     part =>
       part &&
-      typeof part === 'object' &&
-      'type' in part &&
-      part.type === 'tool-call' &&
-      'toolCallId' in part &&
-      part.toolCallId === targetToolCallId,
+      part.type === 'tool-invocation' &&
+      part.toolInvocation.state === 'call' &&
+      part.toolInvocation.toolCallId === targetToolCallId,
   );
 };
 
-const getToolResultIndexById = (id: string, results: MessageType[]) =>
+const getToolResultIndexById = (id: string, results: MastraMessageV2[]) =>
   results.findIndex(message => {
-    if (!Array.isArray(message?.content)) return false;
-    return message.content.some(
+    if (!message || !message.content || !Array.isArray(message.content.parts)) return false;
+    return message.content.parts.some(
       part =>
         part &&
-        typeof part === 'object' &&
-        'type' in part &&
-        part.type === 'tool-result' &&
-        'toolCallId' in part &&
-        part.toolCallId === id,
+        part.type === 'tool-invocation' &&
+        part.toolInvocation.state === 'result' &&
+        part.toolInvocation.toolCallId === id,
     );
   });
 
@@ -31,7 +27,7 @@ const getToolResultIndexById = (id: string, results: MessageType[]) =>
  * Self-heals message ordering to ensure tool calls are directly before their matching tool results.
  * This is needed due to a bug where messages were saved in the wrong order. That bug is fixed, but this code ensures any tool calls saved in the wrong order in the past will still be usable now.
  */
-export function reorderToolCallsAndResults(messages: MessageType[]): MessageType[] {
+export function reorderToolCallsAndResults(messages: MastraMessageV2[]): MastraMessageV2[] {
   if (!messages.length) return messages;
 
   // Create a copy of messages to avoid modifying the original
@@ -41,18 +37,16 @@ export function reorderToolCallsAndResults(messages: MessageType[]): MessageType
 
   // First loop: collect all tool result IDs in a set
   for (const message of results) {
-    if (!Array.isArray(message.content)) continue;
+    if (!message.content || !Array.isArray(message.content.parts)) continue;
 
-    for (const part of message.content) {
+    for (const part of message.content.parts) {
       if (
         part &&
-        typeof part === 'object' &&
-        'type' in part &&
-        part.type === 'tool-result' &&
-        'toolCallId' in part &&
-        part.toolCallId
+        part.type === 'tool-invocation' &&
+        part.toolInvocation.state === 'result' &&
+        part.toolInvocation.toolCallId
       ) {
-        toolCallIds.add(part.toolCallId);
+        toolCallIds.add(part.toolInvocation.toolCallId);
       }
     }
   }
@@ -80,6 +74,7 @@ export function reorderToolCallsAndResults(messages: MessageType[]): MessageType
       results.splice(toolCallIndex, 1);
 
       // Insert right before the tool result
+      // Need to re-calculate resultIndex as splice might have shifted indices
       results.splice(getToolResultIndexById(toolCallId, results), 0, toolCall);
     }
   }

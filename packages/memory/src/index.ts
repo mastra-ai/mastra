@@ -56,7 +56,7 @@ export class Memory extends MastraMemory {
     threadConfig,
   }: StorageGetMessagesArg & {
     threadConfig?: MemoryConfig;
-  }): Promise<{ messages: CoreMessage[]; uiMessages: AiMessageType[] }> {
+  }): Promise<{ messages: MastraMessageV2[] }> {
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId);
 
     const vectorResults: {
@@ -140,15 +140,12 @@ export class Memory extends MastraMemory {
     });
 
     // First sort messages by date
-    const orderedByDate = rawMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    const orderedByDate = rawMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()) as MastraMessageV2[];
     // Then reorder tool calls to be directly before their results
-    const reorderedToolCalls = reorderToolCallsAndResults(orderedByDate);
+    // This utility will need to be updated to handle MastraMessageV2[]
+    const reorderedToolMessages = reorderToolCallsAndResults(orderedByDate);
 
-    // Parse and convert messages
-    const messages = this.parseMessages(reorderedToolCalls);
-    const uiMessages = this.convertToUIMessages(reorderedToolCalls);
-
-    return { messages, uiMessages };
+    return { messages: reorderedToolMessages };
   }
 
   async rememberMessages({
@@ -161,11 +158,7 @@ export class Memory extends MastraMemory {
     resourceId?: string;
     vectorMessageSearch?: string;
     config?: MemoryConfig;
-  }): Promise<{
-    threadId: string;
-    messages: CoreMessage[];
-    uiMessages: AiMessageType[];
-  }> {
+  }): Promise<{ messages: MastraMessageV2[] }> {
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId);
     const threadConfig = this.getMergedThreadConfig(config || {});
 
@@ -187,11 +180,7 @@ export class Memory extends MastraMemory {
     });
 
     this.logger.debug(`Remembered message history includes ${messagesResult.messages.length} messages.`);
-    return {
-      threadId,
-      messages: messagesResult.messages,
-      uiMessages: messagesResult.uiMessages,
-    };
+    return { messages: messagesResult.messages };
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
@@ -331,9 +320,9 @@ export class Memory extends MastraMemory {
     messages,
     memoryConfig,
   }: {
-    messages: MessageType[];
+    messages: MastraMessageV2[];
     memoryConfig?: MemoryConfig;
-  }): Promise<MessageType[]> {
+  }): Promise<MastraMessageV2[]> {
     await this.storage.init();
     // First save working memory from any messages
     await this.saveWorkingMemory(messages);
@@ -351,12 +340,12 @@ export class Memory extends MastraMemory {
         updatedMessages.map(async message => {
           let textForEmbedding: string | null = null;
 
-          if (typeof message.content === 'string' && message.content.trim() !== '') {
-            textForEmbedding = message.content;
-          } else if (Array.isArray(message.content)) {
+          if (message.content.content && typeof message.content.content === 'string' && message.content.content.trim() !== '') {
+            textForEmbedding = message.content.content;
+          } else if (message.content.parts && message.content.parts.length > 0) {
             // Extract text from all text parts, concatenate
-            const joined = message.content
-              .filter(part => part && part.type === 'text' && typeof part.text === 'string')
+            const joined = message.content.parts
+              .filter(part => part.type === 'text')
               .map(part => (part as TextPart).text)
               .join(' ')
               .trim();
@@ -393,45 +382,46 @@ export class Memory extends MastraMemory {
     return result;
   }
 
-  protected updateMessagesToHideWorkingMemory(messages: MessageType[]): MessageType[] {
+protected updateMessagesToHideWorkingMemory(messages: MastraMessageV2[]): MastraMessageV2[] {
     const workingMemoryRegex = /<working_memory>([^]*?)<\/working_memory>/g;
-
-    const updatedMessages: MessageType[] = [];
+    const updatedMessages: MastraMessageV2[] = [];
 
     for (const message of messages) {
-      if (typeof message?.content === `string`) {
-        updatedMessages.push({
-          ...message,
-          content: message.content.replace(workingMemoryRegex, ``).trim(),
-        });
-      } else if (Array.isArray(message?.content)) {
-        // Filter out updateWorkingMemory tool-call/result content items
-        const filteredContent = message.content.filter(
-          content =>
-            !(
-              (content.type === 'tool-call' || content.type === 'tool-result') &&
-              content.toolName === 'updateWorkingMemory'
-            ),
-        );
-        if (filteredContent.length === 0) {
-          // If nothing left, skip this message
+      const newMessage = { ...message, content: { ...message.content } }; // Deep copy message and content
+
+      if (newMessage.content.content && typeof newMessage.content.content === 'string') {
+        newMessage.content.content = newMessage.content.content.replace(workingMemoryRegex, '').trim();
+      }
+
+      if (newMessage.content.parts) {
+        const newParts = newMessage.content.parts
+          .filter(part => {
+            if (part.type === 'tool-invocation') {
+              return part.toolInvocation.toolName !== 'updateWorkingMemory';
+            }
+            return true;
+          })
+          .map(part => {
+            if (part.type === 'text') {
+              return {
+                ...part,
+                text: part.text.replace(workingMemoryRegex, '').trim(),
+              };
+            }
+            return part;
+          });
+
+        // If all parts were filtered out (e.g., only contained updateWorkingMemory tool calls),
+        // and there's no primary string content, we might skip this message or handle it.
+        // For now, if parts become empty and there was no string content, it might result in an empty message.
+        // This matches the previous behavior of `continue` if filteredContent.length === 0.
+        if (newParts.length === 0 && !newMessage.content.content) {
           continue;
         }
-        const newContent = filteredContent.map(content => {
-          if (content.type === 'text') {
-            return {
-              ...content,
-              text: content.text.replace(workingMemoryRegex, '').trim(),
-            };
-          }
-          return { ...content };
-        }) as MessageType['content'];
-        updatedMessages.push({ ...message, content: newContent });
-      } else {
-        updatedMessages.push({ ...message });
+        newMessage.content.parts = newParts;
       }
+      updatedMessages.push(newMessage);
     }
-
     return updatedMessages;
   }
 
@@ -466,21 +456,22 @@ export class Memory extends MastraMemory {
     return memory.trim();
   }
 
-  private async saveWorkingMemory(messages: MessageType[]) {
+private async saveWorkingMemory(messages: MastraMessageV2[]) {
     const latestMessage = messages[messages.length - 1];
 
     if (!latestMessage || !this.threadConfig.workingMemory?.enabled) {
       return;
     }
 
-    const latestContent = !latestMessage?.content
-      ? null
-      : typeof latestMessage.content === 'string'
-        ? latestMessage.content
-        : latestMessage.content
-            .filter(c => c.type === 'text')
-            .map(c => c.text)
-            .join('\n');
+    let latestContent: string | null = null;
+    if (latestMessage?.content?.content && typeof latestMessage.content.content === 'string') {
+      latestContent = latestMessage.content.content;
+    } else if (latestMessage?.content?.parts) {
+      latestContent = latestMessage.content.parts
+        .filter(part => part.type === 'text')
+        .map(part => (part as TextPart).text)
+        .join('\n');
+    }
 
     const threadId = latestMessage?.threadId;
     if (!latestContent || !threadId) {

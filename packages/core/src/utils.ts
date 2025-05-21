@@ -436,22 +436,6 @@ export function isCoreMessage(message: CoreMessage | AiMessageType): message is 
   return [`has-core-specific-parts`, `message`].includes(detectSingleMessageCharacteristics(message));
 }
 
-export function ensureAllMessagesAreCoreMessages(messages: (CoreMessage | AiMessageType)[]) {
-  return messages
-    .map(message => {
-      if (isUiMessage(message)) {
-        return convertToCoreMessages([message]);
-      }
-      if (isCoreMessage(message)) {
-        return message;
-      }
-      const characteristics = detectSingleMessageCharacteristics(message);
-      throw new Error(
-        `Message does not appear to be a core message or a UI message but must be one of the two, found "${characteristics}" type for message:\n\n${JSON.stringify(message, null, 2)}\n`,
-      );
-    })
-    .flat();
-}
 
 /** Represents a validated SQL identifier (e.g., table or column name). */
 type SqlIdentifier = string & { __brand: 'SqlIdentifier' };

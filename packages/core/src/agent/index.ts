@@ -21,6 +21,7 @@ import type { Metric } from '../eval';
 import { AvailableHooks, executeHook } from '../hooks';
 import type { GenerateReturn, StreamReturn } from '../llm';
 import type { MastraLLMBase } from '../llm/model';
+import { MessageList } from './message-list';
 import { MastraLLM } from '../llm/model';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
@@ -29,7 +30,7 @@ import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import { RuntimeContext } from '../runtime-context';
 import { InstrumentClass } from '../telemetry';
 import type { CoreTool } from '../tools/types';
-import { makeCoreTool, createMastraProxy, ensureToolProperties, ensureAllMessagesAreCoreMessages } from '../utils';
+import { makeCoreTool, createMastraProxy, ensureToolProperties } from '../utils';
 import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import type { Workflow } from '../workflows';
@@ -432,42 +433,34 @@ export class Agent<
     thread: passedThread,
     memoryConfig,
     resourceId,
-    userMessages,
-    systemMessage,
     runId,
+    messageList, // Added messageList
   }: {
     resourceId: string;
     threadId: string;
     thread?: StorageThreadType;
     memoryConfig?: MemoryConfig;
-    userMessages: CoreMessage[];
-    systemMessage: CoreMessage;
-    time?: Date;
-    keyword?: string;
     runId?: string;
+    messageList: MessageList; // Added messageList type
+    // Removed userMessages, systemMessage, time, keyword
   }) {
     const memory = this.getMemory();
     if (memory) {
       const thread = passedThread ?? (await memory.getThreadById({ threadId }));
 
       if (!thread) {
-        return { threadId: threadId || '', messages: userMessages };
+        // If no thread, nothing to fetch from memory. 
+        // The messageList already contains the current user messages and system message.
+        return { threadId: threadId || '' }; 
       }
 
-      const newMessages = ensureAllMessagesAreCoreMessages(userMessages);
-
-      const now = Date.now();
-      const messages = newMessages.map((u, index) => {
-        return {
-          id: this.getMemory()?.generateId()!,
-          createdAt: new Date(now + index),
-          threadId: threadId,
-          ...u,
-          content: u.content as UserContent | AssistantContent,
-          role: u.role as 'user' | 'assistant',
-          type: 'text' as 'text' | 'tool-call' | 'tool-result',
-        };
-      });
+      // Get current user messages from the list for vector search and processMessages
+      // Assuming user messages are the last ones added after system/context.
+      // This might need refinement based on how messageList is populated before this call.
+      const allUIMessages = messageList.toUIMessages();
+      const currentUserMessages = allUIMessages.filter(m => m.role === 'user' && !m.id.startsWith('mem-')); // A way to distinguish from memory messages if needed
+      // For now, let's assume the last user message is the most relevant for vector search
+      const lastUserMessageContent = currentUserMessages.at(-1)?.content ?? '';
 
       const [memoryMessages, memorySystemMessage] =
         threadId && memory
@@ -477,194 +470,60 @@ export class Agent<
                   threadId,
                   resourceId,
                   config: memoryConfig,
-                  systemMessage,
-                  vectorMessageSearch: messages
-                    .slice(-1)
-                    .map(m => {
-                      if (typeof m === `string`) {
-                        return m;
-                      }
-                      return m?.content || ``;
-                    })
-                    .join(`\n`),
+                  // systemMessage: coreSystemMessage, // systemMessage is already in messageList
+                  vectorMessageSearch: lastUserMessageContent,
                 })
-                .then(r => r.messages),
+                .then(r => r.messages), // rememberMessages should return CoreMessage[] or adaptable
               memory.getSystemMessage({ threadId, memoryConfig }),
             ])
           : [[], null];
 
-      this.logger.debug('Saved messages to memory', {
+      this.logger.debug('Fetched messages from memory', {
         threadId,
         runId,
+        fetchedCount: memoryMessages.length,
       });
 
-      const processedMessages = memory.processMessages({
-        messages: this.sanitizeResponseMessages(memoryMessages),
-        newMessages,
-        systemMessage: typeof systemMessage?.content === `string` ? systemMessage.content : undefined,
-        memorySystemMessage: memorySystemMessage ?? ``,
-      });
+      // Clear the list and repopulate. System message first, then processed history, then current user messages.
+      // This is a temporary strategy. Ideally, processMessages would integrate better.
+      const originalSystemMessage = allUIMessages.find(m => m.role === 'system');
+      messageList.getMessages().length = 0; // Clear the list
+
+      if (originalSystemMessage) {
+        messageList.add(originalSystemMessage);
+      }
+      if (memorySystemMessage) {
+        messageList.add({ role: 'system', content: memorySystemMessage });
+      }
+
+      // Add historical messages fetched from memory
+      // These should be in a format MessageList can add (e.g., CoreMessage[] or MastraMessageV2[])
+      messageList.add(memoryMessages);
+
+      // Add back the current user messages that were originally in the list.
+      // This ensures they are present for the LLM call after memory processing.
+      // This assumes currentUserMessages are CoreMessage[] or compatible.
+      messageList.add(currentUserMessages);
+
+      // TODO: Re-evaluate memory.processMessages. For now, we are adding raw memory messages 
+      // and current user messages. If processMessages is still needed, its role needs to be clarified
+      // in the context of MessageList handling most transformations.
+      // const processedMessages = memory.processMessages({
+      //   messages: memoryMessages, // Historical messages
+      //   newMessages: currentUserMessages, // Current turn messages
+      //   systemMessage: typeof coreSystemMessage?.content === `string` ? coreSystemMessage.content : undefined,
+      //   memorySystemMessage: memorySystemMessage ?? ``,
+      // });
+      // messageList.add(processedMessages); // Add processed messages
 
       return {
         threadId: thread.id,
-        messages: [
-          memorySystemMessage
-            ? {
-                role: 'system' as const,
-                content: memorySystemMessage,
-              }
-            : null,
-          ...processedMessages,
-          ...newMessages,
-        ].filter((message): message is NonNullable<typeof message> => Boolean(message)),
       };
     }
 
-    return { threadId: threadId || '', messages: userMessages };
+    return { threadId: threadId || '' };
   }
 
-  private getResponseMessages({
-    messages,
-    threadId,
-    resourceId,
-    now,
-    experimental_generateMessageId,
-  }: {
-    messages: (CoreMessage | CoreAssistantMessage)[];
-    threadId: string;
-    resourceId: string;
-    now: number;
-    experimental_generateMessageId: any;
-  }) {
-    if (!messages) return [];
-    const messagesArray = Array.isArray(messages) ? messages : [messages];
-
-    return this.sanitizeResponseMessages(messagesArray).map((message: CoreMessage | CoreAssistantMessage, index) => {
-      const messageId = (`id` in message && message.id) || experimental_generateMessageId?.() || randomUUID();
-      let toolCallIds: string[] | undefined;
-      let toolCallArgs: Record<string, unknown>[] | undefined;
-      let toolNames: string[] | undefined;
-      let type: 'text' | 'tool-call' | 'tool-result' = 'text';
-
-      if (message.role === 'tool') {
-        toolCallIds = (message as CoreToolMessage).content.map(content => content.toolCallId);
-        type = 'tool-result';
-      }
-      if (message.role === 'assistant') {
-        const assistantContent = (message as CoreAssistantMessage).content as Array<TextPart | ToolCallPart>;
-
-        const assistantToolCalls = assistantContent
-          .map(content => {
-            if (content.type === 'tool-call') {
-              return {
-                toolCallId: content.toolCallId,
-                toolArgs: content.args,
-                toolName: content.toolName,
-              };
-            }
-            return undefined;
-          })
-          ?.filter(Boolean) as Array<{
-          toolCallId: string;
-          toolArgs: Record<string, unknown>;
-          toolName: string;
-        }>;
-
-        toolCallIds = assistantToolCalls?.map(toolCall => toolCall.toolCallId);
-
-        toolCallArgs = assistantToolCalls?.map(toolCall => toolCall.toolArgs);
-        toolNames = assistantToolCalls?.map(toolCall => toolCall.toolName);
-        type = assistantContent?.[0]?.type as 'text' | 'tool-call' | 'tool-result';
-      }
-
-      return {
-        id: messageId,
-        threadId: threadId,
-        resourceId: resourceId,
-        role: message.role as any,
-        content: message.content as any,
-        createdAt: new Date(now + index), // use Date.now() + index to make sure every message is atleast one millisecond apart
-        toolCallIds: toolCallIds?.length ? toolCallIds : undefined,
-        toolCallArgs: toolCallArgs?.length ? toolCallArgs : undefined,
-        toolNames: toolNames?.length ? toolNames : undefined,
-        type,
-      };
-    });
-  }
-
-  sanitizeResponseMessages(messages: Array<CoreMessage>): Array<CoreMessage> {
-    let toolResultIds: Array<string> = [];
-    let toolCallIds: Array<string> = [];
-
-    for (const message of messages) {
-      if (!Array.isArray(message.content)) continue;
-
-      if (message.role === 'tool') {
-        for (const content of message.content) {
-          if (content.type === 'tool-result') {
-            toolResultIds.push(content.toolCallId);
-          }
-        }
-      } else if (message.role === 'assistant' || message.role === 'user') {
-        for (const content of message.content) {
-          if (typeof content !== `string`) {
-            if (content.type === `tool-call`) {
-              toolCallIds.push(content.toolCallId);
-            }
-          }
-        }
-      }
-    }
-
-    const messagesBySanitizedContent = messages.map(message => {
-      if (message.role !== 'assistant' && message.role !== `tool` && message.role !== `user`) return message;
-
-      if (!Array.isArray(message.content)) {
-        return message;
-      }
-
-      const sanitizedContent = message.content.filter(content => {
-        if (content.type === `tool-call`) {
-          return toolResultIds.includes(content.toolCallId);
-        }
-        if (content.type === `text`) {
-          return content.text.trim() !== ``;
-        }
-        if (content.type === `tool-result`) {
-          return toolCallIds.includes(content.toolCallId);
-        }
-        return true;
-      });
-
-      return {
-        ...message,
-        content: sanitizedContent,
-      };
-    });
-
-    return messagesBySanitizedContent.filter(message => {
-      if (typeof message.content === `string`) {
-        if (message.role === 'assistant') {
-          return true;
-        }
-        return message.content !== '';
-      }
-
-      if (Array.isArray(message.content)) {
-        return (
-          message.content.length &&
-          message.content.every(c => {
-            if (c.type === `text`) {
-              return c.text && c.text !== '';
-            }
-            return true;
-          })
-        );
-      }
-
-      return true;
-    }) as Array<CoreMessage>;
-  }
 
   private async getMemoryTools({
     runId,
@@ -1030,33 +889,27 @@ export class Agent<
     threadId,
     thread,
     memoryConfig,
-    messages,
-    systemMessage,
+    messageList, // Changed from messages to messageList
   }: {
     runId?: string;
     threadId: string;
     thread?: StorageThreadType;
     memoryConfig?: MemoryConfig;
-    messages: CoreMessage[];
     resourceId: string;
-    systemMessage: CoreMessage;
+    messageList: MessageList; // Changed from CoreMessage[] to MessageList
+    // systemMessage is no longer needed here as it's already in messageList
   }) {
-    let coreMessages: CoreMessage[] = [];
-    let threadIdToUse = threadId;
-
-    this.logger.debug(`Saving user messages in memory for agent ${this.name}`, { runId });
-    const saveMessageResponse = await this.fetchMemory({
+    this.logger.debug(`Fetching and processing memory for agent ${this.name}`, { runId });
+    const fetchMemoryResult = await this.fetchMemory({
       threadId,
       thread,
       resourceId,
-      userMessages: messages,
       memoryConfig,
-      systemMessage,
+      messageList, // Pass the messageList instance
+      runId,
     });
 
-    coreMessages = saveMessageResponse.messages;
-    threadIdToUse = saveMessageResponse.threadId;
-    return { coreMessages, threadIdToUse };
+    return { threadIdToUse: fetchMemoryResult.threadId };
   }
 
   __primitive({
@@ -1079,7 +932,7 @@ export class Agent<
     memoryConfig?: MemoryConfig;
     context?: CoreMessage[];
     runId?: string;
-    messages: CoreMessage[];
+    messages: string | string[] | CoreMessage[] | AiMessageType[];
     runtimeContext: RuntimeContext;
   }) {
     return {
@@ -1093,9 +946,16 @@ export class Agent<
           content: instructions || `${this.instructions}.`,
         };
 
-        let coreMessages = messages;
         let threadIdToUse = threadId;
         let thread: StorageThreadType | null | undefined;
+
+        const messageList = new MessageList({ threadId: threadIdToUse, resourceId });
+        messageList.add(systemMessage);
+        if (context) {
+          messageList.add(context);
+        }
+        // Add current turn's user messages BEFORE memory processing
+        messageList.add(messages);
 
         const memory = this.getMemory();
 
@@ -1126,20 +986,25 @@ export class Agent<
             });
           }
           threadIdToUse = thread.id;
+          // Update messageList's internal memoryInfo if threadId changed (e.g. new thread created)
+          if (threadIdToUse !== messageList['memoryInfo']?.threadId) {
+            messageList['memoryInfo'] = { threadId: threadIdToUse, resourceId };
+          }
 
+          // preExecute now modifies messageList in place
           const preExecuteResult = await this.preExecute({
             resourceId,
             runId,
             threadId: threadIdToUse,
             thread,
             memoryConfig,
-            messages,
-            systemMessage,
+            messageList, // Pass the messageList instance which now includes current user messages
           });
-
-          coreMessages = preExecuteResult.coreMessages;
+          // threadIdToUse might be updated by preExecute if a new thread was created
           threadIdToUse = preExecuteResult.threadIdToUse;
-        }
+
+        } 
+        // If memory is not used, current turn's messages are already in messageList from the add call before the memory block.
 
         let convertedTools: Record<string, CoreTool> | undefined;
 
@@ -1167,9 +1032,10 @@ export class Agent<
           runtimeContext,
         });
 
-        const messageObjects = [systemMessage, ...(context || []), ...coreMessages];
+        // Get messages in UIMessage format for the AI SDK
+        const messageObjects = messageList.toUIMessages();
 
-        return { messageObjects, convertedTools, threadId: threadIdToUse as string, thread };
+        return { messageObjects, convertedTools, threadId: threadIdToUse as string, thread, messageListInstance: messageList };
       },
       after: async ({
         result,
@@ -1179,6 +1045,7 @@ export class Agent<
         outputText,
         runId,
         experimental_generateMessageId,
+        messageListInstance, // Added messageListInstance
       }: {
         runId: string;
         result: Record<string, any>;
@@ -1187,6 +1054,7 @@ export class Agent<
         memoryConfig: MemoryConfig | undefined;
         outputText: string;
         experimental_generateMessageId: any;
+        messageListInstance: MessageList; // Added messageListInstance type
       }) => {
         const resToLog = {
           text: result?.text,
@@ -1215,26 +1083,25 @@ export class Agent<
 
         if (memory && resourceId && thread) {
           try {
-            const userMessage = this.getMostRecentUserMessage(messages);
-            const now = Date.now();
-            const threadMessages = this.sanitizeResponseMessages(ensureAllMessagesAreCoreMessages(messages)).map(
-              (u, index) => {
-                return {
-                  id:
-                    (`id` in u && u.id) || experimental_generateMessageId
-                      ? experimental_generateMessageId()
-                      : this.getMemory()?.generateId()!,
-                  createdAt: new Date(now + index),
-                  threadId: thread.id,
-                  resourceId: resourceId,
-                  ...u,
-                  content: u.content as UserContent | AssistantContent,
-                  role: u.role as 'user' | 'assistant',
-                  type: 'text' as 'text' | 'tool-call' | 'tool-result',
-                };
-              },
-            );
-            const dateResponseMessagesFrom = (threadMessages.at(-1)?.createdAt?.getTime?.() || Date.now()) + 1;
+            const userMessage = this.getMostRecentUserMessage(messageListInstance.toUIMessages());
+            // Add LLM response messages to the list
+            let responseMessages = result.response.messages;
+            if (!responseMessages && result.object) {
+              responseMessages = [
+                {
+                  role: 'assistant',
+                  content: [
+                    {
+                      type: 'text',
+                      text: outputText, // outputText contains the stringified object
+                    },
+                  ],
+                },
+              ];
+            }
+            if (responseMessages) {
+              messageListInstance.add(responseMessages);
+            }
 
             // renaming the thread doesn't need to block finishing the req
             void (async () => {
@@ -1256,31 +1123,9 @@ export class Agent<
                 metadata: thread.metadata,
               });
             })();
-            let responseMessages = result.response.messages;
-            if (!responseMessages && result.object) {
-              responseMessages = [
-                {
-                  role: 'assistant',
-                  content: [
-                    {
-                      type: 'text',
-                      text: outputText,
-                    },
-                  ],
-                },
-              ];
-            }
+
             await memory.saveMessages({
-              messages: [
-                ...threadMessages,
-                ...this.getResponseMessages({
-                  threadId,
-                  resourceId,
-                  messages: responseMessages,
-                  now: dateResponseMessagesFrom,
-                  experimental_generateMessageId,
-                }),
-              ],
+              messages: messageListInstance.getMessages(), // Save messages from MessageList
               memoryConfig,
             });
           } catch (e) {
@@ -1355,28 +1200,6 @@ export class Agent<
       ...rest
     }: AgentGenerateOptions<Z> = Object.assign({}, this.#defaultGenerateOptions, generateOptions);
 
-    let messagesToUse: CoreMessage[] = [];
-
-    if (typeof messages === `string`) {
-      messagesToUse = [
-        {
-          role: 'user',
-          content: messages,
-        },
-      ];
-    } else if (Array.isArray(messages)) {
-      messagesToUse = messages.map(message => {
-        if (typeof message === `string`) {
-          return {
-            role: 'user',
-            content: message,
-          };
-        }
-        return message as CoreMessage;
-      });
-    } else {
-      messagesToUse = [messages];
-    }
 
     const runIdToUse = runId || randomUUID();
     const instructionsToUse = instructions || (await this.getInstructions({ runtimeContext }));
@@ -1553,27 +1376,6 @@ export class Agent<
     const runIdToUse = runId || randomUUID();
     const instructionsToUse = instructions || (await this.getInstructions({ runtimeContext }));
     const llm = await this.getLLM({ runtimeContext });
-
-    let messagesToUse: CoreMessage[] = [];
-
-    if (typeof messages === `string`) {
-      messagesToUse = [
-        {
-          role: 'user',
-          content: messages,
-        },
-      ];
-    } else {
-      messagesToUse = messages.map(message => {
-        if (typeof message === `string`) {
-          return {
-            role: 'user',
-            content: message,
-          };
-        }
-        return message as CoreMessage;
-      });
-    }
 
     const { before, after } = this.__primitive({
       instructions: instructionsToUse,
