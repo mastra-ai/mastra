@@ -1,16 +1,13 @@
-import type { BaseLogMessage } from '@mastra/core/logger';
-import { Logger } from '@mastra/core/logger';
+import type { BaseLogMessage, IMastraLogger } from '@mastra/core/logger';
 import { Mastra } from '@mastra/core/mastra';
 import type { Mock } from 'vitest';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import { getLogsHandler, getLogsByRunIdHandler, getLogTransports } from './logs';
 
-vi.mock('@mastra/core/logger');
-
 type MockedLogger = {
-  getLogsByRunId: Mock<Logger['getLogsByRunId']>;
-  getLogs: Mock<Logger['getLogs']>;
+  getLogsByRunId: Mock<IMastraLogger['getLogsByRunId']>;
+  getLogs: Mock<IMastraLogger['getLogs']>;
 };
 
 function createLog(args: Partial<BaseLogMessage>): BaseLogMessage {
@@ -27,7 +24,7 @@ function createLog(args: Partial<BaseLogMessage>): BaseLogMessage {
 }
 
 describe('Logs Handlers', () => {
-  let mockLogger: Omit<Logger, keyof MockedLogger> &
+  let mockLogger: Omit<IMastraLogger, keyof MockedLogger> &
     MockedLogger & {
       transports: Record<string, unknown>;
     };
@@ -35,10 +32,13 @@ describe('Logs Handlers', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockLogger = new Logger() as any;
+    mockLogger = { getLogsByRunId: vi.fn(), getLogs: vi.fn(), transports: new Map<string, unknown>() } as unknown as MockedLogger & {
+      transports: Record<string, unknown>;
+    };
+    mockLogger.getTransports = vi.fn(() => mockLogger.transports ?? new Map<string, unknown>())
 
     mastra = new Mastra({
-      logger: mockLogger as unknown as Logger,
+      logger: mockLogger as unknown as IMastraLogger,
     });
   });
 
@@ -102,10 +102,7 @@ describe('Logs Handlers', () => {
 
   describe('getLogTransports', () => {
     it('should get log transports successfully', async () => {
-      mockLogger.transports = {
-        console: {},
-        file: {},
-      } as any;
+      mockLogger.transports = new Map([['console', {}], ['file', {}]]) as unknown as Record<string, unknown>;
 
       const result = await getLogTransports({ mastra });
 
@@ -115,7 +112,7 @@ describe('Logs Handlers', () => {
     });
 
     it('should handle empty transports', async () => {
-      mockLogger.transports = {};
+      mockLogger.transports = new Map<string, unknown>();
 
       const result = await getLogTransports({ mastra });
 

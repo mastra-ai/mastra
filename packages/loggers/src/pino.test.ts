@@ -1,7 +1,7 @@
-import { Transform } from 'stream';
+import { LogLevel, LoggerTransport, MultiLogger } from '@mastra/core/logger';
 import { describe, it, expect, beforeEach } from 'vitest';
 
-import { Logger, LogLevel, createLogger, combineLoggers, LoggerTransport } from './index.js';
+import { PinoLogger } from './pino';
 
 // Helper to create a memory stream that captures log output
 class MemoryStream extends LoggerTransport {
@@ -39,10 +39,10 @@ describe('Logger', () => {
   });
 
   describe('Logging Methods', () => {
-    let logger: Logger;
+    let logger: PinoLogger;
 
     beforeEach(() => {
-      logger = new Logger({
+      logger = new PinoLogger({
         transports: {
           memory: memoryStream,
         },
@@ -63,51 +63,23 @@ describe('Logger', () => {
       });
     });
   });
-
-  describe('Stream Creation', () => {
-    it('should create a transform stream', () => {
-      const logger = new Logger();
-      const stream = logger.createStream();
-      expect(stream).toBeInstanceOf(Transform);
-    });
-
-    it('should process chunks correctly in stream', async () => {
-      const logger = new Logger({
-        transports: { memory: memoryStream },
-      });
-      const stream = logger.createStream();
-
-      const testData = 'test data';
-
-      stream.write(testData);
-
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      const logs = await memoryStream.getLogs();
-
-      expect(logs[0]).toMatchObject({
-        msg: testData,
-        level: 'info',
-      });
-    });
-  });
 });
 
 describe('MultiLogger', () => {
   let memoryStream1: MemoryStream;
   let memoryStream2: MemoryStream;
-  let logger1: Logger;
-  let logger2: Logger;
+  let logger1: PinoLogger;
+  let logger2: PinoLogger;
 
   beforeEach(() => {
     memoryStream1 = new MemoryStream();
     memoryStream2 = new MemoryStream();
-    logger1 = createLogger({ transports: { memory: memoryStream1 } });
-    logger2 = createLogger({ transports: { memory: memoryStream2 } });
+    logger1 = new PinoLogger({ transports: { memory: memoryStream1 } });
+    logger2 = new PinoLogger({ transports: { memory: memoryStream2 } });
   });
 
   it('should forward log calls to all loggers', async () => {
-    const multiLogger = combineLoggers([logger1, logger2]);
+    const multiLogger = new MultiLogger([logger1, logger2]);
     const testMessage = 'test message';
 
     multiLogger.info(testMessage);
@@ -130,18 +102,18 @@ describe('createLogger', () => {
   });
 
   it('should create a logger instance', () => {
-    const logger = createLogger({
+    const logger = new PinoLogger({
       transports: {
         memory: memoryStream,
       },
     });
-    expect(logger).toBeInstanceOf(Logger);
+    expect(logger).toBeInstanceOf(PinoLogger);
   });
 
   it('should create a logger with custom options and capture output', async () => {
     const customStream = new MemoryStream();
 
-    const logger = createLogger({
+    const logger = new PinoLogger({
       name: 'custom',
       level: LogLevel.DEBUG,
       transports: {

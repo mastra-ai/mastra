@@ -1,5 +1,5 @@
 import { Mastra } from '@mastra/core';
-import { createLogger } from '@mastra/core/logger';
+import { PinoLogger } from '@mastra/loggers';
 import { createCryptoAgent } from './agents';
 
 export const createMastra = ({
@@ -11,7 +11,7 @@ export const createMastra = ({
 }) =>
   new Mastra({
     agents: { cryptoAgent: createCryptoAgent(modelProvider, modelName) },
-    logger: createLogger({
+    logger: new PinoLogger({
       name: 'CONSOLE',
       level: 'debug',
     }),

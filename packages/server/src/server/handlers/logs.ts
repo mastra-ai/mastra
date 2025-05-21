@@ -41,10 +41,11 @@ export async function getLogsByRunIdHandler({
 export async function getLogTransports({ mastra }: Pick<LogsContext, 'mastra'>) {
   try {
     const logger = mastra.getLogger();
-    const transports = logger.transports;
+    console.log(logger)
+    const transports = logger.getTransports();
 
     return {
-      transports: transports ? Object.keys(transports) : [],
+      transports: transports ? [...transports.keys()] : [],
     };
   } catch (error) {
     return handleError(error, 'Error getting log Transports');

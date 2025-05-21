@@ -1,7 +1,7 @@
 import { jsonSchemaToZod } from 'json-schema-to-zod';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { Logger } from './logger';
+import { ConsoleLogger } from './logger';
 import { RuntimeContext } from './runtime-context';
 import type { InternalCoreTool } from './tools';
 import { createTool } from './tools';
@@ -216,7 +216,7 @@ describe('makeCoreTool', () => {
   });
 
   it('should handle tool execution errors correctly', async () => {
-    const errorSpy = vi.spyOn(Logger.prototype, 'error');
+    const errorSpy = vi.spyOn(ConsoleLogger.prototype, 'error');
     const error = new Error('Test error');
     const mastraTool = createTool({
       id: 'test',
@@ -288,7 +288,7 @@ describe('makeCoreTool', () => {
 });
 
 it('should log correctly for Vercel tool execution', async () => {
-  const debugSpy = vi.spyOn(Logger.prototype, 'debug');
+  const debugSpy = vi.spyOn(ConsoleLogger.prototype, 'debug');
 
   const vercelTool = {
     description: 'test',

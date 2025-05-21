@@ -376,7 +376,7 @@ export const mastra = new Mastra()
       destPath,
       `
 import { Mastra } from '@mastra/core/mastra';
-import { createLogger } from '@mastra/core/logger';
+import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
 ${addWorkflow ? `import { weatherWorkflow } from './workflows/weather-workflow';` : ''}
 ${addAgent ? `import { weatherAgent } from './agents/weather-agent';` : ''}
@@ -387,7 +387,7 @@ export const mastra = new Mastra({
     // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
     url: ":memory:",
   }),
-  logger: createLogger({
+  logger: new PinoLogger({
     name: 'Mastra',
     level: 'info',
   }),

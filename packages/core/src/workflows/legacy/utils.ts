@@ -4,7 +4,7 @@ import type { Mastra } from '../..';
 import type { ToolsInput } from '../../agent';
 import { Agent } from '../../agent';
 import type { Metric } from '../../eval';
-import type { Logger } from '../../logger';
+import type { IMastraLogger } from '../../logger';
 import type { LegacyStep as Step } from './step';
 import type {
   StepAction,
@@ -207,7 +207,7 @@ export function resolveVariables({
   context,
 }: {
   runId: string;
-  logger: Logger;
+  logger: IMastraLogger;
   variables: Record<string, VariableReference<any, any>>;
   context: WorkflowContext;
 }): Record<string, any> {

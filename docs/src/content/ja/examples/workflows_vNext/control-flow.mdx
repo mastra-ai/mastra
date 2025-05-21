@@ -106,7 +106,7 @@ export { workflow as incrementWorkflow };
 
 ```ts showLineNumbers copy filename="index.ts"
 import { Mastra } from "@mastra/core/mastra";
-import { createLogger } from "@mastra/core/logger";
+import { PinoLogger } from "@mastra/loggers";
 import { incrementWorkflow } from "./workflows";
 
 // Initialize Mastra with the increment workflow
@@ -115,7 +115,7 @@ const mastra = new Mastra({
   vnext_workflows: {
     incrementWorkflow,
   },
-  logger: createLogger({
+  logger: new PinoLogger({
     name: "Mastra",
     level: "info",
   }),

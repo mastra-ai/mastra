@@ -19,6 +19,7 @@ pnpm add @mastra/cloud
 The package currently provides OpenTelemetry integration with Mastra Cloud for instrumenting and collecting telemetry data from your applications.
 
 ```typescript
+import { PinoLogger } from '@mastra/loggers';
 import { MastraCloudExporter } from '@mastra/cloud';
 
 // Initialize the exporter with your access token
@@ -31,7 +32,7 @@ const exporter = new MastraCloudExporter({
 // Use with Mastra instance
 export const mastra = new Mastra({
   agents: { agent },
-  logger: createLogger({
+  logger: new PinoLogger({
     name: 'Mastra',
     level: 'info',
   }),
