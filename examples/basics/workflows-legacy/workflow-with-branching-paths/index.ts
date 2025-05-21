@@ -1,7 +1,7 @@
-import { Step, Workflow } from '@mastra/core';
+import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy';
 import { z } from 'zod';
 
-const stepOne = new Step({
+const stepOne = new LegacyStep({
   id: 'stepOne',
   execute: async ({ context }) => {
     const triggerData = context?.triggerData;
@@ -10,35 +10,35 @@ const stepOne = new Step({
   },
 });
 
-const stepTwo = new Step({
+const stepTwo = new LegacyStep({
   id: 'stepTwo',
   execute: async ({ context }) => {
-    const stepOneResult = context?.steps.stepOne.result;
+    const stepOneResult = context?.getStepResult<{ doubledValue: number }>('stepOne');
     const incrementedValue = stepOneResult.doubledValue + 1;
     return { incrementedValue };
   },
 });
 
-const stepThree = new Step({
+const stepThree = new LegacyStep({
   id: 'stepThree',
   execute: async ({ context }) => {
-    const stepTwoResult = context?.steps.stepOne.result;
+    const stepTwoResult = context?.getStepResult<{ incrementedValue: number }>('stepTwo');
     const isEven = stepTwoResult.incrementedValue % 2 === 0;
     return { isEven };
   },
 });
 
-const stepFour = new Step({
+const stepFour = new LegacyStep({
   id: 'stepFour',
   execute: async ({ context }) => {
-    const stepThreeResult = context?.steps.stepThree.result;
+    const stepThreeResult = context?.getStepResult<{ tripledValue: number }>('stepThree');
     const isEven = stepThreeResult.tripledValue % 2 === 0;
     return { isEven };
   },
 });
 
 // Build the workflow
-const myWorkflow = new Workflow({
+const myWorkflow = new LegacyWorkflow({
   name: 'my-workflow',
   triggerSchema: z.object({
     inputValue: z.number(),

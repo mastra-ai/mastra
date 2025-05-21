@@ -28,6 +28,7 @@ import MCPServerToolExecutor from './pages/mcps/tool';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
 import { QueryClient } from '@tanstack/react-query';
+import { McpServerPage } from './pages/mcps/[serverId]';
 
 function App() {
   const [queryClient] = useState(() => new QueryClient());
@@ -84,9 +85,13 @@ function App() {
               <Route path="/tools/:agentId/:toolId" element={<AgentTool />} />
               <Route path="/tools/all/:toolId" element={<Tool />} />
               <Route path="/mcps" element={<MCPs />} />
-              <Route path="/mcps/:serverId/:toolId" element={<MCPServerToolExecutor />} />
+
+              <Route path="/mcps/:serverId" element={<McpServerPage />} />
+              <Route path="/mcps/:serverId/tools/:toolId" element={<MCPServerToolExecutor />} />
+
               <Route path="/workflows" element={<Workflows />} />
               <Route path="/workflows/:workflowId" element={<Navigate to="/workflows/:workflowId/graph" />} />
+
               <Route
                 path="/workflows/:workflowId"
                 element={

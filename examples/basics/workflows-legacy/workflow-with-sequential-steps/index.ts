@@ -1,9 +1,12 @@
-import { Step, Workflow } from '@mastra/core';
+import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy';
 import { z } from 'zod';
 
 async function main() {
-  const stepOne = new Step({
+  const stepOne = new LegacyStep({
     id: 'stepOne',
+    inputSchema: z.object({
+      inputValue: z.number(),
+    }),
     outputSchema: z.object({
       doubledValue: z.number(),
     }),
@@ -15,13 +18,16 @@ async function main() {
     },
   });
 
-  const stepTwo = new Step({
+  const stepTwo = new LegacyStep({
     id: 'stepTwo',
+    inputSchema: z.object({
+      valueToIncrement: z.number(),
+    }),
     outputSchema: z.object({
       incrementedValue: z.number(),
     }),
     execute: async ({ context }) => {
-      const valueToIncrement = context?.getStepResult<{ inputValue: number }>('trigger')?.inputValue;
+      const valueToIncrement = context?.getStepResult<{ doubledValue: number }>('stepOne')?.doubledValue;
       if (!valueToIncrement) throw new Error('No value to increment provided');
       const incrementedValue = valueToIncrement + 1;
       return { incrementedValue };
@@ -29,15 +35,15 @@ async function main() {
   });
 
   // Build the workflow
-  const myWorkflow = new Workflow({
+  const myWorkflow = new LegacyWorkflow({
     name: 'my-workflow',
     triggerSchema: z.object({
       inputValue: z.number(),
     }),
   });
 
-  // run workflows in parallel
-  myWorkflow.step(stepOne).step(stepTwo);
+  // sequential steps
+  myWorkflow.step(stepOne).then(stepTwo);
 
   myWorkflow.commit();
 

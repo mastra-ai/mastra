@@ -1,5 +1,11 @@
 # @mastra/loggers
 
+## 0.2.0-alpha.2
+
+### Patch Changes
+
+- 129b5f5: Add pino to loggers package
+
 ## 0.2.0-alpha.1
 
 ### Minor Changes

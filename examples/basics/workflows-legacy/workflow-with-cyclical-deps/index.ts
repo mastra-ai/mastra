@@ -1,8 +1,8 @@
-import { Step, Workflow } from '@mastra/core';
+import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy';
 import { z } from 'zod';
 
 async function main() {
-  const doubleValue = new Step({
+  const doubleValue = new LegacyStep({
     id: 'doubleValue',
     description: 'Doubles the input value',
     inputSchema: z.object({
@@ -17,7 +17,7 @@ async function main() {
     },
   });
 
-  const incrementByOne = new Step({
+  const incrementByOne = new LegacyStep({
     id: 'incrementByOne',
     description: 'Adds 1 to the input value',
     outputSchema: z.object({
@@ -31,7 +31,7 @@ async function main() {
     },
   });
 
-  const cyclicalWorkflow = new Workflow({
+  const cyclicalWorkflow = new LegacyWorkflow({
     name: 'cyclical-workflow',
     triggerSchema: z.object({
       firstValue: z.number(),
