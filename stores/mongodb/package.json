@@ -21,7 +21,7 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
     "build:watch": "pnpm build --watch",
-    "pretest": "docker compose up -d && (for i in $(seq 1 30); do docker compose exec -T mongodb mongosh --eval 'db.adminCommand(\"ping\")' --quiet && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
+    "pretest": "docker compose up -d --wait",
     "test": "vitest run",
     "posttest": "docker compose down -v",
     "pretest:watch": "docker compose up -d",
