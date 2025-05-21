@@ -9,9 +9,10 @@ import { CodeBlockDemo } from '@/components/ui/code-block';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 export interface WorkflowResultProps {
   jsonResult: string;
+  sanitizedJsonResult?: string | null;
 }
 
-export const WorkflowResult = ({ jsonResult }: WorkflowResultProps) => {
+export const WorkflowResult = ({ jsonResult, sanitizedJsonResult }: WorkflowResultProps) => {
   const { handleCopy } = useCopyToClipboard({ text: jsonResult });
   const [expanded, setExpanded] = useState(false);
 
@@ -50,7 +51,9 @@ export const WorkflowResult = ({ jsonResult }: WorkflowResultProps) => {
         </button>
       }
       children={
-        expanded ? <CodeBlockDemo className="w-full overflow-x-auto" code={jsonResult} language="json" /> : null
+        expanded ? (
+          <CodeBlockDemo className="w-full overflow-x-auto" code={sanitizedJsonResult || jsonResult} language="json" />
+        ) : null
       }
     />
   );

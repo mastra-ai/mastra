@@ -42,7 +42,7 @@ The Mastra class is the core entry point for your application. It manages agents
     {
       name: "logger",
       type: "Logger",
-      description: "Logger instance created with createLogger()",
+      description: "Logger instance created with new PinoLogger()",
       isOptional: true,
       defaultValue: "Console logger with INFO level",
     },
@@ -72,7 +72,7 @@ The Mastra class is typically initialized in your `src/mastra/index.ts` file:
 
 ```typescript copy filename=src/mastra/index.ts
 import { Mastra } from "@mastra/core";
-import { createLogger } from "@mastra/core/logger";
+import { PinoLogger } from "@mastra/loggers";
 
 // Basic initialization
 export const mastra = new Mastra({});
@@ -82,7 +82,7 @@ export const mastra = new Mastra({
   agents: {},
   workflows: [],
   integrations: [],
-  logger: createLogger({
+  logger: new PinoLogger({
     name: "My Project",
     level: "info",
   }),
@@ -177,7 +177,7 @@ You can think of the `Mastra` class as a top-level registry. When you register t
       description:
         "Sets the logger for all components (agents, workflows, etc.).",
       example:
-        'mastra.setLogger({ logger: createLogger({ name: "MyLogger" }) });',
+        'mastra.setLogger({ logger: new PinoLogger({ name: "MyLogger" }) });',
     },
     {
       name: "setTelemetry(telemetry)",

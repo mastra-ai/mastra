@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "5.0.5-alpha.0",
+  "version": "5.1.0",
   "description": "Mastra Playground components",
   "main": "dist/index.umd.js",
   "module": "dist/index.es.js",
@@ -101,7 +101,7 @@
     "zustand": "^5.0.3"
   },
   "peerDependencies": {
-    "@mastra/core": "^0.9.4",
+    "@mastra/core": "^0.10.0",
     "lucide-react": "^0.474.0",
     "react": ">=19.0.0",
     "react-dom": ">=19.0.0",

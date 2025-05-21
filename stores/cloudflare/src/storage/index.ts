@@ -1076,14 +1076,7 @@ export class CloudflareStore extends MastraStorage {
   }
 
   private validateWorkflowState(state: any): void {
-    if (
-      !state?.runId ||
-      !state?.value ||
-      !state?.context?.steps ||
-      !state?.context?.triggerData ||
-      !state?.context?.attempts ||
-      !state?.activePaths
-    ) {
+    if (!state?.runId || !state?.value || !state?.context?.input || !state?.activePaths) {
       throw new Error('Invalid workflow state structure');
     }
   }
@@ -1117,15 +1110,10 @@ export class CloudflareStore extends MastraStorage {
   }
 
   private normalizeWorkflowState(data: any): WorkflowRunState {
-    const steps = data.context?.stepResults || data.context?.steps || {};
     return {
       runId: data.runId,
       value: data.value,
-      context: {
-        steps: this.normalizeSteps(steps),
-        triggerData: data.context?.triggerData || {},
-        attempts: data.context?.attempts || {},
-      },
+      context: data.context,
       suspendedPaths: data.suspendedPaths || {},
       activePaths: data.activePaths || [],
       timestamp: data.timestamp || Date.now(),

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "0.3.5-alpha.0",
+  "version": "0.10.0",
   "description": "",
   "type": "module",
   "files": [
@@ -120,6 +120,7 @@
     "@hono/node-server": "^1.13.8",
     "@hono/swagger-ui": "^0.5.1",
     "@internal/lint": "workspace:*",
+    "@mastra/core": "workspace:*",
     "@mastra/mcp": "workspace:^",
     "@microsoft/api-extractor": "^7.52.5",
     "@types/babel__core": "^7.20.5",
@@ -134,10 +135,9 @@
     "tsup": "^8.4.0",
     "type-fest": "^4.37.0",
     "typescript": "^5.8.2",
-    "vitest": "^2.1.9",
-    "@mastra/core": "workspace:*"
+    "vitest": "^2.1.9"
   },
   "peerDependencies": {
-    "@mastra/core": "^0.9.4"
+    "@mastra/core": "^0.10.0"
   }
 }

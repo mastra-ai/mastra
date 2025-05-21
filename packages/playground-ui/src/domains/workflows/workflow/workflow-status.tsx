@@ -1,35 +1,26 @@
 import { Txt } from '@/ds/components/Txt';
 import { CheckIcon, CrossIcon, Icon } from '@/ds/icons';
-import { Loader2 } from 'lucide-react';
+import { CirclePause, Loader2 } from 'lucide-react';
 import { WorkflowCard } from './workflow-card';
 
 export interface WorkflowStatusProps {
   stepId: string;
-  pathStatus: string;
-  path: string;
+  status: string;
 }
 
-export const WorkflowStatus = ({ stepId, pathStatus, path }: WorkflowStatusProps) => {
-  const status =
-    pathStatus === 'completed'
-      ? 'Completed'
-      : stepId === path
-        ? pathStatus.charAt(0).toUpperCase() + pathStatus.slice(1)
-        : pathStatus === 'executing'
-          ? 'Executing'
-          : 'Completed';
-
+export const WorkflowStatus = ({ stepId, status }: WorkflowStatusProps) => {
   return (
     <WorkflowCard
       header={
         <div className="flex items-center gap-3">
           <Icon>
-            {status === 'Completed' && <CheckIcon className="text-accent1" />}
-            {status === 'Failed' && <CrossIcon className="text-accent2" />}
-            {status === 'Executing' && <Loader2 className="text-icon3 animate-spin" />}
+            {status === 'success' && <CheckIcon className="text-accent1" />}
+            {status === 'failed' && <CrossIcon className="text-accent2" />}
+            {status === 'suspended' && <CirclePause className="text-icon3" />}
+            {status === 'running' && <Loader2 className="text-icon3 animate-spin" />}
           </Icon>
           <Txt as="span" variant="ui-lg" className="text-icon6 font-medium">
-            {path}
+            {stepId.charAt(0).toUpperCase() + stepId.slice(1)}
           </Txt>
         </div>
       }

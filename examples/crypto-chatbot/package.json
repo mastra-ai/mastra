@@ -16,6 +16,7 @@
     "@mastra/core": "latest",
     "@mastra/memory": "latest",
     "@mastra/pg": "latest",
+    "@mastra/loggers": "latest",
     "@next/env": "^15.2.2",
     "@radix-ui/react-alert-dialog": "^1.1.6",
     "@radix-ui/react-dialog": "^1.1.6",
@@ -73,7 +74,8 @@
     "overrides": {
       "@mastra/core": "link:../../packages/core",
       "@mastra/memory": "link:../../packages/memory",
-      "@mastra/pg": "link:../../stores/pg"
+      "@mastra/pg": "link:../../stores/pg",
+      "@mastra/loggers": "link:../../packages/loggers"
     }
   },
   "devDependencies": {

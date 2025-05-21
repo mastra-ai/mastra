@@ -45,14 +45,15 @@ npm install @mastra/deployer-netlify@latest
 エントリーファイルでデプロイヤーを設定します：
 
 ```typescript copy showLineNumbers
-import { Mastra, createLogger } from "@mastra/core";
+import { Mastra } from "@mastra/core";
+imoprt { ConsoleLogger } from "@mastra/core/logger";
 import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
 
 export const mastra = new Mastra({
   agents: {
     /* your agents here */
   },
-  logger: createLogger({ name: "MyApp", level: "debug" }),
+  logger: new ConsoleLogger({ name: "MyApp", level: "debug" }),
   deployer: new CloudflareDeployer({
     scope: "your-cloudflare-scope",
     projectName: "your-project-name",

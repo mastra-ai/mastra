@@ -1,27 +1,26 @@
 import { randomUUID } from 'crypto';
 import { subscribe } from '@inngest/realtime';
-import type { Mastra, VNextWorkflowRun, VNextWorkflowRuns } from '@mastra/core';
+import type { Mastra, WorkflowRun, WorkflowRuns } from '@mastra/core';
 import { RuntimeContext } from '@mastra/core/di';
-import { NewWorkflow, createStep, Run, DefaultExecutionEngine, cloneStep } from '@mastra/core/workflows/vNext';
+import { Workflow, createStep, Run, DefaultExecutionEngine, cloneStep } from '@mastra/core/workflows';
 import type {
   ExecuteFunction,
   ExecutionContext,
   ExecutionEngine,
   ExecutionGraph,
-  NewStep,
-  NewStep as Step,
-  NewWorkflowConfig,
+  Step,
+  WorkflowConfig,
   StepFlowEntry,
   StepResult,
   WorkflowResult,
-} from '@mastra/core/workflows/vNext';
+} from '@mastra/core/workflows';
 import type { Span } from '@opentelemetry/api';
 import type { Inngest, BaseContext } from 'inngest';
 import { serve as inngestServe } from 'inngest/hono';
 import type { z } from 'zod';
 
 export function serve({ mastra, inngest }: { mastra: Mastra; inngest: Inngest }): ReturnType<typeof inngestServe> {
-  const wfs = mastra.vnext_getWorkflows();
+  const wfs = mastra.getWorkflows();
   const functions = Object.values(wfs).flatMap(wf => {
     if (wf instanceof InngestWorkflow) {
       wf.__registerMastra(mastra);
@@ -36,7 +35,7 @@ export function serve({ mastra, inngest }: { mastra: Mastra; inngest: Inngest })
 }
 
 export class InngestRun<
-  TSteps extends NewStep<string, any, any>[] = NewStep<string, any, any>[],
+  TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
   TInput extends z.ZodType<any> = z.ZodType<any>,
   TOutput extends z.ZodType<any> = z.ZodType<any>,
 > extends Run<TSteps, TInput, TOutput> {
@@ -196,18 +195,18 @@ export class InngestRun<
 }
 
 export class InngestWorkflow<
-  TSteps extends NewStep<string, any, any>[] = NewStep<string, any, any>[],
+  TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
   TWorkflowId extends string = string,
   TInput extends z.ZodType<any> = z.ZodType<any>,
   TOutput extends z.ZodType<any> = z.ZodType<any>,
   TPrevSchema extends z.ZodType<any> = TInput,
-> extends NewWorkflow<TSteps, TWorkflowId, TInput, TOutput, TPrevSchema> {
+> extends Workflow<TSteps, TWorkflowId, TInput, TOutput, TPrevSchema> {
   #mastra: Mastra;
   public inngest: Inngest;
 
   private function: ReturnType<Inngest['createFunction']> | undefined;
 
-  constructor(params: NewWorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>, inngest: Inngest) {
+  constructor(params: WorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>, inngest: Inngest) {
     super(params);
     this.#mastra = params.mastra!;
     this.inngest = inngest;
@@ -226,22 +225,20 @@ export class InngestWorkflow<
       return { runs: [], total: 0 };
     }
 
-    return storage.getWorkflowRuns({ workflowName: this.id, ...(args ?? {}) }) as unknown as VNextWorkflowRuns;
+    return storage.getWorkflowRuns({ workflowName: this.id, ...(args ?? {}) }) as unknown as WorkflowRuns;
   }
 
-  async getWorkflowRunById(runId: string): Promise<VNextWorkflowRun | null> {
+  async getWorkflowRunById(runId: string): Promise<WorkflowRun | null> {
     const storage = this.#mastra?.getStorage();
     if (!storage) {
       this.logger.debug('Cannot get workflow runs. Mastra engine is not initialized');
       return null;
     }
-    const run = (await storage.getWorkflowRunById({ runId, workflowName: this.id })) as unknown as VNextWorkflowRun;
+    const run = (await storage.getWorkflowRunById({ runId, workflowName: this.id })) as unknown as WorkflowRun;
 
     return (
       run ??
-      (this.runs.get(runId)
-        ? ({ ...this.runs.get(runId), workflowName: this.id } as unknown as VNextWorkflowRun)
-        : null)
+      (this.runs.get(runId) ? ({ ...this.runs.get(runId), workflowName: this.id } as unknown as WorkflowRun) : null)
     );
   }
 
@@ -396,7 +393,7 @@ export function init(inngest: Inngest) {
       TInput extends z.ZodType<any> = z.ZodType<any>,
       TOutput extends z.ZodType<any> = z.ZodType<any>,
       TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
-    >(params: NewWorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>) {
+    >(params: WorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>) {
       return new InngestWorkflow(params, inngest);
     },
     createStep,

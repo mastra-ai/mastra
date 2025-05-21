@@ -1,6 +1,6 @@
 'use client';
 
-import { Network, Globe, Server, ArrowLeftFromLine, Book } from 'lucide-react';
+import { Network, Globe, ArrowLeftFromLine, Book } from 'lucide-react';
 import { Link, useLocation } from 'react-router';
 
 import {
@@ -16,7 +16,7 @@ import {
   SidebarRail,
   useSidebar,
 } from '@/components/ui/sidebar';
-import { AgentIcon, GithubIcon, Icon, ToolsIcon, WorkflowIcon } from '@mastra/playground-ui';
+import { AgentIcon, GithubIcon, Icon, McpServerIcon, ToolsIcon, WorkflowIcon } from '@mastra/playground-ui';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip';
 import clsx from 'clsx';
@@ -133,7 +133,7 @@ const links = [
   {
     name: 'MCP Servers',
     url: '/mcps',
-    icon: Server,
+    icon: McpServerIcon,
   },
   {
     name: 'Workflows',

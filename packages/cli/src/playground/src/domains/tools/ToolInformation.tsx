@@ -1,8 +1,4 @@
-import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-
-import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import { Icon, Txt, ToolsIcon, Badge } from '@mastra/playground-ui';
-import { CopyIcon } from 'lucide-react';
+import { Icon, Txt, ToolsIcon } from '@mastra/playground-ui';
 
 export interface ToolInformationProps {
   toolDescription: string;
@@ -10,7 +6,6 @@ export interface ToolInformationProps {
 }
 
 export const ToolInformation = ({ toolDescription, toolId }: ToolInformationProps) => {
-  const { handleCopy } = useCopyToClipboard({ text: toolId });
   return (
     <div className="p-5 border-b-sm border-border1">
       <div className="text-icon6 flex gap-2">
@@ -30,19 +25,6 @@ export const ToolInformation = ({ toolDescription, toolId }: ToolInformationProp
             </Txt>
           </div>
         </div>
-      </div>
-
-      <div className="pl-8 pt-1">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button onClick={handleCopy} className="h-badge-default">
-              <Badge icon={<CopyIcon />} variant="default">
-                {toolId}
-              </Badge>
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>Copy Tool ID for use in code</TooltipContent>
-        </Tooltip>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.6.4-alpha.0",
+  "version": "0.10.0",
   "license": "Elastic-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -52,6 +52,7 @@
     "@clack/prompts": "^0.8.2",
     "@lukeed/uuid": "^2.0.1",
     "@mastra/deployer": "workspace:^",
+    "@mastra/loggers": "workspace:^",
     "@mastra/mcp": "workspace:^",
     "@opentelemetry/instrumentation": "^0.57.2",
     "@webcontainer/env": "^1.1.1",
@@ -96,6 +97,6 @@
     "vitest": "^3.1.2"
   },
   "peerDependencies": {
-    "@mastra/core": "^0.9.4"
+    "@mastra/core": "^0.10.0"
   }
 }

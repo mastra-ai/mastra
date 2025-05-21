@@ -92,7 +92,7 @@ MastraのカスタムAPIルートを活用して、CopilotKitのランタイム�
 
 ```typescript copy
 import { Mastra } from "@mastra/core/mastra";
-import { createLogger } from "@mastra/core/logger";
+import { PinoLogger } from "@mastra/loggers";
 import { LibSQLStore } from "@mastra/libsql";
 import { registerApiRoute } from "@mastra/core/server";
 import {
@@ -112,7 +112,7 @@ export const mastra = new Mastra({
     // if you need to persist, change to file:../mastra.db
     url: ":memory:",
   }),
-  logger: createLogger({
+  logger: new PinoLogger({
     name: "Mastra",
     level: "info",
   }),

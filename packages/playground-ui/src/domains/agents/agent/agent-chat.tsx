@@ -31,7 +31,7 @@ export const AgentChat = ({
       runtimeContext={runtimeContext}
     >
       <div className="h-full pb-4 bg-surface1">
-        <Thread agentName={agentName ?? ''} />
+        <Thread agentName={agentName ?? ''} hasMemory={memory} />
       </div>
     </MastraRuntimeProvider>
   );

@@ -1,4 +1,3 @@
-import type { Workflow } from '@mastra/core/workflows';
 import {
   ReactFlow,
   MiniMap,
@@ -10,19 +9,16 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { contructNodesAndEdges, WStep } from './utils';
+import { constructNodesAndEdges } from './utils';
 import { WorkflowConditionNode } from './workflow-condition-node';
 import { WorkflowDefaultNode } from './workflow-default-node';
 import { WorkflowAfterNode } from './workflow-after-node';
 import { WorkflowLoopResultNode } from './workflow-loop-result-node';
 import { WorkflowNestedNode } from './workflow-nested-node';
+import { GetWorkflowResponse } from '@mastra/client-js';
 
-export function WorkflowGraphInner({ workflow }: { workflow: Workflow }) {
-  const { nodes: initialNodes, edges: initialEdges } = contructNodesAndEdges({
-    stepGraph: workflow.serializedStepGraph || workflow.stepGraph,
-    stepSubscriberGraph: workflow.serializedStepSubscriberGraph || workflow.stepSubscriberGraph,
-    steps: workflow.steps as WStep,
-  });
+export function WorkflowGraphInner({ workflow }: { workflow: GetWorkflowResponse }) {
+  const { nodes: initialNodes, edges: initialEdges } = constructNodesAndEdges(workflow);
   const [nodes, _, onNodesChange] = useNodesState(initialNodes);
   const [edges] = useEdgesState(initialEdges);
 

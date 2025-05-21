@@ -1,5 +1,5 @@
 import { client } from '@/lib/client';
-import type { BaseLogMessage } from '@mastra/core';
+import type { BaseLogMessage } from '@mastra/core/logger';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 

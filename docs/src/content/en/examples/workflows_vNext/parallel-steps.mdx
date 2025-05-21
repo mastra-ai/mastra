@@ -361,7 +361,7 @@ This is critical for enabling access to the agents within the workflow.
 
 ```ts showLineNumbers copy filename="index.ts"
 import { Mastra } from '@mastra/core/mastra'
-import { createLogger } from '@mastra/core/logger'
+import { PinoLogger } from '@mastra/loggers'
 import { activityPlanningWorkflow } from './workflows/parallel-workflow'
 import { planningAgent } from './agents/planning-agent'
 import { synthesizeAgent } from './agents/synthesize-agent'
@@ -376,7 +376,7 @@ const mastra = new Mastra({
     planningAgent,
     synthesizeAgent,
   },
-  logger: createLogger({
+  logger: new PinoLogger({
     name: "Mastra",
     level: "info",
   }),

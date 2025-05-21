@@ -1,5 +1,5 @@
 import { Integration } from '@mastra/core/integration';
-import { Step, Workflow } from '@mastra/core/workflows';
+import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 
 import type * as integrationClient from './client/sdk.gen';
@@ -25,20 +25,45 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
       config: this.config,
     });
 
-    const crawlAndSyncWorkflow = new Workflow({
-      name: 'Crawl and Sync',
-      triggerSchema: z.object({
+    const crawlAndSyncWorkflow = createWorkflow({
+      id: 'Crawl and Sync',
+      inputSchema: z.object({
         url: z.string(),
         limit: z.number().default(3),
         pathRegex: z.string().nullable(),
       }),
+      outputSchema: z.object({
+        success: z.boolean(),
+        crawlData: z.array(z.object({
+          markdown: z.string(),
+          metadata: z.object({
+            sourceURL: z.string(),
+          }),
+        })),
+        entityType: z.string(),
+      }),
     });
 
-    const syncStep = new Step({
+    const syncStep = createStep({
       id: 'FIRECRAWL:CRAWL_AND_SYNC',
       description: 'Crawl and Sync',
-      execute: async ({ context }) => {
-        const triggerData = context?.triggerData;
+      inputSchema: z.object({
+        url: z.string(),
+        limit: z.number().default(3),
+        pathRegex: z.string().nullable(),
+      }),
+      outputSchema: z.object({
+        success: z.boolean(),
+        crawlData: z.array(z.object({
+          markdown: z.string(),
+          metadata: z.object({
+            sourceURL: z.string(),
+          }),
+        })),
+        entityType: z.string(),
+      }),
+      execute: async ({ inputData  }) => {
+        const triggerData = inputData;
         console.log('Starting crawl', triggerData?.url);
 
         const entityType = `CRAWL_${triggerData?.url}`;
@@ -115,7 +140,7 @@ export class FirecrawlIntegration extends Integration<void, typeof integrationCl
       },
     });
 
-    crawlAndSyncWorkflow.step(syncStep).commit();
+    crawlAndSyncWorkflow.then(syncStep).commit();
 
     this.registerWorkflow('FIRECRAWL:CRAWL_AND_SYNC', crawlAndSyncWorkflow);
   }

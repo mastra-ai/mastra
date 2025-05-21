@@ -1,22 +1,27 @@
 import { useState } from 'react';
 
-import { Badge, Icon, Txt, VNextWorkflowTrigger, WorkflowIcon, WorkflowTrigger } from '@mastra/playground-ui';
+import { Badge, Icon, Txt, LegacyWorkflowTrigger, WorkflowIcon, WorkflowTrigger } from '@mastra/playground-ui';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 import { WorkflowEndpoints } from './workflow-endpoints';
 import { WorkflowLogs } from './workflow-logs';
-import { useWorkflow } from '@/hooks/use-workflows';
+import { useLegacyWorkflow, useWorkflow } from '@/hooks/use-workflows';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CopyIcon } from 'lucide-react';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 
-export function WorkflowInformation({ workflowId, isVNext }: { workflowId: string; isVNext?: boolean }) {
-  const { workflow, isLoading } = useWorkflow(workflowId);
+export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: string; isLegacy?: boolean }) {
+  const { workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId, !isLegacy);
+  const { legacyWorkflow, isLoading: isLegacyWorkflowLoading } = useLegacyWorkflow(workflowId, !!isLegacy);
+
   const [runId, setRunId] = useState<string>('');
   const { handleCopy } = useCopyToClipboard({ text: workflowId });
 
   const stepsCount = Object.keys(workflow?.steps ?? {}).length;
+
+  const isLoading = isLegacy ? isLegacyWorkflowLoading : isWorkflowLoading;
+  const workflowToUse = isLegacy ? legacyWorkflow : workflow;
 
   return (
     <div className="h-full overflow-y-scroll pb-5">
@@ -29,9 +34,21 @@ export function WorkflowInformation({ workflowId, isVNext }: { workflowId: strin
           {isLoading ? (
             <Skeleton className="h-3 w-1/3" />
           ) : (
-            <Txt variant="header-md" as="h2" className="font-medium">
-              {workflow?.name}
-            </Txt>
+            <div className="flex items-center gap-4">
+              <Txt variant="header-md" as="h2" className="font-medium">
+                {workflowToUse?.name}
+              </Txt>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button onClick={handleCopy}>
+                    <Icon className="transition-colors hover:bg-surface4 rounded-lg text-icon3 hover:text-icon6">
+                      <CopyIcon />
+                    </Icon>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Copy Workflow ID for use in code</TooltipContent>
+              </Tooltip>
+            </div>
           )}
         </div>
 
@@ -74,8 +91,8 @@ export function WorkflowInformation({ workflowId, isVNext }: { workflowId: strin
         <TabsContent value="run">
           {workflowId ? (
             <>
-              {isVNext ? (
-                <VNextWorkflowTrigger workflowId={workflowId} setRunId={setRunId} baseUrl="" />
+              {isLegacy ? (
+                <LegacyWorkflowTrigger workflowId={workflowId} setRunId={setRunId} baseUrl="" />
               ) : (
                 <WorkflowTrigger workflowId={workflowId} setRunId={setRunId} baseUrl="" />
               )}
@@ -83,7 +100,7 @@ export function WorkflowInformation({ workflowId, isVNext }: { workflowId: strin
           ) : null}
         </TabsContent>
         <TabsContent value="endpoints">
-          <WorkflowEndpoints workflowId={workflowId} isVNext={isVNext} />
+          <WorkflowEndpoints workflowId={workflowId} isLegacy={isLegacy} />
         </TabsContent>
         <TabsContent value="logs">
           <WorkflowLogs runId={runId} />
