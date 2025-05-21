@@ -1,4 +1,4 @@
-import type { Logger } from '@mastra/core';
+import type { IMastraLogger } from '@mastra/core/logger';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
@@ -72,7 +72,7 @@ async function analyze(
   mastraEntry: string,
   isVirtualFile: boolean,
   platform: 'node' | 'browser',
-  logger: Logger,
+  logger: IMastraLogger,
 ) {
   logger.info('Analyzing dependencies...');
   let virtualPlugin = null;
@@ -165,12 +165,7 @@ async function analyze(
  * @param logger - Logger instance for debugging
  * @returns Object containing bundle output and reference map for validation
  */
-async function bundleExternals(
-  depsToOptimize: Map<string, string[]>,
-  outputDir: string,
-  logger: Logger,
-  customExternals?: string[],
-) {
+async function bundleExternals(depsToOptimize: Map<string, string[]>, outputDir: string, logger: IMastraLogger) {
   logger.info('Optimizing dependencies...');
   logger.debug(
     `${Array.from(depsToOptimize.keys())
@@ -303,7 +298,7 @@ async function validateOutput(
     usedExternals: Record<string, Record<string, string>>;
     outputDir: string;
   },
-  logger: Logger,
+  logger: IMastraLogger,
 ) {
   const result = {
     invalidChunks: new Set<string>(),
@@ -373,7 +368,7 @@ export async function analyzeBundle(
   mastraEntry: string,
   outputDir: string,
   platform: 'node' | 'browser',
-  logger: Logger,
+  logger: IMastraLogger,
 ) {
   const isVirtualFile = entry.includes('\n') || !existsSync(entry);
 

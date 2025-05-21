@@ -612,7 +612,7 @@ Add the following code:
 
 ```ts filename="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core";
-import { createLogger } from "@mastra/core/logger";
+import { PinoLogger } from "@mastra/loggers";
 import { LibSQLStore } from "@mastra/libsql";
 import { weatherWorkflow } from "./agents/weather-workflow";
 import { weatherAgent } from "./agents/weather-agent";
@@ -624,7 +624,7 @@ export const mastra = new Mastra({
     // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
     url: ":memory:",
   }),
-  logger: createLogger({
+  logger: new PinoLogger({
     name: "Mastra",
     level: "info",
   }),

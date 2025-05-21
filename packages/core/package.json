@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "0.9.5-alpha.0",
+  "version": "0.10.0-alpha.1",
   "license": "Elastic-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -30,34 +30,14 @@
         "default": "./dist/*/index.cjs"
       }
     },
-    "./workflows/vNext": {
+    "./workflows/legacy": {
       "import": {
-        "types": "./dist/workflows/vNext/index.d.ts",
-        "default": "./dist/workflows/vNext/index.js"
+        "types": "./dist/workflows/legacy/index.d.ts",
+        "default": "./dist/workflows/legacy/index.js"
       },
       "require": {
-        "types": "./dist/workflows/vNext/index.d.cts",
-        "default": "./dist/workflows/vNext/index.cjs"
-      }
-    },
-    "./storage/libsql": {
-      "import": {
-        "types": "./dist/storage/libsql/index.d.ts",
-        "default": "./dist/storage/libsql/index.js"
-      },
-      "require": {
-        "types": "./dist/storage/libsql/index.d.cts",
-        "default": "./dist/storage/libsql/index.cjs"
-      }
-    },
-    "./vector/libsql": {
-      "import": {
-        "types": "./dist/vector/libsql/index.d.ts",
-        "default": "./dist/vector/libsql/index.js"
-      },
-      "require": {
-        "types": "./dist/vector/libsql/index.d.cts",
-        "default": "./dist/vector/libsql/index.cjs"
+        "types": "./dist/workflows/legacy/index.d.cts",
+        "default": "./dist/workflows/legacy/index.cjs"
       }
     },
     "./vector/filter": {
@@ -114,7 +94,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@libsql/client": "^0.14.0",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/auto-instrumentations-node": "^0.59.0",
     "@opentelemetry/core": "^2.0.1",
@@ -133,7 +112,6 @@
     "cohere-ai": "^7.16.0",
     "date-fns": "^3.6.0",
     "dotenv": "^16.4.7",
-    "fastembed": "^1.14.4",
     "hono": "^4.5.1",
     "hono-openapi": "^0.4.6",
     "json-schema": "^0.4.0",

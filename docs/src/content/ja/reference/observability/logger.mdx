@@ -5,13 +5,13 @@ description: さまざまな重大度レベルでイベントを記録するた�
 
 # Loggerインスタンス
 
-Loggerインスタンスは`createLogger()`によって作成され、さまざまな重大度レベルでイベントを記録するためのメソッドを提供します。Loggerの種類によって、メッセージはコンソール、ファイル、または外部サービスに書き込まれる場合があります。
+Loggerインスタンスは`new PinoLogger()`によって作成され、さまざまな重大度レベルでイベントを記録するためのメソッドを提供します。Loggerの種類によって、メッセージはコンソール、ファイル、または外部サービスに書き込まれる場合があります。
 
 ## 例
 
 ```typescript showLineNumbers copy
 // Using a console logger
-const logger = createLogger({ name: "Mastra", level: "info" });
+const logger = new PinoLogger({ name: "Mastra", level: "info" });
 
 logger.debug("Debug message"); // Won't be logged because level is INFO
 logger.info({

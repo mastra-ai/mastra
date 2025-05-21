@@ -176,8 +176,8 @@ Register the agents and the weather workflow with the mastra instance.
 This is critical for enabling access to the agents within the workflow.
 
 ```ts showLineNumbers copy filename="index.ts"
-import { Mastra } from '@mastra/core/mastra'
-import { createLogger } from '@mastra/core/logger'
+import { Mastra } from '@mastra/core'
+import { PinoLogger } from '@mastra/loggers'
 import { travelAgentWorkflow } from './workflows/human-in-the-loop-workflow'
 import { summaryTravelAgent, travelAgent } from './agents/travel-agent'
  
@@ -193,7 +193,7 @@ const mastra = new Mastra({
     travelAgent,
 	  summaryTravelAgent
   },
-  logger: createLogger({
+  logger: new PinoLogger({
     name: "Mastra",
     level: "info",
   }),

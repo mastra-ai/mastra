@@ -5,45 +5,48 @@ import { openai } from '@ai-sdk/openai';
 import type { CoreMessage, MemoryProcessorOpts } from '@mastra/core';
 import { MemoryProcessor } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
-import { LibSQLStore } from '@mastra/core/storage/libsql';
 import { createTool } from '@mastra/core/tools';
+import { fastembed } from '@mastra/fastembed';
+import { LibSQLVector, LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { TokenLimiter, ToolCallFilter } from '@mastra/memory/processors';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { filterToolCallsByName, filterToolResultsByName, generateConversationHistory } from './test-utils';
 
-describe('Memory with Processors', () => {
-  let memory: Memory;
-  let storage: LibSQLStore;
-  const resourceId = 'processor-test';
-  let testCount = 0;
+let memory: Memory;
+let storage: LibSQLStore;
+let vector: LibSQLVector;
+const resourceId = 'processor-test';
+let testCount = 0;
 
-  beforeEach(() => {
-    // Create a new unique database file in the temp directory for each test
-    const timestamp = Date.now();
-    const uniqueId = `memory-processor-test-${timestamp}-${testCount++}`;
-    const dbPath = join(tmpdir(), uniqueId);
+beforeEach(() => {
+  // Create a new unique database file in the temp directory for each test
+  const timestamp = Date.now();
+  const uniqueId = `memory-processor-test-${timestamp}-${testCount++}`;
+  const dbPath = join(tmpdir(), uniqueId);
 
-    storage = new LibSQLStore({
-      config: {
-        url: `file:${dbPath}`,
-      },
-    });
-
-    // Initialize memory with the in-memory database
-    memory = new Memory({
-      storage,
-      options: {
-        lastMessages: 10,
-        semanticRecall: false,
-        threads: {
-          generateTitle: false,
-        },
-      },
-    });
+  storage = new LibSQLStore({
+    url: `file:${dbPath}`,
+  });
+  vector = new LibSQLVector({
+    connectionUrl: `file:${dbPath}`,
   });
 
+  // Initialize memory with the in-memory database
+  memory = new Memory({
+    storage,
+    options: {
+      lastMessages: 10,
+      semanticRecall: false,
+      threads: {
+        generateTitle: false,
+      },
+    },
+  });
+});
+
+describe('Memory with Processors', () => {
   afterEach(async () => {
     for (const thread of await storage.getThreadsByResourceId({
       resourceId,
@@ -230,14 +233,15 @@ describe('Memory with Processors', () => {
       }
     }
     const memory = new Memory({
+      storage,
+      vector,
+      embedder: fastembed,
       processors: [new ToolCallFilter(), new ConversationOnlyFilter(), new TokenLimiter(127000)],
       options: {
         lastMessages: 10,
         semanticRecall: true,
-        threads: { generateTitle: false },
         workingMemory: {
           enabled: true,
-          use: 'tool-call',
         },
       },
     });
@@ -520,12 +524,12 @@ describe('Memory with Processors', () => {
 describe('Memory.chunkText', () => {
   it('should split long text into chunks at word boundaries', () => {
     const memory = new Memory({
+      storage,
+      vector,
+      embedder: fastembed,
       options: {
         semanticRecall: true,
         lastMessages: 10,
-        threads: {
-          generateTitle: false,
-        },
       },
     });
     const words = [];

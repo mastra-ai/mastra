@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import type { D1Database } from '@cloudflare/workers-types';
+import type { WorkflowRunState } from '@mastra/core';
 import type { MessageType } from '@mastra/core/memory';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 import {
@@ -723,25 +724,21 @@ describe('D1Store', () => {
         value: { currentState: 'running' },
         timestamp: Date.now(),
         context: {
-          steps: {},
-          stepResults: {
-            'step-1': {
-              status: 'success',
-              result: {
-                nestedData: {
-                  array: [1, 2, 3],
-                  object: { key: 'value' },
-                  date: new Date().toISOString(),
-                },
+          'step-1': {
+            status: 'success',
+            output: {
+              nestedData: {
+                array: [1, 2, 3],
+                object: { key: 'value' },
+                date: new Date().toISOString(),
               },
             },
-            'step-2': {
-              status: 'waiting',
-              dependencies: ['step-3', 'step-4'],
-            },
           },
-          attempts: { 'step-1': 1, 'step-2': 0 },
-          triggerData: {
+          'step-2': {
+            status: 'suspended',
+            dependencies: ['step-3', 'step-4'],
+          },
+          input: {
             type: 'scheduled',
             metadata: {
               schedule: '0 0 * * *',
@@ -749,20 +746,9 @@ describe('D1Store', () => {
             },
           },
         },
-        activePaths: [
-          {
-            stepPath: ['step-1'],
-            stepId: 'step-1',
-            status: 'success',
-          },
-          {
-            stepPath: ['step-2'],
-            stepId: 'step-2',
-            status: 'waiting',
-          },
-        ],
+        activePaths: [],
         suspendedPaths: {},
-      };
+      } as unknown as WorkflowRunState;
 
       await store.persistWorkflowSnapshot({
         workflowName,

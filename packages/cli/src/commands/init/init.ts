@@ -78,6 +78,11 @@ export const init = async ({
       if (needsMemory) {
         await depService.installPackages(['@mastra/memory']);
       }
+
+      const needsLoggers = (await depService.checkDependencies(['@mastra/loggers'])) !== `ok`;
+      if (needsLoggers) {
+        await depService.installPackages(['@mastra/loggers']);
+      }
     }
 
     const key = await getAPIKey(llmProvider || 'openai');

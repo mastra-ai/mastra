@@ -32,8 +32,8 @@ import type { CoreTool } from '../tools/types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties, ensureAllMessagesAreCoreMessages } from '../utils';
 import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
-import { agentToStep, Step } from '../workflows';
-import type { NewWorkflow } from '../workflows/vNext';
+import type { Workflow } from '../workflows';
+import { agentToStep, LegacyStep as Step } from '../workflows/legacy';
 import type {
   AgentConfig,
   MastraLanguageModel,
@@ -85,7 +85,7 @@ export class Agent<
   readonly model?: DynamicArgument<MastraLanguageModel>;
   #mastra?: Mastra;
   #memory?: MastraMemory;
-  #workflows?: DynamicArgument<Record<string, NewWorkflow>>;
+  #workflows?: DynamicArgument<Record<string, Workflow>>;
   #defaultGenerateOptions: AgentGenerateOptions;
   #defaultStreamOptions: AgentStreamOptions;
   #tools: DynamicArgument<TTools>;
@@ -160,7 +160,17 @@ export class Agent<
   }
 
   public getMemory(): MastraMemory | undefined {
-    return this.#memory ?? this.#mastra?.memory;
+    const memory = this.#memory;
+
+    if (memory && !memory.hasOwnStorage && this.#mastra) {
+      const storage = this.#mastra.getStorage();
+
+      if (storage) {
+        memory.setStorage(storage);
+      }
+    }
+
+    return memory;
   }
 
   get voice() {
@@ -173,7 +183,7 @@ export class Agent<
 
   public async getWorkflows({
     runtimeContext = new RuntimeContext(),
-  }: { runtimeContext?: RuntimeContext } = {}): Promise<Record<string, NewWorkflow>> {
+  }: { runtimeContext?: RuntimeContext } = {}): Promise<Record<string, Workflow>> {
     let workflowRecord;
     if (typeof this.#workflows === 'function') {
       workflowRecord = await Promise.resolve(this.#workflows({ runtimeContext }));

@@ -13,6 +13,9 @@ export function usePromptVersions(agentId: string, instructions?: string) {
     try {
       const response = await fetch(`/api/agents/${agentId}/evals/live`, {
         method: 'GET',
+        headers: {
+          'x-mastra-dev-playground': 'true',
+        },
       });
 
       if (!response.ok) {
@@ -123,6 +126,7 @@ export function usePromptVersions(agentId: string, instructions?: string) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-mastra-dev-playground': 'true',
         },
         body: JSON.stringify({
           instructions: version.content,

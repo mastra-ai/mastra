@@ -1,5 +1,6 @@
 import { execSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 function cleanup(monorepoDir, resetChanges = false) {
   execSync('git checkout .', {
@@ -49,13 +50,20 @@ export async function prepareMonorepo(monorepoDir, glob) {
     await (async function updateWorkspaceDependencies() {
       // Update workspace dependencies to use ^ instead of *
       const packageFiles = await glob('**/package.json', {
-        ignore: ['**/node_modules/**'],
+        ignore: ['**/node_modules/**', '**/examples/**'],
+        cwd: monorepoDir,
       });
 
       for (const file of packageFiles) {
-        const content = readFileSync(file, 'utf8');
+        const content = readFileSync(join(monorepoDir, file), 'utf8');
         const updated = content.replace(/"workspace:\^"/g, '"workspace:*"');
-        writeFileSync(file, updated);
+
+        const parsed = JSON.parse(content);
+        if (parsed?.peerDependencies?.['@mastra/core']) {
+          parsed.peerDependencies['@mastra/core'] = '*';
+        }
+
+        writeFileSync(join(monorepoDir, file), JSON.stringify(parsed, null, 2));
       }
     })();
 

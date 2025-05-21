@@ -33,24 +33,23 @@ export function AgentInformation({ agentId }: { agentId: string }) {
           {isLoading || isMemoryLoading ? (
             <Skeleton className="h-3 w-1/3" />
           ) : (
-            <div className="flex items-center gap-4">
-              <Txt variant="header-md" as="h2" className="font-medium">
-                {agent?.name}
-              </Txt>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button onClick={handleCopy}>
-                    <Icon className="transition-colors hover:bg-surface4 rounded-lg text-icon3 hover:text-icon6">
-                      <CopyIcon />
-                    </Icon>
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Copy Agent ID for use in code</TooltipContent>
-              </Tooltip>
-            </div>
+            <Txt variant="header-md" as="h2" className="font-medium">
+              {agent?.name}
+            </Txt>
           )}
         </div>
         <div className="flex items-center gap-2 pt-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button onClick={handleCopy} className="h-badge-default">
+                <Badge icon={<CopyIcon />} variant="default">
+                  {agentId}
+                </Badge>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Copy Agent ID for use in code</TooltipContent>
+          </Tooltip>
+
           <Badge className="capitalize" icon={providerIcon}>
             {agent?.provider?.split('.')[0]}
           </Badge>

@@ -234,8 +234,8 @@ Register the planning agent and activity planning workflow with the mastra insta
 This is critical for enabling access to the planning agent within the activity planning workflow.
 
 ```ts showLineNumbers copy filename="index.ts"
-import { Mastra } from '@mastra/core/mastra'
-import { createLogger } from '@mastra/core/logger'
+import { Mastra } from '@mastra/core'
+import { PinoLogger } from '@mastra/loggers'
 import { activityPlanningWorkflow } from './workflows/agent-workflow'
 import { planningAgent } from './agents/planning-agent'
  
@@ -247,7 +247,7 @@ const mastra = new Mastra({
   agents: {
     planningAgent,
   },
-  logger: createLogger({
+  logger: PinoLogger({
     name: "Mastra",
     level: "info",
   }),

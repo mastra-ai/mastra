@@ -1,6 +1,6 @@
-import { createLogger, LogLevel } from '@mastra/core/logger';
+import { LogLevel } from '@mastra/core/logger';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-
+import { PinoLogger } from '../pino';
 import { UpstashTransport } from './index.js';
 
 describe('UpstashTransport', () => {
@@ -42,8 +42,8 @@ describe('UpstashTransport', () => {
     expect(transport.logBuffer).toEqual([]);
   });
 
-  it('should work with createLogger', async () => {
-    const logger = createLogger({
+  it('should work with PinoLogger', async () => {
+    const logger = new PinoLogger({
       name: 'test-logger',
       level: LogLevel.INFO,
       transports: {
@@ -58,7 +58,7 @@ describe('UpstashTransport', () => {
     await transport._flush();
 
     expect(fetchMock).toHaveBeenCalledWith(
-      defaultOptions.upstashUrl,
+      `${defaultOptions.upstashUrl}/pipeline`,
       expect.objectContaining({
         method: 'POST',
         headers: {
@@ -71,7 +71,7 @@ describe('UpstashTransport', () => {
   });
 
   it('should handle multiple log messages', async () => {
-    const logger = createLogger({
+    const logger = new PinoLogger({
       name: 'test-logger',
       level: LogLevel.INFO,
       transports: {
@@ -87,7 +87,7 @@ describe('UpstashTransport', () => {
 
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
     messages.forEach(msg => {
-      expect(body.pipeline[0].some((cmd: string) => cmd.includes(msg))).toBe(true);
+      expect(body[0].some((cmd: string) => cmd.includes(msg))).toBe(true);
     });
   });
 
@@ -112,7 +112,7 @@ describe('UpstashTransport', () => {
   });
 
   it('should automatically flush on interval', async () => {
-    const logger = createLogger({
+    const logger = new PinoLogger({
       name: 'test-logger',
       level: LogLevel.INFO,
       transports: {
@@ -138,7 +138,7 @@ describe('UpstashTransport', () => {
         }),
       );
 
-      const logger = createLogger({
+      const logger = new PinoLogger({
         name: 'test-logger',
         level: LogLevel.INFO,
         transports: {
@@ -155,7 +155,7 @@ describe('UpstashTransport', () => {
     it('should handle network errors', async () => {
       fetchMock.mockImplementationOnce(() => Promise.reject(new Error('Network error')));
 
-      const logger = createLogger({
+      const logger = new PinoLogger({
         name: 'test-logger',
         level: LogLevel.INFO,
         transports: {
