@@ -1,7 +1,7 @@
 import type { Agent } from '../agent';
 import type { MastraDeployer } from '../deployer';
 import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
-import type { IMastraLogger, MastraLogger } from '../logger';
+import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory/memory';
 import type { AgentNetwork } from '../network';

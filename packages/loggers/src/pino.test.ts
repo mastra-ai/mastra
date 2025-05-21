@@ -3,8 +3,6 @@ import { describe, it, expect, beforeEach } from 'vitest';
 
 import { PinoLogger } from './pino';
 
-const createLogger = (options: any) => new PinoLogger(options);
-
 // Helper to create a memory stream that captures log output
 class MemoryStream extends LoggerTransport {
   chunks: any[] = [];

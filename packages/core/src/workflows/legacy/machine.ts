@@ -7,6 +7,7 @@ import { assign, createActor, fromPromise, setup } from 'xstate';
 import type { z } from 'zod';
 import type { Mastra } from '../..';
 import type { MastraUnion } from '../../action';
+import type { IMastraLogger } from '../../logger';
 import type { RuntimeContext } from '../../runtime-context';
 import { createMastraProxy } from '../../utils';
 import type { LegacyStep as Step } from './step';
