@@ -2,11 +2,11 @@ import type { Span } from '@opentelemetry/api';
 import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Snapshot } from 'xstate';
 import type { z } from 'zod';
-import type { Logger } from '../logger';
-import type { Mastra } from '../mastra';
-import { RuntimeContext } from '../runtime-context';
+import type { Mastra, WorkflowRunState as NewWorkflowRunState } from '../..';
+import type { Logger } from '../../logger';
+import { RuntimeContext } from '../../runtime-context';
 import { Machine } from './machine';
-import type { Step } from './step';
+import type { LegacyStep as Step } from './step';
 import type {
   ActionContext,
   RetryConfig,
@@ -14,8 +14,8 @@ import type {
   StepDef,
   StepGraph,
   StepNode,
-  WorkflowRunResult,
-  WorkflowRunState,
+  LegacyWorkflowRunResult as WorkflowRunResult,
+  LegacyWorkflowRunState as WorkflowRunState,
 } from './types';
 import {
   getActivePathsAndStatus,
@@ -418,7 +418,7 @@ export class WorkflowInstance<
     const existingSnapshot = (await storage.loadWorkflowSnapshot({
       workflowName: this.name,
       runId: this.#runId,
-    })) as WorkflowRunState;
+    })) as unknown as WorkflowRunState;
 
     const machineSnapshots: Record<string, WorkflowRunState> = {};
     for (const [stepId, machine] of Object.entries(this.#machines)) {
@@ -445,7 +445,7 @@ export class WorkflowInstance<
       await storage.persistWorkflowSnapshot({
         workflowName: this.name,
         runId: this.#runId,
-        snapshot: existingSnapshot,
+        snapshot: existingSnapshot as unknown as NewWorkflowRunState,
       });
 
       return;
@@ -455,7 +455,7 @@ export class WorkflowInstance<
       await storage.persistWorkflowSnapshot({
         workflowName: this.name,
         runId: this.#runId,
-        snapshot,
+        snapshot: snapshot as unknown as NewWorkflowRunState,
       });
       return;
     } else if (!snapshot) {
@@ -469,7 +469,7 @@ export class WorkflowInstance<
       await storage.persistWorkflowSnapshot({
         workflowName: this.name,
         runId: this.#runId,
-        snapshot,
+        snapshot: snapshot as unknown as NewWorkflowRunState,
       });
 
       return;
@@ -484,7 +484,7 @@ export class WorkflowInstance<
     await storage.persistWorkflowSnapshot({
       workflowName: this.name,
       runId: this.#runId,
-      snapshot,
+      snapshot: snapshot as unknown as NewWorkflowRunState,
     });
   }
 
@@ -493,14 +493,14 @@ export class WorkflowInstance<
       workflowName: this.name,
       runId: this.runId,
     });
-    const prevSnapshot: Record<string, WorkflowRunState> = storedSnapshot
-      ? {
+    const prevSnapshot = storedSnapshot
+      ? ({
           trigger: storedSnapshot,
-          ...Object.entries(storedSnapshot?.childStates ?? {}).reduce(
+          ...Object.entries((storedSnapshot as unknown as WorkflowRunState)?.childStates ?? {}).reduce(
             (acc, [stepId, snapshot]) => ({ ...acc, [stepId]: snapshot as WorkflowRunState }),
             {},
           ),
-        }
+        } as unknown as Record<string, WorkflowRunState>)
       : ({} as Record<string, WorkflowRunState>);
 
     const currentSnapshot = Object.entries(this.#machines).reduce(

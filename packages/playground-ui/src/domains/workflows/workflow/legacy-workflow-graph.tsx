@@ -1,16 +1,16 @@
 import { Skeleton } from '@/components/ui/skeleton';
 
-import { useVNextWorkflow } from '@/hooks/use-workflows';
+import { useLegacyWorkflow } from '@/hooks/use-workflows';
 import '../../../index.css';
 
+import { LegacyWorkflowGraphInner } from './legacy-workflow-graph-inner';
 import { lodashTitleCase } from '@/lib/string';
 import { AlertCircleIcon } from 'lucide-react';
+import { LegacyWorkflowNestedGraphProvider } from '../context/legacy-workflow-nested-graph-context';
 import { ReactFlowProvider } from '@xyflow/react';
-import { VNextWorkflowGraphInner } from './v-next-workflow-graph-inner';
-import { VNextWorkflowNestedGraphProvider } from '../context/v-next-workflow-nested-graph-context';
 
-export function VNextWorkflowGraph({ workflowId, baseUrl }: { workflowId: string; baseUrl: string }) {
-  const { vNextWorkflow, isLoading } = useVNextWorkflow(workflowId, baseUrl);
+export function LegacyWorkflowGraph({ workflowId, baseUrl }: { workflowId: string; baseUrl: string }) {
+  const { legacyWorkflow, isLoading } = useLegacyWorkflow(workflowId, baseUrl);
 
   if (isLoading) {
     return (
@@ -20,7 +20,7 @@ export function VNextWorkflowGraph({ workflowId, baseUrl }: { workflowId: string
     );
   }
 
-  if (!vNextWorkflow) {
+  if (!legacyWorkflow) {
     return (
       <div className="grid h-full place-items-center">
         <div className="flex flex-col items-center gap-2">
@@ -32,10 +32,10 @@ export function VNextWorkflowGraph({ workflowId, baseUrl }: { workflowId: string
   }
 
   return (
-    <VNextWorkflowNestedGraphProvider>
+    <LegacyWorkflowNestedGraphProvider>
       <ReactFlowProvider>
-        <VNextWorkflowGraphInner workflow={vNextWorkflow} />
+        <LegacyWorkflowGraphInner workflow={legacyWorkflow} />
       </ReactFlowProvider>
-    </VNextWorkflowNestedGraphProvider>
+    </LegacyWorkflowNestedGraphProvider>
   );
 }

@@ -4,25 +4,25 @@ import { WorkflowRunProvider, Header, HeaderTitle } from '@mastra/playground-ui'
 
 import { Skeleton } from '@/components/ui/skeleton';
 
-import { useVNextWorkflow } from '@/hooks/use-workflows';
+import { useLegacyWorkflow } from '@/hooks/use-workflows';
 
 import { WorkflowHeader } from './workflow-header';
 
-export const VNextWorkflowLayout = ({ children }: { children: React.ReactNode }) => {
+export const LegacyWorkflowLayout = ({ children }: { children: React.ReactNode }) => {
   const { workflowId } = useParams();
-  const { vNextWorkflow, isLoading: isVNextWorkflowLoading } = useVNextWorkflow(workflowId!);
+  const { legacyWorkflow, isLoading: isWorkflowLoading } = useLegacyWorkflow(workflowId!);
 
   return (
     <WorkflowRunProvider>
       <div className="h-full overflow-hidden">
-        {isVNextWorkflowLoading ? (
+        {isWorkflowLoading ? (
           <Header>
             <HeaderTitle>
               <Skeleton className="h-6 w-[200px]" />
             </HeaderTitle>
           </Header>
         ) : (
-          <WorkflowHeader workflowName={vNextWorkflow?.name || ''} workflowId={workflowId!} isVNext />
+          <WorkflowHeader workflowName={legacyWorkflow?.name || ''} workflowId={workflowId!} isLegacy />
         )}
         {children}
       </div>

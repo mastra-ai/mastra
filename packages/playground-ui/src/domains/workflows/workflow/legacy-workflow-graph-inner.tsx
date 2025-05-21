@@ -1,3 +1,4 @@
+import type { LegacyWorkflow } from '@mastra/core/workflows/legacy';
 import {
   ReactFlow,
   MiniMap,
@@ -9,16 +10,19 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { constructVNextNodesAndEdges } from './utils';
+import { contructLegacyNodesAndEdges, WStep } from './utils';
 import { WorkflowConditionNode } from './workflow-condition-node';
 import { WorkflowDefaultNode } from './workflow-default-node';
 import { WorkflowAfterNode } from './workflow-after-node';
 import { WorkflowLoopResultNode } from './workflow-loop-result-node';
-import { VNextWorkflowNestedNode } from './v-next-workflow-nested-node';
-import { GetVNextWorkflowResponse } from '@mastra/client-js';
+import { LegacyWorkflowNestedNode } from './legacy-workflow-nested-node';
 
-export function VNextWorkflowGraphInner({ workflow }: { workflow: GetVNextWorkflowResponse }) {
-  const { nodes: initialNodes, edges: initialEdges } = constructVNextNodesAndEdges(workflow);
+export function LegacyWorkflowGraphInner({ workflow }: { workflow: LegacyWorkflow }) {
+  const { nodes: initialNodes, edges: initialEdges } = contructLegacyNodesAndEdges({
+    stepGraph: workflow.serializedStepGraph || workflow.stepGraph,
+    stepSubscriberGraph: workflow.serializedStepSubscriberGraph || workflow.stepSubscriberGraph,
+    steps: workflow.steps as WStep,
+  });
   const [nodes, _, onNodesChange] = useNodesState(initialNodes);
   const [edges] = useEdgesState(initialEdges);
 
@@ -27,7 +31,7 @@ export function VNextWorkflowGraphInner({ workflow }: { workflow: GetVNextWorkfl
     'condition-node': WorkflowConditionNode,
     'after-node': WorkflowAfterNode,
     'loop-result-node': WorkflowLoopResultNode,
-    'nested-node': VNextWorkflowNestedNode,
+    'nested-node': LegacyWorkflowNestedNode,
   };
 
   return (

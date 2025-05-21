@@ -1,39 +1,44 @@
 import type { z } from 'zod';
+import type { Mastra } from '..';
+import type { RuntimeContext } from '../di';
+import type { Workflow } from './workflow';
 
-import type { Mastra } from '../mastra';
-import type { RetryConfig, StepAction, StepExecutionContext } from './types';
+// Define a type for the execute function
+export type ExecuteFunction<TStepInput, TStepOutput, TResumeSchema, TSuspendSchema> = (params: {
+  mastra: Mastra;
+  runtimeContext: RuntimeContext;
+  inputData: TStepInput;
+  resumeData?: TResumeSchema;
+  getInitData<T extends z.ZodType<any>>(): z.infer<T>;
+  getInitData<T extends Workflow<any, any, any, any, any>>(): T extends undefined
+    ? unknown
+    : z.infer<NonNullable<T['inputSchema']>>;
+  getStepResult<T extends Step<any, any, any>>(
+    stepId: T,
+  ): T['outputSchema'] extends undefined ? unknown : z.infer<NonNullable<T['outputSchema']>>;
+  // TODO: should this be a schema you can define on the step?
+  suspend(suspendPayload: TSuspendSchema): Promise<void>;
+  resume?: {
+    steps: string[];
+    resumePayload: any;
+  };
+  emitter: { emit: (event: string, data: any) => Promise<void> };
+}) => Promise<TStepOutput>;
 
-export class Step<
-  TStepId extends string = any,
-  TSchemaIn extends z.ZodSchema | undefined = undefined,
-  TSchemaOut extends z.ZodSchema | undefined = undefined,
-  TContext extends StepExecutionContext<TSchemaIn> = StepExecutionContext<TSchemaIn>,
-> implements StepAction<TStepId, TSchemaIn, TSchemaOut, TContext>
-{
+// Define a Step interface
+export interface Step<
+  TStepId extends string = string,
+  TSchemaIn extends z.ZodType<any> = z.ZodType<any>,
+  TSchemaOut extends z.ZodType<any> = z.ZodType<any>,
+  TResumeSchema extends z.ZodType<any> = z.ZodType<any>,
+  TSuspendSchema extends z.ZodType<any> = z.ZodType<any>,
+> {
   id: TStepId;
   description?: string;
-  inputSchema?: TSchemaIn;
-  outputSchema?: TSchemaOut;
-  payload?: TSchemaIn extends z.ZodSchema ? Partial<z.infer<TSchemaIn>> : unknown;
-  execute: (context: TContext) => Promise<TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : unknown>;
-  retryConfig?: RetryConfig;
-  mastra?: Mastra;
-
-  constructor({
-    id,
-    description,
-    execute,
-    payload,
-    outputSchema,
-    inputSchema,
-    retryConfig,
-  }: StepAction<TStepId, TSchemaIn, TSchemaOut, TContext>) {
-    this.id = id;
-    this.description = description ?? '';
-    this.inputSchema = inputSchema;
-    this.payload = payload;
-    this.outputSchema = outputSchema;
-    this.execute = execute;
-    this.retryConfig = retryConfig;
-  }
+  inputSchema: TSchemaIn;
+  outputSchema: TSchemaOut;
+  resumeSchema?: TResumeSchema;
+  suspendSchema?: TSuspendSchema;
+  execute: ExecuteFunction<z.infer<TSchemaIn>, z.infer<TSchemaOut>, z.infer<TResumeSchema>, z.infer<TSuspendSchema>>;
+  retries?: number;
 }

@@ -5,12 +5,12 @@ import sift from 'sift';
 import type { MachineContext, Snapshot } from 'xstate';
 import { assign, createActor, fromPromise, setup } from 'xstate';
 import type { z } from 'zod';
-import type { MastraUnion } from '../action';
-import type { Logger } from '../logger';
-import type { Mastra } from '../mastra';
-import type { RuntimeContext } from '../runtime-context';
-import { createMastraProxy } from '../utils';
-import type { Step } from './step';
+import type { Mastra } from '../..';
+import type { MastraUnion } from '../../action';
+import type { Logger } from '../../logger';
+import type { RuntimeContext } from '../../runtime-context';
+import { createMastraProxy } from '../../utils';
+import type { LegacyStep as Step } from './step';
 import type {
   DependencyCheckOutput,
   ResolverFunctionInput,
@@ -27,8 +27,8 @@ import type {
   WorkflowActors,
   WorkflowContext,
   WorkflowEvent,
-  WorkflowRunResult,
-  WorkflowState,
+  LegacyWorkflowRunResult as WorkflowRunResult,
+  LegacyWorkflowState as WorkflowState,
 } from './types';
 import { WhenConditionReturnValue } from './types';
 import {

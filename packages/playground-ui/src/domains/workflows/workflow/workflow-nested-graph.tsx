@@ -8,27 +8,20 @@ import {
   BackgroundVariant,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { SerializedStepFlowEntry } from '@mastra/core/workflows';
 
-import { contructNodesAndEdges } from './utils';
+import { constructNodesAndEdges } from './utils';
 import { WorkflowConditionNode } from './workflow-condition-node';
 import { WorkflowDefaultNode } from './workflow-default-node';
 import { WorkflowAfterNode } from './workflow-after-node';
 import { WorkflowLoopResultNode } from './workflow-loop-result-node';
 import { useEffect, useState } from 'react';
 import Spinner from '@/components/ui/spinner';
+import { WorkflowNestedNode } from './workflow-nested-node';
 
-export function WorkflowNestedGraph({
-  stepGraph,
-  stepSubscriberGraph,
-  open,
-}: {
-  stepGraph: any;
-  stepSubscriberGraph: any;
-  open: boolean;
-}) {
-  const { nodes: initialNodes, edges: initialEdges } = contructNodesAndEdges({
-    stepGraph: stepGraph,
-    stepSubscriberGraph: stepSubscriberGraph,
+export function WorkflowNestedGraph({ stepGraph, open }: { stepGraph: SerializedStepFlowEntry[]; open: boolean }) {
+  const { nodes: initialNodes, edges: initialEdges } = constructNodesAndEdges({
+    stepGraph,
   });
   const [isMounted, setIsMounted] = useState(false);
   const [nodes, _, onNodesChange] = useNodesState(initialNodes);
@@ -39,6 +32,7 @@ export function WorkflowNestedGraph({
     'condition-node': WorkflowConditionNode,
     'after-node': WorkflowAfterNode,
     'loop-result-node': WorkflowLoopResultNode,
+    'nested-node': WorkflowNestedNode,
   };
 
   useEffect(() => {

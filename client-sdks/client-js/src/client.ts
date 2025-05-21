@@ -9,9 +9,9 @@ import {
   Vector,
   BaseResource,
   Network,
-  VNextWorkflow,
   A2A,
   MCPTool,
+  LegacyWorkflow,
 } from './resources';
 import type {
   ClientOptions,
@@ -27,13 +27,12 @@ import type {
   GetTelemetryParams,
   GetTelemetryResponse,
   GetToolResponse,
-  GetVNextWorkflowResponse,
   GetWorkflowResponse,
   SaveMessageToMemoryParams,
   SaveMessageToMemoryResponse,
   McpServerListResponse,
   McpServerToolListResponse,
-  McpToolInfo,
+  GetLegacyWorkflowResponse,
 } from './types';
 
 export class MastraClient extends BaseResource {
@@ -142,6 +141,23 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Retrieves all available legacy workflows
+   * @returns Promise containing map of legacy workflow IDs to legacy workflow details
+   */
+  public getLegacyWorkflows(): Promise<Record<string, GetLegacyWorkflowResponse>> {
+    return this.request('/api/workflows/legacy');
+  }
+
+  /**
+   * Gets a legacy workflow instance by ID
+   * @param workflowId - ID of the legacy workflow to retrieve
+   * @returns Legacy Workflow instance
+   */
+  public getLegacyWorkflow(workflowId: string) {
+    return new LegacyWorkflow(this.options, workflowId);
+  }
+
+  /**
    * Retrieves all available workflows
    * @returns Promise containing map of workflow IDs to workflow details
    */
@@ -156,23 +172,6 @@ export class MastraClient extends BaseResource {
    */
   public getWorkflow(workflowId: string) {
     return new Workflow(this.options, workflowId);
-  }
-
-  /**
-   * Retrieves all available vNext workflows
-   * @returns Promise containing map of vNext workflow IDs to vNext workflow details
-   */
-  public getVNextWorkflows(): Promise<Record<string, GetVNextWorkflowResponse>> {
-    return this.request('/api/workflows/v-next');
-  }
-
-  /**
-   * Gets a vNext workflow instance by ID
-   * @param workflowId - ID of the vNext workflow to retrieve
-   * @returns vNext Workflow instance
-   */
-  public getVNextWorkflow(workflowId: string) {
-    return new VNextWorkflow(this.options, workflowId);
   }
 
   /**

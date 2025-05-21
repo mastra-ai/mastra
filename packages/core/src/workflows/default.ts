@@ -1,9 +1,9 @@
 import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
-import type { RuntimeContext } from '../../di';
+import type { RuntimeContext } from '../di';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
-import type { ExecuteFunction, NewStep } from './step';
+import type { ExecuteFunction, Step } from './step';
 import type { StepResult } from './types';
 import type { StepFlowEntry } from './workflow';
 
@@ -214,7 +214,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   }: {
     workflowId: string;
     runId: string;
-    step: NewStep<string, any, any>;
+    step: Step<string, any, any>;
     stepResults: Record<string, StepResult<any>>;
     executionContext: ExecutionContext;
     resume?: {
@@ -247,7 +247,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       eventTimestamp: Date.now(),
     });
 
-    const _runStep = (step: NewStep<any, any, any, any>, spanName: string, attributes?: Record<string, string>) => {
+    const _runStep = (step: Step<any, any, any, any>, spanName: string, attributes?: Record<string, string>) => {
       return async (data: any) => {
         const telemetry = this.mastra?.getTelemetry();
         const span = executionContext.executionSpan;
@@ -548,7 +548,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     runId: string;
     entry: {
       type: 'loop';
-      step: NewStep;
+      step: Step;
       condition: ExecuteFunction<any, any, any, any>;
       loopType: 'dowhile' | 'dountil';
     };
@@ -622,7 +622,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     runId: string;
     entry: {
       type: 'foreach';
-      step: NewStep;
+      step: Step;
       opts: {
         concurrency: number;
       };

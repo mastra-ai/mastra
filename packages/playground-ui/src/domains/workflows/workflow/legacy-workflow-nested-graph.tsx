@@ -9,19 +9,26 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { constructVNextNodesAndEdges } from './utils';
+import { contructLegacyNodesAndEdges } from './utils';
 import { WorkflowConditionNode } from './workflow-condition-node';
 import { WorkflowDefaultNode } from './workflow-default-node';
 import { WorkflowAfterNode } from './workflow-after-node';
 import { WorkflowLoopResultNode } from './workflow-loop-result-node';
 import { useEffect, useState } from 'react';
 import Spinner from '@/components/ui/spinner';
-import { StepFlowEntry } from '@mastra/core/workflows/vNext';
-import { VNextWorkflowNestedNode } from './v-next-workflow-nested-node';
 
-export function VNextWorkflowNestedGraph({ stepGraph, open }: { stepGraph: StepFlowEntry[]; open: boolean }) {
-  const { nodes: initialNodes, edges: initialEdges } = constructVNextNodesAndEdges({
-    stepGraph,
+export function LegacyWorkflowNestedGraph({
+  stepGraph,
+  stepSubscriberGraph,
+  open,
+}: {
+  stepGraph: any;
+  stepSubscriberGraph: any;
+  open: boolean;
+}) {
+  const { nodes: initialNodes, edges: initialEdges } = contructLegacyNodesAndEdges({
+    stepGraph: stepGraph,
+    stepSubscriberGraph: stepSubscriberGraph,
   });
   const [isMounted, setIsMounted] = useState(false);
   const [nodes, _, onNodesChange] = useNodesState(initialNodes);
@@ -32,7 +39,6 @@ export function VNextWorkflowNestedGraph({ stepGraph, open }: { stepGraph: StepF
     'condition-node': WorkflowConditionNode,
     'after-node': WorkflowAfterNode,
     'loop-result-node': WorkflowLoopResultNode,
-    'nested-node': VNextWorkflowNestedNode,
   };
 
   useEffect(() => {

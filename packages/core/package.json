@@ -30,14 +30,14 @@
         "default": "./dist/*/index.cjs"
       }
     },
-    "./workflows/vNext": {
+    "./workflows/legacy": {
       "import": {
-        "types": "./dist/workflows/vNext/index.d.ts",
-        "default": "./dist/workflows/vNext/index.js"
+        "types": "./dist/workflows/legacy/index.d.ts",
+        "default": "./dist/workflows/legacy/index.js"
       },
       "require": {
-        "types": "./dist/workflows/vNext/index.d.cts",
-        "default": "./dist/workflows/vNext/index.cjs"
+        "types": "./dist/workflows/legacy/index.d.cts",
+        "default": "./dist/workflows/legacy/index.cjs"
       }
     },
     "./vector/filter": {

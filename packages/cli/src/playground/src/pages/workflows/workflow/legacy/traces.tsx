@@ -4,14 +4,14 @@ import { TraceProvider, useTraces, WorkflowTraces } from '@mastra/playground-ui'
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { WorkflowInformation } from '@/domains/workflows/workflow-information';
-import { useVNextWorkflow } from '@/hooks/use-workflows';
+import { useLegacyWorkflow } from '@/hooks/use-workflows';
 
 function WorkflowTracesContent() {
   const { workflowId } = useParams();
-  const { vNextWorkflow, isLoading: isWorkflowLoading } = useVNextWorkflow(workflowId!);
+  const { legacyWorkflow, isLoading: isWorkflowLoading } = useLegacyWorkflow(workflowId!);
 
   // This hook will now be called within a TraceProvider context
-  const { traces, error, firstCallLoading } = useTraces(vNextWorkflow?.name || '', '', true);
+  const { traces, error, firstCallLoading } = useTraces(legacyWorkflow?.name || '', '', true);
 
   if (isWorkflowLoading) {
     return (
@@ -20,7 +20,7 @@ function WorkflowTracesContent() {
           <Skeleton className="h-[600px]" />
         </div>
         <div className="flex flex-col">
-          <WorkflowInformation workflowId={workflowId!} />
+          <WorkflowInformation workflowId={workflowId!} isLegacy />
         </div>
       </main>
     );
