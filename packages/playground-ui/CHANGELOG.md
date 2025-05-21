@@ -1,5 +1,49 @@
 # @mastra/playground-ui
 
+## 5.1.0
+
+### Minor Changes
+
+- 83da932: Move @mastra/core to peerdeps
+
+### Patch Changes
+
+- b3a3d63: BREAKING: Make vnext workflow the default worklow, and old workflow legacy_workflow
+- 99552bc: revamp the UI of the tools page
+- 9b7294a: Revamp the UI for the right sidebar of the agents page
+- e2c2cf1: Persist playground agent settings across refresh
+- fd69cc3: revamp UI of workflow "Run" pane
+- 1270183: Add waterfull traces instead of stacked progressbar (UI improvement mostly)
+- cbf153f: Handle broken images on the playground
+- 0cae9b1: sidebar adjustments (storing status + showing the action of collapsing / expanding)
+- 1f6886f: bring back the memory not activated warning in agent chat
+- 8a68886: revamp the UI of the workflow form input
+- Updated dependencies [b3a3d63]
+- Updated dependencies [344f453]
+- Updated dependencies [0215b0b]
+- Updated dependencies [0a3ae6d]
+- Updated dependencies [95911be]
+- Updated dependencies [83da932]
+- Updated dependencies [f53a6ac]
+- Updated dependencies [5eb5a99]
+- Updated dependencies [7e632c5]
+- Updated dependencies [1e9fbfa]
+- Updated dependencies [eabdcd9]
+- Updated dependencies [90be034]
+- Updated dependencies [ccdabdc]
+- Updated dependencies [99f050a]
+- Updated dependencies [d0ee3c6]
+- Updated dependencies [b2ae5aa]
+- Updated dependencies [a6e3881]
+- Updated dependencies [fddae56]
+- Updated dependencies [23f258c]
+- Updated dependencies [a7292b0]
+- Updated dependencies [0dcb9f0]
+- Updated dependencies [5063646]
+- Updated dependencies [2672a05]
+  - @mastra/client-js@0.10.0
+  - @mastra/core@0.10.0
+
 ## 5.1.0-alpha.1
 
 ### Minor Changes

@@ -1,5 +1,30 @@
 # @mastra/core
 
+## 0.10.0
+
+### Minor Changes
+
+- 5eb5a99: Remove pino from @mastra/core into @mastra/loggers
+- 7e632c5: Removed default LibSQLStore and LibSQLVector from @mastra/core. These now live in a separate package @mastra/libsql
+- b2ae5aa: Added support for experimental authentication and authorization
+- 0dcb9f0: Memory breaking changes: storage, vector, and embedder are now required. Working memory text streaming has been removed, only tool calling is supported for working memory updates now. Default settings have changed (lastMessages: 40->10, semanticRecall: true->false, threads.generateTitle: true->false)
+
+### Patch Changes
+
+- b3a3d63: BREAKING: Make vnext workflow the default worklow, and old workflow legacy_workflow
+- 344f453: Await onFinish & onStepFinish to ensure the stream doesn't close early
+- 0a3ae6d: Fixed a bug where tool input schema properties that were optional became required
+- 95911be: Fixed an issue where if @mastra/core was not released at the same time as create-mastra, create-mastra would match the alpha tag instead of latest tag when running npm create mastra@latest
+- f53a6ac: Add VNextWorkflowRuns type
+- 1e9fbfa: Upgrade to OpenTelemetry JS SDK 2.x
+- eabdcd9: [MASTRA-3451] SQL Injection Protection
+- 90be034: Pass zod schema directly to getInitData
+- 99f050a: Bumped a workspace package zod version to attempt to prevent duplicate dep installs of @mastra/core
+- d0ee3c6: Change all public functions and constructors in vector stores to use named args and prepare to phase out positional args
+- 23f258c: Add new list and get routes for mcp servers. Changed route make-up for more consistency with existing API routes. Lastly, added in a lot of extra detail that can be optionally passed to the mcp server per the mcp spec.
+- a7292b0: BREAKING(@mastra/core, all vector stores): Vector store breaking changes (remove deprecated functions and positional arguments)
+- 2672a05: Add MCP servers and tool call execution to playground
+
 ## 0.10.0-alpha.1
 
 ### Minor Changes

@@ -1,5 +1,37 @@
 # @mastra/deployer
 
+## 0.10.0
+
+### Minor Changes
+
+- 83da932: Move @mastra/core to peerdeps
+- 5eb5a99: Remove pino from @mastra/core into @mastra/loggers
+
+### Patch Changes
+
+- b3a3d63: BREAKING: Make vnext workflow the default worklow, and old workflow legacy_workflow
+- 0215b0b: Add description to vnext workflow response
+- f53a6ac: Add VNextWorkflowRuns type
+- d0ee3c6: Change all public functions and constructors in vector stores to use named args and prepare to phase out positional args
+- Updated dependencies [b3a3d63]
+- Updated dependencies [344f453]
+- Updated dependencies [0a3ae6d]
+- Updated dependencies [95911be]
+- Updated dependencies [f53a6ac]
+- Updated dependencies [5eb5a99]
+- Updated dependencies [7e632c5]
+- Updated dependencies [1e9fbfa]
+- Updated dependencies [eabdcd9]
+- Updated dependencies [90be034]
+- Updated dependencies [99f050a]
+- Updated dependencies [d0ee3c6]
+- Updated dependencies [b2ae5aa]
+- Updated dependencies [23f258c]
+- Updated dependencies [a7292b0]
+- Updated dependencies [0dcb9f0]
+- Updated dependencies [2672a05]
+  - @mastra/core@0.10.0
+
 ## 2.1.0-alpha.1
 
 ### Minor Changes
