@@ -32,10 +32,14 @@ describe('Logs Handlers', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockLogger = { getLogsByRunId: vi.fn(), getLogs: vi.fn(), transports: new Map<string, unknown>() } as unknown as MockedLogger & {
+    mockLogger = {
+      getLogsByRunId: vi.fn(),
+      getLogs: vi.fn(),
+      transports: new Map<string, unknown>(),
+    } as unknown as MockedLogger & {
       transports: Record<string, unknown>;
     };
-    mockLogger.getTransports = vi.fn(() => mockLogger.transports ?? new Map<string, unknown>())
+    mockLogger.getTransports = vi.fn(() => mockLogger.transports ?? new Map<string, unknown>());
 
     mastra = new Mastra({
       logger: mockLogger as unknown as IMastraLogger,
@@ -102,7 +106,10 @@ describe('Logs Handlers', () => {
 
   describe('getLogTransports', () => {
     it('should get log transports successfully', async () => {
-      mockLogger.transports = new Map([['console', {}], ['file', {}]]) as unknown as Record<string, unknown>;
+      mockLogger.transports = new Map([
+        ['console', {}],
+        ['file', {}],
+      ]) as unknown as Record<string, unknown>;
 
       const result = await getLogTransports({ mastra });
 
