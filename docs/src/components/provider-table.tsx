@@ -491,7 +491,7 @@ export function ProviderTable() {
                 {model.provider}
               </Link>
             </TableCell>
-            <TableCell className="font-medium">
+            <TableCell className="font-mono">
               {model.providerUrl.split("/").pop()!.split("-")[0]}
             </TableCell>
             <TableCell className="font-medium">
