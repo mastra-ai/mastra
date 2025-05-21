@@ -62,7 +62,7 @@ export class MarkdownHeaderTransformer {
 
     for (const line of lines) {
       const lastLine = aggregatedChunks[aggregatedChunks.length - 1]?.content?.split('\n')?.slice(-1)[0]?.trim();
-      const isHeaderLine = lastLine ? this.headersToSplitOn.some(([sep]) => lastLine.startsWith(sep)) : false;
+      const lastChunkIsHeader = lastLine ? this.headersToSplitOn.some(([sep]) => lastLine.startsWith(sep)) : false;
       if (
         aggregatedChunks.length > 0 &&
         JSON.stringify(aggregatedChunks?.[aggregatedChunks.length - 1]!.metadata) === JSON.stringify(line.metadata)
@@ -74,7 +74,7 @@ export class MarkdownHeaderTransformer {
         JSON.stringify(aggregatedChunks?.[aggregatedChunks.length - 1]!.metadata) !== JSON.stringify(line.metadata) &&
         Object.keys(aggregatedChunks?.[aggregatedChunks.length - 1]!.metadata).length <
           Object.keys(line.metadata).length &&
-        isHeaderLine
+        lastChunkIsHeader
       ) {
         if (aggregatedChunks && aggregatedChunks?.[aggregatedChunks.length - 1]) {
           const aggChunk = aggregatedChunks[aggregatedChunks.length - 1];
@@ -199,6 +199,7 @@ export class MarkdownHeaderTransformer {
         }
       }
 
+      // Reset metadata for next line
       currentMetadata = { ...initialMetadata };
     }
 
