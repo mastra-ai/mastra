@@ -9,7 +9,7 @@ import { Agent } from '../../agent';
 import { createLogger } from '../../logger';
 import { RuntimeContext } from '../../runtime-context';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../../storage';
-import { DefaultStorage } from '../../storage/libsql';
+import { MockStore } from '../../storage/mock';
 import { Telemetry } from '../../telemetry';
 import { createTool } from '../../tools';
 
@@ -18,11 +18,7 @@ import type { WorkflowContext, WorkflowResumeResult } from './types';
 import { WhenConditionReturnValue } from './types';
 import { LegacyWorkflow } from './workflow';
 
-const storage = new DefaultStorage({
-  config: {
-    url: 'file::memory:?cache=shared',
-  },
-});
+const storage = new MockStore();
 
 const logger = createLogger({
   level: 'info',
@@ -2540,11 +2536,7 @@ describe('LegacyWorkflow', async () => {
         .commit();
 
       // Create a new storage instance for initial run
-      const initialStorage = new DefaultStorage({
-        config: {
-          url: 'file::memory:',
-        },
-      });
+      const initialStorage = new MockStore();
       await initialStorage.init();
 
       const mastra = new Mastra({

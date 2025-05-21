@@ -1,12 +1,13 @@
 import fs from 'fs';
 import path from 'path';
 import { MockLanguageModelV1 } from 'ai/test';
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, describe, expect, it, vi, beforeEach } from 'vitest';
+
 import { z } from 'zod';
-import { createTool, Mastra, Telemetry } from '..';
-import { Agent } from '../agent';
-import { RuntimeContext } from '../di';
-import { MockStore } from '../storage/mock';
+import { createTool, Mastra, Telemetry } from '../..';
+import { Agent } from '../../agent';
+import { RuntimeContext } from '../../di';
+import { MockStore } from '../../storage/mock';
 import type { WatchEvent } from './types';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow } from './workflow';
 
@@ -2056,7 +2057,8 @@ describe('Workflow', () => {
 
       new Mastra({
         logger: false,
-        workflows: {
+        storage: testStorage,
+        vnext_workflows: {
           'test-workflow': workflow,
         },
       });
@@ -2100,7 +2102,7 @@ describe('Workflow', () => {
       new Mastra({
         logger: false,
         storage: testStorage,
-        workflows: {
+        vnext_workflows: {
           'test-workflow': workflow,
         },
       });
@@ -2510,7 +2512,7 @@ describe('Workflow', () => {
       new Mastra({
         logger: false,
         storage: initialStorage,
-        workflows: { 'test-workflow': promptEvalWorkflow },
+        vnext_workflows: { 'test-workflow': promptEvalWorkflow },
       });
 
       const run = promptEvalWorkflow.createRun();
@@ -2629,7 +2631,7 @@ describe('Workflow', () => {
 
       new Mastra({
         logger: false,
-        workflows: { 'test-workflow': workflow },
+        vnext_workflows: { 'test-workflow': workflow },
         storage: testStorage,
       });
 
@@ -2802,7 +2804,7 @@ describe('Workflow', () => {
 
       new Mastra({
         logger: false,
-        workflows: { 'test-workflow': workflow },
+        vnext_workflows: { 'test-workflow': workflow },
         storage: testStorage,
       });
 
@@ -2973,7 +2975,7 @@ describe('Workflow', () => {
       new Mastra({
         logger: false,
         storage: testStorage,
-        workflows: { 'test-workflow': promptEvalWorkflow },
+        vnext_workflows: { 'test-workflow': promptEvalWorkflow },
       });
 
       const run = promptEvalWorkflow.createRun();
@@ -3084,7 +3086,7 @@ describe('Workflow', () => {
       workflow.then(step1).then(step2).commit();
 
       new Mastra({
-        workflows: {
+        vnext_workflows: {
           'test-workflow': workflow,
         },
         logger: false,
@@ -3130,7 +3132,7 @@ describe('Workflow', () => {
       new Mastra({
         logger: false,
         storage: testStorage,
-        workflows: {
+        vnext_workflows: {
           'test-workflow': workflow,
         },
       });
@@ -3172,7 +3174,7 @@ describe('Workflow', () => {
       new Mastra({
         logger: false,
         storage: testStorage,
-        workflows: { 'test-workflow': workflow },
+        vnext_workflows: { 'test-workflow': workflow },
       });
 
       // Access new instance properties directly - should work without warning
@@ -3237,7 +3239,7 @@ describe('Workflow', () => {
       });
 
       new Mastra({
-        workflows: { 'test-workflow': workflow },
+        vnext_workflows: { 'test-workflow': workflow },
         agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
         logger: false,
         storage: testStorage,
@@ -3349,7 +3351,7 @@ describe('Workflow', () => {
       new Mastra({
         logger: false,
         storage: testStorage,
-        workflows: { 'test-workflow': workflow },
+        vnext_workflows: { 'test-workflow': workflow },
         agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
       });
 
@@ -3461,7 +3463,7 @@ describe('Workflow', () => {
       new Mastra({
         logger: false,
         storage: testStorage,
-        workflows: { 'test-workflow': workflow },
+        vnext_workflows: { 'test-workflow': workflow },
         agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
       });
       workflow
@@ -3558,7 +3560,7 @@ describe('Workflow', () => {
       new Mastra({
         logger: false,
         storage: testStorage,
-        workflows: { 'test-workflow': workflow },
+        vnext_workflows: { 'test-workflow': workflow },
         agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
       });
 
@@ -4469,7 +4471,7 @@ describe('Workflow', () => {
         new Mastra({
           logger: false,
           storage: testStorage,
-          workflows: { counterWorkflow },
+          vnext_workflows: { counterWorkflow },
         });
 
         const run = counterWorkflow.createRun();
@@ -4734,7 +4736,7 @@ describe('Workflow', () => {
       new Mastra({
         logger: false,
         storage: testStorage,
-        workflows: { counterWorkflow },
+        vnext_workflows: { counterWorkflow },
       });
 
       const run = counterWorkflow.createRun();
@@ -4807,7 +4809,7 @@ describe('Workflow', () => {
 
       const mastra = new Mastra({
         logger: false,
-        storage: initialStorage,
+        storage: testStorage,
       });
 
       const execute = vi.fn(async ({ runtimeContext, suspend, resumeData }) => {

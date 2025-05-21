@@ -989,9 +989,6 @@ importers:
 
   packages/core:
     dependencies:
-      '@libsql/client':
-        specifier: ^0.14.0
-        version: 0.14.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
@@ -12410,6 +12407,7 @@ packages:
 
   elevenlabs@1.57.0:
     resolution: {integrity: sha512-MDzlZUqB3oS9Eq8Fnr865i1EkapUFldVUlZnVlnuSpkNi0suzXfiOR/6WwGDi6QRMvQEZhI8pafsVK9kr+jKrw==}
+    deprecated: This package has moved to @elevenlabs/elevenlabs-js
 
   emittery@0.13.1:
     resolution: {integrity: sha512-DeWwawk6r5yR9jFgnDKYt4sLS0LmHJJi3ZOnb5/JdbYwj3nW+FxQnHIjhBKz8YLC7oRNPVM9NQ47I3CVx34eqQ==}
@@ -23988,6 +23986,7 @@ snapshots:
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
+    optional: true
 
   '@libsql/client@0.15.4(bufferutil@4.0.9)(utf-8-validate@6.0.5)':
     dependencies:
@@ -24003,6 +24002,7 @@ snapshots:
   '@libsql/core@0.14.0':
     dependencies:
       js-base64: 3.7.7
+    optional: true
 
   '@libsql/core@0.15.4':
     dependencies:
@@ -27781,7 +27781,7 @@ snapshots:
       '@types/node': 20.17.32
     optional: true
 
-  '@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3))(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3)':
+  '@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1)(typescript@5.8.3)':
     dependencies:
       '@eslint-community/regexpp': 4.12.1
       '@typescript-eslint/parser': 5.62.0(eslint@8.57.1)(typescript@5.8.3)
@@ -30537,7 +30537,7 @@ snapshots:
       '@rollup/plugin-replace': 5.0.7(rollup@3.29.5)
       '@rollup/plugin-terser': 0.4.4(rollup@3.29.5)
       '@types/jest': 29.5.14
-      '@typescript-eslint/eslint-plugin': 5.62.0(@typescript-eslint/parser@5.62.0(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3))(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3)
+      '@typescript-eslint/eslint-plugin': 5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1)(typescript@5.8.3)
       '@typescript-eslint/parser': 5.62.0(eslint@8.57.1)(typescript@5.8.3)
       ansi-escapes: 4.3.2
       asyncro: 3.0.0
@@ -31228,7 +31228,7 @@ snapshots:
       '@typescript-eslint/utils': 5.62.0(eslint@8.57.1)(typescript@5.8.3)
       eslint: 8.57.1
     optionalDependencies:
-      '@typescript-eslint/eslint-plugin': 5.62.0(@typescript-eslint/parser@5.62.0(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3))(eslint@9.25.1(jiti@2.4.2))(typescript@5.8.3)
+      '@typescript-eslint/eslint-plugin': 5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1)(typescript@5.8.3)
       jest: 29.7.0(@types/node@20.17.32)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.11.10(@swc/helpers@0.5.15))(@types/node@20.17.32)(typescript@5.8.3))
     transitivePeerDependencies:
       - supports-color
@@ -34234,6 +34234,7 @@ snapshots:
       '@libsql/linux-x64-gnu': 0.4.7
       '@libsql/linux-x64-musl': 0.4.7
       '@libsql/win32-x64-msvc': 0.4.7
+    optional: true
 
   libsql@0.5.6:
     dependencies:

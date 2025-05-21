@@ -1,5 +1,6 @@
 import { Mastra } from '@mastra/core';
 import { RuntimeContext } from '@mastra/core/runtime-context';
+import { MockStore } from '@mastra/core/storage';
 import { LegacyStep as Step, LegacyWorkflow as Workflow } from '@mastra/core/workflows/legacy';
 import { stringify } from 'superjson';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -91,6 +92,7 @@ describe('Workflow Handlers', () => {
     mockMastra = new Mastra({
       logger: false,
       legacy_workflows: { 'test-workflow': mockWorkflow, 'reusable-workflow': reusableWorkflow },
+      storage: new MockStore(),
     });
   });
 
