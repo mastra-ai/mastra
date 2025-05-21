@@ -3075,6 +3075,7 @@ describe('LegacyWorkflow', async () => {
       const mastra = new Mastra({
         logger,
         legacy_workflows: { 'test-workflow': promptEvalWorkflow },
+        storage,
       });
 
       const wf = mastra.legacy_getWorkflow('test-workflow');
@@ -4366,6 +4367,7 @@ describe('LegacyWorkflow', async () => {
         new Mastra({
           logger,
           legacy_workflows: { counterWorkflow },
+          storage,
         });
 
         const run = counterWorkflow.createRun();
@@ -4496,6 +4498,7 @@ describe('LegacyWorkflow', async () => {
         new Mastra({
           logger,
           legacy_workflows: { counterWorkflow },
+          storage,
         });
 
         const run = counterWorkflow.createRun();

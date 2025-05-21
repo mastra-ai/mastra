@@ -2059,6 +2059,7 @@ describe('Workflow', () => {
         workflows: {
           'test-workflow': workflow,
         },
+        storage: testStorage,
       });
 
       workflow.then(step1).then(step2).commit();
