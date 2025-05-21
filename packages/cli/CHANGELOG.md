@@ -1,5 +1,13 @@
 # mastra
 
+## 0.7.0-alpha.2
+
+### Patch Changes
+
+- 47776b4: update the mcp pages
+- Updated dependencies [129b5f5]
+  - @mastra/loggers@0.2.0-alpha.2
+
 ## 0.7.0-alpha.1
 
 ### Minor Changes
