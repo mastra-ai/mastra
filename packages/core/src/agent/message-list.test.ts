@@ -1545,6 +1545,62 @@ describe('MessageList', () => {
       ]);
     });
 
+    describe('system messages', () => {
+      it('should add and retrieve a single system message', () => {
+        const list = new MessageList({ threadId, resourceId });
+        const systemMsgContent = 'This is a system directive.';
+        list.add({ role: 'system', content: systemMsgContent });
+
+        const systemMessages = list.getSystemMessages();
+        expect(systemMessages.length).toBe(1);
+        expect(systemMessages[0]?.role).toBe('system');
+        expect(systemMessages[0]?.content).toBe(systemMsgContent);
+
+        expect(list.getMessages().length).toBe(0); // Should not be in MastraMessageV2 list
+        expect(list.toUIMessages().length).toBe(0); // Should not be in UI messages
+      });
+
+      it('should not add duplicate system messages based on content', () => {
+        const list = new MessageList({ threadId, resourceId });
+        const systemMsgContent = 'This is a unique system directive.';
+        list.add({ role: 'system', content: systemMsgContent });
+        list.add({ role: 'system', content: systemMsgContent }); // Add duplicate
+
+        const systemMessages = list.getSystemMessages();
+        expect(systemMessages.length).toBe(1); // Still only one
+        expect(systemMessages[0]?.content).toBe(systemMsgContent);
+      });
+
+      it('should add and retrieve multiple unique system messages', () => {
+        const list = new MessageList({ threadId, resourceId });
+        const systemMsgContent1 = 'Directive one.';
+        const systemMsgContent2 = 'Directive two.';
+        list.add({ role: 'system', content: systemMsgContent1 });
+        list.add({ role: 'system', content: systemMsgContent2 });
+
+        const systemMessages = list.getSystemMessages();
+        expect(systemMessages.length).toBe(2);
+        expect(systemMessages.find(m => m.content === systemMsgContent1)).toBeDefined();
+        expect(systemMessages.find(m => m.content === systemMsgContent2)).toBeDefined();
+      });
+
+      it('should handle system messages added amidst other messages', () => {
+        const list = new MessageList({ threadId, resourceId });
+        list.add({ role: 'user', content: 'Hello' });
+        list.add({ role: 'system', content: 'System setup complete.' });
+        list.add({ role: 'assistant', content: 'Hi there!' });
+        list.add({ role: 'system', content: 'Another system note.' });
+
+        const systemMessages = list.getSystemMessages();
+        expect(systemMessages.length).toBe(2);
+        expect(systemMessages.find(m => m.content === 'System setup complete.')).toBeDefined();
+        expect(systemMessages.find(m => m.content === 'Another system note.')).toBeDefined();
+
+        expect(list.getMessages().length).toBe(2); // user and assistant
+        expect(list.toUIMessages().length).toBe(2); // user and assistant
+      });
+    });
+
     describe('toBase64String', () => {
       it('should return the string itself if the input is a string', () => {
         const input = 'alreadybase64==';

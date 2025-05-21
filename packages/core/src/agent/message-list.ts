@@ -27,6 +27,7 @@ type MessageInput = UIMessage | Message | MessageType | CoreMessage | MastraMess
 
 export class MessageList {
   private messages: MastraMessageV2[] = [];
+  private systemMessages: CoreMessage[] = [];
   private memoryInfo: null | { threadId: string; resourceId?: string } = null;
 
   constructor({
@@ -63,6 +64,9 @@ export class MessageList {
   }
   public getMessages(): MastraMessageV2[] {
     return this.messages;
+  }
+  public getSystemMessages(): CoreMessage[] {
+    return this.systemMessages;
   }
   public toUIMessages(): UIMessage[] {
     return this.messages.map(MessageList.toUIMessage);
@@ -130,8 +134,56 @@ export class MessageList {
   }
   private addOne(message: MessageInput) {
     if (message.role === `system`) {
-      // TODO: should we handle this more gracefully?
-      throw new Error(`Cannot add system messages to MessageList class.`);
+      // Ensure it's a CoreMessage or compatible
+      if (!MessageList.isVercelCoreMessage(message) && !MessageList.isMastraMessageV1(message) && !MessageList.isMastraMessageV2(message)) {
+        // It might be a simple { role: 'system', content: '...' } which is CoreMessage like.
+        // For now, we'll assume if it has a 'role' and 'content', it's CoreMessage-like.
+        // A more robust check might be needed if other types of system messages appear.
+        if (!('content' in message && typeof message.content === 'string')) {
+          console.warn('System message received in an unexpected format, skipping:', message);
+          return this;
+        }
+      }
+
+      // We've established message.role === 'system'
+      // and we will ensure message.content is a string.
+      const systemCoreMessage: CoreMessage = {
+        role: 'system',
+        content: '', // Placeholder, will be set below
+      };
+      
+      // Ensure content is string for CoreMessage
+      if (typeof message.content !== 'string') {
+        // Attempt to stringify if it's complex, or skip if not easily convertible
+        // For system messages, content is usually expected to be a simple string.
+        // If it's an array of parts, we'd need a specific way to handle that for system messages.
+        console.warn('System message content is not a string, attempting to process. Message:', message);
+        // For now, if it's not a string, we might skip or log, as CoreMessage expects string content.
+        // Let's assume for now that valid system messages will have string content.
+        // If `message.content` is an array (e.g. from MastraMessageV1), this needs careful handling.
+        // However, the primary path for system messages should be CoreMessage directly.
+        if(Array.isArray(message.content)) {
+            systemCoreMessage.content = message.content.map(c => 'text' in c ? c.text : '').join('\\n');
+        } else if (message.content && typeof (message.content as any).toString === 'function') {
+            systemCoreMessage.content = (message.content as any).toString();
+        } else {
+            console.warn('Cannot convert system message content to string, skipping:', message);
+            return this;
+        }
+      } else {
+        systemCoreMessage.content = message.content;
+      }
+
+
+      // Check for duplicates
+      const isDuplicate = this.systemMessages.some(
+        existingMsg => existingMsg.content === systemCoreMessage.content
+      );
+
+      if (!isDuplicate) {
+        this.systemMessages.push(systemCoreMessage);
+      }
+      return this;
     }
 
     const messageV2 = this.inputToMastraMessageV2(message);
