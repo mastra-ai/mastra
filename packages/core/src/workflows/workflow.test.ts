@@ -9,7 +9,7 @@ import { createLogger } from '../logger';
 import { Mastra } from '../mastra';
 import { RuntimeContext } from '../runtime-context';
 import { TABLE_WORKFLOW_SNAPSHOT } from '../storage';
-import { DefaultStorage } from '../storage/libsql';
+import { MockStore } from '../storage/mock';
 import { Telemetry } from '../telemetry';
 import { createTool } from '../tools';
 
@@ -18,11 +18,7 @@ import type { WorkflowContext, WorkflowResumeResult } from './types';
 import { WhenConditionReturnValue } from './types';
 import { Workflow } from './workflow';
 
-const storage = new DefaultStorage({
-  config: {
-    url: 'file::memory:?cache=shared',
-  },
-});
+const storage = new MockStore();
 
 const logger = createLogger({
   level: 'info',
@@ -2540,11 +2536,7 @@ describe('Workflow', async () => {
         .commit();
 
       // Create a new storage instance for initial run
-      const initialStorage = new DefaultStorage({
-        config: {
-          url: 'file::memory:',
-        },
-      });
+      const initialStorage = new MockStore();
       await initialStorage.init();
 
       const mastra = new Mastra({
@@ -3083,6 +3075,7 @@ describe('Workflow', async () => {
       const mastra = new Mastra({
         logger,
         workflows: { 'test-workflow': promptEvalWorkflow },
+        storage: new MockStore(),
       });
 
       const wf = mastra.getWorkflow('test-workflow');
@@ -3308,8 +3301,6 @@ describe('Workflow', async () => {
       const result = await run.start({
         triggerData: { prompt1: 'Capital of France, just the name', prompt2: 'Capital of UK, just the name' },
       });
-
-      console.log(result);
 
       expect(result.results['test-agent-1']).toEqual({
         status: 'success',
@@ -4366,6 +4357,7 @@ describe('Workflow', async () => {
         new Mastra({
           logger,
           workflows: { counterWorkflow },
+          storage: new MockStore(),
         });
 
         const run = counterWorkflow.createRun();
@@ -4496,6 +4488,7 @@ describe('Workflow', async () => {
         new Mastra({
           logger,
           workflows: { counterWorkflow },
+          storage,
         });
 
         const run = counterWorkflow.createRun();

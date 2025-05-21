@@ -7,7 +7,6 @@ import type { MastraMemory } from '../memory/memory';
 import type { AgentNetwork } from '../network';
 import type { ServerConfig } from '../server/types';
 import type { MastraStorage } from '../storage';
-import { DefaultProxyStorage } from '../storage/default-proxy-storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import { InstrumentClass, Telemetry } from '../telemetry';
 import type { OtelConfig } from '../telemetry';
@@ -50,7 +49,7 @@ export interface Config<
   }>;
 
   // @deprecated add memory to your Agent directly instead
-  memory?: MastraMemory;
+  memory?: never;
 }
 
 @InstrumentClass({
@@ -134,15 +133,10 @@ export class Mastra<
     this.#logger = logger;
 
     let storage = config?.storage;
-    if (!storage) {
-      storage = new DefaultProxyStorage({
-        config: {
-          url: process.env.MASTRA_DEFAULT_STORAGE_URL || `:memory:`,
-        },
-      });
-    }
 
-    storage = augmentWithInit(storage);
+    if (storage) {
+      storage = augmentWithInit(storage);
+    }
 
     /*
     Telemetry
@@ -152,7 +146,7 @@ export class Mastra<
     /*
       Storage
     */
-    if (this.#telemetry) {
+    if (this.#telemetry && storage) {
       this.#storage = this.#telemetry.traceClass(storage, {
         excludeMethods: ['__setTelemetry', '__getTelemetry', 'batchTraceInsert', 'getTraces', 'getEvalsByAgentName'],
       });
@@ -202,18 +196,8 @@ export class Mastra<
       });
     }
 
-    if (config?.memory) {
-      this.#memory = config.memory;
-      if (this.#telemetry) {
-        this.#memory = this.#telemetry.traceClass(config.memory, {
-          excludeMethods: ['__setTelemetry', '__getTelemetry'],
-        });
-        this.#memory.__setTelemetry(this.#telemetry);
-      }
-    }
-
     if (config && `memory` in config) {
-      this.#logger.warn(`
+      throw new Error(`
   Memory should be added to Agents, not to Mastra.
 
 Instead of:
@@ -221,8 +205,6 @@ Instead of:
 
 do:
   new Agent({ memory: new Memory() })
-
-This is a warning for now, but will throw an error in the future
 `);
     }
 
@@ -421,17 +403,6 @@ This is a warning for now, but will throw an error in the future
   }
 
   public setStorage(storage: MastraStorage) {
-    if (storage instanceof DefaultProxyStorage) {
-      this.#logger.warn(`Importing "DefaultStorage" from '@mastra/core/storage/libsql' is deprecated.
-
-Instead of:
-  import { DefaultStorage } from '@mastra/core/storage/libsql';
-
-Do:
-  import { LibSQLStore } from '@mastra/libsql';
-`);
-    }
-
     this.#storage = augmentWithInit(storage);
   }
 
