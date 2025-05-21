@@ -10,12 +10,13 @@ The new architecture will centralize message handling within the `MessageList` c
 .  **Input Messages**: `generate` and `stream` methods will receive messages in their current formats.
 .  **MessageList Initialization**: An instance of `MessageList` will be created at the beginning of `generate`/`stream`.
 .  **Adding Messages to List**:
-    *   All incoming messages (initial user messages, context messages, messages from memory) will be added to the `MessageList` instance using `messageList.add()`. `MessageList` will handle internal conversion to its V2 format.
+    *   User, assistant, and tool messages (initial user input, context messages, messages from memory) will be added to the `MessageList` instance using `messageList.add()`. `MessageList` will handle internal conversion to its `MastraMessageV2` format for these.
+    *   System messages (`CoreMessage` type) are also added via `messageList.add()`. They are stored separately within the `MessageList` instance, are not converted to `MastraMessageV2`, and duplicates are prevented based on content.
     *   LLM response messages will also be added to the same `MessageList` instance.
 .  **Memory Interaction**:
     *   **Saving**: When saving messages to memory, `MessageList.getMessages()` will provide `MastraMessageV2[]`. The memory system will be responsible for storing this format (or adapting it if necessary).
     *   **Retrieving**: Messages fetched from memory (which should be in `MastraMessageV2` format or convertible to it) will be added to the `MessageList` using `messageList.add()`.
-    *   System messages, including working memory, will be constructed by the `Agent` or `Memory` system and can be added to the `MessageList` if they need to be part of the history, or handled separately if they are only for the current LLM call.
+    *   System messages managed by `MessageList` (retrieved via `messageList.getSystemMessages()`) are typically used for the current LLM call and are not part of the `MastraMessageV2[]` returned by `getMessages()` for storage.
 .  **Preparing Messages for LLM**: 
     *   When messages are needed for the LLM, `messageList.toUIMessages()` will be called. The `MastraLLM` layer (wrapping the AI SDK's `generateText` or `streamText` functions) will be responsible for handling the `UIMessage[]` input. The AI SDK itself can convert `UIMessage[]` to the `CoreMessage[]` format it expects internally for these core functions. The `Agent` will no longer be responsible for this conversion.
     *   If `MastraMessageV2` (from `messageList.getMessages()`) is needed by other internal systems (e.g., advanced memory processing before LLM call), that format is also available.

@@ -70,6 +70,14 @@ This document summarizes the changes made to integrate the `MessageList` class i
 ## V. `packages/core/src/agent/message-list.ts` (`MessageList` class)
 
 .  **REMOVED `toCoreMessages()` method**: Based on the clarification that the AI SDK can handle `UIMessage[]` directly for its core functions (like `generateText`, `streamText`), or that `MastraLLM` would be adapted if necessary, this conversion method is not needed in `MessageList`. The agent will pass `UIMessage[]` (from `messageList.toUIMessages()`) to the LLM layer.
+.  **Added System Message Handling**:
+    *   Added a private `systemMessages: CoreMessage[]` property to store system messages separately.
+    *   Implemented `getSystemMessages(): CoreMessage[]` to retrieve these messages.
+    *   Updated `addOne(message: MessageInput)` method:
+        *   If `message.role === 'system'`, it's treated as a system message.
+        *   Ensures the system message is (or can be treated as) `CoreMessage` format.
+        *   Checks for and prevents duplicate system messages based on content before adding to `this.systemMessages`.
+        *   System messages are not converted to `MastraMessageV2` and are not part of the array returned by `getMessages()`.
 
 ## VI. `packages/core/src/memory/memory.ts` (`MastraMemory` abstract class)
 
