@@ -15,13 +15,16 @@ import { AssistantMessage } from './assistant-message';
 import { UserMessage } from './user-message';
 import { useRef } from 'react';
 import { useAutoscroll } from '@/hooks/use-autoscroll';
+import { Txt } from '@/ds/components/Txt';
+import { Icon, InfoIcon } from '@/ds/icons';
 
 export interface ThreadProps {
   ToolFallback?: ToolCallContentPartComponent;
   agentName?: string;
+  hasMemory?: boolean;
 }
 
-export const Thread = ({ ToolFallback, agentName }: ThreadProps) => {
+export const Thread = ({ ToolFallback, agentName, hasMemory }: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: true });
 
@@ -30,7 +33,7 @@ export const Thread = ({ ToolFallback, agentName }: ThreadProps) => {
   };
 
   return (
-    <ThreadPrimitive.Root className="max-w-[568px] w-full mx-auto h-[calc(100%-100px)] px-4">
+    <ThreadPrimitive.Root className="max-w-[568px] w-full mx-auto h-[calc(100%-110px)] px-4">
       <ThreadPrimitive.Viewport className="py-10 overflow-y-auto scroll-smooth h-full" ref={areaRef} autoScroll={false}>
         <div>
           <ThreadWelcome agentName={agentName} />
@@ -48,7 +51,7 @@ export const Thread = ({ ToolFallback, agentName }: ThreadProps) => {
         </ThreadPrimitive.If>
       </ThreadPrimitive.Viewport>
 
-      <Composer />
+      <Composer hasMemory={hasMemory} />
     </ThreadPrimitive.Root>
   );
 };
@@ -83,22 +86,33 @@ const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
   );
 };
 
-const Composer: FC = () => {
+const Composer: FC<{ hasMemory?: boolean }> = ({ hasMemory }) => {
   return (
-    <ComposerPrimitive.Root className="w-full bg-surface3 rounded-lg border-sm border-border1 px-3 py-4 mt-auto h-[100px]">
-      <ComposerPrimitive.Input asChild className="w-full">
-        <textarea
-          className="text-ui-lg leading-ui-lg placeholder:text-icon3 text-icon6 bg-transparent focus:outline-none resize-none"
-          autoFocus
-          placeholder="Enter your message..."
-          name=""
-          id=""
-        ></textarea>
-      </ComposerPrimitive.Input>
-      <div className="flex justify-end">
-        <ComposerAction />
-      </div>
-    </ComposerPrimitive.Root>
+    <div>
+      <ComposerPrimitive.Root className="w-full bg-surface3 rounded-lg border-sm border-border1 px-3 py-4 mt-auto h-[100px]">
+        <ComposerPrimitive.Input asChild className="w-full">
+          <textarea
+            className="text-ui-lg leading-ui-lg placeholder:text-icon3 text-icon6 bg-transparent focus:outline-none resize-none"
+            autoFocus
+            placeholder="Enter your message..."
+            name=""
+            id=""
+          ></textarea>
+        </ComposerPrimitive.Input>
+        <div className="flex justify-end">
+          <ComposerAction />
+        </div>
+      </ComposerPrimitive.Root>
+
+      {!hasMemory && (
+        <Txt variant="ui-sm" className="text-icon3 flex items-center gap-2 pt-0.5">
+          <Icon>
+            <InfoIcon />
+          </Icon>
+          Memory is not enabled. The conversation will not be persisted.
+        </Txt>
+      )}
+    </div>
   );
 };
 
