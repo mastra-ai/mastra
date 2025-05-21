@@ -1,5 +1,7 @@
 import { openai } from '@ai-sdk/openai';
-import { Agent, Mastra, Step, Workflow } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
+import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy';
+import { Mastra } from '@mastra/core/mastra';
 import { z } from 'zod';
 
 async function main() {
@@ -9,14 +11,14 @@ async function main() {
     model: openai('gpt-4o-mini'),
   });
 
-  const newWorkflow = new Workflow({
+  const newWorkflow = new LegacyWorkflow({
     name: 'pass message to the workflow',
     triggerSchema: z.object({
       message: z.string(),
     }),
   });
 
-  const replyAsSkipper = new Step({
+  const replyAsSkipper = new LegacyStep({
     id: 'reply',
     outputSchema: z.object({
       reply: z.string(),
@@ -34,10 +36,10 @@ async function main() {
 
   const mastra = new Mastra({
     agents: { penguin },
-    workflows: { newWorkflow },
+    legacy_workflows: { newWorkflow },
   });
 
-  const { runId, start } = mastra.getWorkflow('newWorkflow').createRun();
+  const { runId, start } = mastra.legacy_getWorkflow('newWorkflow').createRun();
 
   console.log('Run', runId);
 
