@@ -128,7 +128,7 @@ const MCPServerToolExecutor = () => {
           <Crumb as={Link} to={`/mcps`}>
             MCP Servers
           </Crumb>
-          <Crumb as={Link} to={`/mcps`}>
+          <Crumb as={Link} to={`/mcps/${serverId}`}>
             {currentServerName}
           </Crumb>
           <Crumb as="span" to="" isCurrent>
@@ -136,10 +136,7 @@ const MCPServerToolExecutor = () => {
           </Crumb>
         </Breadcrumb>
       </Header>
-      <div className="p-4">
-        <h2 className="text-xl font-semibold text-mastra-el-7 mb-1">{toolActualName}</h2>
-        {toolActualDescription && <p className="text-sm text-mastra-el-3 mb-4">{toolActualDescription}</p>}
-      </div>
+
       <ToolExecutor
         executionResult={executionResult}
         isExecutingTool={isExecuting}
