@@ -8,10 +8,10 @@ import {
 } from "@headlessui/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import cn from "clsx";
-import { Search } from "lucide-react";
+import { Search, Zap } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { FC, SyntheticEvent } from "react";
-import { useRef, useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   PagefindResult,
   PagefindSearchOptions,
@@ -19,6 +19,7 @@ import {
 } from "../hooks/use-debounced-search";
 import { BookIcon, BurgerIcon, JarvisIcon } from "./svgs/Icons";
 import { SpinnerIcon } from "./svgs/spinner";
+import { Button } from "./ui/button";
 
 // Custom hook for responsive design
 const useMediaQuery = (query: string): boolean => {
@@ -317,10 +318,68 @@ export const CustomSearch: FC<SearchProps> = ({
                   );
                 })}
               </div>
-            ) : null}
+            ) : (
+              <EmptyState setSearch={setSearch} />
+            )}
           </ComboboxOptions>
         </div>
       </div>
     </Combobox>
   );
 };
+
+function EmptyState({ setSearch }: { setSearch: (search: string) => void }) {
+  const searches = [
+    {
+      label: "Search for RAG",
+      search: "RAG",
+    },
+    {
+      label: "Search for Workflows",
+      search: "Workflows",
+    },
+    {
+      label: "Search for Tools and MCP",
+      search: "Tools MCP",
+    },
+    {
+      label: "Search for Memory",
+      search: "Memory",
+    },
+    {
+      label: "Search for Evals",
+      search: "Evals",
+    },
+    {
+      label: "Search for Voice",
+      search: "Voice",
+    },
+  ];
+
+  return (
+    <div className="pt-4 ">
+      <p className="px-2 mb-2 text-sm font-medium text-icons-3 md:px-3">
+        Top searches
+      </p>
+      <ul className="flex flex-col w-full">
+        {searches.map((search) => (
+          <Button
+            key={search.search}
+            variant="ghost"
+            onClick={() => setSearch(search.search)}
+            className={cn(
+              "p-2 md:p-3 rounded-md cursor-pointer w-full text-left justify-start h-auto",
+              "hover:dark:bg-surface-5 hover:bg-[var(--light-color-surface-2)] ",
+              "bg-[var(--light-color-surface-15)] dark:bg-surface-4",
+            )}
+          >
+            <Zap className="w-4 h-4 md:w-5 md:h-5 shrink-0 text-accent-green" />
+            <span className="text-base font-normal truncate dark:text-icons-6 text-[var(--light-color-text-4)]">
+              {search.label}
+            </span>
+          </Button>
+        ))}
+      </ul>
+    </div>
+  );
+}
