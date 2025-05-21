@@ -31,3 +31,5 @@ memory.db-*
 # Test directories
 voice/**/test-outputs/
 voice/**/test-data/
+
+serviceAccount.json
