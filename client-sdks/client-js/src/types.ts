@@ -5,6 +5,7 @@ import type {
   QueryResult,
   StorageThreadType,
   WorkflowRuns,
+  LegacyWorkflowRuns,
 } from '@mastra/core';
 import type { BaseLogMessage } from '@mastra/core/logger';
 
