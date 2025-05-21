@@ -85,7 +85,6 @@ function App() {
               <Route path="/tools/:agentId/:toolId" element={<AgentTool />} />
               <Route path="/tools/all/:toolId" element={<Tool />} />
               <Route path="/mcps" element={<MCPs />} />
-              <Route path="/mcps/:serverId/:toolId" element={<MCPServerToolExecutor />} />
 
               <Route path="/mcps/:serverId" element={<McpServerPage />} />
               <Route path="/mcps/:serverId/tools/:toolId" element={<MCPServerToolExecutor />} />

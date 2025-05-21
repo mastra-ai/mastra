@@ -1,5 +1,6 @@
 import { CodeMirrorBlock } from '@/components/ui/code-mirror-block';
 import { CopyButton } from '@/components/ui/copy-button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useMCPServerTools } from '@/hooks/use-mcp-server-tools';
 import { useMCPServers } from '@/hooks/use-mcp-servers';
@@ -33,16 +34,6 @@ export const McpServerPage = () => {
 
   const server = mcpServers?.find(server => server.id === serverId);
 
-  if (isLoading) return null;
-
-  if (!server) {
-    return (
-      <Txt as="h1" variant="header-md" className="text-icon6 font-medium py-20">
-        Server not found
-      </Txt>
-    );
-  }
-
   const effectiveBaseUrl = client.options.baseUrl || 'http://localhost:4111';
   const sseUrl = `${effectiveBaseUrl}/api/mcp/${serverId}/sse`;
   const httpStreamUrl = `${effectiveBaseUrl}/api/mcp/${serverId}/mcp`;
@@ -56,54 +47,60 @@ export const McpServerPage = () => {
           </Crumb>
 
           <Crumb as={Link} to={`/mcps/${serverId}`} isCurrent>
-            {server.name}
+            {isLoading ? <Skeleton className="w-20 h-4" /> : server?.name || 'Not found'}
           </Crumb>
         </Breadcrumb>
       </Header>
 
-      <div className="grid grid-cols-[1fr_396px] h-full">
-        <div className="px-8 py-20 mx-auto max-w-[604px] w-full">
-          <Txt as="h1" variant="header-md" className="text-icon6 font-medium pb-4">
-            {server.name}
-          </Txt>
+      {isLoading ? null : server ? (
+        <div className="grid grid-cols-[1fr_396px] h-full">
+          <div className="px-8 py-20 mx-auto max-w-[604px] w-full">
+            <Txt as="h1" variant="header-md" className="text-icon6 font-medium pb-4">
+              {server.name}
+            </Txt>
 
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-1">
-              <Badge
-                icon={<span className="font-mono w-6 text-accent1 text-ui-xs font-medium">SSE</span>}
-                className="text-icon4"
-              >
-                {sseUrl}
-              </Badge>
-              <CopyButton tooltip="Copy SSE URL" content={sseUrl} iconSize="sm" />
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-1">
+                <Badge
+                  icon={<span className="font-mono w-6 text-accent1 text-ui-xs font-medium">SSE</span>}
+                  className="!text-icon4"
+                >
+                  {sseUrl}
+                </Badge>
+                <CopyButton tooltip="Copy SSE URL" content={sseUrl} iconSize="sm" />
+              </div>
+
+              <div className="flex items-center gap-1">
+                <Badge
+                  icon={<span className="font-mono w-6 text-accent1 text-ui-xs font-medium">HTTP</span>}
+                  className="!text-icon4"
+                >
+                  {httpStreamUrl}
+                </Badge>
+                <CopyButton tooltip="Copy HTTP Stream URL" content={httpStreamUrl} iconSize="sm" />
+              </div>
             </div>
 
-            <div className="flex items-center gap-1">
-              <Badge
-                icon={<span className="font-mono w-6 text-accent1 text-ui-xs font-medium">HTTP</span>}
-                className="text-icon4"
-              >
-                {httpStreamUrl}
+            <div className="flex items-center gap-1 pt-3 pb-9">
+              <Badge icon={<FolderIcon className="text-icon6" />} className="rounded-r-sm !text-icon4">
+                Version
               </Badge>
-              <CopyButton tooltip="Copy HTTP Stream URL" content={httpStreamUrl} iconSize="sm" />
+
+              <Badge className="rounded-l-sm !text-icon4">{server.version_detail.version}</Badge>
             </div>
+
+            <McpSetupTabs sseUrl={sseUrl} serverName={server.name} />
           </div>
 
-          <div className="flex items-center gap-1 pt-3 pb-9">
-            <Badge icon={<FolderIcon className="text-icon6" />} className="rounded-r-sm text-icon4">
-              Version
-            </Badge>
-
-            <Badge className="rounded-l-sm text-icon4">{server.version_detail.version}</Badge>
+          <div className="h-full overflow-y-scroll border-l-sm border-border1">
+            <McpToolList server={server} />
           </div>
-
-          <McpSetupTabs sseUrl={sseUrl} serverName={server.name} />
         </div>
-
-        <div className="h-full overflow-y-scroll border-l-sm border-border1">
-          <McpToolList server={server} />
-        </div>
-      </div>
+      ) : (
+        <Txt as="h1" variant="header-md" className="text-icon6 font-medium py-20">
+          Server not found
+        </Txt>
+      )}
     </>
   );
 };
