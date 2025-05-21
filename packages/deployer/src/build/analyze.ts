@@ -165,7 +165,12 @@ async function analyze(
  * @param logger - Logger instance for debugging
  * @returns Object containing bundle output and reference map for validation
  */
-async function bundleExternals(depsToOptimize: Map<string, string[]>, outputDir: string, logger: IMastraLogger) {
+async function bundleExternals(
+  depsToOptimize: Map<string, string[]>,
+  outputDir: string,
+  logger: IMastraLogger,
+  customExternals?: string[],
+) {
   logger.info('Optimizing dependencies...');
   logger.debug(
     `${Array.from(depsToOptimize.keys())
