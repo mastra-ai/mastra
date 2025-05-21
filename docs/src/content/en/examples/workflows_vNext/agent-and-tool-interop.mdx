@@ -204,7 +204,7 @@ Register the workflow with the mastra instance.
 
 ```ts showLineNumbers copy filename="index.ts"
 import { Mastra } from '@mastra/core/mastra'
-import { createLogger } from '@mastra/core/logger'
+import { PinoLogger } from '@mastra/loggers'
 import { weatherWorkflow } from './workflows/interop-workflow'
 import { weatherReporterAgent } from './agents/weather-reporter-agent'
  
@@ -216,7 +216,7 @@ const mastra = new Mastra({
   agents: {
     weatherReporterAgent,
   },
-  logger: createLogger({
+  logger: new PinoLogger({
     name: "Mastra",
     level: "info",
   }),

@@ -8,7 +8,6 @@ import { DynamicForm } from '@/components/dynamic-form';
 import { resolveSerializedZodOutput } from '@/components/dynamic-form/utils';
 import { Button } from '@/ds/components/Button';
 import { CodeBlockDemo } from '@/components/ui/code-block';
-
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
@@ -16,10 +15,10 @@ import { Text } from '@/components/ui/text';
 import { useExecuteWorkflow, useWatchWorkflow, useResumeWorkflow, useWorkflow } from '@/hooks/use-workflows';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { toast } from 'sonner';
-import { Txt } from '@/ds/components/Txt';
+import { usePlaygroundStore } from '@/store/playground-store';
 import { Icon } from '@/ds/icons';
+import { Txt } from '@/ds/components/Txt';
 import { WorkflowStatus } from './workflow-status';
-
 import { WorkflowResult } from './workflow-result';
 interface SuspendedStep {
   stepId: string;
@@ -36,6 +35,7 @@ export function WorkflowTrigger({
   baseUrl: string;
   setRunId?: (runId: string) => void;
 }) {
+  const { runtimeContext } = usePlaygroundStore();
   const { result, setResult, payload, setPayload } = useContext(WorkflowRunContext);
   const { isLoading, workflow } = useWorkflow(workflowId, baseUrl);
   const { createWorkflowRun, startWorkflowRun } = useExecuteWorkflow(baseUrl);
@@ -43,7 +43,7 @@ export function WorkflowTrigger({
   const { resumeWorkflow, isResumingWorkflow } = useResumeWorkflow(baseUrl);
   const [suspendedSteps, setSuspendedSteps] = useState<SuspendedStep[]>([]);
   const [isRunning, setIsRunning] = useState(false);
-  const triggerSchema = workflow?.triggerSchema;
+  const triggerSchema = workflow?.inputSchema;
 
   const handleExecuteWorkflow = async (data: any) => {
     try {
@@ -58,47 +58,48 @@ export function WorkflowTrigger({
 
       watchWorkflow({ workflowId, runId });
 
-      startWorkflowRun({ workflowId, runId, input: data });
+      startWorkflowRun({ workflowId, runId, input: data, runtimeContext });
     } catch (err) {
       setIsRunning(false);
       toast.error('Error executing workflow');
     }
   };
 
-  const handleResumeWorkflow = async (step: SuspendedStep & { context: any }) => {
+  const handleResumeWorkflow = async (step: SuspendedStep & { resumeData: any }) => {
     if (!workflow) return;
 
-    const { stepId, runId: prevRunId, context } = step;
+    const { stepId, runId: prevRunId, resumeData } = step;
 
     const { runId } = await createWorkflowRun({ workflowId, prevRunId });
 
     watchWorkflow({ workflowId, runId });
 
     await resumeWorkflow({
-      stepId,
+      step: stepId,
       runId,
-      context,
+      resumeData,
       workflowId,
+      runtimeContext,
     });
   };
 
   const watchResultToUse = result ?? watchResult;
 
-  const workflowActivePaths = watchResultToUse?.activePaths ?? {};
+  const workflowActivePaths = watchResultToUse?.payload?.workflowState?.steps ?? {};
 
   useEffect(() => {
     setIsRunning(isWatchingWorkflow);
   }, [isWatchingWorkflow]);
 
   useEffect(() => {
-    if (!watchResultToUse?.activePaths || !result?.runId) return;
+    if (!watchResultToUse?.payload?.workflowState?.steps || !result?.runId) return;
 
-    const suspended = Object.entries(watchResultToUse.activePaths)
+    const suspended = Object.entries(watchResultToUse.payload.workflowState.steps)
       .filter(([_, { status }]) => status === 'suspended')
-      .map(([stepId, { suspendPayload }]) => ({
+      .map(([stepId, { payload }]) => ({
         stepId,
         runId: result.runId,
-        suspendPayload,
+        suspendPayload: payload,
       }));
     setSuspendedSteps(suspended);
   }, [watchResultToUse, result]);
@@ -174,11 +175,12 @@ export function WorkflowTrigger({
           </>
         )}
 
-        {isSuspendedSteps &&
+        {!isWatchingWorkflow &&
+          isSuspendedSteps &&
           suspendedSteps?.map(step => {
             const stepDefinition = workflow.steps[step.stepId];
-            const stepSchema = stepDefinition?.inputSchema
-              ? resolveSerializedZodOutput(jsonSchemaToZod(parse(stepDefinition.inputSchema)))
+            const stepSchema = stepDefinition?.resumeSchema
+              ? resolveSerializedZodOutput(jsonSchemaToZod(parse(stepDefinition.resumeSchema)))
               : z.record(z.string(), z.any());
             return (
               <div className="flex flex-col px-4">
@@ -203,7 +205,7 @@ export function WorkflowTrigger({
                       stepId: step.stepId,
                       runId: step.runId,
                       suspendPayload: step.suspendPayload,
-                      context: data,
+                      resumeData: data,
                     });
                   }}
                 />
@@ -214,16 +216,17 @@ export function WorkflowTrigger({
         {hasWorkflowActivePaths && (
           <>
             <hr className="border-border1 border-sm my-5" />
-            <div className="flex flex-col gap-4">
-              {Object.entries(workflowActivePaths)?.map(([stepId, { status: pathStatus, stepPath }]) => {
-                return (
-                  <div className="flex flex-col gap-1" key={stepId}>
-                    {stepPath?.map((path, idx) => {
-                      return <WorkflowStatus stepId={stepId} pathStatus={pathStatus} path={path} key={idx} />;
-                    })}
-                  </div>
-                );
-              })}
+            <div className="flex flex-col gap-2">
+              <Text variant="secondary" className="px-4 text-mastra-el-3" size="xs">
+                Status
+              </Text>
+              <div className="px-4 flex flex-col gap-4">
+                {Object.entries(workflowActivePaths)
+                  ?.filter(([key, _]) => key !== 'input' && !key.endsWith('.input'))
+                  ?.map(([stepId, { status }]) => {
+                    return <WorkflowStatus stepId={stepId} status={status} />;
+                  })}
+              </div>
             </div>
           </>
         )}
@@ -231,7 +234,7 @@ export function WorkflowTrigger({
         {result && (
           <>
             <hr className="border-border1 border-sm my-5" />
-            <WorkflowResult jsonResult={JSON.stringify(restResult, null, 2)} />
+            <WorkflowResult sanitizedJsonResult={sanitizedOutput} jsonResult={JSON.stringify(restResult, null, 2)} />
           </>
         )}
       </div>

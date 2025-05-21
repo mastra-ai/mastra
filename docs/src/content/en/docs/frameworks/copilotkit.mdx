@@ -92,7 +92,7 @@ Next, let's update the Mastra instance with a custom API route for CopilotKit.
 
 ```typescript copy
 import { Mastra } from "@mastra/core/mastra";
-import { createLogger } from "@mastra/core/logger";
+import { PinoLogger } from "@mastra/loggers";
 import { LibSQLStore } from "@mastra/libsql";
 import {
   CopilotRuntime,
@@ -111,7 +111,7 @@ export const mastra = new Mastra({
     // if you need to persist, change to file:../mastra.db
     url: ":memory:",
   }),
-  logger: createLogger({
+  logger: new PinoLogger({
     name: "Mastra",
     level: "info",
   }),

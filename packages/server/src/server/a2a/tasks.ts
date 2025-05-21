@@ -1,5 +1,5 @@
 import type { Message, TaskContext, TaskAndHistory, Task, TaskState, TaskStatus, Artifact } from '@mastra/core/a2a';
-import type { Logger } from '@mastra/core/logger';
+import type { IMastraLogger } from '@mastra/core/logger';
 import type { InMemoryTaskStore } from './store';
 
 function isTaskStatusUpdate(update: TaskStatus | Artifact): update is Omit<TaskStatus, 'timestamp'> {
@@ -97,7 +97,7 @@ export async function loadOrCreateTaskAndHistory({
   message: Message;
   sessionId?: string | null;
   metadata?: Record<string, unknown> | null;
-  logger?: Logger;
+  logger?: IMastraLogger;
 }): Promise<TaskAndHistory> {
   const data = await taskStore.load({ agentId, taskId });
 

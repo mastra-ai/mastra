@@ -1,7 +1,7 @@
 import type { MetricResult, TestInfo } from '../eval';
 import type { MemoryConfig } from '../memory/types';
 import type { WorkflowRunState } from '../workflows';
-import type { VNextWorkflowRunState } from '../workflows/vNext';
+import type { LegacyWorkflowRunState } from '../workflows/legacy';
 
 export interface StorageColumn {
   type: 'text' | 'timestamp' | 'uuid' | 'jsonb' | 'integer' | 'bigint';
@@ -13,6 +13,20 @@ export interface StorageColumn {
   };
 }
 
+export interface LegacyWorkflowRuns {
+  runs: LegacyWorkflowRun[];
+  total: number;
+}
+
+export interface LegacyWorkflowRun {
+  workflowName: string;
+  runId: string;
+  snapshot: LegacyWorkflowRunState | string;
+  createdAt: Date;
+  updatedAt: Date;
+  resourceId?: string;
+}
+
 export interface WorkflowRuns {
   runs: WorkflowRun[];
   total: number;
@@ -22,20 +36,6 @@ export interface WorkflowRun {
   workflowName: string;
   runId: string;
   snapshot: WorkflowRunState | string;
-  createdAt: Date;
-  updatedAt: Date;
-  resourceId?: string;
-}
-
-export interface VNextWorkflowRuns {
-  runs: VNextWorkflowRun[];
-  total: number;
-}
-
-export interface VNextWorkflowRun {
-  workflowName: string;
-  runId: string;
-  snapshot: VNextWorkflowRunState | string;
   createdAt: Date;
   updatedAt: Date;
   resourceId?: string;

@@ -150,13 +150,15 @@ export class UpstashTransport extends LoggerTransport {
       const response = await this.executeUpstashCommand(command);
 
       // Parse the logs from JSON strings back to objects
-      return response?.[0]?.result.map((log: string) => {
-        try {
-          return JSON.parse(log);
-        } catch {
-          return '';
-        }
-      }) as BaseLogMessage[];
+      return (
+        (response?.[0]?.result?.map((log: string) => {
+          try {
+            return JSON.parse(log);
+          } catch {
+            return {};
+          }
+        }) as BaseLogMessage[]) || []
+      );
     } catch (error) {
       console.error('Error getting logs from Upstash:', error);
       return [];
@@ -166,11 +168,11 @@ export class UpstashTransport extends LoggerTransport {
   async getLogsByRunId({ runId }: { runId: string }): Promise<BaseLogMessage[]> {
     try {
       const allLogs = await this.getLogs();
-      const logs = (allLogs.filter((log: any) => log.runId === runId) || []) as BaseLogMessage[];
+      const logs = (allLogs?.filter((log: any) => log.runId === runId) || []) as BaseLogMessage[];
       return logs;
     } catch (error) {
       console.error('Error getting logs by runId from Upstash:', error);
-      return [] as BaseLogMessage[];
+      return [];
     }
   }
 }

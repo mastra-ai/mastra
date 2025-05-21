@@ -1,5 +1,23 @@
 # @mastra/core
 
+## 0.10.0-alpha.1
+
+### Minor Changes
+
+- 5eb5a99: Remove pino from @mastra/core into @mastra/loggers
+- 7e632c5: Removed default LibSQLStore and LibSQLVector from @mastra/core. These now live in a separate package @mastra/libsql
+- b2ae5aa: Added support for experimental authentication and authorization
+- 0dcb9f0: Memory breaking changes: storage, vector, and embedder are now required. Working memory text streaming has been removed, only tool calling is supported for working memory updates now. Default settings have changed (lastMessages: 40->10, semanticRecall: true->false, threads.generateTitle: true->false)
+
+### Patch Changes
+
+- b3a3d63: BREAKING: Make vnext workflow the default worklow, and old workflow legacy_workflow
+- 344f453: Await onFinish & onStepFinish to ensure the stream doesn't close early
+- 0a3ae6d: Fixed a bug where tool input schema properties that were optional became required
+- 95911be: Fixed an issue where if @mastra/core was not released at the same time as create-mastra, create-mastra would match the alpha tag instead of latest tag when running npm create mastra@latest
+- 1e9fbfa: Upgrade to OpenTelemetry JS SDK 2.x
+- a7292b0: BREAKING(@mastra/core, all vector stores): Vector store breaking changes (remove deprecated functions and positional arguments)
+
 ## 0.9.5-alpha.0
 
 ### Patch Changes

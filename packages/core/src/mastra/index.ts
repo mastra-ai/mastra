@@ -1,7 +1,7 @@
 import type { Agent } from '../agent';
 import type { MastraDeployer } from '../deployer';
-import { LogLevel, createLogger, noopLogger } from '../logger';
-import type { Logger } from '../logger';
+import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
+import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory/memory';
 import type { AgentNetwork } from '../network';
@@ -13,15 +13,15 @@ import type { OtelConfig } from '../telemetry';
 import type { MastraTTS } from '../tts';
 import type { MastraVector } from '../vector';
 import type { Workflow } from '../workflows';
-import type { NewWorkflow } from '../workflows/vNext';
+import type { LegacyWorkflow } from '../workflows/legacy';
 
 export interface Config<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
+  TLegacyWorkflows extends Record<string, LegacyWorkflow> = Record<string, LegacyWorkflow>,
   TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
-  TNewWorkflows extends Record<string, NewWorkflow> = Record<string, NewWorkflow>,
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
-  TLogger extends Logger = Logger,
+  TLogger extends IMastraLogger = IMastraLogger,
   TNetworks extends Record<string, AgentNetwork> = Record<string, AgentNetwork>,
   TMCPServers extends Record<string, MCPServerBase> = Record<string, MCPServerBase>,
 > {
@@ -30,8 +30,8 @@ export interface Config<
   storage?: MastraStorage;
   vectors?: TVectors;
   logger?: TLogger | false;
+  legacy_workflows?: TLegacyWorkflows;
   workflows?: TWorkflows;
-  vnext_workflows?: TNewWorkflows;
   tts?: TTTS;
   telemetry?: OtelConfig;
   deployer?: MastraDeployer;
@@ -58,19 +58,19 @@ export interface Config<
 })
 export class Mastra<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
+  TLegacyWorkflows extends Record<string, LegacyWorkflow> = Record<string, LegacyWorkflow>,
   TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
-  TNewWorkflows extends Record<string, NewWorkflow> = Record<string, NewWorkflow>,
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
-  TLogger extends Logger = Logger,
+  TLogger extends IMastraLogger = IMastraLogger,
   TNetworks extends Record<string, AgentNetwork> = Record<string, AgentNetwork>,
   TMCPServers extends Record<string, MCPServerBase> = Record<string, MCPServerBase>,
 > {
   #vectors?: TVectors;
   #agents: TAgents;
   #logger: TLogger;
+  #legacy_workflows: TLegacyWorkflows;
   #workflows: TWorkflows;
-  #vnext_workflows: TNewWorkflows;
   #tts?: TTTS;
   #deployer?: MastraDeployer;
   #serverMiddleware: Array<{
@@ -105,7 +105,7 @@ export class Mastra<
     return this.#memory;
   }
 
-  constructor(config?: Config<TAgents, TWorkflows, TNewWorkflows, TVectors, TTTS, TLogger, TNetworks, TMCPServers>) {
+  constructor(config?: Config<TAgents, TLegacyWorkflows, TWorkflows, TVectors, TTTS, TLogger, TNetworks, TMCPServers>) {
     // Store server middleware with default path
     if (config?.serverMiddleware) {
       this.#serverMiddleware = config.serverMiddleware.map(m => ({
@@ -125,9 +125,9 @@ export class Mastra<
       if (config?.logger) {
         logger = config.logger;
       } else {
-        const levleOnEnv =
+        const levelOnEnv =
           process.env.NODE_ENV === 'production' && process.env.MASTRA_DEV !== 'true' ? LogLevel.WARN : LogLevel.INFO;
-        logger = createLogger({ name: 'Mastra', level: levleOnEnv }) as unknown as TLogger;
+        logger = new ConsoleLogger({ name: 'Mastra', level: levelOnEnv }) as unknown as TLogger;
       }
     }
     this.#logger = logger;
@@ -264,10 +264,36 @@ do:
     }
 
     /*
-    Workflows
+    Legacy Workflows
     */
-    this.#workflows = {} as TWorkflows;
+    this.#legacy_workflows = {} as TLegacyWorkflows;
 
+    if (config?.legacy_workflows) {
+      Object.entries(config.legacy_workflows).forEach(([key, workflow]) => {
+        workflow.__registerMastra(this);
+        workflow.__registerPrimitives({
+          logger: this.getLogger(),
+          telemetry: this.#telemetry,
+          storage: this.storage,
+          memory: this.memory,
+          agents: agents,
+          tts: this.#tts,
+          vectors: this.#vectors,
+        });
+        // @ts-ignore
+        this.#legacy_workflows[key] = workflow;
+
+        const workflowSteps = Object.values(workflow.steps).filter(step => !!step.workflowId && !!step.workflow);
+        if (workflowSteps.length > 0) {
+          workflowSteps.forEach(step => {
+            // @ts-ignore
+            this.#legacy_workflows[step.workflowId] = step.workflow;
+          });
+        }
+      });
+    }
+
+    this.#workflows = {} as TWorkflows;
     if (config?.workflows) {
       Object.entries(config.workflows).forEach(([key, workflow]) => {
         workflow.__registerMastra(this);
@@ -282,32 +308,6 @@ do:
         });
         // @ts-ignore
         this.#workflows[key] = workflow;
-
-        const workflowSteps = Object.values(workflow.steps).filter(step => !!step.workflowId && !!step.workflow);
-        if (workflowSteps.length > 0) {
-          workflowSteps.forEach(step => {
-            // @ts-ignore
-            this.#workflows[step.workflowId] = step.workflow;
-          });
-        }
-      });
-    }
-
-    this.#vnext_workflows = {} as TNewWorkflows;
-    if (config?.vnext_workflows) {
-      Object.entries(config.vnext_workflows).forEach(([key, workflow]) => {
-        workflow.__registerMastra(this);
-        workflow.__registerPrimitives({
-          logger: this.getLogger(),
-          telemetry: this.#telemetry,
-          storage: this.storage,
-          memory: this.memory,
-          agents: agents,
-          tts: this.#tts,
-          vectors: this.#vectors,
-        });
-        // @ts-ignore
-        this.#vnext_workflows[key] = workflow;
       });
     }
 
@@ -346,6 +346,22 @@ do:
     return this.#deployer;
   }
 
+  public legacy_getWorkflow<TWorkflowId extends keyof TLegacyWorkflows>(
+    id: TWorkflowId,
+    { serialized }: { serialized?: boolean } = {},
+  ): TLegacyWorkflows[TWorkflowId] {
+    const workflow = this.#legacy_workflows?.[id];
+    if (!workflow) {
+      throw new Error(`Workflow with ID ${String(id)} not found`);
+    }
+
+    if (serialized) {
+      return { name: workflow.name } as TLegacyWorkflows[TWorkflowId];
+    }
+
+    return workflow;
+  }
+
   public getWorkflow<TWorkflowId extends keyof TWorkflows>(
     id: TWorkflowId,
     { serialized }: { serialized?: boolean } = {},
@@ -362,20 +378,16 @@ do:
     return workflow;
   }
 
-  public vnext_getWorkflow<TWorkflowId extends keyof TNewWorkflows>(
-    id: TWorkflowId,
-    { serialized }: { serialized?: boolean } = {},
-  ): TNewWorkflows[TWorkflowId] {
-    const workflow = this.#vnext_workflows?.[id];
-    if (!workflow) {
-      throw new Error(`Workflow with ID ${String(id)} not found`);
+  public legacy_getWorkflows(props: { serialized?: boolean } = {}): Record<string, LegacyWorkflow> {
+    if (props.serialized) {
+      return Object.entries(this.#legacy_workflows).reduce((acc, [k, v]) => {
+        return {
+          ...acc,
+          [k]: { name: v.name },
+        };
+      }, {});
     }
-
-    if (serialized) {
-      return { name: workflow.name } as TNewWorkflows[TWorkflowId];
-    }
-
-    return workflow;
+    return this.#legacy_workflows;
   }
 
   public getWorkflows(props: { serialized?: boolean } = {}): Record<string, Workflow> {
@@ -388,18 +400,6 @@ do:
       }, {});
     }
     return this.#workflows;
-  }
-
-  public vnext_getWorkflows(props: { serialized?: boolean } = {}): Record<string, NewWorkflow> {
-    if (props.serialized) {
-      return Object.entries(this.#vnext_workflows).reduce((acc, [k, v]) => {
-        return {
-          ...acc,
-          [k]: { name: v.name },
-        };
-      }, {});
-    }
-    return this.#vnext_workflows;
   }
 
   public setStorage(storage: MastraStorage) {

@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import type { Logger } from '@mastra/core';
+import type { IMastraLogger } from '@mastra/core/logger';
 import slugify from '@sindresorhus/slugify';
 import { findWorkspaces, findWorkspacesRoot } from 'find-workspaces';
 import { ensureDir } from 'fs-extra';
@@ -47,7 +47,7 @@ export const collectTransitiveWorkspaceDependencies = ({
 }: {
   workspaceMap: Map<string, WorkspacePackageInfo>;
   initialDependencies: Set<string>;
-  logger: Logger;
+  logger: IMastraLogger;
 }): TransitiveDependencyResult => {
   const usedWorkspacePackages = new Set<string>();
   const queue: string[] = Array.from(initialDependencies);
@@ -102,7 +102,7 @@ export const packWorkspaceDependencies = async ({
 }: {
   workspaceMap: Map<string, WorkspacePackageInfo>;
   bundleOutputDir: string;
-  logger: Logger;
+  logger: IMastraLogger;
   usedWorkspacePackages: Set<string>;
 }): Promise<void> => {
   const root = findWorkspacesRoot();

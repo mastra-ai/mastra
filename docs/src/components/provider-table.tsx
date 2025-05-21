@@ -458,6 +458,9 @@ export function ProviderTable() {
       <TableHeader>
         <TableRow className="dark:border-neutral-700 border-[var(--light-border-muted)]">
           <TableHead className="w-[200px] font-bold pb-2">Provider</TableHead>
+          <TableHead className="w-[200px] font-bold pb-2">
+            Provider String
+          </TableHead>
           <TableHead className="w-[200px] font-bold pb-2">API Key</TableHead>
           <TableHead className="w-[250px] font-bold pb-2">Model</TableHead>
           <TableHead className="pb-2 font-bold text-center">
@@ -487,6 +490,9 @@ export function ProviderTable() {
               >
                 {model.provider}
               </Link>
+            </TableCell>
+            <TableCell className="font-mono">
+              {model.providerUrl.split("/").pop()!.split("-")[0]}
             </TableCell>
             <TableCell className="font-medium">
               <Badge

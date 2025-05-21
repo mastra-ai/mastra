@@ -3,7 +3,7 @@ import { Routes, Route, BrowserRouter, Navigate, Outlet } from 'react-router';
 import { Layout } from '@/components/layout';
 
 import { AgentLayout } from '@/domains/agents/agent-layout';
-import { WorkflowLayout } from '@/domains/workflows/workflow-layout';
+import { LegacyWorkflowLayout } from '@/domains/workflows/legacy-workflow-layout';
 import Tools from '@/pages/tools';
 
 import Agents from './pages/agents';
@@ -14,12 +14,12 @@ import AgentTool from './pages/tools/agent-tool';
 import Tool from './pages/tools/tool';
 import Workflows from './pages/workflows';
 import Workflow from './pages/workflows/workflow';
-import VNextWorkflow from './pages/workflows/workflow/v-next';
+import LegacyWorkflow from './pages/workflows/workflow/legacy';
 import WorkflowTracesPage from './pages/workflows/workflow/traces';
-import VNextWorkflowTracesPage from './pages/workflows/workflow/v-next/traces';
+import LegacyWorkflowTracesPage from './pages/workflows/workflow/legacy/traces';
 import Networks from './pages/networks';
 import { NetworkLayout } from './domains/networks/network-layout';
-import { VNextWorkflowLayout } from './domains/workflows/v-next-workflow-layout';
+import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import Network from './pages/networks/network';
 import { PostHogProvider } from './lib/analytics';
 import RuntimeContext from './pages/runtime-context';
@@ -83,11 +83,10 @@ function App() {
               <Route path="/tools" element={<Tools />} />
               <Route path="/tools/:agentId/:toolId" element={<AgentTool />} />
               <Route path="/tools/all/:toolId" element={<Tool />} />
-              <Route path="/workflows" element={<Workflows />} />
-              <Route path="/workflows/:workflowId" element={<Navigate to="/workflows/:workflowId/graph" />} />
               <Route path="/mcps" element={<MCPs />} />
               <Route path="/mcps/:serverId/:toolId" element={<MCPServerToolExecutor />} />
-
+              <Route path="/workflows" element={<Workflows />} />
+              <Route path="/workflows/:workflowId" element={<Navigate to="/workflows/:workflowId/graph" />} />
               <Route
                 path="/workflows/:workflowId"
                 element={
@@ -99,17 +98,21 @@ function App() {
                 <Route path="graph" element={<Workflow />} />
                 <Route path="traces" element={<WorkflowTracesPage />} />
               </Route>
-              <Route path="/workflows/v-next" element={<Navigate to="/workflows/v-next/:workflowId/graph" />} />
               <Route
-                path="/workflows/v-next/:workflowId"
+                path="/workflows/legacy/:workflowId"
+                element={<Navigate to="/workflows/legacy/:workflowId/graph" />}
+              />
+
+              <Route
+                path="/workflows/legacy/:workflowId"
                 element={
-                  <VNextWorkflowLayout>
+                  <LegacyWorkflowLayout>
                     <Outlet />
-                  </VNextWorkflowLayout>
+                  </LegacyWorkflowLayout>
                 }
               >
-                <Route path="graph" element={<VNextWorkflow />} />
-                <Route path="traces" element={<VNextWorkflowTracesPage />} />
+                <Route path="graph" element={<LegacyWorkflow />} />
+                <Route path="traces" element={<LegacyWorkflowTracesPage />} />
               </Route>
               <Route path="/" element={<Navigate to="/agents" />} />
               <Route path="/runtime-context" element={<RuntimeContext />} />

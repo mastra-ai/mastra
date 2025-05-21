@@ -151,7 +151,7 @@ Register the workflow with Mastra and configure the Inngest API endpoint:
 ```ts showLineNumbers copy filename="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
 import { serve as inngestServe } from '@mastra/inngest'
-import { createLogger } from '@mastra/core/logger'
+import { PinoLogger } from '@mastra/loggers'
 import { Inngest } from 'inngest'
 import { incrementWorkflow } from './workflows/inngest-workflow'
 import { realtimeMiddleware } from '@inngest/realtime'
@@ -182,7 +182,7 @@ export const mastra = new Mastra({
       },
     ],
   },
-  logger: createLogger({
+  logger: new PinoLogger({
     name: 'Mastra',
     level: 'info',
   }),
