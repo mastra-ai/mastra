@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-openai-realtime",
-  "version": "0.3.0-alpha.1",
+  "version": "0.10.0-alpha.1",
   "description": "Mastra OpenAI Realtime API integration",
   "type": "module",
   "main": "dist/index.js",
@@ -43,7 +43,7 @@
     "zod": "^3.24.3"
   },
   "peerDependencies": {
-    "@mastra/core": "^0.9.4",
+    "@mastra/core": "^0.10.0",
     "zod": "^3.0.0"
   }
 }

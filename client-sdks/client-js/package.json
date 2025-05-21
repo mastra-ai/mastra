@@ -1,6 +1,6 @@
 {
   "name": "@mastra/client-js",
-  "version": "0.2.0-alpha.1",
+  "version": "0.10.0-alpha.1",
   "description": "The official TypeScript library for the Mastra Client API",
   "author": "",
   "type": "module",
@@ -36,7 +36,7 @@
   },
   "peerDependencies": {
     "zod": "^3.0.0",
-    "@mastra/core": "^0.9.4"
+    "@mastra/core": "^0.10.0"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.26.9",
