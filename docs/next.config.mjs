@@ -887,6 +887,11 @@ export default withGT(
         destination: "/reference/tools/mcp-client",
         permanent: true,
       },
+      {
+        source: "/reference/observability/create-logger",
+        destination: "/reference/observability/logger",
+        permanent: true,
+      },
     ],
     trailingSlash: false,
   }),

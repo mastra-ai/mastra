@@ -1,7 +1,7 @@
 import type { Agent } from '../agent';
 import type { MastraDeployer } from '../deployer';
-import { LogLevel, createLogger, noopLogger } from '../logger';
-import type { Logger } from '../logger';
+import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
+import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory/memory';
 import type { AgentNetwork } from '../network';
@@ -21,7 +21,7 @@ export interface Config<
   TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
-  TLogger extends Logger = Logger,
+  TLogger extends IMastraLogger = IMastraLogger,
   TNetworks extends Record<string, AgentNetwork> = Record<string, AgentNetwork>,
   TMCPServers extends Record<string, MCPServerBase> = Record<string, MCPServerBase>,
 > {
@@ -62,7 +62,7 @@ export class Mastra<
   TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
-  TLogger extends Logger = Logger,
+  TLogger extends IMastraLogger = IMastraLogger,
   TNetworks extends Record<string, AgentNetwork> = Record<string, AgentNetwork>,
   TMCPServers extends Record<string, MCPServerBase> = Record<string, MCPServerBase>,
 > {
@@ -125,9 +125,9 @@ export class Mastra<
       if (config?.logger) {
         logger = config.logger;
       } else {
-        const levleOnEnv =
+        const levelOnEnv =
           process.env.NODE_ENV === 'production' && process.env.MASTRA_DEV !== 'true' ? LogLevel.WARN : LogLevel.INFO;
-        logger = createLogger({ name: 'Mastra', level: levleOnEnv }) as unknown as TLogger;
+        logger = new ConsoleLogger({ name: 'Mastra', level: levelOnEnv }) as unknown as TLogger;
       }
     }
     this.#logger = logger;

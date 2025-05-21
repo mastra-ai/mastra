@@ -35,14 +35,14 @@ export const noteTakerAgent = new Agent({
 このスニペットは、STT対応エージェントをあなたの Mastra インスタンスに登録する方法を示しています。
 
 ```typescript filename="src/mastra/index.ts"
-import { createLogger } from "@mastra/core/logger";
+import { PinoLogger } from "@mastra/loggers";
 import { Mastra } from "@mastra/core/mastra";
 
 import { noteTakerAgent } from "./agents";
 
 export const mastra = new Mastra({
   agents: { noteTakerAgent }, // Register the note taker agent
-  logger: createLogger({
+  logger: new PinoLogger({
     name: "Mastra",
     level: "info",
   }),

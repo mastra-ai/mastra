@@ -4,10 +4,10 @@ import type {
   CoreMessage,
   QueryResult,
   StorageThreadType,
-  BaseLogMessage,
   WorkflowRuns,
   LegacyWorkflowRuns,
 } from '@mastra/core';
+import type { BaseLogMessage } from '@mastra/core/logger';
 
 import type { AgentGenerateOptions, AgentStreamOptions } from '@mastra/core/agent';
 import type { ServerInfo } from '@mastra/core/mcp';

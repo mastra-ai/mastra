@@ -7,7 +7,7 @@ import { assign, createActor, fromPromise, setup } from 'xstate';
 import type { z } from 'zod';
 import type { Mastra } from '../..';
 import type { MastraUnion } from '../../action';
-import type { Logger } from '../../logger';
+import type { IMastraLogger } from '../../logger';
 import type { RuntimeContext } from '../../runtime-context';
 import { createMastraProxy } from '../../utils';
 import type { LegacyStep as Step } from './step';
@@ -47,7 +47,7 @@ export class Machine<
   TTriggerSchema extends z.ZodObject<any> = any,
   TResultSchema extends z.ZodObject<any> = any,
 > extends EventEmitter {
-  logger: Logger;
+  logger: IMastraLogger;
   #mastra?: Mastra;
   #runtimeContext: RuntimeContext;
   #workflowInstance: WorkflowInstance;
@@ -76,7 +76,7 @@ export class Machine<
     retryConfig,
     startStepId,
   }: {
-    logger: Logger;
+    logger: IMastraLogger;
     mastra?: Mastra;
     runtimeContext: RuntimeContext;
     workflowInstance: WorkflowInstance;

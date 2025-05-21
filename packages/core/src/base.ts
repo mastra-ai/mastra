@@ -1,24 +1,26 @@
-import type { Logger } from './logger';
-import { createLogger, RegisteredLogger } from './logger';
+import type { IMastraLogger } from './logger';
+import { RegisteredLogger } from './logger/constants';
+import { ConsoleLogger } from './logger/default-logger';
+
 import type { Telemetry } from './telemetry';
 
 export class MastraBase {
   component: RegisteredLogger = RegisteredLogger.LLM;
-  protected logger: Logger;
+  protected logger: IMastraLogger;
   name?: string;
   telemetry?: Telemetry;
 
   constructor({ component, name }: { component?: RegisteredLogger; name?: string }) {
     this.component = component || RegisteredLogger.LLM;
     this.name = name;
-    this.logger = createLogger({ name: `${this.component} - ${this.name}` });
+    this.logger = new ConsoleLogger({ name: `${this.component} - ${this.name}` });
   }
 
   /**
    * Set the logger for the agent
    * @param logger
    */
-  __setLogger(logger: Logger) {
+  __setLogger(logger: IMastraLogger) {
     this.logger = logger;
 
     if (this.component !== RegisteredLogger.LLM) {

@@ -379,10 +379,6 @@ export const ReferenceCards = () => {
             title: "OTelConfig",
             href: "/reference/observability/otel-config",
           },
-          {
-            title: ".createLogger()",
-            href: "/reference/observability/create-logger",
-          },
         ],
         "Client SDK - JS": [
           {

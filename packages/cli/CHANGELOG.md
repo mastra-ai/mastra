@@ -1,5 +1,44 @@
 # mastra
 
+## 0.7.0-alpha.1
+
+### Minor Changes
+
+- 83da932: Move @mastra/core to peerdeps
+- 5eb5a99: Remove pino from @mastra/core into @mastra/loggers
+- 0dcb9f0: Memory breaking changes: storage, vector, and embedder are now required. Working memory text streaming has been removed, only tool calling is supported for working memory updates now. Default settings have changed (lastMessages: 40->10, semanticRecall: true->false, threads.generateTitle: true->false)
+
+### Patch Changes
+
+- bdb7934: fix tools not showing (discoverability)
+- b3a3d63: BREAKING: Make vnext workflow the default worklow, and old workflow legacy_workflow
+- ae122cc: show the entities ID close to the copy button
+- f2d3352: fix overflow scroll in runtime context
+- fd69cc3: revamp UI of workflow "Run" pane
+- 8d9feae: Add missing x-mastra-dev-playground headers
+- cbf153f: Handle broken images on the playground
+- 0cae9b1: sidebar adjustments (storing status + showing the action of collapsing / expanding)
+- d2b595a: a better tools playground page
+- 1f6886f: bring back the memory not activated warning in agent chat
+- 8a68886: revamp the UI of the workflow form input
+- 8332970: Rename agents, tools, workflow example files.
+- Updated dependencies [b3a3d63]
+- Updated dependencies [344f453]
+- Updated dependencies [0a3ae6d]
+- Updated dependencies [95911be]
+- Updated dependencies [83da932]
+- Updated dependencies [5eb5a99]
+- Updated dependencies [7e632c5]
+- Updated dependencies [1e9fbfa]
+- Updated dependencies [8d9feae]
+- Updated dependencies [b2ae5aa]
+- Updated dependencies [a7292b0]
+- Updated dependencies [0dcb9f0]
+  - @mastra/deployer@0.4.0-alpha.1
+  - @mastra/core@0.10.0-alpha.1
+  - @mastra/mcp@0.6.0-alpha.1
+  - @mastra/loggers@0.2.0-alpha.1
+
 ## 0.6.4-alpha.0
 
 ### Patch Changes
