@@ -1,5 +1,33 @@
 # @mastra/deployer
 
+## 0.4.0-alpha.1
+
+### Minor Changes
+
+- 83da932: Move @mastra/core to peerdeps
+- 5eb5a99: Remove pino from @mastra/core into @mastra/loggers
+- b2ae5aa: Added support for experimental authentication and authorization
+
+### Patch Changes
+
+- b3a3d63: BREAKING: Make vnext workflow the default worklow, and old workflow legacy_workflow
+- 1e9fbfa: Upgrade to OpenTelemetry JS SDK 2.x
+- 8d9feae: Add missing x-mastra-dev-playground headers
+- Updated dependencies [b3a3d63]
+- Updated dependencies [344f453]
+- Updated dependencies [0215b0b]
+- Updated dependencies [0a3ae6d]
+- Updated dependencies [95911be]
+- Updated dependencies [83da932]
+- Updated dependencies [5eb5a99]
+- Updated dependencies [7e632c5]
+- Updated dependencies [1e9fbfa]
+- Updated dependencies [b2ae5aa]
+- Updated dependencies [a7292b0]
+- Updated dependencies [0dcb9f0]
+  - @mastra/server@2.1.0-alpha.1
+  - @mastra/core@0.10.0-alpha.1
+
 ## 0.3.5-alpha.0
 
 ### Patch Changes

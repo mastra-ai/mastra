@@ -1,5 +1,28 @@
 # @mastra/rag
 
+## 0.2.0-alpha.1
+
+### Minor Changes
+
+- 83da932: Move @mastra/core to peerdeps
+
+### Patch Changes
+
+- 4424836: [MASTRA-2591] Rag Tool Return Types
+- 8cdd799: [MASTRA-3078] added sources to return for vector query tool
+- 4f62987: update rerank weight sum to use big.js
+- Updated dependencies [b3a3d63]
+- Updated dependencies [344f453]
+- Updated dependencies [0a3ae6d]
+- Updated dependencies [95911be]
+- Updated dependencies [5eb5a99]
+- Updated dependencies [7e632c5]
+- Updated dependencies [1e9fbfa]
+- Updated dependencies [b2ae5aa]
+- Updated dependencies [a7292b0]
+- Updated dependencies [0dcb9f0]
+  - @mastra/core@0.10.0-alpha.1
+
 ## 0.1.24-alpha.0
 
 ### Patch Changes
