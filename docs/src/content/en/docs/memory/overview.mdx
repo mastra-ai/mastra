@@ -24,17 +24,24 @@ npm install @mastra/memory@latest
 
 **2. Create an agent and attach a `Memory` instance:**
 
-```typescript filename="src/mastra/agents/index.ts" {10}
+```typescript filename="src/mastra/agents/index.ts" {10-14}
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { openai } from "@ai-sdk/openai";
+import { LibSQLStore } from "@mastra/libsql";
+
+// Initialize memory with LibSQLStore for persistence
+const memory = new Memory({
+  storage: new LibSQLStore({
+    url: "file:../mastra.db", // Or your database URL
+  }),
+});
 
 export const myMemoryAgent = new Agent({
   name: "MemoryAgent",
   instructions: "...",
   model: openai("gpt-4o"),
-
-  memory: new Memory(),
+  memory,
 });
 ```
 
@@ -90,17 +97,9 @@ const memory = new Memory({
 Conversation history relies on a [storage adapter](/reference/memory/Memory#parameters) to store messages.
 By default it uses the same storage provided to the [main Mastra instance](https://mastra.ai/reference/core/mastra-class#initialization)
 
-If neither the `Memory` instance nor the `Mastra` object specify a storage
-provider, Mastra automatically creates a small local `LibSQLStore`
-(`file:memory.db`) for you. This _default storage_ makes it very quick to try
-out Memory locally. The data survives page refreshes but will disappear if the
-server process restarts or you deploy to an ephemeral environment. For any
-deployment beyond local testing you should provide your own storage
-configuration either on `Mastra` or directly within `new Memory()`.
+If neither the `Memory` instance nor the `Mastra` object specify a storage provider, Mastra will not persist memory data across application restarts or deployments. For any deployment beyond local testing you should provide your own storage configuration either on `Mastra` or directly within `new Memory()`.
 
-When `storage` **is** given on the `Mastra` instance it will automatically be
-used by every `Memory` attached to agents. In that case you do not need to pass
-`storage` to `new Memory()` unless you want a per-agent override.
+When `storage` **is** given on the `Mastra` instance it will automatically be used by every `Memory` attached to agents. In that case you do not need to pass `storage` to `new Memory()` unless you want a per-agent override.
 
 ```ts {7-9}
 import { Memory } from "@mastra/memory";
