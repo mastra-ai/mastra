@@ -25,15 +25,48 @@ export interface UpstashConfig {
 }
 
 export class UpstashStore extends MastraStorage {
-  batchInsert(_input: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    throw new Error('Method not implemented.');
+  async batchInsert(input: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
+    const { tableName, records } = input;
+    if (!records.length) return;
+
+    const batchSize = 1000;
+    for (let i = 0; i < records.length; i += batchSize) {
+      const batch = records.slice(i, i + batchSize);
+      const pipeline = this.redis.pipeline();
+      for (const record of batch) {
+        let key: string;
+        if (tableName === TABLE_MESSAGES) {
+          key = this.getKey(tableName, { threadId: record.threadId, id: record.id });
+        } else if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
+          key = this.getKey(tableName, {
+            namespace: record.namespace || 'workflows',
+            workflow_name: record.workflow_name,
+            run_id: record.run_id,
+            ...(record.resourceId ? { resourceId: record.resourceId } : {}),
+          });
+        } else if (tableName === TABLE_EVALS) {
+          key = this.getKey(tableName, { id: record.run_id });
+        } else {
+          key = this.getKey(tableName, { id: record.id });
+        }
+
+        // Convert dates to ISO strings before storing
+        const value = JSON.stringify(
+          Object.fromEntries(
+            Object.entries(record).map(([k, v]) => (v instanceof Date ? [k, v.toISOString()] : [k, v])),
+          ),
+        );
+        pipeline.set(key, value);
+      }
+      await pipeline.exec();
+    }
   }
 
   async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
     try {
       // Get all keys that match the evals table pattern
       const pattern = `${TABLE_EVALS}:*`;
-      const keys = await this.redis.keys(pattern);
+      const keys = await this.scanKeys(pattern);
 
       // Fetch all eval records
       const evalRecords = await Promise.all(
@@ -162,7 +195,7 @@ export class UpstashStore extends MastraStorage {
     try {
       // Get all keys that match the traces table pattern
       const pattern = `${TABLE_TRACES}:*`;
-      const keys = await this.redis.keys(pattern);
+      const keys = await this.scanKeys(pattern);
 
       // Fetch all trace records
       const traceRecords = await Promise.all(
@@ -306,10 +339,7 @@ export class UpstashStore extends MastraStorage {
 
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     const pattern = `${tableName}:*`;
-    const keys = await this.redis.keys(pattern);
-    if (keys.length > 0) {
-      await this.redis.del(...keys);
-    }
+    await this.scanAndDelete(pattern);
   }
 
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
@@ -365,7 +395,7 @@ export class UpstashStore extends MastraStorage {
 
   async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
     const pattern = `${TABLE_THREADS}:*`;
-    const keys = await this.redis.keys(pattern);
+    const keys = await this.scanKeys(pattern);
     const threads = await Promise.all(
       keys.map(async key => {
         const data = await this.redis.get<StorageThreadType>(key);
@@ -434,29 +464,33 @@ export class UpstashStore extends MastraStorage {
   async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
     if (messages.length === 0) return [];
 
-    const pipeline = this.redis.pipeline();
-
     // Add an index to each message to maintain order
     const messagesWithIndex = messages.map((message, index) => ({
       ...message,
       _index: index,
     }));
 
-    for (const message of messagesWithIndex) {
-      const key = this.getMessageKey(message.threadId, message.id);
-      const score = message._index !== undefined ? message._index : new Date(message.createdAt).getTime();
+    const batchSize = 1000;
+    for (let i = 0; i < messagesWithIndex.length; i += batchSize) {
+      const batch = messagesWithIndex.slice(i, i + batchSize);
+      const pipeline = this.redis.pipeline();
+      for (const message of batch) {
+        const key = this.getMessageKey(message.threadId, message.id);
+        const score = message._index !== undefined ? message._index : new Date(message.createdAt).getTime();
 
-      // Store the message data
-      pipeline.set(key, message);
+        // Store the message data
+        pipeline.set(key, message);
 
-      // Add to sorted set for this thread
-      pipeline.zadd(this.getThreadMessagesKey(message.threadId), {
-        score,
-        member: message.id,
-      });
+        // Add to sorted set for this thread
+        pipeline.zadd(this.getThreadMessagesKey(message.threadId), {
+          score,
+          member: message.id,
+        });
+      }
+
+      await pipeline.exec();
     }
 
-    await pipeline.exec();
     return messages;
   }
 
@@ -612,7 +646,7 @@ export class UpstashStore extends MastraStorage {
       } else if (resourceId) {
         pattern = this.getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace, workflow_name: '*', run_id: '*', resourceId });
       }
-      const keys = await this.redis.keys(pattern);
+      const keys = await this.scanKeys(pattern);
 
       // Get all workflow data
       const workflows = await Promise.all(
@@ -665,7 +699,7 @@ export class UpstashStore extends MastraStorage {
   }): Promise<WorkflowRun | null> {
     try {
       const key = this.getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace, workflow_name: workflowName, run_id: runId }) + '*';
-      const keys = await this.redis.keys(key);
+      const keys = await this.scanKeys(key);
       const workflows = await Promise.all(
         keys.map(async key => {
           const data = await this.redis.get<{
@@ -690,5 +724,47 @@ export class UpstashStore extends MastraStorage {
 
   async close(): Promise<void> {
     // No explicit cleanup needed for Upstash Redis
+  }
+
+  /**
+   * Scans for keys matching the given pattern using SCAN and returns them as an array.
+   * @param pattern Redis key pattern, e.g. "table:*"
+   * @param batchSize Number of keys to scan per batch (default: 1000)
+   */
+  private async scanKeys(pattern: string, batchSize = 10000): Promise<string[]> {
+    let cursor = '0';
+    let keys: string[] = [];
+    do {
+      // Upstash: scan(cursor, { match, count })
+      const [nextCursor, batch] = await this.redis.scan(cursor, {
+        match: pattern,
+        count: batchSize,
+      });
+      keys.push(...batch);
+      cursor = nextCursor;
+    } while (cursor !== '0');
+    return keys;
+  }
+
+  /**
+   * Deletes all keys matching the given pattern using SCAN and DEL in batches.
+   * @param pattern Redis key pattern, e.g. "table:*"
+   * @param batchSize Number of keys to delete per batch (default: 1000)
+   */
+  private async scanAndDelete(pattern: string, batchSize = 10000): Promise<number> {
+    let cursor = '0';
+    let totalDeleted = 0;
+    do {
+      const [nextCursor, keys] = await this.redis.scan(cursor, {
+        match: pattern,
+        count: batchSize,
+      });
+      if (keys.length > 0) {
+        await this.redis.del(...keys);
+        totalDeleted += keys.length;
+      }
+      cursor = nextCursor;
+    } while (cursor !== '0');
+    return totalDeleted;
   }
 }
