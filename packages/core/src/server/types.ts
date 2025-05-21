@@ -1,7 +1,8 @@
-import type { Handler, MiddlewareHandler } from 'hono';
+import type { Handler, MiddlewareHandler, HonoRequest, Context } from 'hono';
 import type { cors } from 'hono/cors';
 import type { DescribeRouteOptions } from 'hono-openapi';
 import type { Mastra } from '../mastra';
+import type { RuntimeContext } from '../runtime-context';
 
 export type Methods = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'ALL';
 
@@ -22,6 +23,52 @@ export type ApiRoute =
     };
 
 type Middleware = MiddlewareHandler | { path: string; handler: MiddlewareHandler };
+
+export type ContextWithMastra = Context<{
+  Variables: {
+    mastra: Mastra;
+    runtimeContext: RuntimeContext;
+  };
+}>;
+
+export type MastraAuthConfig<TUser = unknown> = {
+  /**
+   * Public paths for the server
+   */
+  public?: (RegExp | string | [string, Methods | Methods[]])[];
+
+  /**
+   * Public paths for the server
+   */
+  authenticateToken?: (token: string, request: HonoRequest) => Promise<TUser>;
+
+  /**
+   * Authorization function for the server
+   */
+  authorize?: (path: string, method: string, user: TUser, context: ContextWithMastra) => Promise<boolean>;
+
+  /**
+   * Rules for the server
+   */
+  rules?: {
+    /**
+     * Path for the rule
+     */
+    path?: RegExp | string | string[];
+    /**
+     * Method for the rule
+     */
+    methods?: Methods | Methods[];
+    /**
+     * Condition for the rule
+     */
+    condition?: (user: TUser) => Promise<boolean> | boolean;
+    /**
+     * Allow the rule
+     */
+    allow?: boolean;
+  }[];
+};
 
 export type ServerConfig = {
   /**
@@ -76,4 +123,9 @@ export type ServerConfig = {
    * @default 4.5mb
    */
   bodySizeLimit?: number;
+
+  /**
+   * Authentication configuration for the server
+   */
+  experimental_auth?: MastraAuthConfig<any>;
 };

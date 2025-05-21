@@ -24,6 +24,7 @@ import {
   setAgentInstructionsHandler,
   streamGenerateHandler,
 } from './handlers/agents';
+import { authorizationMiddleware, authenticationMiddleware } from './handlers/auth';
 import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import { getLogsByRunIdHandler, getLogsHandler, getLogTransports } from './handlers/logs';
@@ -194,6 +195,10 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
     };
     app.use('*', timeout(server?.timeout ?? 3 * 60 * 1000), cors(corsConfig));
   }
+
+  // Run AUTH middlewares after CORS middleware
+  app.use('*', authenticationMiddleware);
+  app.use('*', authorizationMiddleware);
 
   const bodyLimitOptions = {
     maxSize: server?.bodySizeLimit ?? 4.5 * 1024 * 1024, // 4.5 MB,

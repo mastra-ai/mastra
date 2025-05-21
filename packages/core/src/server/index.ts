@@ -1,7 +1,9 @@
 import type { Context, Handler, MiddlewareHandler } from 'hono';
 import type { DescribeRouteOptions } from 'hono-openapi';
 import type { Mastra } from '../mastra';
-import type { ApiRoute, Methods } from './types';
+import type { ApiRoute, MastraAuthConfig, Methods } from './types';
+
+export type { MastraAuthConfig, ContextWithMastra } from './types';
 
 // Helper type for inferring parameters from a path
 // Thank you Claude!
@@ -52,4 +54,8 @@ export function registerApiRoute<P extends string>(
     openapi: options.openapi,
     middleware: options.middleware,
   } as ApiRoute;
+}
+
+export function defineAuth<TUser>(config: MastraAuthConfig<TUser>): MastraAuthConfig<TUser> {
+  return config;
 }
