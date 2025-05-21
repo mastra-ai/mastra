@@ -1,0 +1,59 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`getBundlerOptionsConfig > should be able to extract the bundler options config from ./__fixtures__/no-bundler.js 1`] = `
+"const bundler = {};
+
+export { bundler };
+"
+`;
+
+exports[`getBundlerOptionsConfig > should be able to extract the bundler options config from ./plugins/__fixtures__/basic.js 1`] = `
+"const bundler = {};
+
+export { bundler };
+"
+`;
+
+exports[`getBundlerOptionsConfig > should be able to extract the bundler options config from ./plugins/__fixtures__/basic-with-bundler.js 1`] = `
+"const bundler = {
+  external: ["nodemailer"]
+};
+
+export { bundler };
+"
+`;
+
+exports[`getBundlerOptionsConfig > should be able to extract the bundler options config from ./plugins/__fixtures__/basic-with-const.js 1`] = `
+"const bundler = {};
+
+export { bundler };
+"
+`;
+
+exports[`getBundlerOptionsConfig > should be able to extract the bundler options config from ./plugins/__fixtures__/basic-with-function.js 1`] = `
+"const bundler = {};
+
+export { bundler };
+"
+`;
+
+exports[`getBundlerOptionsConfig > should be able to extract the bundler options config from ./plugins/__fixtures__/basic-with-import.js 1`] = `
+"const bundler = {};
+
+export { bundler };
+"
+`;
+
+exports[`getBundlerOptionsConfig > should be able to extract the bundler options config from ./plugins/__fixtures__/empty-mastra.js 1`] = `
+"const bundler = {};
+
+export { bundler };
+"
+`;
+
+exports[`getBundlerOptionsConfig > should be able to extract the bundler options config from ./plugins/__fixtures__/mastra-with-extra-code.js 1`] = `
+"const bundler = {};
+
+export { bundler };
+"
+`;
