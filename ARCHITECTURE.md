@@ -17,7 +17,8 @@ The new architecture will centralize message handling within the `MessageList` c
     *   **Retrieving**: Messages fetched from memory (which should be in `MastraMessageV2` format or convertible to it) will be added to the `MessageList` using `messageList.add()`.
     *   System messages, including working memory, will be constructed by the `Agent` or `Memory` system and can be added to the `MessageList` if they need to be part of the history, or handled separately if they are only for the current LLM call.
 .  **Preparing Messages for LLM**: 
-    *   When messages are needed for the LLM, `messageList.toUIMessages()` will be called. The AI SDK's `generateText` or `streamText` functions will handle the conversion from `UIMessage[]` to the `CoreMessage[]` format they expect internally.
+    *   When messages are needed for the LLM, `messageList.toUIMessages()` will be called. The `MastraLLM` layer (wrapping the AI SDK's `generateText` or `streamText` functions) will be responsible for handling the `UIMessage[]` input. The AI SDK itself can convert `UIMessage[]` to the `CoreMessage[]` format it expects internally for these core functions. The `Agent` will no longer be responsible for this conversion.
+    *   If `MastraMessageV2` (from `messageList.getMessages()`) is needed by other internal systems (e.g., advanced memory processing before LLM call), that format is also available.
 .  **Tool Conversion**: Tool conversion logic remains within the `Agent` but operates on tools provided, not directly by manipulating message content for tool calls/results.
 .  **Response Handling**:
     *   The LLM's response messages (as `CoreMessage[]`) will be added to the `MessageList` using `messageList.add()`. `MessageList` will handle merging tool results with their corresponding tool calls and any other necessary normalization.
@@ -29,8 +30,8 @@ The new architecture will centralize message handling within the `MessageList` c
 
 *   **Centralized Logic**: `MessageList` becomes the single source of truth for message state and transformations.
 *   **Simplified Agent**: The `Agent` class will be significantly simplified, with less direct message manipulation.
-*   **Consistent Format**: Internally, `MessageList` uses `MastraMessageV2`. It provides `UIMessage[]` for the AI SDK and `MastraMessageV2[]` for storage.
-*   **Reduced Conversions**: Explicit conversions by the `Agent` are minimized. `MessageList` handles its internal format, and the AI SDK handles its needs.
+*   **Consistent Format**: Internally, `MessageList` uses `MastraMessageV2`. It provides `UIMessage[]` for AI SDK interactions (which handles internal conversion to `CoreMessage[]`) and `MastraMessageV2[]` for storage.
+*   **Reduced Conversions**: Explicit conversions by the `Agent` to `CoreMessage[]` for LLM calls are eliminated. `MessageList` handles its internal format, and the AI SDK handles its needs.
 *   **Clearer Deduplication/Merging**: All such logic will be encapsulated within `MessageList.add()`.
 
 ## Current Architecture

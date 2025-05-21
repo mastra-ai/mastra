@@ -67,7 +67,11 @@ This document summarizes the changes made to integrate the `MessageList` class i
     *   Return type changed to `Promise<{ messages: MastraMessageV2[] }> `.
     *   Adjusted to use the updated `query` method.
 
-## V. `packages/core/src/memory/memory.ts` (`MastraMemory` abstract class)
+## V. `packages/core/src/agent/message-list.ts` (`MessageList` class)
+
+.  **REMOVED `toCoreMessages()` method**: Based on the clarification that the AI SDK can handle `UIMessage[]` directly for its core functions (like `generateText`, `streamText`), or that `MastraLLM` would be adapted if necessary, this conversion method is not needed in `MessageList`. The agent will pass `UIMessage[]` (from `messageList.toUIMessages()`) to the LLM layer.
+
+## VI. `packages/core/src/memory/memory.ts` (`MastraMemory` abstract class)
 
 1.  **Removed `parseMessages` and `convertToUIMessages` method definitions** (they were concrete implementations in this abstract class, which is unusual but was the case).
 2.  **Updated abstract method signatures**:

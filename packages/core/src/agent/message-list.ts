@@ -38,11 +38,23 @@ export class MessageList {
     }
   }
 
-  public add(messages: MessageInput | MessageInput[]) {
+  public add(messages: string | string[] | MessageInput | MessageInput[]) {
     if (Array.isArray(messages)) {
       for (const message of messages) {
-        this.addOne(message);
+        if (typeof message === `string`) {
+          this.addOne({
+            role: 'user',
+            content: message,
+          });
+        } else {
+          this.addOne(message);
+        }
       }
+    } else if (typeof messages === `string`) {
+      this.addOne({
+        role: 'user',
+        content: messages,
+      });
     } else {
       this.addOne(messages);
     }

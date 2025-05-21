@@ -1,4 +1,4 @@
-import type { MastraMessageV2 } from '@mastra/core'; // Updated import
+import type { MastraMessageV2 } from '@mastra/core/agent';
 
 const isToolCallWithId = (message: MastraMessageV2 | undefined, targetToolCallId: string): boolean => {
   if (!message || !message.content || !Array.isArray(message.content.parts)) return false;

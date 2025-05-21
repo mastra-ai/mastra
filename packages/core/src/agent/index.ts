@@ -1,17 +1,11 @@
 import { randomUUID } from 'crypto';
 import type {
-  AssistantContent,
-  CoreAssistantMessage,
   CoreMessage,
-  CoreToolMessage,
-  CoreUserMessage,
   GenerateObjectResult,
   GenerateTextResult,
   StreamObjectResult,
   StreamTextResult,
-  TextPart,
-  ToolCallPart,
-  UserContent,
+  UIMessage,
 } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
@@ -21,7 +15,6 @@ import type { Metric } from '../eval';
 import { AvailableHooks, executeHook } from '../hooks';
 import type { GenerateReturn, StreamReturn } from '../llm';
 import type { MastraLLMBase } from '../llm/model';
-import { MessageList } from './message-list';
 import { MastraLLM } from '../llm/model';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
@@ -35,6 +28,7 @@ import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import { agentToStep, LegacyStep as Step } from '../workflows/legacy';
+import { MessageList } from './message-list';
 import type {
   AgentConfig,
   MastraLanguageModel,
@@ -379,7 +373,7 @@ export class Agent<
     message,
     runtimeContext = new RuntimeContext(),
   }: {
-    message: CoreUserMessage;
+    message: UIMessage;
     runtimeContext?: RuntimeContext;
   }) {
     // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
@@ -409,12 +403,12 @@ export class Agent<
     return cleanedText;
   }
 
-  getMostRecentUserMessage(messages: Array<CoreMessage>) {
+  getMostRecentUserMessage(messages: Array<UIMessage>) {
     const userMessages = messages.filter(message => message.role === 'user');
     return userMessages.at(-1);
   }
 
-  async genTitle(userMessage: CoreUserMessage | undefined) {
+  async genTitle(userMessage: UIMessage | undefined) {
     let title = `New Thread ${new Date().toISOString()}`;
     try {
       if (userMessage) {
@@ -449,9 +443,9 @@ export class Agent<
       const thread = passedThread ?? (await memory.getThreadById({ threadId }));
 
       if (!thread) {
-        // If no thread, nothing to fetch from memory. 
+        // If no thread, nothing to fetch from memory.
         // The messageList already contains the current user messages and system message.
-        return { threadId: threadId || '' }; 
+        return { threadId: threadId || '' };
       }
 
       // Get current user messages from the list for vector search and processMessages
@@ -473,7 +467,7 @@ export class Agent<
                   // systemMessage: coreSystemMessage, // systemMessage is already in messageList
                   vectorMessageSearch: lastUserMessageContent,
                 })
-                .then(r => r.messages), // rememberMessages should return CoreMessage[] or adaptable
+                .then(r => r.messages),
               memory.getSystemMessage({ threadId, memoryConfig }),
             ])
           : [[], null];
@@ -505,7 +499,7 @@ export class Agent<
       // This assumes currentUserMessages are CoreMessage[] or compatible.
       messageList.add(currentUserMessages);
 
-      // TODO: Re-evaluate memory.processMessages. For now, we are adding raw memory messages 
+      // TODO: Re-evaluate memory.processMessages. For now, we are adding raw memory messages
       // and current user messages. If processMessages is still needed, its role needs to be clarified
       // in the context of MessageList handling most transformations.
       // const processedMessages = memory.processMessages({
@@ -523,7 +517,6 @@ export class Agent<
 
     return { threadId: threadId || '' };
   }
-
 
   private async getMemoryTools({
     runId,
@@ -1002,8 +995,7 @@ export class Agent<
           });
           // threadIdToUse might be updated by preExecute if a new thread was created
           threadIdToUse = preExecuteResult.threadIdToUse;
-
-        } 
+        }
         // If memory is not used, current turn's messages are already in messageList from the add call before the memory block.
 
         let convertedTools: Record<string, CoreTool> | undefined;
@@ -1032,10 +1024,19 @@ export class Agent<
           runtimeContext,
         });
 
-        // Get messages in UIMessage format for the AI SDK
-        const messageObjects = messageList.toUIMessages();
+        // Get messages in CoreMessage format for the AI SDK
+        let uiMessagesForLlm: UIMessage[] = messageList.toUIMessages();
 
-        return { messageObjects, convertedTools, threadId: threadIdToUse as string, thread, messageListInstance: messageList };
+        // messageObjects is already UIMessage[], AI SDK will handle conversion to CoreMessage[] internally.
+        // Tool calls and results should be correctly represented by MessageList.toUIMessages().
+
+        return {
+          messageObjects: uiMessagesForLlm,
+          convertedTools,
+          threadId: threadIdToUse as string,
+          thread,
+          messageList, // Corrected variable name
+        };
       },
       after: async ({
         result,
@@ -1044,8 +1045,8 @@ export class Agent<
         memoryConfig,
         outputText,
         runId,
-        experimental_generateMessageId,
-        messageListInstance, // Added messageListInstance
+        // experimental_generateMessageId, // TODO: leave this for now, we will support it later
+        messageList, // Added messageList
       }: {
         runId: string;
         result: Record<string, any>;
@@ -1054,7 +1055,7 @@ export class Agent<
         memoryConfig: MemoryConfig | undefined;
         outputText: string;
         experimental_generateMessageId: any;
-        messageListInstance: MessageList; // Added messageListInstance type
+        messageList: MessageList; // Added messageList type
       }) => {
         const resToLog = {
           text: result?.text,
@@ -1083,7 +1084,7 @@ export class Agent<
 
         if (memory && resourceId && thread) {
           try {
-            const userMessage = this.getMostRecentUserMessage(messageListInstance.toUIMessages());
+            const userMessage = this.getMostRecentUserMessage(messageList.toUIMessages());
             // Add LLM response messages to the list
             let responseMessages = result.response.messages;
             if (!responseMessages && result.object) {
@@ -1100,7 +1101,7 @@ export class Agent<
               ];
             }
             if (responseMessages) {
-              messageListInstance.add(responseMessages);
+              messageList.add(responseMessages);
             }
 
             // renaming the thread doesn't need to block finishing the req
@@ -1110,7 +1111,8 @@ export class Agent<
               }
 
               const config = memory.getMergedThreadConfig(memoryConfig);
-              const title = config?.threads?.generateTitle ? await this.genTitle(userMessage) : undefined;
+              const title =
+                config?.threads?.generateTitle && userMessage ? await this.genTitle(userMessage) : undefined;
               if (!title) {
                 return;
               }
@@ -1125,7 +1127,7 @@ export class Agent<
             })();
 
             await memory.saveMessages({
-              messages: messageListInstance.getMessages(), // Save messages from MessageList
+              messages: messageList.getMessages(), // Save messages from MessageList
               memoryConfig,
             });
           } catch (e) {
@@ -1140,7 +1142,10 @@ export class Agent<
         }
 
         if (Object.keys(this.evals || {}).length > 0) {
-          const input = messages.map(message => message.content).join('\n');
+          const userInputMessages = messageList.toUIMessages().filter(m => m.role === 'user');
+          const input = userInputMessages
+            .map(message => (typeof message.content === 'string' ? message.content : ''))
+            .join('\n');
           const runIdToUse = runId || crypto.randomUUID();
           for (const metric of Object.values(this.evals || {})) {
             executeHook(AvailableHooks.ON_GENERATION, {
@@ -1200,14 +1205,14 @@ export class Agent<
       ...rest
     }: AgentGenerateOptions<Z> = Object.assign({}, this.#defaultGenerateOptions, generateOptions);
 
-
     const runIdToUse = runId || randomUUID();
     const instructionsToUse = instructions || (await this.getInstructions({ runtimeContext }));
     const llm = await this.getLLM({ runtimeContext });
 
     const { before, after } = this.__primitive({
+      // messagesToUse was removed, messages is passed directly
+      messages,
       instructions: instructionsToUse,
-      messages: messagesToUse,
       context,
       threadId: threadIdInFn,
       memoryConfig: memoryOptions,
@@ -1218,7 +1223,7 @@ export class Agent<
       runtimeContext,
     });
 
-    const { threadId, thread, messageObjects, convertedTools } = await before();
+    const { threadId, thread, messageObjects, convertedTools, messageList } = await before(); // Added messageList
 
     if (!output && experimental_output) {
       const result = await llm.__text({
@@ -1250,6 +1255,7 @@ export class Agent<
         runId: runIdToUse,
         experimental_generateMessageId:
           `experimental_generateMessageId` in rest ? rest.experimental_generateMessageId : undefined,
+        messageList,
       });
 
       const newResult = result as any;
@@ -1289,6 +1295,7 @@ export class Agent<
         runId: runIdToUse,
         experimental_generateMessageId:
           `experimental_generateMessageId` in rest ? rest.experimental_generateMessageId : undefined,
+        messageList, // Added messageList
       });
 
       return result as unknown as GenerateReturn<Z>;
@@ -1322,6 +1329,7 @@ export class Agent<
       runId: runIdToUse,
       experimental_generateMessageId:
         `experimental_generateMessageId` in rest ? rest.experimental_generateMessageId : undefined,
+      messageList, // Added messageList
     });
 
     return result as unknown as GenerateReturn<Z>;
@@ -1379,7 +1387,7 @@ export class Agent<
 
     const { before, after } = this.__primitive({
       instructions: instructionsToUse,
-      messages: messagesToUse,
+      messages: messages, // Changed messagesToUse to messages
       context,
       threadId: threadIdInFn,
       memoryConfig: memoryOptions,
@@ -1390,7 +1398,7 @@ export class Agent<
       runtimeContext,
     });
 
-    const { threadId, thread, messageObjects, convertedTools } = await before();
+    const { threadId, thread, messageObjects, convertedTools, messageList } = await before(); // Added messageList
 
     if (!output && experimental_output) {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
@@ -1416,6 +1424,7 @@ export class Agent<
               runId: runIdToUse,
               experimental_generateMessageId:
                 `experimental_generateMessageId` in rest ? rest.experimental_generateMessageId : undefined,
+              messageList, // Added messageList
             });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
@@ -1460,6 +1469,7 @@ export class Agent<
               runId: runIdToUse,
               experimental_generateMessageId:
                 `experimental_generateMessageId` in rest ? rest.experimental_generateMessageId : undefined,
+              messageList, // Added messageList
             });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
@@ -1503,6 +1513,7 @@ export class Agent<
             runId: runIdToUse,
             experimental_generateMessageId:
               `experimental_generateMessageId` in rest ? rest.experimental_generateMessageId : undefined,
+            messageList, // Added messageList
           });
         } catch (e) {
           this.logger.error('Error saving memory on finish', {

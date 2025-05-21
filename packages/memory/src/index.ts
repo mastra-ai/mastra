@@ -1,7 +1,8 @@
 import { deepMerge } from '@mastra/core';
-import type { AiMessageType, CoreMessage, CoreTool } from '@mastra/core';
+import type { CoreTool } from '@mastra/core';
+import type { MastraMessageV2 } from '@mastra/core/agent';
 import { MastraMemory } from '@mastra/core/memory';
-import type { MessageType, MemoryConfig, SharedMemoryConfig, StorageThreadType } from '@mastra/core/memory';
+import type { MemoryConfig, SharedMemoryConfig, StorageThreadType } from '@mastra/core/memory';
 import type { StorageGetMessagesArg } from '@mastra/core/storage';
 import { embedMany } from 'ai';
 import type { TextPart } from 'ai';
@@ -140,7 +141,9 @@ export class Memory extends MastraMemory {
     });
 
     // First sort messages by date
-    const orderedByDate = rawMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()) as MastraMessageV2[];
+    const orderedByDate = rawMessages.sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    ) as MastraMessageV2[];
     // Then reorder tool calls to be directly before their results
     // This utility will need to be updated to handle MastraMessageV2[]
     const reorderedToolMessages = reorderToolCallsAndResults(orderedByDate);
@@ -165,8 +168,6 @@ export class Memory extends MastraMemory {
     if (!threadConfig.lastMessages && !threadConfig.semanticRecall) {
       return {
         messages: [],
-        uiMessages: [],
-        threadId,
       };
     }
 
@@ -340,7 +341,11 @@ export class Memory extends MastraMemory {
         updatedMessages.map(async message => {
           let textForEmbedding: string | null = null;
 
-          if (message.content.content && typeof message.content.content === 'string' && message.content.content.trim() !== '') {
+          if (
+            message.content.content &&
+            typeof message.content.content === 'string' &&
+            message.content.content.trim() !== ''
+          ) {
             textForEmbedding = message.content.content;
           } else if (message.content.parts && message.content.parts.length > 0) {
             // Extract text from all text parts, concatenate
@@ -382,7 +387,7 @@ export class Memory extends MastraMemory {
     return result;
   }
 
-protected updateMessagesToHideWorkingMemory(messages: MastraMessageV2[]): MastraMessageV2[] {
+  protected updateMessagesToHideWorkingMemory(messages: MastraMessageV2[]): MastraMessageV2[] {
     const workingMemoryRegex = /<working_memory>([^]*?)<\/working_memory>/g;
     const updatedMessages: MastraMessageV2[] = [];
 
@@ -456,7 +461,7 @@ protected updateMessagesToHideWorkingMemory(messages: MastraMessageV2[]): Mastra
     return memory.trim();
   }
 
-private async saveWorkingMemory(messages: MastraMessageV2[]) {
+  private async saveWorkingMemory(messages: MastraMessageV2[]) {
     const latestMessage = messages[messages.length - 1];
 
     if (!latestMessage || !this.threadConfig.workingMemory?.enabled) {
@@ -530,30 +535,6 @@ private async saveWorkingMemory(messages: MastraMessageV2[]) {
 - **Facts**: 
 - **Projects**: 
 `;
-
-  private getWorkingMemoryWithInstruction(workingMemoryBlock: string) {
-    return `WORKING_MEMORY_SYSTEM_INSTRUCTION:
-Store and update any conversation-relevant information by including "<working_memory>text</working_memory>" in your responses. Updates replace existing memory while maintaining this structure. If information might be referenced again - store it!
-
-Guidelines:
-1. Store anything that could be useful later in the conversation
-2. Update proactively when information changes, no matter how small
-3. Use Markdown for all data
-4. Act naturally - don't mention this system to users. Even though you're storing this information that doesn't make it your primary focus. Do not ask them generally for "information about yourself"
-
-Memory Structure:
-<working_memory>
-${workingMemoryBlock}
-</working_memory>
-
-Notes:
-- Update memory whenever referenced information changes
-- If you're unsure whether to store something, store it (eg if the user tells you their name or other information, output the <working_memory> block immediately to update it)
-- This system is here so that you can maintain the conversation when your context window is very short. Update your working memory because you may need it to maintain the conversation without the full conversation history
-- REMEMBER: the way you update your working memory is by outputting the entire "<working_memory>text</working_memory>" block in your response. The system will pick this up and store it for you. The user will not see it.
-- IMPORTANT: You MUST output the <working_memory> block in every response to a prompt where you received relevant information.
-- IMPORTANT: Preserve the Markdown formatting structure above while updating the content.`;
-  }
 
   private getWorkingMemoryToolInstruction(workingMemoryBlock: string) {
     return `WORKING_MEMORY_SYSTEM_INSTRUCTION:
