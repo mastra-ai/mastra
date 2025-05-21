@@ -7,7 +7,7 @@ services:
     volumes:
       - mongodbdata:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: ['CMD', 'mongosh', '--eval', "db.adminCommand('ping')"]
       interval: 2s
       timeout: 2s
       retries: 15
@@ -21,7 +21,7 @@ services:
     ports:
       - 27018:27017
     healthcheck:
-      test: ["CMD", "mongosh", "-u", "mongodb", "-p", "mongodb", "--eval", "db.adminCommand('ping')"]
+      test: ['CMD', 'mongosh', '-u', 'mongodb', '-p', 'mongodb', '--eval', "db.adminCommand('ping')"]
       interval: 2s
       timeout: 2s
       retries: 15
