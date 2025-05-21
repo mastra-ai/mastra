@@ -27,7 +27,7 @@ const ToolExecutor = ({
   const code = JSON.stringify(result ?? {}, null, 2);
 
   return (
-    <div className="w-full h-full grid grid-cols-[300px_1fr] bg-surface1">
+    <div className="w-full h-full grid grid-cols-[400px_1fr] bg-surface1">
       <div className="border-r-sm border-border1 bg-surface2">
         <ToolInformation toolDescription={toolDescription} toolId={toolId} />
 
