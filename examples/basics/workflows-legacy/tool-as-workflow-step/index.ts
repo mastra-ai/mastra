@@ -1,4 +1,5 @@
-import { createTool, Workflow } from '@mastra/core';
+import { LegacyWorkflow } from '@mastra/core/workflows/legacy';
+import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 async function main() {
@@ -16,7 +17,7 @@ async function main() {
     },
   });
 
-  const contentWorkflow = new Workflow({ name: 'content-review' });
+  const contentWorkflow = new LegacyWorkflow({ name: 'content-review' });
 
   contentWorkflow.step(crawlWebpage).commit();
 
