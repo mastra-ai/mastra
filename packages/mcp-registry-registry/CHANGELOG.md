@@ -1,5 +1,11 @@
 # @mastra/mcp-registry-registry
 
+## 0.1.0-alpha.2
+
+### Patch Changes
+
+- 92c53c6: Apify
+
 ## 0.1.0-alpha.1
 
 ### Minor Changes
