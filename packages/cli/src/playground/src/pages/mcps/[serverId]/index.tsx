@@ -97,7 +97,7 @@ export const McpServerPage = () => {
           </div>
         </div>
       ) : (
-        <Txt as="h1" variant="header-md" className="text-icon6 font-medium py-20">
+        <Txt as="h1" variant="header-md" className="text-icon3 font-medium py-20 text-center">
           Server not found
         </Txt>
       )}
