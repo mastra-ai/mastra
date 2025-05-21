@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.3.4-alpha.2
+
+### Patch Changes
+
+- 47776b4: update the mcp pages
+
 ## 0.3.4-alpha.1
 
 ### Patch Changes
