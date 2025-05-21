@@ -33,6 +33,6 @@ export const mastra = new Mastra({
 
 ## 設定
 
-- `createLogger()` に渡すことができるオプションの詳細については、[createLogger リファレンスドキュメント](/reference/observability/create-logger.mdx)を参照してください。
+- `new PinoLogger()` に渡すことができるオプションの詳細については、[Logger リファレンスドキュメント](/reference/observability/logger)を参照してください。
 - `Logger` インスタンスを取得したら、そのメソッド（例：`.info()`、`.warn()`、`.error()`）を[Logger インスタンスリファレンスドキュメント](/reference/observability/logger.mdx)で呼び出すことができます。
 - ログを外部サービスに送信して集中管理、分析、または保存を行いたい場合は、Upstash Redis などの他のロガータイプを設定できます。`UPSTASH` ロガータイプを使用する際の `url`、`token`、`key` などのパラメータの詳細については、[createLogger リファレンスドキュメント](/reference/observability/create-logger.mdx)を参照してください。

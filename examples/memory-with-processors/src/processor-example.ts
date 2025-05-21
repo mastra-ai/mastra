@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { openai } from '@ai-sdk/openai';
 import { Mastra } from '@mastra/core';
-import { createLogger } from '@mastra/core/logger';
+import { PinoLogger } from '@mastra/loggers';
 import { createTool } from '@mastra/core/tools';
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
@@ -94,7 +94,7 @@ const tokenTestAgent = new Agent({
 // Create Mastra instance
 const mastra = new Mastra({
   agents: { tokenTestAgent },
-  logger: createLogger({ level: 'info' }),
+  logger: new PinoLogger({ level: 'info' }),
 });
 
 // Track token usage

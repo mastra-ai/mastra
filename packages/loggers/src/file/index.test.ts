@@ -30,7 +30,7 @@ describe('FileTransport', () => {
     expect(fileLogger.path).toBe(testPath);
   });
 
-  it('should work with createLogger', async () => {
+  it('should work with PinoLogger', async () => {
     const logger = new PinoLogger({
       name: 'test-logger',
       level: LogLevel.INFO,

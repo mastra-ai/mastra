@@ -76,8 +76,8 @@ describe('MultiLogger', () => {
   beforeEach(() => {
     memoryStream1 = new MemoryStream();
     memoryStream2 = new MemoryStream();
-    logger1 = createLogger({ transports: { memory: memoryStream1 } });
-    logger2 = createLogger({ transports: { memory: memoryStream2 } });
+    logger1 = new PinoLogger({ transports: { memory: memoryStream1 } });
+    logger2 = new PinoLogger({ transports: { memory: memoryStream2 } });
   });
 
   it('should forward log calls to all loggers', async () => {
@@ -104,7 +104,7 @@ describe('createLogger', () => {
   });
 
   it('should create a logger instance', () => {
-    const logger = createLogger({
+    const logger = new PinoLogger({
       transports: {
         memory: memoryStream,
       },
@@ -115,7 +115,7 @@ describe('createLogger', () => {
   it('should create a logger with custom options and capture output', async () => {
     const customStream = new MemoryStream();
 
-    const logger = createLogger({
+    const logger = new PinoLogger({
       name: 'custom',
       level: LogLevel.DEBUG,
       transports: {

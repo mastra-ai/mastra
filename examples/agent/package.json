@@ -9,6 +9,7 @@
     "@ai-sdk/openai": "latest",
     "@mastra/client-js": "latest",
     "@mastra/core": "latest",
+    "@mastra/loggers": "latest",
     "@mastra/mcp": "latest",
     "@mastra/memory": "latest",
     "@mastra/voice-openai": "latest",
@@ -20,6 +21,7 @@
   "pnpm": {
     "overrides": {
       "@mastra/core": "link:../../packages/core",
+      "@mastra/loggers": "link:../../packages/loggers",
       "@mastra/voice-openai": "link:../../voice/openai",
       "@mastra/memory": "link:../../packages/memory",
       "@mastra/client-js": "link:../../client-sdks/client-js",
