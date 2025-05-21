@@ -14,7 +14,7 @@
   "license": "Elastic-2.0",
   "peerDependencies": {
     "vitest": "*",
-    "@mastra/core": "^0.9.4"
+    "@mastra/core": "^0.10.0"
   },
   "devDependencies": {
     "@mastra/core": "workspace:*"

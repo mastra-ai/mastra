@@ -1,6 +1,6 @@
 {
   "name": "@mastra/chroma",
-  "version": "0.3.0-alpha.1",
+  "version": "0.10.0-alpha.1",
   "description": "Chroma vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -39,6 +39,6 @@
     "@mastra/core": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": "^0.9.4"
+    "@mastra/core": "^0.10.0"
   }
 }

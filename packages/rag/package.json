@@ -1,6 +1,6 @@
 {
   "name": "@mastra/rag",
-  "version": "0.2.0-alpha.1",
+  "version": "0.10.0-alpha.1",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -36,7 +36,7 @@
   },
   "peerDependencies": {
     "ai": "^4.0.0",
-    "@mastra/core": "^0.9.4"
+    "@mastra/core": "^0.10.0"
   },
   "devDependencies": {
     "@ai-sdk/cohere": "latest",
