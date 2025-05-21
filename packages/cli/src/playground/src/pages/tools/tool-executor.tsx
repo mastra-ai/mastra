@@ -1,4 +1,4 @@
-import { DynamicForm, Txt } from '@mastra/playground-ui';
+import { DynamicForm } from '@mastra/playground-ui';
 import { CopyButton } from '@/components/ui/copy-button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ZodType } from 'zod';
@@ -42,22 +42,18 @@ const ToolExecutor = ({
         </div>
       </div>
 
-      <div className="p-5">
-        <div className="flex items-center gap-2">
-          <Txt variant="ui-sm" className="text-icon3">
-            Output
-          </Txt>
-
+      <div className="p-5 relative">
+        <div className="absolute top-4 right-4 z-10">
           <CopyButton content={code} tooltip="Copy JSON result to clipboard" />
         </div>
 
-        <ScrollArea className="h-[calc(100vh-120px)] w-full pt-2">
+        <ScrollArea className="h-[calc(100vh-120px)] w-full">
           <CodeMirror
             value={code}
-            editable={false}
+            editable={true}
             theme={theme}
             extensions={[jsonLanguage]}
-            className="overflow-y-scroll bg-surface2 rounded-lg p-5"
+            className="overflow-y-scroll"
           />
         </ScrollArea>
       </div>
