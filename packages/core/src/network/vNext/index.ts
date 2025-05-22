@@ -168,6 +168,8 @@ export class NewAgentNetwork extends MastraBase {
     const instructions = `
           You are a router in a network of specialized AI agents. 
           Your job is to decide which agent should handle each step of a task.
+
+          If asking for completion of a task, make sure to follow system instructions closely.
             
           ## System Instructions
           ${instructionsToUse}
@@ -201,7 +203,7 @@ export class NewAgentNetwork extends MastraBase {
       inputSchema: z.object({
         task: z.string(),
         agentId: z.string().optional(),
-        agentResult: z.string().optional(),
+        result: z.string().optional(),
       }),
       outputSchema: z.object({
         task: z.string(),
@@ -211,13 +213,15 @@ export class NewAgentNetwork extends MastraBase {
         isComplete: z.boolean().optional(),
       }),
       execute: async ({ inputData }) => {
-        if (inputData?.agentId && inputData?.agentResult) {
+        console.dir({ inputData }, { depth: null });
+        let completionResult;
+        if (inputData?.agentId && inputData?.result) {
           // Check if the task is complete
           const completionPrompt = `
                         The agent ${inputData.agentId} has contributed to the task.
-                        This is the result from the agent: ${inputData.agentResult}
+                        This is the result from the agent: ${inputData.result}
 
-                        You need to evaluate that our task is complete.
+                        You need to evaluate that our task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete.
                         Original task: ${inputData.task}
 
                         {
@@ -226,14 +230,12 @@ export class NewAgentNetwork extends MastraBase {
                         }
                     `;
 
-          const completionResult = await routingAgent.generate(completionPrompt, {
+          completionResult = await routingAgent.generate(completionPrompt, {
             output: z.object({
               isComplete: z.boolean(),
               finalResult: z.string(),
             }),
           });
-
-          console.log(completionResult.object);
 
           if (completionResult.object.isComplete) {
             return {
@@ -246,25 +248,47 @@ export class NewAgentNetwork extends MastraBase {
           }
         }
 
-        const result = await routingAgent.generate(
+        console.log(
+          'PROMPT',
           `
                     The user has given you the following task: 
                     ${inputData.task}
+                    ${completionResult ? `\n\n${completionResult.object.finalResult}` : ''}
 
                     Please select the most appropriate agent to handle this task and the prompt to be sent to the agent.
 
                     {
                         "agentId": string,
-                        "prompt": string
+                        "prompt": string,
+                        "selectionReason": string
+                    }
+                    `,
+        );
+
+        const result = await routingAgent.generate(
+          `
+                    The user has given you the following task: 
+                    ${inputData.task}
+                    ${completionResult ? `\n\n${completionResult.object.finalResult}` : ''}
+
+                    Please select the most appropriate agent to handle this task and the prompt to be sent to the agent.
+
+                    {
+                        "agentId": string,
+                        "prompt": string,
+                        "selectionReason": string
                     }
                     `,
           {
             output: z.object({
               agentId: z.string(),
               prompt: z.string(),
+              selectionReason: z.string(),
             }),
           },
         );
+
+        console.log('RESULT', result.object);
 
         return {
           task: inputData.task,
@@ -340,7 +364,7 @@ export class NewAgentNetwork extends MastraBase {
       inputSchema: z.object({
         task: z.string(),
         agentId: z.string().optional(),
-        agentResult: z.string().optional(),
+        result: z.string().optional(),
       }),
       outputSchema: z.object({
         result: z.string(),
@@ -365,6 +389,10 @@ export class NewAgentNetwork extends MastraBase {
         result: {
           step: [agentStep, finishStep],
           path: 'result',
+        },
+        agentId: {
+          step: [routingStep, agentStep],
+          path: 'agentId',
         },
       })
       .commit();
