@@ -9,47 +9,14 @@ description: "Inngest workflow allows you to run Mastra vNext workflows with Inn
 
 ## How Inngest Works with Mastra
 
-Inngest provides an event delivery and orchestration layer for running Mastra vNext workflows in response to events. The integration connects Inngest’s event system to Mastra’s workflow engine, enabling event-driven execution, step-level monitoring, and suspend/resume functionality.
+Inngest provides an event delivery and orchestration layer for running Mastra vNext workflows in response to events. The integration connects Inngest's event system to Mastra's workflow engine.
 
-### Integration Architecture
-
-- **Workflow Registration:**  
-  Workflows are defined using the `createWorkflow` and `createStep` helpers from `@mastra/inngest`. These helpers produce workflow and step objects compatible with both Mastra and Inngest.
-
-- **Event Handling:**  
-  Each workflow is registered as an Inngest function. When an event matching the workflow’s trigger is received, Inngest invokes the workflow handler. The handler starts or resumes a workflow run using the event payload as input.
-
-- **Run Management:**  
-  Workflow runs are managed by the `InngestRun` class. This class sends events to Inngest to start or resume runs, polls for run status, and retrieves results. Workflow state is persisted using Mastra’s storage system.
-
-- **Suspend and Resume:**  
-  If a workflow step suspends (for example, waiting for external input), the run is paused. To resume, a new event is sent to Inngest with the required resume data and step information. The workflow continues from the suspended step.
-
-- **Real-Time Monitoring:**  
-  The `watch` method on a workflow run subscribes to Inngest’s realtime API. This provides step-level execution updates, including status changes and outputs, which can be used for dashboards or debugging.
-
-### Data Flow
-
-1. **Event Trigger:**  
-   An event is sent to Inngest Cloud (or a local Inngest dev server) with a payload matching the workflow’s input schema.
-
-2. **Function Invocation:**  
-   Inngest matches the event to a registered workflow function and invokes it, passing the event data to the workflow handler.
-
-3. **Workflow Execution:**  
-   The handler creates a workflow run and starts execution. Each step is executed in order, and state is persisted after each step.
-
-4. **Suspend/Resume:**  
-   If a step suspends, the workflow run is paused. To continue, a new event is sent with resume data, and the workflow resumes from the suspended step.
-
-5. **Result Retrieval:**
-   When the workflow completes, fails, or suspends, the result is available via Inngest’s API and dashboard. The result includes the status, step outputs, and any error or suspension information.
-
+Workflows are defined using Mastra's `createWorkflow` and `createStep` helpers, which map directly to Inngest functions through a memoized creation process. Each step of workflow is registered as a single Inngest function with a unique ID, created once and cached for efficiency. When an event occurs, Inngest invokes the corresponding function, creating a workflow run that executes steps in sequence within Inngest's context. Real-time monitoring is provided through Inngest's publish-subscribe system, where the watch method subscribes to a specific channel `workflow:${workflowId}:${runId}` for execution updates. Results are available through Inngest's API and dashboard, including status, outputs, and any errors.
 
 ## Setup
 
 ```sh
-npm install @mastra/inngest @mastra/core @mastra/deployer @hono/node-server
+npm install @mastra/inngest @mastra/core @mastra/deployer
 ```
 
 ## Building an Inngest Workflow
@@ -86,7 +53,7 @@ import { init } from '@mastra/inngest'
 // Initialize Inngest with Mastra, pointing to your local Inngest server
 const { createWorkflow, createStep } = init(inngest)
 
-// Step 1: Increment the counter value
+// Step: Increment the counter value
 const incrementStep = createStep({
   id: 'increment',
   inputSchema: z.object({
@@ -97,35 +64,6 @@ const incrementStep = createStep({
   }),
   execute: async ({ inputData }) => {
     return { value: inputData.value + 1 }
-  },
-})
-
-// Step 2: Log the current value (side effect)
-const sideEffectStep = createStep({
-  id: 'side-effect',
-  inputSchema: z.object({
-    value: z.number(),
-  }),
-  outputSchema: z.object({
-    value: z.number(),
-  }),
-  execute: async ({ inputData }) => {
-    console.log('Current value:', inputData.value)
-    return { value: inputData.value }
-  },
-})
-
-// Step 3: Final step after loop completion
-const finalStep = createStep({
-  id: 'final',
-  inputSchema: z.object({
-    value: z.number(),
-  }),
-  outputSchema: z.object({
-    value: z.number(),
-  }),
-  execute: async ({ inputData }) => {
-    return { value: inputData.value }
   },
 })
 ```
@@ -144,25 +82,7 @@ const workflow = createWorkflow({
   outputSchema: z.object({
     value: z.number(),
   }),
-})
-  // Loop until the condition is met (value reaches 10)
-  .dountil(
-    createWorkflow({
-      id: 'increment-subworkflow',
-      inputSchema: z.object({
-        value: z.number(),
-      }),
-      outputSchema: z.object({
-        value: z.number(),
-      }),
-      steps: [incrementStep, sideEffectStep],
-    })
-      .then(incrementStep)
-      .then(sideEffectStep)
-      .commit(),
-    async ({ inputData }) => inputData.value >= 10
-  )
-  .then(finalStep)
+}).then(incrementStep)
 
 workflow.commit()
 
@@ -187,6 +107,11 @@ export const mastra = new Mastra({
     incrementWorkflow
   },
   server: {
+    // The server configuration is required to expose the Inngest integration endpoint.
+    // This server acts as a bridge between Mastra and Inngest, allowing:
+    // - Inngest to discover and register Mastra workflows
+    // - Inngest to send events to trigger workflow executions
+    // - Real-time communication for workflow monitoring and updates
     host: '0.0.0.0',
     apiRoutes: [
       // This API route is used to register the Mastra workflow (inngest function) on the inngest server
