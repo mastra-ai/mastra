@@ -382,9 +382,6 @@ export class Workflow<
     delay?: number;
   };
 
-  #closeStreamAction?: () => Promise<void>;
-  #executionResults?: Promise<WorkflowResult<TOutput, TSteps>>;
-
   #mastra?: Mastra;
 
   #runs: Map<string, Run<TSteps, TInput, TOutput>> = new Map();
@@ -957,6 +954,9 @@ export class Run<
    * The storage for this run
    */
   #mastra?: Mastra;
+
+  #closeStreamAction?: () => Promise<void>;
+  #executionResults?: Promise<WorkflowResult<TOutput, TSteps>>;
 
   protected cleanup?: () => void;
 

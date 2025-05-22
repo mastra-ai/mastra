@@ -14,6 +14,7 @@ import type {
   StepResult,
   WorkflowResult,
 } from '@mastra/core/workflows';
+import { EMITTER_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Span } from '@opentelemetry/api';
 import type { Inngest, BaseContext } from 'inngest';
 import { serve as inngestServe } from 'inngest/hono';

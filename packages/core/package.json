@@ -40,6 +40,12 @@
         "default": "./dist/workflows/legacy/index.cjs"
       }
     },
+    "./workflows/_constants": {
+      "import": {
+        "types": "./dist/workflows/constants.d.ts",
+        "default": "./dist/workflows/constants.js"
+      }
+    },
     "./vector/filter": {
       "import": {
         "types": "./dist/vector/filter/index.d.ts",

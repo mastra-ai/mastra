@@ -225,7 +225,7 @@ export class Workflow extends BaseResource {
     runId?: string;
     inputData: Record<string, any>;
     runtimeContext?: RuntimeContext;
-  }): Promise<AsyncGenerator<VNextWorkflowWatchResult, void, unknown>> {
+  }): Promise<AsyncGenerator<WorkflowWatchResult, void, unknown>> {
     const searchParams = new URLSearchParams();
 
     if (!!params?.runId) {

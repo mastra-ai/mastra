@@ -306,7 +306,7 @@ export function streamWorkflowHandler({
       throw new HTTPException(400, { message: 'Workflow ID is required' });
     }
 
-    const workflow = mastra.vnext_getWorkflow(workflowId);
+    const workflow = mastra.getWorkflow(workflowId);
 
     if (!workflow) {
       throw new HTTPException(404, { message: 'Workflow not found' });

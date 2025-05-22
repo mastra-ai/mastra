@@ -7,6 +7,7 @@ import {
   createWorkflowRunHandler as getOriginalCreateWorkflowRunHandler,
   startWorkflowRunHandler as getOriginalStartWorkflowRunHandler,
   watchWorkflowHandler as getOriginalWatchWorkflowHandler,
+  streamWorkflowHandler as getOriginalStreamWorkflowHandler,
   resumeAsyncWorkflowHandler as getOriginalResumeAsyncWorkflowHandler,
   resumeWorkflowHandler as getOriginalResumeWorkflowHandler,
   getWorkflowRunsHandler as getOriginalGetWorkflowRunsHandler,
@@ -139,6 +140,44 @@ export function watchWorkflowHandler(c: Context) {
 
           for await (const chunk of result) {
             await stream.write(chunk.toString() + '\x1E');
+          }
+        } catch (err) {
+          console.log(err);
+        }
+      },
+      async err => {
+        logger.error('Error in watch stream: ' + err?.message);
+      },
+    );
+  } catch (error) {
+    return handleError(error, 'Error watching workflow');
+  }
+}
+
+export async function streamWorkflowHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const logger = mastra.getLogger();
+    const workflowId = c.req.param('workflowId');
+    const runtimeContext: RuntimeContext = c.get('runtimeContext');
+    const { inputData, runtimeContext: runtimeContextFromRequest } = await c.req.json();
+    const runId = c.req.query('runId');
+
+    return stream(
+      c,
+      async stream => {
+        try {
+          const result = getOriginalStreamWorkflowHandler({
+            mastra,
+            workflowId,
+            runId,
+            inputData,
+            runtimeContext,
+            runtimeContextFromRequest,
+          });
+
+          for await (const chunk of result.stream) {
+            await stream.write(JSON.stringify(chunk) + '\x1E');
           }
         } catch (err) {
           console.log(err);
