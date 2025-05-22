@@ -1,17 +1,17 @@
 ---
-title: "Using Workflows with Agents and Tools | Workflows (vNext) | Mastra Docs"
-description: "Steps in Mastra workflows (vNext) provide a structured way to manage operations by defining inputs, outputs, and execution logic."
+title: "Using Workflows with Agents and Tools | Workflows | Mastra Docs"
+description: "Steps in Mastra workflows provide a structured way to manage operations by defining inputs, outputs, and execution logic."
 ---
 
 ## Agent as a step
 
-vNext workflows can use Mastra agents directly as steps using `createStep(agent)`:
+Workflows can use Mastra agents directly as steps using `createStep(agent)`:
 
 ```typescript
 import { Mastra } from "@mastra/core";
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
-import { createWorkflow, createStep } from "@mastra/core/workflows/vNext";
+import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
 const myAgent = new Agent({
@@ -65,12 +65,12 @@ const mastra = new Mastra({
   agents: {
       myAgent,
   },
-  vnext_workflows: {
+  workflows: {
       myWorkflow,
   },
 });
 
-const workflow = mastra.vnext_getWorkflow("myWorkflow");
+const workflow = mastra.getWorkflow("myWorkflow");
 const run = workflow.createRun();
 
 // Run the workflow with a question
@@ -90,11 +90,11 @@ if (res.status === "success") {
 
 ## Tools as a step
 
-vNext workflows can use Mastra tools directly as steps using `createStep(tool)`:
+Workflows can use Mastra tools directly as steps using `createStep(tool)`:
 
 ```typescript
 import { createTool, Mastra } from "@mastra/core";
-import { createWorkflow, createStep } from "@mastra/core/workflows/vNext";
+import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
 // Create a weather tool
@@ -172,13 +172,13 @@ weatherWorkflow
 
 // Create Mastra instance
 const mastra = new Mastra({
-  vnext_workflows: {
+  workflows: {
       weatherWorkflow
   }
 });
 
 
-const workflow = mastra.vnext_getWorkflow("weatherWorkflow");
+const workflow = mastra.getWorkflow("weatherWorkflow");
 const run = workflow.createRun();
 
 // Run the workflow
@@ -203,7 +203,7 @@ import { openai } from "@ai-sdk/openai";
 import { Mastra } from "@mastra/core";
 import { Agent } from "@mastra/core/agent";
 import { createTool } from "@mastra/core/tools";
-import { createWorkflow, createStep } from "@mastra/core/workflows/vNext";
+import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
 // Define the weather fetching step
@@ -282,7 +282,7 @@ const activityPlannerTool = createTool({
   execute: async ({ context: { city }, mastra }) => {
     mastra.getLogger()?.debug(`Tool executing for city: ${city}`);
     
-    const workflow = mastra?.vnext_getWorkflow("weatherWorkflow");
+    const workflow = mastra?.getWorkflow("weatherWorkflow");
     if (!workflow) {
       throw new Error("Weather workflow not found");
     }
@@ -318,7 +318,7 @@ const activityPlannerAgent = new Agent({
 
 // Create the Mastra instance
 const mastra = new Mastra({
-  vnext_workflows: {
+  workflows: {
     weatherWorkflow
   },
   agents: {

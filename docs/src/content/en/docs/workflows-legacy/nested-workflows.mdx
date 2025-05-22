@@ -1,4 +1,4 @@
-# Nested Workflows
+# Nested Workflows (Legacy)
 
 Mastra allows you to use workflows as steps within other workflows, enabling you to create modular and reusable workflow components. This feature helps in organizing complex workflows into smaller, manageable pieces and promotes code reuse.
 
@@ -9,14 +9,16 @@ It is also visually easier to understand the flow of a workflow when you can see
 You can use a workflow as a step directly in another workflow using the `step()` method:
 
 ```typescript
+import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy'
+
 // Create a nested workflow
-const nestedWorkflow = new Workflow({ name: "nested-workflow" })
+const nestedWorkflow = new LegacyWorkflow({ name: "nested-workflow" })
   .step(stepA)
   .then(stepB)
   .commit();
 
 // Use the nested workflow in a parent workflow
-const parentWorkflow = new Workflow({ name: "parent-workflow" })
+const parentWorkflow = new LegacyWorkflow({ name: "parent-workflow" })
   .step(nestedWorkflow, {
     variables: {
       city: {
@@ -78,12 +80,12 @@ Nested workflows can be used in if-else branches using the new syntax that accep
 
 ```typescript
 // Create nested workflows for different paths
-const workflowA = new Workflow({ name: "workflow-a" })
+const workflowA = new LegacyWorkflow({ name: "workflow-a" })
   .step(stepA1)
   .then(stepA2)
   .commit();
 
-const workflowB = new Workflow({ name: "workflow-b" })
+const workflowB = new LegacyWorkflow({ name: "workflow-b" })
   .step(stepB1)
   .then(stepB2)
   .commit();
@@ -134,7 +136,7 @@ parentWorkflow
 You can watch the state changes of nested workflows using the `watch` method on the parent workflow. This is useful for monitoring the progress and state transitions of complex workflows:
 
 ```typescript
-const parentWorkflow = new Workflow({ name: "parent-workflow" })
+const parentWorkflow = new LegacyWorkflow({ name: "parent-workflow" })
   .step([nestedWorkflowA, nestedWorkflowB])
   .then(finalStep)
   .commit();
@@ -155,7 +157,7 @@ Nested workflows support suspension and resumption, allowing you to pause and co
 
 ```typescript
 // Define a step that may need to suspend
-const suspendableStep = new Step({
+const suspendableStep = new LegacyStep({
   id: "other",
   description: "Step that may need to suspend",
   execute: async ({ context, suspend }) => {
@@ -168,14 +170,14 @@ const suspendableStep = new Step({
 });
 
 // Create a nested workflow with suspendable steps
-const nestedWorkflow = new Workflow({ name: "nested-workflow-a" })
+const nestedWorkflow = new LegacyWorkflow({ name: "nested-workflow-a" })
   .step(startStep)
   .then(suspendableStep)
   .then(finalStep)
   .commit();
 
 // Use in parent workflow
-const parentWorkflow = new Workflow({ name: "parent-workflow" })
+const parentWorkflow = new LegacyWorkflow({ name: "parent-workflow" })
   .step(beginStep)
   .then(nestedWorkflow)
   .then(lastStep)
@@ -215,7 +217,7 @@ Nested workflows can define their result schema and mapping, which helps in type
 
 ```typescript
 // Create a nested workflow with result schema and mapping
-const nestedWorkflow = new Workflow({
+const nestedWorkflow = new LegacyWorkflow({
   name: "nested-workflow",
   result: {
     schema: z.object({
@@ -239,7 +241,7 @@ const nestedWorkflow = new Workflow({
   .commit();
 
 // Use in parent workflow with type-safe results
-const parentWorkflow = new Workflow({ name: "parent-workflow" })
+const parentWorkflow = new LegacyWorkflow({ name: "parent-workflow" })
   .step(nestedWorkflow)
   .then(async ({ context }) => {
     const result = context.getStepResult("nested-workflow");
@@ -264,7 +266,7 @@ const parentWorkflow = new Workflow({ name: "parent-workflow" })
 Here's a complete example showing various features of nested workflows:
 
 ```typescript
-const workflowA = new Workflow({
+const workflowA = new LegacyWorkflow({
   name: "workflow-a",
   result: {
     schema: z.object({
@@ -282,7 +284,7 @@ const workflowA = new Workflow({
   .then(planActivities)
   .commit();
 
-const workflowB = new Workflow({
+const workflowB = new LegacyWorkflow({
   name: "workflow-b",
   result: {
     schema: z.object({
@@ -300,7 +302,7 @@ const workflowB = new Workflow({
   .then(planActivities)
   .commit();
 
-const weatherWorkflow = new Workflow({
+const weatherWorkflow = new LegacyWorkflow({
   name: "weather-workflow",
   triggerSchema: z.object({
     cityA: z.string().describe("The city to get the weather for"),

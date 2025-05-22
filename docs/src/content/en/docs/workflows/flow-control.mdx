@@ -1,6 +1,6 @@
 ---
-title: "Branching, Merging, Conditions | Workflows (vNext) | Mastra Docs"
-description: "Control flow in Mastra (vNext) workflows allows you to manage branching, merging, and conditions to construct workflows that meet your logic requirements."
+title: "Branching, Merging, Conditions | Workflows | Mastra Docs"
+description: "Control flow in Mastra workflows allows you to manage branching, merging, and conditions to construct workflows that meet your logic requirements."
 ---
 
 ## Sequential Flow
@@ -16,7 +16,7 @@ myWorkflow
   .commit();
 ```
 
-The output from each step is automatically passed to the next step if schemas match. If the schemas don't match, you can use the [`map` function](/docs/workflows-vnext/input-data-mapping.mdx) to transform the output to the expected schema.
+The output from each step is automatically passed to the next step if schemas match. If the schemas don't match, you can use the [`map` function](./input-data-mapping.mdx) to transform the output to the expected schema.
 Step chaining is type-safe and checked at compile time.
 
 ## Parallel Execution
@@ -75,7 +75,7 @@ Each conditional step (like `highValueStep` or `lowValueStep`) receives as input
 
 ## Loops
 
-vNext supports two types of loops. When looping a step (or nested workflow or any other step-compatible construct), the `inputData` of the loop is the output of the previous step initially, but any subsequent `inputData` is the output of the loop step itself. Thus for looping, the initial loop state should either match the previous step output or be derived using the `map` function.
+Workflows supports two types of loops. When looping a step (or nested workflow or any other step-compatible construct), the `inputData` of the loop is the output of the previous step initially, but any subsequent `inputData` is the output of the loop step itself. Thus for looping, the initial loop state should either match the previous step output or be derived using the `map` function.
 
 **Do-While Loop**: Executes a step repeatedly while a condition is true.
 
@@ -162,7 +162,7 @@ counterWorkflow.foreach(mapStep, { concurrency: 2 }).then(finalStep).commit();
 
 ## Nested Workflows
 
-vNext supports composing workflows by nesting them:
+You can compose workflows by nesting them:
 
 ```typescript
 const nestedWorkflow = createWorkflow({

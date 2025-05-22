@@ -1,5 +1,5 @@
 ---
-title: "Data Mapping with Workflow Variables | Mastra Docs"
+title: "Data Mapping with Workflow (Legacy) Variables | Mastra Docs"
 description: "Learn how to use workflow variables to map data between steps and create dynamic data flows in your Mastra workflows."
 ---
 
@@ -23,7 +23,9 @@ In Mastra workflows, variables serve as a way to:
 You can map data between steps using the `variables` property when adding a step to your workflow:
 
 ```typescript showLineNumbers filename="src/mastra/workflows/index.ts" copy
-const workflow = new Workflow({
+import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy'
+
+const workflow = new LegacyWorkflow({
   name: "data-mapping-workflow",
   triggerSchema: z.object({
     inputData: z.string(),
@@ -47,7 +49,7 @@ workflow
 
 // Register the workflow with Mastra
 export const mastra = new Mastra({
-  workflows: { workflow },
+  legacy_workflows: { workflow },
 });
 ```
 
@@ -88,7 +90,7 @@ Variables can also be passed to `while` and `until` loops. This is useful for pa
 
 ```typescript showLineNumbers filename="src/mastra/workflows/loop-variables.ts" copy
 // Step that increments a counter
-const incrementStep = new Step({
+const incrementStep = new LegacyStep({
   id: "increment",
   inputSchema: z.object({
     // Previous value from last iteration
@@ -104,7 +106,7 @@ const incrementStep = new Step({
   },
 });
 
-const workflow = new Workflow({
+const workflow = new LegacyWorkflow({
   name: "counter",
 });
 
@@ -141,11 +143,12 @@ When a workflow executes, Mastra resolves variables at runtime by:
 This example shows how to map data from the workflow trigger to a step:
 
 ```typescript showLineNumbers filename="src/mastra/workflows/trigger-mapping.ts" copy
-import { Step, Workflow, Mastra } from "@mastra/core";
+import { Mastra } from "@mastra/core";
+import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy'
 import { z } from "zod";
 
 // Define a step that needs user input
-const processUserInput = new Step({
+const processUserInput = new LegacyStep({
   id: "processUserInput",
   execute: async ({ context }) => {
     // The inputData will be available in context because of the variable mapping
@@ -158,7 +161,7 @@ const processUserInput = new Step({
 });
 
 // Create the workflow
-const workflow = new Workflow({
+const workflow = new LegacyWorkflow({
   name: "trigger-mapping",
   triggerSchema: z.object({
     inputData: z.string(),
@@ -176,7 +179,7 @@ workflow
 
 // Register the workflow with Mastra
 export const mastra = new Mastra({
-  workflows: { workflow },
+  legacy_workflows: { workflow },
 });
 ```
 
@@ -185,11 +188,12 @@ export const mastra = new Mastra({
 This example demonstrates mapping data from one step to another:
 
 ```typescript showLineNumbers filename="src/mastra/workflows/step-mapping.ts" copy
-import { Step, Workflow, Mastra } from "@mastra/core";
+import { Mastra } from "@mastra/core";
+import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy'
 import { z } from "zod";
 
 // Step 1: Generate data
-const generateData = new Step({
+const generateData = new LegacyStep({
   id: "generateData",
   outputSchema: z.object({
     nested: z.object({
@@ -206,7 +210,7 @@ const generateData = new Step({
 });
 
 // Step 2: Process the data from step 1
-const processData = new Step({
+const processData = new LegacyStep({
   id: "processData",
   inputSchema: z.object({
     previousValue: z.string(),
@@ -222,7 +226,7 @@ const processData = new Step({
 });
 
 // Create the workflow
-const workflow = new Workflow({
+const workflow = new LegacyWorkflow({
   name: "step-mapping",
 });
 
@@ -239,7 +243,7 @@ workflow
 
 // Register the workflow with Mastra
 export const mastra = new Mastra({
-  workflows: { workflow },
+  legacy_workflows: { workflow },
 });
 ```
 
@@ -248,7 +252,8 @@ export const mastra = new Mastra({
 Mastra provides type safety for variable mappings when using TypeScript:
 
 ```typescript showLineNumbers filename="src/mastra/workflows/type-safe.ts" copy
-import { Step, Workflow, Mastra } from "@mastra/core";
+import { Mastra } from "@mastra/core";
+import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy'
 import { z } from "zod";
 
 // Define schemas for better type safety
@@ -259,7 +264,7 @@ const triggerSchema = z.object({
 type TriggerType = z.infer<typeof triggerSchema>;
 
 // Step with typed context
-const step1 = new Step({
+const step1 = new LegacyStep({
   id: "step1",
   outputSchema: z.object({
     nested: z.object({
@@ -279,7 +284,7 @@ const step1 = new Step({
 });
 
 // Create the workflow with the schema
-const workflow = new Workflow({
+const workflow = new LegacyWorkflow({
   name: "type-safe-workflow",
   triggerSchema,
 });
@@ -288,7 +293,7 @@ workflow.step(step1).commit();
 
 // Register the workflow with Mastra
 export const mastra = new Mastra({
-  workflows: { workflow },
+  legacy_workflows: { workflow },
 });
 ```
 

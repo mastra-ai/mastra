@@ -4,8 +4,11 @@ const meta = {
   agents: { title: "Agents" },
   "tools-mcp": { title: "Tools & MCP", theme: { collapsed: true } },
   memory: { title: "Memory", theme: { collapsed: true } },
-  workflows: { title: "Workflows", theme: { collapsed: true } },
-  "workflows-vnext": { title: "Workflows (vNext)" },
+  workflows: { title: "Workflows" },
+  "workflows-legacy": {
+    title: "Workflows (Legacy)",
+    theme: { collapsed: true },
+  },
   rag: { title: "RAG" },
   "local-dev": { title: "Local Dev" },
   deployment: { title: "Deployment" },
