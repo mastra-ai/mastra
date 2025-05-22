@@ -81,6 +81,7 @@ Define the individual steps that will compose your workflow:
 ```ts showLineNumbers copy filename="src/mastra/workflows/index.ts"
 import { z } from 'zod'
 import { inngest } from '../inngest'
+import { init } from '@mastra/inngest'
 
 // Initialize Inngest with Mastra, pointing to your local Inngest server
 const { createWorkflow, createStep } = init(inngest)
@@ -241,7 +242,7 @@ docker run --rm -p 8288:8288 \
 ```
 ![Inngest Function](/inngest-function-dashboard.png)
 
-5. Monitor the Workflow Execution**
+5. **Monitor the Workflow Execution**
 - Go to the **Runs** tab in the sidebar.
 - Click on the latest run to see step-by-step execution progress.
 ![Inngest Function Run](/inngest-runs-dashboard.png)
