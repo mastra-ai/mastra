@@ -9,13 +9,13 @@ describe('NewAgentNetwork', () => {
     const agent1 = new Agent({
       name: 'agent1',
       instructions: 'Test instructions',
-      description: 'This agent is used to do Mathematics',
+      description: 'This agent is used to do research, but not create full responses.',
       model: openai('gpt-4o'),
     });
 
     const agent2 = new Agent({
       name: 'agent2',
-      description: 'This agent is used to do text synthesis',
+      description: 'This agent is used to do text synthesis on researched material',
       instructions: 'Test instructions',
       model: openai('gpt-4o'),
     });
