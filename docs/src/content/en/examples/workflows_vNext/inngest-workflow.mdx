@@ -13,7 +13,7 @@ npm install @mastra/inngest @mastra/core @mastra/deployer @hono/node-server @ai-
 
 docker run --rm -p 8288:8288 \
   inngest/inngest \
-  inngest dev -u http://host.docker.internal:3000/inngest/api
+  inngest dev -u http://host.docker.internal:4111/inngest/api
 ```
 
 Alternatively, you can use the Inngest CLI for local development by following the official [Inngest Dev Server guide](https://www.inngest.com/docs/dev-server).
@@ -328,7 +328,7 @@ const inngest = new Inngest({
   id: 'mastra',
   baseUrl: `http://localhost:8288`,  // URL of your local Inngest server
   isDev: true,
-  middleware: [realtimeMiddleware()], // Enable real-time updates in the Inngest dashboard
+  middleware: [realtimeMiddleware()],
 })
 
 // Create and configure the main Mastra instance
@@ -356,35 +356,4 @@ export const mastra = new Mastra({
 })
 ```
 
-## Execute the activity planner workflow
-
-Here, we'll get the activity planner workflow from the mastra instance, then create a run and execute the created run with the required inputData.
-
-```ts showLineNumbers copy filename="exec.ts"
-import { mastra } from './'
-import { serve } from '@hono/node-server'
-import { createHonoServer } from '@mastra/deployer/server'
-
-
-const app = await createHonoServer(mastra)
-
-// Start the server on port 3000 so Inngest can send events to it
-const srv = serve({
-    fetch: app.fetch,
-    port: 3000,
-})
-
-const workflow = mastra.vnext_getWorkflow('activityPlanningWorkflow')
-const run = workflow.createRun({})
-
-// Start the workflow with the required input data (city name)
-// This will trigger the workflow steps and stream the result to the console
-const result = await run.start({ inputData: { city: 'New York' } })
-console.dir(result, { depth: null })
-
-// Close the server after the workflow run is complete
-srv.close()
-
-```
-
-After running the workflow, you can view and monitor your workflow runs in real time using the Inngest dashboard at [http://localhost:8288](http://localhost:8288).
+After running the workflow, you can view, invoke and monitor your workflow runs in real time using the Inngest dashboard at [http://localhost:8288](http://localhost:8288).
