@@ -1078,9 +1078,9 @@ function deepMerge(a: Record<string, any>, b: Record<string, any>): Record<strin
       const bVal = b[key];
 
       if (Array.isArray(bVal)) {
-        result[key] = Array.isArray(aVal)
-          ? [...aVal, ...bVal].filter(item => item !== undefined)
-          : bVal.filter(item => item !== undefined);
+        //we should just replace it instead of spreading as we do for others
+        //spreading aVal and then bVal will result in duplication of items
+        result[key] = bVal.filter(item => item !== undefined);
       } else if (typeof aVal === 'object' && aVal !== null) {
         // If both values are objects, merge them
         result[key] = deepMerge(aVal, bVal);
