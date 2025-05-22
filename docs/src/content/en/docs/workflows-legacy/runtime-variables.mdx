@@ -1,9 +1,9 @@
 ---
-title: "Runtime variables - dependency injection | Workflows | Mastra Docs"
+title: "Runtime variables - dependency injection | Workflows (Legacy) | Mastra Docs"
 description: Learn how to use Mastra's dependency injection system to provide runtime configuration to workflows and steps.
 ---
 
-# Workflow Runtime Variables
+# Workflow Runtime Variables (Legacy)
 
 Mastra provides a powerful dependency injection system that enables you to configure your workflows and steps with runtime variables. This feature is essential for creating flexible and reusable workflows that can adapt their behavior based on runtime configuration.
 
@@ -19,7 +19,7 @@ The dependency injection system allows you to:
 ## Basic Usage
 
 ```typescript
-const myWorkflow = mastra.getWorkflow("myWorkflow");
+const myWorkflow = mastra.legacy_getWorkflow("myWorkflow");
 const { runId, start, resume } = myWorkflow.createRun();
 
 // Define your runtimeContext's type structure
@@ -52,7 +52,7 @@ type WorkflowRuntimeContext = {
 };
 
 export const mastra = new Mastra({
-  workflows: {
+  legacy_workflows: {
     myWorkflow,
   },
   server: {
@@ -81,7 +81,7 @@ export const mastra = new Mastra({
 Steps can access runtimeContext variables and must conform to the workflow's runtimeContext type:
 
 ```typescript
-import { Step } from "@mastra/core/workflow";
+import { LegacyStep } from "@mastra/core/workflows/legacy";
 import { z } from "zod";
 
 // Define step input/output types
@@ -93,7 +93,7 @@ interface StepOutput {
   incrementedValue: number;
 }
 
-const stepOne = new Step({
+const stepOne = new LegacyStep({
   id: "stepOne",
   description: "Multiply the input value by the configured multiplier",
   execute: async ({ context, runtimeContext }) => {

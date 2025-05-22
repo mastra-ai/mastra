@@ -17,7 +17,7 @@ You need to import Mastra tools and Zod to handle workflow definitions and data 
 
 ```ts filename="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core";
-import { Step, Workflow } from "@mastra/core/workflows";
+import { createStep, createWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
 ```
 
@@ -41,7 +41,7 @@ const recruiter = new Agent({
   model: openai("gpt-4o-mini"),
 });
 
-const gatherCandidateInfo = new Step({
+const gatherCandidateInfo = createStep({
   id: "gatherCandidateInfo",
   inputSchema: z.object({
     resumeText: z.string(),
@@ -52,10 +52,8 @@ const gatherCandidateInfo = new Step({
     specialty: z.string(),
     resumeText: z.string(),
   }),
-  execute: async ({ context }) => {
-    const resumeText = context?.getStepResult<{
-      resumeText: string;
-    }>("trigger")?.resumeText;
+  execute: async ({ inputData }) => {
+    const resumeText = inputData?.resumeText;
 
     const prompt = `
           Extract details from the resume text:
@@ -88,15 +86,19 @@ interface CandidateInfo {
   resumeText: string;
 }
 
-const askAboutSpecialty = new Step({
+const askAboutSpecialty = createStep({
   id: "askAboutSpecialty",
+  inputSchema: z.object({
+    candidateName: z.string(),
+    isTechnical: z.boolean(),
+    specialty: z.string(),
+    resumeText: z.string(),
+  }),
   outputSchema: z.object({
     question: z.string(),
   }),
-  execute: async ({ context }) => {
-    const candidateInfo = context?.getStepResult<CandidateInfo>(
-      "gatherCandidateInfo",
-    );
+  execute: async ({ inputData }) => {
+    const candidateInfo = inputData
 
     const prompt = `
           You are a recruiter. Given the resume below, craft a short question
@@ -115,15 +117,19 @@ const askAboutSpecialty = new Step({
 If the candidate is non-technical, you want a different follow-up question. This step asks what interests them most about the role, again referencing their complete resume text. The code solicits a role-focused query from the LLM.
 
 ```ts filename="src/mastra/index.ts" copy
-const askAboutRole = new Step({
+const askAboutRole = createStep({
   id: "askAboutRole",
+  inputSchema: z.object({
+    candidateName: z.string(),
+    isTechnical: z.boolean(),
+    specialty: z.string(),
+    resumeText: z.string(),
+  }),
   outputSchema: z.object({
     question: z.string(),
   }),
-  execute: async ({ context }) => {
-    const candidateInfo = context?.getStepResult<CandidateInfo>(
-      "gatherCandidateInfo",
-    );
+  execute: async ({ inputData }) => {
+    const candidateInfo = inputData;
 
     const prompt = `
           You are a recruiter. Given the resume below, craft a short question
@@ -141,22 +147,34 @@ const askAboutRole = new Step({
 You now combine the steps to implement branching logic based on the candidate's technical status. The workflow first gathers candidate data, then either asks about their specialty or about their role, depending on isTechnical. The code chains gatherCandidateInfo with askAboutSpecialty and askAboutRole, and commits the workflow.
 
 ```ts filename="src/mastra/index.ts" copy
-const candidateWorkflow = new Workflow({
-  name: "candidate-workflow",
-  triggerSchema: z.object({
+const candidateWorkflow = createWorkflow({
+  id: "candidate-workflow",
+  inputSchema: z.object({
     resumeText: z.string(),
+  }),
+  outputSchema: z.object({
+    question: z.string(),
   }),
 });
 
 candidateWorkflow
-  .step(gatherCandidateInfo)
-  .then(askAboutSpecialty, {
-    when: { "gatherCandidateInfo.isTechnical": true },
-  })
-  .after(gatherCandidateInfo)
-  .step(askAboutRole, {
-    when: { "gatherCandidateInfo.isTechnical": false },
-  });
+  .then(gatherCandidateInfo)
+  .branch([
+    // Branch for technical candidates
+    [
+      async ({ inputData }) => {
+        return inputData?.isTechnical;
+      },
+      askAboutSpecialty,
+    ],
+    // Branch for non-technical candidates
+    [
+      async ({ inputData }) => {
+        return !inputData?.isTechnical;
+      },
+      askAboutRole,
+    ],
+  ]);
 
 candidateWorkflow.commit();
 ```

@@ -3,168 +3,354 @@ title: "Handling Complex LLM Operations | Workflows | Mastra"
 description: "Workflows in Mastra help you orchestrate complex sequences of operations with features like branching, parallel execution, resource suspension, and more."
 ---
 
-# Handling Complex LLM Operations with Workflows
+## Getting Started
 
-Workflows in Mastra help you orchestrate complex sequences of operations with features like branching, parallel execution, resource suspension, and more.
+To use workflows, first import the necessary functions from the workflows module:
 
-## When to use workflows
-
-Most AI applications need more than a single call to a language model. You may want to run multiple steps, conditionally skip certain paths, or even pause execution altogether until you receive user input. Sometimes your agent tool calling is not accurate enough.
-
-Mastra's workflow system provides:
-
-- A standardized way to define steps and link them together.
-- Support for both simple (linear) and advanced (branching, parallel) paths.
-- Debugging and observability features to track each workflow run.
-
-## Example
-
-To create a workflow, you define one or more steps, link them, and then commit the workflow before starting it.
-
-### Breaking Down the Workflow
-
-Let's examine each part of the workflow creation process:
-
-#### 1. Creating the Workflow
-
-Here's how you define a workflow in Mastra. The `name` field determines the workflow's API endpoint (`/workflows/$NAME/`), while the `triggerSchema` defines the structure of the workflow's trigger data:
-
-```ts filename="src/mastra/workflow/index.ts"
-const myWorkflow = new Workflow({
-  name: "my-workflow",
-  triggerSchema: z.object({
-    inputValue: z.number(),
-  }),
-});
+```typescript
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod"; // For schema validation
 ```
 
-#### 2. Defining Steps
+## Key Concepts
 
-Now, we'll define the workflow's steps. Each step can have its own input and output schemas. Here, `stepOne` doubles an input value, and `stepTwo` increments that result if `stepOne` was successful. (To keep things simple, we aren't making any LLM calls in this example):
+Workflows consist of:
 
-```ts filename="src/mastra/workflow/index.ts"
-const stepOne = new Step({
-  id: "stepOne",
-  outputSchema: z.object({
-    doubledValue: z.number(),
-  }),
-  execute: async ({ context }) => {
-    const doubledValue = context.triggerData.inputValue * 2;
-    return { doubledValue };
-  },
+- **Schemas**: Type definitions for inputs and outputs using Zod
+- **Steps**: Individual units of work with defined inputs and outputs
+- **Workflow**: A structured sequence of steps designed to accomplish a specific task or process. Workflows define the order, dependencies, and logic for executing steps, and can themselves be reused as steps within other workflows.
+- **Workflow execution flow**: The path and logic followed during a workflow run, including how steps are executed, how data moves between them, and how conditions, branches, and errors are handled.
+
+Schemas are defined using Zod both for inputs and outputs of steps and workflows. Schemas can also dictate what data does a step take when resuming from a suspended state, as well as what contextual information should be passed when suspending a step's execution.
+
+The inputs and outputs of steps that are connected together should match: the inputSchema of a step should be the same as the outputSchema of the previous step, for instance. The same is true, when using workflows as steps in other workflows, the workflow's inputSchema should match the outputSchema of the step it is used as.
+
+Steps are run using an `execute` function that receives a context object with inputs from the previous step and/or resume data if the step is being resumed from a suspended state. The `execute` function should return a value that matches its outputSchema.
+
+Primitives such as `.then()`, `.parallel()` and `.branch()` describe the execution flow of workflows, and how the steps within them are connected. Running workflows (whether standalone or as a step), their execution is dictated by their execution flow instead of an `execute` function. The final result of a workflow will always be the result of its last step, which should match the workflow's outputSchema.
+
+## Creating Workflows
+
+### Steps
+
+Steps are the building blocks of workflows. Create a step using `createStep`:
+
+```typescript
+// Create a step with defined input/output schemas and execution logic
+const inputSchema = z.object({
+  inputValue: z.string(),
 });
 
-const stepTwo = new Step({
-  id: "stepTwo",
-  execute: async ({ context }) => {
-    const doubledValue = context.getStepResult(stepOne)?.doubledValue;
-    if (!doubledValue) {
-      return { incrementedValue: 0 };
-    }
+const myStep = createStep({
+  id: "my-step",
+  description: "Does something useful",
+  inputSchema,
+  outputSchema: z.object({
+    outputValue: z.string(),
+  }),
+  // Optional: Define the resume schema for step resumption
+  resumeSchema: z.object({
+    resumeValue: z.string(),
+  }),
+  // Optional: Define the suspend schema for step suspension
+  suspendSchema: z.object({
+    suspendValue: z.string(),
+  }),
+  execute: async ({
+    inputData,
+    mastra,
+    getStepResult,
+    getInitData,
+    runtimeContext,
+  }) => {
+    const otherStepOutput = getStepResult(step2);
+    const initData = getInitData<typeof inputSchema>(); // typed as the input schema variable (zod schema)
     return {
-      incrementedValue: doubledValue + 1,
+      outputValue: `Processed: ${inputData.inputValue}, ${initData.startValue} (runtimeContextValue: ${runtimeContext.get("runtimeContextValue")})`,
     };
   },
 });
 ```
 
-#### 3. Linking Steps
+Each step requires:
 
-Now, let's create the control flow, and "commit" (finalize the workflow). In this case, `stepOne` runs first and is followed by `stepTwo`.
+- `id`: Unique identifier for the step
+- `inputSchema`: Zod schema defining expected input
+- `outputSchema`: Zod schema defining output shape
+- `resumeSchema`: Optional. Zod schema defining resume input
+- `suspendSchema`: Optional. Zod schema defining suspend input
+- `execute`: Async function that performs the step's work
 
-```ts filename="src/mastra/workflow/index.ts"
-myWorkflow.step(stepOne).then(stepTwo).commit();
-```
+The `execute` function receives a context object with:
 
-### Register the Workflow
+- `inputData`: The input data matching the inputSchema
+- `resumeData`: The resume data matching the resumeSchema, when resuming the step from a suspended state. Only exists if the step is being resumed.
+- `mastra`: Access to mastra services (agents, tools, etc.)
+- `getStepResult`: Function to access results from other steps
+- `getInitData`: Function to access the initial input data of the workflow in any step
+- `suspend`: Function to pause workflow execution (for user interaction)
 
-Register your workflow with Mastra to enable logging and telemetry:
+### Workflow Structure
 
-```ts showLineNumbers filename="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
+Create a workflow using `createWorkflow`:
 
-export const mastra = new Mastra({
-  workflows: { myWorkflow },
+```typescript
+// Create a workflow with defined steps and execution flow
+const myWorkflow = createWorkflow({
+  id: "my-workflow",
+  // Define the expected input structure (should match the first step's inputSchema)
+  inputSchema: z.object({
+    startValue: z.string(),
+  }),
+  // Define the expected output structure (should match the last step's outputSchema)
+  outputSchema: z.object({
+    result: z.string(),
+  }),
+  steps: [step1, step2, step3], // Declare steps used in this workflow
+})
+  .then(step1)
+  .then(step2)
+  .then(step3)
+  .commit();
+
+// Register workflow with Mastra instance
+const mastra = new Mastra({
+  workflows: {
+    myWorkflow,
+  },
 });
+
+// Create a run instance of the workflow
+const run = mastra.getWorkflow("myWorkflow").createRun();
 ```
 
-The workflow can also have the mastra instance injected into the context in the case where you need to create dynamic workflows:
+The `steps` property in the workflow options provides type safety for accessing step results. When you declare the steps used in your workflow, TypeScript will ensure type safety when accessing `result.steps`:
 
-```ts filename="src/mastra/workflow/index.ts"
-import { Mastra } from "@mastra/core";
+```typescript
+// With steps declared in workflow options
+const workflow = createWorkflow({
+  id: "my-workflow",
+  inputSchema: z.object({}),
+  outputSchema: z.object({}),
+  steps: [step1, step2], // TypeScript knows these steps exist
+})
+  .then(step1)
+  .then(step2)
+  .commit();
 
-const mastra = new Mastra();
+const result = await workflow.createRun().start({ inputData: {} });
+if (result.status === "success") {
+  console.log(result.result); // only exists if status is success
+} else if (result.status === "failed") {
+  console.error(result.error); // only exists if status is failed, this is an instance of Error
+  throw result.error;
+} else if (result.status === "suspended") {
+  console.log(result.suspended); // only exists if status is suspended
+}
 
-const myWorkflow = new Workflow({
-  name: "my-workflow",
-  mastra,
+// TypeScript knows these properties exist and their types
+console.log(result.steps.step1.output); // Fully typed
+console.log(result.steps.step2.output); // Fully typed
+```
+
+Workflow definition requires:
+
+- `id`: Unique identifier for the workflow
+- `inputSchema`: Zod schema defining workflow input
+- `outputSchema`: Zod schema defining workflow output
+- `steps`: Array of steps used in the workflow (optional, but recommended for type safety)
+
+### Re-using steps and nested workflows
+
+You can re-use steps and nested workflows by cloning them:
+
+```typescript
+const clonedStep = cloneStep(myStep, { id: "cloned-step" });
+const clonedWorkflow = cloneWorkflow(myWorkflow, { id: "cloned-workflow" });
+```
+
+This way you can use the same step or nested workflow in the same workflow multiple times.
+
+```typescript
+import {
+  createWorkflow,
+  createStep,
+  cloneStep,
+  cloneWorkflow,
+} from "@mastra/core/workflows";
+
+const myWorkflow = createWorkflow({
+  id: "my-workflow",
+  steps: [step1, step2, step3],
 });
+myWorkflow.then(step1).then(step2).then(step3).commit();
+
+const parentWorkflow = createWorkflow({
+  id: "parent-workflow",
+  steps: [myWorkflow, step4],
+});
+parentWorkflow
+  .then(myWorkflow) // nested workflow
+  .then(step4)
+  .then(cloneWorkflow(myWorkflow, { id: "cloned-workflow" })) // cloned workflow
+  .then(cloneStep(step4, { id: "cloned-step-4" })) // cloned step
+  .commit();
 ```
 
-### Executing the Workflow
+## Running Workflows
 
-Execute your workflow programmatically or via API:
+After defining a workflow, run it with:
 
-```ts showLineNumbers filename="src/mastra/run-workflow.ts" copy
-import { mastra } from "./index";
+```typescript
+// Create a run instance
+const run = myWorkflow.createRun();
 
-// Get the workflow
-const myWorkflow = mastra.getWorkflow("myWorkflow");
-const { runId, start } = myWorkflow.createRun();
+// Start the workflow with input data
+const result = await run.start({
+  inputData: {
+    startValue: "initial data",
+  },
+});
 
-// Start the workflow execution
-await start({ triggerData: { inputValue: 45 } });
+// Access the results
+console.log(result.steps); // All step results
+console.log(result.steps["step-id"].output); // Output from a specific step
+
+if (result.status === "success") {
+  console.log(result.result); // The final result of the workflow, result of the last step (or `.map()` output, if used as last step)
+} else if (result.status === "suspended") {
+  const resumeResult = await run.resume({
+    step: result.suspended[0], // there is always at least one step id in the suspended array, in this case we resume the first suspended execution path
+    resumeData: {
+      /* user input */
+    },
+  });
+} else if (result.status === "failed") {
+  console.error(result.error); // only exists if status is failed, this is an instance of Error
+}
 ```
 
-Or use the API (requires running `mastra dev`):
+**Note:** don't destructure the `run` instance
+i.e. don't do
+```typescript
+const { start, resume, ... } = myWorkflow.createRun();
 
-// Create workflow run
+// NOR
 
-```bash
-curl --location 'http://localhost:4111/api/workflows/myWorkflow/start-async' \
-     --header 'Content-Type: application/json' \
-     --data '{
-       "inputValue": 45
-     }'
+const run = myWorkflow.createRun();
+const { start, resume, ... } = run;
+```
+it will break the connection to the workflow and prevent it from running
+
+
+## Workflow Execution Result Schema
+
+The result of running a workflow (either from `start()` or `resume()`) follows this TypeScript interface:
+
+```typescript
+export type WorkflowResult<...> =
+  | {
+      status: 'success';
+      result: z.infer<TOutput>;
+      steps: {
+        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
+          ? StepResult<unknown>
+          : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
+      };
+    }
+  | {
+      status: 'failed';
+      steps: {
+        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
+          ? StepResult<unknown>
+          : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
+      };
+      error: Error;
+    }
+  | {
+      status: 'suspended';
+      steps: {
+        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
+          ? StepResult<unknown>
+          : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
+      };
+      suspended: [string[], ...string[][]];
+    };
 ```
 
-This example shows the essentials: define your workflow, add steps, commit the workflow, then execute it.
+### Result Properties Explained
 
-## Defining Steps
+1. **status**: Indicates the final state of the workflow execution
 
-The basic building block of a workflow [is a step](./steps.mdx). Steps are defined using schemas for inputs and outputs, and can fetch prior step results.
+   - `'success'`: Workflow completed successfully
+   - `'failed'`: Workflow encountered an error
+   - `'suspended'`: Workflow is paused waiting for user input
 
-## Control Flow
+2. **result**: Contains the final output of the workflow, typed according to the workflow's `outputSchema`
 
-Workflows let you define a [control flow](./control-flow.mdx) to chain steps together in with parallel steps, branching paths, and more.
+3. **suspended**: Optional array of step IDs that are currently suspended. Only present when `status` is `'suspended'`
 
-## Workflow Variables
+4. **steps**: A record containing the results of all executed steps
 
-When you need to map data between steps or create dynamic data flows, [workflow variables](./variables.mdx) provide a powerful mechanism for passing information from one step to another and accessing nested properties within step outputs.
+   - Keys are step IDs
+   - Values are `StepResult` objects containing the step's output
+   - Type-safe based on each step's `outputSchema`
 
-## Suspend and Resume
+5. **error**: Optional error object present when `status` is `'failed'`
 
-When you need to pause execution for external data, user input, or asynchronous events, Mastra [supports suspension at any step](./suspend-and-resume.mdx), persisting the state of the workflow so you can resume it later.
+## Watching Workflow Execution
 
-## Observability and Debugging
+You can also watch workflow execution:
 
-Mastra workflows automatically [log the input and output of each step within a workflow run](../../reference/observability/otel-config.mdx), allowing you to send this data to your preferred logging, telemetry, or observability tools.
+```typescript
+const run = myWorkflow.createRun();
 
-You can:
+// Add a watcher to monitor execution
+run.watch(event => {
+  console.log('Step completed:', event.payload.currentStep.id);
+});
 
-- Track the status of each step (e.g., `success`, `error`, or `suspended`).
-- Store run-specific metadata for analysis.
-- Integrate with third-party observability platforms like Datadog or New Relic by forwarding logs.
-
+// Start the workflow
+const result = await run.start({ inputData: {...} });
 ```
+
+The `event` object has the following schema:
+
+```typescript
+type WatchEvent = {
+  type: "watch";
+  payload: {
+    currentStep?: {
+      id: string;
+      status: "running" | "completed" | "failed" | "suspended";
+      output?: Record<string, any>;
+      payload?: Record<string, any>;
+    };
+    workflowState: {
+      status: "running" | "success" | "failed" | "suspended";
+      steps: Record<
+        string,
+        {
+          status: "running" | "completed" | "failed" | "suspended";
+          output?: Record<string, any>;
+          payload?: Record<string, any>;
+        }
+      >;
+      result?: Record<string, any>;
+      error?: Record<string, any>;
+      payload?: Record<string, any>;
+    };
+  };
+  eventTimestamp: Date;
+};
+```
+
+The `currentStep` property is only present when the workflow is running. When the workflow is finished the status on `workflowState` is changed, as well as the `result` and `error` properties. At the same time the `currentStep` property is removed.
 
 ## More Resources
 
-- The [Workflow Guide](../guides/ai-recruiter.mdx) in the Guides section is a tutorial that covers the main concepts.
-- [Sequential Steps workflow example](../../examples/workflows/sequential-steps.mdx)
-- [Parallel Steps workflow example](../../examples/workflows/parallel-steps.mdx)
-- [Branching Paths workflow example](../../examples/workflows/branching-paths.mdx)
-- [Workflow Variables example](../../examples/workflows/workflow-variables.mdx)
-- [Cyclical Dependencies workflow example](../../examples/workflows/cyclical-dependencies.mdx)
-- [Suspend and Resume workflow example](../../examples/workflows/suspend-and-resume.mdx)
-```
+- The [Workflow Guide](../../guides/guide/ai-recruiter.mdx) in the Guides section is a tutorial that covers the main concepts.
+- [Parallel Steps workflow example](../../examples/workflows_vNext/parallel-steps.mdx)
+- [Conditional Branching workflow example](../../examples/workflows_vNext/conditional-branching.mdx)
+- [Inngest workflow example](../../examples/workflows_vNext/inngest-workflow.mdx)
+- [Suspend and Resume workflow example](../../examples/workflows_vNext/human-in-the-loop.mdx)
