@@ -1,11 +1,11 @@
 ---
-title: "Example: Suspend and Resume | Workflows | Mastra Docs"
-description: Example of using Mastra to suspend and resume workflow steps during execution.
+title: "Example: Suspend and Resume | Workflows (Legacy) | Mastra Docs"
+description: Example of using Mastra to suspend and resume legacy workflow steps during execution.
 ---
 
 import { GithubLink } from "@/components/github-link";
 
-# Workflow with Suspend and Resume
+# Workflow (Legacy) with Suspend and Resume
 
 Workflow steps can be suspended and resumed at any point in the workflow execution. This example demonstrates how to suspend a workflow step and resume it later.
 
@@ -13,10 +13,10 @@ Workflow steps can be suspended and resumed at any point in the workflow executi
 
 ```ts showLineNumbers copy
 import { Mastra } from "@mastra/core";
-import { Step, Workflow } from "@mastra/core/workflows";
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 import { z } from "zod";
 
-const stepOne = new Step({
+const stepOne = new LegacyStep({
   id: "stepOne",
   outputSchema: z.object({
     doubledValue: z.number(),
@@ -29,7 +29,7 @@ const stepOne = new Step({
 ```
 
 ```ts showLineNumbers copy
-const stepTwo = new Step({
+const stepTwo = new LegacyStep({
   id: "stepTwo",
   outputSchema: z.object({
     incrementedValue: z.number(),
@@ -49,7 +49,7 @@ const stepTwo = new Step({
 });
 
 // Build the workflow
-const myWorkflow = new Workflow({
+const myWorkflow = new LegacyWorkflow({
   name: "my-workflow",
   triggerSchema: z.object({
     inputValue: z.number(),
@@ -63,11 +63,11 @@ myWorkflow.step(stepOne).then(stepTwo).commit();
 ```ts showLineNumbers copy
 // Register the workflow
 export const mastra = new Mastra({
-  workflows: { registeredWorkflow: myWorkflow },
+  legacy_workflows: { registeredWorkflow: myWorkflow },
 });
 
 // Get registered workflow from Mastra
-const registeredWorkflow = mastra.getWorkflow("registeredWorkflow");
+const registeredWorkflow = mastra.legacy_getWorkflow("registeredWorkflow");
 const { runId, start } = registeredWorkflow.createRun();
 
 // Start watching the workflow before executing it
@@ -97,11 +97,11 @@ This example demonstrates a more complex workflow with multiple suspension point
 
 ```ts showLineNumbers copy
 import { Mastra } from "@mastra/core";
-import { Step, Workflow } from "@mastra/core/workflows";
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 import { z } from "zod";
 
 // Step 1: Get user input
-const getUserInput = new Step({
+const getUserInput = new LegacyStep({
   id: "getUserInput",
   execute: async ({ context }) => {
     // In a real application, this might come from a form or API
@@ -113,7 +113,7 @@ const getUserInput = new Step({
 
 ```ts showLineNumbers copy
 // Step 2: Generate content with AI (may suspend for human guidance)
-const promptAgent = new Step({
+const promptAgent = new LegacyStep({
   id: "promptAgent",
   inputSchema: z.object({
     guidance: z.string(),
@@ -158,7 +158,7 @@ const promptAgent = new Step({
 
 ```ts showLineNumbers copy
 // Step 3: Evaluate the content quality
-const evaluateTone = new Step({
+const evaluateTone = new LegacyStep({
   id: "evaluateToneConsistency",
   execute: async ({ context }) => {
     const content = context.getStepResult(promptAgent)?.modelOutput;
@@ -178,7 +178,7 @@ const evaluateTone = new Step({
 
 ```ts showLineNumbers copy
 // Step 4: Improve response if needed (may suspend)
-const improveResponse = new Step({
+const improveResponse = new LegacyStep({
   id: "improveResponse",
   inputSchema: z.object({
     improvedContent: z.string(),
@@ -223,7 +223,7 @@ const improveResponse = new Step({
 
 ```ts showLineNumbers copy
 // Step 5: Final evaluation
-const evaluateImproved = new Step({
+const evaluateImproved = new LegacyStep({
   id: "evaluateImprovedResponse",
   execute: async ({ context }) => {
     const improvedContent =
@@ -242,7 +242,7 @@ const evaluateImproved = new Step({
 });
 
 // Build the workflow
-const contentWorkflow = new Workflow({
+const contentWorkflow = new LegacyWorkflow({
   name: "content-generation-workflow",
   triggerSchema: z.object({ input: z.string() }),
 });
@@ -259,7 +259,7 @@ contentWorkflow
 ```ts showLineNumbers copy
 // Register the workflow
 const mastra = new Mastra({
-  workflows: { contentWorkflow },
+  legacy_workflows: { contentWorkflow },
 });
 
 // Helper functions (simulated)
@@ -289,7 +289,7 @@ function calculateCompletenessScore(_: string = "") {
 
 // Usage example
 async function runWorkflow() {
-  const workflow = mastra.getWorkflow("contentWorkflow");
+  const workflow = mastra.legacy_getWorkflow("contentWorkflow");
   const { runId, start } = workflow.createRun();
 
   let finalResult: any;
@@ -363,14 +363,3 @@ const result = await runWorkflow();
 console.log("Workflow completed");
 console.log("Final workflow result:", result);
 ```
-
-<br />
-<br />
-<hr className={"dark:border-[#404040] border-gray-300"} />
-<br />
-<br />
-<GithubLink
-  link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/workflow-with-parallel-steps"
-  }
-/>

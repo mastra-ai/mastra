@@ -16,7 +16,7 @@ npm install @ai-sdk/openai @mastra/core
 Defines a workflow which calls the executes a nested workflow until the provided condition is met.
 
 ```ts showLineNumbers copy filename="looping-workflow.ts"
-import { createWorkflow, createStep } from "@mastra/core/workflows/vNext";
+import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
 // Step that increments the input value by 1
@@ -112,7 +112,7 @@ import { incrementWorkflow } from "./workflows";
 // Initialize Mastra with the increment workflow
 // This enables the workflow to be executed
 const mastra = new Mastra({
-  vnext_workflows: {
+  workflows: {
     incrementWorkflow,
   },
   logger: new PinoLogger({
@@ -131,7 +131,7 @@ Here, we'll get the increment workflow from the mastra instance, then create a r
 ```ts showLineNumbers copy filename="exec.ts"
 import { mastra } from "./";
 
-const workflow = mastra.vnext_getWorkflow("incrementWorkflow");
+const workflow = mastra.getWorkflow("incrementWorkflow");
 const run = workflow.createRun();
 
 // Start the workflow with initial value 0

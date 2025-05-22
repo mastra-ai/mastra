@@ -1,17 +1,17 @@
 ---
-title: "Example: Using a Tool as a Step | Workflows | Mastra Docs"
-description: Example of using Mastra to integrate a custom tool as a step in a workflow.
+title: "Example: Using a Tool as a Step | Workflows (Legacy) | Mastra Docs"
+description: Example of using Mastra to integrate a custom tool as a step in a legacy workflow.
 ---
 
 import { GithubLink } from "@/components/github-link";
 
-# Tool as a Workflow step
+# Tool as a Workflow step (Legacy)
 
 This example demonstrates how to create and integrate a custom tool as a workflow step, showing how to define input/output schemas and implement the tool's execution logic.
 
 ```ts showLineNumbers copy
 import { createTool } from "@mastra/core/tools";
-import { Workflow } from "@mastra/core/workflows";
+import { LegacyWorkflow } from "@mastra/core/workflows/legacy";
 import { z } from "zod";
 
 const crawlWebpage = createTool({
@@ -30,7 +30,7 @@ const crawlWebpage = createTool({
   },
 });
 
-const contentWorkflow = new Workflow({ name: "content-review" });
+const contentWorkflow = new LegacyWorkflow({ name: "content-review" });
 
 contentWorkflow.step(crawlWebpage).commit();
 
@@ -48,6 +48,6 @@ console.log(res.results);
 <br />
 <GithubLink
   link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/tool-as-workflow-step"
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows-legacy/tool-as-workflow-step"
   }
 />

@@ -1,9 +1,9 @@
 ---
-title: "Data Mapping with Workflow Variables | Mastra Examples"
+title: "Data Mapping with Workflow Variables (Legacy) | Mastra Examples"
 description: "Learn how to use workflow variables to map data between steps in Mastra workflows."
 ---
 
-# Data Mapping with Workflow Variables
+# Data Mapping with Workflow Variables (Legacy)
 
 This example demonstrates how to use workflow variables to map data between steps in a Mastra workflow.
 
@@ -18,7 +18,7 @@ In this example, we'll build a simple user registration workflow that:
 ## Implementation
 
 ```typescript showLineNumbers filename="src/mastra/workflows/user-registration.ts" copy
-import { Step, Workflow } from "@mastra/core/workflows";
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 import { z } from "zod";
 
 // Define our schemas for better type safety
@@ -57,13 +57,13 @@ const profileSchema = z.object({
 });
 
 // Define the workflow
-const registrationWorkflow = new Workflow({
+const registrationWorkflow = new LegacyWorkflow({
   name: "user-registration",
   triggerSchema: userInputSchema,
 });
 
 // Step 1: Validate user input
-const validateInput = new Step({
+const validateInput = new LegacyStep({
   id: "validateInput",
   inputSchema: userInputSchema,
   outputSchema: validatedDataSchema,
@@ -85,7 +85,7 @@ const validateInput = new Step({
 });
 
 // Step 2: Format user data
-const formatUserData = new Step({
+const formatUserData = new LegacyStep({
   id: "formatUserData",
   inputSchema: z.object({
     validatedData: z.object({
@@ -116,7 +116,7 @@ const formatUserData = new Step({
 });
 
 // Step 3: Create user profile
-const createUserProfile = new Step({
+const createUserProfile = new LegacyStep({
   id: "createUserProfile",
   inputSchema: z.object({
     userId: z.string(),

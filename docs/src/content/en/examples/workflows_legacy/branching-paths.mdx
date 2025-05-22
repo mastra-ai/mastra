@@ -1,17 +1,17 @@
 ---
-title: "Example: Branching Paths | Workflows | Mastra Docs"
-description: Example of using Mastra to create workflows with branching paths based on intermediate results.
+title: "Example: Branching Paths | Workflows (Legacy) | Mastra Docs"
+description: Example of using Mastra to create legacy workflows with branching paths based on intermediate results.
 ---
 
 import { GithubLink } from "@/components/github-link";
 
 # Branching Paths
 
-When processing data, you often need to take different actions based on intermediate results. This example shows how to create a workflow that splits into separate paths, where each path executes different steps based on the output of a previous step.
+When processing data, you often need to take different actions based on intermediate results. This example shows how to create a legacy workflow that splits into separate paths, where each path executes different steps based on the output of a previous step.
 
 ## Control Flow Diagram
 
-This example shows how to create a workflow that splits into separate paths, where each path executes different steps based on the output of a previous step.
+This example shows how to create a legacy workflow that splits into separate paths, where each path executes different steps based on the output of a previous step.
 
 Here's the control flow diagram:
 
@@ -26,17 +26,17 @@ Let's start by creating the steps and initializing the workflow.
 
 {/* prettier-ignore */}
 ```ts showLineNumbers copy
-import { Step, Workflow } from "@mastra/core/workflows";
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 import { z } from "zod"
 
-const stepOne = new Step({
+const stepOne = new LegacyStep({
   id: "stepOne",
   execute: async ({ context }) => ({
     doubledValue: context.triggerData.inputValue * 2
   })
 });
 
-const stepTwo = new Step({
+const stepTwo = new LegacyStep({
   id: "stepTwo",
   execute: async ({ context }) => {
     const stepOneResult = context.getStepResult<{ doubledValue: number }>("stepOne");
@@ -49,7 +49,7 @@ const stepTwo = new Step({
 });
 
 
-const stepThree = new Step({
+const stepThree = new LegacyStep({
   id: "stepThree",
   execute: async ({ context }) =>{
     const stepOneResult = context.getStepResult<{ doubledValue: number }>("stepOne");
@@ -61,7 +61,7 @@ const stepThree = new Step({
   }
 });
 
-const stepFour = new Step({
+const stepFour = new LegacyStep({
   id: "stepFour",
   execute: async ({ context }) => {
     const stepThreeResult = context.getStepResult<{ incrementedValue: number }>("stepThree");
@@ -74,7 +74,7 @@ const stepFour = new Step({
 });
 
 // New step that depends on both branches
-const finalStep = new Step({
+const finalStep = new LegacyStep({
   id: "finalStep",
   execute: async ({ context }) => {
     // Get results from both branches using getStepResult
@@ -93,7 +93,7 @@ const finalStep = new Step({
 });
 
 // Build the workflow
-const myWorkflow = new Workflow({
+const myWorkflow = new LegacyWorkflow({
   name: "my-workflow",
   triggerSchema: z.object({
     inputValue: z.number(),
@@ -103,7 +103,7 @@ const myWorkflow = new Workflow({
 
 ## Branching Paths and Chaining Steps
 
-Now let's configure the workflow with branching paths and merge them using the compound `.after([])` syntax.
+Now let's configure the legacy workflow with branching paths and merge them using the compound `.after([])` syntax.
 
 ```ts showLineNumbers copy
 // Create two parallel branches
@@ -134,7 +134,7 @@ console.log(result.steps.finalStep.output.summary);
 You can create more complex workflows with multiple branches and merge points:
 
 ```ts showLineNumbers copy
-const complexWorkflow = new Workflow({
+const complexWorkflow = new LegacyWorkflow({
   name: "complex-workflow",
   triggerSchema: z.object({
     inputValue: z.number(),
@@ -157,7 +157,7 @@ complexWorkflow
   // Third branch (another path from stepOne)
   .after(stepOne)
   .step(
-    new Step({
+    new LegacyStep({
       id: "alternativePath",
       execute: async ({ context }) => {
         const stepOneResult = context.getStepResult<{ doubledValue: number }>(
@@ -173,7 +173,7 @@ complexWorkflow
   // Merge first and second branches
   .after([stepTwo, stepFour])
   .step(
-    new Step({
+    new LegacyStep({
       id: "partialMerge",
       execute: async ({ context }) => {
         const stepTwoResult = context.getStepResult<{
@@ -197,7 +197,7 @@ complexWorkflow
   // Final merge of all branches
   .after(["partialMerge", "alternativePath"])
   .step(
-    new Step({
+    new LegacyStep({
       id: "finalMerge",
       execute: async ({ context }) => {
         const partialMergeResult = context.getStepResult<{
@@ -229,6 +229,7 @@ complexWorkflow
 <br />
 <GithubLink
   link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/workflow-with-branching-paths"
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows-legacy/workflow-with-branching-paths"
   }
 />
+`

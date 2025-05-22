@@ -1,11 +1,11 @@
 ---
-title: "Example: Sequential Steps | Workflows | Mastra Docs"
-description: Example of using Mastra to chain workflow steps in a specific sequence, passing data between them.
+title: "Example: Sequential Steps | Workflows (Legacy) | Mastra Docs"
+description: Example of using Mastra to chain legacy workflow steps in a specific sequence, passing data between them.
 ---
 
 import { GithubLink } from "@/components/github-link";
 
-# Workflow with Sequential Steps
+# Workflow (Legacy) with Sequential Steps
 
 Workflow can be chained to run one after another in a specific sequence.
 
@@ -26,17 +26,17 @@ Here's the control flow diagram:
 Let's start by creating the steps and initializing the workflow.
 
 ```ts showLineNumbers copy
-import { Step, Workflow } from "@mastra/core/workflows";
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 import { z } from "zod";
 
-const stepOne = new Step({
+const stepOne = new LegacyStep({
   id: "stepOne",
   execute: async ({ context }) => ({
     doubledValue: context.triggerData.inputValue * 2,
   }),
 });
 
-const stepTwo = new Step({
+const stepTwo = new LegacyStep({
   id: "stepTwo",
   execute: async ({ context }) => {
     if (context.steps.stepOne.status !== "success") {
@@ -47,7 +47,7 @@ const stepTwo = new Step({
   },
 });
 
-const stepThree = new Step({
+const stepThree = new LegacyStep({
   id: "stepThree",
   execute: async ({ context }) => {
     if (context.steps.stepTwo.status !== "success") {
@@ -59,7 +59,7 @@ const stepThree = new Step({
 });
 
 // Build the workflow
-const myWorkflow = new Workflow({
+const myWorkflow = new LegacyWorkflow({
   name: "my-workflow",
   triggerSchema: z.object({
     inputValue: z.number(),
@@ -89,6 +89,6 @@ const res = await start({ triggerData: { inputValue: 90 } });
 <br />
 <GithubLink
   link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/workflow-with-sequential-steps"
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows-legacy/workflow-with-sequential-steps"
   }
 />
