@@ -2,23 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { vectorQuerySearch } from '../utils';
 import { createVectorQueryTool } from './vector-query';
 
-// Mock dependencies
-vi.mock('@mastra/core/tools', () => ({
-  createTool: vi.fn(({ inputSchema, execute }) => ({
-    inputSchema,
-    execute,
-    // Return a simplified version of the tool for testing
-    __inputSchema: inputSchema,
-  })),
-}));
-
-vi.mock('../utils', () => ({
-  vectorQuerySearch: vi.fn().mockResolvedValue({ results: [] }),
-  defaultVectorQueryDescription: () => 'Default vector query description',
-  queryTextDescription: 'Query text description',
-  filterDescription: 'Filter description',
-  topKDescription: 'Top K description',
-}));
+vi.mock('../utils', async importOriginal => {
+  const actual: any = await importOriginal();
+  return {
+    ...actual,
+    vectorQuerySearch: vi.fn().mockResolvedValue({ results: [] }),
+  };
+});
 
 describe('createVectorQueryTool', () => {
   const mockModel = { name: 'test-model' } as any;
@@ -60,21 +50,21 @@ describe('createVectorQueryTool', () => {
       });
 
       // Get the Zod schema
-      const schema = tool.__inputSchema;
+      const schema = tool.inputSchema;
 
       // Test with no filter (should be valid)
       const validInput = {
         queryText: 'test query',
         topK: 5,
       };
-      expect(() => schema.parse(validInput)).not.toThrow();
+      expect(() => schema?.parse(validInput)).not.toThrow();
 
       // Test with filter (should throw - unexpected property)
       const inputWithFilter = {
         ...validInput,
         filter: '{"field": "value"}',
       };
-      expect(() => schema.parse(inputWithFilter)).not.toThrow();
+      expect(() => schema?.parse(inputWithFilter)).not.toThrow();
     });
 
     it('should handle filter when enableFilter is true', () => {
@@ -86,7 +76,7 @@ describe('createVectorQueryTool', () => {
       });
 
       // Get the Zod schema
-      const schema = tool.__inputSchema;
+      const schema = tool.inputSchema;
 
       // Test various filter inputs that should coerce to string
       const testCases = [
@@ -105,7 +95,7 @@ describe('createVectorQueryTool', () => {
 
       testCases.forEach(({ filter }) => {
         expect(() =>
-          schema.parse({
+          schema?.parse({
             queryText: 'test query',
             topK: 5,
             filter,
@@ -115,12 +105,12 @@ describe('createVectorQueryTool', () => {
 
       // Verify that all parsed values are strings
       testCases.forEach(({ filter }) => {
-        const result = schema.parse({
+        const result = schema?.parse({
           queryText: 'test query',
           topK: 5,
           filter,
         });
-        expect(typeof result.filter).toBe('string');
+        expect(typeof result?.filter).toBe('string');
       });
     });
 
@@ -135,7 +125,7 @@ describe('createVectorQueryTool', () => {
 
       // Should reject unexpected property
       expect(() =>
-        toolWithoutFilter.__inputSchema.parse({
+        toolWithoutFilter.inputSchema?.parse({
           queryText: 'test query',
           topK: 5,
           unexpectedProp: 'value',
@@ -152,7 +142,7 @@ describe('createVectorQueryTool', () => {
 
       // Should reject unexpected property even with valid filter
       expect(() =>
-        toolWithFilter.__inputSchema.parse({
+        toolWithFilter.inputSchema?.parse({
           queryText: 'test query',
           topK: 5,
           filter: '{}',
@@ -179,6 +169,7 @@ describe('createVectorQueryTool', () => {
           topK: 5,
         },
         mastra: mockMastra as any,
+        runtimeContext: {} as any,
       });
 
       // Check that vectorQuerySearch was called with undefined queryFilter
@@ -208,6 +199,7 @@ describe('createVectorQueryTool', () => {
           filter: filterJson,
         },
         mastra: mockMastra as any,
+        runtimeContext: {} as any,
       });
 
       // Check that vectorQuerySearch was called with the parsed filter
@@ -237,6 +229,7 @@ describe('createVectorQueryTool', () => {
           filter: stringFilter,
         },
         mastra: mockMastra as any,
+        runtimeContext: {} as any,
       });
 
       // Since this is not a valid filter, it should be ignored

@@ -4,13 +4,8 @@ import { z } from 'zod';
 
 import { rerank } from '../rerank';
 import type { RerankConfig } from '../rerank';
-import {
-  vectorQuerySearch,
-  defaultVectorQueryDescription,
-  filterDescription,
-  topKDescription,
-  queryTextDescription,
-} from '../utils';
+import { vectorQuerySearch, defaultVectorQueryDescription, filterSchema, outputSchema, baseSchema } from '../utils';
+import type { RagTool } from '../utils';
 import { convertToSources } from '../utils/convert-sources';
 
 export const createVectorQueryTool = ({
@@ -36,39 +31,11 @@ export const createVectorQueryTool = ({
 }) => {
   const toolId = id || `VectorQuery ${vectorStoreName} ${indexName} Tool`;
   const toolDescription = description || defaultVectorQueryDescription();
-  // Create base schema with required fields
-  const baseSchema = {
-    queryText: z.string().describe(queryTextDescription),
-    topK: z.coerce.number().describe(topKDescription),
-  };
-  const inputSchema = enableFilter
-    ? z
-        .object({
-          ...baseSchema,
-          filter: z.coerce.string().describe(filterDescription),
-        })
-        .passthrough()
-    : z.object(baseSchema).passthrough();
+  const inputSchema = enableFilter ? filterSchema : z.object(baseSchema).passthrough();
   return createTool({
     id: toolId,
     inputSchema,
-    // Output schema includes `sources`, which exposes the full set of retrieved chunks (QueryResult objects)
-    // Each source contains all information needed to reference
-    // the original document, chunk, and similarity score.
-    outputSchema: z.object({
-      // Array of metadata or content for compatibility with prior usage
-      relevantContext: z.any(),
-      // Array of full retrieval result objects
-      sources: z.array(
-        z.object({
-          id: z.string(), // Unique chunk/document identifier
-          metadata: z.any(), // All metadata fields (document ID, etc.)
-          vector: z.array(z.number()), // Embedding vector (if available)
-          score: z.number(), // Similarity score for this retrieval
-          document: z.string(), // Full chunk/document text (if available)
-        }),
-      ),
-    }),
+    outputSchema,
     description: toolDescription,
     execute: async ({ context: { queryText, topK, filter }, mastra }) => {
       const logger = mastra?.getLogger();
@@ -167,5 +134,6 @@ export const createVectorQueryTool = ({
         return { relevantContext: [], sources: [] };
       }
     },
-  });
+    // Use any for output schema as the structure of the output causes type inference issues
+  }) as RagTool<typeof inputSchema, any>;
 };
