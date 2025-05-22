@@ -1059,12 +1059,12 @@ export class Run<
     }
 
     if (state.workflowState) {
-      this.state.workflowState = deepMerge(this.state.workflowState ?? {}, state.workflowState ?? {});
+      this.state.workflowState = deepMergeWorkflowState(this.state.workflowState ?? {}, state.workflowState ?? {});
     }
   }
 }
 
-function deepMerge(a: Record<string, any>, b: Record<string, any>): Record<string, any> {
+function deepMergeWorkflowState(a: Record<string, any>, b: Record<string, any>): Record<string, any> {
   if (!a || typeof a !== 'object') return b;
   if (!b || typeof b !== 'object') return a;
 
@@ -1083,7 +1083,7 @@ function deepMerge(a: Record<string, any>, b: Record<string, any>): Record<strin
         result[key] = bVal.filter(item => item !== undefined);
       } else if (typeof aVal === 'object' && aVal !== null) {
         // If both values are objects, merge them
-        result[key] = deepMerge(aVal, bVal);
+        result[key] = deepMergeWorkflowState(aVal, bVal);
       } else {
         // If the target isn't an object, use the source object
         result[key] = bVal;
