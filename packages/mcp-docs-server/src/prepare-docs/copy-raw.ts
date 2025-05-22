@@ -4,7 +4,7 @@ import { fromPackageRoot, fromRepoRoot, log } from '../utils.js';
 
 const DOCS_SOURCE = fromRepoRoot('docs/src/content/en/docs');
 const REFERENCE_SOURCE = fromRepoRoot('docs/src/content/en/reference');
-const COURSE_SOURCE = fromRepoRoot('docs/src/content/en/course');
+const COURSE_SOURCE = fromRepoRoot('docs/src/course');
 const DOCS_DEST = fromPackageRoot('.docs/raw');
 const REFERENCE_DEST = path.join(DOCS_DEST, 'reference');
 const COURSE_DEST = path.join(DOCS_DEST, 'course');
@@ -24,7 +24,7 @@ async function copyDir(src: string, dest: string) {
       // Recursively copy directories
       await copyDir(srcPath, destPath);
     } else if (entry.isFile() && (entry.name.endsWith('.mdx') || entry.name.endsWith('.md'))) {
-      // Copy only MDX files
+      // Copy both mdx and md files
       await fs.copyFile(srcPath, destPath);
     }
   }
