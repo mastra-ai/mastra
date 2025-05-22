@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.10.1-alpha.0
+
+### Patch Changes
+
+- 35bb6a3: Allow undefined temprature, topP model setting from playground
+
 ## 0.10.0
 
 ### Patch Changes
