@@ -223,7 +223,7 @@ export function getAGUI({ mastra, resourceId }: { mastra: Mastra; resourceId?: s
       });
       return acc;
     },
-    {} as Record<string, AGUIAdapter>,
+    {} as Record<string, AbstractAgent>,
   );
 
   const agentAGUI = Object.entries(agents).reduce(
@@ -235,7 +235,7 @@ export function getAGUI({ mastra, resourceId }: { mastra: Mastra; resourceId?: s
       });
       return acc;
     },
-    {} as Record<string, AGUIAdapter>,
+    {} as Record<string, AbstractAgent>,
   );
 
   return {
@@ -261,7 +261,7 @@ export function getAGUIAgent({
     agentId,
     agent,
     resourceId,
-  });
+  }) as AbstractAgent;
 }
 
 export function getAGUINetwork({
@@ -281,7 +281,7 @@ export function getAGUINetwork({
     agentId: network.name!,
     agent: network as unknown as Agent,
     resourceId,
-  });
+  }) as AbstractAgent;
 }
 
 export function registerCopilotKit({
@@ -293,7 +293,7 @@ export function registerCopilotKit({
   path: string;
   resourceId: string;
   serviceAdapter?: CopilotServiceAdapter;
-  agents?: Record<string, AGUIAdapter>;
+  agents?: Record<string, AbstractAgent>;
 }) {
   return registerApiRoute(path, {
     method: `ALL`,
@@ -306,8 +306,6 @@ export function registerCopilotKit({
           resourceId,
           mastra,
         });
-
-      console.log('aguiAgents', aguiAgents);
 
       const runtime = new CopilotRuntime({
         agents: aguiAgents,
