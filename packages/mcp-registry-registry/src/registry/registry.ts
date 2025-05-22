@@ -31,7 +31,7 @@ export const registryData: RegistryFile = {
     {
       id: 'apify',
       name: 'Apify',
-      description: "A MCP marketplace enabling AI agents to use 5,000+ ready-made servers and Actors.",
+      description: 'A MCP marketplace enabling AI agents to use 5,000+ ready-made servers and Actors.',
       url: 'https://apify.com/store',
       servers_url: 'https://api.apify.com/v2/store',
       tags: ['verified'],

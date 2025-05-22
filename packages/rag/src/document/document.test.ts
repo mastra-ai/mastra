@@ -1611,6 +1611,7 @@ describe('MDocument', () => {
         strategy: 'markdown',
         headers: [['#', 'Header 1']],
         returnEachLine: true,
+        stripHeaders: false,
       });
 
       expect(doc.getDocs().length).toBe(4); // Title + 3 lines
@@ -1638,6 +1639,125 @@ describe('MDocument', () => {
 
       const docs = doc.getDocs();
       expect(docs?.[0]?.text).toContain('# Title');
+    });
+
+    it('should remove headers when stripHeaders: true is set in markdown chunker', async () => {
+      const markdown = [
+        '# H1 Title',
+        'Some intro text.',
+        '## H2 Subtitle',
+        'More details.',
+        '### H3 Section',
+        'Final content.',
+      ].join('\n');
+
+      const doc = MDocument.fromMarkdown(markdown);
+      const chunks = await doc.chunk({
+        strategy: 'markdown',
+        size: 500,
+        overlap: 0,
+        headers: [
+          ['#', 'h1'],
+          ['##', 'h2'],
+          ['###', 'h3'],
+        ],
+        stripHeaders: true,
+      });
+      // None of the chunk texts should start with the header patterns
+      const headerPatterns = [/^#\s/, /^##\s/, /^###\s/];
+      for (const chunk of chunks) {
+        for (const pattern of headerPatterns) {
+          expect(pattern.test(chunk.text)).toBe(false);
+        }
+      }
+    });
+
+    it('should support custom header prefixes', async () => {
+      const text = `!!! Important\nThis is important.\n--- Section\nSection content.`;
+      const doc = MDocument.fromMarkdown(text);
+      await doc.chunk({
+        strategy: 'markdown',
+        headers: [
+          ['!!!', 'important'],
+          ['---', 'section'],
+        ],
+        stripHeaders: true,
+      });
+      const texts = doc.getText();
+      expect(texts.some(t => t.startsWith('!!!'))).toBe(false);
+      expect(texts.some(t => t.startsWith('---'))).toBe(false);
+    });
+
+    it('should attach correct metadata for nested headers', async () => {
+      const text = `# H1\n## H2\n### H3\nContent`;
+      const doc = MDocument.fromMarkdown(text);
+      await doc.chunk({
+        strategy: 'markdown',
+        headers: [
+          ['#', 'h1'],
+          ['##', 'h2'],
+          ['###', 'h3'],
+        ],
+        stripHeaders: true,
+      });
+      const chunk = doc.getDocs().find(c => c.text.includes('Content'));
+      expect(chunk?.metadata?.h1).toBe('H1');
+      expect(chunk?.metadata?.h2).toBe('H2');
+      expect(chunk?.metadata?.h3).toBe('H3');
+    });
+
+    it('should include header lines as chunks if stripHeaders is false', async () => {
+      const text = `# H1\nContent`;
+      const doc = MDocument.fromMarkdown(text);
+      await doc.chunk({
+        strategy: 'markdown',
+        headers: [['#', 'h1']],
+        stripHeaders: false,
+      });
+      const texts = doc.getText();
+      expect(texts.some(t => t.startsWith('# H1'))).toBe(true);
+    });
+
+    it('should handle multiple adjacent headers correctly', async () => {
+      const text = `# H1\n## H2\n### H3\nContent`;
+      const doc = MDocument.fromMarkdown(text);
+      await doc.chunk({
+        strategy: 'markdown',
+        headers: [
+          ['#', 'h1'],
+          ['##', 'h2'],
+          ['###', 'h3'],
+        ],
+        stripHeaders: true,
+      });
+      const texts = doc.getText();
+      expect(texts.some(t => t === 'Content')).toBe(true);
+      expect(texts.some(t => t === '')).toBe(false);
+    });
+
+    it('should handle content before any header', async () => {
+      const text = `Intro before header\n# H1\nContent`;
+      const doc = MDocument.fromMarkdown(text);
+      await doc.chunk({
+        strategy: 'markdown',
+        headers: [['#', 'h1']],
+        stripHeaders: true,
+      });
+      const preHeaderChunk = doc.getDocs().find(c => c.text.includes('Intro before header'));
+      expect(preHeaderChunk?.metadata?.h1).toBeUndefined();
+    });
+
+    it('should not treat headers inside code blocks as headers', async () => {
+      const text = ['# Real Header', '```', '# Not a header', '```', 'Content'].join('\n');
+      const doc = MDocument.fromMarkdown(text);
+      await doc.chunk({
+        strategy: 'markdown',
+        headers: [['#', 'h1']],
+        stripHeaders: true,
+      });
+      const texts = doc.getText();
+      expect(texts.some(t => t.includes('# Not a header'))).toBe(true);
+      expect(texts.some(t => t.startsWith('# Real Header'))).toBe(false);
     });
   });
 

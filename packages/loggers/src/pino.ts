@@ -21,7 +21,7 @@ export class PinoLogger extends MastraLogger {
     super(options);
 
     let prettyStream: ReturnType<typeof pretty> | undefined = undefined;
-    if (options.transports?.default) {
+    if (!options.overrideDefaultTransports) {
       prettyStream = pretty({
         colorize: true,
         levelFirst: true,
