@@ -149,7 +149,7 @@ function getWeatherCondition(code: number): string {
 Defines a workflow which takes an agent and tool as a step.
 
 ```ts showLineNumbers copy filename="workflows/interop-workflow.ts"
-import { createWorkflow, createStep } from '@mastra/core/workflows/vNext'
+import { createWorkflow, createStep } from '@mastra/core/workflows'
 import { weatherTool } from '../tools/weather-tool'
 import { weatherReporterAgent } from '../agents/weather-reporter-agent'
 import { z } from 'zod'
@@ -210,7 +210,7 @@ import { weatherReporterAgent } from './agents/weather-reporter-agent'
  
 // Create a new Mastra instance with our components
 const mastra = new Mastra({
-  vnext_workflows: {
+  workflows: {
     weatherWorkflow,
   },
   agents: {
@@ -232,7 +232,7 @@ Here, we'll get the weather workflow from the mastra instance, then create a run
 ```ts showLineNumbers copy filename="exec.ts"
 import { mastra } from "./";
 
-const workflow = mastra.vnext_getWorkflow('weatherWorkflow')
+const workflow = mastra.getWorkflow('weatherWorkflow')
 const run = workflow.createRun()
  
 // Start the workflow with Lagos as the location

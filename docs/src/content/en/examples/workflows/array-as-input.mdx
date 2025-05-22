@@ -47,7 +47,7 @@ export { docGeneratorAgent };
 Define the file summary workflow with 2 steps: one to fetch the code of a particular file and another to generate a readme for that particular code file.
 
 ```ts showLineNumbers copy filename="workflows/file-summary-workflow.ts"
-import { createWorkflow, createStep } from "@mastra/core/workflows/vNext";
+import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { docGeneratorAgent } from "../agents/docs-generator-agent";
 import { z } from "zod";
 import fs from "fs";
@@ -113,7 +113,7 @@ export { generateSummaryWorkflow };
 Define a readme generator workflow with 4 steps: one to clone the github repository, one to suspend the workflow and get user input on what all folders to consider while generating a readme, one to generate a summary of all the files inside the folder, and another to collate all the documentation generated for each file into a single readme.
 
 ```ts showLineNumbers copy filename="workflows/readme-generator-workflow.ts
-import { createWorkflow, createStep } from "@mastra/core/workflows/vNext";
+import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { docGeneratorAgent } from "../agents/docs-generator-agent";
 import { generateSummaryWorkflow } from "./file-summary-workflow";
 import { z } from "zod";
@@ -283,7 +283,7 @@ const mastra = new Mastra({
   agents: {
     docGeneratorAgent,
   },
-  vnext_workflows: {
+  workflows: {
     readmeGeneratorWorkflow,
     generateSummaryWorkflow,
   },
@@ -305,7 +305,7 @@ import { mastra } from "./";
 
 // GitHub repository to generate documentation for
 const ghRepoUrl = "https://github.com/mastra-ai/mastra";
-const run = mastra.vnext_getWorkflow("readmeGeneratorWorkflow").createRun();
+const run = mastra.getWorkflow("readmeGeneratorWorkflow").createRun();
 
 // Start the workflow with the repository URL as input
 const res = await run.start({ inputData: { repoUrl: ghRepoUrl } });
@@ -357,4 +357,3 @@ if (res.status === "success") {
   console.log(res);
 }
 ```
-

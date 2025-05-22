@@ -1,20 +1,20 @@
 ---
-title: "Example: Cyclical Dependencies | Workflows | Mastra Docs"
-description: Example of using Mastra to create workflows with cyclical dependencies and conditional loops.
+title: "Example: Cyclical Dependencies | Workflows (Legacy) | Mastra Docs"
+description: Example of using Mastra to create legacy workflows with cyclical dependencies and conditional loops.
 ---
 
 import { GithubLink } from "@/components/github-link";
 
-# Workflow with Cyclical dependencies
+# Workflow (Legacy) with Cyclical dependencies
 
 Workflows support cyclical dependencies where steps can loop back based on conditions. The example below shows how to use conditional logic to create loops and handle repeated execution.
 
 ```ts showLineNumbers copy
-import { Workflow, Step } from "@mastra/core";
+import { LegacyWorkflow, LegacyStep } from "@mastra/core/workflows/legacy";
 import { z } from "zod";
 
 async function main() {
-  const doubleValue = new Step({
+  const doubleValue = new LegacyStep({
     id: "doubleValue",
     description: "Doubles the input value",
     inputSchema: z.object({
@@ -29,7 +29,7 @@ async function main() {
     },
   });
 
-  const incrementByOne = new Step({
+  const incrementByOne = new LegacyStep({
     id: "incrementByOne",
     description: "Adds 1 to the input value",
     outputSchema: z.object({
@@ -45,7 +45,7 @@ async function main() {
     },
   });
 
-  const cyclicalWorkflow = new Workflow({
+  const cyclicalWorkflow = new LegacyWorkflow({
     name: "cyclical-workflow",
     triggerSchema: z.object({
       firstValue: z.number(),
@@ -92,6 +92,6 @@ main();
 <br />
 <GithubLink
   link={
-    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows/workflow-with-cyclical-deps"
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows-legacy/workflow-with-cyclical-deps"
   }
 />
