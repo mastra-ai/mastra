@@ -1,6 +1,6 @@
 # getThreadById リファレンス
 
-`getThreadById` 関数は、ストレージからIDによって特定のスレッドを取得します。
+`getThreadById` 関数は、ストレージから指定したIDのスレッドを取得します。
 
 ## 使用例
 
@@ -33,14 +33,14 @@ const thread = await memory.getThreadById({ threadId: "thread-123" });
       name: "StorageThreadType | null",
       type: "Promise",
       description:
-        "指定されたIDに関連付けられたスレッド、または見つからない場合はnullに解決されるプロミス。",
+        "指定されたIDに関連付けられたスレッドが見つかった場合はそのスレッド、見つからなかった場合はnullを返すPromise。",
     },
   ]}
 />
 
-### 関連
+### 関連情報
 
 - [Memory クラスリファレンス](/reference/memory/Memory.mdx)
-- [メモリの概要](/docs/memory/overview.mdx) (スレッドの概念をカバー)
+- [Memory のはじめ方](/docs/memory/overview.mdx)（スレッドの概念について解説）
 - [createThread](/reference/memory/createThread.mdx)
 - [getThreadsByResourceId](/reference/memory/getThreadsByResourceId.mdx)

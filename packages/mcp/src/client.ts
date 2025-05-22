@@ -1,4 +1,5 @@
 import { MastraBase } from '@mastra/core/base';
+
 import type { RuntimeContext } from '@mastra/core/di';
 import { createTool } from '@mastra/core/tools';
 import { isZodType } from '@mastra/core/utils';
@@ -13,10 +14,9 @@ import type { Protocol } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { ClientCapabilities, LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
 import { CallToolResultSchema, ListResourcesResultSchema } from '@modelcontextprotocol/sdk/types.js';
-
 import { asyncExitHook, gracefulExit } from 'exit-hook';
 import { z } from 'zod';
-import { jsonSchemaObjectToZodRawShape } from 'zod-from-json-schema';
+import { convertJsonSchemaToZod } from 'zod-from-json-schema';
 import type { JSONSchema } from 'zod-from-json-schema';
 
 // Re-export MCP SDK LoggingLevel for convenience
@@ -334,9 +334,7 @@ export class InternalMastraMCPClient extends MastraBase {
     }
 
     try {
-      // Assuming inputSchema is a JSONSchema object type for tool inputs
-      const rawShape = jsonSchemaObjectToZodRawShape(inputSchema as JSONSchema);
-      return z.object(rawShape); // Wrap the raw shape to return a ZodType (object)
+      return convertJsonSchemaToZod(inputSchema as JSONSchema);
     } catch (error: unknown) {
       let errorDetails: string | undefined;
       if (error instanceof Error) {

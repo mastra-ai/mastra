@@ -139,9 +139,10 @@ const agent = new Agent({
 The logging system provides structured, leveled logging with multiple transport options. It supports debug information, performance monitoring, and error tracking across your AI applications.
 
 ```typescript
-import { createLogger, LogLevel } from '@mastra/core';
+import { LogLevel } from '@mastra/core';
+import { PinoLogger } from '@mastra/loggers';
 
-const logger = createLogger({
+const logger = new PinoLogger({
   name: 'MyApp',
   level: LogLevel.INFO,
 });

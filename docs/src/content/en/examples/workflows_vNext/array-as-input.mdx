@@ -272,7 +272,8 @@ export { readmeGeneratorWorkflow };
 Register the agents and workflow with the mastra instance. This is critical for enabling access to the agents within the workflow.
 
 ```ts showLineNumbers copy filename="index.ts"
-import { createLogger, Mastra } from "@mastra/core";
+import { Mastra } from "@mastra/core";
+import { PinoLogger } from "@mastra/loggers";
 import { docGeneratorAgent } from "./agents/docs-generator-agent";
 import { readmeGeneratorWorkflow } from "./workflows/readme-generator-workflow";
 import { generateSummaryWorkflow } from "./workflows/file-summary-workflow";
@@ -286,7 +287,7 @@ const mastra = new Mastra({
     readmeGeneratorWorkflow,
     generateSummaryWorkflow,
   },
-  logger: createLogger({
+  logger: new PinoLogger({
     name: 'Mastra',
     level: 'info',
   }),

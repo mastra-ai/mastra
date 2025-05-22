@@ -113,7 +113,7 @@ export function AgentDetails({ agent }: AgentDetailsProps) {
                 <span
                   key={workflowKey}
                   onClick={() => {
-                    // navigate(`/workflows/v-next/${workflowKey}/graph`);
+                    // navigate(`/workflows/${workflowKey}/graph`);
                   }}
                   className="no-underline"
                 >

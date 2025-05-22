@@ -1,8 +1,8 @@
+import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { Service } from 'electrodb';
-import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import { threadEntity } from './thread';
-import { messageEntity } from './message';
 import { evalEntity } from './eval';
+import { messageEntity } from './message';
+import { threadEntity } from './thread';
 import { traceEntity } from './trace';
 import { workflowSnapshotEntity } from './workflow-snapshot';
 

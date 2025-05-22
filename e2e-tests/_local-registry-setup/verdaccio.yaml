@@ -5,6 +5,11 @@ uplinks:
     url: https://registry.npmjs.org/
 
 packages:
+  'mastra':
+    access: $all
+    publish: $authenticated
+    unpublish: $authenticated
+
   '@mastra/*':
     access: $all
     publish: $authenticated

@@ -40,7 +40,7 @@ export const baseAttributes = {
       if (value) {
         try {
           return JSON.parse(value);
-        } catch (e) {
+        } catch {
           // If parsing fails, return the original string
           return value;
         }

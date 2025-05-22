@@ -44,7 +44,7 @@ export default defineConfig({
     'src/utils.ts',
     '!src/action/index.ts',
     'src/*/index.ts',
-    'src/workflows/vNext/index.ts',
+    'src/workflows/legacy/index.ts',
     'src/storage/libsql/index.ts',
     'src/vector/libsql/index.ts',
     'src/vector/filter/index.ts',

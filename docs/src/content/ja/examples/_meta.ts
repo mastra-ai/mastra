@@ -23,5 +23,8 @@ const meta = {
   voice: {
     title: "音声",
   },
+  deployment: {
+    title: "デプロイメント",
+  },
 };
 export default meta;

@@ -6,7 +6,7 @@ import { z } from 'zod';
 
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
-import type { Logger } from './logger';
+import type { IMastraLogger } from './logger';
 import type { Mastra } from './mastra';
 import type { AiMessageType, MastraMemory } from './memory';
 import type { RuntimeContext } from './runtime-context';
@@ -206,7 +206,7 @@ export interface ToolOptions {
   runId?: string;
   threadId?: string;
   resourceId?: string;
-  logger?: Logger;
+  logger?: IMastraLogger;
   description?: string;
   mastra?: (Mastra & MastraPrimitives) | MastraPrimitives;
   runtimeContext: RuntimeContext;
@@ -308,7 +308,7 @@ export function makeCoreTool(
  * @param logger - The logger to use for warnings
  * @returns A proxy for the Mastra instance
  */
-export function createMastraProxy({ mastra, logger }: { mastra: Mastra; logger: Logger }) {
+export function createMastraProxy({ mastra, logger }: { mastra: Mastra; logger: IMastraLogger }) {
   return new Proxy(mastra, {
     get(target, prop) {
       const hasProp = Reflect.has(target, prop);
@@ -362,7 +362,7 @@ export function createMastraProxy({ mastra, logger }: { mastra: Mastra; logger: 
   });
 }
 
-export function checkEvalStorageFields(traceObject: any, logger?: Logger) {
+export function checkEvalStorageFields(traceObject: any, logger?: IMastraLogger) {
   const missingFields = [];
   if (!traceObject.input) missingFields.push('input');
   if (!traceObject.output) missingFields.push('output');

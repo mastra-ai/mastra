@@ -14,7 +14,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vites
 import { UpstashStore } from './index';
 
 // Increase timeout for all tests in this file to 30 seconds
-vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
+vi.setConfig({ testTimeout: 200_000, hookTimeout: 200_000 });
 
 const createSampleThread = (date?: Date) => ({
   id: `thread-${randomUUID()}`,
@@ -42,16 +42,13 @@ const createSampleWorkflowSnapshot = (status: string, createdAt?: Date) => {
   const snapshot: WorkflowRunState = {
     value: {},
     context: {
-      steps: {
-        [stepId]: {
-          status: status as WorkflowRunState['context']['steps'][string]['status'],
-          payload: {},
-          error: undefined,
-        },
+      [stepId]: {
+        status: status,
+        payload: {},
+        error: undefined,
       },
-      triggerData: {},
-      attempts: {},
-    },
+      input: {},
+    } as WorkflowRunState['context'],
     activePaths: [],
     suspendedPaths: {},
     runId,
@@ -98,7 +95,7 @@ const checkWorkflowSnapshot = (snapshot: WorkflowRunState | string, stepId: stri
   if (typeof snapshot === 'string') {
     throw new Error('Expected WorkflowRunState, got string');
   }
-  expect(snapshot.context?.steps[stepId]?.status).toBe(status);
+  expect(snapshot.context?.[stepId]?.status).toBe(status);
 };
 
 describe('UpstashStore', () => {
@@ -226,6 +223,16 @@ describe('UpstashStore', () => {
         key: 'value',
         updated: 'value',
       });
+    });
+    it('should fetch >100000 threads by resource ID', async () => {
+      const resourceId = `resource-${randomUUID()}`;
+      const total = 100_000;
+      const threads = Array.from({ length: total }, () => ({ ...createSampleThread(), resourceId }));
+
+      await store.batchInsert({ tableName: TABLE_THREADS, records: threads });
+
+      const retrievedThreads = await store.getThreadsByResourceId({ resourceId });
+      expect(retrievedThreads).toHaveLength(total);
     });
   });
 
@@ -455,13 +462,8 @@ describe('UpstashStore', () => {
       const mockSnapshot = {
         value: { step1: 'completed' },
         context: {
-          stepResults: {
-            step1: { status: 'success', payload: { result: 'done' } },
-          },
-          steps: {},
-          attempts: {},
-          triggerData: {},
-        },
+          step1: { status: 'success', output: { result: 'done' } },
+        } as WorkflowRunState['context'],
         runId: testRunId,
         activePaths: [],
         suspendedPaths: {},
@@ -619,10 +621,7 @@ describe('UpstashStore', () => {
       expect(total).toBe(1);
       expect(runs[0]!.workflowName).toBe(workflowName1);
       const snapshot = runs[0]!.snapshot;
-      if (typeof snapshot === 'string') {
-        throw new Error('Expected WorkflowRunState, got string');
-      }
-      expect(snapshot.context?.steps[stepId1]?.status).toBe('success');
+      checkWorkflowSnapshot(snapshot, stepId1, 'success');
     });
 
     it('filters by date range', async () => {

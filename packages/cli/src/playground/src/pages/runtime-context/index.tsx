@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { Button, Icon } from '@mastra/playground-ui';
-import { Textarea } from '@/components/ui/textarea';
 
 import { toast } from 'sonner';
 import { Header, HeaderTitle, Txt, usePlaygroundStore } from '@mastra/playground-ui';
@@ -64,7 +63,7 @@ export default function RuntimeContext() {
         <HeaderTitle>Runtime Context</HeaderTitle>
       </Header>
 
-      <div className="max-w-3xl p-5">
+      <div className="max-w-3xl p-5 overflow-y-scroll h-full">
         <div className="rounded-lg p-4 pb-2 bg-surface4 shadow-md space-y-3 border border-border1">
           <Txt as="p" variant="ui-lg" className="text-icon3">
             Mastra provides runtime context, which is a system based on dependency injection that enables you to

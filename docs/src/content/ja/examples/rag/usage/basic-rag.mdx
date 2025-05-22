@@ -1,28 +1,28 @@
 ---
-title: "例：ベクトルクエリツールの使用 | RAG | Mastra ドキュメント"
-description: OpenAI埋め込みとベクトルストレージにPGVectorを使用して、Mastraで基本的なRAGシステムを実装する例。
+title: "例: ベクタークエリツールの使用方法 | RAG | Mastra ドキュメント"
+description: OpenAI の埋め込みと PGVector を使って、Mastra で基本的な RAG システムを実装する例です。
 ---
 
 import { GithubLink } from "@/components/github-link";
 
-# ベクタークエリツールの使用
+# ベクタークエリツールの使い方
 
-この例では、RAGシステムでのセマンティック検索のために`createVectorQueryTool`を実装し使用する方法を示します。ツールの設定方法、ベクターストレージの管理、および関連するコンテキストを効果的に取得する方法を示しています。
+この例では、RAGシステムにおけるセマンティック検索のための `createVectorQueryTool` の実装と使用方法を示します。ツールの設定方法、ベクターストレージの管理、関連するコンテキストの効果的な取得方法について説明します。
 
 ## 概要
 
-このシステムは、Mastra と OpenAI を使用して RAG を実装しています。以下がその機能です：
+このシステムは、Mastra と OpenAI を使って RAG を実装しています。主な機能は以下の通りです。
 
-1. 応答生成のために gpt-4o-mini を使用して Mastra エージェントを設定
-2. ベクターストアの操作を管理するためのベクタークエリツールを作成
-3. 既存の埋め込みを使用して関連するコンテキストを取得
-4. Mastra エージェントを使用してコンテキストに応じた応答を生成
+1. 応答生成のために gpt-4o-mini を使用した Mastra エージェントをセットアップします
+2. ベクトルストアとのやり取りを管理するベクトルクエリツールを作成します
+3. 既存の埋め込みを使って関連するコンテキストを取得します
+4. Mastra エージェントを使ってコンテキストに応じた応答を生成します
 
-> **注**: 埋め込みの作成と保存方法については、[Upsert Embeddings](/examples/rag/upsert/upsert-embeddings) ガイドを参照してください。
+> **注意**: 埋め込みの作成と保存方法については、[Upsert Embeddings](/examples/rag/upsert/upsert-embeddings) ガイドをご覧ください。
 
 ## セットアップ
 
-### 環境セットアップ
+### 環境設定
 
 環境変数を設定してください：
 
@@ -45,7 +45,7 @@ import { PgVector } from "@mastra/pg";
 
 ## ベクタークエリツールの作成
 
-ベクターデータベースをクエリできるツールを作成します:
+ベクターデータベースをクエリできるツールを作成します：
 
 ```typescript copy showLineNumbers{7} filename="src/index.ts"
 const vectorQueryTool = createVectorQueryTool({
@@ -55,9 +55,9 @@ const vectorQueryTool = createVectorQueryTool({
 });
 ```
 
-## エージェント設定
+## エージェントの設定
 
-応答を処理するMastraエージェントを設定します：
+応答を処理するMastraエージェントをセットアップします：
 
 ```typescript copy showLineNumbers{13} filename="src/index.ts"
 export const ragAgent = new Agent({
@@ -71,9 +71,9 @@ export const ragAgent = new Agent({
 });
 ```
 
-## PgVectorとMastraのインスタンス化
+## PgVector と Mastra のインスタンス化
 
-すべてのコンポーネントを使用してPgVectorとMastraをインスタンス化します:
+すべてのコンポーネントを使って PgVector と Mastra をインスタンス化します。
 
 ```typescript copy showLineNumbers{23} filename="src/index.ts"
 const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
@@ -90,9 +90,9 @@ const agent = mastra.getAgent("ragAgent");
 
 ```typescript copy showLineNumbers{32} filename="src/index.ts"
 const prompt = `
-[ここにドキュメントに基づくクエリを挿入]
-ツールで提供されたコンテキストのみに基づいて回答してください。
-コンテキストに質問に完全に答えるための十分な情報が含まれていない場合は、その旨を明示してください。
+[Insert query based on document here]
+Please base your answer only on the context provided in the tool. 
+If the context doesn't contain enough information to fully answer the question, please state that explicitly.
 `;
 
 const completion = await agent.generate(prompt);

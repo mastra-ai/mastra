@@ -1,6 +1,6 @@
-import { createLogger } from '@mastra/core/logger';
+import { PinoLogger } from '@mastra/loggers';
 
-export const logger = createLogger({
+export const logger = new PinoLogger({
   name: 'Mastra CLI',
   level: 'debug',
 });

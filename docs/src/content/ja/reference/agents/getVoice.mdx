@@ -13,7 +13,7 @@ description: "Mastraエージェントの`.getVoice()`メソッドに関する�
 getVoice({ runtimeContext }: { runtimeContext?: RuntimeContext } = {}): CompositeVoice | Promise<CompositeVoice>
 ```
 
-## パラメータ
+## パラメーター
 
 <br />
 <PropertiesTable
@@ -23,7 +23,7 @@ getVoice({ runtimeContext }: { runtimeContext?: RuntimeContext } = {}): Composit
       type: "RuntimeContext",
       isOptional: true,
       description:
-        "依存性注入とコンテキスト情報のためのランタイムコンテキスト。提供されない場合は、新しいRuntimeContextインスタンスがデフォルトとなります。",
+        "依存性注入やコンテキスト情報のためのランタイムコンテキスト。指定されていない場合は、新しい RuntimeContext インスタンスがデフォルトで使用されます。",
     },
   ]}
 />
@@ -34,17 +34,17 @@ getVoice({ runtimeContext }: { runtimeContext?: RuntimeContext } = {}): Composit
 
 ## 説明
 
-`getVoice()`メソッドは、エージェントの音声機能にアクセスするために使用されます。これは、直接提供されるか、関数から返される音声プロバイダーを解決します。
+`getVoice()` メソッドは、エージェントの音声機能にアクセスするために使用されます。このメソッドは、音声プロバイダーを解決します。音声プロバイダーは、直接指定することも、関数から返されることもあります。
 
-音声プロバイダーは以下を可能にします：
+音声プロバイダーによって以下が可能になります：
 
-- テキストから音声への変換（発話）
-- 音声からテキストへの変換（聴取）
-- 利用可能なスピーカー/音声の取得
+- テキストを音声に変換する（発話）
+- 音声をテキストに変換する（聞き取り）
+- 利用可能なスピーカーや音声の取得
 
 ## 例
 
-### 基本的な使用法
+### 基本的な使い方
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
@@ -75,7 +75,7 @@ const speakers = await voice.getSpeakers();
 console.log(speakers);
 ```
 
-### RuntimeContextでの使用
+### RuntimeContextとの併用
 
 ```typescript
 import { Agent } from "@mastra/core/agent";

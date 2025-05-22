@@ -1,6 +1,6 @@
 ---
 title: "リファレンス: Agent.stream() | ストリーミング | エージェント | Mastra ドキュメント"
-description: Mastraエージェントの`.stream()`メソッドに関するドキュメント。リアルタイムでのレスポンスのストリーミングを可能にします。
+description: Mastra エージェントの `.stream()` メソッドのドキュメント。リアルタイムでレスポンスのストリーミングを可能にします。
 ---
 
 # `stream()`
@@ -37,7 +37,7 @@ interface Message {
       type: "AbortSignal",
       isOptional: true,
       description:
-        "エージェントの実行を中止できる信号オブジェクト。信号が中止されると、進行中のすべての操作が終了します。",
+        "エージェントの実行を中止できるシグナルオブジェクト。シグナルが中止されると、進行中のすべての操作が終了します。",
     },
     {
       name: "context",
@@ -84,8 +84,7 @@ interface Message {
       name: "onFinish",
       type: "StreamTextOnFinishCallback | StreamObjectOnFinishCallback",
       isOptional: true,
-      description:
-        "ストリーミングが完了したときに呼び出されるコールバック関数。",
+      description: "ストリーミングが完了したときに呼び出されるコールバック関数。",
     },
     {
       name: "onStepFinish",
@@ -127,15 +126,14 @@ interface Message {
       type: "string",
       isOptional: true,
       description:
-        "会話スレッドの識別子。複数のやり取りにわたってコンテキストを維持できます。resourceIdが提供される場合は必須です。",
+        "会話スレッドの識別子。複数のやり取りにわたってコンテキストを維持することができます。resourceIdが提供される場合は必須です。",
     },
     {
       name: "toolChoice",
       type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
       isOptional: true,
       defaultValue: "'auto'",
-      description:
-        "ストリーミング中にエージェントがツールをどのように使用するかを制御します。",
+      description: "ストリーミング中にエージェントがツールを使用する方法を制御します。",
     },
     {
       name: "toolsets",
@@ -143,6 +141,13 @@ interface Message {
       isOptional: true,
       description:
         "このストリーム中にエージェントが利用できるようにする追加のツールセット。",
+    },
+    {
+      name: "clientTools",
+      type: "ToolsInput",
+      isOptional: true,
+      description:
+        "リクエストの「クライアント」側で実行されるツール。これらのツールは定義内に実行関数を持ちません。",
     },
   ]}
 />
@@ -174,7 +179,8 @@ interface Message {
               name: "topK",
               type: "number",
               isOptional: true,
-              description: "取得する意味的に最も類似したメッセージの数。",
+              description:
+                "取得する意味的に最も類似したメッセージの数。",
             },
           ],
         },
@@ -186,7 +192,7 @@ interface Message {
               type: "number | { before: number; after: number }",
               isOptional: true,
               description:
-                "セマンティック検索の対象とするメッセージの範囲。単一の数値または前後の設定が可能です。",
+                "セマンティック検索で考慮するメッセージの範囲。単一の数値または前後の設定が可能です。",
             },
           ],
         },
@@ -246,7 +252,8 @@ interface Message {
               name: "generateTitle",
               type: "boolean",
               isOptional: true,
-              description: "新しいスレッドのタイトルを自動生成するかどうか。",
+              description:
+                "新しいスレッドのタイトルを自動生成するかどうか。",
             },
           ],
         },
@@ -362,7 +369,7 @@ for await (const chunk of stream.textStream) {
 }
 ```
 
-### スレッドコンテキストを使用した構造化出力ストリーミング
+### スレッドコンテキストを持つ構造化出力ストリーミング
 
 ```typescript
 const schema = {
@@ -388,4 +395,4 @@ const result = await response.object;
 console.log("Final structured result:", result);
 ```
 
-Agentの`stream()`とLLMの`stream()`の主な違いは、Agentは`threadId`を通じて会話のコンテキストを維持し、ツールにアクセスでき、エージェントのメモリシステムと統合できることです。
+エージェントの`stream()`とLLMの`stream()`の主な違いは、エージェントが`threadId`を通じて会話のコンテキストを維持し、ツールにアクセスでき、エージェントのメモリシステムと統合できることです。

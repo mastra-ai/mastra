@@ -78,6 +78,11 @@ export const init = async ({
       if (needsMemory) {
         await depService.installPackages(['@mastra/memory']);
       }
+
+      const needsLoggers = (await depService.checkDependencies(['@mastra/loggers'])) !== `ok`;
+      if (needsLoggers) {
+        await depService.installPackages(['@mastra/loggers']);
+      }
     }
 
     const key = await getAPIKey(llmProvider || 'openai');
@@ -101,7 +106,7 @@ export const init = async ({
       ${color.green('Mastra initialized successfully!')}
 
       Add your ${color.cyan(key)} as an environment variable
-      in your ${color.cyan('.env.development')} file
+      in your ${color.cyan('.env')} file
       `);
     } else {
       p.note(`
