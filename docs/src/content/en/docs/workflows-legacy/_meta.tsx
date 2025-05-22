@@ -1,4 +1,3 @@
-import { Tag } from "@/components/tag";
 const meta = {
   overview: "Overview",
   steps: "Steps",
