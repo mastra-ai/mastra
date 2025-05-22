@@ -1,5 +1,14 @@
 # @mastra/deployer
 
+## 0.10.1-alpha.0
+
+### Patch Changes
+
+- 6d16390: Support custom bundle externals on mastra Instance
+- Updated dependencies [6d16390]
+- Updated dependencies [1e4a421]
+  - @mastra/core@0.10.1-alpha.0
+
 ## 0.10.0
 
 ### Minor Changes

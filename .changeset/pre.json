@@ -61,5 +61,16 @@
     "@mastra/voice-speechify": "0.10.0",
     "@mastra/inngest": "0.10.0"
   },
-  "changesets": []
+  "changesets": [
+    "chubby-suits-drop",
+    "cuddly-shirts-call",
+    "curvy-regions-ring",
+    "large-sheep-rhyme",
+    "lovely-boxes-pull",
+    "ninety-dryers-switch",
+    "red-turkeys-leave",
+    "rotten-spiders-swim",
+    "sixty-aliens-greet",
+    "tiny-spiders-shake"
+  ]
 }

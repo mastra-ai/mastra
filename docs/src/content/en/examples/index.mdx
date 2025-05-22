@@ -10,7 +10,7 @@ import { Tabs } from "nextra/components";
 
 The Examples section is a short list of example projects demonstrating basic AI engineering with Mastra, including text generation, structured output, streaming responses, retrieval‐augmented generation (RAG), and voice.
 
-<CardItems titles={["Agent", "Workflow", "vNextWorkflow", "Memory", "RAG", "Evals", "Voice"]} items={
+<CardItems titles={["Agent", "Workflow", "legacyWorkflow", "Memory", "RAG", "Evals", "Voice"]} items={
   {
     Agent: [
       {
@@ -44,58 +44,58 @@ The Examples section is a short list of example projects demonstrating basic AI 
     ],
     Workflow: [
       {
-        title: "Creating a Workflow",
-        href: "/examples/workflows/creating-a-workflow",
-      },
-      {
-        title: "Using a Tool as a Step",
-        href: "/examples/workflows/using-a-tool-as-a-step",
-      },
-      { title: "Parallel Steps", href: "/examples/workflows/parallel-steps" },
-      {
-        title: "Sequential Steps",
-        href: "/examples/workflows/sequential-steps",
-      },
-      { title: "Branching Paths", href: "/examples/workflows/branching-paths" },
-      {
-        title: "Cyclical Dependencies",
-        href: "/examples/workflows/cyclical-dependencies",
-      },
-      {
-        title: "Suspend and Resume",
-        href: "/examples/workflows/suspend-and-resume",
-      },
-      { title: "Calling an Agent", href: "/examples/workflows/calling-agent" },
-    ],
-    vNextWorkflow: [
-      {
         title: "Conditional Branching",
-        href: "/examples/workflows_vNext/conditional-branching",
+        href: "/examples/workflows/conditional-branching",
       },
       {
         title: "Parallel Steps",
-        href: "/examples/workflows_vNext/parallel-steps",
+        href: "/examples/workflows/parallel-steps",
       },
       {
         title: "Calling an Agent",
-        href: "/examples/workflows_vNext/calling-agent",
+        href: "/examples/workflows/calling-agent",
       },
       {
         title: "Tool & Agent as a Step",
-        href: "/examples/workflows_vNext/agent-and-tool-interop",
+        href: "/examples/workflows/agent-and-tool-interop",
       },
       {
         title: "Human in the loop",
-        href: "/examples/workflows_vNext/human-in-the-loop",
+        href: "/examples/workflows/human-in-the-loop",
       },
       {
         title: "Control Flow",
-        href: "/examples/workflows_vNext/control-flow",
+        href: "/examples/workflows/control-flow",
       },
       {
         title: "Array as Input",
-        href: "/examples/workflows_vNext/array-as-input",
+        href: "/examples/workflows/array-as-input",
       }
+    ],
+    legacyWorkflow: [
+      {
+        title: "Creating a Workflow",
+        href: "/examples/workflows_legacy/creating-a-workflow",
+      },
+      {
+        title: "Using a Tool as a Step",
+        href: "/examples/workflows_legacy/using-a-tool-as-a-step",
+      },
+      { title: "Parallel Steps", href: "/examples/workflows_legacy/parallel-steps" },
+      {
+        title: "Sequential Steps",
+        href: "/examples/workflows_legacy/sequential-steps",
+      },
+      { title: "Branching Paths", href: "/examples/workflows_legacy/branching-paths" },
+      {
+        title: "Cyclical Dependencies",
+        href: "/examples/workflows_legacy/cyclical-dependencies",
+      },
+      {
+        title: "Suspend and Resume",
+        href: "/examples/workflows_legacy/suspend-and-resume",
+      },
+      { title: "Calling an Agent", href: "/examples/workflows_legacy/calling-agent" },
     ],
     Memory:[
       {
@@ -119,7 +119,7 @@ The Examples section is a short list of example projects demonstrating basic AI 
         href: "/examples/memory/streaming-working-memory-advanced",
       },
     ],
-  RAG: [
+    RAG: [
       { title: "Chunk Text", href: "/examples/rag/chunking/chunk-text" },
       { title: "Chunk Markdown", href: "/examples/rag/chunking/chunk-markdown" },
       { title: "Chunk HTML", href: "/examples/rag/chunking/chunk-html" },
@@ -169,81 +169,81 @@ The Examples section is a short list of example projects demonstrating basic AI 
       },
       { title: "Graph RAG", href: "/examples/rag/usage/graph-rag" },
     ],
-  Evals: [
-    {
-      title: "Answer Relevancy",
-      href: "/examples/evals/answer-relevancy",
-    },
-    {
-      title: "Bias",
-      href: "/examples/evals/bias",
-    },
-    {
-      title: "Completeness",
-      href: "/examples/evals/completeness",
-    },
-    {
-      title: "Content Similarity",
-      href: "/examples/evals/content-similarity",
-    },
-    {
-      title: "Context Position",
-      href: "/examples/evals/context-position",
-    },
-    {
-      title: "Context Precision",
-      href: "/examples/evals/context-precision",
-    },
-    {
-      title: "Context Relevancy",
-      href: "/examples/evals/context-relevancy",
-    },
-    {
-      title: "Contextual Recall",
-      href: "/examples/evals/contextual-recall",
-    },
-    {
-      title: "Custom Eval with LLM as a Judge",
-      href: "/examples/evals/custom-eval",
-    },
-    {
-      title: "Faithfulness",
-      href: "/examples/evals/faithfulness",
-    },
-    {
-      title: "Hallucination",
-      href: "/examples/evals/hallucination",
-    },
-    {
-      title: "Keyword Coverage",
-      href: "/examples/evals/keyword-coverage",
-    },
-    {
-      title: "Prompt Alignment",
-      href: "/examples/evals/prompt-alignment",
-    },
-    {
-      title: "Summarization",
-      href: "/examples/evals/summarization",
-    },
-    {
-      title: "Textual Difference",
-      href: "/examples/evals/textual-difference",
-    },
-    {
-      title: "Tone Consistency", 
-      href: "/examples/evals/tone-consistency",
-    },
-    {
-      title: "Toxicity",
-      href: "/examples/evals/toxicity",
-    },
-    {
-      title: "Word Inclusion",
-      href: "/examples/evals/word-inclusion",
-    },
-  ],
-  Voice: [
+    Evals: [
+      {
+        title: "Answer Relevancy",
+        href: "/examples/evals/answer-relevancy",
+      },
+      {
+        title: "Bias",
+        href: "/examples/evals/bias",
+      },
+      {
+        title: "Completeness",
+        href: "/examples/evals/completeness",
+      },
+      {
+        title: "Content Similarity",
+        href: "/examples/evals/content-similarity",
+      },
+      {
+        title: "Context Position",
+        href: "/examples/evals/context-position",
+      },
+      {
+        title: "Context Precision",
+        href: "/examples/evals/context-precision",
+      },
+      {
+        title: "Context Relevancy",
+        href: "/examples/evals/context-relevancy",
+      },
+      {
+        title: "Contextual Recall",
+        href: "/examples/evals/contextual-recall",
+      },
+      {
+        title: "Custom Eval with LLM as a Judge",
+        href: "/examples/evals/custom-eval",
+      },
+      {
+        title: "Faithfulness",
+        href: "/examples/evals/faithfulness",
+      },
+      {
+        title: "Hallucination",
+        href: "/examples/evals/hallucination",
+      },
+      {
+        title: "Keyword Coverage",
+        href: "/examples/evals/keyword-coverage",
+      },
+      {
+        title: "Prompt Alignment",
+        href: "/examples/evals/prompt-alignment",
+      },
+      {
+        title: "Summarization",
+        href: "/examples/evals/summarization",
+      },
+      {
+        title: "Textual Difference",
+        href: "/examples/evals/textual-difference",
+      },
+      {
+        title: "Tone Consistency", 
+        href: "/examples/evals/tone-consistency",
+      },
+      {
+        title: "Toxicity",
+        href: "/examples/evals/toxicity",
+      },
+      {
+        title: "Word Inclusion",
+        href: "/examples/evals/word-inclusion",
+      },
+    ],
+    Voice: [
     {
       title: "Text to Speech",
       href: "/examples/voice/text-to-speech",
@@ -260,7 +260,7 @@ The Examples section is a short list of example projects demonstrating basic AI 
       title: "Speech to Speech",
       href: "/examples/voice/speech-to-speech",
     },
-  ],
+    ],
 }}>
 
 </CardItems>
