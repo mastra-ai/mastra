@@ -1,9 +1,9 @@
 ---
-title: "Error Handling in Workflows | Mastra Docs"
-description: "Learn how to handle errors in Mastra workflows using step retries, conditional branching, and monitoring."
+title: "Error Handling in Workflows (Legacy) | Mastra Docs"
+description: "Learn how to handle errors in Mastra legacy workflows using step retries, conditional branching, and monitoring."
 ---
 
-# Error Handling in Workflows
+# Error Handling in Workflows (Legacy)
 
 Robust error handling is essential for production workflows. Mastra provides several mechanisms to handle errors gracefully, allowing your workflows to recover from failures or gracefully degrade when necessary.
 
@@ -25,8 +25,10 @@ Mastra provides a built-in retry mechanism for steps that fail due to transient 
 You can configure retries at the workflow level or for individual steps:
 
 ```typescript
+import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy'
+
 // Workflow-level retry configuration
-const workflow = new Workflow({
+const workflow = new LegacyWorkflow({
   name: "my-workflow",
   retryConfig: {
     attempts: 3, // Number of retry attempts
@@ -35,7 +37,7 @@ const workflow = new Workflow({
 });
 
 // Step-level retry configuration (overrides workflow-level)
-const apiStep = new Step({
+const apiStep = new LegacyStep({
   id: "callApi",
   execute: async () => {
     // API call that might fail
@@ -55,7 +57,7 @@ You can create alternative workflow paths based on the success or failure of pre
 
 ```typescript
 // Create a workflow with conditional branching
-const workflow = new Workflow({
+const workflow = new LegacyWorkflow({
   name: "error-handling-workflow",
 });
 
@@ -103,7 +105,7 @@ await start();
 Within a step's execution function, you can handle errors programmatically:
 
 ```typescript
-const robustStep = new Step({
+const robustStep = new LegacyStep({
   id: "robustStep",
   execute: async ({ context }) => {
     try {
@@ -130,7 +132,7 @@ const robustStep = new Step({
 You can make decisions based on the results of previous steps:
 
 ```typescript
-const finalStep = new Step({
+const finalStep = new LegacyStep({
   id: "finalStep",
   execute: async ({ context }) => {
     // Check results of previous steps

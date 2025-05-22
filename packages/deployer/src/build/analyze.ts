@@ -14,6 +14,7 @@ import { join } from 'node:path';
 import { validate } from '../validator/validate';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
 import { writeFile } from 'node:fs/promises';
+import { getBundlerOptions } from './bundlerOptions';
 
 // TODO: Make thie extendable or find a rollup plugin that can do this
 const globalExternals = [
@@ -164,7 +165,12 @@ async function analyze(
  * @param logger - Logger instance for debugging
  * @returns Object containing bundle output and reference map for validation
  */
-async function bundleExternals(depsToOptimize: Map<string, string[]>, outputDir: string, logger: IMastraLogger) {
+async function bundleExternals(
+  depsToOptimize: Map<string, string[]>,
+  outputDir: string,
+  logger: IMastraLogger,
+  customExternals?: string[],
+) {
   logger.info('Optimizing dependencies...');
   logger.debug(
     `${Array.from(depsToOptimize.keys())
@@ -172,6 +178,7 @@ async function bundleExternals(depsToOptimize: Map<string, string[]>, outputDir:
       .join('\n')}`,
   );
 
+  const allExternals = [...globalExternals, ...(customExternals || [])];
   const reverseVirtualReferenceMap = new Map<string, string>();
   const virtualDependencies = new Map();
   for (const [dep, exports] of depsToOptimize.entries()) {
@@ -211,7 +218,7 @@ async function bundleExternals(depsToOptimize: Map<string, string[]>, outputDir:
     ),
     // this dependency breaks the build, so we need to exclude it
     // TODO actually fix this so we don't need to exclude it
-    external: globalExternals,
+    external: allExternals,
     treeshake: 'smallest',
     plugins: [
       virtual(
@@ -250,7 +257,7 @@ async function bundleExternals(depsToOptimize: Map<string, string[]>, outputDir:
   const filteredChunks = output.filter(o => o.type === 'chunk');
 
   for (const o of filteredChunks.filter(o => o.isEntry || o.isDynamicEntry)) {
-    for (const external of globalExternals) {
+    for (const external of allExternals) {
       const importer = findExternalImporter(o, external, filteredChunks);
 
       if (importer) {
@@ -371,10 +378,13 @@ export async function analyzeBundle(
   const isVirtualFile = entry.includes('\n') || !existsSync(entry);
 
   const depsToOptimize = await analyze(entry, mastraEntry, isVirtualFile, platform, logger);
+  const customExternals = (await getBundlerOptions(mastraEntry, outputDir))?.externals;
+
   const { output, reverseVirtualReferenceMap, usedExternals } = await bundleExternals(
     depsToOptimize,
     outputDir,
     logger,
+    customExternals,
   );
   const result = await validateOutput({ output, reverseVirtualReferenceMap, usedExternals, outputDir }, logger);
 
