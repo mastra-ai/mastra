@@ -17,16 +17,16 @@ const memory = new Memory({
   options: {
     // Conversation history configuration
     lastMessages: 20, // Include the last 20 messages in the context
-    
+
     // Semantic recall configuration
     semanticRecall: {
       topK: 3, // Retrieve 3 most similar messages
       messageRange: {
         before: 2, // Include 2 messages before each match
-        after: 1,  // Include 1 message after each match
+        after: 1, // Include 1 message after each match
       },
     },
-    
+
     // Working memory configuration
     workingMemory: {
       enabled: true,

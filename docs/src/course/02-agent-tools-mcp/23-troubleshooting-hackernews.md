@@ -7,6 +7,7 @@ If your agent can't access the Hacker News tools, check:
 3. That the tools are properly loaded by checking the Tools tab in the playground
 
 Common issues include:
+
 - NPX not being installed or configured properly
 - Network restrictions preventing NPX from downloading packages
 - Firewall or proxy settings blocking the Hacker News API

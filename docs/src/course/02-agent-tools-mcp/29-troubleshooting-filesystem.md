@@ -7,6 +7,7 @@ If your agent can't access the Filesystem tools, check:
 3. That the tools are properly loaded by checking the Tools tab in the playground
 
 Common issues include:
+
 - PNPX not being installed or configured properly
 - The notes directory not existing or having incorrect permissions
 - Path issues in the MCP configuration

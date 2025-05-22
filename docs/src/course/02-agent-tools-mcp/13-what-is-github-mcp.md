@@ -5,6 +5,7 @@ In this step, we'll add the Composio GitHub MCP server to our agent, which will 
 ## What is the GitHub MCP Server?
 
 The GitHub MCP server provides tools for interacting with GitHub repositories, including:
+
 - Monitoring repository activity
 - Checking pull requests and issues
 - Viewing commit history

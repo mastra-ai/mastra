@@ -5,6 +5,7 @@ In this final step, we'll add the Filesystem MCP server to our agent, which will
 ## What is the Filesystem MCP Server?
 
 The Filesystem MCP server provides tools for interacting with your local file system, including:
+
 - Reading files
 - Writing to files
 - Creating directories

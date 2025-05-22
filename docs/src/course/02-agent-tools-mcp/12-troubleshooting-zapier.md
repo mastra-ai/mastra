@@ -7,6 +7,7 @@ If your agent can't access the Zapier tools, check:
 3. That the tools are properly loaded by checking the Tools tab in the playground
 
 Common issues include:
+
 - Incorrect or missing environment variables
 - Network connectivity problems
 - Authentication issues with the Zapier MCP server

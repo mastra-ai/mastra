@@ -7,6 +7,7 @@ If your agent can't access the GitHub tools, check:
 3. That the tools are properly loaded by checking the Tools tab in the playground
 
 Common issues include:
+
 - Incorrect or missing environment variables
 - Authentication issues with GitHub
 - Permission problems with the repositories you're trying to access

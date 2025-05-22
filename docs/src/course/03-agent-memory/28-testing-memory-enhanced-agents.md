@@ -28,6 +28,7 @@ Let's test both of our memory-enhanced agents:
    - "Can you go back to Python? I forgot how functions work."
 
 Your agents should demonstrate all the memory capabilities we've explored:
+
 - Remembering recent conversation context
 - Recalling relevant information from older messages
 - Maintaining persistent user information in working memory
