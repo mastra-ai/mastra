@@ -1,5 +1,14 @@
 # @mastra/client-js
 
+## 0.10.1-alpha.0
+
+### Patch Changes
+
+- f622cfa: Make some properties of CreateMemoryThreadParams optional
+- Updated dependencies [6d16390]
+- Updated dependencies [1e4a421]
+  - @mastra/core@0.10.1-alpha.0
+
 ## 0.10.0
 
 ### Minor Changes

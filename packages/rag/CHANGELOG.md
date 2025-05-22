@@ -1,5 +1,14 @@
 # @mastra/rag
 
+## 0.10.1-alpha.0
+
+### Patch Changes
+
+- 8784cef: Changed stripHeaders for markdown chunking to strip headers correctly from output when true
+- Updated dependencies [6d16390]
+- Updated dependencies [1e4a421]
+  - @mastra/core@0.10.1-alpha.0
+
 ## 0.10.0
 
 ### Minor Changes
