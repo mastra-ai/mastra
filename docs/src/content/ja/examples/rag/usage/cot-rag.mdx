@@ -91,12 +91,12 @@ FINAL ANSWER:
 });
 ```
 
-## PgVector と Mastra のインスタンス化
+## PgVectorとMastraのインスタンス化
 
-すべてのコンポーネントを使って PgVector と Mastra をインスタンス化します。
+PgVectorとMastraをすべてのコンポーネントでインスタンス化します：
 
 ```typescript copy showLineNumbers{36} filename="index.ts"
-const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
+const pgVector = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING! });
 
 export const mastra = new Mastra({
   agents: { ragAgent },

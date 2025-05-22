@@ -1,0 +1,194 @@
+---
+title: "DynamoDB ストレージ | ストレージシステム | Mastra Core"
+description: "ElectroDBを使用した単一テーブル設計によるMastraのDynamoDBストレージ実装のドキュメント。"
+---
+
+# DynamoDB ストレージ
+
+DynamoDB ストレージの実装は、[ElectroDB](https://electrodb.dev/)を活用した単一テーブル設計パターンにより、Mastraにスケーラブルで高性能なNoSQLデータベースソリューションを提供します。
+
+## 機能
+
+- すべてのMastraストレージニーズに対応する効率的な単一テーブル設計
+- 型安全なDynamoDBアクセスのためのElectroDBベース
+- AWS認証情報、リージョン、エンドポイントのサポート
+- 開発用のAWS DynamoDB Localとの互換性
+- スレッド、メッセージ、トレース、評価、ワークフローデータの保存
+- サーバーレス環境向けに最適化
+
+## インストール
+
+```bash copy
+npm install @mastra/dynamodb@latest
+# or
+pnpm add @mastra/dynamodb@latest
+# or
+yarn add @mastra/dynamodb@latest
+```
+
+## 前提条件
+
+このパッケージを使用する前に、特定の構造（プライマリキーとグローバルセカンダリインデックス（GSI）を含む）を持つDynamoDBテーブルを**必ず**作成する必要があります。このアダプターは、DynamoDBテーブルとそのGSIが外部でプロビジョニングされていることを前提としています。
+
+AWS CloudFormationまたはAWS CDKを使用したテーブルのセットアップに関する詳細な手順は、[TABLE_SETUP.md](https://github.com/mastra/mastra/blob/main/stores/dynamodb/TABLE_SETUP.md)で確認できます。先に進む前に、これらの手順に従ってテーブルが構成されていることを確認してください。
+
+## 使用方法
+
+### 基本的な使用方法
+
+```typescript copy showLineNumbers
+import { Memory } from "@mastra/memory";
+import { DynamoDBStore } from "@mastra/dynamodb";
+
+// Initialize the DynamoDB storage
+const storage = new DynamoDBStore({
+  name: "dynamodb", // A name for this storage instance
+  config: {
+    tableName: "mastra-single-table", // Name of your DynamoDB table
+    region: "us-east-1", // Optional: AWS region, defaults to 'us-east-1'
+    // endpoint: "http://localhost:8000", // Optional: For local DynamoDB
+    // credentials: { accessKeyId: "YOUR_ACCESS_KEY", secretAccessKey: "YOUR_SECRET_KEY" } // Optional
+  },
+});
+
+// Example: Initialize Memory with DynamoDB storage
+const memory = new Memory({
+  storage,
+  options: {
+    lastMessages: 10,
+  },
+});
+```
+
+### DynamoDB Localを使用したローカル開発
+
+ローカル開発には、[DynamoDB Local](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.html)を使用できます。
+
+1.  **DynamoDB Localを実行する（例：Dockerを使用）：**
+    ```bash
+    docker run -p 8000:8000 amazon/dynamodb-local
+    ```
+
+2.  **ローカルエンドポイントを使用するように`DynamoDBStore`を設定する：**
+    ```typescript copy showLineNumbers
+    import { DynamoDBStore } from "@mastra/dynamodb";
+
+    const storage = new DynamoDBStore({
+      name: "dynamodb-local",
+      config: {
+        tableName: "mastra-single-table", // Ensure this table is created in your local DynamoDB
+        region: "localhost", // Can be any string for local, 'localhost' is common
+        endpoint: "http://localhost:8000",
+        // For DynamoDB Local, credentials are not typically required unless configured.
+        // If you've configured local credentials:
+        // credentials: { accessKeyId: "fakeMyKeyId", secretAccessKey: "fakeSecretAccessKey" }
+      },
+    });
+    ```
+    ローカルDynamoDBインスタンスでテーブルとGSIを作成する必要があります。例えば、ローカルエンドポイントを指定したAWS CLIを使用します。
+
+## パラメータ
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      description: "ストレージインスタンスの名前。",
+      isOptional: false,
+    },
+    {
+      name: "config.tableName",
+      type: "string",
+      description: "DynamoDBテーブルの名前。",
+      isOptional: false,
+    },
+    {
+      name: "config.region",
+      type: "string",
+      description: "AWSリージョン。デフォルトは'us-east-1'です。ローカル開発の場合、'localhost'などに設定できます。",
+      isOptional: true,
+    },
+    {
+      name: "config.endpoint",
+      type: "string",
+      description: "DynamoDBのカスタムエンドポイント（例：ローカル開発用の'http://localhost:8000'）。",
+      isOptional: true,
+    },
+    {
+      name: "config.credentials",
+      type: "object",
+      description: "`accessKeyId`と`secretAccessKey`を持つAWS認証情報オブジェクト。提供されない場合、AWS SDKは環境変数、IAMロール（EC2/Lambda用など）、または共有AWSクレデンシャルファイルから認証情報を取得しようとします。",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## AWS IAM 権限
+
+コードを実行するIAMロールまたはユーザーは、指定されたDynamoDBテーブルとそのインデックスを操作するための適切な権限が必要です。以下はサンプルポリシーです。`${YOUR_TABLE_NAME}`を実際のテーブル名に、`${YOUR_AWS_REGION}`と`${YOUR_AWS_ACCOUNT_ID}`を適切な値に置き換えてください。
+
+```json copy
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:DescribeTable",
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:Query",
+        "dynamodb:Scan",
+        "dynamodb:BatchGetItem",
+        "dynamodb:BatchWriteItem"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:${YOUR_AWS_REGION}:${YOUR_AWS_ACCOUNT_ID}:table/${YOUR_TABLE_NAME}",
+        "arn:aws:dynamodb:${YOUR_AWS_REGION}:${YOUR_AWS_ACCOUNT_ID}:table/${YOUR_TABLE_NAME}/index/*"
+      ]
+    }
+  ]
+}
+```
+
+## 主な考慮事項
+
+DynamoDBストレージアダプターの詳細な設計に入る前に、以下の重要なポイントを念頭に置いてください：
+
+-   **外部テーブルのプロビジョニング：** このアダプターを使用する前に、DynamoDBテーブルとそのグローバルセカンダリインデックス（GSI）を自分で作成・設定する*必要があります*。[TABLE_SETUP.md](https://github.com/mastra/mastra/blob/main/stores/dynamodb/TABLE_SETUP.md)のガイドに従ってください。
+-   **シングルテーブル設計：** すべてのMastraデータ（スレッド、メッセージなど）は1つのDynamoDBテーブルに保存されます。これはDynamoDBに最適化された意図的な設計選択であり、リレーショナルデータベースのアプローチとは異なります。
+-   **GSIの理解：** データ取得と潜在的なクエリパターンを理解するためには、（`TABLE_SETUP.md`に記載されている）GSIの構造に精通していることが重要です。
+-   **ElectroDB：** このアダプターはElectroDBを使用してDynamoDBとのやり取りを管理し、生のDynamoDB操作に対する抽象化とタイプセーフティの層を提供します。
+
+## アーキテクチャアプローチ
+
+このストレージアダプターは、[ElectroDB](https://electrodb.dev/)を活用した**シングルテーブル設計パターン**を使用しています。これはDynamoDBでは一般的で推奨されるアプローチです。このアーキテクチャは、通常は特定のエンティティ（スレッド、メッセージなど）ごとに専用のテーブルを使用するリレーショナルデータベースアダプター（`@mastra/pg`や`@mastra/libsql`など）とは異なります。
+
+このアプローチの主な特徴：
+
+-   **DynamoDBネイティブ：** シングルテーブル設計はDynamoDBのキー値とクエリ機能に最適化されており、リレーショナルモデルを模倣する場合と比較して、多くの場合、より優れたパフォーマンスとスケーラビリティをもたらします。
+-   **外部テーブル管理：** コードを通じてテーブルを作成するヘルパー関数を提供する一部のアダプターとは異なり、このアダプターは**使用前にDynamoDBテーブルとそれに関連するグローバルセカンダリインデックス（GSI）が外部からプロビジョニングされていることを前提としています**。AWS CloudFormationやCDKなどのツールを使用した詳細な手順については、[TABLE_SETUP.md](https://github.com/mastra/mastra/blob/main/stores/dynamodb/TABLE_SETUP.md)を参照してください。このアダプターは、既存のテーブル構造との対話のみに焦点を当てています。
+-   **インターフェースによる一貫性：** 基盤となるストレージモデルは異なりますが、このアダプターは他のアダプターと同じ`MastraStorage`インターフェースに準拠しており、Mastra `Memory`コンポーネント内で互換的に使用できることを保証します。
+
+### シングルテーブル内のMastraデータ
+
+単一のDynamoDBテーブル内で、異なるMastraデータエンティティ（スレッド、メッセージ、トレース、評価、ワークフローなど）はElectroDBを使用して管理および区別されます。ElectroDBは各エンティティタイプに固有のモデルを定義し、これには一意のキー構造と属性が含まれます。これにより、アダプターは同じテーブル内で多様なデータタイプを効率的に保存および取得できます。
+
+例えば、`Thread`アイテムのプライマリキーは`THREAD#<threadId>`のようになり、そのスレッドに属する`Message`アイテムはパーティションキーとして`THREAD#<threadId>`を使用し、ソートキーとして`MESSAGE#<messageId>`を使用する場合があります。`TABLE_SETUP.md`で詳述されているグローバルセカンダリインデックス（GSI）は、スレッドのすべてのメッセージを取得したり、特定のワークフローに関連するトレースをクエリしたりするなど、これらの異なるエンティティ間の一般的なアクセスパターンをサポートするために戦略的に設計されています。
+
+### シングルテーブル設計の利点
+
+この実装はElectroDBを使用したシングルテーブル設計パターンを採用しており、DynamoDBのコンテキスト内でいくつかの利点を提供します：
+
+1.  **（潜在的に）低コスト：** テーブル数が少ないことで、特にオンデマンドキャパシティを使用する場合、読み取り/書き込みキャパシティユニット（RCU/WCU）のプロビジョニングと管理が簡素化されます。
+2.  **より良いパフォーマンス：** 関連データはGSIを通じて共存または効率的にアクセスでき、一般的なアクセスパターンの高速ルックアップが可能になります。
+3.  **管理の簡素化：** 監視、バックアップ、管理する個別のテーブルが少なくなります。
+4.  **アクセスパターンの複雑さの軽減：** ElectroDBは単一テーブル上のアイテムタイプとアクセスパターンの複雑さを管理するのに役立ちます。
+5.  **トランザクションサポート：** 必要に応じて、同じテーブル内に保存されている異なる「エンティティ」タイプ間でDynamoDBトランザクションを使用できます。
+
+## ライセンス
+
+このパッケージはMITライセンスの下で配布されています。詳細については[LICENSE.md](https://github.com/mastra/mastra/blob/main/LICENSE.md)をご覧ください。 

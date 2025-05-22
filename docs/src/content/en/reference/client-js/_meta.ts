@@ -3,7 +3,7 @@ const meta = {
   memory: "Memory API",
   tools: "Tools API",
   workflows: "Workflows API",
-  "workflows-vnext": "Workflows (vNext) API",
+  "workflows-legacy": "Workflows (Legacy) API",
   vectors: "Vectors API",
   logs: "Logs API",
   telemetry: "Telemetry API",

@@ -1,0 +1,42 @@
+---
+title: "リファレンス: Workflow.branch() | ワークフローの構築 | Mastra ドキュメント"
+description: ワークフロー内で条件分岐を作成する `.branch()` メソッドのドキュメント。
+---
+
+# Workflow.branch()
+
+`.branch()` メソッドは、ワークフローの各ステップ間で条件分岐を作成し、前のステップの結果に基づいて異なるパスを選択できるようにします。
+
+## 使い方
+
+```typescript
+workflow.branch([
+  [async ({ context }) => true, stepOne],
+  [async ({ context }) => false, stepTwo],
+]);
+```
+
+## パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "steps",
+      type: "[() => boolean, Step]",
+      description: "各タプルは、条件関数と、その条件が真の場合に実行されるステップを含む配列です",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "NewWorkflow",
+      description: "メソッドチェーン用のワークフローインスタンス",
+    },
+  ]}
+/>

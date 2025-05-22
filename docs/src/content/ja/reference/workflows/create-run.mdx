@@ -1,0 +1,60 @@
+---
+title: "リファレンス: Workflow.createRun() | ワークフローの構築 | Mastra ドキュメント"
+description: ワークフロー内の `.createRun()` メソッドのドキュメント。新しいワークフロー実行インスタンスを作成します。
+---
+
+# Workflow.createRun()
+
+`.createRun()` メソッドは新しいワークフロー実行インスタンスを作成し、特定の入力データでワークフローを実行できるようにします。
+
+## 使用方法
+
+```typescript
+const myWorkflow = createWorkflow({
+  id: "my-workflow",
+  inputSchema: z.object({
+    startValue: z.string(),
+  }),
+  outputSchema: z.object({
+    result: z.string(),
+  }),
+  steps: [step1, step2, step3], // Declare steps used in this workflow
+})
+  .then(step1)
+  .then(step2)
+  .then(step3)
+  .commit();
+
+const mastra = new Mastra({
+  workflows: {
+    myWorkflow,
+  },
+});
+
+const run = mastra.getWorkflow("myWorkflow").createRun();
+```
+
+## パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "options",
+      type: "{ runId?: string }",
+      description: "カスタムの実行IDを含む、実行のためのオプション設定",
+      isOptional: true,
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "run",
+      type: "Run",
+      description: "ワークフローを実行するために使用できる新しいワークフロー実行インスタンス",
+    },
+  ]}
+/>

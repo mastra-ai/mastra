@@ -1,0 +1,123 @@
+---
+title: "リファレンス: Workflow.map() | ワークフローの構築 | Mastra ドキュメント"
+description: ワークフロー内の `.map()` メソッドのドキュメント。前のステップの出力データを次のステップの入力にマッピングします。
+---
+
+# Workflow.map()
+
+`.map()` メソッドは、前のステップの出力データを次のステップの入力にマッピングし、ステップ間でデータを変換できるようにします。
+
+## 使用方法
+
+```typescript
+const step1 = createStep({
+  id: "step1",
+  inputSchema: z.object({
+    inputValue: z.string(),
+  }),
+  outputSchema: z.object({
+    outputValue: z.string(),
+  }),
+  execute: async ({ inputData }) => {
+    return { outputValue: inputData.inputValue };
+  },
+});
+
+const step2 = createStep({
+  id: "step2",
+  inputSchema: z.object({
+    unexpectedName: z.string(),
+  }),
+  outputSchema: z.object({
+    result: z.string(),
+  }),
+  execute: async ({ inputData }) => {
+    return { result: inputData.unexpectedName };
+  },
+});
+
+const workflow = createWorkflow({
+  id: "my-workflow",
+  steps: [step1, step2],
+  inputSchema: z.object({
+    inputValue: z.string(),
+  }),
+  outputSchema: z.object({
+    result: z.string(),
+  }),
+});
+
+workflow
+  .then(step1)
+  .map({
+    unexpectedName: {
+      step: step1,
+      path: "outputValue",
+    },
+  })
+  .then(step2)
+  .commit();
+```
+
+## パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "mappingConfig",
+      type: "object",
+      description: "データをワークフローステップ間でどのようにマッピングするかを定義する設定オブジェクト。マッピングオブジェクトまたはマッピング関数として指定します。",
+      isOptional: false,
+      properties: [
+        {
+          name: "step",
+          type: "Step | Step[]",
+          description: "出力をマッピングするステップ（複数可）",
+          isOptional: true
+        },
+        {
+          name: "path", 
+          type: "string",
+          description: "ステップ結果内の出力値へのパス",
+          isOptional: true
+        },
+        {
+          name: "value",
+          type: "any", 
+          description: "マッピングする静的な値",
+          isOptional: true
+        },
+        {
+          name: "schema",
+          type: "ZodType",
+          description: "マッピングされた値を検証するためのスキーマ",
+          isOptional: true
+        },
+        {
+          name: "initData",
+          type: "Step",
+          description: "マッピング元となる初期ワークフローデータを含むステップ",
+          isOptional: true
+        },
+        {
+          name: "runtimeContextPath",
+          type: "string",
+          description: "ランタイムコンテキスト内の値へのパス",
+          isOptional: true
+        }
+      ]
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "Workflow",
+      description: "メソッドチェーン用のワークフローインスタンス",
+    },
+  ]}
+/>

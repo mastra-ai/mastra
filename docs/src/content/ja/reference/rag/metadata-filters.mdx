@@ -7,12 +7,12 @@ description: Mastra のメタデータフィルタリング機能に関するド
 
 Mastra は、すべてのベクトルストアで統一されたメタデータフィルタリング構文を提供しており、MongoDB/Sift クエリ構文に基づいています。各ベクトルストアは、これらのフィルターを自分たちのネイティブな形式に変換します。
 
-## 基本例
+## 基本的な例
 
 ```typescript
 import { PgVector } from "@mastra/pg";
 
-const store = new PgVector(connectionString);
+const store = new PgVector({ connectionString });
 
 const results = await store.query({
   indexName: "my_index",

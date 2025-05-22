@@ -1,10 +1,10 @@
-# Postgresを使用したメモリ
+# Postgresによるメモリ
 
-この例では、PostgreSQLをストレージバックエンドとして使用して、Mastraのメモリシステムを使用する方法を示します。
+この例では、PostgreSQLをストレージバックエンドとして使用するMastraのメモリシステムの使用方法を示しています。
 
 ## セットアップ
 
-まず、PostgreSQLストレージとベクター機能を使用してメモリシステムをセットアップします:
+まず、PostgreSQLストレージとベクトル機能を使用してメモリシステムをセットアップします：
 
 ```typescript
 import { Memory } from "@mastra/memory";
@@ -20,7 +20,7 @@ const database = "postgres";
 const password = "postgres";
 const connectionString = `postgresql://${user}:${password}@${host}:${port}`;
 
-// PostgreSQLストレージとベクター検索でメモリを初期化
+// PostgreSQLストレージとベクトル検索でメモリを初期化
 const memory = new Memory({
   storage: new PostgresStore({
     host,
@@ -29,7 +29,7 @@ const memory = new Memory({
     database,
     password,
   }),
-  vector: new PgVector(connectionString),
+  vector: new PgVector({ connectionString }),
   options: {
     lastMessages: 10,
     semanticRecall: {
@@ -43,7 +43,7 @@ const memory = new Memory({
 const chefAgent = new Agent({
   name: "chefAgent",
   instructions:
-    "あなたはMichelです。実用的で経験豊富な家庭料理のシェフで、利用可能な食材で素晴らしい料理を作る手助けをします。",
+    "あなたはミシェルです。実用的で経験豊富な家庭料理人で、人々が手持ちの食材で素晴らしい料理を作るのを手伝います。",
   model: openai("gpt-4o-mini"),
   memory,
 });
@@ -54,36 +54,36 @@ const chefAgent = new Agent({
 ```typescript
 import { randomUUID } from "crypto";
 
-// 会話を開始する
+// Start a conversation
 const threadId = randomUUID();
 const resourceId = "SOME_USER_ID";
 
-// 材料について尋ねる
+// Ask about ingredients
 const response1 = await chefAgent.stream(
-  "私のキッチンには、パスタ、缶詰のトマト、ニンニク、オリーブオイル、そしていくつかの乾燥ハーブ（バジルとオレガノ）があります。何が作れますか？",
+  "In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?",
   {
     threadId,
     resourceId,
   },
 );
 
-// 別の材料について尋ねる
+// Ask about different ingredients
 const response2 = await chefAgent.stream(
-  "今、友達の家にいて、彼らは鶏もも肉、ココナッツミルク、サツマイモ、カレーパウダーを持っています。",
+  "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and curry powder.",
   {
     threadId,
     resourceId,
   },
 );
 
-// メモリを使用して以前の会話を思い出す
+// Use memory to recall previous conversation
 const response3 = await chefAgent.stream(
-  "友達の家に行く前に何を料理しましたか？",
+  "What did we cook before I went to my friends house?",
   {
     threadId,
     resourceId,
     memoryOptions: {
-      lastMessages: 3, // コンテキストのために最後の3つのメッセージを取得
+      lastMessages: 3, // Get last 3 messages for context
     },
   },
 );
@@ -91,7 +91,7 @@ const response3 = await chefAgent.stream(
 
 この例は以下を示しています：
 
-1. ベクトル検索機能を備えたPostgreSQLストレージの設定
+1. ベクトル検索機能を備えたPostgreSQLストレージのセットアップ
 2. メッセージ履歴とセマンティック検索のためのメモリオプションの設定
-3. メモリ統合を備えたエージェントの作成
-4. 複数のやり取りを通じて会話のコンテキストを維持するためのエージェントの使用
+3. メモリ統合機能を持つエージェントの作成
+4. 複数のやり取りにわたって会話のコンテキストを維持するためのエージェントの使用

@@ -1,17 +1,23 @@
-# LibSQLを使用したメモリ
+# LibSQLによるメモリ
 
-この例では、MastraのメモリシステムをLibSQLと共に使用する方法を示します。LibSQLはデフォルトのストレージおよびベクトルデータベースバックエンドです。
+この例では、MastraのメモリシステムをLibSQLと共に使用する方法を示します。LibSQLはストレージとベクトルデータベースのバックエンドオプションです。
 
 ## クイックスタート
 
-設定なしでメモリを初期化すると、LibSQLがストレージとベクトルデータベースとして使用されます。
+LibSQLをMemoryで使用するには、`Memory`を`LibSQLStore`で明示的に設定する必要があります：
 
 ```typescript copy showLineNumbers
 import { Memory } from "@mastra/memory";
 import { Agent } from "@mastra/core/agent";
+import { LibSQLStore } from "@mastra/libsql";
+import { openai } from "@ai-sdk/openai";
 
-// Initialize memory with LibSQL defaults
-const memory = new Memory();
+// Initialize memory with LibSQLStore
+const memory = new Memory({
+  storage: new LibSQLStore({
+    url: "file:../mastra.db", // Or your database URL
+  }),
+});
 
 const memoryAgent = new Agent({
   name: "Memory Agent",

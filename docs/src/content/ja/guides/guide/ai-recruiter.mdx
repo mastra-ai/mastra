@@ -13,11 +13,11 @@ description: LLMを活用して候補者情報を収集・処理するためのM
 
 ## 1. インポートとセットアップ
 
-ワークフローの定義とデータ検証を扱うために、Mastra ツールと Zod をインポートする必要があります。
+Mastra ツールと Zod をインポートして、ワークフロー定義とデータ検証を行う必要があります。
 
 ```ts filename="src/mastra/index.ts" copy
 import { Mastra } from "@mastra/core";
-import { Step, Workflow } from "@mastra/core/workflows";
+import { createStep, createWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
 ```
 
@@ -29,7 +29,7 @@ OPENAI_API_KEY=<your-openai-key>
 
 ## 2. ステップ1：候補者情報の収集
 
-履歴書のテキストから候補者の詳細を抽出し、それらを技術系か非技術系かに分類したいと考えています。このステップでは、LLMを呼び出して履歴書を解析し、名前、技術的ステータス、専門分野、元の履歴書テキストを含む構造化されたJSONを返します。コードはtriggerデータからresumeTextを読み取り、LLMにプロンプトを送り、後続のステップで使用するために整理されたフィールドを返します。
+履歴書のテキストから候補者の詳細を抽出し、それらを技術系か非技術系かに分類したいと考えています。このステップでは、LLMを呼び出して履歴書を解析し、名前、技術的ステータス、専門分野、元の履歴書テキストを含む構造化されたJSONを返します。コードはtrigger dataからresumeTextを読み取り、LLMにプロンプトを送り、後続のステップで使用するために整理されたフィールドを返します。
 
 ```ts filename="src/mastra/index.ts" copy
 import { Agent } from "@mastra/core/agent";
@@ -41,7 +41,7 @@ const recruiter = new Agent({
   model: openai("gpt-4o-mini"),
 });
 
-const gatherCandidateInfo = new Step({
+const gatherCandidateInfo = createStep({
   id: "gatherCandidateInfo",
   inputSchema: z.object({
     resumeText: z.string(),
@@ -52,10 +52,8 @@ const gatherCandidateInfo = new Step({
     specialty: z.string(),
     resumeText: z.string(),
   }),
-  execute: async ({ context }) => {
-    const resumeText = context?.getStepResult<{
-      resumeText: string;
-    }>("trigger")?.resumeText;
+  execute: async ({ inputData }) => {
+    const resumeText = inputData?.resumeText;
 
     const prompt = `
           Extract details from the resume text:
@@ -88,15 +86,19 @@ interface CandidateInfo {
   resumeText: string;
 }
 
-const askAboutSpecialty = new Step({
+const askAboutSpecialty = createStep({
   id: "askAboutSpecialty",
+  inputSchema: z.object({
+    candidateName: z.string(),
+    isTechnical: z.boolean(),
+    specialty: z.string(),
+    resumeText: z.string(),
+  }),
   outputSchema: z.object({
     question: z.string(),
   }),
-  execute: async ({ context }) => {
-    const candidateInfo = context?.getStepResult<CandidateInfo>(
-      "gatherCandidateInfo",
-    );
+  execute: async ({ inputData }) => {
+    const candidateInfo = inputData
 
     const prompt = `
           You are a recruiter. Given the resume below, craft a short question
@@ -115,15 +117,19 @@ const askAboutSpecialty = new Step({
 候補者が非技術系の場合は、異なるフォローアップ質問が必要です。このステップでは、再度履歴書全体のテキストを参照しながら、その役割について最も興味がある点を尋ねます。コードは、LLMに役割に焦点を当てた質問を求めます。
 
 ```ts filename="src/mastra/index.ts" copy
-const askAboutRole = new Step({
+const askAboutRole = createStep({
   id: "askAboutRole",
+  inputSchema: z.object({
+    candidateName: z.string(),
+    isTechnical: z.boolean(),
+    specialty: z.string(),
+    resumeText: z.string(),
+  }),
   outputSchema: z.object({
     question: z.string(),
   }),
-  execute: async ({ context }) => {
-    const candidateInfo = context?.getStepResult<CandidateInfo>(
-      "gatherCandidateInfo",
-    );
+  execute: async ({ inputData }) => {
+    const candidateInfo = inputData;
 
     const prompt = `
           You are a recruiter. Given the resume below, craft a short question
@@ -138,25 +144,37 @@ const askAboutRole = new Step({
 
 ## 5. ワークフローの定義
 
-ここでは、候補者の技術的なステータスに基づいて分岐ロジックを実装するために、これまでのステップを組み合わせます。ワークフローはまず候補者のデータを収集し、その後、isTechnical に応じて専門分野について質問するか、役割について質問します。コードでは、gatherCandidateInfo を askAboutSpecialty および askAboutRole と連結し、ワークフローを確定します。
+ここでは、候補者の技術的なステータスに基づいて分岐ロジックを実装するために、これまでのステップを組み合わせます。ワークフローはまず候補者データを収集し、その後、isTechnical に応じて専門分野について質問するか、役割について質問します。コードは gatherCandidateInfo を askAboutSpecialty および askAboutRole と連結し、ワークフローをコミットします。
 
 ```ts filename="src/mastra/index.ts" copy
-const candidateWorkflow = new Workflow({
-  name: "candidate-workflow",
-  triggerSchema: z.object({
+const candidateWorkflow = createWorkflow({
+  id: "candidate-workflow",
+  inputSchema: z.object({
     resumeText: z.string(),
+  }),
+  outputSchema: z.object({
+    question: z.string(),
   }),
 });
 
 candidateWorkflow
-  .step(gatherCandidateInfo)
-  .then(askAboutSpecialty, {
-    when: { "gatherCandidateInfo.isTechnical": true },
-  })
-  .after(gatherCandidateInfo)
-  .step(askAboutRole, {
-    when: { "gatherCandidateInfo.isTechnical": false },
-  });
+  .then(gatherCandidateInfo)
+  .branch([
+    // Branch for technical candidates
+    [
+      async ({ inputData }) => {
+        return inputData?.isTechnical;
+      },
+      askAboutSpecialty,
+    ],
+    // Branch for non-technical candidates
+    [
+      async ({ inputData }) => {
+        return !inputData?.isTechnical;
+      },
+      askAboutRole,
+    ],
+  ]);
 
 candidateWorkflow.commit();
 ```

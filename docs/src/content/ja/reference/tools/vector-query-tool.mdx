@@ -20,7 +20,7 @@ const queryTool = createVectorQueryTool({
 });
 ```
 
-## パラメーター
+## パラメータ
 
 <PropertiesTable
   content={[
@@ -34,7 +34,7 @@ const queryTool = createVectorQueryTool({
     {
       name: "indexName",
       type: "string",
-      description: "ベクトルストア内のインデックス名",
+      description: "ベクトルストア内のインデックスの名前",
       isOptional: false,
     },
     {
@@ -44,23 +44,44 @@ const queryTool = createVectorQueryTool({
       isOptional: false,
     },
     {
+      name: "enableFilter",
+      type: "boolean",
+      description: "メタデータに基づく結果のフィルタリングを有効にする",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "includeVectors",
+      type: "boolean",
+      description: "結果に埋め込みベクトルを含める",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "includeSources",
+      type: "boolean",
+      description: "結果に完全な取得オブジェクトを含める",
+      isOptional: true,
+      defaultValue: "true",
+    },
+    {
       name: "reranker",
       type: "RerankConfig",
-      description: "結果のリランキング用オプション",
+      description: "結果の再ランク付けのオプション",
       isOptional: true,
     },
     {
       name: "id",
       type: "string",
       description:
-        "ツールのカスタムID（デフォルトは 'VectorQuery {vectorStoreName} {indexName} Tool'）",
+        "ツールのカスタムID（デフォルトは'VectorQuery {vectorStoreName} {indexName} Tool'）",
       isOptional: true,
     },
     {
       name: "description",
       type: "string",
       description:
-        "ツールのカスタム説明。デフォルト: 'ナレッジベースにアクセスして、ユーザーの質問に答えるために必要な情報を検索します'",
+        "ツールのカスタム説明。デフォルトでは：'ユーザーの質問に答えるために必要な情報を見つけるためにナレッジベースにアクセスする'",
       isOptional: true,
     },
   ]}
@@ -73,13 +94,13 @@ const queryTool = createVectorQueryTool({
     {
       name: "model",
       type: "MastraLanguageModel",
-      description: "リランキングに使用する言語モデル",
+      description: "再ランク付けに使用する言語モデル",
       isOptional: false,
     },
     {
       name: "options",
       type: "RerankerOptions",
-      description: "リランキング処理のオプション",
+      description: "再ランク付けプロセスのオプション",
       isOptional: true,
       properties: [
         {
@@ -88,7 +109,7 @@ const queryTool = createVectorQueryTool({
             {
               name: "weights",
               description:
-                "スコアリング要素の重み（semantic: 0.4, vector: 0.4, position: 0.2）",
+                "スコアリングコンポーネントの重み（semantic: 0.4, vector: 0.4, position: 0.2）",
               isOptional: true,
               type: "WeightConfig",
             },
@@ -108,17 +129,34 @@ const queryTool = createVectorQueryTool({
 
 ## 戻り値
 
-このツールは以下のオブジェクトを返します：
+このツールは以下を含むオブジェクトを返します：
 
 <PropertiesTable
   content={[
     {
       name: "relevantContext",
       type: "string",
-      description: "最も関連性の高いドキュメントチャンクから結合されたテキスト",
+      description: "最も関連性の高いドキュメントチャンクからの結合テキスト",
+    },
+    {
+      name: "sources",
+      type: "QueryResult[]",
+      description: "完全な検索結果オブジェクトの配列。各オブジェクトには元のドキュメント、チャンク、類似度スコアを参照するために必要なすべての情報が含まれています。",
     },
   ]}
 />
+
+### QueryResultオブジェクトの構造
+
+```typescript
+{
+  id: string;         // ユニークなチャンク/ドキュメント識別子
+  metadata: any;      // すべてのメタデータフィールド（ドキュメントIDなど）
+  vector: number[];   // 埋め込みベクトル（利用可能な場合）
+  score: number;      // この検索の類似度スコア
+  document: string;   // 完全なチャンク/ドキュメントテキスト（利用可能な場合）
+}
+```
 
 ## デフォルトツールの説明
 

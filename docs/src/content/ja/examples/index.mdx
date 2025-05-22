@@ -10,7 +10,7 @@ import { Tabs } from "nextra/components";
 
 例のセクションでは、Mastraを使用した基本的なAIエンジニアリングを示す短いプロジェクト例のリストを紹介しています。これには、テキスト生成、構造化された出力、ストリーミングレスポンス、検索拡張生成（RAG）、音声などが含まれます。
 
-<CardItems titles={["Agent", "Workflow", "vNextWorkflow", "Memory", "RAG", "Evals", "Voice"]} items={
+<CardItems titles={["Agent", "Workflow", "legacyWorkflow", "Memory", "RAG", "Evals", "Voice"]} items={
   {
     Agent: [
       {
@@ -37,61 +37,65 @@ import { Tabs } from "nextra/components";
         title: "鳥チェッカー",
         href: "/examples/agents/bird-checker",
       },
+      {
+        title: "動的エージェント",
+        href: "/examples/agents/dynamic-agents"
+      }
     ],
     Workflow: [
       {
-        title: "ワークフローの作成",
-        href: "/examples/workflows/creating-a-workflow",
-      },
-      {
-        title: "ステップとしてツールを使用する",
-        href: "/examples/workflows/using-a-tool-as-a-step",
-      },
-      { title: "並列ステップ", href: "/examples/workflows/parallel-steps" },
-      {
-        title: "連続ステップ",
-        href: "/examples/workflows/sequential-steps",
-      },
-      { title: "分岐パス", href: "/examples/workflows/branching-paths" },
-      {
-        title: "循環依存関係",
-        href: "/examples/workflows/cyclical-dependencies",
-      },
-      {
-        title: "一時停止と再開",
-        href: "/examples/workflows/suspend-and-resume",
-      },
-      { title: "エージェントの呼び出し", href: "/examples/workflows/calling-agent" },
-    ],
-    vNextWorkflow: [
-      {
         title: "条件分岐",
-        href: "/examples/workflows_vNext/conditional-branching",
+        href: "/examples/workflows/conditional-branching",
       },
       {
         title: "並列ステップ",
-        href: "/examples/workflows_vNext/parallel-steps",
+        href: "/examples/workflows/parallel-steps",
       },
       {
         title: "エージェントの呼び出し",
-        href: "/examples/workflows_vNext/calling-agent",
+        href: "/examples/workflows/calling-agent",
       },
       {
         title: "ステップとしてのツールとエージェント",
-        href: "/examples/workflows_vNext/agent-and-tool-interop",
+        href: "/examples/workflows/agent-and-tool-interop",
       },
       {
         title: "ヒューマンインザループ",
-        href: "/examples/workflows_vNext/human-in-the-loop",
+        href: "/examples/workflows/human-in-the-loop",
       },
       {
         title: "制御フロー",
-        href: "/examples/workflows_vNext/control-flow",
+        href: "/examples/workflows/control-flow",
       },
       {
-        title: "配列を入力として",
-        href: "/examples/workflows_vNext/array-as-input",
+        title: "配列を入力として使用",
+        href: "/examples/workflows/array-as-input",
       }
+    ],
+    legacyWorkflow: [
+      {
+        title: "ワークフローの作成",
+        href: "/examples/workflows_legacy/creating-a-workflow",
+      },
+      {
+        title: "ステップとしてツールを使用",
+        href: "/examples/workflows_legacy/using-a-tool-as-a-step",
+      },
+      { title: "並列ステップ", href: "/examples/workflows_legacy/parallel-steps" },
+      {
+        title: "連続ステップ",
+        href: "/examples/workflows_legacy/sequential-steps",
+      },
+      { title: "分岐パス", href: "/examples/workflows_legacy/branching-paths" },
+      {
+        title: "循環依存関係",
+        href: "/examples/workflows_legacy/cyclical-dependencies",
+      },
+      {
+        title: "一時停止と再開",
+        href: "/examples/workflows_legacy/suspend-and-resume",
+      },
+      { title: "エージェントの呼び出し", href: "/examples/workflows_legacy/calling-agent" },
     ],
     Memory:[
       {
@@ -124,7 +128,7 @@ import { Tabs } from "nextra/components";
       { title: "チャンク配列の埋め込み", href: "/examples/rag/embedding/embed-chunk-array" },
       { title: "チャンクサイズの調整", href: "/examples/rag/chunking/adjust-chunk-size" },
       {
-        title: "チャンク区切り文字の調整",
+        title: "チャンク区切りの調整",
         href: "/examples/rag/chunking/adjust-chunk-delimiters",
       },
       {
@@ -151,11 +155,11 @@ import { Tabs } from "nextra/components";
       },
       { title: "メタデータフィルタリング", href: "/examples/rag/usage/filter-rag" },
       {
-        title: "結果の再ランク付け",
+        title: "結果の再ランキング",
         href: "/examples/rag/rerank/rerank",
       },
       {
-        title: "ツールを使用した結果の再ランク付け",
+        title: "ツールを使用した結果の再ランキング",
         href: "/examples/rag/rerank/rerank-rag",
       },
       { title: "思考連鎖プロンプティング", href: "/examples/rag/usage/cot-rag" },
@@ -199,7 +203,7 @@ import { Tabs } from "nextra/components";
       href: "/examples/evals/contextual-recall",
     },
     {
-      title: "LLMを審判とするカスタム評価",
+      title: "LLMを審査員とするカスタム評価",
       href: "/examples/evals/custom-eval",
     },
     {

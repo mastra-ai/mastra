@@ -68,22 +68,22 @@ MastraとCopilotKitを統合するには、主に2つのステップがありま
 
 MastraのカスタムAPIルートを活用して、CopilotKitのランタイムをMastraサーバーに追加することができます。
 
-現在のバージョンの統合では、`MastraClient`を使用してMastraエージェントをCopilotKitのAGUI形式にフォーマットしています。
+現在のバージョンの統合では、`MastraClient`を使用してMastraエージェントをCopilotKitのAGUI形式にフォーマットします。
 
 <Tabs items={["npm", "yarn", "pnpm"]}>
   <Tabs.Tab>
     ```bash copy
-    npm install @mastra/client-js
+    npm install @mastra/agui@alpha
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```bash copy
-    yarn add @mastra/client-js
+    yarn add @mastra/agui@alpha
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```bash copy
-    pnpm add @mastra/client-js
+    pnpm add @mastra/agui@alpha
     ```
   </Tabs.Tab>
 </Tabs>
@@ -94,13 +94,12 @@ MastraのカスタムAPIルートを活用して、CopilotKitのランタイム�
 import { Mastra } from "@mastra/core/mastra";
 import { PinoLogger } from "@mastra/loggers";
 import { LibSQLStore } from "@mastra/libsql";
-import { registerApiRoute } from "@mastra/core/server";
 import {
   CopilotRuntime,
   copilotRuntimeNodeHttpEndpoint,
   ExperimentalEmptyAdapter,
 } from "@copilotkit/runtime";
-import { MastraClient } from "@mastra/client-js";
+import { registerCopilotKit } from "@mastra/agui";
 import { weatherAgent } from "./agents";
 
 const serviceAdapter = new ExperimentalEmptyAdapter();
@@ -117,35 +116,23 @@ export const mastra = new Mastra({
     level: "info",
   }),
   server: {
+    // We will be calling this from a Vite App. Allow CORS
+    cors: {
+      origin: '*',
+      allowMethods: ['*'],
+      allowHeaders: ['*'],
+    },
     apiRoutes: [
-      registerApiRoute("/copilotkit", {
-        method: `POST`,
-        handler: async (c) => {
-          // N.B. Current integration leverages MastraClient to fetch AGUI.
-          // Future versions will support fetching AGUI from mastra context.
-          const client = new MastraClient({
-            baseUrl: "http://localhost:4111",
-          });
-
-          const runtime = new CopilotRuntime({
-            agents: await client.getAGUI({ resourceId: "weatherAgent" }),
-          });
-
-          const handler = copilotRuntimeNodeHttpEndpoint({
-            endpoint: "/copilotkit",
-            runtime,
-            serviceAdapter,
-          });
-
-          return handler.handle(c.req.raw, {});
-        },
+      registerCopilotKit({
+        path: "/copilotkit",
+        resourceId: "weatherAgent",
       }),
     ],
   },
 });
 ```
 
-このセットアップにより、MastraサーバーでCopilotKitが実行されるようになりました。`mastra dev`コマンドでMastraサーバーを起動できます。
+このセットアップにより、MastraサーバーでCopilotKitが実行されるようになりました。`mastra dev`でMastraサーバーを起動できます。
 
 ## UIのセットアップ
 
@@ -205,7 +192,47 @@ export function CopilotKitComponent() {
   height={700}
 />
 
-## 参考文献
+## 他のフレームワーク（NextJS）での使用
 
+Mastra Serverを経由せずにAGUIを活用することもできます。
+
+```typescript copy
+// import your mastra instance from dir
+import { mastra } from '../path/to/mastra';
+import {
+  CopilotRuntime,
+  ExperimentalEmptyAdapter,
+  copilotRuntimeNextJSAppRouterEndpoint,
+} from "@copilotkit/runtime";
+import { NextRequest } from "next/server";
+
+export const POST = async (req: NextRequest) => {
+  // Clone the request before reading the body
+  const clonedReq = req.clone();
+  const body = await clonedReq.json()
+  const resourceId = body.resourceId || "TEST"
+
+  const mastraAgents = getAGUI({
+    mastra,
+    resourceId,
+  })
+
+  const runtime = new CopilotRuntime({
+    agents: mastraAgents,
+  });
+
+  const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
+    runtime,
+    serviceAdapter: new ExperimentalEmptyAdapter(),
+    endpoint: "/api/copilotkit",
+  });
+
+  // Use the original request for handleRequest
+  return handleRequest(req);
+};
+
+```
+
+## 参考文献
 - [CopilotKit ドキュメント](https://docs.copilotkit.ai)
 - [CopilotKitを使用したReact Hooks](https://docs.copilotkit.ai/reference/hooks/useCoAgent)

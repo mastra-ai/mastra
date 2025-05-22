@@ -1,6 +1,6 @@
 ---
 title: "エージェントメモリーの使用 | エージェント | Mastra ドキュメント"
-description: Mastraのエージェントが会話履歴やコンテキスト情報を保存するためにメモリーをどのように使用するかに関するドキュメント。
+description: Mastraのエージェントが会話履歴や文脈情報を保存するためにメモリーをどのように使用するかに関するドキュメント。
 ---
 
 # エージェントメモリー
@@ -9,31 +9,35 @@ Mastraのエージェントは、会話履歴を保存し、関連情報を思�
 
 ## エージェントのメモリを有効にする
 
-メモリを有効にするには、単に`Memory`クラスをインスタンス化し、エージェントの設定に渡すだけです。また、メモリパッケージをインストールする必要があります：
+メモリを有効にするには、単に`Memory`クラスをインスタンス化し、エージェントの設定に渡すだけです。また、メモリパッケージとストレージアダプターをインストールする必要があります：
 
 ```bash npm2yarn copy
-npm install @mastra/memory@latest
+npm install @mastra/memory@latest @mastra/libsql@latest
 ```
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
 import { openai } from "@ai-sdk/openai";
 
-// 基本的なメモリのセットアップ
-const memory = new Memory();
+const memory = new Memory({
+  storage: new LibSQLStore({
+    url: "file:../../memory.db",
+  }),
+});
 
 const agent = new Agent({
   name: "MyMemoryAgent",
-  instructions: "あなたはメモリを持つ役立つアシスタントです。",
+  instructions: "You are a helpful assistant with memory.",
   model: openai("gpt-4o"),
-  memory: memory, // メモリインスタンスを接続
+  memory, // Attach the memory instance
 });
 ```
 
-この基本的なセットアップでは、ストレージにLibSQL、埋め込みにFastEmbedを含むデフォルト設定を使用しています。詳細なセットアップ手順については、[メモリ](/docs/memory/overview)を参照してください。
+この基本的なセットアップはデフォルト設定を使用しています。より詳細な設定情報については[メモリのドキュメント](/docs/memory/overview)をご覧ください。
 
-## エージェントコールでのメモリの使用
+## エージェント呼び出しでのメモリの使用
 
 インタラクション中にメモリを活用するには、エージェントの`stream()`または`generate()`メソッドを呼び出す際に`resourceId`と`threadId`を**必ず**提供する必要があります。
 
@@ -42,13 +46,13 @@ const agent = new Agent({
 
 ```typescript
 // メモリを使用したエージェント呼び出しの例
-await agent.stream("私の好きな色は青だということを覚えておいて。", {
+await agent.stream("Remember my favorite color is blue.", {
   resourceId: "user_alice",
   threadId: "preferences_thread",
 });
 
 // 同じスレッドの後で...
-const response = await agent.stream("私の好きな色は何？", {
+const response = await agent.stream("What's my favorite color?", {
   resourceId: "user_alice",
   threadId: "preferences_thread",
 });

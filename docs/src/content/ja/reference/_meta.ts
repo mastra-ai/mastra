@@ -8,14 +8,15 @@ const meta: Meta = {
   agents: "エージェント",
   tools: "ツール",
   workflows: "ワークフロー",
+  legacyWorkflows: "レガシーワークフロー",
   networks: "ネットワーク",
   memory: "メモリ",
   storage: "ストレージ",
   rag: "RAG",
   evals: "評価",
   voice: "音声",
-  observability: "可観測性",
-  "client-js": "クライアント SDK - JS",
+  observability: "オブザーバビリティ",
+  "client-js": "クライアントSDK - JS",
   deployer: "デプロイヤー",
 };
 export default meta;

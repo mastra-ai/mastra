@@ -192,7 +192,7 @@ interface Message {
               type: "number | { before: number; after: number }",
               isOptional: true,
               description:
-                "セマンティック検索で考慮するメッセージの範囲。単一の数値または前後の設定が可能です。",
+                "セマンティック検索の対象とするメッセージの範囲。単一の数値または前後の設定が可能です。",
             },
           ],
         },
@@ -223,17 +223,6 @@ interface Message {
               type: "string",
               isOptional: true,
               description: "ワーキングメモリに使用するテンプレート。",
-            },
-          ],
-        },
-        {
-          type: "'text-stream' | 'tool-call'",
-          parameters: [
-            {
-              name: "type",
-              type: "'text-stream' | 'tool-call'",
-              isOptional: true,
-              description: "ワーキングメモリに使用するコンテンツのタイプ。",
             },
           ],
         },

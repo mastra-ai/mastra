@@ -1,12 +1,12 @@
 const meta = {
-  "creating-a-workflow": "ワークフローの作成",
-  "sequential-steps": "連続的なステップ",
-  "parallel-steps": "並列ステップ",
-  "branching-paths": "分岐パス",
   "conditional-branching": "条件分岐",
+  "parallel-steps": "並列ステップ",
   "calling-agent": "エージェントの呼び出し",
-  "using-a-tool-as-a-step": "ツールをステップとして使用する",
-  "cyclical-dependencies": "循環依存関係",
-  "workflow-variables": "ワークフロー変数",
+  "agent-and-tool-interop": "ツール＆エージェントをステップとして利用",
+  "human-in-the-loop": "人間の介在",
+  "control-flow": "制御フロー",
+  "array-as-input": "配列を入力として使用",
+  "inngest-workflow": "Inngestワークフロー",
+  // "input-data-mapping": "入力データのマッピング",
 };
 export default meta;

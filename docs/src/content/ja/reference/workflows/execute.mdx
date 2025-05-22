@@ -1,26 +1,45 @@
 ---
-title: "リファレンス: Workflow.execute() | ワークフロー | Mastra ドキュメント"
-description: "Mastraワークフローの`.execute()`メソッドに関するドキュメント。ワークフローのステップを実行し、結果を返します。"
+title: "リファレンス: Workflow.execute() | ワークフローの構築 | Mastra ドキュメント"
+description: ワークフロー内の `.execute()` メソッドのドキュメント。入力データでステップを実行し、出力を返します。
 ---
 
 # Workflow.execute()
 
-指定されたトリガーデータでワークフローを実行し、結果を返します。ワークフローは実行前にコミットされている必要があります。
+`.execute()` メソッドは、入力データを使ってステップを実行し、その出力を返します。これにより、ワークフロー内でデータを処理することができます。
 
-## 使用例
+## 使い方
 
 ```typescript
-const workflow = new Workflow({
-  name: "my-workflow",
-  triggerSchema: z.object({
-    inputValue: z.number(),
-  }),
+const inputSchema = z.object({
+  inputValue: z.string(),
 });
 
-workflow.step(stepOne).then(stepTwo).commit();
-
-const result = await workflow.execute({
-  triggerData: { inputValue: 42 },
+const myStep = createStep({
+  id: "my-step",
+  description: "Does something useful",
+  inputSchema,
+  outputSchema: z.object({
+    outputValue: z.string(),
+  }),
+  resumeSchema: z.object({
+    resumeValue: z.string(),
+  }),
+  suspendSchema: z.object({
+    suspendValue: z.string(),
+  }),
+  execute: async ({
+    inputData,
+    mastra,
+    getStepResult,
+    getInitData,
+    runtimeContext,
+  }) => {
+    const otherStepOutput = getStepResult(step2);
+    const initData = getInitData<typeof inputSchema>(); // typed as the input schema variable (zod schema)
+    return {
+      outputValue: `Processed: ${inputData.inputValue}, ${initData.startValue} (runtimeContextValue: ${runtimeContext.get("runtimeContextValue")})`,
+    };
+  },
 });
 ```
 
@@ -29,25 +48,77 @@ const result = await workflow.execute({
 <PropertiesTable
   content={[
     {
-      name: "options",
-      type: "ExecuteOptions",
-      description: "ワークフロー実行のためのオプション",
-      isOptional: true,
+      name: "params",
+      type: "object",
+      description: "ステップを実行するための設定オブジェクト",
+      isOptional: false,
       properties: [
         {
-          name: "triggerData",
-          type: "TriggerSchema",
-          description: "ワークフローのトリガースキーマに一致する入力データ",
+          name: "inputData",
+          type: "z.infer<TInput>",
+          description: "ステップの入力スキーマに一致する入力データ",
           isOptional: false,
         },
         {
-          name: "runId",
-          type: "string",
-          description: "この実行ランを追跡するための任意のID",
+          name: "resumeData",
+          type: "ResumeSchema",
+          description: "一時停止したステップを再開するためのデータ",
           isOptional: true,
         },
-      ],
-    },
+        {
+          name: "suspend",
+          type: "(suspendPayload: any) => Promise<void>",
+          description: "ステップの実行を一時停止する関数",
+          isOptional: false,
+        },
+        {
+          name: "resume",
+          type: "object",
+          description: "実行再開のための設定",
+          isOptional: true,
+          properties: [
+            {
+              name: "steps",
+              type: "string[]",
+              description: "再開するステップ",
+              isOptional: false
+            },
+            {
+              name: "resumePayload",
+              type: "any",
+              description: "再開時に使用するペイロードデータ",
+              isOptional: false
+            },
+            {
+              name: "runId",
+              type: "string",
+              description: "再開する実行のID",
+              isOptional: true
+            }
+          ]
+        },
+        {
+          name: "emitter",
+          type: "object",
+          description: "イベントエミッターオブジェクト",
+          isOptional: false,
+          properties: [
+            {
+              name: "emit",
+              type: "(event: string, data: any) => void",
+              description: "イベントを発行する関数",
+              isOptional: false
+            }
+          ]
+        },
+        {
+          name: "mastra",
+          type: "Mastra",
+          description: "Mastraインスタンス",
+          isOptional: false
+        }
+      ]
+    }
   ]}
 />
 
@@ -56,55 +127,9 @@ const result = await workflow.execute({
 <PropertiesTable
   content={[
     {
-      name: "WorkflowResult",
-      type: "object",
-      description: "ワークフロー実行からの結果",
-      properties: [
-        {
-          name: "runId",
-          type: "string",
-          description: "この実行の一意の識別子",
-        },
-        {
-          name: "results",
-          type: "Record<string, StepResult>",
-          description: "完了した各ステップからの結果",
-        },
-        {
-          name: "status",
-          type: "WorkflowStatus",
-          description: "ワークフロー実行の最終ステータス",
-        },
-      ],
+      name: "result",
+      type: "Promise<z.infer<TOutput>>",
+      description: "実行されたステップの出力に解決される Promise",
     },
   ]}
 />
-
-## 追加の例
-
-run ID を指定して実行:
-
-```typescript
-const result = await workflow.execute({
-  runId: "custom-run-id",
-  triggerData: { inputValue: 42 },
-});
-```
-
-実行結果を処理する:
-
-```typescript
-const { runId, results, status } = await workflow.execute({
-  triggerData: { inputValue: 42 },
-});
-
-if (status === "COMPLETED") {
-  console.log("Step results:", results);
-}
-```
-
-### 関連
-
-- [Workflow.createRun()](./createRun.mdx)
-- [Workflow.commit()](./commit.mdx)
-- [Workflow.start()](./start.mdx)

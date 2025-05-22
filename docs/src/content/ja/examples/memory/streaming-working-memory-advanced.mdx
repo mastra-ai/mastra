@@ -13,10 +13,11 @@ description: 会話間でTodoリストを維持するための作業メモリの
 
 ### 1. メモリのセットアップ
 
-まず、状態を維持するためにワーキングメモリを使用するので、短いコンテキストウィンドウでメモリシステムを設定します。メモリはデフォルトでLibSQLストレージを使用しますが、必要に応じて他の[ストレージプロバイダー](/docs/agents/agent-memory#storage-options)を使用することもできます：
+まず、状態を維持するためにワーキングメモリを使用するので、短いコンテキストウィンドウでメモリシステムを設定します。ストレージプロバイダーを設定せずに`new Memory()`を使用すると、アプリケーションの再起動間でデータは保持されないことに注意してください。データを永続化するには、`@mastra/libsql`のようなストレージプロバイダーを設定できます：
 
 ```typescript
 import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
 
 const memory = new Memory({
   options: {
@@ -25,6 +26,9 @@ const memory = new Memory({
       enabled: true,
     },
   },
+  storage: new LibSQLStore({
+    url: "file:../mastra.db",
+  }),
 });
 ```
 
@@ -49,6 +53,9 @@ const memory = new Memory({
 `,
     },
   },
+  storage: new LibSQLStore({
+    url: "file:../mastra.db",
+  }),
 });
 ```
 
@@ -68,7 +75,7 @@ const todoAgent = new Agent({
 });
 ```
 
-**注意:** テンプレートと指示は任意です - `workingMemory.enabled`が`true`に設定されている場合、エージェントがワーキングメモリの使用方法を理解するのに役立つデフォルトのシステムメッセージが自動的に挿入されます。
+**注意:** テンプレートと指示は任意です - `workingMemory.enabled`が`true`に設定されている場合、エージェントがワーキングメモリの使用方法を理解するのを助けるためのデフォルトのシステムメッセージが自動的に挿入されます。
 
 ## 使用例
 

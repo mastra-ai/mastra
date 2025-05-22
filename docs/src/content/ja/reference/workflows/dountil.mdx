@@ -1,0 +1,45 @@
+---
+title: "リファレンス: Workflow.dountil() | ワークフローの構築 | Mastra ドキュメント"
+description: ワークフロー内の `.dountil()` メソッドのドキュメント。条件が満たされるまでステップを実行するループを作成します。
+---
+
+# Workflow.dountil()
+
+`.dountil()` メソッドは、条件が満たされるまでステップを繰り返し実行するループを作成します。
+
+## 使い方
+
+```typescript
+workflow.dountil(stepOne, async ({ inputData }) => true);
+```
+
+## パラメーター
+
+<PropertiesTable
+  content={[
+    {
+      name: "step",
+      type: "Step",
+      description: "ループ内で実行するステップインスタンス",
+      isOptional: false,
+    },
+    {
+      name: "condition",
+      type: "(params : { inputData: any}) => Promise<boolean>",
+      description: "ループを継続するかどうかを示すブール値を返す関数",
+      isOptional: false,
+    },
+  ]}
+/>
+
+## 戻り値
+
+<PropertiesTable
+  content={[
+    {
+      name: "workflow",
+      type: "Workflow",
+      description: "メソッドチェーン用のワークフローインスタンス",
+    },
+  ]}
+/>

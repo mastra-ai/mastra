@@ -5,7 +5,7 @@ const meta = {
   "tools-mcp": { title: "Tools & MCP", theme: { collapsed: true } },
   memory: { title: "Memory", theme: { collapsed: true } },
   workflows: { title: "Workflows", theme: { collapsed: true } },
-  "workflows-vnext": { title: "Workflows (vNext)" },
+  "workflows-legacy": { title: "Workflows (Legacy)" },
   rag: { title: "RAG" },
   "local-dev": { title: "Local Dev" },
   deployment: { title: "Deployment" },

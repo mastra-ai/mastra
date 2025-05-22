@@ -8,8 +8,8 @@ const meta = {
   workflows: {
     title: "ワークフロー",
   },
-  workflows_vNext: {
-    title: "ワークフロー (vNext)",
+  workflows_legacy: {
+    title: "ワークフロー（レガシー）",
   },
   rag: {
     title: "RAG",
@@ -24,7 +24,7 @@ const meta = {
     title: "音声",
   },
   deployment: {
-    title: "デプロイメント",
+    title: "デプロイ",
   },
 };
 export default meta;

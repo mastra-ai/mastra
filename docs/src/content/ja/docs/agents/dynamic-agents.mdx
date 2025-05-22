@@ -1,6 +1,6 @@
 ---
-title: "動的エージェント | エージェント | Mastra ドキュメント"
-description: ランタイムコンテキストを使用して、エージェントの指示、モデル、ツールを動的に設定します。
+title: "動的エージェント"
+description: 実行時のコンテキストを使用して、エージェントの指示、モデル、ツールを動的に設定します。
 ---
 
 # 動的エージェント
@@ -9,47 +9,61 @@ description: ランタイムコンテキストを使用して、エージェン�
 
 これにより、使用するモデルの変更、指示の更新、必要に応じて異なるツールの選択が可能になります。
 
-このコンテキストを活用することで、エージェントは各ユーザーのニーズにより適切に対応できます。また、さらに情報を収集するために任意のAPIを呼び出すことができ、エージェントの機能を向上させるのに役立ちます。
+このコンテキストを活用することで、エージェントは各ユーザーのニーズにより適切に対応できます。また、より多くの情報を収集するために任意のAPIを呼び出すことができ、エージェントの機能を向上させるのに役立ちます。
 
 ### 設定例
 
-以下は、ランタイムコンテキストを使用して動的エージェントを設定する例です。このエージェントは、ユーザーがプレミアム会員かどうかに応じて、指示、モデル、ツールを調整します：
+以下は、ユーザーのサブスクリプション層と言語設定に基づいて動作を調整する動的サポートエージェントの例です：
 
 ```typescript
-const dynamicAgent = new Agent({
-  name: "Master Chef Agent",
+const supportAgent = new Agent({
+  name: "Dynamic Support Agent",
+  
   instructions: async ({ runtimeContext }) => {
-    // Fetch user preferences from an API using user ID from runtime context
-    const userId = runtimeContext.get("userId");
-    const prefs = await fetchUserPreferences(userId);
-    const premium = runtimeContext.get("premiumUser") === true;
-
-    const base = `The current user (${userId}) has the following preferences:
-    - Allergies: ${prefs.allergies.join(", ") || "None"}
-    - Preferred cuisines: ${prefs.cuisines.join(", ")}
-    - Dietary restrictions: ${prefs.restrictions.join(", ") || "None"}`;
-
-    return premium
-      ? `You are a master chef creating gourmet dishes.\n${base}`
-      : `You are a home cook giving simple recipes.\n${base}`;
+    const userTier = runtimeContext.get("user-tier");
+    const language = runtimeContext.get("language");
+    
+    return `You are a customer support agent for our SaaS platform.
+    The current user is on the ${userTier} tier and prefers ${language} language.
+    
+    For ${userTier} tier users:
+    ${userTier === "free" ? "- Provide basic support and documentation links" : ""}
+    ${userTier === "pro" ? "- Offer detailed technical support and best practices" : ""}
+    ${userTier === "enterprise" ? "- Provide priority support with custom solutions" : ""}
+    
+    Always respond in ${language} language.`;
   },
-  model: ({ runtimeContext }) =>
-    runtimeContext.get("premiumUser") === true
-      ? openai("gpt-4o")
-      : openai("gpt-3.5-turbo"),
+
+  model: ({ runtimeContext }) => {
+    const userTier = runtimeContext.get("user-tier");
+    return userTier === "enterprise" 
+      ? openai("gpt-4") 
+      : openai("gpt-3.5-turbo");
+  },
+
   tools: ({ runtimeContext }) => {
-    const premium = runtimeContext.get("premiumUser") === true;
-    return premium
-      ? {
-          recipeDatabase,
-          ingredientSubstitutions,
-          nutritionalCalculator,
-        }
-      : {
-          recipeDatabase,
-        };
+    const userTier = runtimeContext.get("user-tier");
+    const baseTools = [knowledgeBase, ticketSystem];
+    
+    if (userTier === "pro" || userTier === "enterprise") {
+      baseTools.push(advancedAnalytics);
+    }
+    
+    if (userTier === "enterprise") {
+      baseTools.push(customIntegration);
+    }
+    
+    return baseTools;
   },
 });
 ```
 
-この例では、エージェントの指示、モデル、ツールがランタイムコンテキストを使用して設定されており、非常に適応性が高く応答性のあるエージェントを実現しています。
+この例では、エージェントは：
+- ユーザーのサブスクリプション層（無料、プロ、エンタープライズ）に基づいて指示を調整します
+- エンタープライズユーザーにはより強力なモデル（GPT-4）を使用します
+- ユーザーの層に基づいて異なるツールセットを提供します
+- ユーザーの好みの言語で応答します
+
+これは、単一のエージェントがランタイムコンテキストを活用して異なるタイプのユーザーやシナリオを処理する方法を示しており、各ユースケースに対して別々のエージェントを作成するよりも柔軟で保守しやすくなっています。
+
+APIルート、ミドルウェアのセットアップ、ランタイムコンテキストの処理を含む完全な実装例については、[動的エージェントの例](/examples/agents/dynamic-agents)をご覧ください。

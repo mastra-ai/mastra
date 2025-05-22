@@ -1,6 +1,6 @@
 # Memory クラスリファレンス
 
-`Memory` クラスは、Mastraで会話履歴とスレッドベースのメッセージストレージを管理するための堅牢なシステムを提供します。会話の永続的な保存、セマンティック検索機能、効率的なメッセージ取得を可能にします。デフォルトでは、ストレージとベクトル検索にLibSQLを使用し、埋め込みにFastEmbedを使用します。
+`Memory` クラスは、Mastraで会話履歴とスレッドベースのメッセージストレージを管理するための堅牢なシステムを提供します。会話の永続的な保存、セマンティック検索機能、効率的なメッセージ取得を可能にします。会話履歴のためのストレージプロバイダーを設定する必要があり、セマンティックリコールを有効にする場合は、ベクトルストアとエンベッダーも提供する必要があります。
 
 ## 基本的な使い方
 
@@ -27,7 +27,7 @@ const memory = new Memory({
     url: "file:./memory.db",
   }),
 
-  // Optional vector database for semantic search - libsql will be used by default
+// Optional vector database for semantic search
   vector: new LibSQLVector({
     url: "file:./vector.db",
   }),
@@ -67,13 +67,7 @@ const agent = new Agent({
 
 ### ワーキングメモリ
 
-ワーキングメモリ機能により、エージェントは会話全体で永続的な情報を維持することができます。有効にすると、Memoryクラスはテキストストリームタグまたはツールコールを通じて、ワーキングメモリの更新を自動的に管理します。
-
-ワーキングメモリの更新を処理するには、次の2つのモードがあります：
-
-1. **text-stream**（デフォルト）：エージェントはMarkdownを含むXMLタグ（`<working_memory># User \n ## Preferences...</working_memory>`）を使用して、応答に直接ワーキングメモリの更新を含めます。これらのタグは自動的に処理され、表示される出力からは削除されます。
-
-2. **tool-call**：エージェントはワーキングメモリを更新するための専用ツールを使用します。このモードは`toDataStream()`と連携する場合に使用すべきです。なぜならtext-streamモードはデータストリーミングと互換性がないためです。さらに、このモードはメモリ更新に対するより明示的な制御を提供し、テキストタグの管理よりもツールの使用が得意なエージェントと連携する場合に好まれることがあります。
+ワーキングメモリ機能により、エージェントは会話間で永続的な情報を維持することができます。有効にすると、Memoryクラスは専用のツール呼び出しを使用してワーキングメモリの更新を自動的に管理します。
 
 設定例：
 
@@ -83,7 +77,6 @@ const memory = new Memory({
     workingMemory: {
       enabled: true,
       template: "# User\n- **First Name**:\n- **Last Name**:",
-      use: "tool-call", // または 'text-stream'
     },
   },
 });
@@ -95,7 +88,7 @@ const memory = new Memory({
 
 `semanticRecall`が有効になっている場合、埋め込みモデルが必要です。
 
-一つのオプションは`@mastra/fastembed`を使用することです。これは[FastEmbed](https://github.com/Anush008/fastembed-js)を使用したオンデバイス/ローカルの埋め込みモデルを提供します。このモデルはローカルで実行され、APIキーやネットワークリクエストを必要としません。
+一つのオプションは`@mastra/fastembed`を使用することで、[FastEmbed](https://github.com/Anush008/fastembed-js)を使用したオンデバイス/ローカルの埋め込みモデルを提供します。このモデルはローカルで実行され、APIキーやネットワークリクエストを必要としません。
 
 使用するには、まずパッケージをインストールします：
 
@@ -113,14 +106,14 @@ import { Agent } from "@mastra/core/agent";
 const agent = new Agent({
   memory: new Memory({
     embedder: fastembed,
-    // ... その他のメモリ設定
+    // ... other memory config
   }),
 });
 ```
 
-プロジェクトをデプロイする場所によっては、FastEmbedの大きな内部依存関係のため、プロジェクトがデプロイできない場合があることに注意してください。
+プロジェクトをデプロイする場所によっては、FastEmbedの大きな内部依存関係のためにプロジェクトがデプロイできない場合があることに注意してください。
 
-あるいは、OpenAIのようなAPIベースの埋め込みツール（この問題がない）を使用することもできます：
+あるいは、OpenAIのようなAPIベースの埋め込みツール（この問題がありません）を使用することもできます：
 
 ```typescript {2,7}
 import { Memory } from "@mastra/memory";
@@ -156,7 +149,7 @@ Mastraは[Vercel AI SDK](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings)を�
       name: "embedder",
       type: "EmbeddingModel",
       description:
-        "ベクトル埋め込みのためのエンベッダーインスタンス。デフォルトではFastEmbed（bge-small-en-v1.5）を使用",
+        "ベクトル埋め込みのためのエンベッダーインスタンス。セマンティックリコールが有効な場合に必要",
       isOptional: true,
     },
     {
@@ -178,7 +171,7 @@ Mastraは[Vercel AI SDK](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings)を�
       description:
         "取得する最新メッセージの数。無効にするにはfalseに設定します。",
       isOptional: true,
-      defaultValue: "40",
+      defaultValue: "10",
     },
     {
       name: "semanticRecall",
@@ -186,7 +179,7 @@ Mastraは[Vercel AI SDK](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings)を�
       description:
         "メッセージ履歴でのセマンティック検索を有効にします。ベクトルストアが提供されると自動的に有効になります。",
       isOptional: true,
-      defaultValue: "false（ベクトルストアが提供されている場合はtrue）",
+      defaultValue: "false",
     },
     {
       name: "topK",
@@ -206,12 +199,12 @@ Mastraは[Vercel AI SDK](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings)を�
     },
     {
       name: "workingMemory",
-      type: "{ enabled: boolean; template?: string; use?: 'text-stream' | 'tool-call' }",
+      type: "{ enabled: boolean; template?: string }",
       description:
-        "会話間でユーザー情報を永続的に保存できるワーキングメモリ機能の設定。'use'設定は、ワーキングメモリの更新がテキストストリームタグを通じて処理されるか、ツール呼び出しを通じて処理されるかを決定します。ワーキングメモリはマークダウン形式を使用して、継続的に関連する情報を構造化して保存します。",
+        "会話間でユーザー情報の永続的な保存を可能にするワーキングメモリ機能の設定。ワーキングメモリはMarkdown形式を使用して、継続的に関連する情報を構造化して保存します。",
       isOptional: true,
       defaultValue:
-        "{ enabled: false, template: '# User Information\\n- **First Name**:\\n- **Last Name**:\\n...', use: 'text-stream' }",
+        "{ enabled: false, template: '# User Information\\n- **First Name**:\\n- **Last Name**:\\n...' }",
     },
     {
       name: "threads",
@@ -219,7 +212,7 @@ Mastraは[Vercel AI SDK](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings)を�
       description:
         "メモリスレッド作成に関する設定。`generateTitle`を設定すると、ユーザーの最初のメッセージからLLMの要約によってthread.titleが生成されます。",
       isOptional: true,
-      defaultValue: "{ generateTitle: true }",
+      defaultValue: "{ generateTitle: false }",
     },
   ]}
 />

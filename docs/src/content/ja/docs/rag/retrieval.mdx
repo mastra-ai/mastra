@@ -23,7 +23,7 @@ Mastraは、セマンティック検索、フィルタリング、再ランキ�
 
 ## 基本的な検索
 
-最もシンプルな方法は、直接的なセマンティック検索です。この方法では、ベクトル類似度を利用して、クエリと意味的に類似したチャンクを見つけます。
+最もシンプルなアプローチは直接的な意味検索です。この方法では、ベクトル類似性を使用してクエリに意味的に類似したチャンクを見つけます：
 
 ```ts showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
@@ -37,7 +37,7 @@ const { embedding } = await embed({
 });
 
 // Query vector store
-const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING);
+const pgVector = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING });
 const results = await pgVector.query({
   indexName: "embeddings",
   queryVector: embedding,
@@ -48,7 +48,7 @@ const results = await pgVector.query({
 console.log(results);
 ```
 
-結果には、テキストコンテンツと類似度スコアの両方が含まれます。
+結果には、テキストコンテンツと類似度スコアの両方が含まれます：
 
 ```ts showLineNumbers copy
 [
@@ -66,7 +66,7 @@ console.log(results);
 ];
 ```
 
-基本的な検索方法の使い方については、[Retrieve Results](../../examples/rag/query/retrieve-results.mdx) の例をご覧ください。
+基本的な検索方法の使用例については、[結果の取得](../../examples/rag/query/retrieve-results.mdx)の例を参照してください。
 
 ## 高度な検索オプション
 

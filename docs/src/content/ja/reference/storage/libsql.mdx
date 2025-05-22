@@ -1,16 +1,16 @@
 ---
 title: "LibSQL ストレージ | ストレージシステム | Mastra Core"
-description: MastraにおけるLibSQLストレージ実装のドキュメント。
+description: Mastraにおける LibSQL ストレージ実装のドキュメント。
 ---
 
-# LibSQL Storage
+# LibSQL ストレージ
 
-LibSQLストレージ実装は、メモリ内および永続データベースとして動作可能なSQLite互換のストレージソリューションを提供します。
+LibSQL ストレージの実装は、インメモリと永続的データベースの両方として実行できる SQLite 互換のストレージソリューションを提供します。
 
 ## インストール
 
 ```bash copy
-npm install @mastra/storage-libsql@latest
+npm install @mastra/libsql@latest
 ```
 
 ## 使用方法
@@ -29,7 +29,7 @@ const storage = new LibSQLStore({
 });
 ```
 
-## パラメーター
+## パラメータ
 
 <PropertiesTable
   content={[
@@ -37,34 +37,34 @@ const storage = new LibSQLStore({
       name: "url",
       type: "string",
       description:
-        "データベースURL。インメモリデータベースには ':memory:' を使用し、ファイルデータベースには 'file:filename.db' を使用します。永続ストレージには、LibSQL互換の接続文字列を使用します。",
+        "データベースURL。インメモリデータベースには':memory:'を、ファイルデータベースには'file:filename.db'を、または永続的ストレージには任意のLibSQL互換の接続文字列を使用します。",
       isOptional: false,
     },
     {
       name: "authToken",
       type: "string",
-      description: "リモートLibSQLデータベースの認証トークン。",
+      description: "リモートLibSQLデータベース用の認証トークン。",
       isOptional: true,
     },
   ]}
 />
 
-## 追加の注意事項
+## 追加情報
 
 ### インメモリ vs 永続ストレージ
 
-ファイル構成 (`file:storage.db`) は以下に役立ちます：
+ファイル設定（`file:storage.db`）は以下の用途に適しています：
 
 - 開発とテスト
 - 一時的なストレージ
 - クイックプロトタイピング
 
-本番環境の使用ケースでは、永続的なデータベースURLを使用してください：`libsql://your-database.turso.io`
+本番環境では、永続的なデータベースURLを使用してください：`libsql://your-database.turso.io`
 
 ### スキーマ管理
 
-ストレージの実装は、スキーマの作成と更新を自動的に処理します。以下のテーブルを作成します：
+ストレージの実装はスキーマの作成と更新を自動的に処理します。以下のテーブルが作成されます：
 
-- `threads`: 会話スレッドを保存
-- `messages`: 個々のメッセージを保存
-- `metadata`: スレッドとメッセージの追加メタデータを保存
+- `threads`：会話スレッドを保存
+- `messages`：個々のメッセージを保存
+- `metadata`：スレッドとメッセージの追加メタデータを保存

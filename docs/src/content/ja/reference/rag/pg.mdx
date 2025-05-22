@@ -29,20 +29,14 @@ PgVectorクラスは、[PostgreSQL](https://www.postgresql.org/)と[pgvector](ht
 
 ## コンストラクタの例
 
-`PgVector`を2つの方法でインスタンス化できます：
+`PgVector`は設定オブジェクトを使用してインスタンス化できます（オプションのschemaNameを含む）：
 
 ```ts
 import { PgVector } from "@mastra/pg";
 
-// 接続文字列を使用する方法（文字列形式）
-const vectorStore1 = new PgVector(
-  "postgresql://user:password@localhost:5432/mydb",
-);
-
-// 設定オブジェクトを使用する方法（オプションのschemaNameを含む）
-const vectorStore2 = new PgVector({
+const vectorStore = new PgVector({
   connectionString: "postgresql://user:password@localhost:5432/mydb",
-  schemaName: "custom_schema", // オプション
+  schemaName: "custom_schema", // optional
 });
 ```
 

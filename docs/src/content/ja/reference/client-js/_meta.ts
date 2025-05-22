@@ -3,7 +3,7 @@ const meta = {
   memory: "メモリー API",
   tools: "ツール API",
   workflows: "ワークフロー API",
-  "workflows-vnext": "ワークフロー (vNext) API",
+  "workflows-legacy": "ワークフロー（レガシー） API",
   vectors: "ベクトル API",
   logs: "ログ API",
   telemetry: "テレメトリー API",

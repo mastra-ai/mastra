@@ -22,21 +22,22 @@ import { Tabs } from "nextra/components";
 
 <Tabs items={["npm", "yarn", "pnpm"]}>
   <Tabs.Tab>
-  ```bash copy
-  npm install @mastra/client-js@latest
-  ```
+    ```bash copy
+    npm install @mastra/client-js@latest
+    ```
   </Tabs.Tab>
   <Tabs.Tab>
-  ```bash copy
-  yarn add @mastra/client-js@latest
-  ```
+    ```bash copy
+    yarn add @mastra/client-js@latest
+    ```
   </Tabs.Tab>
   <Tabs.Tab>
-  ```bash copy
-  pnpm add @mastra/client-js@latest
-  ```
+    ```bash copy
+    pnpm add @mastra/client-js@latest
+    ```
   </Tabs.Tab>
 </Tabs>
+
 
 ## Mastra Clientの初期化
 
@@ -106,7 +107,7 @@ Mastraクライアントは、Mastraサーバーが提供するすべてのリ�
 3. **デバッグ**: 必要に応じて詳細なログ記録を有効にする
 
 ```typescript
-// Example with error handling and logging
+// エラー処理とログ記録の例
 try {
   const agent = client.getAgent("dev-agent-id");
   const response = await agent.generate({
@@ -116,4 +117,13 @@ try {
 } catch (error) {
   console.error("Development error:", error);
 }
+```
+## デバッグ
+
+- MastraClientをクライアントではなくサーバー上で使用する場合（例：`/api/chat`）、
+ クライアントへのレスポンスを再作成する必要があることがあります：
+
+ ```typescript
+ const result = agent.stream(/* get your agent stream */)
+ return new Response(result.body);
 ```

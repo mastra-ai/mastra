@@ -1,36 +1,24 @@
 ---
-title: "Reference: run.watch() | Workflows | Mastra Docs"
-description: Documentation for the `.watch()` method in workflows, which monitors the status of a workflow run.
+title: "Reference: Workflow.watch() | Building Workflows | Mastra Docs"
+description: Documentation for the `.watch()` method in workflows, which allows you to monitor the execution of a workflow run.
 ---
 
-# run.watch()
+# Workflow.watch()
 
-The `.watch()` function subscribes to state changes on a mastra run, allowing you to monitor execution progress and react to state updates.
+The `.watch()` method allows you to monitor the execution of a workflow run, providing real-time updates on the status of steps.
 
-## Usage Example
+## Usage
 
 ```typescript
-import { Workflow } from "@mastra/core/workflows";
+const run = myWorkflow.createRun();
 
-const workflow = new Workflow({
-  name: "document-processor",
+// Add a watcher to monitor execution
+run.watch(event => {
+  console.log('Step completed:', event.payload.currentStep.id);
 });
 
-const run = workflow.createRun();
-
-// Subscribe to state changes
-const unsubscribe = run.watch(({ results, activePaths }) => {
-  console.log("Results:", results);
-  console.log("Active paths:", activePaths);
-});
-
-// Run the workflow
-await run.start({
-  input: { text: "Process this document" },
-});
-
-// Stop watching
-unsubscribe();
+// Start the workflow
+const result = await run.start({ inputData: {...} });
 ```
 
 ## Parameters
@@ -38,40 +26,9 @@ unsubscribe();
 <PropertiesTable
   content={[
     {
-      name: "callback",
-      type: "(state: WorkflowState) => void",
-      description: "Function called whenever the workflow state changes",
-      isOptional: false,
-    },
-  ]}
-/>
-
-### WorkflowState Properties
-
-<PropertiesTable
-  content={[
-    {
-      name: "results",
-      type: "Record<string, any>",
-      description: "Outputs from completed workflow steps",
-      isOptional: false,
-    },
-    {
-      name: "activePaths",
-      type: "Map<string, { status: string; suspendPayload?: any; stepPath: string[] }>",
-      description: "Current status of each step",
-      isOptional: false,
-    },
-    {
-      name: "runId",
-      type: "string",
-      description: "ID of the workflow run",
-      isOptional: false,
-    },
-    {
-      name: "timestamp",
-      type: "number",
-      description: "Timestamp of the workflow run",
+      name: "cb",
+      type: "(event: WatchEvent) => void",
+      description: "A callback function that is called whenever a step is completed or the workflow state changes",
       isOptional: false,
     },
   ]}
@@ -82,43 +39,9 @@ unsubscribe();
 <PropertiesTable
   content={[
     {
-      name: "unsubscribe",
+      name: "unwatch",
       type: "() => void",
-      description: "Function to stop watching workflow state changes",
+      description: "A function that can be called to stop watching the workflow run",
     },
   ]}
 />
-
-## Additional Examples
-
-Monitor specific step completion:
-
-```typescript
-run.watch(({ results, activePaths }) => {
-  if (activePaths.get("processDocument")?.status === "completed") {
-    console.log(
-      "Document processing output:",
-      results["processDocument"].output,
-    );
-  }
-});
-```
-
-Error handling:
-
-```typescript
-run.watch(({ results, activePaths }) => {
-  if (activePaths.get("processDocument")?.status === "failed") {
-    console.error(
-      "Document processing failed:",
-      results["processDocument"].error,
-    );
-    // Implement error recovery logic
-  }
-});
-```
-
-### Related
-
-- [Workflow Creation](../../reference/workflows/createRun.mdx)
-- [Step Configuration](../../reference/workflows/step-class.mdx)

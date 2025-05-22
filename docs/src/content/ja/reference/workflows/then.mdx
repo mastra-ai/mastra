@@ -7,21 +7,20 @@ description: ワークフローにおける `.then()` メソッドのドキュ�
 
 `.then()`メソッドはワークフローステップ間の順次依存関係を作成し、ステップが特定の順序で実行されることを保証します。
 
-## 使用方法
+## 使い方
 
 ```typescript
-workflow.step(stepOne).then(stepTwo).then(stepThree);
+workflow.then(stepOne).then(stepTwo);
 ```
 
-## パラメータ
+## パラメーター
 
 <PropertiesTable
   content={[
     {
       name: "step",
-      type: "Step | string",
-      description:
-        "前のステップが完了した後に実行されるべきステップインスタンスまたはステップID",
+      type: "Step",
+      description: "前のステップが完了した後に実行されるステップインスタンス",
       isOptional: false,
     },
   ]}
@@ -38,35 +37,3 @@ workflow.step(stepOne).then(stepTwo).then(stepThree);
     },
   ]}
 />
-
-## バリデーション
-
-`then`を使用する場合：
-
-- 前のステップがワークフロー内に存在する必要があります
-- ステップは循環依存関係を形成できません
-- 各ステップは連続したチェーン内で一度だけ表示できます
-
-## エラー処理
-
-```typescript
-try {
-  workflow
-    .step(stepA)
-    .then(stepB)
-    .then(stepA) // エラーが発生します - 循環依存関係
-    .commit();
-} catch (error) {
-  if (error instanceof ValidationError) {
-    console.log(error.type); // 'circular_dependency'
-    console.log(error.details);
-  }
-}
-```
-
-## 関連項目
-
-- [step リファレンス](./step-class.mdx)
-- [after リファレンス](./after.mdx)
-- [連続ステップの例](../../examples/workflows/sequential-steps.mdx)
-- [制御フローガイド](../../docs/workflows/control-flow.mdx)

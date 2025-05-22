@@ -158,12 +158,12 @@ export const ragAgent = new Agent({
 
 > 注: ベクトルストアごとに利用可能なプロンプトが異なります。詳細は[Vector Store Prompts](/docs/rag/retrieval#vector-store-prompts)をご覧ください。
 
-## PgVector と Mastra のインスタンス化
+## PgVectorとMastraのインスタンス化
 
-以下のコンポーネントを使って PgVector と Mastra をインスタンス化します。
+コンポーネントを使用してPgVectorとMastraをインスタンス化します：
 
 ```typescript copy showLineNumbers{69} filename="index.ts"
-const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
+const pgVector = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING! });
 
 export const mastra = new Mastra({
   agents: { ragAgent },

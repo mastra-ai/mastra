@@ -7,11 +7,11 @@ description: Mastra メモリを Vercel AI SDK useChat フックと統合する�
 
 Mastraのメモリを、Vercel AI SDKの`useChat`フックを使ってReactのようなフロントエンドフレームワークと統合する際は、メッセージ履歴の重複を避けるために慎重な取り扱いが必要です。この例では、推奨されるパターンを示します。
 
-## `useChat`によるメッセージの重複防止
+## `useChat`を使用したメッセージの重複防止
 
-`useChat`のデフォルトの動作では、リクエストごとにチャット履歴全体が送信されます。Mastraのメモリは`threadId`に基づいて自動的に履歴を取得するため、クライアントから全履歴を送信すると、コンテキストウィンドウやストレージ内でメッセージが重複してしまいます。
+`useChat`のデフォルト動作では、リクエストごとにチャット履歴全体を送信します。Mastraのメモリは`threadId`に基づいて自動的に履歴を取得するため、クライアントから完全な履歴を送信すると、コンテキストウィンドウとストレージにメッセージが重複して表示されます。
 
-**解決策：** `useChat`を設定し、`threadId`と`resourceId`とともに**最新のメッセージのみ**を送信するようにしましょう。
+**解決策:** `useChat`を設定して、**最新のメッセージのみ**を`threadId`と`resourceId`と一緒に送信するようにします。
 
 ```typescript
 // components/Chat.tsx (React Example)
@@ -51,14 +51,19 @@ export function Chat({ threadId, resourceId }) {
 // app/api/chat/route.ts (Next.js Example)
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
 import { openai } from "@ai-sdk/openai";
-import { CoreMessage } from "@mastra/core"; // Import CoreMessage
+import { CoreMessage } from "@mastra/core";
 
 const agent = new Agent({
   name: "ChatAgent",
   instructions: "You are a helpful assistant.",
   model: openai("gpt-4o"),
-  memory: new Memory(), // Assumes default memory setup
+  memory: new Memory({
+    storage: new LibSQLStore({
+      url: "file:../mastra.db", // Or your database URL
+    }),
+  });
 });
 
 export async function POST(request: Request) {
@@ -84,7 +89,7 @@ export async function POST(request: Request) {
 }
 ```
 
-より詳しい背景については、[AI SDKのメッセージ永続化に関するドキュメント](https://sdk.vercel.ai/docs/ai-sdk-ui/chatbot-message-persistence)をご覧ください。
+詳細については、[メッセージ永続化に関するAI SDKのドキュメント](https://sdk.vercel.ai/docs/ai-sdk-ui/chatbot-message-persistence)を参照してください。
 
 ## 基本的なスレッド管理UI
 

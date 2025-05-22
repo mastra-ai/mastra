@@ -62,9 +62,9 @@ const chunks = await doc1.chunk({
 });
 ```
 
-## 埋め込みの作成と保存
+## エンベディングの作成と保存
 
-チャンクの埋め込みを生成し、それらをベクターデータベースに保存します。
+チャンクのエンベディングを生成し、ベクトルデータベースに保存します：
 
 ```typescript copy showLineNumbers{36} filename="src/index.ts"
 const { embeddings } = await embedMany({
@@ -72,7 +72,7 @@ const { embeddings } = await embedMany({
   model: openai.embedding("text-embedding-3-small"),
 });
 
-const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
+const pgVector = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING! });
 await pgVector.createIndex({
   indexName: "embeddings",
   dimension: 1536,

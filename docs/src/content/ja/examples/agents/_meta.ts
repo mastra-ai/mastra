@@ -7,5 +7,6 @@ const meta = {
   "bird-checker": "鳥チェッカー",
   "adding-voice-capabilities": "エージェントに音声機能を追加する",
   "deploying-mcp-server": "MCPサーバーのデプロイ",
+  "dynamic-agents": "動的エージェント",
 };
 export default meta;

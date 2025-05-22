@@ -1,166 +1,356 @@
 ---
 title: "複雑なLLM操作の処理 | ワークフロー | Mastra"
-description: "Mastraのワークフローは、分岐、並列実行、リソースの一時停止などの機能を使用して、複雑な操作のシーケンスを調整するのに役立ちます。"
+description: "Mastraのワークフローは、分岐、並列実行、リソースの一時停止などの機能を使って、複雑な操作のシーケンスをオーケストレーションするのに役立ちます。"
 ---
 
-# ワークフローを使用した複雑なLLM操作の処理
+## はじめに
 
-Mastraのワークフローは、分岐、並列実行、リソースの一時停止などの機能を使用して、複雑な操作のシーケンスを調整するのに役立ちます。
+ワークフローを使用するには、まず workflows モジュールから必要な関数をインポートします。
 
-## ワークフローを使用するタイミング
-
-ほとんどのAIアプリケーションは、言語モデルへの単一の呼び出し以上のものを必要とします。複数のステップを実行したり、特定のパスを条件付きでスキップしたり、ユーザー入力を受け取るまで実行を一時停止したりすることがあるかもしれません。時には、エージェントツールの呼び出しが十分に正確でないこともあります。
-
-Mastraのワークフローシステムは以下を提供します：
-
-- ステップを定義し、それらを結びつけるための標準化された方法。
-- 単純（線形）および高度（分岐、並列）パスの両方をサポート。
-- 各ワークフローの実行を追跡するためのデバッグおよび可観測性機能。
-
-## 例
-
-ワークフローを作成するには、1つ以上のステップを定義し、それらをリンクしてから、開始する前にワークフローをコミットします。
-
-### ワークフローの分解
-
-ワークフロー作成プロセスの各部分を見てみましょう：
-
-#### 1. ワークフローの作成
-
-Mastraでワークフローを定義する方法は次のとおりです。`name`フィールドはワークフローのAPIエンドポイント（`/workflows/$NAME/`）を決定し、`triggerSchema`はワークフローのトリガーデータの構造を定義します：
-
-```ts filename="src/mastra/workflow/index.ts"
-const myWorkflow = new Workflow({
-  name: "my-workflow",
-  triggerSchema: z.object({
-    inputValue: z.number(),
-  }),
-});
+```typescript
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod"; // For schema validation
 ```
 
-#### 2. ステップの定義
+## 主要な概念
 
-次に、ワークフローのステップを定義します。各ステップは独自の入力および出力スキーマを持つことができます。ここでは、`stepOne`が入力値を2倍にし、`stepTwo`が`stepOne`が成功した場合にその結果をインクリメントします。（簡単にするために、この例ではLLM呼び出しは行っていません）：
+ワークフローは以下で構成されています：
 
-```ts filename="src/mastra/workflow/index.ts"
-const stepOne = new Step({
-  id: "stepOne",
-  outputSchema: z.object({
-    doubledValue: z.number(),
-  }),
-  execute: async ({ context }) => {
-    const doubledValue = context.triggerData.inputValue * 2;
-    return { doubledValue };
-  },
+- **スキーマ**: Zod を使用した入力および出力の型定義
+- **ステップ**: 定義された入力と出力を持つ個々の作業単位
+- **ワークフロー**: 特定のタスクやプロセスを達成するために設計された、ステップの構造化されたシーケンス。ワークフローはステップの実行順序、依存関係、ロジックを定義し、他のワークフロー内でステップとして再利用することもできます。
+- **ワークフロー実行フロー**: ワークフローの実行中にたどる経路とロジック。これには、ステップの実行方法、データの受け渡し、条件分岐やエラー処理の方法が含まれます。
+
+スキーマは、ステップやワークフローの入力および出力のために Zod を使って定義されます。スキーマはまた、中断状態から再開する際にステップが受け取るデータや、ステップの実行を中断する際に渡すべきコンテキスト情報も規定できます。
+
+接続されているステップ同士の入力と出力は一致している必要があります。たとえば、あるステップの inputSchema は、直前のステップの outputSchema と同じでなければなりません。同様に、ワークフローを他のワークフロー内でステップとして使用する場合、そのワークフローの inputSchema は、使用されるステップの outputSchema と一致している必要があります。
+
+ステップは、前のステップからの入力や中断状態からの再開データを含む context オブジェクトを受け取る `execute` 関数を使って実行されます。`execute` 関数は、その outputSchema に一致する値を返す必要があります。
+
+`.then()`、`.parallel()`、`.branch()` などのプリミティブは、ワークフローの実行フローや、その中のステップ同士の接続方法を記述します。ワークフローを（単独またはステップとして）実行する際、その実行は `execute` 関数ではなく、実行フローによって制御されます。ワークフローの最終的な結果は常に最後のステップの結果となり、それはワークフローの outputSchema と一致している必要があります。
+
+## ワークフローの作成
+
+### ステップ
+
+ステップはワークフローの構成要素です。`createStep` を使ってステップを作成します：
+
+```typescript
+// 入力/出力スキーマと実行ロジックを定義してステップを作成
+const inputSchema = z.object({
+  inputValue: z.string(),
 });
 
-const stepTwo = new Step({
-  id: "stepTwo",
-  execute: async ({ context }) => {
-    const doubledValue = context.getStepResult(stepOne)?.doubledValue;
-    if (!doubledValue) {
-      return { incrementedValue: 0 };
-    }
+const myStep = createStep({
+  id: "my-step",
+  description: "何か有用な処理を行います",
+  inputSchema,
+  outputSchema: z.object({
+    outputValue: z.string(),
+  }),
+  // オプション: ステップ再開時のスキーマを定義
+  resumeSchema: z.object({
+    resumeValue: z.string(),
+  }),
+  // オプション: ステップ一時停止時のスキーマを定義
+  suspendSchema: z.object({
+    suspendValue: z.string(),
+  }),
+  execute: async ({
+    inputData,
+    mastra,
+    getStepResult,
+    getInitData,
+    runtimeContext,
+  }) => {
+    const otherStepOutput = getStepResult(step2);
+    const initData = getInitData<typeof inputSchema>(); // 入力スキーマ変数（zodスキーマ）として型付け
     return {
-      incrementedValue: doubledValue + 1,
+      outputValue: `Processed: ${inputData.inputValue}, ${initData.startValue} (runtimeContextValue: ${runtimeContext.get("runtimeContextValue")})`,
     };
   },
 });
 ```
 
-#### 3. ステップのリンク
+各ステップには以下が必要です：
 
-次に、制御フローを作成し、ワークフローを「コミット」（最終化）します。この場合、`stepOne`が最初に実行され、その後に`stepTwo`が続きます。
+- `id`: ステップの一意な識別子
+- `inputSchema`: 期待される入力を定義するZodスキーマ
+- `outputSchema`: 出力の形を定義するZodスキーマ
+- `resumeSchema`: オプション。再開時の入力を定義するZodスキーマ
+- `suspendSchema`: オプション。一時停止時の入力を定義するZodスキーマ
+- `execute`: ステップの処理を実行する非同期関数
 
-```ts filename="src/mastra/workflow/index.ts"
-myWorkflow.step(stepOne).then(stepTwo).commit();
-```
+`execute` 関数は以下のコンテキストオブジェクトを受け取ります：
 
-### ワークフローの登録
+- `inputData`: inputSchemaに一致する入力データ
+- `resumeData`: ステップが一時停止状態から再開される場合に、resumeSchemaに一致する再開データ。再開時のみ存在します。
+- `mastra`: mastraのサービス（エージェント、ツールなど）へのアクセス
+- `getStepResult`: 他のステップの結果にアクセスする関数
+- `getInitData`: 任意のステップでワークフローの初期入力データにアクセスする関数
+- `suspend`: ワークフローの実行を一時停止する関数（ユーザー操作用）
 
-Mastraにワークフローを登録して、ログとテレメトリを有効にします：
+### ワークフローの構造
 
-```ts showLineNumbers filename="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
+`createWorkflow` を使ってワークフローを作成します：
 
-export const mastra = new Mastra({
-  workflows: { myWorkflow },
+```typescript
+// ステップと実行フローを定義してワークフローを作成
+const myWorkflow = createWorkflow({
+  id: "my-workflow",
+  // 期待される入力構造を定義（最初のステップのinputSchemaと一致する必要があります）
+  inputSchema: z.object({
+    startValue: z.string(),
+  }),
+  // 期待される出力構造を定義（最後のステップのoutputSchemaと一致する必要があります）
+  outputSchema: z.object({
+    result: z.string(),
+  }),
+  steps: [step1, step2, step3], // このワークフローで使用するステップを宣言
+})
+  .then(step1)
+  .then(step2)
+  .then(step3)
+  .commit();
+
+// Mastraインスタンスにワークフローを登録
+const mastra = new Mastra({
+  workflows: {
+    myWorkflow,
+  },
 });
+
+// ワークフローの実行インスタンスを作成
+const run = mastra.getWorkflow("myWorkflow").createRun();
 ```
 
-動的なワークフローを作成する必要がある場合には、mastraインスタンスをコンテキストに注入することもできます：
+ワークフローオプションの `steps` プロパティは、ステップ結果への型安全性を提供します。ワークフローで使用するステップを宣言すると、TypeScriptは `result.steps` へのアクセス時に型安全性を保証します：
 
-```ts filename="src/mastra/workflow/index.ts"
-import { Mastra } from "@mastra/core";
+```typescript
+// ワークフローオプションでステップを宣言
+const workflow = createWorkflow({
+  id: "my-workflow",
+  inputSchema: z.object({}),
+  outputSchema: z.object({}),
+  steps: [step1, step2], // TypeScriptはこれらのステップが存在することを認識
+})
+  .then(step1)
+  .then(step2)
+  .commit();
 
-const mastra = new Mastra();
+const result = await workflow.createRun().start({ inputData: {} });
+if (result.status === "success") {
+  console.log(result.result); // statusがsuccessの場合のみ存在
+} else if (result.status === "failed") {
+  console.error(result.error); // statusがfailedの場合のみ存在。これはErrorのインスタンス
+  throw result.error;
+} else if (result.status === "suspended") {
+  console.log(result.suspended); // statusがsuspendedの場合のみ存在
+}
 
-const myWorkflow = new Workflow({
-  name: "my-workflow",
-  mastra,
+// TypeScriptはこれらのプロパティと型を認識
+console.log(result.steps.step1.output); // 完全に型付け
+console.log(result.steps.step2.output); // 完全に型付け
+```
+
+ワークフロー定義には以下が必要です：
+
+- `id`: ワークフローの一意な識別子
+- `inputSchema`: ワークフロー入力を定義するZodスキーマ
+- `outputSchema`: ワークフロー出力を定義するZodスキーマ
+- `steps`: ワークフローで使用するステップの配列（オプションですが、型安全性のため推奨）
+
+### ステップやネストされたワークフローの再利用
+
+ステップやネストされたワークフローは、クローンすることで再利用できます。
+
+```typescript
+const clonedStep = cloneStep(myStep, { id: "cloned-step" });
+const clonedWorkflow = cloneWorkflow(myWorkflow, { id: "cloned-workflow" });
+```
+
+この方法を使うことで、同じステップやネストされたワークフローを、同じワークフロー内で複数回利用することができます。
+
+```typescript
+import {
+  createWorkflow,
+  createStep,
+  cloneStep,
+  cloneWorkflow,
+} from "@mastra/core/workflows";
+
+const myWorkflow = createWorkflow({
+  id: "my-workflow",
+  steps: [step1, step2, step3],
 });
+myWorkflow.then(step1).then(step2).then(step3).commit();
+
+const parentWorkflow = createWorkflow({
+  id: "parent-workflow",
+  steps: [myWorkflow, step4],
+});
+parentWorkflow
+  .then(myWorkflow) // nested workflow
+  .then(step4)
+  .then(cloneWorkflow(myWorkflow, { id: "cloned-workflow" })) // cloned workflow
+  .then(cloneStep(step4, { id: "cloned-step-4" })) // cloned step
+  .commit();
 ```
 
-### ワークフローの実行
+## ワークフローの実行
 
-プログラム的にまたはAPI経由でワークフローを実行します：
+ワークフローを定義した後、次のように実行します。
 
-```ts showLineNumbers filename="src/mastra/run-workflow.ts" copy
-import { mastra } from "./index";
+```typescript
+// Create a run instance
+const run = myWorkflow.createRun();
 
-// ワークフローを取得
-const myWorkflow = mastra.getWorkflow("myWorkflow");
-const { runId, start } = myWorkflow.createRun();
+// Start the workflow with input data
+const result = await run.start({
+  inputData: {
+    startValue: "initial data",
+  },
+});
 
-// ワークフローの実行を開始
-await start({ triggerData: { inputValue: 45 } });
+// Access the results
+console.log(result.steps); // All step results
+console.log(result.steps["step-id"].output); // Output from a specific step
+
+if (result.status === "success") {
+  console.log(result.result); // The final result of the workflow, result of the last step (or `.map()` output, if used as last step)
+} else if (result.status === "suspended") {
+  const resumeResult = await run.resume({
+    step: result.suspended[0], // there is always at least one step id in the suspended array, in this case we resume the first suspended execution path
+    resumeData: {
+      /* user input */
+    },
+  });
+} else if (result.status === "failed") {
+  console.error(result.error); // only exists if status is failed, this is an instance of Error
+}
 ```
 
-またはAPIを使用します（`mastra dev`を実行する必要があります）：
+**注意:** `run` インスタンスを分割代入しないでください  
+つまり、以下のようにしないでください
+```typescript
+const { start, resume, ... } = myWorkflow.createRun();
 
-// ワークフロー実行の作成
+// NOR
 
-```bash
-curl --location 'http://localhost:4111/api/workflows/myWorkflow/start-async' \
-     --header 'Content-Type: application/json' \
-     --data '{
-       "inputValue": 45
-     }'
+const run = myWorkflow.createRun();
+const { start, resume, ... } = run;
+```
+これを行うとワークフローとの接続が切れ、実行できなくなります
+
+
+## ワークフロー実行結果スキーマ
+
+ワークフローを実行した結果（`start()` または `resume()` から）は、次の TypeScript インターフェースに従います。
+
+```typescript
+export type WorkflowResult<...> =
+  | {
+      status: 'success';
+      result: z.infer<TOutput>;
+      steps: {
+        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
+          ? StepResult<unknown>
+          : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
+      };
+    }
+  | {
+      status: 'failed';
+      steps: {
+        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
+          ? StepResult<unknown>
+          : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
+      };
+      error: Error;
+    }
+  | {
+      status: 'suspended';
+      steps: {
+        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
+          ? StepResult<unknown>
+          : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
+      };
+      suspended: [string[], ...string[][]];
+    };
 ```
 
-この例は基本を示しています：ワークフローを定義し、ステップを追加し、ワークフローをコミットし、それから実行します。
+### 結果プロパティの説明
 
-## ステップの定義
+1. **status**: ワークフロー実行の最終状態を示します
 
-ワークフローの基本的な構成要素[はステップです](./steps.mdx)。ステップは入力と出力のスキーマを使用して定義され、前のステップの結果を取得することができます。
+   - `'success'`: ワークフローが正常に完了した
+   - `'failed'`: ワークフローでエラーが発生した
+   - `'suspended'`: ワークフローがユーザー入力待ちで一時停止している
 
-## フロー制御
+2. **result**: ワークフローの最終出力を含みます。ワークフローの `outputSchema` に従って型付けされます
 
-ワークフローを使用すると、並列ステップ、分岐パスなどでステップを連鎖させる[フロー制御](./control-flow.mdx)を定義できます。
+3. **suspended**: 現在一時停止中のステップIDの配列（オプション）。`status` が `'suspended'` の場合のみ存在します
 
-## ワークフロー変数
+4. **steps**: 実行されたすべてのステップの結果を含むレコード
 
-ステップ間でデータをマッピングしたり、動的なデータフローを作成する必要がある場合、[ワークフロー変数](./variables.mdx)は、情報をあるステップから別のステップに渡し、ステップ出力内のネストされたプロパティにアクセスするための強力なメカニズムを提供します。
+   - キーはステップIDです
+   - 値はステップの出力を含む `StepResult` オブジェクトです
+   - 各ステップの `outputSchema` に基づいて型安全です
 
-## 可観測性とデバッグ
+5. **error**: `status` が `'failed'` の場合に存在するエラーオブジェクト（オプション）
 
-Mastraワークフローは自動的に[ワークフロー実行内の各ステップの入力と出力をログに記録](../../reference/observability/otel-config.mdx)し、このデータを好みのロギング、テレメトリ、または可観測性ツールに送信できるようにします。
+## ワークフロー実行の監視
 
-以下のことが可能です：
+ワークフロー実行を監視することもできます：
 
-- 各ステップのステータス（例：`success`、`error`、または`suspended`）を追跡する。
-- 分析のための実行固有のメタデータを保存する。
-- ログを転送することで、DatadogやNew Relicなどのサードパーティの可観測性プラットフォームと統合する。
+```typescript
+const run = myWorkflow.createRun();
 
+// 実行を監視するウォッチャーを追加
+run.watch(event => {
+  console.log('ステップ完了:', event.payload.currentStep.id);
+});
+
+// ワークフローを開始
+const result = await run.start({ inputData: {...} });
 ```
+
+`event`オブジェクトは以下のスキーマを持っています：
+
+```typescript
+type WatchEvent = {
+  type: "watch";
+  payload: {
+    currentStep?: {
+      id: string;
+      status: "running" | "completed" | "failed" | "suspended";
+      output?: Record<string, any>;
+      payload?: Record<string, any>;
+    };
+    workflowState: {
+      status: "running" | "success" | "failed" | "suspended";
+      steps: Record<
+        string,
+        {
+          status: "running" | "completed" | "failed" | "suspended";
+          output?: Record<string, any>;
+          payload?: Record<string, any>;
+        }
+      >;
+      result?: Record<string, any>;
+      error?: Record<string, any>;
+      payload?: Record<string, any>;
+    };
+  };
+  eventTimestamp: Date;
+};
+```
+
+`currentStep`プロパティはワークフローの実行中にのみ存在します。ワークフローが終了すると、`workflowState`のステータスが変更され、`result`および`error`プロパティも更新されます。同時に`currentStep`プロパティは削除されます。
 
 ## その他のリソース
 
-- ガイドセクションの[ワークフローガイド](../guides/ai-recruiter.mdx)は、主要な概念をカバーするチュートリアルです。
-- [シーケンシャルステップのワークフロー例](../../examples/workflows/sequential-steps.mdx)
+- ガイドセクションの[ワークフローガイド](../../guides/guide/ai-recruiter.mdx)は、主要な概念をカバーするチュートリアルです。
 - [並列ステップのワークフロー例](../../examples/workflows/parallel-steps.mdx)
-- [分岐パスのワークフロー例](../../examples/workflows/branching-paths.mdx)
-- [ワークフロー変数の例](../../examples/workflows/workflow-variables.mdx)
-- [循環依存関係のワークフロー例](../../examples/workflows/cyclical-dependencies.mdx)
-- [一時停止と再開のワークフロー例](../../examples/workflows/suspend-and-resume.mdx)
-```
+- [条件分岐のワークフロー例](../../examples/workflows/conditional-branching.mdx)
+- [Inngestワークフロー例](../../examples/workflows/inngest-workflow.mdx)
+- [一時停止と再開のワークフロー例](../../examples/workflows/human-in-the-loop.mdx)

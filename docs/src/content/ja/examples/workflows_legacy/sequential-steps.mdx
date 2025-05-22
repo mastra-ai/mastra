@@ -1,0 +1,94 @@
+---
+title: "例: 順次ステップ | ワークフロー（レガシー） | Mastra ドキュメント"
+description: Mastra を使用してレガシーワークフローステップを特定の順序で連結し、データを受け渡す例。
+---
+
+import { GithubLink } from "@/components/github-link";
+
+# ワークフロー（レガシー）と順次ステップ
+
+ワークフローは、特定の順序で次々と連鎖して実行することができます。
+
+## 制御フローダイアグラム
+
+この例では、`then` メソッドを使ってワークフローステップを連結し、順次ステップ間でデータを渡しながら順番に実行する方法を示しています。
+
+制御フローダイアグラムは以下の通りです：
+
+<img
+  src="/sequential-chains.png"
+  alt="順次ステップを持つワークフローのダイアグラム"
+  width={600}
+/>
+
+## ステップの作成
+
+まず、ステップを作成し、ワークフローを初期化しましょう。
+
+```ts showLineNumbers copy
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
+import { z } from "zod";
+
+const stepOne = new LegacyStep({
+  id: "stepOne",
+  execute: async ({ context }) => ({
+    doubledValue: context.triggerData.inputValue * 2,
+  }),
+});
+
+const stepTwo = new LegacyStep({
+  id: "stepTwo",
+  execute: async ({ context }) => {
+    if (context.steps.stepOne.status !== "success") {
+      return { incrementedValue: 0 };
+    }
+
+    return { incrementedValue: context.steps.stepOne.output.doubledValue + 1 };
+  },
+});
+
+const stepThree = new LegacyStep({
+  id: "stepThree",
+  execute: async ({ context }) => {
+    if (context.steps.stepTwo.status !== "success") {
+      return { tripledValue: 0 };
+    }
+
+    return { tripledValue: context.steps.stepTwo.output.incrementedValue * 3 };
+  },
+});
+
+// Build the workflow
+const myWorkflow = new LegacyWorkflow({
+  name: "my-workflow",
+  triggerSchema: z.object({
+    inputValue: z.number(),
+  }),
+});
+```
+
+## ステップの連結とワークフローの実行
+
+それでは、ステップを順番につなげてみましょう。
+
+```ts showLineNumbers copy
+// sequential steps
+myWorkflow.step(stepOne).then(stepTwo).then(stepThree);
+
+myWorkflow.commit();
+
+const { start } = myWorkflow.createRun();
+
+const res = await start({ triggerData: { inputValue: 90 } });
+```
+
+<br />
+<br />
+<hr className="dark:border-[#404040] border-gray-300" />
+<br />
+<br />
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/basics/workflows-legacy/workflow-with-sequential-steps"
+  }
+/>

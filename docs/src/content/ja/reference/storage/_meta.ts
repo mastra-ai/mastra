@@ -4,5 +4,6 @@ const meta = {
   upstash: "Upstash ストレージ",
   cloudflare: "Cloudflare KV ストレージ",
   "cloudflare-d1": "Cloudflare D1 ストレージ",
+  dynamodb: "DynamoDB ストレージ",
 };
 export default meta;

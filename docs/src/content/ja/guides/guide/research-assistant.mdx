@@ -57,28 +57,28 @@ research-assistant/
 <Steps>
   ### プロジェクトの初期化と依存関係のインストール
 
-  まず、プロジェクト用の新しいディレクトリを作成し、その中に移動します。
+  まず、プロジェクト用の新しいディレクトリを作成し、そこに移動します：
 
   ```bash
   mkdir research-assistant
   cd research-assistant
   ```
 
-  新しい Node.js プロジェクトを初期化し、必要な依存関係をインストールします。
+  新しいNode.jsプロジェクトを初期化し、必要な依存関係をインストールします：
 
   ```bash copy
   npm init -y
   npm install @mastra/core@latest @mastra/rag@latest @mastra/pg@latest @ai-sdk/openai@latest ai@latest zod@latest
   ```
 
-  APIアクセスやデータベース接続のための環境変数を設定します。
+  APIアクセスとデータベース接続のための環境変数を設定します：
 
   ```bash filename=".env" copy
   OPENAI_API_KEY=your_openai_api_key
   POSTGRES_CONNECTION_STRING=your_connection_string
   ```
 
-  プロジェクトに必要なファイルを作成します。
+  プロジェクトに必要なファイルを作成します：
 
   ```bash copy
   mkdir -p src/mastra/agents
@@ -86,13 +86,13 @@ research-assistant/
   touch src/mastra/index.ts src/store.ts src/index.ts
   ```
 
-  ### Research Assistant エージェントの作成
+  ### リサーチアシスタントエージェントの作成
 
-  次に、RAG対応のリサーチアシスタントを作成します。このエージェントは以下を利用します。
+  次に、RAG対応のリサーチアシスタントを作成します。このエージェントは以下を使用します：
 
-  * [Vector Query Tool](/reference/tools/vector-query-tool) を使い、ベクトルストア上でセマンティック検索を行い、論文内の関連コンテンツを見つけます。
-  * GPT-4o-mini を用いてクエリの理解と応答の生成を行います
-  * 論文の分析方法、取得したコンテンツの効果的な活用方法、制限事項の認識についてエージェントを導くカスタムインストラクション
+  * [Vector Query Tool](/reference/tools/vector-query-tool)：ベクトルストア上でセマンティック検索を実行し、論文から関連コンテンツを見つけるためのツール
+  * GPT-4o-mini：クエリを理解し、応答を生成するため
+  * カスタム指示：論文の分析方法、検索されたコンテンツの効果的な使用方法、制限の認識方法についてエージェントを導くもの
 
   ```ts copy showLineNumbers filename="src/mastra/agents/researchAgent.ts"
   import { Agent } from "@mastra/core/agent";
@@ -120,7 +120,7 @@ research-assistant/
   });
   ```
 
-  ### Mastra インスタンスとベクトルストアのセットアップ
+  ### Mastraインスタンスとベクトルストアの設定
 
   ```ts copy showLineNumbers filename="src/mastra/index.ts"
   import { Mastra } from "@mastra/core";
@@ -129,7 +129,7 @@ research-assistant/
   import { researchAgent } from "./agents/researchAgent";
 
   // Initialize Mastra instance
-  const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
+  const pgVector = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING! });
   export const mastra = new Mastra({
     agents: { researchAgent },
     vectors: { pgVector },
@@ -138,11 +138,11 @@ research-assistant/
 
   ### 論文の読み込みと処理
 
-  このステップでは、初期ドキュメント処理を行います。具体的には：
+  このステップでは、初期ドキュメント処理を行います。以下の手順で進めます：
 
-  1. 論文をURLから取得
+  1. 研究論文をURLから取得
   2. ドキュメントオブジェクトに変換
-  3. より良い処理のために小さなチャンクに分割
+  3. より良い処理のために、小さく管理しやすいチャンクに分割
 
   ```ts copy showLineNumbers filename="src/store.ts"
   import { openai } from "@ai-sdk/openai";
@@ -170,15 +170,15 @@ research-assistant/
 
   ### 埋め込みの作成と保存
 
-  最後に、RAG用にコンテンツを準備します。手順は以下の通りです。
+  最後に、RAG用にコンテンツを準備します：
 
-  1. 各テキストチャンクの埋め込みを生成
-  2. 埋め込みを格納するベクトルストアインデックスを作成
-  3. 埋め込みとメタデータ（元のテキストやソース情報）をベクトルデータベースに保存
+  1. テキストの各チャンクの埋め込みを生成
+  2. 埋め込みを保持するベクトルストアインデックスを作成
+  3. 埋め込みとメタデータ（元のテキストとソース情報）をベクトルデータベースに保存
 
-  > **注**: このメタデータは、ベクトルストアが関連する一致を見つけた際に、実際のコンテンツを返すために重要です。
+  > **注意**：このメタデータは重要です。ベクトルストアが関連する一致を見つけたときに実際のコンテンツを返すことができるようになります。
 
-  これにより、エージェントは効率的に関連情報を検索・取得できるようになります。
+  これにより、エージェントは効率的に情報を検索して取得できるようになります。
 
   ```ts copy showLineNumbers{23} filename="src/store.ts"
   // Generate embeddings
@@ -207,14 +207,14 @@ research-assistant/
   });
   ```
 
-  これにより、以下の処理が行われます：
+  これにより以下が実行されます：
 
-  1. 論文をURLから読み込みます
-  2. 論文を扱いやすいチャンクに分割します
-  3. 各チャンクの埋め込みを生成します
-  4. 埋め込みとテキストの両方をベクトルデータベースに保存します
+  1. URLから論文を読み込む
+  2. 管理しやすいチャンクに分割する
+  3. 各チャンクの埋め込みを生成する
+  4. 埋め込みとテキストの両方をベクトルデータベースに保存する
 
-  スクリプトを実行して埋め込みを保存するには、以下を実行します：
+  スクリプトを実行して埋め込みを保存するには：
 
   ```bash
   npx bun src/store.ts
@@ -222,7 +222,7 @@ research-assistant/
 
   ### アシスタントをテストする
 
-  リサーチアシスタントをさまざまなクエリでテストしてみましょう：
+  異なるタイプのクエリで研究アシスタントをテストしてみましょう：
 
   ```ts filename="src/index.ts" showLineNumbers copy
   import { mastra } from "./mastra";
@@ -253,7 +253,7 @@ research-assistant/
   4. Challenges in parallelizing computations, resulting in longer training times
   ```
 
-  別の質問も試してみましょう：
+  別の質問を試してみましょう：
 
   ```ts filename="src/index.ts" showLineNumbers{10} copy
   // Query about specific findings
@@ -263,7 +263,7 @@ research-assistant/
   console.log("Response:", response2.text);
   ```
 
-  出力例：
+  出力：
 
   ```
   Query: What improvements were achieved in translation quality?
@@ -272,21 +272,21 @@ research-assistant/
   task, while also reducing training costs.
   ```
 
-  ### アプリケーションを公開する
+  ### アプリケーションを提供する
 
-  Mastraサーバーを起動して、リサーチアシスタントをAPI経由で利用できるようにします：
+  Mastraサーバーを起動して、研究アシスタントをAPI経由で公開します：
 
   ```bash
   mastra dev
   ```
 
-  リサーチアシスタントは以下のURLで利用可能になります：
+  研究アシスタントは以下のURLで利用可能になります：
 
   ```
   http://localhost:4111/api/agents/researchAgent/generate
   ```
 
-  curlでテストするには：
+  curlでテストします：
 
   ```bash
   curl -X POST http://localhost:4111/api/agents/researchAgent/generate \

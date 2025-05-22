@@ -1,9 +1,10 @@
 ---
 title: "Cursor/Windsurfでの使用 | はじめに | Mastra ドキュメント"
-description: "Mastra MCPドキュメントサーバーをIDEで使用して、エージェント型のMastraエキスパートに変える方法を学びましょう。"
+description: "IDEでMastra MCPドキュメントサーバーを使用して、エージェント型のMastraエキスパートに変える方法を学びましょう。"
 ---
 
 import YouTube from "@/components/youtube";
+import { Tabs } from "nextra/components";
 
 # エージェントIDEのためのMastraツール
 
@@ -42,31 +43,17 @@ IDEにインストールされると、プロンプトを書いて、エージ�
 
 ## 自動インストール
 
-MCPドキュメントサーバーは、`create-mastra`コマンドで`-m`フラグを使用してインストールできます。
+**新規**プロジェクトの場合、MCP Docsサーバーはインストール中に[インタラクティブ](/docs/getting-started/installation#interactive)セットアッププロンプトを通じて、または[非インタラクティブ](/docs/getting-started/installation#non-interactive)コマンドで`-m`フラグを指定することで追加できます。
 
-```bash npm2yarn
-npm create mastra@latest --default -m cursor
-```
-
-mcpオプションには以下が含まれます：
-
-- `cursor-global` - MCPサーバーをグローバルにインストール
-- `windsurf` - WindsurfにMCPサーバーをインストール
-- `cursor` - CursorにMCPサーバーをインストール
-- `vscode` - VSCodeにMCPサーバーをインストール
-
-または、以下の手順に従ってMCPサーバーを手動でインストールすることもできます。
-
-`pnpm create mastra@latest`を実行し、プロンプトが表示されたらCursorまたはWindsurfを選択してMCPサーバーをインストールします。他のIDEの場合、またはすでにMastraプロジェクトがある場合は、以下の手順に従ってMCPサーバーをインストールしてください。
 
 ## 手動インストール
 
-- **Cursor**: プロジェクトルートの `.cursor/mcp.json` またはグローバル設定の場合は `~/.cursor/mcp.json` を編集してください
-- **Windsurf**: `~/.codeium/windsurf/mcp_config.json` を編集してください（グローバル設定のみ対応）
-- **VSCode**: プロジェクトルートの `~/.vscode/mcp.json` を編集してください  
-  以下の設定を追加します:
+既存のプロジェクトにMCP Docsサーバーを追加するには、手動でインストールします。
 
-import { Tabs } from "nextra/components";
+- **Cursor**: プロジェクトルートの`.cursor/mcp.json`、またはグローバル設定の場合は`~/.cursor/mcp.json`を編集します
+- **Windsurf**: `~/.codeium/windsurf/mcp_config.json`を編集します（グローバル設定のみサポート）
+- **VSCode**: プロジェクトルートの`~/.vscode/mcp.json`を編集します
+  以下の設定を追加してください：
 
 ### MacOS/Linux
 

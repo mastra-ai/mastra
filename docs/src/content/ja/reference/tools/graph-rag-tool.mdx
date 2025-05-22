@@ -26,20 +26,20 @@ const graphTool = createGraphRAGTool({
 });
 ```
 
-## パラメーター
+## パラメータ
 
 <PropertiesTable
   content={[
     {
       name: "vectorStoreName",
       type: "string",
-      description: "クエリを実行するベクトルストアの名前",
+      description: "クエリするベクトルストアの名前",
       isOptional: false,
     },
     {
       name: "indexName",
       type: "string",
-      description: "ベクトルストア内のインデックス名",
+      description: "ベクトルストア内のインデックスの名前",
       isOptional: false,
     },
     {
@@ -47,6 +47,20 @@ const graphTool = createGraphRAGTool({
       type: "EmbeddingModel",
       description: "ベクトル検索に使用する埋め込みモデル",
       isOptional: false,
+    },
+    {
+      name: "enableFilter",
+      type: "boolean",
+      description: "メタデータに基づく結果のフィルタリングを有効にする",
+      isOptional: true,
+      defaultValue: "false",
+    },
+    {
+      name: "includeSources",
+      type: "boolean",
+      description: "結果に完全な取得オブジェクトを含める",
+      isOptional: true,
+      defaultValue: "true",
     },
     {
       name: "graphOptions",
@@ -59,7 +73,7 @@ const graphTool = createGraphRAGTool({
       name: "description",
       type: "string",
       description:
-        "ツールのカスタム説明。デフォルト: 'ナレッジベース内の情報間の関係性をアクセス・分析し、接続やパターンに関する複雑な質問に答えます'",
+        "ツールのカスタム説明。デフォルトでは：'ナレッジベース内の情報間の関係にアクセスして分析し、接続やパターンに関する複雑な質問に答える'",
       isOptional: true,
     },
   ]}
@@ -72,7 +86,7 @@ const graphTool = createGraphRAGTool({
     {
       name: "dimension",
       type: "number",
-      description: "埋め込みベクトルの次元数",
+      description: "埋め込みベクトルの次元",
       isOptional: true,
       defaultValue: "1536",
     },
@@ -80,14 +94,14 @@ const graphTool = createGraphRAGTool({
       name: "threshold",
       type: "number",
       description:
-        "ノード間のエッジ作成のための類似度しきい値（0-1）",
+        "ノード間のエッジを作成するための類似度しきい値（0-1）",
       isOptional: true,
       defaultValue: "0.7",
     },
     {
       name: "randomWalkSteps",
       type: "number",
-      description: "グラフ探索のためのランダムウォークのステップ数",
+      description: "グラフ走査のためのランダムウォークのステップ数",
       isOptional: true,
       defaultValue: "100",
     },
@@ -103,7 +117,7 @@ const graphTool = createGraphRAGTool({
 
 ## 戻り値
 
-このツールは以下のオブジェクトを返します：
+このツールは以下を含むオブジェクトを返します：
 
 <PropertiesTable
   content={[
@@ -111,10 +125,27 @@ const graphTool = createGraphRAGTool({
       name: "relevantContext",
       type: "string",
       description:
-        "グラフベースのランキングを用いて取得した、最も関連性の高いドキュメントチャンクから結合されたテキスト",
+        "グラフベースのランキングを使用して取得された、最も関連性の高いドキュメントチャンクからの結合テキスト",
+    },
+    {
+      name: "sources",
+      type: "QueryResult[]",
+      description: "完全な検索結果オブジェクトの配列。各オブジェクトには、元のドキュメント、チャンク、および類似度スコアを参照するために必要なすべての情報が含まれています。",
     },
   ]}
 />
+
+### QueryResultオブジェクトの構造
+
+```typescript
+{
+  id: string;         // ユニークなチャンク/ドキュメント識別子
+  metadata: any;      // すべてのメタデータフィールド（ドキュメントIDなど）
+  vector: number[];   // 埋め込みベクトル（利用可能な場合）
+  score: number;      // この検索の類似度スコア
+  document: string;   // 完全なチャンク/ドキュメントテキスト（利用可能な場合）
+}
+```
 
 ## デフォルトツールの説明
 
