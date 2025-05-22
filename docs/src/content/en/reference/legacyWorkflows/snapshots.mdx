@@ -1,5 +1,5 @@
 ---
-title: "Reference: Snapshots | Workflow State Persistence | Mastra Docs"
+title: "Reference: Snapshots | Workflow State Persistence (Legacy) | Mastra Docs"
 description: "Technical reference on snapshots in Mastra - the serialized workflow state that enables suspend and resume functionality"
 ---
 
@@ -34,25 +34,23 @@ This mechanism provides a powerful way to implement human-in-the-loop workflows,
 A Mastra workflow snapshot consists of several key components:
 
 ```typescript
-export interface WorkflowRunState {
+export interface LegacyWorkflowRunState {
   // Core state info
   value: Record<string, string>; // Current state machine value
   context: {
     // Workflow context
-    [key: string]: Record<
+    steps: Record<
       string,
       {
-        status: "success";
-        output: any;
-      } | {
-        status: "failed";
-        error: string;
-      } | {
-        status: "suspended";
-        payload?: any;
+        // Step execution results
+        status: "success" | "failed" | "suspended" | "waiting" | "skipped";
+        payload?: any; // Step-specific data
+        error?: string; // Error info if failed
       }
     >;
-    input: Record<string, any>; // Initial input data
+    triggerData: Record<string, any>; // Initial trigger data
+    attempts: Record<string, number>; // Remaining retry attempts
+    inputData: Record<string, any>; // Initial input data
   };
 
   activePaths: Array<{
@@ -62,12 +60,13 @@ export interface WorkflowRunState {
     status: string;
   }>;
 
-  // Paths to suspended steps
-  suspendedPaths: Record<string, number[]>;
-
   // Metadata
   runId: string; // Unique run identifier
   timestamp: number; // Time snapshot was created
+
+  // For nested workflows and suspended steps
+  childStates?: Record<string, WorkflowRunState>; // Child workflow states
+  suspendedSteps?: Record<string, string>; // Mapping of suspended steps
 }
 ```
 
@@ -123,7 +122,7 @@ const mastra = new Mastra({
       // authToken: process.env.DATABASE_AUTH_TOKEN,
     },
   }),
-  workflows: {
+  legacy_workflows: {
     weatherWorkflow,
     travelWorkflow,
   },
@@ -199,3 +198,10 @@ run.watch(async ({ activePaths }) => {
   }
 });
 ```
+
+## Related
+
+- [Suspend Function Reference](./suspend.mdx)
+- [Resume Function Reference](./resume.mdx)
+- [Watch Function Reference](./watch.mdx)
+- [Suspend and Resume Guide](../../docs/workflows-legacy/suspend-and-resume.mdx)
