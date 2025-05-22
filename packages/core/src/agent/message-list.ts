@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
-import type { CoreMessage, FilePart, Message, UIMessage } from 'ai';
+import { convertToCoreMessages } from 'ai';
+import type { CoreMessage, CoreSystemMessage, FilePart, Message, UIMessage } from 'ai';
 import type { MessageType } from '../memory';
 import { isCoreMessage, isUiMessage } from '../utils';
 
@@ -24,11 +25,23 @@ export type MastraMessageV2 = {
 };
 
 type MessageInput = UIMessage | Message | MessageType | CoreMessage | MastraMessageV2;
+type MessageSource = 'memory' | 'response' | 'user' | 'system';
+type MemoryInfo = { threadId: string; resourceId?: string };
 
 export class MessageList {
   private messages: MastraMessageV2[] = [];
-  private systemMessages: CoreMessage[] = [];
-  private memoryInfo: null | { threadId: string; resourceId?: string } = null;
+
+  // passed in by dev in input or context
+  private systemMessages: CoreSystemMessage[] = [];
+  // passed in by us for a specific purpose, eg memory system message
+  private taggedSystemMessages: Record<string, CoreSystemMessage[]> = {};
+
+  private memoryInfo: null | MemoryInfo = null;
+
+  // used to filter this.messages by how it was added: input/response/memory
+  private memoryMessages = new Set<MastraMessageV2>();
+  private newMessages = new Set<MastraMessageV2>();
+  private responseMessages = new Set<MastraMessageV2>();
 
   constructor({
     threadId,
@@ -39,37 +52,95 @@ export class MessageList {
     }
   }
 
-  public add(messages: string | string[] | MessageInput | MessageInput[]) {
-    if (Array.isArray(messages)) {
-      for (const message of messages) {
-        if (typeof message === `string`) {
-          this.addOne({
-            role: 'user',
-            content: message,
-          });
-        } else {
-          this.addOne(message);
-        }
-      }
-    } else if (typeof messages === `string`) {
-      this.addOne({
-        role: 'user',
-        content: messages,
-      });
-    } else {
-      this.addOne(messages);
+  public add(messages: string | string[] | MessageInput | MessageInput[], messageSource: MessageSource) {
+    for (const message of Array.isArray(messages) ? messages : [messages]) {
+      this.addOne(
+        typeof message === `string`
+          ? {
+              role: 'user',
+              content: message,
+            }
+          : message,
+        messageSource,
+      );
     }
-
     return this;
   }
-  public getMessages(): MastraMessageV2[] {
-    return this.messages;
+  public getLatestUserContent(): string | null {
+    const currentUserMessages = this.all.core().filter(m => m.role === 'user');
+    const content = currentUserMessages.at(-1)?.content;
+    if (!content) return null;
+    return MessageList.coreContentToString(content);
   }
-  public getSystemMessages(): CoreMessage[] {
+  public get get() {
+    return {
+      all: this.all,
+      remembered: this.remembered,
+      input: this.input,
+      response: this.response,
+    };
+  }
+  private all = {
+    mastra: () => this.messages,
+    ui: () => this.messages.map(MessageList.toUIMessage),
+    core: () => convertToCoreMessages(this.all.ui()),
+  };
+  private remembered = {
+    mastra: () => this.messages.filter(m => this.memoryMessages.has(m)),
+    ui: () => this.remembered.mastra().map(MessageList.toUIMessage),
+    core: () => convertToCoreMessages(this.remembered.ui()),
+  };
+  private input = {
+    mastra: () => this.messages.filter(m => this.newMessages.has(m)),
+    ui: () => this.input.mastra().map(MessageList.toUIMessage),
+    core: () => convertToCoreMessages(this.input.ui()),
+  };
+  private response = {
+    mastra: () => this.messages.filter(m => this.responseMessages.has(m)),
+    // ui: () => {},
+    // core: () => {},
+  };
+  public drainUnsavedMessages(): MastraMessageV2[] {
+    const messages = this.messages.filter(m => this.newMessages.has(m) || this.responseMessages.has(m));
+    this.newMessages.clear();
+    this.responseMessages.clear();
+    return messages;
+  }
+  public getSystemMessages(tag?: string): CoreMessage[] {
+    if (tag) {
+      return this.taggedSystemMessages[tag] || [];
+    }
     return this.systemMessages;
   }
-  public toUIMessages(): UIMessage[] {
-    return this.messages.map(MessageList.toUIMessage);
+  public addSystem(messages: CoreSystemMessage | CoreSystemMessage[] | string | string[], tag?: string) {
+    for (const message of Array.isArray(messages) ? messages : [messages]) {
+      this.addOneSystem(message, tag);
+    }
+    return this;
+  }
+  public setMemoryInfo(info: MemoryInfo) {
+    this.memoryInfo = info;
+  }
+
+  private addOneSystem(message: CoreSystemMessage | string, tag?: string) {
+    if (typeof message === `string`) message = { role: 'system', content: message };
+    if (tag && !this.isDuplicateSystem(message, tag)) {
+      this.taggedSystemMessages[tag] ||= [];
+      this.taggedSystemMessages[tag].push(message);
+    } else if (!this.isDuplicateSystem(message)) {
+      this.systemMessages.push(message);
+    }
+  }
+  private isDuplicateSystem(message: CoreSystemMessage, tag?: string) {
+    if (tag) {
+      if (!this.taggedSystemMessages[tag]) return false;
+      return this.taggedSystemMessages[tag].some(
+        m => MessageList.cacheKeyFromContent(m.content) === MessageList.cacheKeyFromContent(message.content),
+      );
+    }
+    return this.systemMessages.some(
+      m => MessageList.cacheKeyFromContent(m.content) === MessageList.cacheKeyFromContent(message.content),
+    );
   }
   private static toUIMessage(m: MastraMessageV2): UIMessage {
     const contentString =
@@ -112,7 +183,6 @@ export class MessageList {
       parts: m.content.parts,
     };
   }
-
   private getMessageById(id: string) {
     return this.messages.find(m => m.id === id);
   }
@@ -132,59 +202,8 @@ export class MessageList {
       id: existingMessage.id,
     };
   }
-  private addOne(message: MessageInput) {
-    if (message.role === `system`) {
-      // Ensure it's a CoreMessage or compatible
-      if (!MessageList.isVercelCoreMessage(message) && !MessageList.isMastraMessageV1(message) && !MessageList.isMastraMessageV2(message)) {
-        // It might be a simple { role: 'system', content: '...' } which is CoreMessage like.
-        // For now, we'll assume if it has a 'role' and 'content', it's CoreMessage-like.
-        // A more robust check might be needed if other types of system messages appear.
-        if (!('content' in message && typeof message.content === 'string')) {
-          console.warn('System message received in an unexpected format, skipping:', message);
-          return this;
-        }
-      }
-
-      // We've established message.role === 'system'
-      // and we will ensure message.content is a string.
-      const systemCoreMessage: CoreMessage = {
-        role: 'system',
-        content: '', // Placeholder, will be set below
-      };
-      
-      // Ensure content is string for CoreMessage
-      if (typeof message.content !== 'string') {
-        // Attempt to stringify if it's complex, or skip if not easily convertible
-        // For system messages, content is usually expected to be a simple string.
-        // If it's an array of parts, we'd need a specific way to handle that for system messages.
-        console.warn('System message content is not a string, attempting to process. Message:', message);
-        // For now, if it's not a string, we might skip or log, as CoreMessage expects string content.
-        // Let's assume for now that valid system messages will have string content.
-        // If `message.content` is an array (e.g. from MastraMessageV1), this needs careful handling.
-        // However, the primary path for system messages should be CoreMessage directly.
-        if(Array.isArray(message.content)) {
-            systemCoreMessage.content = message.content.map(c => 'text' in c ? c.text : '').join('\\n');
-        } else if (message.content && typeof (message.content as any).toString === 'function') {
-            systemCoreMessage.content = (message.content as any).toString();
-        } else {
-            console.warn('Cannot convert system message content to string, skipping:', message);
-            return this;
-        }
-      } else {
-        systemCoreMessage.content = message.content;
-      }
-
-
-      // Check for duplicates
-      const isDuplicate = this.systemMessages.some(
-        existingMsg => existingMsg.content === systemCoreMessage.content
-      );
-
-      if (!isDuplicate) {
-        this.systemMessages.push(systemCoreMessage);
-      }
-      return this;
-    }
+  private addOne(message: MessageInput, messageSource: MessageSource) {
+    if (message.role === `system` && MessageList.isVercelCoreMessage(message)) return this.addSystem(message);
 
     const messageV2 = this.inputToMastraMessageV2(message);
 
@@ -239,7 +258,20 @@ export class MessageList {
       } else if (!exists) {
         this.messages.push(messageV2);
       }
+
+      if (messageSource === `memory`) {
+        this.memoryMessages.add(messageV2);
+      } else if (messageSource === `response`) {
+        this.responseMessages.add(messageV2);
+      } else if (messageSource === `user`) {
+        this.newMessages.add(messageV2);
+      } else {
+        throw new Error(`Missing message source for message ${messageV2}`);
+      }
     }
+
+    // make sure messages are always stored in order of when they were created!
+    this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
     return this;
   }
@@ -270,21 +302,20 @@ export class MessageList {
     throw new Error(`Found unhandled message ${JSON.stringify(message)}`);
   }
 
-  private lastCreatedAt: Date | undefined;
+  private lastCreatedAt: number = Date.now();
   private generateCreatedAt(): Date {
     const now = new Date();
+    const nowTime = now.getTime();
+    const lastTime = this.lastCreatedAt;
 
-    if (this.lastCreatedAt) {
-      const lastTime = this.lastCreatedAt.getTime();
-
-      if (now.getTime() <= lastTime) {
-        const newDate = new Date(lastTime + 1);
-        this.lastCreatedAt = newDate;
-        return newDate;
-      }
+    // added messages are assumed to be added in order if they don't already have a date set on them.
+    if (nowTime <= lastTime) {
+      const newDate = new Date(lastTime + 1);
+      this.lastCreatedAt = newDate.getTime();
+      return newDate;
     }
 
-    this.lastCreatedAt = now;
+    this.lastCreatedAt = nowTime;
     return now;
   }
 
@@ -294,16 +325,16 @@ export class MessageList {
       role: message.role,
     } as CoreMessage);
 
+    const createdAt = message.createdAt || this.generateCreatedAt();
     return {
       id: message.id,
       role: coreV2.role,
-      createdAt: message.createdAt || this.generateCreatedAt(),
+      createdAt,
       threadId: message.threadId,
       resourceId: message.resourceId,
       content: coreV2.content,
     };
   }
-
   private vercelUIMessageToMastraMessageV2(message: UIMessage): MastraMessageV2 {
     const content: MastraMessageContentV2 = {
       format: 2,
@@ -315,10 +346,11 @@ export class MessageList {
     if (message.annotations) content.annotations = message.annotations;
     if (message.experimental_attachments) content.experimental_attachments = message.experimental_attachments;
 
+    const createdAt = message.createdAt || this.generateCreatedAt();
     return {
       id: message.id || randomUUID(),
       role: MessageList.getRole(message),
-      createdAt: message.createdAt || this.generateCreatedAt(),
+      createdAt,
       threadId: this.memoryInfo?.threadId,
       resourceId: this.memoryInfo?.resourceId,
       content,
@@ -478,6 +510,16 @@ export class MessageList {
       }
     }
     return key;
+  }
+  private static coreContentToString(content: CoreMessage['content']): string {
+    if (typeof content === `string`) return content;
+
+    return content.reduce((p, c) => {
+      if (c.type === `text`) {
+        p += c.text;
+      }
+      return p;
+    }, '');
   }
   private static cacheKeyFromContent(content: CoreMessage['content']): string {
     if (typeof content === `string`) return content;
