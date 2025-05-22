@@ -1,9 +1,9 @@
 ---
-title: "Branching, Merging, Conditions | Workflows | Mastra Docs"
-description: "Control flow in Mastra workflows allows you to manage branching, merging, and conditions to construct workflows that meet your logic requirements."
+title: "Branching, Merging, Conditions | Workflows (Legacy) | Mastra Docs"
+description: "Control flow in Mastra legacy workflows allows you to manage branching, merging, and conditions to construct legacy workflows that meet your logic requirements."
 ---
 
-# Control Flow in Workflows: Branching, Merging, and Conditions
+# Control Flow in Legacy Workflows: Branching, Merging, and Conditions
 
 When you create a multi-step process, you may need to run steps in parallel, chain them sequentially, or follow different paths based on outcomes. This page describes how you can manage branching, merging, and conditions to construct workflows that meet your logic requirements. The code snippets show the key patterns for structuring complex control flow.
 
@@ -132,8 +132,11 @@ The `until` method repeats a step until a specified condition becomes true. It t
 3. Optional variables to pass to the repeated step
 
 ```typescript
+import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy'
+import { z } from "zod";
+
 // Step that increments a counter until target is reached
-const incrementStep = new Step({
+const incrementStep = new LegacyStep({
   id: "increment",
   inputSchema: z.object({
     // Current counter value
@@ -200,7 +203,7 @@ The `while` method repeats a step as long as a specified condition remains true.
 
 ```typescript
 // Step that increments a counter while below target
-const incrementStep = new Step({
+const incrementStep = new LegacyStep({
   id: "increment",
   inputSchema: z.object({
     // Current counter value
@@ -354,10 +357,10 @@ The `getStepResult` method provides a type-safe way to access step results. This
 For better type safety, you can provide a type parameter to `getStepResult`:
 
 ```typescript showLineNumbers filename="src/mastra/workflows/get-step-result.ts" copy
-import { Step, Workflow } from "@mastra/core/workflows";
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 import { z } from "zod";
 
-const fetchUserStep = new Step({
+const fetchUserStep = new LegacyStep({
   id: "fetchUser",
   outputSchema: z.object({
     name: z.string(),
@@ -368,7 +371,7 @@ const fetchUserStep = new Step({
   },
 });
 
-const analyzeDataStep = new Step({
+const analyzeDataStep = new LegacyStep({
   id: "analyzeData",
   execute: async ({ context }) => {
     // Type-safe access to previous step result
@@ -393,11 +396,11 @@ const analyzeDataStep = new Step({
 The most type-safe approach is to reference the step directly in the `getStepResult` call:
 
 ```typescript showLineNumbers filename="src/mastra/workflows/step-reference.ts" copy
-import { Step, Workflow } from "@mastra/core/workflows";
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 import { z } from "zod";
 
 // Define step with output schema
-const fetchUserStep = new Step({
+const fetchUserStep = new LegacyStep({
   id: "fetchUser",
   outputSchema: z.object({
     userId: z.string(),
@@ -413,7 +416,7 @@ const fetchUserStep = new Step({
   },
 });
 
-const processUserStep = new Step({
+const processUserStep = new LegacyStep({
   id: "processUser",
   execute: async ({ context }) => {
     // TypeScript will infer the correct type from fetchUserStep's outputSchema
@@ -426,7 +429,7 @@ const processUserStep = new Step({
   },
 });
 
-const workflow = new Workflow({
+const workflow = new LegacyWorkflow({
   name: "user-workflow",
 });
 
@@ -440,10 +443,10 @@ This approach makes dependencies clear and provides good type safety.
 The data injected into the step is available in the `context.inputData` object, and typed based on the `inputSchema` of the step.
 
 ```typescript showLineNumbers filename="src/mastra/workflows/variable-mapping.ts" copy
-import { Step, Workflow } from "@mastra/core/workflows";
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 import { z } from "zod";
 
-const fetchUserStep = new Step({
+const fetchUserStep = new LegacyStep({
   id: "fetchUser",
   outputSchema: z.object({
     userId: z.string(),
@@ -459,7 +462,7 @@ const fetchUserStep = new Step({
   },
 });
 
-const sendEmailStep = new Step({
+const sendEmailStep = new LegacyStep({
   id: "sendEmail",
   inputSchema: z.object({
     recipientEmail: z.string(),
@@ -476,7 +479,7 @@ const sendEmailStep = new Step({
   },
 });
 
-const workflow = new Workflow({
+const workflow = new LegacyWorkflow({
   name: "email-workflow",
 });
 
@@ -500,10 +503,10 @@ The context object provides direct access to all step results and their outputs.
 You can access step results directly through the `context.steps` object:
 
 ```typescript showLineNumbers filename="src/mastra/workflows/context-access.ts" copy
-import { Step, Workflow } from "@mastra/core/workflows";
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 import { z } from "zod";
 
-const processOrderStep = new Step({
+const processOrderStep = new LegacyStep({
   id: "processOrder",
   execute: async ({ context }) => {
     // Access data from a previous step
@@ -522,7 +525,7 @@ const processOrderStep = new Step({
   },
 });
 
-const workflow = new Workflow({
+const workflow = new LegacyWorkflow({
   name: "order-workflow",
 });
 
@@ -535,11 +538,11 @@ For comprehensive type safety across your entire workflow, you can define types 
 This allows you to get type safety for the context object on conditions, and on step results in the final workflow output.
 
 ```typescript showLineNumbers filename="src/mastra/workflows/workflow-typing.ts" copy
-import { Step, Workflow } from "@mastra/core/workflows";
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 import { z } from "zod";
 
 // Create steps with typed outputs
-const fetchUserStep = new Step({
+const fetchUserStep = new LegacyStep({
   id: "fetchUser",
   outputSchema: z.object({
     userId: z.string(),
@@ -555,7 +558,7 @@ const fetchUserStep = new Step({
   },
 });
 
-const processOrderStep = new Step({
+const processOrderStep = new LegacyStep({
   id: "processOrder",
   execute: async ({ context }) => {
     // TypeScript knows the shape of userData
@@ -568,7 +571,7 @@ const processOrderStep = new Step({
   },
 });
 
-const workflow = new Workflow<[typeof fetchUserStep, typeof processOrderStep]>({
+const workflow = new LegacyWorkflow<[typeof fetchUserStep, typeof processOrderStep]>({
   name: "typed-workflow",
 });
 
@@ -588,7 +591,7 @@ workflow
 In addition to step results, you can access the original trigger data that started the workflow:
 
 ```typescript showLineNumbers filename="src/mastra/workflows/trigger-data.ts" copy
-import { Step, Workflow } from "@mastra/core/workflows";
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 import { z } from "zod";
 
 // Define trigger schema
@@ -599,7 +602,7 @@ const triggerSchema = z.object({
 
 type TriggerType = z.infer<typeof triggerSchema>;
 
-const processOrderStep = new Step({
+const processOrderStep = new LegacyStep({
   id: "processOrder",
   execute: async ({ context }) => {
     // Access trigger data with type safety
@@ -613,7 +616,7 @@ const processOrderStep = new Step({
   },
 });
 
-const workflow = new Workflow({
+const workflow = new LegacyWorkflow({
   name: "order-workflow",
   triggerSchema,
 });
@@ -626,10 +629,10 @@ workflow.step(processOrderStep).commit();
 The data injected into the step is available in the `context.inputData` object, and typed based on the `inputSchema` of the step.
 
 ```typescript showLineNumbers filename="src/mastra/workflows/resume-data.ts" copy
-import { Step, Workflow } from "@mastra/core/workflows";
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 import { z } from "zod";
 
-const processOrderStep = new Step({
+const processOrderStep = new LegacyStep({
   id: "processOrder",
   inputSchema: z.object({
     orderId: z.string(),
@@ -649,7 +652,7 @@ const processOrderStep = new Step({
   },
 });
 
-const workflow = new Workflow({
+const workflow = new LegacyWorkflow({
   name: "order-workflow",
 });
 
@@ -674,9 +677,10 @@ console.log({ resumedResult });
 You can get typed access to the results of a workflow by injecting the step types into the `Workflow` type params:
 
 ```typescript showLineNumbers filename="src/mastra/workflows/get-results.ts" copy
-import { Workflow } from "@mastra/core/workflows";
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
+import { z } from "zod";
 
-const fetchUserStep = new Step({
+const fetchUserStep = new LegacyStep({
   id: "fetchUser",
   outputSchema: z.object({
     userId: z.string(),
@@ -692,7 +696,7 @@ const fetchUserStep = new Step({
   },
 });
 
-const processOrderStep = new Step({
+const processOrderStep = new LegacyStep({
   id: "processOrder",
   outputSchema: z.object({
     orderId: z.string(),
@@ -707,7 +711,7 @@ const processOrderStep = new Step({
   },
 });
 
-const workflow = new Workflow<[typeof fetchUserStep, typeof processOrderStep]>({
+const workflow = new LegacyWorkflow<[typeof fetchUserStep, typeof processOrderStep]>({
   name: "typed-workflow",
 });
 

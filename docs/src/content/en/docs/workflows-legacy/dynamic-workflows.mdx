@@ -1,9 +1,9 @@
 ---
-title: "Dynamic Workflows | Mastra Docs"
-description: "Learn how to create dynamic workflows within workflow steps, allowing for flexible workflow creation based on runtime conditions."
+title: "Dynamic Workflows (Legacy) | Mastra Docs"
+description: "Learn how to create dynamic workflows within legacy workflow steps, allowing for flexible workflow creation based on runtime conditions."
 ---
 
-# Dynamic Workflows
+# Dynamic Workflows (Legacy)
 
 This guide demonstrates how to create dynamic workflows within a workflow step. This advanced pattern allows you to create and execute workflows on the fly based on runtime conditions.
 
@@ -18,7 +18,8 @@ The key to creating dynamic workflows is accessing the Mastra instance from with
 ### Basic Example
 
 ```typescript
-import { Mastra, Step, Workflow } from "@mastra/core";
+import { Mastra } from "@mastra/core";
+import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy'
 import { z } from "zod";
 
 const isMastra = (mastra: any): mastra is Mastra => {
@@ -26,7 +27,7 @@ const isMastra = (mastra: any): mastra is Mastra => {
 };
 
 // Step that creates and runs a dynamic workflow
-const createDynamicWorkflow = new Step({
+const createDynamicWorkflow = new LegacyStep({
   id: "createDynamicWorkflow",
   outputSchema: z.object({
     dynamicWorkflowResult: z.any(),
@@ -43,7 +44,7 @@ const createDynamicWorkflow = new Step({
     const inputData = context.triggerData.inputData;
 
     // Create a new dynamic workflow
-    const dynamicWorkflow = new Workflow({
+    const dynamicWorkflow = new LegacyWorkflow({
       name: "dynamic-workflow",
       mastra, // Pass the mastra instance to the new workflow
       triggerSchema: z.object({
@@ -52,7 +53,7 @@ const createDynamicWorkflow = new Step({
     });
 
     // Define steps for the dynamic workflow
-    const dynamicStep = new Step({
+    const dynamicStep = new LegacyStep({
       id: "dynamicStep",
       execute: async ({ context }) => {
         const dynamicInput = context.triggerData.dynamicInput;
@@ -90,7 +91,7 @@ const createDynamicWorkflow = new Step({
 });
 
 // Main workflow that uses the dynamic workflow creator
-const mainWorkflow = new Workflow({
+const mainWorkflow = new LegacyWorkflow({
   name: "main-workflow",
   triggerSchema: z.object({
     inputData: z.string(),
@@ -102,7 +103,7 @@ mainWorkflow.step(createDynamicWorkflow).commit();
 
 // Register the workflow with Mastra
 export const mastra = new Mastra({
-  workflows: { mainWorkflow },
+  legacy_workflows: { mainWorkflow },
 });
 
 const run = mainWorkflow.createRun();
@@ -122,7 +123,7 @@ const isMastra = (mastra: any): mastra is Mastra => {
   return mastra && typeof mastra === "object" && mastra instanceof Mastra;
 };
 
-const workflowFactory = new Step({
+const workflowFactory = new LegacyStep({
   id: "workflowFactory",
   inputSchema: z.object({
     workflowType: z.enum(["simple", "complex"]),
@@ -141,7 +142,7 @@ const workflowFactory = new Step({
     }
 
     // Create a new dynamic workflow based on the type
-    const dynamicWorkflow = new Workflow({
+    const dynamicWorkflow = new LegacyWorkflow({
       name: `dynamic-${context.workflowType}-workflow`,
       mastra,
       triggerSchema: z.object({
@@ -163,7 +164,7 @@ const workflowFactory = new Step({
       dynamicWorkflow.step(simpleStep).commit();
     } else {
       // Complex workflow with multiple steps
-      const step1 = new Step({
+      const step1 = new LegacyStep({
         id: "step1",
         outputSchema: z.object({
           intermediateResult: z.string(),
@@ -175,7 +176,7 @@ const workflowFactory = new Step({
         },
       });
 
-      const step2 = new Step({
+      const step2 = new LegacyStep({
         id: "step2",
         execute: async ({ context }) => {
           const intermediate = context.getStepResult(step1).intermediateResult;

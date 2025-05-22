@@ -1,6 +1,6 @@
 ---
-title: "Input Data Mapping with Workflow (vNext) | Mastra Docs"
-description: "Learn how to use workflow input mapping to create more dynamic data flows in your Mastra workflows (vNext)."
+title: "Input Data Mapping with Workflow | Mastra Docs"
+description: "Learn how to use workflow input mapping to create more dynamic data flows in your Mastra workflows."
 ---
 
 # Input Data Mapping
@@ -45,7 +45,7 @@ One use case for input mappings is renaming outputs to match inputs:
 
 ```typescript
 import { Mastra } from "@mastra/core";
-import { createWorkflow, createStep } from "@mastra/core/workflows/vNext";
+import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
 const step1 = createStep({
@@ -96,12 +96,12 @@ const myWorkflow = createWorkflow({
 
 
 const mastra = new Mastra({
-  vnext_workflows: {
+  workflows: {
     myWorkflow,
   }
 });
 
-const run = mastra.vnext_getWorkflow("myWorkflow").createRun();
+const run = mastra.getWorkflow("myWorkflow").createRun();
 const res = await run.start({
   inputData: { inputValue: "Hello world" }
 });
@@ -114,7 +114,7 @@ if (res.status === "success") {
 
 ```typescript
 import { Mastra } from "@mastra/core";
-import { createWorkflow, createStep } from "@mastra/core/workflows/vNext";
+import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
 
@@ -175,12 +175,12 @@ myWorkflow
 
 // Create Mastra instance with all workflows
 const mastra = new Mastra({
-  vnext_workflows: {
+  workflows: {
     myWorkflow,
   }
 });
 
-const run = mastra.vnext_getWorkflow("myWorkflow").createRun();
+const run = mastra.getWorkflow("myWorkflow").createRun();
 const res = await run.start({
   inputData: { inputValue: "Original input" }
 });
@@ -194,7 +194,7 @@ if (res.status === "success") {
 
 ```typescript
 import { Mastra } from "@mastra/core";
-import { createWorkflow, createStep } from "@mastra/core/workflows/vNext";
+import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
 
@@ -281,12 +281,12 @@ myWorkflow
 
 // Create Mastra instance with all workflows
 const mastra = new Mastra({
-  vnext_workflows: {
+  workflows: {
     myWorkflow,
   }
 });
 
-const run = mastra.vnext_getWorkflow("myWorkflow").createRun();
+const run = mastra.getWorkflow("myWorkflow").createRun();
 const res = await run.start({
   inputData: { inputValue: "Starting data" }
 });
