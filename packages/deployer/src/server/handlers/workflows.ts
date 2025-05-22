@@ -132,14 +132,16 @@ export function watchWorkflowHandler(c: Context) {
             workflowId,
             runId,
           });
+
+          const reader = result.getReader();
+
           stream.onAbort(() => {
-            if (!result.locked) {
-              return result.cancel();
-            }
+            void reader.cancel('request aborted');
           });
 
-          for await (const chunk of result) {
-            await stream.write(chunk.toString() + '\x1E');
+          let chunkResult;
+          while ((chunkResult = await reader.read()) && !chunkResult.done) {
+            await stream.write(JSON.stringify(chunkResult.value) + '\x1E');
           }
         } catch (err) {
           console.log(err);
@@ -176,8 +178,15 @@ export async function streamWorkflowHandler(c: Context) {
             runtimeContextFromRequest,
           });
 
-          for await (const chunk of result.stream) {
-            await stream.write(JSON.stringify(chunk) + '\x1E');
+          const reader = result.stream.getReader();
+
+          stream.onAbort(() => {
+            void reader.cancel('request aborted');
+          });
+
+          let chunkResult;
+          while ((chunkResult = await reader.read()) && !chunkResult.done) {
+            await stream.write(JSON.stringify(chunkResult.value) + '\x1E');
           }
         } catch (err) {
           console.log(err);
