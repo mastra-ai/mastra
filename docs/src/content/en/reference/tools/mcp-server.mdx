@@ -21,6 +21,7 @@ import { Agent } from "@mastra/core/agent";
 import { createTool } from "@mastra/core/tools";
 import { MCPServer } from "@mastra/mcp";
 import { z } from "zod";
+import { dataProcessingWorkflow } from "../workflows/dataProcessingWorkflow";
 
 const myAgent = new Agent({
   name: "MyExampleAgent",
@@ -41,6 +42,9 @@ const server = new MCPServer({
   version: "1.0.0",
   tools: { weatherTool },
   agents: { myAgent }, // this agent will become tool "ask_myAgent"
+  workflows: {
+    dataProcessingWorkflow, // this workflow will become tool "run_dataProcessingWorkflow"
+  }
 });
 ```
 
@@ -75,6 +79,13 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
       isOptional: true,
       description:
         "An object where keys are agent identifiers and values are Mastra Agent instances. Each agent will be automatically converted into a tool named `ask_<agentIdentifier>`. The agent **must** have a non-empty `description` string property defined in its constructor configuration. This description will be used in the tool's description. If an agent's description is missing or empty, an error will be thrown during MCPServer initialization.",
+    },
+    {
+      name: "workflows",
+      type: "Record<string, Workflow>",
+      isOptional: true,
+      description:
+        "An object where keys are workflow identifiers and values are Mastra Workflow instances. Each workflow is converted into a tool named `run_<workflowKey>`. The workflow's `inputSchema` becomes the tool's input schema. The workflow **must** have a non-empty `description` string property, which is used for the tool's description. If a workflow's description is missing or empty, an error will be thrown. The tool executes the workflow by calling `workflow.createRun().start({ inputData: <tool_input> })`. If a tool name derived from an agent or workflow (e.g., `ask_myAgent` or `run_myWorkflow`) collides with an explicitly defined tool name or another derived name, the explicitly defined tool takes precedence, and a warning is logged. Agents/workflows leading to subsequent collisions are skipped.",
     },
     {
       name: "id",
@@ -124,6 +135,12 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
       isOptional: true,
       description: "Optional list of remote access points for this server.",
     },
+    {
+      name: "resources",
+      type: "MCPServerResources",
+      isOptional: true,
+      description: "An object defining how the server should handle MCP resources. See Resource Handling section for details.",
+    },
   ]}
 />
 
@@ -134,7 +151,7 @@ A powerful feature of `MCPServer` is its ability to automatically expose your Ma
 - **Tool Naming**: Each agent is converted into a tool named `ask_<agentKey>`, where `<agentKey>` is the key you used for that agent in the `agents` object. For instance, if you configure `agents: { myAgentKey: myAgentInstance }`, a tool named `ask_myAgentKey` will be created.
 
 - **Tool Functionality**:
-    - **Description**: The generated tool's description will be in the format: "Ask agent '<AgentName>' a question. Original agent instructions: <agent description>".
+    - **Description**: The generated tool's description will be in the format: "Ask agent `<AgentName>` a question. Original agent instructions: `<agent description>`".
     - **Input**: The tool expects a single object argument with a `message` property (string): `{ message: "Your question for the agent" }`.
     - **Execution**: When this tool is called, it invokes the `generate()` method of the corresponding agent, passing the provided `query`.
     - **Output**: The direct result from the agent's `generate()` method is returned as the output of the tool.
@@ -147,7 +164,7 @@ This makes it straightforward to allow MCP clients to interact with your agents 
 
 When you provide agents in the `agents` configuration property, `MCPServer` will automatically create a corresponding tool for each agent. The tool will be named `ask_<agentIdentifier>`, where `<agentIdentifier>` is the key you used in the `agents` object.
 
-The description for this generated tool will be: "Ask agent \\'<agent.name>\\' a question. Agent description: <agent.description>".
+The description for this generated tool will be: "Ask agent `<agent.name>` a question. Agent description: `<agent.description>`".
 
 **Important**: For an agent to be converted into a tool, it **must** have a non-empty `description` string property set in its configuration when it was instantiated (e.g., `new Agent({ name: 'myAgent', description: 'This agent does X.', ... })`). If an agent is passed to `MCPServer` with a missing or empty `description`, an error will be thrown when the `MCPServer` is instantiated, and server setup will fail.
 
@@ -481,10 +498,152 @@ getStreamableHTTPTransport(): StreamableHTTPServerTransport | undefined
 
 ### tools()
 
-This method gives you a look at the tools that were set up when you created the server. It's a read-only list, useful for debugging purposes.
+Executes a specific tool provided by this MCP server.
 
 ```typescript
-tools(): Readonly<Record<string, ConvertedTool>>
+async executeTool(
+  toolId: string,
+  args: any,
+  executionContext?: { messages?: any[]; toolCallId?: string },
+): Promise<any>
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "toolId",
+      type: "string",
+      description: "The ID/name of the tool to execute.",
+    },
+    {
+      name: "args",
+      type: "any",
+      description: "The arguments to pass to the tool\'s execute function.",
+    },
+    {
+      name: "executionContext",
+      type: "object",
+      isOptional: true,
+      description: "Optional context for the tool execution, like messages or a toolCallId.",
+    },
+  ]}
+/>
+
+## Resource Handling
+
+### What are MCP Resources?
+
+Resources are a core primitive in the Model Context Protocol (MCP) that allow servers to expose data and content that can be read by clients and used as context for LLM interactions. They represent any kind of data that an MCP server wants to make available, such as:
+
+- File contents
+- Database records
+- API responses
+- Live system data
+- Screenshots and images
+- Log files
+
+Resources are identified by unique URIs (e.g., `file:///home/user/documents/report.pdf`, `postgres://database/customers/schema`) and can contain either text (UTF-8 encoded) or binary data (base64 encoded).
+
+Clients can discover resources through:
+1.  **Direct resources**: Servers expose a list of concrete resources via a `resources/list` endpoint.
+2.  **Resource templates**: For dynamic resources, servers can expose URI templates (RFC 6570) that clients use to construct resource URIs.
+
+To read a resource, clients make a `resources/read` request with the URI. Servers can also notify clients about changes to the resource list (`notifications/resources/list_changed`) or updates to specific resource content (`notifications/resources/updated`) if a client has subscribed to that resource.
+
+For more detailed information, refer to the [official MCP documentation on Resources](https://modelcontextprotocol.io/docs/concepts/resources).
+
+### `MCPServerResources` Type
+
+The `resources` option takes an object of type `MCPServerResources`. This type defines the callbacks your server will use to handle resource requests:
+
+```typescript
+export type MCPServerResources = {
+  // Callback to list available resources
+  listResources: () => Promise<Resource[]>;
+
+  // Callback to get the content of a specific resource
+  getResourceContent: ({ uri }: { uri: string; }) => Promise<MCPServerResourceContent | MCPServerResourceContent[]>;
+
+  // Optional callback to list available resource templates
+  resourceTemplates?: () => Promise<ResourceTemplate[]>;
+};
+
+export type MCPServerResourceContent = { text?: string } | { blob?: string };
+```
+
+Example:
+
+```typescript
+import { MCPServer } from "@mastra/mcp";
+import type { MCPServerResourceContent, Resource, ResourceTemplate } from "@mastra/mcp";
+
+// Resources/resource templates will generally be dynamically fetched.
+const myResources: Resource[] = [
+  { uri: "file://data/123.txt", name: "Data File", mimeType: "text/plain" },
+];
+
+const myResourceContents: Record<string, MCPServerResourceContent> = {
+  "file://data.txt/123": { text: "This is the content of the data file." },
+};
+
+const myResourceTemplates: ResourceTemplate[] = [
+  {
+    uriTemplate: 'file://data/{id}',
+    name: 'Data File',
+    description: 'A file containing data.',
+    mimeType: 'text/plain',
+  },
+];
+
+const myResourceHandlers: MCPServerResources = {
+  listResources: async () => myResources,
+  getResourceContent: async ({ uri }) => {
+    if (myResourceContents[uri]) {
+      return myResourceContents[uri];
+    }
+    throw new Error(`Resource content not found for ${uri}`);
+  },
+  resourceTemplates: async () => myResourceTemplates,
+};
+
+const serverWithResources = new MCPServer({
+  name: "Resourceful Server",
+  version: "1.0.0",
+  tools: { /* ... your tools ... */ },
+  resources: myResourceHandlers,
+});
+```
+
+### Notifying Clients of Resource Changes
+
+If the available resources or their content change, your server can notify connected clients that are subscribed to the specific resource.
+
+#### `server.resources.notifyUpdated({ uri: string })`
+
+Call this method when the content of a specific resource (identified by its `uri`) has been updated. If any clients are subscribed to this URI, they will receive a `notifications/resources/updated` message.
+
+```typescript
+async server.resources.notifyUpdated({ uri: string }): Promise<void>
+```
+
+Example:
+```typescript
+// After updating the content of 'file://data.txt'
+await serverWithResources.resources.notifyUpdated({ uri: "file://data.txt" });
+```
+
+#### `server.resources.notifyListChanged()`
+
+Call this method when the overall list of available resources has changed (e.g., a resource was added or removed). This will send a `notifications/resources/list_changed` message to clients, prompting them to re-fetch the list of resources.
+
+```typescript
+async server.resources.notifyListChanged(): Promise<void>
+```
+
+Example:
+```typescript
+// After adding a new resource to the list managed by 'myResourceHandlers.listResources'
+await serverWithResources.resources.notifyListChanged();
 ```
 
 ## Examples
