@@ -151,7 +151,7 @@ A powerful feature of `MCPServer` is its ability to automatically expose your Ma
 - **Tool Naming**: Each agent is converted into a tool named `ask_<agentKey>`, where `<agentKey>` is the key you used for that agent in the `agents` object. For instance, if you configure `agents: { myAgentKey: myAgentInstance }`, a tool named `ask_myAgentKey` will be created.
 
 - **Tool Functionality**:
-    - **Description**: The generated tool's description will be in the format: "Ask agent '<AgentName>' a question. Original agent instructions: <agent description>".
+    - **Description**: The generated tool's description will be in the format: "Ask agent `<AgentName>` a question. Original agent instructions: `<agent description>`".
     - **Input**: The tool expects a single object argument with a `message` property (string): `{ message: "Your question for the agent" }`.
     - **Execution**: When this tool is called, it invokes the `generate()` method of the corresponding agent, passing the provided `query`.
     - **Output**: The direct result from the agent's `generate()` method is returned as the output of the tool.
@@ -164,7 +164,7 @@ This makes it straightforward to allow MCP clients to interact with your agents 
 
 When you provide agents in the `agents` configuration property, `MCPServer` will automatically create a corresponding tool for each agent. The tool will be named `ask_<agentIdentifier>`, where `<agentIdentifier>` is the key you used in the `agents` object.
 
-The description for this generated tool will be: "Ask agent \\'<agent.name>\\' a question. Agent description: <agent.description>".
+The description for this generated tool will be: "Ask agent `<agent.name>` a question. Agent description: `<agent.description>`".
 
 **Important**: For an agent to be converted into a tool, it **must** have a non-empty `description` string property set in its configuration when it was instantiated (e.g., `new Agent({ name: 'myAgent', description: 'This agent does X.', ... })`). If an agent is passed to `MCPServer` with a missing or empty `description`, an error will be thrown when the `MCPServer` is instantiated, and server setup will fail.
 
