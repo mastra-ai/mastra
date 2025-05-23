@@ -134,8 +134,8 @@ A powerful feature of `MCPServer` is its ability to automatically expose your Ma
 - **Tool Naming**: Each agent is converted into a tool named `ask_<agentKey>`, where `<agentKey>` is the key you used for that agent in the `agents` object. For instance, if you configure `agents: { myAgentKey: myAgentInstance }`, a tool named `ask_myAgentKey` will be created.
 
 - **Tool Functionality**:
-    - **Description**: The generated tool's description will be in the format: "Ask agent '<AgentName>' a question. Original agent instructions: <first 500 chars of agent's instructions, or 'Not available'>".
-    - **Input**: The tool expects a single object argument with a `query` property (string): `{ query: "Your question for the agent" }`.
+    - **Description**: The generated tool's description will be in the format: "Ask agent '<AgentName>' a question. Original agent instructions: <agent description>".
+    - **Input**: The tool expects a single object argument with a `message` property (string): `{ message: "Your question for the agent" }`.
     - **Execution**: When this tool is called, it invokes the `generate()` method of the corresponding agent, passing the provided `query`.
     - **Output**: The direct result from the agent's `generate()` method is returned as the output of the tool.
 
