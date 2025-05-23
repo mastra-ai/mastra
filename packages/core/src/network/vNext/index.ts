@@ -225,35 +225,8 @@ export class NewAgentNetwork extends MastraBase {
 
     const runtimeContextToUse = runtimeContext || new RuntimeContext();
     const agentsMap = await this.getAgents({ runtimeContext: runtimeContextToUse });
+    const workflowsMap = await this.getWorkflows({ runtimeContext: runtimeContextToUse });
     const routingAgent = await this.getRoutingAgent({ runtimeContext: runtimeContextToUse });
-
-    const workflowStep = createStep({
-      id: 'workflow-step',
-      inputSchema: z.object({
-        task: z.string(),
-        resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
-        prompt: z.string(),
-        result: z.string(),
-        isComplete: z.boolean().optional(),
-      }),
-      outputSchema: z.object({
-        task: z.string(),
-        resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
-        result: z.string(),
-        isComplete: z.boolean().optional(),
-      }),
-      execute: async ({ inputData }) => {
-        return {
-          result: 'workflow result',
-          task: inputData.task,
-          resourceId: inputData.resourceId,
-          resourceType: inputData.resourceType,
-          isComplete: false,
-        };
-      },
-    });
 
     const routingStep = createStep({
       id: 'routing-step',
@@ -321,6 +294,7 @@ export class NewAgentNetwork extends MastraBase {
                     ${completionResult ? `\n\n${completionResult.object.finalResult}` : ''}
 
                     Please select the most appropriate agent to handle this task and the prompt to be sent to the agent.
+                    If you are calling the same agent again, make sure to adjust the prompt to be more specific.
 
                     {
                         "resourceId": string,
@@ -396,6 +370,58 @@ export class NewAgentNetwork extends MastraBase {
       },
     });
 
+    const workflowStep = createStep({
+      id: 'workflow-step',
+      inputSchema: z.object({
+        task: z.string(),
+        resourceId: z.string(),
+        resourceType: RESOURCE_TYPES,
+        prompt: z.string(),
+        result: z.string(),
+        isComplete: z.boolean().optional(),
+      }),
+      outputSchema: z.object({
+        task: z.string(),
+        resourceId: z.string(),
+        resourceType: RESOURCE_TYPES,
+        result: z.string(),
+        isComplete: z.boolean().optional(),
+      }),
+      execute: async ({ inputData }) => {
+        console.log('calling workflow', inputData.resourceId);
+        const wf = workflowsMap[inputData.resourceId];
+
+        if (!wf) {
+          throw new Error(`Workflow ${inputData.resourceId} not found`);
+        }
+
+        const run = wf.createRun();
+        const resp = await run.start({
+          // TODO: this can't be task, it needs to be the input schema of the workflow
+          inputData: {
+            task: inputData.task,
+          },
+        });
+
+        if (resp.status === 'failed') {
+          throw resp.error;
+        }
+
+        if (resp.status === 'suspended') {
+          throw new Error('Workflow suspended');
+        }
+
+        // TODO: this cant' be result.text
+        return {
+          result: resp?.result?.text || '',
+          task: inputData.task,
+          resourceId: inputData.resourceId,
+          resourceType: inputData.resourceType,
+          isComplete: false,
+        };
+      },
+    });
+
     const finishStep = createStep({
       id: 'finish-step',
       inputSchema: z.object({
@@ -442,23 +468,23 @@ export class NewAgentNetwork extends MastraBase {
       ])
       .map({
         task: {
-          step: [routingStep, agentStep],
+          step: [routingStep, agentStep, workflowStep],
           path: 'task',
         },
         isComplete: {
-          step: [routingStep, finishStep],
+          step: [routingStep, workflowStep, finishStep],
           path: 'isComplete',
         },
         result: {
-          step: [agentStep, finishStep],
+          step: [agentStep, workflowStep, finishStep],
           path: 'result',
         },
         resourceId: {
-          step: [routingStep, agentStep],
+          step: [routingStep, agentStep, workflowStep],
           path: 'resourceId',
         },
         resourceType: {
-          step: [routingStep, agentStep],
+          step: [routingStep, agentStep, workflowStep],
           path: 'resourceType',
         },
       })

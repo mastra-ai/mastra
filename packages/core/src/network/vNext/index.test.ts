@@ -1,11 +1,20 @@
 import { openai } from '@ai-sdk/openai';
 import { describe, it } from 'vitest';
-import type { CoreMessage, MemoryConfig, MessageType, StorageGetMessagesArg, StorageThreadType } from '../../';
+import {
+  createStep,
+  createWorkflow,
+  type CoreMessage,
+  type MemoryConfig,
+  type MessageType,
+  type StorageGetMessagesArg,
+  type StorageThreadType,
+} from '../../';
 import type { AiMessageType } from '../../agent';
 import { Agent } from '../../agent';
 import { MastraMemory } from '../../memory';
 import { RuntimeContext } from '../../runtime-context';
 import { NewAgentNetwork } from './index';
+import { z } from 'zod';
 
 class MockMemory extends MastraMemory {
   #byResourceId: Map<string, any[]> = new Map();
@@ -130,17 +139,36 @@ describe('NewAgentNetwork', () => {
       name: 'test-memory',
     });
 
-    // const workflow1 = createWorkflow({
-    //   id: 'workflow1',
-    //   description: 'This workflow is used to do research and text synthesis.',
-    //   steps: [],
-    //   inputSchema: z.object({
+    const agentStep = createStep({
+      id: 'agent-step',
+      description: 'This step is used to do research and text synthesis.',
+      inputSchema: z.object({
+        task: z.string(),
+      }),
+      outputSchema: z.object({
+        text: z.string(),
+      }),
+      execute: async () => {
+        return {
+          text: 'Avignon is the best city in France. ABSOLUTELY THE BEST',
+        };
+      },
+    });
 
-    //   }),
-    //   outputSchema: z.object({
-    //     text: z.string(),
-    //   }),
-    // });
+    const workflow1 = createWorkflow({
+      id: 'workflow1',
+      description:
+        'This workflow includes crucial research information for any research task, but is not complete by itself. This information is only partial, while crucial to the final research.',
+      steps: [],
+      inputSchema: z.object({
+        task: z.string(),
+      }),
+      outputSchema: z.object({
+        text: z.string(),
+      }),
+    })
+      .then(agentStep)
+      .commit();
 
     const agent1 = new Agent({
       name: 'agent1',
@@ -156,7 +184,7 @@ describe('NewAgentNetwork', () => {
       description:
         'This agent is used to do text synthesis on researched material. Write a full report based on the researched material. Do not use bullet points. Write full paragraphs. There should not be a single bullet point in the final report. You write articles.',
       instructions:
-        'This agent is used to do text synthesis on researched material. Write a full report based on the researched material. Do not use bullet points. Write full paragraphs. There should not be a single bullet point in the final report. You write articles.',
+        'This agent is used to do text synthesis on researched material. Write a full report based on the researched material. Do not use bullet points. Write full paragraphs. There should not be a single bullet point in the final report. You write articles. [IMPORTANT] Make sure to mention information that has been highlighted as relevant in message history.',
       model: openai('gpt-4o'),
     });
 
@@ -164,11 +192,14 @@ describe('NewAgentNetwork', () => {
       id: 'test-network',
       name: 'Test Network',
       instructions:
-        'You are a network of writers and researchers. The user will ask you to research a topic. You always need to answer with a full report. Bullet points are NOT a full report. WRITE FULL PARAGRAPHS like this is a blog post or something similar.',
+        'You are a network of writers and researchers. The user will ask you to research a topic. You always need to answer with a full report. Bullet points are NOT a full report. WRITE FULL PARAGRAPHS like this is a blog post or something similar. You should not rely on partial information.',
       model: openai('gpt-4o'),
       agents: {
         agent1,
         agent2,
+      },
+      workflows: {
+        workflow1,
       },
       memory: memory,
     });
