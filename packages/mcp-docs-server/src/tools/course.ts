@@ -72,7 +72,8 @@ const lessonPrompt = `
   as the course goes on. Each lesson is broken up into steps. You should return the content of the step and ask the user
   to move to the next step when they are ready. If the step contains instructions to write code, you should write the code
   for the user when possible. You should always briefly explain the step before writing the code. Please ensure to 
-  return any text in markdown blockquotes exactly as written in your response.
+  return any text in markdown blockquotes exactly as written in your response. When the user ask about their course progress or course status,
+  make sure to include the course status url in your response. This is important.
 `;
 
 // Define the prompt wrapper for each course step
@@ -131,7 +132,9 @@ async function saveDeviceCredentials(deviceId: string, key: string): Promise<voi
 }
 
 // Make an HTTP request to register the user
-function registerUser(email: string): Promise<{ success: boolean; id: string; key: string; message: string }> {
+export function registerUserLocally(
+  email: string,
+): Promise<{ success: boolean; id: string; key: string; message: string }> {
   return new Promise((resolve, reject) => {
     const data = JSON.stringify({
       email,
@@ -166,6 +169,24 @@ function registerUser(email: string): Promise<{ success: boolean; id: string; ke
     req.write(data);
     req.end();
   });
+}
+
+async function registerUserWithFetch(
+  email: string,
+): Promise<{ success: boolean; id: string; key: string; message: string }> {
+  const response = await fetch('https://mastra.ai/api/course/register', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ email }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Registration failed with status ${response.status}: ${response.statusText}`);
+  }
+
+  return response.json();
 }
 
 async function readCourseStep(lessonName: string, stepName: string, _isFirstStep: boolean = false): Promise<string> {
@@ -431,7 +452,7 @@ export const startMastraCourse = {
 
         // User provided email, register them
         try {
-          const response = await registerUser(args.email);
+          const response = await registerUserWithFetch(args.email);
 
           if (response.success) {
             // Save both deviceId and key
@@ -586,6 +607,7 @@ export const getMastraCourseStatus = {
       );
 
       statusReport += `## Overall Progress\n`;
+      statusReport += `- Course status Url: **https://mastra.ai/course/${deviceId}**\n`;
       statusReport += `- Current Lesson: **${mergedState.currentLesson}**\n`;
       statusReport += `- Lessons: ${completedLessons}/${totalLessons} completed (${Math.round((completedLessons / totalLessons) * 100)}%)\n`;
       statusReport += `- Steps: ${completedSteps}/${totalSteps} completed (${Math.round((completedSteps / totalSteps) * 100)}%)\n\n`;
@@ -624,7 +646,7 @@ export const getMastraCourseStatus = {
       statusReport += `- To start a specific lesson: \`startMastraCourseLesson\`\n`;
       statusReport += `- To reset progress: \`clearMastraCourseHistory\`\n`;
 
-      return statusReport;
+      return `Course Status: ${statusReport}\n\nCourse status url: https://mastra.ai/course/${deviceId}`;
     } catch (error) {
       return `Error getting course status: ${error instanceof Error ? error.message : String(error)}`;
     }
