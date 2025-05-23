@@ -12,6 +12,7 @@ import type {
   ToolCallArgsEvent,
   ToolCallEndEvent,
   ToolCallStartEvent,
+  ToolMessage,
 } from '@ag-ui/client';
 import { AbstractAgent, EventType } from '@ag-ui/client';
 import {
@@ -145,6 +146,15 @@ export class AGUIAdapter extends AbstractAgent {
               };
               subscriber.next(endEvent);
             },
+            onToolResultPart(streamPart) {
+              const toolMessage: ToolMessage = {
+                role: 'tool',
+                id: randomUUID(),
+                toolCallId: streamPart.toolCallId,
+                content: JSON.stringify(streamPart.result),
+              };
+              finalMessages.push(toolMessage);
+            },
           });
         })
         .catch(error => {
@@ -157,7 +167,6 @@ export class AGUIAdapter extends AbstractAgent {
     });
   }
 }
-
 export function convertMessagesToMastraMessages(messages: Message[]): CoreMessage[] {
   const result: CoreMessage[] = [];
 
@@ -176,30 +185,30 @@ export function convertMessagesToMastraMessages(messages: Message[]): CoreMessag
         role: 'assistant',
         content: parts,
       });
-      if (message.toolCalls?.length) {
-        result.push({
-          role: 'tool',
-          content: message.toolCalls.map(toolCall => ({
-            type: 'tool-result',
-            toolCallId: toolCall.id,
-            toolName: toolCall.function.name,
-            result: JSON.parse(toolCall.function.arguments),
-          })),
-        });
-      }
     } else if (message.role === 'user') {
       result.push({
         role: 'user',
         content: message.content || '',
       });
     } else if (message.role === 'tool') {
+      let toolName = 'unknown';
+      for (const msg of messages) {
+        if (msg.role === 'assistant') {
+          for (const toolCall of msg.toolCalls ?? []) {
+            if (toolCall.id === message.toolCallId) {
+              toolName = toolCall.function.name;
+              break;
+            }
+          }
+        }
+      }
       result.push({
         role: 'tool',
         content: [
           {
             type: 'tool-result',
             toolCallId: message.toolCallId,
-            toolName: 'unknown',
+            toolName: toolName,
             result: message.content,
           },
         ],
