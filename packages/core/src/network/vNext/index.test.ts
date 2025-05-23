@@ -25,12 +25,12 @@ class MockMemory extends MastraMemory {
   }
 
   async getThreadsByResourceId({ resourceId }: { resourceId: string }) {
-    console.log('MEM getThreadsByResourceId', resourceId, this.#byResourceId.get(resourceId));
+    // console.log('MEM getThreadsByResourceId', resourceId, this.#byResourceId.get(resourceId));
     return this.#byResourceId.get(resourceId) || [];
   }
 
   async getThreadById({ threadId }: { threadId: string }) {
-    console.log('MEM getThreadById', threadId, this.#byThreadId.get(threadId));
+    // console.log('MEM getThreadById', threadId, this.#byThreadId.get(threadId));
     return {
       id: threadId,
       resourceId: 'test-resource',
@@ -41,7 +41,7 @@ class MockMemory extends MastraMemory {
   }
 
   async saveMessages({ messages }: { messages: MessageType[] }) {
-    console.log('MEM saveMessages', messages);
+    // console.log('MEM saveMessages', messages);
     for (const message of messages) {
       const thread = this.#byThreadId.get(message.threadId) ?? [];
       thread.push(message);
@@ -73,7 +73,7 @@ class MockMemory extends MastraMemory {
     messages: CoreMessage[];
     uiMessages: AiMessageType[];
   }> {
-    console.log('MEM rememberMessages', threadId, resourceId, vectorMessageSearch, systemMessage, config);
+    // console.log('MEM rememberMessages', threadId, resourceId, vectorMessageSearch, systemMessage, config);
     const thread = this.#byThreadId.get(threadId) ?? [];
     thread.push(systemMessage);
     this.#byThreadId.set(threadId, thread);
@@ -102,7 +102,7 @@ class MockMemory extends MastraMemory {
     resourceId,
     selectBy,
   }: StorageGetMessagesArg): Promise<{ messages: CoreMessage[]; uiMessages: AiMessageType[] }> {
-    console.log('MEM query', threadId, resourceId, selectBy);
+    // console.log('MEM query', threadId, resourceId, selectBy);
     const thread = this.#byThreadId.get(threadId) ?? [];
     return {
       messages: thread,
@@ -117,13 +117,13 @@ class MockMemory extends MastraMemory {
   }
 
   async saveThread({ thread }: { thread: StorageThreadType }) {
-    console.log('MEM saveThread', thread);
+    // console.log('MEM saveThread', thread);
     this.#byThreadId.set(thread.id, []);
     return thread;
   }
 
   async deleteThread(threadId: string) {
-    console.log('MEM deleteThread', threadId);
+    // console.log('MEM deleteThread', threadId);
     this.#byThreadId.delete(threadId);
   }
 }
