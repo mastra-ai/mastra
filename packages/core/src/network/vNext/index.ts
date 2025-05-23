@@ -4,8 +4,9 @@ import type { DynamicArgument, MastraLanguageModel } from '../../agent';
 import { MastraBase } from '../../base';
 import { RegisteredLogger } from '../../logger';
 import { RuntimeContext } from '../../runtime-context';
-import { createWorkflow, type NewWorkflow, createStep } from '../../workflows/vNext';
+import { createWorkflow, type Workflow, createStep } from '../../workflows';
 import type { MastraMemory } from '../../memory';
+import { randomUUID } from 'crypto';
 
 interface NewAgentNetworkConfig {
   id: string;
@@ -13,7 +14,7 @@ interface NewAgentNetworkConfig {
   instructions: DynamicArgument<string>;
   model: DynamicArgument<MastraLanguageModel>;
   agents: DynamicArgument<Record<string, Agent>>;
-  workflows?: DynamicArgument<Record<string, NewWorkflow>>;
+  workflows?: DynamicArgument<Record<string, Workflow>>;
   memory?: DynamicArgument<MastraMemory>;
 }
 
@@ -194,6 +195,8 @@ export class NewAgentNetwork extends MastraBase {
       runtimeContext?: RuntimeContext;
     },
   ) {
+    const runId = randomUUID();
+
     const runtimeContextToUse = runtimeContext || new RuntimeContext();
     const agentsMap = await this.getAgents({ runtimeContext: runtimeContextToUse });
     const routingAgent = await this.getRoutingAgent({ runtimeContext: runtimeContextToUse });
@@ -235,6 +238,8 @@ export class NewAgentNetwork extends MastraBase {
               isComplete: z.boolean(),
               finalResult: z.string(),
             }),
+            threadId: runId,
+            resourceId: this.name,
           });
 
           if (completionResult.object.isComplete) {
@@ -285,6 +290,8 @@ export class NewAgentNetwork extends MastraBase {
               prompt: z.string(),
               selectionReason: z.string(),
             }),
+            threadId: runId,
+            resourceId: this.name,
           },
         );
 
@@ -325,7 +332,10 @@ export class NewAgentNetwork extends MastraBase {
           throw new Error(`Agent ${agentId} not found`);
         }
 
-        const result = await agent.generate(inputData.prompt);
+        const result = await agent.generate(inputData.prompt, {
+          threadId: runId,
+          resourceId: this.name,
+        });
 
         return {
           task: inputData.task,
