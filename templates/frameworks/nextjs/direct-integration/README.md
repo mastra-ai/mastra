@@ -1,44 +1,70 @@
 # Mastra Next.js Template (Direct Integration)
 
-This template provides a quick start for integrating Mastra directly into your Next.js application.
+This template demonstrates how to create a weather agent using the Mastra framework directly integrated with a Next.js application. The agent can provide weather information based on user queries using Next.js server components and server actions.
+
+## Overview
+
+The Mastra Next.js Template showcases how to:
+
+- Create an AI-powered agent using Mastra framework within a Next.js application
+- Implement weather tools that connect to external APIs
+- Build a React interface for user weather queries
+- Use Next.js server actions to communicate with Mastra agents
+- Set up a proper project structure for maintainability
 
 ## Features
 
-- Next.js 13+ with App Router
-- Mastra AI agent integration with direct access
-- Sample weather query implementation
+- Next.js 14+ with App Router
+- Mastra AI agent with direct integration
+- Weather API integration
 - TypeScript support
 - Tailwind CSS for styling
+- Proper error handling and loading states
 
 ## Getting Started
 
 ### Installation
 
-1. Create a new Next.js project with this template:
+1. Create a new project with this template:
 
 ```bash
-# Using npx
-npx create-next-app my-mastra-app --example https://github.com/OmkarBansod02/mastra/tree/main/templates/frameworks/nextjs/direct-integration
+# Using npm
+npm create mastra@latest -- --template nextjs-direct
 
 # Or clone this template manually
-git clone https://github.com/OmkarBansod02/mastra.git
+git clone https://github.com/mastra-ai/mastra.git
 cp -r mastra/templates/frameworks/nextjs/direct-integration my-mastra-app
 cd my-mastra-app
-npm install
 ```
 
-2. Set up your environment variables:
+2. Install dependencies:
+
+```bash
+# Using npm (may have issues with native dependencies)
+npm install
+
+# Using pnpm (recommended)
+pnpm install
+```
+
+3. Set up environment variables:
 
 ```bash
 cp .env.example .env.local
 ```
 
-3. Update the `.env.local` file with your API keys.
+4. Add your OpenAI API key to `.env.local`:
 
-4. Start the development server:
+```
+OPENAI_API_KEY=your_openai_api_key_here
+```
+
+5. Start the development server:
 
 ```bash
 npm run dev
+# or
+pnpm dev
 ```
 
 ### Project Structure
@@ -46,10 +72,8 @@ npm run dev
 ```
 ├── app/                  # Next.js App Router
 │   ├── actions.ts        # Server actions for Mastra
-│   ├── api/              # API routes
-│   │   └── chat/         # Chat API endpoint
-│   │       └── route.ts  # Chat route handler
 │   ├── components/       # React components
+│   │   └── WeatherForm   # Weather query interface
 │   ├── layout.tsx        # Root layout
 │   └── page.tsx          # Home page
 ├── mastra/               # Mastra configuration
@@ -62,6 +86,12 @@ npm run dev
 ├── package.json          # Dependencies
 └── tsconfig.json         # TypeScript configuration
 ```
+
+## Known Issues & Troubleshooting
+
+- If you encounter dependency installation issues, try using pnpm instead of npm
+- Make sure to use an LTS version of Node.js
+- For native dependency build issues, you may need to install build tools for your platform
 
 ## Documentation
 
