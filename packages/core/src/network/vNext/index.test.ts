@@ -1,6 +1,6 @@
 import { describe, it, vi } from 'vitest';
 import { openai } from '@ai-sdk/openai';
-import { CoreMessage, MastraMemory, MemoryConfig, MessageType, StorageThreadType } from '../../';
+import { CoreMessage, MastraMemory, MemoryConfig, MessageType, StorageGetMessagesArg, StorageThreadType } from '../../';
 import { Agent, AiMessageType } from '../../agent';
 import { NewAgentNetwork } from './index';
 import { RuntimeContext } from '../../runtime-context';
@@ -89,7 +89,24 @@ class MockMemory extends MastraMemory {
     };
   }
 
-  query = vi.fn();
+  async query({
+    threadId,
+    resourceId,
+    selectBy,
+  }: StorageGetMessagesArg): Promise<{ messages: CoreMessage[]; uiMessages: AiMessageType[] }> {
+    console.log('MEM query', threadId, resourceId, selectBy);
+    const thread = this.#byThreadId.get(threadId) ?? [];
+    return {
+      messages: thread,
+      uiMessages: thread.map(msg => ({
+        id: msg.id,
+        role: msg.role,
+        content: msg.content,
+        createdAt: msg.createdAt,
+        updatedAt: msg.updatedAt,
+      })),
+    };
+  }
 
   async saveThread({ thread }: { thread: StorageThreadType }) {
     console.log('MEM saveThread', thread);

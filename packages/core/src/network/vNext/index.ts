@@ -224,11 +224,12 @@ export class NewAgentNetwork extends MastraBase {
                         The agent ${inputData.agentId} has contributed to the task.
                         This is the result from the agent: ${inputData.result}
 
-                        You need to evaluate that our task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete.
+                        You need to evaluate that our task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. Only return true if the task is complete according to the system instructions. Pay close attention to the finalResult and completionReason.
                         Original task: ${inputData.task}
 
                         {
                             "isComplete": boolean,
+                            "completionReason": string,
                             "finalResult": string
                         }
                     `;
@@ -237,10 +238,13 @@ export class NewAgentNetwork extends MastraBase {
             output: z.object({
               isComplete: z.boolean(),
               finalResult: z.string(),
+              completionReason: z.string(),
             }),
             threadId: runId,
             resourceId: this.name,
           });
+
+          console.log('COMPLETION RESULT', completionResult.object);
 
           if (completionResult.object.isComplete) {
             return {
