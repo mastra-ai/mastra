@@ -1,5 +1,14 @@
 # @mastra/core
 
+## 0.10.1-alpha.1
+
+### Patch Changes
+
+- bf5f17b: Adds ability to pass workflows into MCPServer to generate tools from the workflows. Each workflow will become a tool that can start the workflow run.
+- 38aee50: Adds ability to pass an agents into an MCPServer instance to automatically generate tools from them.
+- 5c41100: Added binding support for cloudflare deployers, added cloudflare kv namespace changes, and removed randomUUID from buildExecutionGraph
+- d6a759b: Update workflows code in core readme'
+
 ## 0.10.1-alpha.0
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # create-mastra
 
+## 0.10.1-alpha.2
+
+### Patch Changes
+
+- bed0916: Update default tools path in mastra dev,build
+- 23d56b1: Handle dev server errors, restart, exit
+
 ## 0.10.1-alpha.1
 
 ### Patch Changes

@@ -1,5 +1,16 @@
 # @mastra/deployer
 
+## 0.10.1-alpha.1
+
+### Patch Changes
+
+- bed0916: Handle wildcards in tools discovery
+- Updated dependencies [bf5f17b]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+  - @mastra/core@0.10.1-alpha.1
+
 ## 0.10.1-alpha.0
 
 ### Patch Changes
