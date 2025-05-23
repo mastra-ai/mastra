@@ -1,10 +1,11 @@
 import { existsSync } from 'node:fs';
-import { stat, writeFile, readdir } from 'node:fs/promises';
-import { dirname, join, basename } from 'node:path';
+import { stat, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MastraBundler } from '@mastra/core/bundler';
 import virtual from '@rollup/plugin-virtual';
 import fsExtra, { copy, ensureDir, readJSON, emptyDir } from 'fs-extra/esm';
+import { globby } from 'globby';
 import resolveFrom from 'resolve-from';
 import type { InputOptions, OutputOptions } from 'rollup';
 
@@ -148,24 +149,7 @@ export abstract class Bundler extends MastraBundler {
     const inputs: Record<string, string> = {};
 
     for (const toolPath of toolsPaths) {
-      const expandWildcardPath = async (path: string): Promise<string[]> => {
-        if (!path.includes('*')) {
-          return [path];
-        }
-
-        const baseDir = dirname(path);
-        const pattern = basename(path);
-        const files = await readdir(baseDir);
-
-        return files
-          .filter(file => {
-            const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
-            return regex.test(file);
-          })
-          .map(file => join(baseDir, file));
-      };
-
-      const expandedPaths = await expandWildcardPath(toolPath);
+      const expandedPaths = await globby(toolPath, {});
 
       for (const path of expandedPaths) {
         if (await fsExtra.pathExists(path)) {
