@@ -1,6 +1,17 @@
 import { Link } from 'react-router';
 
-import { Txt, Header, HeaderTitle, Icon, Badge, ToolsIcon } from '@mastra/playground-ui';
+import {
+  Txt,
+  Header,
+  HeaderTitle,
+  Icon,
+  Badge,
+  ToolsIcon,
+  Button,
+  McpCoinIcon,
+  McpServerIcon,
+  EmptyState,
+} from '@mastra/playground-ui';
 
 import { useMCPServers } from '@/hooks/use-mcp-servers';
 import { useMCPServerTools } from '@/hooks/use-mcp-server-tools';
@@ -8,7 +19,6 @@ import { client } from '@/lib/client';
 
 import { ServerInfo } from '@mastra/core/mcp';
 import { Skeleton } from '@/components/ui/skeleton';
-import { McpServerIcon } from '@mastra/playground-ui';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 const McpServerRow = ({ server }: { server: ServerInfo }) => {
@@ -50,23 +60,52 @@ const McpServerRow = ({ server }: { server: ServerInfo }) => {
 };
 
 const MCPs = () => {
-  const { servers: mcpServers } = useMCPServers();
+  const { servers, isLoading } = useMCPServers();
+
+  const mcpServers = servers ?? [];
+
+  if (isLoading) return null;
 
   return (
-    <section className="overflow-hidden">
+    <section className="overflow-hidden h-full">
       <Header>
         <HeaderTitle>MCP Servers</HeaderTitle>
       </Header>
 
-      <ScrollArea className="h-full">
-        <ul>
-          {(mcpServers || []).map(server => (
-            <li key={server.id}>
-              <McpServerRow server={server} />
-            </li>
-          ))}
-        </ul>
-      </ScrollArea>
+      {mcpServers.length === 0 ? (
+        <div className="flex h-full items-center justify-center">
+          <EmptyState
+            iconSlot={<McpCoinIcon />}
+            titleSlot="Configure MCP servers"
+            descriptionSlot="MCP servers are not configured yet. You can find more information in the documentation."
+            actionSlot={
+              <Button
+                size="lg"
+                className="w-full"
+                variant="light"
+                as="a"
+                href="https://mastra.ai/en/docs/getting-started/mcp-docs-server"
+                target="_blank"
+              >
+                <Icon>
+                  <McpServerIcon />
+                </Icon>
+                Docs
+              </Button>
+            }
+          />
+        </div>
+      ) : (
+        <ScrollArea className="h-full">
+          <ul>
+            {(mcpServers || []).map(server => (
+              <li key={server.id}>
+                <McpServerRow server={server} />
+              </li>
+            ))}
+          </ul>
+        </ScrollArea>
+      )}
     </section>
   );
 };
