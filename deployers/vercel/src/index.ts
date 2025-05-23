@@ -115,7 +115,7 @@ import { AvailableHooks, registerHook } from '@mastra/core/hooks';
 import { TABLE_EVALS } from '@mastra/core/storage';
 import { checkEvalStorageFields } from '@mastra/core/utils';
 
-registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName, instructions }) => {
+registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName, instructions, agentVersion }) => {
   evaluate({
     agentName,
     input,
@@ -124,6 +124,7 @@ registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agen
     runId,
     globalRunId: runId,
     instructions,
+    testInfo: { agentVersion },
   });
 });
 
@@ -149,7 +150,7 @@ registerHook(AvailableHooks.ON_EVALUATION, async traceObject => {
         agent_name: traceObject.agentName,
         metric_name: traceObject.metricName,
         instructions: traceObject.instructions,
-        test_info: null,
+        test_info: traceObject.testInfo,
         global_run_id: traceObject.globalRunId,
         run_id: traceObject.runId,
         created_at: new Date().toISOString(),

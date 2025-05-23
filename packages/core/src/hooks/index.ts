@@ -30,6 +30,7 @@ type GenerationHookData = {
   runId: string;
   agentName: string;
   instructions: string;
+  agentVersion: string;
 };
 
 export function registerHook(hook: AvailableHooks.ON_EVALUATION, action: Handler<EvaluationHookData>): void;
