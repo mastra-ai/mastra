@@ -3,7 +3,10 @@
 import { useChat } from '@ai-sdk/react';
 
 export default function Chat() {
-  const { messages, input, handleInputChange, handleSubmit } = useChat();
+  const { messages, input, data, handleInputChange, handleSubmit } = useChat({
+    // api: '/api/chat',
+    api: '/api/sub-agent-tools',
+  });
 
   return (
     <div className="flex flex-col w-full max-w-md py-24 mx-auto stretch">
@@ -11,6 +14,20 @@ export default function Chat() {
         <div key={m.id} className="whitespace-pre-wrap">
           {m.role === 'user' ? 'User: ' : 'AI: '}
           {m.content}
+        </div>
+      ))}
+
+      {/* Leverage message annotations to display tool calls */}
+      {messages.map(m => (
+        <div key={m.id} className="whitespace-pre-wrap">
+          {JSON.stringify(m.annotations)}
+        </div>
+      ))}
+
+      {/* Leverage data parts to display tool calls */}
+      {messages.map(m => (
+        <div key={m.id} className="whitespace-pre-wrap">
+          {JSON.stringify(data)}
         </div>
       ))}
 
