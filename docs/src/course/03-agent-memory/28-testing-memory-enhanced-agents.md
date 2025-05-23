@@ -3,7 +3,7 @@
 Let's test both of our memory-enhanced agents:
 
 1. Make sure your development server is running with `npm run dev`
-2. Open the playground at http://localhost:4111/
+2. Open the playground at `http://localhost:4111/`
 
 ## Testing the Memory Master Agent
 
