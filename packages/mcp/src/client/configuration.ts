@@ -1,6 +1,6 @@
 import { MastraBase } from '@mastra/core/base';
 import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
-import type { Resource } from '@modelcontextprotocol/sdk/types.js';
+import type { Resource, ResourceTemplate } from '@modelcontextprotocol/sdk/types.js';
 import equal from 'fast-deep-equal';
 import { v5 as uuidv5 } from 'uuid';
 import { InternalMastraMCPClient } from './client';
@@ -35,6 +35,7 @@ export class MCPClient extends MastraBase {
         const existingInstance = mcpClientInstances.get(this.id);
         if (existingInstance) {
           void existingInstance.disconnect();
+          mcpClientInstances.delete(this.id);
         }
       }
     } else {
@@ -63,6 +64,56 @@ To fix this you have three different options:
     return this;
   }
 
+  public get resources() {
+    this.addToInstanceCache();
+    return {
+      list: async (): Promise<Record<string, Resource[]>> => {
+        const allResources: Record<string, Resource[]> = {};
+        for (const serverName of Object.keys(this.serverConfigs)) {
+          try {
+            const internalClient = await this.getConnectedClientForServer(serverName);
+            allResources[serverName] = await internalClient.resources.list();
+          } catch (error) {
+            this.logger.error(`Failed to list resources from server ${serverName}`, { error });
+          }
+        }
+        return allResources;
+      },
+      templates: async (): Promise<Record<string, ResourceTemplate[]>> => {
+        const allTemplates: Record<string, ResourceTemplate[]> = {};
+        for (const serverName of Object.keys(this.serverConfigs)) {
+          try {
+            const internalClient = await this.getConnectedClientForServer(serverName);
+            allTemplates[serverName] = await internalClient.resources.templates();
+          } catch (error) {
+            this.logger.error(`Failed to list resource templates from server ${serverName}`, { error });
+          }
+        }
+        return allTemplates;
+      },
+      read: async (serverName: string, uri: string) => {
+        const internalClient = await this.getConnectedClientForServer(serverName);
+        return internalClient.resources.read(uri);
+      },
+      subscribe: async (serverName: string, uri: string) => {
+        const internalClient = await this.getConnectedClientForServer(serverName);
+        return internalClient.resources.subscribe(uri);
+      },
+      unsubscribe: async (serverName: string, uri: string) => {
+        const internalClient = await this.getConnectedClientForServer(serverName);
+        return internalClient.resources.unsubscribe(uri);
+      },
+      onUpdated: async (serverName: string, handler: (params: { uri: string }) => void) => {
+        const internalClient = await this.getConnectedClientForServer(serverName);
+        return internalClient.resources.onUpdated(handler);
+      },
+      onListChanged: async (serverName: string, handler: () => void) => {
+        const internalClient = await this.getConnectedClientForServer(serverName);
+        return internalClient.resources.onListChanged(handler);
+      },
+    };
+  }
+
   private addToInstanceCache() {
     if (!mcpClientInstances.has(this.id)) {
       mcpClientInstances.set(this.id, this);
@@ -86,7 +137,7 @@ To fix this you have three different options:
     this.disconnectPromise = (async () => {
       try {
         mcpClientInstances.delete(this.id);
-
+        
         // Disconnect all clients in the cache
         await Promise.all(Array.from(this.mcpClientsById.values()).map(client => client.disconnect()));
         this.mcpClientsById.clear();
@@ -125,20 +176,10 @@ To fix this you have three different options:
   }
 
   /**
-   * Get all resources from connected MCP servers
-   * @returns A record of server names to their resources
+   * @deprecated all resource actions have been moved to the this.resources object. Use this.resources.list() instead.
    */
   public async getResources() {
-    this.addToInstanceCache();
-    const connectedResources: Record<string, Resource[]> = {};
-
-    await this.eachClientResources(async ({ serverName, resources }) => {
-      if (resources && Array.isArray(resources)) {
-        connectedResources[serverName] = resources;
-      }
-    });
-
-    return connectedResources;
+    return this.resources.list();
   }
 
   /**
@@ -155,9 +196,7 @@ To fix this you have three different options:
     return sessionIds;
   }
 
-  private async getConnectedClient(name: string, config: MastraMCPServerDefinition) {
-    // Helps to prevent race condition.
-    // If we want to call connect() we need to wait for the disconnect to complete first if any is ongoing.
+  private async getConnectedClient(name: string, config: MastraMCPServerDefinition): Promise<InternalMastraMCPClient> {
     if (this.disconnectPromise) {
       await this.disconnectPromise;
     }
@@ -197,10 +236,16 @@ To fix this you have three different options:
         `Failed to connect to MCP server ${name}: ${e instanceof Error ? e.stack || e.message : String(e)}`,
       );
     }
-
     this.logger.debug(`Connected to ${name} MCP server`);
-
     return mcpClient;
+  }
+
+  private async getConnectedClientForServer(serverName: string): Promise<InternalMastraMCPClient> {
+    const serverConfig = this.serverConfigs[serverName];
+    if (!serverConfig) {
+      throw new Error(`Server configuration not found for name: ${serverName}`);
+    }
+    return this.getConnectedClient(serverName, serverConfig);
   }
 
   private async eachClientTools(
@@ -215,35 +260,6 @@ To fix this you have three different options:
         const client = await this.getConnectedClient(serverName, serverConfig);
         const tools = await client.tools();
         await cb({ serverName, tools, client });
-      }),
-    );
-  }
-
-  /**
-   * Helper method to iterate through each connected MCP client and retrieve resources
-   * @param cb Callback function to process resources from each server
-   */
-  private async eachClientResources(
-    cb: (args: {
-      serverName: string;
-      resources: Resource[];
-      client: InstanceType<typeof InternalMastraMCPClient>;
-    }) => Promise<void>,
-  ) {
-    await Promise.all(
-      Object.entries(this.serverConfigs).map(async ([serverName, serverConfig]) => {
-        try {
-          const client = await this.getConnectedClient(serverName, serverConfig);
-          const response = await client.resources();
-          // Ensure response has the expected structure
-          if (response && 'resources' in response && Array.isArray(response.resources)) {
-            await cb({ serverName, resources: response.resources, client });
-          }
-        } catch (e) {
-          this.logger.error(`Error getting resources from server ${serverName}`, {
-            error: e instanceof Error ? e.message : String(e),
-          });
-        }
       }),
     );
   }

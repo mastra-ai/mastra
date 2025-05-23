@@ -3,8 +3,9 @@ import path from 'path';
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/di';
+import type { ResourceTemplate } from '@modelcontextprotocol/sdk/types.js';
 import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll, vi } from 'vitest';
-import { allTools, mcpServerName } from './__fixtures__/fire-crawl-complex-schema';
+import { allTools, mcpServerName } from '../__fixtures__/fire-crawl-complex-schema';
 import type { LogHandler, LogMessage } from './client';
 import { MCPClient } from './configuration';
 
@@ -14,10 +15,14 @@ describe('MCPClient', () => {
   let mcp: MCPClient;
   let weatherProcess: ReturnType<typeof spawn>;
   let clients: MCPClient[] = [];
+  let weatherServerPort: number;
 
   beforeAll(async () => {
+    weatherServerPort = 60000 + Math.floor(Math.random() * 1000); // Generate a random port
     // Start the weather SSE server
-    weatherProcess = spawn('npx', ['-y', 'tsx', path.join(__dirname, '__fixtures__/weather.ts')]);
+    weatherProcess = spawn('npx', ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/weather.ts')], {
+      env: { ...process.env, WEATHER_SERVER_PORT: String(weatherServerPort) }, // Pass port as env var
+    });
 
     // Wait for SSE server to be ready
     let resolved = false;
@@ -42,17 +47,20 @@ describe('MCPClient', () => {
   });
 
   beforeEach(async () => {
+    // Give each MCPClient a unique ID to prevent re-initialization errors across tests
+    const testId = "testId"
     mcp = new MCPClient({
+      id: testId,
       servers: {
         stockPrice: {
           command: 'npx',
-          args: ['-y', 'tsx', path.join(__dirname, '__fixtures__/stock-price.ts')],
+          args: ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
           env: {
             FAKE_CREDS: 'test',
           },
         },
         weather: {
-          url: new URL('http://localhost:60808/sse'),
+          url: new URL(`http://localhost:${weatherServerPort}/sse`), // Use the dynamic port
         },
       },
     });
@@ -77,13 +85,13 @@ describe('MCPClient', () => {
     expect(mcp['serverConfigs']).toEqual({
       stockPrice: {
         command: 'npx',
-        args: ['-y', 'tsx', path.join(__dirname, '__fixtures__/stock-price.ts')],
+        args: ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
         env: {
           FAKE_CREDS: 'test',
         },
       },
       weather: {
-        url: new URL('http://localhost:60808/sse'),
+        url: new URL(`http://localhost:${weatherServerPort}/sse`),
       },
     });
   });
@@ -106,7 +114,7 @@ describe('MCPClient', () => {
   });
 
   it('should get resources from connected MCP servers', async () => {
-    const resources = await mcp.getResources();
+    const resources = await mcp.resources.list();
 
     expect(resources).toHaveProperty('weather');
     expect(resources.weather).toBeDefined();
@@ -142,12 +150,116 @@ describe('MCPClient', () => {
     });
   });
 
+  it('should list resource templates from connected MCP servers', async () => {
+    const templates = await mcp.resources.templates();
+    expect(templates).toHaveProperty('weather');
+    expect(templates.weather).toBeDefined();
+    expect(templates.weather.length).toBeGreaterThan(0);
+    const customForecastTemplate = templates.weather.find(
+      (t: ResourceTemplate) => t.uriTemplate === 'weather://custom/{city}/{days}',
+    );
+    expect(customForecastTemplate).toBeDefined();
+    expect(customForecastTemplate).toMatchObject({
+      uriTemplate: 'weather://custom/{city}/{days}',
+      name: 'Custom Weather Forecast',
+      description: expect.any(String),
+      mimeType: 'application/json',
+    });
+  });
+
+  it('should read a specific resource from a server', async () => {
+    const resourceContent = await mcp.resources.read('weather', 'weather://current');
+    expect(resourceContent).toBeDefined();
+    expect(resourceContent.contents).toBeInstanceOf(Array);
+    expect(resourceContent.contents.length).toBe(1);
+    const contentItem = resourceContent.contents[0];
+    expect(contentItem.uri).toBe('weather://current');
+    expect(contentItem.mimeType).toBe('application/json');
+    expect(contentItem.text).toBeDefined();
+    let parsedText: any = {};
+    if (contentItem.text && typeof contentItem.text === 'string') {
+      try {
+        parsedText = JSON.parse(contentItem.text);
+      } catch {
+        // If parsing fails, parsedText remains an empty object
+        // console.error("Failed to parse resource content text:", _e);
+      }
+    }
+    expect(parsedText).toHaveProperty('location');
+  });
+
+  it('should subscribe and unsubscribe from a resource on a specific server', async () => {
+    const serverName = 'weather';
+    const resourceUri = 'weather://current';
+
+    const subResult = await mcp.resources.subscribe(serverName, resourceUri);
+    expect(subResult).toEqual({});
+
+    const unsubResult = await mcp.resources.unsubscribe(serverName, resourceUri);
+    expect(unsubResult).toEqual({});
+  });
+
+  it('should receive resource updated notification from a specific server', async () => {
+    const serverName = 'weather';
+    const resourceUri = 'weather://current';
+    let notificationReceived = false;
+    let receivedUri = '';
+
+    await mcp.resources.list(); // Initial call to establish connection if needed
+    // Create the promise for the notification BEFORE subscribing
+    const resourceUpdatedPromise = new Promise<void>((resolve, reject) => {
+      mcp.resources.onUpdated(serverName, (params: { uri: string }) => {
+        if (params.uri === resourceUri) {
+          notificationReceived = true;
+          receivedUri = params.uri;
+          resolve();
+        } else {
+          console.log(`[Test LOG] Received update for ${params.uri}, waiting for ${resourceUri}`);
+        }
+      });
+      setTimeout(() => reject(new Error(`Timeout waiting for resourceUpdated notification for ${resourceUri}`)), 4500);
+    });
+
+    await mcp.resources.subscribe(serverName, resourceUri); // Ensure subscription is active
+
+    await expect(resourceUpdatedPromise).resolves.toBeUndefined(); // Wait for the notification
+
+    expect(notificationReceived).toBe(true);
+    expect(receivedUri).toBe(resourceUri);
+
+    await mcp.resources.unsubscribe(serverName, resourceUri); // Cleanup
+  }, 5000);
+
+  it('should receive resource list changed notification from a specific server', async () => {
+    const serverName = 'weather';
+    let notificationReceived = false;
+
+    await mcp.resources.list(); // Initial call to establish connection
+
+    const resourceListChangedPromise = new Promise<void>((resolve, reject) => {
+      mcp.resources.onListChanged(serverName, () => {
+        notificationReceived = true;
+        resolve();
+      });
+      setTimeout(() => reject(new Error('Timeout waiting for resourceListChanged notification')), 4500);
+    });
+
+    // In a real scenario, something would trigger the server to send this.
+    // For the test, we rely on the interval in weather.ts or a direct call if available.
+    // Adding a small delay or an explicit trigger if the fixture supported it would be more robust.
+    // For now, we assume the interval in weather.ts will eventually fire it.
+
+    await expect(resourceListChangedPromise).resolves.toBeUndefined(); // Wait for the notification
+
+    expect(notificationReceived).toBe(true);
+  });
+
   it('should handle errors when getting resources', async () => {
     const errorClient = new MCPClient({
       id: 'error-test-client',
       servers: {
         weather: {
-          url: new URL('http://localhost:60808/sse'),
+          url: new URL(`http://localhost:${weatherServerPort}/sse`),
         },
         nonexistentServer: {
           command: 'nonexistent-command',
@@ -157,7 +269,7 @@ describe('MCPClient', () => {
     });
 
     try {
-      const resources = await errorClient.getResources();
+      const resources = await errorClient.resources.list();
 
       expect(resources).toHaveProperty('weather');
       expect(resources.weather).toBeDefined();
@@ -190,7 +302,7 @@ describe('MCPClient', () => {
         servers: {
           stockPrice: {
             command: 'npx',
-            args: ['-y', 'tsx', path.join(__dirname, '__fixtures__/stock-price.ts')],
+            args: ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
             env: {
               FAKE_CREDS: 'test',
             },
@@ -209,13 +321,13 @@ describe('MCPClient', () => {
         servers: {
           stockPrice: {
             command: 'npx',
-            args: ['-y', 'tsx', path.join(__dirname, '__fixtures__/stock-price.ts')],
+            args: ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
             env: {
               FAKE_CREDS: 'test',
             },
           },
           weather: {
-            url: new URL('http://localhost:60808/sse'),
+            url: new URL(`http://localhost:${weatherServerPort}/sse`),
           },
         },
       });
@@ -229,7 +341,7 @@ describe('MCPClient', () => {
         servers: {
           stockPrice: {
             command: 'npx',
-            args: ['-y', 'tsx', path.join(__dirname, '__fixtures__/stock-price.ts')],
+            args: ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
             env: {
               FAKE_CREDS: 'test',
             },
@@ -243,7 +355,7 @@ describe('MCPClient', () => {
             servers: {
               stockPrice: {
                 command: 'npx',
-                args: ['-y', 'tsx', path.join(__dirname, '__fixtures__/stock-price.ts')],
+                args: ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
                 env: {
                   FAKE_CREDS: 'test',
                 },
@@ -381,7 +493,7 @@ describe('MCPClient', () => {
         servers: {
           'firecrawl-mcp': {
             command: 'npx',
-            args: ['-y', 'tsx', path.join(__dirname, '__fixtures__/fire-crawl-complex-schema.ts')],
+            args: ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/fire-crawl-complex-schema.ts')],
             logger: mockLogHandler,
           },
         },
@@ -390,7 +502,7 @@ describe('MCPClient', () => {
 
     afterEach(async () => {
       mockLogHandler.mockClear();
-      await complexClient?.disconnect().catch(() => {});
+      await complexClient?.disconnect().catch(() => { });
     });
 
     it('should process tools from firecrawl-mcp without crashing', async () => {
@@ -427,7 +539,7 @@ describe('MCPClient', () => {
         servers: {
           stockPrice: {
             command: 'npx',
-            args: ['tsx', path.join(__dirname, '__fixtures__/stock-price.ts')],
+            args: ['tsx', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
             env: { FAKE_CREDS: 'test' },
             logger: loggerFn,
           },
@@ -471,7 +583,7 @@ describe('MCPClient', () => {
         servers: {
           stockPriceServer: {
             command: 'npx',
-            args: ['tsx', path.join(__dirname, '__fixtures__/stock-price.ts')],
+            args: ['tsx', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
             env: { FAKE_CREDS: 'test' },
             logger: loggerFn,
           },
@@ -513,7 +625,7 @@ describe('MCPClient', () => {
         servers: {
           stockPriceServer: {
             command: 'npx',
-            args: ['tsx', path.join(__dirname, '__fixtures__/stock-price.ts')],
+            args: ['tsx', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
             env: { FAKE_CREDS: 'test' },
             logger: loggerFn,
           },
@@ -567,13 +679,13 @@ describe('MCPClient', () => {
         servers: {
           serverX: {
             command: 'npx',
-            args: ['tsx', path.join(__dirname, '__fixtures__/stock-price.ts')], // Re-use fixture, tool name will differ by server
+            args: ['tsx', path.join(__dirname, '..', '__fixtures__/stock-price.ts')], // Re-use fixture, tool name will differ by server
             logger: sharedLoggerFn,
             env: { FAKE_CREDS: 'serverX-creds' }, // Make env slightly different for clarity if needed
           },
           serverY: {
             command: 'npx',
-            args: ['tsx', path.join(__dirname, '__fixtures__/stock-price.ts')], // Re-use fixture
+            args: ['tsx', path.join(__dirname, '..', '__fixtures__/stock-price.ts')], // Re-use fixture
             logger: sharedLoggerFn,
             env: { FAKE_CREDS: 'serverY-creds' },
           },

@@ -124,6 +124,12 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
       isOptional: true,
       description: "Optional list of remote access points for this server.",
     },
+    {
+      name: "resources",
+      type: "MCPServerResources",
+      isOptional: true,
+      description: "An object defining how the server should handle MCP resources. See Resource Handling section for details.",
+    },
   ]}
 />
 
@@ -481,10 +487,152 @@ getStreamableHTTPTransport(): StreamableHTTPServerTransport | undefined
 
 ### tools()
 
-This method gives you a look at the tools that were set up when you created the server. It's a read-only list, useful for debugging purposes.
+Executes a specific tool provided by this MCP server.
 
 ```typescript
-tools(): Readonly<Record<string, ConvertedTool>>
+async executeTool(
+  toolId: string,
+  args: any,
+  executionContext?: { messages?: any[]; toolCallId?: string },
+): Promise<any>
+```
+
+<PropertiesTable
+  content={[
+    {
+      name: "toolId",
+      type: "string",
+      description: "The ID/name of the tool to execute.",
+    },
+    {
+      name: "args",
+      type: "any",
+      description: "The arguments to pass to the tool\'s execute function.",
+    },
+    {
+      name: "executionContext",
+      type: "object",
+      isOptional: true,
+      description: "Optional context for the tool execution, like messages or a toolCallId.",
+    },
+  ]}
+/>
+
+## Resource Handling
+
+### What are MCP Resources?
+
+Resources are a core primitive in the Model Context Protocol (MCP) that allow servers to expose data and content that can be read by clients and used as context for LLM interactions. They represent any kind of data that an MCP server wants to make available, such as:
+
+- File contents
+- Database records
+- API responses
+- Live system data
+- Screenshots and images
+- Log files
+
+Resources are identified by unique URIs (e.g., `file:///home/user/documents/report.pdf`, `postgres://database/customers/schema`) and can contain either text (UTF-8 encoded) or binary data (base64 encoded).
+
+Clients can discover resources through:
+1.  **Direct resources**: Servers expose a list of concrete resources via a `resources/list` endpoint.
+2.  **Resource templates**: For dynamic resources, servers can expose URI templates (RFC 6570) that clients use to construct resource URIs.
+
+To read a resource, clients make a `resources/read` request with the URI. Servers can also notify clients about changes to the resource list (`notifications/resources/list_changed`) or updates to specific resource content (`notifications/resources/updated`) if a client has subscribed to that resource.
+
+For more detailed information, refer to the [official MCP documentation on Resources](https://modelcontextprotocol.io/docs/concepts/resources).
+
+### `MCPServerResources` Type
+
+The `resources` option takes an object of type `MCPServerResources`. This type defines the callbacks your server will use to handle resource requests:
+
+```typescript
+export type MCPServerResources = {
+  // Callback to list available resources
+  listResources: () => Promise<Resource[]>;
+
+  // Callback to get the content of a specific resource
+  getResourceContent: ({ uri }: { uri: string; }) => Promise<MCPServerResourceContent | MCPServerResourceContent[]>;
+
+  // Optional callback to list available resource templates
+  resourceTemplates?: () => Promise<ResourceTemplate[]>;
+};
+
+export type MCPServerResourceContent = { text?: string } | { blob?: string };
+```
+
+Example:
+
+```typescript
+import { MCPServer } from "@mastra/mcp";
+import type { MCPServerResourceContent, Resource, ResourceTemplate } from "@mastra/mcp";
+
+// Resources/resource templates will generally be dynamically fetched.
+const myResources: Resource[] = [
+  { uri: "file://data/123.txt", name: "Data File", mimeType: "text/plain" },
+];
+
+const myResourceContents: Record<string, MCPServerResourceContent> = {
+  "file://data.txt/123": { text: "This is the content of the data file." },
+};
+
+const myResourceTemplates: ResourceTemplate[] = [
+  {
+    uriTemplate: 'file://data/{id}',
+    name: 'Data File',
+    description: 'A file containing data.',
+    mimeType: 'text/plain',
+  },
+];
+
+const myResourceHandlers: MCPServerResources = {
+  listResources: async () => myResources,
+  getResourceContent: async ({ uri }) => {
+    if (myResourceContents[uri]) {
+      return myResourceContents[uri];
+    }
+    throw new Error(`Resource content not found for ${uri}`);
+  },
+  resourceTemplates: async () => myResourceTemplates,
+};
+
+const serverWithResources = new MCPServer({
+  name: "Resourceful Server",
+  version: "1.0.0",
+  tools: { /* ... your tools ... */ },
+  resources: myResourceHandlers,
+});
+```
+
+### Notifying Clients of Resource Changes
+
+If the available resources or their content change, your server can notify connected clients that are subscribed to the specific resource.
+
+#### `server.resources.notifyUpdated({ uri: string })`
+
+Call this method when the content of a specific resource (identified by its `uri`) has been updated. If any clients are subscribed to this URI, they will receive a `notifications/resources/updated` message.
+
+```typescript
+async server.resources.notifyUpdated({ uri: string }): Promise<void>
+```
+
+Example:
+```typescript
+// After updating the content of 'file://data.txt'
+await serverWithResources.resources.notifyUpdated({ uri: "file://data.txt" });
+```
+
+#### `server.resources.notifyListChanged()`
+
+Call this method when the overall list of available resources has changed (e.g., a resource was added or removed). This will send a `notifications/resources/list_changed` message to clients, prompting them to re-fetch the list of resources.
+
+```typescript
+async server.resources.notifyListChanged(): Promise<void>
+```
+
+Example:
+```typescript
+// After adding a new resource to the list managed by 'myResourceHandlers.listResources'
+await serverWithResources.resources.notifyListChanged();
 ```
 
 ## Examples

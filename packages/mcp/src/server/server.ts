@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import type * as http from 'node:http';
 import type { InternalCoreTool } from '@mastra/core';
 import { createTool, makeCoreTool } from '@mastra/core';
@@ -19,12 +19,40 @@ import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { StreamableHTTPServerTransportOptions } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
+  ListResourceTemplatesRequestSchema,
+  SubscribeRequestSchema,
+  UnsubscribeRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js';
+import type {
+  ResourceContents,
+  Resource,
+  ResourceTemplate,
+  ServerCapabilities,
+} from '@modelcontextprotocol/sdk/types.js';
 import type { SSEStreamingApi } from 'hono/streaming';
 import { streamSSE } from 'hono/streaming';
 import { SSETransport } from 'hono-mcp-server-sse-transport';
 import { z } from 'zod';
+import { ServerResourceActions } from './resourceActions';
 
+export type MCPServerResourceContentCallback = ({
+  uri,
+}: {
+  uri: string;
+}) => Promise<MCPServerResourceContent | MCPServerResourceContent[]>;
+export type MCPServerResourceContent = { text?: string } | { blob?: string };
+export type MCPServerResources = {
+  listResources: () => Promise<Resource[]>;
+  getResourceContent: MCPServerResourceContentCallback;
+  resourceTemplates?: () => Promise<ResourceTemplate[]>;
+};
+
+export type { Resource, ResourceTemplate };
 export class MCPServer extends MCPServerBase {
   private server: Server;
   private stdioTransport?: StdioServerTransport;
@@ -33,6 +61,17 @@ export class MCPServer extends MCPServerBase {
   private streamableHTTPTransport?: StreamableHTTPServerTransport;
   private listToolsHandlerIsRegistered: boolean = false;
   private callToolHandlerIsRegistered: boolean = false;
+  private listResourcesHandlerIsRegistered: boolean = false;
+  private readResourceHandlerIsRegistered: boolean = false;
+  private listResourceTemplatesHandlerIsRegistered: boolean = false;
+  private subscribeResourceHandlerIsRegistered: boolean = false;
+  private unsubscribeResourceHandlerIsRegistered: boolean = false;
+
+  private definedResources?: Resource[];
+  private definedResourceTemplates?: ResourceTemplate[];
+  private resourceOptions?: MCPServerResources;
+  private subscriptions: Set<string> = new Set();
+  public readonly resources: ServerResourceActions;
 
   /**
    * Get the current stdio transport.
@@ -66,21 +105,49 @@ export class MCPServer extends MCPServerBase {
    * Construct a new MCPServer instance.
    * @param opts - Configuration options for the server, including registry metadata.
    */
-  constructor(opts: MCPServerConfig) {
+  constructor(opts: MCPServerConfig & { resources?: MCPServerResources }) {
     super(opts);
+    this.resourceOptions = opts.resources;
 
-    this.server = new Server(
-      { name: this.name, version: this.version },
-      { capabilities: { tools: {}, logging: { enabled: true } } },
-    );
+    const capabilities: ServerCapabilities = {
+      tools: {},
+      logging: { enabled: true },
+    };
+
+    if (opts.resources) {
+      capabilities.resources = { subscribe: true, listChanged: true };
+    }
+
+    this.server = new Server({ name: this.name, version: this.version }, { capabilities });
 
     this.logger.info(
-      `Initialized MCPServer '${this.name}' v${this.version} (ID: ${this.id}) with tools: ${Object.keys(this.convertedTools).join(', ')}`,
+      `Initialized MCPServer '${this.name}' v${this.version} (ID: ${this.id}) with tools: ${Object.keys(this.convertedTools).join(', ')} and resources. Capabilities: ${JSON.stringify(capabilities)}`,
     );
 
     this.sseHonoTransports = new Map();
     this.registerListToolsHandler();
     this.registerCallToolHandler();
+    if (opts.resources) {
+      this.registerListResourcesHandler();
+      this.registerReadResourceHandler({ getResourcesCallback: opts.resources.getResourceContent });
+      this.registerSubscribeResourceHandler();
+      this.registerUnsubscribeResourceHandler();
+
+      if (opts.resources.resourceTemplates) {
+        this.registerListResourceTemplatesHandler();
+      }
+    }
+    this.resources = new ServerResourceActions({
+      getSubscriptions: () => this.subscriptions,
+      getLogger: () => this.logger,
+      getSdkServer: () => this.server,
+      clearDefinedResources: () => {
+        this.definedResources = undefined;
+      },
+      clearDefinedResourceTemplates: () => {
+        this.definedResourceTemplates = undefined;
+      },
+    });
   }
 
   private convertAgentsToTools(
@@ -307,6 +374,187 @@ export class MCPServer extends MCPServerBase {
   }
 
   /**
+   * Register the ListResources handler for listing all available resources.
+   */
+  private registerListResourcesHandler() {
+    if (this.listResourcesHandlerIsRegistered) {
+      return;
+    }
+    this.listResourcesHandlerIsRegistered = true;
+    const capturedResourceOptions = this.resourceOptions; // Capture for TS narrowing
+
+    if (!capturedResourceOptions?.listResources) {
+      this.logger.warn('ListResources capability not supported by server configuration.');
+      return;
+    }
+
+    this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
+      this.logger.debug('Handling ListResources request');
+      if (this.definedResources) {
+        return { resources: this.definedResources };
+      } else {
+        try {
+          const resources = await capturedResourceOptions.listResources();
+          // Cache the resources
+          this.definedResources = resources;
+          this.logger.debug(`Fetched and cached ${this.definedResources.length} resources.`);
+          return { resources: this.definedResources };
+        } catch (error) {
+          this.logger.error('Error fetching resources via listResources():', { error });
+          // Re-throw to let the MCP Server SDK handle formatting the error response
+          throw error;
+        }
+      }
+    });
+  }
+
+  /**
+   * Register the ReadResource handler for reading a resource by URI.
+   */
+  private registerReadResourceHandler({
+    getResourcesCallback,
+  }: {
+    getResourcesCallback: MCPServerResourceContentCallback;
+  }) {
+    if (this.readResourceHandlerIsRegistered) {
+      return;
+    }
+    this.readResourceHandlerIsRegistered = true;
+    this.server.setRequestHandler(ReadResourceRequestSchema, async request => {
+      const startTime = Date.now();
+      const uri = request.params.uri;
+      this.logger.debug(`Handling ReadResource request for URI: ${uri}`);
+
+      if (!this.definedResources) {
+        const resources = await this.resourceOptions?.listResources?.();
+        if (!resources) throw new Error('Failed to load resources');
+        this.definedResources = resources;
+      }
+
+      const resource = this.definedResources?.find(r => r.uri === uri);
+
+      if (!resource) {
+        this.logger.warn(`ReadResource: Unknown resource URI '${uri}' requested.`);
+        throw new Error(`Resource not found: ${uri}`);
+      }
+
+      try {
+        const resourcesOrResourceContent = await getResourcesCallback({ uri });
+        const resourcesContent = Array.isArray(resourcesOrResourceContent)
+          ? resourcesOrResourceContent
+          : [resourcesOrResourceContent];
+        const contents: ResourceContents[] = resourcesContent.map(resourceContent => {
+          const contentItem: ResourceContents = {
+            uri: resource.uri,
+            mimeType: resource.mimeType,
+          };
+          if ('text' in resourceContent) {
+            contentItem.text = resourceContent.text;
+          }
+
+          if ('blob' in resourceContent) {
+            contentItem.blob = resourceContent.blob;
+          }
+
+          return contentItem;
+        });
+        const duration = Date.now() - startTime;
+        this.logger.info(`Resource '${uri}' read successfully in ${duration}ms.`);
+        return {
+          contents,
+        };
+      } catch (error) {
+        const duration = Date.now() - startTime;
+        this.logger.error(`Failed to get content for resource URI '${uri}' in ${duration}ms`, { error });
+        throw error;
+      }
+    });
+  }
+
+  /**
+   * Register the ListResourceTemplates handler.
+   */
+  private registerListResourceTemplatesHandler() {
+    if (this.listResourceTemplatesHandlerIsRegistered) {
+      return;
+    }
+
+    // If this method is called, this.resourceOptions and this.resourceOptions.resourceTemplates should exist
+    // due to the constructor logic checking opts.resources.resourceTemplates.
+    if (!this.resourceOptions || typeof this.resourceOptions.resourceTemplates !== 'function') {
+      this.logger.warn(
+        'ListResourceTemplates handler called, but resourceTemplates function is not available on resourceOptions or not a function.',
+      );
+      // Register a handler that returns empty templates if not properly configured.
+      this.server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
+        this.logger.debug('Handling ListResourceTemplates request (no templates configured or resourceOptions issue)');
+        return { resourceTemplates: [] };
+      });
+      this.listResourceTemplatesHandlerIsRegistered = true;
+      return;
+    }
+
+    // Typescript can now infer resourceTemplatesFn is a function.
+    const resourceTemplatesFn = this.resourceOptions.resourceTemplates;
+
+    this.listResourceTemplatesHandlerIsRegistered = true;
+    this.server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
+      this.logger.debug('Handling ListResourceTemplates request');
+      if (this.definedResourceTemplates) {
+        return { resourceTemplates: this.definedResourceTemplates };
+      } else {
+        try {
+          const templates = await resourceTemplatesFn(); // Safe to call now
+          this.definedResourceTemplates = templates;
+          this.logger.debug(`Fetched and cached ${this.definedResourceTemplates.length} resource templates.`);
+          return { resourceTemplates: this.definedResourceTemplates };
+        } catch (error) {
+          this.logger.error('Error fetching resource templates via resourceTemplates():', { error });
+          // Re-throw to let the MCP Server SDK handle formatting the error response
+          throw error;
+        }
+      }
+    });
+  }
+
+  /**
+   * Register the SubscribeResource handler.
+   */
+  private registerSubscribeResourceHandler() {
+    if (this.subscribeResourceHandlerIsRegistered) {
+      return;
+    }
+    if (!SubscribeRequestSchema) {
+      this.logger.warn('SubscribeRequestSchema not available, cannot register SubscribeResource handler.');
+      return;
+    }
+    this.subscribeResourceHandlerIsRegistered = true;
+    this.server.setRequestHandler(SubscribeRequestSchema as any, async (request: { params: { uri: string } }) => {
+      const uri = request.params.uri;
+      this.logger.info(`Received resources/subscribe request for URI: ${uri}`);
+      this.subscriptions.add(uri);
+      return {};
+    });
+  }
+
+  /**
+   * Register the UnsubscribeResource handler.
+   */
+  private registerUnsubscribeResourceHandler() {
+    if (this.unsubscribeResourceHandlerIsRegistered) {
+      return;
+    }
+    this.unsubscribeResourceHandlerIsRegistered = true;
+
+    this.server.setRequestHandler(UnsubscribeRequestSchema as any, async (request: { params: { uri: string } }) => {
+      const uri = request.params.uri;
+      this.logger.info(`Received resources/unsubscribe request for URI: ${uri}`);
+      this.subscriptions.delete(uri);
+      return {};
+    });
+  }
+
+  /**
    * Start the MCP server using stdio transport (for Windsurf integration).
    */
   public async startStdio(): Promise<void> {
@@ -497,6 +745,12 @@ export class MCPServer extends MCPServerBase {
   async close() {
     this.callToolHandlerIsRegistered = false;
     this.listToolsHandlerIsRegistered = false;
+    this.listResourcesHandlerIsRegistered = false;
+    this.readResourceHandlerIsRegistered = false;
+    this.listResourceTemplatesHandlerIsRegistered = false;
+    this.subscribeResourceHandlerIsRegistered = false;
+    this.unsubscribeResourceHandlerIsRegistered = false;
+
     try {
       if (this.stdioTransport) {
         await this.stdioTransport.close?.();
