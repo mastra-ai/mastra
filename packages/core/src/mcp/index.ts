@@ -50,6 +50,8 @@ export abstract class MCPServerBase extends MastraBase {
   public readonly convertedTools: Record<string, ConvertedTool>;
   /** Reference to the Mastra instance if this server is registered with one. */
   public mastra: Mastra | undefined;
+  /** Agents to be exposed as tools. */
+  protected readonly agents?: MCPServerConfig['agents'];
 
   /**
    * Public getter for the server's unique ID.
@@ -84,10 +86,12 @@ export abstract class MCPServerBase extends MastraBase {
 
   /**
    * Abstract method to convert and validate tool definitions provided to the server.
+   * This method will also handle agents passed in the config.
    * @param tools Tool definitions to convert.
+   * @param agents Agent definitions to convert to tools.
    * @returns A record of converted and validated tools.
    */
-  public abstract convertTools(tools: ToolsInput): Record<string, ConvertedTool>;
+  public abstract convertTools(tools: ToolsInput, agents?: MCPServerConfig['agents']): Record<string, ConvertedTool>;
 
   /**
    * Internal method used by Mastra to register itself with the server.
@@ -123,7 +127,8 @@ export abstract class MCPServerBase extends MastraBase {
     this.packageCanonical = config.packageCanonical;
     this.packages = config.packages;
     this.remotes = config.remotes;
-    this.convertedTools = this.convertTools(config.tools);
+    this.agents = config.agents;
+    this.convertedTools = this.convertTools(config.tools, config.agents);
   }
 
   /**

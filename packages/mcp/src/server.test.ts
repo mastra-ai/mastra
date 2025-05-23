@@ -2,9 +2,11 @@ import http from 'node:http';
 import path from 'path';
 import type { ServerType } from '@hono/node-server';
 import { serve } from '@hono/node-server';
+import { Agent } from '@mastra/core/agent';
 import type { ToolsInput } from '@mastra/core/agent';
 import type { MCPServerConfig, Repository, PackageInfo, RemoteInfo } from '@mastra/core/mcp';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { MockLanguageModelV1 } from 'ai/test';
 import { Hono } from 'hono';
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
@@ -31,6 +33,31 @@ const mockTools: ToolsInput = {
     parameters: z.object({ input: z.string().optional() }),
     execute: mockToolExecute,
   },
+};
+
+const mockAgentGenerate = vi.fn(async (query: string) => {
+  return {
+    rawCall: { rawPrompt: null, rawSettings: {} },
+    finishReason: 'stop',
+    usage: { promptTokens: 10, completionTokens: 20 },
+    text: `{"content":"Agent response to: "${JSON.stringify(query)}"}`,
+  };
+});
+
+const mockAgentGetInstructions = vi.fn(() => 'This is a mock agent for testing.');
+
+const createMockAgent = (name: string, generateFn: any, instructionsFn?: any, description?: string) => {
+  return new Agent({
+    name: name,
+    instructions: instructionsFn,
+    description: description || '',
+    model: new MockLanguageModelV1({
+      defaultObjectGenerationMode: 'json',
+      doGenerate: async options => {
+        return generateFn((options.prompt.at(-1)?.content[0] as { text: string }).text);
+      },
+    }),
+  });
 };
 
 const minimalConfig: MCPServerConfig = {
@@ -463,5 +490,133 @@ describe('MCPServer', () => {
       expect(toolResult).toHaveProperty('windSpeed');
       expect(toolResult).toHaveProperty('windGust');
     });
+  });
+});
+
+describe('MCPServer - Agent to Tool Conversion', () => {
+  let server: MCPServer;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should convert a provided agent to an MCP tool with sync dynamic description', () => {
+    const testAgent = createMockAgent(
+      'MyTestAgent',
+      mockAgentGenerate,
+      mockAgentGetInstructions,
+      'Simple mock description.',
+    );
+    server = new MCPServer({
+      name: 'AgentToolServer',
+      version: '1.0.0',
+      tools: {},
+      agents: { testAgentKey: testAgent },
+    });
+
+    const tools = server.tools();
+    const agentToolName = 'ask_testAgentKey';
+    expect(tools[agentToolName]).toBeDefined();
+    expect(tools[agentToolName].description).toContain("Ask agent 'MyTestAgent' a question.");
+    expect(tools[agentToolName].description).toContain('Agent description: Simple mock description.');
+
+    const schema = tools[agentToolName].parameters.jsonSchema;
+    expect(schema.type).toBe('object');
+    if (schema.properties) {
+      expect(schema.properties.message).toBeDefined();
+      const querySchema = schema.properties.message as any;
+      expect(querySchema.type).toBe('string');
+    } else {
+      throw new Error('Schema properties are undefined'); // Fail test if properties not found
+    }
+  });
+
+  it('should call agent.generate when the derived tool is executed', async () => {
+    const testAgent = createMockAgent(
+      'MyExecAgent',
+      mockAgentGenerate,
+      mockAgentGetInstructions,
+      'Executable mock agent',
+    );
+    server = new MCPServer({
+      name: 'AgentExecServer',
+      version: '1.0.0',
+      tools: {},
+      agents: { execAgentKey: testAgent },
+    });
+
+    const agentTool = server.tools()['ask_execAgentKey'];
+    expect(agentTool).toBeDefined();
+
+    const queryInput = { message: 'Hello Agent' };
+
+    if (agentTool && agentTool.execute) {
+      const result = await agentTool.execute(queryInput, { toolCallId: 'mcp-call-123', messages: [] });
+
+      expect(mockAgentGenerate).toHaveBeenCalledTimes(1);
+      expect(mockAgentGenerate).toHaveBeenCalledWith(queryInput.message);
+      expect(result.text).toBe(`{"content":"Agent response to: ""Hello Agent""}`);
+    } else {
+      throw new Error('Agent tool or its execute function is undefined');
+    }
+  });
+
+  it('should handle name collision: explicit tool wins over agent-derived tool', () => {
+    const explicitToolName = 'ask_collidingAgentKey';
+    const explicitToolExecute = vi.fn(async () => 'explicit tool response');
+    const collidingAgent = createMockAgent(
+      'CollidingAgent',
+      mockAgentGenerate,
+      undefined,
+      'Colliding agent description',
+    );
+
+    server = new MCPServer({
+      name: 'CollisionServer',
+      version: '1.0.0',
+      tools: {
+        [explicitToolName]: {
+          description: 'An explicit tool that collides.',
+          parameters: z.object({ query: z.string() }),
+          execute: explicitToolExecute,
+        },
+      },
+      agents: { collidingAgentKey: collidingAgent },
+    });
+
+    const tools = server.tools();
+    expect(tools[explicitToolName]).toBeDefined();
+    expect(tools[explicitToolName].description).toBe('An explicit tool that collides.');
+    expect(mockAgentGenerate).not.toHaveBeenCalled();
+  });
+
+  it('should use agentKey for tool name ask_<agentKey>', () => {
+    const uniqueKeyAgent = createMockAgent(
+      'AgentNameDoesNotMatterForToolKey',
+      mockAgentGenerate,
+      undefined,
+      'Agent description',
+    );
+    server = new MCPServer({
+      name: 'UniqueKeyServer',
+      version: '1.0.0',
+      tools: {},
+      agents: { unique_agent_key_123: uniqueKeyAgent },
+    });
+    expect(server.tools()['ask_unique_agent_key_123']).toBeDefined();
+  });
+
+  it('should throw an error if description is undefined (not provided to mock)', () => {
+    const agentWithNoDesc = createMockAgent('NoDescAgent', mockAgentGenerate, mockAgentGetInstructions, undefined); // getDescription will return ''
+
+    expect(
+      () =>
+        new MCPServer({
+          name: 'NoDescProvidedServer',
+          version: '1.0.0',
+          tools: {},
+          agents: { noDescKey: agentWithNoDesc as unknown as Agent }, // Cast for test setup
+        }),
+    ).toThrow('must have a non-empty description');
   });
 });

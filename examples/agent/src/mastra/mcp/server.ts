@@ -1,6 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { MCPServer } from '@mastra/mcp';
 import { z } from 'zod';
+import { chefAgent } from '../agents';
 
 export const myMcpServer = new MCPServer({
   name: 'My Calculation & Data MCP Server',
@@ -48,6 +49,7 @@ export const myMcpServer = new MCPServer({
 export const myMcpServerTwo = new MCPServer({
   name: 'My Utility MCP Server',
   version: '1.0.0',
+  agents: { chefAgent },
   tools: {
     stringUtils: createTool({
       id: 'stringUtils',

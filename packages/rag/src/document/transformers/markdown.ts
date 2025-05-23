@@ -61,6 +61,8 @@ export class MarkdownHeaderTransformer {
     const aggregatedChunks: LineType[] = [];
 
     for (const line of lines) {
+      const lastLine = aggregatedChunks[aggregatedChunks.length - 1]?.content?.split('\n')?.slice(-1)[0]?.trim();
+      const lastChunkIsHeader = lastLine ? this.headersToSplitOn.some(([sep]) => lastLine.startsWith(sep)) : false;
       if (
         aggregatedChunks.length > 0 &&
         JSON.stringify(aggregatedChunks?.[aggregatedChunks.length - 1]!.metadata) === JSON.stringify(line.metadata)
@@ -72,8 +74,7 @@ export class MarkdownHeaderTransformer {
         JSON.stringify(aggregatedChunks?.[aggregatedChunks.length - 1]!.metadata) !== JSON.stringify(line.metadata) &&
         Object.keys(aggregatedChunks?.[aggregatedChunks.length - 1]!.metadata).length <
           Object.keys(line.metadata).length &&
-        aggregatedChunks?.[aggregatedChunks.length - 1]?.content?.split('\n')?.slice(-1)[0]![0] === '#' &&
-        !this.stripHeaders
+        lastChunkIsHeader
       ) {
         if (aggregatedChunks && aggregatedChunks?.[aggregatedChunks.length - 1]) {
           const aggChunk = aggregatedChunks[aggregatedChunks.length - 1];
@@ -166,12 +167,13 @@ export class MarkdownHeaderTransformer {
             initialMetadata[name] = header.data;
           }
 
-          // Always create a separate chunk for the header
-          linesWithMetadata.push({
-            content: line,
-            metadata: { ...currentMetadata, ...initialMetadata },
-          });
-
+          // Only add header to linesWithMetadata if stripHeaders is false
+          if (!this.stripHeaders) {
+            linesWithMetadata.push({
+              content: line,
+              metadata: { ...currentMetadata, ...initialMetadata },
+            });
+          }
           break;
         }
       }
@@ -197,6 +199,7 @@ export class MarkdownHeaderTransformer {
         }
       }
 
+      // Reset metadata for next line
       currentMetadata = { ...initialMetadata };
     }
 

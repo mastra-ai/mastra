@@ -1,5 +1,12 @@
 # @mastra/core
 
+## 0.10.1-alpha.0
+
+### Patch Changes
+
+- 6d16390: Support custom bundle externals on mastra Instance
+- 1e4a421: Fix duplication of items in array results in workflow
+
 ## 0.10.0
 
 ### Minor Changes
