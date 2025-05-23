@@ -136,8 +136,8 @@ In addition to using tools from MCP servers, your Mastra Agents themselves can b
 When an `Agent` instance is provided to an `MCPServer` configuration:
 
 - It is automatically converted into a callable tool.
-- The tool is named `ask_<agentKey>`, where `<agentKey>` is the identifier you used when adding the agent to the `MCPServer`\'s `agents` configuration.
-- The agent\'s `description` property (which must be a non-empty string) is used to generate the tool\'s description.
+- The tool is named `ask_<agentKey>`, where `<agentKey>` is the identifier you used when adding the agent to the `MCPServer`'s `agents` configuration.
+- The agent's `description` property (which must be a non-empty string) is used to generate the tool\'s description.
 
 This allows other AI models or MCP clients to interact with your Mastra Agents as if they were standard tools, typically by "asking" them a question.
 
@@ -151,7 +151,7 @@ import { weatherInfo } from "../tools/weatherInfo";
 import { generalHelper } from "../agents/generalHelper";
 
 const server = new MCPServer({
-  name: "My Custom Server with Agent Tool",
+  name: "My Custom Server with Agent-Tool",
   version: "1.0.0",
   tools: {
     weatherInfo,
