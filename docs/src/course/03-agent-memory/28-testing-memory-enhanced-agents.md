@@ -7,7 +7,7 @@ Let's test both of our memory-enhanced agents:
 
 ## Testing the Memory Master Agent
 
-1. Select your "MemoryMasterAgent"
+1. Select your `MemoryMasterAgent`
 2. Have a comprehensive conversation that tests all memory features:
    - Share personal information: "Hi, I'm Taylor. I live in Boston and work as a software engineer."
    - Discuss a project: "I'm working on a web application with a deadline next month."
@@ -17,7 +17,7 @@ Let's test both of our memory-enhanced agents:
 
 ## Testing the Learning Assistant
 
-1. Select your "Learning Assistant"
+1. Select your `Learning Assistant`
 2. Have a conversation about learning programming:
    - "I want to learn Python programming. I'm a complete beginner."
    - "My learning style is visual - I learn best with diagrams and examples."
