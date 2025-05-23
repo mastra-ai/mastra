@@ -3,8 +3,9 @@ import {
   MessagePrimitive,
   ThreadPrimitive,
   ToolCallContentPartComponent,
+  useComposerRuntime,
 } from '@assistant-ui/react';
-import { ArrowUp } from 'lucide-react';
+import { ArrowUp, Mic, PlusIcon } from 'lucide-react';
 import type { FC } from 'react';
 
 import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button';
@@ -13,18 +14,21 @@ import { Button } from '@/components/ui/button';
 
 import { AssistantMessage } from './assistant-message';
 import { UserMessage } from './user-message';
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useAutoscroll } from '@/hooks/use-autoscroll';
 import { Txt } from '@/ds/components/Txt';
 import { Icon, InfoIcon } from '@/ds/icons';
+import { useSpeechRecognition } from '@/hooks/use-speech-recognition';
+import { ComposerAttachments } from './attachment';
 
 export interface ThreadProps {
   ToolFallback?: ToolCallContentPartComponent;
   agentName?: string;
   hasMemory?: boolean;
+  showFileSupport?: boolean;
 }
 
-export const Thread = ({ ToolFallback, agentName, hasMemory }: ThreadProps) => {
+export const Thread = ({ ToolFallback, agentName, hasMemory, showFileSupport }: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
   useAutoscroll(areaRef, { enabled: true });
 
@@ -33,7 +37,7 @@ export const Thread = ({ ToolFallback, agentName, hasMemory }: ThreadProps) => {
   };
 
   return (
-    <ThreadPrimitive.Root className="max-w-[568px] w-full mx-auto h-[calc(100%-110px)] px-4">
+    <ThreadPrimitive.Root className="max-w-[568px] w-full mx-auto h-[calc(100%-208px)] px-4">
       <ThreadPrimitive.Viewport className="py-10 overflow-y-auto scroll-smooth h-full" ref={areaRef} autoScroll={false}>
         <div>
           <ThreadWelcome agentName={agentName} />
@@ -51,7 +55,7 @@ export const Thread = ({ ToolFallback, agentName, hasMemory }: ThreadProps) => {
         </ThreadPrimitive.If>
       </ThreadPrimitive.Viewport>
 
-      <Composer hasMemory={hasMemory} />
+      <Composer hasMemory={hasMemory} showFileSupport={showFileSupport} />
     </ThreadPrimitive.Root>
   );
 };
@@ -86,21 +90,26 @@ const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
   );
 };
 
-const Composer: FC<{ hasMemory?: boolean }> = ({ hasMemory }) => {
+const Composer: FC<{ hasMemory?: boolean; showFileSupport?: boolean }> = ({ hasMemory, showFileSupport }) => {
   return (
     <div>
-      <ComposerPrimitive.Root className="w-full bg-surface3 rounded-lg border-sm border-border1 px-3 py-4 mt-auto h-[100px]">
-        <ComposerPrimitive.Input asChild className="w-full">
-          <textarea
-            className="text-ui-lg leading-ui-lg placeholder:text-icon3 text-icon6 bg-transparent focus:outline-none resize-none"
-            autoFocus
-            placeholder="Enter your message..."
-            name=""
-            id=""
-          ></textarea>
-        </ComposerPrimitive.Input>
-        <div className="flex justify-end">
-          <ComposerAction />
+      <ComposerPrimitive.Root>
+        <ComposerAttachments />
+
+        <div className="w-full bg-surface3 rounded-lg border-sm border-border1 px-3 py-4 mt-auto h-[100px]">
+          <ComposerPrimitive.Input asChild className="w-full">
+            <textarea
+              className="text-ui-lg leading-ui-lg placeholder:text-icon3 text-icon6 bg-transparent focus:outline-none resize-none"
+              autoFocus
+              placeholder="Enter your message..."
+              name=""
+              id=""
+            ></textarea>
+          </ComposerPrimitive.Input>
+          <div className="flex justify-end gap-2">
+            <SpeechInput />
+            <ComposerAction showFileSupport={showFileSupport} />
+          </div>
         </div>
       </ComposerPrimitive.Root>
 
@@ -116,9 +125,40 @@ const Composer: FC<{ hasMemory?: boolean }> = ({ hasMemory }) => {
   );
 };
 
-const ComposerAction: FC = () => {
+const SpeechInput = () => {
+  const composerRuntime = useComposerRuntime();
+  const { start, stop, isListening, transcript } = useSpeechRecognition();
+
+  useEffect(() => {
+    if (!transcript) return;
+
+    composerRuntime.setText(transcript);
+  }, [composerRuntime, transcript]);
+
+  return (
+    <TooltipIconButton
+      type="button"
+      tooltip={isListening ? 'Stop dictation' : 'Start dictation'}
+      variant="ghost"
+      className="rounded-full"
+      onClick={() => (isListening ? stop() : start())}
+    >
+      {isListening ? <CircleStopIcon /> : <Mic className="h-6 w-6 text-[#898989] hover:text-[#fff]" />}
+    </TooltipIconButton>
+  );
+};
+
+const ComposerAction: FC<{ showFileSupport?: boolean }> = ({ showFileSupport }) => {
   return (
     <>
+      {showFileSupport && (
+        <ComposerPrimitive.AddAttachment asChild>
+          <TooltipIconButton tooltip="Add attachment" variant="ghost" className="rounded-full">
+            <PlusIcon className="h-6 w-6 text-[#898989] hover:text-[#fff]" />
+          </TooltipIconButton>
+        </ComposerPrimitive.AddAttachment>
+      )}
+
       <ThreadPrimitive.If running={false}>
         <ComposerPrimitive.Send asChild>
           <TooltipIconButton

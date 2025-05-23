@@ -28,6 +28,7 @@ export interface ChatProps {
   modelSettings?: ModelSettings;
   chatWithGenerate?: boolean;
   runtimeContext?: Record<string, any>;
+  showFileSupport?: boolean;
 }
 
 export type SpanStatus = {
