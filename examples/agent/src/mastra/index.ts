@@ -3,6 +3,7 @@ import { PinoLogger } from '@mastra/loggers';
 
 import { chefAgent, chefAgentResponses, dynamicAgent } from './agents/index';
 import { myMcpServer, myMcpServerTwo } from './mcp/server';
+import { myWorkflow } from './workflows';
 
 export const mastra = new Mastra({
   agents: { chefAgent, chefAgentResponses, dynamicAgent },
@@ -11,6 +12,7 @@ export const mastra = new Mastra({
     myMcpServer,
     myMcpServerTwo,
   },
+  workflows: { myWorkflow },
   serverMiddleware: [
     {
       handler: (c, next) => {

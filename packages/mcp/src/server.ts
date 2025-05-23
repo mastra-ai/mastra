@@ -191,7 +191,7 @@ export class MCPServer extends MCPServerBase {
 
       const workflowToolDefinition = createTool({
         id: workflowToolName,
-        description: workflowDescription,
+        description: `Run workflow '${workflowKey}'. Workflow description: ${workflowDescription}`,
         inputSchema: workflow.inputSchema,
         execute: async ({ context, runtimeContext }) => {
           this.logger.debug(
@@ -199,19 +199,11 @@ export class MCPServer extends MCPServerBase {
             context,
           );
           try {
-            const run = workflow.createRun({ runId: runtimeContext?.get('runId') as string | undefined });
+            const run = workflow.createRun({ runId: runtimeContext?.get('runId') });
+
             const response = await run.start({ inputData: context, runtimeContext });
-            if (response.status === 'failed') {
-              throw response.error;
-            }
-            if (response.status === 'success') {
-              return response.result;
-            }
-            // Handle suspended or other statuses if necessary, or return undefined/throw
-            this.logger.warn(
-              `Workflow tool '${workflowToolName}' for workflow '${workflow.id}' did not return a successful result. Status: ${response.status}`,
-            );
-            return undefined; // Or throw an error for non-success states
+
+            return response;
           } catch (error) {
             this.logger.error(
               `Error executing workflow tool '${workflowToolName}' for workflow '${workflow.id}':`,
