@@ -54,6 +54,7 @@ export type StepFlowEntry =
 export type SerializedStep = Pick<Step, 'id' | 'description'> & {
   component?: string;
   serializedStepFlow?: SerializedStepFlowEntry[];
+  mapConfig?: string;
 };
 
 export type SerializedStepFlowEntry =
@@ -314,16 +315,22 @@ export type WorkflowResult<TOutput extends z.ZodType<any>, TSteps extends Step<s
       result: z.infer<TOutput>;
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
-          ? StepResult<unknown>
-          : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
+          ? StepResult<unknown, unknown>
+          : StepResult<
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
+            >;
       };
     }
   | {
       status: 'failed';
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
-          ? StepResult<unknown>
-          : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
+          ? StepResult<unknown, unknown>
+          : StepResult<
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
+            >;
       };
       error: Error;
     }
@@ -331,8 +338,8 @@ export type WorkflowResult<TOutput extends z.ZodType<any>, TSteps extends Step<s
       status: 'suspended';
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
-          ? StepResult<unknown>
-          : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
+          ? StepResult<unknown, unknown>
+          : StepResult<unknown, z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
       };
       suspended: [string[], ...string[][]];
     };
@@ -502,9 +509,7 @@ export class Workflow<
         type: 'step',
         step: {
           id: mappingStep.id,
-          description: mappingStep.description,
-          component: (mappingStep as SerializedStep).component,
-          serializedStepFlow: (mappingStep as SerializedStep).serializedStepFlow,
+          mapConfig: mappingConfig.toString(),
         },
       });
       return this as unknown as Workflow<TSteps, TWorkflowId, TInput, TOutput, any>;
@@ -592,9 +597,7 @@ export class Workflow<
       type: 'step',
       step: {
         id: mappingStep.id,
-        description: mappingStep.description,
-        component: (mappingStep as SerializedStep).component,
-        serializedStepFlow: (mappingStep as SerializedStep).serializedStepFlow,
+        mapConfig: JSON.stringify(mappingConfig, null, 2),
       },
     });
     return this as unknown as Workflow<TSteps, TWorkflowId, TInput, TOutput, MappedOutputSchema>;
@@ -862,7 +865,7 @@ export class Workflow<
       : await run.start({ inputData, runtimeContext });
     unwatch();
     const suspendedSteps = Object.entries(res.steps).filter(([_stepName, stepResult]) => {
-      const stepRes: StepResult<any> = stepResult as StepResult<any>;
+      const stepRes: StepResult<any, any> = stepResult as StepResult<any, any>;
       return stepRes?.status === 'suspended';
     });
 

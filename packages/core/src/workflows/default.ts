@@ -27,8 +27,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   protected async fmtReturnValue<TOutput>(
     executionSpan: Span | undefined,
     emitter: { emit: (event: string, data: any) => Promise<void> },
-    stepResults: Record<string, StepResult<any>>,
-    lastOutput: StepResult<any>,
+    stepResults: Record<string, StepResult<any, any>>,
+    lastOutput: StepResult<any, any>,
     error?: Error | string,
   ): Promise<TOutput> {
     const base: any = {
@@ -107,7 +107,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     resume?: {
       // TODO: add execute path
       steps: string[];
-      stepResults: Record<string, StepResult<any>>;
+      stepResults: Record<string, StepResult<any, any>>;
       resumePayload: any;
       resumePath: number[];
     };
@@ -216,7 +216,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     workflowId: string;
     runId: string;
     step: Step<string, any, any>;
-    stepResults: Record<string, StepResult<any>>;
+    stepResults: Record<string, StepResult<any, any>>;
     executionContext: ExecutionContext;
     resume?: {
       steps: string[];
@@ -225,7 +225,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     prevOutput: any;
     emitter: { emit: (event: string, data: any) => Promise<void> };
     runtimeContext: RuntimeContext;
-  }): Promise<StepResult<any>> {
+  }): Promise<StepResult<any, any>> {
     await emitter.emit('watch', {
       type: 'watch',
       payload: {
@@ -400,19 +400,19 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     runId: string;
     entry: { type: 'parallel'; steps: StepFlowEntry[] };
     prevStep: StepFlowEntry;
-    stepResults: Record<string, StepResult<any>>;
+    stepResults: Record<string, StepResult<any, any>>;
     resume?: {
       steps: string[];
-      stepResults: Record<string, StepResult<any>>;
+      stepResults: Record<string, StepResult<any, any>>;
       resumePayload: any;
       resumePath: number[];
     };
     executionContext: ExecutionContext;
     emitter: { emit: (event: string, data: any) => Promise<void> };
     runtimeContext: RuntimeContext;
-  }): Promise<StepResult<any>> {
+  }): Promise<StepResult<any, any>> {
     let execResults: any;
-    const results: StepResult<any>[] = await Promise.all(
+    const results: StepResult<any, any>[] = await Promise.all(
       entry.steps.map((step, i) =>
         this.executeEntry({
           workflowId,
@@ -474,17 +474,17 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     entry: { type: 'conditional'; steps: StepFlowEntry[]; conditions: ExecuteFunction<any, any, any, any>[] };
     prevStep: StepFlowEntry;
     prevOutput: any;
-    stepResults: Record<string, StepResult<any>>;
+    stepResults: Record<string, StepResult<any, any>>;
     resume?: {
       steps: string[];
-      stepResults: Record<string, StepResult<any>>;
+      stepResults: Record<string, StepResult<any, any>>;
       resumePayload: any;
       resumePath: number[];
     };
     executionContext: ExecutionContext;
     emitter: { emit: (event: string, data: any) => Promise<void> };
     runtimeContext: RuntimeContext;
-  }): Promise<StepResult<any>> {
+  }): Promise<StepResult<any, any>> {
     let execResults: any;
     const truthyIndexes = (
       await Promise.all(
@@ -522,7 +522,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     ).filter((index): index is number => index !== null);
 
     const stepsToRun = entry.steps.filter((_, index) => truthyIndexes.includes(index));
-    const results: StepResult<any>[] = await Promise.all(
+    const results: StepResult<any, any>[] = await Promise.all(
       stepsToRun.map((step, index) =>
         this.executeEntry({
           workflowId,
@@ -588,20 +588,20 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     };
     prevStep: StepFlowEntry;
     prevOutput: any;
-    stepResults: Record<string, StepResult<any>>;
+    stepResults: Record<string, StepResult<any, any>>;
     resume?: {
       steps: string[];
-      stepResults: Record<string, StepResult<any>>;
+      stepResults: Record<string, StepResult<any, any>>;
       resumePayload: any;
       resumePath: number[];
     };
     executionContext: ExecutionContext;
     emitter: { emit: (event: string, data: any) => Promise<void> };
     runtimeContext: RuntimeContext;
-  }): Promise<StepResult<any>> {
+  }): Promise<StepResult<any, any>> {
     const { step, condition } = entry;
     let isTrue = true;
-    let result: StepResult<any> = { status: 'success', output: prevOutput };
+    let result: StepResult<any, any> = { status: 'success', output: prevOutput };
 
     do {
       result = await this.executeStep({
@@ -663,19 +663,19 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     };
     prevStep: StepFlowEntry;
     prevOutput: any;
-    stepResults: Record<string, StepResult<any>>;
+    stepResults: Record<string, StepResult<any, any>>;
     resume?: {
       steps: string[];
-      stepResults: Record<string, StepResult<any>>;
+      stepResults: Record<string, StepResult<any, any>>;
       resumePayload: any;
       resumePath: number[];
     };
     executionContext: ExecutionContext;
     emitter: { emit: (event: string, data: any) => Promise<void> };
     runtimeContext: RuntimeContext;
-  }): Promise<StepResult<any>> {
+  }): Promise<StepResult<any, any>> {
     const { step, opts } = entry;
-    const results: StepResult<any>[] = [];
+    const results: StepResult<any, any>[] = [];
     const concurrency = opts.concurrency;
 
     for (let i = 0; i < prevOutput.length; i += concurrency) {
@@ -716,7 +716,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   }: {
     workflowId: string;
     runId: string;
-    stepResults: Record<string, StepResult<any>>;
+    stepResults: Record<string, StepResult<any, any>>;
     executionContext: ExecutionContext;
   }) {
     await this.mastra?.getStorage()?.persistWorkflowSnapshot({
@@ -749,17 +749,17 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     runId: string;
     entry: StepFlowEntry;
     prevStep: StepFlowEntry;
-    stepResults: Record<string, StepResult<any>>;
+    stepResults: Record<string, StepResult<any, any>>;
     resume?: {
       steps: string[];
-      stepResults: Record<string, StepResult<any>>;
+      stepResults: Record<string, StepResult<any, any>>;
       resumePayload: any;
       resumePath: number[];
     };
     executionContext: ExecutionContext;
     emitter: { emit: (event: string, data: any) => Promise<void> };
     runtimeContext: RuntimeContext;
-  }): Promise<StepResult<any>> {
+  }): Promise<StepResult<any, any>> {
     const prevOutput = this.getStepOutput(stepResults, prevStep);
     let execResults: any;
 

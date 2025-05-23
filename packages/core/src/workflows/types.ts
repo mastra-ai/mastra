@@ -1,22 +1,42 @@
 import type { z } from 'zod';
 import type { ExecuteFunction, Step } from './step';
 
-export type StepSuccess<T> = {
+export type StepSuccess<P, T> = {
   status: 'success';
   output: T;
+  payload: P;
+  startedAt: Date;
+  endedAt: Date;
+  suspendedAt?: Date;
+  resumedAt?: Date;
 };
 
-export type StepFailure = {
+export type StepFailure<P> = {
   status: 'failed';
   error: string | Error;
+  payload: P;
+  startedAt: Date;
+  endedAt: Date;
+  suspendedAt?: Date;
+  resumedAt?: Date;
 };
 
-export type StepSuspended<T> = {
+export type StepSuspended<P> = {
   status: 'suspended';
-  payload: T;
+  payload: P;
+  startedAt: Date;
+  suspendedAt: Date;
 };
 
-export type StepResult<T> = StepSuccess<T> | StepFailure | StepSuspended<T>;
+export type StepRunning<P> = {
+  status: 'running';
+  payload: P;
+  startedAt: Date;
+  suspendedAt?: Date;
+  resumedAt?: Date;
+};
+
+export type StepResult<P, T> = StepSuccess<P, T> | StepFailure<P> | StepSuspended<P> | StepRunning<P>;
 
 export type StepsRecord<T extends readonly Step<any, any, any>[]> = {
   [K in T[number]['id']]: Extract<T[number], { id: K }>;
@@ -67,6 +87,7 @@ export type WatchEvent = {
       status: 'running' | 'success' | 'failed' | 'suspended';
       output?: Record<string, any>;
       payload?: Record<string, any>;
+      error?: string | Error;
     };
     workflowState: {
       status: 'running' | 'success' | 'failed' | 'suspended';
@@ -76,10 +97,12 @@ export type WatchEvent = {
           status: 'running' | 'success' | 'failed' | 'suspended';
           output?: Record<string, any>;
           payload?: Record<string, any>;
+          error?: string | Error;
         }
       >;
       output?: Record<string, any>;
       payload?: Record<string, any>;
+      error?: string | Error;
     };
   };
   eventTimestamp: Date;
@@ -103,7 +126,7 @@ export interface WorkflowRunState {
   // Core state info
   runId: string;
   value: Record<string, string>;
-  context: { input?: Record<string, any> } & Record<string, StepResult<any>>;
+  context: { input?: Record<string, any> } & Record<string, StepResult<any, any>>;
   activePaths: Array<unknown>;
   suspendedPaths: Record<string, number[]>;
   timestamp: number;
