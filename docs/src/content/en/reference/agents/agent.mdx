@@ -34,6 +34,13 @@ constructor(config: AgentConfig<TAgentId, TTools, TMetrics>)
       description: "Unique identifier for the agent.",
     },
     {
+      name: "description",
+      type: "string",
+      isOptional: true,
+      description:
+        "An optional description of the agent\'s purpose and capabilities."
+    },
+    {
       name: "instructions",
       type: "string | ({ runtimeContext: RuntimeContext }) => string | Promise<string>",
       isOptional: false,
