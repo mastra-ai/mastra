@@ -26,12 +26,12 @@ const myWorkflow = createWorkflow({
   .commit();
 
 const mastra = new Mastra({
-  vnext_workflows: {
+  workflows: {
     myWorkflow,
   },
 });
 
-const run = mastra.vnext_getWorkflow("myWorkflow").createRun();
+const run = mastra.getWorkflow("myWorkflow").createRun();
 ```
 
 ## API Reference
