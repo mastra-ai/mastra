@@ -1,5 +1,14 @@
 # @mastra/cloud
 
+## 0.1.1-alpha.0
+
+### Patch Changes
+
+- 481e1be: chore: Update Cloud exporter otel deps
+- Updated dependencies [6d16390]
+- Updated dependencies [1e4a421]
+  - @mastra/core@0.10.1-alpha.0
+
 ## 0.1.0
 
 ### Minor Changes
