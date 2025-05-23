@@ -18,6 +18,8 @@ interface NewAgentNetworkConfig {
   memory?: DynamicArgument<MastraMemory>;
 }
 
+const RESOURCE_TYPES = z.enum(['agent', 'workflow', 'none']);
+
 // getInstructions() {
 
 //     return `
@@ -100,9 +102,10 @@ export class NewAgentNetwork extends MastraBase {
   #instructions: DynamicArgument<string>;
   #model: DynamicArgument<MastraLanguageModel>;
   #agents: DynamicArgument<Record<string, Agent>>;
+  #workflows: DynamicArgument<Record<string, Workflow>> | undefined;
   #memory?: DynamicArgument<MastraMemory>;
 
-  constructor({ id, name, instructions, model, agents, memory }: NewAgentNetworkConfig) {
+  constructor({ id, name, instructions, model, agents, workflows, memory }: NewAgentNetworkConfig) {
     super({
       component: RegisteredLogger.NETWORK,
       name: name || 'NewAgentNetwork',
@@ -113,6 +116,7 @@ export class NewAgentNetwork extends MastraBase {
     this.#instructions = instructions;
     this.#model = model;
     this.#agents = agents;
+    this.#workflows = workflows;
     this.#memory = memory;
   }
 
@@ -126,6 +130,18 @@ export class NewAgentNetwork extends MastraBase {
     }
 
     return agentsToUse;
+  }
+
+  async getWorkflows({ runtimeContext }: { runtimeContext?: RuntimeContext }) {
+    let workflowsToUse: Record<string, Workflow>;
+
+    if (typeof this.#workflows === 'function') {
+      workflowsToUse = await this.#workflows({ runtimeContext: runtimeContext || new RuntimeContext() });
+    } else {
+      workflowsToUse = this.#workflows || {};
+    }
+
+    return workflowsToUse;
   }
 
   async getMemory({ runtimeContext }: { runtimeContext?: RuntimeContext }) {
@@ -158,11 +174,18 @@ export class NewAgentNetwork extends MastraBase {
     const instructionsToUse = await this.getInstructions({ runtimeContext: runtimeContext || new RuntimeContext() });
     const memoryToUse = await this.getMemory({ runtimeContext: runtimeContext || new RuntimeContext() });
     const agentsToUse = await this.getAgents({ runtimeContext: runtimeContext || new RuntimeContext() });
+    const workflowsToUse = await this.getWorkflows({ runtimeContext: runtimeContext || new RuntimeContext() });
 
     const agentList = Object.entries(agentsToUse)
       .map(([name, agent]) => {
         // Use agent name instead of description since description might not exist
         return ` - **${name}**: ${agent.description}`;
+      })
+      .join('\n');
+
+    const workflowList = Object.entries(workflowsToUse)
+      .map(([name, workflow]) => {
+        return ` - **${name}**: ${workflow.description}`;
       })
       .join('\n');
 
@@ -177,6 +200,9 @@ export class NewAgentNetwork extends MastraBase {
 
           ## Available Agents in Network
           ${agentList}
+
+          ## Available Workflows in Network
+          ${workflowList}
         `;
 
     return new Agent({
@@ -201,16 +227,46 @@ export class NewAgentNetwork extends MastraBase {
     const agentsMap = await this.getAgents({ runtimeContext: runtimeContextToUse });
     const routingAgent = await this.getRoutingAgent({ runtimeContext: runtimeContextToUse });
 
+    const workflowStep = createStep({
+      id: 'workflow-step',
+      inputSchema: z.object({
+        task: z.string(),
+        resourceId: z.string(),
+        resourceType: RESOURCE_TYPES,
+        prompt: z.string(),
+        result: z.string(),
+        isComplete: z.boolean().optional(),
+      }),
+      outputSchema: z.object({
+        task: z.string(),
+        resourceId: z.string(),
+        resourceType: RESOURCE_TYPES,
+        result: z.string(),
+        isComplete: z.boolean().optional(),
+      }),
+      execute: async ({ inputData }) => {
+        return {
+          result: 'workflow result',
+          task: inputData.task,
+          resourceId: inputData.resourceId,
+          resourceType: inputData.resourceType,
+          isComplete: false,
+        };
+      },
+    });
+
     const routingStep = createStep({
       id: 'routing-step',
       inputSchema: z.object({
         task: z.string(),
-        agentId: z.string().optional(),
+        resourceId: z.string(),
+        resourceType: RESOURCE_TYPES,
         result: z.string().optional(),
       }),
       outputSchema: z.object({
         task: z.string(),
-        agentId: z.string(),
+        resourceId: z.string(),
+        resourceType: RESOURCE_TYPES,
         prompt: z.string(),
         result: z.string(),
         isComplete: z.boolean().optional(),
@@ -218,10 +274,10 @@ export class NewAgentNetwork extends MastraBase {
       execute: async ({ inputData }) => {
         console.dir({ inputData }, { depth: null });
         let completionResult;
-        if (inputData?.agentId && inputData?.result) {
+        if (inputData.resourceType !== 'none' && inputData?.result) {
           // Check if the task is complete
           const completionPrompt = `
-                        The agent ${inputData.agentId} has contributed to the task.
+                        The ${inputData.resourceType} ${inputData.resourceId} has contributed to the task.
                         This is the result from the agent: ${inputData.result}
 
                         You need to evaluate that our task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. Only return true if the task is complete according to the system instructions. Pay close attention to the finalResult and completionReason.
@@ -249,30 +305,14 @@ export class NewAgentNetwork extends MastraBase {
           if (completionResult.object.isComplete) {
             return {
               task: inputData.task,
-              agentId: inputData.agentId,
+              resourceId: '',
+              resourceType: 'none' as z.infer<typeof RESOURCE_TYPES>,
               prompt: '',
               result: completionResult.object.finalResult,
               isComplete: true,
             };
           }
         }
-
-        console.log(
-          'PROMPT',
-          `
-                    The user has given you the following task: 
-                    ${inputData.task}
-                    ${completionResult ? `\n\n${completionResult.object.finalResult}` : ''}
-
-                    Please select the most appropriate agent to handle this task and the prompt to be sent to the agent.
-
-                    {
-                        "agentId": string,
-                        "prompt": string,
-                        "selectionReason": string
-                    }
-                    `,
-        );
 
         const result = await routingAgent.generate(
           `
@@ -283,14 +323,16 @@ export class NewAgentNetwork extends MastraBase {
                     Please select the most appropriate agent to handle this task and the prompt to be sent to the agent.
 
                     {
-                        "agentId": string,
+                        "resourceId": string,
+                        "resourceType": "agent" | "workflow",
                         "prompt": string,
                         "selectionReason": string
                     }
                     `,
           {
             output: z.object({
-              agentId: z.string(),
+              resourceId: z.string(),
+              resourceType: RESOURCE_TYPES,
               prompt: z.string(),
               selectionReason: z.string(),
             }),
@@ -304,7 +346,8 @@ export class NewAgentNetwork extends MastraBase {
         return {
           task: inputData.task,
           result: '',
-          agentId: result.object.agentId,
+          resourceId: result.object.resourceId,
+          resourceType: result.object.resourceType,
           prompt: result.object.prompt,
           isComplete: false,
         };
@@ -315,22 +358,24 @@ export class NewAgentNetwork extends MastraBase {
       id: 'agent-step',
       inputSchema: z.object({
         task: z.string(),
-        agentId: z.string(),
+        resourceId: z.string(),
+        resourceType: RESOURCE_TYPES,
         prompt: z.string(),
         result: z.string(),
         isComplete: z.boolean().optional(),
       }),
       outputSchema: z.object({
         task: z.string(),
-        agentId: z.string(),
+        resourceId: z.string(),
+        resourceType: RESOURCE_TYPES,
         result: z.string(),
         isComplete: z.boolean().optional(),
       }),
       execute: async ({ inputData }) => {
-        const agentId = inputData.agentId;
+        const agentId = inputData.resourceId;
         console.log('calling agent', agentId);
 
-        const agent = agentsMap[agentId];
+        const agent = agentsMap[inputData.resourceId];
 
         if (!agent) {
           throw new Error(`Agent ${agentId} not found`);
@@ -343,7 +388,8 @@ export class NewAgentNetwork extends MastraBase {
 
         return {
           task: inputData.task,
-          agentId,
+          resourceId: inputData.resourceId,
+          resourceType: inputData.resourceType,
           result: result.text,
           isComplete: false,
         };
@@ -354,7 +400,8 @@ export class NewAgentNetwork extends MastraBase {
       id: 'finish-step',
       inputSchema: z.object({
         task: z.string(),
-        agentId: z.string(),
+        resourceId: z.string(),
+        resourceType: RESOURCE_TYPES,
         prompt: z.string(),
         result: z.string(),
         isComplete: z.boolean().optional(),
@@ -377,7 +424,8 @@ export class NewAgentNetwork extends MastraBase {
       id: 'Agent-Network-Outer-Workflow',
       inputSchema: z.object({
         task: z.string(),
-        agentId: z.string().optional(),
+        resourceId: z.string(),
+        resourceType: RESOURCE_TYPES,
         result: z.string().optional(),
       }),
       outputSchema: z.object({
@@ -388,7 +436,8 @@ export class NewAgentNetwork extends MastraBase {
     })
       .then(routingStep)
       .branch([
-        [async ({ inputData }) => !inputData.isComplete, agentStep],
+        [async ({ inputData }) => !inputData.isComplete && inputData.resourceType === 'agent', agentStep],
+        [async ({ inputData }) => !inputData.isComplete && inputData.resourceType === 'workflow', workflowStep],
         [async ({ inputData }) => inputData.isComplete, finishStep],
       ])
       .map({
@@ -404,9 +453,13 @@ export class NewAgentNetwork extends MastraBase {
           step: [agentStep, finishStep],
           path: 'result',
         },
-        agentId: {
+        resourceId: {
           step: [routingStep, agentStep],
-          path: 'agentId',
+          path: 'resourceId',
+        },
+        resourceType: {
+          step: [routingStep, agentStep],
+          path: 'resourceType',
         },
       })
       .commit();
@@ -415,6 +468,7 @@ export class NewAgentNetwork extends MastraBase {
       id: 'Agent-Network-Main-Workflow',
       inputSchema: z.object({
         task: z.string(),
+        resourceType: RESOURCE_TYPES,
       }),
       outputSchema: z.object({
         text: z.string(),
@@ -430,6 +484,7 @@ export class NewAgentNetwork extends MastraBase {
     const result = await run.start({
       inputData: {
         task: message,
+        resourceType: 'none',
       },
     });
 

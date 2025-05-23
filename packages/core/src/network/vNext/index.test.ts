@@ -137,7 +137,7 @@ describe('NewAgentNetwork', () => {
     const agent2 = new Agent({
       name: 'agent2',
       description:
-        'This agent is used to do text synthesis on researched material. Write a full report based on the researched material.',
+        'This agent is used to do text synthesis on researched material. Write a full report based on the researched material. Do not use bullet points. Write full paragraphs.',
       instructions: 'Test instructions',
       model: openai('gpt-4o'),
     });
