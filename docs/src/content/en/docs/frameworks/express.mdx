@@ -11,16 +11,16 @@ Mastra integrates with Express, making it easy to:
 
 - Build flexible APIs to serve AI-powered features
 - Maintain full control over your server logic and routing
-- Scale your backend independently from your frontend
+- Scale your backend independently of your frontend
 
-This guide will help you set up and integrate Mastra agents in your Express app.
+Follow this guide to scaffold and connect Mastra agents to your Express backend.
 
 <Callout type="warning">
 This setup is compatible with the following package versions:
 - `express`: 4.x
 - `@types/express`: 4.x
 
-TypeScript compatibility issues may occur with version 5.x of either package.
+TypeScript issues may occur with version 5.x of either package.
 </Callout>
 
 <Steps>
@@ -55,56 +55,22 @@ bun add mastra@latest @mastra/core@latest @mastra/libsql@latest
 
 To initialize Mastra in your project, you have two options:
 
-### Option 1: Use the One-Liner
+### 1. Use the One-Liner
 
 Run the following command to quickly scaffold the default Weather agent with sensible defaults:
 
-```bash
-npx mastra@latest init --dir src --components agents,tools --llm openai --example
+```bash copy
+npx mastra@latest init --default
 ```
-This sets up:
 
-- A default agent (`weatherAgent`)
-- Tooling support
-- OpenAI as the provider
-- An example prompt
-- All files generated under the `src/` directory
+> You can read more about the defaults here: [mastra init](/reference/cli/init)
 
-### Option 2: Use the Interactive CLI
+### 2. Use the Interactive CLI
 
-If you prefer to customize the setup, run the `init` command without flags:
+If you prefer to customize the setup, run the `init` command and choose options from the prompts:
 
 ```bash copy
 npx mastra@latest init
-```
-
-Follow the interactive prompts to configure your Mastra project:
-
-```bash
-Where should we create the Mastra files? (default: src/)
-  src/
-Choose components to install:
-  ● Agents (recommended)
-  ◯ Tools
-  ◯ Workflows
-Add tools?
-  ● Yes / ◯ No
-Select default provider:
-  ● OpenAI (recommended)
-  ◯ Anthropic
-  ◯ Groq
-  ◯ Google
-  ○ Cerebra
-Enter your openai API key?
-  ● Skip for now (default)
-  ○ Enter API key
-Add example
-  ● Yes / ○ No
-Make your AI IDE into a Mastra expert? (installs Mastra docs MCP server)
-  ● Skip for now (default)
-  ○ Cursor (project only)
-  ○ Cursor (global, all projects)
-  ○ Windsurf
 ```
 
 Add the `dev` and `build` scripts to `package.json`:
@@ -118,6 +84,8 @@ Add the `dev` and `build` scripts to `package.json`:
   }
 }
 ```
+
+> If your project already uses `dev` and `build` scripts, we recommend using: `dev:mastra` and `build:mastra`.
 
 ## Initialize TypeScript
 
@@ -147,11 +115,12 @@ Create a `tsconfig.json` file in your project root with the following configurat
 ```bash filename=".env" copy
 OPENAI_API_KEY=<your-api-key>
 ```
-> Replace `your-api-key` with your API key.
+
+> Each llm provider uses a different env var. See [Model Capabilities](/docs/getting-started/model-capability) for details.
 
 ## Start the Mastra Dev Server
 
-Mastra provides commands to serve your agents via REST endpoints. To start the Mastra server, run:
+Start the Mastra dev server to expose your agents as REST endpoints:
 
 <Tabs items={["npm", "CLI"]}>
   <Tabs.Tab>
@@ -166,7 +135,7 @@ Mastra provides commands to serve your agents via REST endpoints. To start the M
    </Tabs.Tab>
 </Tabs>
 
-This command creates REST API endpoints for your agents which are available on the following links:
+Once running, your agents are available at:
 
 - Playground: [http://localhost:4111/](http://localhost:4111/)
 - Mastra API: [http://localhost:4111/api](http://localhost:4111/api)
@@ -174,6 +143,8 @@ This command creates REST API endpoints for your agents which are available on t
 - Swagger UI – API explorer: [http://localhost:4111/swagger-ui](http://localhost:4111/swagger-ui)
 
 ## Example Express App
+
+This example creates an `/api/weather` endpoint that expects a `city` query parameter.
 
 ```typescript filename="src/server.ts" showLineNumbers copy
 import "dotenv/config";
@@ -197,6 +168,7 @@ app.get("/api/weather", async (req: Request, res: Response) => {
     const result = await agent.generate(`What's the weather like in ${city}?`);
     res.send(result.text);
   } catch (error) {
+    console.error("Agent error:", error);
     res.status(500).send('An error occurred while processing your request');
   }
 });
@@ -206,9 +178,9 @@ app.listen(port, () => {
 });
 ```
 
-With the Mastra dev server running, start your Express app. For example:
+With the Mastra dev server running, start your Express app separately. For example:
 
-```bash
+```bash copy
 npx tsx --watch src/server.ts --watch-dir src
 ```
 
@@ -227,7 +199,7 @@ You can now make a request to the endpoint using one of the following:
    </Tabs.Tab>
 </Tabs>
 
-You should see output similar to the following:
+You should see output similar to the below:
 
 ```plaintext
 The current weather in London is as follows:
