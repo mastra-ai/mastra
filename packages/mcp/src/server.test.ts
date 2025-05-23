@@ -2,10 +2,11 @@ import http from 'node:http';
 import path from 'path';
 import type { ServerType } from '@hono/node-server';
 import { serve } from '@hono/node-server';
-import type { Agent, ToolsInput } from '@mastra/core/agent';
+import { Agent } from '@mastra/core/agent';
+import type { ToolsInput } from '@mastra/core/agent';
 import type { MCPServerConfig, Repository, PackageInfo, RemoteInfo } from '@mastra/core/mcp';
-import { RuntimeContext } from '@mastra/core/runtime-context';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { MockLanguageModelV1 } from 'ai/test';
 import { Hono } from 'hono';
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
@@ -34,27 +35,30 @@ const mockTools: ToolsInput = {
   },
 };
 
-const mockAgentGenerate = vi.fn(async (query: string, options?: { runtimeContext?: RuntimeContext }) => {
-  return `Agent response to: "${query}" with context: ${options?.runtimeContext instanceof RuntimeContext}`;
+const mockAgentGenerate = vi.fn(async (query: string) => {
+  return {
+    rawCall: { rawPrompt: null, rawSettings: {} },
+    finishReason: 'stop',
+    usage: { promptTokens: 10, completionTokens: 20 },
+    text: `{"content":"Agent response to: "${JSON.stringify(query)}"}`,
+  };
 });
 
 const mockAgentGetInstructions = vi.fn(() => 'This is a mock agent for testing.');
 
-const createMockAgent = (name: string, generateFn: any, instructionsFn?: any) => ({
-  name: name,
-  id: name,
-  generate: generateFn,
-  getInstructions: instructionsFn
-    ? () => instructionsFn()
-    : () =>
-        `${name} mock instructions. Long enough to be truncated for testing purposes. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.`,
-  __setLogger: vi.fn(),
-  __setTelemetry: vi.fn(),
-  __registerMastra: vi.fn(),
-  __registerPrimitives: vi.fn(),
-  logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
-  telemetry: undefined,
-});
+const createMockAgent = (name: string, generateFn: any, instructionsFn?: any, description?: string) => {
+  return new Agent({
+    name: name,
+    instructions: instructionsFn,
+    description: description || '',
+    model: new MockLanguageModelV1({
+      defaultObjectGenerationMode: 'json',
+      doGenerate: async options => {
+        return generateFn((options.prompt.at(-1)?.content[0] as { text: string }).text);
+      },
+    }),
+  });
+};
 
 const minimalConfig: MCPServerConfig = {
   name: 'TestServer',
@@ -496,26 +500,31 @@ describe('MCPServer - Agent to Tool Conversion', () => {
     vi.clearAllMocks();
   });
 
-  it('should convert a provided agent to an MCP tool', () => {
-    const testAgent = createMockAgent('MyTestAgent', mockAgentGenerate, mockAgentGetInstructions);
+  it('should convert a provided agent to an MCP tool with sync dynamic description', () => {
+    const testAgent = createMockAgent(
+      'MyTestAgent',
+      mockAgentGenerate,
+      mockAgentGetInstructions,
+      'Simple mock description.',
+    );
     server = new MCPServer({
       name: 'AgentToolServer',
       version: '1.0.0',
       tools: {},
-      agents: { testAgentKey: testAgent as unknown as Agent<any> },
+      agents: { testAgentKey: testAgent },
     });
 
     const tools = server.tools();
     const agentToolName = 'ask_testAgentKey';
     expect(tools[agentToolName]).toBeDefined();
     expect(tools[agentToolName].description).toContain("Ask agent 'MyTestAgent' a question.");
-    expect(tools[agentToolName].description).toContain('This is a mock agent for testing.');
+    expect(tools[agentToolName].description).toContain('Agent description: Simple mock description.');
 
     const schema = tools[agentToolName].parameters.jsonSchema;
     expect(schema.type).toBe('object');
     if (schema.properties) {
-      expect(schema.properties.query).toBeDefined();
-      const querySchema = schema.properties.query as any; // Cast to any to access type, or use proper JSONSchema7 types
+      expect(schema.properties.message).toBeDefined();
+      const querySchema = schema.properties.message as any;
       expect(querySchema.type).toBe('string');
     } else {
       throw new Error('Schema properties are undefined'); // Fail test if properties not found
@@ -523,34 +532,30 @@ describe('MCPServer - Agent to Tool Conversion', () => {
   });
 
   it('should call agent.generate when the derived tool is executed', async () => {
-    const testAgent = createMockAgent('MyExecAgent', mockAgentGenerate);
+    const testAgent = createMockAgent(
+      'MyExecAgent',
+      mockAgentGenerate,
+      mockAgentGetInstructions,
+      'Executable mock agent',
+    );
     server = new MCPServer({
       name: 'AgentExecServer',
       version: '1.0.0',
       tools: {},
-      agents: { execAgentKey: testAgent as unknown as Agent<any> },
+      agents: { execAgentKey: testAgent },
     });
 
     const agentTool = server.tools()['ask_execAgentKey'];
     expect(agentTool).toBeDefined();
 
-    const queryInput = { query: 'Hello Agent' };
+    const queryInput = { message: 'Hello Agent' };
 
     if (agentTool && agentTool.execute) {
-      // Simulate the MCP execution context, which might include toolCallId and messages.
-      // The internal runtimeContext is passed during makeCoreTool setup.
       const result = await agentTool.execute(queryInput, { toolCallId: 'mcp-call-123', messages: [] });
 
       expect(mockAgentGenerate).toHaveBeenCalledTimes(1);
-      // The mockAgentGenerate is expected to be called with query and options object containing runtimeContext
-      // by the inner execute function defined with createTool.
-      expect(mockAgentGenerate).toHaveBeenCalledWith(
-        queryInput.query,
-        expect.objectContaining({
-          runtimeContext: expect.any(RuntimeContext),
-        }),
-      );
-      expect(result).toBe(`Agent response to: "${queryInput.query}" with context: true`);
+      expect(mockAgentGenerate).toHaveBeenCalledWith(queryInput.message);
+      expect(result.text).toBe(`{"content":"Agent response to: ""Hello Agent""}`);
     } else {
       throw new Error('Agent tool or its execute function is undefined');
     }
@@ -559,7 +564,12 @@ describe('MCPServer - Agent to Tool Conversion', () => {
   it('should handle name collision: explicit tool wins over agent-derived tool', () => {
     const explicitToolName = 'ask_collidingAgentKey';
     const explicitToolExecute = vi.fn(async () => 'explicit tool response');
-    const collidingAgent = createMockAgent('CollidingAgent', mockAgentGenerate);
+    const collidingAgent = createMockAgent(
+      'CollidingAgent',
+      mockAgentGenerate,
+      undefined,
+      'Colliding agent description',
+    );
 
     server = new MCPServer({
       name: 'CollisionServer',
@@ -571,7 +581,7 @@ describe('MCPServer - Agent to Tool Conversion', () => {
           execute: explicitToolExecute,
         },
       },
-      agents: { collidingAgentKey: collidingAgent as unknown as Agent<any> },
+      agents: { collidingAgentKey: collidingAgent },
     });
 
     const tools = server.tools();
@@ -581,13 +591,32 @@ describe('MCPServer - Agent to Tool Conversion', () => {
   });
 
   it('should use agentKey for tool name ask_<agentKey>', () => {
-    const uniqueKeyAgent = createMockAgent('AgentNameDoesNotMatterForToolKey', mockAgentGenerate);
+    const uniqueKeyAgent = createMockAgent(
+      'AgentNameDoesNotMatterForToolKey',
+      mockAgentGenerate,
+      undefined,
+      'Agent description',
+    );
     server = new MCPServer({
       name: 'UniqueKeyServer',
       version: '1.0.0',
       tools: {},
-      agents: { unique_agent_key_123: uniqueKeyAgent as unknown as Agent<any> },
+      agents: { unique_agent_key_123: uniqueKeyAgent },
     });
     expect(server.tools()['ask_unique_agent_key_123']).toBeDefined();
+  });
+
+  it('should throw an error if description is undefined (not provided to mock)', () => {
+    const agentWithNoDesc = createMockAgent('NoDescAgent', mockAgentGenerate, mockAgentGetInstructions, undefined); // getDescription will return ''
+
+    expect(
+      () =>
+        new MCPServer({
+          name: 'NoDescProvidedServer',
+          version: '1.0.0',
+          tools: {},
+          agents: { noDescKey: agentWithNoDesc as unknown as Agent }, // Cast for test setup
+        }),
+    ).toThrow('must have a non-empty description');
   });
 });

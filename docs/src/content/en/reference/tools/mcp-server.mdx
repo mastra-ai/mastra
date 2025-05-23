@@ -16,19 +16,19 @@ It supports both [stdio (subprocess) and SSE (HTTP) MCP transports](https://mode
 To create a new `MCPServer`, you need to provide some basic information about your server, the tools it will offer, and optionally, any agents you want to expose as tools.
 
 ```typescript
-import { MCPServer } from "@mastra/mcp";
-import { Agent } from "@mastra/core/agent"; // Assuming Agent import for example
-import { z } from "zod";
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
 import { createTool } from "@mastra/core/tools";
+import { MCPServer } from "@mastra/mcp";
+import { z } from "zod";
 
-// Example Agent (replace with your actual agent definition)
 const myAgent = new Agent({
   name: "MyExampleAgent",
+  description: "A generalist to help with basic questions."
   instructions: "You are a helpful assistant.",
-  model: /* your_model_instance_here */ {} as any, 
+  model: openai("gpt-4o-mini"),
 });
 
-// Example Tool
 const weatherTool = createTool({
   id: "getWeather",
   description: "Gets the current weather for a location.",
@@ -40,7 +40,7 @@ const server = new MCPServer({
   name: "My Custom Server",
   version: "1.0.0",
   tools: { weatherTool },
-  agents: { exampleAgentKey: myAgent },
+  agents: { myAgent }, // this agent will become tool "ask_myAgent"
 });
 ```
 
@@ -74,7 +74,7 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
       type: "Record<string, Agent>",
       isOptional: true,
       description:
-        "An object where keys are unique identifiers (agent keys) and values are Mastra Agent instances. Each agent will be automatically converted into an invokable tool. See 'Exposing Agents as Tools' below.",
+        "An object where keys are agent identifiers and values are Mastra Agent instances. Each agent will be automatically converted into a tool named `ask_<agentIdentifier>`. The agent **must** have a non-empty `description` string property defined in its constructor configuration. This description will be used in the tool's description. If an agent's description is missing or empty, an error will be thrown during MCPServer initialization.",
     },
     {
       name: "id",
@@ -142,6 +142,16 @@ A powerful feature of `MCPServer` is its ability to automatically expose your Ma
 - **Name Collisions**: If an explicit tool defined in the `tools` configuration has the same name as an agent-derived tool (e.g., you have a tool named `ask_myAgentKey` and also an agent with the key `myAgentKey`), the *explicitly defined tool will take precedence*. The agent will not be converted into a tool in this conflicting case, and a warning will be logged.
 
 This makes it straightforward to allow MCP clients to interact with your agents using natural language queries, just like any other tool.
+
+### Agent-to-Tool Conversion
+
+When you provide agents in the `agents` configuration property, `MCPServer` will automatically create a corresponding tool for each agent. The tool will be named `ask_<agentIdentifier>`, where `<agentIdentifier>` is the key you used in the `agents` object.
+
+The description for this generated tool will be: "Ask agent \\'<agent.name>\\' a question. Agent description: <agent.description>".
+
+**Important**: For an agent to be converted into a tool, it **must** have a non-empty `description` string property set in its configuration when it was instantiated (e.g., `new Agent({ name: 'myAgent', description: 'This agent does X.', ... })`). If an agent is passed to `MCPServer` with a missing or empty `description`, an error will be thrown when the `MCPServer` is instantiated, and server setup will fail.
+
+This allows you to quickly expose the generative capabilities of your agents through the MCP, enabling clients to "ask" your agents questions directly.
 
 ## Methods
 
