@@ -1,6 +1,14 @@
 import { describe, it, vi } from 'vitest';
 import { openai } from '@ai-sdk/openai';
-import { CoreMessage, MastraMemory, MemoryConfig, MessageType, StorageGetMessagesArg, StorageThreadType } from '../../';
+import {
+  CoreMessage,
+  createWorkflow,
+  MastraMemory,
+  MemoryConfig,
+  MessageType,
+  StorageGetMessagesArg,
+  StorageThreadType,
+} from '../../';
 import { Agent, AiMessageType } from '../../agent';
 import { NewAgentNetwork } from './index';
 import { RuntimeContext } from '../../runtime-context';
@@ -126,9 +134,22 @@ describe('NewAgentNetwork', () => {
       name: 'test-memory',
     });
 
+    // const workflow1 = createWorkflow({
+    //   id: 'workflow1',
+    //   description: 'This workflow is used to do research and text synthesis.',
+    //   steps: [],
+    //   inputSchema: z.object({
+
+    //   }),
+    //   outputSchema: z.object({
+    //     text: z.string(),
+    //   }),
+    // });
+
     const agent1 = new Agent({
       name: 'agent1',
-      instructions: 'Test instructions',
+      instructions:
+        'This agent is used to do research, but not create full responses. Answer in bullet points only and be concise.',
       description:
         'This agent is used to do research, but not create full responses. Answer in bullet points only and be concise.',
       model: openai('gpt-4o'),
@@ -137,8 +158,9 @@ describe('NewAgentNetwork', () => {
     const agent2 = new Agent({
       name: 'agent2',
       description:
-        'This agent is used to do text synthesis on researched material. Write a full report based on the researched material. Do not use bullet points. Write full paragraphs.',
-      instructions: 'Test instructions',
+        'This agent is used to do text synthesis on researched material. Write a full report based on the researched material. Do not use bullet points. Write full paragraphs. There should not be a single bullet point in the final report. You write articles.',
+      instructions:
+        'This agent is used to do text synthesis on researched material. Write a full report based on the researched material. Do not use bullet points. Write full paragraphs. There should not be a single bullet point in the final report. You write articles.',
       model: openai('gpt-4o'),
     });
 
