@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 import { Agent } from '../../agent';
 import type { DynamicArgument, MastraLanguageModel } from '../../agent';
 import { MastraBase } from '../../base';
@@ -185,7 +186,9 @@ export class NewAgentNetwork extends MastraBase {
 
     const workflowList = Object.entries(workflowsToUse)
       .map(([name, workflow]) => {
-        return ` - **${name}**: ${workflow.description}`;
+        return ` - **${name}**: ${workflow.description}, input schema: ${JSON.stringify(
+          zodToJsonSchema(workflow.inputSchema),
+        )}`;
       })
       .join('\n');
 
@@ -201,7 +204,7 @@ export class NewAgentNetwork extends MastraBase {
           ## Available Agents in Network
           ${agentList}
 
-          ## Available Workflows in Network
+          ## Available Workflows in Network (make sure to use the input schema when calling a workflow)
           ${workflowList}
         `;
 
@@ -388,19 +391,24 @@ export class NewAgentNetwork extends MastraBase {
         isComplete: z.boolean().optional(),
       }),
       execute: async ({ inputData }) => {
-        console.log('calling workflow', inputData.resourceId);
+        console.log('calling workflow', inputData.resourceId, inputData.prompt);
         const wf = workflowsMap[inputData.resourceId];
 
         if (!wf) {
           throw new Error(`Workflow ${inputData.resourceId} not found`);
         }
 
+        let input;
+        try {
+          input = JSON.parse(inputData.prompt);
+        } catch (e: unknown) {
+          console.error(e);
+          throw new Error(`Invalid task input: ${inputData.task}`);
+        }
+
         const run = wf.createRun();
         const resp = await run.start({
-          // TODO: this can't be task, it needs to be the input schema of the workflow
-          inputData: {
-            task: inputData.task,
-          },
+          inputData: input,
         });
 
         if (resp.status === 'failed') {
@@ -411,9 +419,8 @@ export class NewAgentNetwork extends MastraBase {
           throw new Error('Workflow suspended');
         }
 
-        // TODO: this cant' be result.text
         return {
-          result: resp?.result?.text || '',
+          result: JSON.stringify(resp?.result) || '',
           task: inputData.task,
           resourceId: inputData.resourceId,
           resourceType: inputData.resourceType,
