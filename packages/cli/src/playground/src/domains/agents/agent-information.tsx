@@ -38,10 +38,10 @@ export function AgentInformation({ agentId }: { agentId: string }) {
             </Txt>
           )}
         </div>
-        <div className="flex items-center gap-2 pt-2">
+        <div className="flex items-center gap-2 pt-2 flex-wrap">
           <Tooltip>
             <TooltipTrigger asChild>
-              <button onClick={handleCopy} className="h-badge-default">
+              <button onClick={handleCopy} className="h-badge-default shrink-0">
                 <Badge icon={<CopyIcon />} variant="default">
                   {agentId}
                 </Badge>
@@ -50,15 +50,15 @@ export function AgentInformation({ agentId }: { agentId: string }) {
             <TooltipContent>Copy Agent ID for use in code</TooltipContent>
           </Tooltip>
 
-          <Badge className="capitalize" icon={providerIcon}>
+          <Badge className="capitalize shrink-0" icon={providerIcon}>
             {agent?.provider?.split('.')[0]}
           </Badge>
 
-          <Badge>{agent?.modelId}</Badge>
+          <Badge className="shrink-0">{agent?.modelId}</Badge>
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <Badge icon={<MemoryIcon />} variant={memory?.result ? 'success' : 'error'}>
+              <Badge icon={<MemoryIcon />} variant={memory?.result ? 'success' : 'error'} className="shrink-0">
                 {memory?.result ? 'Memory is On' : 'Memory is Off'}
               </Badge>
             </TooltipTrigger>
