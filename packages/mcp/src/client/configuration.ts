@@ -5,7 +5,6 @@ import equal from 'fast-deep-equal';
 import { v5 as uuidv5 } from 'uuid';
 import { InternalMastraMCPClient } from './client';
 import type { MastraMCPServerDefinition } from './client';
-import { ResourceClientActions } from './resourceActions';
 
 const mcpClientInstances = new Map<string, InstanceType<typeof MCPClient>>();
 
@@ -21,7 +20,6 @@ export class MCPClient extends MastraBase {
   private defaultTimeout: number;
   private mcpClientsById = new Map<string, InternalMastraMCPClient>();
   private disconnectPromise: Promise<void> | null = null;
-  private resourceActionsCache = new Map<string, ResourceClientActions>();
 
   constructor(args: MCPClientOptions) {
     super({ name: 'MCPClient' });
@@ -66,27 +64,6 @@ To fix this you have three different options:
     return this;
   }
 
-  private async _getResourceActions(serverName: string): Promise<ResourceClientActions> {
-    if (this.resourceActionsCache.has(serverName)) {
-      return this.resourceActionsCache.get(serverName)!;
-    }
-
-    const serverConfig = this.serverConfigs[serverName];
-    if (!serverConfig) {
-      throw new Error(`Server configuration not found for name: ${serverName}`);
-    }
-
-    const internalClient = await this.getConnectedClientForServer(serverName);
-    
-    const actions = new ResourceClientActions({
-      client: internalClient,
-      logger: this.logger,
-    });
-
-    this.resourceActionsCache.set(serverName, actions);
-    return actions;
-  }
-
   public get resources() {
     this.addToInstanceCache();
     return {
@@ -94,11 +71,10 @@ To fix this you have three different options:
         const allResources: Record<string, Resource[]> = {};
         for (const serverName of Object.keys(this.serverConfigs)) {
           try {
-            const actions = await this._getResourceActions(serverName);
-            allResources[serverName] = await actions.list();
+            const internalClient = await this.getConnectedClientForServer(serverName);
+            allResources[serverName] = await internalClient.resources.list();
           } catch (error) {
             this.logger.error(`Failed to list resources from server ${serverName}`, { error });
-            throw error
           }
         }
         return allResources;
@@ -107,29 +83,33 @@ To fix this you have three different options:
         const allTemplates: Record<string, ResourceTemplate[]> = {};
         for (const serverName of Object.keys(this.serverConfigs)) {
           try {
-            const actions = await this._getResourceActions(serverName);
-            allTemplates[serverName] = await actions.templates();
+            const internalClient = await this.getConnectedClientForServer(serverName);
+            allTemplates[serverName] = await internalClient.resources.templates();
           } catch (error) {
             this.logger.error(`Failed to list resource templates from server ${serverName}`, { error });
-            throw error;
           }
         }
         return allTemplates;
       },
       read: async (serverName: string, uri: string) => {
-        return (await this._getResourceActions(serverName)).read(uri);
+        const internalClient = await this.getConnectedClientForServer(serverName);
+        return internalClient.resources.read(uri);
       },
       subscribe: async (serverName: string, uri: string) => {
-        return (await this._getResourceActions(serverName)).subscribe(uri);
+        const internalClient = await this.getConnectedClientForServer(serverName);
+        return internalClient.resources.subscribe(uri);
       },
       unsubscribe: async (serverName: string, uri: string) => {
-        return (await this._getResourceActions(serverName)).unsubscribe(uri);
+        const internalClient = await this.getConnectedClientForServer(serverName);
+        return internalClient.resources.unsubscribe(uri);
       },
       onUpdated: async (serverName: string, handler: (params: { uri: string }) => void) => {
-        return (await this._getResourceActions(serverName)).onUpdated(handler);
+        const internalClient = await this.getConnectedClientForServer(serverName);
+        return internalClient.resources.onUpdated(handler);
       },
       onListChanged: async (serverName: string, handler: () => void) => {
-        return (await this._getResourceActions(serverName)).onListChanged(handler);
+        const internalClient = await this.getConnectedClientForServer(serverName);
+        return internalClient.resources.onListChanged(handler);
       },
     };
   }
@@ -157,7 +137,6 @@ To fix this you have three different options:
     this.disconnectPromise = (async () => {
       try {
         mcpClientInstances.delete(this.id);
-        this.resourceActionsCache.clear();
         
         // Disconnect all clients in the cache
         await Promise.all(Array.from(this.mcpClientsById.values()).map(client => client.disconnect()));

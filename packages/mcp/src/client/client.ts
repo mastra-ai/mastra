@@ -25,6 +25,7 @@ import { asyncExitHook, gracefulExit } from 'exit-hook';
 import { z } from 'zod';
 import { convertJsonSchemaToZod } from 'zod-from-json-schema';
 import type { JSONSchema } from 'zod-from-json-schema';
+import { ResourceClientActions } from './resourceActions';
 
 // Re-export MCP SDK LoggingLevel for convenience
 export type { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
@@ -117,6 +118,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private serverConfig: MastraMCPServerDefinition;
   private transport?: Transport;
   private currentOperationContext: RuntimeContext | null = null;
+  public readonly resources: ResourceClientActions;
 
   constructor({
     name,
@@ -144,6 +146,8 @@ export class InternalMastraMCPClient extends MastraBase {
 
     // Set up log message capturing
     this.setupLogging();
+    
+    this.resources = new ResourceClientActions({ client: this, logger: this.logger });
   }
 
   /**
