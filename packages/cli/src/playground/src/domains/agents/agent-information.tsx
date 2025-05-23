@@ -25,7 +25,7 @@ export function AgentInformation({ agentId }: { agentId: string }) {
   return (
     <div className="h-full overflow-y-scroll pb-5">
       <div className="p-5 border-b-sm border-border1">
-        <div className="text-icon6 flex items-center gap-2">
+        <div className="text-icon6 flex items-center gap-2 min-w-0">
           <Icon size="lg" className="bg-surface4 rounded-md p-1">
             <AgentIcon />
           </Icon>
@@ -33,7 +33,7 @@ export function AgentInformation({ agentId }: { agentId: string }) {
           {isLoading || isMemoryLoading ? (
             <Skeleton className="h-3 w-1/3" />
           ) : (
-            <Txt variant="header-md" as="h2" className="font-medium">
+            <Txt variant="header-md" as="h2" className="font-medium truncate">
               {agent?.name}
             </Txt>
           )}
