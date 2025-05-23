@@ -31,6 +31,7 @@ const prepareAgents = (tools: Record<string, Tool>, agents: Record<string, GetAg
   const toolsWithAgents = new Map<string, ToolWithAgents>();
   const agentsKeys = Object.keys(agents);
 
+  // Assemble tools from agents
   for (const k of agentsKeys) {
     const agent = agents[k];
     const agentToolsDict = agent.tools;
@@ -50,12 +51,17 @@ const prepareAgents = (tools: Record<string, Tool>, agents: Record<string, GetAg
     }
   }
 
-  const actualTools = Object.entries(tools).map(([_, tool]) => ({
-    ...tool,
-    agents: toolsWithAgents.get(tool.id)?.agents || [],
-  }));
+  // Assemble discovered tools
+  for (const [_, tool] of Object.entries(tools)) {
+    if (!toolsWithAgents.has(tool.id)) {
+      toolsWithAgents.set(tool.id, {
+        ...tool,
+        agents: [],
+      });
+    }
+  }
 
-  return actualTools;
+  return Array.from(toolsWithAgents.values());
 };
 
 const Tools = () => {
@@ -147,7 +153,10 @@ const ToolEntity = ({ tool }: ToolEntityProps) => {
 
       <EntityContent>
         <EntityName>
-          <Link ref={linkRef} to={`/tools/all/${tool.id}`}>
+          <Link
+            ref={linkRef}
+            to={tool.agents.length > 0 ? `/tools/${tool.agents[0].id}/${tool.id}` : `/tools/all/${tool.id}`}
+          >
             {tool.id}
           </Link>
         </EntityName>
