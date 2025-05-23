@@ -9,7 +9,6 @@ import {
   ToolsIcon,
   Button,
   McpCoinIcon,
-  AgentCoinIcon,
   McpServerIcon,
   EmptyState,
 } from '@mastra/playground-ui';
@@ -76,8 +75,8 @@ const MCPs = () => {
       {mcpServers.length === 0 ? (
         <div className="flex h-full items-center justify-center">
           <EmptyState
-            iconSlot={<AgentCoinIcon />}
-            titleSlot="No MCP servers found"
+            iconSlot={<McpCoinIcon />}
+            titleSlot="Configure MCP servers"
             descriptionSlot="MCP servers are not configured yet. You can find more information in the documentation."
             actionSlot={
               <Button
@@ -89,7 +88,7 @@ const MCPs = () => {
                 target="_blank"
               >
                 <Icon>
-                  <McpCoinIcon />
+                  <McpServerIcon />
                 </Icon>
                 Docs
               </Button>
