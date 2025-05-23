@@ -1,13 +1,15 @@
 import type {
   AssistantContent,
+  CoreMessage,
+  CoreToolMessage,
+  EmbeddingModel,
+  Message,
+  ToolInvocation,
   ToolResultPart,
   UserContent,
-  CoreToolMessage,
-  ToolInvocation,
-  CoreMessage,
-  EmbeddingModel,
 } from 'ai';
-
+import { existsSync } from 'fs';
+import { join } from 'path';
 import { MastraBase } from '../base';
 import type { MastraStorage, StorageGetMessagesArg } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
@@ -15,7 +17,7 @@ import type { CoreTool } from '../tools';
 import { deepMerge } from '../utils';
 import type { MastraVector } from '../vector';
 
-import type { MessageType, SharedMemoryConfig, StorageThreadType, MemoryConfig, AiMessageType } from './types';
+import type { AiMessageType, MemoryConfig, MessageType, SharedMemoryConfig, StorageThreadType } from './types';
 
 export type MemoryProcessorOpts = {
   systemMessage?: string;
@@ -262,21 +264,24 @@ export abstract class MastraMemory extends MastraBase {
       toolResultContents: Array<ToolResultPart>;
     }): { chatMessages: Array<AiMessageType>; toolResultContents: Array<ToolResultPart> } {
       const chatMessages = messages.map(message => {
-        if (message.toolInvocations) {
+        if (message.parts) {
           return {
             ...message,
-            toolInvocations: message.toolInvocations.map(toolInvocation => {
-              const toolResult = toolMessage.content.find(tool => tool.toolCallId === toolInvocation.toolCallId);
-
-              if (toolResult) {
-                return {
-                  ...toolInvocation,
-                  state: 'result',
-                  result: toolResult.result,
-                };
+            parts: message.parts.map(part => {
+              if (part.type === 'tool-invocation') {
+                const toolResult = toolMessage.content.find(tool => tool.toolCallId === part.toolInvocation.toolCallId);
+                if (toolResult) {
+                  return {
+                    ...part,
+                    toolInvocation: {
+                      ...part.toolInvocation,
+                      state: 'result' as const,
+                      result: toolResult.result,
+                    },
+                  };
+                }
               }
-
-              return toolInvocation;
+              return part;
             }),
           };
         }
@@ -299,26 +304,29 @@ export abstract class MastraMemory extends MastraBase {
           });
         }
 
-        let textContent = '';
-        let toolInvocations: Array<ToolInvocation> = [];
+        const parts: Message['parts'] = [];
+        const toolInvocations: Array<ToolInvocation> = [];
 
         if (typeof message.content === 'string') {
-          textContent = message.content;
-        } else if (typeof message.content === 'number') {
-          textContent = String(message.content);
+          parts.push({ type: 'text', text: message.content });
         } else if (Array.isArray(message.content)) {
           for (const content of message.content) {
             if (content.type === 'text') {
-              textContent += content.text;
+              parts.push({ type: 'text', text: content.text });
             } else if (content.type === 'tool-call') {
               const toolResult = obj.toolResultContents.find(tool => tool.toolCallId === content.toolCallId);
-              toolInvocations.push({
-                state: toolResult ? 'result' : 'call',
+              const toolInvocation = {
+                state: toolResult ? ('result' as const) : ('call' as const),
                 toolCallId: content.toolCallId,
                 toolName: content.toolName,
                 args: content.args,
                 result: toolResult?.result,
+              };
+              parts.push({
+                type: 'tool-invocation',
+                toolInvocation,
               });
+              toolInvocations.push(toolInvocation);
             }
           }
         }
@@ -326,9 +334,10 @@ export abstract class MastraMemory extends MastraBase {
         obj.chatMessages.push({
           id: (message as MessageType).id,
           role: message.role as AiMessageType['role'],
-          content: textContent,
-          toolInvocations,
           createdAt: message.createdAt,
+          content: typeof message.content === 'string' ? message.content : '',
+          parts: parts.length > 0 ? parts : undefined,
+          toolInvocations: toolInvocations.length > 0 ? toolInvocations : undefined,
         });
 
         return obj;
