@@ -720,7 +720,7 @@ export class Workflow<
    */
   buildExecutionGraph(): ExecutionGraph {
     return {
-      id: randomUUID(),
+      id: this.id,
       steps: this.stepFlow,
     };
   }
