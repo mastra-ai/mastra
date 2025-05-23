@@ -14,23 +14,17 @@ import {
 import type { RagTool } from '../utils';
 import { convertToSources } from '../utils/convert-sources';
 import type { GraphRagToolOptions } from './types';
+import { defaultGraphOptions } from './types';
 
 export const createGraphRAGTool = (options: GraphRagToolOptions) => {
-  const {
-    model,
-    graphOptions = {
-      dimension: 1536,
-      randomWalkSteps: 100,
-      restartProb: 0.15,
-      threshold: 0.7,
-    },
-    id,
-    description,
-    useRuntimeContext,
-  } = options;
+  const { model, id, description, useRuntimeContext } = options;
 
   const toolId = id || `GraphRAG Tool`;
   const toolDescription = description || defaultGraphRagDescription();
+  const graphOptions = {
+    ...defaultGraphOptions,
+    ...(options.graphOptions || {}),
+  };
   // Initialize GraphRAG
   const graphRag = new GraphRAG(graphOptions.dimension, graphOptions.threshold);
   let isInitialized = false;
@@ -59,7 +53,7 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
         indexName,
         vectorStoreName,
         enableFilter,
-      } = getToolParams({ runtimeContext, context, options });
+      } = getToolParams({ runtimeContext, context, options: { ...options, graphOptions } });
       if (!indexName) {
         throw new Error('indexName is required');
       }
