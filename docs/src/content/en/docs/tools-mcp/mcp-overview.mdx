@@ -23,6 +23,19 @@ If you haven't already, install the Mastra MCP package:
 npm install @mastra/mcp@latest
 ```
 
+### Registering the MCPServer
+
+Register your MCP server with Mastra to enable logging and access to configured tools and integrations:
+
+```ts showLineNumbers filename="src/mastra/index.ts" copy
+import { Mastra } from "@mastra/core";
+import { myMcpServer } from "./mcpServers";
+
+export const mastra = new Mastra({
+  mcpServers: { myMcpServer },
+});
+```
+
 ### Configuring `MCPClient`
 
 You configure `MCPClient` with a map of servers you want to connect to. It supports connections via subprocess (Stdio) or HTTP (Streamable HTTP with SSE fallback).
@@ -99,7 +112,7 @@ For detailed configuration options, see the [`MCPClient` reference documentation
 
 ## Connecting to an MCP registry
 
-MCP servers can be discovered through registries. Here’s how to connect to some popular ones using `MCPClient`:
+MCP servers can be discovered through registries. Here's how to connect to some popular ones using `MCPClient`:
 
 <Tabs items={["mcp.run", "Composio.dev", "Smithery.ai"]}>
   <Tabs.Tab>
@@ -200,20 +213,26 @@ MCP servers can be discovered through registries. Here’s how to connect to som
 
 If you have created your own Mastra tools, you can expose them to any MCP-compatible client using Mastra's `MCPServer` class.
 
-This allows others to use your tools without needing direct access to your codebase.
+Similarly, Mastra `Agent` instances can also be exposed as tools via `MCPServer`. This allows other MCP clients to interact with your agents by "asking" them questions. Each agent provided in the `MCPServer` configuration will be converted into a tool named `ask_<agentKey>`, using the agent's `description` property.
+
+This allows others to use your tools and agents without needing direct access to your codebase.
 
 ### Using `MCPServer`
 
-You initialize `MCPServer` with a name, version, and the Mastra tools you want to share.
+You initialize `MCPServer` with a name, version, and the Mastra tools and/or agents you want to share.
 
 ```typescript
 import { MCPServer } from "@mastra/mcp";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
 import { weatherTool } from "./tools"; // Your Mastra tool
+import { weatherAgent } from "./agents";
 
 const server = new MCPServer({
   name: "My Weather Server",
   version: "1.0.0",
-  tools: { weatherTool }, // Provide your tool(s) here
+  tools: { weatherTool },    // Provide your tool(s) here
+  agents: { weatherAgent }   // Provide your agent(s) here
 });
 
 // Start the server (e.g., using stdio for a CLI tool)
@@ -222,5 +241,7 @@ const server = new MCPServer({
 // Or integrate with an HTTP server using startSSE()
 // See MCPServer reference for details
 ```
+
+For an agent to be exposed as a tool, it must have a non-empty `description` string. If the description is missing or empty, `MCPServer` will throw an error during initialization.
 
 For detailed usage and examples, see the [`MCPServer` reference documentation](/reference/tools/mcp-server).

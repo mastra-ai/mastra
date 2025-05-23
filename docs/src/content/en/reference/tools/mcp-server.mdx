@@ -5,48 +5,153 @@ description: API Reference for MCPServer - A class for exposing Mastra tools and
 
 # MCPServer
 
-The `MCPServer` class provides the functionality to expose your existing Mastra tools as a Model Context Protocol (MCP) server. This allows any MCP client (like Cursor, Windsurf, or Claude Desktop) to connect to the tools and make them available to an agent.
-Note that if you only need to use your tools in your Mastra agents you don't need to create an MCP server. This API allows you to expose your Mastra tools to external MCP clients. In Mastra you can use your tools directly without MCP.
+The `MCPServer` class provides the functionality to expose your existing Mastra tools and Agents as a Model Context Protocol (MCP) server. This allows any MCP client (like Cursor, Windsurf, or Claude Desktop) to connect to these capabilities and make them available to an agent.
+
+Note that if you only need to use your tools or agents directly within your Mastra application, you don't necessarily need to create an MCP server. This API is specifically for exposing your Mastra tools and agents to *external* MCP clients.
 
 It supports both [stdio (subprocess) and SSE (HTTP) MCP transports](https://modelcontextprotocol.io/docs/concepts/transports).
 
-## Properties
+## Constructor
 
-To create a new MCPServer, you need to provide some basic information about your server and the tools it will offer.
+To create a new `MCPServer`, you need to provide some basic information about your server, the tools it will offer, and optionally, any agents you want to expose as tools.
+
+```typescript
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { createTool } from "@mastra/core/tools";
+import { MCPServer } from "@mastra/mcp";
+import { z } from "zod";
+
+const myAgent = new Agent({
+  name: "MyExampleAgent",
+  description: "A generalist to help with basic questions."
+  instructions: "You are a helpful assistant.",
+  model: openai("gpt-4o-mini"),
+});
+
+const weatherTool = createTool({
+  id: "getWeather",
+  description: "Gets the current weather for a location.",
+  inputSchema: z.object({ location: z.string() }),
+  execute: async ({ context }) => `Weather in ${context.location} is sunny.`,
+});
+
+const server = new MCPServer({
+  name: "My Custom Server",
+  version: "1.0.0",
+  tools: { weatherTool },
+  agents: { myAgent }, // this agent will become tool "ask_myAgent"
+});
+```
+
+### Configuration Properties
+
+The constructor accepts an `MCPServerConfig` object with the following properties:
 
 <PropertiesTable
   content={[
     {
       name: "name",
       type: "string",
-      description: "A name for your server (like 'My Weather Server').",
+      isOptional: false,
+      description: "A descriptive name for your server (e.g., 'My Weather and Agent Server').",
     },
     {
       name: "version",
       type: "string",
-      description: "The version of your server (like '1.0.0').",
+      isOptional: false,
+      description: "The semantic version of your server (e.g., '1.0.0').",
     },
     {
       name: "tools",
       type: "ToolsInput",
+      isOptional: false,
       description:
-        "An object containing the tools you want to make available. This can include tools created with Mastra or the Vercel AI SDK.",
+        "An object where keys are tool names and values are Mastra tool definitions (created with `createTool` or Vercel AI SDK). These tools will be directly exposed.",
+    },
+    {
+      name: "agents",
+      type: "Record<string, Agent>",
+      isOptional: true,
+      description:
+        "An object where keys are agent identifiers and values are Mastra Agent instances. Each agent will be automatically converted into a tool named `ask_<agentIdentifier>`. The agent **must** have a non-empty `description` string property defined in its constructor configuration. This description will be used in the tool's description. If an agent's description is missing or empty, an error will be thrown during MCPServer initialization.",
+    },
+    {
+      name: "id",
+      type: "string",
+      isOptional: true,
+      description: "Optional unique identifier for the server. If not provided, a UUID will be generated. This ID is considered final and cannot be changed by Mastra if provided.",
+    },
+    {
+      name: "description",
+      type: "string",
+      isOptional: true,
+      description: "Optional description of what the MCP server does.",
+    },
+    {
+      name: "repository",
+      type: "Repository", // { url: string; source: string; id: string; }
+      isOptional: true,
+      description: "Optional repository information for the server's source code.",
+    },
+    {
+      name: "releaseDate",
+      type: "string", // ISO 8601
+      isOptional: true,
+      description: "Optional release date of this server version (ISO 8601 string). Defaults to the time of instantiation if not provided.",
+    },
+    {
+      name: "isLatest",
+      type: "boolean",
+      isOptional: true,
+      description: "Optional flag indicating if this is the latest version. Defaults to true if not provided.",
+    },
+    {
+      name: "packageCanonical",
+      type: "'npm' | 'docker' | 'pypi' | 'crates' | string",
+      isOptional: true,
+      description: "Optional canonical packaging format if the server is distributed as a package (e.g., 'npm', 'docker').",
+    },
+    {
+      name: "packages",
+      type: "PackageInfo[]",
+      isOptional: true,
+      description: "Optional list of installable packages for this server.",
+    },
+    {
+      name: "remotes",
+      type: "RemoteInfo[]",
+      isOptional: true,
+      description: "Optional list of remote access points for this server.",
     },
   ]}
 />
 
-For example, here's how you might create a new `MCPServer` instance:
+## Exposing Agents as Tools
 
-```typescript
-import { MCPServer } from "@mastra/mcp";
-import { weatherTool } from "./tools"; // Assuming you have a weather tool defined in this file
+A powerful feature of `MCPServer` is its ability to automatically expose your Mastra Agents as callable tools. When you provide agents in the `agents` property of the configuration:
 
-const server = new MCPServer({
-  name: "My Weather Server",
-  version: "1.0.0",
-  tools: { weatherTool },
-});
-```
+- **Tool Naming**: Each agent is converted into a tool named `ask_<agentKey>`, where `<agentKey>` is the key you used for that agent in the `agents` object. For instance, if you configure `agents: { myAgentKey: myAgentInstance }`, a tool named `ask_myAgentKey` will be created.
+
+- **Tool Functionality**:
+    - **Description**: The generated tool's description will be in the format: "Ask agent '<AgentName>' a question. Original agent instructions: <agent description>".
+    - **Input**: The tool expects a single object argument with a `message` property (string): `{ message: "Your question for the agent" }`.
+    - **Execution**: When this tool is called, it invokes the `generate()` method of the corresponding agent, passing the provided `query`.
+    - **Output**: The direct result from the agent's `generate()` method is returned as the output of the tool.
+
+- **Name Collisions**: If an explicit tool defined in the `tools` configuration has the same name as an agent-derived tool (e.g., you have a tool named `ask_myAgentKey` and also an agent with the key `myAgentKey`), the *explicitly defined tool will take precedence*. The agent will not be converted into a tool in this conflicting case, and a warning will be logged.
+
+This makes it straightforward to allow MCP clients to interact with your agents using natural language queries, just like any other tool.
+
+### Agent-to-Tool Conversion
+
+When you provide agents in the `agents` configuration property, `MCPServer` will automatically create a corresponding tool for each agent. The tool will be named `ask_<agentIdentifier>`, where `<agentIdentifier>` is the key you used in the `agents` object.
+
+The description for this generated tool will be: "Ask agent \\'<agent.name>\\' a question. Agent description: <agent.description>".
+
+**Important**: For an agent to be converted into a tool, it **must** have a non-empty `description` string property set in its configuration when it was instantiated (e.g., `new Agent({ name: 'myAgent', description: 'This agent does X.', ... })`). If an agent is passed to `MCPServer` with a missing or empty `description`, an error will be thrown when the `MCPServer` is instantiated, and server setup will fail.
+
+This allows you to quickly expose the generative capabilities of your agents through the MCP, enabling clients to "ask" your agents questions directly.
 
 ## Methods
 
@@ -144,6 +249,204 @@ Here are the details for the values needed by the `startSSE` method:
   ]}
 />
 
+### startHonoSSE()
+
+This method helps you integrate the MCP server with an existing web server to use Server-Sent Events (SSE) for communication. You'll call this from your web server's code when it receives a request for the SSE or message paths.
+
+```typescript
+async startHonoSSE({
+  url,
+  ssePath,
+  messagePath,
+  req,
+  res,
+}: {
+  url: URL;
+  ssePath: string;
+  messagePath: string;
+  req: any;
+  res: any;
+}): Promise<void>
+```
+
+Here's an example of how you might use `startHonoSSE` within an HTTP server request handler. In this example an MCP client could connect to your MCP server at `http://localhost:1234/hono-sse`:
+
+```typescript
+import http from "http";
+
+const httpServer = http.createServer(async (req, res) => {
+  await server.startHonoSSE({
+    url: new URL(req.url || "", `http://localhost:1234`),
+    ssePath: "/hono-sse",
+    messagePath: "/message",
+    req,
+    res,
+  });
+});
+
+httpServer.listen(PORT, () => {
+  console.log(`HTTP server listening on port ${PORT}`);
+});
+```
+
+Here are the details for the values needed by the `startHonoSSE` method:
+
+<PropertiesTable
+  content={[
+    {
+      name: "url",
+      type: "URL",
+      description: "The web address the user is requesting.",
+    },
+    {
+      name: "ssePath",
+      type: "string",
+      description:
+        "The specific part of the URL where clients will connect for SSE (e.g., '/hono-sse').",
+    },
+    {
+      name: "messagePath",
+      type: "string",
+      description:
+        "The specific part of the URL where clients will send messages (e.g., '/message').",
+    },
+    {
+      name: "req",
+      type: "any",
+      description: "The incoming request object from your web server.",
+    },
+    {
+      name: "res",
+      type: "any",
+      description:
+        "The response object from your web server, used to send data back.",
+    },
+  ]}
+/>
+
+### startHTTP()
+
+This method helps you integrate the MCP server with an existing web server to use Server-Sent Events (SSE) for communication. You'll call this from your web server's code when it receives a request for the SSE or message paths.
+
+```typescript
+async startHTTP({
+  url,
+  ssePath,
+  messagePath,
+  req,
+  res,
+}: {
+  url: URL;
+  ssePath: string;
+  messagePath: string;
+  req: any;
+  res: any;
+}): Promise<void>
+```
+
+Here's an example of how you might use `startHTTP` within an HTTP server request handler. In this example an MCP client could connect to your MCP server at `http://localhost:1234/http`:
+
+```typescript
+import http from "http";
+
+const httpServer = http.createServer(async (req, res) => {
+  await server.startHTTP({
+    url: new URL(req.url || "", `http://localhost:1234`),
+    ssePath: "/http",
+    messagePath: "/message",
+    req,
+    res,
+  });
+});
+
+httpServer.listen(PORT, () => {
+  console.log(`HTTP server listening on port ${PORT}`);
+});
+```
+
+Here are the details for the values needed by the `startHTTP` method:
+
+<PropertiesTable
+  content={[
+    {
+      name: "url",
+      type: "URL",
+      description: "The web address the user is requesting.",
+    },
+    {
+      name: "ssePath",
+      type: "string",
+      description:
+        "The specific part of the URL where clients will connect for SSE (e.g., '/http').",
+    },
+    {
+      name: "messagePath",
+      type: "string",
+      description:
+        "The specific part of the URL where clients will send messages (e.g., '/message').",
+    },
+    {
+      name: "req",
+      type: "any",
+      description: "The incoming request object from your web server.",
+    },
+    {
+      name: "res",
+      type: "any",
+      description:
+        "The response object from your web server, used to send data back.",
+    },
+  ]}
+/>
+
+### close()
+
+This method closes the server and releases all resources.
+
+```typescript
+async close(): Promise<void>
+```
+
+### getServerInfo()
+
+This method gives you a look at the server's basic information.
+
+```typescript
+getServerInfo(): ServerInfo
+```
+
+### getServerDetail()
+
+This method gives you a detailed look at the server's information.
+
+```typescript
+getServerDetail(): ServerDetail
+```
+
+### getToolListInfo()
+
+This method gives you a look at the tools that were set up when you created the server. It's a read-only list, useful for debugging purposes.
+
+```typescript
+getToolListInfo(): ToolListInfo
+```
+
+### getToolInfo()
+
+This method gives you detailed information about a specific tool.
+
+```typescript
+getToolInfo(toolName: string): ToolInfo
+```
+
+### executeTool()
+
+This method executes a specific tool and returns the result.
+
+```typescript
+executeTool(toolName: string, input: any): Promise<any>
+```
+
 ### getStdioTransport()
 
 If you started the server with `startStdio()`, you can use this to get the object that manages the stdio communication. This is mostly for checking things internally or for testing.
@@ -160,6 +463,22 @@ If you started the server with `startSSE()`, you can use this to get the object 
 getSseTransport(): SSEServerTransport | undefined
 ```
 
+### getSseHonoTransport()
+
+If you started the server with `startHonoSSE()`, you can use this to get the object that manages the SSE communication. Like `getSseTransport`, this is mainly for internal checks or testing.
+
+```typescript
+getSseHonoTransport(): SSETransport | undefined
+```
+
+### getStreamableHTTPTransport()
+
+If you started the server with `startHTTP()`, you can use this to get the object that manages the HTTP communication. Like `getSseTransport`, this is mainly for internal checks or testing.
+
+```typescript
+getStreamableHTTPTransport(): StreamableHTTPServerTransport | undefined
+```
+
 ### tools()
 
 This method gives you a look at the tools that were set up when you created the server. It's a read-only list, useful for debugging purposes.
@@ -171,6 +490,8 @@ tools(): Readonly<Record<string, ConvertedTool>>
 ## Examples
 
 For practical examples of setting up and deploying an MCPServer, see the [Deploying an MCPServer Example](/examples/agents/deploying-mcp-server).
+
+The example at the beginning of this page also demonstrates how to instantiate `MCPServer` with both tools and agents.
 
 ## Related Information
 
