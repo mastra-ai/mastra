@@ -1,17 +1,11 @@
-import { describe, it, vi } from 'vitest';
 import { openai } from '@ai-sdk/openai';
-import {
-  CoreMessage,
-  createWorkflow,
-  MastraMemory,
-  MemoryConfig,
-  MessageType,
-  StorageGetMessagesArg,
-  StorageThreadType,
-} from '../../';
-import { Agent, AiMessageType } from '../../agent';
-import { NewAgentNetwork } from './index';
+import { describe, it } from 'vitest';
+import type { CoreMessage, MemoryConfig, MessageType, StorageGetMessagesArg, StorageThreadType } from '../../';
+import type { AiMessageType } from '../../agent';
+import { Agent } from '../../agent';
+import { MastraMemory } from '../../memory';
 import { RuntimeContext } from '../../runtime-context';
+import { NewAgentNetwork } from './index';
 
 class MockMemory extends MastraMemory {
   #byResourceId: Map<string, any[]> = new Map();
@@ -20,7 +14,9 @@ class MockMemory extends MastraMemory {
   constructor(config: { name: string }) {
     super({
       name: config.name,
-      lastMessage: 10,
+      options: {
+        lastMessages: 10,
+      },
     });
   }
 
