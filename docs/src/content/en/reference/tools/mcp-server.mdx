@@ -43,7 +43,7 @@ const server = new MCPServer({
   tools: { weatherTool },
   agents: { myAgent }, // this agent will become tool "ask_myAgent"
   workflows: {
-    dataProcessingWorkflow, // An instance of Mastra Workflow
+    dataProcessingWorkflow, // this workflow will become tool "run_dataProcessingWorkflow"
   }
 });
 ```

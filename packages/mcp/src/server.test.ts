@@ -638,7 +638,7 @@ describe('MCPServer - Agent to Tool Conversion', () => {
   });
 });
 
-describe.only('MCPServer - Workflow to Tool Conversion', () => {
+describe('MCPServer - Workflow to Tool Conversion', () => {
   let server: MCPServer;
 
   beforeEach(() => {
