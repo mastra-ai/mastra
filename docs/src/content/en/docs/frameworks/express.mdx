@@ -13,20 +13,20 @@ Mastra integrates with Express, making it easy to:
 - Maintain full control over your server logic and routing
 - Scale your backend independently of your frontend
 
-Follow this guide to scaffold and connect Mastra agents to your Express backend.
+Use this guide to scaffold and integrate Mastra with your Express project.
 
 <Callout type="warning">
 This setup is compatible with the following package versions:
 - `express`: 4.x
 - `@types/express`: 4.x
 
-TypeScript issues may occur with version 5.x of either package.
+Type compatibility in 5.x can be inconsistent while `express` and `@types/express` evolve toward alignment.
 </Callout>
 
 <Steps>
 ## Install Mastra
 
-Install the `mastra` CLI and `@mastra/core` packages:
+Install the required Mastra packages:
 
 <Tabs items={["npm", "yarn", "pnpm", "bun"]}>
   <Tabs.Tab>
@@ -51,9 +51,9 @@ bun add mastra@latest @mastra/core@latest @mastra/libsql@latest
   </Tabs.Tab>
 </Tabs>
 
-## Initialize Mastra
+## Integrate Mastra
 
-To initialize Mastra in your project, you have two options:
+To integrate Mastra in your project, you have two options:
 
 ### 1. Use the One-Liner
 
@@ -63,11 +63,11 @@ Run the following command to quickly scaffold the default Weather agent with sen
 npx mastra@latest init --default
 ```
 
-> You can read more about the defaults here: [mastra init](/reference/cli/init)
+> See [mastra init](/reference/cli/init) for more information.
 
 ### 2. Use the Interactive CLI
 
-If you prefer to customize the setup, run the `init` command and choose options from the prompts:
+If you prefer to customize the setup, run the `init` command and choose from the options when prompted:
 
 ```bash copy
 npx mastra@latest init
@@ -116,7 +116,7 @@ Create a `tsconfig.json` file in your project root with the following configurat
 OPENAI_API_KEY=<your-api-key>
 ```
 
-> Each llm provider uses a different env var. See [Model Capabilities](/docs/getting-started/model-capability) for details.
+> Each llm provider uses a different env var. See [Model Capabilities](/docs/getting-started/model-capability) for more information.
 
 ## Start the Mastra Dev Server
 
@@ -135,12 +135,7 @@ Start the Mastra dev server to expose your agents as REST endpoints:
    </Tabs.Tab>
 </Tabs>
 
-Once running, your agents are available at:
-
-- Playground: [http://localhost:4111/](http://localhost:4111/)
-- Mastra API: [http://localhost:4111/api](http://localhost:4111/api)
-- OpenAPI Spec: [http://localhost:4111/openapi.json](http://localhost:4111/openapi.json)
-- Swagger UI – API explorer: [http://localhost:4111/swagger-ui](http://localhost:4111/swagger-ui)
+> Once running, your agents are available locally. See [Local Development Environment](/docs/local-dev/mastra-dev) for more information.
 
 ## Example Express App
 
