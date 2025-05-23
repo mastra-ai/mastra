@@ -50,8 +50,8 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
         context,
         options,
       });
-      if (!indexName) throw new Error('indexName is required');
-      if (!vectorStoreName) throw new Error('vectorStoreName is required');
+      if (!indexName) throw new Error(`indexName is required, got: ${indexName}`);
+      if (!vectorStoreName) throw new Error(`vectorStoreName is required, got: ${vectorStoreName}`);
 
       const logger = mastra?.getLogger();
       if (!logger) {
@@ -195,7 +195,7 @@ function getToolParams({
       includeVectors,
       includeSources,
       reranker,
-      enableFilter: !!filter,
+      enableFilter: Object.keys(filter || {}).length > 0,
     };
   }
 }

@@ -54,12 +54,8 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
         vectorStoreName,
         enableFilter,
       } = getToolParams({ runtimeContext, context, options: { ...options, graphOptions } });
-      if (!indexName) {
-        throw new Error('indexName is required');
-      }
-      if (!vectorStoreName) {
-        throw new Error('vectorStoreName is required');
-      }
+      if (!indexName) throw new Error(`indexName is required, got: ${indexName}`);
+      if (!vectorStoreName) throw new Error(`vectorStoreName is required, got: ${vectorStoreName}`);
       const logger = mastra?.getLogger();
       if (!logger) {
         console.warn(
@@ -214,7 +210,7 @@ function getToolParams({
       includeSources,
       randomWalkSteps,
       restartProb,
-      enableFilter: !!filter,
+      enableFilter: Object.keys(filter || {}).length > 0,
     };
   }
 }

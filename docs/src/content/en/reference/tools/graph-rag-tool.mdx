@@ -225,7 +225,7 @@ runtimeContext.set("indexName", "my-index");
 runtimeContext.set("topK", 5);
 runtimeContext.set("filter", { "category": "docs" });
 
-const response = await agent.generate("What's the weather like today?", {
+const response = await agent.generate("Find documentation from the knowledge base.", {
   runtimeContext,
 });
 ```

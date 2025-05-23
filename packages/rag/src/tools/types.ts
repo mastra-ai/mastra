@@ -11,7 +11,7 @@ export type VectorQueryToolOptions =
   | {
       id?: string;
       description?: string;
-      useRuntimeContext?: false; // default is false if not provided
+      useRuntimeContext?: false;
       indexName: string;
       vectorStoreName: string;
       model: EmbeddingModel<string>;
@@ -37,7 +37,7 @@ export type GraphRagToolOptions =
   | {
       id?: string;
       description?: string;
-      useRuntimeContext?: false; // default is false if not provided
+      useRuntimeContext?: false;
       indexName: string;
       vectorStoreName: string;
       model: EmbeddingModel<string>;
