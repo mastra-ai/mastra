@@ -23,48 +23,31 @@ The Mastra Next.js Template showcases how to:
 
 ## Getting Started
 
-### Installation
-
-1. Create a new project with this template:
+### Quick Start
 
 ```bash
-# Using npm
+# Create new project
 npm create mastra@latest -- --template nextjs-direct
 
-# Or clone this template manually
-git clone https://github.com/mastra-ai/mastra.git
-cp -r mastra/templates/frameworks/nextjs/direct-integration my-mastra-app
-cd my-mastra-app
-```
+# OR with pnpm (recommended for Windows users)
+pnpm create mastra@latest --template nextjs-direct
 
-2. Install dependencies:
+# Install dependencies (in the created project directory)
+pnpm install  # Recommended for better compatibility
 
-```bash
-# Using npm (may have issues with native dependencies)
-npm install
-
-# Using pnpm (recommended)
-pnpm install
-```
-
-3. Set up environment variables:
-
-```bash
+# Set up environment variables
 cp .env.example .env.local
+
+# Start development server
+pnpm dev
 ```
 
-4. Add your OpenAI API key to `.env.local`:
+### Environment Setup
+
+Add your OpenAI API key to `.env.local`:
 
 ```
 OPENAI_API_KEY=your_openai_api_key_here
-```
-
-5. Start the development server:
-
-```bash
-npm run dev
-# or
-pnpm dev
 ```
 
 ### Project Structure
@@ -89,9 +72,18 @@ pnpm dev
 
 ## Known Issues & Troubleshooting
 
-- If you encounter dependency installation issues, try using pnpm instead of npm
-- Make sure to use an LTS version of Node.js
-- For native dependency build issues, you may need to install build tools for your platform
+### Installation Issues
+
+- **Package manager freezes**: If `npm create mastra@latest` freezes, try using pnpm instead
+- **Native dependency errors**: Issues with @swc/core, esbuild, mastra, or protobufjs may occur during installation
+- **Node.js compatibility**: Use an LTS version of Node.js (recommended: Node.js 18.x or 20.x)
+
+### Common Solutions
+
+- Clear npm cache: `npm cache clean --force`
+- Use pnpm for better dependency resolution: `pnpm install`
+- For detailed error logs: Add `DEBUG=mastra:*` to your .env.local file
+- Windows users may need to install build tools: `npm install --global windows-build-tools`
 
 ## Documentation
 
