@@ -43,7 +43,7 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
 
     // Handle server process exit
     currentServerProcess.on('close', code => {
-      if (code !== 0 && code !== null) {
+      if (!code) {
         restartCount++;
         if (restartCount > MAX_RESTARTS) {
           logger.error(`Server failed to start after ${MAX_RESTARTS} attempts. Giving up.`);
