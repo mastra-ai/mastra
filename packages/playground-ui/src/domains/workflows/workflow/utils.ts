@@ -1,6 +1,6 @@
 import Dagre from '@dagrejs/dagre';
-import type { StepCondition } from '@mastra/core/workflows';
-import { NewStep, NewWorkflow, SerializedStepFlowEntry, StepFlowEntry } from '@mastra/core/workflows/vNext';
+import { Workflow, SerializedStepFlowEntry } from '@mastra/core/workflows';
+import type { StepCondition } from '@mastra/core/workflows/legacy';
 import type { Node, Edge } from '@xyflow/react';
 import { MarkerType } from '@xyflow/react';
 
@@ -136,7 +136,7 @@ export type WStep = {
   };
 };
 
-export const contructNodesAndEdges = ({
+export const contructLegacyNodesAndEdges = ({
   stepGraph,
   stepSubscriberGraph,
   steps: mainSteps = {},
@@ -680,10 +680,10 @@ const getStepNodeAndEdge = ({
   return { nodes: [], edges: [], nextPrevNodeIds: [] };
 };
 
-export const constructVNextNodesAndEdges = ({
+export const constructNodesAndEdges = ({
   stepGraph,
 }: {
-  stepGraph: NewWorkflow['serializedStepGraph'];
+  stepGraph: Workflow['serializedStepGraph'];
 }): { nodes: Node[]; edges: Edge[] } => {
   if (!stepGraph) {
     return { nodes: [], edges: [] };

@@ -46,21 +46,18 @@ export const createSampleWorkflowSnapshot = (threadId: string, status: string, c
   const snapshot: WorkflowRunState = {
     value: { [threadId]: 'running' },
     context: {
-      steps: {
-        [stepId]: {
-          status: status as WorkflowRunState['context']['steps'][string]['status'],
-          payload: {},
-          error: undefined,
-        },
+      [stepId]: {
+        status: status as WorkflowRunState['context'][string]['status'],
+        payload: {},
+        error: undefined,
       },
-      triggerData: {},
-      attempts: {},
+      input: {},
     },
     activePaths: [],
     suspendedPaths: {},
     runId,
     timestamp: timestamp.getTime(),
-  };
+  } as unknown as WorkflowRunState;
   return { snapshot, runId, stepId };
 };
 
@@ -102,5 +99,5 @@ export const checkWorkflowSnapshot = (snapshot: WorkflowRunState | string, stepI
   if (typeof snapshot === 'string') {
     throw new Error('Expected WorkflowRunState, got string');
   }
-  expect(snapshot.context?.steps[stepId]?.status).toBe(status);
+  expect(snapshot.context?.[stepId]?.status).toBe(status);
 };

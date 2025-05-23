@@ -1,11 +1,11 @@
 ---
-title: "リファレンス: Cloudflare Vector Store | ベクターデータベース | RAG | Mastra ドキュメント"
-description: Cloudflare Vectorizeを使用したベクター検索を提供するMastraのCloudflareVectorクラスのドキュメント。
+title: "リファレンス: Cloudflare ベクトルストア | ベクトルデータベース | RAG | Mastra ドキュメント"
+description: Mastraの CloudflareVectorクラスに関するドキュメント。Cloudflare Vectorizeを使用したベクトル検索を提供します。
 ---
 
 # Cloudflare Vector Store
 
-CloudflareVector クラスは、Cloudflare のエッジネットワークと統合されたベクターデータベースサービスである [Cloudflare Vectorize](https://developers.cloudflare.com/vectorize/) を使用したベクター検索を提供します。
+CloudflareVectorクラスは、Cloudflareのエッジネットワークと統合されたベクトルデータベースサービスである[Cloudflare Vectorize](https://developers.cloudflare.com/vectorize/)を使用してベクトル検索を提供します。
 
 ## コンストラクタオプション
 
@@ -14,12 +14,12 @@ CloudflareVector クラスは、Cloudflare のエッジネットワークと統�
     {
       name: "accountId",
       type: "string",
-      description: "Cloudflare アカウントID",
+      description: "CloudflareアカウントのアカウントID",
     },
     {
       name: "apiToken",
       type: "string",
-      description: "Vectorize 権限を持つ Cloudflare API トークン",
+      description: "Vectorize権限を持つCloudflare APIトークン",
     },
   ]}
 />
@@ -38,7 +38,7 @@ CloudflareVector クラスは、Cloudflare のエッジネットワークと統�
     {
       name: "dimension",
       type: "number",
-      description: "ベクトルの次元（埋め込みモデルに一致する必要があります）",
+      description: "ベクトルの次元数（埋め込みモデルと一致する必要があります）",
     },
     {
       name: "metric",
@@ -46,7 +46,7 @@ CloudflareVector クラスは、Cloudflare のエッジネットワークと統�
       isOptional: true,
       defaultValue: "cosine",
       description:
-        "類似性検索のための距離メトリック（dotproductはドット積にマッピングされます）",
+        "類似性検索の距離メトリック（dotproductはドット積に対応します）",
     },
   ]}
 />
@@ -75,8 +75,7 @@ CloudflareVector クラスは、Cloudflare のエッジネットワークと統�
       name: "ids",
       type: "string[]",
       isOptional: true,
-      description:
-        "オプションのベクトルID（提供されない場合は自動生成されます）",
+      description: "オプションのベクトルID（指定しない場合は自動生成されます）",
     },
   ]}
 />
@@ -93,7 +92,7 @@ CloudflareVector クラスは、Cloudflare のエッジネットワークと統�
     {
       name: "queryVector",
       type: "number[]",
-      description: "類似ベクトルを見つけるためのクエリベクトル",
+      description: "類似ベクトルを検索するためのクエリベクトル",
     },
     {
       name: "topK",
@@ -120,7 +119,7 @@ CloudflareVector クラスは、Cloudflare のエッジネットワークと統�
 
 ### listIndexes()
 
-文字列としてインデックス名の配列を返します。
+インデックス名の文字列配列を返します。
 
 ### describeIndex()
 
@@ -134,7 +133,7 @@ CloudflareVector クラスは、Cloudflare のエッジネットワークと統�
   ]}
 />
 
-返される内容:
+戻り値：
 
 ```typescript copy
 interface IndexStats {
@@ -175,7 +174,7 @@ interface IndexStats {
     {
       name: "indexType",
       type: "'string' | 'number' | 'boolean'",
-      description: "メタデータフィールドのタイプ",
+      description: "メタデータフィールドの型",
     },
   ]}
 />
@@ -215,7 +214,7 @@ interface IndexStats {
 
 ### updateVector()
 
-インデックス内の特定のIDに対してベクトルまたはメタデータを更新します。
+インデックス内の特定のIDのベクトルまたはメタデータを更新します。
 
 <PropertiesTable
   content={[
@@ -232,14 +231,14 @@ interface IndexStats {
     {
       name: "update",
       type: "{ vector?: number[]; metadata?: Record<string, any>; }",
-      description: "更新するベクトルおよび/またはメタデータを含むオブジェクト",
+      description: "更新するベクトルやメタデータを含むオブジェクト",
     },
   ]}
 />
 
 ### deleteVector()
 
-インデックス内の特定のIDに対するベクトルとその関連メタデータを削除します。
+インデックス内の特定のIDに対するベクトルとそれに関連するメタデータを削除します。
 
 <PropertiesTable
   content={[
@@ -258,7 +257,7 @@ interface IndexStats {
 
 ## レスポンスタイプ
 
-クエリ結果はこの形式で返されます:
+クエリ結果は以下の形式で返されます：
 
 ```typescript copy
 interface QueryResult {
@@ -269,9 +268,9 @@ interface QueryResult {
 }
 ```
 
-## エラーハンドリング
+## エラー処理
 
-ストアは、キャッチ可能な型付きエラーをスローします:
+ストアは型付きエラーをスローし、それをキャッチすることができます：
 
 ```typescript copy
 try {
@@ -282,17 +281,17 @@ try {
 } catch (error) {
   if (error instanceof VectorStoreError) {
     console.log(error.code); // 'connection_failed' | 'invalid_dimension' | etc
-    console.log(error.details); // 追加のエラーコンテキスト
+    console.log(error.details); // Additional error context
   }
 }
 ```
 
 ## 環境変数
 
-必要な環境変数:
+必要な環境変数：
 
 - `CLOUDFLARE_ACCOUNT_ID`: あなたのCloudflareアカウントID
-- `CLOUDFLARE_API_TOKEN`: Vectorize権限を持つあなたのCloudflare APIトークン
+- `CLOUDFLARE_API_TOKEN`: Vectorize権限を持つCloudflare APIトークン
 
 ## 関連
 

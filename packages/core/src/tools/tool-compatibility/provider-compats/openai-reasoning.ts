@@ -1,4 +1,4 @@
-import type { z } from 'zod';
+import { z } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
 import { ToolCompatibility } from '..';
 import type { ShapeValue } from '..';
@@ -33,7 +33,8 @@ export class OpenAIReasoningToolCompat extends ToolCompatibility {
   processZodType<T extends z.AnyZodObject>(value: z.ZodTypeAny): ShapeValue<T> {
     switch (value._def.typeName) {
       case 'ZodOptional':
-        return (value as z.ZodOptional<z.ZodTypeAny>).unwrap().nullable() as ShapeValue<T>;
+        const innerZodType = this.processZodType(value._def.innerType);
+        return innerZodType.nullable() as ShapeValue<T>;
       case 'ZodObject': {
         return this.defaultZodObjectHandler(value);
       }
@@ -67,6 +68,16 @@ export class OpenAIReasoningToolCompat extends ToolCompatibility {
       }
       case 'ZodDate': {
         return this.defaultZodDateHandler(value);
+      }
+      case 'ZodAny': {
+        // It's bad practice in the tool to use any, it's not reasonable for models that don't support that OOTB, to cast every single possible type
+        // in the schema. Usually when it's "any" it could be a json object or a union of specific types.
+        return z
+          .string()
+          .describe(
+            (value.description ?? '') +
+              `\nArgument was an "any" type, but you (the LLM) do not support "any", so it was cast to a "string" type`,
+          );
       }
       default:
         return this.defaultUnsupportedZodTypeHandler(value);

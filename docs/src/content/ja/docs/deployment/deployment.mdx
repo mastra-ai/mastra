@@ -1,11 +1,11 @@
 ---
 title: "サーバーレスデプロイメント"
-description: "プラットフォーム固有のデプロイヤーや標準HTTPサーバーを使用してMastraアプリケーションを構築・デプロイする"
+description: "プラットフォーム固有のデプロイヤーまたは標準HTTPサーバーを使用してMastraアプリケーションを構築およびデプロイする"
 ---
 
 # サーバーレスデプロイメント
 
-このガイドでは、プラットフォーム固有のデプロイヤーを使用して、MastraをCloudflare Workers、Vercel、およびNetlifyにデプロイする方法を説明します
+このガイドでは、プラットフォーム固有のデプロイヤーを使用して、MastraをCloudflare Workers、Vercel、およびNetlifyにデプロイする方法について説明します
 
 セルフホスト型Node.jsサーバーのデプロイメントについては、[Mastraサーバーの作成](/docs/deployment/server)ガイドを参照してください。
 
@@ -13,20 +13,19 @@ description: "プラットフォーム固有のデプロイヤーや標準HTTP�
 
 始める前に、以下のものを用意してください：
 
-- **Node.js**がインストールされていること（バージョン18以上を推奨）
+- **Node.js** がインストールされていること（バージョン18以上を推奨）
 - プラットフォーム固有のデプロイヤーを使用する場合：
   - 選択したプラットフォームのアカウント
   - 必要なAPIキーまたは認証情報
 
 ## サーバーレスプラットフォームデプロイヤー
 
-プラットフォーム固有のデプロイヤーは、以下の設定とデプロイメントを処理します：
+プラットフォーム固有のデプロイヤーは、以下の設定とデプロイを処理します：
 
 - **[Cloudflare Workers](/reference/deployer/cloudflare)**
 - **[Vercel](/reference/deployer/vercel)**
 - **[Netlify](/reference/deployer/netlify)**
-
-2025年4月現在、Mastraは[Mastra Cloud](https://mastra.ai/cloud-beta)も提供しており、これはアトミックデプロイメントを備えたサーバーレスエージェント環境です。ウェイトリストへの登録は[こちら](https://mastra.ai/cloud-beta)から行えます。
+- **[Mastra Cloud](/docs/mastra-cloud/overview)** _(ベータ)_。早期アクセスのために[クラウドウェイトリスト](https://mastra.ai/cloud-beta)に参加できます。
 
 ### デプロイヤーのインストール
 
@@ -46,14 +45,15 @@ npm install @mastra/deployer-netlify@latest
 エントリーファイルでデプロイヤーを設定します：
 
 ```typescript copy showLineNumbers
-import { Mastra, createLogger } from "@mastra/core";
+import { Mastra } from "@mastra/core";
+imoprt { ConsoleLogger } from "@mastra/core/logger";
 import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
 
 export const mastra = new Mastra({
   agents: {
     /* your agents here */
   },
-  logger: createLogger({ name: "MyApp", level: "debug" }),
+  logger: new ConsoleLogger({ name: "MyApp", level: "debug" }),
   deployer: new CloudflareDeployer({
     scope: "your-cloudflare-scope",
     projectName: "your-project-name",
@@ -66,7 +66,7 @@ export const mastra = new Mastra({
 
 各デプロイヤーには特定の設定オプションがあります。以下は基本的な例ですが、完全な詳細についてはリファレンスドキュメントを参照してください。
 
-#### Cloudflareデプロイヤー
+#### Cloudflare デプロイヤー
 
 ```typescript copy showLineNumbers
 new CloudflareDeployer({
@@ -76,9 +76,9 @@ new CloudflareDeployer({
 });
 ```
 
-[Cloudflareデプロイヤーリファレンスを見る →](/reference/deployer/cloudflare)
+[Cloudflare デプロイヤーリファレンスを見る →](/reference/deployer/cloudflare)
 
-#### Vercelデプロイヤー
+#### Vercel デプロイヤー
 
 ```typescript copy showLineNumbers
 new VercelDeployer({
@@ -89,9 +89,9 @@ new VercelDeployer({
 });
 ```
 
-[Vercelデプロイヤーリファレンスを見る →](/reference/deployer/vercel)
+[Vercel デプロイヤーリファレンスを見る →](/reference/deployer/vercel)
 
-#### Netlifyデプロイヤー
+#### Netlify デプロイヤー
 
 ```typescript copy showLineNumbers
 new NetlifyDeployer({
@@ -101,7 +101,7 @@ new NetlifyDeployer({
 });
 ```
 
-[Netlifyデプロイヤーリファレンスを見る →](/reference/deployer/netlify)
+[Netlify デプロイヤーリファレンスを見る →](/reference/deployer/netlify)
 
 ## 環境変数
 

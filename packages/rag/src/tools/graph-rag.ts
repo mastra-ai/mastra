@@ -3,19 +3,16 @@ import type { EmbeddingModel } from 'ai';
 import { z } from 'zod';
 
 import { GraphRAG } from '../graph-rag';
-import {
-  vectorQuerySearch,
-  defaultGraphRagDescription,
-  filterDescription,
-  topKDescription,
-  queryTextDescription,
-} from '../utils';
+import { vectorQuerySearch, defaultGraphRagDescription, filterSchema, outputSchema, baseSchema } from '../utils';
+import type { RagTool } from '../utils';
+import { convertToSources } from '../utils/convert-sources';
 
 export const createGraphRAGTool = ({
   vectorStoreName,
   indexName,
   model,
   enableFilter = false,
+  includeSources = true,
   graphOptions = {
     dimension: 1536,
     randomWalkSteps: 100,
@@ -29,6 +26,7 @@ export const createGraphRAGTool = ({
   indexName: string;
   model: EmbeddingModel<string>;
   enableFilter?: boolean;
+  includeSources?: boolean;
   graphOptions?: {
     dimension?: number;
     randomWalkSteps?: number;
@@ -37,31 +35,19 @@ export const createGraphRAGTool = ({
   };
   id?: string;
   description?: string;
-}): ReturnType<typeof createTool> => {
+}) => {
   const toolId = id || `GraphRAG ${vectorStoreName} ${indexName} Tool`;
   const toolDescription = description || defaultGraphRagDescription();
   // Initialize GraphRAG
   const graphRag = new GraphRAG(graphOptions.dimension, graphOptions.threshold);
   let isInitialized = false;
 
-  const baseSchema = {
-    queryText: z.string().describe(queryTextDescription),
-    topK: z.coerce.number().describe(topKDescription),
-  };
-  const inputSchema = enableFilter
-    ? z
-        .object({
-          ...baseSchema,
-          filter: z.coerce.string().describe(filterDescription),
-        })
-        .passthrough()
-    : z.object(baseSchema).passthrough();
+  const inputSchema = enableFilter ? filterSchema : z.object(baseSchema).passthrough();
+
   return createTool({
     id: toolId,
     inputSchema,
-    outputSchema: z.object({
-      relevantContext: z.any(),
-    }),
+    outputSchema,
     description: toolDescription,
     execute: async ({ context: { queryText, topK, filter }, mastra }) => {
       const logger = mastra?.getLogger();
@@ -86,7 +72,7 @@ export const createGraphRAGTool = ({
           if (logger) {
             logger.error('Vector store not found', { vectorStoreName });
           }
-          return { relevantContext: [] };
+          return { relevantContext: [], sources: [] };
         }
 
         let queryFilter = {};
@@ -154,8 +140,11 @@ export const createGraphRAGTool = ({
         if (logger) {
           logger.debug('Returning relevant context chunks', { count: relevantChunks.length });
         }
+        // `sources` exposes the full retrieval objects
+        const sources = includeSources ? convertToSources(rerankedResults) : [];
         return {
           relevantContext: relevantChunks,
+          sources,
         };
       } catch (err) {
         if (logger) {
@@ -165,8 +154,9 @@ export const createGraphRAGTool = ({
             errorStack: err instanceof Error ? err.stack : undefined,
           });
         }
-        return { relevantContext: [] };
+        return { relevantContext: [], sources: [] };
       }
     },
-  });
+    // Use any for output schema as the structure of the output causes type inference issues
+  }) as RagTool<typeof inputSchema, any>;
 };

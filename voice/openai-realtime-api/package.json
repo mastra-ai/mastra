@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-openai-realtime",
-  "version": "0.2.4",
+  "version": "0.10.0",
   "description": "Mastra OpenAI Realtime API integration",
   "type": "module",
   "main": "dist/index.js",
@@ -26,7 +26,6 @@
   },
   "license": "Elastic-2.0",
   "dependencies": {
-    "@mastra/core": "workspace:^",
     "openai-realtime-api": "^1.0.7",
     "ws": "^8.18.1",
     "zod-to-json-schema": "^3.24.5"
@@ -39,6 +38,12 @@
     "eslint": "^9.25.1",
     "tsup": "^8.4.0",
     "typescript": "^5.8.3",
-    "vitest": "^2.1.9"
+    "vitest": "^2.1.9",
+    "@mastra/core": "workspace:*",
+    "zod": "^3.24.3"
+  },
+  "peerDependencies": {
+    "@mastra/core": "^0.10.0",
+    "zod": "^3.0.0"
   }
 }

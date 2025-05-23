@@ -726,16 +726,13 @@ describe('CloudflareStore Workers Binding', () => {
         value: { 'test-run': 'running' },
         timestamp: Date.now(),
         context: {
-          steps: {
-            'step-1': {
-              status: 'waiting' as const,
-              payload: { input: 'test' },
-            },
+          'step-1': {
+            status: 'success' as const,
+            output: { input: 'test' },
           },
-          triggerData: { source: 'test' },
-          attempts: { 'step-1': 0 },
-        },
-        activePaths: [{ stepPath: ['main'], stepId: 'step-1', status: 'waiting' }],
+          input: { source: 'test' },
+        } as unknown as WorkflowRunState['context'],
+        activePaths: [],
         suspendedPaths: {},
       };
 
@@ -775,16 +772,13 @@ describe('CloudflareStore Workers Binding', () => {
         value: { 'test-run-2': 'running' },
         timestamp: Date.now(),
         context: {
-          steps: {
-            'step-1': {
-              status: 'waiting' as const,
-              payload: { input: 'test' },
-            },
+          'step-1': {
+            status: 'success' as const,
+            output: { input: 'test' },
           },
-          triggerData: { source: 'test' },
-          attempts: { 'step-1': 0 },
-        },
-        activePaths: [{ stepPath: ['main'], stepId: 'step-1', status: 'waiting' }],
+          input: { source: 'test' },
+        } as unknown as WorkflowRunState['context'],
+        activePaths: [],
         suspendedPaths: {},
       };
 
@@ -836,23 +830,17 @@ describe('CloudflareStore Workers Binding', () => {
         value: { 'test-run-3': 'running' },
         timestamp: Date.now(),
         context: {
-          steps: {
-            'step-1': {
-              status: 'waiting' as const,
-              payload: { input: 'test' },
-            },
-            'step-2': {
-              status: 'waiting' as const,
-              payload: { input: 'test2' },
-            },
+          'step-1': {
+            status: 'success' as const,
+            output: { input: 'test' },
           },
-          triggerData: { source: 'test' },
-          attempts: { 'step-1': 0, 'step-2': 0 },
-        },
-        activePaths: [
-          { stepPath: ['main'], stepId: 'step-1', status: 'waiting' },
-          { stepPath: ['main'], stepId: 'step-2', status: 'waiting' },
-        ],
+          'step-2': {
+            status: 'success' as const,
+            output: { input: 'test2' },
+          },
+          input: { source: 'test' },
+        } as unknown as WorkflowRunState['context'],
+        activePaths: [],
         suspendedPaths: {},
       };
 
@@ -870,16 +858,13 @@ describe('CloudflareStore Workers Binding', () => {
         ...workflow,
         context: {
           ...workflow.context,
-          steps: {
-            ...workflow.context.steps,
-            'step-1': {
-              status: 'success' as const,
-              payload: { result: 'done' },
-            },
+          'step-1': {
+            status: 'success' as const,
+            output: { result: 'done' },
           },
         },
-        activePaths: [{ stepPath: ['main'], stepId: 'step-2', status: 'waiting' }],
-      };
+        activePaths: [],
+      } as unknown as WorkflowRunState;
 
       await store.persistWorkflowSnapshot({
         namespace: 'test',
@@ -896,10 +881,10 @@ describe('CloudflareStore Workers Binding', () => {
         runId: workflow.runId,
       });
 
-      expect(retrieved?.context.steps['step-1'].status).toBe('success');
-      expect(retrieved?.context.steps['step-1'].payload).toEqual({ result: 'done' });
-      expect(retrieved?.context.steps['step-2'].status).toBe('waiting');
-      expect(retrieved?.activePaths).toEqual([{ stepPath: ['main'], stepId: 'step-2', status: 'waiting' }]);
+      expect(retrieved?.context['step-1'].status).toBe('success');
+      expect((retrieved?.context['step-1'] as any).output).toEqual({ result: 'done' });
+      expect(retrieved?.context['step-2'].status).toBe('success');
+      expect(retrieved?.activePaths).toEqual([]);
     });
   });
 
@@ -987,7 +972,7 @@ describe('CloudflareStore Workers Binding', () => {
       if (typeof snapshot === 'string') {
         throw new Error('Expected WorkflowRunState, got string');
       }
-      expect(snapshot.context?.steps[stepId1]?.status).toBe('success');
+      expect(snapshot.context?.[stepId1]?.status).toBe('success');
     });
 
     it('filters by date range', async () => {

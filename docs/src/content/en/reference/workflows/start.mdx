@@ -1,43 +1,47 @@
 ---
-title: "Reference: start() | Running Workflows | Mastra Docs"
-description: "Documentation for the `start()` method in workflows, which begins execution of a workflow run."
+title: "Reference: Workflow.start() | Building Workflows | Mastra Docs"
+description: Documentation for the `.start()` method in workflows, which starts a workflow run with input data.
 ---
 
-# start()
+# Workflow.start()
 
-The start function begins execution of a workflow run. It processes all steps in the defined workflow order, handling parallel execution, branching logic, and step dependencies.
+The `.start()` method starts a workflow run with input data, allowing you to execute the workflow from the beginning.
 
 ## Usage
 
-```typescript copy showLineNumbers
-const { runId, start } = workflow.createRun();
-const result = await start({
-  triggerData: { inputValue: 42 },
+```typescript
+const run = myWorkflow.createRun();
+
+// Start the workflow with input data
+const result = await run.start({
+  inputData: {
+    startValue: "initial data",
+  },
 });
 ```
 
 ## Parameters
-
 <PropertiesTable
   content={[
     {
-      name: "config",
+      name: "params",
       type: "object",
-      description: "Configuration for starting the workflow run",
-      isOptional: true,
-    },
-  ]}
-/>
-
-### config
-
-<PropertiesTable
-  content={[
-    {
-      name: "triggerData",
-      type: "Record<string, any>",
-      description: "Initial data that matches the workflow's triggerSchema",
+      description: "Configuration object for starting the workflow run",
       isOptional: false,
+      properties: [
+        {
+          name: "inputData",
+          type: "z.infer<TInput>",
+          description: "Input data matching the workflow's input schema",
+          isOptional: true,
+        },
+        {
+          name: "runtimeContext",
+          type: "RuntimeContext",
+          description: "Runtime context data to use when starting the workflow",
+          isOptional: true,
+        },
+      ],
     },
   ]}
 />
@@ -47,41 +51,9 @@ const result = await start({
 <PropertiesTable
   content={[
     {
-      name: "results",
-      type: "Record<string, any>",
-      description: "Combined output from all completed workflow steps",
-    },
-    {
-      name: "status",
-      type: "'completed' | 'error' | 'suspended'",
-      description: "Final status of the workflow run",
+      name: "result",
+      type: "Promise<WorkflowResult<TOutput, TSteps>>",
+      description: "A promise that resolves to the result of the workflow run",
     },
   ]}
 />
-
-## Error Handling
-
-The start function may throw several types of validation errors:
-
-```typescript copy showLineNumbers
-try {
-  const result = await start({ triggerData: data });
-} catch (error) {
-  if (error instanceof ValidationError) {
-    console.log(error.type); // 'circular_dependency' | 'no_terminal_path' | 'unreachable_step'
-    console.log(error.details);
-  }
-}
-```
-
-## Related
-
-- [Example: Creating a Workflow](../../../examples/workflows/creating-a-workflow.mdx)
-- [Example: Suspend and Resume](../../../examples/workflows/suspend-and-resume.mdx)
-- [createRun Reference](./createRun.mdx)
-- [Workflow Class Reference](./workflow.mdx)
-- [Step Class Reference](./step-class.mdx)
-
-```
-
-```

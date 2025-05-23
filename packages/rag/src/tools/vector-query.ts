@@ -4,19 +4,17 @@ import { z } from 'zod';
 
 import { rerank } from '../rerank';
 import type { RerankConfig } from '../rerank';
-import {
-  vectorQuerySearch,
-  defaultVectorQueryDescription,
-  filterDescription,
-  topKDescription,
-  queryTextDescription,
-} from '../utils';
+import { vectorQuerySearch, defaultVectorQueryDescription, filterSchema, outputSchema, baseSchema } from '../utils';
+import type { RagTool } from '../utils';
+import { convertToSources } from '../utils/convert-sources';
 
 export const createVectorQueryTool = ({
   vectorStoreName,
   indexName,
   model,
   enableFilter = false,
+  includeVectors = false,
+  includeSources = true,
   reranker,
   id,
   description,
@@ -25,31 +23,19 @@ export const createVectorQueryTool = ({
   indexName: string;
   model: EmbeddingModel<string>;
   enableFilter?: boolean;
+  includeVectors?: boolean;
+  includeSources?: boolean;
   reranker?: RerankConfig;
   id?: string;
   description?: string;
-}): ReturnType<typeof createTool> => {
+}) => {
   const toolId = id || `VectorQuery ${vectorStoreName} ${indexName} Tool`;
   const toolDescription = description || defaultVectorQueryDescription();
-  // Create base schema with required fields
-  const baseSchema = {
-    queryText: z.string().describe(queryTextDescription),
-    topK: z.coerce.number().describe(topKDescription),
-  };
-  const inputSchema = enableFilter
-    ? z
-        .object({
-          ...baseSchema,
-          filter: z.coerce.string().describe(filterDescription),
-        })
-        .passthrough()
-    : z.object(baseSchema).passthrough();
+  const inputSchema = enableFilter ? filterSchema : z.object(baseSchema).passthrough();
   return createTool({
     id: toolId,
     inputSchema,
-    outputSchema: z.object({
-      relevantContext: z.any(),
-    }),
+    outputSchema,
     description: toolDescription,
     execute: async ({ context: { queryText, topK, filter }, mastra }) => {
       const logger = mastra?.getLogger();
@@ -75,7 +61,7 @@ export const createVectorQueryTool = ({
           if (logger) {
             logger.error('Vector store not found', { vectorStoreName });
           }
-          return { relevantContext: [] };
+          return { relevantContext: [], sources: [] };
         }
         // Get relevant chunks from the vector database
         let queryFilter = {};
@@ -103,6 +89,7 @@ export const createVectorQueryTool = ({
           model,
           queryFilter: Object.keys(queryFilter || {}).length > 0 ? queryFilter : undefined,
           topK: topKValue,
+          includeVectors,
         });
         if (logger) {
           logger.debug('vectorQuerySearch returned results', { count: results.length });
@@ -122,15 +109,19 @@ export const createVectorQueryTool = ({
           if (logger) {
             logger.debug('Returning reranked relevant context chunks', { count: relevantChunks.length });
           }
-          return { relevantContext: relevantChunks };
+          const sources = includeSources ? convertToSources(rerankedResults) : [];
+          return { relevantContext: relevantChunks, sources };
         }
 
         const relevantChunks = results.map(result => result?.metadata);
         if (logger) {
           logger.debug('Returning relevant context chunks', { count: relevantChunks.length });
         }
+        // `sources` exposes the full retrieval objects
+        const sources = includeSources ? convertToSources(results) : [];
         return {
           relevantContext: relevantChunks,
+          sources,
         };
       } catch (err) {
         if (logger) {
@@ -140,8 +131,9 @@ export const createVectorQueryTool = ({
             errorStack: err instanceof Error ? err.stack : undefined,
           });
         }
-        return { relevantContext: [] };
+        return { relevantContext: [], sources: [] };
       }
     },
-  });
+    // Use any for output schema as the structure of the output causes type inference issues
+  }) as RagTool<typeof inputSchema, any>;
 };

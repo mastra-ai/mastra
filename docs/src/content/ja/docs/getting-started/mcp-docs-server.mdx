@@ -5,54 +5,73 @@ description: "Mastra MCPドキュメントサーバーをIDEで使用して、�
 
 import YouTube from "@/components/youtube";
 
-# Mastra Tools for your agentic IDE
+# エージェントIDEのためのMastraツール
 
-`@mastra/mcp-docs-server` は、Cursor、Windsurf、Cline、またはMCPをサポートする他の任意のIDEで、Mastraの完全な知識ベースに直接アクセスを提供します。
+`@mastra/mcp-docs-server`は、Cursor、Windsurf、Cline、またはMCPをサポートする他のIDEでMastraの完全なナレッジベースに直接アクセスできるようにします。
 
-これには、ドキュメント、コード例、技術ブログ投稿/機能発表、およびパッケージの変更履歴へのアクセスが含まれており、あなたのIDEがMastraを使用して構築するのを助けるために読むことができます。
+これはドキュメント、コード例、技術ブログ投稿/機能アナウンス、パッケージの変更履歴にアクセスでき、あなたのIDEがMastraを使って構築するのを助けることができます。
 
 <YouTube id="vciV57lF0og" />
 
-MCPサーバーツールは、エージェントがMastra関連のタスクを完了するために必要な特定の情報をクエリできるように設計されています。例えば、エージェントにMastra機能を追加する、新しいプロジェクトをスキャフォルドする、または何かの動作を理解するのを助けるなどです。
+MCPサーバーツールは、エージェントがMastra関連のタスクを完了するために必要な特定の情報を照会できるように設計されています - 例えば：エージェントにMastra機能を追加する、新しいプロジェクトの足場を作る、または何かがどのように機能するかを理解するのを助けるなど。
 
 ## 仕組み
 
-IDEにインストールされると、プロンプトを書いて、エージェントがMastraについてすべて理解していると仮定できます。
+IDEにインストールされると、プロンプトを書いて、エージェントがMastraについてすべてを理解していると想定できます。
 
-### 機能を追加
+### 機能を追加する
 
-- "エージェントに評価を追加してテストを書く"
-- "次の`[task]`を行うワークフローを書いてください"
-- "エージェントが`[3rd party API]`にアクセスできる新しいツールを作成してください"
+- 「エージェントに評価を追加してテストを書いてください」
+- 「次のことを行うワークフローを作成してください `[タスク]`」
+- 「エージェントが `[サードパーティAPI]` にアクセスできるようにする新しいツールを作成してください」
 
 ### 統合について質問する
 
-- "MastraはAI SDKと連携しますか？
-  どのようにして`[React/Svelte/etc]`プロジェクトで使用できますか？"
-- "MCPに関する最新のMastraニュースは何ですか？"
-- "Mastraは`[provider]`の音声およびボイスAPIをサポートしていますか？コード内での使用例を見せてください。"
+- 「MastraはAI SDKと連携しますか？
+  `[React/Svelte/など]` プロジェクトでどのように使用できますか？」
+- 「MCPに関する最新のMastraニュースは何ですか？」
+- 「Mastraは `[プロバイダー]` の音声APIをサポートしていますか？コードでの使用例を示してください。」
 
 ### 既存のコードをデバッグまたは更新する
 
-- "エージェントのメモリにバグが発生しています。最近関連する変更やバグ修正がありましたか？"
-- "Mastraでの作業メモリはどのように動作し、`[task]`を行うためにどのように使用できますか？期待通りに動作しないようです。"
-- "新しいワークフロー機能があると聞きました。それを説明してから、`[workflow]`をそれらを使用するように更新してください。"
+- 「エージェントのメモリに関するバグが発生しています。最近関連する変更やバグ修正はありましたか？」
+- 「Mastraでワーキングメモリはどのように動作し、`[タスク]` を実行するためにどのように使用できますか？期待通りに動作していないようです。」
+- 「新しいワークフロー機能があると聞きました。それを説明し、`[ワークフロー]` を更新して使用するようにしてください。」
 
-**さらに多く** - 質問があれば、IDEに尋ねて調べてもらいましょう。
+**その他** - 質問がある場合は、IDEに尋ねて調べてもらいましょう。
 
 ## 自動インストール
 
-`pnpm create mastra@latest` を実行し、プロンプトが表示されたらCursorまたはWindsurfを選択してMCPサーバーをインストールします。他のIDEの場合、またはすでにMastraプロジェクトがある場合は、以下の手順に従ってMCPサーバーをインストールしてください。
+MCPドキュメントサーバーは、`create-mastra`コマンドで`-m`フラグを使用してインストールできます。
+
+```bash npm2yarn
+npm create mastra@latest --default -m cursor
+```
+
+mcpオプションには以下が含まれます：
+
+- `cursor-global` - MCPサーバーをグローバルにインストール
+- `windsurf` - WindsurfにMCPサーバーをインストール
+- `cursor` - CursorにMCPサーバーをインストール
+- `vscode` - VSCodeにMCPサーバーをインストール
+
+または、以下の手順に従ってMCPサーバーを手動でインストールすることもできます。
+
+`pnpm create mastra@latest`を実行し、プロンプトが表示されたらCursorまたはWindsurfを選択してMCPサーバーをインストールします。他のIDEの場合、またはすでにMastraプロジェクトがある場合は、以下の手順に従ってMCPサーバーをインストールしてください。
 
 ## 手動インストール
 
-- **Cursor**: プロジェクトのルートにある `.cursor/mcp.json` を編集するか、グローバル設定の場合は `~/.cursor/mcp.json` を編集します
-- **Windsurf**: `~/.codeium/windsurf/mcp_config.json` を編集します（グローバル設定のみサポート）
+- **Cursor**: プロジェクトルートの `.cursor/mcp.json` またはグローバル設定の場合は `~/.cursor/mcp.json` を編集してください
+- **Windsurf**: `~/.codeium/windsurf/mcp_config.json` を編集してください（グローバル設定のみ対応）
+- **VSCode**: プロジェクトルートの `~/.vscode/mcp.json` を編集してください  
+  以下の設定を追加します:
 
-次の設定を追加します：
+import { Tabs } from "nextra/components";
 
 ### MacOS/Linux
 
+<Tabs items={["cursor", "windsurf", "vscode"]}>
+  <Tabs.Tab>
 ```json
 {
   "mcpServers": {
@@ -63,9 +82,38 @@ IDEにインストールされると、プロンプトを書いて、エージ�
   }
 }
 ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```json
+{
+  "mcpServers": {
+    "mastra": {
+      "command": "npx",
+      "args": ["-y", "@mastra/mcp-docs-server@latest"]
+    }
+  }
+}
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```json
+{
+  "servers": {
+    "mastra": {
+      "command": "npx",
+      "args": ["-y", "@mastra/mcp-docs-server@latest"]
+      "type": "stdio"
+    }
+  }
+}
+```
+  </Tabs.Tab>
+</Tabs>
 
 ### Windows
 
+<Tabs items={["cursor", "windsurf", "vscode"]}>
+  <Tabs.Tab>
 ```json
 {
   "mcpServers": {
@@ -76,46 +124,108 @@ IDEにインストールされると、プロンプトを書いて、エージ�
   }
 }
 ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```json
+{
+  "mcpServers": {
+    "mastra": {
+      "command": "cmd",
+      "args": ["/c", "npx", "-y", "@mastra/mcp-docs-server@latest"]
+    }
+  }
+}
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```json
+{
+  "servers": {
+    "mastra": {
+      "command": "cmd",
+      "args": ["/c", "npx", "-y", "@mastra/mcp-docs-server@latest"],
+      "type": "stdio"
+    }
+  }
+}
+```
+  </Tabs.Tab>
+</Tabs>
 
 ## 設定後
 
 ### Cursor
 
-自動インストールに従った場合、Cursorを開くと左下隅にポップアップが表示され、Mastra Docs MCPサーバーを有効にするよう促されます。
+自動インストールを行った場合、Cursorを開くと左下にポップアップが表示され、Mastra Docs MCP Serverを有効にするよう促されます。
 
 <img
   src="/image/enable-mastra-docs-cursor.png"
-  alt="Mastra docsのMCPサーバーを有効にするためのCursorプロンプトを示す図"
+  alt="Mastra docs MCP server を有効にするよう促す cursor のダイアグラム"
   width={800}
 />
 
-それ以外の場合、手動インストールでは、以下の手順に従ってください。
+手動インストールの場合は、以下の手順を行ってください。
 
-1. Cursorの設定を開く
-2. MCP設定に移動する
-3. Mastra MCPサーバーの「有効化」をクリックする
-4. エージェントチャットが開いている場合は、MCPサーバーを使用するために再度開くか、新しいチャットを開始する必要があります
+1. Cursor の設定を開く
+2. MCP 設定に移動する
+3. Mastra MCP server の「enable」をクリックする
+4. すでにエージェントチャットを開いている場合は、チャットを再度開くか新しいチャットを開始して MCP server を利用してください
 
 ### Windsurf
 
-1. Windsurfを完全に終了して再起動する
-2. ツール呼び出しが失敗し始めた場合は、WindsurfのMCP設定に移動し、MCPサーバーを再起動してください。これはWindsurfのMCPに関する一般的な問題であり、Mastraとは関係ありません。現在、CursorのMCP実装はWindsurfのものよりも安定しています。
+1. Windsurf を完全に終了し、再度開く
+2. ツール呼び出しが失敗し始めた場合は、Windsurf の MCP 設定に移動し、MCP server を再起動してください。これはよくある Windsurf MCP の問題であり、Mastra とは関係ありません。現時点では Cursor の MCP 実装の方が Windsurf よりも安定しています。
 
-両方のIDEで、MCPサーバーが最初に起動するまでに1分ほどかかる場合があります。これはnpmからパッケージをダウンロードする必要があるためです。
+どちらの IDE でも、初回は npm からパッケージをダウンロードする必要があるため、MCP server の起動に少し時間がかかる場合があります。
+
+### VSCode
+
+1. VSCode の設定を開く
+2. MCP 設定に移動する
+3. Chat > MCP オプションの「enable」をクリックする
+
+<br />
+
+<img
+  src="/image/vscode-mcp-setting.png"
+  alt="MCP を有効にするための VSCode の設定ページ"
+  width={800}
+  className="rounded-lg"
+/>
+
+MCP は VSCode ではエージェントモードでのみ動作します。エージェントモードに入ったら、`mcp.json` ファイルを開き、「start」ボタンをクリックしてください。
+
+<br />
+<img
+  src="/image/vscode-start-mcp.png"
+  alt="MCP を有効にするための VSCode の設定ページ"
+  width={800}
+  className="rounded-lg"
+/>
+
+mcp server を起動した後、copilot ペインのツールボタンをクリックすると利用可能なツールが表示されます。
+
+<br />
+<img
+  src="/image/vscode-mcp-running.png"
+  alt="利用可能なツールを表示する VSCode のツールページ"
+  width={800}
+  className="rounded-lg"
+/>
 
 ## 利用可能なエージェントツール
 
 ### ドキュメント
 
-Mastraの完全なドキュメントにアクセス:
+Mastraの完全なドキュメントにアクセス：
 
-- 始め方 / インストール
+- 入門 / インストール
 - ガイドとチュートリアル
 - APIリファレンス
 
 ### 例
 
-コード例を閲覧:
+コード例を閲覧：
 
 - 完全なプロジェクト構造
 - 実装パターン
@@ -123,19 +233,19 @@ Mastraの完全なドキュメントにアクセス:
 
 ### ブログ投稿
 
-ブログを検索:
+ブログを検索：
 
 - 技術的な投稿
-- 変更履歴と機能発表
-- AIニュースと更新
+- 変更履歴と機能のお知らせ
+- AIニュースとアップデート
 
 ### パッケージの変更
 
-Mastraと`@mastra/*`パッケージの更新を追跡:
+Mastraと`@mastra/*`パッケージの更新を追跡：
 
 - バグ修正
 - 新機能
-- 互換性を壊す変更
+- 破壊的変更
 
 ## 一般的な問題
 

@@ -41,10 +41,7 @@ const createSampleMessage = (threadId: string): MessageType => ({
   createdAt: new Date(),
 });
 
-const createSampleWorkflowSnapshot = (
-  status: WorkflowRunState['context']['steps'][string]['status'],
-  createdAt?: Date,
-) => {
+const createSampleWorkflowSnapshot = (status: WorkflowRunState['context'][string]['status'], createdAt?: Date) => {
   const runId = `run-${randomUUID()}`;
   const stepId = `step-${randomUUID()}`;
   const timestamp = createdAt || new Date();
@@ -52,21 +49,18 @@ const createSampleWorkflowSnapshot = (
     result: { success: true },
     value: {},
     context: {
-      steps: {
-        [stepId]: {
-          status,
-          payload: {},
-          error: undefined,
-        },
+      [stepId]: {
+        status,
+        payload: {},
+        error: undefined,
       },
-      triggerData: {},
-      attempts: {},
+      input: {},
     },
     activePaths: [],
     suspendedPaths: {},
     runId,
     timestamp: timestamp.getTime(),
-  };
+  } as unknown as WorkflowRunState;
   return { snapshot, runId, stepId };
 };
 
@@ -92,7 +86,7 @@ const checkWorkflowSnapshot = (snapshot: WorkflowRunState | string, stepId: stri
   if (typeof snapshot === 'string') {
     throw new Error('Expected WorkflowRunState, got string');
   }
-  expect(snapshot.context?.steps[stepId]?.status).toBe(status);
+  expect(snapshot.context?.[stepId]?.status).toBe(status);
 };
 
 describe('PostgresStore', () => {
@@ -356,17 +350,15 @@ describe('PostgresStore', () => {
       const snapshot = {
         status: 'running',
         context: {
-          steps: {},
-          stepResults: {},
-          attempts: {},
-          triggerData: { type: 'manual' },
+          input: { type: 'manual' },
+          step1: { status: 'success', output: { data: 'test' } },
         },
         value: {},
         activePaths: [],
         suspendedPaths: {},
         runId,
         timestamp: new Date().getTime(),
-      };
+      } as unknown as WorkflowRunState;
 
       await store.persistWorkflowSnapshot({
         workflowName,
@@ -397,10 +389,7 @@ describe('PostgresStore', () => {
       const initialSnapshot = {
         status: 'running',
         context: {
-          steps: {},
-          stepResults: {},
-          attempts: {},
-          triggerData: { type: 'manual' },
+          input: { type: 'manual' },
         },
         value: {},
         activePaths: [],
@@ -412,18 +401,14 @@ describe('PostgresStore', () => {
       await store.persistWorkflowSnapshot({
         workflowName,
         runId,
-        snapshot: initialSnapshot,
+        snapshot: initialSnapshot as unknown as WorkflowRunState,
       });
 
       const updatedSnapshot = {
-        status: 'completed',
+        status: 'success',
         context: {
-          steps: {},
-          stepResults: {
-            'step-1': { status: 'success', result: { data: 'test' } },
-          },
-          attempts: { 'step-1': 1 },
-          triggerData: { type: 'manual' },
+          input: { type: 'manual' },
+          'step-1': { status: 'success', result: { data: 'test' } },
         },
         value: {},
         activePaths: [],
@@ -435,7 +420,7 @@ describe('PostgresStore', () => {
       await store.persistWorkflowSnapshot({
         workflowName,
         runId,
-        snapshot: updatedSnapshot,
+        snapshot: updatedSnapshot as unknown as WorkflowRunState,
       });
 
       const loadedSnapshot = await store.loadWorkflowSnapshot({
@@ -452,25 +437,21 @@ describe('PostgresStore', () => {
       const complexSnapshot = {
         value: { currentState: 'running' },
         context: {
-          stepResults: {
-            'step-1': {
-              status: 'success',
-              result: {
-                nestedData: {
-                  array: [1, 2, 3],
-                  object: { key: 'value' },
-                  date: new Date().toISOString(),
-                },
+          'step-1': {
+            status: 'success',
+            output: {
+              nestedData: {
+                array: [1, 2, 3],
+                object: { key: 'value' },
+                date: new Date().toISOString(),
               },
             },
-            'step-2': {
-              status: 'waiting',
-              dependencies: ['step-3', 'step-4'],
-            },
           },
-          steps: {},
-          attempts: { 'step-1': 1, 'step-2': 0 },
-          triggerData: {
+          'step-2': {
+            status: 'waiting',
+            dependencies: ['step-3', 'step-4'],
+          },
+          input: {
             type: 'scheduled',
             metadata: {
               schedule: '0 0 * * *',
@@ -498,7 +479,7 @@ describe('PostgresStore', () => {
       await store.persistWorkflowSnapshot({
         workflowName,
         runId,
-        snapshot: complexSnapshot,
+        snapshot: complexSnapshot as unknown as WorkflowRunState,
       });
 
       const loadedSnapshot = await store.loadWorkflowSnapshot({
@@ -704,7 +685,7 @@ describe('PostgresStore', () => {
       // Insert multiple workflow runs for the same resourceId
       resourceId = 'resource-shared';
       for (const status of ['success', 'failed']) {
-        const sample = createSampleWorkflowSnapshot(status as WorkflowRunState['context']['steps'][string]['status']);
+        const sample = createSampleWorkflowSnapshot(status as WorkflowRunState['context'][string]['status']);
         runIds.push(sample.runId);
         await store.insert({
           tableName: TABLE_WORKFLOW_SNAPSHOT,
@@ -719,7 +700,7 @@ describe('PostgresStore', () => {
         });
       }
       // Insert a run with a different resourceId
-      const other = createSampleWorkflowSnapshot('waiting');
+      const other = createSampleWorkflowSnapshot('suspended');
       await store.insert({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         record: {

@@ -22,21 +22,22 @@ import { Tabs } from "nextra/components";
 
 <Tabs items={["npm", "yarn", "pnpm"]}>
   <Tabs.Tab>
-  ```bash copy
-  npm install @mastra/client-js@latest
-  ```
+    ```bash copy
+    npm install @mastra/client-js@latest
+    ```
   </Tabs.Tab>
   <Tabs.Tab>
-  ```bash copy
-  yarn add @mastra/client-js@latest
-  ```
+    ```bash copy
+    yarn add @mastra/client-js@latest
+    ```
   </Tabs.Tab>
   <Tabs.Tab>
-  ```bash copy
-  pnpm add @mastra/client-js@latest
-  ```
+    ```bash copy
+    pnpm add @mastra/client-js@latest
+    ```
   </Tabs.Tab>
 </Tabs>
+
 
 ## Initialize Mastra Client
 
@@ -117,4 +118,13 @@ try {
 } catch (error) {
   console.error("Development error:", error);
 }
+```
+## Debug
+
+- Sometimes when using MastraClient on the server instead of the client e.g `/api/chat`,
+ you might need to recreate the response to your client:
+
+ ```typescript
+ const result = agent.stream(/* get your agent stream */)
+ return new Response(result.body);
 ```

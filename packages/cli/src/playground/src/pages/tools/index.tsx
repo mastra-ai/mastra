@@ -18,6 +18,8 @@ import { Link } from 'react-router';
 import { startTransition, useMemo, useRef, useState } from 'react';
 import { GetAgentResponse } from '@mastra/client-js';
 import { SearchIcon } from 'lucide-react';
+import { useTools } from '@/hooks/use-all-tools';
+import { Tool } from '@mastra/core/tools';
 
 interface ToolWithAgents {
   id: string;
@@ -25,10 +27,11 @@ interface ToolWithAgents {
   agents: Array<{ id: string; name: string }>;
 }
 
-const prepareAgents = (agents: Record<string, GetAgentResponse>) => {
-  const tools = new Map<string, ToolWithAgents>();
+const prepareAgents = (tools: Record<string, Tool>, agents: Record<string, GetAgentResponse>) => {
+  const toolsWithAgents = new Map<string, ToolWithAgents>();
   const agentsKeys = Object.keys(agents);
 
+  // Assemble tools from agents
   for (const k of agentsKeys) {
     const agent = agents[k];
     const agentToolsDict = agent.tools;
@@ -37,26 +40,37 @@ const prepareAgents = (agents: Record<string, GetAgentResponse>) => {
     for (const key of agentToolsKeys) {
       const tool = agentToolsDict[key];
 
-      if (!tools.has(tool.id)) {
-        tools.set(tool.id, {
+      if (!toolsWithAgents.has(tool.id)) {
+        toolsWithAgents.set(tool.id, {
           ...tool,
           agents: [],
         });
       }
 
-      tools.get(tool.id)!.agents.push({ id: k, name: agent.name });
+      toolsWithAgents.get(tool.id)!.agents.push({ id: k, name: agent.name });
     }
   }
 
-  return Array.from(tools.values());
+  // Assemble discovered tools
+  for (const [_, tool] of Object.entries(tools)) {
+    if (!toolsWithAgents.has(tool.id)) {
+      toolsWithAgents.set(tool.id, {
+        ...tool,
+        agents: [],
+      });
+    }
+  }
+
+  return Array.from(toolsWithAgents.values());
 };
 
 const Tools = () => {
   const { agents: agentsRecord, isLoading: isLoadingAgents } = useAgents();
+  const { tools, isLoading: isLoadingTools } = useTools();
 
-  const memoizedToolsWithAgents = useMemo(() => prepareAgents(agentsRecord), [agentsRecord]);
+  const memoizedToolsWithAgents = useMemo(() => prepareAgents(tools, agentsRecord), [agentsRecord, tools]);
 
-  if (isLoadingAgents) return null;
+  if (isLoadingAgents || isLoadingTools) return null;
 
   return <ToolsInner toolsWithAgents={memoizedToolsWithAgents} />;
 };
@@ -139,7 +153,10 @@ const ToolEntity = ({ tool }: ToolEntityProps) => {
 
       <EntityContent>
         <EntityName>
-          <Link ref={linkRef} to={`/tools/all/${tool.id}`}>
+          <Link
+            ref={linkRef}
+            to={tool.agents.length > 0 ? `/tools/${tool.agents[0].id}/${tool.id}` : `/tools/all/${tool.id}`}
+          >
             {tool.id}
           </Link>
         </EntityName>

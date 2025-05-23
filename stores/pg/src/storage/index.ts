@@ -23,10 +23,6 @@ import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
 
 export type PostgresConfig = {
   schemaName?: string;
-  /**
-   * @deprecated Use `schemaName` instead. Support for `schema` will be removed on May 20th, 2025.
-   */
-  schema?: string;
 } & (
   | {
       host: string;
@@ -72,13 +68,7 @@ export class PostgresStore extends MastraStorage {
     }
     super({ name: 'PostgresStore' });
     this.pgp = pgPromise();
-    // Deprecation notice for schema (old option)
-    if ('schema' in config && config.schema) {
-      console.warn(
-        '[DEPRECATION NOTICE] The "schema" option in PostgresStore is deprecated. Please use "schemaName" instead. Support for "schema" will be removed on May 20th, 2025.',
-      );
-    }
-    this.schema = config.schemaName ?? config.schema;
+    this.schema = config.schemaName;
     this.db = this.pgp(
       `connectionString` in config
         ? { connectionString: config.connectionString }
