@@ -119,7 +119,7 @@ export async function dev({
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');
   const dotMastraPath = join(rootDir, '.mastra');
 
-  const defaultToolsPath = join(mastraDir, 'tools');
+  const defaultToolsPath = join(mastraDir, 'tools/**/*');
   const discoveredTools = [defaultToolsPath, ...(tools || [])];
 
   const fileService = new FileService();
