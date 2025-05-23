@@ -143,14 +143,14 @@ describe('NewAgentNetwork', () => {
       id: 'agent-step',
       description: 'This step is used to do research and text synthesis.',
       inputSchema: z.object({
-        task: z.string(),
+        city: z.string().describe('The city to research'),
       }),
       outputSchema: z.object({
         text: z.string(),
       }),
-      execute: async () => {
+      execute: async ({ inputData }) => {
         return {
-          text: 'Avignon is the best city in France. ABSOLUTELY THE BEST',
+          text: `${inputData.city} is the best city in France. ABSOLUTELY THE BEST`,
         };
       },
     });
@@ -161,7 +161,7 @@ describe('NewAgentNetwork', () => {
         'This workflow includes crucial research information for any research task, but is not complete by itself. This information is only partial, while crucial to the final research.',
       steps: [],
       inputSchema: z.object({
-        task: z.string(),
+        city: z.string(),
       }),
       outputSchema: z.object({
         text: z.string(),
