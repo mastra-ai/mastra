@@ -132,25 +132,16 @@ Each resource has a URI, name, description, and MIME type. The `getResources()` 
 ## Exposing Agents as Tools via MCPServer
 
 In addition to using tools from MCP servers, your Mastra Agents themselves can be exposed as tools to any MCP-compatible client using Mastra's `MCPServer`.
-Similarly, Mastra `Workflow` instances can also be exposed in the same way.
 
 When an `Agent` instance is provided to an `MCPServer` configuration:
 
 - It is automatically converted into a callable tool.
-- The tool is named `ask_<agentKey>`, where `<agentKey>` is the identifier you used when adding the agent to the `MCPServer`'s `agents` configuration.
-- The agent's `description` property (which must be a non-empty string) is used to generate the tool's description.
+- The tool is named `ask_<agentKey>`, where `<agentKey>` is the identifier you used when adding the agent to the `MCPServer`\'s `agents` configuration.
+- The agent\'s `description` property (which must be a non-empty string) is used to generate the tool\'s description.
 
 This allows other AI models or MCP clients to interact with your Mastra Agents as if they were standard tools, typically by "asking" them a question.
 
-When a `Workflow` instance is provided to an `MCPServer` configuration:
-
-- It is automatically converted into a callable tool.
-- The tool is named `run_<workflowKey>`.
-- The workflow's `description` is used for the tool's description.
-- The `workflow.inputSchema` is used as the tool's input schema.
-- Executing the tool calls `workflow.createRun().start({ inputData: <tool_input> })`.
-
-**Example `MCPServer` Configuration with an Agent and Workflow:**
+**Example `MCPServer` Configuration with an Agent:**
 
 ```typescript filename="src/mastra/mcp.ts"
 import { Agent } from "@mastra/core/agent";
@@ -158,19 +149,17 @@ import { MCPServer } from "@mastra/mcp";
 import { openai } from "@ai-sdk/openai";
 import { weatherInfo } from "../tools/weatherInfo";
 import { generalHelper } from "../agents/generalHelper";
-import { dataPipeline } from "../workflows/dataPipeline";
 
 const server = new MCPServer({
-  name: "My Custom Server with Agent and Workflow Tools",
+  name: "My Custom Server with Agent Tool",
   version: "1.0.0",
   tools: {
     weatherInfo,
   },
   agents: { generalHelper }, // Exposes 'ask_generalHelper' tool
-  workflows: { dataPipeline }, // Exposes 'run_dataPipeline' tool
 });
 ```
 
-For an agent to be successfully converted into a tool by `MCPServer`, its `description` property must be set to a non-empty string in its constructor configuration. The same requirement applies to `Workflow` instances; their `description` must also be a non-empty string. If the description is missing or empty for either an agent or a workflow, `MCPServer` will throw an error during initialization. Workflows use their `inputSchema` for the tool's input details.
+For an agent to be successfully converted into a tool by `MCPServer`, its `description` property must be set to a non-empty string in its constructor configuration. If the description is missing or empty, `MCPServer` will throw an error during initialization.
 
 For more details on setting up and configuring `MCPServer`, refer to the [MCPServer reference documentation](/reference/tools/mcp-server).
