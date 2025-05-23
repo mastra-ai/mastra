@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
-import { stat, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { stat, writeFile, readdir } from 'node:fs/promises';
+import { dirname, join, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MastraBundler } from '@mastra/core/bundler';
 import virtual from '@rollup/plugin-virtual';
@@ -148,25 +148,45 @@ export abstract class Bundler extends MastraBundler {
     const inputs: Record<string, string> = {};
 
     for (const toolPath of toolsPaths) {
-      if (await fsExtra.pathExists(toolPath)) {
-        const fileService = new FileService();
-        const entryFile = fileService.getFirstExistingFile([
-          join(toolPath, 'index.ts'),
-          join(toolPath, 'index.js'),
-          toolPath, // if toolPath itself is a file
-        ]);
-
-        // if it doesn't exist or is a dir skip it. using a dir as a tool will crash the process
-        if (!entryFile || (await stat(entryFile)).isDirectory()) {
-          this.logger.warn(`No entry file found in ${toolPath}, skipping...`);
-          continue;
+      const expandWildcardPath = async (path: string): Promise<string[]> => {
+        if (!path.includes('*')) {
+          return [path];
         }
 
-        const uniqueToolID = crypto.randomUUID();
+        const baseDir = dirname(path);
+        const pattern = basename(path);
+        const files = await readdir(baseDir);
 
-        inputs[`tools/${uniqueToolID}`] = entryFile;
-      } else {
-        this.logger.warn(`Tool path ${toolPath} does not exist, skipping...`);
+        return files
+          .filter(file => {
+            const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+            return regex.test(file);
+          })
+          .map(file => join(baseDir, file));
+      };
+
+      const expandedPaths = await expandWildcardPath(toolPath);
+
+      for (const path of expandedPaths) {
+        if (await fsExtra.pathExists(path)) {
+          const fileService = new FileService();
+          const entryFile = fileService.getFirstExistingFile([
+            join(path, 'index.ts'),
+            join(path, 'index.js'),
+            path, // if path itself is a file
+          ]);
+
+          // if it doesn't exist or is a dir skip it. using a dir as a tool will crash the process
+          if (!entryFile || (await stat(entryFile)).isDirectory()) {
+            this.logger.warn(`No entry file found in ${path}, skipping...`);
+            continue;
+          }
+
+          const uniqueToolID = crypto.randomUUID();
+          inputs[`tools/${uniqueToolID}`] = entryFile;
+        } else {
+          this.logger.warn(`Tool path ${path} does not exist, skipping...`);
+        }
       }
     }
 
