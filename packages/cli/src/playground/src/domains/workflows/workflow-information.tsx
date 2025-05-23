@@ -34,8 +34,8 @@ export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: stri
           {isLoading ? (
             <Skeleton className="h-3 w-1/3" />
           ) : (
-            <div className="flex items-center gap-4">
-              <Txt variant="header-md" as="h2" className="font-medium">
+            <div className="flex items-center gap-4 min-w-0">
+              <Txt variant="header-md" as="h2" className="font-medium truncate">
                 {workflowToUse?.name}
               </Txt>
               <Tooltip>

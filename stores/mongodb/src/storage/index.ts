@@ -10,7 +10,7 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import type { Db } from 'mongodb';
+import type { Db, MongoClientOptions } from 'mongodb';
 import { MongoClient } from 'mongodb';
 
 function safelyParseJSON(jsonString: string): any {
@@ -24,6 +24,7 @@ function safelyParseJSON(jsonString: string): any {
 export interface MongoDBConfig {
   url: string;
   dbName: string;
+  options?: MongoClientOptions;
 }
 
 export class MongoDBStore extends MastraStorage {
@@ -49,7 +50,7 @@ export class MongoDBStore extends MastraStorage {
     }
 
     this.#dbName = config.dbName;
-    this.#client = new MongoClient(config.url);
+    this.#client = new MongoClient(config.url, config.options);
   }
 
   private async getConnection(): Promise<Db> {
