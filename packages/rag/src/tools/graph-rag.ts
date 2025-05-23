@@ -1,25 +1,17 @@
-import type { RuntimeContext } from '@mastra/core/runtime-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import { GraphRAG } from '../graph-rag';
-import {
-  vectorQuerySearch,
-  defaultGraphRagDescription,
-  filterSchema,
-  outputSchema,
-  baseSchema,
-  queryTextDescription,
-} from '../utils';
+import { vectorQuerySearch, defaultGraphRagDescription, filterSchema, outputSchema, baseSchema } from '../utils';
 import type { RagTool } from '../utils';
 import { convertToSources } from '../utils/convert-sources';
 import type { GraphRagToolOptions } from './types';
 import { defaultGraphOptions } from './types';
 
 export const createGraphRAGTool = (options: GraphRagToolOptions) => {
-  const { model, id, description, useRuntimeContext } = options;
+  const { model, id, description } = options;
 
-  const toolId = id || `GraphRAG Tool`;
+  const toolId = id || `GraphRAG ${options.vectorStoreName} ${options.indexName} Tool`;
   const toolDescription = description || defaultGraphRagDescription();
   const graphOptions = {
     ...defaultGraphOptions,
@@ -29,33 +21,27 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
   const graphRag = new GraphRAG(graphOptions.dimension, graphOptions.threshold);
   let isInitialized = false;
 
-  let inputSchema;
-  if (!useRuntimeContext) {
-    inputSchema = options.enableFilter ? filterSchema : z.object(baseSchema).passthrough();
-  } else {
-    inputSchema = z.object({
-      queryText: z.string().describe(queryTextDescription),
-    });
-  }
+  const inputSchema = options.enableFilter ? filterSchema : z.object(baseSchema).passthrough();
+
   return createTool({
     id: toolId,
     inputSchema,
     outputSchema,
     description: toolDescription,
     execute: async ({ context, mastra, runtimeContext }) => {
-      const {
-        queryText,
-        topK,
-        filter,
-        includeSources,
-        randomWalkSteps,
-        restartProb,
-        indexName,
-        vectorStoreName,
-        enableFilter,
-      } = getToolParams({ runtimeContext, context, options: { ...options, graphOptions } });
+      const indexName: string = runtimeContext.get('indexName') ?? options.indexName;
+      const vectorStoreName: string = runtimeContext.get('vectorStoreName') ?? options.vectorStoreName;
       if (!indexName) throw new Error(`indexName is required, got: ${indexName}`);
       if (!vectorStoreName) throw new Error(`vectorStoreName is required, got: ${vectorStoreName}`);
+      const includeSources: boolean = runtimeContext.get('includeSources') ?? options.includeSources ?? true;
+      const randomWalkSteps: number | undefined = runtimeContext.get('randomWalkSteps') ?? graphOptions.randomWalkSteps;
+      const restartProb: number | undefined = runtimeContext.get('restartProb') ?? graphOptions.restartProb;
+      const topK: number = runtimeContext.get('topK') ?? context.topK ?? 10;
+      const filter: Record<string, any> = runtimeContext.get('filter') ?? context.filter;
+      const queryText = context.queryText;
+
+      const enableFilter = !!runtimeContext.get('filter') || (options.enableFilter ?? false);
+
       const logger = mastra?.getLogger();
       if (!logger) {
         console.warn(
@@ -166,51 +152,3 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
     // Use any for output schema as the structure of the output causes type inference issues
   }) as RagTool<typeof inputSchema, any>;
 };
-
-function getToolParams({
-  runtimeContext,
-  context,
-  options,
-}: {
-  runtimeContext: RuntimeContext;
-  context: any;
-  options: GraphRagToolOptions;
-}) {
-  if (!options.useRuntimeContext) {
-    const { queryText, topK, filter } = context;
-    // Use static config for store/index, etc.
-    return {
-      indexName: options.indexName,
-      vectorStoreName: options.vectorStoreName,
-      queryText,
-      topK,
-      filter,
-      includeSources: options.includeSources,
-      randomWalkSteps: options.graphOptions?.randomWalkSteps,
-      restartProb: options.graphOptions?.restartProb,
-      enableFilter: options.enableFilter,
-    };
-  } else {
-    // Get params from runtimeContext
-    const { queryText } = context;
-    const indexName: string = runtimeContext.get('indexName');
-    const topK = runtimeContext.get('topK') ?? 10;
-    const filter = runtimeContext.get('filter') ?? {};
-    const vectorStoreName: string = runtimeContext.get('vectorStoreName');
-    const includeSources: boolean = runtimeContext.get('includeSources') ?? true;
-    const randomWalkSteps: number | undefined =
-      runtimeContext.get('randomWalkSteps') ?? options.graphOptions?.randomWalkSteps;
-    const restartProb: number | undefined = runtimeContext.get('restartProb') ?? options.graphOptions?.restartProb;
-    return {
-      indexName,
-      vectorStoreName,
-      queryText,
-      topK,
-      filter,
-      includeSources,
-      randomWalkSteps,
-      restartProb,
-      enableFilter: Object.keys(filter || {}).length > 0,
-    };
-  }
-}

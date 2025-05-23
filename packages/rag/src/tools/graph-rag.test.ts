@@ -64,31 +64,13 @@ describe('createGraphRAGTool', () => {
   });
 
   describe('runtimeContext', () => {
-    it('throws if indexName or vectorStoreName missing', async () => {
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('vectorStoreName', 'testStore');
-
-      const tool = createGraphRAGTool({ id: 'test', model: mockModel, useRuntimeContext: true });
-      await expect(
-        tool.execute({
-          context: { queryText: 'foo' },
-          mastra: mockMastra as any,
-          runtimeContext,
-        }),
-      ).rejects.toThrow('indexName is required');
-      const runtimeContext2 = new RuntimeContext();
-      runtimeContext2.set('indexName', 'testIndex');
-      await expect(
-        tool.execute({
-          context: { queryText: 'foo' },
-          mastra: mockMastra as any,
-          runtimeContext: runtimeContext2,
-        }),
-      ).rejects.toThrow('vectorStoreName is required');
-    });
-
     it('calls vectorQuerySearch and GraphRAG with runtimeContext params', async () => {
-      const tool = createGraphRAGTool({ id: 'test', model: mockModel, useRuntimeContext: true });
+      const tool = createGraphRAGTool({
+        id: 'test',
+        model: mockModel,
+        indexName: 'testIndex',
+        vectorStoreName: 'testStore',
+      });
       const runtimeContext = new RuntimeContext();
       runtimeContext.set('indexName', 'testIndex');
       runtimeContext.set('vectorStoreName', 'testStore');
@@ -97,7 +79,7 @@ describe('createGraphRAGTool', () => {
       runtimeContext.set('randomWalkSteps', 99);
       runtimeContext.set('restartProb', 0.42);
       const result = await tool.execute({
-        context: { queryText: 'foo' },
+        context: { queryText: 'foo', topK: 2 },
         mastra: mockMastra as any,
         runtimeContext,
       });

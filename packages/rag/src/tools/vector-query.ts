@@ -1,33 +1,18 @@
-import type { RuntimeContext } from '@mastra/core/runtime-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import { rerank } from '../rerank';
 import type { RerankConfig } from '../rerank';
-import {
-  vectorQuerySearch,
-  defaultVectorQueryDescription,
-  filterSchema,
-  outputSchema,
-  baseSchema,
-  queryTextDescription,
-} from '../utils';
+import { vectorQuerySearch, defaultVectorQueryDescription, filterSchema, outputSchema, baseSchema } from '../utils';
 import type { RagTool } from '../utils';
 import { convertToSources } from '../utils/convert-sources';
 import type { VectorQueryToolOptions } from './types';
 
 export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
-  const { model, id, description, useRuntimeContext } = options;
-  const toolId = id || `VectorQuery Tool`;
+  const { model, id, description } = options;
+  const toolId = id || `VectorQuery ${options.vectorStoreName} ${options.indexName} Tool`;
   const toolDescription = description || defaultVectorQueryDescription();
-  let inputSchema;
-  if (!useRuntimeContext) {
-    inputSchema = options.enableFilter ? filterSchema : z.object(baseSchema).passthrough();
-  } else {
-    inputSchema = z.object({
-      queryText: z.string().describe(queryTextDescription),
-    });
-  }
+  const inputSchema = options.enableFilter ? filterSchema : z.object(baseSchema).passthrough();
 
   return createTool({
     id: toolId,
@@ -35,23 +20,18 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
     inputSchema,
     outputSchema,
     execute: async ({ context, mastra, runtimeContext }) => {
-      const {
-        indexName,
-        vectorStoreName,
-        queryText,
-        topK,
-        filter,
-        includeVectors,
-        includeSources,
-        reranker,
-        enableFilter,
-      } = getToolParams({
-        runtimeContext,
-        context,
-        options,
-      });
+      const indexName: string = runtimeContext.get('indexName') ?? options.indexName;
+      const vectorStoreName: string = runtimeContext.get('vectorStoreName') ?? options.vectorStoreName;
+      const includeVectors: boolean = runtimeContext.get('includeVectors') ?? options.includeVectors ?? false;
+      const includeSources: boolean = runtimeContext.get('includeSources') ?? options.includeSources ?? true;
+      const reranker: RerankConfig = runtimeContext.get('reranker') ?? options.reranker;
       if (!indexName) throw new Error(`indexName is required, got: ${indexName}`);
       if (!vectorStoreName) throw new Error(`vectorStoreName is required, got: ${vectorStoreName}`);
+
+      const topK: number = runtimeContext.get('topK') ?? context.topK ?? 10;
+      const filter: Record<string, any> = runtimeContext.get('filter') ?? context.filter;
+      const queryText = context.queryText;
+      const enableFilter = !!runtimeContext.get('filter') || (options.enableFilter ?? false);
 
       const logger = mastra?.getLogger();
       if (!logger) {
@@ -152,50 +132,3 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
     // Use any for output schema as the structure of the output causes type inference issues
   }) as RagTool<typeof inputSchema, any>;
 };
-
-function getToolParams({
-  runtimeContext,
-  context,
-  options,
-}: {
-  runtimeContext: RuntimeContext;
-  context: any;
-  options: VectorQueryToolOptions;
-}) {
-  if (!options.useRuntimeContext) {
-    const { queryText, topK, filter } = context;
-    // Use static config for store/index, etc.
-    return {
-      indexName: options.indexName,
-      vectorStoreName: options.vectorStoreName,
-      queryText,
-      topK,
-      filter,
-      includeVectors: options.includeVectors,
-      includeSources: options.includeSources,
-      reranker: options.reranker,
-      enableFilter: options.enableFilter,
-    };
-  } else {
-    // Get params from runtimeContext
-    const { queryText } = context;
-    const indexName: string = runtimeContext.get('indexName');
-    const vectorStoreName: string = runtimeContext.get('vectorStoreName');
-    const topK: number = runtimeContext.get('topK') ?? 10;
-    const filter: Record<string, any> = runtimeContext.get('filter') ?? {};
-    const includeVectors: boolean = runtimeContext.get('includeVectors') ?? false;
-    const includeSources: boolean = runtimeContext.get('includeSources') ?? true;
-    const reranker: RerankConfig = runtimeContext.get('reranker');
-    return {
-      indexName,
-      vectorStoreName,
-      queryText,
-      topK,
-      filter,
-      includeVectors,
-      includeSources,
-      reranker,
-      enableFilter: Object.keys(filter || {}).length > 0,
-    };
-  }
-}

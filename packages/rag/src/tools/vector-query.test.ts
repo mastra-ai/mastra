@@ -168,6 +168,8 @@ describe('createVectorQueryTool', () => {
 
   describe('execute function', () => {
     it('should not process filter when enableFilter is false', async () => {
+      const runtimeContext = new RuntimeContext();
+
       // Create tool with enableFilter set to false
       const tool = createVectorQueryTool({
         vectorStoreName: 'testStore',
@@ -183,7 +185,7 @@ describe('createVectorQueryTool', () => {
           topK: 5,
         },
         mastra: mockMastra as any,
-        runtimeContext: {} as any,
+        runtimeContext,
       });
 
       // Check that vectorQuerySearch was called with undefined queryFilter
@@ -195,6 +197,7 @@ describe('createVectorQueryTool', () => {
     });
 
     it('should process filter when enableFilter is true and filter is provided', async () => {
+      const runtimeContext = new RuntimeContext();
       // Create tool with enableFilter set to true
       const tool = createVectorQueryTool({
         vectorStoreName: 'testStore',
@@ -213,7 +216,7 @@ describe('createVectorQueryTool', () => {
           filter: filterJson,
         },
         mastra: mockMastra as any,
-        runtimeContext: {} as any,
+        runtimeContext,
       });
 
       // Check that vectorQuerySearch was called with the parsed filter
@@ -225,6 +228,7 @@ describe('createVectorQueryTool', () => {
     });
 
     it('should handle string filters correctly', async () => {
+      const runtimeContext = new RuntimeContext();
       // Create tool with enableFilter set to true
       const tool = createVectorQueryTool({
         vectorStoreName: 'testStore',
@@ -243,7 +247,7 @@ describe('createVectorQueryTool', () => {
           filter: stringFilter,
         },
         mastra: mockMastra as any,
-        runtimeContext: {} as any,
+        runtimeContext,
       });
 
       // Since this is not a valid filter, it should be ignored
@@ -256,30 +260,13 @@ describe('createVectorQueryTool', () => {
   });
 
   describe('runtimeContext', () => {
-    it('throws if indexName or vectorStoreName missing', async () => {
-      const tool = createVectorQueryTool({ id: 'test', model: mockModel, useRuntimeContext: true });
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('vectorStoreName', 'testStore');
-      await expect(
-        tool.execute({
-          context: { queryText: 'foo' },
-          mastra: mockMastra as any,
-          runtimeContext,
-        }),
-      ).rejects.toThrow('indexName is required');
-      const runtimeContext2 = new RuntimeContext();
-      runtimeContext2.set('indexName', 'testIndex');
-      await expect(
-        tool.execute({
-          context: { queryText: 'foo' },
-          mastra: mockMastra as any,
-          runtimeContext: runtimeContext2,
-        }),
-      ).rejects.toThrow('vectorStoreName is required');
-    });
-
     it('calls vectorQuerySearch with runtimeContext params', async () => {
-      const tool = createVectorQueryTool({ id: 'test', model: mockModel, useRuntimeContext: true });
+      const tool = createVectorQueryTool({
+        id: 'test',
+        model: mockModel,
+        indexName: 'testIndex',
+        vectorStoreName: 'testStore',
+      });
       const runtimeContext = new RuntimeContext();
       runtimeContext.set('indexName', 'testIndex');
       runtimeContext.set('vectorStoreName', 'testStore');
@@ -288,7 +275,7 @@ describe('createVectorQueryTool', () => {
       runtimeContext.set('includeVectors', true);
       runtimeContext.set('includeSources', false);
       const result = await tool.execute({
-        context: { queryText: 'foo' },
+        context: { queryText: 'foo', topK: 3 },
         mastra: mockMastra as any,
         runtimeContext,
       });
@@ -308,7 +295,12 @@ describe('createVectorQueryTool', () => {
     });
 
     it('handles reranker from runtimeContext', async () => {
-      const tool = createVectorQueryTool({ id: 'test', model: mockModel, useRuntimeContext: true });
+      const tool = createVectorQueryTool({
+        id: 'test',
+        model: mockModel,
+        indexName: 'testIndex',
+        vectorStoreName: 'testStore',
+      });
       const runtimeContext = new RuntimeContext();
       runtimeContext.set('indexName', 'testIndex');
       runtimeContext.set('vectorStoreName', 'testStore');
@@ -322,7 +314,7 @@ describe('createVectorQueryTool', () => {
         },
       ]);
       const result = await tool.execute({
-        context: { queryText: 'foo' },
+        context: { queryText: 'foo', topK: 1 },
         mastra: mockMastra as any,
         runtimeContext,
       });
