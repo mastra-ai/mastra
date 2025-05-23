@@ -2,6 +2,8 @@ import { createTool } from '@mastra/core/tools';
 import { MCPServer, MCPServerResources } from '@mastra/mcp';
 import { z } from 'zod';
 import { chefAgent } from '../agents';
+import { myWorkflow } from '../workflows';
+
 // Resources implementation
 const weatherResources: MCPServerResources = {
   listResources: async () => {
@@ -134,6 +136,7 @@ export const myMcpServerTwo = new MCPServer({
   name: 'My Utility MCP Server',
   version: '1.0.0',
   agents: { chefAgent },
+  workflows: { myWorkflow },
   resources: weatherResources,
   tools: {
     stringUtils: createTool({

@@ -4,7 +4,8 @@ import type { ServerType } from '@hono/node-server';
 import { serve } from '@hono/node-server';
 import { Agent } from '@mastra/core/agent';
 import type { ToolsInput } from '@mastra/core/agent';
-import type { MCPServerConfig, Repository, PackageInfo, RemoteInfo } from '@mastra/core/mcp';
+import type { MCPServerConfig, Repository, PackageInfo, RemoteInfo, ConvertedTool } from '@mastra/core/mcp';
+import { createStep, Workflow } from '@mastra/core/workflows';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import type {
   Resource,
@@ -74,6 +75,21 @@ const createMockAgent = (name: string, generateFn: any, instructionsFn?: any, de
         return generateFn((options.prompt.at(-1)?.content[0] as { text: string }).text);
       },
     }),
+  });
+};
+
+const createMockWorkflow = (
+  id: string,
+  description?: string,
+  inputSchema?: z.ZodTypeAny,
+  outputSchema?: z.ZodTypeAny,
+) => {
+  return new Workflow({
+    id,
+    description: description || '',
+    inputSchema: inputSchema as z.ZodType<any>,
+    outputSchema: outputSchema as z.ZodType<any>,
+    steps: [],
   });
 };
 
@@ -977,5 +993,134 @@ describe('MCPServer - Agent to Tool Conversion', () => {
           agents: { noDescKey: agentWithNoDesc as unknown as Agent }, // Cast for test setup
         }),
     ).toThrow('must have a non-empty description');
+  });
+});
+
+describe('MCPServer - Workflow to Tool Conversion', () => {
+  let server: MCPServer;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should convert a provided workflow to an MCP tool', () => {
+    const testWorkflow = createMockWorkflow('MyTestWorkflow', 'A test workflow.');
+    server = new MCPServer({
+      name: 'WorkflowToolServer',
+      version: '1.0.0',
+      tools: {},
+      workflows: { testWorkflowKey: testWorkflow },
+    });
+
+    const tools = server.tools();
+    const workflowToolName = 'run_testWorkflowKey';
+    expect(tools[workflowToolName]).toBeDefined();
+    expect(tools[workflowToolName].description).toBe(
+      "Run workflow 'testWorkflowKey'. Workflow description: A test workflow.",
+    );
+    expect(tools[workflowToolName].parameters.jsonSchema).toBeDefined();
+    expect(tools[workflowToolName].parameters.jsonSchema.type).toBe('object');
+  });
+
+  it('should throw an error if workflow.description is undefined or empty', () => {
+    const testWorkflowNoDesc = createMockWorkflow('MyWorkflowNoDesc', undefined);
+    expect(
+      () =>
+        new MCPServer({
+          name: 'WorkflowNoDescServer',
+          version: '1.0.0',
+          tools: {},
+          workflows: { testKeyNoDesc: testWorkflowNoDesc },
+        }),
+    ).toThrow('must have a non-empty description');
+
+    const testWorkflowEmptyDesc = createMockWorkflow('MyWorkflowEmptyDesc', '');
+    expect(
+      () =>
+        new MCPServer({
+          name: 'WorkflowEmptyDescServer',
+          version: '1.0.0',
+          tools: {},
+          workflows: { testKeyEmptyDesc: testWorkflowEmptyDesc },
+        }),
+    ).toThrow('must have a non-empty description');
+  });
+
+  it('should call workflow.createRun().start() when the derived tool is executed', async () => {
+    const testWorkflow = createMockWorkflow('MyExecWorkflow', 'Executable workflow');
+    const step = createStep({
+      id: 'my-step',
+      description: 'My step description',
+      inputSchema: z.object({
+        data: z.string(),
+      }),
+      outputSchema: z.object({
+        result: z.string(),
+      }),
+      execute: async ({ inputData }) => {
+        return {
+          result: inputData.data,
+        };
+      },
+    });
+    testWorkflow.then(step).commit();
+    server = new MCPServer({
+      name: 'WorkflowExecServer',
+      version: '1.0.0',
+      tools: {},
+      workflows: { execWorkflowKey: testWorkflow },
+    });
+
+    const workflowTool = server.tools()['run_execWorkflowKey'] as ConvertedTool;
+    expect(workflowTool).toBeDefined();
+
+    const inputData = { data: 'Hello Workflow' };
+    if (workflowTool && workflowTool.execute) {
+      const result = await workflowTool.execute(inputData, { toolCallId: 'mcp-wf-call-123', messages: [] });
+      expect(result).toEqual({
+        status: 'success',
+        steps: {
+          input: { data: 'Hello Workflow' },
+          'my-step': { status: 'success', output: { result: 'Hello Workflow' } },
+        },
+        result: { result: 'Hello Workflow' },
+      });
+    } else {
+      throw new Error('Workflow tool or its execute function is undefined');
+    }
+  });
+
+  it('should handle name collision: explicit tool wins over workflow-derived tool', () => {
+    const explicitToolName = 'run_collidingWorkflowKey';
+    const explicitToolExecute = vi.fn(async () => 'explicit tool response');
+    const collidingWorkflow = createMockWorkflow('CollidingWorkflow', 'Colliding workflow description');
+
+    server = new MCPServer({
+      name: 'WFCollisionServer',
+      version: '1.0.0',
+      tools: {
+        [explicitToolName]: {
+          description: 'An explicit tool that collides with a workflow.',
+          parameters: z.object({ query: z.string() }),
+          execute: explicitToolExecute,
+        },
+      },
+      workflows: { collidingWorkflowKey: collidingWorkflow },
+    });
+
+    const tools = server.tools();
+    expect(tools[explicitToolName]).toBeDefined();
+    expect(tools[explicitToolName].description).toBe('An explicit tool that collides with a workflow.');
+  });
+
+  it('should use workflowKey for tool name run_<workflowKey>', () => {
+    const uniqueKeyWorkflow = createMockWorkflow('WorkflowNameDoesNotMatter', 'WF description');
+    server = new MCPServer({
+      name: 'UniqueWFKeyServer',
+      version: '1.0.0',
+      tools: {},
+      workflows: { unique_workflow_key_789: uniqueKeyWorkflow },
+    });
+    expect(server.tools()['run_unique_workflow_key_789']).toBeDefined();
   });
 });
