@@ -1,9 +1,8 @@
 import { createTestSuite } from '@internal/storage-test-utils';
 import { Mastra } from '@mastra/core/mastra';
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-
-import { LibSQLStore } from './index';
 import { TABLE_WORKFLOW_SNAPSHOT, TABLE_SCHEMAS } from '@mastra/core/storage';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { LibSQLStore } from './index';
 
 // Test database configuration
 const TEST_DB_URL = 'file::memory:?cache=shared'; // Use in-memory SQLite for tests
@@ -58,7 +57,6 @@ describe('LibSQLStore createdAt/updatedAt columns', () => {
     expect(result.rows).toBeTruthy();
     expect(result.rows.length).toBe(1);
     const { createdAt, updatedAt } = result.rows[0];
-    console.log('createdAt:', createdAt, 'updatedAt:', updatedAt);
     // Check that these are valid ISO date strings
     expect(typeof createdAt).toBe('string');
     expect(typeof updatedAt).toBe('string');
