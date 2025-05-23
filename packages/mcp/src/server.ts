@@ -14,6 +14,7 @@ import type {
   MCPServerSSEOptions,
 } from '@mastra/core/mcp';
 import { RuntimeContext } from '@mastra/core/runtime-context';
+import type { Workflow } from '@mastra/core/workflows';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -155,14 +156,105 @@ export class MCPServer extends MCPServerBase {
     return agentTools;
   }
 
+  private convertWorkflowsToTools(
+    workflowsConfig?: Record<string, Workflow>,
+    definedConvertedTools?: Record<string, ConvertedTool>,
+  ): Record<string, ConvertedTool> {
+    const workflowTools: Record<string, ConvertedTool> = {};
+    if (!workflowsConfig) {
+      return workflowTools;
+    }
+
+    for (const workflowKey in workflowsConfig) {
+      const workflow = workflowsConfig[workflowKey];
+      if (!workflow || typeof workflow.createRun !== 'function') {
+        this.logger.warn(
+          `Workflow instance for '${workflowKey}' is invalid or missing a createRun function. Skipping.`,
+        );
+        continue;
+      }
+
+      const workflowDescription = workflow.description;
+      if (!workflowDescription) {
+        throw new Error(
+          `Workflow '${workflow.id}' (key: '${workflowKey}') must have a non-empty description to be used in an MCPServer.`,
+        );
+      }
+
+      const workflowToolName = `run_${workflowKey}`;
+      if (definedConvertedTools?.[workflowToolName] || workflowTools[workflowToolName]) {
+        this.logger.warn(
+          `Tool with name '${workflowToolName}' already exists. Workflow '${workflowKey}' will not be added as a duplicate tool.`,
+        );
+        continue;
+      }
+
+      const workflowToolDefinition = createTool({
+        id: workflowToolName,
+        description: workflowDescription,
+        inputSchema: workflow.inputSchema,
+        execute: async ({ context, runtimeContext }) => {
+          this.logger.debug(
+            `Executing workflow tool '${workflowToolName}' for workflow '${workflow.id}' with input:`,
+            context,
+          );
+          try {
+            const run = workflow.createRun({ runId: runtimeContext?.get('runId') as string | undefined });
+            const response = await run.start({ inputData: context, runtimeContext });
+            if (response.status === 'failed') {
+              throw response.error;
+            }
+            if (response.status === 'success') {
+              return response.result;
+            }
+            // Handle suspended or other statuses if necessary, or return undefined/throw
+            this.logger.warn(
+              `Workflow tool '${workflowToolName}' for workflow '${workflow.id}' did not return a successful result. Status: ${response.status}`,
+            );
+            return undefined; // Or throw an error for non-success states
+          } catch (error) {
+            this.logger.error(
+              `Error executing workflow tool '${workflowToolName}' for workflow '${workflow.id}':`,
+              error,
+            );
+            throw error;
+          }
+        },
+      });
+
+      const options = {
+        name: workflowToolName,
+        logger: this.logger,
+        mastra: this.mastra,
+        runtimeContext: new RuntimeContext(),
+        description: workflowToolDefinition.description,
+      };
+      const coreTool = makeCoreTool(workflowToolDefinition, options) as InternalCoreTool;
+
+      workflowTools[workflowToolName] = {
+        name: workflowToolName,
+        description: coreTool.description,
+        parameters: coreTool.parameters,
+        execute: coreTool.execute!,
+      };
+      this.logger.info(`Registered workflow '${workflow.id}' (key: '${workflowKey}') as tool: '${workflowToolName}'`);
+    }
+    return workflowTools;
+  }
+
   /**
    * Convert and validate all provided tools, logging registration status.
-   * Also converts agents into tools.
+   * Also converts agents and workflows into tools.
    * @param tools Tool definitions
    * @param agentsConfig Agent definitions to be converted to tools, expected from MCPServerConfig
+   * @param workflowsConfig Workflow definitions to be converted to tools, expected from MCPServerConfig
    * @returns Converted tools registry
    */
-  convertTools(tools: ToolsInput, agentsConfig?: Record<string, Agent<any>>): Record<string, ConvertedTool> {
+  convertTools(
+    tools: ToolsInput,
+    agentsConfig?: Record<string, Agent>,
+    workflowsConfig?: Record<string, Workflow>,
+  ): Record<string, ConvertedTool> {
     const definedConvertedTools: Record<string, ConvertedTool> = {};
 
     for (const toolName of Object.keys(tools)) {
@@ -198,11 +290,12 @@ export class MCPServer extends MCPServerBase {
     this.logger.info(`Total defined tools registered: ${Object.keys(definedConvertedTools).length}`);
 
     const agentDerivedTools = this.convertAgentsToTools(agentsConfig, definedConvertedTools);
+    const workflowDerivedTools = this.convertWorkflowsToTools(workflowsConfig, definedConvertedTools);
 
-    const allConvertedTools = { ...definedConvertedTools, ...agentDerivedTools };
+    const allConvertedTools = { ...definedConvertedTools, ...agentDerivedTools, ...workflowDerivedTools };
 
     const finalToolCount = Object.keys(allConvertedTools).length;
-    this.logger.info(`Total tools registered (defined + from agents): ${finalToolCount}`);
+    this.logger.info(`Total tools registered (defined + agents + workflows): ${finalToolCount}`);
 
     return allConvertedTools;
   }

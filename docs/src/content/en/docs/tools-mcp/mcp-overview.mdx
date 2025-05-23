@@ -213,26 +213,28 @@ MCP servers can be discovered through registries. Here's how to connect to some 
 
 If you have created your own Mastra tools, you can expose them to any MCP-compatible client using Mastra's `MCPServer` class.
 
-Similarly, Mastra `Agent` instances can also be exposed as tools via `MCPServer`. This allows other MCP clients to interact with your agents by "asking" them questions. Each agent provided in the `MCPServer` configuration will be converted into a tool named `ask_<agentKey>`, using the agent's `description` property.
+Similarly, Mastra `Agent` and `Workflow` instances can also be exposed as tools via `MCPServer`. This allows other MCP clients to interact with your agents by "asking" them questions or run your workflows. Each agent provided in the `MCPServer` configuration will be converted into a tool named `ask_<agentKey>`, using the agent's `description` property. Each workflow will be converted into a tool named `run_<workflowKey>`, using its `inputSchema` and `description`.
 
-This allows others to use your tools and agents without needing direct access to your codebase.
+This allows others to use your tools, agents, and workflows without needing direct access to your codebase.
 
 ### Using `MCPServer`
 
-You initialize `MCPServer` with a name, version, and the Mastra tools and/or agents you want to share.
+You initialize `MCPServer` with a name, version, and the Mastra tools, agents, and/or workflows you want to share.
 
 ```typescript
 import { MCPServer } from "@mastra/mcp";
 import { Agent } from "@mastra/core/agent";
 import { openai } from "@ai-sdk/openai";
 import { weatherTool } from "./tools"; // Your Mastra tool
-import { weatherAgent } from "./agents";
+import { weatherAgent } from "./agents"; // Your Mastra Agent
+import { dataWorkflow } from "./workflows"; // Your Mastra Workflow
 
 const server = new MCPServer({
-  name: "My Weather Server",
+  name: "My Custom Server",
   version: "1.0.0",
   tools: { weatherTool },    // Provide your tool(s) here
-  agents: { weatherAgent }   // Provide your agent(s) here
+  agents: { weatherAgent },   // Provide your agent(s) here
+  workflows: { dataWorkflow } // Provide your workflow(s) here
 });
 
 // Start the server (e.g., using stdio for a CLI tool)
@@ -242,6 +244,7 @@ const server = new MCPServer({
 // See MCPServer reference for details
 ```
 
-For an agent to be exposed as a tool, it must have a non-empty `description` string. If the description is missing or empty, `MCPServer` will throw an error during initialization.
+For an agent to be exposed as a tool, it must have a non-empty `description` string. Similarly, for a workflow to be exposed, its `description` must also be a non-empty string. If the description is missing or empty for either, `MCPServer` will throw an error during initialization.
+Workflows will use their `inputSchema` for the tool's input.
 
 For detailed usage and examples, see the [`MCPServer` reference documentation](/reference/tools/mcp-server).
