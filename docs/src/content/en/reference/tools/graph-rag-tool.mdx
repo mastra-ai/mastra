@@ -32,8 +32,8 @@ const graphTool = createGraphRAGTool({
 
 <Callout>
 **Parameter Requirements:**  
-All fields can be set at creation as defaults. At runtime, any field may be overridden by providing a value in the runtime context or input.  
-If a required field (such as `vectorStoreName`, `indexName`, or `model`) is missing from both creation and runtime, an error will be thrown.
+Most fields can be set at creation as defaults. Some fields can be overridden at runtime via the runtime context or input.  
+If a required field is missing from both creation and runtime, an error will be thrown. Note that `model`, `id`, and `description` can only be set at creation time.
 </Callout>
 
 <PropertiesTable
@@ -217,6 +217,8 @@ runtimeContext.set("vectorStoreName", "my-store");
 runtimeContext.set("indexName", "my-index");
 runtimeContext.set("topK", 5);
 runtimeContext.set("filter", { "category": "docs" });
+runtimeContext.set("randomWalkSteps", 100);
+runtimeContext.set("restartProb", 0.15);
 
 const response = await agent.generate("Find documentation from the knowledge base.", {
   runtimeContext,

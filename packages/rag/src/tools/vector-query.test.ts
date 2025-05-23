@@ -31,9 +31,12 @@ describe('createVectorQueryTool', () => {
       testStore: {
         // Mock vector store methods
       },
+      anotherStore: {
+        // Mock vector store methods
+      },
     },
-    getVector: vi.fn(() => ({
-      testStore: {
+    getVector: vi.fn(storeName => ({
+      [storeName]: {
         // Mock vector store methods
       },
     })),
@@ -268,14 +271,14 @@ describe('createVectorQueryTool', () => {
         vectorStoreName: 'testStore',
       });
       const runtimeContext = new RuntimeContext();
-      runtimeContext.set('indexName', 'testIndex');
-      runtimeContext.set('vectorStoreName', 'testStore');
+      runtimeContext.set('indexName', 'anotherIndex');
+      runtimeContext.set('vectorStoreName', 'anotherStore');
       runtimeContext.set('topK', 3);
       runtimeContext.set('filter', { foo: 'bar' });
       runtimeContext.set('includeVectors', true);
       runtimeContext.set('includeSources', false);
       const result = await tool.execute({
-        context: { queryText: 'foo', topK: 3 },
+        context: { queryText: 'foo', topK: 6 },
         mastra: mockMastra as any,
         runtimeContext,
       });
@@ -283,8 +286,10 @@ describe('createVectorQueryTool', () => {
       expect(result.sources).toEqual([]); // includeSources false
       expect(vectorQuerySearch).toHaveBeenCalledWith(
         expect.objectContaining({
-          indexName: 'testIndex',
-          vectorStore: expect.anything(),
+          indexName: 'anotherIndex',
+          vectorStore: {
+            anotherStore: {},
+          },
           queryText: 'foo',
           model: mockModel,
           queryFilter: { foo: 'bar' },

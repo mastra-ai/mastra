@@ -29,6 +29,18 @@ export type GraphRagToolOptions = {
   };
 };
 
+/**
+ * Default options for GraphRAG
+ * @default
+ * ```json
+ * {
+ *   "dimension": 1536,
+ *   "randomWalkSteps": 100,
+ *   "restartProb": 0.15,
+ *   "threshold": 0.7
+ * }
+ * ```
+ */
 export const defaultGraphOptions = {
   dimension: 1536,
   randomWalkSteps: 100,

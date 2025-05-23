@@ -36,8 +36,8 @@ vi.mock('../graph-rag', async importOriginal => {
 
 const mockModel = { name: 'test-model' } as any;
 const mockMastra = {
-  getVector: vi.fn(() => ({
-    testStore: {},
+  getVector: vi.fn(storeName => ({
+    [storeName]: {},
   })),
   getLogger: vi.fn(() => ({
     debug: vi.fn(),
@@ -72,9 +72,9 @@ describe('createGraphRAGTool', () => {
         vectorStoreName: 'testStore',
       });
       const runtimeContext = new RuntimeContext();
-      runtimeContext.set('indexName', 'testIndex');
-      runtimeContext.set('vectorStoreName', 'testStore');
-      runtimeContext.set('topK', 2);
+      runtimeContext.set('indexName', 'anotherIndex');
+      runtimeContext.set('vectorStoreName', 'anotherStore');
+      runtimeContext.set('topK', 5);
       runtimeContext.set('filter', { foo: 'bar' });
       runtimeContext.set('randomWalkSteps', 99);
       runtimeContext.set('restartProb', 0.42);
@@ -87,12 +87,14 @@ describe('createGraphRAGTool', () => {
       expect(result.sources.length).toBe(2);
       expect(vectorQuerySearch).toHaveBeenCalledWith(
         expect.objectContaining({
-          indexName: 'testIndex',
-          vectorStore: expect.anything(),
+          indexName: 'anotherIndex',
+          vectorStore: {
+            anotherStore: {},
+          },
           queryText: 'foo',
           model: mockModel,
           queryFilter: { foo: 'bar' },
-          topK: 2,
+          topK: 5,
           includeVectors: true,
         }),
       );
@@ -103,7 +105,7 @@ describe('createGraphRAGTool', () => {
       expect(instance.query).toHaveBeenCalledWith(
         expect.objectContaining({
           query: [1, 2, 3],
-          topK: 2,
+          topK: 5,
           randomWalkSteps: 99,
           restartProb: 0.42,
         }),
