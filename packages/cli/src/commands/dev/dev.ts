@@ -12,6 +12,8 @@ import { DevBundler } from './DevBundler';
 
 let currentServerProcess: ChildProcess | undefined;
 let isRestarting = false;
+let restartCount = 0;
+const MAX_RESTARTS = 3;
 
 const startServer = async (dotMastraPath: string, port: number, env: Map<string, string>) => {
   try {
@@ -39,11 +41,33 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
       reject: false,
     }) as any as ChildProcess;
 
+    // Handle server process exit
+    currentServerProcess.on('close', code => {
+      if (!code) {
+        restartCount++;
+        if (restartCount > MAX_RESTARTS) {
+          logger.error(`Server failed to start after ${MAX_RESTARTS} attempts. Giving up.`);
+          process.exit(1);
+        }
+        logger.error(
+          `Server exited with code ${code}, attempting to restart... (Attempt ${restartCount}/${MAX_RESTARTS})`,
+        );
+        setTimeout(() => {
+          if (!isRestarting) {
+            // eslint-disable-next-line @typescript-eslint/no-floating-promises
+            startServer(dotMastraPath, port, env);
+          }
+        }, 1000);
+      }
+    });
+
     if (currentServerProcess?.exitCode && currentServerProcess?.exitCode !== 0) {
       if (!currentServerProcess) {
         throw new Error(`Server failed to start`);
       }
-      throw new Error(`Server failed to start with error: ${currentServerProcess.stderr}`);
+      throw new Error(
+        `Server failed to start with error: ${currentServerProcess.stderr || currentServerProcess.stdout}`,
+      );
     }
 
     // Wait for server to be ready
@@ -80,6 +104,20 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
     const execaError = err as { stderr?: string; stdout?: string };
     if (execaError.stderr) logger.error('Server error output:', { stderr: execaError.stderr });
     if (execaError.stdout) logger.debug('Server output:', { stdout: execaError.stdout });
+
+    // Attempt to restart on error after a delay
+    setTimeout(() => {
+      if (!isRestarting) {
+        restartCount++;
+        if (restartCount > MAX_RESTARTS) {
+          logger.error(`Server failed to start after ${MAX_RESTARTS} attempts. Giving up.`);
+          process.exit(1);
+        }
+        logger.error(`Attempting to restart server... (Attempt ${restartCount}/${MAX_RESTARTS})`);
+        // eslint-disable-next-line @typescript-eslint/no-floating-promises
+        startServer(dotMastraPath, port, env);
+      }
+    }, 1000);
   }
 };
 
@@ -115,6 +153,9 @@ export async function dev({
   port: number | null;
   tools?: string[];
 }) {
+  // Reset restart counter at the start of dev
+  restartCount = 0;
+
   const rootDir = root || process.cwd();
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');
   const dotMastraPath = join(rootDir, '.mastra');
