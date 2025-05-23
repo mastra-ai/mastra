@@ -53,13 +53,16 @@ export function AgentDetails({ agent }: AgentDetailsProps) {
             <Entry label="Temperature">
               <div className="flex flex-row justify-between items-center gap-2">
                 <Slider
-                  value={[modelSettings?.temperature ?? 0.5]}
+                  value={[modelSettings?.temperature ?? -0.1]}
                   max={1}
+                  min={-0.1}
                   step={0.1}
-                  onValueChange={value => setModelSettings({ ...modelSettings, temperature: value[0] })}
+                  onValueChange={value =>
+                    setModelSettings({ ...modelSettings, temperature: value[0] < 0 ? undefined : value[0] })
+                  }
                 />
                 <Txt as="p" variant="ui-sm" className="text-icon3">
-                  {modelSettings?.temperature}
+                  {modelSettings?.temperature ?? 'n/a'}
                 </Txt>
               </div>
             </Entry>
@@ -67,14 +70,17 @@ export function AgentDetails({ agent }: AgentDetailsProps) {
             <Entry label="Top P">
               <div className="flex flex-row justify-between items-center gap-2">
                 <Slider
-                  onValueChange={value => setModelSettings({ ...modelSettings, topP: value[0] })}
-                  value={[modelSettings?.topP ?? 1]}
+                  onValueChange={value =>
+                    setModelSettings({ ...modelSettings, topP: value[0] < 0 ? undefined : value[0] })
+                  }
+                  value={[modelSettings?.topP ?? -0.1]}
                   max={1}
+                  min={-0.1}
                   step={0.1}
                 />
 
                 <Txt as="p" variant="ui-sm" className="text-icon3">
-                  {modelSettings?.topP}
+                  {modelSettings?.topP ?? 'n/a'}
                 </Txt>
               </div>
             </Entry>

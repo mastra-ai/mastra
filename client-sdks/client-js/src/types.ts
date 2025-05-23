@@ -177,10 +177,10 @@ export interface SaveMessageToMemoryParams {
 export type SaveMessageToMemoryResponse = MessageType[];
 
 export interface CreateMemoryThreadParams {
-  title: string;
-  metadata: Record<string, any>;
+  title?: string;
+  metadata?: Record<string, any>;
   resourceId: string;
-  threadId: string;
+  threadId?: string;
   agentId: string;
 }
 
