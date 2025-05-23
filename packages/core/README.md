@@ -47,10 +47,13 @@ const agent = new Agent({
 Workflows orchestrate complex AI tasks by combining multiple actions into a coherent sequence. They handle state management, error recovery, and can include conditional logic and parallel execution.
 
 ```typescript
-import { Workflow } from '@mastra/core';
+import { createWorkflow } from '@mastra/core/workflows';
+import z from 'zod'
 
-const workflow = new Workflow({
-  name: 'my-workflow',
+const workflow = createWorkflow({
+  id: 'my-workflow',
+  inputSchema: z.object({}),
+  outputSchema: z.object({})
   steps: [
     // Workflow steps
   ],
