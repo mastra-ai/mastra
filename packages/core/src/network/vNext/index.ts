@@ -216,7 +216,7 @@ export class NewAgentNetwork extends MastraBase {
     });
   }
 
-  async generate(
+  async loop(
     message: string,
     {
       runtimeContext,
@@ -224,279 +224,7 @@ export class NewAgentNetwork extends MastraBase {
       runtimeContext?: RuntimeContext;
     },
   ) {
-    const runId = randomUUID();
-
-    const runtimeContextToUse = runtimeContext || new RuntimeContext();
-    const agentsMap = await this.getAgents({ runtimeContext: runtimeContextToUse });
-    const workflowsMap = await this.getWorkflows({ runtimeContext: runtimeContextToUse });
-    const routingAgent = await this.getRoutingAgent({ runtimeContext: runtimeContextToUse });
-
-    const routingStep = createStep({
-      id: 'routing-step',
-      inputSchema: z.object({
-        task: z.string(),
-        resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
-        result: z.string().optional(),
-      }),
-      outputSchema: z.object({
-        task: z.string(),
-        resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
-        prompt: z.string(),
-        result: z.string(),
-        isComplete: z.boolean().optional(),
-      }),
-      execute: async ({ inputData }) => {
-        console.dir({ inputData }, { depth: null });
-        let completionResult;
-        if (inputData.resourceType !== 'none' && inputData?.result) {
-          // Check if the task is complete
-          const completionPrompt = `
-                        The ${inputData.resourceType} ${inputData.resourceId} has contributed to the task.
-                        This is the result from the agent: ${inputData.result}
-
-                        You need to evaluate that our task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. Only return true if the task is complete according to the system instructions. Pay close attention to the finalResult and completionReason.
-                        Original task: ${inputData.task}
-
-                        {
-                            "isComplete": boolean,
-                            "completionReason": string,
-                            "finalResult": string
-                        }
-                    `;
-
-          completionResult = await routingAgent.generate(completionPrompt, {
-            output: z.object({
-              isComplete: z.boolean(),
-              finalResult: z.string(),
-              completionReason: z.string(),
-            }),
-            threadId: runId,
-            resourceId: this.name,
-          });
-
-          console.log('COMPLETION RESULT', completionResult.object);
-
-          if (completionResult.object.isComplete) {
-            return {
-              task: inputData.task,
-              resourceId: '',
-              resourceType: 'none' as z.infer<typeof RESOURCE_TYPES>,
-              prompt: '',
-              result: completionResult.object.finalResult,
-              isComplete: true,
-            };
-          }
-        }
-
-        const result = await routingAgent.generate(
-          `
-                    The user has given you the following task: 
-                    ${inputData.task}
-                    ${completionResult ? `\n\n${completionResult.object.finalResult}` : ''}
-
-                    Please select the most appropriate agent to handle this task and the prompt to be sent to the agent.
-                    If you are calling the same agent again, make sure to adjust the prompt to be more specific.
-
-                    {
-                        "resourceId": string,
-                        "resourceType": "agent" | "workflow",
-                        "prompt": string,
-                        "selectionReason": string
-                    }
-                    `,
-          {
-            output: z.object({
-              resourceId: z.string(),
-              resourceType: RESOURCE_TYPES,
-              prompt: z.string(),
-              selectionReason: z.string(),
-            }),
-            threadId: runId,
-            resourceId: this.name,
-          },
-        );
-
-        console.log('RESULT', result.object);
-
-        return {
-          task: inputData.task,
-          result: '',
-          resourceId: result.object.resourceId,
-          resourceType: result.object.resourceType,
-          prompt: result.object.prompt,
-          isComplete: false,
-        };
-      },
-    });
-
-    const agentStep = createStep({
-      id: 'agent-step',
-      inputSchema: z.object({
-        task: z.string(),
-        resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
-        prompt: z.string(),
-        result: z.string(),
-        isComplete: z.boolean().optional(),
-      }),
-      outputSchema: z.object({
-        task: z.string(),
-        resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
-        result: z.string(),
-        isComplete: z.boolean().optional(),
-      }),
-      execute: async ({ inputData }) => {
-        const agentId = inputData.resourceId;
-        console.log('calling agent', agentId);
-
-        const agent = agentsMap[inputData.resourceId];
-
-        if (!agent) {
-          throw new Error(`Agent ${agentId} not found`);
-        }
-
-        const result = await agent.generate(inputData.prompt, {
-          threadId: runId,
-          resourceId: this.name,
-        });
-
-        return {
-          task: inputData.task,
-          resourceId: inputData.resourceId,
-          resourceType: inputData.resourceType,
-          result: result.text,
-          isComplete: false,
-        };
-      },
-    });
-
-    const workflowStep = createStep({
-      id: 'workflow-step',
-      inputSchema: z.object({
-        task: z.string(),
-        resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
-        prompt: z.string(),
-        result: z.string(),
-        isComplete: z.boolean().optional(),
-      }),
-      outputSchema: z.object({
-        task: z.string(),
-        resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
-        result: z.string(),
-        isComplete: z.boolean().optional(),
-      }),
-      execute: async ({ inputData }) => {
-        console.log('calling workflow', inputData.resourceId, inputData.prompt);
-        const wf = workflowsMap[inputData.resourceId];
-
-        if (!wf) {
-          throw new Error(`Workflow ${inputData.resourceId} not found`);
-        }
-
-        let input;
-        try {
-          input = JSON.parse(inputData.prompt);
-        } catch (e: unknown) {
-          console.error(e);
-          throw new Error(`Invalid task input: ${inputData.task}`);
-        }
-
-        const run = wf.createRun();
-        const resp = await run.start({
-          inputData: input,
-        });
-
-        if (resp.status === 'failed') {
-          throw resp.error;
-        }
-
-        if (resp.status === 'suspended') {
-          throw new Error('Workflow suspended');
-        }
-
-        return {
-          result: JSON.stringify(resp?.result) || '',
-          task: inputData.task,
-          resourceId: inputData.resourceId,
-          resourceType: inputData.resourceType,
-          isComplete: false,
-        };
-      },
-    });
-
-    const finishStep = createStep({
-      id: 'finish-step',
-      inputSchema: z.object({
-        task: z.string(),
-        resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
-        prompt: z.string(),
-        result: z.string(),
-        isComplete: z.boolean().optional(),
-      }),
-      outputSchema: z.object({
-        task: z.string(),
-        result: z.string(),
-        isComplete: z.boolean(),
-      }),
-      execute: async ({ inputData }) => {
-        return {
-          task: inputData.task,
-          result: inputData.result,
-          isComplete: !!inputData.isComplete,
-        };
-      },
-    });
-
-    const networkWorkflow = createWorkflow({
-      id: 'Agent-Network-Outer-Workflow',
-      inputSchema: z.object({
-        task: z.string(),
-        resourceId: z.string(),
-        resourceType: RESOURCE_TYPES,
-        result: z.string().optional(),
-      }),
-      outputSchema: z.object({
-        result: z.string(),
-        task: z.string(),
-        isComplete: z.boolean().optional(),
-      }),
-    })
-      .then(routingStep)
-      .branch([
-        [async ({ inputData }) => !inputData.isComplete && inputData.resourceType === 'agent', agentStep],
-        [async ({ inputData }) => !inputData.isComplete && inputData.resourceType === 'workflow', workflowStep],
-        [async ({ inputData }) => inputData.isComplete, finishStep],
-      ])
-      .map({
-        task: {
-          step: [routingStep, agentStep, workflowStep],
-          path: 'task',
-        },
-        isComplete: {
-          step: [routingStep, workflowStep, finishStep],
-          path: 'isComplete',
-        },
-        result: {
-          step: [agentStep, workflowStep, finishStep],
-          path: 'result',
-        },
-        resourceId: {
-          step: [routingStep, agentStep, workflowStep],
-          path: 'resourceId',
-        },
-        resourceType: {
-          step: [routingStep, agentStep, workflowStep],
-          path: 'resourceType',
-        },
-      })
-      .commit();
-
+    const networkWorkflow = this.createWorkflow({ runtimeContext });
     const mainWorkflow = createWorkflow({
       id: 'Agent-Network-Main-Workflow',
       inputSchema: z.object({
@@ -520,6 +248,7 @@ export class NewAgentNetwork extends MastraBase {
         resourceType: 'none',
       },
     });
+    console.log('RESULT', result);
 
     if (result.status === 'failed') {
       throw result.error;
@@ -532,13 +261,10 @@ export class NewAgentNetwork extends MastraBase {
     return result.result;
   }
 
-  async execute(message: string, { runtimeContext }: { runtimeContext?: RuntimeContext }) {
+  createWorkflow({ runtimeContext }: { runtimeContext?: RuntimeContext }) {
     const runId = randomUUID();
 
     const runtimeContextToUse = runtimeContext || new RuntimeContext();
-    const agentsMap = await this.getAgents({ runtimeContext: runtimeContextToUse });
-    const workflowsMap = await this.getWorkflows({ runtimeContext: runtimeContextToUse });
-    const routingAgent = await this.getRoutingAgent({ runtimeContext: runtimeContextToUse });
 
     const routingStep = createStep({
       id: 'routing-step',
@@ -557,6 +283,8 @@ export class NewAgentNetwork extends MastraBase {
         isComplete: z.boolean().optional(),
       }),
       execute: async ({ inputData }) => {
+        const routingAgent = await this.getRoutingAgent({ runtimeContext: runtimeContextToUse });
+
         console.dir({ inputData }, { depth: null });
         let completionResult;
         if (inputData.resourceType !== 'none' && inputData?.result) {
@@ -599,6 +327,25 @@ export class NewAgentNetwork extends MastraBase {
           }
         }
 
+        console.log(
+          'PROMPT',
+          `
+                    The user has given you the following task: 
+                    ${inputData.task}
+                    ${completionResult ? `\n\n${completionResult.object.finalResult}` : ''}
+
+                    Please select the most appropriate agent to handle this task and the prompt to be sent to the agent.
+                    If you are calling the same agent again, make sure to adjust the prompt to be more specific.
+
+                    {
+                        "resourceId": string,
+                        "resourceType": "agent" | "workflow",
+                        "prompt": string,
+                        "selectionReason": string
+                    }
+                    `,
+        );
+
         const result = await routingAgent.generate(
           `
                     The user has given you the following task: 
@@ -626,8 +373,6 @@ export class NewAgentNetwork extends MastraBase {
             resourceId: this.name,
           },
         );
-
-        console.log('RESULT', result.object);
 
         return {
           task: inputData.task,
@@ -658,6 +403,7 @@ export class NewAgentNetwork extends MastraBase {
         isComplete: z.boolean().optional(),
       }),
       execute: async ({ inputData }) => {
+        const agentsMap = await this.getAgents({ runtimeContext: runtimeContextToUse });
         const agentId = inputData.resourceId;
         console.log('calling agent', agentId);
 
@@ -700,6 +446,7 @@ export class NewAgentNetwork extends MastraBase {
         isComplete: z.boolean().optional(),
       }),
       execute: async ({ inputData }) => {
+        const workflowsMap = await this.getWorkflows({ runtimeContext: runtimeContextToUse });
         console.log('calling workflow', inputData.resourceId, inputData.prompt);
         const wf = workflowsMap[inputData.resourceId];
 
@@ -771,8 +518,11 @@ export class NewAgentNetwork extends MastraBase {
         result: z.string().optional(),
       }),
       outputSchema: z.object({
-        result: z.string(),
         task: z.string(),
+        resourceId: z.string(),
+        resourceType: RESOURCE_TYPES,
+        prompt: z.string(),
+        result: z.string(),
         isComplete: z.boolean().optional(),
       }),
     })
@@ -780,6 +530,7 @@ export class NewAgentNetwork extends MastraBase {
       .branch([
         [async ({ inputData }) => !inputData.isComplete && inputData.resourceType === 'agent', agentStep],
         [async ({ inputData }) => !inputData.isComplete && inputData.resourceType === 'workflow', workflowStep],
+        [async ({ inputData }) => inputData.isComplete, finishStep],
       ])
       .map({
         task: {
@@ -787,7 +538,7 @@ export class NewAgentNetwork extends MastraBase {
           path: 'task',
         },
         isComplete: {
-          step: [routingStep, workflowStep, finishStep],
+          step: [agentStep, workflowStep, finishStep],
           path: 'isComplete',
         },
         result: {
@@ -805,6 +556,11 @@ export class NewAgentNetwork extends MastraBase {
       })
       .commit();
 
+    return networkWorkflow;
+  }
+
+  async generate(message: string, { runtimeContext }: { runtimeContext?: RuntimeContext }) {
+    const networkWorkflow = this.createWorkflow({ runtimeContext });
     const run = networkWorkflow.createRun();
 
     const result = await run.start({
@@ -823,6 +579,11 @@ export class NewAgentNetwork extends MastraBase {
       throw new Error('Workflow suspended');
     }
 
-    return result.result;
+    return {
+      task: result.result.task,
+      result: result.result.result,
+      resourceId: result.result.resourceId,
+      resourceType: result.result.resourceType,
+    };
   }
 }

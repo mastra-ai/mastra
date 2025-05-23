@@ -134,7 +134,7 @@ class MockMemory extends MastraMemory {
 }
 
 describe('NewAgentNetwork', () => {
-  it.skip('should create a new agent network', async () => {
+  it('should create a new agent network', async () => {
     const memory = new MockMemory({
       name: 'test-memory',
     });
@@ -206,9 +206,7 @@ describe('NewAgentNetwork', () => {
 
     const runtimeContext = new RuntimeContext();
 
-    console.log(
-      await network.generate('What are the biggest cities in France? How are they like?', { runtimeContext }),
-    );
+    console.log(await network.loop('What are the biggest cities in France? How are they like?', { runtimeContext }));
   });
 
   it.only('should create a new agent network single call', async () => {
@@ -307,7 +305,9 @@ describe('NewAgentNetwork', () => {
 
     const runtimeContext = new RuntimeContext();
 
-    console.log(await network.execute('What are the biggest cities in France? How are they like?', { runtimeContext }));
-    console.log(await network.execute('Tell me more about Paris', { runtimeContext }));
+    console.log(
+      await network.generate('What are the biggest cities in France? How are they like?', { runtimeContext }),
+    );
+    console.log(await network.generate('Tell me more about Paris', { runtimeContext }));
   });
 }, 120e3);
