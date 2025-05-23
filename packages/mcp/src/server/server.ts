@@ -354,7 +354,12 @@ export class MCPServer extends MCPServerBase {
     const allConvertedTools = { ...definedConvertedTools, ...agentDerivedTools, ...workflowDerivedTools };
 
     const finalToolCount = Object.keys(allConvertedTools).length;
-    this.logger.info(`Total tools registered (defined + agents + workflows): ${finalToolCount}`);
+    const definedCount = Object.keys(definedConvertedTools).length;
+    const fromAgentsCount = Object.keys(agentDerivedTools).length;
+    const fromWorkflowsCount = Object.keys(workflowDerivedTools).length;
+    this.logger.info(
+      `${finalToolCount} total tools registered (${definedCount} defined + ${fromAgentsCount} agents + ${fromWorkflowsCount} workflows)`,
+    );
 
     return allConvertedTools;
   }

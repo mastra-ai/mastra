@@ -365,10 +365,10 @@ const server = new MCPServer({
 });
 
 // To start the server (example using stdio):
-// server.startStdio().catch(console.error);
+server.startStdio().catch(console.error);
 
 // An MCP client could now connect and see a tool named 'run_weatherWorkflow'.
-// Calling it with { "message": "Hello from MCP" } would run the workflow.
+// Calling it with { "city": "Paris" } would run the workflow.
 ```
 
 This mechanism provides a powerful way to make complex, multi-step processes (encapsulated as Workflows) available as simple, callable tools in the broader MCP ecosystem.
