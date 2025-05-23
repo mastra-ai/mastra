@@ -1,0 +1,5 @@
+---
+'@mastra/core': patch
+---
+
+Return payload data, start time, end time, resume time and suspend time for each step in workflow state
