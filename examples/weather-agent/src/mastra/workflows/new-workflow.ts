@@ -193,7 +193,7 @@ const weatherStepFromAgent = createStep(weatherReporterAgent);
 const weatherWorkflow2 = createWorkflow({
   id: 'weather-workflow-with-tool-and-agent',
   inputSchema: z.object({
-    city: z.string().describe('The city to get the weather for'),
+    location: z.string().describe('The city to get the weather for'),
   }),
   outputSchema: z.object({
     text: z.string(),

@@ -521,6 +521,29 @@ export class Workflow<
       return this as unknown as Workflow<TSteps, TWorkflowId, TInput, TOutput, any>;
     }
 
+    const newMappingConfig: Record<string, any> = Object.entries(mappingConfig).reduce(
+      (a, [key, mapping]) => {
+        const m: any = mapping;
+        if (m.value !== undefined) {
+          a[key] = m;
+        } else if (m.fn !== undefined) {
+          a[key] = {
+            fn: m.fn.toString(),
+            schema: m.schema,
+          };
+        } else if (m.runtimeContextPath) {
+          a[key] = {
+            runtimeContextPath: m.runtimeContextPath,
+            schema: m.schema,
+          };
+        } else {
+          a[key] = m;
+        }
+        return a;
+      },
+      {} as Record<string, any>,
+    );
+
     const mappingStep: any = createStep({
       id: `mapping_${randomUUID()}`,
       inputSchema: z.object({}),
@@ -603,7 +626,7 @@ export class Workflow<
       type: 'step',
       step: {
         id: mappingStep.id,
-        mapConfig: JSON.stringify(mappingConfig, null, 2),
+        mapConfig: JSON.stringify(newMappingConfig, null, 2),
       },
     });
     return this as unknown as Workflow<TSteps, TWorkflowId, TInput, TOutput, MappedOutputSchema>;
@@ -902,7 +925,7 @@ export class Workflow<
   }) {
     const storage = this.#mastra?.getStorage();
     if (!storage) {
-      this.logger.debug('Cannot get workflow runs. Mastra engine is not initialized');
+      this.logger.debug('Cannot get workflow runs. Mastra storage is not initialized');
       return { runs: [], total: 0 };
     }
 
@@ -912,8 +935,11 @@ export class Workflow<
   async getWorkflowRunById(runId: string) {
     const storage = this.#mastra?.getStorage();
     if (!storage) {
-      this.logger.debug('Cannot get workflow runs. Mastra engine is not initialized');
-      return null;
+      this.logger.debug('Cannot get workflow runs from storage. Mastra storage is not initialized');
+      //returning in memory run if no storage is initialized
+      return this.#runs.get(runId)
+        ? ({ ...this.#runs.get(runId), workflowName: this.id } as unknown as WorkflowRun)
+        : null;
     }
     const run = await storage.getWorkflowRunById({ runId, workflowName: this.id });
 

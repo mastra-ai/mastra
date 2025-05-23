@@ -17,7 +17,7 @@ export const weatherTool = createTool({
   id: 'get-weather',
   description: 'Get current weather for a location',
   inputSchema: z.object({
-    city: z.string().describe('City name'),
+    location: z.string().describe('City name'),
   }),
   outputSchema: z.object({
     temperature: z.number(),
