@@ -42,6 +42,7 @@ export interface AgentConfig<
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
 > {
   name: TAgentId;
+  description?: string;
   instructions: DynamicArgument<string>;
   model: DynamicArgument<MastraLanguageModel>;
   tools?: DynamicArgument<TTools>;

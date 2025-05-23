@@ -1,44 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { MCPServer, MCPServerResources } from '@mastra/mcp';
 import { z } from 'zod';
-
-import type { MCPServerResourceContent, Resource, ResourceTemplate } from '@mastra/mcp'; // Or relative path
-
-const myResources: Resource[] = [{ uri: 'file://data/123.txt', name: 'Data File', mimeType: 'text/plain' }];
-
-const myResourceContents: Record<string, MCPServerResourceContent> = {
-  'file://data.txt/123': { text: 'This is the content of the data file.' },
-};
-
-const myResourceTemplates: ResourceTemplate[] = [
-  {
-    uriTemplate: 'file://data/{id}',
-    name: 'Data File',
-    description: 'A file containing data.',
-    mimeType: 'text/plain',
-  },
-];
-
-const myResourceHandlers: MCPServerResources = {
-  listResources: async () => myResources,
-  getResourceContent: async ({ uri }) => {
-    if (myResourceContents[uri]) {
-      return myResourceContents[uri];
-    }
-    throw new Error(`Resource content not found for ${uri}`);
-  },
-  resourceTemplates: async () => myResourceTemplates,
-};
-
-const serverWithResources = new MCPServer({
-  name: 'Resourceful Server',
-  version: '1.0.0',
-  tools: {
-    /* ... your tools ... */
-  },
-  resources: myResourceHandlers,
-});
-
+import { chefAgent } from '../agents';
 // Resources implementation
 const weatherResources: MCPServerResources = {
   listResources: async () => {
@@ -170,6 +133,7 @@ export const myMcpServer = new MCPServer({
 export const myMcpServerTwo = new MCPServer({
   name: 'My Utility MCP Server',
   version: '1.0.0',
+  agents: { chefAgent },
   resources: weatherResources,
   tools: {
     stringUtils: createTool({
