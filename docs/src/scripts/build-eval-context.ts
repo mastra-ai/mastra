@@ -281,7 +281,11 @@ async function generateSectionFiles(sourceDir: string) {
   }
 }
 
-const docsDir = process.argv[2] || "."; // Expect project root as argument
+const docsDir = path.resolve(process.argv[2] || "."); // Expect project root as argument
+if (!docsDir.startsWith(process.cwd())) {
+  console.error("Error: Provided path must be within the project directory");
+  process.exit(1);
+}
 console.log(`Using project root: ${path.resolve(docsDir)}`);
 
 generateSectionFiles(docsDir).catch((error) => {
