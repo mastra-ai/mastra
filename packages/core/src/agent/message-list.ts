@@ -91,6 +91,9 @@ export class MessageList {
     v1: () => convertToV1Messages(this.messages),
     ui: () => this.messages.map(MessageList.toUIMessage),
     core: () => convertToCoreMessages(this.all.ui()),
+    prompt: () => {
+      return [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat(), ...this.all.core()];
+    },
   };
   private remembered = {
     mastra: () => this.messages.filter(m => this.memoryMessages.has(m)),
@@ -119,7 +122,8 @@ export class MessageList {
     }
     return this.systemMessages;
   }
-  public addSystem(messages: CoreSystemMessage | CoreSystemMessage[] | string | string[], tag?: string) {
+  public addSystem(messages: CoreSystemMessage | CoreSystemMessage[] | string | string[] | null, tag?: string) {
+    if (!messages) return this;
     for (const message of Array.isArray(messages) ? messages : [messages]) {
       this.addOneSystem(message, tag);
     }

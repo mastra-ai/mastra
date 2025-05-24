@@ -922,7 +922,7 @@ export class Agent<
         if (!memory || (!threadId && !resourceId)) {
           messageList.add(messages, 'user');
           return {
-            messageObjects: messageList.get.all.core(),
+            messageObjects: messageList.get.all.prompt(),
             convertedTools,
             messageList,
           };
@@ -1002,9 +1002,12 @@ export class Agent<
         });
 
         const processedList = new MessageList({ threadId, resourceId })
+          .addSystem(instructions || `${this.instructions}.`)
+          .addSystem(memorySystemMessage)
+          .add(context || [], 'user')
           .add(processedMemoryMessages, 'memory')
           .add(messageList.get.input.mastra(), 'user')
-          .get.all.core();
+          .get.all.prompt();
 
         return {
           convertedTools,

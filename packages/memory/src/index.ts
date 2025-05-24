@@ -57,7 +57,7 @@ export class Memory extends MastraMemory {
     threadConfig,
   }: StorageGetMessagesArg & {
     threadConfig?: MemoryConfig;
-  }): Promise<{ messages: (MastraMessageV2 | MastraMessageV1)[]; uiMessages: UIMessage[] }> {
+  }): Promise<{ messages: MastraMessageV1[]; uiMessages: UIMessage[] }> {
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId);
 
     const vectorResults: {
@@ -142,11 +142,13 @@ export class Memory extends MastraMemory {
 
     const orderedByDate = rawMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
+    const list = new MessageList({ threadId, resourceId }).add(orderedByDate, 'memory');
     return {
-      messages: orderedByDate,
+      get messages() {
+        return list.get.all.v1();
+      },
       get uiMessages() {
-        // for compatibility with our published public API
-        return new MessageList({ threadId, resourceId }).add(orderedByDate, 'memory').get.all.ui();
+        return list.get.all.ui();
       },
     };
   }
@@ -328,11 +330,15 @@ export class Memory extends MastraMemory {
     memoryConfig?: MemoryConfig;
   }): Promise<MastraMessageV2[]> {
     await this.storage.init();
-    // First save working memory from any messages
-    await this.saveWorkingMemory(messages);
-
     // Then strip working memory tags from all messages
-    const updatedMessages = this.updateMessagesToHideWorkingMemory(messages);
+    const updatedMessages = messages
+      .map(m => {
+        if (MessageList.isMastraMessageV1(m)) {
+          return this.updateMessageToHideWorkingMemory(m);
+        }
+        return this.updateMessageToHideWorkingMemoryV2(m);
+      })
+      .filter((m): m is MastraMessageV1 | MastraMessageV2 => Boolean(m));
 
     const config = this.getMergedThreadConfig(memoryConfig);
 
@@ -403,48 +409,77 @@ export class Memory extends MastraMemory {
 
     return result;
   }
-
-  protected updateMessagesToHideWorkingMemory(messages: MastraMessageV2[]): MastraMessageV2[] {
+  protected updateMessageToHideWorkingMemory(message: MastraMessageV1): MastraMessageV1 | null {
+    console.log(`updateMessageToHideWorkingMemory`);
     const workingMemoryRegex = /<working_memory>([^]*?)<\/working_memory>/g;
-    const updatedMessages: MastraMessageV2[] = [];
 
-    for (const message of messages) {
-      const newMessage = { ...message, content: { ...message.content } }; // Deep copy message and content
-
-      if (newMessage.content.content && typeof newMessage.content.content === 'string') {
-        newMessage.content.content = newMessage.content.content.replace(workingMemoryRegex, '').trim();
-      }
-
-      if (newMessage.content.parts) {
-        const newParts = newMessage.content.parts
-          .filter(part => {
-            if (part.type === 'tool-invocation') {
-              return part.toolInvocation.toolName !== 'updateWorkingMemory';
-            }
-            return true;
-          })
-          .map(part => {
-            if (part.type === 'text') {
-              return {
-                ...part,
-                text: part.text.replace(workingMemoryRegex, '').trim(),
-              };
-            }
-            return part;
-          });
-
-        // If all parts were filtered out (e.g., only contained updateWorkingMemory tool calls),
-        // and there's no primary string content, we might skip this message or handle it.
-        // For now, if parts become empty and there was no string content, it might result in an empty message.
-        // This matches the previous behavior of `continue` if filteredContent.length === 0.
-        if (newParts.length === 0 && !newMessage.content.content) {
-          continue;
+    if (typeof message?.content === `string`) {
+      return {
+        ...message,
+        content: message.content.replace(workingMemoryRegex, ``).trim(),
+      };
+    } else if (Array.isArray(message?.content)) {
+      // Filter out updateWorkingMemory tool-call/result content items
+      const filteredContent = message.content.filter(
+        content =>
+          (content.type !== 'tool-call' && content.type !== 'tool-result') ||
+          content.toolName !== 'updateWorkingMemory',
+      );
+      console.log({ filteredContent });
+      // if (filteredContent.length === 0) {
+      //   // If nothing left, skip this message
+      //   return message;
+      // }
+      const newContent = filteredContent.map(content => {
+        if (content.type === 'text') {
+          return {
+            ...content,
+            text: content.text.replace(workingMemoryRegex, '').trim(),
+          };
         }
-        newMessage.content.parts = newParts;
-      }
-      updatedMessages.push(newMessage);
+        return { ...content };
+      }) as MastraMessageV1['content'];
+      if (!newContent.length) return null;
+      return { ...message, content: newContent };
+    } else {
+      return { ...message };
     }
-    return updatedMessages;
+  }
+  protected updateMessageToHideWorkingMemoryV2(message: MastraMessageV2): MastraMessageV2 | null {
+    console.log(`updateMessageToHideWorkingMemoryV2`);
+    const workingMemoryRegex = /<working_memory>([^]*?)<\/working_memory>/g;
+
+    const newMessage = { ...message, content: { ...message.content } }; // Deep copy message and content
+
+    if (newMessage.content.content && typeof newMessage.content.content === 'string') {
+      newMessage.content.content = newMessage.content.content.replace(workingMemoryRegex, '').trim();
+    }
+
+    if (newMessage.content.parts) {
+      newMessage.content.parts = newMessage.content.parts
+        .filter(part => {
+          if (part.type === 'tool-invocation') {
+            return part.toolInvocation.toolName !== 'updateWorkingMemory';
+          }
+          return true;
+        })
+        .map(part => {
+          if (part.type === 'text') {
+            return {
+              ...part,
+              text: part.text.replace(workingMemoryRegex, '').trim(),
+            };
+          }
+          return part;
+        });
+
+      // If all parts were filtered out (e.g., only contained updateWorkingMemory tool calls) we need to skip the whole message, it was only working memory tool calls/results
+      if (newMessage.content.parts.length === 0) {
+        return null;
+      }
+    }
+
+    return newMessage;
   }
 
   protected parseWorkingMemory(text: string): string | null {
@@ -476,48 +511,6 @@ export class Memory extends MastraMemory {
       this.defaultWorkingMemoryTemplate;
 
     return memory.trim();
-  }
-
-  private async saveWorkingMemory(messages: MastraMessageV2[]) {
-    const latestMessage = messages[messages.length - 1];
-
-    if (!latestMessage || !this.threadConfig.workingMemory?.enabled) {
-      return;
-    }
-
-    let latestContent: string | null = null;
-    if (latestMessage?.content?.content && typeof latestMessage.content.content === 'string') {
-      latestContent = latestMessage.content.content;
-    } else if (latestMessage?.content?.parts) {
-      latestContent = latestMessage.content.parts
-        .filter(part => part.type === 'text')
-        .map(part => (part as TextPart).text)
-        .join('\n');
-    }
-
-    const threadId = latestMessage?.threadId;
-    if (!latestContent || !threadId) {
-      return;
-    }
-
-    const newMemory = this.parseWorkingMemory(latestContent);
-    if (!newMemory) {
-      return;
-    }
-
-    await this.storage.init();
-    const thread = await this.storage.getThreadById({ threadId });
-    if (!thread) return;
-
-    // Update thread metadata with new working memory
-    await this.storage.updateThread({
-      id: thread.id,
-      title: thread.title || '',
-      metadata: deepMerge(thread.metadata || {}, {
-        workingMemory: newMemory,
-      }),
-    });
-    return newMemory;
   }
 
   public async getSystemMessage({
