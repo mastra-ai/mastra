@@ -1,4 +1,10 @@
-const meta = {
+import type { MetaRecord } from "nextra";
+
+const meta: MetaRecord = {
+  "###": {
+    type: "separator",
+    title: "RAG",
+  },
   chunking: {
     title: "Chunking",
   },
