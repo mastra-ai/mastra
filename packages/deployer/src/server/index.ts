@@ -24,6 +24,7 @@ import {
   setAgentInstructionsHandler,
   streamGenerateHandler,
 } from './handlers/agents';
+import { getAGUIHandler } from './handlers/agui';
 import { authorizationMiddleware, authenticationMiddleware } from './handlers/auth';
 import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client';
 import { errorHandler } from './handlers/error';
@@ -255,6 +256,31 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
   if (server?.build?.apiReqLogs) {
     app.use(logger());
   }
+
+  /**
+   * CopilotKit
+   */
+  app.post(
+    '/api/copilotkit',
+    describeRoute({
+      description: 'Get AGUI',
+      tags: ['copilotkit'],
+      parameters: [
+        {
+          name: 'resourceId',
+          in: 'query',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'AGUI',
+        },
+      },
+    }),
+    getAGUIHandler,
+  );
 
   /**
    * A2A
