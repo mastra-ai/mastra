@@ -1,5 +1,4 @@
 import { createTool } from '@mastra/core/tools';
-import type { EmbeddingModel } from 'ai';
 import { z } from 'zod';
 
 import { rerank } from '../rerank';
@@ -7,37 +6,33 @@ import type { RerankConfig } from '../rerank';
 import { vectorQuerySearch, defaultVectorQueryDescription, filterSchema, outputSchema, baseSchema } from '../utils';
 import type { RagTool } from '../utils';
 import { convertToSources } from '../utils/convert-sources';
+import type { VectorQueryToolOptions } from './types';
 
-export const createVectorQueryTool = ({
-  vectorStoreName,
-  indexName,
-  model,
-  enableFilter = false,
-  includeVectors = false,
-  includeSources = true,
-  reranker,
-  id,
-  description,
-}: {
-  vectorStoreName: string;
-  indexName: string;
-  model: EmbeddingModel<string>;
-  enableFilter?: boolean;
-  includeVectors?: boolean;
-  includeSources?: boolean;
-  reranker?: RerankConfig;
-  id?: string;
-  description?: string;
-}) => {
-  const toolId = id || `VectorQuery ${vectorStoreName} ${indexName} Tool`;
+export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
+  const { model, id, description } = options;
+  const toolId = id || `VectorQuery ${options.vectorStoreName} ${options.indexName} Tool`;
   const toolDescription = description || defaultVectorQueryDescription();
-  const inputSchema = enableFilter ? filterSchema : z.object(baseSchema).passthrough();
+  const inputSchema = options.enableFilter ? filterSchema : z.object(baseSchema).passthrough();
+
   return createTool({
     id: toolId,
+    description: toolDescription,
     inputSchema,
     outputSchema,
-    description: toolDescription,
-    execute: async ({ context: { queryText, topK, filter }, mastra }) => {
+    execute: async ({ context, mastra, runtimeContext }) => {
+      const indexName: string = runtimeContext.get('indexName') ?? options.indexName;
+      const vectorStoreName: string = runtimeContext.get('vectorStoreName') ?? options.vectorStoreName;
+      const includeVectors: boolean = runtimeContext.get('includeVectors') ?? options.includeVectors ?? false;
+      const includeSources: boolean = runtimeContext.get('includeSources') ?? options.includeSources ?? true;
+      const reranker: RerankConfig = runtimeContext.get('reranker') ?? options.reranker;
+      if (!indexName) throw new Error(`indexName is required, got: ${indexName}`);
+      if (!vectorStoreName) throw new Error(`vectorStoreName is required, got: ${vectorStoreName}`);
+
+      const topK: number = runtimeContext.get('topK') ?? context.topK ?? 10;
+      const filter: Record<string, any> = runtimeContext.get('filter') ?? context.filter;
+      const queryText = context.queryText;
+      const enableFilter = !!runtimeContext.get('filter') || (options.enableFilter ?? false);
+
       const logger = mastra?.getLogger();
       if (!logger) {
         console.warn(

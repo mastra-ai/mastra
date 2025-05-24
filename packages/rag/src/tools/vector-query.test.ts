@@ -1,4 +1,6 @@
+import { RuntimeContext } from '@mastra/core/runtime-context';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { rerank } from '../rerank';
 import { vectorQuerySearch } from '../utils';
 import { createVectorQueryTool } from './vector-query';
 
@@ -6,7 +8,19 @@ vi.mock('../utils', async importOriginal => {
   const actual: any = await importOriginal();
   return {
     ...actual,
-    vectorQuerySearch: vi.fn().mockResolvedValue({ results: [] }),
+    vectorQuerySearch: vi.fn().mockResolvedValue({ results: [{ metadata: { text: 'foo' }, vector: [1, 2, 3] }] }),
+  };
+});
+
+vi.mock('../rerank', async importOriginal => {
+  const actual: any = await importOriginal();
+  return {
+    ...actual,
+    rerank: vi
+      .fn()
+      .mockResolvedValue([
+        { result: { id: '1', metadata: { text: 'bar' }, score: 1, details: { semantic: 1, vector: 1, position: 1 } } },
+      ]),
   };
 });
 
@@ -17,9 +31,12 @@ describe('createVectorQueryTool', () => {
       testStore: {
         // Mock vector store methods
       },
+      anotherStore: {
+        // Mock vector store methods
+      },
     },
-    getVector: vi.fn(() => ({
-      testStore: {
+    getVector: vi.fn(storeName => ({
+      [storeName]: {
         // Mock vector store methods
       },
     })),
@@ -154,6 +171,8 @@ describe('createVectorQueryTool', () => {
 
   describe('execute function', () => {
     it('should not process filter when enableFilter is false', async () => {
+      const runtimeContext = new RuntimeContext();
+
       // Create tool with enableFilter set to false
       const tool = createVectorQueryTool({
         vectorStoreName: 'testStore',
@@ -169,7 +188,7 @@ describe('createVectorQueryTool', () => {
           topK: 5,
         },
         mastra: mockMastra as any,
-        runtimeContext: {} as any,
+        runtimeContext,
       });
 
       // Check that vectorQuerySearch was called with undefined queryFilter
@@ -181,6 +200,7 @@ describe('createVectorQueryTool', () => {
     });
 
     it('should process filter when enableFilter is true and filter is provided', async () => {
+      const runtimeContext = new RuntimeContext();
       // Create tool with enableFilter set to true
       const tool = createVectorQueryTool({
         vectorStoreName: 'testStore',
@@ -199,7 +219,7 @@ describe('createVectorQueryTool', () => {
           filter: filterJson,
         },
         mastra: mockMastra as any,
-        runtimeContext: {} as any,
+        runtimeContext,
       });
 
       // Check that vectorQuerySearch was called with the parsed filter
@@ -211,6 +231,7 @@ describe('createVectorQueryTool', () => {
     });
 
     it('should handle string filters correctly', async () => {
+      const runtimeContext = new RuntimeContext();
       // Create tool with enableFilter set to true
       const tool = createVectorQueryTool({
         vectorStoreName: 'testStore',
@@ -229,7 +250,7 @@ describe('createVectorQueryTool', () => {
           filter: stringFilter,
         },
         mastra: mockMastra as any,
-        runtimeContext: {} as any,
+        runtimeContext,
       });
 
       // Since this is not a valid filter, it should be ignored
@@ -238,6 +259,71 @@ describe('createVectorQueryTool', () => {
           queryFilter: undefined,
         }),
       );
+    });
+  });
+
+  describe('runtimeContext', () => {
+    it('calls vectorQuerySearch with runtimeContext params', async () => {
+      const tool = createVectorQueryTool({
+        id: 'test',
+        model: mockModel,
+        indexName: 'testIndex',
+        vectorStoreName: 'testStore',
+      });
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('indexName', 'anotherIndex');
+      runtimeContext.set('vectorStoreName', 'anotherStore');
+      runtimeContext.set('topK', 3);
+      runtimeContext.set('filter', { foo: 'bar' });
+      runtimeContext.set('includeVectors', true);
+      runtimeContext.set('includeSources', false);
+      const result = await tool.execute({
+        context: { queryText: 'foo', topK: 6 },
+        mastra: mockMastra as any,
+        runtimeContext,
+      });
+      expect(result.relevantContext.length).toBeGreaterThan(0);
+      expect(result.sources).toEqual([]); // includeSources false
+      expect(vectorQuerySearch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          indexName: 'anotherIndex',
+          vectorStore: {
+            anotherStore: {},
+          },
+          queryText: 'foo',
+          model: mockModel,
+          queryFilter: { foo: 'bar' },
+          topK: 3,
+          includeVectors: true,
+        }),
+      );
+    });
+
+    it('handles reranker from runtimeContext', async () => {
+      const tool = createVectorQueryTool({
+        id: 'test',
+        model: mockModel,
+        indexName: 'testIndex',
+        vectorStoreName: 'testStore',
+      });
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('indexName', 'testIndex');
+      runtimeContext.set('vectorStoreName', 'testStore');
+      runtimeContext.set('reranker', { model: 'reranker-model', options: { topK: 1 } });
+      // Mock rerank
+      vi.mocked(rerank).mockResolvedValue([
+        {
+          result: { id: '1', metadata: { text: 'bar' }, score: 1 },
+          score: 1,
+          details: { semantic: 1, vector: 1, position: 1 },
+        },
+      ]);
+      const result = await tool.execute({
+        context: { queryText: 'foo', topK: 1 },
+        mastra: mockMastra as any,
+        runtimeContext,
+      });
+      expect(result.relevantContext[0]).toEqual({ text: 'bar' });
     });
   });
 });

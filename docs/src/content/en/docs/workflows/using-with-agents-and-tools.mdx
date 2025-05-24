@@ -331,3 +331,47 @@ const response = await activityPlannerAgent.generate("What activities do you rec
 console.log("\nAgent response:");
 console.log(response.text);
 ```
+
+## Exposing Workflows as Tools via MCPServer
+
+Beyond using workflows within agents, your Mastra `Workflow` instances can themselves be exposed as tools to any MCP-compatible client using Mastra's `MCPServer`.
+This allows other AI models or MCP clients to initiate and run your Mastra Workflows as if they were standard tools.
+
+When a `Workflow` instance is provided to an `MCPServer` configuration:
+
+- It is automatically converted into a callable tool.
+- The tool is named `run_<workflowKey>`, where `<workflowKey>` is the identifier you used when adding the workflow to the `MCPServer`'s `workflows` configuration (e.g., `workflows: { myWorkflow: myWorkflowInstance }` would create a tool `run_myWorkflow`).
+- The workflow's `description` property **must be a non-empty string** and is used to generate the tool's description. If the description is missing or empty, `MCPServer` will throw an error during initialization.
+- The `workflow.inputSchema` is used as the input schema for the generated tool.
+- Executing the tool triggers `workflow.createRun().start({ inputData: <tool_input> })`, passing the tool's input as `inputData` to the workflow run.
+
+**Example `MCPServer` Configuration with a Workflow:**
+
+```typescript filename="src/mastra/mcp-server-with-workflow.ts"
+import { MCPServer } from "@mastra/mcp";
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+import { weatherWorkflow } from "./workflows";
+
+const server = new MCPServer({
+  name: "MyServerWithWorkflowTool",
+  version: "1.0.0",
+  tools: {
+    // You can still have other defined tools
+  },
+  workflows: {
+    weatherWorkflow, // Exposes 'run_weatherWorkflow' tool
+  },
+});
+
+// To start the server (example using stdio):
+server.startStdio().catch(console.error);
+
+// An MCP client could now connect and see a tool named 'run_weatherWorkflow'.
+// Calling it with { "city": "Paris" } would run the workflow.
+```
+
+This mechanism provides a powerful way to make complex, multi-step processes (encapsulated as Workflows) available as simple, callable tools in the broader MCP ecosystem.
+
+For more general details on `MCPServer` and its capabilities, including exposing Agents, refer to the [MCPServer reference documentation](/reference/tools/mcp-server).
+For more general details on connecting to your `MCPServer` using the `MCPClient`, refer to the [MCPClient reference documentation](/reference/tools/mcp-client).

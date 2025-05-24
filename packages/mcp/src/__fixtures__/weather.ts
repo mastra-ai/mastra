@@ -1,15 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { createServer } from 'http';
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-  ListResourcesRequestSchema,
-  ReadResourceRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
+import { createTool } from '@mastra/core';
+import type { Resource, ResourceTemplate } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
+import { MCPServer } from '../server/server';
+import type { MCPServerResources, MCPServerResourceContent } from '../server/server';
 
 const getWeather = async (location: string) => {
   // Return mock data for testing
@@ -24,29 +19,20 @@ const getWeather = async (location: string) => {
   };
 };
 
-const server = new Server(
-  {
-    name: 'Weather Server',
-    version: '1.0.0',
-  },
-  {
-    capabilities: {
-      tools: {},
-      resources: {},
-    },
-  },
-);
+const serverId = 'weather-server-fixture';
+console.log(`[${serverId}] Initializing`);
 
 const weatherInputSchema = z.object({
   location: z.string().describe('City name'),
 });
 
-const weatherTool = {
-  name: 'getWeather',
+const weatherToolDefinition = createTool({
+  id: 'getWeather',
   description: 'Get current weather for a location',
-  execute: async (args: z.infer<typeof weatherInputSchema>) => {
+  inputSchema: weatherInputSchema,
+  execute: async ({ context }) => {
     try {
-      const weatherData = await getWeather(args.location);
+      const weatherData = await getWeather(context.location);
       return {
         content: [
           {
@@ -57,43 +43,21 @@ const weatherTool = {
         isError: false,
       };
     } catch (error) {
-      if (error instanceof Error) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Weather fetch failed: ${error.message}`,
-            },
-          ],
-          isError: true,
-        };
-      }
+      const message = error instanceof Error ? error.message : String(error);
       return {
         content: [
           {
             type: 'text',
-            text: 'An unknown error occurred.',
+            text: `Weather fetch failed: ${message}`,
           },
         ],
         isError: true,
       };
     }
   },
-};
+});
 
-// Set up request handlers
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [
-    {
-      name: weatherTool.name,
-      description: weatherTool.description,
-      inputSchema: zodToJsonSchema(weatherInputSchema),
-    },
-  ],
-}));
-
-// Resources implementation
-const weatherResources = [
+const weatherResourceDefinitions: Resource[] = [
   {
     uri: 'weather://current',
     name: 'Current Weather Data',
@@ -114,164 +78,132 @@ const weatherResources = [
   },
 ];
 
-// List available resources
-server.setRequestHandler(ListResourcesRequestSchema, async () => ({
-  resources: weatherResources,
-}));
+const weatherResourceTemplatesDefinitions: ResourceTemplate[] = [
+  {
+    uriTemplate: 'weather://custom/{city}/{days}',
+    name: 'Custom Weather Forecast',
+    description: 'Generates a custom weather forecast for a city and number of days.',
+    mimeType: 'application/json',
+  },
+];
 
-// Read resource contents
-server.setRequestHandler(ReadResourceRequestSchema, async request => {
-  const uri = request.params.uri;
+const weatherResourceContents: Record<string, MCPServerResourceContent> = {
+  'weather://current': {
+    text: JSON.stringify({
+      location: 'San Francisco',
+      temperature: 18,
+      conditions: 'Partly Cloudy',
+      humidity: 65,
+      windSpeed: 12,
+      updated: new Date().toISOString(),
+    }),
+  },
+  'weather://forecast': {
+    text: JSON.stringify([
+      { day: 1, high: 19, low: 12, conditions: 'Sunny' },
+      { day: 2, high: 22, low: 14, conditions: 'Clear' },
+      { day: 3, high: 20, low: 13, conditions: 'Partly Cloudy' },
+      { day: 4, high: 18, low: 11, conditions: 'Rain' },
+      { day: 5, high: 17, low: 10, conditions: 'Showers' },
+    ]),
+  },
+  'weather://historical': {
+    text: JSON.stringify({
+      averageHigh: 20,
+      averageLow: 12,
+      rainDays: 8,
+      sunnyDays: 18,
+      recordHigh: 28,
+      recordLow: 7,
+    }),
+  },
+};
 
-  if (uri === 'weather://current') {
-    return {
-      contents: [
-        {
-          uri,
-          mimeType: 'application/json',
-          text: JSON.stringify({
-            location: 'San Francisco',
-            temperature: 18,
-            conditions: 'Partly Cloudy',
-            humidity: 65,
-            windSpeed: 12,
-            updated: new Date().toISOString(),
-          }),
-        },
-      ],
-    };
-  } else if (uri === 'weather://forecast') {
-    return {
-      contents: [
-        {
-          uri,
-          mimeType: 'application/json',
-          text: JSON.stringify([
-            { day: 1, high: 19, low: 12, conditions: 'Sunny' },
-            { day: 2, high: 22, low: 14, conditions: 'Clear' },
-            { day: 3, high: 20, low: 13, conditions: 'Partly Cloudy' },
-            { day: 4, high: 18, low: 11, conditions: 'Rain' },
-            { day: 5, high: 17, low: 10, conditions: 'Showers' },
-          ]),
-        },
-      ],
-    };
-  } else if (uri === 'weather://historical') {
-    return {
-      contents: [
-        {
-          uri,
-          mimeType: 'application/json',
-          text: JSON.stringify({
-            averageHigh: 20,
-            averageLow: 12,
-            rainDays: 8,
-            sunnyDays: 18,
-            recordHigh: 28,
-            recordLow: 7,
-          }),
-        },
-      ],
-    };
-  }
-
-  throw new Error(`Resource not found: ${uri}`);
-});
-
-server.setRequestHandler(CallToolRequestSchema, async request => {
-  try {
-    switch (request.params.name) {
-      case 'getWeather': {
-        const args = weatherInputSchema.parse(request.params.arguments);
-        return await weatherTool.execute(args);
-      }
-      default:
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Unknown tool: ${request.params.name}`,
-            },
-          ],
-          isError: true,
-        };
+const mcpServerResources: MCPServerResources = {
+  listResources: async () => weatherResourceDefinitions,
+  getResourceContent: async ({ uri }: { uri: string }) => {
+    if (weatherResourceContents[uri]) {
+      return weatherResourceContents[uri];
     }
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Invalid arguments: ${error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-        },
-      ],
-      isError: true,
-    };
-  }
-});
+    throw new Error(`Mock resource content not found for ${uri}`);
+  },
+  resourceTemplates: async () => weatherResourceTemplatesDefinitions,
+};
 
-// Start the server
-let transport: SSEServerTransport | undefined;
+const mcpServer = new MCPServer({
+  name: serverId,
+  version: '1.0.0',
+  tools: {
+    getWeather: weatherToolDefinition,
+  },
+  resources: mcpServerResources,
+});
 
 const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
   const url = new URL(req.url || '', `http://${req.headers.host}`);
+  const connectionLogPrefix = `[${serverId}] REQ: ${req.method} ${url.pathname}`;
+  console.log(connectionLogPrefix);
 
-  if (url.pathname === '/sse') {
-    console.log('Received SSE connection');
-    transport = new SSEServerTransport('/message', res);
-    await server.connect(transport);
-
-    server.onclose = async () => {
-      await server.close();
-      transport = undefined;
-    };
-
-    // Handle client disconnection
-    res.on('close', () => {
-      transport = undefined;
-    });
-  } else if (url.pathname === '/message') {
-    console.log('Received message');
-    if (!transport) {
-      res.writeHead(503);
-      res.end('SSE connection not established');
-      return;
-    }
-    await transport.handlePostMessage(req, res);
-  } else {
-    console.log('Unknown path:', url.pathname);
-    res.writeHead(404);
-    res.end();
-  }
+  await mcpServer.startSSE({
+    url,
+    ssePath: '/sse',
+    messagePath: '/message',
+    req,
+    res,
+  });
 });
 
-const PORT = process.env.PORT || 60808;
+const PORT = process.env.WEATHER_SERVER_PORT || 60808;
+console.log(`[${serverId}] Starting HTTP server on port ${PORT}`);
 httpServer.listen(PORT, () => {
-  console.log(`Weather server is running on SSE at http://localhost:${PORT}`);
+  console.log(`[${serverId}] Weather server is running on SSE at http://localhost:${PORT}`);
 });
+
+// --- Interval-based Notifications ---
+const NOTIFICATION_INTERVAL_MS = 1500;
+let resourceUpdateCounter = 0;
+
+const notificationInterval = setInterval(async () => {
+  // Simulate resource update for weather://current
+  resourceUpdateCounter++;
+  const newCurrentWeatherText = JSON.stringify({
+    location: 'San Francisco',
+    temperature: 18 + (resourceUpdateCounter % 5), // Vary temperature slightly
+    conditions: resourceUpdateCounter % 2 === 0 ? 'Sunny' : 'Partly Cloudy',
+    humidity: 65 + (resourceUpdateCounter % 3),
+    windSpeed: 12 + (resourceUpdateCounter % 4),
+    updated: new Date().toISOString(),
+  });
+  weatherResourceContents['weather://current'] = { text: newCurrentWeatherText };
+
+  const updatePrefix = `[${serverId}] IntervalUpdate`;
+  try {
+    await mcpServer.resources.notifyUpdated({ uri: 'weather://current' });
+  } catch (e: any) {
+    console.error(`${updatePrefix} - Error sending resourceUpdated for weather://current via MCPServer: ${e.message}`);
+  }
+
+  // Simulate resource list changed (less frequently, e.g., every 3rd interval)
+  if (resourceUpdateCounter % 3 === 0) {
+    const listChangePrefix = `[${serverId}] IntervalListChange`;
+    try {
+      await mcpServer.resources.notifyListChanged();
+    } catch (e: any) {
+      console.error(`${listChangePrefix} - Error sending resourceListChanged via MCPServer: ${e.message}`);
+    }
+  }
+}, NOTIFICATION_INTERVAL_MS);
+// --- End Interval-based Notifications ---
 
 // Handle graceful shutdown
 process.on('SIGINT', async () => {
   console.log('Shutting down weather server...');
-  if (transport) {
-    await server.close();
-    transport = undefined;
-  }
-  // Close the HTTP server
+  clearInterval(notificationInterval); // Clear the interval
+  await mcpServer.close();
   httpServer.close(() => {
     console.log('Weather server shut down complete');
     process.exit(0);
   });
 });
 
-export { server };
+export { mcpServer as server };
