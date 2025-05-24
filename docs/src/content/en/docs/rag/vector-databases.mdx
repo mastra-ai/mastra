@@ -16,18 +16,18 @@ After generating embeddings, you need to store them in a database that supports 
   ```ts filename="vector-store.ts" showLineNumbers copy
   import { PgVector } from '@mastra/pg';
 
-const store = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING })
-await store.createIndex({
-indexName: "myCollection",
-dimension: 1536,
-});
-await store.upsert({
-indexName: "myCollection",
-vectors: embeddings,
-metadata: chunks.map(chunk => ({ text: chunk.text })),
-});
+  const store = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING })
+  await store.createIndex({
+    indexName: "myCollection",
+    dimension: 1536,
+  });
+  await store.upsert({
+    indexName: "myCollection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
 
-````
+  ```
 
 ### Using PostgreSQL with pgvector
 
@@ -50,28 +50,28 @@ await store.upsert({
   vectors: embeddings,
   metadata: chunks.map(chunk => ({ text: chunk.text })),
 });
-````
+```
 
 </Tabs.Tab>
 <Tabs.Tab>
   ```ts filename="vector-store.ts" showLineNumbers copy
   import { QdrantVector } from '@mastra/qdrant'
 
-const store = new QdrantVector({
-  url: process.env.QDRANT_URL,
-  apiKey: process.env.QDRANT_API_KEY
-})
-await store.createIndex({
-indexName: "myCollection",
-dimension: 1536,
-});
-await store.upsert({
-indexName: "myCollection",
-vectors: embeddings,
-metadata: chunks.map(chunk => ({ text: chunk.text })),
-});
+  const store = new QdrantVector({
+    url: process.env.QDRANT_URL,
+    apiKey: process.env.QDRANT_API_KEY
+  })
+  await store.createIndex({
+    indexName: "myCollection",
+    dimension: 1536,
+  });
+  await store.upsert({
+    indexName: "myCollection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
 
-````
+```
 </Tabs.Tab>
 <Tabs.Tab>
 ```ts filename="vector-store.ts" showLineNumbers copy
@@ -87,29 +87,29 @@ await store.upsert({
   vectors: embeddings,
   metadata: chunks.map(chunk => ({ text: chunk.text })),
 });
-````
+```
 
 </Tabs.Tab>
 <Tabs.Tab>
   ```ts filename="vector-store.ts" showLineNumbers copy
   import { AstraVector } from '@mastra/astra'
 
-const store = new AstraVector({
-token: process.env.ASTRA_DB_TOKEN,
-endpoint: process.env.ASTRA_DB_ENDPOINT,
-keyspace: process.env.ASTRA_DB_KEYSPACE
-})
-await store.createIndex({
-indexName: "myCollection",
-dimension: 1536,
-});
-await store.upsert({
-indexName: "myCollection",
-vectors: embeddings,
-metadata: chunks.map(chunk => ({ text: chunk.text })),
-});
+  const store = new AstraVector({
+    token: process.env.ASTRA_DB_TOKEN,
+    endpoint: process.env.ASTRA_DB_ENDPOINT,
+    keyspace: process.env.ASTRA_DB_KEYSPACE
+  })
+  await store.createIndex({
+    indexName: "myCollection",
+    dimension: 1536,
+  });
+  await store.upsert({
+    indexName: "myCollection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
 
-````
+```
 </Tabs.Tab>
 <Tabs.Tab>
 ```ts filename="vector-store.ts" showLineNumbers copy
@@ -128,28 +128,28 @@ await store.upsert({
   vectors: embeddings,
   metadata: chunks.map(chunk => ({ text: chunk.text })),
 });
-````
+```
 
 </Tabs.Tab>
 <Tabs.Tab>
   ```ts filename="vector-store.ts" showLineNumbers copy
   import { UpstashVector } from '@mastra/upstash'
 
-const store = new UpstashVector({
-url: process.env.UPSTASH_URL,
-token: process.env.UPSTASH_TOKEN
-})
-await store.createIndex({
-indexName: "myCollection",
-dimension: 1536,
-});
-await store.upsert({
-indexName: "myCollection",
-vectors: embeddings,
-metadata: chunks.map(chunk => ({ text: chunk.text })),
-});
+  const store = new UpstashVector({
+    url: process.env.UPSTASH_URL,
+    token: process.env.UPSTASH_TOKEN
+  })
+  await store.createIndex({
+    indexName: "myCollection",
+    dimension: 1536,
+  });
+  await store.upsert({
+    indexName: "myCollection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
 
-````
+```
 </Tabs.Tab>
 <Tabs.Tab>
 ```ts filename="vector-store.ts" showLineNumbers copy
@@ -168,28 +168,28 @@ await store.upsert({
   vectors: embeddings,
   metadata: chunks.map(chunk => ({ text: chunk.text })),
 });
-````
+```
 
 </Tabs.Tab>
 <Tabs.Tab>
   ```ts filename="vector-store.ts" showLineNumbers copy
   import { MongoDBVector } from '@mastra/mongodb'
 
-const store = new MongoDBVector({
-url: process.env.MONGODB_URL,
-database: process.env.MONGODB_DATABASE
-})
-await store.createIndex({
-indexName: "myCollection",
-dimension: 1536,
-});
-await store.upsert({
-indexName: "myCollection",
-vectors: embeddings,
-metadata: chunks.map(chunk => ({ text: chunk.text })),
-});
+  const store = new MongoDBVector({
+    url: process.env.MONGODB_URL,
+    database: process.env.MONGODB_DATABASE
+  })
+  await store.createIndex({
+    indexName: "myCollection",
+    dimension: 1536,
+  });
+  await store.upsert({
+    indexName: "myCollection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
 
-````
+```
 </Tabs.Tab>
 <Tabs.Tab>
 ```ts filename="vector-store.ts" showLineNumbers copy
@@ -205,7 +205,7 @@ await store.upsert({
   vectors: embeddings,
   metadata: chunks.map(chunk => ({ text: chunk.text })),
 });
-````
+```
 
 </Tabs.Tab>
 </Tabs>

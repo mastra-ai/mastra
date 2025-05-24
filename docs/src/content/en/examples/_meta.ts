@@ -20,6 +20,9 @@ const meta = {
   evals: {
     title: "Evals",
   },
+  storage: {
+    title: "Storage",
+  },
   voice: {
     title: "Voice",
   },
