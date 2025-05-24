@@ -216,7 +216,7 @@ export class MessageList {
   private addOne(message: MessageInput, messageSource: MessageSource) {
     if (message.role === `system` && MessageList.isVercelCoreMessage(message)) return this.addSystem(message);
 
-    const messageV2 = this.inputToMastraMessageV2(message);
+    const messageV2 = this.inputToMastraMessageV2(message, messageSource);
 
     const { exists, shouldUpdate, id } = this.shouldUpdateMessage(message);
 
@@ -287,7 +287,7 @@ export class MessageList {
     return this;
   }
 
-  private inputToMastraMessageV2(message: MessageInput): MastraMessageV2 {
+  private inputToMastraMessageV2(message: MessageInput, messageSource: MessageSource): MastraMessageV2 {
     if (`threadId` in message && message.threadId && this.memoryInfo && message.threadId !== this.memoryInfo.threadId) {
       throw new Error(
         `Received input message with wrong threadId. Input ${message.threadId}, expected ${this.memoryInfo.threadId}`,
@@ -305,21 +305,36 @@ export class MessageList {
       );
     }
 
-    if (MessageList.isMastraMessageV1(message)) return this.mastraMessageV1ToMastraMessageV2(message);
+    if (MessageList.isMastraMessageV1(message)) return this.mastraMessageV1ToMastraMessageV2(message, messageSource);
     if (MessageList.isMastraMessageV2(message)) return this.hydrateMastraMessageV2Fields(message);
-    if (MessageList.isVercelCoreMessage(message)) return this.vercelCoreMessageToMastraMessageV2(message);
-    if (MessageList.isVercelUIMessage(message)) return this.vercelUIMessageToMastraMessageV2(message);
+    if (MessageList.isVercelCoreMessage(message))
+      return this.vercelCoreMessageToMastraMessageV2(message, messageSource);
+    if (MessageList.isVercelUIMessage(message)) return this.vercelUIMessageToMastraMessageV2(message, messageSource);
 
     throw new Error(`Found unhandled message ${JSON.stringify(message)}`);
   }
 
-  private lastCreatedAt: number = Date.now();
-  private generateCreatedAt(): Date {
-    const now = new Date();
-    const nowTime = now.getTime();
-    const lastTime = this.lastCreatedAt;
+  private lastCreatedAt?: number;
+  private generateCreatedAt(messageSource: MessageSource, start?: Date | number): Date {
+    start = start instanceof Date ? start : start ? new Date(start) : undefined;
 
-    // added messages are assumed to be added in order if they don't already have a date set on them.
+    if (start && !this.lastCreatedAt) {
+      this.lastCreatedAt = start.getTime();
+      return start;
+    }
+
+    if (start && messageSource === `memory`) {
+      return start;
+    }
+
+    const now = new Date();
+    const nowTime = start?.getTime() || now.getTime();
+    // const lastTime = this.lastCreatedAt;
+    const lastTime = this.messages.reduce((p, m) => {
+      if (m.createdAt.getTime() > p) return m.createdAt.getTime();
+      return p;
+    }, this.lastCreatedAt || 0);
+
     if (nowTime <= lastTime) {
       const newDate = new Date(lastTime + 1);
       this.lastCreatedAt = newDate.getTime();
@@ -337,13 +352,16 @@ export class MessageList {
     return randomUUID();
   }
 
-  private mastraMessageV1ToMastraMessageV2(message: MastraMessageV1): MastraMessageV2 {
-    const coreV2 = this.vercelCoreMessageToMastraMessageV2({
-      content: message.content,
-      role: message.role,
-    } as CoreMessage);
+  private mastraMessageV1ToMastraMessageV2(message: MastraMessageV1, messageSource: MessageSource): MastraMessageV2 {
+    const coreV2 = this.vercelCoreMessageToMastraMessageV2(
+      {
+        content: message.content,
+        role: message.role,
+      } as CoreMessage,
+      messageSource,
+    );
 
-    const createdAt = message.createdAt || this.generateCreatedAt();
+    const createdAt = this.generateCreatedAt(messageSource, message.createdAt);
     return {
       id: message.id,
       role: coreV2.role,
@@ -357,7 +375,7 @@ export class MessageList {
     if (!(message.createdAt instanceof Date)) message.createdAt = new Date(message.createdAt);
     return message;
   }
-  private vercelUIMessageToMastraMessageV2(message: UIMessage): MastraMessageV2 {
+  private vercelUIMessageToMastraMessageV2(message: UIMessage, messageSource: MessageSource): MastraMessageV2 {
     const content: MastraMessageContentV2 = {
       format: 2,
       parts: message.parts,
@@ -368,7 +386,7 @@ export class MessageList {
     if (message.annotations) content.annotations = message.annotations;
     if (message.experimental_attachments) content.experimental_attachments = message.experimental_attachments;
 
-    const createdAt = message.createdAt || this.generateCreatedAt();
+    const createdAt = this.generateCreatedAt(messageSource, message.createdAt);
 
     return {
       id: message.id || this.newMessageId(),
@@ -379,9 +397,9 @@ export class MessageList {
       content,
     } satisfies MastraMessageV2;
   }
-  private vercelCoreMessageToMastraMessageV2(coreMessage: CoreMessage): MastraMessageV2 {
-    const id = this.newMessageId();
-    const createdAt = this.generateCreatedAt();
+  private vercelCoreMessageToMastraMessageV2(coreMessage: CoreMessage, messageSource: MessageSource): MastraMessageV2 {
+    const id = `id` in coreMessage ? (coreMessage.id as string) : this.newMessageId();
+    const createdAt = this.generateCreatedAt(messageSource);
     const parts: UIMessage['parts'] = [];
     const experimentalAttachments: UIMessage['experimental_attachments'] = [];
 

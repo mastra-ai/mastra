@@ -144,7 +144,7 @@ describe('MessageList', () => {
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
-          createdAt: inputV1Message.createdAt,
+          createdAt: expect.any(Date),
           content: {
             format: 2,
             parts: [
@@ -184,7 +184,7 @@ describe('MessageList', () => {
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
-          createdAt: inputV1Message.createdAt,
+          createdAt: expect.any(Date),
           content: {
             format: 2,
             content: 'Hello from V1!',
@@ -314,37 +314,47 @@ describe('MessageList', () => {
           resourceId,
         },
       ];
-      expect(new MessageList({ threadId, resourceId }).add(messageSequence, 'user').get.all.mastra()).toEqual(expected);
+      expect(new MessageList({ threadId, resourceId }).add(messageSequence, 'user').get.all.mastra()).toEqual(
+        expected.map(m => ({ ...m, createdAt: expect.any(Date) })),
+      );
 
       let messages: Message[] = [];
       const list = new MessageList();
 
       // msg1
       messages = appendClientMessage({ messages, message: msg1 });
-      expect(new MessageList().add(messages, 'user').get.all.ui()).toEqual(messages);
+      expect(new MessageList().add(messages, 'user').get.all.ui()).toEqual(
+        messages.map(m => ({ ...m, createdAt: expect.any(Date) })),
+      );
       list.add(messages, 'user');
-      expect(list.get.all.ui()).toEqual(messages);
+      expect(list.get.all.ui()).toEqual(messages.map(m => ({ ...m, createdAt: expect.any(Date) })));
 
       // msg2
       messages = appendResponseMessages({
         messages,
         responseMessages: [{ ...msg2, id: randomUUID() }],
       });
-      expect(new MessageList().add(messages, 'response').get.all.ui()).toEqual(messages);
+      expect(new MessageList().add(messages, 'response').get.all.ui()).toEqual(
+        messages.map(m => ({ ...m, createdAt: expect.any(Date) })),
+      );
       list.add(messages, 'response');
-      expect(list.get.all.ui()).toEqual(messages);
+      expect(list.get.all.ui()).toEqual(messages.map(m => ({ ...m, createdAt: expect.any(Date) })));
 
       // msg3
       messages = appendResponseMessages({ messages, responseMessages: [{ id: randomUUID(), ...msg3 }] });
-      expect(new MessageList().add(messages, 'response').get.all.ui()).toEqual(messages);
+      expect(new MessageList().add(messages, 'response').get.all.ui()).toEqual(
+        messages.map(m => ({ ...m, createdAt: expect.any(Date) })),
+      );
       list.add(messages, 'response');
-      expect(list.get.all.ui()).toEqual(messages);
+      expect(list.get.all.ui()).toEqual(messages.map(m => ({ ...m, createdAt: expect.any(Date) })));
 
       // msg4
       messages = appendResponseMessages({ messages, responseMessages: [msg4] });
-      expect(new MessageList().add(messages, 'response').get.all.ui()).toEqual(messages);
+      expect(new MessageList().add(messages, 'response').get.all.ui()).toEqual(
+        messages.map(m => ({ ...m, createdAt: expect.any(Date) })),
+      );
       list.add(messages, 'response');
-      expect(list.get.all.ui()).toEqual(messages);
+      expect(list.get.all.ui()).toEqual(messages.map(m => ({ ...m, createdAt: expect.any(Date) })));
     });
 
     it('should correctly convert and add a Vercel CoreMessage with reasoning and redacted-reasoning parts', () => {
@@ -433,7 +443,7 @@ describe('MessageList', () => {
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
-          createdAt: inputV1Message.createdAt,
+          createdAt: expect.any(Date),
           content: {
             format: 2,
             parts: [
@@ -473,7 +483,7 @@ describe('MessageList', () => {
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
-          createdAt: inputV1Message.createdAt,
+          createdAt: expect.any(Date),
           content: {
             format: 2,
             parts: [
@@ -670,7 +680,7 @@ describe('MessageList', () => {
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
-          createdAt: inputV1Message.createdAt,
+          createdAt: expect.any(Date),
           content: {
             format: 2,
             parts: [{ type: 'text', text: 'Here is an image URL:' }],
@@ -750,7 +760,7 @@ describe('MessageList', () => {
       expect(messages[0]).toEqual({
         id: input.id,
         role: 'user',
-        createdAt: input.createdAt,
+        createdAt: expect.any(Date),
         content: {
           format: 2,
           parts: [{ type: 'text', text: 'Message with attachment' }],
@@ -791,7 +801,7 @@ describe('MessageList', () => {
       expect(messages[0]).toEqual({
         id: input.id,
         role: 'user',
-        createdAt: input.createdAt,
+        createdAt: expect.any(Date),
         content: {
           format: 2,
           parts: [{ type: 'text', text: 'Check out this image:' }],
@@ -861,7 +871,7 @@ describe('MessageList', () => {
         {
           id: userMsgV1.id,
           role: 'user',
-          createdAt: userMsgV1.createdAt,
+          createdAt: expect.any(Date),
           content: {
             format: 2,
             content: userMsgV1.content,
@@ -873,7 +883,7 @@ describe('MessageList', () => {
         {
           id: assistantMsgV1.id, // Should retain the original assistant message ID
           role: 'assistant',
-          createdAt: assistantMsgUIV2.createdAt, // The last message's timestamp might be used for the merged message
+          createdAt: expect.any(Date),
           content: {
             format: 2,
             parts: [
@@ -1348,7 +1358,7 @@ describe('MessageList', () => {
           id: 'c59c844b-0f1a-409a-995e-3382a3ee1eaa',
           role: 'user',
           content: 'hi',
-          createdAt: new Date('2025-03-25T20:29:58.103Z'),
+          createdAt: expect.any(Date),
           parts: [{ type: 'step-start' }, { type: 'text', text: 'hi' }],
           experimental_attachments: [],
         },
@@ -1356,7 +1366,7 @@ describe('MessageList', () => {
           id: '7bb920f1-1a89-4f1a-8fb0-6befff982946',
           role: 'assistant',
           content: 'Hello! How can I assist you today?',
-          createdAt: new Date('2025-03-25T20:29:58.717Z'),
+          createdAt: expect.any(Date),
           parts: [{ type: 'step-start' }, { type: 'text', text: 'Hello! How can I assist you today?' }],
           reasoning: undefined,
           toolInvocations: undefined,
@@ -1365,7 +1375,7 @@ describe('MessageList', () => {
           id: '673b1279-9ce5-428e-a646-d19d83ed4d67',
           role: 'user',
           content: 'LA',
-          createdAt: new Date('2025-03-25T20:30:01.911Z'),
+          createdAt: expect.any(Date),
           parts: [{ type: 'step-start' }, { type: 'text', text: 'LA' }],
           experimental_attachments: [],
         },
@@ -1373,7 +1383,7 @@ describe('MessageList', () => {
           id: '6a903ed0-1cf4-463d-8ea0-c13bd0896405',
           role: 'assistant',
           content: "Got it! You're in LA. What would you like to talk about or do today?",
-          createdAt: new Date('2025-03-25T20:30:02.177Z'), // Merged message takes the latest timestamp
+          createdAt: expect.any(Date),
           parts: [
             { type: 'step-start' },
             {
@@ -1398,7 +1408,7 @@ describe('MessageList', () => {
           id: '1b271c02-7762-4416-91e9-146a25ce9c73',
           role: 'user',
           content: 'Hello',
-          createdAt: new Date('2025-05-13T22:23:26.584Z'),
+          createdAt: expect.any(Date),
           parts: [{ type: 'text', text: 'Hello' }],
           experimental_attachments: [],
         },
@@ -1406,7 +1416,7 @@ describe('MessageList', () => {
           id: 'msg-Cpo828mGmAc8dhWwQcD32Net',
           role: 'assistant',
           content: 'Hello again! How can I help you today?',
-          createdAt: new Date('2025-05-13T22:23:26.585Z'),
+          createdAt: expect.any(Date),
           parts: [{ type: 'step-start' }, { type: 'text', text: 'Hello again! How can I help you today?' }],
           reasoning: undefined,
           toolInvocations: undefined,
@@ -1415,7 +1425,7 @@ describe('MessageList', () => {
           id: 'eab9da82-6120-4630-b60e-0a7cb86b0718',
           role: 'user',
           content: 'Hi',
-          createdAt: new Date('2025-05-13T22:24:51.608Z'),
+          createdAt: expect.any(Date),
           parts: [{ type: 'text', text: 'Hi' }],
           experimental_attachments: [],
         },
@@ -1423,7 +1433,7 @@ describe('MessageList', () => {
           id: 'msg-JpZvGeyqVaUo1wthbXf0EVSS',
           role: 'assistant',
           content: "Hi there! What's on your mind?",
-          createdAt: new Date('2025-05-13T22:24:51.609Z'),
+          createdAt: expect.any(Date),
           parts: [{ type: 'step-start' }, { type: 'text', text: "Hi there! What's on your mind?" }],
           reasoning: undefined,
           toolInvocations: undefined,
@@ -1440,19 +1450,20 @@ describe('MessageList', () => {
       expect(uiMessages).toEqual(expectedMessages);
 
       let newId = randomUUID();
+      const responseMessages = [
+        {
+          id: newId,
+          role: 'assistant' as const,
+          content: [{ type: 'text' as const, text: 'As a large language model...' }],
+        },
+      ];
       let newUIMessages = appendResponseMessages({
         messages: uiMessages,
-        responseMessages: [
-          {
-            id: newId,
-            role: 'assistant' as const,
-            content: [{ type: 'text' as const, text: 'As a large language model...' }],
-          },
-        ],
+        responseMessages,
       });
 
       expect(newUIMessages.length).toBe(uiMessages.length + 1);
-      const newUIMessages2 = list.add(newUIMessages, 'memory').get.all.ui();
+      const newUIMessages2 = list.add(responseMessages, 'response').get.all.ui();
       expect(newUIMessages2).toEqual([
         ...uiMessages,
         {
@@ -1462,15 +1473,15 @@ describe('MessageList', () => {
           createdAt: expect.any(Date),
           parts: [{ type: 'step-start' }, { type: 'text', text: 'As a large language model...' }],
           reasoning: undefined,
-          toolInvocations: [],
+          toolInvocations: undefined,
         } satisfies UIMessage,
       ]);
 
       const newClientMessage = {
         id: randomUUID(),
         role: 'user',
-        content: 'Do it anyway please',
         createdAt: new Date(),
+        content: 'Do it anyway please',
         experimental_attachments: [],
         parts: [{ type: 'step-start' }, { type: 'text', text: 'Do it anyway please' }],
       } satisfies Message;
@@ -1481,33 +1492,32 @@ describe('MessageList', () => {
       });
 
       expect(newUIMessages3.length).toBe(newUIMessages2.length + 1);
-      const newUIMessages4 = list.add(newUIMessages3, 'memory').get.all.ui();
-      expect(newUIMessages4).toEqual([
-        ...newUIMessages2,
-        {
-          ...newClientMessage,
-        } satisfies Message,
-      ]);
+      const newUIMessages4 = list.add(newClientMessage, 'user').get.all.ui();
+      expect(newUIMessages4.map(m => ({ ...m, createdAt: expect.any(Date) }))).toEqual(
+        newUIMessages3.map(m => ({ ...m, createdAt: expect.any(Date) })),
+      );
 
+      const responseMessages2 = [
+        { id: randomUUID(), role: 'assistant', content: "Ok fine I'll call a tool then" },
+        {
+          id: randomUUID(),
+          role: 'assistant',
+          content: [{ type: 'tool-call', args: { ok: 'fine' }, toolCallId: 'ok-fine-1', toolName: 'okFineTool' }],
+        },
+        {
+          id: randomUUID(),
+          role: 'tool',
+          content: [{ type: 'tool-result', toolName: 'okFineTool', toolCallId: 'ok-fine-1', result: { lets: 'go' } }],
+        },
+      ];
       const newUIMessages5 = appendResponseMessages({
         messages: newUIMessages3,
-        responseMessages: [
-          { id: randomUUID(), role: 'assistant', content: "Ok fine I'll call a tool then" },
-          {
-            id: randomUUID(),
-            role: 'assistant',
-            content: [{ type: 'tool-call', args: { ok: 'fine' }, toolCallId: 'ok-fine-1', toolName: 'okFineTool' }],
-          },
-          {
-            id: randomUUID(),
-            role: 'tool',
-            content: [{ type: 'tool-result', toolName: 'okFineTool', toolCallId: 'ok-fine-1', result: { lets: 'go' } }],
-          },
-        ],
+        // @ts-ignore
+        responseMessages: responseMessages2,
       });
 
-      expect(list.add(newUIMessages5, 'memory').get.all.ui()).toEqual([
-        ...newUIMessages4,
+      expect(list.add(newUIMessages5, 'response').get.all.ui()).toEqual([
+        ...newUIMessages4.map(m => ({ ...m, createdAt: expect.any(Date) })),
         {
           role: 'assistant',
           content: "Ok fine I'll call a tool then",

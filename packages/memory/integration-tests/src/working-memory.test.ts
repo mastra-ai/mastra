@@ -409,6 +409,7 @@ describe('Working Memory Tests', () => {
 
     // TODO: again seems like we're getting V1 here but types say V2
     // It actually should return V1 for now (CoreMessage compatible)
+
     // Pure text message should be present
     expect(saved.some(m => m.content === 'Another normal message')).toBe(true);
     // User message should be present
