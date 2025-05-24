@@ -122,17 +122,17 @@ const AttachmentUI: FC = () => {
   return (
     <TooltipProvider>
       <Tooltip>
-        <AttachmentPrimitive.Root className="relative mt-3">
+        <AttachmentPrimitive.Root className="relative">
           <AttachmentPreviewDialog>
             <TooltipTrigger asChild>
-              <div className="flex h-12 w-40 items-center justify-center gap-2 rounded-lg border p-1">
+              <div className="h-full w-full aspect-ratio overflow-hidden rounded-lg">
                 <AttachmentThumb />
-                <div className="flex-grow basis-0">
+                {/* <div className="flex-grow basis-0">
                   <p className="text-muted-foreground line-clamp-1 text-ellipsis break-all text-xs font-bold">
                     <AttachmentPrimitive.Name />
                   </p>
                   <p className="text-muted-foreground text-xs">{typeLabel}</p>
-                </div>
+                </div> */}
               </div>
             </TooltipTrigger>
           </AttachmentPreviewDialog>
@@ -170,7 +170,7 @@ export const UserMessageAttachments: FC = () => {
 
 export const ComposerAttachments: FC = () => {
   return (
-    <div className="flex w-full flex-row gap-3 px-10">
+    <div className="flex w-full flex-row items-center gap-4 h-20">
       <ComposerPrimitive.Attachments components={{ Attachment: AttachmentUI }} />
     </div>
   );
