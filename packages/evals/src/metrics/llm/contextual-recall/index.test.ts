@@ -48,6 +48,14 @@ const testCases: TestCaseWithContext[] = [
       score: 0,
     },
   },
+  {
+    input: `What is the capital of France?`,
+    output: `The capital of France is Paris. Incidentally, the sky is blue due to atmospheric diffusion.`,
+    context: ['Paris is the capital of France.'],
+    expectedResult: {
+      score: 1,
+    },
+  },
 ];
 
 const SECONDS = 10000;
@@ -81,6 +89,13 @@ describe(
       const metric = new ContextualRecallMetric(model, { context: testCase.context });
       const result = await metric.measure(testCase.input, testCase.output);
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
+    });
+
+    it('should allow non-contextual outputs', async () => {
+      const testCase = testCases[3]!;
+      const metric = new ContextualRecallMetric(model, { context: testCase.context });
+      const result = await metric.measure(testCase.input, testCase.output);
+      expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
     });
   },
   {
