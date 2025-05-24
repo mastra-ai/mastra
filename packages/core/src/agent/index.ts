@@ -42,6 +42,7 @@ import type {
 
 export { MessageList };
 export * from './types';
+type IDGenerator = () => string;
 
 function resolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) => R) {
   if (value instanceof Promise) {
@@ -861,6 +862,7 @@ export class Agent<
     toolsets,
     clientTools,
     runtimeContext,
+    generateMessageId,
   }: {
     instructions?: string;
     toolsets?: ToolsetsInput;
@@ -872,6 +874,7 @@ export class Agent<
     runId?: string;
     messages: string | string[] | CoreMessage[] | AiMessageType[];
     runtimeContext: RuntimeContext;
+    generateMessageId: undefined | IDGenerator;
   }) {
     return {
       before: async () => {
@@ -909,7 +912,7 @@ export class Agent<
           runtimeContext,
         });
 
-        const messageList = new MessageList({ threadId, resourceId })
+        const messageList = new MessageList({ threadId, resourceId, generateMessageId })
           .addSystem({
             role: 'system',
             content: instructions || `${this.instructions}.`,
@@ -917,6 +920,7 @@ export class Agent<
           .add(context || [], 'user');
 
         if (!memory || (!threadId && !resourceId)) {
+          messageList.add(messages, 'user');
           return {
             messageObjects: messageList.get.all.core(),
             convertedTools,
@@ -988,18 +992,27 @@ export class Agent<
             ?.join(`\n`) ?? undefined;
 
         const processedMemoryMessages = memory.processMessages({
-          messages: messageList.get.remembered.core(), // these are processed
-          newMessages: messageList.get.input.core(), // these are here for inspecting - ex TokenLimiter needs to measure all tokens even though it's only processing remembered messages
+          // these will be processed
+          messages: messageList.get.remembered.v1() as CoreMessage[],
+          // these are here for inspecting but shouldn't be returned by the processor
+          // - ex TokenLimiter needs to measure all tokens even though it's only processing remembered messages
+          newMessages: messageList.get.input.v1() as CoreMessage[],
           systemMessage,
           memorySystemMessage: memorySystemMessage || undefined,
         });
+
+        const processedList = new MessageList({ threadId, resourceId })
+          .add(processedMemoryMessages, 'memory')
+          .add(messageList.get.input.mastra(), 'user')
+          .get.all.core();
 
         return {
           convertedTools,
           threadId,
           thread,
           messageList,
-          messageObjects: [...processedMemoryMessages, ...messageList.get.input.core()], // add old processed messages + new input messages
+          // add old processed messages + new input messages
+          messageObjects: processedList,
         };
       },
       after: async ({
@@ -1009,7 +1022,6 @@ export class Agent<
         memoryConfig,
         outputText,
         runId,
-        // experimental_generateMessageId, // TODO: leave this for now, we will support it later IN THIS PR THOUGH
         messageList,
       }: {
         runId: string;
@@ -1018,8 +1030,7 @@ export class Agent<
         threadId?: string;
         memoryConfig: MemoryConfig | undefined;
         outputText: string;
-        experimental_generateMessageId: any;
-        messageList: MessageList; // Added messageList type
+        messageList: MessageList;
       }) => {
         const resToLog = {
           text: result?.text,
@@ -1167,6 +1178,10 @@ export class Agent<
       runtimeContext = new RuntimeContext(),
       ...args
     }: AgentGenerateOptions<Z> = Object.assign({}, this.#defaultGenerateOptions, generateOptions);
+    const generateMessageId =
+      `experimental_generateMessageId` in args && typeof args.experimental_generateMessageId === `function`
+        ? (args.experimental_generateMessageId as IDGenerator)
+        : undefined;
 
     const runId = args.runId || randomUUID();
     const instructions = args.instructions || (await this.getInstructions({ runtimeContext }));
@@ -1183,9 +1198,15 @@ export class Agent<
       toolsets,
       clientTools,
       runtimeContext,
+      generateMessageId,
     });
 
     const { threadId, thread, messageObjects, convertedTools, messageList } = await before();
+
+    // need to remove this if we're using memory so AI SDK doesn't generate additional new IDs
+    if (thread && `experimental_generateMessageId` in args) {
+      args['experimental_generateMessageId'] = undefined;
+    }
 
     if (!output && experimental_output) {
       const result = await llm.__text({
@@ -1215,8 +1236,6 @@ export class Agent<
         memoryConfig,
         outputText,
         runId,
-        experimental_generateMessageId:
-          `experimental_generateMessageId` in args ? args.experimental_generateMessageId : undefined,
         messageList,
       });
 
@@ -1255,8 +1274,6 @@ export class Agent<
         memoryConfig,
         outputText,
         runId,
-        experimental_generateMessageId:
-          `experimental_generateMessageId` in args ? args.experimental_generateMessageId : undefined,
         messageList,
       });
 
@@ -1289,9 +1306,7 @@ export class Agent<
       memoryConfig,
       outputText,
       runId,
-      experimental_generateMessageId:
-        `experimental_generateMessageId` in args ? args.experimental_generateMessageId : undefined,
-      messageList, // Added messageList
+      messageList,
     });
 
     return result as unknown as GenerateReturn<Z>;
@@ -1340,6 +1355,10 @@ export class Agent<
       runtimeContext = new RuntimeContext(),
       ...args
     }: AgentStreamOptions<Z> = Object.assign({}, this.#defaultStreamOptions, streamOptions);
+    const generateMessageId =
+      `experimental_generateMessageId` in args && typeof args.experimental_generateMessageId === `function`
+        ? (args.experimental_generateMessageId as IDGenerator)
+        : undefined;
     const runId = args.runId || randomUUID();
     const instructions = args.instructions || (await this.getInstructions({ runtimeContext }));
     const llm = await this.getLLM({ runtimeContext });
@@ -1355,9 +1374,15 @@ export class Agent<
       toolsets,
       clientTools,
       runtimeContext,
+      generateMessageId,
     });
 
     const { threadId, thread, messageObjects, convertedTools, messageList } = await before();
+
+    // need to remove this if we're using memory so AI SDK doesn't generate additional new IDs
+    if (thread && `experimental_generateMessageId` in args) {
+      args['experimental_generateMessageId'] = undefined;
+    }
 
     if (!output && experimental_output) {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
@@ -1381,9 +1406,7 @@ export class Agent<
               memoryConfig,
               outputText,
               runId,
-              experimental_generateMessageId:
-                `experimental_generateMessageId` in args ? args.experimental_generateMessageId : undefined,
-              messageList, // Added messageList
+              messageList,
             });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
@@ -1426,9 +1449,7 @@ export class Agent<
               memoryConfig,
               outputText,
               runId,
-              experimental_generateMessageId:
-                `experimental_generateMessageId` in args ? args.experimental_generateMessageId : undefined,
-              messageList, // Added messageList
+              messageList,
             });
           } catch (e) {
             this.logger.error('Error saving memory on finish', {
@@ -1470,9 +1491,7 @@ export class Agent<
             memoryConfig,
             outputText,
             runId,
-            experimental_generateMessageId:
-              `experimental_generateMessageId` in args ? args.experimental_generateMessageId : undefined,
-            messageList, // Added messageList
+            messageList,
           });
         } catch (e) {
           this.logger.error('Error saving memory on finish', {

@@ -1,8 +1,9 @@
 import { randomUUID } from 'crypto';
 import { convertToCoreMessages } from 'ai';
-import type { CoreMessage, CoreSystemMessage, FilePart, Message, UIMessage } from 'ai';
-import type { MessageType } from '../memory';
+import type { CoreMessage, CoreSystemMessage, FilePart, IDGenerator, Message, UIMessage } from 'ai';
+import type { MastraMessageV1 } from '../memory';
 import { isCoreMessage, isUiMessage } from '../utils';
+import { convertToV1Messages } from './prompt/convert-to-mastra-v1';
 
 export type MastraMessageContentV2 = {
   format: 2; // format 2 === UIMessage in AI SDK v4
@@ -22,9 +23,10 @@ export type MastraMessageV2 = {
   createdAt: Date;
   threadId?: string;
   resourceId?: string;
+  type?: string;
 };
 
-type MessageInput = UIMessage | Message | MessageType | CoreMessage | MastraMessageV2;
+type MessageInput = UIMessage | Message | MastraMessageV1 | CoreMessage | MastraMessageV2;
 type MessageSource = 'memory' | 'response' | 'user' | 'system';
 type MemoryInfo = { threadId: string; resourceId?: string };
 
@@ -43,12 +45,16 @@ export class MessageList {
   private newMessages = new Set<MastraMessageV2>();
   private responseMessages = new Set<MastraMessageV2>();
 
+  private generateMessageId?: IDGenerator;
+
   constructor({
     threadId,
     resourceId,
-  }: { threadId?: string; resourceId?: string } | { threadId: string; resourceId?: string } = {}) {
+    generateMessageId,
+  }: { threadId?: string; resourceId?: string; generateMessageId?: IDGenerator } = {}) {
     if (threadId) {
       this.memoryInfo = { threadId, resourceId };
+      this.generateMessageId = generateMessageId;
     }
   }
 
@@ -82,23 +88,24 @@ export class MessageList {
   }
   private all = {
     mastra: () => this.messages,
+    v1: () => convertToV1Messages(this.messages),
     ui: () => this.messages.map(MessageList.toUIMessage),
     core: () => convertToCoreMessages(this.all.ui()),
   };
   private remembered = {
     mastra: () => this.messages.filter(m => this.memoryMessages.has(m)),
+    v1: () => convertToV1Messages(this.remembered.mastra()),
     ui: () => this.remembered.mastra().map(MessageList.toUIMessage),
     core: () => convertToCoreMessages(this.remembered.ui()),
   };
   private input = {
     mastra: () => this.messages.filter(m => this.newMessages.has(m)),
+    v1: () => convertToV1Messages(this.input.mastra()),
     ui: () => this.input.mastra().map(MessageList.toUIMessage),
     core: () => convertToCoreMessages(this.input.ui()),
   };
   private response = {
     mastra: () => this.messages.filter(m => this.responseMessages.has(m)),
-    // ui: () => {},
-    // core: () => {},
   };
   public drainUnsavedMessages(): MastraMessageV2[] {
     const messages = this.messages.filter(m => this.newMessages.has(m) || this.responseMessages.has(m));
@@ -286,7 +293,7 @@ export class MessageList {
     if (
       `resourceId` in message &&
       message.resourceId &&
-      this.memoryInfo &&
+      this.memoryInfo?.resourceId &&
       message.resourceId !== this.memoryInfo.resourceId
     ) {
       throw new Error(
@@ -295,7 +302,7 @@ export class MessageList {
     }
 
     if (MessageList.isMastraMessageV1(message)) return this.mastraMessageV1ToMastraMessageV2(message);
-    if (MessageList.isMastraMessageV2(message)) return message;
+    if (MessageList.isMastraMessageV2(message)) return this.hydrateMastraMessageV2Fields(message);
     if (MessageList.isVercelCoreMessage(message)) return this.vercelCoreMessageToMastraMessageV2(message);
     if (MessageList.isVercelUIMessage(message)) return this.vercelUIMessageToMastraMessageV2(message);
 
@@ -319,7 +326,14 @@ export class MessageList {
     return now;
   }
 
-  private mastraMessageV1ToMastraMessageV2(message: MessageType): MastraMessageV2 {
+  private newMessageId(): string {
+    if (this.generateMessageId) {
+      return this.generateMessageId();
+    }
+    return randomUUID();
+  }
+
+  private mastraMessageV1ToMastraMessageV2(message: MastraMessageV1): MastraMessageV2 {
     const coreV2 = this.vercelCoreMessageToMastraMessageV2({
       content: message.content,
       role: message.role,
@@ -329,11 +343,15 @@ export class MessageList {
     return {
       id: message.id,
       role: coreV2.role,
-      createdAt,
+      createdAt: createdAt instanceof Date ? createdAt : new Date(createdAt),
       threadId: message.threadId,
       resourceId: message.resourceId,
       content: coreV2.content,
     };
+  }
+  private hydrateMastraMessageV2Fields(message: MastraMessageV2): MastraMessageV2 {
+    if (!(message.createdAt instanceof Date)) message.createdAt = new Date(message.createdAt);
+    return message;
   }
   private vercelUIMessageToMastraMessageV2(message: UIMessage): MastraMessageV2 {
     const content: MastraMessageContentV2 = {
@@ -347,17 +365,18 @@ export class MessageList {
     if (message.experimental_attachments) content.experimental_attachments = message.experimental_attachments;
 
     const createdAt = message.createdAt || this.generateCreatedAt();
+
     return {
-      id: message.id || randomUUID(),
+      id: message.id || this.newMessageId(),
       role: MessageList.getRole(message),
-      createdAt,
+      createdAt: createdAt instanceof Date ? createdAt : new Date(createdAt),
       threadId: this.memoryInfo?.threadId,
       resourceId: this.memoryInfo?.resourceId,
       content,
     } satisfies MastraMessageV2;
   }
   private vercelCoreMessageToMastraMessageV2(coreMessage: CoreMessage): MastraMessageV2 {
-    const id = randomUUID();
+    const id = this.newMessageId();
     const createdAt = this.generateCreatedAt();
     const parts: UIMessage['parts'] = [];
     const experimentalAttachments: UIMessage['experimental_attachments'] = [];
@@ -397,7 +416,7 @@ export class MessageList {
                 state: 'result',
                 toolCallId: part.toolCallId,
                 toolName: part.toolName,
-                result: part.result,
+                result: part.result ?? '', // undefined will cause AI SDK to throw an error, but for client side tool calls this really could be undefined
                 args: {}, // Args are unknown at this stage
               },
             });
@@ -453,26 +472,26 @@ export class MessageList {
     return {
       id,
       role: MessageList.getRole(coreMessage),
-      createdAt,
+      createdAt: createdAt instanceof Date ? createdAt : new Date(createdAt),
       threadId: this.memoryInfo?.threadId,
       resourceId: this.memoryInfo?.resourceId,
       content,
     };
   }
 
-  private static isVercelUIMessage(msg: MessageInput): msg is UIMessage {
+  static isVercelUIMessage(msg: MessageInput): msg is UIMessage {
     return !MessageList.isMastraMessage(msg) && isUiMessage(msg);
   }
-  private static isVercelCoreMessage(msg: MessageInput): msg is CoreMessage {
+  static isVercelCoreMessage(msg: MessageInput): msg is CoreMessage {
     return !MessageList.isMastraMessage(msg) && isCoreMessage(msg);
   }
-  private static isMastraMessage(msg: MessageInput): msg is MastraMessageV2 | MessageType {
+  static isMastraMessage(msg: MessageInput): msg is MastraMessageV2 | MastraMessageV1 {
     return MessageList.isMastraMessageV2(msg) || MessageList.isMastraMessageV1(msg);
   }
-  private static isMastraMessageV1(msg: MessageInput): msg is MessageType {
+  static isMastraMessageV1(msg: MessageInput): msg is MastraMessageV1 {
     return !MessageList.isMastraMessageV2(msg) && (`threadId` in msg || `resourceId` in msg);
   }
-  private static isMastraMessageV2(msg: MessageInput): msg is MastraMessageV2 {
+  static isMastraMessageV2(msg: MessageInput): msg is MastraMessageV2 {
     return Boolean(
       msg.content &&
         !Array.isArray(msg.content) &&

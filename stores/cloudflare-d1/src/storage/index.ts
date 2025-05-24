@@ -660,7 +660,7 @@ export class D1Store extends MastraStorage {
           content: typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
           createdAt: createdAt.toISOString(),
           role: message.role,
-          type: message.type,
+          type: 'v2',
         };
       });
 

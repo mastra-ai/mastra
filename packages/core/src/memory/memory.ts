@@ -1,4 +1,4 @@
-import type { AssistantContent, UserContent, CoreMessage, EmbeddingModel } from 'ai';
+import type { AssistantContent, UserContent, CoreMessage, EmbeddingModel, UIMessage } from 'ai';
 
 import type { MastraMessageContentV2, MastraMessageV2 } from '../agent/message-list';
 import { MastraBase } from '../base';
@@ -8,7 +8,7 @@ import type { CoreTool } from '../tools';
 import { deepMerge } from '../utils';
 import type { MastraVector } from '../vector';
 
-import type { SharedMemoryConfig, StorageThreadType, MemoryConfig } from './types';
+import type { SharedMemoryConfig, StorageThreadType, MemoryConfig, MastraMessageV1 } from './types';
 
 export type MemoryProcessorOpts = {
   systemMessage?: string;
@@ -213,7 +213,7 @@ export abstract class MastraMemory extends MastraBase {
     resourceId?: string;
     vectorMessageSearch?: string;
     config?: MemoryConfig;
-  }): Promise<{ messages: MastraMessageV2[] }>;
+  }): Promise<{ messages: MastraMessageV1[]; messagesV2: MastraMessageV2[] }>;
 
   estimateTokens(text: string): number {
     return Math.ceil(text.split(' ').length * 1.3);
@@ -250,7 +250,7 @@ export abstract class MastraMemory extends MastraBase {
     messages,
     memoryConfig,
   }: {
-    messages: MastraMessageV2[];
+    messages: (MastraMessageV1 | MastraMessageV2)[];
     memoryConfig: MemoryConfig | undefined;
   }): Promise<MastraMessageV2[]>;
 
@@ -259,7 +259,11 @@ export abstract class MastraMemory extends MastraBase {
    * @param threadId - The unique identifier of the thread
    * @returns Promise resolving to array of messages and uiMessages
    */
-  abstract query({ threadId, resourceId, selectBy }: StorageGetMessagesArg): Promise<{ messages: MastraMessageV2[] }>;
+  abstract query({
+    threadId,
+    resourceId,
+    selectBy,
+  }: StorageGetMessagesArg): Promise<{ messages: (MastraMessageV2 | MastraMessageV1)[]; uiMessages: UIMessage[] }>;
 
   /**
    * Helper method to create a new thread

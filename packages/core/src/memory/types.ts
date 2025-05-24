@@ -1,5 +1,6 @@
 import type { AssistantContent, CoreMessage, EmbeddingModel, ToolContent, UserContent } from 'ai';
 
+import type { MastraMessageV2 } from '../agent';
 import type { MastraStorage } from '../storage';
 import type { MastraVector } from '../vector';
 import type { MemoryProcessor } from '.';
@@ -7,9 +8,9 @@ import type { MemoryProcessor } from '.';
 export type { Message as AiMessageType } from 'ai';
 
 // Types for the memory system
-export type MessageType = {
+export type MastraMessageV1 = {
   id: string;
-  content: UserContent | AssistantContent | ToolContent;
+  content: string | UserContent | AssistantContent | ToolContent;
   role: 'system' | 'user' | 'assistant' | 'tool';
   createdAt: Date;
   threadId: string;
@@ -19,6 +20,8 @@ export type MessageType = {
   toolNames?: string[];
   type: 'text' | 'tool-call' | 'tool-result';
 };
+
+export type MessageType = MastraMessageV2 & { threadId: string };
 
 export type StorageThreadType = {
   id: string;
@@ -30,7 +33,7 @@ export type StorageThreadType = {
 };
 
 export type MessageResponse<T extends 'raw' | 'core_message'> = {
-  raw: MessageType[];
+  raw: MastraMessageV1[];
   core_message: CoreMessage[];
 }[T];
 

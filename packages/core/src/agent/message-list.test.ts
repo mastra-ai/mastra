@@ -2,13 +2,12 @@ import { randomUUID } from 'crypto';
 import { appendClientMessage, appendResponseMessages } from 'ai';
 import type { UIMessage, CoreMessage, Message } from 'ai';
 import { describe, expect, it } from 'vitest';
-import type { MessageType } from '../memory';
+import type { MastraMessageV1 } from '../memory';
 import type { MastraMessageV2 } from './message-list';
 import { MessageList, toBase64String } from './message-list';
 
 type VercelUIMessage = Message;
 type VercelCoreMessage = CoreMessage;
-type MastraMessageV1 = MessageType;
 
 const threadId = `one`;
 const resourceId = `user`;
@@ -25,9 +24,9 @@ describe('MessageList', () => {
         experimental_attachments: [],
       } satisfies VercelUIMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(input);
+      const list = new MessageList({ threadId, resourceId }).add(input, 'user');
 
-      const messages = list.getMessages();
+      const messages = list.get.all.mastra();
       expect(messages.length).toBe(1);
 
       expect(messages[0]).toEqual({
@@ -53,9 +52,9 @@ describe('MessageList', () => {
       const list = new MessageList({
         threadId,
         resourceId,
-      }).add(input);
+      }).add(input, 'user');
 
-      const messages = list.getMessages();
+      const messages = list.get.all.mastra();
       expect(messages.length).toBe(1);
 
       expect(messages[0]).toEqual({
@@ -81,7 +80,7 @@ describe('MessageList', () => {
 
       const initialMessages = [messageOne, messageTwo];
 
-      const list = new MessageList().add(initialMessages[0]).add(initialMessages[1]);
+      const list = new MessageList().add(initialMessages[0], 'user').add(initialMessages[1], 'response');
 
       const messageThree = {
         role: 'tool',
@@ -90,9 +89,9 @@ describe('MessageList', () => {
         ],
       } satisfies CoreMessage;
 
-      list.add(messageThree);
+      list.add(messageThree, 'response');
 
-      expect(list.toUIMessages()).toEqual([
+      expect(list.get.all.ui()).toEqual([
         {
           id: expect.any(String),
           content: messageOne.content,
@@ -139,9 +138,9 @@ describe('MessageList', () => {
         type: 'text',
       } satisfies MastraMessageV1;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputV1Message);
+      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, 'response');
 
-      expect(list.getMessages()).toEqual([
+      expect(list.get.all.mastra()).toEqual([
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
@@ -179,9 +178,9 @@ describe('MessageList', () => {
         type: 'text',
       } satisfies MastraMessageV1;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputV1Message);
+      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, 'user');
 
-      expect(list.getMessages()).toEqual([
+      expect(list.get.all.mastra()).toEqual([
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
@@ -211,9 +210,9 @@ describe('MessageList', () => {
         ],
       } satisfies VercelCoreMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage);
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'user');
 
-      expect(list.getMessages()).toEqual([
+      expect(list.get.all.mastra()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
@@ -315,37 +314,37 @@ describe('MessageList', () => {
           resourceId,
         },
       ];
-      expect(new MessageList({ threadId, resourceId }).add(messageSequence).getMessages()).toEqual(expected);
+      expect(new MessageList({ threadId, resourceId }).add(messageSequence, 'user').get.all.mastra()).toEqual(expected);
 
       let messages: Message[] = [];
       const list = new MessageList();
 
       // msg1
       messages = appendClientMessage({ messages, message: msg1 });
-      expect(new MessageList().add(messages).toUIMessages()).toEqual(messages);
-      list.add(messages);
-      expect(list.toUIMessages()).toEqual(messages);
+      expect(new MessageList().add(messages, 'user').get.all.ui()).toEqual(messages);
+      list.add(messages, 'user');
+      expect(list.get.all.ui()).toEqual(messages);
 
       // msg2
       messages = appendResponseMessages({
         messages,
         responseMessages: [{ ...msg2, id: randomUUID() }],
       });
-      expect(new MessageList().add(messages).toUIMessages()).toEqual(messages);
-      list.add(messages);
-      expect(list.toUIMessages()).toEqual(messages);
+      expect(new MessageList().add(messages, 'response').get.all.ui()).toEqual(messages);
+      list.add(messages, 'response');
+      expect(list.get.all.ui()).toEqual(messages);
 
       // msg3
       messages = appendResponseMessages({ messages, responseMessages: [{ id: randomUUID(), ...msg3 }] });
-      expect(new MessageList().add(messages).toUIMessages()).toEqual(messages);
-      list.add(messages);
-      expect(list.toUIMessages()).toEqual(messages);
+      expect(new MessageList().add(messages, 'response').get.all.ui()).toEqual(messages);
+      list.add(messages, 'response');
+      expect(list.get.all.ui()).toEqual(messages);
 
       // msg4
       messages = appendResponseMessages({ messages, responseMessages: [msg4] });
-      expect(new MessageList().add(messages).toUIMessages()).toEqual(messages);
-      list.add(messages);
-      expect(list.toUIMessages()).toEqual(messages);
+      expect(new MessageList().add(messages, 'response').get.all.ui()).toEqual(messages);
+      list.add(messages, 'response');
+      expect(list.get.all.ui()).toEqual(messages);
     });
 
     it('should correctly convert and add a Vercel CoreMessage with reasoning and redacted-reasoning parts', () => {
@@ -358,9 +357,9 @@ describe('MessageList', () => {
         ],
       } satisfies VercelCoreMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage);
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'user');
 
-      expect(list.getMessages()).toEqual([
+      expect(list.get.all.mastra()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
@@ -393,9 +392,9 @@ describe('MessageList', () => {
         ],
       } satisfies VercelCoreMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage);
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'user');
 
-      expect(list.getMessages()).toEqual([
+      expect(list.get.all.mastra()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
@@ -428,9 +427,9 @@ describe('MessageList', () => {
         type: 'text',
       } satisfies MastraMessageV1;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputV1Message);
+      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, 'response');
 
-      expect(list.getMessages()).toEqual([
+      expect(list.get.all.mastra()).toEqual([
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
@@ -468,9 +467,9 @@ describe('MessageList', () => {
         type: 'text',
       } satisfies MastraMessageV1;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputV1Message);
+      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, 'user');
 
-      expect(list.getMessages()).toEqual([
+      expect(list.get.all.mastra()).toEqual([
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
@@ -518,9 +517,9 @@ describe('MessageList', () => {
 
       const messageSequence = [msg1, msg2, msg3, msg4, msg5];
 
-      const list = new MessageList({ threadId, resourceId }).add(messageSequence);
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'memory');
 
-      expect(list.getMessages()).toEqual([
+      expect(list.get.all.mastra()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
@@ -593,9 +592,9 @@ describe('MessageList', () => {
 
       const messageSequence = [userMsg, assistantMsgPart1, toolResultMsg, assistantMsgPart2];
 
-      const list = new MessageList({ threadId, resourceId }).add(messageSequence);
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'memory');
 
-      expect(list.getMessages()).toEqual([
+      expect(list.get.all.mastra()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
@@ -665,9 +664,9 @@ describe('MessageList', () => {
         type: 'text',
       } satisfies MastraMessageV1;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputV1Message);
+      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, 'memory');
 
-      expect(list.getMessages()).toEqual([
+      expect(list.get.all.mastra()).toEqual([
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
@@ -703,9 +702,9 @@ describe('MessageList', () => {
         ],
       } satisfies VercelCoreMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage);
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'user');
 
-      expect(list.getMessages()).toEqual([
+      expect(list.get.all.mastra()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
@@ -743,9 +742,9 @@ describe('MessageList', () => {
         ],
       } satisfies VercelUIMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(input);
+      const list = new MessageList({ threadId, resourceId }).add(input, 'user');
 
-      const messages = list.getMessages();
+      const messages = list.get.all.mastra();
       expect(messages.length).toBe(1);
 
       expect(messages[0]).toEqual({
@@ -784,9 +783,9 @@ describe('MessageList', () => {
         ],
       } satisfies VercelUIMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(input);
+      const list = new MessageList({ threadId, resourceId }).add(input, 'user');
 
-      const messages = list.getMessages();
+      const messages = list.get.all.mastra();
       expect(messages.length).toBe(1);
 
       expect(messages[0]).toEqual({
@@ -856,9 +855,9 @@ describe('MessageList', () => {
 
       const messageSequence = [userMsgV1, assistantMsgV1, toolResultMsgV1, assistantMsgUIV2];
 
-      const list = new MessageList({ threadId, resourceId }).add(messageSequence);
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'memory');
 
-      expect(list.getMessages()).toEqual([
+      expect(list.get.all.mastra()).toEqual([
         {
           id: userMsgV1.id,
           role: 'user',
@@ -932,9 +931,9 @@ describe('MessageList', () => {
 
       const messageSequence = [userMsg, assistantMsgWithToolCall, toolResultMsg, assistantMsgWithFinalText];
 
-      const list = new MessageList({ threadId, resourceId }).add(messageSequence);
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'memory');
 
-      expect(list.getMessages()).toEqual([
+      expect(list.get.all.mastra()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
@@ -989,9 +988,9 @@ describe('MessageList', () => {
         ],
       } satisfies VercelCoreMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage);
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'user');
 
-      expect(list.getMessages()).toEqual([
+      expect(list.get.all.mastra()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
@@ -1020,9 +1019,9 @@ describe('MessageList', () => {
         ],
       } satisfies VercelCoreMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage);
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'memory');
 
-      expect(list.getMessages()).toEqual([
+      expect(list.get.all.mastra()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
@@ -1098,9 +1097,9 @@ describe('MessageList', () => {
         assistantMsgWithFinalText,
       ];
 
-      const list = new MessageList({ threadId, resourceId }).add(messageSequence);
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'memory');
 
-      expect(list.getMessages()).toEqual([
+      expect(list.get.all.mastra()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
@@ -1163,9 +1162,9 @@ describe('MessageList', () => {
         ],
       } satisfies VercelCoreMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage);
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'memory');
 
-      expect(list.getMessages()).toEqual([
+      expect(list.get.all.mastra()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
@@ -1339,9 +1338,9 @@ describe('MessageList', () => {
         createdAt: `createdAt` in m && m.createdAt ? new Date(m.createdAt) : new Date(),
       })) as MastraMessageV1[];
 
-      const list = new MessageList({ threadId: '68' }).add(history);
+      const list = new MessageList({ threadId: '68' }).add(history, 'memory');
 
-      const uiMessages = list.toUIMessages();
+      const uiMessages = list.get.all.ui();
 
       expect(uiMessages.length).toBe(9);
       const expectedMessages = [
@@ -1453,7 +1452,7 @@ describe('MessageList', () => {
       });
 
       expect(newUIMessages.length).toBe(uiMessages.length + 1);
-      const newUIMessages2 = list.add(newUIMessages).toUIMessages();
+      const newUIMessages2 = list.add(newUIMessages, 'memory').get.all.ui();
       expect(newUIMessages2).toEqual([
         ...uiMessages,
         {
@@ -1482,7 +1481,7 @@ describe('MessageList', () => {
       });
 
       expect(newUIMessages3.length).toBe(newUIMessages2.length + 1);
-      const newUIMessages4 = list.add(newUIMessages3).toUIMessages();
+      const newUIMessages4 = list.add(newUIMessages3, 'memory').get.all.ui();
       expect(newUIMessages4).toEqual([
         ...newUIMessages2,
         {
@@ -1507,7 +1506,7 @@ describe('MessageList', () => {
         ],
       });
 
-      expect(list.add(newUIMessages5).toUIMessages()).toEqual([
+      expect(list.add(newUIMessages5, 'memory').get.all.ui()).toEqual([
         ...newUIMessages4,
         {
           role: 'assistant',
@@ -1549,22 +1548,22 @@ describe('MessageList', () => {
       it('should add and retrieve a single system message', () => {
         const list = new MessageList({ threadId, resourceId });
         const systemMsgContent = 'This is a system directive.';
-        list.add({ role: 'system', content: systemMsgContent });
+        list.add({ role: 'system', content: systemMsgContent }, 'system');
 
         const systemMessages = list.getSystemMessages();
         expect(systemMessages.length).toBe(1);
         expect(systemMessages[0]?.role).toBe('system');
         expect(systemMessages[0]?.content).toBe(systemMsgContent);
 
-        expect(list.getMessages().length).toBe(0); // Should not be in MastraMessageV2 list
-        expect(list.toUIMessages().length).toBe(0); // Should not be in UI messages
+        expect(list.get.all.mastra().length).toBe(0); // Should not be in MastraMessageV2 list
+        expect(list.get.all.ui().length).toBe(0); // Should not be in UI messages
       });
 
       it('should not add duplicate system messages based on content', () => {
         const list = new MessageList({ threadId, resourceId });
         const systemMsgContent = 'This is a unique system directive.';
-        list.add({ role: 'system', content: systemMsgContent });
-        list.add({ role: 'system', content: systemMsgContent }); // Add duplicate
+        list.add({ role: 'system', content: systemMsgContent }, 'system');
+        list.add({ role: 'system', content: systemMsgContent }, 'system'); // Add duplicate
 
         const systemMessages = list.getSystemMessages();
         expect(systemMessages.length).toBe(1); // Still only one
@@ -1575,8 +1574,8 @@ describe('MessageList', () => {
         const list = new MessageList({ threadId, resourceId });
         const systemMsgContent1 = 'Directive one.';
         const systemMsgContent2 = 'Directive two.';
-        list.add({ role: 'system', content: systemMsgContent1 });
-        list.add({ role: 'system', content: systemMsgContent2 });
+        list.add({ role: 'system', content: systemMsgContent1 }, 'system');
+        list.add({ role: 'system', content: systemMsgContent2 }, 'system');
 
         const systemMessages = list.getSystemMessages();
         expect(systemMessages.length).toBe(2);
@@ -1586,18 +1585,18 @@ describe('MessageList', () => {
 
       it('should handle system messages added amidst other messages', () => {
         const list = new MessageList({ threadId, resourceId });
-        list.add({ role: 'user', content: 'Hello' });
-        list.add({ role: 'system', content: 'System setup complete.' });
-        list.add({ role: 'assistant', content: 'Hi there!' });
-        list.add({ role: 'system', content: 'Another system note.' });
+        list.add({ role: 'user', content: 'Hello' }, 'user');
+        list.add({ role: 'system', content: 'System setup complete.' }, 'system');
+        list.add({ role: 'assistant', content: 'Hi there!' }, 'response');
+        list.add({ role: 'system', content: 'Another system note.' }, 'system');
 
         const systemMessages = list.getSystemMessages();
         expect(systemMessages.length).toBe(2);
         expect(systemMessages.find(m => m.content === 'System setup complete.')).toBeDefined();
         expect(systemMessages.find(m => m.content === 'Another system note.')).toBeDefined();
 
-        expect(list.getMessages().length).toBe(2); // user and assistant
-        expect(list.toUIMessages().length).toBe(2); // user and assistant
+        expect(list.get.all.mastra().length).toBe(2); // user and assistant
+        expect(list.get.all.ui().length).toBe(2); // user and assistant
       });
     });
 

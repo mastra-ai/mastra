@@ -1,15 +1,15 @@
 import { deepMerge } from '@mastra/core';
-import type { CoreTool } from '@mastra/core';
+import type { CoreTool, MastraMessageV1 } from '@mastra/core';
+import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageV2 } from '@mastra/core/agent';
 import { MastraMemory } from '@mastra/core/memory';
 import type { MemoryConfig, SharedMemoryConfig, StorageThreadType } from '@mastra/core/memory';
 import type { StorageGetMessagesArg } from '@mastra/core/storage';
 import { embedMany } from 'ai';
-import type { TextPart } from 'ai';
+import type { TextPart, UIMessage } from 'ai';
 
 import xxhash from 'xxhash-wasm';
 import { updateWorkingMemoryTool } from './tools/working-memory';
-import { reorderToolCallsAndResults } from './utils';
 
 // Average characters per token based on OpenAI's tokenization
 const CHARS_PER_TOKEN = 4;
@@ -57,7 +57,7 @@ export class Memory extends MastraMemory {
     threadConfig,
   }: StorageGetMessagesArg & {
     threadConfig?: MemoryConfig;
-  }): Promise<{ messages: MastraMessageV2[] }> {
+  }): Promise<{ messages: (MastraMessageV2 | MastraMessageV1)[]; uiMessages: UIMessage[] }> {
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId);
 
     const vectorResults: {
@@ -140,15 +140,15 @@ export class Memory extends MastraMemory {
       threadConfig: config,
     });
 
-    // First sort messages by date
-    const orderedByDate = rawMessages.sort(
-      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-    ) as MastraMessageV2[];
-    // Then reorder tool calls to be directly before their results
-    // This utility will need to be updated to handle MastraMessageV2[]
-    const reorderedToolMessages = reorderToolCallsAndResults(orderedByDate);
+    const orderedByDate = rawMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
-    return { messages: reorderedToolMessages };
+    return {
+      messages: orderedByDate,
+      get uiMessages() {
+        // for compatibility with our published public API
+        return new MessageList({ threadId, resourceId }).add(orderedByDate, 'memory').get.all.ui();
+      },
+    };
   }
 
   async rememberMessages({
@@ -161,13 +161,14 @@ export class Memory extends MastraMemory {
     resourceId?: string;
     vectorMessageSearch?: string;
     config?: MemoryConfig;
-  }): Promise<{ messages: MastraMessageV2[] }> {
+  }): Promise<{ messages: MastraMessageV1[]; messagesV2: MastraMessageV2[] }> {
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId);
     const threadConfig = this.getMergedThreadConfig(config || {});
 
     if (!threadConfig.lastMessages && !threadConfig.semanticRecall) {
       return {
         messages: [],
+        messagesV2: [],
       };
     }
 
@@ -179,9 +180,11 @@ export class Memory extends MastraMemory {
       },
       threadConfig: config,
     });
+    // Using MessageList here just to convert mixed input messages to single type output messages
+    const list = new MessageList({ threadId, resourceId }).add(messagesResult.messages, 'memory');
 
     this.logger.debug(`Remembered message history includes ${messagesResult.messages.length} messages.`);
-    return { messages: messagesResult.messages };
+    return { messages: list.get.all.v1(), messagesV2: list.get.all.mastra() };
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
@@ -321,7 +324,7 @@ export class Memory extends MastraMemory {
     messages,
     memoryConfig,
   }: {
-    messages: MastraMessageV2[];
+    messages: (MastraMessageV1 | MastraMessageV2)[];
     memoryConfig?: MemoryConfig;
   }): Promise<MastraMessageV2[]> {
     await this.storage.init();
@@ -341,20 +344,34 @@ export class Memory extends MastraMemory {
         updatedMessages.map(async message => {
           let textForEmbedding: string | null = null;
 
-          if (
-            message.content.content &&
-            typeof message.content.content === 'string' &&
-            message.content.content.trim() !== ''
-          ) {
-            textForEmbedding = message.content.content;
-          } else if (message.content.parts && message.content.parts.length > 0) {
-            // Extract text from all text parts, concatenate
-            const joined = message.content.parts
-              .filter(part => part.type === 'text')
-              .map(part => (part as TextPart).text)
-              .join(' ')
-              .trim();
-            if (joined) textForEmbedding = joined;
+          if (MessageList.isMastraMessageV2(message)) {
+            if (
+              message.content.content &&
+              typeof message.content.content === 'string' &&
+              message.content.content.trim() !== ''
+            ) {
+              textForEmbedding = message.content.content;
+            } else if (message.content.parts && message.content.parts.length > 0) {
+              // Extract text from all text parts, concatenate
+              const joined = message.content.parts
+                .filter(part => part.type === 'text')
+                .map(part => (part as TextPart).text)
+                .join(' ')
+                .trim();
+              if (joined) textForEmbedding = joined;
+            }
+          } else if (MessageList.isMastraMessageV1(message)) {
+            if (message.content && typeof message.content === 'string' && message.content.trim() !== '') {
+              textForEmbedding = message.content;
+            } else if (message.content && Array.isArray(message.content) && message.content.length > 0) {
+              // Extract text from all text parts, concatenate
+              const joined = message.content
+                .filter(part => part.type === 'text')
+                .map(part => part.text)
+                .join(' ')
+                .trim();
+              if (joined) textForEmbedding = joined;
+            }
           }
 
           if (!textForEmbedding) return;

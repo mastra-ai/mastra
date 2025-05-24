@@ -1,6 +1,6 @@
 import type { MastraMessageV2 } from '../agent';
 import { MastraBase } from '../base';
-import type { StorageThreadType } from '../memory/types';
+import type { MastraMessageV1, StorageThreadType } from '../memory/types';
 import type { WorkflowRunState } from '../workflows';
 
 import {
@@ -76,7 +76,7 @@ export abstract class MastraStorage extends MastraBase {
 
   abstract getMessages({ threadId, selectBy, threadConfig }: StorageGetMessagesArg): Promise<MastraMessageV2[]>;
 
-  abstract saveMessages({ messages }: { messages: MastraMessageV2[] }): Promise<MastraMessageV2[]>;
+  abstract saveMessages({ messages }: { messages: (MastraMessageV1 | MastraMessageV2)[] }): Promise<MastraMessageV2[]>;
 
   abstract getTraces({
     name,

@@ -949,7 +949,7 @@ export class CloudflareStore extends MastraStorage {
         return {
           ...message,
           createdAt: this.ensureDate(message.createdAt)!,
-          type: message.type || 'text',
+          type: 'v2',
           _index: index,
         };
       });
