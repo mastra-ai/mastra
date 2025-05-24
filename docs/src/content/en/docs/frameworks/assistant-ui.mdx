@@ -3,11 +3,11 @@ title: Using with Assistant UI
 description: "Learn how to integrate Assistant UI with Mastra"
 ---
 
-import { Callout, Steps } from 'nextra/components'
+import { Callout, FileTree, Steps } from 'nextra/components'
 
 # Using with Assistant UI
 
-[Assistant UI](https://assistant-ui.com) is the Typescript/React library for AI Chat.
+[Assistant UI](https://assistant-ui.com) is the TypeScript/React library for AI Chat.
 Built on shadcn/ui and Tailwind CSS, it enables developers to create beautiful, enterprise-grade chat experiences in minutes.
 
 ## Integrating with Next.js and Assistant UI
@@ -22,14 +22,21 @@ There are two primary ways to integrate Mastra into your Next.js project when us
 <Steps>
 ### Initialize Assistant UI
 
-Start by setting up Assistant UI in your Next.js project:
+There are two options when setting up Assistant UI using the `assistant-ui` CLI:
+
+1. **New Project**: Create a new Next.js project with Assistant UI.
+2. **Existing Project**: Initialize Assistant UI into an existing React project.
+
+#### New Project
 
 ```bash copy
-npx assistant-ui@latest create # For new project
+npx assistant-ui@latest create
 ```
 
+#### Existing Project
+
 ```bash copy
-npx assistant-ui@latest init # For existing project
+npx assistant-ui@latest init
 ```
 
 <Callout>For detailed setup instructions, including adding API keys, basic configuration, and manual setup steps, please refer to [assistant-ui's official documentation](https://assistant-ui.com/docs).</Callout>
@@ -49,7 +56,7 @@ To ensure Next.js correctly bundles your application when using Mastra directly 
 
 Update your `next.config.js` file to include `@mastra/`:
 
-```js copy
+```js showLineNumbers copy {3}
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   serverExternalPackages: ["@mastra/*"],
@@ -61,9 +68,7 @@ module.exports = nextConfig;
 
 ### Configure Mastra Memory and Storage
 
-Create a new file `mastra/memory.ts` and add the following code:
-
-```typescript copy
+```typescript showLineNumbers copy filename="mastra/memory.ts" {4,8}
 import { LibSQLStore } from "@mastra/libsql";
 import { Memory } from "@mastra/memory";
 
@@ -77,14 +82,12 @@ export const memory = new Memory({
 ```
 
 <Callout>
-If deploying to the edge, you should use a compatible storage solution and not a file based storage.
+If deploying to the edge, you should use a compatible storage solution and not a file-based storage.
 </Callout>
 
 ### Define Mastra Agent
 
-Create a new file `mastra/agents/chefAgent.ts` and add the following code:
-
-```typescript copy 
+```typescript showLineNumbers copy filename="mastra/agents/chef-agent.ts" {5-12}
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { memory} from "../memory";
@@ -101,11 +104,9 @@ export const chefAgent = new Agent({
 
 ### Register Agent to Mastra Instance
 
-Create a new file `mastra/index.ts` and add the following code:
-
-```typescript copy
+```typescript showLineNumbers copy filename="mastra/index.ts" {4-5}
 import { Mastra } from "@mastra/core";
-import { chefAgent } from "./agents/chefAgent";
+import { chefAgent } from "./agents/chef-agent";
 
 export const mastra = new Mastra({
     agents: { chefAgent },
@@ -119,7 +120,7 @@ This initializes Mastra and makes the `chefAgent` available for use.
 
 The initial bootstrapped Next.js project has a `app/api/chat/route.ts` file that exports a `POST` handler. The initial implementation may look like this:
 
-```typescript copy
+```typescript showLineNumbers copy filename="app/api/chat/route.ts" {11-21}
 import { openai } from "@ai-sdk/openai";
 import { frontendTools } from "@assistant-ui/react-ai-sdk";
 import { streamText } from "ai";
@@ -148,7 +149,7 @@ export async function POST(req: Request) {
 
 Now we need to modify the `POST` handler to use the `chefAgent` instead of this implementation.
 
-```typescript copy
+```typescript showLineNumbers copy filename="app/api/chat/route.ts" {1,6,8}
 import { mastra } from "@/mastra";
 
 export async function POST(req: Request) {
@@ -191,13 +192,19 @@ Run Mastra as a standalone server and connect your Next.js frontend (with Assist
 
 Set up your directory structure. A possible directory structure could look like this:
 
-```plaintext
-mastra-server/
-└── (server files)
-
-nextjs-frontend/
-└── (frontend files)
-```
+<FileTree>
+    <FileTree.Folder name="project-root" defaultOpen>
+        <FileTree.Folder name="mastra-server" defaultOpen>
+            <FileTree.Folder name="src">
+                <FileTree.Folder name="mastra" />
+            </FileTree.Folder>
+            <FileTree.File name="package.json" />
+        </FileTree.Folder>
+        <FileTree.Folder name="nextjs-frontend">
+            <FileTree.File name="package.json" />
+        </FileTree.Folder>
+    </FileTree.Folder>
+</FileTree>
 
 Bootstrap your Mastra server:
 
@@ -211,14 +218,12 @@ Follow the prompts to create your server project.
 You now have a basic Mastra server project ready.
 
 <Callout>
-Ensure that you have set the appropriate environment variables for your LLM provider in the `.env.development` file.
+Ensure that you have set the appropriate environment variables for your LLM provider in the `.env` file.
 </Callout>
 
 ### Define Mastra Agent
 
-Create a new file inside the `agents` directory `mastra/agents/chefAgent.ts` and add the following code:
-
-```typescript copy 
+```typescript showLineNumbers copy filename="mastra/agents/chef-agent.ts" {5-12}
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
 import { memory} from "../memory";
@@ -235,11 +240,9 @@ export const chefAgent = new Agent({
 
 ### Register Agent to Mastra Instance
 
-Update the `mastra/index.ts` file and add the following code:
-
-```typescript copy
+```typescript copy filename="mastra/index.ts" showLineNumbers
 import { Mastra } from "@mastra/core";
-import { chefAgent } from "./agents/chefAgent";
+import { chefAgent } from "./agents/chef-agent";
 
 export const mastra = new Mastra({
     agents: { chefAgent },
@@ -259,14 +262,21 @@ By default, the Mastra server will run on http://localhost:4111. Your chefAgent 
 
 ### Initialize Assistant UI
 
-Start by setting up Assistant UI in your Next.js project:
+There are two options when setting up Assistant UI using the `assistant-ui` CLI:
+
+1. **New Project**: Create a new Next.js project with Assistant UI.
+2. **Existing Project**: Initialize Assistant UI into an existing React project.
+
+#### New Project
 
 ```bash copy
-npx assistant-ui@latest create # For new project
+npx assistant-ui@latest create
 ```
 
+#### Existing Project
+
 ```bash copy
-npx assistant-ui@latest init # For existing project
+npx assistant-ui@latest init
 ```
 
 <Callout>For detailed setup instructions, including adding API keys, basic configuration, and manual setup steps, please refer to [assistant-ui's official documentation](https://assistant-ui.com/docs).</Callout>
@@ -277,7 +287,7 @@ The default Assistant UI setup configures the chat runtime to use a local API ro
 
 Open the main page file in your Assistant UI frontend project (usually `app/page.tsx` or `src/app/page.tsx`). Find the `useChatRuntime` hook and change the `api` property to the full URL of your Mastra agent's stream endpoint:
 
-```typescript copy
+```typescript showLineNumbers copy filename="app/page.tsx" {2}
 const runtime = useChatRuntime({
     api: "http://localhost:4111/api/agents/chefAgent/stream",
 });
