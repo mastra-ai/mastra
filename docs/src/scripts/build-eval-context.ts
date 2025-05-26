@@ -1,11 +1,5 @@
-import path from "path";
 import { promises as fs } from "fs";
-import { fileURLToPath } from "url";
-import { dirname } from "path";
-
-// Get __dirname equivalent in ES modules
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+import path from "path";
 
 function extractFrontMatter(content: string) {
   const frontMatterRegex = /^---\n([\s\S]*?)\n---/;
@@ -87,11 +81,7 @@ async function generateSectionFiles(sourceDir: string) {
         const fullPath = path.join(currentDirPath, entry.name);
 
         if (entry.isDirectory()) {
-          if (
-            !entry.name.startsWith(".") &&
-            entry.name !== "node_modules" &&
-            entry.name !== "showcase"
-          ) {
+          if (!entry.name.startsWith(".") && entry.name !== "node_modules") {
             await processDirectoryEntries(fullPath, language, contentRootPath);
           }
           continue;
@@ -244,38 +234,38 @@ async function generateSectionFiles(sourceDir: string) {
     }
 
     // Generate an index file
-    // const indexContent = ["# Mastra Documentation Sections\n"];
-    // for (const topLevelDir of Object.keys(groupedFiles).sort()) {
-    //   indexContent.push(`\n## ${topLevelDir}`);
-    //   const subSections = groupedFiles[topLevelDir];
-    //   for (const subSectionName of Object.keys(subSections).sort()) {
-    //     const filesInSubSection = subSections[subSectionName];
-    //     let sectionTitle =
-    //       subSectionName.charAt(0).toUpperCase() + subSectionName.slice(1);
-    //     let sectionDescription = `Content related to ${sectionTitle} in ${topLevelDir}.`;
-    //     const webUrl = `https://mastra.ai/en/${topLevelDir}/${subSectionName}`;
+    const indexContent = ["# Mastra Documentation Sections\n"];
+    for (const topLevelDir of Object.keys(groupedFiles).sort()) {
+      indexContent.push(`\n## ${topLevelDir}`);
+      const subSections = groupedFiles[topLevelDir];
+      for (const subSectionName of Object.keys(subSections).sort()) {
+        const filesInSubSection = subSections[subSectionName];
+        let sectionTitle =
+          subSectionName.charAt(0).toUpperCase() + subSectionName.slice(1);
+        let sectionDescription = `Content related to ${sectionTitle} in ${topLevelDir}.`;
+        const webUrl = `https://mastra.ai/en/${topLevelDir}/${subSectionName}`;
 
-    //     const indexFile = filesInSubSection.find((f) =>
-    //       path.basename(f.originalPath).startsWith("index."),
-    //     );
+        const indexFile = filesInSubSection.find((f) =>
+          path.basename(f.originalPath).startsWith("index."),
+        );
 
-    //     if (indexFile) {
-    //       sectionTitle = indexFile.title || sectionTitle;
-    //       sectionDescription = indexFile.description || sectionDescription;
-    //     }
+        if (indexFile) {
+          sectionTitle = indexFile.title || sectionTitle;
+          sectionDescription = indexFile.description || sectionDescription;
+        }
 
-    //     indexContent.push(
-    //       `- [${sectionTitle}](${webUrl})${sectionDescription ? ": " + sectionDescription : ""}`,
-    //     );
-    //   }
-    // }
+        indexContent.push(
+          `- [${sectionTitle}](${webUrl})${sectionDescription ? ": " + sectionDescription : ""}`,
+        );
+      }
+    }
 
-    // await fs.writeFile(
-    //   path.join(outputDir, "index.txt"),
-    //   indexContent.join("\n"),
-    //   "utf-8",
-    // );
-    // console.log("Generated index.txt");
+    await fs.writeFile(
+      path.join(outputDir, "index.txt"),
+      indexContent.join("\n"),
+      "utf-8",
+    );
+    console.log("Generated index.txt");
   } catch (error) {
     console.error(
       "Fatal error during documentation generation:",
