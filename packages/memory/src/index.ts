@@ -410,7 +410,6 @@ export class Memory extends MastraMemory {
     return result;
   }
   protected updateMessageToHideWorkingMemory(message: MastraMessageV1): MastraMessageV1 | null {
-    console.log(`updateMessageToHideWorkingMemory`);
     const workingMemoryRegex = /<working_memory>([^]*?)<\/working_memory>/g;
 
     if (typeof message?.content === `string`) {
@@ -425,11 +424,6 @@ export class Memory extends MastraMemory {
           (content.type !== 'tool-call' && content.type !== 'tool-result') ||
           content.toolName !== 'updateWorkingMemory',
       );
-      console.log({ filteredContent });
-      // if (filteredContent.length === 0) {
-      //   // If nothing left, skip this message
-      //   return message;
-      // }
       const newContent = filteredContent.map(content => {
         if (content.type === 'text') {
           return {
@@ -446,7 +440,6 @@ export class Memory extends MastraMemory {
     }
   }
   protected updateMessageToHideWorkingMemoryV2(message: MastraMessageV2): MastraMessageV2 | null {
-    console.log(`updateMessageToHideWorkingMemoryV2`);
     const workingMemoryRegex = /<working_memory>([^]*?)<\/working_memory>/g;
 
     const newMessage = { ...message, content: { ...message.content } }; // Deep copy message and content

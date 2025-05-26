@@ -321,7 +321,7 @@ describe('Working Memory Tests', () => {
     }
   });
 
-  it.only('should remove tool-call/tool-result messages with toolName "updateWorkingMemory"', async () => {
+  it('should remove tool-call/tool-result messages with toolName "updateWorkingMemory"', async () => {
     const threadId = thread.id;
     const messages = [
       createTestMessage(threadId, 'User says something'),
