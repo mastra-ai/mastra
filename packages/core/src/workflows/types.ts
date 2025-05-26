@@ -6,10 +6,10 @@ export type StepSuccess<P, R, T> = {
   output: T;
   payload: P;
   resumePayload?: R;
-  startedAt: Date;
-  endedAt: Date;
-  suspendedAt?: Date;
-  resumedAt?: Date;
+  startedAt: number;
+  endedAt: number;
+  suspendedAt?: number;
+  resumedAt?: number;
 };
 
 export type StepFailure<P, R> = {

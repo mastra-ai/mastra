@@ -5,7 +5,7 @@ import { EMITTER_SYMBOL } from './constants';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
 import type { ExecuteFunction, Step } from './step';
-import type { StepResult } from './types';
+import type { StepResult, StepSuccess } from './types';
 import type { StepFlowEntry } from './workflow';
 
 export type ExecutionContext = {
@@ -744,7 +744,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       endedAt: Date.now(),
       ...(startTime ? { startedAt: startTime } : {}),
       ...(resumeTime ? { resumedAt: resumeTime } : {}),
-    };
+    } as StepSuccess<any, any, any>;
   }
 
   protected async persistStepUpdate({
