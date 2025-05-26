@@ -141,7 +141,7 @@ describe('NewAgentNetwork', () => {
 
     const agentStep1 = createStep({
       id: 'agent-step',
-      description: 'This step is used to do research and text synthesis.',
+      description: 'This step is used to do research',
       inputSchema: z.object({
         city: z.string().describe('The city to research'),
       }),
@@ -161,7 +161,7 @@ describe('NewAgentNetwork', () => {
 
     const agentStep2 = createStep({
       id: 'agent-step',
-      description: 'This step is used to do research and text synthesis.',
+      description: 'This step is used to do text synthesis.',
       inputSchema: z.object({
         text: z.string().describe('The city to research'),
       }),

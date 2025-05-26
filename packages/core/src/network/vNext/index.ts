@@ -201,7 +201,7 @@ export class NewAgentNetwork extends MastraBase {
           ## System Instructions
           ${instructionsToUse}
 
-          You can only pick agents and workflows that are available in the lists below.
+          You can only pick agents and workflows that are available in the lists below. Never call any agents or workflows that are not available in the lists below.
 
           ## Available Agents in Network
           ${agentList}
@@ -210,7 +210,7 @@ export class NewAgentNetwork extends MastraBase {
           ${workflowList}
 
           If you have multiple entries that need to be called with a workflow or agent, call them separately with each input.
-          When calling a workflow, the prompt should be a JSON value that corresponds to the input schema of the workflow.
+          When calling a workflow, the prompt should be a JSON value that corresponds to the input schema of the workflow. The JSON value is stringified.
 
           Keep in mind that the user only sees the final result of the task. When reviewing completion, you should know that the user will not see the intermediate results.
         `;
