@@ -245,26 +245,10 @@ export function createStep<
       inputSchema: params.inputSchema,
       outputSchema: params.outputSchema,
       execute: async ({ inputData, mastra, [EMITTER_SYMBOL]: emitter }) => {
-        await emitter.emit('watch-v2', {
-          type: 'tool-call',
-          toolCallId: params.id,
-          toolName: params.id,
-          args: inputData,
-        });
-
-        const result = await params.execute({
+        return params.execute({
           context: inputData,
           mastra,
         });
-
-        await emitter.emit('watch-v2', {
-          type: 'tool-call-result',
-          toolCallId: params.id,
-          toolName: params.id,
-          result,
-        });
-
-        return result;
       },
     };
   }

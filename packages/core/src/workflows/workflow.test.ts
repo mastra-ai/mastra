@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { simulateReadableStream } from 'ai';
@@ -218,17 +219,9 @@ describe('Workflow', () => {
         .then(evaluateImproved)
         .commit();
 
-      // Create a new storage instance for initial run
-      const initialStorage = new DefaultStorage({
-        config: {
-          url: 'file::memory:',
-        },
-      });
-      await initialStorage.init();
-
       new Mastra({
-        storage: initialStorage,
-        vnext_workflows: { 'test-workflow': promptEvalWorkflow },
+        storage: testStorage,
+        workflows: { 'test-workflow': promptEvalWorkflow },
       });
 
       const run = promptEvalWorkflow.createRun();
@@ -336,7 +329,7 @@ describe('Workflow', () => {
       });
 
       new Mastra({
-        vnext_workflows: { 'test-workflow': workflow },
+        workflows: { 'test-workflow': workflow },
         agents: { 'test-agent-1': agent, 'test-agent-2': agent2 },
       });
 
@@ -405,13 +398,13 @@ describe('Workflow', () => {
           },
           {
             "payload": {
-              "id": "mapping_mock-uuid-2",
+              "id": "mapping_mock-uuid-1",
             },
             "type": "step-start",
           },
           {
             "payload": {
-              "id": "mapping_mock-uuid-2",
+              "id": "mapping_mock-uuid-1",
               "output": {
                 "prompt": "Capital of France, just the name",
               },
@@ -421,7 +414,7 @@ describe('Workflow', () => {
           },
           {
             "payload": {
-              "id": "mapping_mock-uuid-2",
+              "id": "mapping_mock-uuid-1",
               "metadata": {},
             },
             "type": "step-finish",
@@ -431,6 +424,21 @@ describe('Workflow', () => {
               "id": "test-agent-1",
             },
             "type": "step-start",
+          },
+          {
+            "args": {
+              "prompt": "Capital of France, just the name",
+            },
+            "name": "test-agent-1",
+            "type": "tool-call-streaming-start",
+          },
+          {
+            "args": {
+              "prompt": "Capital of France, just the name",
+            },
+            "argsTextDelta": "Paris",
+            "name": "test-agent-1",
+            "type": "tool-call-delta",
           },
           {
             "payload": {
@@ -451,13 +459,13 @@ describe('Workflow', () => {
           },
           {
             "payload": {
-              "id": "mapping_mock-uuid-3",
+              "id": "mapping_mock-uuid-2",
             },
             "type": "step-start",
           },
           {
             "payload": {
-              "id": "mapping_mock-uuid-3",
+              "id": "mapping_mock-uuid-2",
               "output": {
                 "prompt": "Capital of UK, just the name",
               },
@@ -467,7 +475,7 @@ describe('Workflow', () => {
           },
           {
             "payload": {
-              "id": "mapping_mock-uuid-3",
+              "id": "mapping_mock-uuid-2",
               "metadata": {},
             },
             "type": "step-finish",
@@ -477,6 +485,21 @@ describe('Workflow', () => {
               "id": "test-agent-2",
             },
             "type": "step-start",
+          },
+          {
+            "args": {
+              "prompt": "Capital of UK, just the name",
+            },
+            "name": "test-agent-2",
+            "type": "tool-call-streaming-start",
+          },
+          {
+            "args": {
+              "prompt": "Capital of UK, just the name",
+            },
+            "argsTextDelta": "London",
+            "name": "test-agent-2",
+            "type": "tool-call-delta",
           },
           {
             "payload": {
@@ -2931,7 +2954,7 @@ describe('Workflow', () => {
         [
           {
             "payload": {
-              "runId": "mock-uuid-3",
+              "runId": "mock-uuid-1",
             },
             "type": "start",
           },
@@ -2983,7 +3006,7 @@ describe('Workflow', () => {
           },
           {
             "payload": {
-              "runId": "mock-uuid-3",
+              "runId": "mock-uuid-1",
             },
             "type": "finish",
           },
