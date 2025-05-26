@@ -4,8 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "gtx-cli translate && pnpm build:llms-txt && next build",
+    "build": "gtx-cli translate && pnpm build:llms-txt && pnpm build:eval-context && next build",
     "build:llms-txt": "tsx src/scripts/build-llms-text-files.ts",
+    "build:eval-context": "tsx src/scripts/build-eval-context.ts",
     "build:stars": "tsx scripts/fetchStars.ts",
     "start": "next start",
     "lint": "next lint",
