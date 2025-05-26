@@ -306,6 +306,10 @@ export function streamWorkflowHandler({
       throw new HTTPException(400, { message: 'Workflow ID is required' });
     }
 
+    if (!runId) {
+      throw new HTTPException(400, { message: 'runId required to resume workflow' });
+    }
+
     const workflow = mastra.getWorkflow(workflowId);
 
     if (!workflow) {
@@ -324,7 +328,7 @@ export function streamWorkflowHandler({
     });
     return result;
   } catch (error) {
-    throw new HTTPException(500, { message: (error as Error)?.message || 'Error executing workflow' });
+    return handleError(error, 'Error executing workflow');
   }
 }
 

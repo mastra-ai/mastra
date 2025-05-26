@@ -144,7 +144,7 @@ export function watchWorkflowHandler(c: Context) {
             await stream.write(JSON.stringify(chunkResult.value) + '\x1E');
           }
         } catch (err) {
-          console.log(err);
+          mastra.getLogger().error('Error in watch stream: ' + ((err as Error)?.message ?? 'Unknown error'));
         }
       },
       async err => {
@@ -193,11 +193,11 @@ export async function streamWorkflowHandler(c: Context) {
         }
       },
       async err => {
-        logger.error('Error in watch stream: ' + err?.message);
+        logger.error('Error in workflow stream: ' + err?.message);
       },
     );
   } catch (error) {
-    return handleError(error, 'Error watching workflow');
+    return handleError(error, 'Error streaming workflow');
   }
 }
 

@@ -195,7 +195,6 @@ export function createStep<
           // resourceId: inputData.resourceId,
           // threadId: inputData.threadId,
           onFinish: result => {
-            console.log('on finish', result.text);
             streamPromise.resolve(result.text);
           },
         });
@@ -1044,15 +1043,11 @@ export class Run<
       unwatch();
 
       try {
-        try {
-          await writer.close();
-        } catch {
-          // Stream might already be closed
-        } finally {
-          writer.releaseLock();
-        }
+        await writer.close();
       } catch (err) {
         console.error('Error closing stream:', err);
+      } finally {
+        writer.releaseLock();
       }
     };
 

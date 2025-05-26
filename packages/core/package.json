@@ -44,6 +44,10 @@
       "import": {
         "types": "./dist/workflows/constants.d.ts",
         "default": "./dist/workflows/constants.js"
+      },
+      "require": {
+        "types": "./dist/workflows/constants.d.cts",
+        "default": "./dist/workflows/constants.cjs"
       }
     },
     "./vector/filter": {
