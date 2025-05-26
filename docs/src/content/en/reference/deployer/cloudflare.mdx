@@ -29,6 +29,19 @@ const mastra = new Mastra({
       apiToken: "your-api-token",
       apiEmail: "your-email",
     },
+    d1Databases: [
+      {
+        binding: "binding-name",
+        database_name: "database-name",
+        database_id: "database-id",
+      }
+    ],
+    kvNamespaces: [
+      {
+        binding: "binding-name",
+        id: "namespace-id"
+      }
+    ],
   }),
   // ... other Mastra configuration options
 });
@@ -78,6 +91,18 @@ const mastra = new Mastra({
       description: "Cloudflare authentication details.",
       isOptional: false,
     },
+    {
+      name: "d1Databases",
+      type: "D1DatabaseBinding[]",
+      description: "Array of D1 database bindings for your worker.",
+      isOptional: true,
+    },
+    {
+      name: "kvNamespaces",
+      type: "KVNamespaceBinding[]",
+      description: "Array of KV namespace bindings for your worker.",
+      isOptional: true,
+    },
   ]}
 />
 
@@ -126,6 +151,56 @@ const mastra = new Mastra({
   ]}
 />
 
+### D1DatabaseBinding Object
+
+<PropertiesTable
+  content={[
+    {
+      name: "binding",
+      type: "string",
+      description: "Name used in Worker code (e.g., `env.testdb`).",
+      isOptional: false,
+    },
+    {
+      name: "database_name",
+      type: "string",
+      description: "Human-readable name (for dashboard).",
+      isOptional: false,
+    },
+    {
+      name: "database_id",
+      type: "string",
+      description: "Cloudflare D1 database ID.",
+      isOptional: false,
+    },
+    {
+      name: "preview_database_id",
+      type: "string",
+      description: "For preview deployments.",
+      isOptional: true,
+    },
+  ]}
+/>
+
+### KVNamespaceBinding Object
+
+<PropertiesTable
+  content={[
+    {
+      name: "binding",
+      type: "string",
+      description: "Name used in Worker code (e.g., `env.test_namespace`).",
+      isOptional: false,
+    },
+    {
+      name: "id",
+      type: "string",
+      description: "Cloudflare KV namespace ID.",
+      isOptional: false,
+    },
+  ]}
+/>
+
 ### Environment Variables
 
 The CloudflareDeployer handles environment variables from multiple sources:
@@ -147,11 +222,11 @@ To build your Mastra project for cloudflare deployment:
 
 ```bash
 npx mastra build
+```
 
 The build process generates the following output structure in the `.mastra/output` directory:
 
 ```
-
 .mastra/output/
 ├── index.mjs # Main worker entry point
 ├── wrangler.json # Cloudflare Worker configuration
@@ -168,7 +243,7 @@ The CloudflareDeployer automatically generates a `wrangler.json` configuration f
   "name": "your-project-name",
   "main": "./output/index.mjs",
   "compatibility_date": "2024-12-02",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": ["nodejs_compat", "nodejs_compat_populate_process_env"],
   "observability": {
     "logs": {
       "enabled": true
@@ -179,9 +254,18 @@ The CloudflareDeployer automatically generates a `wrangler.json` configuration f
   },
   "routes": [
     // Route configurations if specified
+  ],
+  "d1_databases": [
+    // D1 database bindings if specified
+  ],
+  "kv_namespaces": [
+    // KV namespace bindings if specified
   ]
 }
 ````
+Compatibility flags:
+  - `nodejs_compat`: Enables Node.js compatibility in Workers.
+  - `nodejs_compat_populate_process_env`: Populates `process.env` with variables from `vars`.
 
 ### Route Configuration
 

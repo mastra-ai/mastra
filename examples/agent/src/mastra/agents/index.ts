@@ -37,6 +37,7 @@ export const weatherInfo = tool({
 
 export const chefAgent = new Agent({
   name: 'Chef Agent',
+  description: 'A chef agent that can help you cook great meals with whatever ingredients you have available.',
   instructions: `
     YOU MUST USE THE TOOL cooking-tool
     You are Michel, a practical and experienced home chef who helps people cook great meals with whatever 

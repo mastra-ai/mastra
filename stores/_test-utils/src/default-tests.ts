@@ -686,6 +686,61 @@ export function createTestSuite(storage: MastraStorage) {
         expect(runs.length).toBe(0);
       });
     });
+
+    it('should store valid ISO date strings for createdAt and updatedAt in workflow runs', async () => {
+      // Use the storage instance from the test context
+      const workflowName = 'test-workflow';
+      const runId = 'test-run-id';
+      const snapshot = {
+        runId,
+        value: {},
+        context: {},
+        activePaths: [],
+        suspendedPaths: {},
+        timestamp: Date.now(),
+      };
+      await storage.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot,
+      });
+      // Fetch the row directly from the database
+      const run = await storage.getWorkflowRunById({ workflowName, runId });
+      expect(run).toBeTruthy();
+      // Check that these are valid Date objects
+      expect(run?.createdAt instanceof Date).toBe(true);
+      expect(run?.updatedAt instanceof Date).toBe(true);
+      expect(!isNaN(run!.createdAt.getTime())).toBe(true);
+      expect(!isNaN(run!.updatedAt.getTime())).toBe(true);
+    });
+
+    it('getWorkflowRuns should return valid createdAt and updatedAt', async () => {
+      // Use the storage instance from the test context
+      const workflowName = 'test-workflow';
+      const runId = 'test-run-id-2';
+      const snapshot = {
+        runId,
+        value: {},
+        context: {},
+        activePaths: [],
+        suspendedPaths: {},
+        timestamp: Date.now(),
+      };
+      await storage.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot,
+      });
+
+      const { runs } = await storage.getWorkflowRuns({ workflowName });
+      expect(runs.length).toBeGreaterThan(0);
+      const run = runs.find(r => r.runId === runId);
+      expect(run).toBeTruthy();
+      expect(run?.createdAt instanceof Date).toBe(true);
+      expect(run?.updatedAt instanceof Date).toBe(true);
+      expect(!isNaN(run!.createdAt.getTime())).toBe(true);
+      expect(!isNaN(run!.updatedAt.getTime())).toBe(true);
+    });
   });
 
   describe('hasColumn', () => {
