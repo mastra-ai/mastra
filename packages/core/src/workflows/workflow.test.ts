@@ -610,6 +610,10 @@ describe('Workflow', () => {
       expect(result.steps['step1']).toEqual({
         status: 'success',
         output: { result: 'success' },
+        payload: {},
+        resumePayload: undefined,
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
       });
     });
 
@@ -642,6 +646,10 @@ describe('Workflow', () => {
       expect(result.steps['step1']).toEqual({
         status: 'success',
         output: { result: 'success' },
+        payload: {},
+        resumePayload: undefined,
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
       });
     });
 
@@ -662,7 +670,7 @@ describe('Workflow', () => {
       const step2 = createStep({
         id: 'step2',
         execute: step2Action,
-        inputSchema: z.object({ value: z.string() }),
+        inputSchema: z.object({}),
         outputSchema: z.object({ value: z.string() }),
       });
 
@@ -673,7 +681,7 @@ describe('Workflow', () => {
         steps: [step1, step2],
       });
 
-      workflow.then(step1).then(step2).commit();
+      workflow.parallel([step1, step2]).commit();
 
       const run = workflow.createRun();
       const result = await run.start({ inputData: {} });
@@ -682,8 +690,22 @@ describe('Workflow', () => {
       expect(step2Action).toHaveBeenCalled();
       expect(result.steps).toEqual({
         input: {},
-        step1: { status: 'success', output: { value: 'step1' } },
-        step2: { status: 'success', output: { value: 'step2' } },
+        step1: {
+          status: 'success',
+          output: { value: 'step1' },
+          payload: {},
+          resumePayload: undefined,
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        step2: {
+          status: 'success',
+          output: { value: 'step2' },
+          payload: {},
+          resumePayload: undefined,
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
       });
     });
 
@@ -727,8 +749,24 @@ describe('Workflow', () => {
       expect(executionOrder).toEqual(['step1', 'step2']);
       expect(result.steps).toEqual({
         input: {},
-        step1: { status: 'success', output: { value: 'step1' } },
-        step2: { status: 'success', output: { value: 'step2' } },
+        step1: {
+          status: 'success',
+          output: { value: 'step1' },
+          payload: {},
+          resumePayload: undefined,
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        step2: {
+          status: 'success',
+          output: { value: 'step2' },
+          payload: {
+            value: 'step1',
+          },
+          resumePayload: undefined,
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
       });
     });
 
@@ -760,8 +798,24 @@ describe('Workflow', () => {
         const run = workflow.createRun();
         const result = await run.start({ inputData: { inputData: 'test-input' } });
 
-        expect(result.steps.step1).toEqual({ status: 'success', output: { result: 'success' } });
-        expect(result.steps.step2).toEqual({ status: 'success', output: { result: 'success' } });
+        expect(result.steps.step1).toEqual({
+          status: 'success',
+          output: { result: 'success' },
+          payload: {
+            inputData: 'test-input',
+          },
+          resumePayload: undefined,
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        });
+        expect(result.steps.step2).toEqual({
+          status: 'success',
+          output: { result: 'success' },
+          payload: { result: 'success' },
+          resumePayload: undefined,
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        });
       });
 
       it('should provide access to step results and trigger data via getStepResult helper', async () => {
@@ -817,8 +871,26 @@ describe('Workflow', () => {
         expect(step2Action).toHaveBeenCalled();
         expect(result.steps).toEqual({
           input: { inputValue: 'test-input' },
-          step1: { status: 'success', output: { value: 'step1-result' } },
-          step2: { status: 'success', output: { value: 'step2-result' } },
+          step1: {
+            status: 'success',
+            output: { value: 'step1-result' },
+            payload: {
+              inputValue: 'test-input',
+            },
+            resumePayload: undefined,
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+          step2: {
+            status: 'success',
+            output: { value: 'step2-result' },
+            payload: {
+              value: 'step1-result',
+            },
+            resumePayload: undefined,
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
         });
       });
 
@@ -894,7 +966,16 @@ describe('Workflow', () => {
           }),
         );
 
-        expect(result.steps.step2).toEqual({ status: 'success', output: { result: { cool: 'test-input' } } });
+        expect(result.steps.step2).toEqual({
+          status: 'success',
+          output: { result: { cool: 'test-input' } },
+          payload: {
+            result: 'success',
+          },
+          resumePayload: undefined,
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        });
       });
 
       it('should resolve trigger data from getInitData with workflow schema', async () => {
@@ -937,7 +1018,14 @@ describe('Workflow', () => {
           }),
         );
 
-        expect(result.steps.step2).toEqual({ status: 'success', output: { result: { cool: 'test-input' } } });
+        expect(result.steps.step2).toEqual({
+          status: 'success',
+          output: { result: { cool: 'test-input' } },
+          payload: { result: 'success' },
+          resumePayload: undefined,
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        });
       });
 
       it('should resolve trigger data and DI runtimeContext values via .map()', async () => {
@@ -995,7 +1083,14 @@ describe('Workflow', () => {
           }),
         );
 
-        expect(result.steps.step2).toEqual({ status: 'success', output: { result: 'test-input', second: 42 } });
+        expect(result.steps.step2).toEqual({
+          status: 'success',
+          output: { result: 'test-input', second: 42 },
+          payload: { test: 'test-input', test2: 42 },
+          resumePayload: undefined,
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        });
       });
 
       it('should resolve dynamic mappings via .map()', async () => {
@@ -1071,6 +1166,10 @@ describe('Workflow', () => {
         expect(result.steps.step2).toEqual({
           status: 'success',
           output: { result: 'test-input', second: 'Hello success' },
+          payload: { test: 'test-input', test2: 'Hello success' },
+          resumePayload: undefined,
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
         });
 
         expect(result.result).toEqual({
@@ -1158,8 +1257,22 @@ describe('Workflow', () => {
 
         expect(result.steps).toEqual({
           input: {},
-          step1: { status: 'success', output: 'step1-data' },
-          step2: { status: 'success', output: { result: 'success', input: 'step1-data' } },
+          step1: {
+            status: 'success',
+            output: 'step1-data',
+            payload: {},
+            resumePayload: undefined,
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+          step2: {
+            status: 'success',
+            output: { result: 'success', input: 'step1-data' },
+            payload: 'step1-data',
+            resumePayload: undefined,
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
         });
       });
 
@@ -1194,8 +1307,22 @@ describe('Workflow', () => {
 
         expect(result.steps).toEqual({
           input: {},
-          step1: { status: 'success', output: [{ str: 'step1-data' }] },
-          step2: { status: 'success', output: { result: 'success', input: [{ str: 'step1-data' }] } },
+          step1: {
+            status: 'success',
+            output: [{ str: 'step1-data' }],
+            payload: {},
+            resumePayload: undefined,
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+          step2: {
+            status: 'success',
+            output: { result: 'success', input: [{ str: 'step1-data' }] },
+            payload: [{ str: 'step1-data' }],
+            resumePayload: undefined,
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
         });
       });
 
@@ -1239,8 +1366,22 @@ describe('Workflow', () => {
 
         expect(result.steps).toMatchObject({
           input: {},
-          step1: { status: 'success', output: [{ str: 'step1-data' }] },
-          step2: { status: 'success', output: { result: 'success', input: [{ str: 'step1-data' }] } },
+          step1: {
+            status: 'success',
+            output: [{ str: 'step1-data' }],
+            payload: {},
+            resumePayload: undefined,
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+          step2: {
+            status: 'success',
+            output: { result: 'success', input: [{ str: 'step1-data' }] },
+            payload: { ary: [{ str: 'step1-data' }] },
+            resumePayload: undefined,
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
         });
       });
 
@@ -1296,7 +1437,14 @@ describe('Workflow', () => {
           }),
         );
 
-        expect(result.steps.step2).toEqual({ status: 'success', output: { result: 'none', second: 0 } });
+        expect(result.steps.step2).toEqual({
+          status: 'success',
+          output: { result: 'none', second: 0 },
+          payload: { candidates: [], iteration: 0 },
+          resumePayload: undefined,
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        });
       });
 
       it('should resolve fully dynamic input via .map()', async () => {
@@ -1347,7 +1495,14 @@ describe('Workflow', () => {
           }),
         );
 
-        expect(result.steps.step2).toEqual({ status: 'success', output: { result: 'success, hello', second: 0 } });
+        expect(result.steps.step2).toEqual({
+          status: 'success',
+          output: { result: 'success, hello', second: 0 },
+          payload: { candidates: [{ name: 'success' }, { name: 'hello' }], iteration: 0 },
+          resumePayload: undefined,
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        });
       });
     });
 
@@ -1478,7 +1633,14 @@ describe('Workflow', () => {
         expect(step2Action).not.toHaveBeenCalled();
         expect(result?.steps).toEqual({
           input: {},
-          step1: { status: 'failed', error: err },
+          step1: {
+            status: 'failed',
+            error: err?.stack ?? err,
+            payload: {},
+            resumePayload: undefined,
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
         });
       });
 
@@ -1545,8 +1707,22 @@ describe('Workflow', () => {
         expect(step3Action).not.toHaveBeenCalled();
         expect(result.steps).toMatchObject({
           input: { status: 'success' },
-          step1: { status: 'success', output: { status: 'success' } },
-          step2: { status: 'success', output: { result: 'step2' } },
+          step1: {
+            status: 'success',
+            output: { status: 'success' },
+            payload: {},
+            resumePayload: undefined,
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+          step2: {
+            status: 'success',
+            output: { result: 'step2' },
+            payload: { status: 'success' },
+            resumePayload: undefined,
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
         });
       });
 
@@ -1594,10 +1770,18 @@ describe('Workflow', () => {
         expect(result.steps.step1).toEqual({
           status: 'success',
           output: { count: 5 },
+          payload: { count: 5 },
+          resumePayload: undefined,
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
         });
         expect(result.steps.step2).toEqual({
           status: 'success',
           output: undefined,
+          payload: { count: 5 },
+          resumePayload: undefined,
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
         });
       });
     });
@@ -1629,12 +1813,16 @@ describe('Workflow', () => {
 
       await expect(run.start({ inputData: {} })).resolves.toEqual({
         status: 'failed',
-        error,
+        error: error?.stack ?? error,
         steps: {
           input: {},
           step1: {
-            error,
+            error: error?.stack ?? error,
             status: 'failed',
+            payload: {},
+            resumePayload: undefined,
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
           },
         },
       });
@@ -1676,10 +1864,20 @@ describe('Workflow', () => {
             output: {
               data: 'success',
             },
+            payload: {},
+            resumePayload: undefined,
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
           },
           step2: {
             output: undefined,
             status: 'success',
+            payload: {
+              data: 'success',
+            },
+            resumePayload: undefined,
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
           },
         },
       });
@@ -1729,10 +1927,18 @@ describe('Workflow', () => {
       expect(result.steps).toMatchObject({
         step1: {
           status: 'success',
+          payload: {},
+          resumePayload: undefined,
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
         },
         step2: {
           status: 'failed',
-          error,
+          error: error?.stack ?? error,
+          payload: {},
+          resumePayload: undefined,
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
         },
       });
     });
@@ -1791,7 +1997,11 @@ describe('Workflow', () => {
       expect(result.steps).toMatchObject({
         'test-workflow': {
           status: 'failed',
-          error,
+          error: error?.stack ?? error,
+          payload: {},
+          resumePayload: undefined,
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
         },
       });
     });
@@ -1883,7 +2093,18 @@ describe('Workflow', () => {
 
       expect(step2Action).toHaveBeenCalled();
       expect(step3Action).not.toHaveBeenCalled();
-      expect(result.steps.step2).toEqual({ status: 'success', output: { result: 'step2' } });
+      expect(result.steps.step2).toEqual({
+        status: 'success',
+        output: { result: 'step2' },
+        payload: {
+          status: 'partial',
+          score: 75,
+          flags: { isValid: true },
+        },
+        resumePayload: undefined,
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
     });
   });
 
