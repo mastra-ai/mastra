@@ -140,10 +140,18 @@ describe('Workflow', () => {
       expect(executionResult.steps.step1).toEqual({
         status: 'success',
         output: { result: 'success1' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
       });
       expect(executionResult.steps.step2).toEqual({
         status: 'success',
         output: { result: 'success2' },
+        payload: {
+          result: 'success1',
+        },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
       });
     });
 
@@ -247,16 +255,43 @@ describe('Workflow', () => {
 
       expect(resumeResult.steps).toEqual({
         input: { input: 'test' },
-        getUserInput: { status: 'success', output: { userInput: 'test input' } },
-        promptAgent: { status: 'success', output: { modelOutput: 'test output' } },
+        getUserInput: {
+          status: 'success',
+          output: { userInput: 'test input' },
+          payload: { input: 'test' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        promptAgent: {
+          status: 'success',
+          output: { modelOutput: 'test output' },
+          payload: { userInput: 'test input' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          resumePayload: { stepId: 'promptAgent', context: { userInput: 'test input for resumption' } },
+          resumedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+        },
         evaluateToneConsistency: {
           status: 'success',
           output: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+          payload: { modelOutput: 'test output' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
         },
-        improveResponse: { status: 'success', output: { improvedOutput: 'improved output' } },
+        improveResponse: {
+          status: 'success',
+          output: { improvedOutput: 'improved output' },
+          payload: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
         evaluateImprovedResponse: {
           status: 'success',
           output: { toneScore: { score: 0.9 }, completenessScore: { score: 0.8 } },
+          payload: { improvedOutput: 'improved output' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
         },
       });
     });
@@ -3373,8 +3408,20 @@ describe('Workflow', () => {
 
       expect(step1Action).toHaveBeenCalled();
       expect(toolAction).toHaveBeenCalled();
-      expect(result.steps.step1).toEqual({ status: 'success', output: { name: 'step1' } });
-      expect(result.steps['random-tool']).toEqual({ status: 'success', output: { name: 'step1' } });
+      expect(result.steps.step1).toEqual({
+        status: 'success',
+        output: { name: 'step1' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(result.steps['random-tool']).toEqual({
+        status: 'success',
+        output: { name: 'step1' },
+        payload: { name: 'step1' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
     });
   });
 
