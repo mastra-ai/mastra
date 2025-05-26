@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import * as React from 'react';
 
 import { cn } from '@/lib/utils';
+import clsx from 'clsx';
 
 const Dialog = DialogPrimitive.Root;
 
@@ -67,7 +68,7 @@ const DialogTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Title
     ref={ref}
-    className={cn('text-lg font-semibold leading-none tracking-tight', className)}
+    className={clsx('text-lg font-semibold leading-none tracking-tight', className)}
     {...props}
   />
 ));

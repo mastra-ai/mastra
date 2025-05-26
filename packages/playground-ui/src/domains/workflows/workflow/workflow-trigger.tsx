@@ -38,6 +38,7 @@ export function WorkflowTrigger({
   const { runtimeContext } = usePlaygroundStore();
   const { result, setResult, payload, setPayload } = useContext(WorkflowRunContext);
   const { isLoading, workflow } = useWorkflow(workflowId, baseUrl);
+
   const { createWorkflowRun, startWorkflowRun } = useExecuteWorkflow(baseUrl);
   const { watchWorkflow, watchResult, isWatchingWorkflow } = useWatchWorkflow(baseUrl);
   const { resumeWorkflow, isResumingWorkflow } = useResumeWorkflow(baseUrl);
