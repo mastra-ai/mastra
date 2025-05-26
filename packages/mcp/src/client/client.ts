@@ -10,14 +10,22 @@ import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotoc
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { StreamableHTTPClientTransportOptions } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
-import type { Protocol } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { ClientCapabilities, LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
-import { CallToolResultSchema, ListResourcesResultSchema } from '@modelcontextprotocol/sdk/types.js';
+import {
+  CallToolResultSchema,
+  ListResourcesResultSchema,
+  ReadResourceResultSchema,
+  ResourceListChangedNotificationSchema,
+  ResourceUpdatedNotificationSchema,
+  ListResourceTemplatesResultSchema,
+} from '@modelcontextprotocol/sdk/types.js';
+
 import { asyncExitHook, gracefulExit } from 'exit-hook';
 import { z } from 'zod';
 import { convertJsonSchemaToZod } from 'zod-from-json-schema';
 import type { JSONSchema } from 'zod-from-json-schema';
+import { ResourceClientActions } from './resourceActions';
 
 // Re-export MCP SDK LoggingLevel for convenience
 export type { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
@@ -110,6 +118,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private serverConfig: MastraMCPServerDefinition;
   private transport?: Transport;
   private currentOperationContext: RuntimeContext | null = null;
+  public readonly resources: ResourceClientActions;
 
   constructor({
     name,
@@ -137,6 +146,8 @@ export class InternalMastraMCPClient extends MastraBase {
 
     // Set up log message capturing
     this.setupLogging();
+    
+    this.resources = new ResourceClientActions({ client: this, logger: this.logger });
   }
 
   /**
@@ -317,12 +328,54 @@ export class InternalMastraMCPClient extends MastraBase {
     }
   }
 
-  // TODO: do the type magic to return the right method type. Right now we get infinitely deep infered type errors from Zod without using "any"
-
-  async resources(): Promise<ReturnType<Protocol<any, any, any>['request']>> {
+  async listResources() {
     this.log('debug', `Requesting resources from MCP server`);
     return await this.client.request({ method: 'resources/list' }, ListResourcesResultSchema, {
       timeout: this.timeout,
+    });
+  }
+
+  async readResource(uri: string) {
+    this.log('debug', `Reading resource from MCP server: ${uri}`);
+    return await this.client.request({ method: 'resources/read', params: { uri } }, ReadResourceResultSchema, {
+      timeout: this.timeout,
+    });
+  }
+
+  async subscribeResource(uri: string) {
+    this.log('debug', `Subscribing to resource on MCP server: ${uri}`);
+    return await this.client.request({ method: 'resources/subscribe', params: { uri } }, z.object({}), {
+      timeout: this.timeout,
+    });
+  }
+
+  async unsubscribeResource(uri: string) {
+    this.log('debug', `Unsubscribing from resource on MCP server: ${uri}`);
+    return await this.client.request({ method: 'resources/unsubscribe', params: { uri } }, z.object({}), {
+      timeout: this.timeout,
+    });
+  }
+
+  async listResourceTemplates() {
+    this.log('debug', `Requesting resource templates from MCP server`);
+    return await this.client.request({ method: 'resources/templates/list' }, ListResourceTemplatesResultSchema, {
+      timeout: this.timeout,
+    });
+  }
+
+  setResourceUpdatedNotificationHandler(
+    handler: (params: z.infer<typeof ResourceUpdatedNotificationSchema>['params']) => void,
+  ): void {
+    this.log('debug', 'Setting resource updated notification handler');
+    this.client.setNotificationHandler(ResourceUpdatedNotificationSchema, notification => {
+      handler(notification.params);
+    });
+  }
+
+  setResourceListChangedNotificationHandler(handler: () => void): void {
+    this.log('debug', 'Setting resource list changed notification handler');
+    this.client.setNotificationHandler(ResourceListChangedNotificationSchema, () => {
+      handler();
     });
   }
 
