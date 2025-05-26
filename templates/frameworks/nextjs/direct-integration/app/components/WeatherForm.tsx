@@ -25,7 +25,7 @@ export function WeatherForm() {
       const response = await getWeatherInfo(location);
       
       if (response.success) {
-        setWeatherInfo(response.data);
+        setWeatherInfo(response.data ?? null);
       } else {
         setError(response.error || 'Failed to get weather information');
       }
