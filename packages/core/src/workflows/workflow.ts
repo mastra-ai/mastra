@@ -244,7 +244,7 @@ export function createStep<
       id: params.id,
       inputSchema: params.inputSchema,
       outputSchema: params.outputSchema,
-      execute: async ({ inputData, mastra, [EMITTER_SYMBOL]: emitter }) => {
+      execute: async ({ inputData, mastra }) => {
         return params.execute({
           context: inputData,
           mastra,
