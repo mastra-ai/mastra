@@ -611,7 +611,6 @@ describe('Workflow', () => {
         status: 'success',
         output: { result: 'success' },
         payload: {},
-        resumePayload: undefined,
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
@@ -647,7 +646,6 @@ describe('Workflow', () => {
         status: 'success',
         output: { result: 'success' },
         payload: {},
-        resumePayload: undefined,
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
@@ -694,7 +692,7 @@ describe('Workflow', () => {
           status: 'success',
           output: { value: 'step1' },
           payload: {},
-          resumePayload: undefined,
+
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
@@ -702,7 +700,7 @@ describe('Workflow', () => {
           status: 'success',
           output: { value: 'step2' },
           payload: {},
-          resumePayload: undefined,
+
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
@@ -753,7 +751,7 @@ describe('Workflow', () => {
           status: 'success',
           output: { value: 'step1' },
           payload: {},
-          resumePayload: undefined,
+
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
@@ -763,7 +761,7 @@ describe('Workflow', () => {
           payload: {
             value: 'step1',
           },
-          resumePayload: undefined,
+
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
@@ -804,7 +802,7 @@ describe('Workflow', () => {
           payload: {
             inputData: 'test-input',
           },
-          resumePayload: undefined,
+
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
@@ -812,7 +810,7 @@ describe('Workflow', () => {
           status: 'success',
           output: { result: 'success' },
           payload: { result: 'success' },
-          resumePayload: undefined,
+
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
@@ -877,7 +875,7 @@ describe('Workflow', () => {
             payload: {
               inputValue: 'test-input',
             },
-            resumePayload: undefined,
+
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           },
@@ -887,7 +885,7 @@ describe('Workflow', () => {
             payload: {
               value: 'step1-result',
             },
-            resumePayload: undefined,
+
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           },
@@ -972,7 +970,7 @@ describe('Workflow', () => {
           payload: {
             result: 'success',
           },
-          resumePayload: undefined,
+
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
@@ -1022,7 +1020,7 @@ describe('Workflow', () => {
           status: 'success',
           output: { result: { cool: 'test-input' } },
           payload: { result: 'success' },
-          resumePayload: undefined,
+
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
@@ -1087,7 +1085,7 @@ describe('Workflow', () => {
           status: 'success',
           output: { result: 'test-input', second: 42 },
           payload: { test: 'test-input', test2: 42 },
-          resumePayload: undefined,
+
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
@@ -1167,7 +1165,6 @@ describe('Workflow', () => {
           status: 'success',
           output: { result: 'test-input', second: 'Hello success' },
           payload: { test: 'test-input', test2: 'Hello success' },
-          resumePayload: undefined,
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
@@ -1261,7 +1258,7 @@ describe('Workflow', () => {
             status: 'success',
             output: 'step1-data',
             payload: {},
-            resumePayload: undefined,
+
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           },
@@ -1269,7 +1266,7 @@ describe('Workflow', () => {
             status: 'success',
             output: { result: 'success', input: 'step1-data' },
             payload: 'step1-data',
-            resumePayload: undefined,
+
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           },
@@ -1311,7 +1308,7 @@ describe('Workflow', () => {
             status: 'success',
             output: [{ str: 'step1-data' }],
             payload: {},
-            resumePayload: undefined,
+
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           },
@@ -1319,7 +1316,7 @@ describe('Workflow', () => {
             status: 'success',
             output: { result: 'success', input: [{ str: 'step1-data' }] },
             payload: [{ str: 'step1-data' }],
-            resumePayload: undefined,
+
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           },
@@ -1370,7 +1367,7 @@ describe('Workflow', () => {
             status: 'success',
             output: [{ str: 'step1-data' }],
             payload: {},
-            resumePayload: undefined,
+
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           },
@@ -1378,7 +1375,7 @@ describe('Workflow', () => {
             status: 'success',
             output: { result: 'success', input: [{ str: 'step1-data' }] },
             payload: { ary: [{ str: 'step1-data' }] },
-            resumePayload: undefined,
+
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           },
@@ -1441,7 +1438,7 @@ describe('Workflow', () => {
           status: 'success',
           output: { result: 'none', second: 0 },
           payload: { candidates: [], iteration: 0 },
-          resumePayload: undefined,
+
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
@@ -1499,7 +1496,7 @@ describe('Workflow', () => {
           status: 'success',
           output: { result: 'success, hello', second: 0 },
           payload: { candidates: [{ name: 'success' }, { name: 'hello' }], iteration: 0 },
-          resumePayload: undefined,
+
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
@@ -1637,7 +1634,7 @@ describe('Workflow', () => {
             status: 'failed',
             error: err?.stack ?? err,
             payload: {},
-            resumePayload: undefined,
+
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           },
@@ -1711,7 +1708,7 @@ describe('Workflow', () => {
             status: 'success',
             output: { status: 'success' },
             payload: {},
-            resumePayload: undefined,
+
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           },
@@ -1719,7 +1716,7 @@ describe('Workflow', () => {
             status: 'success',
             output: { result: 'step2' },
             payload: { status: 'success' },
-            resumePayload: undefined,
+
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           },
@@ -1771,7 +1768,7 @@ describe('Workflow', () => {
           status: 'success',
           output: { count: 5 },
           payload: { count: 5 },
-          resumePayload: undefined,
+
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
@@ -1779,7 +1776,7 @@ describe('Workflow', () => {
           status: 'success',
           output: undefined,
           payload: { count: 5 },
-          resumePayload: undefined,
+
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         });
@@ -1820,7 +1817,7 @@ describe('Workflow', () => {
             error: error?.stack ?? error,
             status: 'failed',
             payload: {},
-            resumePayload: undefined,
+
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           },
@@ -1865,7 +1862,6 @@ describe('Workflow', () => {
               data: 'success',
             },
             payload: {},
-            resumePayload: undefined,
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           },
@@ -1875,7 +1871,6 @@ describe('Workflow', () => {
             payload: {
               data: 'success',
             },
-            resumePayload: undefined,
             startedAt: expect.any(Number),
             endedAt: expect.any(Number),
           },
@@ -1928,7 +1923,6 @@ describe('Workflow', () => {
         step1: {
           status: 'success',
           payload: {},
-          resumePayload: undefined,
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
@@ -1936,7 +1930,6 @@ describe('Workflow', () => {
           status: 'failed',
           error: error?.stack ?? error,
           payload: {},
-          resumePayload: undefined,
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
@@ -1999,7 +1992,6 @@ describe('Workflow', () => {
           status: 'failed',
           error: error?.stack ?? error,
           payload: {},
-          resumePayload: undefined,
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
@@ -2101,7 +2093,7 @@ describe('Workflow', () => {
           score: 75,
           flags: { isValid: true },
         },
-        resumePayload: undefined,
+
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
@@ -2298,8 +2290,20 @@ describe('Workflow', () => {
       expect(map).toHaveBeenCalledTimes(3);
       expect(result.steps).toEqual({
         input: [{ value: 1 }, { value: 22 }, { value: 333 }],
-        map: { status: 'success', output: [{ value: 12 }, { value: 33 }, { value: 344 }] },
-        final: { status: 'success', output: { finalValue: 1 + 11 + (22 + 11) + (333 + 11) } },
+        map: {
+          status: 'success',
+          output: [{ value: 12 }, { value: 33 }, { value: 344 }],
+          payload: [{ value: 1 }, { value: 22 }, { value: 333 }],
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        final: {
+          status: 'success',
+          output: { finalValue: 1 + 11 + (22 + 11) + (333 + 11) },
+          payload: [{ value: 12 }, { value: 33 }, { value: 344 }],
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
       });
     });
 
@@ -2354,8 +2358,22 @@ describe('Workflow', () => {
       expect(map).toHaveBeenCalledTimes(3);
       expect(result.steps).toEqual({
         input: [{ value: 1 }, { value: 22 }, { value: 333 }],
-        map: { status: 'success', output: [{ value: 12 }, { value: 33 }, { value: 344 }] },
-        final: { status: 'success', output: { finalValue: 1 + 11 + (22 + 11) + (333 + 11) } },
+        map: {
+          status: 'success',
+          output: [{ value: 12 }, { value: 33 }, { value: 344 }],
+          payload: [{ value: 1 }, { value: 22 }, { value: 333 }],
+
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        final: {
+          status: 'success',
+          output: { finalValue: 1 + 11 + (22 + 11) + (333 + 11) },
+          payload: [{ value: 12 }, { value: 33 }, { value: 344 }],
+
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
       });
     });
 
@@ -2411,8 +2429,20 @@ describe('Workflow', () => {
       expect(map).toHaveBeenCalledTimes(3);
       expect(result.steps).toEqual({
         input: [{ value: 1 }, { value: 22 }, { value: 333 }],
-        map: { status: 'success', output: [{ value: 12 }, { value: 33 }, { value: 344 }] },
-        final: { status: 'success', output: { finalValue: 1 + 11 + (22 + 11) + (333 + 11) } },
+        map: {
+          status: 'success',
+          output: [{ value: 12 }, { value: 33 }, { value: 344 }],
+          payload: [{ value: 1 }, { value: 22 }, { value: 333 }],
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        final: {
+          status: 'success',
+          output: { finalValue: 1 + 11 + (22 + 11) + (333 + 11) },
+          payload: [{ value: 12 }, { value: 33 }, { value: 344 }],
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
       });
     });
   });
@@ -2766,8 +2796,20 @@ describe('Workflow', () => {
       const run = workflow.createRun();
       const result = await run.start({ inputData: {} });
 
-      expect(result.steps['nested-a']).toEqual({ status: 'success', output: { result: 'success3' } });
-      expect(result.steps['nested-b']).toEqual({ status: 'success', output: { result: 'success5' } });
+      expect(result.steps['nested-a']).toEqual({
+        status: 'success',
+        output: { result: 'success3' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(result.steps['nested-b']).toEqual({
+        status: 'success',
+        output: { result: 'success5' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
     });
   });
 
@@ -2809,8 +2851,20 @@ describe('Workflow', () => {
       const run = workflow.createRun();
       const result = await run.start({ inputData: {} });
 
-      expect(result.steps.step1).toEqual({ status: 'success', output: { result: 'success' } });
-      expect(result.steps.step2).toEqual({ status: 'failed', error: err });
+      expect(result.steps.step1).toEqual({
+        status: 'success',
+        output: { result: 'success' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(result.steps.step2).toEqual({
+        status: 'failed',
+        error: err?.stack ?? err,
+        payload: { result: 'success' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
       expect(step1.execute).toHaveBeenCalledTimes(1);
       expect(step2.execute).toHaveBeenCalledTimes(1); // 0 retries + 1 initial call
     });
@@ -2853,8 +2907,20 @@ describe('Workflow', () => {
       const run = workflow.createRun();
       const result = await run.start({ inputData: {} });
 
-      expect(result.steps.step1).toEqual({ status: 'success', output: { result: 'success' } });
-      expect(result.steps.step2).toEqual({ status: 'failed', error: err });
+      expect(result.steps.step1).toEqual({
+        status: 'success',
+        output: { result: 'success' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(result.steps.step2).toEqual({
+        status: 'failed',
+        error: err?.stack ?? err,
+        payload: { result: 'success' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
       expect(step1.execute).toHaveBeenCalledTimes(1);
       expect(step2.execute).toHaveBeenCalledTimes(6); // 5 retries + 1 initial call
     });
@@ -2873,7 +2939,6 @@ describe('Workflow', () => {
 
       // @ts-ignore
       const toolAction = vi.fn<any>().mockImplementation(async ({ context }) => {
-        console.log('tool call context', context);
         return { name: context.name };
       });
 
@@ -2897,8 +2962,20 @@ describe('Workflow', () => {
 
       expect(step1Action).toHaveBeenCalled();
       expect(toolAction).toHaveBeenCalled();
-      expect(result.steps.step1).toEqual({ status: 'success', output: { name: 'step1' } });
-      expect(result.steps['random-tool']).toEqual({ status: 'success', output: { name: 'step1' } });
+      expect(result.steps.step1).toEqual({
+        status: 'success',
+        output: { name: 'step1' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(result.steps['random-tool']).toEqual({
+        status: 'success',
+        output: { name: 'step1' },
+        payload: { name: 'step1' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
     });
   });
 
@@ -2948,6 +3025,9 @@ describe('Workflow', () => {
             id: 'step1',
             status: 'success',
             output: { result: 'success1' },
+            payload: {},
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
           },
           workflowState: {
             status: 'running',
@@ -2956,6 +3036,9 @@ describe('Workflow', () => {
               step1: {
                 status: 'success',
                 output: { result: 'success1' },
+                payload: {},
+                startedAt: expect.any(Number),
+                endedAt: expect.any(Number),
               },
             },
             result: null,
@@ -2973,8 +3056,20 @@ describe('Workflow', () => {
             status: 'success',
             steps: {
               input: {},
-              step1: { status: 'success', output: { result: 'success1' } },
-              step2: { status: 'success', output: { result: 'success2' } },
+              step1: {
+                status: 'success',
+                output: { result: 'success1' },
+                payload: {},
+                startedAt: expect.any(Number),
+                endedAt: expect.any(Number),
+              },
+              step2: {
+                status: 'success',
+                output: { result: 'success2' },
+                payload: { result: 'success1' },
+                startedAt: expect.any(Number),
+                endedAt: expect.any(Number),
+              },
             },
             result: { result: 'success2' },
             error: null,
@@ -2987,10 +3082,16 @@ describe('Workflow', () => {
       expect(executionResult.steps.step1).toEqual({
         status: 'success',
         output: { result: 'success1' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
       });
       expect(executionResult.steps.step2).toEqual({
         status: 'success',
         output: { result: 'success2' },
+        payload: { result: 'success1' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
       });
     });
 
@@ -3040,6 +3141,9 @@ describe('Workflow', () => {
             id: 'step1',
             status: 'success',
             output: { result: 'success1' },
+            payload: {},
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
           },
           workflowState: {
             status: 'running',
@@ -3048,6 +3152,9 @@ describe('Workflow', () => {
               step1: {
                 status: 'success',
                 output: { result: 'success1' },
+                payload: {},
+                startedAt: expect.any(Number),
+                endedAt: expect.any(Number),
               },
             },
             result: null,
@@ -3064,8 +3171,20 @@ describe('Workflow', () => {
             status: 'success',
             steps: {
               input: {},
-              step1: { status: 'success', output: { result: 'success1' } },
-              step2: { status: 'success', output: { result: 'success2' } },
+              step1: {
+                status: 'success',
+                output: { result: 'success1' },
+                payload: {},
+                startedAt: expect.any(Number),
+                endedAt: expect.any(Number),
+              },
+              step2: {
+                status: 'success',
+                output: { result: 'success2' },
+                payload: { result: 'success1' },
+                startedAt: expect.any(Number),
+                endedAt: expect.any(Number),
+              },
             },
             result: { result: 'success2' },
             error: null,
@@ -3078,10 +3197,16 @@ describe('Workflow', () => {
       expect(executionResult.steps.step1).toEqual({
         status: 'success',
         output: { result: 'success1' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
       });
       expect(executionResult.steps.step2).toEqual({
         status: 'success',
         output: { result: 'success2' },
+        payload: { result: 'success1' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
       });
     });
 
@@ -3396,16 +3521,43 @@ describe('Workflow', () => {
 
       expect(resumeResult.steps).toEqual({
         input: { input: 'test' },
-        getUserInput: { status: 'success', output: { userInput: 'test input' } },
-        promptAgent: { status: 'success', output: { modelOutput: 'test output' } },
+        getUserInput: {
+          status: 'success',
+          output: { userInput: 'test input' },
+          payload: { input: 'test' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        promptAgent: {
+          status: 'success',
+          output: { modelOutput: 'test output' },
+          payload: { userInput: 'test input' },
+          resumePayload: { context: { userInput: 'test input for resumption' }, stepId: 'promptAgent' },
+          resumedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
         evaluateToneConsistency: {
           status: 'success',
           output: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+          payload: { modelOutput: 'test output' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
         },
-        improveResponse: { status: 'success', output: { improvedOutput: 'improved output' } },
+        improveResponse: {
+          status: 'success',
+          output: { improvedOutput: 'improved output' },
+          payload: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
         evaluateImprovedResponse: {
           status: 'success',
           output: { toneScore: { score: 0.9 }, completenessScore: { score: 0.8 } },
+          payload: { improvedOutput: 'improved output' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
         },
       });
     });
@@ -3488,54 +3640,70 @@ describe('Workflow', () => {
 
       const run = workflow.createRun();
 
-      const started = run.start({ inputData: { input: 'test' } });
-
-      const result = await new Promise<any>((resolve, reject) => {
-        let hasResumed = false;
-        run.watch(async data => {
-          const suspended =
-            data.payload?.currentStep?.id === 'humanIntervention' && data.payload?.currentStep?.status === 'suspended';
-          if (suspended) {
-            if (!hasResumed) {
-              hasResumed = true;
-
-              try {
-                const resumed = await run.resume({
-                  step: humanIntervention,
-                  resumeData: {
-                    humanPrompt: 'What improvements would you suggest?',
-                  },
-                });
-
-                resolve(resumed as any);
-              } catch (error) {
-                reject(error);
-              }
-            }
-          }
-        });
+      // Create a promise to track when the workflow is ready to resume
+      let resolveWorkflowSuspended: (value: unknown) => void;
+      const workflowSuspended = new Promise(resolve => {
+        resolveWorkflowSuspended = resolve;
       });
 
-      const initialResult = await started;
+      run.watch(async data => {
+        const suspended =
+          data.payload?.currentStep?.id === 'humanIntervention' && data.payload?.currentStep?.status === 'suspended';
+        if (suspended) {
+          resolveWorkflowSuspended({
+            humanPrompt: 'What improvements would you suggest?',
+          });
+        }
+      });
+
+      const initialResult = await run.start({ inputData: { input: 'test' } });
 
       expect(initialResult.steps.humanIntervention.status).toBe('suspended');
       expect(initialResult.steps.explainResponse).toBeUndefined();
-      expect(humanInterventionAction).toHaveBeenCalledTimes(2);
+      expect(humanInterventionAction).toHaveBeenCalledTimes(1);
       expect(explainResponseAction).not.toHaveBeenCalled();
 
-      if (!result) {
+      // Wait for the workflow to be ready to resume
+      const resumeData = await workflowSuspended;
+      const resumeResult = await run.resume({ resumeData: resumeData as any, step: humanIntervention });
+
+      if (!resumeResult) {
         throw new Error('Resume failed to return a result');
       }
 
-      expect(result.steps).toEqual({
+      expect(resumeResult.steps).toEqual({
         input: { input: 'test' },
-        getUserInput: { status: 'success', output: { userInput: 'test input' } },
-        promptAgent: { status: 'success', output: { modelOutput: 'test output' } },
+        getUserInput: {
+          status: 'success',
+          output: { userInput: 'test input' },
+          payload: { input: 'test' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        promptAgent: {
+          status: 'success',
+          output: { modelOutput: 'test output' },
+          payload: { userInput: 'test input' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
         evaluateToneConsistency: {
           status: 'success',
           output: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+          payload: { modelOutput: 'test output' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
         },
-        humanIntervention: { status: 'success', output: { improvedOutput: 'human intervention output' } },
+        humanIntervention: {
+          status: 'success',
+          output: { improvedOutput: 'human intervention output' },
+          payload: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+          resumePayload: { humanPrompt: 'What improvements would you suggest?' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+        },
       });
     });
 
@@ -3839,8 +4007,20 @@ describe('Workflow', () => {
       // expect(initialResult.activePaths.get('promptAgent')?.suspendPayload).toEqual({ testPayload: 'hello' });
       expect(initialResult.steps).toEqual({
         input: { input: 'test' },
-        getUserInput: { status: 'success', output: { userInput: 'test input' } },
-        promptAgent: { status: 'suspended', payload: { testPayload: 'hello' } },
+        getUserInput: {
+          status: 'success',
+          output: { userInput: 'test input' },
+          payload: { input: 'test' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        promptAgent: {
+          status: 'suspended',
+          payload: { userInput: 'test input' },
+          suspendPayload: { testPayload: 'hello' },
+          startedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+        },
       });
 
       const newCtx = {
@@ -3859,16 +4039,40 @@ describe('Workflow', () => {
       // expect(firstResumeResult.activePaths.get('improveResponse')?.status).toBe('suspended');
       expect(firstResumeResult.steps).toEqual({
         input: { input: 'test' },
-        getUserInput: { status: 'success', output: { userInput: 'test input' } },
-        promptAgent: { status: 'success', output: { modelOutput: 'test output' } },
+        getUserInput: {
+          status: 'success',
+          output: { userInput: 'test input' },
+          payload: { input: 'test' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        promptAgent: {
+          status: 'success',
+          output: { modelOutput: 'test output' },
+          payload: { userInput: 'test input' },
+          suspendPayload: { testPayload: 'hello' },
+          resumePayload: { userInput: 'test input for resumption' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
         evaluateToneConsistency: {
           status: 'success',
           output: {
             toneScore: { score: 0.8 },
             completenessScore: { score: 0.7 },
           },
+          payload: { modelOutput: 'test output' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
         },
-        improveResponse: { status: 'suspended' },
+        improveResponse: {
+          status: 'suspended',
+          payload: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+          startedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+        },
       });
 
       const secondResumeResult = await run.resume({
@@ -3886,16 +4090,53 @@ describe('Workflow', () => {
 
       expect(secondResumeResult.steps).toEqual({
         input: { input: 'test' },
-        getUserInput: { status: 'success', output: { userInput: 'test input' } },
-        promptAgent: { status: 'success', output: { modelOutput: 'test output' } },
+        getUserInput: {
+          status: 'success',
+          output: { userInput: 'test input' },
+          payload: { input: 'test' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+        },
+        promptAgent: {
+          status: 'success',
+          output: { modelOutput: 'test output' },
+          payload: { userInput: 'test input' },
+          suspendPayload: { testPayload: 'hello' },
+          resumePayload: { userInput: 'test input for resumption' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
         evaluateToneConsistency: {
           status: 'success',
-          output: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+          output: {
+            toneScore: { score: 0.8 },
+            completenessScore: { score: 0.7 },
+          },
+          payload: { modelOutput: 'test output' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
         },
-        improveResponse: { status: 'success', output: { improvedOutput: 'improved output' } },
+        improveResponse: {
+          status: 'success',
+          output: { improvedOutput: 'improved output' },
+          payload: { toneScore: { score: 0.8 }, completenessScore: { score: 0.7 } },
+          resumePayload: {
+            toneScore: { score: 0.8 },
+            completenessScore: { score: 0.7 },
+          },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
+          suspendedAt: expect.any(Number),
+          resumedAt: expect.any(Number),
+        },
         evaluateImprovedResponse: {
           status: 'success',
           output: { toneScore: { score: 0.9 }, completenessScore: { score: 0.8 } },
+          payload: { improvedOutput: 'improved output' },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
         },
       });
 
@@ -4140,11 +4381,21 @@ describe('Workflow', () => {
       expect(result.steps['test-agent-1']).toEqual({
         status: 'success',
         output: { text: 'Paris' },
+        payload: {
+          prompt: 'Capital of France, just the name',
+        },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
       });
 
       expect(result.steps['test-agent-2']).toEqual({
         status: 'success',
         output: { text: 'London' },
+        payload: {
+          prompt: 'Capital of UK, just the name',
+        },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
       });
     });
 
@@ -4279,16 +4530,38 @@ describe('Workflow', () => {
       expect(result.steps['finalStep']).toEqual({
         status: 'success',
         output: { result: 'success' },
+        payload: {
+          'nested-workflow': {
+            text: 'Paris',
+          },
+          'nested-workflow-2': {
+            text: 'London',
+          },
+        },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
       });
 
       expect(result.steps['nested-workflow']).toEqual({
         status: 'success',
         output: { text: 'Paris' },
+        payload: {
+          prompt1: 'Capital of France, just the name',
+          prompt2: 'Capital of UK, just the name',
+        },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
       });
 
       expect(result.steps['nested-workflow-2']).toEqual({
         status: 'success',
         output: { text: 'London' },
+        payload: {
+          prompt1: 'Capital of France, just the name',
+          prompt2: 'Capital of UK, just the name',
+        },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
       });
     });
 
@@ -4398,11 +4671,21 @@ describe('Workflow', () => {
       expect(result.steps['agent-step-1']).toEqual({
         status: 'success',
         output: { text: 'Paris' },
+        payload: {
+          prompt: 'Capital of France, just the name',
+        },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
       });
 
       expect(result.steps['agent-step-2']).toEqual({
         status: 'success',
         output: { text: 'London' },
+        payload: {
+          prompt: 'Capital of UK, just the name',
+        },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
       });
     });
 
@@ -4511,6 +4794,12 @@ describe('Workflow', () => {
       expect(result.steps['nested-workflow']).toEqual({
         status: 'success',
         output: { text: 'Paris London' },
+        payload: {
+          prompt1: 'Capital of France, just the name',
+          prompt2: 'Capital of UK, just the name',
+        },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
       });
     });
   });
@@ -4620,6 +4909,16 @@ describe('Workflow', () => {
       expect(result.steps['last-step']).toEqual({
         output: { success: true },
         status: 'success',
+        payload: {
+          'nested-workflow-a': {
+            finalValue: 27,
+          },
+          'nested-workflow-b': {
+            finalValue: 1,
+          },
+        },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
       });
     });
 
@@ -4731,6 +5030,16 @@ describe('Workflow', () => {
       expect(result.steps['last-step']).toEqual({
         output: { success: true },
         status: 'success',
+        payload: {
+          'nested-workflow-a-clone': {
+            finalValue: 27,
+          },
+          'nested-workflow-b': {
+            finalValue: 1,
+          },
+        },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
       });
     });
 
@@ -4848,6 +5157,16 @@ describe('Workflow', () => {
       expect(result.steps['last-step']).toEqual({
         output: { success: true },
         status: 'success',
+        payload: {
+          'nested-workflow-a': {
+            finalValue: 27,
+          },
+          'nested-workflow-b': {
+            finalValue: 1,
+          },
+        },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
       });
     });
 
@@ -4966,11 +5285,24 @@ describe('Workflow', () => {
         expect(result.steps['first-step']).toEqual({
           output: { success: true },
           status: 'success',
+          payload: {
+            startValue: 0,
+          },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
         });
 
         expect(result.steps['last-step']).toEqual({
           output: { success: true },
           status: 'success',
+          payload: {
+            'nested-workflow-a': {
+              finalValue: 27,
+            },
+            'nested-workflow-b': undefined,
+          },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
         });
       });
 
@@ -5089,11 +5421,24 @@ describe('Workflow', () => {
         expect(result.steps['first-step']).toEqual({
           output: { success: true },
           status: 'success',
+          payload: {
+            startValue: 0,
+          },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
         });
 
         expect(result.steps['last-step']).toEqual({
           output: { success: true },
           status: 'success',
+          payload: {
+            'nested-workflow-b': {
+              finalValue: 1,
+            },
+            'nested-workflow-a': undefined,
+          },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
         });
       });
 
@@ -5249,11 +5594,24 @@ describe('Workflow', () => {
         expect(result.steps['first-step']).toEqual({
           output: { success: true },
           status: 'success',
+          payload: {
+            startValue: 1,
+          },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
         });
 
         expect(result.steps['last-step']).toEqual({
           output: { success: true },
           status: 'success',
+          payload: {
+            'nested-workflow-a': undefined,
+            'nested-workflow-b': {
+              finalValue: 1,
+            },
+          },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
         });
       });
     });
@@ -5489,6 +5847,11 @@ describe('Workflow', () => {
         expect(result.steps['last-step']).toEqual({
           status: 'success',
           output: { success: true },
+          payload: {
+            finalValue: 26 + 1,
+          },
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
         });
       });
     });
@@ -5628,7 +5991,7 @@ describe('Workflow', () => {
       expect(passthroughStep.execute).toHaveBeenCalledTimes(2);
       expect(result.steps['nested-workflow-c']).toMatchObject({
         status: 'suspended',
-        payload: {
+        suspendPayload: {
           __workflow_meta: {
             path: ['nested-workflow-b', 'nested-workflow-a', 'other'],
           },

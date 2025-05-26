@@ -315,10 +315,11 @@ export type WorkflowResult<TOutput extends z.ZodType<any>, TSteps extends Step<s
       result: z.infer<TOutput>;
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
-          ? StepResult<unknown, unknown, unknown>
+          ? StepResult<unknown, unknown, unknown, unknown>
           : StepResult<
               z.infer<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
               z.infer<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
               z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
             >;
       };
@@ -327,10 +328,11 @@ export type WorkflowResult<TOutput extends z.ZodType<any>, TSteps extends Step<s
       status: 'failed';
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
-          ? StepResult<unknown, unknown, unknown>
+          ? StepResult<unknown, unknown, unknown, unknown>
           : StepResult<
               z.infer<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
               z.infer<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
               z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
             >;
       };
@@ -340,10 +342,11 @@ export type WorkflowResult<TOutput extends z.ZodType<any>, TSteps extends Step<s
       status: 'suspended';
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
-          ? StepResult<unknown, unknown, unknown>
+          ? StepResult<unknown, unknown, unknown, unknown>
           : StepResult<
               z.infer<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
               z.infer<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
               z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
             >;
       };
@@ -894,16 +897,16 @@ export class Workflow<
       : await run.start({ inputData, runtimeContext });
     unwatch();
     const suspendedSteps = Object.entries(res.steps).filter(([_stepName, stepResult]) => {
-      const stepRes: StepResult<any, any, any> = stepResult as StepResult<any, any, any>;
+      const stepRes: StepResult<any, any, any, any> = stepResult as StepResult<any, any, any, any>;
       return stepRes?.status === 'suspended';
     });
 
     if (suspendedSteps?.length) {
       for (const [stepName, stepResult] of suspendedSteps) {
         // @ts-ignore
-        const suspendPath: string[] = [stepName, ...(stepResult?.payload?.__workflow_meta?.path ?? [])];
+        const suspendPath: string[] = [stepName, ...(stepResult?.suspendPayload?.__workflow_meta?.path ?? [])];
         await suspend({
-          ...(stepResult as any)?.payload,
+          ...(stepResult as any)?.suspendPayload,
           __workflow_meta: { runId: run.runId, path: suspendPath },
         });
       }

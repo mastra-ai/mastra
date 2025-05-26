@@ -27,8 +27,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   protected async fmtReturnValue<TOutput>(
     executionSpan: Span | undefined,
     emitter: { emit: (event: string, data: any) => Promise<void> },
-    stepResults: Record<string, StepResult<any, any, any>>,
-    lastOutput: StepResult<any, any, any>,
+    stepResults: Record<string, StepResult<any, any, any, any>>,
+    lastOutput: StepResult<any, any, any, any>,
     error?: Error | string,
   ): Promise<TOutput> {
     const base: any = {
@@ -64,11 +64,16 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       });
 
       base.error =
-        error instanceof Error ? (error?.stack ?? error) : (lastOutput.error ?? new Error('Unknown error: ' + error));
+        error instanceof Error
+          ? (error?.stack ?? error)
+          : (lastOutput.error ??
+            (typeof error === 'string'
+              ? error
+              : (new Error('Unknown error: ' + error)?.stack ?? new Error('Unknown error: ' + error))));
     } else if (lastOutput.status === 'suspended') {
       const suspendedStepIds = Object.entries(stepResults).flatMap(([stepId, stepResult]) => {
         if (stepResult?.status === 'suspended') {
-          const nestedPath = stepResult?.payload?.__workflow_meta?.path;
+          const nestedPath = stepResult?.suspendPayload?.__workflow_meta?.path;
           return nestedPath ? [[stepId, ...nestedPath]] : [[stepId]];
         }
 
@@ -108,7 +113,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     resume?: {
       // TODO: add execute path
       steps: string[];
-      stepResults: Record<string, StepResult<any, any, any>>;
+      stepResults: Record<string, StepResult<any, any, any, any>>;
       resumePayload: any;
       resumePath: number[];
     };
@@ -217,7 +222,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     workflowId: string;
     runId: string;
     step: Step<string, any, any>;
-    stepResults: Record<string, StepResult<any, any, any>>;
+    stepResults: Record<string, StepResult<any, any, any, any>>;
     executionContext: ExecutionContext;
     resume?: {
       steps: string[];
@@ -226,14 +231,14 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     prevOutput: any;
     emitter: { emit: (event: string, data: any) => Promise<void> };
     runtimeContext: RuntimeContext;
-  }): Promise<StepResult<any, any, any>> {
+  }): Promise<StepResult<any, any, any, any>> {
     const startTime = resume?.steps[0] === step.id ? undefined : Date.now();
     const resumeTime = resume?.steps[0] === step.id ? Date.now() : undefined;
 
     const stepInfo = {
       ...stepResults[step.id],
       payload: prevOutput,
-      resumePayload: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
+      ...(resume?.steps[0] === step.id ? { resumePayload: resume?.resumePayload } : {}),
       ...(startTime ? { startedAt: startTime } : {}),
       ...(resumeTime ? { resumedAt: resumeTime } : {}),
     };
@@ -251,7 +256,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           steps: {
             ...stepResults,
             [step.id]: {
-              ...stepResults[step.id],
+              // ...stepResults[step.id],
               status: 'running',
               ...stepInfo,
             },
@@ -325,13 +330,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             steps: resume?.steps?.slice(1) || [],
             resumePayload: resume?.resumePayload,
             // @ts-ignore
-            runId: stepResults[step.id]?.payload?.__workflow_meta?.runId,
+            runId: stepResults[step.id]?.suspendPayload?.__workflow_meta?.runId,
           },
           [EMITTER_SYMBOL]: emitter,
         });
 
         if (suspended) {
-          execResults = { status: 'suspended', payload: suspended.payload, suspendedAt: Date.now() };
+          execResults = { status: 'suspended', suspendPayload: suspended.payload, suspendedAt: Date.now() };
         } else {
           execResults = { status: 'success', output: result, endedAt: Date.now() };
         }
@@ -341,7 +346,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         this.logger.error('Error executing step: ' + ((e as Error)?.stack ?? e));
         execResults = {
           status: 'failed',
-          error: e instanceof Error ? (e?.stack ?? e) : new Error('Unknown error: ' + e),
+          error:
+            e instanceof Error
+              ? (e?.stack ?? e)
+              : typeof e === 'string'
+                ? e
+                : (new Error('Unknown error: ' + e)?.stack ?? new Error('Unknown error: ' + e)),
           endedAt: Date.now(),
         };
       }
@@ -352,8 +362,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       payload: {
         currentStep: {
           id: step.id,
-          // status: execResults.status,
-          // output: execResults.output,
           ...stepInfo,
           ...execResults,
         },
@@ -364,10 +372,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             [step.id]: {
               ...stepInfo,
               ...execResults,
-              // status: execResults.status,
-              // output: execResults.output,
-              // error: execResults.error,
-              // payload: execResults.payload,
             },
           },
 
@@ -423,19 +427,19 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     runId: string;
     entry: { type: 'parallel'; steps: StepFlowEntry[] };
     prevStep: StepFlowEntry;
-    stepResults: Record<string, StepResult<any, any, any>>;
+    stepResults: Record<string, StepResult<any, any, any, any>>;
     resume?: {
       steps: string[];
-      stepResults: Record<string, StepResult<any, any, any>>;
+      stepResults: Record<string, StepResult<any, any, any, any>>;
       resumePayload: any;
       resumePath: number[];
     };
     executionContext: ExecutionContext;
     emitter: { emit: (event: string, data: any) => Promise<void> };
     runtimeContext: RuntimeContext;
-  }): Promise<StepResult<any, any, any>> {
+  }): Promise<StepResult<any, any, any, any>> {
     let execResults: any;
-    const results: StepResult<any, any, any>[] = await Promise.all(
+    const results: StepResult<any, any, any, any>[] = await Promise.all(
       entry.steps.map((step, i) =>
         this.executeEntry({
           workflowId,
@@ -462,7 +466,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     if (hasFailed) {
       execResults = { status: 'failed', error: hasFailed.error };
     } else if (hasSuspended) {
-      execResults = { status: 'suspended', payload: hasSuspended.payload };
+      execResults = { status: 'suspended', payload: hasSuspended.suspendPayload };
     } else {
       execResults = {
         status: 'success',
@@ -497,17 +501,17 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     entry: { type: 'conditional'; steps: StepFlowEntry[]; conditions: ExecuteFunction<any, any, any, any>[] };
     prevStep: StepFlowEntry;
     prevOutput: any;
-    stepResults: Record<string, StepResult<any, any, any>>;
+    stepResults: Record<string, StepResult<any, any, any, any>>;
     resume?: {
       steps: string[];
-      stepResults: Record<string, StepResult<any, any, any>>;
+      stepResults: Record<string, StepResult<any, any, any, any>>;
       resumePayload: any;
       resumePath: number[];
     };
     executionContext: ExecutionContext;
     emitter: { emit: (event: string, data: any) => Promise<void> };
     runtimeContext: RuntimeContext;
-  }): Promise<StepResult<any, any, any>> {
+  }): Promise<StepResult<any, any, any, any>> {
     let execResults: any;
     const truthyIndexes = (
       await Promise.all(
@@ -545,7 +549,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     ).filter((index): index is number => index !== null);
 
     const stepsToRun = entry.steps.filter((_, index) => truthyIndexes.includes(index));
-    const results: StepResult<any, any, any>[] = await Promise.all(
+    const results: StepResult<any, any, any, any>[] = await Promise.all(
       stepsToRun.map((step, index) =>
         this.executeEntry({
           workflowId,
@@ -572,7 +576,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     if (hasFailed) {
       execResults = { status: 'failed', error: hasFailed.error };
     } else if (hasSuspended) {
-      execResults = { status: 'suspended', payload: hasSuspended.payload };
+      execResults = { status: 'suspended', payload: hasSuspended.suspendPayload };
     } else {
       execResults = {
         status: 'success',
@@ -611,20 +615,20 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     };
     prevStep: StepFlowEntry;
     prevOutput: any;
-    stepResults: Record<string, StepResult<any, any, any>>;
+    stepResults: Record<string, StepResult<any, any, any, any>>;
     resume?: {
       steps: string[];
-      stepResults: Record<string, StepResult<any, any, any>>;
+      stepResults: Record<string, StepResult<any, any, any, any>>;
       resumePayload: any;
       resumePath: number[];
     };
     executionContext: ExecutionContext;
     emitter: { emit: (event: string, data: any) => Promise<void> };
     runtimeContext: RuntimeContext;
-  }): Promise<StepResult<any, any, any>> {
+  }): Promise<StepResult<any, any, any, any>> {
     const { step, condition } = entry;
     let isTrue = true;
-    let result = { status: 'success', output: prevOutput } as unknown as StepResult<any, any, any>;
+    let result = { status: 'success', output: prevOutput } as unknown as StepResult<any, any, any, any>;
 
     do {
       result = await this.executeStep({
@@ -686,19 +690,19 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     };
     prevStep: StepFlowEntry;
     prevOutput: any;
-    stepResults: Record<string, StepResult<any, any, any>>;
+    stepResults: Record<string, StepResult<any, any, any, any>>;
     resume?: {
       steps: string[];
-      stepResults: Record<string, StepResult<any, any, any>>;
+      stepResults: Record<string, StepResult<any, any, any, any>>;
       resumePayload: any;
       resumePath: number[];
     };
     executionContext: ExecutionContext;
     emitter: { emit: (event: string, data: any) => Promise<void> };
     runtimeContext: RuntimeContext;
-  }): Promise<StepResult<any, any, any>> {
+  }): Promise<StepResult<any, any, any, any>> {
     const { step, opts } = entry;
-    const results: StepResult<any, any, any>[] = [];
+    const results: StepResult<any, any, any, any>[] = [];
     const concurrency = opts.concurrency;
     const startTime = resume?.steps[0] === step.id ? undefined : Date.now();
     const resumeTime = resume?.steps[0] === step.id ? Date.now() : undefined;
@@ -734,7 +738,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       ...stepResults[step.id],
       status: 'success',
       payload: prevOutput,
-      resumePayload: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
+      ...(resume?.steps[0] === step.id ? { resumePayload: resume?.resumePayload } : {}),
       output: results,
       //@ts-ignore
       endedAt: Date.now(),
@@ -751,7 +755,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   }: {
     workflowId: string;
     runId: string;
-    stepResults: Record<string, StepResult<any, any, any>>;
+    stepResults: Record<string, StepResult<any, any, any, any>>;
     executionContext: ExecutionContext;
   }) {
     await this.mastra?.getStorage()?.persistWorkflowSnapshot({
@@ -784,17 +788,17 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     runId: string;
     entry: StepFlowEntry;
     prevStep: StepFlowEntry;
-    stepResults: Record<string, StepResult<any, any, any>>;
+    stepResults: Record<string, StepResult<any, any, any, any>>;
     resume?: {
       steps: string[];
-      stepResults: Record<string, StepResult<any, any, any>>;
+      stepResults: Record<string, StepResult<any, any, any, any>>;
       resumePayload: any;
       resumePath: number[];
     };
     executionContext: ExecutionContext;
     emitter: { emit: (event: string, data: any) => Promise<void> };
     runtimeContext: RuntimeContext;
-  }): Promise<StepResult<any, any, any>> {
+  }): Promise<StepResult<any, any, any, any>> {
     const prevOutput = this.getStepOutput(stepResults, prevStep);
     let execResults: any;
 

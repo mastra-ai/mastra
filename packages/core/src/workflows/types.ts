@@ -23,9 +23,10 @@ export type StepFailure<P, R> = {
   resumedAt?: Date;
 };
 
-export type StepSuspended<P> = {
+export type StepSuspended<P, S> = {
   status: 'suspended';
   payload: P;
+  suspendPayload?: S;
   startedAt: Date;
   suspendedAt: Date;
 };
@@ -39,7 +40,7 @@ export type StepRunning<P, R> = {
   resumedAt?: Date;
 };
 
-export type StepResult<P, R, T> = StepSuccess<P, R, T> | StepFailure<P, R> | StepSuspended<P> | StepRunning<P, R>;
+export type StepResult<P, R, S, T> = StepSuccess<P, R, T> | StepFailure<P, R> | StepSuspended<P, S> | StepRunning<P, R>;
 
 export type StepsRecord<T extends readonly Step<any, any, any>[]> = {
   [K in T[number]['id']]: Extract<T[number], { id: K }>;
@@ -135,7 +136,7 @@ export interface WorkflowRunState {
   // Core state info
   runId: string;
   value: Record<string, string>;
-  context: { input?: Record<string, any> } & Record<string, StepResult<any, any, any>>;
+  context: { input?: Record<string, any> } & Record<string, StepResult<any, any, any, any>>;
   activePaths: Array<unknown>;
   suspendedPaths: Record<string, number[]>;
   timestamp: number;
