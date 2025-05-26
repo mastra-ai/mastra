@@ -17,27 +17,27 @@ export type StepFailure<P, R> = {
   error: string | Error;
   payload: P;
   resumePayload?: R;
-  startedAt: Date;
-  endedAt: Date;
-  suspendedAt?: Date;
-  resumedAt?: Date;
+  startedAt: number;
+  endedAt: number;
+  suspendedAt?: number;
+  resumedAt?: number;
 };
 
 export type StepSuspended<P, S> = {
   status: 'suspended';
   payload: P;
   suspendPayload?: S;
-  startedAt: Date;
-  suspendedAt: Date;
+  startedAt: number;
+  suspendedAt: number;
 };
 
 export type StepRunning<P, R> = {
   status: 'running';
   payload: P;
   resumePayload?: R;
-  startedAt: Date;
-  suspendedAt?: Date;
-  resumedAt?: Date;
+  startedAt: number;
+  suspendedAt?: number;
+  resumedAt?: number;
 };
 
 export type StepResult<P, R, S, T> = StepSuccess<P, R, T> | StepFailure<P, R> | StepSuspended<P, S> | StepRunning<P, R>;
