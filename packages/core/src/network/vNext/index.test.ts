@@ -134,12 +134,12 @@ class MockMemory extends MastraMemory {
 }
 
 describe('NewAgentNetwork', () => {
-  it('should create a new agent network', async () => {
+  it.only('should create a new agent network', async () => {
     const memory = new MockMemory({
       name: 'test-memory',
     });
 
-    const agentStep = createStep({
+    const agentStep1 = createStep({
       id: 'agent-step',
       description: 'This step is used to do research and text synthesis.',
       inputSchema: z.object({
@@ -149,16 +149,40 @@ describe('NewAgentNetwork', () => {
         text: z.string(),
       }),
       execute: async ({ inputData }) => {
-        return {
-          text: `${inputData.city} is the best city in France. ABSOLUTELY THE BEST`,
-        };
+        const resp = await agent1.generate(inputData.city, {
+          output: z.object({
+            text: z.string(),
+          }),
+        });
+
+        return { text: resp.object.text };
+      },
+    });
+
+    const agentStep2 = createStep({
+      id: 'agent-step',
+      description: 'This step is used to do research and text synthesis.',
+      inputSchema: z.object({
+        text: z.string().describe('The city to research'),
+      }),
+      outputSchema: z.object({
+        text: z.string(),
+      }),
+      execute: async ({ inputData }) => {
+        const resp = await agent2.generate(inputData.text, {
+          output: z.object({
+            text: z.string(),
+          }),
+        });
+
+        return { text: resp.object.text };
       },
     });
 
     const workflow1 = createWorkflow({
       id: 'workflow1',
       description:
-        'This workflow includes crucial research information for any research task, but is not complete by itself. This information is only partial, while crucial to the final research.',
+        'This workflow is perfect for researching a specific city. It should be used when you have a city in mind to research.',
       steps: [],
       inputSchema: z.object({
         city: z.string(),
@@ -167,7 +191,8 @@ describe('NewAgentNetwork', () => {
         text: z.string(),
       }),
     })
-      .then(agentStep)
+      .then(agentStep1)
+      .then(agentStep2)
       .commit();
 
     const agent1 = new Agent({
@@ -182,9 +207,9 @@ describe('NewAgentNetwork', () => {
     const agent2 = new Agent({
       name: 'agent2',
       description:
-        'This agent is used to do text synthesis on researched material. Write a full report based on the researched material. Do not use bullet points. Write full paragraphs. There should not be a single bullet point in the final report. You write articles.',
+        'This agent is used to do text synthesis on researched material. Write a full report based on the researched material. Writes reports in full paragraphs. Should be used to synthesize text from different sources together as a final report.',
       instructions:
-        'This agent is used to do text synthesis on researched material. Write a full report based on the researched material. Do not use bullet points. Write full paragraphs. There should not be a single bullet point in the final report. You write articles. [IMPORTANT] Make sure to mention information that has been highlighted as relevant in message history.',
+        'This agent is used to do text synthesis on researched material. Write a full report based on the researched material. Do not use bullet points. Write full paragraphs. There should not be a single bullet point in the final report.',
       model: openai('gpt-4o'),
     });
 
@@ -206,10 +231,15 @@ describe('NewAgentNetwork', () => {
 
     const runtimeContext = new RuntimeContext();
 
-    console.log(await network.loop('What are the biggest cities in France? How are they like?', { runtimeContext }));
+    console.log(
+      await network.loop(
+        'What are the biggest cities in France? Give me 3. How are they like? Find cities, then do thorough research on each city, and give me a final full report synthesizing all that information. Make sure to use an agent for synthesis.',
+        { runtimeContext },
+      ),
+    );
   });
 
-  it.only('should create a new agent network single call', async () => {
+  it('should create a new agent network single call', async () => {
     const memory = new MockMemory({
       name: 'test-memory',
     });

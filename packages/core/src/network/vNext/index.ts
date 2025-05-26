@@ -201,11 +201,18 @@ export class NewAgentNetwork extends MastraBase {
           ## System Instructions
           ${instructionsToUse}
 
+          You can only pick agents and workflows that are available in the lists below.
+
           ## Available Agents in Network
           ${agentList}
 
-          ## Available Workflows in Network (make sure to use the input schema when calling a workflow)
+          ## Available Workflows in Network (make sure to use inputs corresponding to the input schema when calling a workflow)
           ${workflowList}
+
+          If you have multiple entries that need to be called with a workflow or agent, call them separately with each input.
+          When calling a workflow, the prompt should be a JSON value that corresponds to the input schema of the workflow.
+
+          Keep in mind that the user only sees the final result of the task. When reviewing completion, you should know that the user will not see the intermediate results.
         `;
 
     return new Agent({
@@ -446,8 +453,8 @@ export class NewAgentNetwork extends MastraBase {
         isComplete: z.boolean().optional(),
       }),
       execute: async ({ inputData }) => {
-        const workflowsMap = await this.getWorkflows({ runtimeContext: runtimeContextToUse });
         console.log('calling workflow', inputData.resourceId, inputData.prompt);
+        const workflowsMap = await this.getWorkflows({ runtimeContext: runtimeContextToUse });
         const wf = workflowsMap[inputData.resourceId];
 
         if (!wf) {
