@@ -63,6 +63,25 @@ for (const chunk of stream) {
         },
       ],
     },
+     {
+      name: "tool-call",
+      type: "object",
+      description: "A tool call has started",
+      isOptional: false,
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "example",
+              type: "{ type: 'tool-call', toolCallId: 'weatherAgent', toolName: 'Weather Agent', args: { prompt: 'Based on the following weather forecast for New York, suggest appropriate activities:...' } }",
+              description: "Example message structure",
+              isOptional: false,
+            },
+          ],
+        },
+      ],
+    },
     {
       name: "tool-call-streaming-start",
       type: "object",
@@ -74,7 +93,7 @@ for (const chunk of stream) {
           parameters: [
             {
               name: "example",
-              type: "{ type: 'tool-call-streaming-start', name: 'Weather Agent', args: { prompt: 'Based on the following weather forecast for New York, suggest appropriate activities:...' } }",
+              type: "{ type: 'tool-call-streaming-start', toolCallId: 'weatherAgent', toolName: 'Weather Agent', args: { prompt: 'Based on the following weather forecast for New York, suggest appropriate activities:...' } }",
               description: "Example message structure",
               isOptional: false,
             },
@@ -93,7 +112,7 @@ for (const chunk of stream) {
           parameters: [
             {
               name: "example",
-              type: "{ type: 'tool-call-delta', name: 'Weather Agent', args: { prompt: 'Based on the following weather forecast for New York, suggest appropriate activities:\\n' + '            [\\n' + '  {\\n' + '    \"date\": \"2025-05-16\",\\n' + '    \"maxTemp\": 22.2,\\n' + '    \"minTemp\": 16,\\n' + '    \"precipitationChance\": 5,\\n' + '    \"condition\": \"Dense drizzle\",\\n' + '    \"location\": \"New York\"\\n' + '  },\\n' + '            ' }, argsTextDelta: '📅' }",
+              type: "{ type: 'tool-call-delta', toolCallId: 'weatherAgent', toolName: 'Weather Agent', args: { prompt: 'Based on the following weather forecast for New York, suggest appropriate activities:\\n' + '            [\\n' + '  {\\n' + '    \"date\": \"2025-05-16\",\\n' + '    \"maxTemp\": 22.2,\\n' + '    \"minTemp\": 16,\\n' + '    \"precipitationChance\": 5,\\n' + '    \"condition\": \"Dense drizzle\",\\n' + '    \"location\": \"New York\"\\n' + '  },\\n' + '            ' }, argsTextDelta: '📅' }",
               description: "Example message structure",
               isOptional: false,
             },
