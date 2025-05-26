@@ -659,19 +659,26 @@ export class UpstashStore extends MastraStorage {
     } = { namespace: 'workflows' },
   ): Promise<WorkflowRuns> {
     try {
+      const actualNamespace = namespace || 'workflows';
       // Get all workflow keys
-      let pattern = this.getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace }) + ':*';
+      let pattern = this.getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: actualNamespace }) + ':*';
       if (workflowName && resourceId) {
         pattern = this.getKey(TABLE_WORKFLOW_SNAPSHOT, {
-          namespace,
+          namespace: actualNamespace,
           workflow_name: workflowName,
           run_id: '*',
           resourceId,
         });
       } else if (workflowName) {
-        pattern = this.getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace, workflow_name: workflowName }) + ':*';
+        pattern =
+          this.getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: actualNamespace, workflow_name: workflowName }) + ':*';
       } else if (resourceId) {
-        pattern = this.getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace, workflow_name: '*', run_id: '*', resourceId });
+        pattern = this.getKey(TABLE_WORKFLOW_SNAPSHOT, {
+          namespace: actualNamespace,
+          workflow_name: '*',
+          run_id: '*',
+          resourceId,
+        });
       }
       const keys = await this.scanKeys(pattern);
 
