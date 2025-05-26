@@ -1,6 +1,7 @@
 import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
 import type { RuntimeContext } from '../di';
+import { EMITTER_SYMBOL } from './constants';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
 import type { ExecuteFunction, Step } from './step';
@@ -246,6 +247,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       },
       eventTimestamp: Date.now(),
     });
+    await emitter.emit('watch-v2', {
+      type: 'step-start',
+      payload: {
+        id: step.id,
+      },
+    });
 
     const _runStep = (step: Step<any, any, any, any>, spanName: string, attributes?: Record<string, string>) => {
       return async (data: any) => {
@@ -305,7 +312,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             // @ts-ignore
             runId: stepResults[step.id]?.payload?.__workflow_meta?.runId,
           },
-          emitter,
+          [EMITTER_SYMBOL]: emitter,
         });
 
         if (suspended) {
@@ -347,6 +354,33 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       },
       eventTimestamp: Date.now(),
     });
+
+    if (execResults.status === 'suspended') {
+      await emitter.emit('watch-v2', {
+        type: 'step-suspended',
+        payload: {
+          id: step.id,
+          output: execResults.output,
+        },
+      });
+    } else {
+      await emitter.emit('watch-v2', {
+        type: 'step-result',
+        payload: {
+          id: step.id,
+          status: execResults.status,
+          output: execResults.output,
+        },
+      });
+
+      await emitter.emit('watch-v2', {
+        type: 'step-finish',
+        payload: {
+          id: step.id,
+          metadata: {},
+        },
+      });
+    }
 
     return execResults;
   }
@@ -476,7 +510,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
               // TODO: this function shouldn't have suspend probably?
               suspend: async (_suspendPayload: any) => {},
-              emitter,
+              [EMITTER_SYMBOL]: emitter,
             });
             return result ? index : null;
           } catch (e: unknown) {
@@ -600,7 +634,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           return result?.status === 'success' ? result.output : null;
         },
         suspend: async (_suspendPayload: any) => {},
-        emitter,
+        [EMITTER_SYMBOL]: emitter,
       });
     } while (entry.loopType === 'dowhile' ? isTrue : !isTrue);
 
