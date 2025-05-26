@@ -14,18 +14,17 @@ There are two main problem areas that this system is designed to solve:
 
 ## Important details
 
-- The AgentNetwork is non-deterministic. It will call the most appropriate primitive based on the task and the context.
-- The AgentNetwork is composable. It can be used to create complex workflows by chaining together multiple primitives.
-- The AgentNetwork is extensible. It can be extended with new primitives and workflows.
-- The AgentNetwork is memory-aware. It can use a memory to store and retrieve conversation or task history. Providing memory to the AgentNetwork is _not_ optional when using the `loop` method, as it is required to store the task history.
+- Providing memory to the AgentNetwork is _not_ optional when using the `loop` method, as it is required to store the task history. Memory is the core primitive used for any decisions on which primitives to run, as well as determine task completion.
+- Any available primitives (agents, workflows) are used based on their descriptions. The better the description, the better the routing agent will be able to select the right primitive. For workflows, the input schema is also used to determine which inputs to use when calling the workflow. More descriptive naming yields better results.
+- When primitives with overlapping capabilities are available, the routing agent will use the most specific primitive. For example, if both an agent and a workflow can do research, it will use the input schema of the worklfow to determine
 
 ## Unstructured input to structured task
 
 As an example, we have an AgentNetwork with 3 primitives at its disposal:
 
-- agent1: A general research agent that can do research on a given topic.
-- agent2: A general writing agent that can write a full report based on the researched material.
-- workflow1: A workflow that can research a given city and write a full report based on the researched material (using both agent1 and agent2).
+- `agent1`: A general research agent that can do research on a given topic.
+- `agent2`: A general writing agent that can write a full report based on the researched material.
+- `workflow1`: A workflow that can research a given city and write a full report based on the researched material (using both agent1 and agent2).
 
 The AgentNetwork is able to route the task to the most appropriate primitive based on the task and the context.
 To ask the AgentNetwork to act on unstructured (text) input, we can use the `generate` method.
@@ -152,9 +151,9 @@ The AgentNetwork will call the most appropriate primitive based on the task and 
 
 As an example, we have an AgentNetwork with 3 primitives at its disposal:
 
-- agent1: A general research agent that can do research on a given topic.
-- agent2: A general writing agent that can write a full report based on the researched material.
-- workflow1: A workflow that can research a given city and write a full report based on the researched material (using both agent1 and agent2).
+- `agent1`: A general research agent that can do research on a given topic.
+- `agent2`: A general writing agent that can write a full report based on the researched material.
+- `workflow1`: A workflow that can research a given city and write a full report based on the researched material (using both agent1 and agent2).
 
 We use the `loop` method to create a task that requires multiple primitives. The AgentNetwork will, using memory, figure out which primitives to call and in which order, as well as when the task is complete.
 
