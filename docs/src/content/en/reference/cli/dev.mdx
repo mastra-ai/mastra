@@ -21,19 +21,19 @@ mastra dev [options]
       name: "--dir",
       type: "string",
       description: "Path to your mastra folder",
-      isOptional: false,
+      isOptional: true,
     },
     {
       name: "--root",
       type: "string",
       description: "Path to your root folder",
-      isOptional: false,
+      isOptional: true,
     },
     {
       name: "--tools",
       type: "string",
       description: "Comma-separated list of paths to tool files to include",
-      isOptional: false,
+      isOptional: true,
     },
     {
       name: "--port",
@@ -49,6 +49,7 @@ mastra dev [options]
     },
   ]}
 />
+
 
 ## Routes
 
@@ -190,7 +191,7 @@ requests through proxies or internal gateways by setting a base URL. For
 OpenAI:
 
 ```bash copy
-OPENAI_API_KEY=sk-this_key \
+OPENAI_API_KEY=<your-api-key> \
 OPENAI_BASE_URL=https://openrouter.example/v1 \
 mastra dev
 ```
@@ -198,7 +199,7 @@ mastra dev
 and for Anthropic:
 
 ```bash copy
-ANTHROPIC_API_KEY=sk-anthropic42 \
+OPENAI_API_KEY=<your-api-key> \
 ANTHROPIC_BASE_URL=https://anthropic.internal \
 mastra dev
 ```
