@@ -44,15 +44,14 @@ export function createTestSuite(storage: MastraStorage) {
         result: { success: true },
         value: {},
         context: {
-          steps: {
-            [stepId]: {
-              status,
-              payload: {},
-              error: undefined,
-            },
+          [stepId]: {
+            status,
+            payload: {},
+            error: undefined,
+            startedAt: timestamp,
+            endedAt: new Date(timestamp.getTime() + 15000),
           },
-          triggerData: {},
-          attempts: {},
+          input: {},
         },
         activePaths: [],
         suspendedPaths: {},
@@ -636,7 +635,7 @@ export function createTestSuite(storage: MastraStorage) {
         // Insert multiple workflow runs for the same resourceId
         resourceId = 'resource-shared';
         for (const status of ['success', 'failed']) {
-          const sample = createSampleWorkflowSnapshot(status as WorkflowRunState['context']['steps'][string]['status']);
+          const sample = createSampleWorkflowSnapshot(status as WorkflowRunState['context']['steps']['status']);
           runIds.push(sample.runId);
           await storage.insert({
             tableName: TABLE_WORKFLOW_SNAPSHOT,

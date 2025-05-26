@@ -79,15 +79,14 @@ class Test {
       result: { success: true },
       value: {},
       context: {
-        steps: {
-          [stepId]: {
-            status: options.status,
-            payload: {},
-            error: undefined,
-          },
+        [stepId]: {
+          status: options.status,
+          payload: {},
+          error: undefined,
+          startedAt: timestamp,
+          endedAt: new Date(timestamp.getTime() + 15000),
         },
-        triggerData: {},
-        attempts: {},
+        input: {},
       },
       activePaths: [],
       suspendedPaths: {},

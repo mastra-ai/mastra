@@ -50,6 +50,8 @@ export const createSampleWorkflowSnapshot = (threadId: string, status: string, c
         status: status as WorkflowRunState['context'][string]['status'],
         payload: {},
         error: undefined,
+        startedAt: timestamp,
+        endedAt: new Date(timestamp.getTime() + 15000),
       },
       input: {},
     } as WorkflowRunState['context'],
