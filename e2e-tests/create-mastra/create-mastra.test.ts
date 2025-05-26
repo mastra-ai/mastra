@@ -116,6 +116,8 @@ describe('create mastra', () => {
                 },
               },
               "workflows": {},
+              "defaultGenerateOptions": {},
+              "defaultStreamOptions": {},
             },
           }
         `);
