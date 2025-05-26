@@ -364,7 +364,12 @@ describe('Workflow', () => {
         },
       });
 
-      expect(await Array.fromAsync(stream.values())).toMatchInlineSnapshot(`
+      const values: WatchEvent[] = [];
+      for await (const value of stream.values()) {
+        values.push(value);
+      }
+
+      expect(values).toMatchInlineSnapshot(`
         [
           {
             "payload": {
@@ -2950,7 +2955,12 @@ describe('Workflow', () => {
 
       const { stream, getWorkflowState } = await workflow.createRun().stream({ inputData: {} });
 
-      expect(await Array.fromAsync(stream.values())).toMatchInlineSnapshot(`
+      const values: WatchEvent[] = [];
+      for await (const value of stream.values()) {
+        values.push(value);
+      }
+
+      expect(values).toMatchInlineSnapshot(`
         [
           {
             "payload": {
