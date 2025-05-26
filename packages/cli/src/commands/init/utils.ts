@@ -20,7 +20,7 @@ import {
 
 const exec = util.promisify(child_process.exec);
 
-export type LLMProvider = 'openai' | 'anthropic' | 'groq' | 'google' | 'cerebras';
+export type LLMProvider = 'openai' | 'anthropic' | 'groq' | 'google' | 'cerebras' | 'openrouter';
 export type Components = 'agents' | 'workflows' | 'tools';
 
 export const getAISDKPackage = (llmProvider: LLMProvider) => {
@@ -35,6 +35,8 @@ export const getAISDKPackage = (llmProvider: LLMProvider) => {
       return '@ai-sdk/google';
     case 'cerebras':
       return '@ai-sdk/cerebras';
+    case 'openrouter':
+      return '@openrouter/ai-sdk-provider';
     default:
       return '@ai-sdk/openai';
   }
@@ -59,6 +61,9 @@ export const getProviderImportAndModelItem = (llmProvider: LLMProvider) => {
   } else if (llmProvider === 'cerebras') {
     providerImport = `import { cerebras } from '${getAISDKPackage(llmProvider)}';`;
     modelItem = `cerebras('llama-3.3-70b')`;
+  } else if (llmProvider === 'openrouter') {
+    providerImport = `import { createOpenRouter } from '${getAISDKPackage(llmProvider)}';`;
+    modelItem = `createOpenRouter({ apiKey: process.env.OPENROUTER_API_KEY })('anthropic/claude-sonnet-4')`;
   }
   return { providerImport, modelItem };
 };
@@ -469,6 +474,9 @@ export const getAPIKey = async (provider: LLMProvider) => {
     case 'cerebras':
       key = 'CEREBRAS_API_KEY';
       return key;
+    case 'openrouter':
+      key = 'OPENROUTER_API_KEY';
+      return key;
     default:
       return key;
   }
@@ -553,6 +561,7 @@ export const interactivePrompt = async () => {
             { value: 'groq', label: 'Groq' },
             { value: 'google', label: 'Google' },
             { value: 'cerebras', label: 'Cerebras' },
+            { value: 'openrouter', label: 'OpenRouter' },
           ],
         }),
       llmApiKey: async ({ results: { llmProvider } }) => {

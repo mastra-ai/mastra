@@ -41,7 +41,10 @@ program
   )
   .option('--default', 'Quick start with defaults(src, OpenAI, no examples)')
   .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows)')
-  .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, groq, google, or cerebras)')
+  .option(
+    '-l, --llm <model-provider>',
+    'Default model provider (openai, anthropic, groq, google, cerebras, or openrouter)',
+  )
   .option('-k, --llm-api-key <api-key>', 'API key for the model provider')
   .option('-e, --example', 'Include example code')
   .option('-n, --no-example', 'Do not include example code')
