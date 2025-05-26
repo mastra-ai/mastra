@@ -12,6 +12,7 @@ const meta = {
   "create-run": "createRun()",
   snapshots: "Snapshots",
   watch: "watch()",
+  stream: "stream()",
   execute: "execute()",
   resume: "resume()",
   start: "start()",
