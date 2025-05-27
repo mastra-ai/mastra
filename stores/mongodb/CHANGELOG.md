@@ -1,5 +1,23 @@
 # @mastra/mongodb
 
+## 0.10.1
+
+### Patch Changes
+
+- 4a8cd1c: MongoDBStore option support
+- fcc915f: Support MongoDB database as store
+- Updated dependencies [d70b807]
+- Updated dependencies [6d16390]
+- Updated dependencies [1e4a421]
+- Updated dependencies [200d0da]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+- Updated dependencies [6015bdf]
+  - @mastra/core@0.10.1
+
 ## 0.10.1-alpha.1
 
 ### Patch Changes

@@ -1,5 +1,22 @@
 # create-mastra
 
+## 0.10.1
+
+### Patch Changes
+
+- b4365f6: add empty states for agents network and tools
+- d0932ac: add multi modal input behind feature flag
+- bed0916: Update default tools path in mastra dev,build
+- 3c2dba5: add workflow run list
+- 23d56b1: Handle dev server errors, restart, exit
+- 267773e: Show map config on workflow graph
+  Highlight borders for conditions too on workflow graph
+  Fix watch stream
+- 35bb6a3: Allow undefined temprature, topP model setting from playground
+- 33f1c64: revamp the experience for workflows
+- 6015bdf: Leverage defaultAgentStreamOption, defaultAgentGenerateOption in playground
+- 7a32205: add empty states for workflows, agents and mcp servers
+
 ## 0.10.1-alpha.5
 
 ### Patch Changes

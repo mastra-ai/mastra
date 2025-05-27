@@ -1,5 +1,27 @@
 # @mastra/client-js
 
+## 0.10.1
+
+### Patch Changes
+
+- 267773e: Show map config on workflow graph
+  Highlight borders for conditions too on workflow graph
+  Fix watch stream
+- 5343f93: Move emitter to symbol to make private
+- f622cfa: Make some properties of CreateMemoryThreadParams optional
+- 6015bdf: Leverage defaultAgentStreamOption, defaultAgentGenerateOption in playground
+- Updated dependencies [d70b807]
+- Updated dependencies [6d16390]
+- Updated dependencies [1e4a421]
+- Updated dependencies [200d0da]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+- Updated dependencies [6015bdf]
+  - @mastra/core@0.10.1
+
 ## 0.10.1-alpha.3
 
 ### Patch Changes

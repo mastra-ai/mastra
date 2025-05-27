@@ -1,5 +1,26 @@
 # @mastra/agui
 
+## 1.0.1
+
+### Patch Changes
+
+- a4bd9cf: Make these return abstract agents
+- cc86d51: Fix missing result messages
+- Updated dependencies [d70b807]
+- Updated dependencies [6d16390]
+- Updated dependencies [1e4a421]
+- Updated dependencies [200d0da]
+- Updated dependencies [267773e]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [f622cfa]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+- Updated dependencies [6015bdf]
+  - @mastra/core@0.10.1
+  - @mastra/client-js@0.10.1
+
 ## 1.0.1-alpha.4
 
 ### Patch Changes

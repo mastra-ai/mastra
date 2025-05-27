@@ -1,5 +1,21 @@
 # @mastra/core
 
+## 0.10.1
+
+### Patch Changes
+
+- d70b807: Improve storage.init
+- 6d16390: Support custom bundle externals on mastra Instance
+- 1e4a421: Fix duplication of items in array results in workflow
+- 200d0da: Return payload data, start time, end time, resume time and suspend time for each step in workflow state
+  Return error stack for failed workflow runs
+- bf5f17b: Adds ability to pass workflows into MCPServer to generate tools from the workflows. Each workflow will become a tool that can start the workflow run.
+- 5343f93: Move emitter to symbol to make private
+- 38aee50: Adds ability to pass an agents into an MCPServer instance to automatically generate tools from them.
+- 5c41100: Added binding support for cloudflare deployers, added cloudflare kv namespace changes, and removed randomUUID from buildExecutionGraph
+- d6a759b: Update workflows code in core readme'
+- 6015bdf: Leverage defaultAgentStreamOption, defaultAgentGenerateOption in playground
+
 ## 0.10.1-alpha.3
 
 ### Patch Changes
