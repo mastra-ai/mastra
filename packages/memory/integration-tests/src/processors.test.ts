@@ -1,3 +1,4 @@
+import { mkdtemp } from 'fs/promises';
 import { afterEach } from 'node:test';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -18,13 +19,10 @@ let memory: Memory;
 let storage: LibSQLStore;
 let vector: LibSQLVector;
 const resourceId = 'processor-test';
-let testCount = 0;
 
-beforeEach(() => {
+beforeEach(async () => {
   // Create a new unique database file in the temp directory for each test
-  const timestamp = Date.now();
-  const uniqueId = `memory-processor-test-${timestamp}-${testCount++}`;
-  const dbPath = join(tmpdir(), uniqueId);
+  const dbPath = join(await mkdtemp(join(tmpdir(), `memory-processor-test-`)), 'test.db');
 
   storage = new LibSQLStore({
     url: `file:${dbPath}`,
@@ -46,15 +44,14 @@ beforeEach(() => {
   });
 });
 
-describe('Memory with Processors', () => {
-  afterEach(async () => {
-    for (const thread of await storage.getThreadsByResourceId({
-      resourceId,
-    })) {
-      await storage.deleteThread({ threadId: thread.id });
-    }
-  });
+afterEach(async () => {
+  //@ts-ignore
+  await storage.client.close();
+  //@ts-ignore
+  await vector.turso.close();
+});
 
+describe('Memory with Processors', () => {
   it('should apply TokenLimiter when retrieving messages', async () => {
     // Create a thread
     const thread = await memory.createThread({

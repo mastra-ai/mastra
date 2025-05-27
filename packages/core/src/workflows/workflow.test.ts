@@ -3530,7 +3530,6 @@ describe('Workflow', () => {
 
       // Create a new storage instance for initial run
       const initialStorage = new MockStore();
-      await initialStorage.init();
 
       new Mastra({
         logger: false,
@@ -6094,7 +6093,6 @@ describe('Workflow', () => {
 
     it('should inject runtimeContext dependencies into steps during resume', async () => {
       const initialStorage = new MockStore();
-      await initialStorage.init();
 
       const runtimeContext = new RuntimeContext();
       const testValue = 'test-dependency';

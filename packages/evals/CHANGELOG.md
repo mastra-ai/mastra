@@ -1,5 +1,13 @@
 # @mastra/evals
 
+## 0.10.1-alpha.0
+
+### Patch Changes
+
+- d70b807: Improve storage.init
+- Updated dependencies [d70b807]
+  - @mastra/core@0.10.1-alpha.3
+
 ## 0.10.0
 
 ### Minor Changes

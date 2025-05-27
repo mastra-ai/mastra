@@ -1,5 +1,13 @@
 # @mastra/dane
 
+## 0.0.22-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [d70b807]
+  - @mastra/memory@0.10.1-alpha.0
+  - @mastra/core@0.10.1-alpha.3
+
 ## 0.0.22-alpha.3
 
 ### Patch Changes
