@@ -11,11 +11,12 @@ import { fastembed } from '@mastra/fastembed';
 import { LibSQLVector, LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { TokenLimiter, ToolCallFilter } from '@mastra/memory/processors';
+import type { UIMessage } from 'ai';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { filterToolCallsByName, filterToolResultsByName, generateConversationHistory } from './test-utils';
 
-function v2ToCoreMessages(messages: MastraMessageV2[]): CoreMessage[] {
+function v2ToCoreMessages(messages: MastraMessageV2[] | UIMessage[]): CoreMessage[] {
   return new MessageList().add(messages, 'memory').get.all.core();
 }
 
@@ -83,7 +84,9 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
     const result = memory.processMessages({
-      messages: v2ToCoreMessages(queryResult.messages),
+      messages: new MessageList({ threadId: thread.id, resourceId })
+        .add(queryResult.uiMessages, 'memory')
+        .get.all.core(),
       processors: [new TokenLimiter(250)], // Limit to 250 tokens
     });
 
@@ -109,8 +112,11 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
     expect(allMessagesQuery.messages.length).toBe(20);
+
     const allMessagesResult = memory.processMessages({
-      messages: v2ToCoreMessages(allMessagesQuery.messages),
+      messages: new MessageList({ threadId: thread.id, resourceId })
+        .add(allMessagesQuery.uiMessages, 'memory')
+        .get.all.core(),
       processors: [new TokenLimiter(3000)], // High limit that should exceed total tokens
     });
 
@@ -148,7 +154,7 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
     const result = memory.processMessages({
-      messages: v2ToCoreMessages(queryResult.messages),
+      messages: v2ToCoreMessages(queryResult.uiMessages),
       processors: [new ToolCallFilter({ exclude: ['weather'] })],
     });
     expect(new MessageList().add(result, 'memory').get.all.mastra().length).toBeLessThan(messages.length);
@@ -162,7 +168,7 @@ describe('Memory with Processors', () => {
       threadId: thread.id,
       selectBy: { last: 20 },
     });
-    const result2 = memory.processMessages({ messages: v2ToCoreMessages(queryResult2.messages), processors: [] });
+    const result2 = memory.processMessages({ messages: v2ToCoreMessages(queryResult2.uiMessages), processors: [] });
     expect(new MessageList().add(result2, 'memory').get.all.mastra()).toHaveLength(messages.length);
     expect(filterToolCallsByName(result2, 'weather')).toHaveLength(1);
     expect(filterToolResultsByName(result2, 'weather')).toHaveLength(1);
@@ -175,7 +181,7 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
     const result3 = memory.processMessages({
-      messages: v2ToCoreMessages(queryResult3.messages),
+      messages: v2ToCoreMessages(queryResult3.uiMessages),
       processors: [new ToolCallFilter({ exclude: ['weather', 'calculator'] })],
     });
     expect(result3.length).toBeLessThan(messages.length);
@@ -190,7 +196,7 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
     const result4 = memory.processMessages({
-      messages: v2ToCoreMessages(queryResult4.messages),
+      messages: v2ToCoreMessages(queryResult4.uiMessages),
       processors: [new ToolCallFilter()],
     });
     expect(result4.length).toBeLessThan(messages.length);
@@ -224,7 +230,7 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
     const result = memory.processMessages({
-      messages: v2ToCoreMessages(queryResult.messages),
+      messages: v2ToCoreMessages(queryResult.uiMessages),
       processors: [new ToolCallFilter({ exclude: ['weather'] }), new TokenLimiter(250)],
     });
 
@@ -401,9 +407,12 @@ describe('Memory with Processors', () => {
       threadId,
       selectBy: { last: 20 },
     });
+
     const list = new MessageList({ threadId }).add(queryResult.messages, 'memory');
+
     const baselineResult = memory.processMessages({
-      messages: list.get.all.core(),
+      messages: list.get.remembered.core(),
+      newMessages: list.get.input.core(),
       processors: [],
     });
 
@@ -511,7 +520,7 @@ describe('Memory with Processors', () => {
 
     // Retrieve the message (no TokenLimiter, just get the message back)
     const result = memory.processMessages({
-      messages: v2ToCoreMessages(queryResult.messages),
+      messages: v2ToCoreMessages(queryResult.uiMessages),
     });
 
     // Should have retrieved the message
