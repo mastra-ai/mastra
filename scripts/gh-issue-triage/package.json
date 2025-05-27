@@ -1,7 +1,7 @@
 {
   "name": "gh-issue-triage",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "index.ts",
   "type": "module",
   "scripts": {
     "test:run": "npx tsx --env-file=.env index.ts"
