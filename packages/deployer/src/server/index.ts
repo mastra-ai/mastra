@@ -1290,7 +1290,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
 
   // MCP server routes
   app.post(
-    '/api/servers/:serverId/mcp',
+    '/api/mcp/:serverId/mcp',
     bodyLimit(bodyLimitOptions),
     describeRoute({
       description: 'Send a message to an MCP server using Streamable HTTP',
@@ -1319,8 +1319,8 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
   );
 
   // New MCP server routes for SSE
-  const mcpSseBasePath = '/api/servers/:serverId/sse';
-  const mcpSseMessagePath = '/api/servers/:serverId/messages';
+  const mcpSseBasePath = '/api/mcp/:serverId/sse';
+  const mcpSseMessagePath = '/api/mcp/:serverId/messages';
 
   // Route for establishing SSE connection
   app.get(
@@ -2105,7 +2105,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
         {
           name: 'runId',
           in: 'query',
-          required: true,
+          required: false,
           schema: { type: 'string' },
         },
       ],
@@ -2928,7 +2928,7 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
     {
       fetch: app.fetch,
       port,
-      hostname: serverOptions?.host ?? 'localhost',
+      hostname: serverOptions?.host,
     },
     () => {
       const logger = mastra.getLogger();
