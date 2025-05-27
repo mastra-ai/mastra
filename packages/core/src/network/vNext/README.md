@@ -12,6 +12,11 @@ There are two main problem areas that this system is designed to solve:
 - Workflows are linear or branched sequences of steps. This creates a deterministic flow of execution.
 - Agent Networks add a layer of non-deterministic LLM-based orchestration, allowing dynamic, multi-agent collaboration and routing. This creates a non-deterministic flow of execution.
 
+## Differences from current experimental implementation
+
+- The current implementation of AgentNetwork relies on tool calls to call other agents in the network. The vNext implementation is using Mastra workflows under the hood to break down the execution to individual tasks.
+- New methods, `.generate()` for a one-off "playbook"-like execution of a single primitive in the network, more suitable for a chat-based interface where you iterate on a solution. The `.loop()` method is still available for more complex tasks and operates much like the current implementation.
+
 ## Important details
 
 - Providing memory to the AgentNetwork is _not_ optional when using the `loop` method, as it is required to store the task history. Memory is the core primitive used for any decisions on which primitives to run, as well as determine task completion.
