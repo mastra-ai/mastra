@@ -394,7 +394,7 @@ export class LibSQLStore extends MastraStorage {
             threadId,
             typeof message.content === 'object' ? JSON.stringify(message.content) : message.content,
             message.role,
-            'v2',
+            message.type || 'v2',
             time instanceof Date ? time.toISOString() : time,
           ],
         };

@@ -702,7 +702,7 @@ export class PostgresStore extends MastraStorage {
               typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
               message.createdAt || new Date().toISOString(),
               message.role,
-              'v2',
+              message.type || 'v2',
             ],
           );
         }

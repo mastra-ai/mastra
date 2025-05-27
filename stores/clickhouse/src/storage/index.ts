@@ -785,7 +785,7 @@ export class ClickhouseStore extends MastraStorage {
           content: typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
           createdAt: message.createdAt.toISOString(),
           role: message.role,
-          type: 'v2',
+          type: message.type || 'v2',
         })),
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
