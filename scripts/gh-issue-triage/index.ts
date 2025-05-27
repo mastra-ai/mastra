@@ -44,7 +44,7 @@ async function main() {
         product_area: { type: 'string' },
         github_username: { type: 'string' },
       },
-      required: ['assignee', 'reason', 'product_area', 'github_username']
+      required: ['assignee', 'reason', 'product_area', 'github_username'],
     },
   });
 
