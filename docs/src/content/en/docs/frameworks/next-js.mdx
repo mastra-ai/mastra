@@ -22,6 +22,12 @@ Best for larger projects where you want to:
 
 Create a new Mastra project using our CLI:
 
+{/* 
+  LLM CONTEXT: This Tabs component shows commands for creating a new Mastra backend project using different package managers.
+  Each tab displays the command for that specific package manager to create a separate Mastra backend service.
+  This is part of the "Separate Backend Integration" approach for Next.js projects.
+  All commands create the same Mastra project but use different package manager syntax.
+*/}
 <Tabs items={["npx", "npm", "yarn", "pnpm"]}>
   <Tabs.Tab>
     ```bash copy
@@ -49,6 +55,12 @@ For detailed setup instructions, see our [installation guide](/docs/getting-star
 
 ### Install MastraClient
 
+{/* 
+  LLM CONTEXT: This Tabs component shows installation commands for the Mastra Client SDK in a Next.js project.
+  Each tab displays the installation command for that specific package manager (npm, yarn, pnpm, bun).
+  This is for installing the client SDK to communicate with a separate Mastra backend service.
+  All commands install the same @mastra/client-js package but use different package manager syntax.
+*/}
 <Tabs items={["npm", "yarn", "pnpm", "bun"]}>
   <Tabs.Tab>
     ```bash copy
@@ -138,6 +150,12 @@ cd your-nextjs-app
 
 Then run the initialization command:
 
+{/* 
+  LLM CONTEXT: This Tabs component shows commands for initializing Mastra directly within a Next.js project.
+  Each tab displays the initialization command for that specific package manager.
+  This is part of the "Direct Integration" approach where Mastra is bundled with the Next.js application.
+  All commands run the same mastra init command but use different package manager execution syntax.
+*/}
 <Tabs items={["npm", "yarn", "pnpm"]}>
   <Tabs.Tab>
     ```bash copy

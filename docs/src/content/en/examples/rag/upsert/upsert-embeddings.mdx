@@ -10,6 +10,13 @@ import { GithubLink } from "@/components/github-link";
 
 After generating embeddings, you need to store them in a database that supports vector similarity search. This example shows how to store embeddings in various vector databases for later retrieval.
 
+{/* 
+  LLM CONTEXT: This Tabs component demonstrates how to upsert (insert/update) embeddings into different vector databases.
+  Each tab shows a complete example of storing embeddings in a specific vector database provider.
+  The tabs help users understand the consistent API pattern across different vector stores while showing provider-specific configuration.
+  Each tab includes document chunking, embedding generation, index creation, and data insertion for that specific database.
+  The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upstash, Cloudflare, and MongoDB.
+*/}
 <Tabs items={['PgVector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra DB', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB']}>
   <Tabs.Tab>
   The `PgVector` class provides methods to create indexes and insert embeddings into PostgreSQL with the pgvector extension.
