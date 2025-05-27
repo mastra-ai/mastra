@@ -424,23 +424,26 @@ Use this guide to scaffold and integrate Mastra with your Next.js project.
   export default function Test() {
     const [result, setResult] = useState<string | null>(null);
 
-    async function handleSubmit(formData: FormData) {
-      const city = formData.get("city");
+    async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+      event.preventDefault();
 
-      const result = await fetch("/api/test", {
+      const formData = new FormData(event.currentTarget);
+      const city = formData.get("city")?.toString();
+
+      const response = await fetch("/api/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ city })
       });
 
-      const text = await result.json();
+      const text = await response.json();
       setResult(text);
     }
 
     return (
       <>
         <h1>Test</h1>
-        <form action={handleSubmit}>
+        <form onSubmit={handleSubmit}>
           <input name="city" placeholder="Enter city" required />
           <button type="submit">Get Weather</button>
         </form>
