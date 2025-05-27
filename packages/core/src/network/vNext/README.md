@@ -292,3 +292,22 @@ For the given task (research 3 biggest cities in France and write a full report)
 
 - The underlying engine is a Mastra workflow that wraps the single call `generate` workflow.
 - The workflow will repeatedly call the network execution workflow with a `dountil` structure, until the routing model determines the task is complete. This check is used as the `dountil` condition.
+
+## Registering the network in Mastra
+
+```typescript
+const mastra = new Mastra({
+  vnext_networks: {
+    'test-network': network,
+  },
+});
+
+// using the network
+const network = mastra.vnext_getNetwork('test-network');
+
+if (!network) {
+  throw new Error('Network not found');
+}
+
+console.log(await network.generate('What are the biggest cities in France?', { runtimeContext }));
+```
