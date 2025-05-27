@@ -53,18 +53,18 @@ To create a project, run:
 <Tabs items={["npx", "npm", "yarn", "pnpm", "bun"]}>
 
   <Tabs.Tab>
-  ```bash copy 
-npx create-mastra@latest 
+  ```bash copy
+npx create-mastra@latest
   ```
   </Tabs.Tab>
   <Tabs.Tab>
   ```bash copy
-npm create mastra@latest 
+npm create mastra@latest
    ```
    </Tabs.Tab>
   <Tabs.Tab>
   ```bash copy
-yarn create mastra@latest 
+yarn create mastra@latest
    ```
    </Tabs.Tab>
   <Tabs.Tab>
@@ -79,24 +79,6 @@ bun create mastra@latest
   </Tabs.Tab>
 </Tabs>
 
-On installation, you'll be guided through the following prompts:
-
-```bash
-What do you want to name your project? my-mastra-app
-Choose components to install:
-  ◯ Agents (recommended)
-  ◯ Tools
-  ◯ Workflows
-Select default provider:
-  ◯ OpenAI (recommended)
-  ◯ Anthropic
-  ◯ Groq
-Would you like to include example code? No / Yes
-Turn your IDE into a Mastra expert? (Installs MCP server)
-  ◯ Skip for now
-  ◯ Cursor
-  ◯ Windsurf
-```
 
 After the prompts, `create-mastra` will:
 
@@ -109,40 +91,14 @@ After the prompts, `create-mastra` will:
 
 #### Non-Interactive
 
-You can run the Mastra CLI in fully non-interactive mode by passing all required flags. Start with:
+You can run the Mastra CLI in fully non-interactive mode by passing all required flags, for example:
 
-```bash copy
-npx create-mastra@latest
-```
-
-**Required Flags**
-
-| Short | Long            | Description                                                             |
-| ----- | --------------- | ----------------------------------------------------------------------- |
-| `-d`  | `--dir`         | Directory for Mastra files (defaults to `src/mastra`)                   |
-| `-c`  | `--components`  | Comma-separated list of components (`agents`, `tools`, `workflows`)     |
-| `-l`  | `--llm`         | Model provider (`openai`, `anthropic`, `groq`, `google`, or `cerebras`) |
-| `-k`  | `--llm-api-key` | API key for the selected LLM provider (added to `.env` file)            |
-| `-e`  | `--example`     | Include example code                                                    |
-| `-ne` | `--no-example`  | Skip example code                                                       |
-
-**Optional Flags**
-
-| Short | Long             | Description                                           |
-| ----- | ---------------- | ----------------------------------------------------- |
-| `-m`  | `--mcp`          | IDE (`windsurf`, `cursor`, `cursor-global`, `vscode`) |
-| `-p`  | `--project-name` | Project name                                          |
-| `-d`  | `--dir`          | Target directory for generated code (default: `src/`) |
-| `-t`  | `--timeout`      | Set timeout in milliseconds for installation steps    |
-| `-h`  | `--help`         | Display available flags                               |
-
-**Example One-Liner**
 
 ```bash copy
 npx create-mastra@latest --project-name hello-mastra --example --components tools,agents,workflows --llm openai
 ```
 
-> Providing all required flags lets the CLI run without any prompts.
+> See the [mastra init](/reference/cli/init) documentation for a full list of available CLI options.
 
 ### Set Up your API Key
 
