@@ -91,7 +91,7 @@ export class MessageList {
     mastra: () => this.messages,
     v1: () => convertToV1Messages(this.messages),
     ui: () => this.messages.map(MessageList.toUIMessage),
-    core: () => convertToCoreMessages(this.all.ui()),
+    core: () => this.convertToCoreMessages(this.all.ui()),
     prompt: () => {
       return [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat(), ...this.all.core()];
     },
@@ -100,13 +100,13 @@ export class MessageList {
     mastra: () => this.messages.filter(m => this.memoryMessages.has(m)),
     v1: () => convertToV1Messages(this.remembered.mastra()),
     ui: () => this.remembered.mastra().map(MessageList.toUIMessage),
-    core: () => convertToCoreMessages(this.remembered.ui()),
+    core: () => this.convertToCoreMessages(this.remembered.ui()),
   };
   private input = {
     mastra: () => this.messages.filter(m => this.newMessages.has(m)),
     v1: () => convertToV1Messages(this.input.mastra()),
     ui: () => this.input.mastra().map(MessageList.toUIMessage),
-    core: () => convertToCoreMessages(this.input.ui()),
+    core: () => this.convertToCoreMessages(this.input.ui()),
   };
   private response = {
     mastra: () => this.messages.filter(m => this.responseMessages.has(m)),
@@ -131,6 +131,39 @@ export class MessageList {
     return this;
   }
 
+  private convertToCoreMessages(messages: UIMessage[]): CoreMessage[] {
+    return convertToCoreMessages(this.sanitizeUIMessages(messages));
+  }
+  private sanitizeUIMessages(messages: UIMessage[]): UIMessage[] {
+    const msgs = messages
+      .map(m => {
+        if (m.parts.length === 0) return false;
+        const safeParts = m.parts.filter(
+          p =>
+            p.type !== `tool-invocation` ||
+            // calls and partial-calls should be updated to be results at this point
+            // if they haven't we can't send them back to the llm and need to remove them.
+            (p.toolInvocation.state !== `call` && p.toolInvocation.state !== `partial-call`),
+        );
+
+        // fully remove this message if it has an empty parts array after stripping out incomplete tool calls.
+        if (!safeParts.length) return false;
+
+        const sanitized = {
+          ...m,
+          parts: safeParts,
+        };
+
+        // ensure toolInvocations are also updated to only show results
+        if (`toolInvocations` in m && m.toolInvocations) {
+          sanitized.toolInvocations = m.toolInvocations.filter(t => t.state === `result`);
+        }
+
+        return sanitized;
+      })
+      .filter((m): m is UIMessage => Boolean(m));
+    return msgs;
+  }
   private addOneSystem(message: CoreSystemMessage | string, tag?: string) {
     if (typeof message === `string`) message = { role: 'system', content: message };
     if (tag && !this.isDuplicateSystem(message, tag)) {
@@ -220,6 +253,25 @@ export class MessageList {
 
     const latestMessage = this.messages.at(-1);
 
+    const singleToolResult =
+      messageV2.role === `assistant` &&
+      messageV2.content.parts.length === 1 &&
+      messageV2.content.parts[0]?.type === `tool-invocation` &&
+      messageV2.content.parts[0].toolInvocation.state === `result` &&
+      messageV2.content.parts[0];
+
+    if (
+      singleToolResult &&
+      (latestMessage?.role !== `assistant` ||
+        !latestMessage.content.parts.some(
+          p =>
+            p.type === `tool-invocation` && p.toolInvocation.toolCallId === singleToolResult.toolInvocation.toolCallId,
+        ))
+    ) {
+      // remove any tool results that aren't updating a tool call
+      return;
+    }
+
     // If the last message is an assistant message and the new message is also an assistant message, merge them together and update tool calls with results
     if (latestMessage?.role === 'assistant' && messageV2.role === 'assistant' && !shouldUpdate) {
       latestMessage.createdAt = messageV2.createdAt || latestMessage.createdAt;
@@ -274,9 +326,20 @@ export class MessageList {
 
       const existingIndex = (shouldUpdate && this.messages.findIndex(m => m.id === id)) || -1;
       const existingMessage = existingIndex !== -1 && this.messages[existingIndex];
+      const firstPart = messageV2.content.parts[0];
+      const isToolResult =
+        messageV2.role === `assistant` &&
+        messageV2.content.parts.length === 0 &&
+        firstPart?.type === `tool-invocation` &&
+        firstPart.toolInvocation.state === `result`;
+
       if (shouldUpdate && existingMessage) {
         this.messages[existingIndex] = messageV2;
-      } else if (!exists) {
+      } else if (
+        !exists &&
+        // don't add tool results if there was no tool call.
+        !isToolResult
+      ) {
         this.messages.push(messageV2);
       }
 
@@ -422,7 +485,7 @@ export class MessageList {
     const parts: UIMessage['parts'] = [];
     const experimentalAttachments: UIMessage['experimental_attachments'] = [];
 
-    if (typeof coreMessage.content === 'string' && coreMessage.content !== ``) {
+    if (typeof coreMessage.content === 'string') {
       parts.push({ type: 'step-start' });
       parts.push({
         type: 'text',

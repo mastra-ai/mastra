@@ -1,5 +1,6 @@
 import { PassThrough } from 'stream';
 import { createOpenAI } from '@ai-sdk/openai';
+import type { CoreMessage } from 'ai';
 import { simulateReadableStream } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
 import { config } from 'dotenv';
@@ -11,6 +12,7 @@ import { Mastra } from '../mastra';
 import { RuntimeContext } from '../runtime-context';
 import { createTool } from '../tools';
 import { CompositeVoice, MastraVoice } from '../voice';
+import { MessageList } from './message-list/index';
 
 import { Agent } from './index';
 
@@ -438,106 +440,146 @@ describe('agent', () => {
   }, 500000);
 
   it('should properly sanitize incomplete tool calls from memory messages', () => {
-    const agent = new Agent({
-      name: 'Test agent',
-      instructions: 'Test agent',
-      model: new MockLanguageModelV1({
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { promptTokens: 10, completionTokens: 20 },
-          text: ``,
-        }),
-      }),
-    });
-
-    const toolResultOne = {
-      role: 'tool' as const,
-      content: [{ type: 'tool-result' as const, toolName: '', toolCallId: 'tool-1', text: 'result', result: '' }],
+    const messageList = new MessageList();
+    // Original CoreMessages for context, but we'll test the output of list.get.all.core()
+    const toolResultOne_Core: CoreMessage = {
+      role: 'tool',
+      content: [{ type: 'tool-result', toolName: 'test-tool-1', toolCallId: 'tool-1', result: 'res1' }],
     };
-    const toolCallTwo = {
-      role: 'assistant' as const,
-      content: [{ type: 'tool-call' as const, toolName: '', args: '', toolCallId: 'tool-2', text: 'call' }],
+    const toolCallTwo_Core: CoreMessage = {
+      role: 'assistant',
+      content: [{ type: 'tool-call', toolName: 'test-tool-2', toolCallId: 'tool-2', args: {} }],
     };
-    const toolResultTwo = {
-      role: 'tool' as const,
-      content: [{ type: 'tool-result' as const, toolName: '', toolCallId: 'tool-2', text: 'result', result: '' }],
+    const toolResultTwo_Core: CoreMessage = {
+      role: 'tool',
+      content: [{ type: 'tool-result', toolName: 'test-tool-2', toolCallId: 'tool-2', result: 'res2' }],
     };
-    const toolCallThree = {
-      role: 'assistant' as const,
-      content: [{ type: 'tool-call' as const, toolName: '', args: '', toolCallId: 'tool-3', text: 'call' }],
+    const toolCallThree_Core: CoreMessage = {
+      role: 'assistant',
+      content: [{ type: 'tool-call', toolName: 'test-tool-3', toolCallId: 'tool-3', args: {} }],
     };
-    const memoryMessages = [toolResultOne, toolCallTwo, toolResultTwo, toolCallThree];
 
-    const sanitizedMessages = agent.sanitizeResponseMessages(memoryMessages);
+    // Add messages. addOne will merge toolCallTwo and toolResultTwo.
+    // toolResultOne is orphaned. toolCallThree is orphaned.
+    messageList.add(toolResultOne_Core, 'memory');
+    messageList.add(toolCallTwo_Core, 'memory');
+    messageList.add(toolResultTwo_Core, 'memory');
+    messageList.add(toolCallThree_Core, 'memory');
 
-    // The tool result for tool-1 should be removed since there's no matching tool call
-    expect(sanitizedMessages).not.toContainEqual(toolResultOne);
+    const finalCoreMessages = messageList.get.all.core();
 
-    // The tool call and result for tool-2 should remain since they form a complete pair
-    expect(sanitizedMessages).toContainEqual(toolCallTwo);
-    expect(sanitizedMessages).toContainEqual(toolResultTwo);
+    // Expected: toolResultOne (orphaned tool result) should be gone.
+    // toolCallThree (orphaned assistant call) should be gone.
+    // toolCallTwo and toolResultTwo should be present and correctly paired by convertToCoreMessages.
 
-    // The tool call for tool-3 should be removed since there's no matching result
-    expect(sanitizedMessages).not.toContainEqual(toolCallThree);
-    expect(sanitizedMessages).toHaveLength(2);
+    // Check that tool-1 (orphaned result) is not present
+    expect(
+      finalCoreMessages.find(
+        m => m.role === 'tool' && (m.content as any[]).some(p => p.type === 'tool-result' && p.toolCallId === 'tool-1'),
+      ),
+    ).toBeUndefined();
+    // Also check no lingering assistant message for tool-1 if it was an assistant message that only contained an orphaned result
+    expect(
+      finalCoreMessages.find(
+        m =>
+          m.role === 'assistant' &&
+          (m.content as any[]).some(p => p.type === 'tool-invocation' && p.toolInvocation?.toolCallId === 'tool-1') &&
+          (m.content as any[]).every(
+            p => p.type === 'tool-invocation' || p.type === 'step-start' || p.type === 'step-end',
+          ),
+      ),
+    ).toBeUndefined();
+
+    // Check that tool-2 call and result are present
+    const assistantCallForTool2 = finalCoreMessages.find(
+      m =>
+        m.role === 'assistant' && (m.content as any[]).some(p => p.type === 'tool-call' && p.toolCallId === 'tool-2'),
+    );
+    expect(assistantCallForTool2).toBeDefined();
+    expect(assistantCallForTool2?.content).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'tool-call', toolCallId: 'tool-2', toolName: 'test-tool-2' }),
+      ]),
+    );
+
+    const toolResultForTool2 = finalCoreMessages.find(
+      m => m.role === 'tool' && (m.content as any[]).some(p => p.type === 'tool-result' && p.toolCallId === 'tool-2'),
+    );
+    expect(toolResultForTool2).toBeDefined();
+    expect(toolResultForTool2?.content).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'tool-result', toolCallId: 'tool-2', toolName: 'test-tool-2', result: 'res2' }),
+      ]),
+    );
+
+    // Check that tool-3 (orphaned call) is not present
+    expect(
+      finalCoreMessages.find(
+        m =>
+          m.role === 'assistant' && (m.content as any[]).some(p => p.type === 'tool-call' && p.toolCallId === 'tool-3'),
+      ),
+    ).toBeUndefined();
+
+    expect(finalCoreMessages.length).toBe(2); // Assistant call for tool-2, Tool result for tool-2
   });
 
   it('should preserve empty assistant messages after tool use', () => {
-    const agent = new Agent({
-      name: 'Test agent',
-      instructions: 'Test agent',
-      model: new MockLanguageModelV1({
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop',
-          usage: { promptTokens: 10, completionTokens: 20 },
-          text: ``,
-        }),
-      }),
-    });
+    const messageList = new MessageList();
 
-    // Create an assistant message with a tool call
-    const assistantToolCallMessage = {
-      role: 'assistant' as const,
-      content: [{ type: 'tool-call' as const, toolName: 'testTool', toolCallId: 'tool-1', args: {}, text: 'call' }],
+    const assistantToolCall_Core: CoreMessage = {
+      role: 'assistant',
+      content: [{ type: 'tool-call', toolName: 'testTool', toolCallId: 'tool-1', args: {} }],
     };
-
-    // Create a tool message that responds to the tool call
-    const toolMessage = {
-      role: 'tool' as const,
-      content: [
-        { type: 'tool-result' as const, toolName: 'testTool', toolCallId: 'tool-1', text: 'result', result: '' },
-      ],
+    const toolMessage_Core: CoreMessage = {
+      role: 'tool',
+      content: [{ type: 'tool-result', toolName: 'testTool', toolCallId: 'tool-1', result: 'res1' }],
     };
-
-    // Create an empty assistant message that follows the tool message
-    const emptyAssistantMessage = {
-      role: 'assistant' as const,
-      content: '', // Empty string content
+    const emptyAssistant_Core: CoreMessage = {
+      role: 'assistant',
+      content: '',
     };
-
-    const userMessage = {
-      role: 'user' as const,
+    const userMessage_Core: CoreMessage = {
+      role: 'user',
       content: 'Hello',
     };
 
-    const messages = [assistantToolCallMessage, toolMessage, emptyAssistantMessage, userMessage];
+    messageList.add(assistantToolCall_Core, 'memory');
+    messageList.add(toolMessage_Core, 'memory');
+    messageList.add(emptyAssistant_Core, 'memory');
+    messageList.add(userMessage_Core, 'memory');
 
-    const sanitizedMessages = agent.sanitizeResponseMessages(messages);
+    const finalCoreMessages = messageList.get.all.core();
 
-    // The empty assistant message should be preserved even though it has empty content
-    expect(sanitizedMessages).toContainEqual(emptyAssistantMessage);
+    // Expected:
+    // 1. Assistant message with tool-1 call.
+    // 2. Tool message with tool-1 result.
+    // 3. Empty assistant message.
+    // 4. User message.
+    expect(finalCoreMessages.length).toBe(4);
 
-    // The tool message should be preserved because it has a matching tool call ID
-    expect(sanitizedMessages).toContainEqual(toolMessage);
+    const assistantCallMsg = finalCoreMessages.find(
+      m =>
+        m.role === 'assistant' && (m.content as any[]).some(p => p.type === 'tool-call' && p.toolCallId === 'tool-1'),
+    );
+    expect(assistantCallMsg).toBeDefined();
 
-    // All messages should be preserved
-    expect(sanitizedMessages).toHaveLength(4);
-    expect(sanitizedMessages[0]).toEqual(assistantToolCallMessage);
-    expect(sanitizedMessages[1]).toEqual(toolMessage);
-    expect(sanitizedMessages[2]).toEqual(emptyAssistantMessage);
-    expect(sanitizedMessages[3]).toEqual(userMessage);
+    const toolResultMsg = finalCoreMessages.find(
+      m => m.role === 'tool' && (m.content as any[]).some(p => p.type === 'tool-result' && p.toolCallId === 'tool-1'),
+    );
+    expect(toolResultMsg).toBeDefined();
+
+    expect(finalCoreMessages).toEqual(
+      expect.arrayContaining([
+        {
+          role: 'assistant',
+          content: [{ type: 'text', text: '' }],
+        },
+      ]),
+    );
+
+    const userMsg = finalCoreMessages.find(m => m.role === 'user');
+    expect(userMsg).toBeDefined();
+    expect(userMsg?.content).toEqual([{ type: 'text', text: 'Hello' }]); // convertToCoreMessages makes text content an array
   });
 
   describe('voice capabilities', () => {
@@ -691,7 +733,9 @@ describe('agent', () => {
       expect((agent.getTools() as Agent['tools']).vercelTool).toBeDefined();
 
       // Verify both tools can be executed
+      // @ts-ignore
       await (agent.getTools() as Agent['tools']).mastraTool.execute!({ name: 'test' });
+      // @ts-ignore
       await (agent.getTools() as Agent['tools']).vercelTool.execute!({ name: 'test' });
 
       expect(mastraExecute).toHaveBeenCalled();

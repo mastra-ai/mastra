@@ -4,7 +4,7 @@ import type { UIMessage, CoreMessage, Message } from 'ai';
 import { describe, expect, it } from 'vitest';
 import type { MastraMessageV1 } from '../../memory';
 import type { MastraMessageV2 } from '../message-list';
-import { MessageList } from '../message-list';
+import { MessageList } from './index';
 
 type VercelUIMessage = Message;
 type VercelCoreMessage = CoreMessage;
@@ -1611,6 +1611,62 @@ describe('MessageList', () => {
         expect(list.get.all.mastra().length).toBe(2); // user and assistant
         expect(list.get.all.ui().length).toBe(2); // user and assistant
       });
+    });
+  });
+
+  describe('core message sanitization', () => {
+    it('should remove an orphaned tool-call part from an assistant message if no result is provided', () => {
+      const list = new MessageList({ threadId, resourceId });
+      const userMessage: CoreMessage = { role: 'user', content: 'Call a tool' };
+      const assistantMessageWithOrphanedCall: CoreMessage = {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Okay' },
+          { type: 'tool-call', toolCallId: 'orphan-call-1', toolName: 'test-tool', args: {} },
+        ],
+      };
+
+      list.add(userMessage, 'user');
+      list.add(assistantMessageWithOrphanedCall, 'response');
+
+      const coreMessages = list.get.all.core();
+
+      expect(coreMessages.length).toBe(2);
+      const assistantMsg = coreMessages.find(m => m.role === 'assistant');
+      expect(assistantMsg).toBeDefined();
+      expect(assistantMsg?.content).toEqual([{ type: 'text', text: 'Okay' }]); // Should only have the text part
+    });
+
+    it('should handle an assistant message with mixed valid and orphaned tool calls', () => {
+      const list = new MessageList({ threadId, resourceId });
+      const assistantMessage: CoreMessage = {
+        role: 'assistant',
+        content: [
+          { type: 'tool-call', toolCallId: 'valid-1', toolName: 'tool-a', args: {} },
+          { type: 'text', text: 'Some text in between' },
+          { type: 'tool-call', toolCallId: 'orphan-3', toolName: 'tool-b', args: {} },
+        ],
+      };
+      const toolMessageResult: CoreMessage = {
+        role: 'tool',
+        content: [{ type: 'tool-result', toolCallId: 'valid-1', toolName: 'tool-a', result: 'Result for valid-1' }],
+      };
+
+      list.add(assistantMessage, 'response');
+      list.add(toolMessageResult, 'response');
+
+      const coreMessages = list.get.all.core();
+      expect(coreMessages.length).toBe(3); // Assistant message and Tool message for valid-1
+
+      const finalAssistantMsg = [...coreMessages].reverse().find(m => m.role === 'assistant');
+      expect(finalAssistantMsg).toBeDefined();
+      expect(finalAssistantMsg?.content).toEqual([{ type: 'text', text: 'Some text in between' }]);
+
+      const finalToolMsg = coreMessages.find(m => m.role === 'tool');
+      expect(finalToolMsg).toBeDefined();
+      expect(finalToolMsg?.content).toEqual([
+        { type: 'tool-result', toolCallId: 'valid-1', toolName: 'tool-a', result: 'Result for valid-1' },
+      ]);
     });
   });
 });
