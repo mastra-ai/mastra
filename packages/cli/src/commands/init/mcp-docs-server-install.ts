@@ -73,6 +73,14 @@ async function writeMergedConfig(configPath: string, editor: Editor) {
 export const windsurfGlobalMCPConfigPath = path.join(os.homedir(), '.codeium', 'windsurf', 'mcp_config.json');
 export const cursorGlobalMCPConfigPath = path.join(os.homedir(), '.cursor', 'mcp.json');
 export const vscodeMCPConfigPath = path.join(process.cwd(), '.vscode', 'mcp.json');
+export const vscodeGlobalMCPConfigPath = path.join(
+  os.homedir(),
+  process.platform === 'win32'
+    ? path.join('AppData', 'Roaming', 'Code', 'User', 'settings.json')
+    : process.platform === 'darwin'
+      ? path.join('Library', 'Application Support', 'Code', 'User', 'settings.json')
+      : path.join('.config', 'Code', 'User', 'settings.json'),
+);
 
 export type Editor = 'cursor' | 'cursor-global' | 'windsurf' | 'vscode';
 
@@ -107,6 +115,8 @@ export async function globalMCPIsAlreadyInstalled(editor: Editor) {
     configPath = windsurfGlobalMCPConfigPath;
   } else if (editor === 'cursor-global') {
     configPath = cursorGlobalMCPConfigPath;
+  } else if (editor === 'vscode') {
+    configPath = vscodeGlobalMCPConfigPath;
   }
 
   if (!configPath || !existsSync(configPath)) {
@@ -115,8 +125,16 @@ export async function globalMCPIsAlreadyInstalled(editor: Editor) {
 
   try {
     const configContents = await readJSON(configPath);
-    if (!configContents?.mcpServers) return false;
 
+    if (editor === 'vscode') {
+      if (!configContents?.servers) return false;
+      const hasMastraMCP = Object.values(configContents.servers).some((server?: any) =>
+        server?.args?.find((arg?: string) => arg?.includes(`@mastra/mcp-docs-server`)),
+      );
+      return hasMastraMCP;
+    }
+
+    if (!configContents?.mcpServers) return false;
     const hasMastraMCP = Object.values(configContents.mcpServers).some((server?: any) =>
       server?.args?.find((arg?: string) => arg?.includes(`@mastra/mcp-docs-server`)),
     );

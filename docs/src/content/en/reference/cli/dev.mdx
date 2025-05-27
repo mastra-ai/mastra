@@ -1,32 +1,55 @@
 ---
-title: "`mastra dev` Reference | Local Development | Mastra CLI"
+title: "mastra dev | Development Server | Mastra CLI"
 description: Documentation for the mastra dev command, which starts a development server for agents, tools, and workflows.
 ---
 
-# `mastra dev` Reference
+# mastra dev
 
-The `mastra dev` command starts a development server that exposes REST routes for your agents, tools, and workflows,
+The `mastra dev` command starts a development server that exposes REST endpoints for your agents, tools, and workflows.
 
-## Parameters
+## Usage
+
+```bash
+mastra dev [options]
+```
+
+## Options
 
 <PropertiesTable
   content={[
     {
       name: "--dir",
       type: "string",
-      description:
-        "Specifies the path to your Mastra folder (containing agents, tools, and workflows). Defaults to the current working directory.",
+      description: "Path to your mastra folder",
+      isOptional: true,
+    },
+    {
+      name: "--root",
+      type: "string",
+      description: "Path to your root folder",
       isOptional: true,
     },
     {
       name: "--tools",
       type: "string",
-      description:
-        "Comma-separated paths to additional tool directories that should be registered. For example: 'src/tools/dbTools,src/tools/scraperTools'.",
+      description: "Comma-separated list of paths to tool files to include",
+      isOptional: true,
+    },
+    {
+      name: "--port",
+      type: "number",
+      description: "deprecated: Port number for the development server (defaults to 4111)",
+      isOptional: true,
+    },
+    {
+      name: "--help",
+      type: "boolean",
+      description: "display help for command",
       isOptional: true,
     },
   ]}
 />
+
 
 ## Routes
 
@@ -123,7 +146,7 @@ Make sure the `index.ts` file in your Mastra folder exports the Mastra instance 
 
 To test an agent after running `mastra dev`:
 
-```bash
+```bash copy
 curl -X POST http://localhost:4111/api/agents/myAgent/generate \
   -H "Content-Type: application/json" \
   -d '{
@@ -143,7 +166,7 @@ be handy during development:
 Set `MASTRA_DEV_NO_CACHE=1` to force a full rebuild rather than using
 the cached assets under `.mastra/`:
 
-```bash
+```bash copy
 MASTRA_DEV_NO_CACHE=1 mastra dev
 ```
 
@@ -155,7 +178,7 @@ output.
 `MASTRA_CONCURRENCY` caps how many expensive operations run in parallel
 (primarily build and evaluation steps). For example:
 
-```bash
+```bash copy
 MASTRA_CONCURRENCY=4 mastra dev
 ```
 
@@ -167,16 +190,16 @@ When using providers supported by the Vercel AI SDK you can redirect
 requests through proxies or internal gateways by setting a base URL. For
 OpenAI:
 
-```bash
-OPENAI_API_KEY=sk-this_key \
+```bash copy
+OPENAI_API_KEY=<your-api-key> \
 OPENAI_BASE_URL=https://openrouter.example/v1 \
 mastra dev
 ```
 
 and for Anthropic:
 
-```bash
-ANTHROPIC_API_KEY=sk-anthropic42 \
+```bash copy
+OPENAI_API_KEY=<your-api-key> \
 ANTHROPIC_BASE_URL=https://anthropic.internal \
 mastra dev
 ```
@@ -190,6 +213,6 @@ To opt out of anonymous CLI analytics set
 `MASTRA_TELEMETRY_DISABLED=1`. This also prevents tracking within the
 local playground.
 
-```bash
+```bash copy
 MASTRA_TELEMETRY_DISABLED=1 mastra dev
 ```

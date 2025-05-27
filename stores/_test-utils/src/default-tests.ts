@@ -44,15 +44,14 @@ export function createTestSuite(storage: MastraStorage) {
         result: { success: true },
         value: {},
         context: {
-          steps: {
-            [stepId]: {
-              status,
-              payload: {},
-              error: undefined,
-            },
+          [stepId]: {
+            status,
+            payload: {},
+            error: undefined,
+            startedAt: timestamp.getTime(),
+            endedAt: new Date(timestamp.getTime() + 15000).getTime(),
           },
-          triggerData: {},
-          attempts: {},
+          input: {},
         },
         activePaths: [],
         suspendedPaths: {},
@@ -66,7 +65,7 @@ export function createTestSuite(storage: MastraStorage) {
       if (typeof snapshot === 'string') {
         throw new Error('Expected WorkflowRunState, got string');
       }
-      expect(snapshot.context?.steps[stepId]?.status).toBe(status);
+      expect(snapshot.context?.[stepId]?.status).toBe(status);
     };
 
     beforeAll(async () => {
@@ -471,8 +470,8 @@ export function createTestSuite(storage: MastraStorage) {
         expect(runs[1]!.workflowName).toBe(workflowName1);
         const firstSnapshot = runs[0]!.snapshot as WorkflowRunState;
         const secondSnapshot = runs[1]!.snapshot as WorkflowRunState;
-        expect(firstSnapshot.context?.steps[stepId2]?.status).toBe('running');
-        expect(secondSnapshot.context?.steps[stepId1]?.status).toBe('completed');
+        expect(firstSnapshot.context?.[stepId2]?.status).toBe('running');
+        expect(secondSnapshot.context?.[stepId1]?.status).toBe('completed');
       });
 
       it('filters by workflow name', async () => {
@@ -491,7 +490,7 @@ export function createTestSuite(storage: MastraStorage) {
         expect(total).toBe(1);
         expect(runs[0]!.workflowName).toBe(workflowName1);
         const snapshot = runs[0]!.snapshot as WorkflowRunState;
-        expect(snapshot.context?.steps[stepId1]?.status).toBe('completed');
+        expect(snapshot.context?.[stepId1]?.status).toBe('completed');
       });
 
       it('filters by date range', async () => {
@@ -547,8 +546,8 @@ export function createTestSuite(storage: MastraStorage) {
         expect(runs[1]!.workflowName).toBe(workflowName2);
         const firstSnapshot = runs[0]!.snapshot as WorkflowRunState;
         const secondSnapshot = runs[1]!.snapshot as WorkflowRunState;
-        expect(firstSnapshot.context?.steps[stepId3]?.status).toBe('waiting');
-        expect(secondSnapshot.context?.steps[stepId2]?.status).toBe('running');
+        expect(firstSnapshot.context?.[stepId3]?.status).toBe('waiting');
+        expect(secondSnapshot.context?.[stepId2]?.status).toBe('running');
       });
 
       it('handles pagination', async () => {
@@ -574,8 +573,8 @@ export function createTestSuite(storage: MastraStorage) {
         expect(page1.runs[1]!.workflowName).toBe(workflowName2);
         const firstSnapshot = page1.runs[0]!.snapshot as WorkflowRunState;
         const secondSnapshot = page1.runs[1]!.snapshot as WorkflowRunState;
-        expect(firstSnapshot.context?.steps[stepId3]?.status).toBe('waiting');
-        expect(secondSnapshot.context?.steps[stepId2]?.status).toBe('running');
+        expect(firstSnapshot.context?.[stepId3]?.status).toBe('waiting');
+        expect(secondSnapshot.context?.[stepId2]?.status).toBe('running');
 
         // Get second page
         const page2 = await storage.getWorkflowRuns({ limit: 2, offset: 2 });
@@ -583,7 +582,7 @@ export function createTestSuite(storage: MastraStorage) {
         expect(page2.total).toBe(3);
         expect(page2.runs[0]!.workflowName).toBe(workflowName1);
         const snapshot = page2.runs[0]!.snapshot as WorkflowRunState;
-        expect(snapshot.context?.steps[stepId1]?.status).toBe('completed');
+        expect(snapshot.context?.[stepId1]?.status).toBe('completed');
       });
     });
     describe('getWorkflowRunById', () => {
@@ -636,7 +635,7 @@ export function createTestSuite(storage: MastraStorage) {
         // Insert multiple workflow runs for the same resourceId
         resourceId = 'resource-shared';
         for (const status of ['success', 'failed']) {
-          const sample = createSampleWorkflowSnapshot(status as WorkflowRunState['context']['steps'][string]['status']);
+          const sample = createSampleWorkflowSnapshot(status as WorkflowRunState['context'][string]['status']);
           runIds.push(sample.runId);
           await storage.insert({
             tableName: TABLE_WORKFLOW_SNAPSHOT,

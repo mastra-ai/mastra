@@ -2,6 +2,8 @@ import { Agent } from '@mastra/core/agent';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { openai } from '@ai-sdk/openai';
+import { weatherTool } from '../tools';
+import { weatherReporterAgent } from '../agents';
 
 const agent = new Agent({
   name: 'Weather Agent',
@@ -185,4 +187,29 @@ const weatherWorkflow = createWorkflow({
 
 weatherWorkflow.commit();
 
-export { weatherWorkflow };
+const weatherStepFromTool = createStep(weatherTool);
+const weatherStepFromAgent = createStep(weatherReporterAgent);
+
+const weatherWorkflow2 = createWorkflow({
+  id: 'weather-workflow-with-tool-and-agent',
+  inputSchema: z.object({
+    location: z.string().describe('The city to get the weather for'),
+  }),
+  outputSchema: z.object({
+    text: z.string(),
+  }),
+})
+  .then(weatherStepFromTool)
+  .map({
+    prompt: {
+      schema: z.string(),
+      fn: async ({ inputData }) => {
+        return 'Forecast data: ' + JSON.stringify(inputData);
+      },
+    },
+  })
+  .then(weatherStepFromAgent);
+
+weatherWorkflow2.commit();
+
+export { weatherWorkflow, weatherWorkflow2 };
