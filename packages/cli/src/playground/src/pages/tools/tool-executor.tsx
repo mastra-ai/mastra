@@ -6,6 +6,8 @@ import { ToolInformation } from '@/domains/tools/ToolInformation';
 import { jsonLanguage } from '@codemirror/lang-json';
 import { useCodemirrorTheme } from '@/components/syntax-highlighter';
 import CodeMirror from '@uiw/react-codemirror';
+import { MCPToolType } from '@mastra/core/mcp';
+
 export interface ToolExecutorProps {
   isExecutingTool: boolean;
   zodInputSchema: ZodType;
@@ -13,6 +15,7 @@ export interface ToolExecutorProps {
   executionResult: any;
   toolDescription: string;
   toolId: string;
+  toolType?: MCPToolType;
 }
 
 const ToolExecutor = ({
@@ -22,6 +25,7 @@ const ToolExecutor = ({
   executionResult: result,
   toolDescription,
   toolId,
+  toolType,
 }: ToolExecutorProps) => {
   const theme = useCodemirrorTheme();
   const code = JSON.stringify(result ?? {}, null, 2);
@@ -29,7 +33,7 @@ const ToolExecutor = ({
   return (
     <div className="w-full h-full grid grid-cols-[400px_1fr] bg-surface1">
       <div className="border-r-sm border-border1 bg-surface2">
-        <ToolInformation toolDescription={toolDescription} toolId={toolId} />
+        <ToolInformation toolDescription={toolDescription} toolId={toolId} toolType={toolType} />
 
         <div className="w-full h-[calc(100vh-144px)] p-5 overflow-y-scroll">
           <DynamicForm
