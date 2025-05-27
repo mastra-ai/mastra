@@ -106,7 +106,7 @@ jobs:
         if: ${{ !inputs.dry_run }}
         run: pnpm publish -r --access public
 
-      -name: Updated alpha versions
+      - name: Updated alpha versions
         if: ${{ !inputs.dry_run }}
         run: node .github/scripts/publish-alpha-tags.js alpha
 
