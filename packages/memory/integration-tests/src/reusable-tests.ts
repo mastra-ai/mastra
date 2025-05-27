@@ -295,7 +295,9 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         expect(result.messages[2].content).toBe('Yet another message');
 
         // Messages should be in the order they were created
-        expect(result.messages.every((m, i) => i === 0 || m.createdAt >= result.messages[i - 1].createdAt)).toBe(true);
+        expect(
+          result.messages.every((m, i) => i === 0 || (m as any).createdAt >= (result.messages[i - 1] as any).createdAt),
+        ).toBe(true);
       });
       it('should embed and recall both string and TextPart messages', async () => {
         // Plain string messages (semantically unrelated)
@@ -417,8 +419,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       it('should handle different message types', async () => {
         const messages = [
           createTestMessage(thread.id, 'Hello', 'user', 'text'),
-          createTestMessage(thread.id, { type: 'function', name: 'test' }, 'assistant', 'tool-call'),
-          createTestMessage(thread.id, { output: 'test result' }, 'assistant', 'tool-result'),
+          createTestMessage(thread.id, { type: 'function', name: 'test' } as any, 'assistant', 'tool-call'),
+          createTestMessage(thread.id, { output: 'test result' } as any, 'assistant', 'tool-result'),
         ];
 
         await memory.saveMessages({ messages });
@@ -588,9 +590,9 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
 
         // Verify message order directly by index
         // We expect: [userMessage, toolCallMessage, toolResultMessage]
-        expect(result.messages[0].id).toBe(integrationUserMessage.id);
-        expect(result.messages[1].id).toBe(integrationToolCallMessage.id);
-        expect(result.messages[2].id).toBe(integrationToolResultMessage.id);
+        expect((result.messages[0] as any).id).toBe(integrationUserMessage.id);
+        expect((result.messages[1] as any).id).toBe(integrationToolCallMessage.id);
+        expect((result.messages[2] as any).id).toBe(integrationToolResultMessage.id);
       });
 
       it('should reorder tool calls that appear after their results', async () => {
@@ -699,9 +701,9 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         expect(result.messages.length).toBe(3);
 
         // Verify message order directly by index
-        expect(result.messages[0].id).toBe(integrationToolCallMessage.id);
-        expect(result.messages[1].id).toBe(integrationToolResultMessage.id);
-        expect(result.messages[2].id).toBe(integrationUserMessage.id);
+        expect((result.messages[0] as any).id).toBe(integrationToolCallMessage.id);
+        expect((result.messages[1] as any).id).toBe(integrationToolResultMessage.id);
+        expect((result.messages[2] as any).id).toBe(integrationUserMessage.id);
       });
 
       it('should handle complex message content', async () => {
@@ -844,10 +846,10 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         expect(result.messages.length).toBe(4);
 
         // Verify message order directly by index
-        expect(result.messages[0].id).toBe(integrationUserMessage1.id);
-        expect(result.messages[1].id).toBe(integrationUserMessage2.id);
-        expect(result.messages[2].id).toBe(integrationToolCallMessage.id);
-        expect(result.messages[3].id).toBe(integrationToolResultMessage.id);
+        expect((result.messages[0] as any).id).toBe(integrationUserMessage1.id);
+        expect((result.messages[1] as any).id).toBe(integrationUserMessage2.id);
+        expect((result.messages[2] as any).id).toBe(integrationToolCallMessage.id);
+        expect((result.messages[3] as any).id).toBe(integrationToolResultMessage.id);
       });
     });
 
