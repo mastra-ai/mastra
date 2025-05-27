@@ -163,7 +163,7 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     const cancelSignal = controller.signal;
 
     beforeAll(async () => {
-      const inputFile = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+      const inputFile = join(fixturePath, 'apps', 'custom');
 
       proc = execa('npm', ['run', 'start'], {
         cwd: inputFile,
