@@ -171,9 +171,7 @@ export function registerUserLocally(
   });
 }
 
-async function registerUserWithFetch(
-  email: string,
-): Promise<{ success: boolean; id: string; key: string; message: string }> {
+async function registerUser(email: string): Promise<{ success: boolean; id: string; key: string; message: string }> {
   const response = await fetch('https://mastra.ai/api/course/register', {
     method: 'POST',
     headers: {
@@ -217,8 +215,8 @@ async function readCourseStep(lessonName: string, stepName: string, _isFirstStep
   }
 }
 
-// Create a function to update course state on the server
-function updateCourseStateOnServer(deviceId: string, state: CourseState): Promise<void> {
+// Create a function to update course state on the local server
+export function updateCourseStateOnServerLocally(deviceId: string, state: CourseState): Promise<void> {
   return new Promise(async (resolve, reject) => {
     try {
       const creds = await getDeviceCredentials();
@@ -266,6 +264,30 @@ function updateCourseStateOnServer(deviceId: string, state: CourseState): Promis
       reject(err);
     }
   });
+}
+
+// Create a function to update course state on the server
+async function updateCourseStateOnServer(deviceId: string, state: CourseState): Promise<void> {
+  const creds = await getDeviceCredentials();
+  if (!creds) {
+    throw new Error('Device credentials not found.');
+  }
+
+  const response = await fetch('https://mastra.ai/api/course/update', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-mastra-course-key': creds.key,
+    },
+    body: JSON.stringify({
+      id: creds.deviceId,
+      state: state,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Course state update failed with status ${response.status}: ${response.statusText}`);
+  }
 }
 
 async function saveCourseState(state: CourseState, deviceId: string | null): Promise<void> {
@@ -452,7 +474,7 @@ export const startMastraCourse = {
 
         // User provided email, register them
         try {
-          const response = await registerUserWithFetch(args.email);
+          const response = await registerUser(args.email);
 
           if (response.success) {
             // Save both deviceId and key
