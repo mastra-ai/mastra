@@ -1206,11 +1206,6 @@ export class Agent<
 
     const { threadId, thread, messageObjects, convertedTools, messageList } = await before();
 
-    // need to remove this if we're using memory so AI SDK doesn't generate additional new IDs
-    if (thread && `experimental_generateMessageId` in args) {
-      args['experimental_generateMessageId'] = undefined;
-    }
-
     if (!output && experimental_output) {
       const result = await llm.__text({
         messages: messageObjects,
@@ -1381,11 +1376,6 @@ export class Agent<
     });
 
     const { threadId, thread, messageObjects, convertedTools, messageList } = await before();
-
-    // need to remove this if we're using memory so AI SDK doesn't generate additional new IDs
-    if (thread && `experimental_generateMessageId` in args) {
-      args['experimental_generateMessageId'] = undefined;
-    }
 
     if (!output && experimental_output) {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
