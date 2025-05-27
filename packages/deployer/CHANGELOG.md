@@ -1,5 +1,14 @@
 # @mastra/deployer
 
+## 0.10.1-alpha.2
+
+### Patch Changes
+
+- fe68410: Fix mcp server routes
+- Updated dependencies [6015bdf]
+  - @mastra/server@0.10.1-alpha.1
+  - @mastra/core@0.10.1-alpha.2
+
 ## 0.10.1-alpha.1
 
 ### Patch Changes
