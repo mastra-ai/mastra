@@ -1,3 +1,4 @@
+import { mkdtemp } from 'fs/promises';
 import { afterEach } from 'node:test';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -13,7 +14,6 @@ import { TokenLimiter, ToolCallFilter } from '@mastra/memory/processors';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { filterToolCallsByName, filterToolResultsByName, generateConversationHistory } from './test-utils';
-import { mkdtemp } from 'fs/promises';
 
 let memory: Memory;
 let storage: LibSQLStore;

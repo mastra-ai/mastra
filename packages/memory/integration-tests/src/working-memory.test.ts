@@ -1,4 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { openai } from '@ai-sdk/openai';
 import type { MessageType } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
@@ -7,10 +10,7 @@ import { LibSQLVector, LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import type { ToolCallPart } from 'ai';
 import dotenv from 'dotenv';
-import { describe, expect, it, beforeEach, afterAll, afterEach } from 'vitest';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { mkdtemp } from 'node:fs/promises';
+import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 
 const resourceId = 'test-resource';
 let messageCounter = 0;
@@ -43,7 +43,6 @@ dotenv.config({ path: '.env.test' });
 describe('Working Memory Tests', () => {
   let memory: Memory;
   let thread: any;
-  let testCount = 0;
   let storage: LibSQLStore;
   let vector: LibSQLVector;
 
