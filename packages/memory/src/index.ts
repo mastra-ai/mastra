@@ -145,7 +145,15 @@ export class Memory extends MastraMemory {
     const list = new MessageList({ threadId, resourceId }).add(orderedByDate, 'memory');
     return {
       get messages() {
-        return list.get.all.v1();
+        const v1Messages = list.get.all.v1();
+        // the conversion from V2/UIMessage -> V1/CoreMessage can sometimes split the messages up into more messages than before
+        // so slice off the earlier messages if it'll exceed the lastMessages setting
+        if (selectBy?.last && v1Messages.length > selectBy.last) {
+          // ex: 23 (v1 messages) minus 20 (selectBy.last messages)
+          // means we will start from index 3 and keep all the later newer messages from index 3 til the end of the array
+          return v1Messages.slice(v1Messages.length - selectBy.last);
+        }
+        return v1Messages;
       },
       get uiMessages() {
         return list.get.all.ui();
