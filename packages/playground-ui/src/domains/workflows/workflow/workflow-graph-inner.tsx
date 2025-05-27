@@ -10,10 +10,13 @@ import { WorkflowLoopResultNode } from './workflow-loop-result-node';
 import { WorkflowNestedNode } from './workflow-nested-node';
 import { ZoomSlider } from './zoom-slider';
 
+import { useCurrentRun } from '../context/use-current-run';
+
 export function WorkflowGraphInner({ workflow }: { workflow: GetWorkflowResponse }) {
   const { nodes: initialNodes, edges: initialEdges } = constructNodesAndEdges(workflow);
   const [nodes, _, onNodesChange] = useNodesState(initialNodes);
   const [edges] = useEdgesState(initialEdges);
+  const { steps } = useCurrentRun();
 
   const nodeTypes = {
     'default-node': WorkflowDefaultNode,
@@ -24,10 +27,16 @@ export function WorkflowGraphInner({ workflow }: { workflow: GetWorkflowResponse
   };
 
   return (
-    <div className="w-full h-full">
+    <div className="w-full h-full bg-surface1">
       <ReactFlow
         nodes={nodes}
-        edges={edges}
+        edges={edges.map(e => ({
+          ...e,
+          style: {
+            ...e.style,
+            stroke: steps[e.source]?.status === 'success' ? '#22c55e' : undefined,
+          },
+        }))}
         nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
         fitView
