@@ -1046,7 +1046,7 @@ export class CloudflareStore extends MastraStorage {
       // Remove _index from returned messages
       return validatedMessages.map(
         ({ _index, ...message }) =>
-          ({ ...message, role: message.type !== 'v2' ? message.type : undefined }) as MessageType,
+          ({ ...message, type: message.type !== 'v2' ? message.type : undefined }) as MessageType,
       );
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
