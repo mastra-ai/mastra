@@ -37,7 +37,6 @@ export class Memory extends MastraMemory {
   }
 
   private async validateThreadIsOwnedByResource(threadId: string, resourceId: string) {
-    await this.storage.init();
     const thread = await this.storage.getThreadById({ threadId });
     if (!thread) {
       throw new Error(`No thread found with id ${threadId}`);
@@ -114,7 +113,6 @@ export class Memory extends MastraMemory {
       );
     }
 
-    await this.storage.init();
     // Get raw messages from storage
     const rawMessages = await this.storage.getMessages({
       threadId,
@@ -195,12 +193,10 @@ export class Memory extends MastraMemory {
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    await this.storage.init();
     return this.storage.getThreadById({ threadId });
   }
 
   async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    await this.storage.init();
     return this.storage.getThreadsByResourceId({ resourceId });
   }
 
@@ -211,7 +207,6 @@ export class Memory extends MastraMemory {
     thread: StorageThreadType;
     memoryConfig?: MemoryConfig;
   }): Promise<StorageThreadType> {
-    await this.storage.init();
     const config = this.getMergedThreadConfig(memoryConfig || {});
 
     if (config.workingMemory?.enabled && !thread?.metadata?.workingMemory) {
@@ -237,7 +232,6 @@ export class Memory extends MastraMemory {
     title: string;
     metadata: Record<string, unknown>;
   }): Promise<StorageThreadType> {
-    await this.storage.init();
     return this.storage.updateThread({
       id,
       title,
@@ -246,7 +240,6 @@ export class Memory extends MastraMemory {
   }
 
   async deleteThread(threadId: string): Promise<void> {
-    await this.storage.init();
     await this.storage.deleteThread({ threadId });
   }
 
@@ -334,7 +327,6 @@ export class Memory extends MastraMemory {
     messages: MessageType[];
     memoryConfig?: MemoryConfig;
   }): Promise<MessageType[]> {
-    await this.storage.init();
     // First save working memory from any messages
     await this.saveWorkingMemory(messages);
 
@@ -452,7 +444,6 @@ export class Memory extends MastraMemory {
   public async getWorkingMemory({ threadId }: { threadId: string }): Promise<string | null> {
     if (!this.threadConfig.workingMemory?.enabled) return null;
 
-    await this.storage.init();
     // Get thread from storage
     const thread = await this.storage.getThreadById({ threadId });
     if (!thread) return this.threadConfig?.workingMemory?.template || this.defaultWorkingMemoryTemplate;
@@ -492,7 +483,6 @@ export class Memory extends MastraMemory {
       return;
     }
 
-    await this.storage.init();
     const thread = await this.storage.getThreadById({ threadId });
     if (!thread) return;
 
