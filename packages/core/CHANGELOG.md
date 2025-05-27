@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.10.1-alpha.3
+
+### Patch Changes
+
+- d70b807: Improve storage.init
+
 ## 0.10.1-alpha.2
 
 ### Patch Changes
