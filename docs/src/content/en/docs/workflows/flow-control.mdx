@@ -56,9 +56,9 @@ myWorkflow
   .branch([
     // If value > 50, run highValueStep
     [async ({ inputData }) => inputData.value > 50, highValueStep],
-    // If value is between 11 and 50, run lowValueStep
+    // If value is between 4 and 50, run lowValueStep
     [
-      async ({ inputData }) => inputData.value > 10 && inputData.value <= 50,
+      async ({ inputData }) => inputData.value > 4 && inputData.value <= 50,
       lowValueStep,
     ],
     // If value <= 10, run extremelyLowValueStep

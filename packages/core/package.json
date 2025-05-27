@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "0.10.1-alpha.0",
+  "version": "0.10.1-alpha.2",
   "license": "Elastic-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -38,6 +38,16 @@
       "require": {
         "types": "./dist/workflows/legacy/index.d.cts",
         "default": "./dist/workflows/legacy/index.cjs"
+      }
+    },
+    "./workflows/_constants": {
+      "import": {
+        "types": "./dist/workflows/constants.d.ts",
+        "default": "./dist/workflows/constants.js"
+      },
+      "require": {
+        "types": "./dist/workflows/constants.d.cts",
+        "default": "./dist/workflows/constants.cjs"
       }
     },
     "./vector/filter": {

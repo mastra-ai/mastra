@@ -72,7 +72,7 @@ export function WorkflowNestedGraphProvider({ children }: { children: React.Reac
 
       <Dialog open={openDialog} onOpenChange={closeNestedGraph}>
         <DialogPortal>
-          <DialogContent className="w-[40rem] h-[40rem] bg-[#121212] p-[0.5rem]">
+          <DialogContent className="w-[45rem] h-[45rem] max-w-[unset] bg-[#121212] p-[0.5rem]">
             <DialogTitle className="flex items-center gap-1.5 absolute top-2.5 left-2.5">
               <Workflow className="text-current w-4 h-4" />
               <Text size="xs" weight="medium" className="text-mastra-el-6 capitalize">

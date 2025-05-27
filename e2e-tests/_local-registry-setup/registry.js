@@ -15,7 +15,7 @@ if (typeof require === 'undefined') {
 export function runRegistry(verdaccioPath, args = [], childOptions) {
   return new Promise((resolve, reject) => {
     const childFork = fork(verdaccioPath, args, {
-      stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+      stdio: ['ignore', 'ignore', 'inherit', 'ipc'],
       ...childOptions,
     });
     childFork.on('message', msg => {

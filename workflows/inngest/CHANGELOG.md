@@ -1,5 +1,20 @@
 # @mastra/inngest
 
+## 0.10.1-alpha.0
+
+### Patch Changes
+
+- 200d0da: Return payload data, start time, end time, resume time and suspend time for each step in workflow state
+  Return error stack for failed workflow runs
+- 5343f93: Move emitter to symbol to make private
+- Updated dependencies [200d0da]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+  - @mastra/core@0.10.1-alpha.1
+
 ## 0.10.0
 
 ### Minor Changes
