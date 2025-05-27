@@ -1,12 +1,4 @@
-import {
-  ReactFlow,
-  MiniMap,
-  Controls,
-  Background,
-  useNodesState,
-  useEdgesState,
-  BackgroundVariant,
-} from '@xyflow/react';
+import { ReactFlow, MiniMap, Background, useNodesState, useEdgesState, BackgroundVariant } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { SerializedStepFlowEntry } from '@mastra/core/workflows';
 
@@ -18,6 +10,7 @@ import { WorkflowLoopResultNode } from './workflow-loop-result-node';
 import { useEffect, useState } from 'react';
 import Spinner from '@/components/ui/spinner';
 import { WorkflowNestedNode } from './workflow-nested-node';
+import { ZoomSlider } from './zoom-slider';
 
 export function WorkflowNestedGraph({ stepGraph, open }: { stepGraph: SerializedStepFlowEntry[]; open: boolean }) {
   const { nodes: initialNodes, edges: initialEdges } = constructNodesAndEdges({
@@ -50,11 +43,15 @@ export function WorkflowNestedGraph({ stepGraph, open }: { stepGraph: Serialized
           nodes={nodes}
           edges={edges}
           fitView
-          fitViewOptions={{ maxZoom: 0.85 }}
+          fitViewOptions={{
+            maxZoom: 1,
+          }}
+          minZoom={0.01}
+          maxZoom={1}
           nodeTypes={nodeTypes}
           onNodesChange={onNodesChange}
         >
-          <Controls />
+          <ZoomSlider position="bottom-left" />
           <MiniMap pannable zoomable maskColor="#121212" bgColor="#171717" nodeColor="#2c2c2c" />
           <Background variant={BackgroundVariant.Lines} gap={12} size={0.5} />
         </ReactFlow>
