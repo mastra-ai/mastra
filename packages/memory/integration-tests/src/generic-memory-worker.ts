@@ -1,7 +1,7 @@
 import { parentPort, workerData } from 'worker_threads';
-import { Memory } from '@mastra/memory';
 import type { MessageType } from '@mastra/core';
 import type { LibSQLConfig } from '@mastra/libsql';
+import { Memory } from '@mastra/memory';
 import type { PostgresConfig } from '@mastra/pg';
 import type { UpstashConfig } from '@mastra/upstash';
 import { mockEmbedder } from './mock-embedder.js';
