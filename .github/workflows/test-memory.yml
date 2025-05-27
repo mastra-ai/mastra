@@ -76,6 +76,9 @@ jobs:
           npx tsc packages/memory/integration-tests/src/worker/generic-memory-worker.ts --esModuleInterop --resolveJsonModule --module commonjs --target es2020 --outDir packages/memory/integration-tests/src/worker --skipLibCheck
           npx tsc packages/memory/integration-tests/src/worker/mock-embedder.ts --esModuleInterop --resolveJsonModule --module commonjs --target es2020 --outDir packages/memory/integration-tests/src/worker --skipLibCheck
 
+      - name: List compiled worker directory
+        run: ls -R packages/memory/integration-tests/src/worker
+
       - name: Run Memory ${{ matrix.suite }} tests
         run: pnpm run test:${{ matrix.suite }}
         working-directory: packages/memory/integration-tests
