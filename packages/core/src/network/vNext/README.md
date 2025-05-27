@@ -30,6 +30,7 @@ The AgentNetwork is able to route the task to the most appropriate primitive bas
 To ask the AgentNetwork to act on unstructured (text) input, we can use the `generate` method.
 
 ```typescript
+import { AgentNetwork } from '@mastra/core/network/vNext';
 import { Agent } from '@mastra/core/agent';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { Memory } from '@mastra/memory';
@@ -158,6 +159,7 @@ As an example, we have an AgentNetwork with 3 primitives at its disposal:
 We use the `loop` method to create a task that requires multiple primitives. The AgentNetwork will, using memory, figure out which primitives to call and in which order, as well as when the task is complete.
 
 ```typescript
+import { AgentNetwork } from '@mastra/core/network/vNext';
 import { Agent } from '@mastra/core/agent';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { Memory } from '@mastra/memory';
