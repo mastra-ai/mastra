@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { convertToCoreMessages } from 'ai';
-import type { CoreMessage, CoreSystemMessage, FilePart, IDGenerator, Message, UIMessage } from 'ai';
+import type { CoreMessage, CoreSystemMessage, FilePart, IDGenerator, Message, ToolInvocation, UIMessage } from 'ai';
 import type { MastraMessageV1 } from '../../memory';
 import { isCoreMessage, isUiMessage } from '../../utils';
 import { convertToV1Messages } from './prompt/convert-to-mastra-v1';
@@ -226,8 +226,8 @@ export class MessageList {
 
     const latestMessage = this.messages.at(-1);
 
-    // If the last message is an assistant message and the new message is also an assistant message, merge them together
-    if (latestMessage?.role === 'assistant' && messageV2.role === 'assistant') {
+    // If the last message is an assistant message and the new message is also an assistant message, merge them together and update tool calls with results
+    if (latestMessage?.role === 'assistant' && messageV2.role === 'assistant' && !shouldUpdate) {
       latestMessage.createdAt = messageV2.createdAt || latestMessage.createdAt;
 
       for (const part of messageV2.content.parts) {
@@ -244,20 +244,18 @@ export class MessageList {
               state: 'result',
               result: part.toolInvocation.result,
             };
-          } else {
-            // This indicates a tool result for a call not found in the preceding assistant message
-            // TODO: use logger
-            console.warn(
-              `Tool call part not found in preceding assistant message for result: ${part.toolInvocation.toolCallId}. Skipping result part.`,
-              part,
-            );
+            if (latestMessage.content.toolInvocations) {
+              latestMessage.content.toolInvocations = latestMessage.content.toolInvocations.map(t => {
+                if (t.toolCallId !== existingCallPart.toolInvocation.toolCallId) return t;
+                return existingCallPart.toolInvocation;
+              });
+            }
           }
         } else {
-          // For all other part types, simply push them to the latest message's parts
+          // For all other part types that aren't already present, simply push them to the latest message's parts
           latestMessage.content.parts.push(part);
         }
       }
-
       if (latestMessage.createdAt.getTime() < messageV2.createdAt.getTime()) {
         latestMessage.createdAt = messageV2.createdAt;
       }
@@ -272,19 +270,17 @@ export class MessageList {
         latestMessage.content.content += `\n${messageV2.content.content}`;
       }
     }
-    // Else the last message and this message are not both assistant messages. add a new message to the array.
+    // Else the last message and this message are not both assistant messages OR an existing message has been updated and should be replaced. add a new message to the array or update an existing one.
     else {
       if (messageV2.role === 'assistant' && messageV2.content.parts[0]?.type !== `step-start`) {
         // Add step-start part for new assistant messages
         messageV2.content.parts.unshift({ type: 'step-start' });
       }
 
-      // if we should update an existing message do so, otherwise push a new message
-      // TODO: why is this logic separate from the first if condition above? this also checks to update and merge.
       const existingIndex = (shouldUpdate && this.messages.findIndex(m => m.id === id)) || -1;
       const existingMessage = existingIndex !== -1 && this.messages[existingIndex];
       if (shouldUpdate && existingMessage) {
-        this.messages[existingIndex] = existingMessage;
+        this.messages[existingIndex] = messageV2;
       } else if (!exists) {
         this.messages.push(messageV2);
       }
