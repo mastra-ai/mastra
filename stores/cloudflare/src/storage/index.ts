@@ -263,17 +263,61 @@ export class CloudflareStore extends MastraStorage {
     const prefix = this.namespacePrefix ? `${this.namespacePrefix}_` : '';
 
     try {
-      if (tableName === TABLE_MESSAGES || tableName === TABLE_THREADS) {
-        return await this.getOrCreateNamespaceId(`${prefix}mastra_threads`);
-      } else if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
-        return await this.getOrCreateNamespaceId(`${prefix}mastra_workflows`);
-      } else {
-        return await this.getOrCreateNamespaceId(`${prefix}mastra_evals`);
+      const legacyNamespaceId = await this.checkLegacyNamespace(tableName, prefix);
+      if (legacyNamespaceId) {
+        return legacyNamespaceId;
       }
+      return await this.getOrCreateNamespaceId(`${prefix}${tableName}`);
     } catch (error: any) {
       this.logger.error('Error fetching namespace ID:', error);
       throw new Error(`Failed to fetch namespace ID for table ${tableName}: ${error.message}`);
     }
+  }
+
+  private LEGACY_NAMESPACE_MAP: Record<string, string> = {
+    [TABLE_MESSAGES]: TABLE_THREADS,
+    [TABLE_WORKFLOW_SNAPSHOT]: 'mastra_workflows',
+    [TABLE_TRACES]: TABLE_EVALS,
+  };
+
+  /**
+   * There were a few legacy mappings for tables such as
+   * - messages -> threads
+   * - workflow_snapshot -> mastra_workflows
+   * - traces -> evals
+   * This has been updated to use dedicated namespaces for each table.
+   * In the case of data for a table existing in the legacy namespace, warn the user to migrate to the new namespace.
+   *
+   * @param tableName The table name to check for legacy data
+   * @param prefix The namespace prefix
+   * @returns The legacy namespace ID if data exists; otherwise, null
+   */
+  private async checkLegacyNamespace(tableName: TABLE_NAMES, prefix: string): Promise<string | null> {
+    const legacyNamespaceBase = this.LEGACY_NAMESPACE_MAP[tableName];
+
+    // 1. If legacy mapping exists, check for legacy data
+    if (legacyNamespaceBase) {
+      const legacyNamespace = `${prefix}${legacyNamespaceBase}`;
+      const keyPrefix = this.namespacePrefix ? `${this.namespacePrefix}:` : '';
+      const prefixKey = `${keyPrefix}${tableName}:`;
+      const legacyId = await this.getNamespaceIdByName(legacyNamespace);
+      if (legacyId) {
+        // Check for any keys for this table in the legacy namespace
+        const response = await this.client!.kv.namespaces.keys.list(legacyId, {
+          account_id: this.accountId!,
+          prefix: prefixKey,
+        });
+        const keys = response.result;
+        const hasTableData = keys.length > 0;
+        if (hasTableData) {
+          this.logger.warn(
+            `Using legacy namespace "${legacyNamespace}" for ${tableName}. Consider migrating to a dedicated namespace "${prefix}${tableName}".`,
+          );
+          return legacyId;
+        }
+      }
+    }
+    return null;
   }
 
   /**

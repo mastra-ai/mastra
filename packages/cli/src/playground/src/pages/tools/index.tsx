@@ -13,6 +13,9 @@ import {
   AgentIcon,
   Icon,
   Txt,
+  ToolCoinIcon,
+  EmptyState,
+  Button,
 } from '@mastra/playground-ui';
 import { Link } from 'react-router';
 import { startTransition, useMemo, useRef, useState } from 'react';
@@ -31,6 +34,7 @@ const prepareAgents = (tools: Record<string, Tool>, agents: Record<string, GetAg
   const toolsWithAgents = new Map<string, ToolWithAgents>();
   const agentsKeys = Object.keys(agents);
 
+  // Assemble tools from agents
   for (const k of agentsKeys) {
     const agent = agents[k];
     const agentToolsDict = agent.tools;
@@ -50,12 +54,17 @@ const prepareAgents = (tools: Record<string, Tool>, agents: Record<string, GetAg
     }
   }
 
-  const actualTools = Object.entries(tools).map(([_, tool]) => ({
-    ...tool,
-    agents: toolsWithAgents.get(tool.id)?.agents || [],
-  }));
+  // Assemble discovered tools
+  for (const [_, tool] of Object.entries(tools)) {
+    if (!toolsWithAgents.has(tool.id)) {
+      toolsWithAgents.set(tool.id, {
+        ...tool,
+        agents: [],
+      });
+    }
+  }
 
-  return actualTools;
+  return Array.from(toolsWithAgents.values());
 };
 
 const Tools = () => {
@@ -92,6 +101,39 @@ const ToolsInner = ({ toolsWithAgents }: { toolsWithAgents: ToolWithAgents[] }) 
       );
     });
   };
+
+  if (filteredTools.length === 0 && !value) {
+    return (
+      <>
+        <Header>
+          <HeaderTitle>Tools</HeaderTitle>
+        </Header>
+
+        <div className="flex h-full items-center justify-center">
+          <EmptyState
+            iconSlot={<ToolCoinIcon />}
+            titleSlot="Configure Tools"
+            descriptionSlot="Mastra tools are not configured yet. You can find more information in the documentation."
+            actionSlot={
+              <Button
+                size="lg"
+                className="w-full"
+                variant="light"
+                as="a"
+                href="https://mastra.ai/en/docs/agents/using-tools-and-mcp"
+                target="_blank"
+              >
+                <Icon>
+                  <ToolsIcon />
+                </Icon>
+                Docs
+              </Button>
+            }
+          />
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
@@ -147,7 +189,10 @@ const ToolEntity = ({ tool }: ToolEntityProps) => {
 
       <EntityContent>
         <EntityName>
-          <Link ref={linkRef} to={`/tools/all/${tool.id}`}>
+          <Link
+            ref={linkRef}
+            to={tool.agents.length > 0 ? `/tools/${tool.agents[0].id}/${tool.id}` : `/tools/all/${tool.id}`}
+          >
             {tool.id}
           </Link>
         </EntityName>

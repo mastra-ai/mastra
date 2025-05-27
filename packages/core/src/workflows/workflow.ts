@@ -9,6 +9,7 @@ import { RuntimeContext } from '../di';
 import { RegisteredLogger } from '../logger';
 import { Tool } from '../tools';
 import type { ToolExecutionContext } from '../tools/types';
+import { EMITTER_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import type { ExecuteFunction, Step } from './step';
@@ -171,14 +172,62 @@ export function createStep<
       outputSchema: z.object({
         text: z.string(),
       }),
-      execute: async ({ inputData }) => {
-        const result = await params.generate(inputData.prompt, {
+      execute: async ({ inputData, [EMITTER_SYMBOL]: emitter }) => {
+        let streamPromise = {} as {
+          promise: Promise<string>;
+          resolve: (value: string) => void;
+          reject: (reason?: any) => void;
+        };
+
+        streamPromise.promise = new Promise((resolve, reject) => {
+          streamPromise.resolve = resolve;
+          streamPromise.reject = reject;
+        });
+        const toolData = {
+          name: params.name,
+          args: inputData,
+        };
+        await emitter.emit('watch-v2', {
+          type: 'tool-call-streaming-start',
+          ...toolData,
+        });
+        const { fullStream } = await params.stream(inputData.prompt, {
           // resourceId: inputData.resourceId,
           // threadId: inputData.threadId,
+          onFinish: result => {
+            streamPromise.resolve(result.text);
+          },
         });
 
+        for await (const chunk of fullStream) {
+          switch (chunk.type) {
+            case 'text-delta':
+              await emitter.emit('watch-v2', {
+                type: 'tool-call-delta',
+                ...toolData,
+                argsTextDelta: chunk.textDelta,
+              });
+              break;
+
+            case 'step-start':
+            case 'step-finish':
+            case 'finish':
+              break;
+
+            case 'tool-call':
+            case 'tool-result':
+            case 'tool-call-streaming-start':
+            case 'tool-call-delta':
+            case 'source':
+            case 'file':
+            default:
+              await emitter.emit('watch-v2', chunk);
+              break;
+          }
+        }
+
         return {
-          text: result.text,
+          text: await streamPromise.promise,
         };
       },
     };
@@ -196,7 +245,7 @@ export function createStep<
       inputSchema: params.inputSchema,
       outputSchema: params.outputSchema,
       execute: async ({ inputData, mastra }) => {
-        return await params.execute({
+        return params.execute({
           context: inputData,
           mastra,
         });
@@ -331,6 +380,7 @@ export class Workflow<
     attempts?: number;
     delay?: number;
   };
+
   #mastra?: Mastra;
 
   #runs: Map<string, Run<TSteps, TInput, TOutput>> = new Map();
@@ -720,7 +770,7 @@ export class Workflow<
    */
   buildExecutionGraph(): ExecutionGraph {
     return {
-      id: randomUUID(),
+      id: this.id,
       steps: this.stepFlow,
     };
   }
@@ -782,7 +832,7 @@ export class Workflow<
     resumeData,
     suspend,
     resume,
-    emitter,
+    [EMITTER_SYMBOL]: emitter,
     mastra,
     runtimeContext,
   }: {
@@ -797,7 +847,7 @@ export class Workflow<
       resumePayload: any;
       runId?: string;
     };
-    emitter: { emit: (event: string, data: any) => void };
+    [EMITTER_SYMBOL]: { emit: (event: string, data: any) => void };
     mastra: Mastra;
     runtimeContext?: RuntimeContext;
   }): Promise<z.infer<TOutput>> {
@@ -904,6 +954,9 @@ export class Run<
    */
   #mastra?: Mastra;
 
+  #closeStreamAction?: () => Promise<void>;
+  #executionResults?: Promise<WorkflowResult<TOutput, TSteps>>;
+
   protected cleanup?: () => void;
 
   protected retryConfig?: {
@@ -951,9 +1004,8 @@ export class Run<
       graph: this.executionGraph,
       input: inputData,
       emitter: {
-        emit: (event: string, data: any) => {
+        emit: async (event: string, data: any) => {
           this.emitter.emit(event, data);
-          return Promise.resolve();
         },
       },
       retryConfig: this.retryConfig,
@@ -965,12 +1017,71 @@ export class Run<
     return result;
   }
 
-  watch(cb: (event: WatchEvent) => void): () => void {
+  /**
+   * Starts the workflow execution with the provided input as a stream
+   * @param input The input data for the workflow
+   * @returns A promise that resolves to the workflow output
+   */
+  stream({ inputData, runtimeContext }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}): {
+    stream: ReadableStream<WatchEvent>;
+    getWorkflowState: () => Promise<WorkflowResult<TOutput, TSteps>>;
+  } {
+    const { readable, writable } = new TransformStream<WatchEvent, WatchEvent>();
+
+    const writer = writable.getWriter();
+    const unwatch = this.watch(async event => {
+      try {
+        await writer.write(event);
+      } catch {}
+    }, 'watch-v2');
+
+    this.#closeStreamAction = async () => {
+      this.emitter.emit('watch-v2', {
+        type: 'finish',
+        payload: { runId: this.runId },
+      });
+      unwatch();
+
+      try {
+        await writer.close();
+      } catch (err) {
+        console.error('Error closing stream:', err);
+      } finally {
+        writer.releaseLock();
+      }
+    };
+
+    this.emitter.emit('watch-v2', {
+      type: 'start',
+      payload: { runId: this.runId },
+    });
+    this.#executionResults = this.start({ inputData, runtimeContext }).then(result => {
+      if (result.status !== 'suspended') {
+        this.#closeStreamAction?.().catch(() => {});
+      }
+
+      return result;
+    });
+
+    return {
+      stream: readable,
+      getWorkflowState: () => this.#executionResults!,
+    };
+  }
+
+  watch(cb: (event: WatchEvent) => void, type: 'watch' | 'watch-v2' = 'watch'): () => void {
     const watchCb = (event: WatchEvent) => {
       this.updateState(event.payload);
-      cb({ type: event.type, payload: this.getState() as any, eventTimestamp: event.eventTimestamp });
+
+      if (type !== 'watch-v2') {
+        cb({ type: event.type, payload: this.getState() as any, eventTimestamp: event.eventTimestamp });
+      }
     };
+
     this.emitter.on('watch', watchCb);
+    if (type === 'watch-v2') {
+      this.emitter.on('watch-v2', cb);
+    }
 
     const nestedWatchCb = ({ event, workflowId }: { event: WatchEvent; workflowId: string }) => {
       try {
@@ -999,6 +1110,10 @@ export class Run<
     this.emitter.on('nested-watch', nestedWatchCb);
 
     return () => {
+      if (type === 'watch-v2') {
+        this.emitter.off('watch-v2', cb);
+      }
+
       this.emitter.off('watch', watchCb);
       this.emitter.off('nested-watch', nestedWatchCb);
     };
@@ -1021,26 +1136,38 @@ export class Run<
       runId: this.runId,
     });
 
-    return this.executionEngine.execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
-      workflowId: this.workflowId,
-      runId: this.runId,
-      graph: this.executionGraph,
-      input: params.resumeData,
-      resume: {
-        steps,
-        stepResults: snapshot?.context as any,
-        resumePayload: params.resumeData,
-        // @ts-ignore
-        resumePath: snapshot?.suspendedPaths?.[steps?.[0]] as any,
-      },
-      emitter: {
-        emit: (event: string, data: any) => {
-          this.emitter.emit(event, data);
-          return Promise.resolve();
+    const executionResultPromise = this.executionEngine
+      .execute<z.infer<TInput>, WorkflowResult<TOutput, TSteps>>({
+        workflowId: this.workflowId,
+        runId: this.runId,
+        graph: this.executionGraph,
+        input: params.resumeData,
+        resume: {
+          steps,
+          stepResults: snapshot?.context as any,
+          resumePayload: params.resumeData,
+          // @ts-ignore
+          resumePath: snapshot?.suspendedPaths?.[steps?.[0]] as any,
         },
-      },
-      runtimeContext: params.runtimeContext ?? new RuntimeContext(),
-    });
+        emitter: {
+          emit: (event: string, data: any) => {
+            this.emitter.emit(event, data);
+            return Promise.resolve();
+          },
+        },
+        runtimeContext: params.runtimeContext ?? new RuntimeContext(),
+      })
+      .then(result => {
+        if (result.status !== 'suspended') {
+          this.#closeStreamAction?.().catch(() => {});
+        }
+
+        return result;
+      });
+
+    this.#executionResults = executionResultPromise;
+
+    return executionResultPromise;
   }
 
   /**
@@ -1059,12 +1186,12 @@ export class Run<
     }
 
     if (state.workflowState) {
-      this.state.workflowState = deepMerge(this.state.workflowState ?? {}, state.workflowState ?? {});
+      this.state.workflowState = deepMergeWorkflowState(this.state.workflowState ?? {}, state.workflowState ?? {});
     }
   }
 }
 
-function deepMerge(a: Record<string, any>, b: Record<string, any>): Record<string, any> {
+function deepMergeWorkflowState(a: Record<string, any>, b: Record<string, any>): Record<string, any> {
   if (!a || typeof a !== 'object') return b;
   if (!b || typeof b !== 'object') return a;
 
@@ -1078,12 +1205,12 @@ function deepMerge(a: Record<string, any>, b: Record<string, any>): Record<strin
       const bVal = b[key];
 
       if (Array.isArray(bVal)) {
-        result[key] = Array.isArray(aVal)
-          ? [...aVal, ...bVal].filter(item => item !== undefined)
-          : bVal.filter(item => item !== undefined);
+        //we should just replace it instead of spreading as we do for others
+        //spreading aVal and then bVal will result in duplication of items
+        result[key] = bVal.filter(item => item !== undefined);
       } else if (typeof aVal === 'object' && aVal !== null) {
         // If both values are objects, merge them
-        result[key] = deepMerge(aVal, bVal);
+        result[key] = deepMergeWorkflowState(aVal, bVal);
       } else {
         // If the target isn't an object, use the source object
         result[key] = bVal;

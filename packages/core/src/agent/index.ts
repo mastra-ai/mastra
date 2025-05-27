@@ -79,6 +79,7 @@ export class Agent<
   public id: TAgentId;
   public name: TAgentId;
   #instructions: DynamicArgument<string>;
+  readonly #description?: string;
   readonly model?: DynamicArgument<MastraLanguageModel>;
   #mastra?: Mastra;
   #memory?: MastraMemory;
@@ -98,6 +99,7 @@ export class Agent<
     this.id = config.name;
 
     this.#instructions = config.instructions;
+    this.#description = config.description;
 
     if (!config.model) {
       throw new Error(`LanguageModel is required to create an Agent. Please provide the 'model'.`);
@@ -238,6 +240,10 @@ export class Agent<
 
       return instructions;
     });
+  }
+
+  public getDescription(): string {
+    return this.#description ?? '';
   }
 
   get tools() {

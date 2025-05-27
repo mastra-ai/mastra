@@ -7,6 +7,7 @@ import {
   createWorkflowRunHandler as getOriginalCreateWorkflowRunHandler,
   startWorkflowRunHandler as getOriginalStartWorkflowRunHandler,
   watchWorkflowHandler as getOriginalWatchWorkflowHandler,
+  streamWorkflowHandler as getOriginalStreamWorkflowHandler,
   resumeAsyncWorkflowHandler as getOriginalResumeAsyncWorkflowHandler,
   resumeWorkflowHandler as getOriginalResumeWorkflowHandler,
   getWorkflowRunsHandler as getOriginalGetWorkflowRunsHandler,
@@ -131,17 +132,19 @@ export function watchWorkflowHandler(c: Context) {
             workflowId,
             runId,
           });
+
+          const reader = result.getReader();
+
           stream.onAbort(() => {
-            if (!result.locked) {
-              return result.cancel();
-            }
+            void reader.cancel('request aborted');
           });
 
-          for await (const chunk of result) {
-            await stream.write(chunk.toString() + '\x1E');
+          let chunkResult;
+          while ((chunkResult = await reader.read()) && !chunkResult.done) {
+            await stream.write(JSON.stringify(chunkResult.value) + '\x1E');
           }
         } catch (err) {
-          console.log(err);
+          mastra.getLogger().error('Error in watch stream: ' + ((err as Error)?.message ?? 'Unknown error'));
         }
       },
       async err => {
@@ -150,6 +153,51 @@ export function watchWorkflowHandler(c: Context) {
     );
   } catch (error) {
     return handleError(error, 'Error watching workflow');
+  }
+}
+
+export async function streamWorkflowHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const logger = mastra.getLogger();
+    const workflowId = c.req.param('workflowId');
+    const runtimeContext: RuntimeContext = c.get('runtimeContext');
+    const { inputData, runtimeContext: runtimeContextFromRequest } = await c.req.json();
+    const runId = c.req.query('runId');
+
+    return stream(
+      c,
+      async stream => {
+        try {
+          const result = getOriginalStreamWorkflowHandler({
+            mastra,
+            workflowId,
+            runId,
+            inputData,
+            runtimeContext,
+            runtimeContextFromRequest,
+          });
+
+          const reader = result.stream.getReader();
+
+          stream.onAbort(() => {
+            void reader.cancel('request aborted');
+          });
+
+          let chunkResult;
+          while ((chunkResult = await reader.read()) && !chunkResult.done) {
+            await stream.write(JSON.stringify(chunkResult.value) + '\x1E');
+          }
+        } catch (err) {
+          console.log(err);
+        }
+      },
+      async err => {
+        logger.error('Error in workflow stream: ' + err?.message);
+      },
+    );
+  } catch (error) {
+    return handleError(error, 'Error streaming workflow');
   }
 }
 

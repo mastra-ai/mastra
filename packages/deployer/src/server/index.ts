@@ -75,6 +75,7 @@ import {
   getWorkflowByIdHandler,
   getWorkflowRunsHandler,
   getWorkflowsHandler,
+  streamWorkflowHandler,
   resumeAsyncWorkflowHandler,
   resumeWorkflowHandler,
   startAsyncWorkflowHandler,
@@ -1289,7 +1290,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
 
   // MCP server routes
   app.post(
-    '/api/mcp/:serverId/mcp',
+    '/api/servers/:serverId/mcp',
     bodyLimit(bodyLimitOptions),
     describeRoute({
       description: 'Send a message to an MCP server using Streamable HTTP',
@@ -1318,8 +1319,8 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
   );
 
   // New MCP server routes for SSE
-  const mcpSseBasePath = '/api/mcp/:serverId/sse';
-  const mcpSseMessagePath = '/api/mcp/:serverId/messages';
+  const mcpSseBasePath = '/api/servers/:serverId/sse';
+  const mcpSseMessagePath = '/api/servers/:serverId/messages';
 
   // Route for establishing SSE connection
   app.get(
@@ -2104,7 +2105,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
         {
           name: 'runId',
           in: 'query',
-          required: false,
+          required: true,
           schema: { type: 'string' },
         },
       ],
@@ -2116,6 +2117,54 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
       },
     }),
     watchLegacyWorkflowHandler,
+  );
+
+  app.post(
+    '/api/workflows/:workflowId/stream',
+    describeRoute({
+      description: 'Stream workflow in real-time',
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                inputData: { type: 'object' },
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the workflow execution',
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'vNext workflow run started',
+        },
+        404: {
+          description: 'vNext workflow not found',
+        },
+      },
+      tags: ['vNextWorkflows'],
+    }),
+    streamWorkflowHandler,
   );
 
   // Workflow routes
@@ -2427,7 +2476,6 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
     }),
     watchWorkflowHandler,
   );
-
   // Log routes
   app.get(
     '/api/logs',
@@ -2880,7 +2928,7 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
     {
       fetch: app.fetch,
       port,
-      hostname: serverOptions?.host,
+      hostname: serverOptions?.host ?? 'localhost',
     },
     () => {
       const logger = mastra.getLogger();
