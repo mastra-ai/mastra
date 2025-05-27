@@ -1,2 +1,3 @@
 memory.db
 *.db
+src/worker/*.js

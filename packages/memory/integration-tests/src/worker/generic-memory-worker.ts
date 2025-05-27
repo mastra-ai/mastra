@@ -5,7 +5,7 @@ import { Memory } from '@mastra/memory';
 import type { PostgresConfig } from '@mastra/pg';
 import type { UpstashConfig } from '@mastra/upstash';
 import { mockEmbedder } from './mock-embedder.js';
-import type { WorkerTestConfig } from './reusable-tests.js';
+import type { WorkerTestConfig } from '../reusable-tests.js';
 
 if (!parentPort) {
   throw new Error('This script must be run as a worker thread.');
