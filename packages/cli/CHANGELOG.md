@@ -1,5 +1,16 @@
 # mastra
 
+## 0.10.1-alpha.4
+
+### Patch Changes
+
+- d70b807: Improve storage.init
+- 3c2dba5: add workflow run list
+- 33f1c64: revamp the experience for workflows
+- Updated dependencies [d70b807]
+  - @mastra/core@0.10.1-alpha.3
+  - @mastra/deployer@0.10.1-alpha.3
+
 ## 0.10.1-alpha.3
 
 ### Patch Changes
