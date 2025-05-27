@@ -3,7 +3,7 @@ import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import dotenv from 'dotenv';
 import { describe } from 'vitest';
-import { getResuableTests } from './reusable-tests';
+import { getResuableTests, StorageType } from './reusable-tests';
 
 dotenv.config({ path: '.env.test' });
 
@@ -30,7 +30,7 @@ describe('Memory with LibSQL Integration', () => {
   });
 
   getResuableTests(memory, {
-    storageTypeForWorker: 'libsql',
+    storageTypeForWorker: StorageType.LibSQL,
     storageConfigForWorker: { url: 'file:libsql-test.db' },
     memoryOptionsForWorker: memoryOptions,
   });

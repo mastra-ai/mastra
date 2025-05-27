@@ -156,7 +156,6 @@ export class LibSQLStore extends MastraStorage {
     };
   }
 
-  // Helper method for retrying write operations
   private async _executeWriteOperationWithRetry<T>(
     operationFn: () => Promise<T>,
     operationDescription: string,
@@ -165,7 +164,7 @@ export class LibSQLStore extends MastraStorage {
 
     while (true) {
       try {
-        return await operationFn(); // Execute the operation
+        return await operationFn();
       } catch (error: any) {
         if (
           error.message &&
@@ -187,7 +186,6 @@ export class LibSQLStore extends MastraStorage {
   }
 
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    // Define an async function that performs the operation and implicitly returns Promise<void>
     const operationFn = async () => {
       return await this.client.execute(
         this.prepareStatement({
@@ -202,7 +200,6 @@ export class LibSQLStore extends MastraStorage {
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
     if (records.length === 0) return;
 
-    // Define an async function that performs the operation and implicitly returns Promise<void>
     const operationFn = async () => {
       const batchStatements = records.map(r => this.prepareStatement({ tableName, record: r }));
       return await this.client.batch(batchStatements, 'write');

@@ -4,7 +4,8 @@ import { mockEmbedder } from './mock-embedder.js';
 import { LibSQLConfig } from '@mastra/libsql';
 import { PostgresConfig } from '@mastra/pg';
 import { UpstashConfig } from '@mastra/upstash';
-import { MessageType, SharedMemoryConfig } from '@mastra/core';
+import { MessageType } from '@mastra/core';
+import { WorkerTestConfig } from './reusable-tests.js';
 
 if (!parentPort) {
   throw new Error('This script must be run as a worker thread.');
@@ -16,9 +17,9 @@ interface MessageToProcess {
 
 interface WorkerData {
   messages: MessageToProcess[];
-  storageType: 'libsql' | 'pg' | 'upstash';
-  storageConfig: LibSQLConfig | PostgresConfig | UpstashConfig;
-  memoryOptions?: SharedMemoryConfig['options'];
+  storageType: WorkerTestConfig['storageTypeForWorker'];
+  storageConfig: WorkerTestConfig['storageConfigForWorker'];
+  memoryOptions?: WorkerTestConfig['memoryOptionsForWorker'];
 }
 
 const { messages, storageType, storageConfig, memoryOptions } = workerData as WorkerData;

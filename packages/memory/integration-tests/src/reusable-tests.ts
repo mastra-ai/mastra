@@ -13,7 +13,7 @@ import { UpstashConfig } from '@mastra/upstash';
 
 const resourceId = 'resource';
 // Test helpers
-export const createTestThread = (title: string, metadata = {}) => ({
+const createTestThread = (title: string, metadata = {}) => ({
   id: randomUUID(),
   title,
   resourceId,
@@ -23,7 +23,7 @@ export const createTestThread = (title: string, metadata = {}) => ({
 });
 
 let messageCounter = 0;
-export const createTestMessage = (
+const createTestMessage = (
   threadId: string,
   content: string | (TextPart | ImagePart | FilePart)[] | (TextPart | ToolCallPart)[],
   role: 'user' | 'assistant' = 'user',
@@ -41,8 +41,14 @@ export const createTestMessage = (
   };
 };
 
+export enum StorageType {
+  LibSQL = 'libsql',
+  Postgres = 'pg',
+  Upstash = 'upstash',
+}
+
 export interface WorkerTestConfig {
-  storageTypeForWorker: 'libsql' | 'pg' | 'upstash';
+  storageTypeForWorker: StorageType;
   storageConfigForWorker: LibSQLConfig | PostgresConfig | UpstashConfig;
   memoryOptionsForWorker?: SharedMemoryConfig['options'];
 }
@@ -912,14 +918,13 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         const result = await memory.rememberMessages({
           threadId: thread.id,
           resourceId,
-          config: { lastMessages: 20 }, // Increased to ensure all messages are retrieved
+          config: { lastMessages: 20 },
         });
         expect(result.messages).toHaveLength(messagesBatches.flat().length);
       });
     });
   });
 
-  // Add the new concurrent test suite if workerTestConfig is provided
   if (workerTestConfig) {
     describe('Concurrent Operations with Workers', () => {
       it('should save multiple messages concurrently using Memory instance in workers to a single thread', async () => {
