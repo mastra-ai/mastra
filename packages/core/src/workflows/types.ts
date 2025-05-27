@@ -1,22 +1,24 @@
 import type { z } from 'zod';
 import type { ExecuteFunction, Step } from './step';
 
-export type StepSuccess<P, R, T> = {
+export type StepSuccess<P, R, S, T> = {
   status: 'success';
   output: T;
   payload: P;
   resumePayload?: R;
+  suspendPayload?: S;
   startedAt: number;
   endedAt: number;
   suspendedAt?: number;
   resumedAt?: number;
 };
 
-export type StepFailure<P, R> = {
+export type StepFailure<P, R, S> = {
   status: 'failed';
   error: string | Error;
   payload: P;
   resumePayload?: R;
+  suspendPayload?: S;
   startedAt: number;
   endedAt: number;
   suspendedAt?: number;
@@ -31,16 +33,21 @@ export type StepSuspended<P, S> = {
   suspendedAt: number;
 };
 
-export type StepRunning<P, R> = {
+export type StepRunning<P, R, S> = {
   status: 'running';
   payload: P;
   resumePayload?: R;
+  suspendPayload?: S;
   startedAt: number;
   suspendedAt?: number;
   resumedAt?: number;
 };
 
-export type StepResult<P, R, S, T> = StepSuccess<P, R, T> | StepFailure<P, R> | StepSuspended<P, S> | StepRunning<P, R>;
+export type StepResult<P, R, S, T> =
+  | StepSuccess<P, R, S, T>
+  | StepFailure<P, R, S>
+  | StepSuspended<P, S>
+  | StepRunning<P, R, S>;
 
 export type StepsRecord<T extends readonly Step<any, any, any>[]> = {
   [K in T[number]['id']]: Extract<T[number], { id: K }>;
@@ -104,10 +111,10 @@ export type WatchEvent = {
           payload?: Record<string, any>;
           resumePayload?: Record<string, any>;
           error?: string | Error;
-          startedAt: Date;
-          endedAt: Date;
-          suspendedAt?: Date;
-          resumedAt?: Date;
+          startedAt: number;
+          endedAt: number;
+          suspendedAt?: number;
+          resumedAt?: number;
         }
       >;
       output?: Record<string, any>;
