@@ -1,5 +1,4 @@
 import { createHash } from 'crypto';
-import { convertToCoreMessages } from 'ai';
 import type { CoreMessage, LanguageModelV1 } from 'ai';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
@@ -435,7 +434,6 @@ export function isUiMessage(message: CoreMessage | AiMessageType): message is Ai
 export function isCoreMessage(message: CoreMessage | AiMessageType): message is CoreMessage {
   return [`has-core-specific-parts`, `message`].includes(detectSingleMessageCharacteristics(message));
 }
-
 
 /** Represents a validated SQL identifier (e.g., table or column name). */
 type SqlIdentifier = string & { __brand: 'SqlIdentifier' };
