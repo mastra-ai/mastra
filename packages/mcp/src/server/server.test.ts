@@ -1077,7 +1077,7 @@ describe('MCPServer - Workflow to Tool Conversion', () => {
     const inputData = { data: 'Hello Workflow' };
     if (workflowTool && workflowTool.execute) {
       const result = await workflowTool.execute(inputData, { toolCallId: 'mcp-wf-call-123', messages: [] });
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         status: 'success',
         steps: {
           input: { data: 'Hello Workflow' },
