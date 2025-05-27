@@ -1,11 +1,11 @@
 import { parentPort, workerData } from 'worker_threads';
 import { Memory } from '@mastra/memory';
+import type { MessageType } from '@mastra/core';
+import type { LibSQLConfig } from '@mastra/libsql';
+import type { PostgresConfig } from '@mastra/pg';
+import type { UpstashConfig } from '@mastra/upstash';
 import { mockEmbedder } from './mock-embedder.js';
-import { LibSQLConfig } from '@mastra/libsql';
-import { PostgresConfig } from '@mastra/pg';
-import { UpstashConfig } from '@mastra/upstash';
-import { MessageType } from '@mastra/core';
-import { WorkerTestConfig } from './reusable-tests.js';
+import type { WorkerTestConfig } from './reusable-tests.js';
 
 if (!parentPort) {
   throw new Error('This script must be run as a worker thread.');
