@@ -18,6 +18,7 @@ async function setupTestServer(withSessionManagement: boolean) {
       capabilities: {
         logging: {},
         tools: {},
+        resources: {},
       },
     },
   );
@@ -34,6 +35,17 @@ async function setupTestServer(withSessionManagement: boolean) {
       };
     },
   );
+
+  mcpServer.resource('test-resource', 'resource://test', () => {
+    return {
+      contents: [
+        {
+          uri: 'resource://test',
+          text: 'Hello, world!',
+        },
+      ],
+    };
+  });
 
   const serverTransport = new StreamableHTTPServerTransport({
     sessionIdGenerator: withSessionManagement ? () => randomUUID() : undefined,
@@ -93,6 +105,21 @@ describe('MastraMCPClient with Streamable HTTP', () => {
       const tools = await client.tools();
       const result = await tools.greet.execute({ context: { name: 'Stateless' } });
       expect(result).toEqual({ content: [{ type: 'text', text: 'Hello, Stateless!' }] });
+    });
+
+    it('should list resources', async () => {
+      const resourcesResult = await client.listResources();
+      const resources = resourcesResult.resources;
+      expect(resources).toBeInstanceOf(Array);
+      const testResource = resources.find((r) => r.uri === 'resource://test');
+      expect(testResource).toBeDefined();
+      expect(testResource!.name).toBe('test-resource');
+      expect(testResource!.uri).toBe('resource://test');
+
+      const readResult = await client.readResource('resource://test');
+      expect(readResult.contents).toBeInstanceOf(Array);
+      expect(readResult.contents.length).toBe(1);
+      expect(readResult.contents[0].text).toBe('Hello, world!');
     });
   });
 
