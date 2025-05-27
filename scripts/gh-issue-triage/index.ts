@@ -44,8 +44,13 @@ async function main() {
         product_area: { type: 'string' },
         github_username: { type: 'string' },
       },
+      required: ['assignee', 'reason', 'product_area', 'github_username']
     },
   });
+
+  if (!response.object || typeof response.object !== 'object') {
+    throw new Error('Invalid response format from AI agent');
+  }
 
   const result = response.object as { assignee: string; reason: string; product_area: string; github_username: string };
 
