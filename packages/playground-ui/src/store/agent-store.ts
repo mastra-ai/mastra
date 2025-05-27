@@ -3,8 +3,8 @@ import { persist } from 'zustand/middleware';
 import { ModelSettings } from '../types';
 
 interface AgentStore {
-  modelSettings: Record<string, ModelSettings>;
-  setModelSettings: (modelSettings: Record<string, ModelSettings>) => void;
+  modelSettings: Record<string, ModelSettings | null>;
+  setModelSettings: (modelSettings: Record<string, ModelSettings | null>) => void;
   chatWithGenerate: Record<string, boolean>;
   setChatWithGenerate: (chatWithGenerate: Record<string, boolean>) => void;
 }

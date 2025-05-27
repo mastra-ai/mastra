@@ -92,6 +92,8 @@ describe('create mastra', () => {
         await expect(response.json()).resolves.toMatchInlineSnapshot(`
           {
             "weatherAgent": {
+              "defaultGenerateOptions": {},
+              "defaultStreamOptions": {},
               "instructions": "
                 You are a helpful weather assistant that provides accurate weather information.
 

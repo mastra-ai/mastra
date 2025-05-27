@@ -1,5 +1,32 @@
 # create-mastra
 
+## 0.10.1-alpha.3
+
+### Patch Changes
+
+- 6015bdf: Leverage defaultAgentStreamOption, defaultAgentGenerateOption in playground
+
+## 0.10.1-alpha.2
+
+### Patch Changes
+
+- b4365f6: add empty states for agents network and tools
+- d0932ac: add multi modal input behind feature flag
+- bed0916: Update default tools path in mastra dev,build
+- 23d56b1: Handle dev server errors, restart, exit
+
+## 0.10.1-alpha.1
+
+### Patch Changes
+
+- 7a32205: add empty states for workflows, agents and mcp servers
+
+## 0.10.1-alpha.0
+
+### Patch Changes
+
+- 35bb6a3: Allow undefined temprature, topP model setting from playground
+
 ## 0.10.0
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/agui",
-  "version": "1.0.0",
+  "version": "1.0.1-alpha.2",
   "description": "AGUI protocol helpers for Mastra",
   "type": "module",
   "files": [
@@ -30,9 +30,9 @@
   "author": "",
   "license": "Elastic-2.0",
   "dependencies": {
-    "@ag-ui/client": "^0.0.27",
+    "@ag-ui/client": "^0.0.28",
     "@ai-sdk/ui-utils": "^1.1.19",
-    "@copilotkit/runtime": "^1.8.11",
+    "@copilotkit/runtime": "^1.8.13",
     "rxjs": "7.8.1"
   },
   "peerDependencies": {

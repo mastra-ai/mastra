@@ -60,6 +60,8 @@ export interface GetAgentResponse {
   workflows: Record<string, GetWorkflowResponse>;
   provider: string;
   modelId: string;
+  defaultGenerateOptions: WithoutMethods<AgentGenerateOptions>;
+  defaultStreamOptions: WithoutMethods<AgentStreamOptions>;
 }
 
 export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
@@ -177,10 +179,10 @@ export interface SaveMessageToMemoryParams {
 export type SaveMessageToMemoryResponse = MessageType[];
 
 export interface CreateMemoryThreadParams {
-  title: string;
-  metadata: Record<string, any>;
+  title?: string;
+  metadata?: Record<string, any>;
   resourceId: string;
-  threadId: string;
+  threadId?: string;
   agentId: string;
 }
 

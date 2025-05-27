@@ -217,6 +217,68 @@ export class Workflow extends BaseResource {
   }
 
   /**
+   * Starts a vNext workflow run and returns a stream
+   * @param params - Object containing the optional runId, inputData and runtimeContext
+   * @returns Promise containing the vNext workflow execution results
+   */
+  async stream(params: { runId?: string; inputData: Record<string, any>; runtimeContext?: RuntimeContext }) {
+    const searchParams = new URLSearchParams();
+
+    if (!!params?.runId) {
+      searchParams.set('runId', params.runId);
+    }
+
+    const runtimeContext = params.runtimeContext ? Object.fromEntries(params.runtimeContext.entries()) : undefined;
+    const response: Response = await this.request(
+      `/api/workflows/${this.workflowId}/stream?${searchParams.toString()}`,
+      {
+        method: 'POST',
+        body: { inputData: params.inputData, runtimeContext },
+        stream: true,
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to stream vNext workflow: ${response.statusText}`);
+    }
+
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    // Create a transform stream that processes the response body
+    const transformStream = new TransformStream<ArrayBuffer, WorkflowWatchResult>({
+      start() {},
+      async transform(chunk, controller) {
+        try {
+          // Decode binary data to text
+          const decoded = new TextDecoder().decode(chunk);
+
+          // Split by record separator
+          const chunks = decoded.split(RECORD_SEPARATOR);
+
+          // Process each chunk
+          for (const chunk of chunks) {
+            if (chunk) {
+              try {
+                const parsedChunk = JSON.parse(chunk);
+                controller.enqueue(parsedChunk);
+              } catch {
+                // Silently ignore parsing errors
+              }
+            }
+          }
+        } catch {
+          // Silently ignore processing errors
+        }
+      },
+    });
+
+    // Pipe the response body through the transform stream
+    return response.body.pipeThrough(transformStream);
+  }
+
+  /**
    * Resumes a suspended workflow step asynchronously and returns a promise that resolves when the workflow is complete
    * @param params - Object containing the runId, step, resumeData and runtimeContext
    * @returns Promise containing the workflow resume results
@@ -259,5 +321,29 @@ export class Workflow extends BaseResource {
     for await (const record of this.streamProcessor(response.body)) {
       onRecord(record);
     }
+  }
+
+  /**
+   * Creates a new ReadableStream from an iterable or async iterable of objects,
+   * serializing each as JSON and separating them with the record separator (\x1E).
+   *
+   * @param records - An iterable or async iterable of objects to stream
+   * @returns A ReadableStream emitting the records as JSON strings separated by the record separator
+   */
+  static createRecordStream(records: Iterable<any> | AsyncIterable<any>): ReadableStream {
+    const encoder = new TextEncoder();
+    return new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const record of records as AsyncIterable<any>) {
+            const json = JSON.stringify(record) + RECORD_SEPARATOR;
+            controller.enqueue(encoder.encode(json));
+          }
+          controller.close();
+        } catch (err) {
+          controller.error(err);
+        }
+      },
+    });
   }
 }

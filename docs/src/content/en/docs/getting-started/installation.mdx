@@ -50,21 +50,27 @@ There are two options when creating a new project with our CLI:
 
 To create a project, run:
 
+{/* 
+  LLM CONTEXT: This Tabs component shows different package manager commands for creating a new Mastra project.
+  Each tab displays the equivalent command for that specific package manager (npx, npm, yarn, pnpm, bun).
+  This helps users choose their preferred package manager while following the same installation process.
+  All commands achieve the same result - creating a new Mastra project with the interactive setup.
+*/}
 <Tabs items={["npx", "npm", "yarn", "pnpm", "bun"]}>
 
   <Tabs.Tab>
-  ```bash copy 
-npx create-mastra@latest 
+  ```bash copy
+npx create-mastra@latest
   ```
   </Tabs.Tab>
   <Tabs.Tab>
   ```bash copy
-npm create mastra@latest 
+npm create mastra@latest
    ```
    </Tabs.Tab>
   <Tabs.Tab>
   ```bash copy
-yarn create mastra@latest 
+yarn create mastra@latest
    ```
    </Tabs.Tab>
   <Tabs.Tab>
@@ -79,24 +85,6 @@ bun create mastra@latest
   </Tabs.Tab>
 </Tabs>
 
-On installation, you'll be guided through the following prompts:
-
-```bash
-What do you want to name your project? my-mastra-app
-Choose components to install:
-  ◯ Agents (recommended)
-  ◯ Tools
-  ◯ Workflows
-Select default provider:
-  ◯ OpenAI (recommended)
-  ◯ Anthropic
-  ◯ Groq
-Would you like to include example code? No / Yes
-Turn your IDE into a Mastra expert? (Installs MCP server)
-  ◯ Skip for now
-  ◯ Cursor
-  ◯ Windsurf
-```
 
 After the prompts, `create-mastra` will:
 
@@ -109,40 +97,14 @@ After the prompts, `create-mastra` will:
 
 #### Non-Interactive
 
-You can run the Mastra CLI in fully non-interactive mode by passing all required flags. Start with:
+You can run the Mastra CLI in fully non-interactive mode by passing all required flags, for example:
 
-```bash copy
-npx create-mastra@latest
-```
-
-**Required Flags**
-
-| Short | Long            | Description                                                             |
-| ----- | --------------- | ----------------------------------------------------------------------- |
-| `-d`  | `--dir`         | Directory for Mastra files (defaults to `src/mastra`)                   |
-| `-c`  | `--components`  | Comma-separated list of components (`agents`, `tools`, `workflows`)     |
-| `-l`  | `--llm`         | Model provider (`openai`, `anthropic`, `groq`, `google`, or `cerebras`) |
-| `-k`  | `--llm-api-key` | API key for the selected LLM provider (added to `.env` file)            |
-| `-e`  | `--example`     | Include example code                                                    |
-| `-ne` | `--no-example`  | Skip example code                                                       |
-
-**Optional Flags**
-
-| Short | Long             | Description                                           |
-| ----- | ---------------- | ----------------------------------------------------- |
-| `-m`  | `--mcp`          | IDE (`windsurf`, `cursor`, `cursor-global`, `vscode`) |
-| `-p`  | `--project-name` | Project name                                          |
-| `-d`  | `--dir`          | Target directory for generated code (default: `src/`) |
-| `-t`  | `--timeout`      | Set timeout in milliseconds for installation steps    |
-| `-h`  | `--help`         | Display available flags                               |
-
-**Example One-Liner**
 
 ```bash copy
 npx create-mastra@latest --project-name hello-mastra --example --components tools,agents,workflows --llm openai
 ```
 
-> Providing all required flags lets the CLI run without any prompts.
+> See the [mastra init](/reference/cli/init) documentation for a full list of available CLI options.
 
 ### Set Up your API Key
 
@@ -174,6 +136,12 @@ cd hello-mastra
 
 Initialize a TypeScript project including the `@mastra/core` package:
 
+{/* 
+  LLM CONTEXT: This Tabs component shows manual installation commands for different package managers.
+  Each tab displays the complete setup process for that package manager including project initialization,
+  dev dependencies installation, and core Mastra packages installation.
+  This helps users manually set up a Mastra project with their preferred package manager.
+*/}
 <Tabs items={["npm", "pnpm", "yarn", "bun"]}>
 
   <Tabs.Tab>
@@ -415,7 +383,7 @@ Add the following code:
 ```ts filename="src/mastra/workflows/weather-workflow.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
-import { Step, Workflow } from "@mastra/core/workflows";
+import { createStep, createWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
 
 const llm = openai("gpt-4o-mini");
@@ -468,90 +436,114 @@ const agent = new Agent({
       `,
 });
 
-const forecastSchema = z.array(
-  z.object({
-    date: z.string(),
-    maxTemp: z.number(),
-    minTemp: z.number(),
-    precipitationChance: z.number(),
-    condition: z.string(),
-    location: z.string(),
-  }),
-);
+const forecastSchema = z.object({
+  date: z.string(),
+  maxTemp: z.number(),
+  minTemp: z.number(),
+  precipitationChance: z.number(),
+  condition: z.string(),
+  location: z.string(),
+});
 
-const fetchWeather = new Step({
-  id: "fetch-weather",
-  description: "Fetches weather forecast for a given city",
+function getWeatherCondition(code: number): string {
+  const conditions: Record<number, string> = {
+    0: 'Clear sky',
+    1: 'Mainly clear',
+    2: 'Partly cloudy',
+    3: 'Overcast',
+    45: 'Foggy',
+    48: 'Depositing rime fog',
+    51: 'Light drizzle',
+    53: 'Moderate drizzle',
+    55: 'Dense drizzle',
+    61: 'Slight rain',
+    63: 'Moderate rain',
+    65: 'Heavy rain',
+    71: 'Slight snow fall',
+    73: 'Moderate snow fall',
+    75: 'Heavy snow fall',
+    95: 'Thunderstorm',
+  };
+  return conditions[code] || 'Unknown';
+}
+
+const fetchWeather = createStep({
+  id: 'fetch-weather',
+  description: 'Fetches weather forecast for a given city',
   inputSchema: z.object({
-    city: z.string().describe("The city to get the weather for"),
+    city: z.string().describe('The city to get the weather for'),
   }),
   outputSchema: forecastSchema,
-  execute: async ({ context }) => {
-    const triggerData = context?.getStepResult<{ city: string }>("trigger");
-
-    if (!triggerData) {
-      throw new Error("Trigger data not found");
+  execute: async ({ inputData }) => {
+    if (!inputData) {
+      throw new Error('Input data not found');
     }
 
-    const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(triggerData.city)}&count=1`;
+    const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(inputData.city)}&count=1`;
     const geocodingResponse = await fetch(geocodingUrl);
     const geocodingData = (await geocodingResponse.json()) as {
       results: { latitude: number; longitude: number; name: string }[];
     };
 
     if (!geocodingData.results?.[0]) {
-      throw new Error(`Location '${triggerData.city}' not found`);
+      throw new Error(`Location '${inputData.city}' not found`);
     }
 
     const { latitude, longitude, name } = geocodingData.results[0];
 
-    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_mean,weathercode&timezone=auto`;
+    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=precipitation,weathercode&timezone=auto,&hourly=precipitation_probability,temperature_2m`;
     const response = await fetch(weatherUrl);
     const data = (await response.json()) as {
-      daily: {
-        time: string[];
-        temperature_2m_max: number[];
-        temperature_2m_min: number[];
-        precipitation_probability_mean: number[];
-        weathercode: number[];
+      current: {
+        time: string;
+        precipitation: number;
+        weathercode: number;
+      };
+      hourly: {
+        precipitation_probability: number[];
+        temperature_2m: number[];
       };
     };
 
-    const forecast = data.daily.time.map((date: string, index: number) => ({
-      date,
-      maxTemp: data.daily.temperature_2m_max[index],
-      minTemp: data.daily.temperature_2m_min[index],
-      precipitationChance: data.daily.precipitation_probability_mean[index],
-      condition: getWeatherCondition(data.daily.weathercode[index]!),
-      location: name,
-    }));
+    const forecast = {
+      date: new Date().toISOString(),
+      maxTemp: Math.max(...data.hourly.temperature_2m),
+      minTemp: Math.min(...data.hourly.temperature_2m),
+      condition: getWeatherCondition(data.current.weathercode),
+      precipitationChance: data.hourly.precipitation_probability.reduce((acc, curr) => Math.max(acc, curr), 0),
+      location: inputData.city,
+    };
 
     return forecast;
   },
 });
 
-const planActivities = new Step({
-  id: "plan-activities",
-  description: "Suggests activities based on weather conditions",
-  execute: async ({ context, mastra }) => {
-    const forecast = context?.getStepResult(fetchWeather);
+const planActivities = createStep({
+  id: 'plan-activities',
+  description: 'Suggests activities based on weather conditions',
+  inputSchema: forecastSchema,
+  outputSchema: z.object({
+    activities: z.string(),
+  }),
+  execute: async ({ inputData }) => {
+    const forecast = inputData;
 
-    if (!forecast || forecast.length === 0) {
-      throw new Error("Forecast data not found");
+    if (!forecast) {
+      throw new Error('Forecast data not found');
     }
 
-    const prompt = `Based on the following weather forecast for ${forecast[0]?.location}, suggest appropriate activities:
+    const prompt = `Based on the following weather forecast for ${forecast.location}, suggest appropriate activities:
       ${JSON.stringify(forecast, null, 2)}
       `;
 
     const response = await agent.stream([
       {
-        role: "user",
+        role: 'user',
         content: prompt,
       },
     ]);
 
-    let activitiesText = "";
+    let activitiesText = '';
 
     for await (const chunk of response.textStream) {
       process.stdout.write(chunk);
@@ -564,35 +556,16 @@ const planActivities = new Step({
   },
 });
 
-function getWeatherCondition(code: number): string {
-  const conditions: Record<number, string> = {
-    0: "Clear sky",
-    1: "Mainly clear",
-    2: "Partly cloudy",
-    3: "Overcast",
-    45: "Foggy",
-    48: "Depositing rime fog",
-    51: "Light drizzle",
-    53: "Moderate drizzle",
-    55: "Dense drizzle",
-    61: "Slight rain",
-    63: "Moderate rain",
-    65: "Heavy rain",
-    71: "Slight snow fall",
-    73: "Moderate snow fall",
-    75: "Heavy snow fall",
-    95: "Thunderstorm",
-  };
-  return conditions[code] || "Unknown";
-}
-
-const weatherWorkflow = new Workflow({
-  name: "weather-workflow",
-  triggerSchema: z.object({
-    city: z.string().describe("The city to get the weather for"),
+const weatherWorkflow = createWorkflow({
+  id: 'weather-workflow',
+  inputSchema: z.object({
+    city: z.string().describe('The city to get the weather for'),
+  }),
+  outputSchema: z.object({
+    activities: z.string(),
   }),
 })
-  .step(fetchWeather)
+  .then(fetchWeather)
   .then(planActivities);
 
 weatherWorkflow.commit();
@@ -614,7 +587,7 @@ Add the following code:
 import { Mastra } from "@mastra/core";
 import { PinoLogger } from "@mastra/loggers";
 import { LibSQLStore } from "@mastra/libsql";
-import { weatherWorkflow } from "./agents/weather-workflow";
+import { weatherWorkflow } from "./workflows/weather-workflow";
 import { weatherAgent } from "./agents/weather-agent";
 
 export const mastra = new Mastra({

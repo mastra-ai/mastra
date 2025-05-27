@@ -1,7 +1,10 @@
 import babel from '@babel/core';
 import type { NodePath, types } from '@babel/core';
 
-export function removeAllOptionsFromMastraExcept(result: { hasCustomConfig: boolean }, option: 'telemetry' | 'server') {
+export function removeAllOptionsFromMastraExcept(
+  result: { hasCustomConfig: boolean },
+  option: 'telemetry' | 'server' | 'bundler',
+) {
   const t = babel.types;
 
   return {
