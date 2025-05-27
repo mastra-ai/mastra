@@ -1,8 +1,8 @@
 import { spawn } from 'child_process';
+import fs from 'fs';
 import { join } from 'path';
 import { isWebContainer } from '@webcontainer/env';
 import { logger } from '../../utils/logger';
-
 interface StartOptions {
   dir?: string;
   telemetry?: boolean;
@@ -13,8 +13,11 @@ export async function start(options: StartOptions = {}) {
   const telemetry = options.telemetry ?? true;
 
   try {
-    // Check if the output directory exists
+    // Check if the output directory exist
     const outputPath = join(process.cwd(), outputDir);
+    if (!fs.existsSync(outputPath)) {
+      throw new Error(`Output directory ${outputPath} does not exist`);
+    }
 
     const commands = [];
 
