@@ -7,7 +7,10 @@ import { LibSQLVector, LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import type { ToolCallPart } from 'ai';
 import dotenv from 'dotenv';
-import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import { describe, expect, it, beforeEach, afterAll, afterEach } from 'vitest';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { mkdtemp } from 'node:fs/promises';
 
 const resourceId = 'test-resource';
 let messageCounter = 0;
@@ -40,9 +43,22 @@ dotenv.config({ path: '.env.test' });
 describe('Working Memory Tests', () => {
   let memory: Memory;
   let thread: any;
-  const dbFile = 'file::memory:?cache=shared';
+  let testCount = 0;
+  let storage: LibSQLStore;
+  let vector: LibSQLVector;
 
   beforeEach(async () => {
+    // Create a new unique database file in the temp directory for each test
+    const dbPath = join(await mkdtemp(join(tmpdir(), `memory-working-test-`)), 'test.db');
+    console.log('dbPath', dbPath);
+
+    storage = new LibSQLStore({
+      url: `file:${dbPath}`,
+    });
+    vector = new LibSQLVector({
+      connectionUrl: `file:${dbPath}`,
+    });
+
     // Create memory instance with working memory enabled
     memory = new Memory({
       options: {
@@ -64,12 +80,8 @@ describe('Working Memory Tests', () => {
           generateTitle: false,
         },
       },
-      storage: new LibSQLStore({
-        url: dbFile,
-      }),
-      vector: new LibSQLVector({
-        connectionUrl: dbFile, // relative path from bundled .mastra/output dir
-      }),
+      storage,
+      vector,
       embedder: fastembed,
     });
     // Reset message counter
@@ -81,10 +93,11 @@ describe('Working Memory Tests', () => {
     });
   });
 
-  afterAll(async () => {
-    const threads = await memory.getThreadsByResourceId({ resourceId });
-    await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
-    setTimeout(() => process.exit(0), 100);
+  afterEach(async () => {
+    //@ts-ignore
+    await storage.client.close();
+    //@ts-ignore
+    await vector.turso.close();
   });
 
   it('should handle LLM responses with working memory using OpenAI (test that the working memory prompt works)', async () => {
@@ -309,13 +322,15 @@ describe('Working Memory Tests', () => {
   });
 
   it('should respect working memory enabled/disabled setting', async () => {
+    const dbPath = join(await mkdtemp(join(tmpdir(), `memory-working-test-`)), 'test.db');
+
     // Create memory instance with working memory disabled
     const disabledMemory = new Memory({
       storage: new LibSQLStore({
-        url: dbFile,
+        url: dbPath,
       }),
       vector: new LibSQLVector({
-        connectionUrl: dbFile, // relative path from bundled .mastra/output dir
+        connectionUrl: dbPath, // relative path from bundled .mastra/output dir
       }),
       embedder: openai.embedding('text-embedding-3-small'),
       options: {
