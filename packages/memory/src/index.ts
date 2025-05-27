@@ -143,6 +143,9 @@ export class Memory extends MastraMemory {
     const list = new MessageList({ threadId, resourceId }).add(orderedByDate, 'memory');
     return {
       get messages() {
+        // returning v1 messages for backwards compat! v1 messages were CoreMessages stored in the db.
+        // returning .v1() takes stored messages which may be in v2 or v1 format and converts them to v1 shape, which is a CoreMessage + id + threadId + resourceId, etc
+        // Perhaps this should be called coreRecord or something ? - for now keeping v1 since it reflects that this used to be our db storage record shape
         const v1Messages = list.get.all.v1();
         // the conversion from V2/UIMessage -> V1/CoreMessage can sometimes split the messages up into more messages than before
         // so slice off the earlier messages if it'll exceed the lastMessages setting
