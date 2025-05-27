@@ -256,7 +256,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           steps: {
             ...stepResults,
             [step.id]: {
-              // ...stepResults[step.id],
               status: 'running',
               ...stepInfo,
             },
@@ -744,7 +743,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       endedAt: Date.now(),
       ...(startTime ? { startedAt: startTime } : {}),
       ...(resumeTime ? { resumedAt: resumeTime } : {}),
-    } as StepSuccess<any, any, any>;
+    } as StepSuccess<any, any, any, any>;
   }
 
   protected async persistStepUpdate({
