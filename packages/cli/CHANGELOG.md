@@ -1,5 +1,25 @@
 # mastra
 
+## 0.10.1-alpha.2
+
+### Patch Changes
+
+- b4365f6: add empty states for agents network and tools
+- d0932ac: add multi modal input behind feature flag
+- bed0916: Update default tools path in mastra dev,build
+- 23d56b1: Handle dev server errors, restart, exit
+- Updated dependencies [ab89d6a]
+- Updated dependencies [200d0da]
+- Updated dependencies [bed0916]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+  - @mastra/mcp@0.10.1-alpha.0
+  - @mastra/core@0.10.1-alpha.1
+  - @mastra/deployer@0.10.1-alpha.1
+
 ## 0.10.1-alpha.1
 
 ### Patch Changes

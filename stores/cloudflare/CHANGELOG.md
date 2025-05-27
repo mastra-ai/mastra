@@ -1,5 +1,18 @@
 # @mastra/cloudflare
 
+## 0.10.1-alpha.0
+
+### Patch Changes
+
+- 5c41100: Added binding support for cloudflare deployers, added cloudflare kv namespace changes, and removed randomUUID from buildExecutionGraph
+- Updated dependencies [200d0da]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+  - @mastra/core@0.10.1-alpha.1
+
 ## 0.10.0
 
 ### Minor Changes
