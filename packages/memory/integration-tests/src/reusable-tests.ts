@@ -3,10 +3,17 @@ import type { Memory } from '@mastra/memory';
 import type { TextPart, ImagePart, FilePart, ToolCallPart } from 'ai';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { reorderToolCallsAndResults } from '../../src/utils';
+import { Worker } from 'worker_threads';
+import * as path from 'path';
+import * as os from 'os';
+import { SharedMemoryConfig } from '@mastra/core';
+import { LibSQLConfig } from '@mastra/libsql';
+import { PostgresConfig } from '@mastra/pg';
+import { UpstashConfig } from '@mastra/upstash';
 
 const resourceId = 'resource';
 // Test helpers
-const createTestThread = (title: string, metadata = {}) => ({
+export const createTestThread = (title: string, metadata = {}) => ({
   id: randomUUID(),
   title,
   resourceId,
@@ -16,7 +23,7 @@ const createTestThread = (title: string, metadata = {}) => ({
 });
 
 let messageCounter = 0;
-const createTestMessage = (
+export const createTestMessage = (
   threadId: string,
   content: string | (TextPart | ImagePart | FilePart)[] | (TextPart | ToolCallPart)[],
   role: 'user' | 'assistant' = 'user',
@@ -34,7 +41,13 @@ const createTestMessage = (
   };
 };
 
-export function getResuableTests(memory: Memory) {
+export interface WorkerTestConfig {
+  storageTypeForWorker: 'libsql' | 'pg' | 'upstash';
+  storageConfigForWorker: LibSQLConfig | PostgresConfig | UpstashConfig;
+  memoryOptionsForWorker?: SharedMemoryConfig['options'];
+}
+
+export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestConfig) {
   beforeEach(async () => {
     // Reset message counter
     messageCounter = 0;
@@ -899,10 +912,95 @@ export function getResuableTests(memory: Memory) {
         const result = await memory.rememberMessages({
           threadId: thread.id,
           resourceId,
-          config: { lastMessages: 20 },
+          config: { lastMessages: 20 }, // Increased to ensure all messages are retrieved
         });
         expect(result.messages).toHaveLength(messagesBatches.flat().length);
       });
     });
   });
+
+  // Add the new concurrent test suite if workerTestConfig is provided
+  if (workerTestConfig) {
+    describe('Concurrent Operations with Workers', () => {
+      it('should save multiple messages concurrently using Memory instance in workers to a single thread', async () => {
+        const totalMessages = 20;
+        const mainThread = await memory.saveThread({
+          thread: createTestThread(`Reusable Concurrent Worker Test Thread`),
+        });
+        const messagesToSave: ReturnType<typeof createTestMessage>[] = [];
+        for (let i = 0; i < totalMessages; i++) {
+          messagesToSave.push(createTestMessage(mainThread.id, `Message ${i + 1} for reusable concurrent test`));
+        }
+        const messagesForWorkers = messagesToSave.map(message => ({
+          originalMessage: message,
+        }));
+
+        const numWorkers = Math.min(os.cpus().length, 2);
+        const chunkSize = Math.ceil(totalMessages / numWorkers);
+        const workerPromises = [];
+        console.log(`Using ${numWorkers} generic Memory workers to process ${totalMessages} messages.`);
+        for (let i = 0; i < numWorkers; i++) {
+          const chunk = messagesForWorkers.slice(i * chunkSize, (i + 1) * chunkSize);
+          if (chunk.length === 0) continue;
+          const workerPromise = new Promise((resolve, reject) => {
+            const worker = new Worker(path.resolve(__dirname, 'generic-memory-worker.js'), {
+              workerData: {
+                messages: chunk,
+                storageType: workerTestConfig.storageTypeForWorker,
+                storageConfig: workerTestConfig.storageConfigForWorker,
+                memoryOptions: workerTestConfig.memoryOptionsForWorker || { threads: { generateTitle: false } },
+              },
+            });
+            worker.on('message', msg => {
+              if ((msg as any).success) {
+                resolve(msg);
+              } else {
+                console.error('Worker error (reusable test):', (msg as any).error);
+                reject(new Error((msg as any).error?.message || 'Worker failed in reusable test'));
+              }
+            });
+            worker.on('error', reject);
+            worker.on('exit', code => {
+              if (code !== 0) {
+                reject(new Error(`Reusable test worker stopped with exit code ${code}`));
+              }
+            });
+          });
+          workerPromises.push(workerPromise);
+        }
+        try {
+          await Promise.all(workerPromises);
+        } catch (error) {
+          console.error('Error during reusable worker execution:', error);
+          throw error;
+        }
+        const result = await memory.rememberMessages({
+          threadId: mainThread.id,
+          resourceId,
+          config: { lastMessages: totalMessages },
+        });
+        expect(result.messages).toHaveLength(totalMessages);
+
+        // Sort based on numeric part of content for consistent comparison
+        const sortedResultMessages = [...result.messages].sort((a, b) => {
+          const numA = parseInt(((a.content as string) || '').match(/Message (\d+)/)?.[1] || '0');
+          const numB = parseInt(((b.content as string) || '').match(/Message (\d+)/)?.[1] || '0');
+          return numA - numB;
+        });
+
+        const sortedExpectedMessages = [...messagesToSave].sort((a, b) => {
+          const numA = parseInt(((a.content as string) || '').match(/Message (\d+)/)?.[1] || '0');
+          const numB = parseInt(((b.content as string) || '').match(/Message (\d+)/)?.[1] || '0');
+          return numA - numB;
+        });
+
+        sortedExpectedMessages.forEach((expectedMessage, index) => {
+          const resultContent = sortedResultMessages[index].content;
+          // messagesToSave contains the direct output of createTestMessage
+          const expectedContent = expectedMessage.content;
+          expect(resultContent).toBe(expectedContent);
+        });
+      });
+    });
+  }
 }

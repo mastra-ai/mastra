@@ -32,13 +32,29 @@ function safelyParseJSON(jsonString: string): any {
 export interface LibSQLConfig {
   url: string;
   authToken?: string;
+  /**
+   * Maximum number of retries for write operations if an SQLITE_BUSY error occurs.
+   * @default 5
+   */
+  maxRetries?: number;
+  /**
+   * Initial backoff time in milliseconds for retrying write operations on SQLITE_BUSY.
+   * The backoff time will double with each retry (exponential backoff).
+   * @default 100
+   */
+  initialBackoffMs?: number;
 }
 
 export class LibSQLStore extends MastraStorage {
   private client: Client;
+  private readonly maxRetries: number;
+  private readonly initialBackoffMs: number;
 
   constructor(config: LibSQLConfig) {
     super({ name: `LibSQLStore` });
+
+    this.maxRetries = config.maxRetries ?? 5;
+    this.initialBackoffMs = config.initialBackoffMs ?? 100;
 
     // need to re-init every time for in memory dbs or the tables might not exist
     if (config.url.endsWith(':memory:')) {
@@ -46,6 +62,19 @@ export class LibSQLStore extends MastraStorage {
     }
 
     this.client = createClient(config);
+
+    // Set PRAGMAs for better concurrency, especially for file-based databases
+    if (config.url.startsWith('file:') || config.url.includes(':memory:')) {
+      this.client
+        .execute('PRAGMA journal_mode=WAL;')
+        .then(() => this.logger.debug('LibSQLStore: PRAGMA journal_mode=WAL set.'))
+        .catch(err => this.logger.warn('LibSQLStore: Failed to set PRAGMA journal_mode=WAL.', err));
+
+      this.client
+        .execute('PRAGMA busy_timeout = 5000;') // 5 seconds
+        .then(() => this.logger.debug('LibSQLStore: PRAGMA busy_timeout=5000 set.'))
+        .catch(err => this.logger.warn('LibSQLStore: Failed to set PRAGMA busy_timeout.', err));
+    }
   }
 
   private getCreateTableSQL(tableName: TABLE_NAMES, schema: Record<string, StorageColumn>): string {
@@ -127,30 +156,58 @@ export class LibSQLStore extends MastraStorage {
     };
   }
 
+  // Helper method for retrying write operations
+  private async _executeWriteOperationWithRetry<T>(
+    operationFn: () => Promise<T>,
+    operationDescription: string,
+  ): Promise<T> {
+    let retries = 0;
+
+    while (true) {
+      try {
+        return await operationFn(); // Execute the operation
+      } catch (error: any) {
+        if (
+          error.message &&
+          (error.message.includes('SQLITE_BUSY') || error.message.includes('database is locked')) &&
+          retries < this.maxRetries
+        ) {
+          retries++;
+          const backoffTime = this.initialBackoffMs * Math.pow(2, retries - 1);
+          this.logger.warn(
+            `LibSQLStore: Encountered SQLITE_BUSY during ${operationDescription}. Retrying (${retries}/${this.maxRetries}) in ${backoffTime}ms...`,
+          );
+          await new Promise(resolve => setTimeout(resolve, backoffTime));
+        } else {
+          this.logger.error(`LibSQLStore: Error during ${operationDescription} after ${retries} retries: ${error}`);
+          throw error;
+        }
+      }
+    }
+  }
+
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    try {
-      await this.client.execute(
+    // Define an async function that performs the operation and implicitly returns Promise<void>
+    const operationFn = async () => {
+      return await this.client.execute(
         this.prepareStatement({
           tableName,
           record,
         }),
       );
-    } catch (error) {
-      this.logger.error(`Error upserting into table ${tableName}: ${error}`);
-      throw error;
-    }
+    };
+    await this._executeWriteOperationWithRetry(operationFn, `insert into table ${tableName}`);
   }
 
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
     if (records.length === 0) return;
 
-    try {
+    // Define an async function that performs the operation and implicitly returns Promise<void>
+    const operationFn = async () => {
       const batchStatements = records.map(r => this.prepareStatement({ tableName, record: r }));
-      await this.client.batch(batchStatements, 'write');
-    } catch (error) {
-      this.logger.error(`Error upserting into table ${tableName}: ${error}`);
-      throw error;
-    }
+      return await this.client.batch(batchStatements, 'write');
+    };
+    await this._executeWriteOperationWithRetry(operationFn, `batch insert into table ${tableName}`);
   }
 
   async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
