@@ -37,7 +37,7 @@ export function WorkflowNestedGraph({ stepGraph, open }: { stepGraph: Serialized
   }, [open]);
 
   return (
-    <div className="w-full h-full relative">
+    <div className="w-full h-full relative bg-surface1">
       {isMounted ? (
         <ReactFlow
           nodes={nodes}
