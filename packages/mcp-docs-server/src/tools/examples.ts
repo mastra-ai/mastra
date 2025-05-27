@@ -62,6 +62,7 @@ export const examplesTool = {
   name: 'mastraExamples',
   description:
     'Get code examples from the Mastra.ai examples directory. Without a specific example name, lists all available examples. With an example name, returns the full source code of that example.',
+  parameters: examplesInputSchema,
   execute: async (args: ExamplesInput) => {
     void logger.debug('Executing mastraExamples tool', { example: args.example });
     try {
