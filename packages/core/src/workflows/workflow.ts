@@ -54,6 +54,7 @@ export type StepFlowEntry =
 export type SerializedStep = Pick<Step, 'id' | 'description'> & {
   component?: string;
   serializedStepFlow?: SerializedStepFlowEntry[];
+  mapConfig?: string;
 };
 
 export type SerializedStepFlowEntry =
@@ -314,16 +315,26 @@ export type WorkflowResult<TOutput extends z.ZodType<any>, TSteps extends Step<s
       result: z.infer<TOutput>;
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
-          ? StepResult<unknown>
-          : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
+          ? StepResult<unknown, unknown, unknown, unknown>
+          : StepResult<
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
+            >;
       };
     }
   | {
       status: 'failed';
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
-          ? StepResult<unknown>
-          : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
+          ? StepResult<unknown, unknown, unknown, unknown>
+          : StepResult<
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
+            >;
       };
       error: Error;
     }
@@ -331,8 +342,13 @@ export type WorkflowResult<TOutput extends z.ZodType<any>, TSteps extends Step<s
       status: 'suspended';
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
-          ? StepResult<unknown>
-          : StepResult<z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>>;
+          ? StepResult<unknown, unknown, unknown, unknown>
+          : StepResult<
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['inputSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['resumeSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['suspendSchema']>>,
+              z.infer<NonNullable<StepsRecord<TSteps>[K]['outputSchema']>>
+            >;
       };
       suspended: [string[], ...string[][]];
     };
@@ -502,13 +518,34 @@ export class Workflow<
         type: 'step',
         step: {
           id: mappingStep.id,
-          description: mappingStep.description,
-          component: (mappingStep as SerializedStep).component,
-          serializedStepFlow: (mappingStep as SerializedStep).serializedStepFlow,
+          mapConfig: mappingConfig.toString(),
         },
       });
       return this as unknown as Workflow<TSteps, TWorkflowId, TInput, TOutput, any>;
     }
+
+    const newMappingConfig: Record<string, any> = Object.entries(mappingConfig).reduce(
+      (a, [key, mapping]) => {
+        const m: any = mapping;
+        if (m.value !== undefined) {
+          a[key] = m;
+        } else if (m.fn !== undefined) {
+          a[key] = {
+            fn: m.fn.toString(),
+            schema: m.schema,
+          };
+        } else if (m.runtimeContextPath) {
+          a[key] = {
+            runtimeContextPath: m.runtimeContextPath,
+            schema: m.schema,
+          };
+        } else {
+          a[key] = m;
+        }
+        return a;
+      },
+      {} as Record<string, any>,
+    );
 
     const mappingStep: any = createStep({
       id: `mapping_${randomUUID()}`,
@@ -592,9 +629,7 @@ export class Workflow<
       type: 'step',
       step: {
         id: mappingStep.id,
-        description: mappingStep.description,
-        component: (mappingStep as SerializedStep).component,
-        serializedStepFlow: (mappingStep as SerializedStep).serializedStepFlow,
+        mapConfig: JSON.stringify(newMappingConfig, null, 2),
       },
     });
     return this as unknown as Workflow<TSteps, TWorkflowId, TInput, TOutput, MappedOutputSchema>;
@@ -862,16 +897,16 @@ export class Workflow<
       : await run.start({ inputData, runtimeContext });
     unwatch();
     const suspendedSteps = Object.entries(res.steps).filter(([_stepName, stepResult]) => {
-      const stepRes: StepResult<any> = stepResult as StepResult<any>;
+      const stepRes: StepResult<any, any, any, any> = stepResult as StepResult<any, any, any, any>;
       return stepRes?.status === 'suspended';
     });
 
     if (suspendedSteps?.length) {
       for (const [stepName, stepResult] of suspendedSteps) {
         // @ts-ignore
-        const suspendPath: string[] = [stepName, ...(stepResult?.payload?.__workflow_meta?.path ?? [])];
+        const suspendPath: string[] = [stepName, ...(stepResult?.suspendPayload?.__workflow_meta?.path ?? [])];
         await suspend({
-          ...(stepResult as any)?.payload,
+          ...(stepResult as any)?.suspendPayload,
           __workflow_meta: { runId: run.runId, path: suspendPath },
         });
       }
@@ -893,7 +928,7 @@ export class Workflow<
   }) {
     const storage = this.#mastra?.getStorage();
     if (!storage) {
-      this.logger.debug('Cannot get workflow runs. Mastra engine is not initialized');
+      this.logger.debug('Cannot get workflow runs. Mastra storage is not initialized');
       return { runs: [], total: 0 };
     }
 
@@ -903,8 +938,11 @@ export class Workflow<
   async getWorkflowRunById(runId: string) {
     const storage = this.#mastra?.getStorage();
     if (!storage) {
-      this.logger.debug('Cannot get workflow runs. Mastra engine is not initialized');
-      return null;
+      this.logger.debug('Cannot get workflow runs from storage. Mastra storage is not initialized');
+      //returning in memory run if no storage is initialized
+      return this.#runs.get(runId)
+        ? ({ ...this.#runs.get(runId), workflowName: this.id } as unknown as WorkflowRun)
+        : null;
     }
     const run = await storage.getWorkflowRunById({ runId, workflowName: this.id });
 

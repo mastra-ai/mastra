@@ -88,6 +88,8 @@ if (res.status === "success") {
 
 ```
 
+> **NOTE:** The step created from agent (`createStep(agent)`) takes `prompt` as an input and returns `text` as an output. You will need to map the output of the previous step to the input of the agent step, as done in the example above
+
 ## Tools as a step
 
 Workflows can use Mastra tools directly as steps using `createStep(tool)`:
