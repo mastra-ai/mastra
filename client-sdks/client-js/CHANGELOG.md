@@ -1,5 +1,26 @@
 # @mastra/client-js
 
+## 0.10.1-alpha.2
+
+### Patch Changes
+
+- 6015bdf: Leverage defaultAgentStreamOption, defaultAgentGenerateOption in playground
+- Updated dependencies [6015bdf]
+  - @mastra/core@0.10.1-alpha.2
+
+## 0.10.1-alpha.1
+
+### Patch Changes
+
+- 5343f93: Move emitter to symbol to make private
+- Updated dependencies [200d0da]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+  - @mastra/core@0.10.1-alpha.1
+
 ## 0.10.1-alpha.0
 
 ### Patch Changes

@@ -50,6 +50,12 @@ There are two options when creating a new project with our CLI:
 
 To create a project, run:
 
+{/* 
+  LLM CONTEXT: This Tabs component shows different package manager commands for creating a new Mastra project.
+  Each tab displays the equivalent command for that specific package manager (npx, npm, yarn, pnpm, bun).
+  This helps users choose their preferred package manager while following the same installation process.
+  All commands achieve the same result - creating a new Mastra project with the interactive setup.
+*/}
 <Tabs items={["npx", "npm", "yarn", "pnpm", "bun"]}>
 
   <Tabs.Tab>
@@ -130,6 +136,12 @@ cd hello-mastra
 
 Initialize a TypeScript project including the `@mastra/core` package:
 
+{/* 
+  LLM CONTEXT: This Tabs component shows manual installation commands for different package managers.
+  Each tab displays the complete setup process for that package manager including project initialization,
+  dev dependencies installation, and core Mastra packages installation.
+  This helps users manually set up a Mastra project with their preferred package manager.
+*/}
 <Tabs items={["npm", "pnpm", "yarn", "bun"]}>
 
   <Tabs.Tab>

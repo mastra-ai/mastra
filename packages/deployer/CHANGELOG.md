@@ -1,5 +1,29 @@
 # @mastra/deployer
 
+## 0.10.1-alpha.2
+
+### Patch Changes
+
+- fe68410: Fix mcp server routes
+- Updated dependencies [6015bdf]
+  - @mastra/server@0.10.1-alpha.1
+  - @mastra/core@0.10.1-alpha.2
+
+## 0.10.1-alpha.1
+
+### Patch Changes
+
+- bed0916: Handle wildcards in tools discovery
+- 5343f93: Move emitter to symbol to make private
+- Updated dependencies [200d0da]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+  - @mastra/core@0.10.1-alpha.1
+  - @mastra/server@0.10.1-alpha.0
+
 ## 0.10.1-alpha.0
 
 ### Patch Changes

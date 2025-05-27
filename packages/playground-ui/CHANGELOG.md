@@ -1,5 +1,29 @@
 # @mastra/playground-ui
 
+## 5.1.1-alpha.3
+
+### Patch Changes
+
+- 6015bdf: Leverage defaultAgentStreamOption, defaultAgentGenerateOption in playground
+- Updated dependencies [6015bdf]
+  - @mastra/client-js@0.10.1-alpha.2
+  - @mastra/core@0.10.1-alpha.2
+
+## 5.1.1-alpha.2
+
+### Patch Changes
+
+- b4365f6: add empty states for agents network and tools
+- d0932ac: add multi modal input behind feature flag
+- Updated dependencies [200d0da]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+  - @mastra/core@0.10.1-alpha.1
+  - @mastra/client-js@0.10.1-alpha.1
+
 ## 5.1.1-alpha.1
 
 ### Patch Changes
