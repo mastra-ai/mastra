@@ -622,7 +622,7 @@ do:
 
   public vnext_getNetwork(networkId: string): NewAgentNetwork | undefined {
     const networks = this.vnext_getNetworks();
-    return networks.find(network => network.name === networkId);
+    return networks.find(network => network.id === networkId);
   }
 
   public async getLogsByRunId({ runId, transportId }: { runId: string; transportId: string }) {
