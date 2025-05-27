@@ -60,7 +60,7 @@ export const memoryDefaultOptions = {
 export abstract class MastraMemory extends MastraBase {
   MAX_CONTEXT_TOKENS?: number;
 
-  _storage?: MastraStorage;
+  protected _storage?: MastraStorage;
   vector?: MastraVector;
   embedder?: EmbeddingModel<string>;
   private processors: MemoryProcessor[] = [];
@@ -108,7 +108,7 @@ export abstract class MastraMemory extends MastraBase {
   }
 
   public setStorage(storage: MastraStorage) {
-    this._storage = storage;
+    this._storage = augmentWithInit(storage);
   }
 
   public setVector(vector: MastraVector) {
@@ -284,7 +284,6 @@ export abstract class MastraMemory extends MastraBase {
     metadata?: Record<string, unknown>;
     memoryConfig?: MemoryConfig;
   }): Promise<StorageThreadType> {
-    await this.storage.init();
     const thread: StorageThreadType = {
       id: threadId || this.generateId(),
       title: title || `New Thread ${new Date().toISOString()}`,

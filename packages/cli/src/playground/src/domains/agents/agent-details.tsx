@@ -19,7 +19,8 @@ export interface AgentDetailsProps {
 }
 
 export function AgentDetails({ agent }: AgentDetailsProps) {
-  const { modelSettings, setModelSettings, chatWithGenerate, setChatWithGenerate } = useContext(AgentContext);
+  const { modelSettings, setModelSettings, chatWithGenerate, setChatWithGenerate, resetModelSettings } =
+    useContext(AgentContext);
 
   const workflowsArray = Object.entries(agent?.workflows ?? {});
 
@@ -91,20 +92,7 @@ export function AgentDetails({ agent }: AgentDetailsProps) {
           <AgentAdvancedSettings />
         </section>
 
-        <Button
-          onClick={() =>
-            setModelSettings({
-              frequencyPenalty: undefined,
-              presencePenalty: undefined,
-              maxRetries: 2,
-              maxSteps: 5,
-              maxTokens: undefined,
-              temperature: 0.5,
-              topP: 1,
-              topK: undefined,
-            })
-          }
-        >
+        <Button onClick={() => resetModelSettings()}>
           <Icon>
             <RefreshCw />
           </Icon>

@@ -461,7 +461,7 @@ export function ProviderTable() {
           <TableHead className="w-[200px] font-bold pb-2">
             Provider String
           </TableHead>
-          <TableHead className="w-[200px] font-bold pb-2">API Key</TableHead>
+          <TableHead className="w-[200px] font-bold pb-2">Env var</TableHead>
           <TableHead className="w-[250px] font-bold pb-2">Model</TableHead>
           <TableHead className="pb-2 font-bold text-center">
             Image Input

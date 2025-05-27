@@ -12,20 +12,28 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { ChevronDown } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useCurrentRun } from '../context/use-current-run';
 
 export type ConditionNode = Node<
   {
     conditions: Condition[];
+    previousStepId: string;
+    nextStepId: string;
   },
   'condition-node'
 >;
 
 export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
-  const { conditions } = data;
+  const { conditions, previousStepId, nextStepId } = data;
   const [open, setOpen] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
   const type = conditions[0]?.type;
   const isCollapsible = (conditions.some(condition => condition.fnString) || conditions?.length > 1) && type !== 'else';
+
+  const { steps } = useCurrentRun();
+
+  const previousStep = steps[previousStepId];
+  const nextStep = steps[nextStepId];
 
   return (
     <Collapsible
@@ -35,7 +43,11 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
           setOpen(_open);
         }
       }}
-      className={cn('bg-mastra-bg-3 rounded-md w-[274px] flex flex-col p-2 gap-2')}
+      className={cn(
+        'bg-mastra-bg-3 rounded-md w-[274px] flex flex-col p-2 gap-2 border-sm border-border1',
+        previousStep?.status === 'success' && nextStep && 'ring-2 ring-accent1',
+        previousStep?.status === 'failed' && nextStep && 'ring-2 ring-accent2',
+      )}
     >
       <Handle type="target" position={Position.Top} style={{ visibility: 'hidden' }} />
 

@@ -99,6 +99,8 @@ describe('Agent Handlers', () => {
           workflows: {},
           provider: 'openai.chat',
           modelId: 'gpt-4o',
+          defaultGenerateOptions: {},
+          defaultStreamOptions: {},
         },
       });
     });
@@ -115,6 +117,8 @@ describe('Agent Handlers', () => {
         workflows: {},
         provider: 'openai.chat',
         modelId: 'gpt-4o',
+        defaultGenerateOptions: {},
+        defaultStreamOptions: {},
       });
     });
 

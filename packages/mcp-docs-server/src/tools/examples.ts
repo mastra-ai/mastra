@@ -23,17 +23,20 @@ async function listCodeExamples(): Promise<Array<{ name: string; path: string }>
   }
 }
 
+type CodeExampleResult = { found: boolean; content: string };
+
 // Helper function to read a code example
-async function readCodeExample(filename: string): Promise<string> {
+async function readCodeExample(filename: string): Promise<CodeExampleResult> {
   const filePath = path.join(examplesDir, filename);
   void logger.debug(`Reading example: ${filename}`);
 
   try {
-    return await fs.readFile(filePath, 'utf-8');
+    const content = await fs.readFile(filePath, 'utf-8');
+    return { found: true, content };
   } catch {
     const examples = await listCodeExamples();
     const availableExamples = examples.map(ex => `- ${ex.name}`).join('\n');
-    throw new Error(`Example "${filename}" not found.\n\nAvailable examples:\n${availableExamples}`);
+    return { found: false, content: `Example "${filename}" not found.\n\nAvailable examples:\n${availableExamples}` };
   }
 }
 
@@ -76,15 +79,15 @@ export const examplesTool = {
       }
 
       const filename = args.example.endsWith('.md') ? args.example : `${args.example}.md`;
-      const content = await readCodeExample(filename);
+      const result = await readCodeExample(filename);
       return {
         content: [
           {
             type: 'text',
-            text: content,
+            text: result.content,
           },
         ],
-        isError: false,
+        isError: !result.found,
       };
     } catch (error) {
       void logger.error('Failed to execute mastraExamples tool', error);

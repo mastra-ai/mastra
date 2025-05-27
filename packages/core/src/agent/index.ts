@@ -69,6 +69,9 @@ function resolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) 
     'getTools',
     'getLLM',
     'getWorkflows',
+    'getDefaultGenerateOptions',
+    'getDefaultStreamOptions',
+    'getDescription',
   ],
 })
 export class Agent<
@@ -244,6 +247,14 @@ export class Agent<
 
   public getDescription(): string {
     return this.#description ?? '';
+  }
+
+  public getDefaultGenerateOptions(): AgentGenerateOptions {
+    return this.#defaultGenerateOptions;
+  }
+
+  public getDefaultStreamOptions(): AgentStreamOptions {
+    return this.#defaultStreamOptions;
   }
 
   get tools() {

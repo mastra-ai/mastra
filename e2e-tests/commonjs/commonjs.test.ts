@@ -18,7 +18,6 @@ describe('commonjs', () => {
 
     process.env.npm_config_registry = registry;
     await setupTestProject(fixturePath);
-    console.log('done');
   }, 60 * 1000);
 
   afterAll(async () => {

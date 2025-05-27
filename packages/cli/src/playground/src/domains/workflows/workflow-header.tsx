@@ -6,30 +6,40 @@ export function WorkflowHeader({
   workflowName,
   workflowId,
   isLegacy,
+  runId,
 }: {
   workflowName: string;
   workflowId: string;
   isLegacy?: boolean;
+  runId?: string;
 }) {
   return (
-    <Header>
-      <Breadcrumb>
-        <Crumb as={Link} to={`/workflows`}>
-          Workflows
-        </Crumb>
-        <Crumb as={Link} to={`/workflows${isLegacy ? '/legacy' : ''}/${workflowId}`} isCurrent>
-          {workflowName}
-        </Crumb>
-      </Breadcrumb>
+    <div className="shrink-0">
+      <Header>
+        <Breadcrumb>
+          <Crumb as={Link} to={`/workflows`}>
+            Workflows
+          </Crumb>
+          <Crumb as={Link} to={`/workflows${isLegacy ? '/legacy' : ''}/${workflowId}`} isCurrent={!runId}>
+            {workflowName}
+          </Crumb>
 
-      <HeaderGroup>
-        <Button as="a" href={`/workflows${isLegacy ? '/legacy' : ''}/${workflowId}/graph`}>
-          Graph
-        </Button>
-        <Button as="a" href={`/workflows${isLegacy ? '/legacy' : ''}/${workflowId}/traces`}>
-          Traces
-        </Button>
-      </HeaderGroup>
-    </Header>
+          {runId && (
+            <Crumb as={Link} to={`/workflows/${workflowId}/graph/${runId}`} isCurrent>
+              {runId}
+            </Crumb>
+          )}
+        </Breadcrumb>
+
+        <HeaderGroup>
+          <Button as={Link} to={`/workflows${isLegacy ? '/legacy' : ''}/${workflowId}/graph`}>
+            Graph
+          </Button>
+          <Button as={Link} to={`/workflows${isLegacy ? '/legacy' : ''}/${workflowId}/traces`}>
+            Traces
+          </Button>
+        </HeaderGroup>
+      </Header>
+    </div>
   );
 }
