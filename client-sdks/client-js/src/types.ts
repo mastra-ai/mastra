@@ -60,6 +60,8 @@ export interface GetAgentResponse {
   workflows: Record<string, GetWorkflowResponse>;
   provider: string;
   modelId: string;
+  defaultGenerateOptions: WithoutMethods<AgentGenerateOptions>;
+  defaultStreamOptions: WithoutMethods<AgentStreamOptions>;
 }
 
 export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
