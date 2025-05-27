@@ -1,7 +1,8 @@
 import type * as http from 'node:http';
 import type { Context } from 'hono';
-import type { ToolsInput } from '../agent';
+import type { ToolsInput, Agent } from '../agent';
 import type { InternalCoreTool } from '../tools';
+import type { Workflow } from '../workflows';
 
 export type ConvertedTool = {
   name: string;
@@ -205,6 +206,16 @@ export interface MCPServerConfig {
   version: string;
   /** The tools that this MCP server will expose. */
   tools: ToolsInput;
+  /**
+   * Optional Agent instances to be exposed as tools.
+   * Each agent will be converted into a tool named 'ask_<agentName>'.
+   */
+  agents?: Record<string, Agent>;
+  /**
+   * Optional Workflow instances to be exposed as tools.
+   * Each workflow will be converted into a tool named 'run_<workflowKey>'.
+   */
+  workflows?: Record<string, Workflow>;
   /**
    * Optional unique identifier for the server.
    * If not provided, a UUID will be generated.

@@ -3,6 +3,8 @@ title: "Reference: createGraphRAGTool() | RAG | Mastra Tools Docs"
 description: Documentation for the Graph RAG Tool in Mastra, which enhances RAG by building a graph of semantic relationships between documents.
 ---
 
+import { Callout } from "nextra/components";
+
 # createGraphRAGTool()
 
 The `createGraphRAGTool()` creates a tool that enhances RAG by building a graph of semantic relationships between documents. It uses the `GraphRAG` system under the hood to provide graph-based retrieval, finding relevant content through both direct similarity and connected relationships.
@@ -28,37 +30,55 @@ const graphTool = createGraphRAGTool({
 
 ## Parameters
 
+<Callout>
+**Parameter Requirements:**  
+Most fields can be set at creation as defaults. Some fields can be overridden at runtime via the runtime context or input.  
+If a required field is missing from both creation and runtime, an error will be thrown. Note that `model`, `id`, and `description` can only be set at creation time.
+</Callout>
+
 <PropertiesTable
   content={[
     {
+      name: "id",
+      type: "string",
+      description: "Custom ID for the tool. By default: 'GraphRAG {vectorStoreName} {indexName} Tool'. (Set at creation only.)",
+      isOptional: true,
+    },
+    {
+      name: "description",
+      type: "string",
+      description: "Custom description for the tool. By default: 'Access and analyze relationships between information in the knowledge base to answer complex questions about connections and patterns.' (Set at creation only.)",
+      isOptional: true,
+    },
+    {
       name: "vectorStoreName",
       type: "string",
-      description: "Name of the vector store to query",
+      description: "Name of the vector store to query. (Can be set at creation or overridden at runtime.)",
       isOptional: false,
     },
     {
       name: "indexName",
       type: "string",
-      description: "Name of the index within the vector store",
+      description: "Name of the index within the vector store. (Can be set at creation or overridden at runtime.)",
       isOptional: false,
     },
     {
       name: "model",
       type: "EmbeddingModel",
-      description: "Embedding model to use for vector search",
+      description: "Embedding model to use for vector search. (Set at creation only.)",
       isOptional: false,
     },
     {
       name: "enableFilter",
       type: "boolean",
-      description: "Enable filtering of results based on metadata",
+      description: "Enable filtering of results based on metadata. (Set at creation only, but will be automatically enabled if a filter is provided in the runtime context.)",
       isOptional: true,
       defaultValue: "false",
     },
     {
       name: "includeSources",
       type: "boolean",
-      description: "Include the full retrieval objects in the results",
+      description: "Include the full retrieval objects in the results. (Can be set at creation or overridden at runtime.)",
       isOptional: true,
       defaultValue: "true",
     },
@@ -68,14 +88,7 @@ const graphTool = createGraphRAGTool({
       description: "Configuration for the graph-based retrieval",
       isOptional: true,
       defaultValue: "Default graph options",
-    },
-    {
-      name: "description",
-      type: "string",
-      description:
-        "Custom description for the tool. By default: 'Access and analyze relationships between information in the knowledge base to answer complex questions about connections and patterns'",
-      isOptional: true,
-    },
+    }
   ]}
 />
 
@@ -101,14 +114,14 @@ const graphTool = createGraphRAGTool({
     {
       name: "randomWalkSteps",
       type: "number",
-      description: "Number of steps in random walk for graph traversal",
+      description: "Number of steps in random walk for graph traversal. (Can be set at creation or overridden at runtime.)",
       isOptional: true,
       defaultValue: "100",
     },
     {
       name: "restartProb",
       type: "number",
-      description: "Probability of restarting random walk from query node",
+      description: "Probability of restarting random walk from query node. (Can be set at creation or overridden at runtime.)",
       isOptional: true,
       defaultValue: "0.15",
     },
@@ -184,6 +197,38 @@ const graphTool = createGraphRAGTool({
 ```
 
 This example shows how to customize the tool description for a specific use case while maintaining its core purpose of relationship analysis.
+
+
+## Example: Using Runtime Context
+
+```typescript
+const graphTool = createGraphRAGTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding("text-embedding-3-small"),
+});
+```
+
+When using runtime context, provide required parameters at execution time via the runtime context:
+
+```typescript
+const runtimeContext = new RuntimeContext<{ vectorStoreName: string; indexName: string; topK: number; filter: any }>();
+runtimeContext.set("vectorStoreName", "my-store");
+runtimeContext.set("indexName", "my-index");
+runtimeContext.set("topK", 5);
+runtimeContext.set("filter", { "category": "docs" });
+runtimeContext.set("randomWalkSteps", 100);
+runtimeContext.set("restartProb", 0.15);
+
+const response = await agent.generate("Find documentation from the knowledge base.", {
+  runtimeContext,
+});
+```
+
+For more information on runtime context, please see:
+
+- [Runtime Variables](../../docs/agents/runtime-variables)
+- [Dynamic Context](../../docs/tools-mcp/dynamic-context)
 
 ## Related
 

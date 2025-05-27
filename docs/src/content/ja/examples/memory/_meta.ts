@@ -2,6 +2,7 @@ const meta = {
   "memory-with-libsql": "LibSQLを使用したメモリ",
   "memory-with-pg": "PostgreSQLを使用したメモリ",
   "memory-with-upstash": "Upstashを使用したメモリ",
+  "memory-with-mem0": "Mem0を使用したメモリ",
   "streaming-working-memory": "ストリーミング作業メモリ",
   "streaming-working-memory-advanced": "ストリーミング作業メモリ（高度）",
   "memory-processors": "メモリプロセッサ",

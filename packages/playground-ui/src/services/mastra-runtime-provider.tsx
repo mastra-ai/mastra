@@ -5,6 +5,8 @@ import {
   ThreadMessageLike,
   AppendMessage,
   AssistantRuntimeProvider,
+  SimpleImageAttachmentAdapter,
+  CompositeAttachmentAdapter,
 } from '@assistant-ui/react';
 import { useState, ReactNode, useEffect } from 'react';
 import { RuntimeContext } from '@mastra/core/di';
@@ -12,8 +14,28 @@ import { RuntimeContext } from '@mastra/core/di';
 import { ChatProps } from '@/types';
 import { createMastraClient } from '@/lib/mastra-client';
 
+import { CoreMessage } from '@mastra/core';
+import { fileToBase64 } from '@/lib/file';
+
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
+};
+
+const convertToAIAttachments = async (attachments: AppendMessage['attachments']): Promise<Array<CoreMessage>> => {
+  const promises = attachments
+    .filter(attachment => attachment.file)
+    .map(async attachment => ({
+      role: 'user' as const,
+      content: [
+        {
+          type: 'image' as const,
+          image: await fileToBase64(attachment.file!),
+          mimeType: attachment.file!.type,
+        },
+      ],
+    }));
+
+  return Promise.all(promises);
 };
 
 export function MastraRuntimeProvider({
@@ -84,8 +106,13 @@ export function MastraRuntimeProvider({
   const onNew = async (message: AppendMessage) => {
     if (message.content[0]?.type !== 'text') throw new Error('Only text messages are supported');
 
+    const attachments = await convertToAIAttachments(message.attachments);
+
     const input = message.content[0].text;
-    setMessages(currentConversation => [...currentConversation, { role: 'user', content: input }]);
+    setMessages(currentConversation => [
+      ...currentConversation,
+      { role: 'user', content: input, attachments: message.attachments },
+    ]);
     setIsRunning(true);
 
     try {
@@ -96,6 +123,7 @@ export function MastraRuntimeProvider({
               role: 'user',
               content: input,
             },
+            ...attachments,
           ],
           runId: agentId,
           frequencyPenalty,
@@ -201,6 +229,7 @@ export function MastraRuntimeProvider({
               role: 'user',
               content: input,
             },
+            ...attachments,
           ],
           runId: agentId,
           frequencyPenalty,
@@ -374,6 +403,9 @@ export function MastraRuntimeProvider({
     messages,
     convertMessage,
     onNew,
+    adapters: {
+      attachments: new CompositeAttachmentAdapter([new SimpleImageAttachmentAdapter()]),
+    },
   });
 
   return <AssistantRuntimeProvider runtime={runtime}> {children} </AssistantRuntimeProvider>;

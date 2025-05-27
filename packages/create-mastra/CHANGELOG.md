@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.10.1-alpha.1
+
+### Patch Changes
+
+- 7a32205: add empty states for workflows, agents and mcp servers
+
 ## 0.10.1-alpha.0
 
 ### Patch Changes

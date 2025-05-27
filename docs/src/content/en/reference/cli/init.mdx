@@ -1,46 +1,78 @@
 ---
-title: "`mastra init` reference | Project Creation | Mastra CLI"
+title: "mastra init | Initialize Project | Mastra CLI"
 description: Documentation for the mastra init command, which creates a new Mastra project with interactive setup options.
 ---
 
-# `mastra init` Reference
+# mastra init
 
-## `mastra init`
+The `mastra init` command **initializes** Mastra in an existing project. Use this command to scaffold the necessary folders and configuration without generating a new project.
 
-This creates a new Mastra project. You can run it in three different ways:
+## Usage
 
-1. **Interactive Mode (Recommended)**
-   Run without flags to use the interactive prompt, which will guide you through:
+```bash
+mastra init [options]
+```
 
-   - Choosing a directory for Mastra files
-   - Selecting components to install (Agents, Tools, Workflows)
-   - Choosing a default LLM provider (OpenAI, Anthropic, or Groq)
-   - Deciding whether to include example code
+## Options
 
-2. **Quick Start with Defaults**
-
-   ```bash
-   mastra init --default
-   ```
-
-   This sets up a project with:
-
-   - Source directory: `src/`
-   - All components: agents, tools, workflows
-   - OpenAI as the default provider
-   - No example code
-
-3. **Custom Setup**
-   ```bash
-   mastra init --dir src/mastra --components agents,tools --llm openai --example
-   ```
-   Options:
-   - `-d, --dir`: Directory for Mastra files (defaults to src/mastra)
-   - `-c, --components`: Comma-separated list of components (agents, tools, workflows)
-   - `-l, --llm`: Default model provider (openai, anthropic, groq, google or cerebras)
-   - `-k, --llm-api-key`: API key for the selected LLM provider (will be added to .env file)
-   - `-e, --example`: Include example code
-   - `-ne, --no-example`: Skip example code
+<PropertiesTable
+  content={[
+    {
+      name: "--default",
+      type: "boolean",
+      description: "Quick start with defaults (src, OpenAI, no examples)",
+      isOptional: true,
+    },
+    {
+      name: "--dir",
+      type: "string",
+      description: "Directory for Mastra files (defaults to src/)",
+      isOptional: false,
+    },
+    {
+      name: "--components",
+      type: "string",
+      description: "Comma-separated list of components (agents, tools, workflows)",
+      isOptional: false,
+    },
+    {
+      name: "--llm",
+      type: "string",
+      description: "Default model provider (openai, anthropic, groq, google or cerebras)",
+      isOptional: false,
+    },
+    {
+      name: "--llm-api-key",
+      type: "string",
+      description: "API key for the model provider",
+      isOptional: false,
+    },
+    {
+      name: "--example",
+      type: "boolean",
+      description: "Include example code",
+      isOptional: true,
+    },
+    {
+      name: "--no-example",
+      type: "boolean",
+      description: "Do not include example code",
+      isOptional: true,
+    },
+    {
+      name: "--mcp",
+      type: "string",
+      description: "MCP Server for code editor (cursor, cursor-global, windsurf, vscode)",
+      isOptional: false,
+    },
+    {
+      name: "--help",
+      type: "boolean",
+      description: "Display help for command",
+      isOptional: true,
+    },
+  ]}
+/>
 
 ## Advanced usage
 
@@ -50,13 +82,13 @@ If you prefer not to send anonymous usage data then set the
 `MASTRA_TELEMETRY_DISABLED=1` environment variable when running the
 command:
 
-```bash
+```bash copy
 MASTRA_TELEMETRY_DISABLED=1 mastra init
 ```
 
 ### Custom provider endpoints
 
-Initialised projects respect the `OPENAI_BASE_URL` and
+Initialized projects respect the `OPENAI_BASE_URL` and
 `ANTHROPIC_BASE_URL` variables if present. This lets you route provider
 traffic through proxies or private gateways when starting the dev server
 later on.

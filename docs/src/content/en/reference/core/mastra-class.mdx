@@ -1,13 +1,29 @@
 ---
 title: "Mastra Core"
-description: Documentation for the Mastra Class, the core entry point for managing agents, workflows, and server endpoints.
+description: Documentation for the Mastra Class, the core entry point for managing agents, workflows, MCP servers, and server endpoints.
 ---
 
 # The Mastra Class
 
-The Mastra class is the core entry point for your application. It manages agents, workflows, and server endpoints.
+The `Mastra` class is the central orchestrator in any Mastra application. It is responsible for managing agents, tools, workflows, storage, logging, telemetry, and more. You typically create a single instance of the `Mastra` class for your application.
 
-## Constructor Options
+## Importing
+
+```typescript
+import { Mastra } from "@mastra/core";
+```
+
+## Constructor
+
+Creates a new `Mastra` instance with the specified configuration.
+
+```typescript
+constructor(config?: Config);
+```
+
+### Configuration (`Config` object)
+
+The constructor accepts an optional `Config` object to customize its behavior and integrate various Mastra components. All properties on the `Config` object are optional.
 
 <PropertiesTable
   content={[
@@ -55,6 +71,24 @@ The Mastra class is the core entry point for your application. It manages agents
       defaultValue: "{}",
     },
     {
+      name: "tts",
+      type: "Record<string, MastraTTS>",
+      isOptional: true,
+      description: "An object for registering Text-To-Speech services.",
+    },
+    {
+      name: "telemetry",
+      type: "OtelConfig",
+      isOptional: true,
+      description: "Configuration for OpenTelemetry integration.",
+    },
+    {
+      name: "deployer",
+      type: "MastraDeployer",
+      isOptional: true,
+      description: "An instance of a MastraDeployer for managing deployments.",
+    },
+    {
       name: "server",
       type: "ServerConfig",
       description:
@@ -62,6 +96,17 @@ The Mastra class is the core entry point for your application. It manages agents
       isOptional: true,
       defaultValue:
         "{ port: 4111, host: localhost,  cors: { origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type'], exposeHeaders: ['Content-Length', 'X-Requested-With'], credentials: false } }",
+    },
+    {
+      name: "mcpServers",
+      type: "Record<string, MCPServerBase>",
+      isOptional: true,
+      description: "An object where keys are unique server identifiers and values are instances of MCPServer or classes extending MCPServerBase. This allows Mastra to be aware of and potentially manage these MCP servers.",
+    },
+    {
+      name: "bundler",
+      type: "BundlerConfig",
+      description: "Configuration for the asset bundler.",
     },
   ]}
 />
@@ -89,6 +134,7 @@ export const mastra = new Mastra({
   storage: {},
   tools: {},
   vectors: {},
+  mcpServers: {},
 });
 ```
 
@@ -209,6 +255,12 @@ You can think of the `Mastra` class as a top-level registry. When you register t
       type: "Promise<any>",
       description: "Retrieves all logs for a specific transport ID.",
       example: 'const logs = await mastra.getLogs("transportId");',
+    },
+    {
+      name: "getMCPServers()",
+      type: "Record<string, MCPServerBase> | undefined",
+      description: "Retrieves all registered MCP server instances.",
+      example: 'const mcpServers = mastra.getMCPServers();'
     },
   ]}
 />

@@ -15,9 +15,9 @@ export const ToolInformation = ({ toolDescription, toolId }: ToolInformationProp
           </Icon>
         </div>
 
-        <div className="flex gap-4 justify-between w-full">
+        <div className="flex gap-4 justify-between w-full min-w-0">
           <div>
-            <Txt variant="header-md" as="h2" className="font-medium">
+            <Txt variant="header-md" as="h2" className="font-medium truncate">
               {toolId}
             </Txt>
             <Txt variant="ui-sm" className="text-icon3">

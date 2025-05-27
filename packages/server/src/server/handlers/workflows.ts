@@ -289,6 +289,49 @@ export async function watchWorkflowHandler({
   }
 }
 
+export function streamWorkflowHandler({
+  mastra,
+  runtimeContext,
+  workflowId,
+  runId,
+  inputData,
+  runtimeContextFromRequest,
+}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
+  inputData?: unknown;
+  runtimeContext?: RuntimeContext;
+  runtimeContextFromRequest?: Record<string, unknown>;
+}) {
+  try {
+    if (!workflowId) {
+      throw new HTTPException(400, { message: 'Workflow ID is required' });
+    }
+
+    if (!runId) {
+      throw new HTTPException(400, { message: 'runId required to resume workflow' });
+    }
+
+    const workflow = mastra.getWorkflow(workflowId);
+
+    if (!workflow) {
+      throw new HTTPException(404, { message: 'Workflow not found' });
+    }
+
+    const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
+      ...Array.from(runtimeContext?.entries() ?? []),
+      ...Array.from(Object.entries(runtimeContextFromRequest ?? {})),
+    ]);
+
+    const run = workflow.createRun({ runId });
+    const result = run.stream({
+      inputData,
+      runtimeContext: finalRuntimeContext,
+    });
+    return result;
+  } catch (error) {
+    return handleError(error, 'Error executing workflow');
+  }
+}
+
 export async function resumeAsyncWorkflowHandler({
   mastra,
   workflowId,

@@ -1,0 +1,150 @@
+# Mem0によるメモリ
+
+この例では、カスタムツールを通じてMem0をメモリバックエンドとして使用したMastraのエージェントシステムの使用方法を説明します。
+
+## セットアップ
+
+まず、Mem0統合をセットアップし、情報を記憶し思い出すためのツールを作成します：
+
+```typescript
+import { Mem0Integration } from '@mastra/mem0';
+import { createTool } from '@mastra/core/tools';
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
+import { z } from 'zod';
+
+// Mem0統合を初期化
+const mem0 = new Mem0Integration({
+  config: {
+    apiKey: process.env.MEM0_API_KEY || '',
+    user_id: 'alice', // 一意のユーザー識別子
+  },
+});
+
+// メモリツールを作成
+const mem0RememberTool = createTool({
+  id: 'Mem0-remember',
+  description: "Mem0-memorizeツールを使用して以前に保存したエージェントメモリを思い出します。",
+  inputSchema: z.object({
+    question: z.string().describe('保存されたメモリで答えを検索するために使用される質問。'),
+  }),
+  outputSchema: z.object({
+    answer: z.string().describe('思い出した答え'),
+  }),
+  execute: async ({ context }) => {
+    console.log(`メモリを検索中 "${context.question}"`);
+    const memory = await mem0.searchMemory(context.question);
+    console.log(`\nメモリが見つかりました "${memory}"\n`);
+
+    return {
+      answer: memory,
+    };
+  },
+});
+
+const mem0MemorizeTool = createTool({
+  id: 'Mem0-memorize',
+  description: 'Mem0-rememberツールを使用して後で思い出すことができるように、情報をmem0に保存します。',
+  inputSchema: z.object({
+    statement: z.string().describe('メモリに保存するステートメント'),
+  }),
+  execute: async ({ context }) => {
+    console.log(`\nメモリを作成中 "${context.statement}"\n`);
+    // レイテンシを削減するため、メモリはツール実行をブロックすることなく非同期で保存できます
+    void mem0.createMemory(context.statement).then(() => {
+      console.log(`\nメモリ "${context.statement}" が保存されました。\n`);
+    });
+    return { success: true };
+  },
+});
+
+// メモリツールを持つエージェントを作成
+const mem0Agent = new Agent({
+  name: 'Mem0 Agent',
+  instructions: `
+    あなたはMem0を使用して事実を記憶し思い出す能力を持つ有用なアシスタントです。
+    後で役立つ可能性のある重要な情報を保存するには、Mem0-memorizeツールを使用してください。
+    質問に答える際に以前に保存した情報を思い出すには、Mem0-rememberツールを使用してください。
+  `,
+  model: openai('gpt-4o'),
+  tools: { mem0RememberTool, mem0MemorizeTool },
+});
+```
+
+## 環境設定
+
+環境変数でMem0 APIキーを設定してください：
+
+```bash
+MEM0_API_KEY=your-mem0-api-key
+```
+
+Mem0 APIキーは[app.mem0.ai](https://app.mem0.ai)でサインアップし、新しいプロジェクトを作成することで取得できます。
+
+## 使用例
+
+```typescript
+import { randomUUID } from "crypto";
+
+// 会話を開始
+const threadId = randomUUID();
+
+// エージェントに情報を記憶するよう依頼
+const response1 = await mem0Agent.text(
+  "私はベジタリアン料理を好み、ナッツアレルギーがあることを覚えておいてください。また、私はサンフランシスコに住んでいます。",
+  {
+    threadId,
+  },
+);
+
+// 異なるトピックについて質問
+const response2 = await mem0Agent.text(
+  "来週末に6人のディナーパーティーを計画しています。メニューを提案してもらえますか？",
+  {
+    threadId,
+  },
+);
+
+// 後で、エージェントに情報を思い出すよう依頼
+const response3 = await mem0Agent.text(
+  "私の食事の好みについて何を覚えていますか？",
+  {
+    threadId,
+  },
+);
+
+// 場所固有の情報について質問
+const response4 = await mem0Agent.text(
+  "私について知っていることに基づいて、ディナーパーティーのための地元のレストランを推薦してください。",
+  {
+    threadId,
+  },
+);
+```
+
+## 主な機能
+
+Mem0統合はいくつかの利点を提供します：
+
+1. **自動メモリ管理**: Mem0はメモリの保存、インデックス化、検索をインテリジェントに処理します
+2. **セマンティック検索**: エージェントは完全一致だけでなく、セマンティックな類似性に基づいて関連するメモリを見つけることができます
+3. **ユーザー固有のメモリ**: 各user_idは個別のメモリスペースを維持します
+4. **非同期保存**: メモリはバックグラウンドで保存され、応答レイテンシを削減します
+5. **長期持続性**: メモリは会話とセッションを越えて持続します
+
+## ツールベースのアプローチ
+
+Mastraの組み込みメモリシステムとは異なり、この例では以下のようなツールベースのアプローチを使用します：
+
+- エージェントは`Mem0-memorize`ツールを使用していつ情報を保存するかを決定します
+- エージェントは`Mem0-remember`ツールを使用して関連するメモリを積極的に検索できます
+- これにより、エージェントがメモリ操作をより細かく制御でき、メモリの使用が透明になります
+
+## ベストプラクティス
+
+1. **明確な指示**: いつ情報を記憶し思い出すかについて、エージェントに明確な指示を提供してください
+2. **ユーザー識別**: 異なるユーザーの個別のメモリスペースを維持するために、一貫したuser_id値を使用してください
+3. **説明的なステートメント**: メモリを保存する際は、後で検索しやすい説明的なステートメントを使用してください
+4. **メモリクリーンアップ**: 古いまたは無関係なメモリの定期的なクリーンアップの実装を検討してください
+
+この例では、会話を越えてユーザーについての情報を学習し記憶できるインテリジェントなエージェントを作成する方法を示しており、時間の経過とともにやり取りをより個人化され文脈に応じたものにします。

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { MastraBundler } from '@mastra/core/bundler';
 import virtual from '@rollup/plugin-virtual';
 import fsExtra, { copy, ensureDir, readJSON, emptyDir } from 'fs-extra/esm';
+import { globby } from 'globby';
 import resolveFrom from 'resolve-from';
 import type { InputOptions, OutputOptions } from 'rollup';
 
@@ -148,25 +149,28 @@ export abstract class Bundler extends MastraBundler {
     const inputs: Record<string, string> = {};
 
     for (const toolPath of toolsPaths) {
-      if (await fsExtra.pathExists(toolPath)) {
-        const fileService = new FileService();
-        const entryFile = fileService.getFirstExistingFile([
-          join(toolPath, 'index.ts'),
-          join(toolPath, 'index.js'),
-          toolPath, // if toolPath itself is a file
-        ]);
+      const expandedPaths = await globby(toolPath, {});
 
-        // if it doesn't exist or is a dir skip it. using a dir as a tool will crash the process
-        if (!entryFile || (await stat(entryFile)).isDirectory()) {
-          this.logger.warn(`No entry file found in ${toolPath}, skipping...`);
-          continue;
+      for (const path of expandedPaths) {
+        if (await fsExtra.pathExists(path)) {
+          const fileService = new FileService();
+          const entryFile = fileService.getFirstExistingFile([
+            join(path, 'index.ts'),
+            join(path, 'index.js'),
+            path, // if path itself is a file
+          ]);
+
+          // if it doesn't exist or is a dir skip it. using a dir as a tool will crash the process
+          if (!entryFile || (await stat(entryFile)).isDirectory()) {
+            this.logger.warn(`No entry file found in ${path}, skipping...`);
+            continue;
+          }
+
+          const uniqueToolID = crypto.randomUUID();
+          inputs[`tools/${uniqueToolID}`] = entryFile;
+        } else {
+          this.logger.warn(`Tool path ${path} does not exist, skipping...`);
         }
-
-        const uniqueToolID = crypto.randomUUID();
-
-        inputs[`tools/${uniqueToolID}`] = entryFile;
-      } else {
-        this.logger.warn(`Tool path ${toolPath} does not exist, skipping...`);
       }
     }
 

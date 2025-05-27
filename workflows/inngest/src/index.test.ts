@@ -71,7 +71,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': workflow,
         },
         server: {
@@ -148,7 +148,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': workflow,
         },
         server: {
@@ -231,7 +231,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': workflow,
         },
         server: {
@@ -305,7 +305,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': workflow,
         },
         server: {
@@ -394,7 +394,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': workflow,
         },
         server: {
@@ -463,7 +463,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': workflow,
         },
         server: {
@@ -540,7 +540,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': workflow,
         },
         server: {
@@ -624,7 +624,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': workflow,
         },
         server: {
@@ -729,7 +729,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': workflow,
         },
         server: {
@@ -807,7 +807,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': workflow,
         },
         server: {
@@ -914,7 +914,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': workflow,
         },
         server: {
@@ -999,7 +999,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': workflow,
         },
         server: {
@@ -1069,7 +1069,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': workflow,
         },
         server: {
@@ -1155,7 +1155,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': workflow,
         },
         server: {
@@ -1251,7 +1251,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'main-workflow': mainWorkflow,
         },
         server: {
@@ -1381,7 +1381,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': workflow,
         },
         server: {
@@ -1485,7 +1485,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': counterWorkflow,
         },
         server: {
@@ -1590,7 +1590,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': counterWorkflow,
         },
         server: {
@@ -1681,7 +1681,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': counterWorkflow,
         },
         server: {
@@ -1836,7 +1836,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': counterWorkflow,
         },
         server: {
@@ -1987,7 +1987,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': counterWorkflow,
         },
         server: {
@@ -2161,7 +2161,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': workflow,
         },
         server: {
@@ -2229,7 +2229,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': workflow,
         },
         server: {
@@ -2292,7 +2292,7 @@ describe('MastraInngestWorkflow', () => {
       });
 
       new Mastra({
-        vnext_workflows: {
+        workflows: {
           'test-workflow': workflow,
         },
         server: {
@@ -2363,7 +2363,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': workflow,
         },
         server: {
@@ -2436,7 +2436,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': workflow,
         },
         server: {
@@ -2624,7 +2624,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': workflow,
         },
         server: {
@@ -2804,7 +2804,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': promptEvalWorkflow,
         },
         server: {
@@ -2956,7 +2956,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': workflow,
         },
         server: {
@@ -3160,7 +3160,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': workflow,
         },
         server: {
@@ -3356,7 +3356,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': promptEvalWorkflow,
         },
         server: {
@@ -3482,7 +3482,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': workflow,
         },
         server: {
@@ -3587,7 +3587,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': workflow,
         },
         server: {
@@ -3725,7 +3725,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': workflow,
         },
         server: {
@@ -3870,7 +3870,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': counterWorkflow,
         },
         server: {
@@ -4024,7 +4024,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': counterWorkflow,
         },
         server: {
@@ -4183,7 +4183,7 @@ describe('MastraInngestWorkflow', () => {
               url: ':memory:',
             },
           }),
-          vnext_workflows: {
+          workflows: {
             'test-workflow': counterWorkflow,
           },
           server: {
@@ -4344,7 +4344,7 @@ describe('MastraInngestWorkflow', () => {
               url: ':memory:',
             },
           }),
-          vnext_workflows: {
+          workflows: {
             'test-workflow': counterWorkflow,
           },
           server: {
@@ -4543,7 +4543,7 @@ describe('MastraInngestWorkflow', () => {
               url: ':memory:',
             },
           }),
-          vnext_workflows: {
+          workflows: {
             'test-workflow': counterWorkflow,
           },
           server: {
@@ -4701,7 +4701,7 @@ describe('MastraInngestWorkflow', () => {
               url: ':memory:',
             },
           }),
-          vnext_workflows: {
+          workflows: {
             'test-workflow': counterWorkflow,
           },
           server: {
@@ -4851,7 +4851,7 @@ describe('MastraInngestWorkflow', () => {
               url: ':memory:',
             },
           }),
-          vnext_workflows: {
+          workflows: {
             'test-workflow': counterWorkflow,
           },
           server: {
@@ -5038,7 +5038,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': counterWorkflow,
         },
         server: {
@@ -5197,7 +5197,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': counterWorkflow,
         },
         server: {
@@ -5274,7 +5274,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': workflow,
         },
         server: {
@@ -5339,7 +5339,7 @@ describe('MastraInngestWorkflow', () => {
             url: ':memory:',
           },
         }),
-        vnext_workflows: {
+        workflows: {
           'test-workflow': workflow,
         },
         server: {

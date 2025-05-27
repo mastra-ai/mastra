@@ -1,55 +1,47 @@
 import { createTool } from '@mastra/core/tools';
-import type { EmbeddingModel } from 'ai';
 import { z } from 'zod';
 
 import { GraphRAG } from '../graph-rag';
 import { vectorQuerySearch, defaultGraphRagDescription, filterSchema, outputSchema, baseSchema } from '../utils';
 import type { RagTool } from '../utils';
 import { convertToSources } from '../utils/convert-sources';
+import type { GraphRagToolOptions } from './types';
+import { defaultGraphOptions } from './types';
 
-export const createGraphRAGTool = ({
-  vectorStoreName,
-  indexName,
-  model,
-  enableFilter = false,
-  includeSources = true,
-  graphOptions = {
-    dimension: 1536,
-    randomWalkSteps: 100,
-    restartProb: 0.15,
-    threshold: 0.7,
-  },
-  id,
-  description,
-}: {
-  vectorStoreName: string;
-  indexName: string;
-  model: EmbeddingModel<string>;
-  enableFilter?: boolean;
-  includeSources?: boolean;
-  graphOptions?: {
-    dimension?: number;
-    randomWalkSteps?: number;
-    restartProb?: number;
-    threshold?: number;
-  };
-  id?: string;
-  description?: string;
-}) => {
-  const toolId = id || `GraphRAG ${vectorStoreName} ${indexName} Tool`;
+export const createGraphRAGTool = (options: GraphRagToolOptions) => {
+  const { model, id, description } = options;
+
+  const toolId = id || `GraphRAG ${options.vectorStoreName} ${options.indexName} Tool`;
   const toolDescription = description || defaultGraphRagDescription();
+  const graphOptions = {
+    ...defaultGraphOptions,
+    ...(options.graphOptions || {}),
+  };
   // Initialize GraphRAG
   const graphRag = new GraphRAG(graphOptions.dimension, graphOptions.threshold);
   let isInitialized = false;
 
-  const inputSchema = enableFilter ? filterSchema : z.object(baseSchema).passthrough();
+  const inputSchema = options.enableFilter ? filterSchema : z.object(baseSchema).passthrough();
 
   return createTool({
     id: toolId,
     inputSchema,
     outputSchema,
     description: toolDescription,
-    execute: async ({ context: { queryText, topK, filter }, mastra }) => {
+    execute: async ({ context, mastra, runtimeContext }) => {
+      const indexName: string = runtimeContext.get('indexName') ?? options.indexName;
+      const vectorStoreName: string = runtimeContext.get('vectorStoreName') ?? options.vectorStoreName;
+      if (!indexName) throw new Error(`indexName is required, got: ${indexName}`);
+      if (!vectorStoreName) throw new Error(`vectorStoreName is required, got: ${vectorStoreName}`);
+      const includeSources: boolean = runtimeContext.get('includeSources') ?? options.includeSources ?? true;
+      const randomWalkSteps: number | undefined = runtimeContext.get('randomWalkSteps') ?? graphOptions.randomWalkSteps;
+      const restartProb: number | undefined = runtimeContext.get('restartProb') ?? graphOptions.restartProb;
+      const topK: number = runtimeContext.get('topK') ?? context.topK ?? 10;
+      const filter: Record<string, any> = runtimeContext.get('filter') ?? context.filter;
+      const queryText = context.queryText;
+
+      const enableFilter = !!runtimeContext.get('filter') || (options.enableFilter ?? false);
+
       const logger = mastra?.getLogger();
       if (!logger) {
         console.warn(
@@ -129,8 +121,8 @@ export const createGraphRAGTool = ({
         const rerankedResults = graphRag.query({
           query: queryEmbedding,
           topK: topKValue,
-          randomWalkSteps: graphOptions.randomWalkSteps,
-          restartProb: graphOptions.restartProb,
+          randomWalkSteps,
+          restartProb,
         });
         if (logger) {
           logger.debug('GraphRAG query returned results', { count: rerankedResults.length });

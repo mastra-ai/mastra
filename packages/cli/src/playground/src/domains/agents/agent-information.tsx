@@ -25,7 +25,7 @@ export function AgentInformation({ agentId }: { agentId: string }) {
   return (
     <div className="h-full overflow-y-scroll pb-5">
       <div className="p-5 border-b-sm border-border1">
-        <div className="text-icon6 flex items-center gap-2">
+        <div className="text-icon6 flex items-center gap-2 min-w-0">
           <Icon size="lg" className="bg-surface4 rounded-md p-1">
             <AgentIcon />
           </Icon>
@@ -33,15 +33,15 @@ export function AgentInformation({ agentId }: { agentId: string }) {
           {isLoading || isMemoryLoading ? (
             <Skeleton className="h-3 w-1/3" />
           ) : (
-            <Txt variant="header-md" as="h2" className="font-medium">
+            <Txt variant="header-md" as="h2" className="font-medium truncate">
               {agent?.name}
             </Txt>
           )}
         </div>
-        <div className="flex items-center gap-2 pt-2">
+        <div className="flex items-center gap-2 pt-2 flex-wrap">
           <Tooltip>
             <TooltipTrigger asChild>
-              <button onClick={handleCopy} className="h-badge-default">
+              <button onClick={handleCopy} className="h-badge-default shrink-0">
                 <Badge icon={<CopyIcon />} variant="default">
                   {agentId}
                 </Badge>
@@ -50,15 +50,15 @@ export function AgentInformation({ agentId }: { agentId: string }) {
             <TooltipContent>Copy Agent ID for use in code</TooltipContent>
           </Tooltip>
 
-          <Badge className="capitalize" icon={providerIcon}>
+          <Badge className="capitalize shrink-0" icon={providerIcon}>
             {agent?.provider?.split('.')[0]}
           </Badge>
 
-          <Badge>{agent?.modelId}</Badge>
+          <Badge className="shrink-0">{agent?.modelId}</Badge>
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <Badge icon={<MemoryIcon />} variant={memory?.result ? 'success' : 'error'}>
+              <Badge icon={<MemoryIcon />} variant={memory?.result ? 'success' : 'error'} className="shrink-0">
                 {memory?.result ? 'Memory is On' : 'Memory is Off'}
               </Badge>
             </TooltipTrigger>

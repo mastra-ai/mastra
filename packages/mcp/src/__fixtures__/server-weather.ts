@@ -1,4 +1,4 @@
-import { MCPServer } from '../server';
+import { MCPServer } from '../server/server';
 import { weatherTool } from './tools';
 
 const server = new MCPServer({

@@ -1,5 +1,11 @@
 # @mastra/rag
 
+## 0.10.1-alpha.1
+
+### Patch Changes
+
+- f56fd29: added return type for vector-query and graph-rag
+
 ## 0.10.1-alpha.0
 
 ### Patch Changes

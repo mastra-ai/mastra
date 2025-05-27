@@ -701,8 +701,8 @@ export class LibSQLStore extends MastraStorage {
       runId: row.run_id as string,
       snapshot: parsedSnapshot,
       resourceId: row.resourceId as string,
-      createdAt: new Date(row.created_at as string),
-      updatedAt: new Date(row.updated_at as string),
+      createdAt: new Date(row.createdAt as string),
+      updatedAt: new Date(row.updatedAt as string),
     };
   }
 }

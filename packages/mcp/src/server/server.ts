@@ -1,8 +1,9 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import type * as http from 'node:http';
 import type { InternalCoreTool } from '@mastra/core';
-import { makeCoreTool } from '@mastra/core';
+import { createTool, makeCoreTool } from '@mastra/core';
 import type { ToolsInput } from '@mastra/core/agent';
+import { Agent } from '@mastra/core/agent';
 import { MCPServerBase } from '@mastra/core/mcp';
 import type {
   MCPServerConfig,
@@ -13,17 +14,46 @@ import type {
   MCPServerSSEOptions,
 } from '@mastra/core/mcp';
 import { RuntimeContext } from '@mastra/core/runtime-context';
+import type { Workflow } from '@mastra/core/workflows';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { StreamableHTTPServerTransportOptions } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
+  ListResourceTemplatesRequestSchema,
+  SubscribeRequestSchema,
+  UnsubscribeRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js';
+import type {
+  ResourceContents,
+  Resource,
+  ResourceTemplate,
+  ServerCapabilities,
+} from '@modelcontextprotocol/sdk/types.js';
 import type { SSEStreamingApi } from 'hono/streaming';
 import { streamSSE } from 'hono/streaming';
 import { SSETransport } from 'hono-mcp-server-sse-transport';
 import { z } from 'zod';
+import { ServerResourceActions } from './resourceActions';
 
+export type MCPServerResourceContentCallback = ({
+  uri,
+}: {
+  uri: string;
+}) => Promise<MCPServerResourceContent | MCPServerResourceContent[]>;
+export type MCPServerResourceContent = { text?: string } | { blob?: string };
+export type MCPServerResources = {
+  listResources: () => Promise<Resource[]>;
+  getResourceContent: MCPServerResourceContentCallback;
+  resourceTemplates?: () => Promise<ResourceTemplate[]>;
+};
+
+export type { Resource, ResourceTemplate };
 export class MCPServer extends MCPServerBase {
   private server: Server;
   private stdioTransport?: StdioServerTransport;
@@ -32,6 +62,17 @@ export class MCPServer extends MCPServerBase {
   private streamableHTTPTransport?: StreamableHTTPServerTransport;
   private listToolsHandlerIsRegistered: boolean = false;
   private callToolHandlerIsRegistered: boolean = false;
+  private listResourcesHandlerIsRegistered: boolean = false;
+  private readResourceHandlerIsRegistered: boolean = false;
+  private listResourceTemplatesHandlerIsRegistered: boolean = false;
+  private subscribeResourceHandlerIsRegistered: boolean = false;
+  private unsubscribeResourceHandlerIsRegistered: boolean = false;
+
+  private definedResources?: Resource[];
+  private definedResourceTemplates?: ResourceTemplate[];
+  private resourceOptions?: MCPServerResources;
+  private subscriptions: Set<string> = new Set();
+  public readonly resources: ServerResourceActions;
 
   /**
    * Get the current stdio transport.
@@ -65,30 +106,216 @@ export class MCPServer extends MCPServerBase {
    * Construct a new MCPServer instance.
    * @param opts - Configuration options for the server, including registry metadata.
    */
-  constructor(opts: MCPServerConfig) {
+  constructor(opts: MCPServerConfig & { resources?: MCPServerResources }) {
     super(opts);
+    this.resourceOptions = opts.resources;
 
-    this.server = new Server(
-      { name: this.name, version: this.version },
-      { capabilities: { tools: {}, logging: { enabled: true } } },
-    );
+    const capabilities: ServerCapabilities = {
+      tools: {},
+      logging: { enabled: true },
+    };
+
+    if (opts.resources) {
+      capabilities.resources = { subscribe: true, listChanged: true };
+    }
+
+    this.server = new Server({ name: this.name, version: this.version }, { capabilities });
 
     this.logger.info(
-      `Initialized MCPServer '${this.name}' v${this.version} (ID: ${this.id}) with tools: ${Object.keys(this.convertedTools).join(', ')}`,
+      `Initialized MCPServer '${this.name}' v${this.version} (ID: ${this.id}) with tools: ${Object.keys(this.convertedTools).join(', ')} and resources. Capabilities: ${JSON.stringify(capabilities)}`,
     );
 
     this.sseHonoTransports = new Map();
     this.registerListToolsHandler();
     this.registerCallToolHandler();
+    if (opts.resources) {
+      this.registerListResourcesHandler();
+      this.registerReadResourceHandler({ getResourcesCallback: opts.resources.getResourceContent });
+      this.registerSubscribeResourceHandler();
+      this.registerUnsubscribeResourceHandler();
+
+      if (opts.resources.resourceTemplates) {
+        this.registerListResourceTemplatesHandler();
+      }
+    }
+    this.resources = new ServerResourceActions({
+      getSubscriptions: () => this.subscriptions,
+      getLogger: () => this.logger,
+      getSdkServer: () => this.server,
+      clearDefinedResources: () => {
+        this.definedResources = undefined;
+      },
+      clearDefinedResourceTemplates: () => {
+        this.definedResourceTemplates = undefined;
+      },
+    });
+  }
+
+  private convertAgentsToTools(
+    agentsConfig?: Record<string, Agent>,
+    definedConvertedTools?: Record<string, ConvertedTool>,
+  ): Record<string, ConvertedTool> {
+    const agentTools: Record<string, ConvertedTool> = {};
+    if (!agentsConfig) {
+      return agentTools;
+    }
+
+    for (const agentKey in agentsConfig) {
+      const agent = agentsConfig[agentKey];
+      if (!agent || !(agent instanceof Agent)) {
+        this.logger.warn(`Agent instance for '${agentKey}' is invalid or missing a generate function. Skipping.`);
+        continue;
+      }
+
+      const agentDescription = agent.getDescription();
+
+      if (!agentDescription) {
+        throw new Error(
+          `Agent '${agent.name}' (key: '${agentKey}') must have a non-empty description to be used in an MCPServer.`,
+        );
+      }
+
+      const agentToolName = `ask_${agentKey}`;
+      if (definedConvertedTools?.[agentToolName] || agentTools[agentToolName]) {
+        this.logger.warn(
+          `Tool with name '${agentToolName}' already exists. Agent '${agentKey}' will not be added as a duplicate tool.`,
+        );
+        continue;
+      }
+
+      const agentToolDefinition = createTool({
+        id: agentToolName,
+        description: `Ask agent '${agent.name}' a question. Agent description: ${agentDescription}`,
+        inputSchema: z.object({
+          message: z.string().describe('The question or input for the agent.'),
+        }),
+        execute: async ({ context, runtimeContext }) => {
+          this.logger.debug(
+            `Executing agent tool '${agentToolName}' for agent '${agent.name}' with message: "${context.message}"`,
+          );
+          try {
+            const response = await agent.generate(context.message, { runtimeContext });
+            return response;
+          } catch (error) {
+            this.logger.error(`Error executing agent tool '${agentToolName}' for agent '${agent.name}':`, error);
+            throw error;
+          }
+        },
+      });
+
+      const options = {
+        name: agentToolName,
+        logger: this.logger,
+        mastra: this.mastra,
+        runtimeContext: new RuntimeContext(),
+        description: agentToolDefinition.description,
+      };
+      const coreTool = makeCoreTool(agentToolDefinition, options) as InternalCoreTool;
+
+      agentTools[agentToolName] = {
+        name: agentToolName,
+        description: coreTool.description,
+        parameters: coreTool.parameters,
+        execute: coreTool.execute!,
+      };
+      this.logger.info(`Registered agent '${agent.name}' (key: '${agentKey}') as tool: '${agentToolName}'`);
+    }
+    return agentTools;
+  }
+
+  private convertWorkflowsToTools(
+    workflowsConfig?: Record<string, Workflow>,
+    definedConvertedTools?: Record<string, ConvertedTool>,
+  ): Record<string, ConvertedTool> {
+    const workflowTools: Record<string, ConvertedTool> = {};
+    if (!workflowsConfig) {
+      return workflowTools;
+    }
+
+    for (const workflowKey in workflowsConfig) {
+      const workflow = workflowsConfig[workflowKey];
+      if (!workflow || typeof workflow.createRun !== 'function') {
+        this.logger.warn(
+          `Workflow instance for '${workflowKey}' is invalid or missing a createRun function. Skipping.`,
+        );
+        continue;
+      }
+
+      const workflowDescription = workflow.description;
+      if (!workflowDescription) {
+        throw new Error(
+          `Workflow '${workflow.id}' (key: '${workflowKey}') must have a non-empty description to be used in an MCPServer.`,
+        );
+      }
+
+      const workflowToolName = `run_${workflowKey}`;
+      if (definedConvertedTools?.[workflowToolName] || workflowTools[workflowToolName]) {
+        this.logger.warn(
+          `Tool with name '${workflowToolName}' already exists. Workflow '${workflowKey}' will not be added as a duplicate tool.`,
+        );
+        continue;
+      }
+
+      const workflowToolDefinition = createTool({
+        id: workflowToolName,
+        description: `Run workflow '${workflowKey}'. Workflow description: ${workflowDescription}`,
+        inputSchema: workflow.inputSchema,
+        execute: async ({ context, runtimeContext }) => {
+          this.logger.debug(
+            `Executing workflow tool '${workflowToolName}' for workflow '${workflow.id}' with input:`,
+            context,
+          );
+          try {
+            const run = workflow.createRun({ runId: runtimeContext?.get('runId') });
+
+            const response = await run.start({ inputData: context, runtimeContext });
+
+            return response;
+          } catch (error) {
+            this.logger.error(
+              `Error executing workflow tool '${workflowToolName}' for workflow '${workflow.id}':`,
+              error,
+            );
+            throw error;
+          }
+        },
+      });
+
+      const options = {
+        name: workflowToolName,
+        logger: this.logger,
+        mastra: this.mastra,
+        runtimeContext: new RuntimeContext(),
+        description: workflowToolDefinition.description,
+      };
+      const coreTool = makeCoreTool(workflowToolDefinition, options) as InternalCoreTool;
+
+      workflowTools[workflowToolName] = {
+        name: workflowToolName,
+        description: coreTool.description,
+        parameters: coreTool.parameters,
+        execute: coreTool.execute!,
+      };
+      this.logger.info(`Registered workflow '${workflow.id}' (key: '${workflowKey}') as tool: '${workflowToolName}'`);
+    }
+    return workflowTools;
   }
 
   /**
    * Convert and validate all provided tools, logging registration status.
+   * Also converts agents and workflows into tools.
    * @param tools Tool definitions
+   * @param agentsConfig Agent definitions to be converted to tools, expected from MCPServerConfig
+   * @param workflowsConfig Workflow definitions to be converted to tools, expected from MCPServerConfig
    * @returns Converted tools registry
    */
-  convertTools(tools: ToolsInput): Record<string, ConvertedTool> {
-    const convertedTools: Record<string, ConvertedTool> = {};
+  convertTools(
+    tools: ToolsInput,
+    agentsConfig?: Record<string, Agent>,
+    workflowsConfig?: Record<string, Workflow>,
+  ): Record<string, ConvertedTool> {
+    const definedConvertedTools: Record<string, ConvertedTool> = {};
+
     for (const toolName of Object.keys(tools)) {
       const toolInstance = tools[toolName];
       if (!toolInstance) {
@@ -111,16 +338,30 @@ export class MCPServer extends MCPServerBase {
 
       const coreTool = makeCoreTool(toolInstance, options) as InternalCoreTool;
 
-      convertedTools[toolName] = {
+      definedConvertedTools[toolName] = {
         name: toolName,
         description: coreTool.description,
         parameters: coreTool.parameters,
         execute: coreTool.execute!,
       };
-      this.logger.info(`Registered tool: '${toolName}' [${toolInstance?.description || 'No description'}]`);
+      this.logger.info(`Registered explicit tool: '${toolName}'`);
     }
-    this.logger.info(`Total tools registered: ${Object.keys(convertedTools).length}`);
-    return convertedTools;
+    this.logger.info(`Total defined tools registered: ${Object.keys(definedConvertedTools).length}`);
+
+    const agentDerivedTools = this.convertAgentsToTools(agentsConfig, definedConvertedTools);
+    const workflowDerivedTools = this.convertWorkflowsToTools(workflowsConfig, definedConvertedTools);
+
+    const allConvertedTools = { ...definedConvertedTools, ...agentDerivedTools, ...workflowDerivedTools };
+
+    const finalToolCount = Object.keys(allConvertedTools).length;
+    const definedCount = Object.keys(definedConvertedTools).length;
+    const fromAgentsCount = Object.keys(agentDerivedTools).length;
+    const fromWorkflowsCount = Object.keys(workflowDerivedTools).length;
+    this.logger.info(
+      `${finalToolCount} total tools registered (${definedCount} defined + ${fromAgentsCount} agents + ${fromWorkflowsCount} workflows)`,
+    );
+
+    return allConvertedTools;
   }
 
   /**
@@ -219,6 +460,187 @@ export class MCPServer extends MCPServerBase {
           isError: true,
         };
       }
+    });
+  }
+
+  /**
+   * Register the ListResources handler for listing all available resources.
+   */
+  private registerListResourcesHandler() {
+    if (this.listResourcesHandlerIsRegistered) {
+      return;
+    }
+    this.listResourcesHandlerIsRegistered = true;
+    const capturedResourceOptions = this.resourceOptions; // Capture for TS narrowing
+
+    if (!capturedResourceOptions?.listResources) {
+      this.logger.warn('ListResources capability not supported by server configuration.');
+      return;
+    }
+
+    this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
+      this.logger.debug('Handling ListResources request');
+      if (this.definedResources) {
+        return { resources: this.definedResources };
+      } else {
+        try {
+          const resources = await capturedResourceOptions.listResources();
+          // Cache the resources
+          this.definedResources = resources;
+          this.logger.debug(`Fetched and cached ${this.definedResources.length} resources.`);
+          return { resources: this.definedResources };
+        } catch (error) {
+          this.logger.error('Error fetching resources via listResources():', { error });
+          // Re-throw to let the MCP Server SDK handle formatting the error response
+          throw error;
+        }
+      }
+    });
+  }
+
+  /**
+   * Register the ReadResource handler for reading a resource by URI.
+   */
+  private registerReadResourceHandler({
+    getResourcesCallback,
+  }: {
+    getResourcesCallback: MCPServerResourceContentCallback;
+  }) {
+    if (this.readResourceHandlerIsRegistered) {
+      return;
+    }
+    this.readResourceHandlerIsRegistered = true;
+    this.server.setRequestHandler(ReadResourceRequestSchema, async request => {
+      const startTime = Date.now();
+      const uri = request.params.uri;
+      this.logger.debug(`Handling ReadResource request for URI: ${uri}`);
+
+      if (!this.definedResources) {
+        const resources = await this.resourceOptions?.listResources?.();
+        if (!resources) throw new Error('Failed to load resources');
+        this.definedResources = resources;
+      }
+
+      const resource = this.definedResources?.find(r => r.uri === uri);
+
+      if (!resource) {
+        this.logger.warn(`ReadResource: Unknown resource URI '${uri}' requested.`);
+        throw new Error(`Resource not found: ${uri}`);
+      }
+
+      try {
+        const resourcesOrResourceContent = await getResourcesCallback({ uri });
+        const resourcesContent = Array.isArray(resourcesOrResourceContent)
+          ? resourcesOrResourceContent
+          : [resourcesOrResourceContent];
+        const contents: ResourceContents[] = resourcesContent.map(resourceContent => {
+          const contentItem: ResourceContents = {
+            uri: resource.uri,
+            mimeType: resource.mimeType,
+          };
+          if ('text' in resourceContent) {
+            contentItem.text = resourceContent.text;
+          }
+
+          if ('blob' in resourceContent) {
+            contentItem.blob = resourceContent.blob;
+          }
+
+          return contentItem;
+        });
+        const duration = Date.now() - startTime;
+        this.logger.info(`Resource '${uri}' read successfully in ${duration}ms.`);
+        return {
+          contents,
+        };
+      } catch (error) {
+        const duration = Date.now() - startTime;
+        this.logger.error(`Failed to get content for resource URI '${uri}' in ${duration}ms`, { error });
+        throw error;
+      }
+    });
+  }
+
+  /**
+   * Register the ListResourceTemplates handler.
+   */
+  private registerListResourceTemplatesHandler() {
+    if (this.listResourceTemplatesHandlerIsRegistered) {
+      return;
+    }
+
+    // If this method is called, this.resourceOptions and this.resourceOptions.resourceTemplates should exist
+    // due to the constructor logic checking opts.resources.resourceTemplates.
+    if (!this.resourceOptions || typeof this.resourceOptions.resourceTemplates !== 'function') {
+      this.logger.warn(
+        'ListResourceTemplates handler called, but resourceTemplates function is not available on resourceOptions or not a function.',
+      );
+      // Register a handler that returns empty templates if not properly configured.
+      this.server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
+        this.logger.debug('Handling ListResourceTemplates request (no templates configured or resourceOptions issue)');
+        return { resourceTemplates: [] };
+      });
+      this.listResourceTemplatesHandlerIsRegistered = true;
+      return;
+    }
+
+    // Typescript can now infer resourceTemplatesFn is a function.
+    const resourceTemplatesFn = this.resourceOptions.resourceTemplates;
+
+    this.listResourceTemplatesHandlerIsRegistered = true;
+    this.server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
+      this.logger.debug('Handling ListResourceTemplates request');
+      if (this.definedResourceTemplates) {
+        return { resourceTemplates: this.definedResourceTemplates };
+      } else {
+        try {
+          const templates = await resourceTemplatesFn(); // Safe to call now
+          this.definedResourceTemplates = templates;
+          this.logger.debug(`Fetched and cached ${this.definedResourceTemplates.length} resource templates.`);
+          return { resourceTemplates: this.definedResourceTemplates };
+        } catch (error) {
+          this.logger.error('Error fetching resource templates via resourceTemplates():', { error });
+          // Re-throw to let the MCP Server SDK handle formatting the error response
+          throw error;
+        }
+      }
+    });
+  }
+
+  /**
+   * Register the SubscribeResource handler.
+   */
+  private registerSubscribeResourceHandler() {
+    if (this.subscribeResourceHandlerIsRegistered) {
+      return;
+    }
+    if (!SubscribeRequestSchema) {
+      this.logger.warn('SubscribeRequestSchema not available, cannot register SubscribeResource handler.');
+      return;
+    }
+    this.subscribeResourceHandlerIsRegistered = true;
+    this.server.setRequestHandler(SubscribeRequestSchema as any, async (request: { params: { uri: string } }) => {
+      const uri = request.params.uri;
+      this.logger.info(`Received resources/subscribe request for URI: ${uri}`);
+      this.subscriptions.add(uri);
+      return {};
+    });
+  }
+
+  /**
+   * Register the UnsubscribeResource handler.
+   */
+  private registerUnsubscribeResourceHandler() {
+    if (this.unsubscribeResourceHandlerIsRegistered) {
+      return;
+    }
+    this.unsubscribeResourceHandlerIsRegistered = true;
+
+    this.server.setRequestHandler(UnsubscribeRequestSchema as any, async (request: { params: { uri: string } }) => {
+      const uri = request.params.uri;
+      this.logger.info(`Received resources/unsubscribe request for URI: ${uri}`);
+      this.subscriptions.delete(uri);
+      return {};
     });
   }
 
@@ -413,6 +835,12 @@ export class MCPServer extends MCPServerBase {
   async close() {
     this.callToolHandlerIsRegistered = false;
     this.listToolsHandlerIsRegistered = false;
+    this.listResourcesHandlerIsRegistered = false;
+    this.readResourceHandlerIsRegistered = false;
+    this.listResourceTemplatesHandlerIsRegistered = false;
+    this.subscribeResourceHandlerIsRegistered = false;
+    this.unsubscribeResourceHandlerIsRegistered = false;
+
     try {
       if (this.stdioTransport) {
         await this.stdioTransport.close?.();

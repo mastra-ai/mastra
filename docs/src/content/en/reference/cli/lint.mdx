@@ -1,9 +1,11 @@
 ---
-title: "mastra lint"
+title: "mastra lint | Validate Project | Mastra CLI"
 description: "Lint your Mastra project"
 ---
 
-The `mastra lint` command validates your Mastra project structure and code.
+# mastra lint
+
+The `mastra lint` command validates the structure and code of your Mastra project to ensure it follows best practices and is error-free.
 
 ## Usage
 
@@ -13,11 +15,34 @@ mastra lint [options]
 
 ## Options
 
-| Option                    | Description                                            |
-| ------------------------- | ------------------------------------------------------ |
-| `-d, --dir <path>`        | Path to your Mastra folder                             |
-| `-r, --root <path>`       | Path to your root folder                               |
-| `-t, --tools <toolsDirs>` | Comma-separated list of paths to tool files to include |
+<PropertiesTable
+  content={[
+    {
+      name: "--dir",
+      type: "string",
+      description: "Path to your Mastra folder",
+      isOptional: true,
+    },
+    {
+      name: "--root",
+      type: "string",
+      description: "Path to your root folder",
+      isOptional: true,
+    },
+    {
+      name: "--tools",
+      type: "string",
+      description: "Comma-separated list of paths to tool files to include",
+      isOptional: true,
+    },
+    {
+      name: "--help",
+      type: "boolean",
+      description: "display help for command",
+      isOptional: true,
+    },
+  ]}
+/>
 
 ## Advanced usage
 
@@ -26,6 +51,6 @@ mastra lint [options]
 To disable CLI analytics while running linting (and other commands) set
 `MASTRA_TELEMETRY_DISABLED=1`:
 
-```bash
+```bash copy
 MASTRA_TELEMETRY_DISABLED=1 mastra lint
 ```

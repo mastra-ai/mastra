@@ -1,22 +1,53 @@
 import type { z } from 'zod';
 import type { ExecuteFunction, Step } from './step';
 
-export type StepSuccess<T> = {
+export type StepSuccess<P, R, S, T> = {
   status: 'success';
   output: T;
+  payload: P;
+  resumePayload?: R;
+  suspendPayload?: S;
+  startedAt: number;
+  endedAt: number;
+  suspendedAt?: number;
+  resumedAt?: number;
 };
 
-export type StepFailure = {
+export type StepFailure<P, R, S> = {
   status: 'failed';
   error: string | Error;
+  payload: P;
+  resumePayload?: R;
+  suspendPayload?: S;
+  startedAt: number;
+  endedAt: number;
+  suspendedAt?: number;
+  resumedAt?: number;
 };
 
-export type StepSuspended<T> = {
+export type StepSuspended<P, S> = {
   status: 'suspended';
-  payload: T;
+  payload: P;
+  suspendPayload?: S;
+  startedAt: number;
+  suspendedAt: number;
 };
 
-export type StepResult<T> = StepSuccess<T> | StepFailure | StepSuspended<T>;
+export type StepRunning<P, R, S> = {
+  status: 'running';
+  payload: P;
+  resumePayload?: R;
+  suspendPayload?: S;
+  startedAt: number;
+  suspendedAt?: number;
+  resumedAt?: number;
+};
+
+export type StepResult<P, R, S, T> =
+  | StepSuccess<P, R, S, T>
+  | StepFailure<P, R, S>
+  | StepSuspended<P, S>
+  | StepRunning<P, R, S>;
 
 export type StepsRecord<T extends readonly Step<any, any, any>[]> = {
   [K in T[number]['id']]: Extract<T[number], { id: K }>;
@@ -66,7 +97,9 @@ export type WatchEvent = {
       id: string;
       status: 'running' | 'success' | 'failed' | 'suspended';
       output?: Record<string, any>;
+      resumePayload?: Record<string, any>;
       payload?: Record<string, any>;
+      error?: string | Error;
     };
     workflowState: {
       status: 'running' | 'success' | 'failed' | 'suspended';
@@ -76,10 +109,17 @@ export type WatchEvent = {
           status: 'running' | 'success' | 'failed' | 'suspended';
           output?: Record<string, any>;
           payload?: Record<string, any>;
+          resumePayload?: Record<string, any>;
+          error?: string | Error;
+          startedAt: number;
+          endedAt: number;
+          suspendedAt?: number;
+          resumedAt?: number;
         }
       >;
       output?: Record<string, any>;
       payload?: Record<string, any>;
+      error?: string | Error;
     };
   };
   eventTimestamp: Date;
@@ -103,7 +143,7 @@ export interface WorkflowRunState {
   // Core state info
   runId: string;
   value: Record<string, string>;
-  context: { input?: Record<string, any> } & Record<string, StepResult<any>>;
+  context: { input?: Record<string, any> } & Record<string, StepResult<any, any, any, any>>;
   activePaths: Array<unknown>;
   suspendedPaths: Record<string, number[]>;
   timestamp: number;

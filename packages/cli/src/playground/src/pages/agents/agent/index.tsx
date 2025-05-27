@@ -10,8 +10,11 @@ import { AgentSidebar } from '@/domains/agents/agent-sidebar';
 import { useAgent } from '@/hooks/use-agents';
 import { useMemory, useMessages, useThreads } from '@/hooks/use-memory';
 import type { Message } from '@/types';
+import { useFeatureFlagEnabled } from 'posthog-js/react';
 
 function Agent() {
+  const isCliShowMultiModal = useFeatureFlagEnabled('cli_ShowMultiModal');
+
   const { agentId, threadId } = useParams();
   const { agent, isLoading: isAgentLoading } = useAgent(agentId!);
   const { memory } = useMemory(agentId!);
@@ -57,6 +60,7 @@ function Agent() {
             initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
             memory={memory?.result}
             refreshThreadList={refreshThreads}
+            showFileSupport={isCliShowMultiModal}
           />
         </div>
 

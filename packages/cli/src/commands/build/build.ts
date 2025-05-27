@@ -11,7 +11,7 @@ export async function build({ dir, tools, root }: { dir?: string; tools?: string
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(rootDir, dir)) : join(rootDir, 'src', 'mastra');
   const outputDirectory = join(rootDir, '.mastra');
 
-  const defaultToolsPath = join(mastraDir, 'tools');
+  const defaultToolsPath = join(mastraDir, 'tools/**/*');
   const discoveredTools = [defaultToolsPath, ...(tools ?? [])];
 
   try {

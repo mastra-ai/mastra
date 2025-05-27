@@ -4,7 +4,7 @@ import type { ToolsInput } from '@mastra/core/agent';
 import FirecrawlApp from '@mendable/firecrawl-js';
 import type { ScrapeParams, MapParams, CrawlParams, FirecrawlDocument } from '@mendable/firecrawl-js';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
-import { MCPServer } from '../server';
+import { MCPServer } from '../server/server';
 
 // Tool definitions
 const SCRAPE_TOOL: Tool = {

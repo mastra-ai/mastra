@@ -14,6 +14,7 @@ import type {
   StepResult,
   WorkflowResult,
 } from '@mastra/core/workflows';
+import { EMITTER_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Span } from '@opentelemetry/api';
 import type { Inngest, BaseContext } from 'inngest';
 import { serve as inngestServe } from 'inngest/hono';
@@ -415,8 +416,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   protected async fmtReturnValue<TOutput>(
     executionSpan: Span | undefined,
     emitter: { emit: (event: string, data: any) => Promise<void> },
-    stepResults: Record<string, StepResult<any>>,
-    lastOutput: StepResult<any>,
+    stepResults: Record<string, StepResult<any, any, any, any>>,
+    lastOutput: StepResult<any, any, any, any>,
     error?: Error | string,
   ): Promise<TOutput> {
     const base: any = {
@@ -500,7 +501,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     workflowId: string;
     runId: string;
     step: Step<string, any, any>;
-    stepResults: Record<string, StepResult<any>>;
+    stepResults: Record<string, StepResult<any, any, any, any>>;
     executionContext: ExecutionContext;
     resume?: {
       steps: string[];
@@ -509,7 +510,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     prevOutput: any;
     emitter: { emit: (event: string, data: any) => Promise<void> };
     runtimeContext: RuntimeContext;
-  }): Promise<StepResult<any>> {
+  }): Promise<StepResult<any, any, any, any>> {
     return super.executeStep({
       workflowId,
       runId,
@@ -533,7 +534,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     runtimeContext,
   }: {
     step: Step<string, any, any>;
-    stepResults: Record<string, StepResult<any>>;
+    stepResults: Record<string, StepResult<any, any, any, any>>;
     executionContext: {
       workflowId: string;
       runId: string;
@@ -549,7 +550,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     prevOutput: any;
     emitter: { emit: (event: string, data: any) => Promise<void> };
     runtimeContext: RuntimeContext;
-  }): Promise<StepResult<any>> {
+  }): Promise<StepResult<any, any, any, any>> {
     await this.inngestStep.run(
       `workflow.${executionContext.workflowId}.run.${executionContext.runId}.step.${step.id}.running_ev`,
       async () => {
@@ -643,7 +644,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             return { executionContext, result: { status: 'failed', error: result?.error } };
           } else if (result.status === 'suspended') {
             const suspendedSteps = Object.entries(result.steps).filter(([_stepName, stepResult]) => {
-              const stepRes: StepResult<any> = stepResult as StepResult<any>;
+              const stepRes: StepResult<any, any, any, any> = stepResult as StepResult<any, any, any, any>;
               return stepRes?.status === 'suspended';
             });
 
@@ -731,7 +732,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       );
 
       Object.assign(executionContext, res.executionContext);
-      return res.result as StepResult<any>;
+      return res.result as StepResult<any, any, any, any>;
     }
 
     const stepRes = await this.inngestStep.run(`workflow.${executionContext.workflowId}.step.${step.id}`, async () => {
@@ -818,7 +819,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   }: {
     workflowId: string;
     runId: string;
-    stepResults: Record<string, StepResult<any>>;
+    stepResults: Record<string, StepResult<any, any, any, any>>;
     executionContext: ExecutionContext;
   }) {
     await this.inngestStep.run(
@@ -858,17 +859,17 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     entry: { type: 'conditional'; steps: StepFlowEntry[]; conditions: ExecuteFunction<any, any, any, any>[] };
     prevStep: StepFlowEntry;
     prevOutput: any;
-    stepResults: Record<string, StepResult<any>>;
+    stepResults: Record<string, StepResult<any, any, any, any>>;
     resume?: {
       steps: string[];
-      stepResults: Record<string, StepResult<any>>;
+      stepResults: Record<string, StepResult<any, any, any, any>>;
       resumePayload: any;
       resumePath: number[];
     };
     executionContext: ExecutionContext;
     emitter: { emit: (event: string, data: any) => Promise<void> };
     runtimeContext: RuntimeContext;
-  }): Promise<StepResult<any>> {
+  }): Promise<StepResult<any, any, any, any>> {
     let execResults: any;
     const truthyIndexes = (
       await Promise.all(
@@ -895,7 +896,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
                 // TODO: this function shouldn't have suspend probably?
                 suspend: async (_suspendPayload: any) => {},
-                emitter,
+                [EMITTER_SYMBOL]: emitter,
               });
               return result ? index : null;
               // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -908,7 +909,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     ).filter((index: any): index is number => index !== null);
 
     const stepsToRun = entry.steps.filter((_, index) => truthyIndexes.includes(index));
-    const results: StepResult<any>[] = await Promise.all(
+    const results: StepResult<any, any, any, any>[] = await Promise.all(
       stepsToRun.map((step, index) =>
         this.executeEntry({
           workflowId,

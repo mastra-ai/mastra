@@ -6,10 +6,12 @@ settings:
 
 overrides:
   '@mastra/core': link:../../packages/core
+  '@mastra/loggers': link:../../packages/loggers
   '@mastra/voice-openai': link:../../voice/openai
   '@mastra/memory': link:../../packages/memory
   '@mastra/client-js': link:../../client-sdks/client-js
   '@mastra/mcp': link:../../packages/mcp
+  '@mastra/libsql': link:../../stores/libsql
   mastra: link:../../packages/cli
 
 importers:
@@ -25,6 +27,12 @@ importers:
       '@mastra/core':
         specifier: link:../../packages/core
         version: link:../../packages/core
+      '@mastra/libsql':
+        specifier: link:../../stores/libsql
+        version: link:../../stores/libsql
+      '@mastra/loggers':
+        specifier: link:../../packages/loggers
+        version: link:../../packages/loggers
       '@mastra/mcp':
         specifier: link:../../packages/mcp
         version: link:../../packages/mcp
