@@ -235,7 +235,7 @@ program
   .command('start')
   .description('Start your built Mastra application')
   .option('-d, --dir <path>', 'Path to your built Mastra output directory (default: .mastra/output)')
-  .option('-t, --telemetry', 'Enable telemetry')
+  .option('-nt, --no-telemetry', 'Disable telemetry on start')
   .action(async args => {
     await analytics.trackCommandExecution({
       command: 'start',
@@ -243,7 +243,7 @@ program
       execution: async () => {
         await start({
           dir: args.dir,
-          telemetry: args.telemetry,
+          telemetry: !args.noTelemetry,
         });
       },
       origin,
