@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import type { MastraMessageV2 } from '@mastra/core/agent';
+import type { MessageType } from '@mastra/core/memory';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 import {
   TABLE_MESSAGES,
@@ -25,7 +26,7 @@ const createSampleThread = (date?: Date) => ({
   metadata: { key: 'value' },
 });
 
-const createSampleMessage = (threadId: string, content: string = 'Hello'): MastraMessageV2 => ({
+const createSampleMessage = (threadId: string, content: string = 'Hello'): MessageType => ({
   id: `msg-${randomUUID()}`,
   role: 'user',
   threadId,
@@ -318,7 +319,7 @@ describe('UpstashStore', () => {
     });
 
     it('should save and retrieve messages in order', async () => {
-      const messages: MastraMessageV2[] = [
+      const messages: MessageType[] = [
         createSampleMessage(threadId, 'First'),
         createSampleMessage(threadId, 'Second'),
         createSampleMessage(threadId, 'Third'),
@@ -328,7 +329,7 @@ describe('UpstashStore', () => {
 
       const retrievedMessages = await store.getMessages<MastraMessageV2[]>({ threadId });
       expect(retrievedMessages).toHaveLength(3);
-      expect(retrievedMessages.map((m: any) => m.content[0].text)).toEqual(['First', 'Second', 'Third']);
+      expect(retrievedMessages.map((m: any) => m.content.parts[0].text)).toEqual(['First', 'Second', 'Third']);
     });
 
     it('should handle empty message array', async () => {
@@ -352,7 +353,7 @@ describe('UpstashStore', () => {
           },
           createdAt: new Date(),
         },
-      ] as MastraMessageV2[];
+      ] as MessageType[];
 
       await store.saveMessages({ messages });
 
