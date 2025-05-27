@@ -136,8 +136,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       attributes: { componentName: workflowId, runId },
     });
 
-    await this.mastra?.getStorage()?.init();
-
     let startIdx = 0;
     if (resume?.resumePath) {
       startIdx = resume.resumePath[0]!;
