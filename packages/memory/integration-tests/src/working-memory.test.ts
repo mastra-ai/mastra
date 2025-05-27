@@ -327,10 +327,10 @@ describe('Working Memory Tests', () => {
     // Create memory instance with working memory disabled
     const disabledMemory = new Memory({
       storage: new LibSQLStore({
-        url: dbPath,
+        url: `file:${dbPath}`,
       }),
       vector: new LibSQLVector({
-        connectionUrl: dbPath, // relative path from bundled .mastra/output dir
+        connectionUrl: `file:${dbPath}`,
       }),
       embedder: openai.embedding('text-embedding-3-small'),
       options: {
