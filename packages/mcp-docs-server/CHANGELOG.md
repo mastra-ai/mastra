@@ -1,5 +1,11 @@
 # @mastra/mcp-docs-server
 
+## 0.10.1-alpha.1
+
+### Patch Changes
+
+- 96f3fb2: Change logging for non existent paths when using mcp-docs-server
+
 ## 0.10.1-alpha.0
 
 ### Patch Changes

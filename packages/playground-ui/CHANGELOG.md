@@ -1,5 +1,15 @@
 # @mastra/playground-ui
 
+## 5.1.1-alpha.5
+
+### Patch Changes
+
+- 267773e: Show map config on workflow graph
+  Highlight borders for conditions too on workflow graph
+  Fix watch stream
+- Updated dependencies [267773e]
+  - @mastra/client-js@0.10.1-alpha.3
+
 ## 5.1.1-alpha.4
 
 ### Patch Changes
