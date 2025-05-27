@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.10.1-alpha.2
+
+### Patch Changes
+
+- 6015bdf: Leverage defaultAgentStreamOption, defaultAgentGenerateOption in playground
+
 ## 0.10.1-alpha.1
 
 ### Patch Changes

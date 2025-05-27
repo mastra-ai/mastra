@@ -1,5 +1,14 @@
 # @mastra/playground-ui
 
+## 5.1.1-alpha.3
+
+### Patch Changes
+
+- 6015bdf: Leverage defaultAgentStreamOption, defaultAgentGenerateOption in playground
+- Updated dependencies [6015bdf]
+  - @mastra/client-js@0.10.1-alpha.2
+  - @mastra/core@0.10.1-alpha.2
+
 ## 5.1.1-alpha.2
 
 ### Patch Changes
