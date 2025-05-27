@@ -44,9 +44,8 @@ async function readPackageChangelog(filename: string): Promise<string> {
   } catch {
     const packages = await listPackageChangelogs();
     const availablePackages = packages.map(pkg => `- ${pkg.name}`).join('\n');
-    throw new Error(
-      `Changelog for "${filename.replace('.md', '')}" not found.\n\nAvailable packages:\n${availablePackages}`,
-    );
+    void logger.warning(`Changelog not found: ${filename}`);
+    return `Changelog for "${filename.replace('.md', '')}" not found.\n\nAvailable packages:\n${availablePackages}`;
   }
 }
 

@@ -33,7 +33,8 @@ async function readCodeExample(filename: string): Promise<string> {
   } catch {
     const examples = await listCodeExamples();
     const availableExamples = examples.map(ex => `- ${ex.name}`).join('\n');
-    throw new Error(`Example "${filename}" not found.\n\nAvailable examples:\n${availableExamples}`);
+    void logger.warning(`Example not found: ${filename}`);
+    return `Example "${filename}" not found.\n\nAvailable examples:\n${availableExamples}`;
   }
 }
 
