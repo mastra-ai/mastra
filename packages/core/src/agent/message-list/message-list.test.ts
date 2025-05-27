@@ -4,7 +4,7 @@ import type { UIMessage, CoreMessage, Message } from 'ai';
 import { describe, expect, it } from 'vitest';
 import type { MastraMessageV1 } from '../../memory';
 import type { MastraMessageV2 } from '../message-list';
-import { MessageList, toBase64String } from '../message-list';
+import { MessageList } from '../message-list';
 
 type VercelUIMessage = Message;
 type VercelCoreMessage = CoreMessage;
@@ -1610,47 +1610,6 @@ describe('MessageList', () => {
 
         expect(list.get.all.mastra().length).toBe(2); // user and assistant
         expect(list.get.all.ui().length).toBe(2); // user and assistant
-      });
-    });
-
-    describe('toBase64String', () => {
-      it('should return the string itself if the input is a string', () => {
-        const input = 'alreadybase64==';
-        expect(toBase64String(input)).toBe('alreadybase64==');
-      });
-
-      it('should convert Uint8Array to base64 string', () => {
-        const input = new Uint8Array([1, 2, 3, 4]);
-        expect(toBase64String(input)).toBe('AQIDBA==');
-      });
-
-      it('should convert ArrayBuffer to base64 string', () => {
-        const input = new Uint8Array([5, 6, 7, 8]).buffer;
-        expect(toBase64String(input)).toBe('BQYHCA==');
-      });
-
-      it('should extract base64 from a data URL', () => {
-        const input = new URL(
-          'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
-        );
-        expect(toBase64String(input)).toBe(
-          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
-        );
-      });
-
-      it('should throw an error for invalid data URL format', () => {
-        const input = new URL('data:image/png,invaliddata');
-        expect(() => toBase64String(input)).toThrow('Invalid data URL format');
-      });
-
-      it('should throw an error for non-data URLs', () => {
-        const input = new URL('https://example.com/image.png');
-        expect(() => toBase64String(input)).toThrow('Unsupported URL protocol for base64 conversion: https:');
-      });
-
-      it('should throw an error for unsupported data types', () => {
-        const input = 12345 as any; // Test with a number
-        expect(() => toBase64String(input)).toThrow('Unsupported data type for base64 conversion: number');
       });
     });
   });

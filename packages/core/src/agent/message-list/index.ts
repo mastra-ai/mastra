@@ -1,9 +1,10 @@
 import { randomUUID } from 'crypto';
 import { convertToCoreMessages } from 'ai';
-import type { CoreMessage, CoreSystemMessage, FilePart, IDGenerator, Message, UIMessage } from 'ai';
+import type { CoreMessage, CoreSystemMessage, IDGenerator, Message, UIMessage } from 'ai';
 import type { MastraMessageV1 } from '../../memory';
 import { isCoreMessage, isUiMessage } from '../../utils';
 import { convertToV1Messages } from './prompt/convert-to-mastra-v1';
+import { convertDataContentToBase64String } from './prompt/data-content';
 
 export type MastraMessageContentV2 = {
   format: 2; // format 2 === UIMessage in AI SDK v4
@@ -403,8 +404,9 @@ export class MessageList {
     if (message.toolInvocations) content.toolInvocations = message.toolInvocations;
     if (message.reasoning) content.reasoning = message.reasoning;
     if (message.annotations) content.annotations = message.annotations;
-    if (message.experimental_attachments) content.experimental_attachments = message.experimental_attachments;
-
+    if (message.experimental_attachments) {
+      content.experimental_attachments = message.experimental_attachments;
+    }
 
     return {
       id: message.id || this.newMessageId(),
@@ -479,19 +481,42 @@ export class MessageList {
             break;
           case 'file':
             // CoreMessage file parts can have mimeType and data (binary/data URL) or just a URL
-            const { type, string } = MessageList.urlDataContentToString(part.data);
-            if (type === `file`) {
-              parts.push({
-                type: 'file',
-                mimeType: part.mimeType,
-                data: string,
-              });
-            } else if (type === `attachment`) {
-              experimentalAttachments.push({
-                name: part.filename,
-                url: string,
-                contentType: part.mimeType,
-              });
+            if (part.data instanceof URL) {
+              // If it's a non-data URL, add to experimental_attachments
+              if (part.data.protocol !== 'data:') {
+                experimentalAttachments.push({
+                  name: part.filename,
+                  url: part.data.toString(),
+                  contentType: part.mimeType,
+                });
+              } else {
+                // If it\'s a data URL, extract the base64 data and add to parts
+                try {
+                  const base64Match = part.data.toString().match(/^data:[^;]+;base64,(.+)$/);
+                  if (base64Match && base64Match[1]) {
+                    parts.push({
+                      type: 'file',
+                      mimeType: part.mimeType,
+                      data: base64Match[1],
+                    });
+                  } else {
+                    console.error(`Invalid data URL format: ${part.data}`);
+                  }
+                } catch (error) {
+                  console.error(`Failed to process data URL in CoreMessage file part: ${error}`, error);
+                }
+              }
+            } else {
+              // If it's binary data, convert to base64 and add to parts
+              try {
+                parts.push({
+                  type: 'file',
+                  mimeType: part.mimeType,
+                  data: convertDataContentToBase64String(part.data),
+                });
+              } catch (error) {
+                console.error(`Failed to convert binary data to base64 in CoreMessage file part: ${error}`, error);
+              }
             }
             break;
           default:
@@ -653,83 +678,4 @@ export class MessageList {
     // default to it did change. we'll likely never reach this codepath
     return true;
   }
-  private static urlDataContentToString(data: FilePart['data']): { string: string; type: 'file' | 'attachment' } {
-    if (data instanceof URL) {
-      try {
-        // Validate URL object
-        new URL(data.toString()); // Check if it's a valid URL format
-        if (data.protocol !== 'data:') {
-          // If it's a non-data URL, add it to experimental_attachments
-          return { type: 'attachment', string: data.toString() };
-        } else {
-          // If it's a data URL object, convert to base64 and add to parts
-          return { type: 'file', string: toBase64String(data) };
-        }
-      } catch (error) {
-        console.error(`Invalid URL in CoreMessage file part`, error);
-      }
-    } else if (typeof data === 'string') {
-      try {
-        // Validate URL string or data URL string
-        if (data.startsWith('http://') || data.startsWith('https://')) {
-          // If it's a non-data URL string, add it to experimental_attachments
-          return { type: 'attachment', string: data };
-        } else if (data.startsWith('data:')) {
-          // If it's a data URL string, convert to base64 and add to parts
-          return { type: 'file', string: toBase64String(data) };
-        } else {
-          // Assume it's base64 data directly
-          return { type: 'file', string: data };
-        }
-      } catch (error) {
-        console.error(`Invalid URL or data URL string in CoreMessage file part`, error);
-      }
-    } else {
-      // Otherwise (binary data), convert to base64 and add to parts
-      try {
-        return { type: 'file', string: toBase64String(data) };
-      } catch (error) {
-        console.error(`Failed to convert binary data to base64 in CoreMessage file part: ${error}`, error);
-      }
-    }
-
-    throw new Error(`Unhandled DataContent URL in file part`);
-  }
-}
-
-export function toBase64String(data: Uint8Array | ArrayBuffer | string | URL): string {
-  if (typeof data === 'string') {
-    // If it's a string, assume it's already base64 or should be treated as such.
-    return data;
-  }
-
-  if (data instanceof Uint8Array) {
-    return Buffer.from(data).toString('base64');
-  }
-
-  if (data instanceof ArrayBuffer) {
-    return Buffer.from(data).toString('base64');
-  }
-
-  if (data instanceof URL) {
-    // If it's a URL, check if it's a data URL and extract the base64 data
-    if (data.protocol === 'data:') {
-      const base64Match = data.toString().match(/^data:[^;]+;base64,(.+)$/);
-      if (base64Match && base64Match[1]) {
-        return base64Match[1];
-      } else {
-        // TODO: is this right?
-        throw new Error(`Invalid data URL format: ${data}`);
-      }
-    } else {
-      // If it's a non-data URL, throw an error or handle as needed
-      // TODO: is this right?
-      throw new Error(`Unsupported URL protocol for base64 conversion: ${data.protocol}`);
-    }
-  }
-
-  // TODO: is this right?
-  throw new Error(
-    `Unsupported data type for base64 conversion: ${typeof data}. Expected Uint8Array, ArrayBuffer, string, or URL.`,
-  );
 }
