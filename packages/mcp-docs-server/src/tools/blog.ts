@@ -47,9 +47,6 @@ async function fetchBlogPost(url: string): Promise<string> {
     let blogList: string;
     try {
       const blogPosts = await fetchBlogPosts();
-      void logger.warning(
-        `Blog post not found or failed to fetch: ${url}. Returning a list of available blog posts as fallback.`,
-      );
       blogList = `Here are available blog posts:\n\n${blogPosts}`;
     } catch (e) {
       void logger.error(
