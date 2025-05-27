@@ -6,12 +6,12 @@ import { CircleXIcon, FileIcon, PaperclipIcon } from 'lucide-react';
 import { PropsWithChildren, useEffect, useState, type FC } from 'react';
 
 import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button';
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogTitle, DialogTrigger, DialogOverlay, DialogPortal, DialogContent } from '@/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 import { useShallow } from 'zustand/shallow';
 import { Icon } from '@/ds/icons';
+import { useHasAttachments } from './use-has-attachments';
 
 const useFileSrc = (file: File | undefined) => {
   const [src, setSrc] = useState<string | undefined>(undefined);
@@ -52,16 +52,9 @@ type AttachmentPreviewProps = {
 };
 
 const AttachmentPreview: FC<AttachmentPreviewProps> = ({ src }) => {
-  const [isLoaded, setIsLoaded] = useState(false);
-
   return (
     <div className="overflow-hidden w-full">
-      <img
-        src={src}
-        onLoad={() => setIsLoaded(true)}
-        className="object-contain aspect-ratio h-full w-full"
-        alt="Preview"
-      />
+      <img src={src} className="object-contain aspect-ratio h-full w-full" alt="Preview" />
     </div>
   );
 };
@@ -88,35 +81,11 @@ const AttachmentPreviewDialog: FC<PropsWithChildren> = ({ children }) => {
   );
 };
 
-const AttachmentThumb: FC = () => {
+const AttachmentThumbnail: FC = () => {
   const isImage = useAttachment(a => a.type === 'image');
   const src = useAttachmentSrc();
-  return (
-    <Avatar className="bg-muted flex size-16 items-center justify-center rounded border text-sm">
-      <AvatarFallback delayMs={isImage ? 200 : 0}>
-        <FileIcon />
-      </AvatarFallback>
-      <AvatarImage src={src} />
-    </Avatar>
-  );
-};
-
-const AttachmentUI: FC = () => {
   const canRemove = useAttachment(a => a.source !== 'message');
-  const typeLabel = useAttachment(a => {
-    const type = a.type;
-    switch (type) {
-      case 'image':
-        return 'Image';
-      case 'document':
-        return 'Document';
-      case 'file':
-        return 'File';
-      default:
-        const _exhaustiveCheck: never = type;
-        throw new Error(`Unknown attachment type: ${_exhaustiveCheck}`);
-    }
-  });
+
   return (
     <TooltipProvider>
       <Tooltip>
@@ -124,13 +93,15 @@ const AttachmentUI: FC = () => {
           <AttachmentPreviewDialog>
             <TooltipTrigger asChild>
               <div className="h-full w-full aspect-ratio overflow-hidden rounded-lg">
-                <AttachmentThumb />
-                {/* <div className="flex-grow basis-0">
-                  <p className="text-muted-foreground line-clamp-1 text-ellipsis break-all text-xs font-bold">
-                    <AttachmentPrimitive.Name />
-                  </p>
-                  <p className="text-muted-foreground text-xs">{typeLabel}</p>
-                </div> */}
+                {isImage ? (
+                  <div className="rounded-lg border-sm border-border1 overflow-hidden">
+                    <img src={src} className="object-cover aspect-ratio size-16" alt="Preview" height={64} width={64} />
+                  </div>
+                ) : (
+                  <div className="rounded-lg border-sm border-border1 flex items-center justify-center">
+                    <FileIcon className="text-icon3" />
+                  </div>
+                )}
               </div>
             </TooltipTrigger>
           </AttachmentPreviewDialog>
@@ -149,7 +120,7 @@ const AttachmentRemove: FC = () => {
     <AttachmentPrimitive.Remove asChild>
       <TooltipIconButton
         tooltip="Remove file"
-        className="absolute -right-3 -top-3 hover:bg-transparent rounded-full"
+        className="absolute -right-3 -top-3 hover:bg-transparent rounded-full bg-surface1 rounded-full p-1"
         side="top"
       >
         <Icon>
@@ -161,17 +132,48 @@ const AttachmentRemove: FC = () => {
 };
 
 export const UserMessageAttachments: FC = () => {
+  return <MessagePrimitive.Attachments components={{ Attachment: InMessageAttachment }} />;
+};
+
+const InMessageAttachment = () => {
+  const isImage = useAttachment(a => a.type === 'image');
+  const src = useAttachmentSrc();
   return (
-    <div className="flex w-full flex-row gap-3 col-span-full col-start-1 row-start-1 justify-end">
-      <MessagePrimitive.Attachments components={{ Attachment: AttachmentUI }} />
-    </div>
+    <TooltipProvider>
+      <Tooltip>
+        <AttachmentPrimitive.Root className="relative pt-4">
+          <AttachmentPreviewDialog>
+            <TooltipTrigger asChild>
+              <div className="h-full w-full aspect-ratio overflow-hidden rounded-lg">
+                {isImage ? (
+                  <div className="rounded-lg border-sm border-border1 overflow-hidden">
+                    <img src={src} className="object-cover aspect-ratio max-h-[140px] max-w-[320px]" alt="Preview" />
+                  </div>
+                ) : (
+                  <div className="rounded-lg border-sm border-border1 flex items-center justify-center">
+                    <FileIcon className="text-icon3" />
+                  </div>
+                )}
+              </div>
+            </TooltipTrigger>
+          </AttachmentPreviewDialog>
+        </AttachmentPrimitive.Root>
+        <TooltipContent side="top">
+          <AttachmentPrimitive.Name />
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 };
 
 export const ComposerAttachments: FC = () => {
+  const hasAttachments = useHasAttachments();
+
+  if (!hasAttachments) return null;
+
   return (
     <div className="flex w-full flex-row items-center gap-4 h-24">
-      <ComposerPrimitive.Attachments components={{ Attachment: AttachmentUI }} />
+      <ComposerPrimitive.Attachments components={{ Attachment: AttachmentThumbnail }} />
     </div>
   );
 };

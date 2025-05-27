@@ -20,6 +20,8 @@ import { Txt } from '@/ds/components/Txt';
 import { Icon, InfoIcon } from '@/ds/icons';
 import { useSpeechRecognition } from '@/hooks/use-speech-recognition';
 import { ComposerAttachments } from './attachment';
+import { useHasAttachments } from './use-has-attachments';
+import clsx from 'clsx';
 
 export interface ThreadProps {
   ToolFallback?: ToolCallContentPartComponent;
@@ -37,7 +39,7 @@ export const Thread = ({ ToolFallback, agentName, hasMemory, showFileSupport }: 
   };
 
   return (
-    <ThreadPrimitive.Root className="max-w-[568px] w-full mx-auto h-[calc(100%-208px)] px-4">
+    <ThreadWrapper>
       <ThreadPrimitive.Viewport className="py-10 overflow-y-auto scroll-smooth h-full" ref={areaRef} autoScroll={false}>
         <div>
           <ThreadWelcome agentName={agentName} />
@@ -56,6 +58,23 @@ export const Thread = ({ ToolFallback, agentName, hasMemory, showFileSupport }: 
       </ThreadPrimitive.Viewport>
 
       <Composer hasMemory={hasMemory} showFileSupport={showFileSupport} />
+    </ThreadWrapper>
+  );
+};
+
+const ThreadWrapper = ({ children }: { children: React.ReactNode }) => {
+  const hasAttachments = useHasAttachments();
+
+  console.log('hasAttachments', hasAttachments);
+
+  return (
+    <ThreadPrimitive.Root
+      className={clsx(
+        'max-w-[568px] w-full mx-auto px-4',
+        hasAttachments ? 'h-[calc(100%-208px)]' : 'h-[calc(100%-112px)]',
+      )}
+    >
+      {children}
     </ThreadPrimitive.Root>
   );
 };
