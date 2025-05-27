@@ -1,5 +1,11 @@
 # @mastra/mcp-docs-server
 
+## 0.11.0-alpha.2
+
+### Minor Changes
+
+- 3240a80: feat: add mastra interactive course
+
 ## 0.10.1-alpha.1
 
 ### Patch Changes

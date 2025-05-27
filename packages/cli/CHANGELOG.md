@@ -1,5 +1,11 @@
 # mastra
 
+## 0.10.1-alpha.6
+
+### Patch Changes
+
+- 3240a80: feat: add vscode as option to interactive prompt
+
 ## 0.10.1-alpha.5
 
 ### Patch Changes
