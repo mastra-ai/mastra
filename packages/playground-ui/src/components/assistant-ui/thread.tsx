@@ -65,8 +65,6 @@ export const Thread = ({ ToolFallback, agentName, hasMemory, showFileSupport }: 
 const ThreadWrapper = ({ children }: { children: React.ReactNode }) => {
   const hasAttachments = useHasAttachments();
 
-  console.log('hasAttachments', hasAttachments);
-
   return (
     <ThreadPrimitive.Root
       className={clsx(
