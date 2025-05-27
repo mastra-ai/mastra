@@ -1,6 +1,7 @@
-import { createContext, useState, ReactNode, useEffect } from 'react';
+import { createContext, useState, ReactNode, useEffect, useMemo } from 'react';
 import { ModelSettings } from '../../../../types';
 import { useAgentStore } from '@/store/agent-store';
+import { GetAgentResponse } from '@mastra/client-js';
 
 type AgentContextType = {
   modelSettings: ModelSettings;
@@ -19,7 +20,17 @@ const defaultModelSettings: ModelSettings = {
 
 export const AgentContext = createContext<AgentContextType>({} as AgentContextType);
 
-export function AgentProvider({ agentId, children }: { agentId: string; children: ReactNode }) {
+export function AgentProvider({
+  agentId,
+  defaultGenerateOptions,
+  defaultStreamOptions,
+  children,
+}: {
+  agentId: string;
+  defaultGenerateOptions?: GetAgentResponse['defaultGenerateOptions'];
+  defaultStreamOptions?: GetAgentResponse['defaultStreamOptions'];
+  children: ReactNode;
+}) {
   const {
     modelSettings: modelSettingsStore,
     setModelSettings: setModelSettingsStore,
@@ -27,19 +38,38 @@ export function AgentProvider({ agentId, children }: { agentId: string; children
     setChatWithGenerate: setChatWithGenerateStore,
   } = useAgentStore();
 
-  const modelSettings = modelSettingsStore[agentId] || defaultModelSettings;
+  const chatWithGenerate = chatWithGenerateStore[agentId] || false;
+  const setChatWithGenerate = (chatWithGenerate: boolean) => {
+    setChatWithGenerateStore({ [agentId]: chatWithGenerate });
+  };
+
+  const modelSettings = useMemo(() => {
+    if (modelSettingsStore[agentId]) return modelSettingsStore[agentId];
+    if (chatWithGenerate) {
+      return {
+        maxRetries: defaultGenerateOptions?.maxRetries ?? defaultModelSettings.maxRetries,
+        maxSteps: defaultGenerateOptions?.maxSteps ?? defaultModelSettings.maxSteps,
+        temperature: defaultGenerateOptions?.temperature ?? defaultModelSettings.temperature,
+        topP: defaultGenerateOptions?.topP ?? defaultModelSettings.topP,
+        ...defaultGenerateOptions,
+      };
+    } else {
+      return {
+        maxRetries: defaultStreamOptions?.maxRetries ?? defaultModelSettings.maxRetries,
+        maxSteps: defaultStreamOptions?.maxSteps ?? defaultModelSettings.maxSteps,
+        temperature: defaultStreamOptions?.temperature ?? defaultModelSettings.temperature,
+        topP: defaultStreamOptions?.topP ?? defaultModelSettings.topP,
+        ...defaultStreamOptions,
+      };
+    }
+  }, [agentId, defaultGenerateOptions, defaultStreamOptions, chatWithGenerate, modelSettingsStore]);
 
   const setModelSettings = (modelSettings: ModelSettings) => {
     setModelSettingsStore({ [agentId]: modelSettings });
   };
 
   const resetModelSettings = () => {
-    setModelSettings(defaultModelSettings);
-  };
-
-  const chatWithGenerate = chatWithGenerateStore[agentId] || false;
-  const setChatWithGenerate = (chatWithGenerate: boolean) => {
-    setChatWithGenerateStore({ [agentId]: chatWithGenerate });
+    setModelSettingsStore({ [agentId]: null });
   };
 
   return (

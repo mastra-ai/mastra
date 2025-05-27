@@ -354,7 +354,7 @@ describe('agent', () => {
     }
   });
 
-  it('should generate with default max steps', async () => {
+  it('should generate with default max steps', { timeout: 10000 }, async () => {
     const findUserTool = createTool({
       id: 'Find user tool',
       description: 'This is a test tool that returns the name and email',

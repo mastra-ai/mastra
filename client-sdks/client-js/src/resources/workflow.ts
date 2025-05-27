@@ -319,7 +319,11 @@ export class Workflow extends BaseResource {
     }
 
     for await (const record of this.streamProcessor(response.body)) {
-      onRecord(record);
+      if (typeof record === 'string') {
+        onRecord(JSON.parse(record));
+      } else {
+        onRecord(record);
+      }
     }
   }
 

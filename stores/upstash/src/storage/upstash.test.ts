@@ -46,6 +46,8 @@ const createSampleWorkflowSnapshot = (status: string, createdAt?: Date) => {
         status: status,
         payload: {},
         error: undefined,
+        startedAt: timestamp.getTime(),
+        endedAt: new Date(timestamp.getTime() + 15000).getTime(),
       },
       input: {},
     } as WorkflowRunState['context'],
@@ -462,7 +464,13 @@ describe('UpstashStore', () => {
       const mockSnapshot = {
         value: { step1: 'completed' },
         context: {
-          step1: { status: 'success', output: { result: 'done' } },
+          step1: {
+            status: 'success',
+            output: { result: 'done' },
+            payload: {},
+            startedAt: new Date().getTime(),
+            endedAt: new Date(Date.now() + 15000).getTime(),
+          },
         } as WorkflowRunState['context'],
         runId: testRunId,
         activePaths: [],
