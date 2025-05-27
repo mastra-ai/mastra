@@ -1,10 +1,34 @@
+/**
+ * This file is an adaptation of https://github.com/vercel/ai/blob/e14c066bf4d02c5ee2180c56a01fa0e5216bc582/packages/ai/core/prompt/convert-to-core-messages.ts
+ * But has been modified to work with Mastra storage adapter messages (MastraMessageV1)
+ */
 import type { AssistantContent, ToolResultPart } from 'ai';
-import type { MastraMessageV1 } from '../../memory/types';
-import type { MastraMessageContentV2, MastraMessageV2 } from '../message-list';
+import type { MastraMessageV1 } from '../../../memory/types';
+import type { MastraMessageContentV2, MastraMessageV2 } from '../../message-list';
 import { attachmentsToParts } from './attachments-to-parts';
 
+const makePushOrCombine = (v1Messages: MastraMessageV1[]) => (msg: MastraMessageV1) => {
+  const previousMessage = v1Messages.at(-1);
+  if (
+    msg.role === previousMessage?.role &&
+    Array.isArray(previousMessage.content) &&
+    Array.isArray(msg.content) &&
+    // we were creating new messages for tool calls before and not appending to the assistant message
+    // so don't append here so everything works as before
+    (msg.role !== `assistant` || (msg.role === `assistant` && msg.content.at(-1)?.type !== `tool-call`))
+  ) {
+    for (const part of msg.content) {
+      // @ts-ignore needs type gymnastics? msg.content and previousMessage.content are the same type here since both are arrays
+      // I'm not sure what's adding `never` to the union but this code definitely works..
+      previousMessage.content.push(part);
+    }
+  } else {
+    v1Messages.push(msg);
+  }
+};
 export function convertToV1Messages(messages: Array<MastraMessageV2>) {
   const v1Messages: MastraMessageV1[] = [];
+  const pushOrCombine = makePushOrCombine(v1Messages);
 
   for (let i = 0; i < messages.length; i++) {
     const message = messages[i];
@@ -25,7 +49,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
           const userContent = experimental_attachments
             ? [{ type: 'text', text: content || '' }, ...attachmentsToParts(experimental_attachments)]
             : { type: 'text', text: content || '' };
-          v1Messages.push({
+          pushOrCombine({
             role: 'user',
             ...fields,
             type: 'text',
@@ -47,7 +71,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
           const userContent = experimental_attachments
             ? [...textParts, ...attachmentsToParts(experimental_attachments)]
             : textParts;
-          v1Messages.push({
+          pushOrCombine({
             role: 'user',
             ...fields,
             type: 'text',
@@ -112,7 +136,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
               }
             }
 
-            v1Messages.push({
+            pushOrCombine({
               role: 'assistant',
               ...fields,
               type: content.some(c => c.type === `tool-call`) ? 'tool-call' : 'text',
@@ -133,7 +157,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
 
             // tool message with tool results
             if (stepInvocations.length > 0) {
-              v1Messages.push({
+              pushOrCombine({
                 role: 'tool',
                 ...fields,
                 type: 'tool-result',
@@ -190,7 +214,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
         const toolInvocations = message.content.toolInvocations;
 
         if (toolInvocations == null || toolInvocations.length === 0) {
-          v1Messages.push({ role: 'assistant', ...fields, content: content || '', type: 'text' });
+          pushOrCombine({ role: 'assistant', ...fields, content: content || '', type: 'text' });
           break;
         }
 
@@ -206,7 +230,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
           }
 
           // assistant message with tool calls
-          v1Messages.push({
+          pushOrCombine({
             role: 'assistant',
             ...fields,
             type: 'tool-call',
@@ -222,7 +246,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
           });
 
           // tool message with tool results
-          v1Messages.push({
+          pushOrCombine({
             role: 'tool',
             ...fields,
             type: 'tool-result',
@@ -245,7 +269,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
         }
 
         if (content && !isLastMessage) {
-          v1Messages.push({ role: 'assistant', ...fields, type: 'text', content: content || '' });
+          pushOrCombine({ role: 'assistant', ...fields, type: 'text', content: content || '' });
         }
 
         break;

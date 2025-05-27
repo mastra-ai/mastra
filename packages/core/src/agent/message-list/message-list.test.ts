@@ -2,9 +2,9 @@ import { randomUUID } from 'crypto';
 import { appendClientMessage, appendResponseMessages } from 'ai';
 import type { UIMessage, CoreMessage, Message } from 'ai';
 import { describe, expect, it } from 'vitest';
-import type { MastraMessageV1 } from '../memory';
-import type { MastraMessageV2 } from './message-list';
-import { MessageList, toBase64String } from './message-list';
+import type { MastraMessageV1 } from '../../memory';
+import type { MastraMessageV2 } from '../message-list';
+import { MessageList, toBase64String } from '../message-list';
 
 type VercelUIMessage = Message;
 type VercelCoreMessage = CoreMessage;
@@ -563,6 +563,7 @@ describe('MessageList', () => {
               { type: 'step-start' },
               { type: 'text', text: 'Final response.' },
             ],
+            content: 'Final response.',
           },
           threadId,
           resourceId,
@@ -978,6 +979,7 @@ describe('MessageList', () => {
               { type: 'step-start' },
               { type: 'text', text: 'The task is now complete.' },
             ],
+            content: 'The task is now complete.',
           },
           threadId,
           resourceId,
@@ -1128,6 +1130,7 @@ describe('MessageList', () => {
           createdAt: expect.any(Date), // Should be the timestamp of the last message in the sequence
           content: {
             format: 2,
+            content: "The weather in London is 20°C and sunny, and in Paris it's 15°C and cloudy.",
             parts: [
               { type: 'step-start' },
               { type: 'text', text: 'Okay, I will check the weather for both cities.' },

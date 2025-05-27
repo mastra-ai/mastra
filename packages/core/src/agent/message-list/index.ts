@@ -1,8 +1,8 @@
 import { randomUUID } from 'crypto';
 import { convertToCoreMessages } from 'ai';
 import type { CoreMessage, CoreSystemMessage, FilePart, IDGenerator, Message, UIMessage } from 'ai';
-import type { MastraMessageV1 } from '../memory';
-import { isCoreMessage, isUiMessage } from '../utils';
+import type { MastraMessageV1 } from '../../memory';
+import { isCoreMessage, isUiMessage } from '../../utils';
 import { convertToV1Messages } from './prompt/convert-to-mastra-v1';
 
 export type MastraMessageContentV2 = {
@@ -47,15 +47,19 @@ export class MessageList {
 
   private generateMessageId?: IDGenerator;
 
+  private debug = false;
+
   constructor({
     threadId,
     resourceId,
     generateMessageId,
-  }: { threadId?: string; resourceId?: string; generateMessageId?: IDGenerator } = {}) {
+    debug,
+  }: { debug?: boolean; threadId?: string; resourceId?: string; generateMessageId?: IDGenerator } = {}) {
     if (threadId) {
       this.memoryInfo = { threadId, resourceId };
       this.generateMessageId = generateMessageId;
     }
+    if (debug) this.debug = debug;
   }
 
   public add(messages: string | string[] | MessageInput | MessageInput[], messageSource: MessageSource) {
@@ -222,9 +226,8 @@ export class MessageList {
 
     const latestMessage = this.messages.at(-1);
 
-    // Handle non-tool messages (user, assistant, system, data)
-    // If the last message is an assistant message and the new message is also an assistant message, merge them.
-    if (latestMessage?.role === 'assistant' && messageV2.role === 'assistant' && !shouldUpdate) {
+    // If the last message is an assistant message and the new message is also an assistant message, merge them together
+    if (latestMessage?.role === 'assistant' && messageV2.role === 'assistant') {
       latestMessage.createdAt = messageV2.createdAt || latestMessage.createdAt;
 
       for (const part of messageV2.content.parts) {
@@ -241,7 +244,6 @@ export class MessageList {
               state: 'result',
               result: part.toolInvocation.result,
             };
-            // Keep the existing args from the call part
           } else {
             // This indicates a tool result for a call not found in the preceding assistant message
             // TODO: use logger
@@ -255,17 +257,34 @@ export class MessageList {
           latestMessage.content.parts.push(part);
         }
       }
-    } else {
-      // Add new message if not merging with the last assistant message
+
+      if (latestMessage.createdAt.getTime() < messageV2.createdAt.getTime()) {
+        latestMessage.createdAt = messageV2.createdAt;
+      }
+      if (!latestMessage.content.content && messageV2.content.content) {
+        latestMessage.content.content = messageV2.content.content;
+      }
+      if (
+        latestMessage.content.content &&
+        messageV2.content.content &&
+        latestMessage.content.content !== messageV2.content.content
+      ) {
+        latestMessage.content.content += `\n${messageV2.content.content}`;
+      }
+    }
+    // Else the last message and this message are not both assistant messages. add a new message to the array.
+    else {
       if (messageV2.role === 'assistant' && messageV2.content.parts[0]?.type !== `step-start`) {
         // Add step-start part for new assistant messages
         messageV2.content.parts.unshift({ type: 'step-start' });
       }
 
+      // if we should update an existing message do so, otherwise push a new message
+      // TODO: why is this logic separate from the first if condition above? this also checks to update and merge.
       const existingIndex = (shouldUpdate && this.messages.findIndex(m => m.id === id)) || -1;
-
-      if (shouldUpdate && existingIndex !== -1) {
-        this.messages[existingIndex] = messageV2;
+      const existingMessage = existingIndex !== -1 && this.messages[existingIndex];
+      if (shouldUpdate && existingMessage) {
+        this.messages[existingIndex] = existingMessage;
       } else if (!exists) {
         this.messages.push(messageV2);
       }
@@ -305,16 +324,24 @@ export class MessageList {
       );
     }
 
-    if (MessageList.isMastraMessageV1(message)) return this.mastraMessageV1ToMastraMessageV2(message, messageSource);
-    if (MessageList.isMastraMessageV2(message)) return this.hydrateMastraMessageV2Fields(message);
-    if (MessageList.isVercelCoreMessage(message))
+    if (MessageList.isMastraMessageV1(message)) {
+      return this.mastraMessageV1ToMastraMessageV2(message, messageSource);
+    }
+    if (MessageList.isMastraMessageV2(message)) {
+      return this.hydrateMastraMessageV2Fields(message);
+    }
+    if (MessageList.isVercelCoreMessage(message)) {
       return this.vercelCoreMessageToMastraMessageV2(message, messageSource);
-    if (MessageList.isVercelUIMessage(message)) return this.vercelUIMessageToMastraMessageV2(message, messageSource);
+    }
+    if (MessageList.isVercelUIMessage(message)) {
+      return this.vercelUIMessageToMastraMessageV2(message, messageSource);
+    }
 
     throw new Error(`Found unhandled message ${JSON.stringify(message)}`);
   }
 
   private lastCreatedAt?: number;
+  // this makes sure messages added in order will always have a date atleast 1ms apart.
   private generateCreatedAt(messageSource: MessageSource, start?: Date | number): Date {
     start = start instanceof Date ? start : start ? new Date(start) : undefined;
 
@@ -324,6 +351,7 @@ export class MessageList {
     }
 
     if (start && messageSource === `memory`) {
+      // we don't want to modify start time if the message came from memory or we may accidentally re-order old messages
       return start;
     }
 
@@ -361,15 +389,16 @@ export class MessageList {
       messageSource,
     );
 
-    const createdAt = this.generateCreatedAt(messageSource, message.createdAt);
-    return {
+    const converted = {
       id: message.id,
       role: coreV2.role,
-      createdAt: createdAt instanceof Date ? createdAt : new Date(createdAt),
+      createdAt: this.generateCreatedAt(messageSource, message.createdAt),
       threadId: message.threadId,
       resourceId: message.resourceId,
       content: coreV2.content,
     };
+
+    return converted;
   }
   private hydrateMastraMessageV2Fields(message: MastraMessageV2): MastraMessageV2 {
     if (!(message.createdAt instanceof Date)) message.createdAt = new Date(message.createdAt);
@@ -438,8 +467,8 @@ export class MessageList {
                 state: 'result',
                 toolCallId: part.toolCallId,
                 toolName: part.toolName,
-                result: part.result ?? '', // undefined will cause AI SDK to throw an error, but for client side tool calls this really could be undefined
-                args: {}, // Args are unknown at this stage
+                result: part.result ?? '', // undefined will cause AI SDK to throw an error, but for client side tool calls this really could be undefined TODO: make absolutely sure client-side tool calling still works properly. We do have tests but I need to check how good they are.
+                args: {}, // when we combine this invocation onto the existing tool-call part it will have args already
               },
             });
             break;
