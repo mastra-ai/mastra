@@ -19,7 +19,7 @@ export async function start(options: StartOptions = {}) {
     const commands = [];
 
     if (telemetry && !isWebContainer()) {
-      const instrumentation = import.meta.resolve('@opentelemetry/instrumentation/hook.mjs');
+      const instrumentation = '@opentelemetry/instrumentation/hook.mjs';
       commands.push('--import=./instrumentation.mjs', `--import=${instrumentation}`);
     }
 

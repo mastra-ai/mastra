@@ -6,6 +6,7 @@ description: 'Start your built Mastra application'
 # mastra start
 
 Start your built Mastra application. This command is used to run your built Mastra application in production mode.
+Telemetry is enabled by default.
 
 ## Usage
 
@@ -18,7 +19,7 @@ mastra start [options]
 | Option | Description |
 |--------|-------------|
 | `-d, --dir <path>` | Path to your built Mastra output directory (default: .mastra/output) |
-| `-t, --telemetry` | Enable OpenTelemetry instrumentation for observability |
+| `-nt, --no-telemetry` | Enable OpenTelemetry instrumentation for observability |
 
 ## Examples
 
@@ -34,14 +35,8 @@ Start from a custom output directory:
 mastra start --dir ./my-output
 ```
 
-Start with telemetry enabled:
+Start with telemetry disabled:
 
 ```bash
-mastra start -t
-```
-
-Start with both custom directory and telemetry:
-
-```bash
-mastra start --dir ./my-output -t
+mastra start -nt
 ```
