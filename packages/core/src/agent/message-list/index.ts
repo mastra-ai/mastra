@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { convertToCoreMessages } from 'ai';
-import type { CoreMessage, CoreSystemMessage, FilePart, IDGenerator, Message, ToolInvocation, UIMessage } from 'ai';
+import type { CoreMessage, CoreSystemMessage, FilePart, IDGenerator, Message, UIMessage } from 'ai';
 import type { MastraMessageV1 } from '../../memory';
 import { isCoreMessage, isUiMessage } from '../../utils';
 import { convertToV1Messages } from './prompt/convert-to-mastra-v1';
@@ -47,19 +47,15 @@ export class MessageList {
 
   private generateMessageId?: IDGenerator;
 
-  private debug = false;
-
   constructor({
     threadId,
     resourceId,
     generateMessageId,
-    debug,
-  }: { debug?: boolean; threadId?: string; resourceId?: string; generateMessageId?: IDGenerator } = {}) {
+  }: { threadId?: string; resourceId?: string; generateMessageId?: IDGenerator } = {}) {
     if (threadId) {
       this.memoryInfo = { threadId, resourceId };
       this.generateMessageId = generateMessageId;
     }
-    if (debug) this.debug = debug;
   }
 
   public add(messages: string | string[] | MessageInput | MessageInput[], messageSource: MessageSource) {
@@ -132,9 +128,6 @@ export class MessageList {
       this.addOneSystem(message, tag);
     }
     return this;
-  }
-  public setMemoryInfo(info: MemoryInfo) {
-    this.memoryInfo = info;
   }
 
   private addOneSystem(message: CoreSystemMessage | string, tag?: string) {
@@ -267,7 +260,8 @@ export class MessageList {
         messageV2.content.content &&
         latestMessage.content.content !== messageV2.content.content
       ) {
-        latestMessage.content.content += `\n${messageV2.content.content}`;
+        // Match what AI SDK does - content string is always the latest text part.
+        latestMessage.content.content = messageV2.content.content;
       }
     }
     // Else the last message and this message are not both assistant messages OR an existing message has been updated and should be replaced. add a new message to the array or update an existing one.
@@ -353,12 +347,14 @@ export class MessageList {
 
     const now = new Date();
     const nowTime = start?.getTime() || now.getTime();
-    // const lastTime = this.lastCreatedAt;
+    // find the latest createdAt in all stored messages
     const lastTime = this.messages.reduce((p, m) => {
       if (m.createdAt.getTime() > p) return m.createdAt.getTime();
       return p;
     }, this.lastCreatedAt || 0);
 
+    // make sure our new message is created later than the latest known message time
+    // it's expected that messages are added to the list in order if they don't have a createdAt date on them
     if (nowTime <= lastTime) {
       const newDate = new Date(lastTime + 1);
       this.lastCreatedAt = newDate.getTime();
@@ -385,7 +381,7 @@ export class MessageList {
       messageSource,
     );
 
-    const converted = {
+    return {
       id: message.id,
       role: coreV2.role,
       createdAt: this.generateCreatedAt(messageSource, message.createdAt),
@@ -393,8 +389,6 @@ export class MessageList {
       resourceId: message.resourceId,
       content: coreV2.content,
     };
-
-    return converted;
   }
   private hydrateMastraMessageV2Fields(message: MastraMessageV2): MastraMessageV2 {
     if (!(message.createdAt instanceof Date)) message.createdAt = new Date(message.createdAt);
@@ -411,12 +405,11 @@ export class MessageList {
     if (message.annotations) content.annotations = message.annotations;
     if (message.experimental_attachments) content.experimental_attachments = message.experimental_attachments;
 
-    const createdAt = this.generateCreatedAt(messageSource, message.createdAt);
 
     return {
       id: message.id || this.newMessageId(),
       role: MessageList.getRole(message),
-      createdAt: createdAt instanceof Date ? createdAt : new Date(createdAt),
+      createdAt: this.generateCreatedAt(messageSource, message.createdAt),
       threadId: this.memoryInfo?.threadId,
       resourceId: this.memoryInfo?.resourceId,
       content,
@@ -424,7 +417,6 @@ export class MessageList {
   }
   private vercelCoreMessageToMastraMessageV2(coreMessage: CoreMessage, messageSource: MessageSource): MastraMessageV2 {
     const id = `id` in coreMessage ? (coreMessage.id as string) : this.newMessageId();
-    const createdAt = this.generateCreatedAt(messageSource);
     const parts: UIMessage['parts'] = [];
     const experimentalAttachments: UIMessage['experimental_attachments'] = [];
 
@@ -463,7 +455,7 @@ export class MessageList {
                 state: 'result',
                 toolCallId: part.toolCallId,
                 toolName: part.toolName,
-                result: part.result ?? '', // undefined will cause AI SDK to throw an error, but for client side tool calls this really could be undefined TODO: make absolutely sure client-side tool calling still works properly. We do have tests but I need to check how good they are.
+                result: part.result ?? '', // undefined will cause AI SDK to throw an error, but for client side tool calls this really could be undefined
                 args: {}, // when we combine this invocation onto the existing tool-call part it will have args already
               },
             });
@@ -519,7 +511,7 @@ export class MessageList {
     return {
       id,
       role: MessageList.getRole(coreMessage),
-      createdAt: createdAt instanceof Date ? createdAt : new Date(createdAt),
+      createdAt: this.generateCreatedAt(messageSource),
       threadId: this.memoryInfo?.threadId,
       resourceId: this.memoryInfo?.resourceId,
       content,

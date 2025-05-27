@@ -957,10 +957,6 @@ export class Agent<
             memoryConfig,
           }));
 
-        // Update messageList's internal memoryInfo incase threadId changed (e.g. new thread created)
-        // TODO: vibe code. do we even need this?
-        messageList.setMemoryInfo({ threadId: thread.id, resourceId });
-
         const [memoryMessages, memorySystemMessage] =
           threadId && memory
             ? await Promise.all([
@@ -1094,7 +1090,6 @@ export class Agent<
               }
 
               const config = memory.getMergedThreadConfig(memoryConfig);
-              // TODO: use messageList.getLatestUserContent()
               const userMessage = this.getMostRecentUserMessage(messageList.get.all.ui());
               const title =
                 config?.threads?.generateTitle && userMessage ? await this.genTitle(userMessage) : undefined;
