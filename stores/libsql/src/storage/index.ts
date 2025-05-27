@@ -286,7 +286,7 @@ export class LibSQLStore extends MastraStorage {
       id: row.id,
       content,
       role: row.role,
-      type: row.type,
+      type: row.type === `v2` ? undefined : row.type,
       createdAt: new Date(row.createdAt as string),
       threadId: row.thread_id,
     } as MastraMessageV2;

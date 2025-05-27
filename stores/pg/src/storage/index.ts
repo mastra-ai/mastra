@@ -667,6 +667,7 @@ export class PostgresStore extends MastraStorage {
             // If parsing fails, leave as string
           }
         }
+        if (message.type === `v2`) delete message.type;
       });
 
       return messages as T[];

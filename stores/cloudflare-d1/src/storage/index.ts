@@ -760,6 +760,7 @@ export class D1Store extends MastraStorage {
         const processedMsg: Record<string, any> = {};
 
         for (const [key, value] of Object.entries(message)) {
+          if (key === `type` && value === `v2`) continue;
           processedMsg[key] = this.deserializeValue(value);
         }
 
