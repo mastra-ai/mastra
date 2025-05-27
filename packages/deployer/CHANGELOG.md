@@ -1,5 +1,26 @@
 # @mastra/deployer
 
+## 0.10.1
+
+### Patch Changes
+
+- 6d16390: Support custom bundle externals on mastra Instance
+- bed0916: Handle wildcards in tools discovery
+- 5343f93: Move emitter to symbol to make private
+- fe68410: Fix mcp server routes
+- Updated dependencies [d70b807]
+- Updated dependencies [6d16390]
+- Updated dependencies [1e4a421]
+- Updated dependencies [200d0da]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+- Updated dependencies [6015bdf]
+  - @mastra/core@0.10.1
+  - @mastra/server@0.10.1
+
 ## 0.10.1-alpha.3
 
 ### Patch Changes

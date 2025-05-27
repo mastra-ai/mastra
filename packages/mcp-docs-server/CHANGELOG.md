@@ -1,5 +1,28 @@
 # @mastra/mcp-docs-server
 
+## 0.11.0
+
+### Minor Changes
+
+- 3240a80: feat: add mastra interactive course
+
+### Patch Changes
+
+- 96f3fb2: Change logging for non existent paths when using mcp-docs-server
+- Updated dependencies [d70b807]
+- Updated dependencies [6d16390]
+- Updated dependencies [1e4a421]
+- Updated dependencies [ab89d6a]
+- Updated dependencies [200d0da]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+- Updated dependencies [6015bdf]
+  - @mastra/core@0.10.1
+  - @mastra/mcp@0.10.1
+
 ## 0.11.0-alpha.2
 
 ### Minor Changes

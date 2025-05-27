@@ -1,5 +1,26 @@
 # @mastra/deployer-cloudflare
 
+## 0.10.1
+
+### Patch Changes
+
+- d70b807: Improve storage.init
+- 5c41100: Added binding support for cloudflare deployers, added cloudflare kv namespace changes, and removed randomUUID from buildExecutionGraph
+- Updated dependencies [d70b807]
+- Updated dependencies [6d16390]
+- Updated dependencies [1e4a421]
+- Updated dependencies [200d0da]
+- Updated dependencies [bed0916]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+- Updated dependencies [fe68410]
+- Updated dependencies [6015bdf]
+  - @mastra/core@0.10.1
+  - @mastra/deployer@0.10.1
+
 ## 0.10.1-alpha.3
 
 ### Patch Changes

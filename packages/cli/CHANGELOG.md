@@ -1,5 +1,41 @@
 # mastra
 
+## 0.10.1
+
+### Patch Changes
+
+- d70b807: Improve storage.init
+- b4365f6: add empty states for agents network and tools
+- d0932ac: add multi modal input behind feature flag
+- bed0916: Update default tools path in mastra dev,build
+- 3c2dba5: add workflow run list
+- 23d56b1: Handle dev server errors, restart, exit
+- 3240a80: feat: add vscode as option to interactive prompt
+- 992fe17: chore: remove check for alpha and non-alpha mastra packages from mastra lint
+- 267773e: Show map config on workflow graph
+  Highlight borders for conditions too on workflow graph
+  Fix watch stream
+- 35bb6a3: Allow undefined temprature, topP model setting from playground
+- 33f1c64: revamp the experience for workflows
+- 6015bdf: Leverage defaultAgentStreamOption, defaultAgentGenerateOption in playground
+- 7a32205: add empty states for workflows, agents and mcp servers
+- Updated dependencies [d70b807]
+- Updated dependencies [6d16390]
+- Updated dependencies [1e4a421]
+- Updated dependencies [ab89d6a]
+- Updated dependencies [200d0da]
+- Updated dependencies [bed0916]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+- Updated dependencies [fe68410]
+- Updated dependencies [6015bdf]
+  - @mastra/core@0.10.1
+  - @mastra/deployer@0.10.1
+  - @mastra/mcp@0.10.1
+
 ## 0.10.1-alpha.6
 
 ### Patch Changes
