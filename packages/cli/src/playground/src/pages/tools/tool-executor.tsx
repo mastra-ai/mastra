@@ -27,11 +27,11 @@ const ToolExecutor = ({
   const code = JSON.stringify(result ?? {}, null, 2);
 
   return (
-    <div className="w-full h-full grid grid-cols-[400px_1fr] bg-surface1">
+    <div className="w-full h-full grid grid-cols-[400px_1fr] bg-surface1  max-h-[calc(100vh-70px)] overflow-y-hidden">
       <div className="border-r-sm border-border1 bg-surface2">
         <ToolInformation toolDescription={toolDescription} toolId={toolId} />
 
-        <div className="w-full h-[calc(100vh-144px)] p-5 overflow-y-scroll">
+        <div className="w-full p-5 overflow-y-auto">
           <DynamicForm
             isSubmitLoading={isExecutingTool}
             schema={zodInputSchema}
@@ -42,20 +42,18 @@ const ToolExecutor = ({
         </div>
       </div>
 
-      <div className="p-5 relative">
-        <div className="absolute top-4 right-4 z-10">
-          <CopyButton content={code} tooltip="Copy JSON result to clipboard" />
-        </div>
+      <div className="p-5 relative" style={{ maxHeight: '100%', maxWidth: '100%', overflowX: 'auto' }}>
+        <CodeMirror
+          value={code}
+          editable={true}
+          theme={theme}
+          extensions={[jsonLanguage]}
+          className="overflow-y-scroll "
+        />
+      </div>
 
-        <ScrollArea className="h-[calc(100vh-120px)] w-full">
-          <CodeMirror
-            value={code}
-            editable={true}
-            theme={theme}
-            extensions={[jsonLanguage]}
-            className="overflow-y-scroll"
-          />
-        </ScrollArea>
+      <div className="absolute top-16 right-8 z-10">
+        <CopyButton content={code} tooltip="Copy JSON result to clipboard" />
       </div>
     </div>
   );
