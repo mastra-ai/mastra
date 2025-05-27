@@ -13,7 +13,7 @@ import AgentTracesPage from './pages/agents/agent/traces';
 import AgentTool from './pages/tools/agent-tool';
 import Tool from './pages/tools/tool';
 import Workflows from './pages/workflows';
-import Workflow from './pages/workflows/workflow';
+import { Workflow } from './pages/workflows/workflow';
 import LegacyWorkflow from './pages/workflows/workflow/legacy';
 import WorkflowTracesPage from './pages/workflows/workflow/traces';
 import LegacyWorkflowTracesPage from './pages/workflows/workflow/legacy/traces';
@@ -29,6 +29,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
 import { QueryClient } from '@tanstack/react-query';
 import { McpServerPage } from './pages/mcps/[serverId]';
+import { WorkflowGraphLayout } from './pages/workflows/layouts/workflow-graph-layout';
 
 function App() {
   const [queryClient] = useState(() => new QueryClient());
@@ -92,17 +93,31 @@ function App() {
               <Route path="/workflows" element={<Workflows />} />
               <Route path="/workflows/:workflowId" element={<Navigate to="/workflows/:workflowId/graph" />} />
 
-              <Route
-                path="/workflows/:workflowId"
-                element={
-                  <WorkflowLayout>
-                    <Outlet />
-                  </WorkflowLayout>
-                }
-              >
-                <Route path="graph" element={<Workflow />} />
-                <Route path="traces" element={<WorkflowTracesPage />} />
+              <Route path="/workflows/:workflowId" element={<Outlet />}>
+                <Route
+                  path="traces"
+                  element={
+                    <WorkflowLayout>
+                      <WorkflowTracesPage />
+                    </WorkflowLayout>
+                  }
+                />
+
+                <Route
+                  path="/workflows/:workflowId/graph"
+                  element={
+                    <WorkflowLayout>
+                      <WorkflowGraphLayout>
+                        <Outlet />
+                      </WorkflowGraphLayout>
+                    </WorkflowLayout>
+                  }
+                >
+                  <Route path="/workflows/:workflowId/graph" element={<Workflow />} />
+                  <Route path="/workflows/:workflowId/graph/:runId" element={<Workflow />} />
+                </Route>
               </Route>
+
               <Route
                 path="/workflows/legacy/:workflowId"
                 element={<Navigate to="/workflows/legacy/:workflowId/graph" />}
