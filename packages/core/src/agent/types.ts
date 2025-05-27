@@ -113,7 +113,7 @@ export type AgentStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = u
       ? StreamObjectOnFinishCallback<z.infer<Z>>
       : StreamObjectOnFinishCallback<any>;
   /** Callback fired after each generation step completes */
-  onStepFinish?: Z extends undefined ? StreamTextOnStepFinishCallback<any> : never;
+  onStepFinish?: StreamTextOnStepFinishCallback<any>;
   /** Maximum number of steps allowed for generation */
   maxSteps?: number;
   /** Schema for structured output */
