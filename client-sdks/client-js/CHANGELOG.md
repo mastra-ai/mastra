@@ -1,5 +1,13 @@
 # @mastra/client-js
 
+## 0.10.1-alpha.3
+
+### Patch Changes
+
+- 267773e: Show map config on workflow graph
+  Highlight borders for conditions too on workflow graph
+  Fix watch stream
+
 ## 0.10.1-alpha.2
 
 ### Patch Changes

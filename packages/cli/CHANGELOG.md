@@ -1,5 +1,14 @@
 # mastra
 
+## 0.10.1-alpha.5
+
+### Patch Changes
+
+- 992fe17: chore: remove check for alpha and non-alpha mastra packages from mastra lint
+- 267773e: Show map config on workflow graph
+  Highlight borders for conditions too on workflow graph
+  Fix watch stream
+
 ## 0.10.1-alpha.4
 
 ### Patch Changes
