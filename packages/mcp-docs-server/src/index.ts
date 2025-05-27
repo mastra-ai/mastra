@@ -9,6 +9,13 @@ import { logger, createLogger } from './logger';
 import { prepare } from './prepare-docs/prepare';
 import { blogTool, blogInputSchema } from './tools/blog';
 import { changesTool, changesInputSchema } from './tools/changes';
+import {
+  startMastraCourse,
+  getMastraCourseStatus,
+  startMastraCourseLesson,
+  nextMastraCourseStep,
+  clearMastraCourseHistory,
+} from './tools/course';
 import { docsTool, docsInputSchema } from './tools/docs';
 import { examplesTool, examplesInputSchema } from './tools/examples';
 import { fromPackageRoot } from './utils';
@@ -64,6 +71,31 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       description: changesTool.description,
       inputSchema: zodToJsonSchema(changesInputSchema),
     },
+    {
+      name: 'startMastraCourse',
+      description: startMastraCourse.description,
+      inputSchema: zodToJsonSchema(startMastraCourse.parameters),
+    },
+    {
+      name: 'getMastraCourseStatus',
+      description: getMastraCourseStatus.description,
+      inputSchema: zodToJsonSchema(getMastraCourseStatus.parameters),
+    },
+    {
+      name: 'startMastraCourseLesson',
+      description: startMastraCourseLesson.description,
+      inputSchema: zodToJsonSchema(startMastraCourseLesson.parameters),
+    },
+    {
+      name: 'nextMastraCourseStep',
+      description: nextMastraCourseStep.description,
+      inputSchema: zodToJsonSchema(nextMastraCourseStep.parameters),
+    },
+    {
+      name: 'clearMastraCourseHistory',
+      description: clearMastraCourseHistory.description,
+      inputSchema: zodToJsonSchema(clearMastraCourseHistory.parameters),
+    },
   ],
 }));
 
@@ -91,6 +123,46 @@ server.setRequestHandler(CallToolRequestSchema, async request => {
         const args = changesInputSchema.parse(request.params.arguments);
         result = await changesTool.execute(args);
         break;
+      }
+      case 'startMastraCourse': {
+        const args = startMastraCourse.parameters.parse(request.params.arguments);
+        const result = await startMastraCourse.execute(args);
+        return {
+          content: [{ type: 'text', text: result }],
+          isError: false,
+        };
+      }
+      case 'getMastraCourseStatus': {
+        const args = getMastraCourseStatus.parameters.parse(request.params.arguments);
+        const result = await getMastraCourseStatus.execute(args);
+        return {
+          content: [{ type: 'text', text: result }],
+          isError: false,
+        };
+      }
+      case 'startMastraCourseLesson': {
+        const args = startMastraCourseLesson.parameters.parse(request.params.arguments);
+        const result = await startMastraCourseLesson.execute(args);
+        return {
+          content: [{ type: 'text', text: result }],
+          isError: false,
+        };
+      }
+      case 'nextMastraCourseStep': {
+        const args = nextMastraCourseStep.parameters.parse(request.params.arguments);
+        const result = await nextMastraCourseStep.execute(args);
+        return {
+          content: [{ type: 'text', text: result }],
+          isError: false,
+        };
+      }
+      case 'clearMastraCourseHistory': {
+        const args = clearMastraCourseHistory.parameters.parse(request.params.arguments);
+        const result = await clearMastraCourseHistory.execute(args);
+        return {
+          content: [{ type: 'text', text: result }],
+          isError: false,
+        };
       }
       default: {
         void logger.warning(`Unknown tool requested: ${request.params.name}`);
