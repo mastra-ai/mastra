@@ -1,5 +1,13 @@
 # @mastra/agui
 
+## 1.0.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [6015bdf]
+  - @mastra/client-js@0.10.1-alpha.2
+  - @mastra/core@0.10.1-alpha.2
+
 ## 1.0.1-alpha.1
 
 ### Patch Changes
