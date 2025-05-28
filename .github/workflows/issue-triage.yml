@@ -35,4 +35,4 @@ jobs:
           MASTRA_BASE_URL: "https://few-substantial-engine.mastra.cloud"
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_TEAM_ID: ${{ secrets.SLACK_TEAM_ID }}
-          SLACK_CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
