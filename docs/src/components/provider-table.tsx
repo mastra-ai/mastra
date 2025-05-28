@@ -94,6 +94,16 @@ const modelData = [
     apiKey: "XAI_API_KEY",
   },
   {
+    provider: "Vercel",
+    providerUrl: "https://sdk.vercel.ai/providers/ai-sdk-providers/vercel",
+    model: "v0-1.0-md",
+    imageInput: true,
+    objectGeneration: true,
+    toolUsage: true,
+    toolStreaming: true,
+    apiKey: "VERCEL_API_KEY",
+  },
+  {
     provider: "OpenAI",
     providerUrl: "https://sdk.vercel.ai/providers/ai-sdk-providers/openai",
     model: "gpt-4.1",
@@ -176,6 +186,26 @@ const modelData = [
   {
     provider: "OpenAI",
     providerUrl: "https://sdk.vercel.ai/providers/ai-sdk-providers/openai",
+    model: "o3",
+    imageInput: false,
+    objectGeneration: false,
+    toolUsage: true,
+    toolStreaming: true,
+    apiKey: "OPENAI_API_KEY",
+  },
+  {
+    provider: "OpenAI",
+    providerUrl: "https://sdk.vercel.ai/providers/ai-sdk-providers/openai",
+    model: "o4-mini",
+    imageInput: false,
+    objectGeneration: false,
+    toolUsage: true,
+    toolStreaming: true,
+    apiKey: "OPENAI_API_KEY",
+  },
+  {
+    provider: "OpenAI",
+    providerUrl: "https://sdk.vercel.ai/providers/ai-sdk-providers/openai",
     model: "o1",
     imageInput: true,
     objectGeneration: false,
@@ -202,6 +232,26 @@ const modelData = [
     toolUsage: false,
     toolStreaming: false,
     apiKey: "OPENAI_API_KEY",
+  },
+  {
+    provider: "Anthropic",
+    providerUrl: "https://sdk.vercel.ai/providers/ai-sdk-providers/anthropic",
+    model: "claude-4-opus-20250514",
+    imageInput: true,
+    objectGeneration: true,
+    toolUsage: true,
+    toolStreaming: true,
+    apiKey: "ANTHROPIC_API_KEY",
+  },
+  {
+    provider: "Anthropic",
+    providerUrl: "https://sdk.vercel.ai/providers/ai-sdk-providers/anthropic",
+    model: "claude-4-sonnet-20250514",
+    imageInput: true,
+    objectGeneration: true,
+    toolUsage: true,
+    toolStreaming: true,
+    apiKey: "ANTHROPIC_API_KEY",
   },
   {
     provider: "Anthropic",
@@ -285,8 +335,7 @@ const modelData = [
   },
   {
     provider: "Google Generative AI",
-    providerUrl:
-      "https://sdk.vercel.ai/providers/ai-sdk-providers/google-generative-ai",
+    providerUrl: "https://sdk.vercel.ai/providers/ai-sdk-providers/google",
     model: "gemini-2.0-flash-exp",
     imageInput: true,
     objectGeneration: true,
@@ -296,8 +345,7 @@ const modelData = [
   },
   {
     provider: "Google Generative AI",
-    providerUrl:
-      "https://sdk.vercel.ai/providers/ai-sdk-providers/google-generative-ai",
+    providerUrl: "https://sdk.vercel.ai/providers/ai-sdk-providers/google",
     model: "gemini-1.5-flash",
     imageInput: true,
     objectGeneration: true,
@@ -307,8 +355,7 @@ const modelData = [
   },
   {
     provider: "Google Generative AI",
-    providerUrl:
-      "https://sdk.vercel.ai/providers/ai-sdk-providers/google-generative-ai",
+    providerUrl: "https://sdk.vercel.ai/providers/ai-sdk-providers/google",
     model: "gemini-1.5-pro",
     imageInput: true,
     objectGeneration: true,
@@ -318,8 +365,7 @@ const modelData = [
   },
   {
     provider: "Google Vertex",
-    providerUrl:
-      "https://sdk.vercel.ai/providers/ai-sdk-providers/google-vertex",
+    providerUrl: "https://sdk.vercel.ai/providers/ai-sdk-providers/google",
     model: "gemini-2.0-flash-exp",
     imageInput: true,
     objectGeneration: true,
@@ -329,8 +375,7 @@ const modelData = [
   },
   {
     provider: "Google Vertex",
-    providerUrl:
-      "https://sdk.vercel.ai/providers/ai-sdk-providers/google-vertex",
+    providerUrl: "https://sdk.vercel.ai/providers/ai-sdk-providers/google",
     model: "gemini-1.5-flash",
     imageInput: true,
     objectGeneration: true,
@@ -340,8 +385,7 @@ const modelData = [
   },
   {
     provider: "Google Vertex",
-    providerUrl:
-      "https://sdk.vercel.ai/providers/ai-sdk-providers/google-vertex",
+    providerUrl: "https://sdk.vercel.ai/providers/ai-sdk-providers/google",
     model: "gemini-1.5-pro",
     imageInput: true,
     objectGeneration: true,
@@ -486,6 +530,8 @@ export function ProviderTable() {
             <TableCell className="font-medium">
               <Link
                 href={model.providerUrl}
+                target="_blank"
+                rel="noopener"
                 className="dark:text-green-400  text-[var(--light-green-accent-2)] hover:underline"
               >
                 {model.provider}

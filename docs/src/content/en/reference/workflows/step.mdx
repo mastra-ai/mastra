@@ -104,7 +104,8 @@ const processOrder = createStep({
     {
       name: "resumeData",
       type: "z.infer<TResumeSchema>",
-      description: "The resume data matching the resumeSchema, when resuming the step from a suspended state. Only exists if the step is being resumed.",
+      description:
+        "The resume data matching the resumeSchema, when resuming the step from a suspended state. Only exists if the step is being resumed.",
     },
     {
       name: "mastra",
@@ -119,7 +120,8 @@ const processOrder = createStep({
     {
       name: "getInitData",
       type: "() => any",
-      description: "Function to access the initial input data of the workflow in any step",
+      description:
+        "Function to access the initial input data of the workflow in any step",
     },
     {
       name: "suspend",

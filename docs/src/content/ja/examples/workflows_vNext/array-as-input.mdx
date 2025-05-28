@@ -4,6 +4,7 @@ description: Mastraを使用してワークフローで.foreach()を使用して
 ---
 
 # 配列を入力として
+
 この例では、ワークフローで配列入力を処理する方法を示しています。Mastraは、配列内の各アイテムに対してステップを実行する`.foreach()`ヘルパー関数を提供しています。
 
 ## セットアップ
@@ -13,6 +14,7 @@ npm install @ai-sdk/openai @mastra/core simple-git
 ```
 
 ## ドキュメント生成エージェントの定義
+
 コードファイルまたはコードファイルの要約を与えられたときに、LLM呼び出しを活用してドキュメントを生成するドキュメント生成エージェントを定義します。
 
 ```ts showLineNumbers copy filename="agents/docs-generator-agent.ts"
@@ -44,6 +46,7 @@ export { docGeneratorAgent };
 ```
 
 ## ファイルサマリーワークフローの定義
+
 特定のファイルのコードを取得するステップと、そのコードファイルのREADMEを生成する別のステップという2つのステップでファイルサマリーワークフローを定義します。
 
 ```ts showLineNumbers copy filename="workflows/file-summary-workflow.ts"
@@ -110,6 +113,7 @@ export { generateSummaryWorkflow };
 ```
 
 ## READMEジェネレーターワークフローの定義
+
 READMEジェネレーターワークフローを4つのステップで定義します：1つはGitHubリポジトリをクローンするステップ、1つはワークフローを一時停止してREADME生成時に考慮するフォルダに関するユーザー入力を取得するステップ、1つはフォルダ内のすべてのファイルの要約を生成するステップ、そして最後に各ファイルに対して生成されたすべてのドキュメントを1つのREADMEにまとめるステップです。
 
 ```ts showLineNumbers copy filename="workflows/readme-generator-workflow.ts
@@ -257,7 +261,12 @@ const readmeGeneratorWorkflow = createWorkflow({
       repoUrl: z.string(),
     }),
   }),
-  steps: [cloneRepositoryStep, selectFolderStep, generateSummaryWorkflow, collateDocumentationStep],
+  steps: [
+    cloneRepositoryStep,
+    selectFolderStep,
+    generateSummaryWorkflow,
+    collateDocumentationStep,
+  ],
 })
   .then(cloneRepositoryStep)
   .then(selectFolderStep)
@@ -269,6 +278,7 @@ export { readmeGeneratorWorkflow };
 ```
 
 ## Mastraクラスでエージェントとワークフローのインスタンスを登録する
+
 エージェントとワークフローをmastraインスタンスに登録します。これはワークフロー内でエージェントへのアクセスを可能にするために重要です。
 
 ```ts showLineNumbers copy filename="index.ts"
@@ -288,8 +298,8 @@ const mastra = new Mastra({
     generateSummaryWorkflow,
   },
   logger: new PinoLogger({
-    name: 'Mastra',
-    level: 'info',
+    name: "Mastra",
+    level: "info",
   }),
 });
 
@@ -297,6 +307,7 @@ export { mastra };
 ```
 
 ## Readme Generator ワークフローを実行する
+
 ここでは、mastraインスタンスからreadme generatorワークフローを取得し、実行を作成して、必要なinputDataで作成した実行を実行します。
 
 ```ts showLineNumbers copy filename="exec.ts"
@@ -357,4 +368,3 @@ if (res.status === "success") {
   console.log(res);
 }
 ```
-

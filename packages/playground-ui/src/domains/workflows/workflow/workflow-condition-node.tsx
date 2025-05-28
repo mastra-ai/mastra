@@ -28,7 +28,7 @@ export type ConditionNode = Node<
 >;
 
 export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
-  const { conditions, previousStepId, nextStepId, mapConfig } = data;
+  const { conditions, previousStepId, nextStepId } = data;
   const [open, setOpen] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
   const type = conditions[0]?.type;
