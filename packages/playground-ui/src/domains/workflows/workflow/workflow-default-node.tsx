@@ -3,12 +3,11 @@ import { CircleDashed, Loader2, PauseIcon } from 'lucide-react';
 import { useCurrentRun } from '../context/use-current-run';
 import { CheckIcon, CrossIcon, Icon } from '@/ds/icons';
 import { Txt } from '@/ds/components/Txt';
-import { Button } from '@/ds/components/Button';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
-import { useState } from 'react';
+
 import { Clock } from './workflow-clock';
-import { CodeDialogContent } from './workflow-code-dialog-content';
+
 import { cn } from '@/lib/utils';
+import { WorkflowStepActionBar } from './workflow-step-action-bar';
 
 export type DefaultNode = Node<
   {
@@ -22,18 +21,10 @@ export type DefaultNode = Node<
 >;
 
 export function WorkflowDefaultNode({ data }: NodeProps<DefaultNode>) {
-  const [isInputOpen, setIsInputOpen] = useState(false);
-  const [isOutputOpen, setIsOutputOpen] = useState(false);
-  const [isErrorOpen, setIsErrorOpen] = useState(false);
-  const [isMapConfigOpen, setIsMapConfigOpen] = useState(false);
-
   const { steps, isRunning } = useCurrentRun();
-  const { label, description, withoutTopHandle, withoutBottomHandle, mapConfig } = data;
+  const { label, description, withoutTopHandle, withoutBottomHandle } = data;
 
   const step = steps[label];
-
-  const dialogContentClass = 'bg-surface2 rounded-lg border-sm border-border1 max-w-4xl w-full px-0';
-  const dialogTitleClass = 'border-b-sm border-border1 pb-4 px-6';
 
   return (
     <>
@@ -67,71 +58,13 @@ export function WorkflowDefaultNode({ data }: NodeProps<DefaultNode>) {
           </Txt>
         )}
 
-        {(step?.input || step?.output || step?.error || mapConfig) && (
-          <div className="flex flex-wrap items-center bg-surface4 border-t-sm border-border1 px-2 py-1 gap-2 rounded-b-lg">
-            {mapConfig && (
-              <>
-                <Button onClick={() => setIsMapConfigOpen(true)}>Map config</Button>
-
-                <Dialog open={isMapConfigOpen} onOpenChange={setIsMapConfigOpen}>
-                  <DialogContent className={dialogContentClass}>
-                    <DialogTitle className={dialogTitleClass}>{label} map config</DialogTitle>
-
-                    <div className="px-4 overflow-hidden">
-                      <CodeDialogContent data={mapConfig} />
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </>
-            )}
-            {step?.input && (
-              <>
-                <Button onClick={() => setIsInputOpen(true)}>Input</Button>
-
-                <Dialog open={isInputOpen} onOpenChange={setIsInputOpen}>
-                  <DialogContent className={dialogContentClass}>
-                    <DialogTitle className={dialogTitleClass}>{label} input</DialogTitle>
-
-                    <div className="px-4 overflow-hidden">
-                      <CodeDialogContent data={step.input} />
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </>
-            )}
-
-            {step?.output && (
-              <>
-                <Button onClick={() => setIsOutputOpen(true)}>Output</Button>
-
-                <Dialog open={isOutputOpen} onOpenChange={setIsOutputOpen}>
-                  <DialogContent className={dialogContentClass}>
-                    <DialogTitle className={dialogTitleClass}>{label} output</DialogTitle>
-                    <div className="px-4 overflow-hidden">
-                      <CodeDialogContent data={step.output} />
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </>
-            )}
-
-            {step?.error && (
-              <>
-                <Button onClick={() => setIsErrorOpen(true)}>Error</Button>
-
-                <Dialog open={isErrorOpen} onOpenChange={setIsErrorOpen}>
-                  <DialogContent className={dialogContentClass}>
-                    <DialogTitle className={dialogTitleClass}>{label} error</DialogTitle>
-
-                    <div className="px-4 overflow-hidden">
-                      <CodeDialogContent data={step?.error} />
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </>
-            )}
-          </div>
-        )}
+        <WorkflowStepActionBar
+          stepName={label}
+          input={step?.input}
+          output={step?.output}
+          error={step?.error}
+          mapConfig={data.mapConfig}
+        />
       </div>
 
       {!withoutBottomHandle && (

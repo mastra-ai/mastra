@@ -9,22 +9,26 @@ import { cn } from '@/lib/utils';
 import type { Condition } from './utils';
 import { Highlight, themes } from 'prism-react-renderer';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Network } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useCurrentRun } from '../context/use-current-run';
+import { Badge } from '@/ds/components/Badge';
+import { Icon } from '@/ds/icons';
+import { WorkflowStepActionBar } from './workflow-step-action-bar';
 
 export type ConditionNode = Node<
   {
     conditions: Condition[];
     previousStepId: string;
     nextStepId: string;
+    mapConfig?: string;
   },
   'condition-node'
 >;
 
 export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
-  const { conditions, previousStepId, nextStepId } = data;
+  const { conditions, previousStepId, nextStepId, mapConfig } = data;
   const [open, setOpen] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
   const type = conditions[0]?.type;
@@ -36,121 +40,121 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
   const nextStep = steps[nextStepId];
 
   return (
-    <Collapsible
-      open={!isCollapsible ? true : open}
-      onOpenChange={_open => {
-        if (isCollapsible) {
-          setOpen(_open);
-        }
-      }}
-      className={cn(
-        'bg-mastra-bg-3 rounded-md w-[274px] flex flex-col p-2 gap-2 border-sm border-border1',
-        previousStep?.status === 'success' && nextStep && 'ring-2 ring-accent1',
-        previousStep?.status === 'failed' && nextStep && 'ring-2 ring-accent2',
-      )}
-    >
+    <>
       <Handle type="target" position={Position.Top} style={{ visibility: 'hidden' }} />
 
-      <CollapsibleTrigger className="flex items-center justify-between w-full">
-        <Text
-          size={'xs'}
-          weight="medium"
-          className="text-mastra-el-3 bg-mastra-bg-11 my-auto block rounded-[0.125rem] px-2 py-1 text-[10px] w-fit"
-        >
-          {type?.toUpperCase()}
-        </Text>
-        {isCollapsible && (
-          <ChevronDown
-            className={cn('w-4 h-4 transition-transform', {
-              'transform rotate-180': open,
-            })}
-          />
+      <div
+        className={cn(
+          'bg-surface3 rounded-lg w-[300px] border-sm border-border1',
+          previousStep?.status === 'success' && nextStep && 'ring-2 ring-accent1',
+          previousStep?.status === 'failed' && nextStep && 'ring-2 ring-accent2',
         )}
-      </CollapsibleTrigger>
-      {type === 'else' ? null : (
-        <CollapsibleContent className="flex flex-col gap-2">
-          {conditions.map((condition, index) => {
-            return condition.fnString ? (
-              <Fragment key={`${condition.fnString}-${index}`}>
-                <Highlight theme={themes.oneDark} code={String(condition.fnString).trim()} language="javascript">
-                  {({ className, style, tokens, getLineProps, getTokenProps }) => (
-                    <pre
-                      className={`${className} relative font-mono text-sm overflow-x-auto p-3 w-full cursor-pointer rounded-lg mt-2`}
-                      style={{
-                        ...style,
-                        backgroundColor: 'transparent',
-                        border: '1px solid #343434',
-                        maxHeight: '9.62rem',
-                      }}
-                      onClick={() => setOpenDialog(true)}
-                    >
-                      {tokens.map((line, i) => (
-                        <div key={i} {...getLineProps({ line })}>
-                          <span className="inline-block mr-2 text-muted-foreground">{i + 1}</span>
-                          {line.map((token, key) => (
-                            <span key={key} {...getTokenProps({ token })} />
+      >
+        <Collapsible
+          open={!isCollapsible ? true : open}
+          onOpenChange={_open => {
+            if (isCollapsible) {
+              setOpen(_open);
+            }
+          }}
+        >
+          <CollapsibleTrigger className="flex items-center justify-between w-full px-3 py-2">
+            <Badge icon={type === 'when' ? <Network className="text-[#ECB047]" /> : null}>{type?.toUpperCase()}</Badge>
+            {isCollapsible && (
+              <Icon>
+                <ChevronDown
+                  className={cn('transition-transform text-icon3', {
+                    'transform rotate-180': open,
+                  })}
+                />
+              </Icon>
+            )}
+          </CollapsibleTrigger>
+
+          {type === 'else' ? null : (
+            <CollapsibleContent className="flex flex-col gap-2 pb-2">
+              {conditions.map((condition, index) => {
+                return condition.fnString ? (
+                  <div key={`${condition.fnString}-${index}`} className="px-3">
+                    <Highlight theme={themes.oneDark} code={String(condition.fnString).trim()} language="javascript">
+                      {({ className, style, tokens, getLineProps, getTokenProps }) => (
+                        <pre
+                          className={`${className} relative font-mono p-3 w-full cursor-pointer rounded-lg text-xs !bg-surface4 overflow-scroll`}
+                          onClick={() => setOpenDialog(true)}
+                          style={style}
+                        >
+                          {tokens.map((line, i) => (
+                            <div key={i} {...getLineProps({ line })}>
+                              <span className="inline-block mr-2 text-muted-foreground">{i + 1}</span>
+                              {line.map((token, key) => (
+                                <span key={key} {...getTokenProps({ token })} />
+                              ))}
+                            </div>
                           ))}
-                        </div>
-                      ))}
-                    </pre>
-                  )}
-                </Highlight>
+                        </pre>
+                      )}
+                    </Highlight>
 
-                <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-                  <DialogContent className="max-w-[30rem] bg-[#121212] p-[0.5rem]">
-                    <DialogTitle className="sr-only">Condition Function</DialogTitle>
-                    <ScrollArea className="w-full p-2" maxHeight="400px">
-                      <Highlight theme={themes.oneDark} code={String(condition.fnString).trim()} language="javascript">
-                        {({ className, style, tokens, getLineProps, getTokenProps }) => (
-                          <pre
-                            className={`${className} relative font-mono text-sm overflow-x-auto p-3 w-full rounded-lg mt-2 dark:bg-zinc-800`}
-                            style={{
-                              ...style,
-                              backgroundColor: '#121212',
-                              padding: '0 0.75rem 0 0',
-                            }}
+                    <Dialog open={openDialog} onOpenChange={setOpenDialog}>
+                      <DialogContent className="max-w-[30rem] bg-surface2 p-4">
+                        <DialogTitle className="sr-only">Condition Function</DialogTitle>
+                        <ScrollArea className="w-full p-2 pt-4" maxHeight="400px">
+                          <Highlight
+                            theme={themes.oneDark}
+                            code={String(condition.fnString).trim()}
+                            language="javascript"
                           >
-                            {tokens.map((line, i) => (
-                              <div key={i} {...getLineProps({ line })}>
-                                <span className="inline-block mr-2 text-muted-foreground">{i + 1}</span>
-                                {line.map((token, key) => (
-                                  <span key={key} {...getTokenProps({ token })} />
+                            {({ className, style, tokens, getLineProps, getTokenProps }) => (
+                              <pre
+                                className={`${className} relative font-mono text-sm overflow-x-auto p-3 w-full rounded-lg mt-2 dark:bg-zinc-800`}
+                                style={{
+                                  ...style,
+                                  backgroundColor: '#121212',
+                                  padding: '0 0.75rem 0 0',
+                                }}
+                              >
+                                {tokens.map((line, i) => (
+                                  <div key={i} {...getLineProps({ line })}>
+                                    <span className="inline-block mr-2 text-muted-foreground">{i + 1}</span>
+                                    {line.map((token, key) => (
+                                      <span key={key} {...getTokenProps({ token })} />
+                                    ))}
+                                  </div>
                                 ))}
-                              </div>
-                            ))}
-                          </pre>
-                        )}
-                      </Highlight>
-                    </ScrollArea>
-                  </DialogContent>
-                </Dialog>
-              </Fragment>
-            ) : (
-              <Fragment key={`${condition.ref?.path}-${index}`}>
-                {condition.ref?.step ? (
-                  <div className="flex items-center gap-1">
-                    {index === 0 ? null : (
-                      <Text
-                        size={'xs'}
-                        weight="medium"
-                        className="text-mastra-el-3 bg-mastra-bg-11 my-auto block rounded-[0.125rem] px-2 py-1 text-[10px]"
-                      >
-                        {condition.conj?.toLocaleUpperCase() || 'WHEN'}
-                      </Text>
-                    )}
-
-                    <Text size={'xs'} className=" text-mastra-el-3 flex-1">
-                      {(condition.ref.step as any).id || condition.ref.step}'s {condition.ref.path}{' '}
-                      {Object.entries(condition.query).map(([key, value]) => `${key} ${String(value)}`)}
-                    </Text>
+                              </pre>
+                            )}
+                          </Highlight>
+                        </ScrollArea>
+                      </DialogContent>
+                    </Dialog>
                   </div>
-                ) : null}
-              </Fragment>
-            );
-          })}
-        </CollapsibleContent>
-      )}
+                ) : (
+                  <Fragment key={`${condition.ref?.path}-${index}`}>
+                    {condition.ref?.step ? (
+                      <div className="flex items-center gap-1">
+                        {index === 0 ? null : (
+                          <Badge icon={<Network className="text-[#ECB047]" />}>
+                            {condition.conj?.toLocaleUpperCase() || 'WHEN'}
+                          </Badge>
+                        )}
+
+                        <Text size={'xs'} className=" text-mastra-el-3 flex-1">
+                          {(condition.ref.step as any).id || condition.ref.step}'s {condition.ref.path}{' '}
+                          {Object.entries(condition.query).map(([key, value]) => `${key} ${String(value)}`)}
+                        </Text>
+                      </div>
+                    ) : null}
+                  </Fragment>
+                );
+              })}
+            </CollapsibleContent>
+          )}
+        </Collapsible>
+
+        <WorkflowStepActionBar stepName={nextStepId} input={previousStep?.output} mapConfig={data.mapConfig} />
+      </div>
+
       <Handle type="source" position={Position.Bottom} style={{ visibility: 'hidden' }} />
-    </Collapsible>
+    </>
   );
 }
