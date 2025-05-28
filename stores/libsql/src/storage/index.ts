@@ -189,26 +189,42 @@ export class LibSQLStore extends MastraStorage {
     }
   }
 
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    const operationFn = async () => {
-      return await this.client.execute(
-        this.prepareStatement({
-          tableName,
-          record,
-        }),
-      );
-    };
-    await this.executeWriteOperationWithRetry(operationFn, `insert into table ${tableName}`);
+  public insert(args: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
+    return this.executeWriteOperationWithRetry(() => this.doInsert(args), `insert into table ${args.tableName}`);
   }
 
-  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    if (records.length === 0) return;
+  private async doInsert({
+    tableName,
+    record,
+  }: {
+    tableName: TABLE_NAMES;
+    record: Record<string, any>;
+  }): Promise<void> {
+    await this.client.execute(
+      this.prepareStatement({
+        tableName,
+        record,
+      }),
+    );
+  }
 
-    const operationFn = async () => {
-      const batchStatements = records.map(r => this.prepareStatement({ tableName, record: r }));
-      return this.client.batch(batchStatements, 'write');
-    };
-    await this.executeWriteOperationWithRetry(operationFn, `batch insert into table ${tableName}`);
+  public batchInsert(args: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
+    return this.executeWriteOperationWithRetry(
+      () => this.doBatchInsert(args),
+      `batch insert into table ${args.tableName}`,
+    );
+  }
+
+  private async doBatchInsert({
+    tableName,
+    records,
+  }: {
+    tableName: TABLE_NAMES;
+    records: Record<string, any>[];
+  }): Promise<void> {
+    if (records.length === 0) return;
+    const batchStatements = records.map(r => this.prepareStatement({ tableName, record: r }));
+    await this.client.batch(batchStatements, 'write');
   }
 
   async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {

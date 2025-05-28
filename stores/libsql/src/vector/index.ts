@@ -66,14 +66,18 @@ export class LibSQLVector extends MastraVector {
 
     if (connectionUrl.includes(`file:`) || connectionUrl.includes(`:memory:`)) {
       this.turso
-        .execute('PRAGMA journal_mode=WAL;')
-        .then(() => this.logger.debug('LibSQLStore: PRAGMA journal_mode=WAL set.'))
-        .catch(err => this.logger.warn('LibSQLStore: Failed to set PRAGMA journal_mode=WAL.', err));
-
-      this.turso
-        .execute('PRAGMA busy_timeout = 5000;') // 5 seconds
-        .then(() => this.logger.debug('LibSQLStore: PRAGMA busy_timeout=5000 set.'))
-        .catch(err => this.logger.warn('LibSQLStore: Failed to set PRAGMA busy_timeout.', err));
+        .batch([
+          {
+            sql: 'PRAGMA journal_mode=WAL;',
+          },
+          {
+            sql: 'PRAGMA busy_timeout = 5000;',
+          },
+        ])
+        .then(() => this.logger.debug('LibSQLVector: PRAGMA journal_mode=WAL and busy_timeout=5000 set.'))
+        .catch(err =>
+          this.logger.warn('LibSQLVector: Failed to set PRAGMA journal_mode=WAL and busy_timeout=5000.', err),
+        );
     }
   }
 
@@ -171,59 +175,64 @@ export class LibSQLVector extends MastraVector {
     }
   }
 
-  async upsert({ indexName, vectors, metadata, ids }: UpsertVectorParams): Promise<string[]> {
-    return this.executeWriteOperationWithRetry(async () => {
-      const tx = await this.turso.transaction('write');
-      try {
-        const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
-        const vectorIds = ids || vectors.map(() => crypto.randomUUID());
+  public upsert(args: UpsertVectorParams): Promise<string[]> {
+    return this.executeWriteOperationWithRetry(() => this.doUpsert(args), true);
+  }
 
-        for (let i = 0; i < vectors.length; i++) {
-          const query = `
+  private async doUpsert({ indexName, vectors, metadata, ids }: UpsertVectorParams): Promise<string[]> {
+    const tx = await this.turso.transaction('write');
+    try {
+      const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
+      const vectorIds = ids || vectors.map(() => crypto.randomUUID());
+
+      for (let i = 0; i < vectors.length; i++) {
+        const query = `
             INSERT INTO ${parsedIndexName} (vector_id, embedding, metadata)
             VALUES (?, vector32(?), ?)
             ON CONFLICT(vector_id) DO UPDATE SET
               embedding = vector32(?),
               metadata = ?
           `;
-          await tx.execute({
-            sql: query,
-            args: [
-              vectorIds[i] as InValue,
-              JSON.stringify(vectors[i]),
-              JSON.stringify(metadata?.[i] || {}),
-              JSON.stringify(vectors[i]),
-              JSON.stringify(metadata?.[i] || {}),
-            ],
-          });
-        }
-        await tx.commit();
-        return vectorIds;
-      } catch (error) {
-        await tx.rollback();
-        if (error instanceof Error && error.message?.includes('dimensions are different')) {
-          const match = error.message.match(/dimensions are different: (\d+) != (\d+)/);
-          if (match) {
-            const [, actual, expected] = match;
-            throw new Error(
-              `Vector dimension mismatch: Index "${indexName}" expects ${expected} dimensions but got ${actual} dimensions. ` +
-                `Either use a matching embedding model or delete and recreate the index with the new dimension.`,
-            );
-          }
-        }
-        throw error;
+        await tx.execute({
+          sql: query,
+          args: [
+            vectorIds[i] as InValue,
+            JSON.stringify(vectors[i]),
+            JSON.stringify(metadata?.[i] || {}),
+            JSON.stringify(vectors[i]),
+            JSON.stringify(metadata?.[i] || {}),
+          ],
+        });
       }
-    }, true);
+      await tx.commit();
+      return vectorIds;
+    } catch (error) {
+      await tx.rollback();
+      if (error instanceof Error && error.message?.includes('dimensions are different')) {
+        const match = error.message.match(/dimensions are different: (\d+) != (\d+)/);
+        if (match) {
+          const [, actual, expected] = match;
+          throw new Error(
+            `Vector dimension mismatch: Index "${indexName}" expects ${expected} dimensions but got ${actual} dimensions. ` +
+              `Either use a matching embedding model or delete and recreate the index with the new dimension.`,
+          );
+        }
+      }
+      throw error;
+    }
   }
 
-  async createIndex({ indexName, dimension }: CreateIndexParams): Promise<void> {
-    await this.executeWriteOperationWithRetry(async () => {
-      if (!Number.isInteger(dimension) || dimension <= 0) {
-        throw new Error('Dimension must be a positive integer');
-      }
-      const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
-      await this.turso.execute({
-        sql: `
+  public createIndex(args: CreateIndexParams): Promise<void> {
+    return this.executeWriteOperationWithRetry(() => this.doCreateIndex(args));
+  }
+
+  private async doCreateIndex({ indexName, dimension }: CreateIndexParams): Promise<void> {
+    if (!Number.isInteger(dimension) || dimension <= 0) {
+      throw new Error('Dimension must be a positive integer');
+    }
+    const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
+    await this.turso.execute({
+      sql: `
           CREATE TABLE IF NOT EXISTS ${parsedIndexName} (
             id SERIAL PRIMARY KEY,
             vector_id TEXT UNIQUE NOT NULL,
@@ -231,25 +240,26 @@ export class LibSQLVector extends MastraVector {
             metadata TEXT DEFAULT '{}'
           );
         `,
-        args: [],
-      });
-      await this.turso.execute({
-        sql: `
+      args: [],
+    });
+    await this.turso.execute({
+      sql: `
           CREATE INDEX IF NOT EXISTS ${parsedIndexName}_vector_idx
           ON ${parsedIndexName} (libsql_vector_idx(embedding))
         `,
-        args: [],
-      });
+      args: [],
     });
   }
 
-  async deleteIndex({ indexName }: DeleteIndexParams): Promise<void> {
-    await this.executeWriteOperationWithRetry(async () => {
-      const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
-      await this.turso.execute({
-        sql: `DROP TABLE IF EXISTS ${parsedIndexName}`,
-        args: [],
-      });
+  public deleteIndex(args: DeleteIndexParams): Promise<void> {
+    return this.executeWriteOperationWithRetry(() => this.doDeleteIndex(args));
+  }
+
+  private async doDeleteIndex({ indexName }: DeleteIndexParams): Promise<void> {
+    const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
+    await this.turso.execute({
+      sql: `DROP TABLE IF EXISTS ${parsedIndexName}`,
+      args: [],
     });
   }
 
@@ -332,35 +342,37 @@ export class LibSQLVector extends MastraVector {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
-    await this.executeWriteOperationWithRetry(async () => {
-      const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
-      const updates = [];
-      const args: InValue[] = [];
+  public updateVector(args: UpdateVectorParams): Promise<void> {
+    return this.executeWriteOperationWithRetry(() => this.doUpdateVector(args));
+  }
 
-      if (update.vector) {
-        updates.push('embedding = vector32(?)');
-        args.push(JSON.stringify(update.vector));
-      }
+  private async doUpdateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
+    const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
+    const updates = [];
+    const args: InValue[] = [];
 
-      if (update.metadata) {
-        updates.push('metadata = ?');
-        args.push(JSON.stringify(update.metadata));
-      }
+    if (update.vector) {
+      updates.push('embedding = vector32(?)');
+      args.push(JSON.stringify(update.vector));
+    }
 
-      if (updates.length === 0) {
-        throw new Error('No updates provided');
-      }
-      args.push(id);
-      const query = `
+    if (update.metadata) {
+      updates.push('metadata = ?');
+      args.push(JSON.stringify(update.metadata));
+    }
+
+    if (updates.length === 0) {
+      throw new Error('No updates provided');
+    }
+    args.push(id);
+    const query = `
         UPDATE ${parsedIndexName}
         SET ${updates.join(', ')}
         WHERE vector_id = ?;
       `;
-      await this.turso.execute({
-        sql: query,
-        args,
-      });
+    await this.turso.execute({
+      sql: query,
+      args,
     });
   }
 
@@ -371,22 +383,26 @@ export class LibSQLVector extends MastraVector {
    * @returns A promise that resolves when the deletion is complete.
    * @throws Will throw an error if the deletion operation fails.
    */
-  async deleteVector({ indexName, id }: DeleteVectorParams): Promise<void> {
-    await this.executeWriteOperationWithRetry(async () => {
-      const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
-      await this.turso.execute({
-        sql: `DELETE FROM ${parsedIndexName} WHERE vector_id = ?`,
-        args: [id],
-      });
+  public deleteVector(args: DeleteVectorParams): Promise<void> {
+    return this.executeWriteOperationWithRetry(() => this.doDeleteVector(args));
+  }
+
+  private async doDeleteVector({ indexName, id }: DeleteVectorParams): Promise<void> {
+    const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
+    await this.turso.execute({
+      sql: `DELETE FROM ${parsedIndexName} WHERE vector_id = ?`,
+      args: [id],
     });
   }
 
-  async truncateIndex({ indexName }: DeleteIndexParams): Promise<void> {
-    await this.executeWriteOperationWithRetry(async () => {
-      await this.turso.execute({
-        sql: `DELETE FROM ${parseSqlIdentifier(indexName, 'index name')}`,
-        args: [],
-      });
+  public truncateIndex(args: DeleteIndexParams): Promise<void> {
+    return this.executeWriteOperationWithRetry(() => this._doTruncateIndex(args));
+  }
+
+  private async _doTruncateIndex({ indexName }: DeleteIndexParams): Promise<void> {
+    await this.turso.execute({
+      sql: `DELETE FROM ${parseSqlIdentifier(indexName, 'index name')}`,
+      args: [],
     });
   }
 }
