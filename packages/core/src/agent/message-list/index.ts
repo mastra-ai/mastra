@@ -281,11 +281,19 @@ ${JSON.stringify(message, null, 2)}`,
       return;
     }
 
+    if (messageSource === `memory`) {
+      for (const existingMessage of this.messages) {
+        // don't double store any messages
+        if (MessageList.messagesAreEqual(existingMessage, messageV2)) {
+          return;
+        }
+      }
+    }
     // If the last message is an assistant message and the new message is also an assistant message, merge them together and update tool calls with results
     if (latestMessage?.role === 'assistant' && messageV2.role === 'assistant') {
       latestMessage.createdAt = messageV2.createdAt || latestMessage.createdAt;
 
-      for (const part of messageV2.content.parts) {
+      for (const [index, part] of messageV2.content.parts.entries()) {
         // If the incoming part is a tool-invocation result, find the corresponding call in the latest message
         if (part.type === 'tool-invocation' && part.toolInvocation.state === 'result') {
           const existingCallPart = latestMessage.content.parts.find(
@@ -306,7 +314,12 @@ ${JSON.stringify(message, null, 2)}`,
               });
             }
           }
-        } else {
+        } else if (
+          // if there's no part at this index yet in the existing message we're merging into
+          !latestMessage.content.parts[index] ||
+          // or there is and the parts are not identical
+          MessageList.cacheKeyFromParts([latestMessage.content.parts[index]]) !== MessageList.cacheKeyFromParts([part])
+        ) {
           // For all other part types that aren't already present, simply push them to the latest message's parts
           latestMessage.content.parts.push(part);
         }
@@ -645,8 +658,6 @@ ${JSON.stringify(message, null, 2)}`,
       if (part.type === `tool-invocation`) {
         key += part.toolInvocation.toolCallId;
         key += part.toolInvocation.state;
-        key += part.toolInvocation.toolName;
-        key += JSON.stringify(part.toolInvocation.args);
       }
       if (part.type === `reasoning`) {
         key += part.reasoning.length;
@@ -702,13 +713,6 @@ ${JSON.stringify(message, null, 2)}`,
     return key;
   }
   private static messagesAreEqual(one: MessageInput, two: MessageInput) {
-    const oneCreatedAt = `createdAt` in one ? one.createdAt?.getTime() || 0 : undefined;
-    const twoCreatedAt = `createdAt` in two ? two.createdAt?.getTime() || 0 : undefined;
-
-    if (oneCreatedAt !== twoCreatedAt) {
-      return false;
-    }
-
     const oneUI = MessageList.isVercelUIMessage(one) && one;
     const twoUI = MessageList.isVercelUIMessage(two) && two;
     if (oneUI && !twoUI) return false;
@@ -735,6 +739,7 @@ ${JSON.stringify(message, null, 2)}`,
     if (oneMM2 && !twoMM2) return false;
     if (oneMM2 && twoMM2) {
       return (
+        oneMM2.id === twoMM2.id &&
         MessageList.cacheKeyFromParts(oneMM2.content.parts) === MessageList.cacheKeyFromParts(twoMM2.content.parts)
       );
     }
