@@ -18,8 +18,21 @@ const memory = new Memory();
 function hasProfanity(message: CoreMessage): boolean {
   // List of profanity words to check for
   const profanityList = [
-    'damn', 'hell', 'ass', 'shit', 'fuck', 'bitch', 'crap', 'bastard',
-    'dick', 'piss', 'cunt', 'whore', 'slut', 'asshole', 'motherfucker'
+    'damn',
+    'hell',
+    'ass',
+    'shit',
+    'fuck',
+    'bitch',
+    'crap',
+    'bastard',
+    'dick',
+    'piss',
+    'cunt',
+    'whore',
+    'slut',
+    'asshole',
+    'motherfucker',
   ];
 
   // Check string content
@@ -36,10 +49,12 @@ function hasProfanity(message: CoreMessage): boolean {
     for (const part of message.content) {
       if (part.type === 'text' && typeof part.text === 'string') {
         const textLower = part.text.toLowerCase();
-        if (profanityList.some(word => {
-          const regex = new RegExp(`\\b${word}\\b`, 'i');
-          return regex.test(textLower);
-        })) {
+        if (
+          profanityList.some(word => {
+            const regex = new RegExp(`\\b${word}\\b`, 'i');
+            return regex.test(textLower);
+          })
+        ) {
           return true;
         }
       }
@@ -142,13 +157,13 @@ export const questionEnhancer = new Agent({
     You are a question enhancer. You take a question and enhance it to make it more specific and detailed.
   `,
   model: openai('gpt-4o-mini'),
-})
+});
 
 export const promptRelevancyEnhancer = new Agent({
   name: 'Prompt Relevancy Enhancer',
   instructions: ({ runtimeContext }) => {
-    const topic = runtimeContext.get('topic')
-    console.log(topic)
+    const topic = runtimeContext.get('topic');
+    console.log(topic);
     return `
       You are a prompt relevancy enhancer. 
       Based on the topic ${topic}, let us know if the prompt is relevant to the topic.
@@ -157,10 +172,10 @@ export const promptRelevancyEnhancer = new Agent({
         "relevant": boolean,
         "reason": string
       }
-    `
+    `;
   },
   model: openai('gpt-4o-mini'),
-})
+});
 
 export const tutorAgent = new Agent({
   name: 'Tutor Agent',
@@ -170,16 +185,15 @@ export const tutorAgent = new Agent({
   model: openai('gpt-4o-mini'),
   inputProcessors: [
     async ({ messages, mastra, runtimeContext }) => {
-
-      const promptRelevancyAgent = mastra.getAgent('promptRelevancyEnhancer')
+      const promptRelevancyAgent = mastra.getAgent('promptRelevancyEnhancer');
 
       const relevancyResponse = await promptRelevancyAgent.generate(messages[messages.length - 1].content, {
         runtimeContext,
         output: z.object({
           relevant: z.boolean(),
           reason: z.string(),
-        })
-      })
+        }),
+      });
 
       if (!relevancyResponse.object.relevant) {
         throw new Error(`Prompt is not relevant to the topic. Reason: ${relevancyResponse.object.reason}`);
@@ -198,10 +212,8 @@ export const tutorAgent = new Agent({
       return messages;
     },
 
-
     async ({ messages, mastra }) => {
-
-      const questionEnhancerAgent = mastra.getAgent('questionEnhancer')
+      const questionEnhancerAgent = mastra.getAgent('questionEnhancer');
 
       const questionEnhancerResponse = await questionEnhancerAgent.generate(messages[messages.length - 1].content);
 
@@ -210,4 +222,4 @@ export const tutorAgent = new Agent({
       return messages;
     },
   ],
-})
+});
