@@ -290,8 +290,8 @@ ${JSON.stringify(message, null, 2)}`,
       }
     }
     // If the last message is an assistant message and the new message is also an assistant message, merge them together and update tool calls with results
-    const latestMessagePartType = latestMessage?.content?.parts?.at?.(-1)?.type;
-    const newMessageFirstPartType = messageV2.content.parts.filter(p => p.type !== `step-start`).at(-1)?.type;
+    const latestMessagePartType = latestMessage?.content?.parts?.filter(p => p.type !== `step-start`)?.at?.(-1)?.type;
+    const newMessageFirstPartType = messageV2.content.parts.filter(p => p.type !== `step-start`).at(0)?.type;
     const shouldAppendToLastAssistantMessage = latestMessage?.role === 'assistant' && messageV2.role === 'assistant';
     const shouldAppendToLastAssistantMessageParts =
       shouldAppendToLastAssistantMessage &&
@@ -317,9 +317,9 @@ ${JSON.stringify(message, null, 2)}`,
       for (const [index, part] of messageV2.content.parts.entries()) {
         // If the incoming part is a tool-invocation result, find the corresponding call in the latest message
         if (part.type === 'tool-invocation' && part.toolInvocation.state === 'result') {
-          const existingCallPart = latestMessage.content.parts.find(
-            p => p.type === 'tool-invocation' && p.toolInvocation.toolCallId === part.toolInvocation.toolCallId,
-          );
+          const existingCallPart = [...latestMessage.content.parts]
+            .reverse()
+            .find(p => p.type === 'tool-invocation' && p.toolInvocation.toolCallId === part.toolInvocation.toolCallId);
 
           if (existingCallPart && existingCallPart.type === 'tool-invocation') {
             // Update the existing tool-call part with the result
@@ -329,12 +329,14 @@ ${JSON.stringify(message, null, 2)}`,
               result: part.toolInvocation.result,
             };
             if (!latestMessage.content.toolInvocations) {
-              latestMessage.content.toolInvocations = messageV2.content.toolInvocations;
-            } else {
-              latestMessage.content.toolInvocations = latestMessage.content.toolInvocations.map(t => {
-                if (t.toolCallId !== existingCallPart.toolInvocation.toolCallId) return t;
-                return existingCallPart.toolInvocation;
-              });
+              latestMessage.content.toolInvocations = [];
+            }
+            if (
+              !latestMessage.content.toolInvocations.some(
+                t => t.toolCallId === existingCallPart.toolInvocation.toolCallId,
+              )
+            ) {
+              latestMessage.content.toolInvocations.push(existingCallPart.toolInvocation);
             }
           }
         } else if (
