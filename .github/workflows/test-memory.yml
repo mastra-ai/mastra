@@ -22,6 +22,7 @@ jobs:
     timeout-minutes: 10
     strategy:
       fail-fast: false
+      max-parallel: 5
       matrix:
         suite:
           - pg
@@ -69,7 +70,7 @@ jobs:
         run: pnpm install
 
       - name: Build vector+store packages
-        run: pnpm turbo build --filter "./stores/*" --filter "mastra" --filter "@mastra/memory" --filter "@mastra/fastembed"
+        run: pnpm turbo build --filter "mastra" --filter "@mastra/memory" ${{ matrix.suite == 'pg' && '--filter "./stores/pg"' || matrix.suite == 'upstash' && '--filter "./stores/upstash" --filter "./stores/libsql"' || '--filter "./stores/libsql"' }}
 
       - name: Run Memory ${{ matrix.suite }} tests
         run: pnpm run test:${{ matrix.suite }}

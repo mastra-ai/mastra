@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { openai } from '@ai-sdk/openai';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
-import { fastembed } from '@mastra/fastembed';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { describe, expect, it } from 'vitest';
@@ -48,7 +47,7 @@ describe('Agent Memory Tests', () => {
       vector: new LibSQLVector({
         connectionUrl: dbFile,
       }),
-      embedder: fastembed,
+      embedder: openai.embedding(`text-embedding-3-small`),
     });
     const agent = new Agent({
       name: 'test',
@@ -134,7 +133,7 @@ describe('Agent Memory Tests', () => {
       },
       storage: new LibSQLStore({ url: dbFile }),
       vector: new LibSQLVector({ connectionUrl: dbFile }),
-      embedder: fastembed,
+      embedder: openai.embedding(`text-embedding-3-small`),
     });
     const agentWithTitle = new Agent({
       name: 'title-on',
@@ -153,7 +152,7 @@ describe('Agent Memory Tests', () => {
       },
       storage: new LibSQLStore({ url: dbFile }),
       vector: new LibSQLVector({ connectionUrl: dbFile }),
-      embedder: fastembed,
+      embedder: openai.embedding(`text-embedding-3-small`),
     });
     const agentNoTitle = new Agent({
       name: 'title-off',

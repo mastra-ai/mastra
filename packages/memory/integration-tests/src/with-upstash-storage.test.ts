@@ -1,4 +1,4 @@
-import { fastembed } from '@mastra/fastembed';
+import { openai } from '@ai-sdk/openai';
 import { LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { UpstashStore } from '@mastra/upstash';
@@ -16,7 +16,7 @@ describe('Memory with UpstashStore Integration', () => {
       // TODO: use upstash vector in tests
       connectionUrl: 'file:upstash-test-vector.db',
     }),
-    embedder: fastembed,
+    embedder: openai.embedding(`text-embedding-3-small`),
     options: {
       lastMessages: 10,
       semanticRecall: {

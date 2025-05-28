@@ -7,11 +7,10 @@ import type { CoreMessage, MemoryProcessorOpts } from '@mastra/core';
 import { MemoryProcessor } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
-import { fastembed } from '@mastra/fastembed';
 import { LibSQLVector, LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { TokenLimiter, ToolCallFilter } from '@mastra/memory/processors';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { z } from 'zod';
 import { filterToolCallsByName, filterToolResultsByName, generateConversationHistory } from './test-utils';
 
@@ -45,10 +44,20 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  //@ts-ignore
-  await storage.client.close();
-  //@ts-ignore
-  await vector.turso.close();
+  await Promise.all([
+    //@ts-ignore
+    storage.client.close(),
+    //@ts-ignore
+    vector.turso.close(),
+  ]).catch(console.error);
+});
+afterAll(async () => {
+  await Promise.all([
+    //@ts-ignore
+    storage.client.close(),
+    //@ts-ignore
+    vector.turso.close(),
+  ]).catch(console.error);
 });
 
 describe('Memory with Processors', () => {
@@ -232,7 +241,7 @@ describe('Memory with Processors', () => {
     const memory = new Memory({
       storage,
       vector,
-      embedder: fastembed,
+      embedder: openai.embedding(`text-embedding-3-small`),
       processors: [new ToolCallFilter(), new ConversationOnlyFilter(), new TokenLimiter(127000)],
       options: {
         lastMessages: 10,
@@ -523,7 +532,7 @@ describe('Memory.chunkText', () => {
     const memory = new Memory({
       storage,
       vector,
-      embedder: fastembed,
+      embedder: openai.embedding(`text-embedding-3-small`),
       options: {
         semanticRecall: true,
         lastMessages: 10,

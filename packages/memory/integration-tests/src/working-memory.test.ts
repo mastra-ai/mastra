@@ -5,7 +5,6 @@ import { join } from 'node:path';
 import { openai } from '@ai-sdk/openai';
 import type { MessageType } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
-import { fastembed } from '@mastra/fastembed';
 import { LibSQLVector, LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import type { ToolCallPart } from 'ai';
@@ -81,7 +80,7 @@ describe('Working Memory Tests', () => {
       },
       storage,
       vector,
-      embedder: fastembed,
+      embedder: openai.embedding(`text-embedding-3-small`),
     });
     // Reset message counter
     messageCounter = 0;

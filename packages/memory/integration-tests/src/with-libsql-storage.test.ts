@@ -1,4 +1,4 @@
-import { fastembed } from '@mastra/fastembed';
+import { openai } from '@ai-sdk/openai';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import dotenv from 'dotenv';
@@ -16,7 +16,7 @@ describe('Memory with LibSQL Integration', () => {
     vector: new LibSQLVector({
       connectionUrl: 'file:libsql-test.db',
     }),
-    embedder: fastembed,
+    embedder: openai.embedding(`text-embedding-3-small`),
     options: {
       lastMessages: 10,
       semanticRecall: {

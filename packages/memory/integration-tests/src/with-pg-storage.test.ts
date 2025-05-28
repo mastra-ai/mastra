@@ -1,4 +1,4 @@
-import { fastembed } from '@mastra/fastembed';
+import { openai } from '@ai-sdk/openai';
 import { Memory } from '@mastra/memory';
 import { PostgresStore, PgVector } from '@mastra/pg';
 import dotenv from 'dotenv';
@@ -31,7 +31,7 @@ describe('Memory with PostgresStore Integration', () => {
   const memory = new Memory({
     storage: new PostgresStore(config),
     vector: new PgVector({ connectionString }),
-    embedder: fastembed,
+    embedder: openai.embedding(`text-embedding-3-small`),
     options: {
       lastMessages: 10,
       semanticRecall: {
