@@ -228,7 +228,7 @@ export class MessageList {
   private getMessageById(id: string) {
     return this.messages.find(m => m.id === id);
   }
-  private shouldUpdateMessage(message: MessageInput): { exists: boolean; shouldUpdate?: boolean; id?: string } {
+  private shouldReplaceMessage(message: MastraMessageV2): { exists: boolean; shouldReplace?: boolean; id?: string } {
     if (!this.messages.length) return { exists: false };
 
     if (!(`id` in message) || !message?.id) {
@@ -240,7 +240,7 @@ export class MessageList {
 
     return {
       exists: true,
-      shouldUpdate: !MessageList.messagesAreEqual(existingMessage, message),
+      shouldReplace: !MessageList.messagesAreEqual(existingMessage, message),
       id: existingMessage.id,
     };
   }
@@ -258,7 +258,7 @@ ${JSON.stringify(message, null, 2)}`,
 
     const messageV2 = this.inputToMastraMessageV2(message, messageSource);
 
-    const { exists, shouldUpdate, id } = this.shouldUpdateMessage(message);
+    const { exists, shouldReplace, id } = this.shouldReplaceMessage(messageV2);
 
     const latestMessage = this.messages.at(-1);
 
@@ -282,7 +282,7 @@ ${JSON.stringify(message, null, 2)}`,
     }
 
     // If the last message is an assistant message and the new message is also an assistant message, merge them together and update tool calls with results
-    if (latestMessage?.role === 'assistant' && messageV2.role === 'assistant' && !shouldUpdate) {
+    if (latestMessage?.role === 'assistant' && messageV2.role === 'assistant') {
       latestMessage.createdAt = messageV2.createdAt || latestMessage.createdAt;
 
       for (const part of messageV2.content.parts) {
@@ -333,22 +333,12 @@ ${JSON.stringify(message, null, 2)}`,
         messageV2.content.parts.unshift({ type: 'step-start' });
       }
 
-      const existingIndex = (shouldUpdate && this.messages.findIndex(m => m.id === id)) || -1;
+      const existingIndex = (shouldReplace && this.messages.findIndex(m => m.id === id)) || -1;
       const existingMessage = existingIndex !== -1 && this.messages[existingIndex];
-      const firstPart = messageV2.content.parts[0];
-      const isToolResult =
-        messageV2.role === `assistant` &&
-        messageV2.content.parts.length === 0 &&
-        firstPart?.type === `tool-invocation` &&
-        firstPart.toolInvocation.state === `result`;
 
-      if (shouldUpdate && existingMessage) {
+      if (shouldReplace && existingMessage) {
         this.messages[existingIndex] = messageV2;
-      } else if (
-        !exists &&
-        // don't add tool results if there was no tool call.
-        !isToolResult
-      ) {
+      } else if (!exists) {
         this.messages.push(messageV2);
       }
 
@@ -655,6 +645,8 @@ ${JSON.stringify(message, null, 2)}`,
       if (part.type === `tool-invocation`) {
         key += part.toolInvocation.toolCallId;
         key += part.toolInvocation.state;
+        key += part.toolInvocation.toolName;
+        key += JSON.stringify(part.toolInvocation.args);
       }
       if (part.type === `reasoning`) {
         key += part.reasoning.length;
