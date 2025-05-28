@@ -7,9 +7,9 @@ import type {
   WorkflowRuns,
   LegacyWorkflowRuns,
 } from '@mastra/core';
+import type { AgentGenerateOptions, AgentStreamOptions } from '@mastra/core/agent';
 import type { BaseLogMessage } from '@mastra/core/logger';
 
-import type { AgentGenerateOptions, AgentStreamOptions } from '@mastra/core/agent';
 import type { ServerInfo } from '@mastra/core/mcp';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type { Workflow, WatchEvent, WorkflowResult } from '@mastra/core/workflows';
@@ -291,6 +291,34 @@ export interface GetNetworkResponse {
     modelId: string;
   };
   state?: Record<string, any>;
+}
+
+export interface GetVNextNetworkResponse {
+  id: string;
+  name: string;
+  instructions: string;
+  agents: Array<{
+    name: string;
+    provider: string;
+    modelId: string;
+  }>;
+  routingModel: {
+    provider: string;
+    modelId: string;
+  };
+  workflows: Array<{
+    name: string;
+    description: string;
+    inputSchema: string | undefined;
+    outputSchema: string | undefined;
+  }>;
+}
+
+export interface GenerateVNextNetworkResponse {
+  task: string;
+  result: string;
+  resourceId: string;
+  resourceType: 'none' | 'tool' | 'agent' | 'workflow';
 }
 
 export interface McpServerListResponse {

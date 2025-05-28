@@ -33,7 +33,9 @@ import type {
   McpServerListResponse,
   McpServerToolListResponse,
   GetLegacyWorkflowResponse,
+  GetVNextNetworkResponse,
 } from './types';
+import { VNextNetwork } from './resources/vNextNetwork';
 
 export class MastraClient extends BaseResource {
   constructor(options: ClientOptions) {
@@ -263,12 +265,29 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Retrieves all available vNext networks
+   * @returns Promise containing map of vNext network IDs to vNext network details
+   */
+  public getVNextNetworks(): Promise<Record<string, GetVNextNetworkResponse>> {
+    return this.request('/api/networks/v-next');
+  }
+
+  /**
    * Gets a network instance by ID
    * @param networkId - ID of the network to retrieve
    * @returns Network instance
    */
   public getNetwork(networkId: string) {
     return new Network(this.options, networkId);
+  }
+
+  /**
+   * Gets a vNext network instance by ID
+   * @param networkId - ID of the vNext network to retrieve
+   * @returns vNext Network instance
+   */
+  public getVNextNetwork(networkId: string) {
+    return new VNextNetwork(this.options, networkId);
   }
 
   /**
