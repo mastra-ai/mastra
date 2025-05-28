@@ -1,7 +1,8 @@
 import { createClient } from '@libsql/client';
 import type { Client, InValue } from '@libsql/client';
+import type { MastraMessageV2 } from '@mastra/core/agent';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
-import type { MessageType, StorageThreadType } from '@mastra/core/memory';
+import type { StorageThreadType } from '@mastra/core/memory';
 import {
   MastraStorage,
   TABLE_MESSAGES,
@@ -343,26 +344,27 @@ export class LibSQLStore extends MastraStorage {
     // Messages will be automatically deleted due to CASCADE constraint
   }
 
-  private parseRow(row: any): MessageType {
+  private parseRow(row: any): MastraMessageV2 {
     let content = row.content;
     try {
       content = JSON.parse(row.content);
     } catch {
       // use content as is if it's not JSON
     }
-    return {
+    const result = {
       id: row.id,
       content,
       role: row.role,
-      type: row.type,
       createdAt: new Date(row.createdAt as string),
       threadId: row.thread_id,
-    } as MessageType;
+    } as MastraMessageV2;
+    if (row.type && row.type !== `v2`) result.type = row.type;
+    return result;
   }
 
-  async getMessages<T extends MessageType[]>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T> {
+  async getMessages<T extends MastraMessageV2[]>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T> {
     try {
-      const messages: MessageType[] = [];
+      const messages: MastraMessageV2[] = [];
       const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
 
       // If we have specific messages to select
@@ -442,7 +444,7 @@ export class LibSQLStore extends MastraStorage {
     }
   }
 
-  async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
+  async saveMessages({ messages }: { messages: MastraMessageV2[] }): Promise<MastraMessageV2[]> {
     if (messages.length === 0) return messages;
 
     try {
@@ -462,7 +464,7 @@ export class LibSQLStore extends MastraStorage {
             threadId,
             typeof message.content === 'object' ? JSON.stringify(message.content) : message.content,
             message.role,
-            message.type,
+            message.type || 'v2',
             time instanceof Date ? time.toISOString() : time,
           ],
         };

@@ -993,7 +993,7 @@ export class CloudflareStore extends MastraStorage {
         return {
           ...message,
           createdAt: this.ensureDate(message.createdAt)!,
-          type: message.type || 'text',
+          type: message.type || 'v2',
           _index: index,
         };
       });
@@ -1044,7 +1044,10 @@ export class CloudflareStore extends MastraStorage {
       );
 
       // Remove _index from returned messages
-      return validatedMessages.map(({ _index, ...message }) => message as MessageType);
+      return validatedMessages.map(
+        ({ _index, ...message }) =>
+          ({ ...message, type: message.type !== 'v2' ? message.type : undefined }) as MessageType,
+      );
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error(`Error saving messages: ${errorMessage}`);
@@ -1103,6 +1106,7 @@ export class CloudflareStore extends MastraStorage {
       // Remove _index and ensure dates before returning, just like Upstash
       return messages.map(({ _index, ...message }) => ({
         ...message,
+        type: message.type === `v2` ? undefined : message.type,
         createdAt: this.ensureDate(message.createdAt)!,
       })) as T[];
     } catch (error) {
