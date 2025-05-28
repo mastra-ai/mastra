@@ -1,14 +1,25 @@
 import { parentPort, workerData } from 'worker_threads';
-import type { MessageType } from '@mastra/core';
+import type { MessageType, SharedMemoryConfig } from '@mastra/core';
 import type { LibSQLConfig } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import type { PostgresConfig } from '@mastra/pg';
 import type { UpstashConfig } from '@mastra/upstash';
 import { mockEmbedder } from './mock-embedder.js';
-import type { WorkerTestConfig } from '../reusable-tests.js';
 
 if (!parentPort) {
   throw new Error('This script must be run as a worker thread.');
+}
+
+export enum StorageType {
+  LibSQL = 'libsql',
+  Postgres = 'pg',
+  Upstash = 'upstash',
+}
+
+export interface WorkerTestConfig {
+  storageTypeForWorker: StorageType;
+  storageConfigForWorker: LibSQLConfig | PostgresConfig | UpstashConfig;
+  memoryOptionsForWorker?: SharedMemoryConfig['options'];
 }
 
 interface MessageToProcess {

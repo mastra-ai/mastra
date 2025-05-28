@@ -3,7 +3,8 @@ import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import dotenv from 'dotenv';
 import { describe } from 'vitest';
-import { getResuableTests, StorageType } from './reusable-tests';
+import { getResuableTests } from './reusable-tests';
+import { StorageType } from './worker/generic-memory-worker';
 
 dotenv.config({ path: '.env.test' });
 

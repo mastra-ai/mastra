@@ -4,7 +4,8 @@ import { Memory } from '@mastra/memory';
 import { UpstashStore } from '@mastra/upstash';
 import { describe } from 'vitest';
 
-import { getResuableTests, StorageType } from './reusable-tests';
+import { getResuableTests } from './reusable-tests';
+import { StorageType } from './worker/generic-memory-worker';
 
 describe('Memory with UpstashStore Integration', () => {
   const memoryOptions = {

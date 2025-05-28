@@ -10,6 +10,7 @@ import type { UpstashConfig } from '@mastra/upstash';
 import type { TextPart, ImagePart, FilePart, ToolCallPart } from 'ai';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { reorderToolCallsAndResults } from '../../src/utils';
+import { WorkerTestConfig } from './worker/generic-memory-worker';
 
 const resourceId = 'resource';
 // Test helpers
@@ -40,18 +41,6 @@ const createTestMessage = (
     resourceId,
   };
 };
-
-export enum StorageType {
-  LibSQL = 'libsql',
-  Postgres = 'pg',
-  Upstash = 'upstash',
-}
-
-export interface WorkerTestConfig {
-  storageTypeForWorker: StorageType;
-  storageConfigForWorker: LibSQLConfig | PostgresConfig | UpstashConfig;
-  memoryOptionsForWorker?: SharedMemoryConfig['options'];
-}
 
 export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestConfig) {
   beforeEach(async () => {
