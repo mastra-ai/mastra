@@ -144,17 +144,11 @@ The constructor accepts an optional `Config` object to customize its behavior an
 
 Any of the below methods can be used with the Mastra class, for example:
 
-```typescript {6} filename="server.ts" showLineNumbers
+```typescript {3} filename="example.ts" showLineNumbers
 import { mastra } from "./mastra";
 
-app.get("/api/weather", async (req: Request, res: Response) => {
-  const { city } = req.query as { city?: string };
-
-  const agent = mastra.getAgent("weatherAgent");
-  const result = await agent.generate(`What's the weather like in ${city}?`);
-
-  res.send(result.text);
-});
+const agent = mastra.getAgent("weatherAgent");
+const result = await agent.generate("What's the weather like in London?");
 ```
 
 ### Methods
@@ -286,21 +280,16 @@ app.get("/api/weather", async (req: Request, res: Response) => {
 
 The Mastra class methods throw typed errors that can be caught:
 
-```typescript {12-13} filename="server.ts" showLineNumbers
+```typescript {8} filename="example.ts" showLineNumbers
 import { mastra } from "./mastra";
 
-app.get("/api/weather", async (req: Request, res: Response) => {
-  const { city } = req.query as { city?: string };
+try {
+  const agent = mastra.getAgent("weatherAgent");
+  const result = await agent.generate("What's the weather like in London?");
 
-  try {
-    const agent = mastra.getAgent("weatherAgent");
-    const result = await agent.generate(`What's the weather like in ${city}?`);
-
-    res.send(result.text);
-  } catch (error) {
-    if (error instanceof Error) {
-      console.log(error.message);
-    }
+} catch (error) {
+  if (error instanceof Error) {
+    console.log(error.message);
   }
-});
+}
 ```
