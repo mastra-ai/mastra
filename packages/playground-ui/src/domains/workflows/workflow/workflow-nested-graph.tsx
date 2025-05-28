@@ -1,10 +1,18 @@
-import { ReactFlow, MiniMap, Background, useNodesState, useEdgesState, BackgroundVariant } from '@xyflow/react';
+import {
+  ReactFlow,
+  MiniMap,
+  Background,
+  useNodesState,
+  useEdgesState,
+  BackgroundVariant,
+  NodeProps,
+} from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { SerializedStepFlowEntry } from '@mastra/core/workflows';
 
 import { constructNodesAndEdges } from './utils';
 import { WorkflowConditionNode } from './workflow-condition-node';
-import { WorkflowDefaultNode } from './workflow-default-node';
+import { DefaultNode, WorkflowDefaultNode } from './workflow-default-node';
 import { WorkflowAfterNode } from './workflow-after-node';
 import { WorkflowLoopResultNode } from './workflow-loop-result-node';
 import { useEffect, useState } from 'react';
@@ -12,7 +20,12 @@ import Spinner from '@/components/ui/spinner';
 import { WorkflowNestedNode } from './workflow-nested-node';
 import { ZoomSlider } from './zoom-slider';
 
-export function WorkflowNestedGraph({ stepGraph, open }: { stepGraph: SerializedStepFlowEntry[]; open: boolean }) {
+export interface WorkflowNestedGraphProps {
+  stepGraph: SerializedStepFlowEntry[];
+  open: boolean;
+}
+
+export function WorkflowNestedGraph({ stepGraph, open }: WorkflowNestedGraphProps) {
   const { nodes: initialNodes, edges: initialEdges } = constructNodesAndEdges({
     stepGraph,
   });
