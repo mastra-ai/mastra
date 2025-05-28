@@ -94,7 +94,10 @@ export type AgentGenerateOptions<Z extends ZodSchema | JSONSchema7 | undefined =
  * Options for streaming responses with an agent
  * @template Z - The schema type for structured output (Zod schema or JSON schema)
  */
-export type AgentStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
+export type AgentStreamOptions<
+  OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+  EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined,
+> = {
   /** Optional instructions to override the agent's default instructions */
   instructions?: string;
   /** Additional tool sets that can be used for this generation */
@@ -107,26 +110,30 @@ export type AgentStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = u
   /** Unique ID for this generation run */
   runId?: string;
   /** Callback fired when streaming completes */
-  onFinish?: Z extends undefined
+  onFinish?: OUTPUT extends undefined
     ? StreamTextOnFinishCallback<any>
-    : Z extends ZodSchema
-      ? StreamObjectOnFinishCallback<z.infer<Z>>
+    : OUTPUT extends ZodSchema
+      ? StreamObjectOnFinishCallback<z.infer<OUTPUT>>
       : StreamObjectOnFinishCallback<any>;
   /** Callback fired after each generation step completes */
-  onStepFinish?: StreamTextOnStepFinishCallback<any>;
+  onStepFinish?: OUTPUT extends undefined
+    ? EXPERIMENTAL_OUTPUT extends undefined
+      ? StreamTextOnStepFinishCallback<any>
+      : StreamTextOnStepFinishCallback<any>
+    : never;
   /** Maximum number of steps allowed for generation */
   maxSteps?: number;
   /** Schema for structured output */
-  output?: OutputType | Z;
+  output?: OutputType | OUTPUT;
   /** Temperature parameter for controlling randomness */
   temperature?: number;
   /** Controls how tools are selected during generation */
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
   /** Experimental schema for structured output */
-  experimental_output?: Z;
+  experimental_output?: EXPERIMENTAL_OUTPUT;
   /** Telemetry settings */
   telemetry?: TelemetrySettings;
   /** RuntimeContext for dependency injection */
   runtimeContext?: RuntimeContext;
 } & ({ resourceId?: undefined; threadId?: undefined } | { resourceId: string; threadId: string }) &
-  (Z extends undefined ? DefaultLLMStreamOptions : DefaultLLMStreamObjectOptions);
+  (OUTPUT extends undefined ? DefaultLLMStreamOptions : DefaultLLMStreamObjectOptions);
