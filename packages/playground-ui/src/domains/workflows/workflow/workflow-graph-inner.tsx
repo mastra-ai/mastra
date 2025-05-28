@@ -34,7 +34,10 @@ export function WorkflowGraphInner({ workflow }: { workflow: GetWorkflowResponse
           ...e,
           style: {
             ...e.style,
-            stroke: steps[e.source]?.status === 'success' ? '#22c55e' : undefined,
+            stroke:
+              steps[e.data?.previousStepId as string]?.status === 'success' && steps[e.data?.nextStepId as string]
+                ? '#22c55e'
+                : undefined,
           },
         }))}
         nodeTypes={nodeTypes}
