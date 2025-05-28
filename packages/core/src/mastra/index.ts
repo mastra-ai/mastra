@@ -6,7 +6,7 @@ import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory/memory';
 import type { AgentNetwork } from '../network';
-import type { ServerConfig } from '../server/types';
+import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraStorage } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import { InstrumentClass, Telemetry } from '../telemetry';
@@ -75,10 +75,7 @@ export class Mastra<
   #workflows: TWorkflows;
   #tts?: TTTS;
   #deployer?: MastraDeployer;
-  #serverMiddleware: Array<{
-    handler: (c: any, next: () => Promise<void>) => Promise<Response | void>;
-    path: string;
-  }> = [];
+  #serverMiddleware: Array<Middleware> = [];
   #telemetry?: Telemetry;
   #storage?: MastraStorage;
   #memory?: MastraMemory;
@@ -532,17 +529,32 @@ do:
     return this.#serverMiddleware;
   }
 
-  public addServerMiddleware(serverMiddleware: {
-    handler: (c: any, next: () => Promise<void>) => Promise<Response | void>;
-    path?: string;
-  }) {
-    if (!this.#serverMiddleware) {
-      this.#serverMiddleware = [];
+  public setServerMiddleware(serverMiddleware: Middleware | Middleware[]) {
+    if (typeof serverMiddleware === 'function') {
+      this.#serverMiddleware = [
+        {
+          handler: serverMiddleware,
+          path: '/api/*',
+        },
+      ];
+      return;
     }
 
-    this.#serverMiddleware.push({
-      handler: serverMiddleware.handler,
-      path: serverMiddleware.path || '/api/*',
+    if (!Array.isArray(serverMiddleware)) {
+      throw new Error(`Invalid middleware: expected a function or array, received ${typeof serverMiddleware}`);
+    }
+
+    this.#serverMiddleware = serverMiddleware.map(m => {
+      if (typeof m === 'function') {
+        return {
+          handler: m,
+          path: '/api/*',
+        };
+      }
+      return {
+        handler: m.handler,
+        path: m.path || '/api/*',
+      };
     });
   }
 
