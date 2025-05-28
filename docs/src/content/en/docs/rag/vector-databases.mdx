@@ -25,12 +25,12 @@ The providers include Pg Vector, Pinecone, Qdrant, Chroma, Astra, LibSQL, Upstas
   import { PgVector } from '@mastra/pg';
 
   const store = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING })
-  
+
   await store.createIndex({
     indexName: "myCollection",
     dimension: 1536,
   });
-    
+
   await store.upsert({
     indexName: "myCollection",
     vectors: embeddings,
