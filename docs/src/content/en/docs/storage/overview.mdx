@@ -45,6 +45,82 @@ If you do not specify any `storage` configuration, Mastra will not persist data 
     deployment beyond local testing you should provide your own storage
     configuration either on `Mastra` or directly within `new Memory()`.
 
+
+## Supported Databases
+
+<Tabs items={['LibSQL', 'PostgreSQL', 'Cloudflare D1', 'Cloudflare KV', 'Upstash']}>
+  <Tabs.Tab>
+  ```ts filename="storage-config.ts" showLineNumbers copy
+  import { Mastra } from '@mastra/core/mastra'
+  import { LibSQLStore } from "@mastra/libsql";
+
+  export const mastra = new Mastra({
+    storage: new LibSQLStore({
+      url: "file:./mastra.db",
+    }),
+  })
+
+  ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+  ```ts filename="storage-config.ts" showLineNumbers copy
+  import { Mastra } from '@mastra/core/mastra'
+  import { PostgresStore } from "@mastra/pg";
+
+  export const mastra = new Mastra({
+    storage: new PostgresStore({
+      connectionString: "your_connection_string",
+    }),
+  })
+
+  ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+  ```ts filename="storage-config.ts" showLineNumbers copy
+  import { Mastra } from '@mastra/core/mastra'
+  import { D1Store } from "@mastra/cloudflare-d1";
+
+  export const mastra = new Mastra({
+    storage: new D1Store({
+      accountId: "your_account_id",
+      apiToken: "your_api_token",
+      databaseId: "your_database_id",
+    }),
+  })
+
+  ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+  ```ts filename="storage-config.ts" showLineNumbers copy
+  import { Mastra } from '@mastra/core/mastra'
+  import { CloudflareStore } from "@mastra/cloudflare";
+
+  export const mastra = new Mastra({
+    storage: new CloudflareStore({
+      accountId: "your_account_id",
+      apiToken: "your_api_token"
+    }),
+  })
+
+  ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+  ```ts filename="storage-config.ts" showLineNumbers copy
+  import { Mastra } from '@mastra/core/mastra'
+  import { UpstashStore } from "@mastra/upstash";
+
+  export const mastra = new Mastra({
+    storage: new UpstashStore({
+      url: "your_upstash_url",
+      token: "your_upstash_token",
+    }),
+  })
+
+  ```
+  </Tabs.Tab>
+</Tabs>
+
+
 ## Data Schema
 
 {/* 
