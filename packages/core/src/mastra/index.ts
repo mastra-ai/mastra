@@ -75,7 +75,10 @@ export class Mastra<
   #workflows: TWorkflows;
   #tts?: TTTS;
   #deployer?: MastraDeployer;
-  #serverMiddleware: Array<Middleware> = [];
+  #serverMiddleware: Array<{
+    handler: (c: any, next: () => Promise<void>) => Promise<Response | void>;
+    path: string;
+  }> = [];
   #telemetry?: Telemetry;
   #storage?: MastraStorage;
   #memory?: MastraMemory;
