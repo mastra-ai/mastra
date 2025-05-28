@@ -9,6 +9,7 @@ import { createWorkflow, type Workflow, createStep } from '../../workflows';
 import type { MastraMemory } from '../../memory';
 import { randomUUID } from 'crypto';
 import type { Mastra } from '../..';
+import { EMITTER_SYMBOL } from '../../workflows/constants';
 
 interface NewAgentNetworkConfig {
   id: string;
@@ -336,6 +337,7 @@ export class NewAgentNetwork extends MastraBase {
               prompt: '',
               result: completionResult.object.finalResult,
               isComplete: true,
+              selectionReason: completionResult.object.completionReason,
             };
           }
         }
@@ -394,6 +396,7 @@ export class NewAgentNetwork extends MastraBase {
           resourceType: result.object.resourceType,
           prompt: result.object.prompt,
           isComplete: false,
+          selectionReason: result.object.selectionReason,
         };
       },
     });
@@ -415,7 +418,7 @@ export class NewAgentNetwork extends MastraBase {
         result: z.string(),
         isComplete: z.boolean().optional(),
       }),
-      execute: async ({ inputData }) => {
+      execute: async ({ inputData, [EMITTER_SYMBOL]: emitter }) => {
         const agentsMap = await this.getAgents({ runtimeContext: runtimeContextToUse });
         const agentId = inputData.resourceId;
         console.log('calling agent', agentId);
@@ -426,16 +429,64 @@ export class NewAgentNetwork extends MastraBase {
           throw new Error(`Agent ${agentId} not found`);
         }
 
-        const result = await agent.generate(inputData.prompt, {
-          threadId: runId,
-          resourceId: this.name,
+        let streamPromise = {} as {
+          promise: Promise<string>;
+          resolve: (value: string) => void;
+          reject: (reason?: any) => void;
+        };
+
+        streamPromise.promise = new Promise((resolve, reject) => {
+          streamPromise.resolve = resolve;
+          streamPromise.reject = reject;
         });
+        const toolData = {
+          name: agent.name,
+          args: inputData,
+        };
+        await emitter.emit('watch-v2', {
+          type: 'tool-call-streaming-start',
+          ...toolData,
+        });
+        const { fullStream } = await agent.stream(inputData.prompt, {
+          // resourceId: inputData.resourceId,
+          // threadId: inputData.threadId,
+          onFinish: result => {
+            streamPromise.resolve(result.text);
+          },
+        });
+
+        for await (const chunk of fullStream) {
+          switch (chunk.type) {
+            case 'text-delta':
+              await emitter.emit('watch-v2', {
+                type: 'tool-call-delta',
+                ...toolData,
+                argsTextDelta: chunk.textDelta,
+              });
+              break;
+
+            case 'step-start':
+            case 'step-finish':
+            case 'finish':
+              break;
+
+            case 'tool-call':
+            case 'tool-result':
+            case 'tool-call-streaming-start':
+            case 'tool-call-delta':
+            case 'source':
+            case 'file':
+            default:
+              await emitter.emit('watch-v2', chunk);
+              break;
+          }
+        }
 
         return {
           task: inputData.task,
           resourceId: inputData.resourceId,
           resourceType: inputData.resourceType,
-          result: result.text,
+          result: await streamPromise.promise,
           isComplete: false,
         };
       },
@@ -450,6 +501,7 @@ export class NewAgentNetwork extends MastraBase {
         prompt: z.string(),
         result: z.string(),
         isComplete: z.boolean().optional(),
+        selectionReason: z.string().optional(),
       }),
       outputSchema: z.object({
         task: z.string(),
@@ -507,6 +559,7 @@ export class NewAgentNetwork extends MastraBase {
         prompt: z.string(),
         result: z.string(),
         isComplete: z.boolean().optional(),
+        selectionReason: z.string().optional(),
       }),
       outputSchema: z.object({
         task: z.string(),
@@ -529,6 +582,7 @@ export class NewAgentNetwork extends MastraBase {
         resourceId: z.string(),
         resourceType: RESOURCE_TYPES,
         result: z.string().optional(),
+        selectionReason: z.string().optional(),
       }),
       outputSchema: z.object({
         task: z.string(),
@@ -598,5 +652,18 @@ export class NewAgentNetwork extends MastraBase {
       resourceId: result.result.resourceId,
       resourceType: result.result.resourceType,
     };
+  }
+
+  async stream(message: string, { runtimeContext }: { runtimeContext?: RuntimeContext }) {
+    const networkWorkflow = this.createWorkflow({ runtimeContext });
+    const run = networkWorkflow.createRun();
+
+    return run.stream({
+      inputData: {
+        task: message,
+        resourceId: '',
+        resourceType: 'none',
+      },
+    });
   }
 }
