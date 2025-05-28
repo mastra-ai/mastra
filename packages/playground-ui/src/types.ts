@@ -73,6 +73,7 @@ export type RefinedTrace = {
   started: number;
   status: SpanStatus;
   trace: Span[];
+  runId?: string;
 };
 
 export * from './domains/traces/types';
