@@ -1,7 +1,7 @@
 import { useContext } from 'react';
 import { WorkflowRunContext } from './workflow-run-context';
 
-type Step = {
+export type Step = {
   error?: any;
   startedAt: number;
   endedAt?: number;

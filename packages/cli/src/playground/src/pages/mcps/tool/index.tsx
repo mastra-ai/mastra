@@ -52,6 +52,7 @@ const MCPServerToolExecutor = () => {
 
   const toolActualName = mcpTool?.details?.name || toolDisplayNameFromState;
   const toolActualDescription = mcpTool?.details?.description;
+  const toolActualType = mcpTool?.details?.toolType;
 
   if (isLoading || (!mcpTool && !error)) {
     return (
@@ -144,6 +145,7 @@ const MCPServerToolExecutor = () => {
         handleExecuteTool={handleExecuteTool}
         toolDescription={toolActualName || ''}
         toolId={toolId || ''}
+        toolType={toolActualType}
       />
     </div>
   );
