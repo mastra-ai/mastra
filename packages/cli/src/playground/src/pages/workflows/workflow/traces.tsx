@@ -1,4 +1,4 @@
-import { useParams } from 'react-router';
+import { useParams, useSearchParams } from 'react-router';
 import { TraceProvider, useTraces, WorkflowTraces } from '@mastra/playground-ui';
 
 import { Skeleton } from '@/components/ui/skeleton';
@@ -8,6 +8,9 @@ import { useWorkflow } from '@/hooks/use-workflows';
 
 function WorkflowTracesContent() {
   const { workflowId } = useParams();
+  const [searchParams] = useSearchParams();
+  const runId = searchParams.get('runId');
+  const stepName = searchParams.get('stepName');
   const { workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId!);
 
   // This hook will now be called within a TraceProvider context
@@ -26,7 +29,15 @@ function WorkflowTracesContent() {
     );
   }
 
-  return <WorkflowTraces traces={traces} isLoading={firstCallLoading} error={error} />;
+  return (
+    <WorkflowTraces
+      traces={traces}
+      isLoading={firstCallLoading}
+      error={error}
+      runId={runId || undefined}
+      stepName={stepName || undefined}
+    />
+  );
 }
 
 function WorkflowTracesPage() {

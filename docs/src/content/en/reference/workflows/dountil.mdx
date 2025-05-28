@@ -26,7 +26,8 @@ workflow.dountil(stepOne, async ({ inputData }) => true);
     {
       name: "condition",
       type: "(params : { inputData: any}) => Promise<boolean>",
-      description: "A function that returns a boolean indicating whether to continue the loop",
+      description:
+        "A function that returns a boolean indicating whether to continue the loop",
       isOptional: false,
     },
   ]}

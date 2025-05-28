@@ -232,6 +232,7 @@ if (result.status === "success") {
 
 **Note:** don't destructure the `run` instance
 i.e. don't do
+
 ```typescript
 const { start, resume, ... } = myWorkflow.createRun();
 
@@ -240,8 +241,8 @@ const { start, resume, ... } = myWorkflow.createRun();
 const run = myWorkflow.createRun();
 const { start, resume, ... } = run;
 ```
-it will break the connection to the workflow and prevent it from running
 
+it will break the connection to the workflow and prevent it from running
 
 ## Workflow Execution Result Schema
 
@@ -338,7 +339,7 @@ The `event` object has the following schema:
     },
     {
       name: "step-start",
-      type: "object", 
+      type: "object",
       description: "The start of a step",
       isOptional: false,
       properties: [
@@ -348,14 +349,14 @@ The `event` object has the following schema:
             {
               name: "example",
               type: "{ type: 'step-start', payload: { id: 'fetch-weather' } }",
-              description: "Example message structure", 
+              description: "Example message structure",
               isOptional: false,
             },
           ],
         },
       ],
     },
-     {
+    {
       name: "tool-call",
       type: "object",
       description: "A tool call has started",
@@ -412,66 +413,65 @@ The `event` object has the following schema:
         },
       ],
     },
-  {
-    name: "step-result",
-    type: "object",
-    description: "The result of a step",
-    isOptional: false,
-    properties: [
-      {
-        type: "object",
-        parameters: [
-          {
-            name: "example",
-            type: "{ type: 'step-result', payload: { id: 'Weather Agent', status: 'success', output: [Object] } }",
-            description: "Example message structure",
-            isOptional: false,
-          },
-        ],
-      },
-    ],
-  },
-  {
-    name: "step-finish",
-    type: "object",
-    description: "The end of a step",
-    isOptional: false,
-    properties: [
-      {
-        type: "object",
-        parameters: [
-          {
-            name: "example",
-            type: "{ type: 'step-finish', payload: { id: 'Weather Agent', metadata: {} } }",
-            description: "Example message structure",
-            isOptional: false,
-          },
-        ],
-      },
-    ],
-  },
-  {
-    name: "finish",
-    type: "object",
-    description: "The end of the workflow",
-    isOptional: false,
-    properties: [
-      {
-        type: "object",
-        parameters: [
-          {
-            name: "example",
-            type: "{ type: 'finish', payload: { runId: '1' } }",
-            description: "Example message structure",
-            isOptional: false,
-          },
-        ],
-      },
-    ],
-  },
+    {
+      name: "step-result",
+      type: "object",
+      description: "The result of a step",
+      isOptional: false,
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "example",
+              type: "{ type: 'step-result', payload: { id: 'Weather Agent', status: 'success', output: [Object] } }",
+              description: "Example message structure",
+              isOptional: false,
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "step-finish",
+      type: "object",
+      description: "The end of a step",
+      isOptional: false,
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "example",
+              type: "{ type: 'step-finish', payload: { id: 'Weather Agent', metadata: {} } }",
+              description: "Example message structure",
+              isOptional: false,
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "finish",
+      type: "object",
+      description: "The end of the workflow",
+      isOptional: false,
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "example",
+              type: "{ type: 'finish', payload: { runId: '1' } }",
+              description: "Example message structure",
+              isOptional: false,
+            },
+          ],
+        },
+      ],
+    },
   ]}
 />
-
 
 ## Watching Workflow Execution
 

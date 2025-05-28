@@ -28,7 +28,10 @@ export type NestedNode = Node<
   'nested-node'
 >;
 
-export function WorkflowNestedNode({ data }: NodeProps<NestedNode>) {
+export function WorkflowNestedNode({
+  data,
+  parentWorkflowName,
+}: NodeProps<NestedNode> & { parentWorkflowName?: string }) {
   const [isInputOpen, setIsInputOpen] = useState(false);
   const [isOutputOpen, setIsOutputOpen] = useState(false);
   const [isErrorOpen, setIsErrorOpen] = useState(false);
@@ -39,7 +42,9 @@ export function WorkflowNestedNode({ data }: NodeProps<NestedNode>) {
 
   const { label, description, withoutTopHandle, withoutBottomHandle, stepGraph, mapConfig } = data;
 
-  const step = steps[label];
+  const fullLabel = parentWorkflowName ? `${parentWorkflowName}.${label}` : label;
+
+  const step = steps[fullLabel];
 
   const dialogContentClass = 'bg-surface2 rounded-lg border-sm border-border1 max-w-4xl w-full px-0';
   const dialogTitleClass = 'border-b-sm border-border1 pb-4 px-6';
@@ -76,7 +81,7 @@ export function WorkflowNestedNode({ data }: NodeProps<NestedNode>) {
         )}
 
         <div className="flex flex-wrap items-center bg-surface4 border-t-sm border-border1 px-2 py-1 gap-2 rounded-b-lg">
-          <Button onClick={() => showNestedGraph({ label, stepGraph })}>View workflow</Button>
+          <Button onClick={() => showNestedGraph({ label, fullStep: fullLabel, stepGraph })}>View workflow</Button>
           {mapConfig && (
             <>
               <Button onClick={() => setIsMapConfigOpen(true)}>Map config</Button>
