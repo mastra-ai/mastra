@@ -34,27 +34,6 @@ const createTestThread = (title: string, metadata = {}) => ({
 });
 
 let messageCounter = 0;
-// const createTestMessage = (
-//   threadId: string,
-//   content: string,
-//   role: 'user' | 'assistant' = 'user',
-//   type: 'text' | 'tool-call' | 'tool-result' = 'text',
-// ): MastraMessageV2 => {
-//   messageCounter++;
-//   return {
-//     id: randomUUID(),
-//     threadId,
-//     content: {
-//       format: 2,
-//       content,
-//       parts: [{ type: 'text', text: content }],
-//     },
-//     role,
-//     type,
-//     createdAt: new Date(Date.now() + messageCounter * 1000), // Add 1 second per message to prevent messages having the same timestamp
-//     resourceId,
-//   };
-// };
 const createTestMessage = (
   threadId: string,
   content: string | TextPart[] | ToolCallPart[] | ToolResultPart[],
