@@ -28,7 +28,8 @@ const result = await run.start({ inputData: {...} });
     {
       name: "cb",
       type: "(event: WatchEvent) => void",
-      description: "A callback function that is called whenever a step is completed or the workflow state changes",
+      description:
+        "A callback function that is called whenever a step is completed or the workflow state changes",
       isOptional: false,
     },
   ]}
@@ -41,7 +42,8 @@ const result = await run.start({ inputData: {...} });
     {
       name: "unwatch",
       type: "() => void",
-      description: "A function that can be called to stop watching the workflow run",
+      description:
+        "A function that can be called to stop watching the workflow run",
     },
   ]}
 />

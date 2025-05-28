@@ -41,16 +41,18 @@ export interface WorkflowRunState {
     // Workflow context
     [key: string]: Record<
       string,
-      {
-        status: "success";
-        output: any;
-      } | {
-        status: "failed";
-        error: string;
-      } | {
-        status: "suspended";
-        payload?: any;
-      }
+      | {
+          status: "success";
+          output: any;
+        }
+      | {
+          status: "failed";
+          error: string;
+        }
+      | {
+          status: "suspended";
+          payload?: any;
+        }
     >;
     input: Record<string, any>; // Initial input data
   };

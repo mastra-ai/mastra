@@ -41,16 +41,6 @@ export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: stri
               <Txt variant="header-md" as="h2" className="font-medium truncate">
                 {workflowToUse?.name}
               </Txt>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button onClick={handleCopy}>
-                    <Icon className="transition-colors hover:bg-surface4 rounded-lg text-icon3 hover:text-icon6">
-                      <CopyIcon />
-                    </Icon>
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Copy Workflow ID for use in code</TooltipContent>
-              </Tooltip>
             </div>
           )}
         </div>

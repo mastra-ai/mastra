@@ -66,46 +66,47 @@ workflow
     {
       name: "mappingConfig",
       type: "object",
-      description: "Configuration object that defines how data should be mapped between workflow steps, either as a mapping object or a mapping function",
+      description:
+        "Configuration object that defines how data should be mapped between workflow steps, either as a mapping object or a mapping function",
       isOptional: false,
       properties: [
         {
           name: "step",
           type: "Step | Step[]",
           description: "The step(s) to map output from",
-          isOptional: true
+          isOptional: true,
         },
         {
-          name: "path", 
+          name: "path",
           type: "string",
           description: "Path to the output value in the step result",
-          isOptional: true
+          isOptional: true,
         },
         {
           name: "value",
-          type: "any", 
+          type: "any",
           description: "Static value to map",
-          isOptional: true
+          isOptional: true,
         },
         {
           name: "schema",
           type: "ZodType",
           description: "Schema for validating the mapped value",
-          isOptional: true
+          isOptional: true,
         },
         {
           name: "initData",
           type: "Step",
           description: "Step containing initial workflow data to map from",
-          isOptional: true
+          isOptional: true,
         },
         {
           name: "runtimeContextPath",
           type: "string",
           description: "Path to value in runtime context",
-          isOptional: true
-        }
-      ]
+          isOptional: true,
+        },
+      ],
     },
   ]}
 />

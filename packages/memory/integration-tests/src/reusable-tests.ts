@@ -1,11 +1,29 @@
-import { randomUUID } from 'node:crypto';
-import type { MastraMessageV1 } from '@mastra/core';
+import { randomUUID } from 'crypto';
+import * as path from 'path';
+import { Worker } from 'worker_threads';
+import type { MastraMessageV1, SharedMemoryConfig } from '@mastra/core';
+import type { LibSQLConfig } from '@mastra/libsql';
 import type { Memory } from '@mastra/memory';
-import type { TextPart, ToolCallPart, ToolResultPart } from 'ai';
+import type { PostgresConfig } from '@mastra/pg';
+import type { UpstashConfig } from '@mastra/upstash';
+import type { ToolResultPart, TextPart, ToolCallPart } from 'ai';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 const resourceId = 'resource';
-// Test helpers
+const NUMBER_OF_WORKERS = 2;
+
+export enum StorageType {
+  LibSQL = 'libsql',
+  Postgres = 'pg',
+  Upstash = 'upstash',
+}
+
+interface WorkerTestConfig {
+  storageTypeForWorker: StorageType;
+  storageConfigForWorker: LibSQLConfig | PostgresConfig | UpstashConfig;
+  memoryOptionsForWorker?: SharedMemoryConfig['options'];
+}
+
 const createTestThread = (title: string, metadata = {}) => ({
   id: randomUUID(),
   title,
@@ -55,17 +73,14 @@ const createTestMessage = (
   };
 };
 
-export function getResuableTests(memory: Memory) {
+export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestConfig) {
   beforeEach(async () => {
-    // Reset message counter
     messageCounter = 0;
-    // Clean up before each test
     const threads = await memory.getThreadsByResourceId({ resourceId });
     await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
   });
 
   afterAll(async () => {
-    // Final cleanup
     const threads = await memory.getThreadsByResourceId({ resourceId });
     await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
   });
@@ -297,7 +312,9 @@ export function getResuableTests(memory: Memory) {
         expect(result.messages[2].content).toBe('Yet another message');
 
         // Messages should be in the order they were created
-        expect(result.messages.every((m, i) => i === 0 || m.createdAt >= result.messages[i - 1].createdAt)).toBe(true);
+        expect(
+          result.messages.every((m, i) => i === 0 || (m as any).createdAt >= (result.messages[i - 1] as any).createdAt),
+        ).toBe(true);
       });
       it('should embed and recall both string and TextPart messages', async () => {
         // Plain string messages (semantically unrelated)
@@ -581,4 +598,87 @@ export function getResuableTests(memory: Memory) {
       });
     });
   });
+
+  if (workerTestConfig) {
+    describe('Concurrent Operations with Workers', () => {
+      it('should save multiple messages concurrently using Memory instance in workers to a single thread', async () => {
+        const totalMessages = 20;
+        const mainThread = await memory.saveThread({
+          thread: createTestThread(`Reusable Concurrent Worker Test Thread`),
+        });
+        const messagesToSave: ReturnType<typeof createTestMessage>[] = [];
+        for (let i = 0; i < totalMessages; i++) {
+          messagesToSave.push(createTestMessage(mainThread.id, `Message ${i + 1} for reusable concurrent test`));
+        }
+        const messagesForWorkers = messagesToSave.map(message => ({
+          originalMessage: message,
+        }));
+
+        const chunkSize = Math.ceil(totalMessages / NUMBER_OF_WORKERS);
+        const workerPromises = [];
+        console.log(`Using ${NUMBER_OF_WORKERS} generic Memory workers to process ${totalMessages} messages.`);
+        for (let i = 0; i < NUMBER_OF_WORKERS; i++) {
+          const chunk = messagesForWorkers.slice(i * chunkSize, (i + 1) * chunkSize);
+          if (chunk.length === 0) continue;
+          const workerPromise = new Promise((resolve, reject) => {
+            const worker = new Worker(path.resolve(__dirname, 'worker/generic-memory-worker.js'), {
+              workerData: {
+                messages: chunk,
+                storageType: workerTestConfig.storageTypeForWorker,
+                storageConfig: workerTestConfig.storageConfigForWorker,
+                memoryOptions: workerTestConfig.memoryOptionsForWorker || { threads: { generateTitle: false } },
+              },
+            });
+            worker.on('message', msg => {
+              if ((msg as any).success) {
+                resolve(msg);
+              } else {
+                console.error('Worker error (reusable test):', (msg as any).error);
+                reject(new Error((msg as any).error?.message || 'Worker failed in reusable test'));
+              }
+            });
+            worker.on('error', reject);
+            worker.on('exit', code => {
+              if (code !== 0) {
+                reject(new Error(`Reusable test worker stopped with exit code ${code}`));
+              }
+            });
+          });
+          workerPromises.push(workerPromise);
+        }
+        try {
+          await Promise.all(workerPromises);
+        } catch (error) {
+          console.error('Error during reusable worker execution:', error);
+          throw error;
+        }
+        const result = await memory.rememberMessages({
+          threadId: mainThread.id,
+          resourceId,
+          config: { lastMessages: totalMessages },
+        });
+        expect(result.messages).toHaveLength(totalMessages);
+
+        // Sort based on numeric part of content for consistent comparison
+        const sortedResultMessages = [...result.messages].sort((a, b) => {
+          const numA = parseInt(((a.content as string) || '').match(/Message (\d+)/)?.[1] || '0');
+          const numB = parseInt(((b.content as string) || '').match(/Message (\d+)/)?.[1] || '0');
+          return numA - numB;
+        });
+
+        const sortedExpectedMessages = [...messagesToSave].sort((a, b) => {
+          const numA = parseInt(((a.content as string) || '').match(/Message (\d+)/)?.[1] || '0');
+          const numB = parseInt(((b.content as string) || '').match(/Message (\d+)/)?.[1] || '0');
+          return numA - numB;
+        });
+
+        sortedExpectedMessages.forEach((expectedMessage, index) => {
+          const resultContent = sortedResultMessages[index].content;
+          // messagesToSave contains the direct output of createTestMessage
+          const expectedContent = expectedMessage.content;
+          expect(resultContent).toBe(expectedContent);
+        });
+      });
+    });
+  }
 }

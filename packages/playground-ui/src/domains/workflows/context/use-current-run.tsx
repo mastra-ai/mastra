@@ -1,7 +1,7 @@
 import { useContext } from 'react';
 import { WorkflowRunContext } from './workflow-run-context';
 
-type Step = {
+export type Step = {
   error?: any;
   startedAt: number;
   endedAt?: number;
@@ -13,6 +13,7 @@ type Step = {
 type UseCurrentRunReturnType = {
   steps: Record<string, Step>;
   isRunning: boolean;
+  runId?: string;
 };
 
 export const useCurrentRun = (): UseCurrentRunReturnType => {
@@ -33,5 +34,5 @@ export const useCurrentRun = (): UseCurrentRunReturnType => {
     };
   }, {});
 
-  return { steps, isRunning: Boolean(context.payload) };
+  return { steps, isRunning: Boolean(context.payload), runId: context.result?.runId };
 };
