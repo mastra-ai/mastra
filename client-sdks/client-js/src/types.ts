@@ -7,10 +7,10 @@ import type {
   WorkflowRuns,
   LegacyWorkflowRuns,
 } from '@mastra/core';
+import type { AgentGenerateOptions, AgentStreamOptions } from '@mastra/core/agent';
 import type { BaseLogMessage } from '@mastra/core/logger';
 
-import type { AgentGenerateOptions, AgentStreamOptions } from '@mastra/core/agent';
-import type { ServerInfo } from '@mastra/core/mcp';
+import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type { Workflow, WatchEvent, WorkflowResult } from '@mastra/core/workflows';
 import type {
@@ -306,6 +306,7 @@ export interface McpToolInfo {
   name: string;
   description?: string;
   inputSchema: string;
+  toolType?: MCPToolType;
 }
 
 export interface McpServerToolListResponse {
