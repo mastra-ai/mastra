@@ -66,18 +66,13 @@ export class LibSQLVector extends MastraVector {
 
     if (connectionUrl.includes(`file:`) || connectionUrl.includes(`:memory:`)) {
       this.turso
-        .batch([
-          {
-            sql: 'PRAGMA journal_mode=WAL;',
-          },
-          {
-            sql: 'PRAGMA busy_timeout = 5000;',
-          },
-        ])
-        .then(() => this.logger.debug('LibSQLVector: PRAGMA journal_mode=WAL and busy_timeout=5000 set.'))
-        .catch(err =>
-          this.logger.warn('LibSQLVector: Failed to set PRAGMA journal_mode=WAL and busy_timeout=5000.', err),
-        );
+        .execute('PRAGMA journal_mode=WAL;')
+        .then(() => this.logger.debug('LibSQLStore: PRAGMA journal_mode=WAL set.'))
+        .catch(err => this.logger.warn('LibSQLStore: Failed to set PRAGMA journal_mode=WAL.', err));
+      this.turso
+        .execute('PRAGMA busy_timeout = 5000;')
+        .then(() => this.logger.debug('LibSQLStore: PRAGMA busy_timeout=5000 set.'))
+        .catch(err => this.logger.warn('LibSQLStore: Failed to set PRAGMA busy_timeout=5000.', err));
     }
   }
 

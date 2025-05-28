@@ -66,18 +66,13 @@ export class LibSQLStore extends MastraStorage {
     // Set PRAGMAs for better concurrency, especially for file-based databases
     if (config.url.startsWith('file:') || config.url.includes(':memory:')) {
       this.client
-        .batch([
-          {
-            sql: 'PRAGMA journal_mode=WAL;',
-          },
-          {
-            sql: 'PRAGMA busy_timeout = 5000;',
-          },
-        ])
-        .then(() => this.logger.debug('LibSQLStore: PRAGMA journal_mode=WAL and busy_timeout=5000 set.'))
-        .catch(err =>
-          this.logger.warn('LibSQLStore: Failed to set PRAGMA journal_mode=WAL and busy_timeout=5000.', err),
-        );
+        .execute('PRAGMA journal_mode=WAL;')
+        .then(() => this.logger.debug('LibSQLStore: PRAGMA journal_mode=WAL set.'))
+        .catch(err => this.logger.warn('LibSQLStore: Failed to set PRAGMA journal_mode=WAL.', err));
+      this.client
+        .execute('PRAGMA busy_timeout = 5000;') // 5 seconds
+        .then(() => this.logger.debug('LibSQLStore: PRAGMA busy_timeout=5000 set.'))
+        .catch(err => this.logger.warn('LibSQLStore: Failed to set PRAGMA busy_timeout.', err));
     }
   }
 
