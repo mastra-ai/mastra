@@ -39,7 +39,7 @@ export class GladiaVoice extends MastraVoice {
     const defaultApiKey = process.env.GLADIA_API_KEY;
     super({
       listeningModel: {
-        name: '',
+        name: 'gladia',
         apiKey: listeningModel?.apiKey ?? defaultApiKey,
       },
     });
@@ -74,7 +74,9 @@ export class GladiaVoice extends MastraVoice {
         headers: { 'x-gladia-key': this.apiKey },
         body: form,
       });
-
+      if (!uploadRes.ok) {
+        throw new Error(`Upload failed: ${uploadRes.status} ${await uploadRes.text()}`);
+      }
       const { audio_url } = await uploadRes.json();
 
       const transcribeRes: any = await fetch(`${this.baseUrl}/pre-recorded/`, {
