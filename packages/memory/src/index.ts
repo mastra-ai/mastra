@@ -339,6 +339,8 @@ export class Memory extends MastraMemory {
         if (MessageList.isMastraMessageV1(m)) {
           return this.updateMessageToHideWorkingMemory(m);
         }
+        // add this to prevent "error saving undefined in the db" if a project is on an earlier storage version but new memory/storage
+        if (!m.type) m.type = `v2`;
         return this.updateMessageToHideWorkingMemoryV2(m);
       })
       .filter((m): m is MastraMessageV1 | MastraMessageV2 => Boolean(m));
