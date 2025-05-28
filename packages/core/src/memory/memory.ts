@@ -1,6 +1,7 @@
 import type { AssistantContent, UserContent, CoreMessage, EmbeddingModel, UIMessage } from 'ai';
 
-import type { MastraMessageContentV2, MastraMessageV2 } from '../agent/message-list';
+import { MessageList } from '../agent/message-list';
+import type { MastraMessageV2 } from '../agent/message-list';
 import { MastraBase } from '../base';
 import type { MastraStorage, StorageGetMessagesArg } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
@@ -263,7 +264,7 @@ export abstract class MastraMemory extends MastraBase {
     threadId,
     resourceId,
     selectBy,
-  }: StorageGetMessagesArg): Promise<{ messages: (MastraMessageV2 | MastraMessageV1)[]; uiMessages: UIMessage[] }>;
+  }: StorageGetMessagesArg): Promise<{ messages: MastraMessageV1[]; uiMessages: UIMessage[] }>;
 
   /**
    * Helper method to create a new thread
@@ -312,6 +313,7 @@ export abstract class MastraMemory extends MastraBase {
    * @param toolCallArgs - Optional array of tool call arguments
    * @param toolCallIds - Optional array of tool call ids
    * @returns Promise resolving to the saved message
+   * @deprecated use saveMessages instead
    */
   async addMessage({
     threadId,
@@ -319,47 +321,37 @@ export abstract class MastraMemory extends MastraBase {
     config,
     content,
     role,
-  }: // type, toolNames, toolCallArgs, toolCallIds parameters are removed as they are inferred from MastraMessageV2.content.parts
-  {
+    type,
+    toolNames,
+    toolCallArgs,
+    toolCallIds,
+  }: {
     threadId: string;
     resourceId: string;
     config?: MemoryConfig;
-    content: UserContent | AssistantContent; // This will be simplified to string for now
+    content: UserContent | AssistantContent;
     role: 'user' | 'assistant';
-  }): Promise<MastraMessageV2> {
-    const messageId = this.generateId();
-    const createdAt = new Date();
-
-    // Simplified content handling: assumes text content for now.
-    // A more robust version would map UserContent/AssistantContent to MastraMessageContentV2.parts
-    let textContent = '';
-    if (typeof content === 'string') {
-      textContent = content;
-    } else if (Array.isArray(content)) {
-      // Join text parts, ignore others for this simplified version
-      textContent = content
-        .filter(part => part.type === 'text')
-        .map(part => (part as any).text)
-        .join('\n');
-    }
-
-    const mastraMessageV2Content: MastraMessageContentV2 = {
-      format: 2,
-      parts: [{ type: 'text', text: textContent }],
-      content: textContent, // Also store the simple string content if applicable
-    };
-
-    const message: MastraMessageV2 = {
-      id: messageId,
+    type: 'text' | 'tool-call' | 'tool-result';
+    toolNames?: string[];
+    toolCallArgs?: Record<string, unknown>[];
+    toolCallIds?: string[];
+  }): Promise<MastraMessageV1> {
+    const message: MastraMessageV1 = {
+      id: this.generateId(),
+      content,
       role,
-      createdAt,
+      createdAt: new Date(),
       threadId,
       resourceId,
-      content: mastraMessageV2Content,
+      type,
+      toolNames,
+      toolCallArgs,
+      toolCallIds,
     };
 
     const savedMessages = await this.saveMessages({ messages: [message], memoryConfig: config });
-    return savedMessages[0]!;
+    const list = new MessageList({ threadId, resourceId }).add(savedMessages[0]!, 'memory');
+    return list.get.all.v1()[0]!;
   }
 
   /**
