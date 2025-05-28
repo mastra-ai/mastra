@@ -532,6 +532,20 @@ do:
     return this.#serverMiddleware;
   }
 
+  public addServerMiddleware(serverMiddleware: {
+    handler: (c: any, next: () => Promise<void>) => Promise<Response | void>;
+    path?: string;
+  }) {
+    if (!this.#serverMiddleware) {
+      this.#serverMiddleware = [];
+    }
+
+    this.#serverMiddleware.push({
+      handler: serverMiddleware.handler,
+      path: serverMiddleware.path || '/api/*',
+    });
+  }
+
   public getNetworks() {
     return Object.values(this.#networks || {});
   }
