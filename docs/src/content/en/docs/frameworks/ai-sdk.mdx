@@ -2,7 +2,7 @@
 title: "Using with Vercel AI SDK"
 description: "Learn how Mastra leverages the Vercel AI SDK library and how you can leverage it further with Mastra"
 ---
-
+import { GithubLink } from "@/components/github-link";
 import Image from "next/image";
 
 # Using with Vercel AI SDK
@@ -267,6 +267,7 @@ The `createDataStreamResponse` function creates a Response object that streams d
 
 ```typescript filename="app/api/chat/route.ts" copy
 import { mastra } from "@/src/mastra";
+import { createDataStreamResponse } from "ai";
 
 export async function POST(req: Request) {
   const { messages } = await req.json();
@@ -299,3 +300,8 @@ export async function POST(req: Request) {
   return response;
 }
 ```
+<GithubLink
+  link={
+    "https://github.com/mastra-ai/mastra/blob/main/examples/ai-sdk-useChat"
+  }
+/>
