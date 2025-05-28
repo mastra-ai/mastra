@@ -32,7 +32,7 @@ jobs:
           OWNER: ${{ github.repository_owner }}
           REPO: ${{ github.event.repository.name }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
-          MASTRA_BASE_URL: "https://few-substantial-engine.mastra.cloud"
+          MASTRA_BASE_URL: 'https://few-substantial-engine.mastra.cloud'
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_TEAM_ID: ${{ secrets.SLACK_TEAM_ID }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}

@@ -11,7 +11,11 @@ Mastra integrates with Next.js, making it easy to:
 
 - Build flexible APIs to serve AI-powered features
 - Simplify deployment with a unified codebase for frontend and backend
+<<<<<<< HEAD
 - Take advantage of Next.js’s built-in server actions (App Router) or API Routes (Pages Router) for efficient server-client workflows
+=======
+- Take advantage of Next.js's built-in server actions (App Router) or API Routes (Pages Router) for efficient server-client workflows
+>>>>>>> main
 
 Use this guide to scaffold and integrate Mastra with your Next.js project.
 
@@ -27,11 +31,16 @@ Use this guide to scaffold and integrate Mastra with your Next.js project.
   ## Install Mastra
 
 Install the required Mastra packages:
+<<<<<<< HEAD
 {/_
+=======
+{/*
+>>>>>>> main
 LLM CONTEXT: This Tabs component shows commands for integrating a new Mastra backend project using different package managers.
 Each tab displays the command for that specific package manager to create an integrated Mastra backend service.
 This is part of the "Integrated Backend Integration" approach for Next.js projects.
 All commands create the same Mastra project but use different package manager syntax.
+<<<<<<< HEAD
 _/}
 
 <Tabs items={["npm", "yarn", "pnpm", "bun"]}>
@@ -51,6 +60,31 @@ _/}
     ```bash copy bun add mastra@latest @mastra/core@latest @mastra/libsql@latest
     ```
   </Tabs.Tab>
+=======
+*/}
+
+<Tabs items={["npm", "yarn", "pnpm", "bun"]}>
+  <Tabs.Tab>
+    ```bash copy
+    npm install mastra@latest @mastra/core@latest @mastra/libsql@latest
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    yarn add mastra@latest @mastra/core@latest @mastra/libsql@latest
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    pnpm add mastra@latest @mastra/core@latest @mastra/libsql@latest
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    bun add mastra@latest @mastra/core@latest @mastra/libsql@latest
+    ```
+  </Tabs.Tab>
+>>>>>>> main
 </Tabs>
 
 ## Integrate Mastra
@@ -91,7 +125,11 @@ Add the `dev` and `build` scripts to `package.json`:
 
 Modify the `tsconfig.json` file in your project root:
 
+<<<<<<< HEAD
 ```json filename="tsconfig.json" copy
+=======
+```json filename="tsconfig.json"
+>>>>>>> main
 {
   ...
   "exclude": ["dist", ".mastra"]
@@ -127,6 +165,7 @@ Add `.mastra` to your `.gitignore` file:
 ```bash filename=".gitignore" copy
 .mastra
 ```
+<<<<<<< HEAD
 
 ## Start the Mastra Dev Server
 
@@ -170,6 +209,59 @@ export async function getWeatherInfo(formData: FormData) {
 
   const result = await agent.generate(`What's the weather like in ${city}?`);
 
+=======
+
+## Start the Mastra Dev Server
+
+Start the Mastra Dev Server to expose your agents as REST endpoints:
+
+<Tabs items={["npm", "CLI"]}>
+  <Tabs.Tab>
+    ```bash copy
+    npm run dev:mastra
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    mastra dev:mastra
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+> Once running, your agents are available locally. See [Local Development Environment](/docs/local-dev/mastra-dev) for more information.
+
+## Start Next.js Dev Server
+
+With the Mastra Dev Server running, you can start your Next.js app in the usual way.
+
+## Create Test Directory
+
+Create a new directory that will contain a Page, Action, and Form for testing purposes.
+
+```bash copy
+mkdir test
+```
+
+### Create Test Action
+
+Create a new Action, and add the example code:
+
+```bash copy
+touch app/test/action.ts
+```
+
+```typescript filename="app/test/action.ts" showLineNumbers copy
+"use server";
+
+import { mastra } from "../../mastra";
+
+export async function getWeatherInfo(formData: FormData) {
+  const city = formData.get("city")?.toString();
+  const agent = mastra.getAgent("weatherAgent");
+
+  const result = await agent.generate(`What's the weather like in ${city}?`);
+
+>>>>>>> main
   return result.text;
 }
 ```
@@ -256,31 +348,36 @@ Let me know if you need more information!
 </Callout>
 
   <Steps>
-  ## Install Mastra
+
+## Install Mastra
 
 Install the required Mastra packages:
-{/_
+{/*
 LLM CONTEXT: This Tabs component shows commands for integrating a new Mastra backend project using different package managers.
 Each tab displays the command for that specific package manager to create an integrated Mastra backend service.
 This is part of the "Integrated Backend Integration" approach for Next.js projects.
 All commands create the same Mastra project but use different package manager syntax.
-_/}
+*/}
 
 <Tabs items={["npm", "yarn", "pnpm", "bun"]}>
   <Tabs.Tab>
-    ```bash copy npm install mastra@latest @mastra/core@latest
-    @mastra/libsql@latest ```
+    ```bash copy
+    npm install mastra@latest @mastra/core@latest @mastra/libsql@latest
+    ```
   </Tabs.Tab>
   <Tabs.Tab>
-    ```bash copy yarn add mastra@latest @mastra/core@latest
-    @mastra/libsql@latest ```
+    ```bash copy
+    yarn add mastra@latest @mastra/core@latest @mastra/libsql@latest
+    ```
   </Tabs.Tab>
   <Tabs.Tab>
-    ```bash copy pnpm add mastra@latest @mastra/core@latest
-    @mastra/libsql@latest ```
+    ```bash copy
+    pnpm add mastra@latest @mastra/core@latest @mastra/libsql@latest
+    ```
   </Tabs.Tab>
   <Tabs.Tab>
-    ```bash copy bun add mastra@latest @mastra/core@latest @mastra/libsql@latest
+    ```bash copy
+    bun add mastra@latest @mastra/core@latest @mastra/libsql@latest
     ```
   </Tabs.Tab>
 </Tabs>
@@ -323,7 +420,7 @@ Add the `dev` and `build` scripts to `package.json`:
 
 Modify the `tsconfig.json` file in your project root:
 
-```json filename="tsconfig.json" copy
+```json filename="tsconfig.json"
 {
   ...
   "exclude": ["dist", ".mastra"]
@@ -365,8 +462,16 @@ Add `.mastra` to your `.gitignore` file:
 Start the Mastra Dev Server to expose your agents as REST endpoints:
 
 <Tabs items={["npm", "CLI"]}>
-  <Tabs.Tab>```bash copy npm run dev:mastra ```</Tabs.Tab>
-  <Tabs.Tab>```bash copy mastra dev:mastra ```</Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    npm run dev:mastra
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    mastra dev:mastra
+    ```
+  </Tabs.Tab>
 </Tabs>
 
 > Once running, your agents are available locally. See [Local Development Environment](/docs/local-dev/mastra-dev) for more information.

@@ -54,7 +54,11 @@ const agent = new Agent({
       `,
   model: openai("gpt-4o-mini"),
 });
+```
 
+### Tool Definitions
+
+```ts
 const forecastSchema = z.object({
   date: z.string(),
   maxTemp: z.number(),
@@ -85,7 +89,11 @@ function getWeatherCondition(code: number): string {
   };
   return conditions[code] || "Unknown";
 }
+```
 
+### Workflow Steps
+
+```ts
 const fetchWeather = createStep({
   id: "fetch-weather",
   description: "Fetches weather forecast for a given city",
@@ -177,7 +185,10 @@ const planActivities = createStep({
     };
   },
 });
+```
 
+### Workflow Definition
+```ts
 const weatherWorkflow = createWorkflow({
   id: "weather-workflow",
   inputSchema: z.object({
@@ -197,7 +208,10 @@ const mastra = new Mastra({
     weatherWorkflow,
   },
 });
+```
 
+### Workflow Execution
+```ts
 async function main() {
   const run = mastra.getWorkflow("weatherWorkflow").createRun();
 
@@ -213,6 +227,8 @@ async function main() {
 
 main();
 ```
+
+<br/>
 
 <GithubLink
   link={

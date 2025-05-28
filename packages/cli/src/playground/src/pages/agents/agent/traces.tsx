@@ -19,16 +19,14 @@ function AgentTracesContent() {
   }
 
   return (
-    <AgentTraces traces={traces || []} isLoading={firstCallLoading} error={error} className="h-[calc(100vh-40px)]" />
+    <TraceProvider initialTraces={traces || []}>
+      <AgentTraces traces={traces || []} isLoading={firstCallLoading} error={error} className="h-[calc(100vh-40px)]" />
+    </TraceProvider>
   );
 }
 
 function AgentTracesPage() {
-  return (
-    <TraceProvider>
-      <AgentTracesContent />
-    </TraceProvider>
-  );
+  return <AgentTracesContent />;
 }
 
 export default AgentTracesPage;

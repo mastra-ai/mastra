@@ -31,19 +31,23 @@ Install the required Mastra packages:
 
 <Tabs items={["npm", "yarn", "pnpm", "bun"]}>
   <Tabs.Tab>
-    ```bash copy npm install mastra@latest @mastra/core@latest
-    @mastra/libsql@latest ```
+    ```bash copy
+    npm install mastra@latest @mastra/core@latest @mastra/libsql@latest
+    ```
   </Tabs.Tab>
   <Tabs.Tab>
-    ```bash copy yarn add mastra@latest @mastra/core@latest
-    @mastra/libsql@latest ```
+    ```bash copy
+    yarn add mastra@latest @mastra/core@latest @mastra/libsql@latest
+    ```
   </Tabs.Tab>
   <Tabs.Tab>
-    ```bash copy pnpm add mastra@latest @mastra/core@latest
-    @mastra/libsql@latest ```
+    ```bash copy
+    pnpm add mastra@latest @mastra/core@latest @mastra/libsql@latest
+    ```
   </Tabs.Tab>
   <Tabs.Tab>
-    ```bash copy bun add mastra@latest @mastra/core@latest @mastra/libsql@latest
+    ```bash copy
+    bun add mastra@latest @mastra/core@latest @mastra/libsql@latest
     ```
   </Tabs.Tab>
 </Tabs>
@@ -75,7 +79,7 @@ Add the `dev` and `build` scripts to `package.json`:
 ```json filename="package.json"
 {
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    ...
     "dev": "mastra dev",
     "build": "mastra build"
   }
@@ -120,8 +124,16 @@ OPENAI_API_KEY=<your-api-key>
 Start the Mastra dev server to expose your agents as REST endpoints:
 
 <Tabs items={["npm", "CLI"]}>
-  <Tabs.Tab>```bash copy npm run dev ```</Tabs.Tab>
-  <Tabs.Tab>```bash copy mastra dev ```</Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    npm run dev
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    mastra dev
+    ```
+  </Tabs.Tab>
 </Tabs>
 
 > Once running, your agents are available locally. See [Local Development Environment](/docs/local-dev/mastra-dev) for more information.
@@ -172,10 +184,14 @@ You can now make a request to the endpoint using one of the following:
 
 <Tabs items={["http", "curl"]}>
   <Tabs.Tab>
-    ```bash copy http://localhost:3000/api/weather?city=London ```
+    ```bash copy
+    http://localhost:3000/api/weather?city=London
+    ```
   </Tabs.Tab>
   <Tabs.Tab>
-    ```bash copy curl "http://localhost:3000/api/weather?city=London" ```
+    ```bash copy
+    curl "http://localhost:3000/api/weather?city=London"
+    ```
   </Tabs.Tab>
 </Tabs>
 

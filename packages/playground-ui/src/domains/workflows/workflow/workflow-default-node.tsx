@@ -20,8 +20,13 @@ export type DefaultNode = Node<
   'default-node'
 >;
 
-export function WorkflowDefaultNode({ data }: NodeProps<DefaultNode>) {
-  const { steps, isRunning } = useCurrentRun();
+export interface WorkflowDefaultNodeProps {
+  data: DefaultNode['data'];
+  onShowTrace?: ({ runId, stepName }: { runId: string; stepName: string }) => void;
+}
+
+export function WorkflowDefaultNode({ data, onShowTrace }: NodeProps<DefaultNode> & WorkflowDefaultNodeProps) {
+  const { steps, isRunning, runId } = useCurrentRun();
   const { label, description, withoutTopHandle, withoutBottomHandle } = data;
 
   const step = steps[label];
@@ -64,6 +69,7 @@ export function WorkflowDefaultNode({ data }: NodeProps<DefaultNode>) {
           output={step?.output}
           error={step?.error}
           mapConfig={data.mapConfig}
+          onShowTrace={runId ? () => onShowTrace?.({ runId, stepName: label }) : undefined}
         />
       </div>
 

@@ -13,14 +13,12 @@ Combined with Mastra, you can build sophisticated AI apps featuring bidirectiona
 
 ## Create a Mastra Project
 
-Create a new Mastra project using the `mastra` CLI:
-
-{/_
-LLM CONTEXT: This Tabs component shows commands for creating a new Mastra project for CopilotKit integration.
+LLM CONTEXT:
+This Tabs component shows commands for creating a new Mastra project using different package managers.
 Each tab displays the command for that specific package manager to create a Mastra project.
 This is the first step in setting up Mastra with CopilotKit for building AI copilot applications.
 All commands create the same Mastra project but use different package manager syntax.
-_/}
+*/}
 
 <Tabs items={["npx", "npm", "yarn", "pnpm"]}>
   <Tabs.Tab>```bash copy npx create-mastra@latest ```</Tabs.Tab>
@@ -37,12 +35,12 @@ For detailed setup instructions, see the [installation guide](/docs/getting-star
 
 Integrating Mastra with CopilotKit involves two main steps: setting up the backend runtime and configuring your frontend components.
 
-{/_
+{/*
 LLM CONTEXT: This Tabs component shows installation commands for the CopilotKit runtime package.
 Each tab displays the installation command for that specific package manager.
 This installs the core CopilotKit runtime needed for backend integration with Mastra.
 All commands install the same @copilotkit/runtime package but use different package manager syntax.
-_/}
+*/}
 
 <Tabs items={["npm", "yarn", "pnpm"]}>
   <Tabs.Tab>```bash copy npm install @copilotkit/runtime ```</Tabs.Tab>
@@ -56,12 +54,12 @@ You can leverage Mastra's custom API routes to add CopilotKit's runtime to your 
 
 The current version of the integration leverages `MastraClient` to format Mastra agents into the AGUI format of CopilotKit.
 
-{/_
+{/*
 LLM CONTEXT: This Tabs component shows installation commands for the Mastra AGUI package.
 Each tab displays the installation command for that specific package manager.
 This installs the alpha version of @mastra/agui which provides CopilotKit integration capabilities.
 All commands install the same @mastra/agui@alpha package but use different package manager syntax.
-_/}
+*/}
 
 <Tabs items={["npm", "yarn", "pnpm"]}>
   <Tabs.Tab>```bash copy npm install @mastra/agui@alpha ```</Tabs.Tab>
@@ -119,12 +117,12 @@ With this setup you now have CopilotKit running on your Mastra server. You can s
 
 Install CopilotKit's React components:
 
-{/_
+{/*
 LLM CONTEXT: This Tabs component shows installation commands for CopilotKit's React UI components.
 Each tab displays the installation command for that specific package manager.
 This installs the React components needed for the frontend CopilotKit integration.
 All commands install the same @copilotkit/react-core and @copilotkit/react-ui packages but use different package manager syntax.
-_/}
+*/}
 
 <Tabs items={["npm", "yarn", "pnpm"]}>
   <Tabs.Tab>
