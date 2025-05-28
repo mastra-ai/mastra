@@ -8,7 +8,7 @@ import { RuntimeContext } from '../../runtime-context';
 import { createWorkflow, type Workflow, createStep } from '../../workflows';
 import type { MastraMemory } from '../../memory';
 import { randomUUID } from 'crypto';
-import type { Mastra } from '../..';
+import type { Mastra, Tool } from '../..';
 import { EMITTER_SYMBOL } from '../../workflows/constants';
 
 interface NewAgentNetworkConfig {
@@ -18,10 +18,11 @@ interface NewAgentNetworkConfig {
   model: DynamicArgument<MastraLanguageModel>;
   agents: DynamicArgument<Record<string, Agent>>;
   workflows?: DynamicArgument<Record<string, Workflow>>;
+  tools?: DynamicArgument<Record<string, Tool>>;
   memory?: DynamicArgument<MastraMemory>;
 }
 
-const RESOURCE_TYPES = z.enum(['agent', 'workflow', 'none']);
+const RESOURCE_TYPES = z.enum(['agent', 'workflow', 'none', 'tool', 'none']);
 
 // getInstructions() {
 
@@ -106,10 +107,11 @@ export class NewAgentNetwork extends MastraBase {
   #model: DynamicArgument<MastraLanguageModel>;
   #agents: DynamicArgument<Record<string, Agent>>;
   #workflows: DynamicArgument<Record<string, Workflow>> | undefined;
+  #tools: DynamicArgument<Record<string, Tool>> | undefined;
   #memory?: DynamicArgument<MastraMemory>;
   #mastra?: Mastra;
 
-  constructor({ id, name, instructions, model, agents, workflows, memory }: NewAgentNetworkConfig) {
+  constructor({ id, name, instructions, model, agents, workflows, memory, tools }: NewAgentNetworkConfig) {
     super({
       component: RegisteredLogger.NETWORK,
       name: name || 'NewAgentNetwork',
@@ -122,6 +124,7 @@ export class NewAgentNetwork extends MastraBase {
     this.#agents = agents;
     this.#workflows = workflows;
     this.#memory = memory;
+    this.#tools = tools;
   }
 
   __registerMastra(mastra: Mastra) {
@@ -150,6 +153,18 @@ export class NewAgentNetwork extends MastraBase {
     }
 
     return workflowsToUse;
+  }
+
+  async getTools({ runtimeContext }: { runtimeContext?: RuntimeContext }) {
+    let toolsToUse: Record<string, Tool>;
+
+    if (typeof this.#tools === 'function') {
+      toolsToUse = await this.#tools({ runtimeContext: runtimeContext || new RuntimeContext() });
+    } else {
+      toolsToUse = this.#tools || {};
+    }
+
+    return toolsToUse;
   }
 
   async getMemory({ runtimeContext }: { runtimeContext?: RuntimeContext }) {
@@ -183,6 +198,7 @@ export class NewAgentNetwork extends MastraBase {
     const memoryToUse = await this.getMemory({ runtimeContext: runtimeContext || new RuntimeContext() });
     const agentsToUse = await this.getAgents({ runtimeContext: runtimeContext || new RuntimeContext() });
     const workflowsToUse = await this.getWorkflows({ runtimeContext: runtimeContext || new RuntimeContext() });
+    const toolsToUse = await this.getTools({ runtimeContext: runtimeContext || new RuntimeContext() });
 
     const agentList = Object.entries(agentsToUse)
       .map(([name, agent]) => {
@@ -195,6 +211,14 @@ export class NewAgentNetwork extends MastraBase {
       .map(([name, workflow]) => {
         return ` - **${name}**: ${workflow.description}, input schema: ${JSON.stringify(
           zodToJsonSchema(workflow.inputSchema),
+        )}`;
+      })
+      .join('\n');
+
+    const toolList = Object.entries(toolsToUse)
+      .map(([name, tool]) => {
+        return ` - **${name}**: ${tool.description}, input schema: ${JSON.stringify(
+          zodToJsonSchema(tool.inputSchema || z.object({})),
         )}`;
       })
       .join('\n');
@@ -216,8 +240,12 @@ export class NewAgentNetwork extends MastraBase {
           ## Available Workflows in Network (make sure to use inputs corresponding to the input schema when calling a workflow)
           ${workflowList}
 
+          ## Available Tools in Network (make sure to use inputs corresponding to the input schema when calling a tool)
+          ${toolList}
+
           If you have multiple entries that need to be called with a workflow or agent, call them separately with each input.
           When calling a workflow, the prompt should be a JSON value that corresponds to the input schema of the workflow. The JSON value is stringified.
+          When calling a tool, the prompt should be a JSON value that corresponds to the input schema of the tool. The JSON value is stringified.
 
           Keep in mind that the user only sees the final result of the task. When reviewing completion, you should know that the user will not see the intermediate results.
         `;
@@ -552,6 +580,64 @@ export class NewAgentNetwork extends MastraBase {
       },
     });
 
+    const toolStep = createStep({
+      id: 'toolStep',
+      inputSchema: z.object({
+        task: z.string(),
+        resourceId: z.string(),
+        resourceType: RESOURCE_TYPES,
+        prompt: z.string(),
+        result: z.string(),
+        isComplete: z.boolean().optional(),
+        selectionReason: z.string(),
+      }),
+      outputSchema: z.object({
+        task: z.string(),
+        resourceId: z.string(),
+        resourceType: RESOURCE_TYPES,
+        result: z.string(),
+        isComplete: z.boolean().optional(),
+      }),
+      execute: async ({ inputData }) => {
+        console.log('calling tool', inputData.resourceId, inputData);
+        const toolsMap = await this.getTools({ runtimeContext: runtimeContextToUse });
+        const tool = toolsMap[inputData.resourceId];
+
+        if (!tool) {
+          throw new Error(`Tool ${inputData.resourceId} not found`);
+        }
+
+        if (!tool.execute) {
+          throw new Error(`Tool ${inputData.resourceId} does not have an execute function`);
+        }
+
+        let inputDataToUse: any;
+        try {
+          inputDataToUse = JSON.parse(inputData.prompt);
+        } catch (e: unknown) {
+          console.error(e);
+          throw new Error(`Invalid task input: ${inputData.task}`);
+        }
+
+        const result: any = await tool.execute({
+          runtimeContext: runtimeContextToUse,
+          mastra: this.#mastra,
+          resourceId: inputData.resourceId,
+          threadId: runId,
+          runId,
+          context: inputDataToUse,
+        });
+
+        return {
+          task: inputData.task,
+          resourceId: inputData.resourceId,
+          resourceType: inputData.resourceType,
+          result: result,
+          isComplete: false,
+        };
+      },
+    });
+
     const finishStep = createStep({
       id: 'finish-step',
       inputSchema: z.object({
@@ -598,27 +684,28 @@ export class NewAgentNetwork extends MastraBase {
       .branch([
         [async ({ inputData }) => !inputData.isComplete && inputData.resourceType === 'agent', agentStep],
         [async ({ inputData }) => !inputData.isComplete && inputData.resourceType === 'workflow', workflowStep],
+        [async ({ inputData }) => !inputData.isComplete && inputData.resourceType === 'tool', toolStep],
         [async ({ inputData }) => inputData.isComplete, finishStep],
       ])
       .map({
         task: {
-          step: [routingStep, agentStep, workflowStep],
+          step: [routingStep, agentStep, workflowStep, toolStep],
           path: 'task',
         },
         isComplete: {
-          step: [agentStep, workflowStep, finishStep],
+          step: [agentStep, workflowStep, toolStep, finishStep],
           path: 'isComplete',
         },
         result: {
-          step: [agentStep, workflowStep, finishStep],
+          step: [agentStep, workflowStep, toolStep, finishStep],
           path: 'result',
         },
         resourceId: {
-          step: [routingStep, agentStep, workflowStep],
+          step: [routingStep, agentStep, workflowStep, toolStep],
           path: 'resourceId',
         },
         resourceType: {
-          step: [routingStep, agentStep, workflowStep],
+          step: [routingStep, agentStep, workflowStep, toolStep],
           path: 'resourceType',
         },
       })
