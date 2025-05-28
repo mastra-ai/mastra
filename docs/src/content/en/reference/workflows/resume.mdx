@@ -48,8 +48,8 @@ if (result.status === "suspended") {
           type: "RuntimeContext",
           description: "Runtime context data to use when resuming",
           isOptional: true,
-        }
-      ]
+        },
+      ],
     },
   ]}
 />
@@ -61,7 +61,8 @@ if (result.status === "suspended") {
     {
       name: "resumedResults",
       type: "Promise<WorkflowResult<TOutput, TSteps>>",
-      description: "A promise that resolves to the result of the resumed workflow run",
+      description:
+        "A promise that resolves to the result of the resumed workflow run",
     },
   ]}
 />
