@@ -47,6 +47,13 @@ If you do not specify any `storage` configuration, Mastra will not persist data 
 
 ## Data Schema
 
+{/* 
+  LLM CONTEXT: This Tabs component displays the database schema for different data types stored by Mastra.
+  Each tab shows the table structure and column definitions for a specific data entity (Messages, Threads, Workflows, etc.).
+  The tabs help users understand the data model and relationships between different storage entities.
+  Each tab includes detailed column information with types, constraints, and example data structures.
+  The data types include Messages, Threads, Workflows, Eval Datasets, and Traces.
+*/}
 <Tabs items={['Messages', 'Threads', 'Workflows', 'Eval Datasets', 'Traces']}>
   <Tabs.Tab>
 Stores conversation messages and their metadata. Each message belongs to a thread and contains the actual content along with metadata about the sender role and message type.

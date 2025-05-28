@@ -581,6 +581,7 @@ export const interactivePrompt = async () => {
       configureEditorWithDocsMCP: async () => {
         const windsurfIsAlreadyInstalled = await globalMCPIsAlreadyInstalled(`windsurf`);
         const cursorIsAlreadyInstalled = await globalMCPIsAlreadyInstalled(`cursor`);
+        const vscodeIsAlreadyInstalled = await globalMCPIsAlreadyInstalled(`vscode`);
 
         const editor = await p.select({
           message: `Make your AI IDE into a Mastra expert? (installs Mastra docs MCP server)`,
@@ -601,12 +602,21 @@ export const interactivePrompt = async () => {
               label: 'Windsurf',
               hint: windsurfIsAlreadyInstalled ? `Already installed` : undefined,
             },
+            {
+              value: 'vscode',
+              label: 'VSCode',
+              hint: vscodeIsAlreadyInstalled ? `Already installed` : undefined,
+            },
           ],
         });
 
         if (editor === `skip`) return undefined;
         if (editor === `windsurf` && windsurfIsAlreadyInstalled) {
           p.log.message(`\nWindsurf is already installed, skipping.`);
+          return undefined;
+        }
+        if (editor === `vscode` && vscodeIsAlreadyInstalled) {
+          p.log.message(`\nVSCode is already installed, skipping.`);
           return undefined;
         }
 

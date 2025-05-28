@@ -2796,14 +2796,8 @@ describe('MastraInngestWorkflow', () => {
           url: 'file::memory:',
         },
       });
-      await initialStorage.init();
-
       const mastra = new Mastra({
-        storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
-        }),
+        storage: initialStorage,
         workflows: {
           'test-workflow': promptEvalWorkflow,
         },
@@ -5382,7 +5376,6 @@ describe('MastraInngestWorkflow', () => {
           url: 'file::memory:',
         },
       });
-      await initialStorage.init();
 
       const runtimeContext = new RuntimeContext();
       const testValue = 'test-dependency';

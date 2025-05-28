@@ -44,7 +44,11 @@ function Agent() {
   }
 
   return (
-    <AgentProvider agentId={agentId!}>
+    <AgentProvider
+      agentId={agentId!}
+      defaultGenerateOptions={agent?.defaultGenerateOptions}
+      defaultStreamOptions={agent?.defaultStreamOptions}
+    >
       <section className={cn('relative h-[calc(100%-40px)] flex w-full')}>
         {sidebar && memory?.result ? (
           <div className="h-full w-[300px] overflow-y-auto">
