@@ -10,13 +10,13 @@ if (!parentPort) {
   throw new Error('This script must be run as a worker thread.');
 }
 
-export enum StorageType {
+// This file is being used as a worker, had to just copy the enum and interface from reusable-tests.ts otherwise it ran into compilation errors
+enum StorageType {
   LibSQL = 'libsql',
   Postgres = 'pg',
   Upstash = 'upstash',
 }
-
-export interface WorkerTestConfig {
+interface WorkerTestConfig {
   storageTypeForWorker: StorageType;
   storageConfigForWorker: LibSQLConfig | PostgresConfig | UpstashConfig;
   memoryOptionsForWorker?: SharedMemoryConfig['options'];

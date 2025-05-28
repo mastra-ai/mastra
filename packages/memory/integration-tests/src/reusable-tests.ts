@@ -10,10 +10,21 @@ import type { UpstashConfig } from '@mastra/upstash';
 import type { TextPart, ImagePart, FilePart, ToolCallPart } from 'ai';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { reorderToolCallsAndResults } from '../../src/utils';
-import { WorkerTestConfig } from './worker/generic-memory-worker';
 
 const resourceId = 'resource';
-// Test helpers
+
+export enum StorageType {
+  LibSQL = 'libsql',
+  Postgres = 'pg',
+  Upstash = 'upstash',
+}
+
+interface WorkerTestConfig {
+  storageTypeForWorker: StorageType;
+  storageConfigForWorker: LibSQLConfig | PostgresConfig | UpstashConfig;
+  memoryOptionsForWorker?: SharedMemoryConfig['options'];
+}
+
 const createTestThread = (title: string, metadata = {}) => ({
   id: randomUUID(),
   title,
@@ -44,15 +55,12 @@ const createTestMessage = (
 
 export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestConfig) {
   beforeEach(async () => {
-    // Reset message counter
     messageCounter = 0;
-    // Clean up before each test
     const threads = await memory.getThreadsByResourceId({ resourceId });
     await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
   });
 
   afterAll(async () => {
-    // Final cleanup
     const threads = await memory.getThreadsByResourceId({ resourceId });
     await Promise.all(threads.map(thread => memory.deleteThread(thread.id)));
   });

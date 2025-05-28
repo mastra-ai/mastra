@@ -3,9 +3,7 @@ import { LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { UpstashStore } from '@mastra/upstash';
 import { describe } from 'vitest';
-
-import { getResuableTests } from './reusable-tests';
-import { StorageType } from './worker/generic-memory-worker';
+import { getResuableTests, StorageType } from './reusable-tests';
 
 describe('Memory with UpstashStore Integration', () => {
   const memoryOptions = {
