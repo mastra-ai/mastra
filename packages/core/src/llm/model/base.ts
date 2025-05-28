@@ -1,12 +1,4 @@
-import type {
-  CoreMessage,
-  DeepPartial,
-  GenerateObjectResult,
-  GenerateTextResult,
-  LanguageModel,
-  StreamObjectResult,
-  StreamTextResult,
-} from 'ai';
+import type { CoreMessage, GenerateObjectResult, GenerateTextResult, StreamObjectResult, StreamTextResult } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 
@@ -20,16 +12,18 @@ import type {
   StreamReturn,
 } from '../';
 import type { MastraPrimitives } from '../../action';
+import type { MastraLanguageModel } from '../../agent/types';
 import { MastraBase } from '../../base';
 import { RegisteredLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
+import type { DeepPartial } from './deep-partial';
 
 export class MastraLLMBase extends MastraBase {
   // @ts-ignore
   #mastra?: MastraPrimitives;
-  #model: LanguageModel;
+  #model: MastraLanguageModel;
 
-  constructor({ name, model }: { name: string; model: LanguageModel }) {
+  constructor({ name, model }: { name: string; model: MastraLanguageModel }) {
     super({
       component: RegisteredLogger.LLM,
       name,
