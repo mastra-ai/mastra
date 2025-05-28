@@ -16,38 +16,36 @@ Mastra integrates with Vite, making it easy to:
 Use this guide to scaffold and integrate Mastra with your Vite/React project.
 
 <Callout type="warning">
-  This guide assumes you're using the Vite/React with React Router v7 at the root of your project, e.g., `app`.
+  This guide assumes you're using the Vite/React with React Router v7 at the
+  root of your project, e.g., `app`.
 </Callout>
 
 ## Install Mastra
 
 Install the required Mastra packages:
-{/*
-  LLM CONTEXT: This Tabs component shows commands for integrating a new Mastra backend project using different package managers.
-  Each tab displays the command for that specific package manager to create an integrated Mastra backend service.
-  This is part of the "Integrated Backend Integration" approach for Vite/React projects.
-  All commands create the same Mastra project but use different package manager syntax.
-*/}
+{/_
+LLM CONTEXT: This Tabs component shows commands for integrating a new Mastra backend project using different package managers.
+Each tab displays the command for that specific package manager to create an integrated Mastra backend service.
+This is part of the "Integrated Backend Integration" approach for Vite/React projects.
+All commands create the same Mastra project but use different package manager syntax.
+_/}
+
 <Tabs items={["npm", "yarn", "pnpm", "bun"]}>
   <Tabs.Tab>
-    ```bash copy
-    npm install mastra@latest @mastra/core@latest @mastra/libsql@latest @mastra/client-js@latest
-    ```
+    ```bash copy npm install mastra@latest @mastra/core@latest
+    @mastra/libsql@latest @mastra/client-js@latest ```
   </Tabs.Tab>
   <Tabs.Tab>
-    ```bash copy
-    yarn add mastra@latest @mastra/core@latest @mastra/libsql@latest @mastra/client-js@latest
-    ```
+    ```bash copy yarn add mastra@latest @mastra/core@latest
+    @mastra/libsql@latest @mastra/client-js@latest ```
   </Tabs.Tab>
   <Tabs.Tab>
-    ```bash copy
-    pnpm add mastra@latest @mastra/core@latest @mastra/libsql@latest @mastra/client-js@latest
-    ```
+    ```bash copy pnpm add mastra@latest @mastra/core@latest
+    @mastra/libsql@latest @mastra/client-js@latest ```
   </Tabs.Tab>
   <Tabs.Tab>
-    ```bash copy
-    bun add mastra@latest @mastra/core@latest @mastra/libsql@latest @mastra/client-js@latest
-    ```
+    ```bash copy bun add mastra@latest @mastra/core@latest @mastra/libsql@latest
+    @mastra/client-js@latest ```
   </Tabs.Tab>
 </Tabs>
 
@@ -117,16 +115,8 @@ Add `.mastra` to your `.gitignore` file:
 Start the Mastra Dev Server to expose your agents as REST endpoints:
 
 <Tabs items={["npm", "CLI"]}>
-  <Tabs.Tab>
-    ```bash copy
-    npm run dev:mastra
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```bash copy
-    mastra dev:mastra
-    ```
-  </Tabs.Tab>
+  <Tabs.Tab>```bash copy npm run dev:mastra ```</Tabs.Tab>
+  <Tabs.Tab>```bash copy mastra dev:mastra ```</Tabs.Tab>
 </Tabs>
 
 > Once running, your agents are available locally. See [Local Development Environment](/docs/local-dev/mastra-dev) for more information.
@@ -148,7 +138,7 @@ touch lib/mastra.ts
 import { MastraClient } from "@mastra/client-js";
 
 export const mastraClient = new MastraClient({
-  baseUrl: import.meta.env.VITE_MASTRA_API_URL || "http://localhost:4111"
+  baseUrl: import.meta.env.VITE_MASTRA_API_URL || "http://localhost:4111",
 });
 ```
 

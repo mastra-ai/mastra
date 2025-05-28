@@ -7,29 +7,32 @@
 まず、Mem0統合をセットアップし、情報を記憶し思い出すためのツールを作成します：
 
 ```typescript
-import { Mem0Integration } from '@mastra/mem0';
-import { createTool } from '@mastra/core/tools';
-import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
-import { z } from 'zod';
+import { Mem0Integration } from "@mastra/mem0";
+import { createTool } from "@mastra/core/tools";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { z } from "zod";
 
 // Mem0統合を初期化
 const mem0 = new Mem0Integration({
   config: {
-    apiKey: process.env.MEM0_API_KEY || '',
-    user_id: 'alice', // 一意のユーザー識別子
+    apiKey: process.env.MEM0_API_KEY || "",
+    user_id: "alice", // 一意のユーザー識別子
   },
 });
 
 // メモリツールを作成
 const mem0RememberTool = createTool({
-  id: 'Mem0-remember',
-  description: "Mem0-memorizeツールを使用して以前に保存したエージェントメモリを思い出します。",
+  id: "Mem0-remember",
+  description:
+    "Mem0-memorizeツールを使用して以前に保存したエージェントメモリを思い出します。",
   inputSchema: z.object({
-    question: z.string().describe('保存されたメモリで答えを検索するために使用される質問。'),
+    question: z
+      .string()
+      .describe("保存されたメモリで答えを検索するために使用される質問。"),
   }),
   outputSchema: z.object({
-    answer: z.string().describe('思い出した答え'),
+    answer: z.string().describe("思い出した答え"),
   }),
   execute: async ({ context }) => {
     console.log(`メモリを検索中 "${context.question}"`);
@@ -43,10 +46,11 @@ const mem0RememberTool = createTool({
 });
 
 const mem0MemorizeTool = createTool({
-  id: 'Mem0-memorize',
-  description: 'Mem0-rememberツールを使用して後で思い出すことができるように、情報をmem0に保存します。',
+  id: "Mem0-memorize",
+  description:
+    "Mem0-rememberツールを使用して後で思い出すことができるように、情報をmem0に保存します。",
   inputSchema: z.object({
-    statement: z.string().describe('メモリに保存するステートメント'),
+    statement: z.string().describe("メモリに保存するステートメント"),
   }),
   execute: async ({ context }) => {
     console.log(`\nメモリを作成中 "${context.statement}"\n`);
@@ -60,13 +64,13 @@ const mem0MemorizeTool = createTool({
 
 // メモリツールを持つエージェントを作成
 const mem0Agent = new Agent({
-  name: 'Mem0 Agent',
+  name: "Mem0 Agent",
   instructions: `
     あなたはMem0を使用して事実を記憶し思い出す能力を持つ有用なアシスタントです。
     後で役立つ可能性のある重要な情報を保存するには、Mem0-memorizeツールを使用してください。
     質問に答える際に以前に保存した情報を思い出すには、Mem0-rememberツールを使用してください。
   `,
-  model: openai('gpt-4o'),
+  model: openai("gpt-4o"),
   tools: { mem0RememberTool, mem0MemorizeTool },
 });
 ```

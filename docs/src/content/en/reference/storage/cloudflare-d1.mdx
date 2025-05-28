@@ -19,8 +19,8 @@ npm install @mastra/cloudflare-d1@latest
 import { D1Store } from "@mastra/cloudflare-d1";
 
 type Env = {
-	// Add your bindings here, e.g. Workers KV, D1, Workers AI, etc.
-	D1Database: D1Database;
+  // Add your bindings here, e.g. Workers KV, D1, Workers AI, etc.
+  D1Database: D1Database;
 };
 
 // --- Example 1: Using Workers Binding ---
@@ -39,6 +39,7 @@ const storageRest = new D1Store({
 ```
 
 And add the following to your `wrangler.toml` or `wrangler.jsonc` file:
+
 ```
 [[d1_databases]]
 binding = "D1Database"

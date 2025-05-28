@@ -82,28 +82,27 @@ const myWorkflow = createWorkflow({
   outputSchema: z.string(),
   steps: [step1, step2],
 })
-.then(step1)
-// mapping output from step1 "outputValue" 
-// to input for step2 "unexpectedName"
-.map({
-  unexpectedName: {
-    step: step1,
-    path: "outputValue",
-  },
-})
-.then(step2)
-.commit();
-
+  .then(step1)
+  // mapping output from step1 "outputValue"
+  // to input for step2 "unexpectedName"
+  .map({
+    unexpectedName: {
+      step: step1,
+      path: "outputValue",
+    },
+  })
+  .then(step2)
+  .commit();
 
 const mastra = new Mastra({
   vnext_workflows: {
     myWorkflow,
-  }
+  },
 });
 
 const run = mastra.vnext_getWorkflow("myWorkflow").createRun();
 const res = await run.start({
-  inputData: { inputValue: "Hello world" }
+  inputData: { inputValue: "Hello world" },
 });
 if (res.status === "success") {
   console.log(res.result);
@@ -116,7 +115,6 @@ if (res.status === "success") {
 import { Mastra } from "@mastra/core";
 import { createWorkflow, createStep } from "@mastra/core/workflows/vNext";
 import { z } from "zod";
-
 
 const step1 = createStep({
   id: "step1",
@@ -142,8 +140,14 @@ const step2 = createStep({
     result: z.string(),
   }),
   execute: async ({ inputData, mastra }) => {
-    mastra.getLogger()?.debug(`Step 2 received: ${inputData.outputValue} and original: ${inputData.initialValue}`);
-    return { result: `Combined: ${inputData.outputValue} (original: ${inputData.initialValue})` };
+    mastra
+      .getLogger()
+      ?.debug(
+        `Step 2 received: ${inputData.outputValue} and original: ${inputData.initialValue}`,
+      );
+    return {
+      result: `Combined: ${inputData.outputValue} (original: ${inputData.initialValue})`,
+    };
   },
 });
 
@@ -156,19 +160,19 @@ const myWorkflow = createWorkflow({
     result: z.string(),
   }),
   steps: [step1, step2],
-})
+});
 
 myWorkflow
   .then(step1)
   .map({
-  outputValue: {
+    outputValue: {
       step: step1,
       path: "outputValue",
-  },
-  initialValue: {
+    },
+    initialValue: {
       initData: myWorkflow,
       path: "inputValue",
-  },
+    },
   })
   .then(step2)
   .commit();
@@ -177,17 +181,16 @@ myWorkflow
 const mastra = new Mastra({
   vnext_workflows: {
     myWorkflow,
-  }
+  },
 });
 
 const run = mastra.vnext_getWorkflow("myWorkflow").createRun();
 const res = await run.start({
-  inputData: { inputValue: "Original input" }
+  inputData: { inputValue: "Original input" },
 });
 if (res.status === "success") {
   console.log("Result:", res.result);
 }
-
 ```
 
 ## 前のステップの複数の出力を使用する
@@ -196,7 +199,6 @@ if (res.status === "success") {
 import { Mastra } from "@mastra/core";
 import { createWorkflow, createStep } from "@mastra/core/workflows/vNext";
 import { z } from "zod";
-
 
 const step1 = createStep({
   id: "step1",
@@ -221,7 +223,9 @@ const step2 = createStep({
     currentResult: z.string(),
   }),
   execute: async ({ inputData, mastra }) => {
-    mastra.getLogger()?.debug(`Step 2 received: ${inputData.intermediateValue}`);
+    mastra
+      .getLogger()
+      ?.debug(`Step 2 received: ${inputData.intermediateValue}`);
     return { currentResult: `Step 2: ${inputData.intermediateValue}` };
   },
 });
@@ -229,9 +233,9 @@ const step2 = createStep({
 const step3 = createStep({
   id: "step3",
   inputSchema: z.object({
-    currentResult: z.string(),     // From step2
+    currentResult: z.string(), // From step2
     intermediateValue: z.string(), // From step1
-    initialValue: z.string(),      // From workflow input
+    initialValue: z.string(), // From workflow input
   }),
   outputSchema: z.object({
     result: z.string(),
@@ -242,7 +246,7 @@ const step3 = createStep({
       result: `Combined result:
       - Initial input: ${inputData.initialValue}
       - Step 1 output: ${inputData.intermediateValue}
-      - Step 2 output: ${inputData.currentResult}`
+      - Step 2 output: ${inputData.currentResult}`,
     };
   },
 });
@@ -256,25 +260,25 @@ const myWorkflow = createWorkflow({
     result: z.string(),
   }),
   steps: [step1, step2, step3],
-})
+});
 
 myWorkflow
   .then(step1)
   .then(step2)
   .map({
-  // Map values from different sources to step3's inputs
-  initialValue: {
+    // Map values from different sources to step3's inputs
+    initialValue: {
       initData: myWorkflow,
       path: "inputValue",
-  },
-  currentResult: {
+    },
+    currentResult: {
       step: step2,
       path: "currentResult",
-  },
-  intermediateValue: {
+    },
+    intermediateValue: {
       step: step1,
       path: "intermediateValue",
-  },
+    },
   })
   .then(step3)
   .commit();
@@ -283,12 +287,12 @@ myWorkflow
 const mastra = new Mastra({
   vnext_workflows: {
     myWorkflow,
-  }
+  },
 });
 
 const run = mastra.vnext_getWorkflow("myWorkflow").createRun();
 const res = await run.start({
-  inputData: { inputValue: "Starting data" }
+  inputData: { inputValue: "Starting data" },
 });
 if (res.status === "success") {
   console.log("Result:", res.result);

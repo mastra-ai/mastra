@@ -34,13 +34,13 @@ const mastra = new Mastra({
         binding: "binding-name",
         database_name: "database-name",
         database_id: "database-id",
-      }
+      },
     ],
     kvNamespaces: [
       {
         binding: "binding-name",
-        id: "namespace-id"
-      }
+        id: "namespace-id",
+      },
     ],
   }),
   // ... other Mastra configuration options
@@ -232,7 +232,7 @@ The build process generates the following output structure in the `.mastra/outpu
 ├── wrangler.json # Cloudflare Worker configuration
 └── assets/ # Static assets and dependencies
 
-````
+```
 
 ### Wrangler Configuration
 
@@ -243,7 +243,10 @@ The CloudflareDeployer automatically generates a `wrangler.json` configuration f
   "name": "your-project-name",
   "main": "./output/index.mjs",
   "compatibility_date": "2024-12-02",
-  "compatibility_flags": ["nodejs_compat", "nodejs_compat_populate_process_env"],
+  "compatibility_flags": [
+    "nodejs_compat",
+    "nodejs_compat_populate_process_env"
+  ],
   "observability": {
     "logs": {
       "enabled": true
@@ -262,10 +265,12 @@ The CloudflareDeployer automatically generates a `wrangler.json` configuration f
     // KV namespace bindings if specified
   ]
 }
-````
+```
+
 Compatibility flags:
-  - `nodejs_compat`: Enables Node.js compatibility in Workers.
-  - `nodejs_compat_populate_process_env`: Populates `process.env` with variables from `vars`.
+
+- `nodejs_compat`: Enables Node.js compatibility in Workers.
+- `nodejs_compat_populate_process_env`: Populates `process.env` with variables from `vars`.
 
 ### Route Configuration
 
