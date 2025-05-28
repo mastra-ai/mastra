@@ -731,7 +731,10 @@ ${JSON.stringify(message, null, 2)}`,
     const twoMM1 = MessageList.isMastraMessageV1(two) && two;
     if (oneMM1 && !twoMM1) return false;
     if (oneMM1 && twoMM1) {
-      return MessageList.cacheKeyFromContent(oneMM1.content) === MessageList.cacheKeyFromContent(twoMM1.content);
+      return (
+        oneMM1.id === twoMM1.id &&
+        MessageList.cacheKeyFromContent(oneMM1.content) === MessageList.cacheKeyFromContent(twoMM1.content)
+      );
     }
 
     const oneMM2 = MessageList.isMastraMessageV2(one) && one;
