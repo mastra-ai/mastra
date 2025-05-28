@@ -1,5 +1,4 @@
 import { randomUUID } from 'crypto';
-import * as os from 'os';
 import * as path from 'path';
 import { Worker } from 'worker_threads';
 import type { SharedMemoryConfig } from '@mastra/core';
