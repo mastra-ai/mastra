@@ -3,10 +3,25 @@ import { LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { UpstashStore } from '@mastra/upstash';
 import { describe } from 'vitest';
-
-import { getResuableTests } from './reusable-tests';
+import { getResuableTests, StorageType } from './reusable-tests';
 
 describe('Memory with UpstashStore Integration', () => {
+  const memoryOptions = {
+    lastMessages: 10,
+    semanticRecall: {
+      topK: 3,
+      messageRange: 2,
+    },
+    threads: {
+      generateTitle: false,
+    },
+  };
+
+  const storageConfig = {
+    url: 'http://localhost:8079',
+    token: 'test_token',
+  };
+
   const memory = new Memory({
     storage: new UpstashStore({
       url: 'http://localhost:8079',
@@ -17,17 +32,14 @@ describe('Memory with UpstashStore Integration', () => {
       connectionUrl: 'file:upstash-test-vector.db',
     }),
     embedder: fastembed,
-    options: {
-      lastMessages: 10,
-      semanticRecall: {
-        topK: 3,
-        messageRange: 2,
-      },
-      threads: {
-        generateTitle: false,
-      },
-    },
+    options: memoryOptions,
   });
 
-  getResuableTests(memory);
+  const workerTestConfig = {
+    storageTypeForWorker: StorageType.Upstash,
+    storageConfigForWorker: storageConfig,
+    memoryOptionsForWorker: memoryOptions,
+  };
+
+  getResuableTests(memory, workerTestConfig);
 });
