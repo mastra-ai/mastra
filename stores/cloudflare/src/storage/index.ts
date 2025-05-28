@@ -124,6 +124,7 @@ export class CloudflareStore extends MastraStorage {
         allNamespaces = allNamespaces.concat(response.result);
       }
 
+      // total_count seems to be optionally returned by the API, so it's preferred but it might not be there.
       if (response.result_info && (response.result_info as any).total_count !== undefined) {
         morePagesExist = allNamespaces.length < (response.result_info as any).total_count;
       } else {
