@@ -53,7 +53,9 @@ import { openai } from "@ai-sdk/openai";
 Initialize PgVector with your connection string:
 
 ```typescript copy showLineNumbers{4} filename="src/index.ts"
-const pgVector = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING! });
+const pgVector = new PgVector({
+  connectionString: process.env.POSTGRES_CONNECTION_STRING!,
+});
 ```
 
 ## Example Usage

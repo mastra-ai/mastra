@@ -50,12 +50,13 @@ There are two options when creating a new project with our CLI:
 
 To create a project, run:
 
-{/* 
-  LLM CONTEXT: This Tabs component shows different package manager commands for creating a new Mastra project.
-  Each tab displays the equivalent command for that specific package manager (npx, npm, yarn, pnpm, bun).
-  This helps users choose their preferred package manager while following the same installation process.
-  All commands achieve the same result - creating a new Mastra project with the interactive setup.
+{/*
+LLM CONTEXT: This Tabs component shows different package manager commands for creating a new Mastra project.
+Each tab displays the equivalent command for that specific package manager (npx, npm, yarn, pnpm, bun).
+This helps users choose their preferred package manager while following the same installation process.
+All commands achieve the same result - creating a new Mastra project with the interactive setup.
 */}
+
 <Tabs items={["npx", "npm", "yarn", "pnpm", "bun"]}>
 
   <Tabs.Tab>
@@ -85,7 +86,6 @@ bun create mastra@latest
   </Tabs.Tab>
 </Tabs>
 
-
 After the prompts, `create-mastra` will:
 
 1. Set up your project directory with TypeScript
@@ -98,7 +98,6 @@ After the prompts, `create-mastra` will:
 #### Non-Interactive
 
 You can run the Mastra CLI in fully non-interactive mode by passing all required flags, for example:
-
 
 ```bash copy
 npx create-mastra@latest --project-name hello-mastra --example --components tools,agents,workflows --llm openai
@@ -136,12 +135,13 @@ cd hello-mastra
 
 Initialize a TypeScript project including the `@mastra/core` package:
 
-{/* 
-  LLM CONTEXT: This Tabs component shows manual installation commands for different package managers.
-  Each tab displays the complete setup process for that package manager including project initialization,
-  dev dependencies installation, and core Mastra packages installation.
-  This helps users manually set up a Mastra project with their preferred package manager.
+{/*
+LLM CONTEXT: This Tabs component shows manual installation commands for different package managers.
+Each tab displays the complete setup process for that package manager including project initialization,
+dev dependencies installation, and core Mastra packages installation.
+This helps users manually set up a Mastra project with their preferred package manager.
 */}
+
 <Tabs items={["npm", "pnpm", "yarn", "bun"]}>
 
   <Tabs.Tab>
@@ -360,7 +360,7 @@ export const weatherAgent = new Agent({
 
 Your primary function is to help users get weather details for specific locations. When responding:
 - Always ask for a location if none is provided
-- If the location name isn’t in English, please translate it
+- If the location name isn't in English, please translate it
 - Include relevant details like humidity, wind conditions, and precipitation
 - Keep responses concise but informative
 
@@ -447,36 +447,36 @@ const forecastSchema = z.object({
 
 function getWeatherCondition(code: number): string {
   const conditions: Record<number, string> = {
-    0: 'Clear sky',
-    1: 'Mainly clear',
-    2: 'Partly cloudy',
-    3: 'Overcast',
-    45: 'Foggy',
-    48: 'Depositing rime fog',
-    51: 'Light drizzle',
-    53: 'Moderate drizzle',
-    55: 'Dense drizzle',
-    61: 'Slight rain',
-    63: 'Moderate rain',
-    65: 'Heavy rain',
-    71: 'Slight snow fall',
-    73: 'Moderate snow fall',
-    75: 'Heavy snow fall',
-    95: 'Thunderstorm',
+    0: "Clear sky",
+    1: "Mainly clear",
+    2: "Partly cloudy",
+    3: "Overcast",
+    45: "Foggy",
+    48: "Depositing rime fog",
+    51: "Light drizzle",
+    53: "Moderate drizzle",
+    55: "Dense drizzle",
+    61: "Slight rain",
+    63: "Moderate rain",
+    65: "Heavy rain",
+    71: "Slight snow fall",
+    73: "Moderate snow fall",
+    75: "Heavy snow fall",
+    95: "Thunderstorm",
   };
-  return conditions[code] || 'Unknown';
+  return conditions[code] || "Unknown";
 }
 
 const fetchWeather = createStep({
-  id: 'fetch-weather',
-  description: 'Fetches weather forecast for a given city',
+  id: "fetch-weather",
+  description: "Fetches weather forecast for a given city",
   inputSchema: z.object({
-    city: z.string().describe('The city to get the weather for'),
+    city: z.string().describe("The city to get the weather for"),
   }),
   outputSchema: forecastSchema,
   execute: async ({ inputData }) => {
     if (!inputData) {
-      throw new Error('Input data not found');
+      throw new Error("Input data not found");
     }
 
     const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(inputData.city)}&count=1`;
@@ -510,7 +510,10 @@ const fetchWeather = createStep({
       maxTemp: Math.max(...data.hourly.temperature_2m),
       minTemp: Math.min(...data.hourly.temperature_2m),
       condition: getWeatherCondition(data.current.weathercode),
-      precipitationChance: data.hourly.precipitation_probability.reduce((acc, curr) => Math.max(acc, curr), 0),
+      precipitationChance: data.hourly.precipitation_probability.reduce(
+        (acc, curr) => Math.max(acc, curr),
+        0,
+      ),
       location: inputData.city,
     };
 
@@ -519,8 +522,8 @@ const fetchWeather = createStep({
 });
 
 const planActivities = createStep({
-  id: 'plan-activities',
-  description: 'Suggests activities based on weather conditions',
+  id: "plan-activities",
+  description: "Suggests activities based on weather conditions",
   inputSchema: forecastSchema,
   outputSchema: z.object({
     activities: z.string(),
@@ -529,7 +532,7 @@ const planActivities = createStep({
     const forecast = inputData;
 
     if (!forecast) {
-      throw new Error('Forecast data not found');
+      throw new Error("Forecast data not found");
     }
 
     const prompt = `Based on the following weather forecast for ${forecast.location}, suggest appropriate activities:
@@ -538,12 +541,12 @@ const planActivities = createStep({
 
     const response = await agent.stream([
       {
-        role: 'user',
+        role: "user",
         content: prompt,
       },
     ]);
 
-    let activitiesText = '';
+    let activitiesText = "";
 
     for await (const chunk of response.textStream) {
       process.stdout.write(chunk);
@@ -554,12 +557,10 @@ const planActivities = createStep({
       activities: activitiesText,
     };
   },
-});
-
-const weatherWorkflow = createWorkflow({
-  id: 'weather-workflow',
+});const weatherWorkflow = createWorkflow({
+  id: "weather-workflow",
   inputSchema: z.object({
-    city: z.string().describe('The city to get the weather for'),
+    city: z.string().describe("The city to get the weather for"),
   }),
   outputSchema: z.object({
     activities: z.string(),
@@ -723,8 +724,8 @@ main();
 Or, if you're using a `.env.development` file, add the following code:
 
 ```ts filename="src/test-agent.ts" showLineNumbers copy
-import { config } from 'dotenv';
-config({ path: '.env.development' });
+import { config } from "dotenv";
+config({ path: ".env.development" });
 
 import { mastra } from "./mastra";
 
@@ -775,3 +776,6 @@ To add Mastra to an existing project, see our Local development docs:
 
 - [Deploy your Agent to Mastra Cloud](/docs/deployment/overview)
 - [Integrate Mastra in your Next.js project](/docs/frameworks/next-js)
+
+
+

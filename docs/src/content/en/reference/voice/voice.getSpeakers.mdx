@@ -58,13 +58,14 @@ This method does not accept any parameters.
 
 Different voice providers return different metadata for their voices:
 
-{/* 
-  LLM CONTEXT: This Tabs component shows the different metadata structures returned by various voice providers' getSpeakers() method.
-  Each tab displays the specific properties and data types returned by that voice provider when listing available speakers/voices.
-  The tabs help users understand what information is available for each provider and how to access voice-specific metadata.
-  Each tab includes property tables showing voiceId and provider-specific metadata like name, language, gender, accent, etc.
-  The providers include OpenAI, OpenAI Realtime, Deepgram, ElevenLabs, Google, Murf, PlayAI, Sarvam, Speechify, and Azure.
+{/*
+LLM CONTEXT: This Tabs component shows the different metadata structures returned by various voice providers' getSpeakers() method.
+Each tab displays the specific properties and data types returned by that voice provider when listing available speakers/voices.
+The tabs help users understand what information is available for each provider and how to access voice-specific metadata.
+Each tab includes property tables showing voiceId and provider-specific metadata like name, language, gender, accent, etc.
+The providers include OpenAI, OpenAI Realtime, Deepgram, ElevenLabs, Google, Murf, PlayAI, Sarvam, Speechify, and Azure.
 */}
+
 <Tabs items={["OpenAI", "OpenAI Realtime", "Deepgram", "ElevenLabs", "Google", "Murf", "PlayAI", "Sarvam", "Speechify", "Azure"]}>
   <Tabs.Tab label="OpenAI">
     <PropertiesTable

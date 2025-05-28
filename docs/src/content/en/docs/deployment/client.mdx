@@ -21,15 +21,17 @@ To ensure smooth local development, make sure you have:
 import { Tabs } from "nextra/components";
 
 {/* 
-  LLM CONTEXT: This Tabs component shows installation commands for the Mastra Client SDK using different package managers.
-  Each tab displays the installation command for that specific package manager (npm, yarn, pnpm).
-  This helps users install the client SDK with their preferred package manager.
-  All commands install the same @mastra/client-js package but use different package manager syntax.
+LLM CONTEXT:
+This Tabs component shows installation commands for the Mastra Client SDK using different package managers.
+Each tab displays the installation command for that specific package manager (npm, yarn, pnpm).
+This helps users install the client SDK with their preferred package manager.
+All commands install the same @mastra/client-js package but use different package manager syntax.
 */}
+
 <Tabs items={["npm", "yarn", "pnpm"]}>
   <Tabs.Tab>
     ```bash copy
-    npm install @mastra/client-js@latest
+    npm install @mastra/client-js@latest 
     ```
   </Tabs.Tab>
   <Tabs.Tab>
@@ -43,7 +45,6 @@ import { Tabs } from "nextra/components";
     ```
   </Tabs.Tab>
 </Tabs>
-
 
 ## Initialize Mastra Client
 
@@ -125,12 +126,13 @@ try {
   console.error("Development error:", error);
 }
 ```
+
 ## Debug
 
 - Sometimes when using MastraClient on the server instead of the client e.g `/api/chat`,
- you might need to recreate the response to your client:
+  you might need to recreate the response to your client:
 
- ```typescript
- const result = agent.stream(/* get your agent stream */)
- return new Response(result.body);
+```typescript
+const result = agent.stream(/* get your agent stream */);
+return new Response(result.body);
 ```

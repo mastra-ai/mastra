@@ -11,36 +11,39 @@ After generating embeddings, you need to store them in a database that supports 
 
 ## Supported Databases
 
-{/* 
-  LLM CONTEXT: This Tabs component showcases different vector database implementations supported by Mastra.
-  Each tab demonstrates the setup and configuration for a specific vector database provider.
-  The tabs show consistent API patterns across different databases, helping users understand how to switch between providers.
-  Each tab includes import statements, initialization code, and basic operations (createIndex, upsert) for that specific database.
-  The providers include Pg Vector, Pinecone, Qdrant, Chroma, Astra, LibSQL, Upstash, Cloudflare, MongoDB, and OpenSearch.
+{/*
+LLM CONTEXT: This Tabs component showcases different vector database implementations supported by Mastra.
+Each tab demonstrates the setup and configuration for a specific vector database provider.
+The tabs show consistent API patterns across different databases, helping users understand how to switch between providers.
+Each tab includes import statements, initialization code, and basic operations (createIndex, upsert) for that specific database.
+The providers include Pg Vector, Pinecone, Qdrant, Chroma, Astra, LibSQL, Upstash, Cloudflare, MongoDB, and OpenSearch.
 */}
+
 <Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB', 'OpenSearch']}>
   <Tabs.Tab>
   ```ts filename="vector-store.ts" showLineNumbers copy
   import { PgVector } from '@mastra/pg';
 
-const store = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING })
-await store.createIndex({
-indexName: "myCollection",
-dimension: 1536,
-});
-await store.upsert({
-indexName: "myCollection",
-vectors: embeddings,
-metadata: chunks.map(chunk => ({ text: chunk.text })),
-});
-
-````
+  const store = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING })
+  
+  await store.createIndex({
+    indexName: "myCollection",
+    dimension: 1536,
+  });
+    
+  await store.upsert({
+    indexName: "myCollection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
+```
 
 ### Using PostgreSQL with pgvector
 
 PostgreSQL with the pgvector extension is a good solution for teams already using PostgreSQL who want to minimize infrastructure complexity.
 For detailed setup instructions and best practices, see the [official pgvector repository](https://github.com/pgvector/pgvector).
 </Tabs.Tab>
+
 <Tabs.Tab>
 ```ts filename="vector-store.ts" showLineNumbers copy
 import { PineconeVector } from '@mastra/pinecone'
@@ -57,67 +60,76 @@ await store.upsert({
   vectors: embeddings,
   metadata: chunks.map(chunk => ({ text: chunk.text })),
 });
-````
-
+```
 </Tabs.Tab>
+
 <Tabs.Tab>
   ```ts filename="vector-store.ts" showLineNumbers copy
   import { QdrantVector } from '@mastra/qdrant'
 
-const store = new QdrantVector({
-  url: process.env.QDRANT_URL,
-  apiKey: process.env.QDRANT_API_KEY
-})
-await store.createIndex({
-indexName: "myCollection",
-dimension: 1536,
-});
-await store.upsert({
-indexName: "myCollection",
-vectors: embeddings,
-metadata: chunks.map(chunk => ({ text: chunk.text })),
-});
+  const store = new QdrantVector({
+    url: process.env.QDRANT_URL,
+    apiKey: process.env.QDRANT_API_KEY
+  })
 
-````
+  await store.createIndex({
+    indexName: "myCollection",
+    dimension: 1536,
+  });
+
+  await store.upsert({
+    indexName: "myCollection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
+
+```
 </Tabs.Tab>
+
 <Tabs.Tab>
 ```ts filename="vector-store.ts" showLineNumbers copy
 import { ChromaVector } from '@mastra/chroma'
 
 const store = new ChromaVector()
+
 await store.createIndex({
   indexName: "myCollection",
   dimension: 1536,
 });
+
 await store.upsert({
   indexName: "myCollection",
   vectors: embeddings,
   metadata: chunks.map(chunk => ({ text: chunk.text })),
 });
-````
-
+```
 </Tabs.Tab>
+
 <Tabs.Tab>
   ```ts filename="vector-store.ts" showLineNumbers copy
   import { AstraVector } from '@mastra/astra'
 
-const store = new AstraVector({
-token: process.env.ASTRA_DB_TOKEN,
-endpoint: process.env.ASTRA_DB_ENDPOINT,
-keyspace: process.env.ASTRA_DB_KEYSPACE
-})
-await store.createIndex({
-indexName: "myCollection",
-dimension: 1536,
-});
-await store.upsert({
-indexName: "myCollection",
-vectors: embeddings,
-metadata: chunks.map(chunk => ({ text: chunk.text })),
-});
+  const store = new AstraVector({
+    token: process.env.ASTRA_DB_TOKEN,
+    endpoint: process.env.ASTRA_DB_ENDPOINT,
+    keyspace: process.env.ASTRA_DB_KEYSPACE
+  })
 
-````
+  await store.createIndex({
+    indexName: "myCollection",
+    dimension: 1536,
+  });
+
+  await store.upsert({
+    indexName: "myCollection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
+
+```
 </Tabs.Tab>
+
+
 <Tabs.Tab>
 ```ts filename="vector-store.ts" showLineNumbers copy
 import { LibSQLVector } from "@mastra/core/vector/libsql";
@@ -126,38 +138,43 @@ const store = new LibSQLVector({
   connectionUrl: process.env.DATABASE_URL,
   authToken: process.env.DATABASE_AUTH_TOKEN // Optional: for Turso cloud databases
 })
+
 await store.createIndex({
   indexName: "myCollection",
   dimension: 1536,
 });
+
 await store.upsert({
   indexName: "myCollection",
   vectors: embeddings,
   metadata: chunks.map(chunk => ({ text: chunk.text })),
 });
-````
-
+```
 </Tabs.Tab>
+
 <Tabs.Tab>
   ```ts filename="vector-store.ts" showLineNumbers copy
   import { UpstashVector } from '@mastra/upstash'
 
-const store = new UpstashVector({
-url: process.env.UPSTASH_URL,
-token: process.env.UPSTASH_TOKEN
-})
-await store.createIndex({
-indexName: "myCollection",
-dimension: 1536,
-});
-await store.upsert({
-indexName: "myCollection",
-vectors: embeddings,
-metadata: chunks.map(chunk => ({ text: chunk.text })),
-});
+  const store = new UpstashVector({
+    url: process.env.UPSTASH_URL,
+    token: process.env.UPSTASH_TOKEN
+  })
 
-````
+  await store.createIndex({
+    indexName: "myCollection",
+    dimension: 1536,
+  });
+
+  await store.upsert({
+    indexName: "myCollection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
+
+```
 </Tabs.Tab>
+
 <Tabs.Tab>
 ```ts filename="vector-store.ts" showLineNumbers copy
 import { CloudflareVector } from '@mastra/vectorize'
@@ -175,44 +192,49 @@ await store.upsert({
   vectors: embeddings,
   metadata: chunks.map(chunk => ({ text: chunk.text })),
 });
-````
+```
 
 </Tabs.Tab>
+
 <Tabs.Tab>
   ```ts filename="vector-store.ts" showLineNumbers copy
   import { MongoDBVector } from '@mastra/mongodb'
 
-const store = new MongoDBVector({
-url: process.env.MONGODB_URL,
-database: process.env.MONGODB_DATABASE
-})
-await store.createIndex({
-indexName: "myCollection",
-dimension: 1536,
-});
-await store.upsert({
-indexName: "myCollection",
-vectors: embeddings,
-metadata: chunks.map(chunk => ({ text: chunk.text })),
-});
+  const store = new MongoDBVector({
+    url: process.env.MONGODB_URL,
+    database: process.env.MONGODB_DATABASE
+  })
 
-````
+  await store.createIndex({
+    indexName: "myCollection",
+    dimension: 1536,
+  });
+
+  await store.upsert({
+    indexName: "myCollection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
+
+```
 </Tabs.Tab>
 <Tabs.Tab>
 ```ts filename="vector-store.ts" showLineNumbers copy
 import { OpenSearchVector } from '@mastra/opensearch'
 
 const store = new OpenSearchVector({ url: process.env.OPENSEARCH_URL })
+
 await store.createIndex({
   indexName: "my-collection",
   dimension: 1536,
 });
+
 await store.upsert({
   indexName: "my-collection",
   vectors: embeddings,
   metadata: chunks.map(chunk => ({ text: chunk.text })),
 });
-````
+```
 
 </Tabs.Tab>
 </Tabs>
@@ -245,12 +267,13 @@ The dimension size must match the output dimension of your chosen embedding mode
 
 Each vector database enforces specific naming conventions for indexes and collections to ensure compatibility and prevent conflicts.
 
-{/* 
-  LLM CONTEXT: This Tabs component displays naming convention rules for different vector databases.
-  Each tab explains the specific naming requirements and restrictions for that database provider.
-  This helps users understand the constraints and avoid naming conflicts when creating indexes or collections.
-  The tabs provide examples of valid and invalid names to clarify the rules for each database.
+{/*
+LLM CONTEXT: This Tabs component displays naming convention rules for different vector databases.
+Each tab explains the specific naming requirements and restrictions for that database provider.
+This helps users understand the constraints and avoid naming conflicts when creating indexes or collections.
+The tabs provide examples of valid and invalid names to clarify the rules for each database.
 */}
+
 <Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB', 'OpenSearch']}>
   <Tabs.Tab>
     Index names must:

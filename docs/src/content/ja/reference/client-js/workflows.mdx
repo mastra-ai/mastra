@@ -143,9 +143,9 @@ try {
 
 ワークフロー実行の結果は以下の内容を含みます：
 
-| フィールド       | 型                                                                               | 説明                                                         |
-| ------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------ |
-| `activePaths` | `Record<string, { status: string; suspendPayload?: any; stepPath: string[] }>` | ワークフロー内で現在アクティブなパスとその実行ステータス         |
-| `results`     | `CoreWorkflowRunResult<any, any, any>['results']`                              | ワークフロー実行からの結果                                    |
-| `timestamp`   | `number`                                                                       | この遷移が発生した Unix タイムスタンプ                        |
-| `runId`       | `string`                                                                       | このワークフロー実行インスタンスの一意な識別子                 |
+| フィールド    | 型                                                                             | 説明                                                     |
+| ------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------- |
+| `activePaths` | `Record<string, { status: string; suspendPayload?: any; stepPath: string[] }>` | ワークフロー内で現在アクティブなパスとその実行ステータス |
+| `results`     | `CoreWorkflowRunResult<any, any, any>['results']`                              | ワークフロー実行からの結果                               |
+| `timestamp`   | `number`                                                                       | この遷移が発生した Unix タイムスタンプ                   |
+| `runId`       | `string`                                                                       | このワークフロー実行インスタンスの一意な識別子           |

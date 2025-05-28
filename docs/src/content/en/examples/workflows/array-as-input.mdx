@@ -4,6 +4,7 @@ description: Example of using Mastra to process an array using .foreach() in a w
 ---
 
 # Array as Input
+
 This example demonstrates how to process an array input in a workflow. Mastra provides a `.foreach()` helper function that executes a step for each item in the array.
 
 ## Setup
@@ -13,6 +14,7 @@ npm install @ai-sdk/openai @mastra/core simple-git
 ```
 
 ## Define Docs Generator Agent
+
 Define a docs generator agent that leverages an LLM call to generate a documentation given a code file or a summary of a code file.
 
 ```ts showLineNumbers copy filename="agents/docs-generator-agent.ts"
@@ -44,6 +46,7 @@ export { docGeneratorAgent };
 ```
 
 ## Define File Summary Workflow
+
 Define the file summary workflow with 2 steps: one to fetch the code of a particular file and another to generate a readme for that particular code file.
 
 ```ts showLineNumbers copy filename="workflows/file-summary-workflow.ts"
@@ -110,6 +113,7 @@ export { generateSummaryWorkflow };
 ```
 
 ## Define Readme Generator Workflow
+
 Define a readme generator workflow with 4 steps: one to clone the github repository, one to suspend the workflow and get user input on what all folders to consider while generating a readme, one to generate a summary of all the files inside the folder, and another to collate all the documentation generated for each file into a single readme.
 
 ```ts showLineNumbers copy filename="workflows/readme-generator-workflow.ts
@@ -257,7 +261,12 @@ const readmeGeneratorWorkflow = createWorkflow({
       repoUrl: z.string(),
     }),
   }),
-  steps: [cloneRepositoryStep, selectFolderStep, generateSummaryWorkflow, collateDocumentationStep],
+  steps: [
+    cloneRepositoryStep,
+    selectFolderStep,
+    generateSummaryWorkflow,
+    collateDocumentationStep,
+  ],
 })
   .then(cloneRepositoryStep)
   .then(selectFolderStep)
@@ -269,6 +278,7 @@ export { readmeGeneratorWorkflow };
 ```
 
 ## Register Agent and Workflow instances with Mastra class
+
 Register the agents and workflow with the mastra instance. This is critical for enabling access to the agents within the workflow.
 
 ```ts showLineNumbers copy filename="index.ts"
@@ -288,8 +298,8 @@ const mastra = new Mastra({
     generateSummaryWorkflow,
   },
   logger: new PinoLogger({
-    name: 'Mastra',
-    level: 'info',
+    name: "Mastra",
+    level: "info",
   }),
 });
 
@@ -297,6 +307,7 @@ export { mastra };
 ```
 
 ## Execute the Readme Generator Workflow
+
 Here, we'll get the reamde generator workflow from the mastra instance, then create a run and execute the created run with the required inputData.
 
 ```ts showLineNumbers copy filename="exec.ts"

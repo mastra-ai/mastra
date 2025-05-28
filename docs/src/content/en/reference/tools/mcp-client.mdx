@@ -162,7 +162,9 @@ async disconnect(): Promise<void>
 The `MCPClient` instance has a `resources` property that provides access to resource-related operations.
 
 ```typescript
-const mcpClient = new MCPClient({ /* ...servers configuration... */ });
+const mcpClient = new MCPClient({
+  /* ...servers configuration... */
+});
 
 // Access resource methods via mcpClient.resources
 const allResourcesByServer = await mcpClient.resources.list();
@@ -179,6 +181,7 @@ async list(): Promise<Record<string, Resource[]>>
 ```
 
 Example:
+
 ```typescript
 const resourcesByServer = await mcpClient.resources.list();
 for (const serverName in resourcesByServer) {
@@ -195,6 +198,7 @@ async templates(): Promise<Record<string, ResourceTemplate[]>>
 ```
 
 Example:
+
 ```typescript
 const templatesByServer = await mcpClient.resources.templates();
 for (const serverName in templatesByServer) {
@@ -214,8 +218,12 @@ async read(serverName: string, uri: string): Promise<ReadResourceResult>
 - `uri`: The URI of the resource to read.
 
 Example:
+
 ```typescript
-const content = await mcpClient.resources.read("myWeatherServer", "weather://current");
+const content = await mcpClient.resources.read(
+  "myWeatherServer",
+  "weather://current",
+);
 console.log("Current weather:", content.contents[0].text);
 ```
 
@@ -228,6 +236,7 @@ async subscribe(serverName: string, uri: string): Promise<object>
 ```
 
 Example:
+
 ```typescript
 await mcpClient.resources.subscribe("myWeatherServer", "weather://current");
 ```
@@ -241,6 +250,7 @@ async unsubscribe(serverName: string, uri: string): Promise<object>
 ```
 
 Example:
+
 ```typescript
 await mcpClient.resources.unsubscribe("myWeatherServer", "weather://current");
 ```
@@ -254,6 +264,7 @@ async onUpdated(serverName: string, handler: (params: { uri: string }) => void):
 ```
 
 Example:
+
 ```typescript
 mcpClient.resources.onUpdated("myWeatherServer", (params) => {
   console.log(`Resource updated on myWeatherServer: ${params.uri}`);
@@ -271,6 +282,7 @@ async onListChanged(serverName: string, handler: () => void): Promise<void>
 ```
 
 Example:
+
 ```typescript
 mcpClient.resources.onListChanged("myWeatherServer", () => {
   console.log("Resource list changed on myWeatherServer.");
@@ -323,8 +335,11 @@ async function checkWeatherResource() {
     const weatherResources = await mcp.resources.list();
     if (weatherResources.weather && weatherResources.weather.length > 0) {
       const currentWeatherURI = weatherResources.weather[0].uri;
-      const weatherData = await mcp.resources.read('weather', currentWeatherURI);
-      console.log('Weather data:', weatherData.contents[0].text);
+      const weatherData = await mcp.resources.read(
+        "weather",
+        currentWeatherURI,
+      );
+      console.log("Weather data:", weatherData.contents[0].text);
     }
   } catch (error) {
     console.error("Error fetching weather resource:", error);
