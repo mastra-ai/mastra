@@ -290,7 +290,28 @@ ${JSON.stringify(message, null, 2)}`,
       }
     }
     // If the last message is an assistant message and the new message is also an assistant message, merge them together and update tool calls with results
-    if (latestMessage?.role === 'assistant' && messageV2.role === 'assistant') {
+    const latestMessagePartType = latestMessage?.content?.parts?.at?.(-1)?.type;
+    const newMessageFirstPartType = messageV2.content.parts.filter(p => p.type !== `step-start`).at(-1)?.type;
+    const shouldAppendToLastAssistantMessage = latestMessage?.role === 'assistant' && messageV2.role === 'assistant';
+    const shouldAppendToLastAssistantMessageParts =
+      shouldAppendToLastAssistantMessage &&
+      newMessageFirstPartType &&
+      ((newMessageFirstPartType === `tool-invocation` && latestMessagePartType !== `text`) ||
+        newMessageFirstPartType === latestMessagePartType);
+
+    if (
+      // backwards compat check!
+      // this condition can technically be removed and it will make it so all new assistant parts will be added to the last assistant message parts instead of creating new db entries.
+      // however, for any downstream code that isn't based around using message parts yet, this may cause tool invocations to show up in the wrong order in their UI, because they use the message.toolInvocations and message.content properties which do not indicate how each is ordered in relation to each other.
+      // this code check then causes any tool invocation to be created as a new message and not update the previous assistant message parts.
+      // without this condition we will see something like
+      // parts: [{type:"step-start"}, {type: "text", text: "let me check the weather"}, {type: "tool-invocation", toolInvocation: x}, {type: "text", text: "the weather in x is y"}]
+      // with this condition we will see
+      // message1.parts: [{type:"step-start"}, {type: "text", text: "let me check the weather"}]
+      // message2.parts: [{type: "tool-invocation", toolInvocation: x}]
+      // message3.parts: [{type: "text", text: "the weather in x is y"}]
+      shouldAppendToLastAssistantMessageParts
+    ) {
       latestMessage.createdAt = messageV2.createdAt || latestMessage.createdAt;
 
       for (const [index, part] of messageV2.content.parts.entries()) {
