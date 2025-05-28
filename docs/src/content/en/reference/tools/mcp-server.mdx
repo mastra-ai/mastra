@@ -7,7 +7,7 @@ description: API Reference for MCPServer - A class for exposing Mastra tools and
 
 The `MCPServer` class provides the functionality to expose your existing Mastra tools and Agents as a Model Context Protocol (MCP) server. This allows any MCP client (like Cursor, Windsurf, or Claude Desktop) to connect to these capabilities and make them available to an agent.
 
-Note that if you only need to use your tools or agents directly within your Mastra application, you don't necessarily need to create an MCP server. This API is specifically for exposing your Mastra tools and agents to *external* MCP clients.
+Note that if you only need to use your tools or agents directly within your Mastra application, you don't necessarily need to create an MCP server. This API is specifically for exposing your Mastra tools and agents to _external_ MCP clients.
 
 It supports both [stdio (subprocess) and SSE (HTTP) MCP transports](https://modelcontextprotocol.io/docs/concepts/transports).
 
@@ -58,7 +58,8 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
       name: "name",
       type: "string",
       isOptional: false,
-      description: "A descriptive name for your server (e.g., 'My Weather and Agent Server').",
+      description:
+        "A descriptive name for your server (e.g., 'My Weather and Agent Server').",
     },
     {
       name: "version",
@@ -91,7 +92,8 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
       name: "id",
       type: "string",
       isOptional: true,
-      description: "Optional unique identifier for the server. If not provided, a UUID will be generated. This ID is considered final and cannot be changed by Mastra if provided.",
+      description:
+        "Optional unique identifier for the server. If not provided, a UUID will be generated. This ID is considered final and cannot be changed by Mastra if provided.",
     },
     {
       name: "description",
@@ -103,25 +105,29 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
       name: "repository",
       type: "Repository", // { url: string; source: string; id: string; }
       isOptional: true,
-      description: "Optional repository information for the server's source code.",
+      description:
+        "Optional repository information for the server's source code.",
     },
     {
       name: "releaseDate",
       type: "string", // ISO 8601
       isOptional: true,
-      description: "Optional release date of this server version (ISO 8601 string). Defaults to the time of instantiation if not provided.",
+      description:
+        "Optional release date of this server version (ISO 8601 string). Defaults to the time of instantiation if not provided.",
     },
     {
       name: "isLatest",
       type: "boolean",
       isOptional: true,
-      description: "Optional flag indicating if this is the latest version. Defaults to true if not provided.",
+      description:
+        "Optional flag indicating if this is the latest version. Defaults to true if not provided.",
     },
     {
       name: "packageCanonical",
       type: "'npm' | 'docker' | 'pypi' | 'crates' | string",
       isOptional: true,
-      description: "Optional canonical packaging format if the server is distributed as a package (e.g., 'npm', 'docker').",
+      description:
+        "Optional canonical packaging format if the server is distributed as a package (e.g., 'npm', 'docker').",
     },
     {
       name: "packages",
@@ -139,7 +145,8 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
       name: "resources",
       type: "MCPServerResources",
       isOptional: true,
-      description: "An object defining how the server should handle MCP resources. See Resource Handling section for details.",
+      description:
+        "An object defining how the server should handle MCP resources. See Resource Handling section for details.",
     },
   ]}
 />
@@ -151,12 +158,13 @@ A powerful feature of `MCPServer` is its ability to automatically expose your Ma
 - **Tool Naming**: Each agent is converted into a tool named `ask_<agentKey>`, where `<agentKey>` is the key you used for that agent in the `agents` object. For instance, if you configure `agents: { myAgentKey: myAgentInstance }`, a tool named `ask_myAgentKey` will be created.
 
 - **Tool Functionality**:
-    - **Description**: The generated tool's description will be in the format: "Ask agent `<AgentName>` a question. Original agent instructions: `<agent description>`".
-    - **Input**: The tool expects a single object argument with a `message` property (string): `{ message: "Your question for the agent" }`.
-    - **Execution**: When this tool is called, it invokes the `generate()` method of the corresponding agent, passing the provided `query`.
-    - **Output**: The direct result from the agent's `generate()` method is returned as the output of the tool.
 
-- **Name Collisions**: If an explicit tool defined in the `tools` configuration has the same name as an agent-derived tool (e.g., you have a tool named `ask_myAgentKey` and also an agent with the key `myAgentKey`), the *explicitly defined tool will take precedence*. The agent will not be converted into a tool in this conflicting case, and a warning will be logged.
+  - **Description**: The generated tool's description will be in the format: "Ask agent `<AgentName>` a question. Original agent instructions: `<agent description>`".
+  - **Input**: The tool expects a single object argument with a `message` property (string): `{ message: "Your question for the agent" }`.
+  - **Execution**: When this tool is called, it invokes the `generate()` method of the corresponding agent, passing the provided `query`.
+  - **Output**: The direct result from the agent's `generate()` method is returned as the output of the tool.
+
+- **Name Collisions**: If an explicit tool defined in the `tools` configuration has the same name as an agent-derived tool (e.g., you have a tool named `ask_myAgentKey` and also an agent with the key `myAgentKey`), the _explicitly defined tool will take precedence_. The agent will not be converted into a tool in this conflicting case, and a warning will be logged.
 
 This makes it straightforward to allow MCP clients to interact with your agents using natural language queries, just like any other tool.
 
@@ -524,7 +532,8 @@ async executeTool(
       name: "executionContext",
       type: "object",
       isOptional: true,
-      description: "Optional context for the tool execution, like messages or a toolCallId.",
+      description:
+        "Optional context for the tool execution, like messages or a toolCallId.",
     },
   ]}
 />
@@ -545,6 +554,7 @@ Resources are a core primitive in the Model Context Protocol (MCP) that allow se
 Resources are identified by unique URIs (e.g., `file:///home/user/documents/report.pdf`, `postgres://database/customers/schema`) and can contain either text (UTF-8 encoded) or binary data (base64 encoded).
 
 Clients can discover resources through:
+
 1.  **Direct resources**: Servers expose a list of concrete resources via a `resources/list` endpoint.
 2.  **Resource templates**: For dynamic resources, servers can expose URI templates (RFC 6570) that clients use to construct resource URIs.
 
@@ -562,7 +572,11 @@ export type MCPServerResources = {
   listResources: () => Promise<Resource[]>;
 
   // Callback to get the content of a specific resource
-  getResourceContent: ({ uri }: { uri: string; }) => Promise<MCPServerResourceContent | MCPServerResourceContent[]>;
+  getResourceContent: ({
+    uri,
+  }: {
+    uri: string;
+  }) => Promise<MCPServerResourceContent | MCPServerResourceContent[]>;
 
   // Optional callback to list available resource templates
   resourceTemplates?: () => Promise<ResourceTemplate[]>;
@@ -575,7 +589,11 @@ Example:
 
 ```typescript
 import { MCPServer } from "@mastra/mcp";
-import type { MCPServerResourceContent, Resource, ResourceTemplate } from "@mastra/mcp";
+import type {
+  MCPServerResourceContent,
+  Resource,
+  ResourceTemplate,
+} from "@mastra/mcp";
 
 // Resources/resource templates will generally be dynamically fetched.
 const myResources: Resource[] = [
@@ -588,10 +606,10 @@ const myResourceContents: Record<string, MCPServerResourceContent> = {
 
 const myResourceTemplates: ResourceTemplate[] = [
   {
-    uriTemplate: 'file://data/{id}',
-    name: 'Data File',
-    description: 'A file containing data.',
-    mimeType: 'text/plain',
+    uriTemplate: "file://data/{id}",
+    name: "Data File",
+    description: "A file containing data.",
+    mimeType: "text/plain",
   },
 ];
 
@@ -609,7 +627,9 @@ const myResourceHandlers: MCPServerResources = {
 const serverWithResources = new MCPServer({
   name: "Resourceful Server",
   version: "1.0.0",
-  tools: { /* ... your tools ... */ },
+  tools: {
+    /* ... your tools ... */
+  },
   resources: myResourceHandlers,
 });
 ```
@@ -627,6 +647,7 @@ async server.resources.notifyUpdated({ uri: string }): Promise<void>
 ```
 
 Example:
+
 ```typescript
 // After updating the content of 'file://data.txt'
 await serverWithResources.resources.notifyUpdated({ uri: "file://data.txt" });
@@ -641,6 +662,7 @@ async server.resources.notifyListChanged(): Promise<void>
 ```
 
 Example:
+
 ```typescript
 // After adding a new resource to the list managed by 'myResourceHandlers.listResources'
 await serverWithResources.resources.notifyListChanged();

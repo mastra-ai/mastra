@@ -43,8 +43,7 @@ console.log(result.info.reason); // Explanation of the score
     {
       name: "model",
       type: "LanguageModel",
-      description:
-        "命令整合性を評価するために使用されるモデルの設定",
+      description: "命令整合性を評価するために使用されるモデルの設定",
       isOptional: false,
     },
     {
@@ -107,8 +106,7 @@ console.log(result.info.reason); // Explanation of the score
     {
       name: "info",
       type: "object",
-      description:
-        "指示遵守に関する詳細なメトリクスを含むオブジェクト",
+      description: "指示遵守に関する詳細なメトリクスを含むオブジェクト",
       properties: [
         {
           type: "string",
@@ -116,8 +114,7 @@ console.log(result.info.reason); // Explanation of the score
             {
               name: "reason",
               type: "string",
-              description:
-                "スコアおよび指示遵守の詳細な説明",
+              description: "スコアおよび指示遵守の詳細な説明",
             },
           ],
         },

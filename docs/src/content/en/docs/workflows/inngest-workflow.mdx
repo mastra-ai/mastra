@@ -32,17 +32,18 @@ This guide walks through creating a workflow with Inngest and Mastra, demonstrat
 Initialize the Inngest integration to obtain Mastra-compatible workflow helpers. The createWorkflow and createStep functions are used to create workflow and step objects that are compatible with Mastra and inngest.
 
 ```ts showLineNumbers copy filename="src/mastra/inngest/index.ts"
-import { Inngest } from 'inngest'
-import { realtimeMiddleware } from '@inngest/realtime'
+import { Inngest } from "inngest";
+import { realtimeMiddleware } from "@inngest/realtime";
 
 export const inngest = new Inngest({
-    id: 'mastra',
-    baseUrl: process.env.NODE_ENV === 'production'
-      ? 'https://api.inngest.com'
-      : 'http://localhost:8288',
-    isDev: process.env.NODE_ENV !== 'production',
-    middleware: [realtimeMiddleware()],
-})
+  id: "mastra",
+  baseUrl:
+    process.env.NODE_ENV === "production"
+      ? "https://api.inngest.com"
+      : "http://localhost:8288",
+  isDev: process.env.NODE_ENV !== "production",
+  middleware: [realtimeMiddleware()],
+});
 ```
 
 ### Creating Steps
@@ -50,16 +51,16 @@ export const inngest = new Inngest({
 Define the individual steps that will compose your workflow:
 
 ```ts showLineNumbers copy filename="src/mastra/workflows/index.ts"
-import { z } from 'zod'
-import { inngest } from '../inngest'
-import { init } from '@mastra/inngest'
+import { z } from "zod";
+import { inngest } from "../inngest";
+import { init } from "@mastra/inngest";
 
 // Initialize Inngest with Mastra, pointing to your local Inngest server
-const { createWorkflow, createStep } = init(inngest)
+const { createWorkflow, createStep } = init(inngest);
 
 // Step: Increment the counter value
 const incrementStep = createStep({
-  id: 'increment',
+  id: "increment",
   inputSchema: z.object({
     value: z.number(),
   }),
@@ -67,9 +68,9 @@ const incrementStep = createStep({
     value: z.number(),
   }),
   execute: async ({ inputData }) => {
-    return { value: inputData.value + 1 }
+    return { value: inputData.value + 1 };
   },
-})
+});
 ```
 
 ### Creating the Workflow
@@ -79,18 +80,18 @@ Compose the steps into a workflow using the `dountil` loop pattern. The createWo
 ```ts showLineNumbers copy filename="src/mastra/workflows/index.ts"
 // workflow that is registered as a function on inngest server
 const workflow = createWorkflow({
-  id: 'increment-workflow',
+  id: "increment-workflow",
   inputSchema: z.object({
     value: z.number(),
   }),
   outputSchema: z.object({
     value: z.number(),
   }),
-}).then(incrementStep)
+}).then(incrementStep);
 
-workflow.commit()
+workflow.commit();
 
-export { workflow as incrementWorkflow }
+export { workflow as incrementWorkflow };
 ```
 
 ### Configuring the Mastra Instance and Executing the Workflow
@@ -98,26 +99,25 @@ export { workflow as incrementWorkflow }
 Register the workflow with Mastra and configure the Inngest API endpoint:
 
 ```ts showLineNumbers copy filename="src/mastra/index.ts"
-import { Mastra } from '@mastra/core/mastra'
-import { serve as inngestServe } from '@mastra/inngest'
-import { incrementWorkflow } from './workflows'
-import { inngest } from './inngest'
-import { PinoLogger } from '@mastra/loggers'
-
+import { Mastra } from "@mastra/core/mastra";
+import { serve as inngestServe } from "@mastra/inngest";
+import { incrementWorkflow } from "./workflows";
+import { inngest } from "./inngest";
+import { PinoLogger } from "@mastra/loggers";
 
 // Configure Mastra with the workflow and Inngest API endpoint
 export const mastra = new Mastra({
   workflows: {
-    incrementWorkflow
+    incrementWorkflow,
   },
   server: {
     // The server configuration is required to allow local docker container can connect to the mastra server
-    host: '0.0.0.0',
+    host: "0.0.0.0",
     apiRoutes: [
       // This API route is used to register the Mastra workflow (inngest function) on the inngest server
       {
-        path: '/api/inngest',
-        method: 'ALL',
+        path: "/api/inngest",
+        method: "ALL",
         createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
         // The inngestServe function integrates Mastra workflows with Inngest by:
         // 1. Creating Inngest functions for each workflow with unique IDs (workflow.${workflowId})
@@ -131,117 +131,136 @@ export const mastra = new Mastra({
     ],
   },
   logger: new PinoLogger({
-    name: 'Mastra',
-    level: 'info',
+    name: "Mastra",
+    level: "info",
   }),
-})
+});
 ```
 
 ### Running the Workflow locally
 
 > **Prerequisites:**
+>
 > - Docker installed and running
 > - Mastra project set up
 > - Dependencies installed (`npm install`)
 
 1. Run `npx mastra dev` to start the Mastra server on local to serve the server on port 4111.
 2. Start the Inngest Dev Server (via Docker)
-In a new terminal, run:
+   In a new terminal, run:
+
 ```sh
 docker run --rm -p 8288:8288 \
   inngest/inngest \
   inngest dev -u http://host.docker.internal:4111/inngest/api
 ```
+
 > **Note:** The URL after `-u` tells the Inngest dev server where to find your Mastra `/api/inngest` endpoint.
 
 3. Open the Inngest Dashboard
+
 - Visit [http://localhost:8288](http://localhost:8288) in your browser.
 - Go to the **Apps** section in the sidebar.
 - You should see your Mastra workflow registered.
-![Inngest Dashboard](/inngest-apps-dashboard.png)
+  ![Inngest Dashboard](/inngest-apps-dashboard.png)
 
 4. Invoke the Workflow
+
 - Go to the **Functions** section in the sidebar.
 - Select your Mastra workflow.
 - Click **Invoke** and use the following input:
+
 ```json
 {
   "data": {
-    "inputData" : {
-        "value": 5
+    "inputData": {
+      "value": 5
     }
   }
 }
 ```
+
 ![Inngest Function](/inngest-function-dashboard.png)
 
 5. **Monitor the Workflow Execution**
+
 - Go to the **Runs** tab in the sidebar.
 - Click on the latest run to see step-by-step execution progress.
-![Inngest Function Run](/inngest-runs-dashboard.png)
+  ![Inngest Function Run](/inngest-runs-dashboard.png)
 
 ### Running the Workflow in Production
 
 > **Prerequisites:**
+>
 > - Vercel account and Vercel CLI installed (`npm i -g vercel`)
 > - Inngest account
 > - Vercel token (recommended: set as environment variable)
 
 1. Add Vercel Deployer to Mastra instance
+
 ```ts showLineNumbers copy filename="src/mastra/index.ts"
-import { VercelDeployer } from '@mastra/deployer-vercel'
+import { VercelDeployer } from "@mastra/deployer-vercel";
 
 export const mastra = new Mastra({
   // ...other config
   deployer: new VercelDeployer({
     teamSlug: "your_team_slug",
     projectName: "your_project_name",
-    // you can get your vercel token from the vercel dashboard by clicking on the user icon in the top right corner 
+    // you can get your vercel token from the vercel dashboard by clicking on the user icon in the top right corner
     // and then clicking on "Account Settings" and then clicking on "Tokens" on the left sidebar.
     token: "your_vercel_token",
   }),
-})
+});
 ```
 
 > **Note:** Set your Vercel token in your environment:
+>
 > ```sh
 > export VERCEL_TOKEN=your_vercel_token
 > ```
 
 2. Build the mastra instance
+
 ```sh
 npx mastra build
 ```
 
 3. Deploy to Vercel
+
 ```sh
 cd .mastra/output
 vercel --prod
 ```
+
 > **Tip:** If you haven't already, log in to Vercel CLI with `vercel login`.
 
 4. Sync with Inngest Dashboard
+
 - Go to the [Inngest dashboard](https://app.inngest.com/env/production/apps).
 - Click **Sync new app with Vercel** and follow the instructions.
 - You should see your Mastra workflow registered as an app.
-![Inngest Dashboard](/inngest-apps-dashboard-prod.png)
+  ![Inngest Dashboard](/inngest-apps-dashboard-prod.png)
 
 5. Invoke the Workflow
+
 - In the **Functions** section, select `workflow.increment-workflow`.
 - Click **All actions** (top right) > **Invoke**.
 - Provide the following input:
+
 ```json
 {
   "data": {
-    "inputData" : {
-        "value": 5
+    "inputData": {
+      "value": 5
     }
   }
 }
 ```
+
 ![Inngest Function Run](/inngest-function-dashboard-prod.png)
 
 6.  Monitor Execution
+
 - Go to the **Runs** tab.
 - Click the latest run to see step-by-step execution progress.
-![Inngest Function Run](/inngest-runs-dashboard-prod.png)
+  ![Inngest Function Run](/inngest-runs-dashboard-prod.png)

@@ -114,12 +114,13 @@ For detailed configuration options, see the [`MCPClient` reference documentation
 
 MCP servers can be discovered through registries. Here's how to connect to some popular ones using `MCPClient`:
 
-{/* 
-  LLM CONTEXT: This Tabs component shows how to connect to different MCP (Model Context Protocol) registries.
-  Each tab demonstrates the configuration for a specific MCP registry service (mcp.run, Composio.dev, Smithery.ai).
-  The tabs help users understand how to connect to various MCP server providers and their different authentication methods.
-  Each tab shows the specific URL patterns and configuration needed for that registry service.
+{/*
+LLM CONTEXT: This Tabs component shows how to connect to different MCP (Model Context Protocol) registries.
+Each tab demonstrates the configuration for a specific MCP registry service (mcp.run, Composio.dev, Smithery.ai).
+The tabs help users understand how to connect to various MCP server providers and their different authentication methods.
+Each tab shows the specific URL patterns and configuration needed for that registry service.
 */}
+
 <Tabs items={["mcp.run", "Composio.dev", "Smithery.ai"]}>
   <Tabs.Tab>
     [mcp.run](https://www.mcp.run/) provides pre-authenticated, managed MCP servers. Tools are grouped into Profiles, each with a unique, signed URL.
@@ -238,9 +239,9 @@ import { dataWorkflow } from "./workflows"; // Your Mastra Workflow
 const server = new MCPServer({
   name: "My Custom Server",
   version: "1.0.0",
-  tools: { weatherTool },    // Provide your tool(s) here
-  agents: { weatherAgent },   // Provide your agent(s) here
-  workflows: { dataWorkflow } // Provide your workflow(s) here
+  tools: { weatherTool }, // Provide your tool(s) here
+  agents: { weatherAgent }, // Provide your agent(s) here
+  workflows: { dataWorkflow }, // Provide your workflow(s) here
 });
 
 // Start the server (e.g., using stdio for a CLI tool)

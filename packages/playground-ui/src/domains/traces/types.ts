@@ -45,6 +45,7 @@ export type RefinedTrace = {
   started: number;
   status: SpanStatus;
   trace: Span[];
+  runId?: string;
 };
 
 export type EnhancedSpan = Span & {

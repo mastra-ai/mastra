@@ -105,7 +105,6 @@ Creates a new workflow run instance, allowing you to execute the workflow with s
 
 Executes the workflow with provided input data. Handles workflow suspension, resumption and emits events during execution.
 
-
 ## Workflow Status
 
 A workflow's status indicates its current execution state. The possible values are:
@@ -114,19 +113,22 @@ A workflow's status indicates its current execution state. The possible values a
   content={[
     {
       name: "success",
-      type: "string", 
-      description: "All steps finished executing successfully, with a valid result output",
+      type: "string",
+      description:
+        "All steps finished executing successfully, with a valid result output",
     },
     {
       name: "failed",
       type: "string",
-      description: "Workflow encountered an error during execution, with error details available",
+      description:
+        "Workflow encountered an error during execution, with error details available",
     },
     {
-      name: "suspended", 
+      name: "suspended",
       type: "string",
-      description: "Workflow execution is paused waiting for resume, with suspended step information",
-    }
+      description:
+        "Workflow execution is paused waiting for resume, with suspended step information",
+    },
   ]}
 />
 

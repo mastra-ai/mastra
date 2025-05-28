@@ -24,28 +24,28 @@ const myAgent = new Agent({
 const preparationStep = createStep({
   id: "preparation",
   inputSchema: z.object({
-      question: z.string()
+    question: z.string(),
   }),
   outputSchema: z.object({
-      formattedPrompt: z.string()
+    formattedPrompt: z.string(),
   }),
   execute: async ({ inputData }) => {
-      return {
-          formattedPrompt: `Answer this question briefly: ${inputData.question}`
-      };
-  }
+    return {
+      formattedPrompt: `Answer this question briefly: ${inputData.question}`,
+    };
+  },
 });
 
-const agentStep = createStep(myAgent)
+const agentStep = createStep(myAgent);
 
 // Create a simple workflow
 const myWorkflow = createWorkflow({
   id: "simple-qa-workflow",
   inputSchema: z.object({
-      question: z.string()
+    question: z.string(),
   }),
   outputSchema: z.string(),
-  steps: [preparationStep, agentStep]
+  steps: [preparationStep, agentStep],
 });
 
 // Define workflow sequence
@@ -53,8 +53,8 @@ myWorkflow
   .then(preparationStep)
   .map({
     prompt: {
-        step: preparationStep,
-        path: "formattedPrompt",
+      step: preparationStep,
+      path: "formattedPrompt",
     },
   })
   .then(agentStep)
@@ -63,10 +63,10 @@ myWorkflow
 // Create Mastra instance
 const mastra = new Mastra({
   agents: {
-      myAgent,
+    myAgent,
   },
   workflows: {
-      myWorkflow,
+    myWorkflow,
   },
 });
 
@@ -76,8 +76,8 @@ const run = workflow.createRun();
 // Run the workflow with a question
 const res = await run.start({
   inputData: {
-      question: "What is machine learning?"
-  }
+    question: "What is machine learning?",
+  },
 });
 
 if (res.status === "success") {
@@ -85,7 +85,6 @@ if (res.status === "success") {
 } else if (res.status === "failed") {
   console.error("Workflow failed:", res.error);
 }
-
 ```
 
 > **NOTE:** The step created from agent (`createStep(agent)`) takes `prompt` as an input and returns `text` as an output. You will need to map the output of the previous step to the input of the agent step, as done in the example above
@@ -104,17 +103,17 @@ const weatherTool = createTool({
   id: "weather-tool",
   description: "Get weather information for a location",
   inputSchema: z.object({
-      location: z.string().describe("The city name")
+    location: z.string().describe("The city name"),
   }),
   outputSchema: z.object({
-      temperature: z.number(),
-      conditions: z.string()
+    temperature: z.number(),
+    conditions: z.string(),
   }),
-  execute: async ({ context: {location} }) => {
-      return { 
-          temperature: 22, 
-          conditions: "Sunny" 
-      };
+  execute: async ({ context: { location } }) => {
+    return {
+      temperature: 22,
+      conditions: "Sunny",
+    };
   },
 });
 
@@ -122,47 +121,47 @@ const weatherTool = createTool({
 const locationStep = createStep({
   id: "location-formatter",
   inputSchema: z.object({
-      city: z.string()
+    city: z.string(),
   }),
   outputSchema: z.object({
-      location: z.string()
+    location: z.string(),
   }),
   execute: async ({ inputData }) => {
-      return {
-          location: inputData.city
-      };
-  }
+    return {
+      location: inputData.city,
+    };
+  },
 });
 
 // Create a step that formats the output
 const formatResultStep = createStep({
   id: "format-result",
   inputSchema: z.object({
-      temperature: z.number(),
-      conditions: z.string()
+    temperature: z.number(),
+    conditions: z.string(),
   }),
   outputSchema: z.object({
-      weatherReport: z.string()
+    weatherReport: z.string(),
   }),
   execute: async ({ inputData }) => {
-      return {
-          weatherReport: `Current weather: ${inputData.temperature}°C and ${inputData.conditions}`
-      };
-  }
+    return {
+      weatherReport: `Current weather: ${inputData.temperature}°C and ${inputData.conditions}`,
+    };
+  },
 });
 
-const weatherToolStep = createStep(weatherTool)
+const weatherToolStep = createStep(weatherTool);
 
 // Create the workflow
 const weatherWorkflow = createWorkflow({
   id: "weather-workflow",
   inputSchema: z.object({
-      city: z.string()
+    city: z.string(),
   }),
   outputSchema: z.object({
-      weatherReport: z.string()
+    weatherReport: z.string(),
   }),
-  steps: [locationStep, weatherToolStep, formatResultStep]
+  steps: [locationStep, weatherToolStep, formatResultStep],
 });
 
 // Define workflow sequence
@@ -175,10 +174,9 @@ weatherWorkflow
 // Create Mastra instance
 const mastra = new Mastra({
   workflows: {
-      weatherWorkflow
-  }
+    weatherWorkflow,
+  },
 });
-
 
 const workflow = mastra.getWorkflow("weatherWorkflow");
 const run = workflow.createRun();
@@ -186,8 +184,8 @@ const run = workflow.createRun();
 // Run the workflow
 const result = await run.start({
   inputData: {
-      city: "Tokyo"
-  }
+    city: "Tokyo",
+  },
 });
 
 if (result.status === "success") {
@@ -195,7 +193,6 @@ if (result.status === "success") {
 } else if (result.status === "failed") {
   console.error("Workflow failed:", result.error);
 }
-
 ```
 
 ## Workflow as a tool in an agent
@@ -212,20 +209,20 @@ import { z } from "zod";
 const fetchWeather = createStep({
   id: "fetch-weather",
   inputSchema: z.object({
-    city: z.string().describe("The city to get the weather for")
+    city: z.string().describe("The city to get the weather for"),
   }),
   outputSchema: z.object({
     temperature: z.number(),
     conditions: z.string(),
-    city: z.string()
+    city: z.string(),
   }),
   execute: async ({ inputData }) => {
     return {
       temperature: 25,
       conditions: "Sunny",
-      city: inputData.city
+      city: inputData.city,
     };
-  }
+  },
 });
 
 // Define the activity planning step
@@ -234,76 +231,83 @@ const planActivities = createStep({
   inputSchema: z.object({
     temperature: z.number(),
     conditions: z.string(),
-    city: z.string()
+    city: z.string(),
   }),
   outputSchema: z.object({
-    activities: z.array(z.string())
+    activities: z.array(z.string()),
   }),
   execute: async ({ inputData }) => {
-    mastra.getLogger()?.debug(`Planning activities for ${inputData.city} based on weather`);
+    mastra
+      .getLogger()
+      ?.debug(`Planning activities for ${inputData.city} based on weather`);
     const activities = [];
-    
+
     if (inputData.temperature > 20 && inputData.conditions === "Sunny") {
       activities.push("Visit the park", "Go hiking", "Have a picnic");
     } else if (inputData.temperature < 10) {
       activities.push("Visit a museum", "Go to a cafe", "Indoor shopping");
     } else {
-      activities.push("Sightseeing tour", "Visit local attractions", "Try local cuisine");
+      activities.push(
+        "Sightseeing tour",
+        "Visit local attractions",
+        "Try local cuisine",
+      );
     }
     return {
-      activities
+      activities,
     };
-  }
+  },
 });
 
 // Create the weather workflow
 const weatherWorkflow = createWorkflow({
   id: "weather-workflow",
   inputSchema: z.object({
-    city: z.string().describe("The city to get the weather for")
+    city: z.string().describe("The city to get the weather for"),
   }),
   outputSchema: z.object({
-    activities: z.array(z.string())
+    activities: z.array(z.string()),
   }),
-  steps: [fetchWeather, planActivities]
+  steps: [fetchWeather, planActivities],
 })
-.then(fetchWeather)
-.then(planActivities)
-.commit();
+  .then(fetchWeather)
+  .then(planActivities)
+  .commit();
 
 // Create a tool that uses the workflow
 const activityPlannerTool = createTool({
   id: "get-weather-specific-activities",
-  description: "Get weather-specific activities for a city based on current weather conditions",
+  description:
+    "Get weather-specific activities for a city based on current weather conditions",
   inputSchema: z.object({
-    city: z.string().describe("The city to get activities for")
+    city: z.string().describe("The city to get activities for"),
   }),
   outputSchema: z.object({
-    activities: z.array(z.string())
+    activities: z.array(z.string()),
   }),
   execute: async ({ context: { city }, mastra }) => {
     mastra.getLogger()?.debug(`Tool executing for city: ${city}`);
-    
+
     const workflow = mastra?.getWorkflow("weatherWorkflow");
     if (!workflow) {
       throw new Error("Weather workflow not found");
     }
-    
+
     const run = workflow.createRun();
     const result = await run.start({
       inputData: {
-        city: city
-      }
+        city: city,
+      },
     });
-    
+
     if (result.status === "success") {
       return {
-        activities: result.result.activities
+        activities: result.result.activities,
       };
     }
-    
+
     throw new Error(`Workflow execution failed: ${result.status}`);
-  }
+  },
 });
 
 // Create an agent that uses the tool
@@ -315,20 +319,22 @@ const activityPlannerAgent = new Agent({
   Use the weather-specific activities tool to get activity recommendations.
   Format your response in a friendly, conversational way.
   `,
-  tools: { activityPlannerTool }
+  tools: { activityPlannerTool },
 });
 
 // Create the Mastra instance
 const mastra = new Mastra({
   workflows: {
-    weatherWorkflow
+    weatherWorkflow,
   },
   agents: {
-    activityPlannerAgent
-  }
+    activityPlannerAgent,
+  },
 });
 
-const response = await activityPlannerAgent.generate("What activities do you recommend for a visit to Tokyo?");
+const response = await activityPlannerAgent.generate(
+  "What activities do you recommend for a visit to Tokyo?",
+);
 
 console.log("\nAgent response:");
 console.log(response.text);
