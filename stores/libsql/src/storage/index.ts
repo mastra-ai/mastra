@@ -282,14 +282,15 @@ export class LibSQLStore extends MastraStorage {
     } catch {
       // use content as is if it's not JSON
     }
-    return {
+    const result = {
       id: row.id,
       content,
       role: row.role,
-      type: row.type === `v2` ? undefined : row.type,
       createdAt: new Date(row.createdAt as string),
       threadId: row.thread_id,
     } as MastraMessageV2;
+    if (row.type && row.type !== `v2`) result.type = row.type;
+    return result;
   }
 
   async getMessages<T extends MastraMessageV2[]>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T> {
