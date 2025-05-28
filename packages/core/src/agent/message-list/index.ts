@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { convertToCoreMessages } from 'ai';
-import type { CoreMessage, CoreSystemMessage, IDGenerator, Message, UIMessage } from 'ai';
+import type { CoreMessage, CoreSystemMessage, IDGenerator, Message, ToolInvocation, UIMessage } from 'ai';
 import type { MastraMessageV1 } from '../../memory';
 import { isCoreMessage, isUiMessage } from '../../utils';
 import { convertToV1Messages } from './prompt/convert-to-mastra-v1';
@@ -200,7 +200,7 @@ export class MessageList {
       return {
         id: m.id,
         role: m.role,
-        content: contentString,
+        content: m.content.content || contentString,
         createdAt: m.createdAt,
         parts: m.content.parts,
         experimental_attachments: m.content.experimental_attachments || [],
@@ -209,7 +209,7 @@ export class MessageList {
       return {
         id: m.id,
         role: m.role,
-        content: contentString,
+        content: m.content.content || contentString,
         createdAt: m.createdAt,
         parts: m.content.parts,
         reasoning: undefined,
@@ -220,7 +220,7 @@ export class MessageList {
     return {
       id: m.id,
       role: m.role,
-      content: contentString,
+      content: m.content.content || contentString,
       createdAt: m.createdAt,
       parts: m.content.parts,
     };
@@ -307,7 +307,9 @@ ${JSON.stringify(message, null, 2)}`,
               state: 'result',
               result: part.toolInvocation.result,
             };
-            if (latestMessage.content.toolInvocations) {
+            if (!latestMessage.content.toolInvocations) {
+              latestMessage.content.toolInvocations = messageV2.content.toolInvocations;
+            } else {
               latestMessage.content.toolInvocations = latestMessage.content.toolInvocations.map(t => {
                 if (t.toolCallId !== existingCallPart.toolInvocation.toolCallId) return t;
                 return existingCallPart.toolInvocation;
@@ -496,6 +498,7 @@ ${JSON.stringify(message, null, 2)}`,
     const id = `id` in coreMessage ? (coreMessage.id as string) : this.newMessageId();
     const parts: UIMessage['parts'] = [];
     const experimentalAttachments: UIMessage['experimental_attachments'] = [];
+    const toolInvocations: ToolInvocation[] = [];
 
     if (typeof coreMessage.content === 'string') {
       parts.push({ type: 'step-start' });
@@ -526,16 +529,18 @@ ${JSON.stringify(message, null, 2)}`,
             break;
 
           case 'tool-result':
+            const invocation = {
+              state: 'result' as const,
+              toolCallId: part.toolCallId,
+              toolName: part.toolName,
+              result: part.result ?? '', // undefined will cause AI SDK to throw an error, but for client side tool calls this really could be undefined
+              args: {}, // when we combine this invocation onto the existing tool-call part it will have args already
+            };
             parts.push({
               type: 'tool-invocation',
-              toolInvocation: {
-                state: 'result',
-                toolCallId: part.toolCallId,
-                toolName: part.toolName,
-                result: part.result ?? '', // undefined will cause AI SDK to throw an error, but for client side tool calls this really could be undefined
-                args: {}, // when we combine this invocation onto the existing tool-call part it will have args already
-              },
+              toolInvocation: invocation,
             });
+            toolInvocations.push(invocation);
             break;
 
           case 'reasoning':
@@ -605,6 +610,7 @@ ${JSON.stringify(message, null, 2)}`,
       parts,
     };
 
+    if (toolInvocations.length) content.toolInvocations = toolInvocations;
     if (typeof coreMessage.content === `string`) content.content = coreMessage.content;
     if (experimentalAttachments.length) content.experimental_attachments = experimentalAttachments;
 
