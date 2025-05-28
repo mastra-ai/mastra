@@ -75,6 +75,7 @@ import {
   getWorkflowByIdHandler,
   getWorkflowRunsHandler,
   getWorkflowsHandler,
+  streamWorkflowHandler,
   resumeAsyncWorkflowHandler,
   resumeWorkflowHandler,
   startAsyncWorkflowHandler,
@@ -2118,6 +2119,54 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
     watchLegacyWorkflowHandler,
   );
 
+  app.post(
+    '/api/workflows/:workflowId/stream',
+    describeRoute({
+      description: 'Stream workflow in real-time',
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                inputData: { type: 'object' },
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the workflow execution',
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'vNext workflow run started',
+        },
+        404: {
+          description: 'vNext workflow not found',
+        },
+      },
+      tags: ['vNextWorkflows'],
+    }),
+    streamWorkflowHandler,
+  );
+
   // Workflow routes
   app.get(
     '/api/workflows',
@@ -2427,7 +2476,6 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
     }),
     watchWorkflowHandler,
   );
-
   // Log routes
   app.get(
     '/api/logs',

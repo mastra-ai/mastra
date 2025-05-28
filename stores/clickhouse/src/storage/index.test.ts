@@ -72,6 +72,8 @@ const createSampleWorkflowSnapshot = (status: WorkflowRunState['context']['steps
         status,
         payload: {},
         error: undefined,
+        startedAt: timestamp.getTime(),
+        endedAt: new Date(timestamp.getTime() + 15000).getTime(),
       },
       input: {},
     },

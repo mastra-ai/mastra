@@ -1,25 +1,31 @@
 import {
   ReactFlow,
   MiniMap,
-  Controls,
   Background,
   useNodesState,
   useEdgesState,
   BackgroundVariant,
+  NodeProps,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { SerializedStepFlowEntry } from '@mastra/core/workflows';
 
 import { constructNodesAndEdges } from './utils';
 import { WorkflowConditionNode } from './workflow-condition-node';
-import { WorkflowDefaultNode } from './workflow-default-node';
+import { DefaultNode, WorkflowDefaultNode } from './workflow-default-node';
 import { WorkflowAfterNode } from './workflow-after-node';
 import { WorkflowLoopResultNode } from './workflow-loop-result-node';
 import { useEffect, useState } from 'react';
 import Spinner from '@/components/ui/spinner';
 import { WorkflowNestedNode } from './workflow-nested-node';
+import { ZoomSlider } from './zoom-slider';
 
-export function WorkflowNestedGraph({ stepGraph, open }: { stepGraph: SerializedStepFlowEntry[]; open: boolean }) {
+export interface WorkflowNestedGraphProps {
+  stepGraph: SerializedStepFlowEntry[];
+  open: boolean;
+}
+
+export function WorkflowNestedGraph({ stepGraph, open }: WorkflowNestedGraphProps) {
   const { nodes: initialNodes, edges: initialEdges } = constructNodesAndEdges({
     stepGraph,
   });
@@ -44,17 +50,21 @@ export function WorkflowNestedGraph({ stepGraph, open }: { stepGraph: Serialized
   }, [open]);
 
   return (
-    <div className="w-full h-full relative">
+    <div className="w-full h-full relative bg-surface1">
       {isMounted ? (
         <ReactFlow
           nodes={nodes}
           edges={edges}
           fitView
-          fitViewOptions={{ maxZoom: 0.85 }}
+          fitViewOptions={{
+            maxZoom: 1,
+          }}
+          minZoom={0.01}
+          maxZoom={1}
           nodeTypes={nodeTypes}
           onNodesChange={onNodesChange}
         >
-          <Controls />
+          <ZoomSlider position="bottom-left" />
           <MiniMap pannable zoomable maskColor="#121212" bgColor="#171717" nodeColor="#2c2c2c" />
           <Background variant={BackgroundVariant.Lines} gap={12} size={0.5} />
         </ReactFlow>
