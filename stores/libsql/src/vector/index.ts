@@ -77,7 +77,7 @@ export class LibSQLVector extends MastraVector {
     }
   }
 
-  private async _executeWriteOperationWithRetry<T>(operation: () => Promise<T>, isTransaction = false): Promise<T> {
+  private async executeWriteOperationWithRetry<T>(operation: () => Promise<T>, isTransaction = false): Promise<T> {
     let attempts = 0;
     let backoff = this.initialBackoffMs;
     while (attempts < this.maxRetries) {
@@ -172,7 +172,7 @@ export class LibSQLVector extends MastraVector {
   }
 
   async upsert({ indexName, vectors, metadata, ids }: UpsertVectorParams): Promise<string[]> {
-    return this._executeWriteOperationWithRetry(async () => {
+    return this.executeWriteOperationWithRetry(async () => {
       const tx = await this.turso.transaction('write');
       try {
         const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
@@ -217,7 +217,7 @@ export class LibSQLVector extends MastraVector {
   }
 
   async createIndex({ indexName, dimension }: CreateIndexParams): Promise<void> {
-    await this._executeWriteOperationWithRetry(async () => {
+    await this.executeWriteOperationWithRetry(async () => {
       if (!Number.isInteger(dimension) || dimension <= 0) {
         throw new Error('Dimension must be a positive integer');
       }
@@ -244,7 +244,7 @@ export class LibSQLVector extends MastraVector {
   }
 
   async deleteIndex({ indexName }: DeleteIndexParams): Promise<void> {
-    await this._executeWriteOperationWithRetry(async () => {
+    await this.executeWriteOperationWithRetry(async () => {
       const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
       await this.turso.execute({
         sql: `DROP TABLE IF EXISTS ${parsedIndexName}`,
@@ -333,7 +333,7 @@ export class LibSQLVector extends MastraVector {
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
   async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
-    await this._executeWriteOperationWithRetry(async () => {
+    await this.executeWriteOperationWithRetry(async () => {
       const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
       const updates = [];
       const args: InValue[] = [];
@@ -372,7 +372,7 @@ export class LibSQLVector extends MastraVector {
    * @throws Will throw an error if the deletion operation fails.
    */
   async deleteVector({ indexName, id }: DeleteVectorParams): Promise<void> {
-    await this._executeWriteOperationWithRetry(async () => {
+    await this.executeWriteOperationWithRetry(async () => {
       const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
       await this.turso.execute({
         sql: `DELETE FROM ${parsedIndexName} WHERE vector_id = ?`,
@@ -382,7 +382,7 @@ export class LibSQLVector extends MastraVector {
   }
 
   async truncateIndex({ indexName }: DeleteIndexParams): Promise<void> {
-    await this._executeWriteOperationWithRetry(async () => {
+    await this.executeWriteOperationWithRetry(async () => {
       await this.turso.execute({
         sql: `DELETE FROM ${parseSqlIdentifier(indexName, 'index name')}`,
         args: [],

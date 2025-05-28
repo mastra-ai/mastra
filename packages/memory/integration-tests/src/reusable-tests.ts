@@ -12,6 +12,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { reorderToolCallsAndResults } from '../../src/utils';
 
 const resourceId = 'resource';
+const NUMBER_OF_WORKERS = 2;
 
 export enum StorageType {
   LibSQL = 'libsql',
@@ -939,11 +940,10 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           originalMessage: message,
         }));
 
-        const numWorkers = Math.min(os.cpus().length, 2);
-        const chunkSize = Math.ceil(totalMessages / numWorkers);
+        const chunkSize = Math.ceil(totalMessages / NUMBER_OF_WORKERS);
         const workerPromises = [];
-        console.log(`Using ${numWorkers} generic Memory workers to process ${totalMessages} messages.`);
-        for (let i = 0; i < numWorkers; i++) {
+        console.log(`Using ${NUMBER_OF_WORKERS} generic Memory workers to process ${totalMessages} messages.`);
+        for (let i = 0; i < NUMBER_OF_WORKERS; i++) {
           const chunk = messagesForWorkers.slice(i * chunkSize, (i + 1) * chunkSize);
           if (chunk.length === 0) continue;
           const workerPromise = new Promise((resolve, reject) => {

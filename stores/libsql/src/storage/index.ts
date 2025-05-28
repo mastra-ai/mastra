@@ -66,14 +66,18 @@ export class LibSQLStore extends MastraStorage {
     // Set PRAGMAs for better concurrency, especially for file-based databases
     if (config.url.startsWith('file:') || config.url.includes(':memory:')) {
       this.client
-        .execute('PRAGMA journal_mode=WAL;')
-        .then(() => this.logger.debug('LibSQLStore: PRAGMA journal_mode=WAL set.'))
-        .catch(err => this.logger.warn('LibSQLStore: Failed to set PRAGMA journal_mode=WAL.', err));
-
-      this.client
-        .execute('PRAGMA busy_timeout = 5000;') // 5 seconds
-        .then(() => this.logger.debug('LibSQLStore: PRAGMA busy_timeout=5000 set.'))
-        .catch(err => this.logger.warn('LibSQLStore: Failed to set PRAGMA busy_timeout.', err));
+        .batch([
+          {
+            sql: 'PRAGMA journal_mode=WAL;',
+          },
+          {
+            sql: 'PRAGMA busy_timeout = 5000;',
+          },
+        ])
+        .then(() => this.logger.debug('LibSQLStore: PRAGMA journal_mode=WAL and busy_timeout=5000 set.'))
+        .catch(err =>
+          this.logger.warn('LibSQLStore: Failed to set PRAGMA journal_mode=WAL and busy_timeout=5000.', err),
+        );
     }
   }
 
@@ -156,7 +160,7 @@ export class LibSQLStore extends MastraStorage {
     };
   }
 
-  private async _executeWriteOperationWithRetry<T>(
+  private async executeWriteOperationWithRetry<T>(
     operationFn: () => Promise<T>,
     operationDescription: string,
   ): Promise<T> {
@@ -194,7 +198,7 @@ export class LibSQLStore extends MastraStorage {
         }),
       );
     };
-    await this._executeWriteOperationWithRetry(operationFn, `insert into table ${tableName}`);
+    await this.executeWriteOperationWithRetry(operationFn, `insert into table ${tableName}`);
   }
 
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
@@ -202,9 +206,9 @@ export class LibSQLStore extends MastraStorage {
 
     const operationFn = async () => {
       const batchStatements = records.map(r => this.prepareStatement({ tableName, record: r }));
-      return await this.client.batch(batchStatements, 'write');
+      return this.client.batch(batchStatements, 'write');
     };
-    await this._executeWriteOperationWithRetry(operationFn, `batch insert into table ${tableName}`);
+    await this.executeWriteOperationWithRetry(operationFn, `batch insert into table ${tableName}`);
   }
 
   async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
