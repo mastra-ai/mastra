@@ -1,4 +1,4 @@
-name: DANE_New_Issue_Labeling
+name: GH_Issue_Triage
 on:
   issues:
     types: [opened, reopened]
@@ -10,38 +10,29 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       issues: write
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-      TURBO_CACHE: remote:r
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
-        name: Install pnpm
-        with:
-          run_install: false
-
       - name: Setup Node.js 20.x
         uses: actions/setup-node@v4
         with:
           node-version: 20.19.1
-          cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm install
-
-      - name: Build Dane
-        run: pnpm turbo run build --filter @mastra/dane
+        run: npm install
+        working-directory: scripts/gh-issue-triage
 
       - name: Label Issue
-        run: node dist/index.js issue-labeler
-        working-directory: examples/dane
+        run: npx tsx index.ts
+        working-directory: scripts/gh-issue-triage
         env:
           GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OWNER: ${{ github.repository_owner }}
           REPO: ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          MASTRA_BASE_URL: "https://few-substantial-engine.mastra.cloud"
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_TEAM_ID: ${{ secrets.SLACK_TEAM_ID }}
+          SLACK_CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
