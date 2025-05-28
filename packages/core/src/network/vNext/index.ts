@@ -295,6 +295,7 @@ export class NewAgentNetwork extends MastraBase {
         prompt: z.string(),
         result: z.string(),
         isComplete: z.boolean().optional(),
+        selectionReason: z.string(),
       }),
       execute: async ({ inputData }) => {
         const routingAgent = await this.getRoutingAgent({ runtimeContext: runtimeContextToUse });
@@ -410,6 +411,7 @@ export class NewAgentNetwork extends MastraBase {
         prompt: z.string(),
         result: z.string(),
         isComplete: z.boolean().optional(),
+        selectionReason: z.string(),
       }),
       outputSchema: z.object({
         task: z.string(),
@@ -501,7 +503,7 @@ export class NewAgentNetwork extends MastraBase {
         prompt: z.string(),
         result: z.string(),
         isComplete: z.boolean().optional(),
-        selectionReason: z.string().optional(),
+        selectionReason: z.string(),
       }),
       outputSchema: z.object({
         task: z.string(),
@@ -559,7 +561,7 @@ export class NewAgentNetwork extends MastraBase {
         prompt: z.string(),
         result: z.string(),
         isComplete: z.boolean().optional(),
-        selectionReason: z.string().optional(),
+        selectionReason: z.string(),
       }),
       outputSchema: z.object({
         task: z.string(),
@@ -582,7 +584,6 @@ export class NewAgentNetwork extends MastraBase {
         resourceId: z.string(),
         resourceType: RESOURCE_TYPES,
         result: z.string().optional(),
-        selectionReason: z.string().optional(),
       }),
       outputSchema: z.object({
         task: z.string(),
