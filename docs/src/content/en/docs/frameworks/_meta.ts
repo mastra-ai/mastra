@@ -3,6 +3,7 @@ const meta = {
   "next-js": "With Next.js",
   express: "With Express",
   copilotkit: "With CopilotKit",
+  openrouter: "With OpenRouter",
 };
 
 export default meta;
