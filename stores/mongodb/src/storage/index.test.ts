@@ -244,7 +244,10 @@ describe('MongoDBStore', () => {
       const thread = test.generateSampleThread();
       await store.saveThread({ thread });
 
-      const messages = [test.generateSampleMessage(thread.id), test.generateSampleMessage(thread.id)];
+      const messages = [
+        test.generateSampleMessage(thread.id),
+        { ...test.generateSampleMessage(thread.id), role: 'assistant' as const },
+      ];
 
       // Save messages
       const savedMessages = await store.saveMessages({ messages });
