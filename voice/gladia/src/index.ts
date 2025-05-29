@@ -17,10 +17,6 @@ interface GladiaListenOptions {
     model?: 'base' | 'enhanced';
     target_languages?: string[];
   };
-  subtitles?: boolean;
-  subtitles_config?: {
-    formats: ('srt' | 'vtt')[];
-  };
   detect_language?: boolean;
   enable_code_switching?: boolean;
 }
@@ -78,6 +74,10 @@ export class GladiaVoice extends MastraVoice {
         throw new Error(`Upload failed: ${uploadRes.status} ${await uploadRes.text()}`);
       }
       const { audio_url } = await uploadRes.json();
+      const opts: GladiaListenOptions = {
+        diarization: true, // <-- default
+        ...options,
+      };
 
       const transcribeRes: any = await fetch(`${this.baseUrl}/pre-recorded/`, {
         method: 'POST',
@@ -86,7 +86,7 @@ export class GladiaVoice extends MastraVoice {
           'Content-Type': 'application/json',
         },
 
-        body: JSON.stringify({ audio_url, ...options }),
+        body: JSON.stringify({ audio_url, ...opts }),
       });
 
       const { id } = await transcribeRes.json();
