@@ -1,5 +1,12 @@
 # @mastra/core
 
+## 0.10.2-alpha.1
+
+### Patch Changes
+
+- ee77e78: Type fixes for dynamodb and MessageList
+- 2901125: feat: set mastra server middleware after Mastra has been initialized
+
 ## 0.10.2-alpha.0
 
 ### Patch Changes
