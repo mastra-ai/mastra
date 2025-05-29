@@ -152,6 +152,15 @@ export class DeepgramVoice extends MastraVoice {
     }, 'voice.deepgram.speak')();
   }
 
+  /**
+   * Checks if listening capabilities are enabled.
+   *
+   * @returns {Promise<string>} The default voice ID
+   */
+  async getListener() {
+    return { enabled: true };
+  }
+
   async listen(
     audioStream: NodeJS.ReadableStream,
     options?: {

@@ -233,6 +233,15 @@ export class PlayAIVoice extends MastraVoice {
     }, 'voice.playai.speak')();
   }
 
+  /**
+   * Checks if listening capabilities are enabled.
+   *
+   * @returns {Promise<string>} The default voice ID
+   */
+  async getListener() {
+    return { enabled: false };
+  }
+
   async listen(
     _input: NodeJS.ReadableStream,
     _options?: Record<string, unknown>,

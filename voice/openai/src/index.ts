@@ -166,6 +166,18 @@ export class OpenAIVoice extends MastraVoice {
   }
 
   /**
+   * Checks if listening capabilities are enabled.
+   *
+   * @returns {Promise<string>} The default voice ID
+   */
+  async getListener() {
+    if (!this.listeningClient) {
+      return { enabled: false };
+    }
+    return { enabled: true };
+  }
+
+  /**
    * Transcribes audio from a given stream using the configured listening model.
    *
    * @param {NodeJS.ReadableStream} audioStream - The audio stream to be transcribed.
