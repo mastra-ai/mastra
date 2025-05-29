@@ -8,7 +8,15 @@ import { WorkflowNestedGraph } from '../workflow/workflow-nested-graph';
 import Spinner from '@/components/ui/spinner';
 
 type WorkflowNestedGraphContextType = {
-  showNestedGraph: ({ label, stepGraph }: { label: string; stepGraph: SerializedStepFlowEntry[] }) => void;
+  showNestedGraph: ({
+    label,
+    stepGraph,
+    fullStep,
+  }: {
+    label: string;
+    stepGraph: SerializedStepFlowEntry[];
+    fullStep: string;
+  }) => void;
   closeNestedGraph: () => void;
 };
 
@@ -19,10 +27,11 @@ export const WorkflowNestedGraphContext = createContext<WorkflowNestedGraphConte
 export function WorkflowNestedGraphProvider({ children }: { children: React.ReactNode }) {
   const [stepGraph, setStepGraph] = useState<SerializedStepFlowEntry[] | null>(null);
   const [parentStepGraphList, setParentStepGraphList] = useState<
-    { stepGraph: SerializedStepFlowEntry[]; label: string }[]
+    { stepGraph: SerializedStepFlowEntry[]; label: string; fullStep: string }[]
   >([]);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
   const [label, setLabel] = useState<string>('');
+  const [fullStep, setFullStep] = useState<string>('');
   const [switching, setSwitching] = useState(false);
 
   const closeNestedGraph = () => {
@@ -31,6 +40,7 @@ export function WorkflowNestedGraphProvider({ children }: { children: React.Reac
       const lastStepGraph = parentStepGraphList[parentStepGraphList.length - 1];
       setStepGraph(lastStepGraph.stepGraph);
       setLabel(lastStepGraph.label);
+      setFullStep(lastStepGraph.fullStep);
       setParentStepGraphList(parentStepGraphList.slice(0, -1));
       setTimeout(() => {
         setSwitching(false);
@@ -39,21 +49,25 @@ export function WorkflowNestedGraphProvider({ children }: { children: React.Reac
       setOpenDialog(false);
       setStepGraph(null);
       setLabel('');
+      setFullStep('');
     }
   };
 
   const showNestedGraph = ({
     label: newLabel,
     stepGraph: newStepGraph,
+    fullStep: newFullStep,
   }: {
     label: string;
     stepGraph: SerializedStepFlowEntry[];
+    fullStep: string;
   }) => {
     if (stepGraph) {
       setSwitching(true);
-      setParentStepGraphList([...parentStepGraphList, { stepGraph, label }]);
+      setParentStepGraphList([...parentStepGraphList, { stepGraph, label, fullStep }]);
     }
     setLabel(newLabel);
+    setFullStep(newFullStep);
     setStepGraph(newStepGraph);
     setOpenDialog(true);
     setTimeout(() => {
@@ -85,7 +99,7 @@ export function WorkflowNestedGraphProvider({ children }: { children: React.Reac
               </div>
             ) : (
               <ReactFlowProvider>
-                <WorkflowNestedGraph stepGraph={stepGraph!} open={openDialog} />
+                <WorkflowNestedGraph stepGraph={stepGraph!} open={openDialog} workflowName={fullStep} />
               </ReactFlowProvider>
             )}
           </DialogContent>

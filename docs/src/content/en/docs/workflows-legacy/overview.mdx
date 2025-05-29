@@ -30,7 +30,7 @@ Let's examine each part of the workflow creation process:
 Here's how you define a workflow in Mastra. The `name` field determines the workflow's API endpoint (`/workflows/$NAME/`), while the `triggerSchema` defines the structure of the workflow's trigger data:
 
 ```ts filename="src/mastra/workflow/index.ts"
-import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy'
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 
 const myWorkflow = new LegacyWorkflow({
   name: "my-workflow",
@@ -94,7 +94,7 @@ The workflow can also have the mastra instance injected into the context in the 
 
 ```ts filename="src/mastra/workflow/index.ts"
 import { Mastra } from "@mastra/core";
-import { LegacyWorkflow } from '@mastra/core/workflows/legacy'
+import { LegacyWorkflow } from "@mastra/core/workflows/legacy";
 
 const mastra = new Mastra();
 

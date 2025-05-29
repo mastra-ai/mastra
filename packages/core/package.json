@@ -97,13 +97,16 @@
     "check": "tsc --noEmit",
     "analyze": "size-limit --why",
     "lint": "eslint .",
-    "pre-build": "tsup --config tsup.config.ts --format esm,cjs",
+    "pre-build": "tsup --silent --config tsup.config.ts --format esm,cjs",
     "build": "node ./tools/commonjs-tsc-fixer.js",
     "build:watch": "pnpm build --watch",
     "size": "size-limit",
     "test": "vitest run"
   },
   "dependencies": {
+    "@ai-sdk/provider": "^1.1.3",
+    "@ai-sdk/provider-utils": "^2.2.8",
+    "@ai-sdk/ui-utils": "^1.2.11",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/auto-instrumentations-node": "^0.59.0",
     "@opentelemetry/core": "^2.0.1",

@@ -28,7 +28,8 @@ const workflow = new Workflow({ name: "my-workflow" });
       name: "logger",
       type: "Logger<WorkflowLogMessage>",
       isOptional: true,
-      description: "ワークフロー実行の詳細を記録するためのオプションのロガーインスタンス",
+      description:
+        "ワークフロー実行の詳細を記録するためのオプションのロガーインスタンス",
     },
     {
       name: "steps",
@@ -38,7 +39,8 @@ const workflow = new Workflow({ name: "my-workflow" });
     {
       name: "triggerSchema",
       type: "z.Schema",
-      description: "ワークフロートリガーデータを検証するためのオプションのスキーマ",
+      description:
+        "ワークフロートリガーデータを検証するためのオプションのスキーマ",
     },
   ]}
 />
@@ -133,7 +135,8 @@ await start({
     {
       name: "CREATED",
       type: "string",
-      description: "ワークフローインスタンスが作成されたが、まだ開始されていません",
+      description:
+        "ワークフローインスタンスが作成されたが、まだ開始されていません",
     },
     {
       name: "RUNNING",

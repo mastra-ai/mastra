@@ -67,6 +67,7 @@ OpenAI、ElevenLabsなど、複数のプロバイダーから選択できます�
     ```
 
     OpenAIの音声プロバイダーについて詳しくは、[OpenAI Voice Reference](/reference/voice/openai)をご覧ください。
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -94,6 +95,7 @@ OpenAI、ElevenLabsなど、複数のプロバイダーから選択できます�
     ```
 
     Azureの音声プロバイダーについて詳しくは、[Azure Voice Reference](/reference/voice/azure)をご覧ください。
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -122,6 +124,7 @@ OpenAI、ElevenLabsなど、複数のプロバイダーから選択できます�
     ```
 
     ElevenLabsの音声プロバイダーについて詳しくは、[ElevenLabs Voice Reference](/reference/voice/elevenlabs)をご覧ください。
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -149,6 +152,7 @@ OpenAI、ElevenLabsなど、複数のプロバイダーから選択できます�
     ```
 
     PlayAIの音声プロバイダーについて詳しくは、[PlayAI Voice Reference](/reference/voice/playai)をご覧ください。
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -177,6 +181,7 @@ OpenAI、ElevenLabsなど、複数のプロバイダーから選択できます�
     ```
 
     詳細については、[Google Voice リファレンス](/reference/voice/google)をご覧ください。
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -204,6 +209,7 @@ OpenAI、ElevenLabsなど、複数のプロバイダーから選択できます�
     ```
 
     詳細については、[Cloudflare Voice リファレンス](/reference/voice/cloudflare)をご覧ください。
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -232,6 +238,7 @@ OpenAI、ElevenLabsなど、複数のプロバイダーから選択できます�
     ```
 
     詳細については、[Deepgram Voice リファレンス](/reference/voice/deepgram)をご覧ください。
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -259,6 +266,7 @@ OpenAI、ElevenLabsなど、複数のプロバイダーから選択できます�
     ```
 
     詳細については、[Speechify Voice リファレンス](/reference/voice/speechify)をご覧ください。
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -287,6 +295,7 @@ OpenAI、ElevenLabsなど、複数のプロバイダーから選択できます�
     ```
 
     詳細については、[Sarvam Voice リファレンス](/reference/voice/sarvam)をご覧ください。
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -314,9 +323,9 @@ OpenAI、ElevenLabsなど、複数のプロバイダーから選択できます�
     ```
 
     Murf音声プロバイダーの詳細については、[Murf音声リファレンス](/reference/voice/murf)をご覧ください。
+
   </Tabs.Tab>
 </Tabs>
-
 
 ### 音声からテキストへの変換 (STT)
 
@@ -355,6 +364,7 @@ OpenAI、ElevenLabsなど、さまざまなプロバイダーを使用して音�
     ```
 
     OpenAI音声プロバイダーの詳細については、[OpenAI Voice Reference](/reference/voice/openai)をご覧ください。
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -384,6 +394,7 @@ OpenAI、ElevenLabsなど、さまざまなプロバイダーを使用して音�
     ```
 
     Azure音声プロバイダーの詳細については、[Azure Voice Reference](/reference/voice/azure)をご覧ください。
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -413,6 +424,7 @@ OpenAI、ElevenLabsなど、さまざまなプロバイダーを使用して音�
     ```
 
     ElevenLabs音声プロバイダーの詳細については、[ElevenLabs Voice Reference](/reference/voice/elevenlabs)をご覧ください。
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -441,6 +453,7 @@ OpenAI、ElevenLabsなど、さまざまなプロバイダーを使用して音�
     ```
 
     Google音声プロバイダーの詳細については、[Google Voice Reference](/reference/voice/google)をご覧ください。
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -470,6 +483,7 @@ OpenAI、ElevenLabsなど、さまざまなプロバイダーを使用して音�
     ```
 
     Cloudflare音声プロバイダーの詳細については、[Cloudflare音声リファレンス](/reference/voice/cloudflare)をご覧ください。
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -498,6 +512,7 @@ OpenAI、ElevenLabsなど、さまざまなプロバイダーを使用して音�
     ```
 
     Deepgram音声プロバイダーの詳細については、[Deepgram音声リファレンス](/reference/voice/deepgram)をご覧ください。
+
   </Tabs.Tab>
 
   <Tabs.Tab>
@@ -527,9 +542,9 @@ OpenAI、ElevenLabsなど、さまざまなプロバイダーを使用して音�
     ```
 
     Sarvam音声プロバイダーの詳細については、[Sarvam音声リファレンス](/reference/voice/sarvam)をご覧ください。
+
   </Tabs.Tab>
 </Tabs>
-
 
 ### 音声から音声へ（STS）
 
@@ -545,15 +560,15 @@ import { playAudio, getMicrophoneStream } from '@mastra/node-audio';
 import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
 
 const voiceAgent = new Agent({
-  name: "Voice Agent",
-  instructions: "You are a voice assistant that can help users with their tasks.",
-  model: openai("gpt-4o"),
-  voice: new OpenAIRealtimeVoice(),
+name: "Voice Agent",
+instructions: "You are a voice assistant that can help users with their tasks.",
+model: openai("gpt-4o"),
+voice: new OpenAIRealtimeVoice(),
 });
 
 // Listen for agent audio responses
 voiceAgent.voice.on('speaker', ({ audio }) => {
-  playAudio(audio);
+playAudio(audio);
 });
 
 // Initiate the conversation
@@ -562,6 +577,7 @@ await voiceAgent.voice.speak('How can I help you today?');
 // Send continuous audio from the microphone
 const micStream = getMicrophoneStream();
 await voiceAgent.voice.send(micStream);
+
 ````
 
 OpenAI音声プロバイダーの詳細については、[OpenAI音声リファレンス](/reference/voice/openai-realtime)をご覧ください。
@@ -856,3 +872,4 @@ CompositeVoiceの詳細については、[CompositeVoiceリファレンス](/ref
 - [Deepgram Voice](../../reference/voice/deepgram.mdx)
 - [PlayAI Voice](../../reference/voice/playai.mdx)
 - [音声の例](../../examples/voice/text-to-speech.mdx)
+````
