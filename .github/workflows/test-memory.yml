@@ -71,6 +71,13 @@ jobs:
       - name: Build vector+store packages
         run: pnpm turbo build --filter "./stores/*" --filter "mastra" --filter "@mastra/memory" --filter "@mastra/fastembed"
 
+      - name: Compile TypeScript Workers
+        run: |
+          npx tsc packages/memory/integration-tests/src/worker/generic-memory-worker.ts packages/memory/integration-tests/src/worker/mock-embedder.ts --esModuleInterop --resolveJsonModule --module commonjs --target es2020 --outDir packages/memory/ --rootDir packages/memory/ --skipLibCheck
+
+      - name: List compiled worker directory
+        run: ls -R packages/memory/integration-tests/src/worker
+
       - name: Run Memory ${{ matrix.suite }} tests
         run: pnpm run test:${{ matrix.suite }}
         working-directory: packages/memory/integration-tests

@@ -42,16 +42,16 @@ docker run --rm -p 8288:8288 \
 Inngest統合を初期化して、Mastra互換のワークフローヘルパーを取得します：
 
 ```ts showLineNumbers copy filename="src/mastra/workflows/inngest-workflow.ts"
-import { init } from '@mastra/inngest'
-import { Inngest } from 'inngest'
+import { init } from "@mastra/inngest";
+import { Inngest } from "inngest";
 
 // Initialize Inngest with Mastra, pointing to your local Inngest server
 const { createWorkflow, createStep } = init(
   new Inngest({
-    id: 'mastra',
+    id: "mastra",
     baseUrl: `http://localhost:8288`,
-  })
-)
+  }),
+);
 ```
 
 ### ステップの作成
@@ -59,11 +59,11 @@ const { createWorkflow, createStep } = init(
 ワークフローを構成する個々のステップを定義します：
 
 ```ts showLineNumbers copy filename="src/mastra/workflows/inngest-workflow.ts"
-import { z } from 'zod'
+import { z } from "zod";
 
 // Step 1: Increment the counter value
 const incrementStep = createStep({
-  id: 'increment',
+  id: "increment",
   inputSchema: z.object({
     value: z.number(),
   }),
@@ -71,13 +71,13 @@ const incrementStep = createStep({
     value: z.number(),
   }),
   execute: async ({ inputData }) => {
-    return { value: inputData.value + 1 }
+    return { value: inputData.value + 1 };
   },
-})
+});
 
 // Step 2: Log the current value (side effect)
 const sideEffectStep = createStep({
-  id: 'side-effect',
+  id: "side-effect",
   inputSchema: z.object({
     value: z.number(),
   }),
@@ -85,14 +85,14 @@ const sideEffectStep = createStep({
     value: z.number(),
   }),
   execute: async ({ inputData }) => {
-    console.log('Current value:', inputData.value)
-    return { value: inputData.value }
+    console.log("Current value:", inputData.value);
+    return { value: inputData.value };
   },
-})
+});
 
 // Step 3: Final step after loop completion
 const finalStep = createStep({
-  id: 'final',
+  id: "final",
   inputSchema: z.object({
     value: z.number(),
   }),
@@ -100,9 +100,9 @@ const finalStep = createStep({
     value: z.number(),
   }),
   execute: async ({ inputData }) => {
-    return { value: inputData.value }
+    return { value: inputData.value };
   },
-})
+});
 ```
 
 ### ワークフローの作成
@@ -112,7 +112,7 @@ const finalStep = createStep({
 ```ts showLineNumbers copy filename="src/mastra/workflows/inngest-workflow.ts"
 // Create the main workflow that uses a do-until loop
 const workflow = createWorkflow({
-  id: 'increment-workflow',
+  id: "increment-workflow",
   inputSchema: z.object({
     value: z.number(),
   }),
@@ -123,7 +123,7 @@ const workflow = createWorkflow({
   // Loop until the condition is met (value reaches 10)
   .dountil(
     createWorkflow({
-      id: 'increment-subworkflow',
+      id: "increment-subworkflow",
       inputSchema: z.object({
         value: z.number(),
       }),
@@ -135,13 +135,13 @@ const workflow = createWorkflow({
       .then(incrementStep)
       .then(sideEffectStep)
       .commit(),
-    async ({ inputData }) => inputData.value >= 10
+    async ({ inputData }) => inputData.value >= 10,
   )
-  .then(finalStep)
+  .then(finalStep);
 
-workflow.commit()
+workflow.commit();
 
-export { workflow as incrementWorkflow }
+export { workflow as incrementWorkflow };
 ```
 
 ### Mastraインスタンスの設定とワークフローの実行
@@ -149,62 +149,60 @@ export { workflow as incrementWorkflow }
 ワークフローをMastraに登録し、Inngest APIエンドポイントを設定します：
 
 ```ts showLineNumbers copy filename="src/mastra/index.ts"
-import { Mastra } from '@mastra/core/mastra'
-import { serve as inngestServe } from '@mastra/inngest'
-import { PinoLogger } from '@mastra/loggers'
-import { Inngest } from 'inngest'
-import { incrementWorkflow } from './workflows/inngest-workflow'
-import { realtimeMiddleware } from '@inngest/realtime'
-import { serve } from '@hono/node-server'
-import { createHonoServer } from '@mastra/deployer/server'
-
+import { Mastra } from "@mastra/core/mastra";
+import { serve as inngestServe } from "@mastra/inngest";
+import { PinoLogger } from "@mastra/loggers";
+import { Inngest } from "inngest";
+import { incrementWorkflow } from "./workflows/inngest-workflow";
+import { realtimeMiddleware } from "@inngest/realtime";
+import { serve } from "@hono/node-server";
+import { createHonoServer } from "@mastra/deployer/server";
 
 // Create an Inngest instance with realtime middleware for development
 const inngest = new Inngest({
-  id: 'mastra',
+  id: "mastra",
   baseUrl: `http://localhost:8288`,
   isDev: true,
   middleware: [realtimeMiddleware()],
-})
+});
 
 // Configure Mastra with the workflow and Inngest API endpoint
 export const mastra = new Mastra({
   vnext_workflows: {
-    incrementWorkflow
+    incrementWorkflow,
   },
   server: {
-    host: '0.0.0.0',
+    host: "0.0.0.0",
     apiRoutes: [
       {
-        path: '/api/inngest',
-        method: 'ALL',
+        path: "/api/inngest",
+        method: "ALL",
         createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
       },
     ],
   },
   logger: new PinoLogger({
-    name: 'Mastra',
-    level: 'info',
+    name: "Mastra",
+    level: "info",
   }),
-})
-
+});
 
 // Create and start the Hono server
-const app = await createHonoServer(mastra)
+const app = await createHonoServer(mastra);
 
 const srv = serve({
-    fetch: app.fetch,
-    port: 3000,
-})
+  fetch: app.fetch,
+  port: 3000,
+});
 
 // Get the workflow, create a run, and start it with an initial value
-const workflow = mastra.vnext_getWorkflow('incrementWorkflow')
-const run = workflow.createRun({})
-const result = await run.start({ inputData: { value: 5 } })
-console.dir(result, { depth: null })
+const workflow = mastra.vnext_getWorkflow("incrementWorkflow");
+const run = workflow.createRun({});
+const result = await run.start({ inputData: { value: 5 } });
+console.dir(result, { depth: null });
 
 // Close the server when done
-srv.close()
+srv.close();
 ```
 
 ワークフローを開始した後、[Inngestダッシュボード](http://localhost:8288)にアクセスして実行の進捗状況を監視し、ステップの出力を確認し、問題をデバッグすることができます。

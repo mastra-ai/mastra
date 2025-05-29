@@ -127,7 +127,8 @@ interface Message {
       type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
       isOptional: true,
       defaultValue: "'auto'",
-      description: "生成中にエージェントがツールをどのように使用するかを制御します。",
+      description:
+        "生成中にエージェントがツールをどのように使用するかを制御します。",
     },
     {
       name: "toolsets",
@@ -173,8 +174,7 @@ interface Message {
               name: "topK",
               type: "number",
               isOptional: true,
-              description:
-                "取得する意味的に最も類似したメッセージの数。",
+              description: "取得する意味的に最も類似したメッセージの数。",
             },
           ],
         },
@@ -246,8 +246,7 @@ interface Message {
               name: "generateTitle",
               type: "boolean",
               isOptional: true,
-              description:
-                "新しいスレッドのタイトルを自動生成するかどうか。",
+              description: "新しいスレッドのタイトルを自動生成するかどうか。",
             },
           ],
         },

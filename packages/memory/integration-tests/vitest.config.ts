@@ -11,5 +11,8 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
     },
+    // smaller output to save token space when LLMs run tests
+    reporters: 'dot',
+    bail: 1,
   },
 });

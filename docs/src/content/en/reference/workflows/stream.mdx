@@ -46,7 +46,7 @@ for (const chunk of stream) {
     },
     {
       name: "step-start",
-      type: "object", 
+      type: "object",
       description: "The start of a step",
       isOptional: false,
       properties: [
@@ -56,14 +56,14 @@ for (const chunk of stream) {
             {
               name: "example",
               type: "{ type: 'step-start', payload: { id: 'fetch-weather' } }",
-              description: "Example message structure", 
+              description: "Example message structure",
               isOptional: false,
             },
           ],
         },
       ],
     },
-     {
+    {
       name: "tool-call",
       type: "object",
       description: "A tool call has started",
@@ -120,69 +120,68 @@ for (const chunk of stream) {
         },
       ],
     },
-  {
-    name: "step-result",
-    type: "object",
-    description: "The result of a step",
-    isOptional: false,
-    properties: [
-      {
-        type: "object",
-        parameters: [
-          {
-            name: "example",
-            type: "{ type: 'step-result', payload: { id: 'Weather Agent', status: 'success', output: [Object] } }",
-            description: "Example message structure",
-            isOptional: false,
-          },
-        ],
-      },
-    ],
-  },
-  {
-    name: "step-finish",
-    type: "object",
-    description: "The end of a step",
-    isOptional: false,
-    properties: [
-      {
-        type: "object",
-        parameters: [
-          {
-            name: "example",
-            type: "{ type: 'step-finish', payload: { id: 'Weather Agent', metadata: {} } }",
-            description: "Example message structure",
-            isOptional: false,
-          },
-        ],
-      },
-    ],
-  },
-  {
-    name: "finish",
-    type: "object",
-    description: "The end of the workflow",
-    isOptional: false,
-    properties: [
-      {
-        type: "object",
-        parameters: [
-          {
-            name: "example",
-            type: "{ type: 'finish', payload: { runId: '1' } }",
-            description: "Example message structure",
-            isOptional: false,
-          },
-        ],
-      },
-    ],
-  },
+    {
+      name: "step-result",
+      type: "object",
+      description: "The result of a step",
+      isOptional: false,
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "example",
+              type: "{ type: 'step-result', payload: { id: 'Weather Agent', status: 'success', output: [Object] } }",
+              description: "Example message structure",
+              isOptional: false,
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "step-finish",
+      type: "object",
+      description: "The end of a step",
+      isOptional: false,
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "example",
+              type: "{ type: 'step-finish', payload: { id: 'Weather Agent', metadata: {} } }",
+              description: "Example message structure",
+              isOptional: false,
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "finish",
+      type: "object",
+      description: "The end of the workflow",
+      isOptional: false,
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "example",
+              type: "{ type: 'finish', payload: { runId: '1' } }",
+              description: "Example message structure",
+              isOptional: false,
+            },
+          ],
+        },
+      ],
+    },
   ]}
 />
 
-
-
 ## Parameters
+
 <PropertiesTable
   content={[
     {
@@ -194,22 +193,28 @@ for (const chunk of stream) {
         {
           name: "inputData",
           type: "z.infer<TInput>",
-          parameters: [{
-            name: "z.infer<TInput>",
-            type: "inputData",
-            description: "Runtime context data to use when starting the workflow",
-            isOptional: true
-          }]
+          parameters: [
+            {
+              name: "z.infer<TInput>",
+              type: "inputData",
+              description:
+                "Runtime context data to use when starting the workflow",
+              isOptional: true,
+            },
+          ],
         },
-        { 
+        {
           name: "runtimeContext",
           type: "RuntimeContext",
-          parameters: [{
-            name: "runtimeContext",
-            type: "RuntimeContext",
-            description: "Runtime context data to use when starting the workflow",
-            isOptional: true
-          }]
+          parameters: [
+            {
+              name: "runtimeContext",
+              type: "RuntimeContext",
+              description:
+                "Runtime context data to use when starting the workflow",
+              isOptional: true,
+            },
+          ],
         },
       ],
     },

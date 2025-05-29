@@ -1,10 +1,18 @@
-import { ReactFlow, MiniMap, Background, useNodesState, useEdgesState, BackgroundVariant } from '@xyflow/react';
+import {
+  ReactFlow,
+  MiniMap,
+  Background,
+  useNodesState,
+  useEdgesState,
+  BackgroundVariant,
+  NodeProps,
+} from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { GetWorkflowResponse } from '@mastra/client-js';
 
 import { constructNodesAndEdges } from './utils';
 import { WorkflowConditionNode } from './workflow-condition-node';
-import { WorkflowDefaultNode } from './workflow-default-node';
+import { DefaultNode, WorkflowDefaultNode } from './workflow-default-node';
 import { WorkflowAfterNode } from './workflow-after-node';
 import { WorkflowLoopResultNode } from './workflow-loop-result-node';
 import { WorkflowNestedNode } from './workflow-nested-node';
@@ -12,14 +20,19 @@ import { ZoomSlider } from './zoom-slider';
 
 import { useCurrentRun } from '../context/use-current-run';
 
-export function WorkflowGraphInner({ workflow }: { workflow: GetWorkflowResponse }) {
+export interface WorkflowGraphInnerProps {
+  workflow: GetWorkflowResponse;
+  onShowTrace: ({ runId, stepName }: { runId: string; stepName: string }) => void;
+}
+
+export function WorkflowGraphInner({ workflow, onShowTrace }: WorkflowGraphInnerProps) {
   const { nodes: initialNodes, edges: initialEdges } = constructNodesAndEdges(workflow);
   const [nodes, _, onNodesChange] = useNodesState(initialNodes);
   const [edges] = useEdgesState(initialEdges);
-  const { steps } = useCurrentRun();
+  const { steps, runId } = useCurrentRun();
 
   const nodeTypes = {
-    'default-node': WorkflowDefaultNode,
+    'default-node': (props: NodeProps<DefaultNode>) => <WorkflowDefaultNode onShowTrace={onShowTrace} {...props} />,
     'condition-node': WorkflowConditionNode,
     'after-node': WorkflowAfterNode,
     'loop-result-node': WorkflowLoopResultNode,

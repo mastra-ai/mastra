@@ -46,7 +46,16 @@ describe.skip('CloudflareStore REST API', () => {
 
   // Helper to clean up KV namespaces
   const cleanupNamespaces = async () => {
-    const tables = [TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_TRACES] as TABLE_NAMES[];
+    const dummyTables = Array.from({ length: 100 }, (_, i) => `test${i + 1}`);
+
+    const tables = [
+      ...dummyTables,
+      TABLE_THREADS,
+      TABLE_MESSAGES,
+      TABLE_WORKFLOW_SNAPSHOT,
+      TABLE_EVALS,
+      TABLE_TRACES,
+    ] as TABLE_NAMES[];
 
     for (const table of tables) {
       try {
@@ -180,8 +189,7 @@ describe.skip('CloudflareStore REST API', () => {
     });
   });
 
-  // eslint-disable-next-line vitest/no-focused-tests
-  describe.only('Trace Operations', () => {
+  describe('Trace Operations', () => {
     beforeEach(async () => {
       await store.clearTable({ tableName: TABLE_TRACES });
     });

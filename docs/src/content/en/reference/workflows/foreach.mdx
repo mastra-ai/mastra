@@ -20,19 +20,22 @@ workflow.foreach(stepOne, { concurrency: 2 });
     {
       name: "step",
       type: "Step",
-      description: "The step instance to execute in the loop. The previous step must return an array type.",
+      description:
+        "The step instance to execute in the loop. The previous step must return an array type.",
       isOptional: false,
     },
     {
       name: "opts",
       type: "object",
-      description: "Optional configuration for the loop. The concurrency option controls how many iterations can run in parallel (default: 1)",
+      description:
+        "Optional configuration for the loop. The concurrency option controls how many iterations can run in parallel (default: 1)",
       isOptional: true,
       properties: [
         {
           name: "concurrency",
           type: "number",
-          description: "The number of concurrent iterations allowed (default: 1)",
+          description:
+            "The number of concurrent iterations allowed (default: 1)",
           isOptional: true,
         },
       ],

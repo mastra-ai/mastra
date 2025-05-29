@@ -153,8 +153,7 @@ const vectorStore2 = new PgVector({
             {
               name: "m",
               type: "number",
-              description:
-                "ノードごとの最大接続数（デフォルト: 8）",
+              description: "ノードごとの最大接続数（デフォルト: 8）",
               isOptional: true,
             },
             {
@@ -368,20 +367,32 @@ IDによって既存のベクトルを更新します。ベクトルまたはメ
 
 ```typescript copy
 // ベクトルのみを更新
-await pgVector.updateVector({ indexName: "my_vectors", id: "vector123", update: {
-  vector: [0.1, 0.2, 0.3],
-}});
+await pgVector.updateVector({
+  indexName: "my_vectors",
+  id: "vector123",
+  update: {
+    vector: [0.1, 0.2, 0.3],
+  },
+});
 
 // メタデータのみを更新
-await pgVector.updateVector({ indexName: "my_vectors", id: "vector123", update: {
-  metadata: { label: "updated" },
-}});
+await pgVector.updateVector({
+  indexName: "my_vectors",
+  id: "vector123",
+  update: {
+    metadata: { label: "updated" },
+  },
+});
 
 // ベクトルとメタデータの両方を更新
-await pgVector.updateVector({ indexName: "my_vectors", id: "vector123", update: {
-  vector: [0.1, 0.2, 0.3],
-  metadata: { label: "updated" },
-}});
+await pgVector.updateVector({
+  indexName: "my_vectors",
+  id: "vector123",
+  update: {
+    vector: [0.1, 0.2, 0.3],
+    metadata: { label: "updated" },
+  },
+});
 ```
 
 ### deleteVector()
