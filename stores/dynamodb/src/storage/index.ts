@@ -1,6 +1,8 @@
 import { DynamoDBClient, DescribeTableCommand } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import type { StorageThreadType, MessageType, WorkflowRunState } from '@mastra/core';
+import type { StorageThreadType, WorkflowRunState, MastraMessageV1 } from '@mastra/core';
+import type { MastraMessageV2 } from '@mastra/core/agent';
+import { MessageList } from '@mastra/core/agent';
 import {
   MastraStorage,
   TABLE_THREADS,
@@ -514,8 +516,14 @@ export class DynamoDBStore extends MastraStorage {
   }
 
   // Message operations
-  async getMessages(args: StorageGetMessagesArg): Promise<MessageType[]> {
-    const { threadId, selectBy } = args;
+  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
+  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
+  public async getMessages({
+    threadId,
+    resourceId,
+    selectBy,
+    format,
+  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     this.logger.debug('Getting messages', { threadId, selectBy });
 
     try {
@@ -530,21 +538,34 @@ export class DynamoDBStore extends MastraStorage {
         // Assuming default sort is ascending on SK, use reverse: true for descending
         const results = await query.go({ limit: selectBy.last, reverse: true });
         // Use arrow function in map to preserve 'this' context for parseMessageData
-        return results.data.map((data: any) => this.parseMessageData(data)) as MessageType[];
+        const list = new MessageList({ threadId, resourceId }).add(
+          results.data.map((data: any) => this.parseMessageData(data)),
+          'memory',
+        );
+        if (format === `v2`) return list.get.all.mastra();
+        return list.get.all.v1();
       }
 
       // If no limit specified, get all messages (potentially paginated by ElectroDB)
       // Consider adding default limit or handling pagination if needed
       const results = await query.go();
-      // Use arrow function in map to preserve 'this' context for parseMessageData
-      return results.data.map((data: any) => this.parseMessageData(data)) as MessageType[];
+      const list = new MessageList({ threadId, resourceId }).add(
+        results.data.map((data: any) => this.parseMessageData(data)),
+        'memory',
+      );
+      if (format === `v2`) return list.get.all.mastra();
+      return list.get.all.v1();
     } catch (error) {
       this.logger.error('Failed to get messages', { threadId, error });
       throw error;
     }
   }
-
-  async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
+  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
+  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
+  async saveMessages(
+    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
+  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
+    const { messages, format = 'v1' } = args;
     this.logger.debug('Saving messages', { count: messages.length });
 
     if (!messages.length) {
@@ -563,10 +584,10 @@ export class DynamoDBStore extends MastraStorage {
         resourceId: msg.resourceId,
         // Ensure complex fields are stringified if not handled by attribute setters
         content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
-        toolCallArgs: msg.toolCallArgs ? JSON.stringify(msg.toolCallArgs) : undefined,
-        toolCallIds: msg.toolCallIds ? JSON.stringify(msg.toolCallIds) : undefined,
-        toolNames: msg.toolNames ? JSON.stringify(msg.toolNames) : undefined,
-        createdAt: msg.createdAt?.toISOString() || now,
+        toolCallArgs: `toolCallArgs` in msg && msg.toolCallArgs ? JSON.stringify(msg.toolCallArgs) : undefined,
+        toolCallIds: `toolCallIds` in msg && msg.toolCallIds ? JSON.stringify(msg.toolCallIds) : undefined,
+        toolNames: `toolNames` in msg && msg.toolNames ? JSON.stringify(msg.toolNames) : undefined,
+        createdAt: msg.createdAt instanceof Date ? msg.createdAt.toISOString() : msg.createdAt || now,
         updatedAt: now, // Add updatedAt
       };
     });
@@ -595,7 +616,9 @@ export class DynamoDBStore extends MastraStorage {
         // Original batch call: await this.service.entities.message.create(batch).go();
       }
 
-      return messages; // Return original message objects
+      const list = new MessageList().add(messages, 'memory');
+      if (format === `v1`) return list.get.all.v1();
+      return list.get.all.mastra();
     } catch (error) {
       this.logger.error('Failed to save messages', { error });
       throw error;
@@ -603,7 +626,7 @@ export class DynamoDBStore extends MastraStorage {
   }
 
   // Helper function to parse message data (handle JSON fields)
-  private parseMessageData(data: any): MessageType {
+  private parseMessageData(data: any): MastraMessageV2 | MastraMessageV1 {
     // Removed try/catch and JSON.parse logic - now handled by entity 'get' attributes
     // This function now primarily ensures correct typing and Date conversion.
     return {
@@ -613,7 +636,7 @@ export class DynamoDBStore extends MastraStorage {
       updatedAt: data.updatedAt ? new Date(data.updatedAt) : undefined,
       // Other fields like content, toolCallArgs etc. are assumed to be correctly
       // transformed by the ElectroDB entity getters.
-    } as MessageType; // Add explicit type assertion
+    };
   }
 
   // Trace operations
