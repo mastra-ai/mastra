@@ -1,7 +1,8 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { createClient } from '@clickhouse/client';
+import type { MastraMessageV2 } from '@mastra/core/agent';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
-import type { MessageType, StorageThreadType } from '@mastra/core/memory';
+import type { StorageThreadType } from '@mastra/core/memory';
 import {
   MastraStorage,
   TABLE_EVALS,
@@ -751,6 +752,7 @@ export class ClickhouseStore extends MastraStorage {
             // If parsing fails, leave as string
           }
         }
+        if (message.type === `v2`) delete message.type;
       });
 
       return messages as T[];
@@ -760,7 +762,7 @@ export class ClickhouseStore extends MastraStorage {
     }
   }
 
-  async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
+  async saveMessages({ messages }: { messages: MastraMessageV2[] }): Promise<MastraMessageV2[]> {
     if (messages.length === 0) return messages;
 
     try {
@@ -784,7 +786,7 @@ export class ClickhouseStore extends MastraStorage {
           content: typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
           createdAt: message.createdAt.toISOString(),
           role: message.role,
-          type: message.type,
+          type: message.type || 'v2',
         })),
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')

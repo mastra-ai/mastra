@@ -18,11 +18,11 @@ Here's an example of a dynamic support agent that adjusts its behavior based on 
 ```typescript
 const supportAgent = new Agent({
   name: "Dynamic Support Agent",
-  
+
   instructions: async ({ runtimeContext }) => {
     const userTier = runtimeContext.get("user-tier");
     const language = runtimeContext.get("language");
-    
+
     return `You are a customer support agent for our SaaS platform.
     The current user is on the ${userTier} tier and prefers ${language} language.
     
@@ -36,29 +36,30 @@ const supportAgent = new Agent({
 
   model: ({ runtimeContext }) => {
     const userTier = runtimeContext.get("user-tier");
-    return userTier === "enterprise" 
-      ? openai("gpt-4") 
+    return userTier === "enterprise"
+      ? openai("gpt-4")
       : openai("gpt-3.5-turbo");
   },
 
   tools: ({ runtimeContext }) => {
     const userTier = runtimeContext.get("user-tier");
     const baseTools = [knowledgeBase, ticketSystem];
-    
+
     if (userTier === "pro" || userTier === "enterprise") {
       baseTools.push(advancedAnalytics);
     }
-    
+
     if (userTier === "enterprise") {
       baseTools.push(customIntegration);
     }
-    
+
     return baseTools;
   },
 });
 ```
 
 In this example, the agent:
+
 - Adjusts its instructions based on the user's subscription tier (free, pro, or enterprise)
 - Uses a more powerful model (GPT-4) for enterprise users
 - Provides different sets of tools based on the user's tier

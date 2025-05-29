@@ -11,9 +11,17 @@ export interface WorkflowStepActionBarProps {
   error?: any;
   stepName: string;
   mapConfig?: string;
+  onShowTrace?: () => void;
 }
 
-export const WorkflowStepActionBar = ({ input, output, error, mapConfig, stepName }: WorkflowStepActionBarProps) => {
+export const WorkflowStepActionBar = ({
+  input,
+  output,
+  error,
+  mapConfig,
+  stepName,
+  onShowTrace,
+}: WorkflowStepActionBarProps) => {
   const [isInputOpen, setIsInputOpen] = useState(false);
   const [isOutputOpen, setIsOutputOpen] = useState(false);
   const [isErrorOpen, setIsErrorOpen] = useState(false);
@@ -87,6 +95,8 @@ export const WorkflowStepActionBar = ({ input, output, error, mapConfig, stepNam
               </Dialog>
             </>
           )}
+
+          {onShowTrace && <Button onClick={onShowTrace}>Show trace</Button>}
         </div>
       )}
     </>

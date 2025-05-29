@@ -146,6 +146,6 @@ A legacy workflow run result yields the following:
 | Field         | Type                                                                           | Description                                                        |
 | ------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
 | `activePaths` | `Record<string, { status: string; suspendPayload?: any; stepPath: string[] }>` | Currently active paths in the workflow with their execution status |
-| `results`     | `LegacyWorkflowRunResult<any, any, any>['results']`                              | Results from the workflow execution                                |
+| `results`     | `LegacyWorkflowRunResult<any, any, any>['results']`                            | Results from the workflow execution                                |
 | `timestamp`   | `number`                                                                       | Unix timestamp of when this transition occurred                    |
 | `runId`       | `string`                                                                       | Unique identifier for this workflow run instance                   |

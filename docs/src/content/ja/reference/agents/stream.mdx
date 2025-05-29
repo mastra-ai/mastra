@@ -84,7 +84,8 @@ interface Message {
       name: "onFinish",
       type: "StreamTextOnFinishCallback | StreamObjectOnFinishCallback",
       isOptional: true,
-      description: "ストリーミングが完了したときに呼び出されるコールバック関数。",
+      description:
+        "ストリーミングが完了したときに呼び出されるコールバック関数。",
     },
     {
       name: "onStepFinish",
@@ -133,7 +134,8 @@ interface Message {
       type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
       isOptional: true,
       defaultValue: "'auto'",
-      description: "ストリーミング中にエージェントがツールを使用する方法を制御します。",
+      description:
+        "ストリーミング中にエージェントがツールを使用する方法を制御します。",
     },
     {
       name: "toolsets",
@@ -179,8 +181,7 @@ interface Message {
               name: "topK",
               type: "number",
               isOptional: true,
-              description:
-                "取得する意味的に最も類似したメッセージの数。",
+              description: "取得する意味的に最も類似したメッセージの数。",
             },
           ],
         },
@@ -252,8 +253,7 @@ interface Message {
               name: "generateTitle",
               type: "boolean",
               isOptional: true,
-              description:
-                "新しいスレッドのタイトルを自動生成するかどうか。",
+              description: "新しいスレッドのタイトルを自動生成するかどうか。",
             },
           ],
         },

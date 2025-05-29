@@ -5,8 +5,8 @@ export const ChevronIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <path
       d="M4.60059 6.30005L8.00098 9.70005L11.3996 6.30142"
       stroke="currentColor"
-      stroke-width="1.5"
-      stroke-linecap="round"
+      strokeWidth="1.5"
+      strokeLinecap="round"
     />
   </svg>
 );
