@@ -409,10 +409,13 @@ pre code.nextra-code:not([class*="twoslash-"]) > span[data-highlighted-line] {
     background-color: var(--color-surface-5);
   }
 }
-main h3:has(+ div.nextra-code) {
+
+h3#npx,
+h3#npm,
+h3#yarn,
+h3#pnpm {
   display: none;
 }
-
 .nextra-code {
   white-space: nowrap;
 }
