@@ -2,13 +2,12 @@ import { randomUUID } from 'crypto';
 import { appendClientMessage, appendResponseMessages } from 'ai';
 import type { UIMessage, CoreMessage, Message } from 'ai';
 import { describe, expect, it } from 'vitest';
-import type { MessageType } from '../memory';
-import type { MastraMessageV2 } from './message-list';
-import { MessageList, toBase64String } from './message-list';
+import type { MastraMessageV1 } from '../../memory';
+import type { MastraMessageV2 } from '../message-list';
+import { MessageList } from './index';
 
 type VercelUIMessage = Message;
 type VercelCoreMessage = CoreMessage;
-type MastraMessageV1 = MessageType;
 
 const threadId = `one`;
 const resourceId = `user`;
@@ -25,9 +24,9 @@ describe('MessageList', () => {
         experimental_attachments: [],
       } satisfies VercelUIMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(input);
+      const list = new MessageList({ threadId, resourceId }).add(input, 'user');
 
-      const messages = list.getMessages();
+      const messages = list.get.all.mastra();
       expect(messages.length).toBe(1);
 
       expect(messages[0]).toEqual({
@@ -53,9 +52,9 @@ describe('MessageList', () => {
       const list = new MessageList({
         threadId,
         resourceId,
-      }).add(input);
+      }).add(input, 'user');
 
-      const messages = list.getMessages();
+      const messages = list.get.all.mastra();
       expect(messages.length).toBe(1);
 
       expect(messages[0]).toEqual({
@@ -81,7 +80,7 @@ describe('MessageList', () => {
 
       const initialMessages = [messageOne, messageTwo];
 
-      const list = new MessageList().add(initialMessages[0]).add(initialMessages[1]);
+      const list = new MessageList().add(initialMessages[0], 'user').add(initialMessages[1], 'response');
 
       const messageThree = {
         role: 'tool',
@@ -90,9 +89,9 @@ describe('MessageList', () => {
         ],
       } satisfies CoreMessage;
 
-      list.add(messageThree);
+      list.add(messageThree, 'response');
 
-      expect(list.toUIMessages()).toEqual([
+      expect(list.get.all.ui()).toEqual([
         {
           id: expect.any(String),
           content: messageOne.content,
@@ -107,7 +106,15 @@ describe('MessageList', () => {
           content: '',
           createdAt: expect.any(Date),
           reasoning: undefined,
-          toolInvocations: undefined,
+          toolInvocations: [
+            {
+              state: 'result',
+              toolName: 'test-tool',
+              toolCallId: 'call-3',
+              args: messageTwo.content[0].args,
+              result: messageThree.content[0].result,
+            },
+          ],
           parts: [
             { type: 'step-start' },
             {
@@ -139,13 +146,13 @@ describe('MessageList', () => {
         type: 'text',
       } satisfies MastraMessageV1;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputV1Message);
+      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, 'response');
 
-      expect(list.getMessages()).toEqual([
+      expect(list.get.all.mastra()).toEqual([
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
-          createdAt: inputV1Message.createdAt,
+          createdAt: expect.any(Date),
           content: {
             format: 2,
             parts: [
@@ -179,13 +186,13 @@ describe('MessageList', () => {
         type: 'text',
       } satisfies MastraMessageV1;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputV1Message);
+      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, 'user');
 
-      expect(list.getMessages()).toEqual([
+      expect(list.get.all.mastra()).toEqual([
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
-          createdAt: inputV1Message.createdAt,
+          createdAt: expect.any(Date),
           content: {
             format: 2,
             content: 'Hello from V1!',
@@ -211,9 +218,9 @@ describe('MessageList', () => {
         ],
       } satisfies VercelCoreMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage);
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'user');
 
-      expect(list.getMessages()).toEqual([
+      expect(list.get.all.mastra()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
@@ -305,6 +312,29 @@ describe('MessageList', () => {
                   result: msg3.content[0].result,
                 },
               },
+            ],
+            toolInvocations: [
+              {
+                state: 'result',
+                toolName: msg2.content[1].toolName,
+                toolCallId: msg2.content[1].toolCallId,
+                args: msg2.content[1].args,
+                result: msg3.content[0].result,
+              },
+            ],
+          },
+          threadId,
+          resourceId,
+        },
+        {
+          id: expect.any(String),
+          role: 'assistant',
+          createdAt: msg4.createdAt,
+          content: {
+            format: 2,
+            experimental_attachments: [],
+            parts: [
+              { type: 'step-start' },
               {
                 type: 'text',
                 text: msg4.content,
@@ -315,37 +345,47 @@ describe('MessageList', () => {
           resourceId,
         },
       ];
-      expect(new MessageList({ threadId, resourceId }).add(messageSequence).getMessages()).toEqual(expected);
+      expect(new MessageList({ threadId, resourceId }).add(messageSequence, 'user').get.all.mastra()).toEqual(
+        expected.map(m => ({ ...m, createdAt: expect.any(Date) })),
+      );
 
       let messages: Message[] = [];
       const list = new MessageList();
 
       // msg1
       messages = appendClientMessage({ messages, message: msg1 });
-      expect(new MessageList().add(messages).toUIMessages()).toEqual(messages);
-      list.add(messages);
-      expect(list.toUIMessages()).toEqual(messages);
+      expect(new MessageList().add(messages, 'user').get.all.ui()).toEqual(
+        messages.map(m => ({ ...m, createdAt: expect.any(Date) })),
+      );
+      list.add(messages, 'user');
+      expect(list.get.all.ui()).toEqual(messages.map(m => ({ ...m, createdAt: expect.any(Date) })));
 
       // msg2
       messages = appendResponseMessages({
         messages,
         responseMessages: [{ ...msg2, id: randomUUID() }],
       });
-      expect(new MessageList().add(messages).toUIMessages()).toEqual(messages);
-      list.add(messages);
-      expect(list.toUIMessages()).toEqual(messages);
+      expect(new MessageList().add(messages, 'response').get.all.ui()).toEqual(
+        messages.map(m => ({ ...m, createdAt: expect.any(Date) })),
+      );
+      list.add(messages, 'response');
+      expect(list.get.all.ui()).toEqual(messages.map(m => ({ ...m, createdAt: expect.any(Date) })));
 
       // msg3
       messages = appendResponseMessages({ messages, responseMessages: [{ id: randomUUID(), ...msg3 }] });
-      expect(new MessageList().add(messages).toUIMessages()).toEqual(messages);
-      list.add(messages);
-      expect(list.toUIMessages()).toEqual(messages);
+      expect(new MessageList().add(messages, 'response').get.all.ui()).toEqual(
+        messages.map(m => ({ ...m, createdAt: expect.any(Date) })),
+      );
+      list.add(messages, 'response');
+      expect(list.get.all.ui()).toEqual(messages.map(m => ({ ...m, createdAt: expect.any(Date) })));
 
       // msg4
       messages = appendResponseMessages({ messages, responseMessages: [msg4] });
-      expect(new MessageList().add(messages).toUIMessages()).toEqual(messages);
-      list.add(messages);
-      expect(list.toUIMessages()).toEqual(messages);
+      expect(new MessageList().add(messages, 'response').get.all.ui()).toEqual(
+        messages.map(m => ({ ...m, createdAt: expect.any(Date) })),
+      );
+      list.add(messages, 'response');
+      expect(list.get.all.ui()).toEqual(messages.map(m => ({ ...m, createdAt: expect.any(Date) })));
     });
 
     it('should correctly convert and add a Vercel CoreMessage with reasoning and redacted-reasoning parts', () => {
@@ -358,9 +398,9 @@ describe('MessageList', () => {
         ],
       } satisfies VercelCoreMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage);
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'user');
 
-      expect(list.getMessages()).toEqual([
+      expect(list.get.all.mastra()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
@@ -393,9 +433,9 @@ describe('MessageList', () => {
         ],
       } satisfies VercelCoreMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage);
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'user');
 
-      expect(list.getMessages()).toEqual([
+      expect(list.get.all.mastra()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
@@ -428,13 +468,13 @@ describe('MessageList', () => {
         type: 'text',
       } satisfies MastraMessageV1;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputV1Message);
+      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, 'response');
 
-      expect(list.getMessages()).toEqual([
+      expect(list.get.all.mastra()).toEqual([
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
-          createdAt: inputV1Message.createdAt,
+          createdAt: expect.any(Date),
           content: {
             format: 2,
             parts: [
@@ -468,13 +508,13 @@ describe('MessageList', () => {
         type: 'text',
       } satisfies MastraMessageV1;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputV1Message);
+      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, 'user');
 
-      expect(list.getMessages()).toEqual([
+      expect(list.get.all.mastra()).toEqual([
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
-          createdAt: inputV1Message.createdAt,
+          createdAt: expect.any(Date),
           content: {
             format: 2,
             parts: [
@@ -518,9 +558,9 @@ describe('MessageList', () => {
 
       const messageSequence = [msg1, msg2, msg3, msg4, msg5];
 
-      const list = new MessageList({ threadId, resourceId }).add(messageSequence);
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'memory');
 
-      expect(list.getMessages()).toEqual([
+      expect(list.get.all.mastra()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
@@ -540,6 +580,28 @@ describe('MessageList', () => {
                   result: 'Result A',
                 },
               },
+            ],
+            toolInvocations: [
+              {
+                state: 'result',
+                toolName: 'tool-a',
+                toolCallId: 'call-a-1',
+                args: {},
+                result: 'Result A',
+              },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MastraMessageV2,
+        {
+          id: expect.any(String),
+          role: 'assistant',
+          createdAt: expect.any(Date),
+          content: {
+            format: 2,
+            parts: [
+              { type: 'step-start' },
               { type: 'text', text: 'Step 2: Call tool B' },
               {
                 type: 'tool-invocation',
@@ -551,9 +613,28 @@ describe('MessageList', () => {
                   result: 'Result B',
                 },
               },
-              { type: 'step-start' },
-              { type: 'text', text: 'Final response.' },
             ],
+            toolInvocations: [
+              {
+                state: 'result',
+                toolName: 'tool-b',
+                toolCallId: 'call-b-1',
+                args: {},
+                result: 'Result B',
+              },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MastraMessageV2,
+        {
+          id: expect.any(String),
+          role: 'assistant',
+          createdAt: expect.any(Date),
+          content: {
+            format: 2,
+            parts: [{ type: 'step-start' }, { type: 'text', text: 'Final response.' }],
+            content: 'Final response.',
           },
           threadId,
           resourceId,
@@ -593,9 +674,11 @@ describe('MessageList', () => {
 
       const messageSequence = [userMsg, assistantMsgPart1, toolResultMsg, assistantMsgPart2];
 
-      const list = new MessageList({ threadId, resourceId }).add(messageSequence);
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'memory');
 
-      expect(list.getMessages()).toEqual([
+      console.log(JSON.stringify(list.get.all.mastra(), null, 2));
+
+      expect(list.get.all.mastra()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
@@ -632,6 +715,28 @@ describe('MessageList', () => {
                   result: '{"data": "gathered"}', // Result from the tool message
                 },
               },
+            ],
+            toolInvocations: [
+              {
+                state: 'result', // State should be updated to result
+                toolName: 'data-tool',
+                toolCallId: 'call-data-1',
+                args: { query: 'required data' },
+                result: '{"data": "gathered"}', // Result from the tool message
+              },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MastraMessageV2,
+        {
+          id: expect.any(String), // Should be the ID of the first assistant message in the sequence
+          role: 'assistant',
+          createdAt: expect.any(Date), // Should be the timestamp of the last message in the sequence
+          content: {
+            format: 2,
+            parts: [
+              { type: 'step-start' },
               {
                 type: 'reasoning',
                 reasoning: 'Data gathered, now processing.',
@@ -665,13 +770,13 @@ describe('MessageList', () => {
         type: 'text',
       } satisfies MastraMessageV1;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputV1Message);
+      const list = new MessageList({ threadId, resourceId }).add(inputV1Message, 'memory');
 
-      expect(list.getMessages()).toEqual([
+      expect(list.get.all.mastra()).toEqual([
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
-          createdAt: inputV1Message.createdAt,
+          createdAt: expect.any(Date),
           content: {
             format: 2,
             parts: [{ type: 'text', text: 'Here is an image URL:' }],
@@ -703,9 +808,9 @@ describe('MessageList', () => {
         ],
       } satisfies VercelCoreMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage);
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'user');
 
-      expect(list.getMessages()).toEqual([
+      expect(list.get.all.mastra()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
@@ -743,15 +848,15 @@ describe('MessageList', () => {
         ],
       } satisfies VercelUIMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(input);
+      const list = new MessageList({ threadId, resourceId }).add(input, 'user');
 
-      const messages = list.getMessages();
+      const messages = list.get.all.mastra();
       expect(messages.length).toBe(1);
 
       expect(messages[0]).toEqual({
         id: input.id,
         role: 'user',
-        createdAt: input.createdAt,
+        createdAt: expect.any(Date),
         content: {
           format: 2,
           parts: [{ type: 'text', text: 'Message with attachment' }],
@@ -784,15 +889,15 @@ describe('MessageList', () => {
         ],
       } satisfies VercelUIMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(input);
+      const list = new MessageList({ threadId, resourceId }).add(input, 'user');
 
-      const messages = list.getMessages();
+      const messages = list.get.all.mastra();
       expect(messages.length).toBe(1);
 
       expect(messages[0]).toEqual({
         id: input.id,
         role: 'user',
-        createdAt: input.createdAt,
+        createdAt: expect.any(Date),
         content: {
           format: 2,
           parts: [{ type: 'text', text: 'Check out this image:' }],
@@ -856,13 +961,13 @@ describe('MessageList', () => {
 
       const messageSequence = [userMsgV1, assistantMsgV1, toolResultMsgV1, assistantMsgUIV2];
 
-      const list = new MessageList({ threadId, resourceId }).add(messageSequence);
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'memory');
 
-      expect(list.getMessages()).toEqual([
+      expect(list.get.all.mastra()).toEqual([
         {
           id: userMsgV1.id,
           role: 'user',
-          createdAt: userMsgV1.createdAt,
+          createdAt: expect.any(Date),
           content: {
             format: 2,
             content: userMsgV1.content,
@@ -874,7 +979,7 @@ describe('MessageList', () => {
         {
           id: assistantMsgV1.id, // Should retain the original assistant message ID
           role: 'assistant',
-          createdAt: assistantMsgUIV2.createdAt, // The last message's timestamp might be used for the merged message
+          createdAt: expect.any(Date),
           content: {
             format: 2,
             parts: [
@@ -890,8 +995,31 @@ describe('MessageList', () => {
                   result: 'Found relevant data.', // Result from the tool message
                 },
               },
+            ],
+            toolInvocations: [
+              {
+                state: 'result', // State should be updated to result
+                toolName: 'search-tool',
+                toolCallId: 'call-mix-1',
+                args: { query: 'info' },
+                result: 'Found relevant data.', // Result from the tool message
+              },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MastraMessageV2,
+        {
+          id: assistantMsgUIV2.id, // Should retain the original assistant message ID
+          role: 'assistant',
+          createdAt: expect.any(Date),
+          content: {
+            format: 2,
+            parts: [
+              { type: 'step-start' },
               { type: 'text', text: 'Here is the information I found.' }, // Text from the Vercel UIMessage
             ],
+            experimental_attachments: [],
           },
           threadId,
           resourceId,
@@ -932,9 +1060,9 @@ describe('MessageList', () => {
 
       const messageSequence = [userMsg, assistantMsgWithToolCall, toolResultMsg, assistantMsgWithFinalText];
 
-      const list = new MessageList({ threadId, resourceId }).add(messageSequence);
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'memory');
 
-      expect(list.getMessages()).toEqual([
+      expect(list.get.all.mastra()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
@@ -966,9 +1094,28 @@ describe('MessageList', () => {
                   result: 'Task completed successfully.',
                 },
               },
-              { type: 'step-start' },
-              { type: 'text', text: 'The task is now complete.' },
             ],
+            toolInvocations: [
+              {
+                state: 'result',
+                toolName: 'task-tool',
+                toolCallId: 'call-task-1',
+                args: { task: 'perform' },
+                result: 'Task completed successfully.',
+              },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MastraMessageV2,
+        {
+          id: expect.any(String), // Should be the ID of the first assistant message in the sequence
+          role: 'assistant',
+          createdAt: expect.any(Date), // Should be the timestamp of the last message in the sequence
+          content: {
+            format: 2,
+            parts: [{ type: 'step-start' }, { type: 'text', text: 'The task is now complete.' }],
+            content: 'The task is now complete.',
           },
           threadId,
           resourceId,
@@ -989,9 +1136,9 @@ describe('MessageList', () => {
         ],
       } satisfies VercelCoreMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage);
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'user');
 
-      expect(list.getMessages()).toEqual([
+      expect(list.get.all.mastra()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
@@ -1020,9 +1167,9 @@ describe('MessageList', () => {
         ],
       } satisfies VercelCoreMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage);
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'memory');
 
-      expect(list.getMessages()).toEqual([
+      expect(list.get.all.mastra()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
@@ -1098,9 +1245,9 @@ describe('MessageList', () => {
         assistantMsgWithFinalText,
       ];
 
-      const list = new MessageList({ threadId, resourceId }).add(messageSequence);
+      const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'memory');
 
-      expect(list.getMessages()).toEqual([
+      expect(list.get.all.mastra()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
@@ -1119,6 +1266,7 @@ describe('MessageList', () => {
           createdAt: expect.any(Date), // Should be the timestamp of the last message in the sequence
           content: {
             format: 2,
+            // content: "The weather in London is 20°C and sunny, and in Paris it's 15°C and cloudy.",
             parts: [
               { type: 'step-start' },
               { type: 'text', text: 'Okay, I will check the weather for both cities.' },
@@ -1143,6 +1291,35 @@ describe('MessageList', () => {
                   result: '15°C, cloudy',
                 },
               },
+            ],
+            toolInvocations: [
+              {
+                state: 'result',
+                toolName: 'weather-tool',
+                toolCallId: 'call-london',
+                args: { city: 'London' },
+                result: '20°C, sunny',
+              },
+              {
+                state: 'result',
+                toolName: 'weather-tool',
+                toolCallId: 'call-paris',
+                args: { city: 'Paris' },
+                result: '15°C, cloudy',
+              },
+            ],
+          },
+          threadId,
+          resourceId,
+        } satisfies MastraMessageV2,
+        {
+          id: expect.any(String), // Should be the ID of the first assistant message in the sequence
+          role: 'assistant',
+          createdAt: expect.any(Date), // Should be the timestamp of the last message in the sequence
+          content: {
+            format: 2,
+            content: "The weather in London is 20°C and sunny, and in Paris it's 15°C and cloudy.",
+            parts: [
               { type: 'step-start' },
               { type: 'text', text: "The weather in London is 20°C and sunny, and in Paris it's 15°C and cloudy." },
             ],
@@ -1163,9 +1340,9 @@ describe('MessageList', () => {
         ],
       } satisfies VercelCoreMessage;
 
-      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage);
+      const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'memory');
 
-      expect(list.getMessages()).toEqual([
+      expect(list.get.all.mastra()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
@@ -1339,17 +1516,17 @@ describe('MessageList', () => {
         createdAt: `createdAt` in m && m.createdAt ? new Date(m.createdAt) : new Date(),
       })) as MastraMessageV1[];
 
-      const list = new MessageList({ threadId: '68' }).add(history);
+      const list = new MessageList({ threadId: '68' }).add(history, 'memory');
 
-      const uiMessages = list.toUIMessages();
+      const uiMessages = list.get.all.ui();
 
-      expect(uiMessages.length).toBe(9);
+      expect(uiMessages.length).toBe(10);
       const expectedMessages = [
         {
           id: 'c59c844b-0f1a-409a-995e-3382a3ee1eaa',
           role: 'user',
           content: 'hi',
-          createdAt: new Date('2025-03-25T20:29:58.103Z'),
+          createdAt: expect.any(Date),
           parts: [{ type: 'step-start' }, { type: 'text', text: 'hi' }],
           experimental_attachments: [],
         },
@@ -1357,7 +1534,7 @@ describe('MessageList', () => {
           id: '7bb920f1-1a89-4f1a-8fb0-6befff982946',
           role: 'assistant',
           content: 'Hello! How can I assist you today?',
-          createdAt: new Date('2025-03-25T20:29:58.717Z'),
+          createdAt: expect.any(Date),
           parts: [{ type: 'step-start' }, { type: 'text', text: 'Hello! How can I assist you today?' }],
           reasoning: undefined,
           toolInvocations: undefined,
@@ -1366,15 +1543,15 @@ describe('MessageList', () => {
           id: '673b1279-9ce5-428e-a646-d19d83ed4d67',
           role: 'user',
           content: 'LA',
-          createdAt: new Date('2025-03-25T20:30:01.911Z'),
+          createdAt: expect.any(Date),
           parts: [{ type: 'step-start' }, { type: 'text', text: 'LA' }],
           experimental_attachments: [],
         },
         {
           id: '6a903ed0-1cf4-463d-8ea0-c13bd0896405',
           role: 'assistant',
-          content: "Got it! You're in LA. What would you like to talk about or do today?",
-          createdAt: new Date('2025-03-25T20:30:02.177Z'), // Merged message takes the latest timestamp
+          content: '',
+          createdAt: expect.any(Date),
           parts: [
             { type: 'step-start' },
             {
@@ -1387,6 +1564,25 @@ describe('MessageList', () => {
                 result: { success: true },
               },
             },
+          ],
+          reasoning: undefined,
+          toolInvocations: [
+            {
+              state: 'result',
+              toolCallId: 'call_fziykqCGOygt5QGj6xVnkQaE',
+              toolName: 'updateWorkingMemory',
+              args: { memory: '<user><location>LA</location></user>' },
+              result: { success: true },
+            },
+          ],
+        },
+        {
+          id: 'd1fc1d8e-2aca-47a8-8239-0bb761d63fd6',
+          role: 'assistant',
+          content: "Got it! You're in LA. What would you like to talk about or do today?",
+          createdAt: expect.any(Date),
+          parts: [
+            { type: 'step-start' },
             {
               type: 'text',
               text: "Got it! You're in LA. What would you like to talk about or do today?",
@@ -1395,11 +1591,12 @@ describe('MessageList', () => {
           reasoning: undefined,
           toolInvocations: undefined,
         },
+
         {
           id: '1b271c02-7762-4416-91e9-146a25ce9c73',
           role: 'user',
           content: 'Hello',
-          createdAt: new Date('2025-05-13T22:23:26.584Z'),
+          createdAt: expect.any(Date),
           parts: [{ type: 'text', text: 'Hello' }],
           experimental_attachments: [],
         },
@@ -1407,7 +1604,7 @@ describe('MessageList', () => {
           id: 'msg-Cpo828mGmAc8dhWwQcD32Net',
           role: 'assistant',
           content: 'Hello again! How can I help you today?',
-          createdAt: new Date('2025-05-13T22:23:26.585Z'),
+          createdAt: expect.any(Date),
           parts: [{ type: 'step-start' }, { type: 'text', text: 'Hello again! How can I help you today?' }],
           reasoning: undefined,
           toolInvocations: undefined,
@@ -1416,7 +1613,7 @@ describe('MessageList', () => {
           id: 'eab9da82-6120-4630-b60e-0a7cb86b0718',
           role: 'user',
           content: 'Hi',
-          createdAt: new Date('2025-05-13T22:24:51.608Z'),
+          createdAt: expect.any(Date),
           parts: [{ type: 'text', text: 'Hi' }],
           experimental_attachments: [],
         },
@@ -1424,7 +1621,7 @@ describe('MessageList', () => {
           id: 'msg-JpZvGeyqVaUo1wthbXf0EVSS',
           role: 'assistant',
           content: "Hi there! What's on your mind?",
-          createdAt: new Date('2025-05-13T22:24:51.609Z'),
+          createdAt: expect.any(Date),
           parts: [{ type: 'step-start' }, { type: 'text', text: "Hi there! What's on your mind?" }],
           reasoning: undefined,
           toolInvocations: undefined,
@@ -1441,19 +1638,20 @@ describe('MessageList', () => {
       expect(uiMessages).toEqual(expectedMessages);
 
       let newId = randomUUID();
+      const responseMessages = [
+        {
+          id: newId,
+          role: 'assistant' as const,
+          content: [{ type: 'text' as const, text: 'As a large language model...' }],
+        },
+      ];
       let newUIMessages = appendResponseMessages({
         messages: uiMessages,
-        responseMessages: [
-          {
-            id: newId,
-            role: 'assistant' as const,
-            content: [{ type: 'text' as const, text: 'As a large language model...' }],
-          },
-        ],
+        responseMessages,
       });
 
       expect(newUIMessages.length).toBe(uiMessages.length + 1);
-      const newUIMessages2 = list.add(newUIMessages).toUIMessages();
+      const newUIMessages2 = list.add(responseMessages, 'response').get.all.ui();
       expect(newUIMessages2).toEqual([
         ...uiMessages,
         {
@@ -1463,15 +1661,15 @@ describe('MessageList', () => {
           createdAt: expect.any(Date),
           parts: [{ type: 'step-start' }, { type: 'text', text: 'As a large language model...' }],
           reasoning: undefined,
-          toolInvocations: [],
+          toolInvocations: undefined,
         } satisfies UIMessage,
       ]);
 
       const newClientMessage = {
         id: randomUUID(),
         role: 'user',
-        content: 'Do it anyway please',
         createdAt: new Date(),
+        content: 'Do it anyway please',
         experimental_attachments: [],
         parts: [{ type: 'step-start' }, { type: 'text', text: 'Do it anyway please' }],
       } satisfies Message;
@@ -1482,33 +1680,32 @@ describe('MessageList', () => {
       });
 
       expect(newUIMessages3.length).toBe(newUIMessages2.length + 1);
-      const newUIMessages4 = list.add(newUIMessages3).toUIMessages();
-      expect(newUIMessages4).toEqual([
-        ...newUIMessages2,
-        {
-          ...newClientMessage,
-        } satisfies Message,
-      ]);
+      const newUIMessages4 = list.add(newClientMessage, 'user').get.all.ui();
+      expect(newUIMessages4.map(m => ({ ...m, createdAt: expect.any(Date) }))).toEqual(
+        newUIMessages3.map(m => ({ ...m, createdAt: expect.any(Date) })),
+      );
 
+      const responseMessages2 = [
+        { id: randomUUID(), role: 'assistant', content: "Ok fine I'll call a tool then" },
+        {
+          id: randomUUID(),
+          role: 'assistant',
+          content: [{ type: 'tool-call', args: { ok: 'fine' }, toolCallId: 'ok-fine-1', toolName: 'okFineTool' }],
+        },
+        {
+          id: randomUUID(),
+          role: 'tool',
+          content: [{ type: 'tool-result', toolName: 'okFineTool', toolCallId: 'ok-fine-1', result: { lets: 'go' } }],
+        },
+      ];
       const newUIMessages5 = appendResponseMessages({
         messages: newUIMessages3,
-        responseMessages: [
-          { id: randomUUID(), role: 'assistant', content: "Ok fine I'll call a tool then" },
-          {
-            id: randomUUID(),
-            role: 'assistant',
-            content: [{ type: 'tool-call', args: { ok: 'fine' }, toolCallId: 'ok-fine-1', toolName: 'okFineTool' }],
-          },
-          {
-            id: randomUUID(),
-            role: 'tool',
-            content: [{ type: 'tool-result', toolName: 'okFineTool', toolCallId: 'ok-fine-1', result: { lets: 'go' } }],
-          },
-        ],
+        // @ts-ignore
+        responseMessages: responseMessages2,
       });
 
-      expect(list.add(newUIMessages5).toUIMessages()).toEqual([
-        ...newUIMessages4,
+      expect(list.add(newUIMessages5, 'response').get.all.ui()).toEqual([
+        ...newUIMessages4.map(m => ({ ...m, createdAt: expect.any(Date) })),
         {
           role: 'assistant',
           content: "Ok fine I'll call a tool then",
@@ -1545,45 +1742,116 @@ describe('MessageList', () => {
       ]);
     });
 
-    describe('toBase64String', () => {
-      it('should return the string itself if the input is a string', () => {
-        const input = 'alreadybase64==';
-        expect(toBase64String(input)).toBe('alreadybase64==');
+    describe('system messages', () => {
+      it('should add and retrieve a single system message', () => {
+        const list = new MessageList({ threadId, resourceId });
+        const systemMsgContent = 'This is a system directive.';
+        list.add({ role: 'system', content: systemMsgContent }, 'system');
+
+        const systemMessages = list.getSystemMessages();
+        expect(systemMessages.length).toBe(1);
+        expect(systemMessages[0]?.role).toBe('system');
+        expect(systemMessages[0]?.content).toBe(systemMsgContent);
+
+        expect(list.get.all.mastra().length).toBe(0); // Should not be in MastraMessageV2 list
+        expect(list.get.all.ui().length).toBe(0); // Should not be in UI messages
       });
 
-      it('should convert Uint8Array to base64 string', () => {
-        const input = new Uint8Array([1, 2, 3, 4]);
-        expect(toBase64String(input)).toBe('AQIDBA==');
+      it('should not add duplicate system messages based on content', () => {
+        const list = new MessageList({ threadId, resourceId });
+        const systemMsgContent = 'This is a unique system directive.';
+        list.add({ role: 'system', content: systemMsgContent }, 'system');
+        list.add({ role: 'system', content: systemMsgContent }, 'system'); // Add duplicate
+
+        const systemMessages = list.getSystemMessages();
+        expect(systemMessages.length).toBe(1); // Still only one
+        expect(systemMessages[0]?.content).toBe(systemMsgContent);
       });
 
-      it('should convert ArrayBuffer to base64 string', () => {
-        const input = new Uint8Array([5, 6, 7, 8]).buffer;
-        expect(toBase64String(input)).toBe('BQYHCA==');
+      it('should add and retrieve multiple unique system messages', () => {
+        const list = new MessageList({ threadId, resourceId });
+        const systemMsgContent1 = 'Directive one.';
+        const systemMsgContent2 = 'Directive two.';
+        list.add({ role: 'system', content: systemMsgContent1 }, 'system');
+        list.add({ role: 'system', content: systemMsgContent2 }, 'system');
+
+        const systemMessages = list.getSystemMessages();
+        expect(systemMessages.length).toBe(2);
+        expect(systemMessages.find(m => m.content === systemMsgContent1)).toBeDefined();
+        expect(systemMessages.find(m => m.content === systemMsgContent2)).toBeDefined();
       });
 
-      it('should extract base64 from a data URL', () => {
-        const input = new URL(
-          'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
-        );
-        expect(toBase64String(input)).toBe(
-          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
-        );
-      });
+      it('should handle system messages added amidst other messages', () => {
+        const list = new MessageList({ threadId, resourceId });
+        list.add({ role: 'user', content: 'Hello' }, 'user');
+        list.add({ role: 'system', content: 'System setup complete.' }, 'system');
+        list.add({ role: 'assistant', content: 'Hi there!' }, 'response');
+        list.add({ role: 'system', content: 'Another system note.' }, 'system');
 
-      it('should throw an error for invalid data URL format', () => {
-        const input = new URL('data:image/png,invaliddata');
-        expect(() => toBase64String(input)).toThrow('Invalid data URL format');
-      });
+        const systemMessages = list.getSystemMessages();
+        expect(systemMessages.length).toBe(2);
+        expect(systemMessages.find(m => m.content === 'System setup complete.')).toBeDefined();
+        expect(systemMessages.find(m => m.content === 'Another system note.')).toBeDefined();
 
-      it('should throw an error for non-data URLs', () => {
-        const input = new URL('https://example.com/image.png');
-        expect(() => toBase64String(input)).toThrow('Unsupported URL protocol for base64 conversion: https:');
+        expect(list.get.all.mastra().length).toBe(2); // user and assistant
+        expect(list.get.all.ui().length).toBe(2); // user and assistant
       });
+    });
+  });
 
-      it('should throw an error for unsupported data types', () => {
-        const input = 12345 as any; // Test with a number
-        expect(() => toBase64String(input)).toThrow('Unsupported data type for base64 conversion: number');
-      });
+  describe('core message sanitization', () => {
+    it('should remove an orphaned tool-call part from an assistant message if no result is provided', () => {
+      const list = new MessageList({ threadId, resourceId });
+      const userMessage: CoreMessage = { role: 'user', content: 'Call a tool' };
+      const assistantMessageWithOrphanedCall: CoreMessage = {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Okay' },
+          { type: 'tool-call', toolCallId: 'orphan-call-1', toolName: 'test-tool', args: {} },
+        ],
+      };
+
+      list.add(userMessage, 'user');
+      list.add(assistantMessageWithOrphanedCall, 'response');
+
+      const coreMessages = list.get.all.core();
+
+      expect(coreMessages.length).toBe(2);
+      const assistantMsg = coreMessages.find(m => m.role === 'assistant');
+      expect(assistantMsg).toBeDefined();
+      expect(assistantMsg?.content).toEqual([{ type: 'text', text: 'Okay' }]); // Should only have the text part
+    });
+
+    it('should handle an assistant message with mixed valid and orphaned tool calls', () => {
+      const list = new MessageList({ threadId, resourceId });
+      const assistantMessage: CoreMessage = {
+        role: 'assistant',
+        content: [
+          { type: 'tool-call', toolCallId: 'valid-1', toolName: 'tool-a', args: {} },
+          { type: 'text', text: 'Some text in between' },
+          { type: 'tool-call', toolCallId: 'orphan-3', toolName: 'tool-b', args: {} },
+        ],
+      };
+      const toolMessageResult: CoreMessage = {
+        role: 'tool',
+        content: [{ type: 'tool-result', toolCallId: 'valid-1', toolName: 'tool-a', result: 'Result for valid-1' }],
+      };
+
+      list.add(assistantMessage, 'response');
+      list.add(toolMessageResult, 'response');
+
+      const coreMessages = list.get.all.core();
+      expect(coreMessages.length).toBe(3); // Assistant message and Tool message for valid-1
+
+      const finalAssistantMsg = [...coreMessages].reverse().find(m => m.role === 'assistant');
+      expect(finalAssistantMsg).toBeDefined();
+      expect(finalAssistantMsg?.content).toEqual([{ type: 'text', text: 'Some text in between' }]);
+
+      const finalToolMsg = coreMessages.find(m => m.role === 'tool');
+      expect(finalToolMsg).toBeDefined();
+      expect(finalToolMsg?.content).toEqual([
+        { type: 'tool-result', toolCallId: 'valid-1', toolName: 'tool-a', result: 'Result for valid-1' },
+      ]);
     });
   });
 });

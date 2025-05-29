@@ -16,26 +16,10 @@ Mastraと組み合わせることで、双方向の状態同期とインタラ�
 `mastra` CLIを使用して新しいMastraプロジェクトを作成します：
 
 <Tabs items={["npx", "npm", "yarn", "pnpm"]}>
-  <Tabs.Tab>
-    ```bash copy
-    npx create-mastra@latest
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```bash copy
-    npm create mastra
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```bash copy
-    yarn create mastra
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```bash copy
-    pnpm create mastra
-    ```
-  </Tabs.Tab>
+  <Tabs.Tab>```bash copy npx create-mastra@latest ```</Tabs.Tab>
+  <Tabs.Tab>```bash copy npm create mastra ```</Tabs.Tab>
+  <Tabs.Tab>```bash copy yarn create mastra ```</Tabs.Tab>
+  <Tabs.Tab>```bash copy pnpm create mastra ```</Tabs.Tab>
 </Tabs>
 
 プロジェクトの構築時にエージェントの例を選択してください。これにより、天気エージェントが提供されます。
@@ -47,21 +31,9 @@ Mastraと組み合わせることで、双方向の状態同期とインタラ�
 MastraとCopilotKitを統合するには、主に2つのステップがあります：バックエンドランタイムのセットアップとフロントエンドコンポーネントの設定です。
 
 <Tabs items={["npm", "yarn", "pnpm"]}>
-  <Tabs.Tab>
-    ```bash copy
-    npm install @copilotkit/runtime
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```bash copy
-    yarn add @copilotkit/runtime
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```bash copy
-    pnpm add @copilotkit/runtime
-    ```
-  </Tabs.Tab>
+  <Tabs.Tab>```bash copy npm install @copilotkit/runtime ```</Tabs.Tab>
+  <Tabs.Tab>```bash copy yarn add @copilotkit/runtime ```</Tabs.Tab>
+  <Tabs.Tab>```bash copy pnpm add @copilotkit/runtime ```</Tabs.Tab>
 </Tabs>
 
 ## ランタイムのセットアップ
@@ -71,21 +43,9 @@ MastraのカスタムAPIルートを活用して、CopilotKitのランタイム�
 現在のバージョンの統合では、`MastraClient`を使用してMastraエージェントをCopilotKitのAGUI形式にフォーマットしています。
 
 <Tabs items={["npm", "yarn", "pnpm"]}>
-  <Tabs.Tab>
-    ```bash copy
-    npm install @mastra/client-js
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```bash copy
-    yarn add @mastra/client-js
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```bash copy
-    pnpm add @mastra/client-js
-    ```
-  </Tabs.Tab>
+  <Tabs.Tab>```bash copy npm install @mastra/client-js ```</Tabs.Tab>
+  <Tabs.Tab>```bash copy yarn add @mastra/client-js ```</Tabs.Tab>
+  <Tabs.Tab>```bash copy pnpm add @mastra/client-js ```</Tabs.Tab>
 </Tabs>
 
 次に、CopilotKit用のカスタムAPIルートでMastraインスタンスを更新しましょう。
@@ -153,19 +113,13 @@ CopilotKitのReactコンポーネントをインストールします：
 
 <Tabs items={["npm", "yarn", "pnpm"]}>
   <Tabs.Tab>
-    ```bash copy
-    npm install @copilotkit/react-core @copilotkit/react-ui
-    ```
+    ```bash copy npm install @copilotkit/react-core @copilotkit/react-ui ```
   </Tabs.Tab>
   <Tabs.Tab>
-    ```bash copy
-    yarn add @copilotkit/react-core @copilotkit/react-ui
-    ```
+    ```bash copy yarn add @copilotkit/react-core @copilotkit/react-ui ```
   </Tabs.Tab>
   <Tabs.Tab>
-    ```bash copy
-    pnpm add @copilotkit/react-core @copilotkit/react-ui
-    ```
+    ```bash copy pnpm add @copilotkit/react-core @copilotkit/react-ui ```
   </Tabs.Tab>
 </Tabs>
 

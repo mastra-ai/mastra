@@ -101,7 +101,8 @@ The constructor accepts an optional `Config` object to customize its behavior an
       name: "mcpServers",
       type: "Record<string, MCPServerBase>",
       isOptional: true,
-      description: "An object where keys are unique server identifiers and values are instances of MCPServer or classes extending MCPServerBase. This allows Mastra to be aware of and potentially manage these MCP servers.",
+      description:
+        "An object where keys are unique server identifiers and values are instances of MCPServer or classes extending MCPServerBase. This allows Mastra to be aware of and potentially manage these MCP servers.",
     },
     {
       name: "bundler",
@@ -260,7 +261,7 @@ You can think of the `Mastra` class as a top-level registry. When you register t
       name: "getMCPServers()",
       type: "Record<string, MCPServerBase> | undefined",
       description: "Retrieves all registered MCP server instances.",
-      example: 'const mcpServers = mastra.getMCPServers();'
+      example: "const mcpServers = mastra.getMCPServers();",
     },
   ]}
 />

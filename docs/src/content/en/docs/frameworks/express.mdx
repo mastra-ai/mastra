@@ -21,6 +21,7 @@ This setup is compatible with the following package versions:
 - `@types/express`: 4.x
 
 Type compatibility in 5.x can be inconsistent while `express` and `@types/express` evolve toward alignment.
+
 </Callout>
 
 <Steps>
@@ -30,24 +31,24 @@ Install the required Mastra packages:
 
 <Tabs items={["npm", "yarn", "pnpm", "bun"]}>
   <Tabs.Tab>
-  ```bash copy
-npm install mastra@latest @mastra/core@latest @mastra/libsql@latest
+    ```bash copy
+    npm install mastra@latest @mastra/core@latest @mastra/libsql@latest
     ```
-   </Tabs.Tab>
-  <Tabs.Tab>
-  ```bash copy
-yarn add mastra@latest @mastra/core@latest @mastra/libsql@latest
-    ```
-   </Tabs.Tab>
-  <Tabs.Tab>
-  ```bash copy
-pnpm add mastra@latest @mastra/core@latest @mastra/libsql@latest
-  ```
   </Tabs.Tab>
-<Tabs.Tab>
-  ```bash copy
-bun add mastra@latest @mastra/core@latest @mastra/libsql@latest
-  ```
+  <Tabs.Tab>
+    ```bash copy
+    yarn add mastra@latest @mastra/core@latest @mastra/libsql@latest
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    pnpm add mastra@latest @mastra/core@latest @mastra/libsql@latest
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    bun add mastra@latest @mastra/core@latest @mastra/libsql@latest
+    ```
   </Tabs.Tab>
 </Tabs>
 
@@ -78,7 +79,7 @@ Add the `dev` and `build` scripts to `package.json`:
 ```json filename="package.json"
 {
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    ...
     "dev": "mastra dev",
     "build": "mastra build"
   }
@@ -124,15 +125,15 @@ Start the Mastra dev server to expose your agents as REST endpoints:
 
 <Tabs items={["npm", "CLI"]}>
   <Tabs.Tab>
-  ```bash copy
-  npm run dev
-   ```
-   </Tabs.Tab>
+    ```bash copy
+    npm run dev
+    ```
+  </Tabs.Tab>
   <Tabs.Tab>
-  ```bash copy
-  mastra dev
-   ```
-   </Tabs.Tab>
+    ```bash copy
+    mastra dev
+    ```
+  </Tabs.Tab>
 </Tabs>
 
 > Once running, your agents are available locally. See [Local Development Environment](/docs/local-dev/mastra-dev) for more information.
@@ -164,7 +165,7 @@ app.get("/api/weather", async (req: Request, res: Response) => {
     res.send(result.text);
   } catch (error) {
     console.error("Agent error:", error);
-    res.status(500).send('An error occurred while processing your request');
+    res.status(500).send("An error occurred while processing your request");
   }
 });
 
@@ -183,15 +184,15 @@ You can now make a request to the endpoint using one of the following:
 
 <Tabs items={["http", "curl"]}>
   <Tabs.Tab>
-  ```bash copy
-  http://localhost:3000/api/weather?city=London
-   ```
-   </Tabs.Tab>
+    ```bash copy
+    http://localhost:3000/api/weather?city=London
+    ```
+  </Tabs.Tab>
   <Tabs.Tab>
-  ```bash copy
-  curl "http://localhost:3000/api/weather?city=London"
-   ```
-   </Tabs.Tab>
+    ```bash copy
+    curl "http://localhost:3000/api/weather?city=London"
+    ```
+  </Tabs.Tab>
 </Tabs>
 
 You should see output similar to the below:
@@ -207,8 +208,8 @@ The current weather in London is as follows:
 
 Let me know if you need more information!
 ```
-</Steps>
 
+</Steps>
 
 ## Next Steps
 

@@ -660,7 +660,7 @@ export class D1Store extends MastraStorage {
           content: typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
           createdAt: createdAt.toISOString(),
           role: message.role,
-          type: message.type,
+          type: message.type || 'v2',
         };
       });
 
@@ -760,6 +760,7 @@ export class D1Store extends MastraStorage {
         const processedMsg: Record<string, any> = {};
 
         for (const [key, value] of Object.entries(message)) {
+          if (key === `type` && value === `v2`) continue;
           processedMsg[key] = this.deserializeValue(value);
         }
 

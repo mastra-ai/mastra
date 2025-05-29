@@ -1,4 +1,5 @@
-import type { MessageType, StorageThreadType } from '../memory/types';
+import type { MastraMessageV2 } from '../agent';
+import type { StorageThreadType } from '../memory/types';
 import { MastraStorage } from './base';
 import type { TABLE_NAMES } from './constants';
 import type { EvalRow, StorageColumn, StorageGetMessagesArg, WorkflowRun, WorkflowRuns } from './types';
@@ -95,7 +96,7 @@ export class MockStore extends MastraStorage {
     );
   }
 
-  async getMessages<T extends MessageType[]>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T> {
+  async getMessages<T extends MastraMessageV2[]>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T> {
     this.logger.debug(`MockStore: getMessages called for thread ${threadId}`);
     // Mock implementation - filter messages by threadId
     let messages = Object.values(this.data.mastra_messages).filter((msg: any) => msg.threadId === threadId);
@@ -111,7 +112,7 @@ export class MockStore extends MastraStorage {
     return messages as T;
   }
 
-  async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
+  async saveMessages({ messages }: { messages: MastraMessageV2[] }): Promise<MastraMessageV2[]> {
     this.logger.debug(`MockStore: saveMessages called with ${messages.length} messages`);
     for (const message of messages) {
       const key = message.id;

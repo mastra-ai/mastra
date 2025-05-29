@@ -13,7 +13,7 @@ import { z } from "zod";
 
 type SupportRuntimeContext = {
   "user-tier": "free" | "pro" | "enterprise";
-  "language": "en" | "es" | "fr";
+  language: "en" | "es" | "fr";
   "user-id": string;
 };
 ```
@@ -23,11 +23,11 @@ Next, let's create our dynamic support agent with its configuration:
 ```typescript
 const supportAgent = new Agent({
   name: "Dynamic Support Agent",
-  
+
   instructions: async ({ runtimeContext }) => {
     const userTier = runtimeContext.get("user-tier");
     const language = runtimeContext.get("language");
-    
+
     return `You are a customer support agent for our SaaS platform.
     The current user is on the ${userTier} tier and prefers ${language} language.
     
@@ -41,23 +41,23 @@ const supportAgent = new Agent({
 
   model: ({ runtimeContext }) => {
     const userTier = runtimeContext.get("user-tier");
-    return userTier === "enterprise" 
-      ? openai("gpt-4") 
+    return userTier === "enterprise"
+      ? openai("gpt-4")
       : openai("gpt-3.5-turbo");
   },
 
   tools: ({ runtimeContext }) => {
     const userTier = runtimeContext.get("user-tier");
     const baseTools = [knowledgeBase, ticketSystem];
-    
+
     if (userTier === "pro" || userTier === "enterprise") {
       baseTools.push(advancedAnalytics);
     }
-    
+
     if (userTier === "enterprise") {
       baseTools.push(customIntegration);
     }
-    
+
     return baseTools;
   },
 });
@@ -68,7 +68,7 @@ Now, let's create a function to handle support requests:
 ```typescript
 async function handleSupportRequest(userId: string, message: string) {
   const runtimeContext = new RuntimeContext<SupportRuntimeContext>();
-  
+
   runtimeContext.set("user-id", userId);
   runtimeContext.set("user-tier", await getUserTier(userId));
   runtimeContext.set("language", await getUserLanguage(userId));
@@ -116,7 +116,7 @@ export const mastra = new Mastra({
         method: "POST",
         handler: async (c) => {
           const { userId, message } = await c.req.json();
-          
+
           try {
             const response = await handleSupportRequest(userId, message);
             return c.json({ response });

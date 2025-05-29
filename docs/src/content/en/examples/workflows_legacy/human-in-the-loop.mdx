@@ -217,7 +217,9 @@ const mastra = new Mastra({
 ```ts showLineNumbers copy
 // Example of using the workflow with Inquirer prompts
 async function runRecommendationWorkflow() {
-  const registeredWorkflow = mastra.legacy_getWorkflow("recommendationWorkflow");
+  const registeredWorkflow = mastra.legacy_getWorkflow(
+    "recommendationWorkflow",
+  );
   const run = registeredWorkflow.createRun();
 
   console.log("Starting product recommendation workflow...");
@@ -514,7 +516,9 @@ const mastra = new Mastra({
 
 // Example of using the workflow with Inquirer prompts
 async function runModerationDemo() {
-  const registeredWorkflow = mastra.legacy_getWorkflow("contentModerationWorkflow");
+  const registeredWorkflow = mastra.legacy_getWorkflow(
+    "contentModerationWorkflow",
+  );
   const run = registeredWorkflow.createRun();
 
   // Start the workflow with content that needs review
