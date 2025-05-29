@@ -1,5 +1,13 @@
 # create-mastra
 
+## 0.10.2-alpha.0
+
+### Patch Changes
+
+- 89a69d0: add a way to go to the given trace of a workflow step
+- 9faee5b: small fixes in the workflows graph
+- 9a31c09: Highlight steps in nested workflows on workflow graph
+
 ## 0.10.1
 
 ### Patch Changes

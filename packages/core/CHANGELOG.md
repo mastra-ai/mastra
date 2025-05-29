@@ -1,5 +1,12 @@
 # @mastra/core
 
+## 0.10.2-alpha.0
+
+### Patch Changes
+
+- 592a2db: Added different icons for agents and workflows in mcp tools list
+- e5dc18d: Added a backwards compatible layer to begin storing/retrieving UIMessages in storage instead of CoreMessages
+
 ## 0.10.1
 
 ### Patch Changes
