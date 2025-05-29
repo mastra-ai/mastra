@@ -296,6 +296,7 @@ export const CustomSearch: FC<SearchProps> = ({
                                   : "dark:bg-surface-4 bg-[var(--light-color-surface-2)]",
                               )}
                               onClick={() => handleSelect({ url: "use-ai" })}
+                              onMouseEnter={() => setSelectedIndex(0)}
                             >
                               <div className="flex items-center gap-2">
                                 <span className="dark:text-accent-green text-[var(--light-green-accent-2)] shrink-0">
@@ -350,12 +351,13 @@ export const CustomSearch: FC<SearchProps> = ({
                     >
                       <div
                         className={cn(
-                          "flex flex-col gap-2 md:gap-3 p-2 md:p-4 rounded-md cursor-pointer",
+                          "flex flex-col gap-1 p-2 md:p-4 rounded-md cursor-pointer",
                           isSelected
                             ? "dark:bg-surface-5 bg-[var(--light-color-surface-2)] "
                             : "bg-[var(--light-color-surface-15)] dark:bg-surface-4",
                         )}
                         onClick={() => handleSelect(subResult)}
+                        onMouseEnter={() => setSelectedIndex(virtualItem.index)}
                       >
                         <div className="flex gap-2 md:gap-[14px] items-center">
                           <BookIcon className="w-4 h-4 md:w-5 md:h-5 text-icons-3" />
