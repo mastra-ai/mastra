@@ -31,10 +31,16 @@ const createSampleThread = () => ({
   metadata: { key: 'value' },
 });
 
+let role: 'user' | 'assistant' = 'assistant';
+const getRole = () => {
+  if (role === `user`) role = `assistant`;
+  else role = `user`;
+  return role;
+};
 const createSampleMessage = (threadId: string): MastraMessageV1 => ({
   id: `msg-${randomUUID()}`,
   resourceId: `resource-${randomUUID()}`,
-  role: 'user',
+  role: getRole(),
   type: 'text',
   threadId,
   content: [{ type: 'text', text: 'Hello' }],
