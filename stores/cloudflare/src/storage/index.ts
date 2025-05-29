@@ -107,7 +107,30 @@ export class CloudflareStore extends MastraStorage {
         })),
       };
     }
-    return await this.client!.kv.namespaces.list({ account_id: this.accountId! });
+
+    let allNamespaces: Array<Cloudflare.KV.Namespace> = [];
+    let currentPage = 1;
+    const perPage = 50; // Using 50, max is 100 for namespaces.list
+    let morePagesExist = true;
+
+    while (morePagesExist) {
+      const response = await this.client!.kv.namespaces.list({
+        account_id: this.accountId!,
+        page: currentPage,
+        per_page: perPage,
+      });
+
+      if (response.result) {
+        allNamespaces = allNamespaces.concat(response.result);
+      }
+
+      morePagesExist = response.result ? response.result.length === perPage : false;
+
+      if (morePagesExist) {
+        currentPage++;
+      }
+    }
+    return { result: allNamespaces };
   }
 
   private async getNamespaceValue(tableName: TABLE_NAMES, key: string) {
