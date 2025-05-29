@@ -114,6 +114,7 @@ const ollama = createOllama({
   headers: {},
   fetch: async (url, options) => {
     // Implement your custom fetch logic here
+    return fetch(url, options);
     }
 });
 
