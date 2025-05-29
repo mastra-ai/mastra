@@ -642,7 +642,7 @@ export class D1Store extends MastraStorage {
 
       this.logger.debug(`Saved ${messages.length} messages`);
       const list = new MessageList().add(messages, 'memory');
-      if (format === `v2`) return list.get.all.mastra();
+      if (format === `v2`) return list.get.all.v2();
       return list.get.all.v1();
     } catch (error) {
       this.logger.error('Error saving messages:', { message: error instanceof Error ? error.message : String(error) });
@@ -747,7 +747,7 @@ export class D1Store extends MastraStorage {
       });
       this.logger.debug(`Retrieved ${messages.length} messages for thread ${threadId}`);
       const list = new MessageList().add(processedMessages as MastraMessageV1[] | MastraMessageV2[], 'memory');
-      if (format === `v2`) return list.get.all.mastra();
+      if (format === `v2`) return list.get.all.v2();
       return list.get.all.v1();
     } catch (error) {
       this.logger.error('Error retrieving messages for thread', {

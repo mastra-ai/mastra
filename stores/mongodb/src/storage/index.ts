@@ -330,7 +330,7 @@ export class MongoDBStore extends MastraStorage {
       const collection = await this.getCollection(TABLE_MESSAGES);
       await collection.insertMany(messagesToInsert);
       const list = new MessageList().add(messages, 'memory');
-      if (format === `v2`) return list.get.all.mastra();
+      if (format === `v2`) return list.get.all.v2();
       return list.get.all.v1();
     } catch (error) {
       this.logger.error('Failed to save messages in database: ' + (error as { message: string })?.message);

@@ -763,7 +763,7 @@ export class ClickhouseStore extends MastraStorage {
       });
 
       const list = new MessageList({ threadId, resourceId }).add(messages, 'memory');
-      if (format === `v2`) return list.get.all.mastra();
+      if (format === `v2`) return list.get.all.v2();
       return list.get.all.v1();
     } catch (error) {
       console.error('Error getting messages:', error);
@@ -812,7 +812,7 @@ export class ClickhouseStore extends MastraStorage {
       });
 
       const list = new MessageList({ threadId, resourceId }).add(messages, 'memory');
-      if (format === `v2`) return list.get.all.mastra();
+      if (format === `v2`) return list.get.all.v2();
       return list.get.all.v1();
     } catch (error) {
       console.error('Error saving messages:', error);

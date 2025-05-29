@@ -126,7 +126,7 @@ export class MockStore extends MastraStorage {
     }
 
     const list = new MessageList().add(messages, 'memory');
-    if (format === `v2`) return list.get.all.mastra();
+    if (format === `v2`) return list.get.all.v2();
     return list.get.all.v1();
   }
 

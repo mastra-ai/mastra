@@ -1081,7 +1081,7 @@ export class CloudflareStore extends MastraStorage {
           ({ ...message, type: message.type !== 'v2' ? message.type : undefined }) as MastraMessageV1,
       );
       const list = new MessageList().add(prepared, 'memory');
-      if (format === `v2`) return list.get.all.mastra();
+      if (format === `v2`) return list.get.all.v2();
       return list.get.all.v1();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -1153,7 +1153,7 @@ export class CloudflareStore extends MastraStorage {
       }));
       const list = new MessageList({ threadId, resourceId }).add(prepared as MastraMessageV1[], 'memory');
 
-      if (format === `v1`) return list.get.all.mastra();
+      if (format === `v1`) return list.get.all.v2();
       return list.get.all.v1();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);

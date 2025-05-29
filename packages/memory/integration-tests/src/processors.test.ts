@@ -117,9 +117,7 @@ describe('Memory with Processors', () => {
       processors: [new TokenLimiter(3000)], // High limit that should exceed total tokens
     });
 
-    const listed = new MessageList({ threadId: thread.id, resourceId })
-      .add(allMessagesResult, 'memory')
-      .get.all.mastra();
+    const listed = new MessageList({ threadId: thread.id, resourceId }).add(allMessagesResult, 'memory').get.all.v2();
 
     // We should get all 20 messages
     expect(listed.length).toBe(20);
@@ -154,7 +152,7 @@ describe('Memory with Processors', () => {
       messages: v2ToCoreMessages(queryResult.uiMessages),
       processors: [new ToolCallFilter({ exclude: ['weather'] })],
     });
-    expect(new MessageList().add(result, 'memory').get.all.mastra().length).toBeLessThan(messagesV2.length);
+    expect(new MessageList().add(result, 'memory').get.all.v2().length).toBeLessThan(messagesV2.length);
     expect(filterToolCallsByName(result, 'weather')).toHaveLength(0);
     expect(filterToolResultsByName(result, 'weather')).toHaveLength(0);
     expect(filterToolCallsByName(result, 'calculator')).toHaveLength(1);
@@ -166,7 +164,7 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
     const result2 = memory.processMessages({ messages: v2ToCoreMessages(queryResult2.uiMessages), processors: [] });
-    expect(new MessageList().add(result2, 'memory').get.all.mastra()).toHaveLength(messagesV2.length);
+    expect(new MessageList().add(result2, 'memory').get.all.v2()).toHaveLength(messagesV2.length);
     expect(filterToolCallsByName(result2, 'weather')).toHaveLength(1);
     expect(filterToolResultsByName(result2, 'weather')).toHaveLength(1);
     expect(filterToolCallsByName(result2, 'calculator')).toHaveLength(1);

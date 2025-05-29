@@ -445,7 +445,7 @@ export class LibSQLStore extends MastraStorage {
       messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
       const list = new MessageList().add(messages, 'memory');
-      if (format === `v2`) return list.get.all.mastra();
+      if (format === `v2`) return list.get.all.v2();
       return list.get.all.v1();
     } catch (error) {
       this.logger.error('Error getting messages:', error as Error);
@@ -490,7 +490,7 @@ export class LibSQLStore extends MastraStorage {
       await this.client.batch(batchStatements, 'write');
 
       const list = new MessageList().add(messages, 'memory');
-      if (format === `v1`) return list.get.all.mastra();
+      if (format === `v1`) return list.get.all.v2();
       return list.get.all.v1();
     } catch (error) {
       this.logger.error('Failed to save messages in database: ' + (error as { message: string })?.message);

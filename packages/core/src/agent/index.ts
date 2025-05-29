@@ -1019,7 +1019,7 @@ export class Agent<
           .addSystem(memorySystemMessage)
           .add(context || [], 'user')
           .add(processedMemoryMessages, 'memory')
-          .add(messageList.get.input.mastra(), 'user')
+          .add(messageList.get.input.v2(), 'user')
           .get.all.prompt();
 
         return {

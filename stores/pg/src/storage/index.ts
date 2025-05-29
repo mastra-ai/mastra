@@ -1,4 +1,5 @@
-import { MessageList, type MastraMessageV2 } from '@mastra/core/agent';
+import { MessageList } from '@mastra/core/agent';
+import type { MastraMessageV2 } from '@mastra/core/agent';
 import type { MetricResult } from '@mastra/core/eval';
 import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
 import {
@@ -717,7 +718,7 @@ export class PostgresStore extends MastraStorage {
       });
 
       const list = new MessageList().add(messages, 'memory');
-      if (format === `v2`) return list.get.all.mastra();
+      if (format === `v2`) return list.get.all.v2();
       return list.get.all.v1();
     } catch (error) {
       console.error('Error saving messages:', error);

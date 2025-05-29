@@ -162,7 +162,7 @@ export class Memory extends MastraMemory {
         return list.get.all.ui();
       },
       get messagesV2() {
-        return list.get.all.mastra();
+        return list.get.all.v2();
       },
     };
   }
@@ -201,7 +201,7 @@ export class Memory extends MastraMemory {
     const list = new MessageList({ threadId, resourceId }).add(messagesResult.messagesV2, 'memory');
 
     this.logger.debug(`Remembered message history includes ${messagesResult.messages.length} messages.`);
-    return { messages: list.get.all.v1(), messagesV2: list.get.all.mastra() };
+    return { messages: list.get.all.v1(), messagesV2: list.get.all.v2() };
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
@@ -366,7 +366,7 @@ export class Memory extends MastraMemory {
     const config = this.getMergedThreadConfig(memoryConfig);
 
     const result = this.storage.saveMessages({
-      messages: new MessageList().add(updatedMessages, 'memory').get.all.mastra(),
+      messages: new MessageList().add(updatedMessages, 'memory').get.all.v2(),
       format: 'v2',
     });
 
