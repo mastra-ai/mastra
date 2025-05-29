@@ -374,7 +374,7 @@ describe('D1Store', () => {
       expect(threads).toHaveLength(0);
 
       // Verify messages were also deleted
-      const retrievedMessages = await store.getMessages({ threadId: thread.id });
+      const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v2' });
       expect(retrievedMessages).toHaveLength(0);
     });
   });
@@ -395,7 +395,7 @@ describe('D1Store', () => {
       expect(savedMessages).toEqual(messages);
 
       // Retrieve messages
-      const retrievedMessages = await store.getMessages({ threadId: thread.id });
+      const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v2' });
       const checkMessages = messages.map(m => {
         const { resourceId, ...rest } = m;
         return {
@@ -423,7 +423,7 @@ describe('D1Store', () => {
 
       await store.saveMessages({ messages, format: 'v2' });
 
-      const retrievedMessages = await store.getMessages({ threadId: thread.id });
+      const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v2' });
       expect(retrievedMessages).toHaveLength(3);
 
       // Verify order is maintained
@@ -444,7 +444,7 @@ describe('D1Store', () => {
       await expect(store.saveMessages({ messages, format: 'v2' })).rejects.toThrow();
 
       // Verify no messages were saved
-      const savedMessages = await store.getMessages({ threadId: thread.id });
+      const savedMessages = await store.getMessages({ threadId: thread.id, format: 'v2' });
       expect(savedMessages).toHaveLength(0);
     });
   });
@@ -575,7 +575,7 @@ describe('D1Store', () => {
       await store.saveMessages({ messages, format: 'v2' });
 
       // Verify order is maintained based on insertion order
-      const order = await store.getMessages({ threadId: thread.id });
+      const order = await store.getMessages({ threadId: thread.id, format: 'v2' });
       const orderIds = order.map(m => m.id);
       const messageIds = messages.map(m => m.id);
 
@@ -599,7 +599,7 @@ describe('D1Store', () => {
       await Promise.all(reversedMessages.map(msg => store.saveMessages({ messages: [msg], format: 'v2' })));
 
       // Verify messages are saved and maintain write order (not timestamp order)
-      const order = await store.getMessages({ threadId: thread.id });
+      const order = await store.getMessages({ threadId: thread.id, format: 'v2' });
       const orderIds = order.map(m => m.id);
       const messageIds = messages.map(m => m.id);
 
@@ -633,7 +633,7 @@ describe('D1Store', () => {
       await new Promise(resolve => setTimeout(resolve, 5000));
 
       // Get messages and verify order
-      const order = await store.getMessages({ threadId: thread.id });
+      const order = await store.getMessages({ threadId: thread.id, format: 'v2' });
       expect(order.length).toBe(3);
     });
   });
@@ -1078,7 +1078,7 @@ describe('D1Store', () => {
       await store.saveMessages({ messages: [message], format: 'v2' });
 
       // Should retrieve correctly
-      const messages = await store.getMessages({ threadId: thread.id });
+      const messages = await store.getMessages({ threadId: thread.id, format: 'v2' });
       expect(messages).toHaveLength(1);
       expect(messages[0].content).toEqual(message.content);
     });
@@ -1100,7 +1100,7 @@ describe('D1Store', () => {
       await Promise.all(messages.map(msg => store.saveMessages({ messages: [msg], format: 'v2' })));
 
       // Order should reflect write order, not timestamp order
-      const order = await store.getMessages({ threadId: thread.id });
+      const order = await store.getMessages({ threadId: thread.id, format: 'v2' });
 
       // Verify messages exist in write order
       const orderIds = order.map(m => m.id);
@@ -1122,7 +1122,7 @@ describe('D1Store', () => {
       await store.saveMessages({ messages, format: 'v2' });
 
       // Verify messages exist
-      const initialOrder = await store.getMessages({ threadId: thread.id });
+      const initialOrder = await store.getMessages({ threadId: thread.id, format: 'v2' });
       expect(initialOrder).toHaveLength(messages.length);
 
       // Delete thread
@@ -1131,7 +1131,7 @@ describe('D1Store', () => {
       await new Promise(resolve => setTimeout(resolve, 5000));
 
       // Verify messages are cleaned up
-      const finalOrder = await store.getMessages({ threadId: thread.id });
+      const finalOrder = await store.getMessages({ threadId: thread.id, format: 'v2' });
       expect(finalOrder).toHaveLength(0);
 
       // Verify thread is gone
@@ -1218,7 +1218,7 @@ describe('D1Store', () => {
       await store.saveMessages({ messages: [malformedMessage], format: 'v2' });
 
       // Should still be able to retrieve and handle the message
-      const messages = await store.getMessages({ threadId: thread.id });
+      const messages = await store.getMessages({ threadId: thread.id, format: 'v2' });
       expect(messages).toHaveLength(1);
       expect(messages[0].id).toBe(malformedMessage.id);
     });
