@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import type { MastraMessageV2 } from '@mastra/core/agent';
 import type { MessageType } from '@mastra/core/memory';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 import {
@@ -28,9 +29,8 @@ const createSampleThread = (date?: Date) => ({
 const createSampleMessage = (threadId: string, content: string = 'Hello'): MessageType => ({
   id: `msg-${randomUUID()}`,
   role: 'user',
-  type: 'text',
   threadId,
-  content: [{ type: 'text', text: content }],
+  content: { format: 2, parts: [{ type: 'text', text: content }] },
   createdAt: new Date(),
   resourceId: `resource-${randomUUID()}`,
 });
@@ -327,9 +327,9 @@ describe('UpstashStore', () => {
 
       await store.saveMessages({ messages: messages });
 
-      const retrievedMessages = await store.getMessages<MessageType[]>({ threadId });
+      const retrievedMessages = await store.getMessages<MastraMessageV2[]>({ threadId });
       expect(retrievedMessages).toHaveLength(3);
-      expect(retrievedMessages.map((m: any) => m.content[0].text)).toEqual(['First', 'Second', 'Third']);
+      expect(retrievedMessages.map((m: any) => m.content.parts[0].text)).toEqual(['First', 'Second', 'Third']);
     });
 
     it('should handle empty message array', async () => {
@@ -343,19 +343,21 @@ describe('UpstashStore', () => {
           id: 'msg-1',
           threadId,
           role: 'user',
-          type: 'text',
-          content: [
-            { type: 'text', text: 'Message with' },
-            { type: 'code', text: 'code block', language: 'typescript' },
-            { type: 'text', text: 'and more text' },
-          ],
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'Message with' },
+              { type: 'code', text: 'code block', language: 'typescript' },
+              { type: 'text', text: 'and more text' },
+            ],
+          },
           createdAt: new Date(),
         },
       ] as MessageType[];
 
       await store.saveMessages({ messages });
 
-      const retrievedMessages = await store.getMessages<MessageType>({ threadId });
+      const retrievedMessages = await store.getMessages<MastraMessageV2>({ threadId });
       expect(retrievedMessages[0].content).toEqual(messages[0].content);
     });
   });

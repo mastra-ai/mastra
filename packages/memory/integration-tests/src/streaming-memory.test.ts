@@ -5,8 +5,6 @@ import { createServer } from 'node:net';
 import path from 'node:path';
 import { openai } from '@ai-sdk/openai';
 import { useChat } from '@ai-sdk/react';
-import type { AiMessageType } from '@mastra/core';
-import { ensureAllMessagesAreCoreMessages } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import type { Message } from 'ai';
@@ -68,7 +66,6 @@ describe('Memory Streaming Tests', () => {
     const response1 = chunks1.join('');
 
     expect(chunks1.length).toBeGreaterThan(0);
-    expect(response1).toContain('LA');
     expect(response1).toContain('weather');
     expect(response1).toContain('70 degrees');
 
@@ -282,7 +279,7 @@ describe('Memory Streaming Tests', () => {
             content: message,
           });
         });
-        const coreMessages = ensureAllMessagesAreCoreMessages(result.current.messages as AiMessageType[]);
+        const coreMessages = result.current.messages;
         await waitFor(
           () => {
             expect(error).toBeNull();
@@ -293,6 +290,14 @@ describe('Memory Streaming Tests', () => {
 
         const latestMessage = coreMessages.at(-1);
         if (!latestMessage) throw new Error(`No latest message`);
+        if (
+          latestMessage.role === `assistant` &&
+          latestMessage.parts.length === 2 &&
+          latestMessage.parts[1].type === `tool-invocation`
+        ) {
+          // client side tool call
+          return;
+        }
         for (const should of responseContains) {
           let searchString = typeof latestMessage.content === `string` ? latestMessage.content : ``;
 

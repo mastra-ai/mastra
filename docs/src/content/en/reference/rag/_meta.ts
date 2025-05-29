@@ -12,6 +12,7 @@ export default {
   pg: "PgVector",
   libsql: "LibSQLVector",
   mongodb: "MongoDBVector",
+  couchbase: "CouchbaseVector",
   opensearch: "OpenSearchVector",
   pinecone: "PineconeVector",
   qdrant: "QdrantVector",

@@ -107,7 +107,30 @@ export class CloudflareStore extends MastraStorage {
         })),
       };
     }
-    return await this.client!.kv.namespaces.list({ account_id: this.accountId! });
+
+    let allNamespaces: Array<Cloudflare.KV.Namespace> = [];
+    let currentPage = 1;
+    const perPage = 50; // Using 50, max is 100 for namespaces.list
+    let morePagesExist = true;
+
+    while (morePagesExist) {
+      const response = await this.client!.kv.namespaces.list({
+        account_id: this.accountId!,
+        page: currentPage,
+        per_page: perPage,
+      });
+
+      if (response.result) {
+        allNamespaces = allNamespaces.concat(response.result);
+      }
+
+      morePagesExist = response.result ? response.result.length === perPage : false;
+
+      if (morePagesExist) {
+        currentPage++;
+      }
+    }
+    return { result: allNamespaces };
   }
 
   private async getNamespaceValue(tableName: TABLE_NAMES, key: string) {
@@ -993,7 +1016,7 @@ export class CloudflareStore extends MastraStorage {
         return {
           ...message,
           createdAt: this.ensureDate(message.createdAt)!,
-          type: message.type || 'text',
+          type: message.type || 'v2',
           _index: index,
         };
       });
@@ -1044,7 +1067,10 @@ export class CloudflareStore extends MastraStorage {
       );
 
       // Remove _index from returned messages
-      return validatedMessages.map(({ _index, ...message }) => message as MessageType);
+      return validatedMessages.map(
+        ({ _index, ...message }) =>
+          ({ ...message, type: message.type !== 'v2' ? message.type : undefined }) as MessageType,
+      );
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error(`Error saving messages: ${errorMessage}`);
@@ -1103,6 +1129,7 @@ export class CloudflareStore extends MastraStorage {
       // Remove _index and ensure dates before returning, just like Upstash
       return messages.map(({ _index, ...message }) => ({
         ...message,
+        type: message.type === `v2` ? undefined : message.type,
         createdAt: this.ensureDate(message.createdAt)!,
       })) as T[];
     } catch (error) {

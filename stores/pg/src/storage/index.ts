@@ -1,5 +1,6 @@
+import type { MastraMessageV2 } from '@mastra/core/agent';
 import type { MetricResult } from '@mastra/core/eval';
-import type { MessageType, StorageThreadType } from '@mastra/core/memory';
+import type { StorageThreadType } from '@mastra/core/memory';
 import {
   MastraStorage,
   TABLE_MESSAGES,
@@ -666,6 +667,7 @@ export class PostgresStore extends MastraStorage {
             // If parsing fails, leave as string
           }
         }
+        if (message.type === `v2`) delete message.type;
       });
 
       return messages as T[];
@@ -675,7 +677,7 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
-  async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
+  async saveMessages({ messages }: { messages: MastraMessageV2[] }): Promise<MastraMessageV2[]> {
     if (messages.length === 0) return messages;
 
     try {
@@ -701,7 +703,7 @@ export class PostgresStore extends MastraStorage {
               typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
               message.createdAt || new Date().toISOString(),
               message.role,
-              message.type,
+              message.type || 'v2',
             ],
           );
         }

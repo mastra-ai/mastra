@@ -1,13 +1,7 @@
-import type {
-  AssistantContent,
-  ToolResultPart,
-  UserContent,
-  CoreToolMessage,
-  ToolInvocation,
-  CoreMessage,
-  EmbeddingModel,
-} from 'ai';
+import type { AssistantContent, UserContent, CoreMessage, EmbeddingModel, UIMessage } from 'ai';
 
+import { MessageList } from '../agent/message-list';
+import type { MastraMessageV2 } from '../agent/message-list';
 import { MastraBase } from '../base';
 import type { MastraStorage, StorageGetMessagesArg } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
@@ -15,7 +9,7 @@ import type { CoreTool } from '../tools';
 import { deepMerge } from '../utils';
 import type { MastraVector } from '../vector';
 
-import type { MessageType, SharedMemoryConfig, StorageThreadType, MemoryConfig, AiMessageType } from './types';
+import type { SharedMemoryConfig, StorageThreadType, MemoryConfig, MastraMessageV1 } from './types';
 
 export type MemoryProcessorOpts = {
   systemMessage?: string;
@@ -214,132 +208,16 @@ export abstract class MastraMemory extends MastraBase {
     threadId,
     resourceId,
     vectorMessageSearch,
-    systemMessage,
     config,
   }: {
     threadId: string;
     resourceId?: string;
     vectorMessageSearch?: string;
-    systemMessage?: CoreMessage;
     config?: MemoryConfig;
-  }): Promise<{
-    threadId: string;
-    messages: CoreMessage[];
-    uiMessages: AiMessageType[];
-  }>;
+  }): Promise<{ messages: MastraMessageV1[]; messagesV2: MastraMessageV2[] }>;
 
   estimateTokens(text: string): number {
     return Math.ceil(text.split(' ').length * 1.3);
-  }
-
-  protected parseMessages(messages: MessageType[]): CoreMessage[] {
-    return messages.map(msg => {
-      let content = msg.content;
-      if (typeof content === 'string' && (content.startsWith('[') || content.startsWith('{'))) {
-        try {
-          content = JSON.parse(content);
-        } catch {
-          // Keep the original string if it's not valid JSON
-        }
-      } else if (typeof content === 'number') {
-        content = String(content);
-      }
-      return {
-        ...msg,
-        content,
-      };
-    }) as CoreMessage[];
-  }
-
-  protected convertToUIMessages(messages: MessageType[]): AiMessageType[] {
-    function addToolMessageToChat({
-      toolMessage,
-      messages,
-      toolResultContents,
-    }: {
-      toolMessage: CoreToolMessage;
-      messages: Array<AiMessageType>;
-      toolResultContents: Array<ToolResultPart>;
-    }): { chatMessages: Array<AiMessageType>; toolResultContents: Array<ToolResultPart> } {
-      const chatMessages = messages.map(message => {
-        if (message.toolInvocations) {
-          return {
-            ...message,
-            toolInvocations: message.toolInvocations.map(toolInvocation => {
-              const toolResult = toolMessage.content.find(tool => tool.toolCallId === toolInvocation.toolCallId);
-
-              if (toolResult) {
-                return {
-                  ...toolInvocation,
-                  state: 'result',
-                  result: toolResult.result,
-                };
-              }
-
-              return toolInvocation;
-            }),
-          };
-        }
-
-        return message;
-      }) as Array<AiMessageType>;
-
-      const resultContents = [...toolResultContents, ...toolMessage.content];
-
-      return { chatMessages, toolResultContents: resultContents };
-    }
-
-    const { chatMessages } = messages.reduce(
-      (obj: { chatMessages: Array<AiMessageType>; toolResultContents: Array<ToolResultPart> }, message) => {
-        if (message.role === 'tool') {
-          return addToolMessageToChat({
-            toolMessage: message as CoreToolMessage,
-            messages: obj.chatMessages,
-            toolResultContents: obj.toolResultContents,
-          });
-        }
-
-        let textContent = '';
-        let toolInvocations: Array<ToolInvocation> = [];
-
-        if (typeof message.content === 'string') {
-          textContent = message.content;
-        } else if (typeof message.content === 'number') {
-          textContent = String(message.content);
-        } else if (Array.isArray(message.content)) {
-          for (const content of message.content) {
-            if (content.type === 'text') {
-              textContent += content.text;
-            } else if (content.type === 'tool-call') {
-              const toolResult = obj.toolResultContents.find(tool => tool.toolCallId === content.toolCallId);
-              toolInvocations.push({
-                state: toolResult ? 'result' : 'call',
-                toolCallId: content.toolCallId,
-                toolName: content.toolName,
-                args: content.args,
-                result: toolResult?.result,
-              });
-            }
-          }
-        }
-
-        obj.chatMessages.push({
-          id: (message as MessageType).id,
-          role: message.role as AiMessageType['role'],
-          content: textContent,
-          toolInvocations,
-          createdAt: message.createdAt,
-        });
-
-        return obj;
-      },
-      { chatMessages: [], toolResultContents: [] } as {
-        chatMessages: Array<AiMessageType>;
-        toolResultContents: Array<ToolResultPart>;
-      },
-    );
-
-    return chatMessages;
   }
 
   /**
@@ -373,9 +251,9 @@ export abstract class MastraMemory extends MastraBase {
     messages,
     memoryConfig,
   }: {
-    messages: MessageType[];
+    messages: (MastraMessageV1 | MastraMessageV2)[];
     memoryConfig: MemoryConfig | undefined;
-  }): Promise<MessageType[]>;
+  }): Promise<MastraMessageV2[]>;
 
   /**
    * Retrieves all messages for a specific thread
@@ -386,7 +264,7 @@ export abstract class MastraMemory extends MastraBase {
     threadId,
     resourceId,
     selectBy,
-  }: StorageGetMessagesArg): Promise<{ messages: CoreMessage[]; uiMessages: AiMessageType[] }>;
+  }: StorageGetMessagesArg): Promise<{ messages: MastraMessageV1[]; uiMessages: UIMessage[] }>;
 
   /**
    * Helper method to create a new thread
@@ -435,6 +313,7 @@ export abstract class MastraMemory extends MastraBase {
    * @param toolCallArgs - Optional array of tool call arguments
    * @param toolCallIds - Optional array of tool call ids
    * @returns Promise resolving to the saved message
+   * @deprecated use saveMessages instead
    */
   async addMessage({
     threadId,
@@ -456,8 +335,8 @@ export abstract class MastraMemory extends MastraBase {
     toolNames?: string[];
     toolCallArgs?: Record<string, unknown>[];
     toolCallIds?: string[];
-  }): Promise<MessageType> {
-    const message: MessageType = {
+  }): Promise<MastraMessageV1> {
+    const message: MastraMessageV1 = {
       id: this.generateId(),
       content,
       role,
@@ -471,7 +350,8 @@ export abstract class MastraMemory extends MastraBase {
     };
 
     const savedMessages = await this.saveMessages({ messages: [message], memoryConfig: config });
-    return savedMessages[0]!;
+    const list = new MessageList({ threadId, resourceId }).add(savedMessages[0]!, 'memory');
+    return list.get.all.v1()[0]!;
   }
 
   /**

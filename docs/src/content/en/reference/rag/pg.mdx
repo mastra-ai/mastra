@@ -362,20 +362,32 @@ Updates an existing vector by ID. At least one of vector or metadata must be pro
 
 ```typescript copy
 // Update just the vector
-await pgVector.updateVector({ indexName: "my_vectors", id: "vector123", update: {
-  vector: [0.1, 0.2, 0.3],
-}});
+await pgVector.updateVector({
+  indexName: "my_vectors",
+  id: "vector123",
+  update: {
+    vector: [0.1, 0.2, 0.3],
+  },
+});
 
 // Update just the metadata
-await pgVector.updateVector({ indexName: "my_vectors", id: "vector123", update: {
-  metadata: { label: "updated" },
-}});
+await pgVector.updateVector({
+  indexName: "my_vectors",
+  id: "vector123",
+  update: {
+    metadata: { label: "updated" },
+  },
+});
 
 // Update both vector and metadata
-await pgVector.updateVector({ indexName: "my_vectors", id: "vector123", update: {
-  vector: [0.1, 0.2, 0.3],
-  metadata: { label: "updated" },
-}});
+await pgVector.updateVector({
+  indexName: "my_vectors",
+  id: "vector123",
+  update: {
+    vector: [0.1, 0.2, 0.3],
+    metadata: { label: "updated" },
+  },
+});
 ```
 
 ### deleteVector()

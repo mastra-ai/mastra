@@ -81,21 +81,21 @@ const myStep = createStep({
               name: "steps",
               type: "string[]",
               description: "Steps to resume",
-              isOptional: false
+              isOptional: false,
             },
             {
               name: "resumePayload",
               type: "any",
               description: "Payload data for resuming",
-              isOptional: false
+              isOptional: false,
             },
             {
               name: "runId",
               type: "string",
               description: "ID of the run to resume",
-              isOptional: true
-            }
-          ]
+              isOptional: true,
+            },
+          ],
         },
         {
           name: "emitter",
@@ -107,18 +107,18 @@ const myStep = createStep({
               name: "emit",
               type: "(event: string, data: any) => void",
               description: "Function to emit events",
-              isOptional: false
-            }
-          ]
+              isOptional: false,
+            },
+          ],
         },
         {
           name: "mastra",
           type: "Mastra",
           description: "Mastra instance",
-          isOptional: false
-        }
-      ]
-    }
+          isOptional: false,
+        },
+      ],
+    },
   ]}
 />
 
