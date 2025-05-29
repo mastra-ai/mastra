@@ -32,10 +32,12 @@ export function LegacyWorkflowTrigger({
   workflowId,
   baseUrl,
   setRunId,
+  mastraClientHeaders,
 }: {
   workflowId: string;
   baseUrl: string;
   setRunId?: (runId: string) => void;
+  mastraClientHeaders?: Record<string, string>;
 }) {
   const { legacyResult: result, setLegacyResult: setResult, payload, setPayload } = useContext(WorkflowRunContext);
   const { isLoading, legacyWorkflow: workflow } = useLegacyWorkflow(workflowId, baseUrl);
@@ -45,9 +47,11 @@ export function LegacyWorkflowTrigger({
     watchLegacyWorkflow: watchWorkflow,
     legacyWatchResult: watchResult,
     isWatchingLegacyWorkflow: isWatchingWorkflow,
-  } = useWatchWorkflow(baseUrl);
-  const { resumeLegacyWorkflow: resumeWorkflow, isResumingLegacyWorkflow: isResumingWorkflow } =
-    useResumeWorkflow(baseUrl);
+  } = useWatchWorkflow(baseUrl, mastraClientHeaders);
+  const { resumeLegacyWorkflow: resumeWorkflow, isResumingLegacyWorkflow: isResumingWorkflow } = useResumeWorkflow(
+    baseUrl,
+    mastraClientHeaders,
+  );
   const [suspendedSteps, setSuspendedSteps] = useState<SuspendedStep[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const triggerSchema = workflow?.triggerSchema;
