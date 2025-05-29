@@ -626,7 +626,7 @@ export class DynamoDBStore extends MastraStorage {
   }
 
   // Helper function to parse message data (handle JSON fields)
-  private parseMessageData(data: any): MastraMessageV2 {
+  private parseMessageData(data: any): MastraMessageV2 | MastraMessageV1 {
     // Removed try/catch and JSON.parse logic - now handled by entity 'get' attributes
     // This function now primarily ensures correct typing and Date conversion.
     return {
@@ -636,7 +636,7 @@ export class DynamoDBStore extends MastraStorage {
       updatedAt: data.updatedAt ? new Date(data.updatedAt) : undefined,
       // Other fields like content, toolCallArgs etc. are assumed to be correctly
       // transformed by the ElectroDB entity getters.
-    } as MastraMessageV2; // Add explicit type assertion
+    };
   }
 
   // Trace operations
