@@ -490,7 +490,7 @@ export class LibSQLStore extends MastraStorage {
       await this.client.batch(batchStatements, 'write');
 
       const list = new MessageList().add(messages, 'memory');
-      if (format === `v1`) return list.get.all.v2();
+      if (format === `v2`) return list.get.all.v2();
       return list.get.all.v1();
     } catch (error) {
       this.logger.error('Failed to save messages in database: ' + (error as { message: string })?.message);
