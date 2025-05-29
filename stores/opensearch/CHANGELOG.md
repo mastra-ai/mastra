@@ -1,5 +1,15 @@
 # @mastra/opensearch
 
+## 0.10.1-alpha.0
+
+### Patch Changes
+
+- 915ca1a: Added disconnect function for couchbase and added docs
+  Added prompt for OpenSearchVector
+- Updated dependencies [ee77e78]
+- Updated dependencies [2901125]
+  - @mastra/core@0.10.2-alpha.1
+
 ## 0.10.0
 
 ### Minor Changes
