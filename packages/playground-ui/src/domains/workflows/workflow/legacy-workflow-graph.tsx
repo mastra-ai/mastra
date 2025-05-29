@@ -9,16 +9,8 @@ import { AlertCircleIcon } from 'lucide-react';
 import { LegacyWorkflowNestedGraphProvider } from '../context/legacy-workflow-nested-graph-context';
 import { ReactFlowProvider } from '@xyflow/react';
 
-export function LegacyWorkflowGraph({
-  workflowId,
-  baseUrl,
-  mastraClientHeaders,
-}: {
-  workflowId: string;
-  baseUrl: string;
-  mastraClientHeaders?: Record<string, string>;
-}) {
-  const { legacyWorkflow, isLoading } = useLegacyWorkflow(workflowId, baseUrl, mastraClientHeaders);
+export function LegacyWorkflowGraph({ workflowId }: { workflowId: string }) {
+  const { legacyWorkflow, isLoading } = useLegacyWorkflow(workflowId);
 
   if (isLoading) {
     return (

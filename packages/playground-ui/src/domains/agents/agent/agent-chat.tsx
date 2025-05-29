@@ -12,10 +12,8 @@ export const AgentChat = ({
   threadId,
   initialMessages,
   memory,
-  baseUrl,
   refreshThreadList,
   showFileSupport,
-  mastraClientHeaders,
 }: ChatProps) => {
   const { modelSettings, chatWithGenerate } = useContext(AgentContext);
   const { runtimeContext } = usePlaygroundStore();
@@ -26,12 +24,10 @@ export const AgentChat = ({
       threadId={threadId}
       initialMessages={initialMessages}
       memory={memory}
-      baseUrl={baseUrl}
       refreshThreadList={refreshThreadList}
       modelSettings={modelSettings}
       chatWithGenerate={chatWithGenerate}
       runtimeContext={runtimeContext}
-      mastraClientHeaders={mastraClientHeaders}
     >
       <div className="h-full pb-4 bg-surface1">
         <Thread agentName={agentName ?? ''} hasMemory={memory} showFileSupport={showFileSupport} />

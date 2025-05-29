@@ -23,13 +23,11 @@ export interface ChatProps {
   threadId?: string;
   initialMessages?: Message[];
   memory?: boolean;
-  baseUrl?: string;
   refreshThreadList?: () => void;
   modelSettings?: ModelSettings;
   chatWithGenerate?: boolean;
   runtimeContext?: Record<string, any>;
   showFileSupport?: boolean;
-  mastraClientHeaders?: Record<string, string>;
 }
 
 export type SpanStatus = {

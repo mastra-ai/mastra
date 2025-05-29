@@ -1,11 +1,11 @@
-import type { Workflow } from '@mastra/core/workflows';
 import { useEffect, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import { toast } from 'sonner';
 import { LegacyWorkflowRunResult, WorkflowWatchResult, GetWorkflowResponse } from '@mastra/client-js';
+import type { MastraClient } from '@mastra/client-js';
 import { RuntimeContext } from '@mastra/core/runtime-context';
-import { createMastraClient } from '@/lib/mastra-client';
 import type { LegacyWorkflow } from '@mastra/core/workflows/legacy';
+import { useMastraClient } from '@/contexts/mastra-client-context';
 
 export type ExtendedLegacyWorkflowRunResult = LegacyWorkflowRunResult & {
   sanitizedOutput?: string | null;
@@ -62,15 +62,11 @@ const sanitizeWorkflowWatchResult = (record: WorkflowWatchResult) => {
   return sanitizedRecord;
 };
 
-export const useLegacyWorkflow = (
-  workflowId: string,
-  baseUrl: string,
-  mastraClientHeaders?: Record<string, string>,
-) => {
+export const useLegacyWorkflow = (workflowId: string) => {
   const [legacyWorkflow, setLegacyWorkflow] = useState<LegacyWorkflow | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const client = createMastraClient(baseUrl, mastraClientHeaders);
+  const client = useMastraClient();
 
   useEffect(() => {
     const fetchWorkflow = async () => {
@@ -119,11 +115,11 @@ export const useLegacyWorkflow = (
   return { legacyWorkflow, isLoading };
 };
 
-export const useWorkflow = (workflowId: string, baseUrl: string, mastraClientHeaders?: Record<string, string>) => {
+export const useWorkflow = (workflowId: string) => {
   const [workflow, setWorkflow] = useState<GetWorkflowResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const client = createMastraClient(baseUrl, mastraClientHeaders);
+  const client = useMastraClient();
 
   useEffect(() => {
     const fetchWorkflow = async () => {
@@ -151,8 +147,8 @@ export const useWorkflow = (workflowId: string, baseUrl: string, mastraClientHea
   return { workflow, isLoading };
 };
 
-export const useExecuteWorkflow = (baseUrl: string, mastraClientHeaders?: Record<string, string>) => {
-  const client = createMastraClient(baseUrl, mastraClientHeaders);
+export const useExecuteWorkflow = () => {
+  const client = useMastraClient();
 
   const createLegacyWorkflowRun = async ({ workflowId, prevRunId }: { workflowId: string; prevRunId?: string }) => {
     try {
@@ -254,11 +250,12 @@ export const useExecuteWorkflow = (baseUrl: string, mastraClientHeaders?: Record
   };
 };
 
-export const useWatchWorkflow = (baseUrl: string, mastraClientHeaders?: Record<string, string>) => {
+export const useWatchWorkflow = () => {
   const [isWatchingLegacyWorkflow, setIsWatchingLegacyWorkflow] = useState(false);
   const [isWatchingWorkflow, setIsWatchingWorkflow] = useState(false);
   const [legacyWatchResult, setLegacyWatchResult] = useState<ExtendedLegacyWorkflowRunResult | null>(null);
   const [watchResult, setWatchResult] = useState<ExtendedWorkflowWatchResult | null>(null);
+  const client = useMastraClient();
 
   // Debounce the state update to prevent too frequent renders
   const debouncedSetLegacyWorkflowWatchResult = useDebouncedCallback((record: ExtendedLegacyWorkflowRunResult) => {
@@ -293,7 +290,6 @@ export const useWatchWorkflow = (baseUrl: string, mastraClientHeaders?: Record<s
   const watchLegacyWorkflow = async ({ workflowId, runId }: { workflowId: string; runId: string }) => {
     try {
       setIsWatchingLegacyWorkflow(true);
-      const client = createMastraClient(baseUrl, mastraClientHeaders);
 
       const workflow = client.getLegacyWorkflow(workflowId);
 
@@ -326,7 +322,6 @@ export const useWatchWorkflow = (baseUrl: string, mastraClientHeaders?: Record<s
   const watchWorkflow = async ({ workflowId, runId }: { workflowId: string; runId: string }) => {
     try {
       setIsWatchingWorkflow(true);
-      const client = createMastraClient(baseUrl, mastraClientHeaders);
 
       const workflow = client.getWorkflow(workflowId);
 
@@ -360,9 +355,11 @@ export const useWatchWorkflow = (baseUrl: string, mastraClientHeaders?: Record<s
   };
 };
 
-export const useResumeWorkflow = (baseUrl: string, mastraClientHeaders?: Record<string, string>) => {
+export const useResumeWorkflow = () => {
   const [isResumingLegacyWorkflow, setIsResumingLegacyWorkflow] = useState(false);
   const [isResumingWorkflow, setIsResumingWorkflow] = useState(false);
+
+  const client = useMastraClient();
 
   const resumeLegacyWorkflow = async ({
     workflowId,
@@ -377,7 +374,6 @@ export const useResumeWorkflow = (baseUrl: string, mastraClientHeaders?: Record<
   }) => {
     try {
       setIsResumingLegacyWorkflow(true);
-      const client = createMastraClient(baseUrl, mastraClientHeaders);
 
       const response = await client.getLegacyWorkflow(workflowId).resume({ stepId, runId, context });
 
@@ -405,7 +401,6 @@ export const useResumeWorkflow = (baseUrl: string, mastraClientHeaders?: Record<
   }) => {
     try {
       setIsResumingWorkflow(true);
-      const client = createMastraClient(baseUrl, mastraClientHeaders);
 
       const runtimeContext = new RuntimeContext();
       Object.entries(playgroundRuntimeContext).forEach(([key, value]) => {

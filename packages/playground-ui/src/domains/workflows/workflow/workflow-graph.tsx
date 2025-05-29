@@ -11,13 +11,11 @@ import { WorkflowNestedGraphProvider } from '../context/workflow-nested-graph-co
 
 export interface WorkflowGraphProps {
   workflowId: string;
-  baseUrl: string;
   onShowTrace: ({ runId, stepName }: { runId: string; stepName: string }) => void;
-  mastraClientHeaders?: Record<string, string>;
 }
 
-export function WorkflowGraph({ workflowId, baseUrl, onShowTrace, mastraClientHeaders }: WorkflowGraphProps) {
-  const { workflow, isLoading } = useWorkflow(workflowId, baseUrl, mastraClientHeaders);
+export function WorkflowGraph({ workflowId, onShowTrace }: WorkflowGraphProps) {
+  const { workflow, isLoading } = useWorkflow(workflowId);
 
   if (isLoading) {
     return (

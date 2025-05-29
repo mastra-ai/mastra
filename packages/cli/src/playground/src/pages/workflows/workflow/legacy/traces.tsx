@@ -11,7 +11,7 @@ function WorkflowTracesContent() {
   const { legacyWorkflow, isLoading: isWorkflowLoading } = useLegacyWorkflow(workflowId!);
 
   // This hook will now be called within a TraceProvider context
-  const { traces, error, firstCallLoading } = useTraces(legacyWorkflow?.name || '', '', true);
+  const { traces, error, firstCallLoading } = useTraces(legacyWorkflow?.name || '', true);
 
   if (isWorkflowLoading) {
     return (

@@ -26,24 +26,14 @@ interface SuspendedStep {
   suspendPayload: any;
 }
 
-export function WorkflowTrigger({
-  workflowId,
-  baseUrl,
-  setRunId,
-  mastraClientHeaders,
-}: {
-  workflowId: string;
-  baseUrl: string;
-  setRunId?: (runId: string) => void;
-  mastraClientHeaders?: Record<string, string>;
-}) {
+export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; setRunId?: (runId: string) => void }) {
   const { runtimeContext } = usePlaygroundStore();
   const { result, setResult, payload, setPayload } = useContext(WorkflowRunContext);
-  const { isLoading, workflow } = useWorkflow(workflowId, baseUrl, mastraClientHeaders);
+  const { isLoading, workflow } = useWorkflow(workflowId);
 
-  const { createWorkflowRun, startWorkflowRun } = useExecuteWorkflow(baseUrl, mastraClientHeaders);
-  const { watchWorkflow, watchResult, isWatchingWorkflow } = useWatchWorkflow(baseUrl, mastraClientHeaders);
-  const { resumeWorkflow, isResumingWorkflow } = useResumeWorkflow(baseUrl, mastraClientHeaders);
+  const { createWorkflowRun, startWorkflowRun } = useExecuteWorkflow();
+  const { watchWorkflow, watchResult, isWatchingWorkflow } = useWatchWorkflow();
+  const { resumeWorkflow, isResumingWorkflow } = useResumeWorkflow();
   const [suspendedSteps, setSuspendedSteps] = useState<SuspendedStep[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const triggerSchema = workflow?.inputSchema;

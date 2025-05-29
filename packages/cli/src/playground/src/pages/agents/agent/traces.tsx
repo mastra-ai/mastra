@@ -8,7 +8,7 @@ import { useAgent } from '@/hooks/use-agents';
 function AgentTracesContent() {
   const { agentId } = useParams();
   const { agent, isLoading: isAgentLoading } = useAgent(agentId!);
-  const { traces, firstCallLoading, error } = useTraces(agent?.name || '', '');
+  const { traces, firstCallLoading, error } = useTraces(agent?.name || '');
 
   if (isAgentLoading) {
     return (
@@ -19,14 +19,16 @@ function AgentTracesContent() {
   }
 
   return (
-    <TraceProvider initialTraces={traces || []}>
-      <AgentTraces traces={traces || []} isLoading={firstCallLoading} error={error} className="h-[calc(100vh-40px)]" />
-    </TraceProvider>
+    <AgentTraces traces={traces || []} isLoading={firstCallLoading} error={error} className="h-[calc(100vh-40px)]" />
   );
 }
 
 function AgentTracesPage() {
-  return <AgentTracesContent />;
+  return (
+    <TraceProvider initialTraces={[]}>
+      <AgentTracesContent />
+    </TraceProvider>
+  );
 }
 
 export default AgentTracesPage;
