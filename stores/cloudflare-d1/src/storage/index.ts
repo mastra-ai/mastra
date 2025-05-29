@@ -104,42 +104,6 @@ export class D1Store extends MastraStorage {
     return params.map(p => (p === undefined || p === null ? null : p) as string);
   }
 
-  // Helper method to create SQL indexes for better query performance
-  private async createIndexIfNotExists(
-    tableName: TABLE_NAMES,
-    columnName: string,
-    indexType: string = '',
-  ): Promise<void> {
-    const fullTableName = this.getTableName(tableName);
-    const indexName = `idx_${tableName}_${columnName}`;
-
-    try {
-      // Check if index exists
-      const checkQuery = createSqlBuilder().checkIndexExists(indexName, fullTableName);
-      const { sql: checkSql, params: checkParams } = checkQuery.build();
-
-      const indexExists = await this.executeQuery({
-        sql: checkSql,
-        params: checkParams,
-        first: true,
-      });
-
-      if (!indexExists) {
-        // Create the index if it doesn't exist
-        const createQuery = createSqlBuilder().createIndex(indexName, fullTableName, columnName, indexType);
-        const { sql: createSql, params: createParams } = createQuery.build();
-
-        await this.executeQuery({ sql: createSql, params: createParams });
-        this.logger.debug(`Created index ${indexName} on ${fullTableName}(${columnName})`);
-      }
-    } catch (error) {
-      this.logger.error(`Error creating index on ${fullTableName}(${columnName}):`, {
-        message: error instanceof Error ? error.message : String(error),
-      });
-      // Non-fatal error, continue execution
-    }
-  }
-
   private async executeWorkersBindingQuery({
     sql,
     params = [],
