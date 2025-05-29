@@ -353,10 +353,10 @@ export const CustomSearch: FC<SearchProps> = ({
                             {subResult.title}
                           </span>
                         </div>
-                        <div className="ml-2 flex items-center gap-2 md:gap-[14px] truncate border-l-2 dark:border-borders-2 border-[var(--light-border-code)] pl-2 md:pl-4">
-                          <BurgerIcon className="w-3.5 h-3.5 md:w-4 md:h-4 shrink-0 text-icons-3" />
+                        <div className="ml-2 flex items-center gap-2 truncate border-l-2 dark:border-borders-2 border-[var(--light-border-code)] pl-2 md:pl-6">
+                          <BurgerIcon className="w-3 h-3 md:w-3.5 md:h-3.5 shrink-0 text-icons-3" />
                           <div
-                            className="text-base md:text-lg font-normal truncate text-icons-3 [&_mark]:text-[var(--light-green-accent-2)] dark:[&_mark]:text-accent-green [&_mark]:bg-transparent"
+                            className="text-sm md:text-base font-normal truncate text-icons-3 [&_mark]:text-[var(--light-green-accent-2)] dark:[&_mark]:text-accent-green [&_mark]:bg-transparent"
                             dangerouslySetInnerHTML={{
                               __html: subResult.excerpt,
                             }}
