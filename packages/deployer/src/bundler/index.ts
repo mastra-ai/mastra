@@ -55,11 +55,14 @@ export abstract class Bundler extends MastraBundler {
     const dependenciesMap = new Map();
     for (const [key, value] of dependencies.entries()) {
       if (key.startsWith('@')) {
+        // Handle scoped packages (e.g. @org/package)
         const pkgChunks = key.split('/');
         dependenciesMap.set(`${pkgChunks[0]}/${pkgChunks[1]}`, value);
-        continue;
+      } else {
+        // For non-scoped packages, take only the first part before any slash
+        const pkgName = key.split('/')[0] || key;
+        dependenciesMap.set(pkgName, value);
       }
-      dependenciesMap.set(key, value);
     }
 
     dependenciesMap.set('@opentelemetry/instrumentation', 'latest');
