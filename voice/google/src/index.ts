@@ -150,7 +150,7 @@ export class GoogleVoice extends MastraVoice {
   /**
    * Checks if listening capabilities are enabled.
    *
-   * @returns {Promise<string>} The default voice ID
+   * @returns {Promise<{ enabled: boolean }>}
    */
   async getListener() {
     return { enabled: true };

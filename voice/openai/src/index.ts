@@ -168,7 +168,7 @@ export class OpenAIVoice extends MastraVoice {
   /**
    * Checks if listening capabilities are enabled.
    *
-   * @returns {Promise<string>} The default voice ID
+   * @returns {Promise<{ enabled: boolean }>}
    */
   async getListener() {
     if (!this.listeningClient) {
