@@ -1,5 +1,15 @@
 # @mastra/agui
 
+## 1.0.2-alpha.0
+
+### Patch Changes
+
+- 187b17d: Bump for runtimecontext
+- Updated dependencies [592a2db]
+- Updated dependencies [e5dc18d]
+  - @mastra/client-js@0.10.2-alpha.0
+  - @mastra/core@0.10.2-alpha.0
+
 ## 1.0.1
 
 ### Patch Changes
