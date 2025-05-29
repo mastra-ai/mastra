@@ -1153,8 +1153,8 @@ export class CloudflareStore extends MastraStorage {
       }));
       const list = new MessageList({ threadId, resourceId }).add(prepared as MastraMessageV1[], 'memory');
 
-      if (format === `v1`) return list.get.all.v2();
-      return list.get.all.v1();
+      if (format === `v1`) return list.get.all.v1();
+      return list.get.all.v2();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error(`Error retrieving messages for thread ${threadId}: ${errorMessage}`);
