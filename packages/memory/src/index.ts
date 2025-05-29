@@ -139,7 +139,6 @@ export class Memory extends MastraMemory {
       threadConfig: config,
     });
 
-    // const orderedByDate = rawMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
     return {
       get messages() {
