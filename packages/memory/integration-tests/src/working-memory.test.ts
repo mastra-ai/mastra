@@ -150,7 +150,7 @@ describe('Working Memory Tests', () => {
       ),
     ];
 
-    await memory.saveMessages({ messages });
+    await memory.saveMessages({ messages, format: 'v2' });
 
     const remembered = await memory.rememberMessages({
       threadId: thread.id,
@@ -211,7 +211,7 @@ describe('Working Memory Tests', () => {
       ),
     ];
 
-    await disabledMemory.saveMessages({ messages });
+    await disabledMemory.saveMessages({ messages, format: 'v2' });
 
     // Working memory should be null when disabled
     const workingMemory = await disabledMemory.getWorkingMemory({ threadId: thread.id });
@@ -389,7 +389,7 @@ describe('Working Memory Tests', () => {
     ];
 
     // Save messages
-    const saved = await memory.saveMessages({ messages: messages as MastraMessageV1[] });
+    const saved = await memory.saveMessages({ messages: messages as MastraMessageV1[], format: 'v2' });
 
     // Should not include any updateWorkingMemory tool-call messages (pure or mixed)
     expect(
@@ -425,8 +425,10 @@ describe('Working Memory Tests', () => {
     // It actually should return V1 for now (CoreMessage compatible)
 
     // Pure text message should be present
-    expect(saved.some(m => m.content === 'Another normal message')).toBe(true);
+    expect(saved.some(m => m.content.content === 'Another normal message')).toBe(true);
     // User message should be present
-    expect(saved.some(m => typeof m.content === 'string' && m.content.includes('User says something'))).toBe(true);
+    expect(
+      saved.some(m => typeof m.content.content === 'string' && m.content.content.includes('User says something')),
+    ).toBe(true);
   });
 });
