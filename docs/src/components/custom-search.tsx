@@ -119,8 +119,18 @@ export const CustomSearch: FC<SearchProps> = ({
   const handleChange = (event: SyntheticEvent<HTMLInputElement>) => {
     const { value } = event.currentTarget;
     setSearch(value);
-    setSelectedIndex(-1); // Reset selection when search changes
+    // Set first item as selected when there's a search query, reset when empty
+    setSelectedIndex(value ? 0 : -1);
   };
+
+  // Auto-select first item when search results change
+  useEffect(() => {
+    if (search && (results.length > 0 || isSearchLoading)) {
+      setSelectedIndex(0);
+    } else if (!search) {
+      setSelectedIndex(-1);
+    }
+  }, [search, results.length, isSearchLoading]);
 
   const handleSelect = (searchResult: SearchResult | null) => {
     if (!searchResult) return;
