@@ -11,7 +11,7 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   const { agentId } = useParams();
   const { agent, isLoading: isAgentLoading } = useAgent(agentId!);
   return (
-    <div className="h-full overflow-hidden">
+    <div className="grid grid-rows-[auto_1fr] items-start content-start h-full">
       {isAgentLoading ? (
         <Header>
           <HeaderTitle>

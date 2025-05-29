@@ -59,7 +59,12 @@ export function AgentSidebar({
   const reverseThreads = [...(threads || [])].reverse();
 
   return (
-    <>
+    <div
+      style={{
+        // border: '2px solid red',
+        maxWidth: '12rem',
+      }}
+    >
       <Threads>
         <ThreadList>
           <ThreadItem>
@@ -110,6 +115,6 @@ export function AgentSidebar({
           </AlertDialog.Footer>
         </AlertDialog.Content>
       </AlertDialog>
-    </>
+    </div>
   );
 }
