@@ -105,6 +105,11 @@ export const mastra = new Mastra({
       registerCopilotKit({
         path: "/copilotkit",
         resourceId: "weatherAgent",
+        setContext: (c, runtimeContext) => {
+          // Add whatever you need to the runtimeContext
+          runtimeContext.set("user-id", c.req.header("X-User-ID"));
+          runtimeContext.set("temperature-scale", "celsius");
+        }
       }),
     ],
   },
