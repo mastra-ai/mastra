@@ -1,6 +1,6 @@
 ---
 title: "Model Providers | Getting Started | Mastra Docs"
-description: ""
+description: "Learn how to configure and use different model providers with Mastra."
 ---
 
 import { Callout, Tabs } from 'nextra/components'
@@ -102,8 +102,8 @@ Here are some examples of how Mastra agents can be configured to use the differe
     Here's the general setup and provider instance creation:
 
     ```typescript showLineNumbers copy filename="src/mastra/agents/weather-agent.ts" {1,4-14,19}
-    import { createOpenAICompatible} from "@ai-sdk/openai-compatible"
-    import { Agent } from "@mastra/core/agent"
+    import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+    import { Agent } from "@mastra/core/agent";
 
     const openaiCompatible = createOpenAICompatible({
         name: "<model-name>",
@@ -157,7 +157,7 @@ Here are some examples of how Mastra agents can be configured to use the differe
     import { Agent } from "@mastra/core/agent";
 
     const ollama = createOllama({
-        baseUrl: "<your-custom-base-url>"
+        baseUrl: "<your-custom-base-url>",
         ...otherOptions,
     });
 
