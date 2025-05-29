@@ -676,8 +676,6 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'memory');
 
-      console.log(JSON.stringify(list.get.all.v2(), null, 2));
-
       expect(list.get.all.v2()).toEqual([
         {
           id: expect.any(String),
