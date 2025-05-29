@@ -29,12 +29,12 @@ export const createSampleThread = () => ({
   metadata: { key: 'value' },
 });
 
-export const createSampleMessage = (threadId: string): MastraMessageV2 =>
+export const createSampleMessage = (threadId: string, parts?: MastraMessageV2['content']['parts']): MastraMessageV2 =>
   ({
     id: `msg-${randomUUID()}`,
     role: 'user',
     threadId,
-    content: { format: 2, parts: [{ type: 'text' as const, text: 'Hello' }] },
+    content: { format: 2, parts: parts || [{ type: 'text' as const, text: 'Hello' }] },
     createdAt: new Date(),
     resourceId: `resource-${randomUUID()}`,
   }) satisfies MastraMessageV2;
