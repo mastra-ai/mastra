@@ -423,6 +423,8 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
       username: process.env.COUCHBASE_USERNAME,
       password: process.env.COUCHBASE_PASSWORD,
       bucketName: process.env.COUCHBASE_BUCKET,
+      scopeName: process.env.COUCHBASE_SCOPE,
+      collectionName: process.env.COUCHBASE_COLLECTION,
     });
 
     await couchbase.createIndex({

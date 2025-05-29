@@ -51,7 +51,14 @@ const bucketName = 'your_vector_bucket';
 const scopeName = '_default'; // Or your custom scope name
 const collectionName = 'vector_data'; // Or your custom collection name
 
-const vectorStore = new CouchbaseVector(connectionString, username, password, bucketName, scopeName, collectionName);
+const vectorStore = new CouchbaseVector({
+  connectionString,
+  username,
+  password,
+  bucketName,
+  scopeName,
+  collectionName,
+});
 
 console.log('CouchbaseVector instance created. Connecting...');
 ```
