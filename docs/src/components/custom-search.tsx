@@ -84,6 +84,13 @@ export const CustomSearch: FC<SearchProps> = ({
   const resultsContainerRef = useRef<HTMLDivElement>(null);
   const [selectedIndex, setSelectedIndex] = useState(-1);
 
+  // Ensure input is focused when component mounts
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, []);
+
   // Check if screen is mobile size
   const isMobile = useMediaQuery("(max-width: 768px)");
 
