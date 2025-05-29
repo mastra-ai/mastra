@@ -398,10 +398,7 @@ describe('D1Store', () => {
       const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v2' });
       const checkMessages = messages.map(m => {
         const { resourceId, ...rest } = m;
-        return {
-          ...rest,
-          createdAt: m.createdAt.toISOString(),
-        };
+        return rest;
       });
       expect(retrievedMessages).toEqual(expect.arrayContaining(checkMessages));
     });
