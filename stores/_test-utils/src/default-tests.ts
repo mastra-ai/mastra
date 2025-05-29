@@ -4,6 +4,7 @@ import type { MetricResult } from '@mastra/core/eval';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import type { MastraStorage } from '@mastra/core/storage';
 import { TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS } from '@mastra/core/storage';
+import { MastraMessageV1 } from '@mastra/core';
 
 export function createTestSuite(storage: MastraStorage) {
   describe(storage.constructor.name, () => {
@@ -34,7 +35,7 @@ export function createTestSuite(storage: MastraStorage) {
         threadId,
         content: [{ type: 'text', text: 'Hello' }],
         createdAt: new Date(),
-      }) as any;
+      }) satisfies MastraMessageV1;
 
     const createSampleWorkflowSnapshot = (status: string, createdAt?: Date) => {
       const runId = `run-${randomUUID()}`;
@@ -204,7 +205,7 @@ export function createTestSuite(storage: MastraStorage) {
           { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'First' }] },
           { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'Second' }] },
           { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'Third' }] },
-        ];
+        ] satisfies MastraMessageV1[];
 
         await storage.saveMessages({ messages });
 
@@ -225,8 +226,9 @@ export function createTestSuite(storage: MastraStorage) {
 
         const messages = [
           createSampleMessage(thread.id),
+          // @ts-ignore
           { ...createSampleMessage(thread.id), id: null }, // This will cause an error
-        ];
+        ] as MastraMessageV1[];
 
         await expect(storage.saveMessages({ messages })).rejects.toThrow();
 
