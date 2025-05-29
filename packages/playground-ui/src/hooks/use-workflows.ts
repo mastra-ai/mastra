@@ -62,11 +62,15 @@ const sanitizeWorkflowWatchResult = (record: WorkflowWatchResult) => {
   return sanitizedRecord;
 };
 
-export const useLegacyWorkflow = (workflowId: string, baseUrl: string) => {
+export const useLegacyWorkflow = (
+  workflowId: string,
+  baseUrl: string,
+  mastraClientHeaders?: Record<string, string>,
+) => {
   const [legacyWorkflow, setLegacyWorkflow] = useState<LegacyWorkflow | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const client = createMastraClient(baseUrl);
+  const client = createMastraClient(baseUrl, mastraClientHeaders);
 
   useEffect(() => {
     const fetchWorkflow = async () => {
@@ -115,11 +119,11 @@ export const useLegacyWorkflow = (workflowId: string, baseUrl: string) => {
   return { legacyWorkflow, isLoading };
 };
 
-export const useWorkflow = (workflowId: string, baseUrl: string) => {
+export const useWorkflow = (workflowId: string, baseUrl: string, mastraClientHeaders?: Record<string, string>) => {
   const [workflow, setWorkflow] = useState<GetWorkflowResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const client = createMastraClient(baseUrl);
+  const client = createMastraClient(baseUrl, mastraClientHeaders);
 
   useEffect(() => {
     const fetchWorkflow = async () => {
@@ -147,8 +151,8 @@ export const useWorkflow = (workflowId: string, baseUrl: string) => {
   return { workflow, isLoading };
 };
 
-export const useExecuteWorkflow = (baseUrl: string) => {
-  const client = createMastraClient(baseUrl);
+export const useExecuteWorkflow = (baseUrl: string, mastraClientHeaders?: Record<string, string>) => {
+  const client = createMastraClient(baseUrl, mastraClientHeaders);
 
   const createLegacyWorkflowRun = async ({ workflowId, prevRunId }: { workflowId: string; prevRunId?: string }) => {
     try {
@@ -250,7 +254,7 @@ export const useExecuteWorkflow = (baseUrl: string) => {
   };
 };
 
-export const useWatchWorkflow = (baseUrl: string) => {
+export const useWatchWorkflow = (baseUrl: string, mastraClientHeaders?: Record<string, string>) => {
   const [isWatchingLegacyWorkflow, setIsWatchingLegacyWorkflow] = useState(false);
   const [isWatchingWorkflow, setIsWatchingWorkflow] = useState(false);
   const [legacyWatchResult, setLegacyWatchResult] = useState<ExtendedLegacyWorkflowRunResult | null>(null);
@@ -289,7 +293,7 @@ export const useWatchWorkflow = (baseUrl: string) => {
   const watchLegacyWorkflow = async ({ workflowId, runId }: { workflowId: string; runId: string }) => {
     try {
       setIsWatchingLegacyWorkflow(true);
-      const client = createMastraClient(baseUrl);
+      const client = createMastraClient(baseUrl, mastraClientHeaders);
 
       const workflow = client.getLegacyWorkflow(workflowId);
 
@@ -322,7 +326,7 @@ export const useWatchWorkflow = (baseUrl: string) => {
   const watchWorkflow = async ({ workflowId, runId }: { workflowId: string; runId: string }) => {
     try {
       setIsWatchingWorkflow(true);
-      const client = createMastraClient(baseUrl);
+      const client = createMastraClient(baseUrl, mastraClientHeaders);
 
       const workflow = client.getWorkflow(workflowId);
 
@@ -356,7 +360,7 @@ export const useWatchWorkflow = (baseUrl: string) => {
   };
 };
 
-export const useResumeWorkflow = (baseUrl: string) => {
+export const useResumeWorkflow = (baseUrl: string, mastraClientHeaders?: Record<string, string>) => {
   const [isResumingLegacyWorkflow, setIsResumingLegacyWorkflow] = useState(false);
   const [isResumingWorkflow, setIsResumingWorkflow] = useState(false);
 
@@ -373,7 +377,7 @@ export const useResumeWorkflow = (baseUrl: string) => {
   }) => {
     try {
       setIsResumingLegacyWorkflow(true);
-      const client = createMastraClient(baseUrl);
+      const client = createMastraClient(baseUrl, mastraClientHeaders);
 
       const response = await client.getLegacyWorkflow(workflowId).resume({ stepId, runId, context });
 
@@ -401,7 +405,7 @@ export const useResumeWorkflow = (baseUrl: string) => {
   }) => {
     try {
       setIsResumingWorkflow(true);
-      const client = createMastraClient(baseUrl);
+      const client = createMastraClient(baseUrl, mastraClientHeaders);
 
       const runtimeContext = new RuntimeContext();
       Object.entries(playgroundRuntimeContext).forEach(([key, value]) => {

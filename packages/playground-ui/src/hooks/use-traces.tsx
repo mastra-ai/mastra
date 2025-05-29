@@ -8,12 +8,17 @@ import { refineTraces } from '@/domains/traces/utils';
 import { TraceContext } from '@/domains/traces/context/trace-context';
 import { createMastraClient } from '@/lib/mastra-client';
 
-export const useTraces = (componentName: string, baseUrl: string, isWorkflow: boolean = false) => {
+export const useTraces = (
+  componentName: string,
+  baseUrl: string,
+  isWorkflow: boolean = false,
+  mastraClientHeaders?: Record<string, string>,
+) => {
   const [traces, setTraces] = useState<RefinedTrace[]>([]);
 
   const { setTraces: setTraceContextTraces } = useContext(TraceContext);
 
-  const client = useMemo(() => createMastraClient(baseUrl), [baseUrl]);
+  const client = useMemo(() => createMastraClient(baseUrl, mastraClientHeaders), [baseUrl, mastraClientHeaders]);
 
   const fetchFn = useCallback(async () => {
     try {

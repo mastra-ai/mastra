@@ -23,6 +23,7 @@ export function MastraNetworkRuntimeProvider({
   threadId,
   baseUrl,
   refreshThreadList,
+  mastraClientHeaders,
   modelSettings = {},
 }: Readonly<{
   children: ReactNode;
@@ -44,7 +45,7 @@ export function MastraNetworkRuntimeProvider({
     }
   }, [initialMessages, threadId, memory, messages]);
 
-  const mastra = createMastraClient(baseUrl);
+  const mastra = createMastraClient(baseUrl, mastraClientHeaders);
 
   const network = mastra.getNetwork(agentId);
 

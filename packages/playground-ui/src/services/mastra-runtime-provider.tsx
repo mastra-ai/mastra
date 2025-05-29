@@ -50,6 +50,7 @@ export function MastraRuntimeProvider({
   modelSettings = {},
   chatWithGenerate,
   runtimeContext,
+  mastraClientHeaders,
 }: Readonly<{
   children: ReactNode;
 }> &
@@ -100,7 +101,7 @@ export function MastraRuntimeProvider({
     }
   }, [initialMessages, threadId, memory]);
 
-  const mastra = createMastraClient(baseUrl);
+  const mastra = createMastraClient(baseUrl, mastraClientHeaders);
   const agent = mastra.getAgent(agentId);
 
   const onNew = async (message: AppendMessage) => {

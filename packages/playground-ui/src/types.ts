@@ -29,6 +29,7 @@ export interface ChatProps {
   chatWithGenerate?: boolean;
   runtimeContext?: Record<string, any>;
   showFileSupport?: boolean;
+  mastraClientHeaders?: Record<string, string>;
 }
 
 export type SpanStatus = {

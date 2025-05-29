@@ -16,11 +16,16 @@ export type Evals = {
   testInfo?: TestInfo;
 };
 
-export const useEvalsByAgentId = (agentId: string, type: 'ci' | 'live', baseUrl?: string) => {
+export const useEvalsByAgentId = (
+  agentId: string,
+  type: 'ci' | 'live',
+  baseUrl?: string,
+  mastraClientHeaders?: Record<string, string>,
+) => {
   const [evals, setEvals] = useState<Evals[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const client = createMastraClient(baseUrl);
+  const client = createMastraClient(baseUrl, mastraClientHeaders);
 
   const fetchEvals = async (_agentId?: string) => {
     setIsLoading(true);
