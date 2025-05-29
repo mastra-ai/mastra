@@ -92,7 +92,9 @@ If the context doesn't contain enough information to fully answer the question, 
 Instantiate PgVector and Mastra with the components:
 
 ```typescript copy showLineNumbers{36} filename="index.ts"
-const pgVector = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING! });
+const pgVector = new PgVector({
+  connectionString: process.env.POSTGRES_CONNECTION_STRING!,
+});
 
 export const mastra = new Mastra({
   agents: { ragAgent },

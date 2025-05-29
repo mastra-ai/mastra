@@ -96,6 +96,8 @@ export const refineTraces = (traces: Span[], isWorkflow: boolean = false): Refin
 
     const failedStatus = value.find(span => span.status.code !== 0)?.status;
 
+    const runId = value?.[0]?.attributes?.runId;
+
     return {
       traceId: key,
       serviceName: parentSpan?.name || key,
@@ -103,6 +105,7 @@ export const refineTraces = (traces: Span[], isWorkflow: boolean = false): Refin
       status: failedStatus || parentSpan?.status || value[0].status,
       started: value[0].startTime,
       trace: enrichedSpans,
+      runId: runId ? String(runId) : undefined,
     };
   });
 

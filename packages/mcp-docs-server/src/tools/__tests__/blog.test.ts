@@ -26,7 +26,7 @@ describe('blog tool', () => {
 
   test('handles fetch errors gracefully', async () => {
     const result = await callTool(tools.mastra_mastraBlog, { url: '/blog/non-existent-post' });
-    expect(result).toBe('Error: Failed to fetch blog post');
+    expect(result).toContain('The requested blog post could not be found or fetched');
   });
 
   test('returns specific blog post content when URL is provided', async () => {

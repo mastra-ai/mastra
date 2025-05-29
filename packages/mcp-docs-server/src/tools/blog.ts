@@ -44,7 +44,18 @@ async function fetchBlogPost(url: string): Promise<string> {
     if (response.status === 429) {
       throw new Error('Rate limit exceeded');
     }
-    throw new Error('Failed to fetch blog post');
+    let blogList: string;
+    try {
+      const blogPosts = await fetchBlogPosts();
+      blogList = `Here are available blog posts:\n\n${blogPosts}`;
+    } catch (e) {
+      void logger.error(
+        `Blog post not found or failed to fetch: ${url}, and failed to fetch blog post listing as fallback.`,
+        e,
+      );
+      blogList = 'Additionally, the list of available blog posts could not be fetched at this time.';
+    }
+    return `The requested blog post could not be found or fetched: ${url}\n\n${blogList}`;
   }
   const html = await response.text();
 

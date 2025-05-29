@@ -38,11 +38,11 @@ export async function prepareMonorepo(monorepoDir, glob) {
     if (gitStatus.length > 0) {
       execSync('git add -A', {
         cwd: monorepoDir,
-        stdio: ['inherit', 'inherit', 'pipe'],
+        stdio: ['inherit', 'inherit', 'inherit'],
       });
       execSync('git commit -m "SAVEPOINT"', {
         cwd: monorepoDir,
-        stdio: ['inherit', 'inherit', 'pipe'],
+        stdio: ['inherit', 'inherit', 'inherit'],
       });
       shelvedChanges = true;
     }

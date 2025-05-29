@@ -28,6 +28,7 @@ export interface ChatProps {
   modelSettings?: ModelSettings;
   chatWithGenerate?: boolean;
   runtimeContext?: Record<string, any>;
+  showFileSupport?: boolean;
 }
 
 export type SpanStatus = {
@@ -72,6 +73,7 @@ export type RefinedTrace = {
   started: number;
   status: SpanStatus;
   trace: Span[];
+  runId?: string;
 };
 
 export * from './domains/traces/types';

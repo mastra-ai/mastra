@@ -1,11 +1,11 @@
 import { T } from "gt-next/client";
 export const GithubLink = ({ link }: { link: string }) => {
   return (
-    <T id="components.github_link.0">
+    <T id="components.github_link.0" className="w-full">
       <a
         target="_blank"
         rel="noopener noreferrer"
-        className="flex flex-row justify-between p-3 border border-gray-300 dark:border-[#404040] rounded-md cursor-pointer group text-zinc-900 dark:text-zinc-50"
+        className="flex w-full flex-row justify-between p-3 border border-gray-300 dark:border-[#404040] rounded-md cursor-pointer group text-zinc-900 dark:text-zinc-50"
         href={link}
       >
         <div className="flex flex-row gap-3">

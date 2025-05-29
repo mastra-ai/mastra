@@ -62,6 +62,8 @@ export async function getAgentsHandler({ mastra, runtimeContext }: Context & { r
           workflows: serializedAgentWorkflows,
           provider: llm?.getProvider(),
           modelId: llm?.getModelId(),
+          defaultGenerateOptions: agent.getDefaultGenerateOptions() as any,
+          defaultStreamOptions: agent.getDefaultStreamOptions() as any,
         };
       }),
     );
@@ -131,6 +133,8 @@ export async function getAgentByIdHandler({
       workflows: serializedAgentWorkflows,
       provider: llm?.getProvider(),
       modelId: llm?.getModelId(),
+      defaultGenerateOptions: agent.getDefaultGenerateOptions() as any,
+      defaultStreamOptions: agent.getDefaultStreamOptions() as any,
     };
   } catch (error) {
     return handleError(error, 'Error getting agent');

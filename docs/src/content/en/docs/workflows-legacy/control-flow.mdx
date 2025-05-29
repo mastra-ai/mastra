@@ -132,7 +132,7 @@ The `until` method repeats a step until a specified condition becomes true. It t
 3. Optional variables to pass to the repeated step
 
 ```typescript
-import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy'
+import { LegacyStep, LegacyWorkflow } from "@mastra/core/workflows/legacy";
 import { z } from "zod";
 
 // Step that increments a counter until target is reached
@@ -571,7 +571,9 @@ const processOrderStep = new LegacyStep({
   },
 });
 
-const workflow = new LegacyWorkflow<[typeof fetchUserStep, typeof processOrderStep]>({
+const workflow = new LegacyWorkflow<
+  [typeof fetchUserStep, typeof processOrderStep]
+>({
   name: "typed-workflow",
 });
 
@@ -711,7 +713,9 @@ const processOrderStep = new LegacyStep({
   },
 });
 
-const workflow = new LegacyWorkflow<[typeof fetchUserStep, typeof processOrderStep]>({
+const workflow = new LegacyWorkflow<
+  [typeof fetchUserStep, typeof processOrderStep]
+>({
   name: "typed-workflow",
 });
 

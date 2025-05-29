@@ -25,6 +25,8 @@ import { processDataStream } from '@ai-sdk/ui-utils';
 import type { CoreMessage, Mastra } from '@mastra/core';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Agent } from '@mastra/core/agent';
+import type { Context } from 'hono';
+import { RuntimeContext } from '@mastra/core/runtime-context';
 import { randomUUID } from 'crypto';
 import { Observable } from 'rxjs';
 
@@ -32,18 +34,21 @@ interface MastraAgentConfig extends AgentConfig {
   agent: Agent;
   agentId: string;
   resourceId?: string;
+  runtimeContext?: RuntimeContext;
 }
 
 export class AGUIAdapter extends AbstractAgent {
   agent: Agent;
   resourceId?: string;
-  constructor({ agent, agentId, resourceId, ...rest }: MastraAgentConfig) {
+  runtimeContext?: RuntimeContext;
+  constructor({ agent, agentId, resourceId, runtimeContext, ...rest }: MastraAgentConfig) {
     super({
       agentId,
       ...rest,
     });
     this.agent = agent;
     this.resourceId = resourceId;
+    this.runtimeContext = runtimeContext;
   }
 
   protected run(input: RunAgentInput): Observable<BaseEvent> {
@@ -73,6 +78,7 @@ export class AGUIAdapter extends AbstractAgent {
             },
             {} as Record<string, any>,
           ),
+          runtimeContext: this.runtimeContext,
         })
         .then(response => {
           let messageId = randomUUID();
@@ -219,7 +225,15 @@ export function convertMessagesToMastraMessages(messages: Message[]): CoreMessag
   return result;
 }
 
-export function getAGUI({ mastra, resourceId }: { mastra: Mastra; resourceId?: string }) {
+export function getAGUI({
+  mastra,
+  resourceId,
+  runtimeContext,
+}: {
+  mastra: Mastra;
+  resourceId?: string;
+  runtimeContext?: RuntimeContext;
+}) {
   const agents = mastra.getAgents() || {};
   const networks = mastra.getNetworks() || [];
 
@@ -229,6 +243,7 @@ export function getAGUI({ mastra, resourceId }: { mastra: Mastra; resourceId?: s
         agentId: network.name!,
         agent: network as unknown as Agent,
         resourceId,
+        runtimeContext,
       });
       return acc;
     },
@@ -241,6 +256,7 @@ export function getAGUI({ mastra, resourceId }: { mastra: Mastra; resourceId?: s
         agentId,
         agent,
         resourceId,
+        runtimeContext,
       });
       return acc;
     },
@@ -257,10 +273,12 @@ export function getAGUIAgent({
   mastra,
   agentId,
   resourceId,
+  runtimeContext,
 }: {
   mastra: Mastra;
   agentId: string;
   resourceId?: string;
+  runtimeContext?: RuntimeContext;
 }) {
   const agent = mastra.getAgent(agentId);
   if (!agent) {
@@ -270,6 +288,7 @@ export function getAGUIAgent({
     agentId,
     agent,
     resourceId,
+    runtimeContext,
   }) as AbstractAgent;
 }
 
@@ -277,10 +296,12 @@ export function getAGUINetwork({
   mastra,
   networkId,
   resourceId,
+  runtimeContext,
 }: {
   mastra: Mastra;
   networkId: string;
   resourceId?: string;
+  runtimeContext?: RuntimeContext;
 }) {
   const network = mastra.getNetwork(networkId);
   if (!network) {
@@ -290,6 +311,7 @@ export function getAGUINetwork({
     agentId: network.name!,
     agent: network as unknown as Agent,
     resourceId,
+    runtimeContext,
   }) as AbstractAgent;
 }
 
@@ -298,22 +320,38 @@ export function registerCopilotKit({
   resourceId,
   serviceAdapter = new ExperimentalEmptyAdapter(),
   agents,
+  setContext,
 }: {
   path: string;
   resourceId: string;
   serviceAdapter?: CopilotServiceAdapter;
   agents?: Record<string, AbstractAgent>;
+  setContext?: (
+    c: Context<{
+      Variables: {
+        mastra: Mastra;
+      };
+    }>,
+    runtimeContext: RuntimeContext,
+  ) => void | Promise<void>;
 }) {
   return registerApiRoute(path, {
     method: `ALL`,
     handler: async c => {
       const mastra = c.get('mastra');
 
+      const runtimeContext = new RuntimeContext();
+
+      if (setContext) {
+        await setContext(c, runtimeContext);
+      }
+
       const aguiAgents =
         agents ||
         getAGUI({
           resourceId,
           mastra,
+          runtimeContext,
         });
 
       const runtime = new CopilotRuntime({

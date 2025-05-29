@@ -1,5 +1,31 @@
 # @mastra/upstash
 
+## 0.10.2-alpha.0
+
+### Patch Changes
+
+- e5dc18d: Added a backwards compatible layer to begin storing/retrieving UIMessages in storage instead of CoreMessages
+- Updated dependencies [592a2db]
+- Updated dependencies [e5dc18d]
+  - @mastra/core@0.10.2-alpha.0
+
+## 0.10.1
+
+### Patch Changes
+
+- e60402a: Use scan instead of keys for upstash redis and implement batchInsert
+- Updated dependencies [d70b807]
+- Updated dependencies [6d16390]
+- Updated dependencies [1e4a421]
+- Updated dependencies [200d0da]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+- Updated dependencies [6015bdf]
+  - @mastra/core@0.10.1
+
 ## 0.10.1-alpha.0
 
 ### Patch Changes

@@ -49,7 +49,8 @@ console.log(result.info); // 詳細な変更メトリクス
     {
       name: "score",
       type: "number",
-      description: "類似度比率（0～1）。1はテキストが完全に一致していることを示します",
+      description:
+        "類似度比率（0～1）。1はテキストが完全に一致していることを示します",
     },
     {
       name: "info",
@@ -61,8 +62,7 @@ console.log(result.info); // 詳細な変更メトリクス
             {
               name: "confidence",
               type: "number",
-              description:
-                "テキスト間の長さの違いに基づく信頼度スコア（0～1）",
+              description: "テキスト間の長さの違いに基づく信頼度スコア（0～1）",
             },
           ],
         },
@@ -82,8 +82,7 @@ console.log(result.info); // 詳細な変更メトリクス
             {
               name: "changes",
               type: "number",
-              description:
-                "変更操作の回数（挿入、削除、置換）",
+              description: "変更操作の回数（挿入、削除、置換）",
             },
           ],
         },
@@ -93,8 +92,7 @@ console.log(result.info); // 詳細な変更メトリクス
             {
               name: "lengthDiff",
               type: "number",
-              description:
-                "入力と出力の長さの正規化された差分（0～1）",
+              description: "入力と出力の長さの正規化された差分（0～1）",
             },
           ],
         },
