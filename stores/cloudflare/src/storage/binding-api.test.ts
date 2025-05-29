@@ -1,5 +1,5 @@
 import type { KVNamespace } from '@cloudflare/workers-types';
-import type { MessageType, StorageThreadType } from '@mastra/core/memory';
+import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 import {
   TABLE_MESSAGES,
@@ -264,10 +264,10 @@ describe('CloudflareStore Workers Binding', () => {
           threadId: 'thread-1',
           content: [{ type: 'text', text: 'test-data-2' }],
           role: 'user',
-        } as MessageType,
+        } as MastraMessageV1,
       });
 
-      const result = await store.load<MessageType>({
+      const result = await store.load<MastraMessageV1>({
         tableName: testTableName2,
         keys: { id: 'test2', threadId: 'thread-1' },
       });
@@ -422,15 +422,15 @@ describe('CloudflareStore Workers Binding', () => {
       const messages = [
         {
           ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'First' }] as MessageType['content'],
+          content: [{ type: 'text' as const, text: 'First' }] as MastraMessageV1['content'],
         },
         {
           ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'Second' }] as MessageType['content'],
+          content: [{ type: 'text' as const, text: 'Second' }] as MastraMessageV1['content'],
         },
         {
           ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'Third' }] as MessageType['content'],
+          content: [{ type: 'text' as const, text: 'Third' }] as MastraMessageV1['content'],
         },
       ];
 
@@ -674,7 +674,7 @@ describe('CloudflareStore Workers Binding', () => {
           content: [{ type: 'text', text: 'Third' }],
           createdAt: new Date(baseTime + 2000),
         },
-      ] as MessageType[];
+      ] as MastraMessageV1[];
 
       await store.saveMessages({ messages });
 
@@ -1251,7 +1251,7 @@ describe('CloudflareStore Workers Binding', () => {
       const thread = createSampleThread();
       const message = {
         ...createSampleMessage(thread.id),
-        content: [{ type: 'text' as const, text: '特殊字符 !@#$%^&*()' }] as MessageType['content'],
+        content: [{ type: 'text' as const, text: '特殊字符 !@#$%^&*()' }] as MastraMessageV1['content'],
       };
 
       await store.saveThread({ thread });
@@ -1623,7 +1623,7 @@ describe('CloudflareStore Workers Binding', () => {
       // Test with various malformed data
       const malformedMessage = {
         ...createSampleMessage(thread.id),
-        content: [{ type: 'text' as const, text: ''.padStart(1024 * 1024, 'x') }] as MessageType['content'], // Very large content
+        content: [{ type: 'text' as const, text: ''.padStart(1024 * 1024, 'x') }] as MastraMessageV1['content'], // Very large content
       };
 
       await store.saveMessages({ messages: [malformedMessage] });

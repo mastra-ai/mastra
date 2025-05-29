@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import type { MessageType, MetricResult, WorkflowRunState } from '@mastra/core';
+import type { MastraMessageV1, MetricResult, WorkflowRunState } from '@mastra/core';
 import { TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { MongoDBConfig } from './index';
@@ -40,7 +40,7 @@ class Test {
     };
   }
 
-  generateSampleMessage(threadId: string): MessageType {
+  generateSampleMessage(threadId: string): MastraMessageV1 {
     return {
       id: `msg-${randomUUID()}`,
       role: 'user',
@@ -274,15 +274,15 @@ describe('MongoDBStore', () => {
       const messages = [
         {
           ...test.generateSampleMessage(thread.id),
-          content: [{ type: 'text', text: 'First' }] as MessageType['content'],
+          content: [{ type: 'text', text: 'First' }] as MastraMessageV1['content'],
         },
         {
           ...test.generateSampleMessage(thread.id),
-          content: [{ type: 'text', text: 'Second' }] as MessageType['content'],
+          content: [{ type: 'text', text: 'Second' }] as MastraMessageV1['content'],
         },
         {
           ...test.generateSampleMessage(thread.id),
-          content: [{ type: 'text', text: 'Third' }] as MessageType['content'],
+          content: [{ type: 'text', text: 'Third' }] as MastraMessageV1['content'],
         },
       ];
 

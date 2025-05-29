@@ -485,7 +485,7 @@ export class Agent<
                   config: memoryConfig,
                   vectorMessageSearch: lastUserMessageContent,
                 })
-                .then(r => r.messages),
+                .then(r => r.messagesV2),
               memory.getSystemMessage({ threadId, memoryConfig }),
             ])
           : [[], null];

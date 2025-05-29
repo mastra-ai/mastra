@@ -1,5 +1,6 @@
 import type { D1Database } from '@cloudflare/workers-types';
-import type { StorageThreadType, MessageType } from '@mastra/core/memory';
+import { MessageList } from '@mastra/core/agent';
+import type { StorageThreadType, MastraMessageV1, MastraMessageV2 } from '@mastra/core/memory';
 import {
   MastraStorage,
   TABLE_MESSAGES,
@@ -633,7 +634,13 @@ export class D1Store extends MastraStorage {
 
   // Thread and message management methods
 
-  async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
+  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
+  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
+  async saveMessages(args: {
+    messages: MastraMessageV1[] | MastraMessageV2[];
+    format?: undefined | 'v1' | 'v2';
+  }): Promise<MastraMessageV2[] | MastraMessageV1[]> {
+    const { messages, format = 'v1' } = args;
     if (messages.length === 0) return [];
 
     try {
@@ -670,14 +677,22 @@ export class D1Store extends MastraStorage {
       });
 
       this.logger.debug(`Saved ${messages.length} messages`);
-      return messages;
+      const list = new MessageList().add(messages, 'memory');
+      if (format === `v2`) return list.get.all.mastra();
+      return list.get.all.v1();
     } catch (error) {
       this.logger.error('Error saving messages:', { message: error instanceof Error ? error.message : String(error) });
       throw error;
     }
   }
 
-  async getMessages<T = MessageType>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T[]> {
+  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
+  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
+  public async getMessages({
+    threadId,
+    selectBy,
+    format,
+  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     const fullTableName = this.getTableName(TABLE_MESSAGES);
     const limit = typeof selectBy?.last === 'number' ? selectBy.last : 40;
     const include = selectBy?.include || [];
@@ -764,10 +779,12 @@ export class D1Store extends MastraStorage {
           processedMsg[key] = this.deserializeValue(value);
         }
 
-        return processedMsg as T;
+        return processedMsg;
       });
       this.logger.debug(`Retrieved ${messages.length} messages for thread ${threadId}`);
-      return processedMessages as T[];
+      const list = new MessageList().add(processedMessages as MastraMessageV1[] | MastraMessageV2[], 'memory');
+      if (format === `v2`) return list.get.all.mastra();
+      return list.get.all.v1();
     } catch (error) {
       this.logger.error('Error retrieving messages for thread', {
         threadId,

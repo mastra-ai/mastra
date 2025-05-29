@@ -1,7 +1,6 @@
 import { DynamoDBClient, DescribeTableCommand } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import type { StorageThreadType, WorkflowRunState, MastraMessageV1 } from '@mastra/core';
-import type { MastraMessageV2 } from '@mastra/core/agent';
+import type { StorageThreadType, WorkflowRunState, MastraMessageV1, MastraMessageV2 } from '@mastra/core';
 import { MessageList } from '@mastra/core/agent';
 import {
   MastraStorage,

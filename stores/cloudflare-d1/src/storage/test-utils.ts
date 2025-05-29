@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import type { MessageType, WorkflowRunState } from '@mastra/core';
+import type { MastraMessageV2, WorkflowRunState } from '@mastra/core';
 import { expect } from 'vitest';
 
 export const createSampleTrace = (name: string, scope?: string, attributes?: Record<string, string>) => ({
@@ -29,15 +29,15 @@ export const createSampleThread = () => ({
   metadata: { key: 'value' },
 });
 
-export const createSampleMessage = (threadId: string): MessageType =>
+export const createSampleMessage = (threadId: string, parts?: MastraMessageV2['content']['parts']): MastraMessageV2 =>
   ({
     id: `msg-${randomUUID()}`,
     role: 'user',
     threadId,
-    content: { format: 2, parts: [{ type: 'text' as const, text: 'Hello' }] },
+    content: { format: 2, parts: parts || [{ type: 'text' as const, text: 'Hello' }] },
     createdAt: new Date(),
     resourceId: `resource-${randomUUID()}`,
-  }) satisfies MessageType;
+  }) satisfies MastraMessageV2;
 
 export const createSampleWorkflowSnapshot = (threadId: string, status: string, createdAt?: Date) => {
   const runId = `run-${randomUUID()}`;

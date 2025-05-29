@@ -1,7 +1,6 @@
 import { randomUUID } from 'crypto';
 import type { D1Database } from '@cloudflare/workers-types';
-import type { WorkflowRunState } from '@mastra/core';
-import type { MessageType } from '@mastra/core/memory';
+import type { MastraMessageV2, WorkflowRunState } from '@mastra/core';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 import {
   TABLE_MESSAGES,
@@ -362,7 +361,7 @@ describe('D1Store', () => {
 
       // Add some messages
       const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
       await store.deleteThread({ threadId: thread.id });
 
@@ -392,7 +391,7 @@ describe('D1Store', () => {
       const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
 
       // Save messages
-      const savedMessages = await store.saveMessages({ messages });
+      const savedMessages = await store.saveMessages({ messages, format: 'v2' });
       expect(savedMessages).toEqual(messages);
 
       // Retrieve messages
@@ -417,21 +416,12 @@ describe('D1Store', () => {
       await store.saveThread({ thread });
 
       const messages = [
-        {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'First' }] as MessageType['content'],
-        },
-        {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'Second' }] as MessageType['content'],
-        },
-        {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'Third' }] as MessageType['content'],
-        },
-      ];
+        createSampleMessage(thread.id, [{ type: 'text' as const, text: 'First' }]),
+        createSampleMessage(thread.id, [{ type: 'text' as const, text: 'Second' }]),
+        createSampleMessage(thread.id, [{ type: 'text' as const, text: 'Third' }]),
+      ] satisfies MastraMessageV2[];
 
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
       const retrievedMessages = await store.getMessages({ threadId: thread.id });
       expect(retrievedMessages).toHaveLength(3);
@@ -449,9 +439,9 @@ describe('D1Store', () => {
       const messages = [
         createSampleMessage(thread.id),
         { ...createSampleMessage(thread.id), id: null }, // This will cause an error
-      ] as MessageType[];
+      ] as any as MastraMessageV2[];
 
-      await expect(store.saveMessages({ messages })).rejects.toThrow();
+      await expect(store.saveMessages({ messages, format: 'v2' })).rejects.toThrow();
 
       // Verify no messages were saved
       const savedMessages = await store.getMessages({ threadId: thread.id });
@@ -582,7 +572,7 @@ describe('D1Store', () => {
         createdAt: timestamp,
       }));
 
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
       // Verify order is maintained based on insertion order
       const order = await store.getMessages({ threadId: thread.id });
@@ -606,7 +596,7 @@ describe('D1Store', () => {
 
       // Save messages in reverse order to verify write order is preserved
       const reversedMessages = [...messages].reverse(); // newest -> oldest
-      await Promise.all(reversedMessages.map(msg => store.saveMessages({ messages: [msg] })));
+      await Promise.all(reversedMessages.map(msg => store.saveMessages({ messages: [msg], format: 'v2' })));
 
       // Verify messages are saved and maintain write order (not timestamp order)
       const order = await store.getMessages({ threadId: thread.id });
@@ -625,23 +615,20 @@ describe('D1Store', () => {
       const baseTime = new Date('2025-03-14T23:30:20.930Z').getTime();
       const messages = [
         {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text', text: 'First' }],
+          ...createSampleMessage(thread.id, [{ type: 'text', text: 'First' }]),
           createdAt: new Date(baseTime),
         },
         {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text', text: 'Second' }],
+          ...createSampleMessage(thread.id, [{ type: 'text', text: 'Second' }]),
           createdAt: new Date(baseTime + 1000),
         },
         {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text', text: 'Third' }],
+          ...createSampleMessage(thread.id, [{ type: 'text', text: 'Third' }]),
           createdAt: new Date(baseTime + 2000),
         },
-      ] as MessageType[];
+      ] as MastraMessageV2[];
 
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
       await new Promise(resolve => setTimeout(resolve, 5000));
 
@@ -1085,13 +1072,10 @@ describe('D1Store', () => {
 
     it('should sanitize and handle special characters', async () => {
       const thread = createSampleThread();
-      const message = {
-        ...createSampleMessage(thread.id),
-        content: [{ type: 'text' as const, text: '特殊字符 !@#$%^&*()' }] as MessageType['content'],
-      };
+      const message = createSampleMessage(thread.id, [{ type: 'text' as const, text: '特殊字符 !@#$%^&*()' }]);
 
       await store.saveThread({ thread });
-      await store.saveMessages({ messages: [message] });
+      await store.saveMessages({ messages: [message], format: 'v2' });
 
       // Should retrieve correctly
       const messages = await store.getMessages({ threadId: thread.id });
@@ -1113,7 +1097,7 @@ describe('D1Store', () => {
       }));
 
       // Save messages in parallel - write order should be preserved
-      await Promise.all(messages.map(msg => store.saveMessages({ messages: [msg] })));
+      await Promise.all(messages.map(msg => store.saveMessages({ messages: [msg], format: 'v2' })));
 
       // Order should reflect write order, not timestamp order
       const order = await store.getMessages({ threadId: thread.id });
@@ -1135,7 +1119,7 @@ describe('D1Store', () => {
       const messages = Array.from({ length: 3 }, () => createSampleMessage(thread.id));
 
       await store.saveThread({ thread });
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
       // Verify messages exist
       const initialOrder = await store.getMessages({ threadId: thread.id });
@@ -1217,6 +1201,7 @@ describe('D1Store', () => {
       await expect(
         store.saveMessages({
           messages: [message],
+          format: 'v2',
         }),
       ).rejects.toThrow();
     });
@@ -1226,12 +1211,11 @@ describe('D1Store', () => {
       await store.saveThread({ thread });
 
       // Test with various malformed data
-      const malformedMessage = {
-        ...createSampleMessage(thread.id),
-        content: [{ type: 'text' as const, text: ''.padStart(1024 * 1024, 'x') }] as MessageType['content'], // Very large content
-      };
+      const malformedMessage = createSampleMessage(thread.id, [
+        { type: 'text' as const, text: ''.padStart(1024 * 1024, 'x') },
+      ]);
 
-      await store.saveMessages({ messages: [malformedMessage] });
+      await store.saveMessages({ messages: [malformedMessage], format: 'v2' });
 
       // Should still be able to retrieve and handle the message
       const messages = await store.getMessages({ threadId: thread.id });
