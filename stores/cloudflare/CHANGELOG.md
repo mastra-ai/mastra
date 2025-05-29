@@ -1,5 +1,14 @@
 # @mastra/cloudflare
 
+## 0.10.2-alpha.1
+
+### Patch Changes
+
+- e9d2ca8: Add pagination to cloudflare kv listing namespaces.
+- Updated dependencies [ee77e78]
+- Updated dependencies [2901125]
+  - @mastra/core@0.10.2-alpha.1
+
 ## 0.10.2-alpha.0
 
 ### Patch Changes

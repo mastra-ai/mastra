@@ -62,13 +62,18 @@
     "@mastra/inngest": "0.10.1"
   },
   "changesets": [
+    "angry-cloths-peel",
     "brown-eggs-smash",
     "busy-buckets-study",
     "busy-ends-mate",
+    "early-bats-search",
     "icy-groups-tell",
     "loud-forks-search",
     "nice-eagles-fall",
     "petite-snakes-exist",
+    "purple-experts-sink",
+    "solid-parks-pay",
+    "true-pillows-argue",
     "wide-dingos-do"
   ]
 }
