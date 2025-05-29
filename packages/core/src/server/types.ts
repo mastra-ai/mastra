@@ -22,7 +22,7 @@ export type ApiRoute =
       openapi?: DescribeRouteOptions;
     };
 
-type Middleware = MiddlewareHandler | { path: string; handler: MiddlewareHandler };
+export type Middleware = MiddlewareHandler | { path: string; handler: MiddlewareHandler };
 
 export type ContextWithMastra = Context<{
   Variables: {
