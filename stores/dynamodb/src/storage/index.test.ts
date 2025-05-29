@@ -12,10 +12,10 @@ import {
   waitUntilTableNotExists,
 } from '@aws-sdk/client-dynamodb';
 import type { MastraMessageV1, StorageThreadType, WorkflowRun, WorkflowRunState } from '@mastra/core';
+import type { MastraMessageV2 } from '@mastra/core/agent';
 import { TABLE_EVALS, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
 import { DynamoDBStore } from '..';
-import { MastraMessageV2 } from '@mastra/core/agent';
 
 const TEST_TABLE_NAME = 'mastra-single-table-test'; // Define the single table name
 const LOCAL_ENDPOINT = 'http://localhost:8000';
