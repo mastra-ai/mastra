@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useMCPServerTools } from '@/hooks/use-mcp-server-tools';
 import { useMCPServers } from '@/hooks/use-mcp-servers';
 import { client } from '@/lib/client';
+import { ToolIconMap } from '@/types';
 
 import { McpToolInfo } from '@mastra/client-js';
 import { ServerInfo } from '@mastra/core/mcp';
@@ -22,7 +23,6 @@ import {
   Entity,
   EntityName,
   EntityIcon,
-  ToolsIcon,
 } from '@mastra/playground-ui';
 import clsx from 'clsx';
 import { useRef, useState } from 'react';
@@ -138,10 +138,12 @@ const McpToolList = ({ server }: { server: ServerInfo }) => {
 const ToolEntry = ({ tool, serverId }: { tool: McpToolInfo; serverId: string }) => {
   const linkRef = useRef<HTMLAnchorElement>(null);
 
+  const ToolIconComponent = ToolIconMap[tool.toolType || 'tool'];
+
   return (
     <Entity onClick={() => linkRef.current?.click()}>
       <EntityIcon>
-        <ToolsIcon className="group-hover/entity:text-[#ECB047]" />
+        <ToolIconComponent className="group-hover/entity:text-[#ECB047]" />
       </EntityIcon>
 
       <EntityContent>

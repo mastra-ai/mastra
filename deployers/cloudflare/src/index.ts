@@ -126,11 +126,6 @@ export class CloudflareDeployer extends Deployer {
       });
     });
 
-    if (mastra.getStorage()) {
-      // start storage init in the background
-      mastra.getStorage().init();
-    }
-
     registerHook(AvailableHooks.ON_EVALUATION, async traceObject => {
       const storage = mastra.getStorage();
       if (storage) {

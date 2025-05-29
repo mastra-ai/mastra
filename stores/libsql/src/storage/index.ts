@@ -1,7 +1,8 @@
 import { createClient } from '@libsql/client';
 import type { Client, InValue } from '@libsql/client';
+import type { MastraMessageV2 } from '@mastra/core/agent';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
-import type { MessageType, StorageThreadType } from '@mastra/core/memory';
+import type { StorageThreadType } from '@mastra/core/memory';
 import {
   MastraStorage,
   TABLE_MESSAGES,
@@ -32,13 +33,29 @@ function safelyParseJSON(jsonString: string): any {
 export interface LibSQLConfig {
   url: string;
   authToken?: string;
+  /**
+   * Maximum number of retries for write operations if an SQLITE_BUSY error occurs.
+   * @default 5
+   */
+  maxRetries?: number;
+  /**
+   * Initial backoff time in milliseconds for retrying write operations on SQLITE_BUSY.
+   * The backoff time will double with each retry (exponential backoff).
+   * @default 100
+   */
+  initialBackoffMs?: number;
 }
 
 export class LibSQLStore extends MastraStorage {
   private client: Client;
+  private readonly maxRetries: number;
+  private readonly initialBackoffMs: number;
 
   constructor(config: LibSQLConfig) {
     super({ name: `LibSQLStore` });
+
+    this.maxRetries = config.maxRetries ?? 5;
+    this.initialBackoffMs = config.initialBackoffMs ?? 100;
 
     // need to re-init every time for in memory dbs or the tables might not exist
     if (config.url.endsWith(':memory:')) {
@@ -46,6 +63,18 @@ export class LibSQLStore extends MastraStorage {
     }
 
     this.client = createClient(config);
+
+    // Set PRAGMAs for better concurrency, especially for file-based databases
+    if (config.url.startsWith('file:') || config.url.includes(':memory:')) {
+      this.client
+        .execute('PRAGMA journal_mode=WAL;')
+        .then(() => this.logger.debug('LibSQLStore: PRAGMA journal_mode=WAL set.'))
+        .catch(err => this.logger.warn('LibSQLStore: Failed to set PRAGMA journal_mode=WAL.', err));
+      this.client
+        .execute('PRAGMA busy_timeout = 5000;') // 5 seconds
+        .then(() => this.logger.debug('LibSQLStore: PRAGMA busy_timeout=5000 set.'))
+        .catch(err => this.logger.warn('LibSQLStore: Failed to set PRAGMA busy_timeout.', err));
+    }
   }
 
   private getCreateTableSQL(tableName: TABLE_NAMES, schema: Record<string, StorageColumn>): string {
@@ -127,30 +156,71 @@ export class LibSQLStore extends MastraStorage {
     };
   }
 
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    try {
-      await this.client.execute(
-        this.prepareStatement({
-          tableName,
-          record,
-        }),
-      );
-    } catch (error) {
-      this.logger.error(`Error upserting into table ${tableName}: ${error}`);
-      throw error;
+  private async executeWriteOperationWithRetry<T>(
+    operationFn: () => Promise<T>,
+    operationDescription: string,
+  ): Promise<T> {
+    let retries = 0;
+
+    while (true) {
+      try {
+        return await operationFn();
+      } catch (error: any) {
+        if (
+          error.message &&
+          (error.message.includes('SQLITE_BUSY') || error.message.includes('database is locked')) &&
+          retries < this.maxRetries
+        ) {
+          retries++;
+          const backoffTime = this.initialBackoffMs * Math.pow(2, retries - 1);
+          this.logger.warn(
+            `LibSQLStore: Encountered SQLITE_BUSY during ${operationDescription}. Retrying (${retries}/${this.maxRetries}) in ${backoffTime}ms...`,
+          );
+          await new Promise(resolve => setTimeout(resolve, backoffTime));
+        } else {
+          this.logger.error(`LibSQLStore: Error during ${operationDescription} after ${retries} retries: ${error}`);
+          throw error;
+        }
+      }
     }
   }
 
-  async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    if (records.length === 0) return;
+  public insert(args: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
+    return this.executeWriteOperationWithRetry(() => this.doInsert(args), `insert into table ${args.tableName}`);
+  }
 
-    try {
-      const batchStatements = records.map(r => this.prepareStatement({ tableName, record: r }));
-      await this.client.batch(batchStatements, 'write');
-    } catch (error) {
-      this.logger.error(`Error upserting into table ${tableName}: ${error}`);
-      throw error;
-    }
+  private async doInsert({
+    tableName,
+    record,
+  }: {
+    tableName: TABLE_NAMES;
+    record: Record<string, any>;
+  }): Promise<void> {
+    await this.client.execute(
+      this.prepareStatement({
+        tableName,
+        record,
+      }),
+    );
+  }
+
+  public batchInsert(args: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
+    return this.executeWriteOperationWithRetry(
+      () => this.doBatchInsert(args),
+      `batch insert into table ${args.tableName}`,
+    );
+  }
+
+  private async doBatchInsert({
+    tableName,
+    records,
+  }: {
+    tableName: TABLE_NAMES;
+    records: Record<string, any>[];
+  }): Promise<void> {
+    if (records.length === 0) return;
+    const batchStatements = records.map(r => this.prepareStatement({ tableName, record: r }));
+    await this.client.batch(batchStatements, 'write');
   }
 
   async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
@@ -274,26 +344,27 @@ export class LibSQLStore extends MastraStorage {
     // Messages will be automatically deleted due to CASCADE constraint
   }
 
-  private parseRow(row: any): MessageType {
+  private parseRow(row: any): MastraMessageV2 {
     let content = row.content;
     try {
       content = JSON.parse(row.content);
     } catch {
       // use content as is if it's not JSON
     }
-    return {
+    const result = {
       id: row.id,
       content,
       role: row.role,
-      type: row.type,
       createdAt: new Date(row.createdAt as string),
       threadId: row.thread_id,
-    } as MessageType;
+    } as MastraMessageV2;
+    if (row.type && row.type !== `v2`) result.type = row.type;
+    return result;
   }
 
-  async getMessages<T extends MessageType[]>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T> {
+  async getMessages<T extends MastraMessageV2[]>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T> {
     try {
-      const messages: MessageType[] = [];
+      const messages: MastraMessageV2[] = [];
       const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
 
       // If we have specific messages to select
@@ -373,7 +444,7 @@ export class LibSQLStore extends MastraStorage {
     }
   }
 
-  async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
+  async saveMessages({ messages }: { messages: MastraMessageV2[] }): Promise<MastraMessageV2[]> {
     if (messages.length === 0) return messages;
 
     try {
@@ -393,7 +464,7 @@ export class LibSQLStore extends MastraStorage {
             threadId,
             typeof message.content === 'object' ? JSON.stringify(message.content) : message.content,
             message.role,
-            message.type,
+            message.type || 'v2',
             time instanceof Date ? time.toISOString() : time,
           ],
         };

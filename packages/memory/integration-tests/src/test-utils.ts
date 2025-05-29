@@ -1,4 +1,5 @@
-import type { MessageType, CoreMessage } from '@mastra/core';
+import type { CoreMessage } from '@mastra/core';
+import type { MastraMessageV2 } from '@mastra/core/agent';
 
 const toolArgs = {
   weather: { location: 'New York' },
@@ -29,13 +30,13 @@ export function generateConversationHistory({
   messageCount?: number;
   toolFrequency?: number;
   toolNames?: (keyof typeof toolArgs)[];
-}): { messages: MessageType[]; counts: { messages: number; toolCalls: number; toolResults: number } } {
+}): { messages: MastraMessageV2[]; counts: { messages: number; toolCalls: number; toolResults: number } } {
   const counts = { messages: 0, toolCalls: 0, toolResults: 0 };
   // Create some words that will each be about one token
   const words = ['apple', 'banana', 'orange', 'grape'];
   // Arguments for different tools
 
-  const messages: MessageType[] = [];
+  const messages: MastraMessageV2[] = [];
   const startTime = Date.now();
 
   // Generate message pairs (user message followed by assistant response)
@@ -46,11 +47,10 @@ export function generateConversationHistory({
     // Add user message
     messages.push({
       role: 'user',
-      content: userContent,
+      content: { format: 2, parts: [{ type: 'text', text: userContent }] },
       id: `message-${i * 2}`,
       threadId,
       createdAt: new Date(startTime + i * 2000), // Each pair 2 seconds apart
-      type: 'text',
     });
     counts.messages++;
 
@@ -64,62 +64,51 @@ export function generateConversationHistory({
       // Assistant message with tool call
       messages.push({
         role: 'assistant',
-        content: [
-          { type: 'text', text: `Using ${toolName} tool:` },
-          {
-            type: 'tool-call',
-            toolCallId: `tool-${i}`,
-            toolName,
-            args: toolArgs[toolName as keyof typeof toolArgs] || {},
-          },
-        ],
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: `Using ${toolName} tool:` },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: `tool-${i}`,
+                toolName,
+                args: toolArgs[toolName as keyof typeof toolArgs] || {},
+                result: toolResults[toolName as keyof typeof toolResults] || {},
+              },
+            },
+          ],
+        },
         id: `tool-call-${i * 2 + 1}`,
         threadId,
         createdAt: new Date(startTime + i * 2000 + 1000), // 1 second after user message
-        type: 'tool-call',
       });
       counts.messages++;
       counts.toolCalls++;
-
-      messages.push({
-        role: 'tool',
-        type: `tool-result`,
-        id: `tool-result-${i * 2 + 1}`,
-        createdAt: new Date(startTime + i * 2000 + 1100),
-        threadId,
-        content: [
-          {
-            type: 'tool-result',
-            result: toolResults[toolName as keyof typeof toolResults] || {},
-            toolCallId: `tool-${i}`,
-            toolName,
-          },
-        ],
-      });
       counts.toolResults++;
     } else {
       // Regular assistant text message
       messages.push({
         role: 'assistant',
-        content: Array(15).fill(words).flat().join(' '), // ~60 tokens
+        content: { format: 2, parts: [{ type: 'text', text: Array(15).fill(words).flat().join(' ') }] }, // ~60 tokens
         id: `message-${i * 2 + 1}`,
         threadId,
         createdAt: new Date(startTime + i * 2000 + 1000), // 1 second after user message
-        type: 'text',
       });
       counts.messages++;
     }
   }
 
-  if (messages.at(-1)!.type === `tool-result`) {
+  const latestMessage = messages.at(-1)!;
+  if (latestMessage.role === `assistant` && latestMessage.content.parts.at(-1)?.type === `tool-invocation`) {
     const userContent = Array(25).fill(words).flat().join(' '); // ~100 tokens
     messages.push({
       role: 'user',
-      content: userContent,
+      content: { format: 2, parts: [{ type: 'text', text: userContent }] },
       id: `message-${messages.length + 1 * 2}`,
       threadId,
       createdAt: new Date(startTime + messages.length + 1 * 2000), // Each pair 2 seconds apart
-      type: 'text',
     });
     counts.messages++;
   }

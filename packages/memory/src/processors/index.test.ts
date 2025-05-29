@@ -1,6 +1,6 @@
 import { openai } from '@ai-sdk/openai';
 import { createTool } from '@mastra/core';
-import type { CoreMessage, MessageType } from '@mastra/core';
+import type { MessageType } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import cl100k_base from 'js-tiktoken/ranks/cl100k_base';
 import { describe, it, expect, vi } from 'vitest';
@@ -26,8 +26,8 @@ describe('TokenLimiter', () => {
 
     // Should prioritize newest messages (higher ids)
     expect(result.length).toBe(2);
-    expect((result[0] as MessageType).id).toBe('message-8');
-    expect((result[1] as MessageType).id).toBe('message-9');
+    expect(result[0].id).toBe('message-8');
+    expect(result[1].id).toBe('message-9');
   });
 
   it('should handle empty messages array', () => {
@@ -52,8 +52,8 @@ describe('TokenLimiter', () => {
     });
 
     // All should process messages successfully but potentially with different token counts
-    const defaultResult = defaultLimiter.process(messages as CoreMessage[]);
-    const customResult = customLimiter.process(messages as CoreMessage[]);
+    const defaultResult = defaultLimiter.process(messages);
+    const customResult = customLimiter.process(messages);
 
     // Each should return the same messages but with potentially different token counts
     expect(defaultResult.length).toBe(messages.length);
@@ -69,7 +69,7 @@ describe('TokenLimiter', () => {
     // Count tokens for each message including all overheads
     for (const message of messages) {
       // Base token count from the countTokens method
-      estimatedTokens += testLimiter.countTokens(message as CoreMessage);
+      estimatedTokens += testLimiter.countTokens(message);
     }
 
     return Number(estimatedTokens.toFixed(2));
@@ -85,7 +85,7 @@ describe('TokenLimiter', () => {
     const { messages, counts } = generateConversationHistory(config);
 
     const estimate = estimateTokens(messages);
-    const used = (await agent.generate(messages.slice(0, -1) as CoreMessage[])).usage.totalTokens;
+    const used = (await agent.generate(messages.slice(0, -1))).usage.totalTokens;
 
     console.log(`Estimated ${estimate} tokens, used ${used} tokens.\n`, counts);
 
@@ -199,7 +199,7 @@ describe.concurrent('ToolCallFilter', () => {
       messageCount: 1,
     });
     const filter = new ToolCallFilter();
-    const result = filter.process(messages as CoreMessage[]) as MessageType[];
+    const result = filter.process(messages) as MessageType[];
 
     // Should only keep the text message and assistant res
     expect(result.length).toBe(2);
@@ -213,7 +213,7 @@ describe.concurrent('ToolCallFilter', () => {
       messageCount: 2,
     });
     const filter = new ToolCallFilter({ exclude: ['weather'] });
-    const result = filter.process(messages as CoreMessage[]) as MessageType[];
+    const result = filter.process(messages);
 
     // Should keep text message, assistant reply, calculator tool call, and calculator result
     expect(result.length).toBe(4);
@@ -230,7 +230,7 @@ describe.concurrent('ToolCallFilter', () => {
     });
 
     const filter = new ToolCallFilter({ exclude: [] });
-    const result = filter.process(messages as CoreMessage[]);
+    const result = filter.process(messages);
 
     // Should keep all messages
     expect(result.length).toBe(messages.length);

@@ -29,15 +29,15 @@ export const createSampleThread = () => ({
   metadata: { key: 'value' },
 });
 
-export const createSampleMessage = (threadId: string): MessageType => ({
-  id: `msg-${randomUUID()}`,
-  role: 'user',
-  type: 'text',
-  threadId,
-  content: [{ type: 'text' as const, text: 'Hello' }] as MessageType['content'],
-  createdAt: new Date(),
-  resourceId: `resource-${randomUUID()}`,
-});
+export const createSampleMessage = (threadId: string): MessageType =>
+  ({
+    id: `msg-${randomUUID()}`,
+    role: 'user',
+    threadId,
+    content: { format: 2, parts: [{ type: 'text' as const, text: 'Hello' }] },
+    createdAt: new Date(),
+    resourceId: `resource-${randomUUID()}`,
+  }) satisfies MessageType;
 
 export const createSampleWorkflowSnapshot = (threadId: string, status: string, createdAt?: Date) => {
   const runId = `run-${randomUUID()}`;
@@ -50,6 +50,8 @@ export const createSampleWorkflowSnapshot = (threadId: string, status: string, c
         status: status as WorkflowRunState['context'][string]['status'],
         payload: {},
         error: undefined,
+        startedAt: timestamp.getTime(),
+        endedAt: new Date(timestamp.getTime() + 15000).getTime(),
       },
       input: {},
     } as WorkflowRunState['context'],

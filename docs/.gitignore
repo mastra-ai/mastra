@@ -52,3 +52,5 @@ llms-full.txt
 #Sitemap
 sitemap.xml
 
+# eval-context
+context
