@@ -213,7 +213,7 @@ describe('ClickhouseStore', () => {
       expect(result).toEqual([]);
     }, 10e3);
 
-    it.only('should maintain message order', async () => {
+    it('should maintain message order', async () => {
       const thread = createSampleThread();
       await store.saveThread({ thread });
 
