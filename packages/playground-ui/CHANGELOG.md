@@ -1,5 +1,17 @@
 # @mastra/playground-ui
 
+## 5.1.2-alpha.0
+
+### Patch Changes
+
+- 89a69d0: add a way to go to the given trace of a workflow step
+- 9faee5b: small fixes in the workflows graph
+- 9a31c09: Highlight steps in nested workflows on workflow graph
+- Updated dependencies [592a2db]
+- Updated dependencies [e5dc18d]
+  - @mastra/client-js@0.10.2-alpha.0
+  - @mastra/core@0.10.2-alpha.0
+
 ## 5.1.1
 
 ### Patch Changes
