@@ -61,5 +61,14 @@
     "@mastra/voice-speechify": "0.10.0",
     "@mastra/inngest": "0.10.1"
   },
-  "changesets": []
+  "changesets": [
+    "brown-eggs-smash",
+    "busy-buckets-study",
+    "busy-ends-mate",
+    "icy-groups-tell",
+    "loud-forks-search",
+    "nice-eagles-fall",
+    "petite-snakes-exist",
+    "wide-dingos-do"
+  ]
 }

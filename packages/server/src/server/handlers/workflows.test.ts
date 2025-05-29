@@ -18,8 +18,10 @@ import {
   getWorkflowRunsHandler,
 } from './workflows';
 
-vi.mock('zod', () => {
+vi.mock('zod', async importOriginal => {
+  const actual: {} = await importOriginal();
   return {
+    ...actual,
     object: vi.fn(() => ({
       parse: vi.fn(input => input),
       safeParse: vi.fn(input => ({ success: true, data: input })),

@@ -19,7 +19,31 @@ Each tab includes import statements, initialization code, and basic operations (
 The providers include Pg Vector, Pinecone, Qdrant, Chroma, Astra, LibSQL, Upstash, Cloudflare, MongoDB, and OpenSearch.
 */}
 
-<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB', 'OpenSearch']}>
+<Tabs items={['MongoDB', 'Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'OpenSearch']}>
+  <Tabs.Tab>
+    ```ts filename="vector-store.ts" showLineNumbers copy
+    import { MongoDBVector } from '@mastra/mongodb'
+
+    const store = new MongoDBVector({
+      uri: process.env.MONGODB_URI,
+      dbName: process.env.MONGODB_DATABASE
+    })
+    await store.createIndex({
+      indexName: "myCollection",
+      dimension: 1536,
+    });
+    await store.upsert({
+      indexName: "myCollection",
+      vectors: embeddings,
+      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    });
+
+    ```
+    ### Using MongoDB Atlas Vector search
+
+    For detailed setup instructions and best practices, see the [official MongoDB Atlas Vector Search documentation](https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-overview/?utm_campaign=devrel&utm_source=third-party-content&utm_medium=cta&utm_content=mastra-docs). 
+  </Tabs.Tab>
+
   <Tabs.Tab>
   ```ts filename="vector-store.ts" showLineNumbers copy
   import { PgVector } from '@mastra/pg';
@@ -197,28 +221,6 @@ await store.upsert({
 </Tabs.Tab>
 
 <Tabs.Tab>
-  ```ts filename="vector-store.ts" showLineNumbers copy
-  import { MongoDBVector } from '@mastra/mongodb'
-
-  const store = new MongoDBVector({
-    url: process.env.MONGODB_URL,
-    database: process.env.MONGODB_DATABASE
-  })
-
-  await store.createIndex({
-    indexName: "myCollection",
-    dimension: 1536,
-  });
-
-  await store.upsert({
-    indexName: "myCollection",
-    vectors: embeddings,
-    metadata: chunks.map(chunk => ({ text: chunk.text })),
-  });
-
-```
-</Tabs.Tab>
-<Tabs.Tab>
 ```ts filename="vector-store.ts" showLineNumbers copy
 import { OpenSearchVector } from '@mastra/opensearch'
 
@@ -274,7 +276,17 @@ This helps users understand the constraints and avoid naming conflicts when crea
 The tabs provide examples of valid and invalid names to clarify the rules for each database.
 */}
 
-<Tabs items={['Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB', 'OpenSearch']}>
+<Tabs items={['MongoDB', 'Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'OpenSearch']}>
+  <Tabs.Tab>
+    Collection (index) names must:
+    - Start with a letter or underscore
+    - Be up to 120 bytes long
+    - Contain only letters, numbers, underscores, or dots
+    - Cannot contain `$` or the null character
+    - Example: `my_collection.123` is valid
+    - Example: `my-index` is not valid (contains hyphen)
+    - Example: `My$Collection` is not valid (contains `$`)
+  </Tabs.Tab>
   <Tabs.Tab>
     Index names must:
     - Start with a letter or underscore
@@ -345,16 +357,6 @@ The tabs provide examples of valid and invalid names to clarify the rules for ea
     - Use dashes instead of spaces
     - Example: `my-index-123` is valid
     - Example: `My_Index` is not valid (uppercase and underscore)
-  </Tabs.Tab>
-  <Tabs.Tab>
-    Collection (index) names must:
-    - Start with a letter or underscore
-    - Be up to 120 bytes long
-    - Contain only letters, numbers, underscores, or dots
-    - Cannot contain `$` or the null character
-    - Example: `my_collection.123` is valid
-    - Example: `my-index` is not valid (contains hyphen)
-    - Example: `My$Collection` is not valid (contains `$`)
   </Tabs.Tab>
   <Tabs.Tab>
     Index names must:
