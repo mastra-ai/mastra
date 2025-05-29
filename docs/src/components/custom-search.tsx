@@ -164,9 +164,9 @@ export const CustomSearch: FC<SearchProps> = ({
         setSelectedIndex((prev) => {
           const newIndex = prev < totalItems - 1 ? prev + 1 : 0;
           // Scroll to the selected item
-          setTimeout(() => {
+          requestAnimationFrame(() => {
             virtualizer.scrollToIndex(newIndex, { align: "auto" });
-          }, 0);
+          });
           return newIndex;
         });
         break;
@@ -175,9 +175,9 @@ export const CustomSearch: FC<SearchProps> = ({
         setSelectedIndex((prev) => {
           const newIndex = prev > 0 ? prev - 1 : totalItems - 1;
           // Scroll to the selected item
-          setTimeout(() => {
+          requestAnimationFrame(() => {
             virtualizer.scrollToIndex(newIndex, { align: "auto" });
-          }, 0);
+          });
           return newIndex;
         });
         break;
