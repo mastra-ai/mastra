@@ -1129,7 +1129,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
                 type: 'object',
                 description: 'Listener information depending on the voice provider',
                 properties: {
-                  listenerId: { type: 'string' },
+                  enabled: { type: 'boolean' },
                 },
                 additionalProperties: true,
               },
