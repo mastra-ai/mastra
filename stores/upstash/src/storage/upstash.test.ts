@@ -356,7 +356,7 @@ describe('UpstashStore', () => {
 
       await store.saveMessages({ messages, format: 'v2' });
 
-      const retrievedMessages = await store.getMessages({ threadId });
+      const retrievedMessages = await store.getMessages({ threadId, format: 'v2' });
       expect(retrievedMessages[0].content).toEqual(messages[0].content);
     });
   });
