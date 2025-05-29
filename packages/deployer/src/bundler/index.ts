@@ -60,7 +60,7 @@ export abstract class Bundler extends MastraBundler {
         dependenciesMap.set(`${pkgChunks[0]}/${pkgChunks[1]}`, value);
       } else {
         // For non-scoped packages, take only the first part before any slash
-        const pkgName = key.split('/')[0];
+        const pkgName = key.split('/')[0] || key;
         dependenciesMap.set(pkgName, value);
       }
     }
