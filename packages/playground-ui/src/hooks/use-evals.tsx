@@ -2,7 +2,6 @@ import type { TestInfo, MetricResult } from '@mastra/core/eval';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { useMastraClient } from '@/contexts/mastra-client-context';
-import type { MastraClient } from '@mastra/client-js';
 
 export type Evals = {
   input: string;
@@ -21,13 +20,7 @@ export const useEvalsByAgentId = (agentId: string, type: 'ci' | 'live') => {
   const [evals, setEvals] = useState<Evals[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  let client: MastraClient;
-  try {
-    client = useMastraClient();
-  } catch (error) {
-    console.error('Error getting client when using evals:', error);
-    throw error;
-  }
+  const client = useMastraClient();
 
   const fetchEvals = async (_agentId?: string) => {
     setIsLoading(true);
