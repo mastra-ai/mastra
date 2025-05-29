@@ -4,6 +4,7 @@ const meta = {
   express: "With Express",
   copilotkit: "With CopilotKit",
   openrouter: "With OpenRouter",
+  ollama: "With Ollama",
 };
 
 export default meta;

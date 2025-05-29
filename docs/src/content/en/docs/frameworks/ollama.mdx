@@ -1,0 +1,127 @@
+---
+title: "Using with Ollama"
+description: "Learn how to integrate Ollama with Mastra"
+---
+
+import { Steps } from 'nextra/components'
+
+# Use Ollama with Mastra
+
+Integrate Ollama with Mastra to leverage local or remote Ollama models.
+
+<Steps>
+## Initialize a Mastra Project
+
+The simplest way to get started with Mastra is to use the `mastra` CLI to initialize a new project:
+
+```bash copy
+npx create-mastra@latest
+```
+
+You'll be guided through prompts to set up your project. For this example, select:
+- Name your project: my-mastra-ollama-app
+- Components: Agents (recommended)
+- For default provider, you can select any option (e.g. OpenAI) - we'll configure Ollama manually.
+- When asked if you want to include example code, select **Yes**.
+
+After the project is created, navigate to the `src/mastra/agents/` directory. If you selected to include example code, a `weather-agent.ts` file containing an example agent will be automatically created in this directory.
+
+Replace the content of your agent file (e.g., `src/mastra/agents/weather-agent.ts`) with the following code:
+
+```typescript filename="src/mastra/agents/weather-agent.ts" copy showLineNumbers {1,18}
+import { ollama } from 'ollama-ai-provider';
+import { Agent } from '@mastra/core/agent';
+import { Memory } from '@mastra/memory';
+import { LibSQLStore } from '@mastra/libsql';
+
+export const weatherAgent = new Agent({
+  name: 'Weather Agent',
+  instructions: `
+      You are a helpful weather assistant that provides accurate weather information.
+
+      Your primary function is to help users get weather details for specific locations. When responding:
+      - Always ask for a location if none is provided
+      - If the location name isn’t in English, please translate it
+      - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
+      - Include relevant details like humidity, wind conditions, and precipitation
+      - Keep responses concise but informative
+  `,
+  model: ollama('llama3.2:latest'),
+
+  memory: new Memory({
+    storage: new LibSQLStore({
+      url: 'file:../mastra.db',
+    }),
+  }),
+});
+```
+
+## Configure Ollama Provider
+
+If you selected a default provider like OpenAI during `create-mastra` setup, you might want to remove its package:
+
+```bash copy
+# Example: if OpenAI was selected
+npm uninstall @ai-sdk/openai
+```
+
+Then, install the `ollama-ai-provider` package:
+
+```bash copy
+npm install ollama-ai-provider
+```
+
+Unlike some other providers, Ollama typically does not require an API key if you are running it locally. Ensure your Ollama instance is running and accessible.
+The agent code provided in the "Initialize a Mastra Project" section (using `import { ollama } from 'ollama-ai-provider';`) demonstrates the standard way to use Ollama with its default settings.
+
+If you need to customize the Ollama provider settings (e.g., to specify a different `baseURL`), refer to the [Advanced Configuration](#advanced-configuration) section below.
+
+## Register your Agent
+
+Make sure to register your agent to the Mastra instance in `src/mastra/index.ts`:
+
+```typescript filename="src/mastra/index.ts" copy showLineNumbers {1,5}
+import { weatherAgent } from "./agents/weather-agent";
+import { Mastra } from "@mastra/core";
+
+export const mastra = new Mastra({
+    agents: { weatherAgent }
+})
+```
+
+## Run and Test your Agent
+
+```bash copy
+npm run dev
+```
+
+This will start the Mastra development server.
+
+You can now test your agent by visiting [http://localhost:4111](http://localhost:4111) for the playground or via the Mastra API at [http://localhost:4111/api/agents/weather-agent/stream](http://localhost:4111/api/agents/weather-agent/stream).
+
+</Steps>
+
+## Advanced Configuration
+
+The `ollama-ai-provider` allows for various configurations such as setting custom headers, intercepting fetch requests, or simulating tool streaming. You can find more information [on the package's GitHub repository](https://github.com/sgomez/ollama-ai-provider)
+
+```typescript filename="src/mastra/agents/weather-agent.ts" {1, 4-10, 15-17} copy showLineNumbers
+import { createOllama } from 'ollama-ai-provider';
+import { Agent } from '@mastra/core/agent';
+
+const ollama = createOllama({
+  baseURL: 'https://<your-ollama-instance-url>',
+  headers: {},
+  fetch: async (url, options) => {
+    // Implement your custom fetch logic here
+    }
+});
+
+export const weatherAgent = new Agent({
+  name: 'Weather Agent',
+  instructions: 'You are a helpful weather assistant...', // Truncated for brevity
+  model: ollama('llama3.2:latest', {
+    simulateStreaming: true
+  }),
+});
+```
