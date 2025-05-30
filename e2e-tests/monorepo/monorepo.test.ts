@@ -155,4 +155,47 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
 
     runApiTests(port);
   });
+
+  describe('start', async () => {
+    let port = await getPort();
+    let proc: ReturnType<typeof execa> | undefined;
+    const controller = new AbortController();
+    const cancelSignal = controller.signal;
+
+    beforeAll(async () => {
+      const inputFile = join(fixturePath, 'apps', 'custom');
+
+      proc = execa('npm', ['run', 'start'], {
+        cwd: inputFile,
+        cancelSignal,
+        gracefulCancel: true,
+        env: {
+          OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+          MASTRA_PORT: port.toString(),
+        },
+      });
+
+      await new Promise<void>(resolve => {
+        proc!.stdout?.on('data', data => {
+          console.log(data?.toString());
+          if (data?.toString()?.includes(`http://localhost:${port}`)) {
+            resolve();
+          }
+        });
+      });
+    }, timeout);
+
+    afterAll(async () => {
+      if (proc) {
+        try {
+          setImmediate(() => controller.abort());
+          await proc;
+        } catch {
+          console.log('failed to kill start proc');
+        }
+      }
+    }, timeout);
+
+    runApiTests(port);
+  });
 });
