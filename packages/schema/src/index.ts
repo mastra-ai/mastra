@@ -2,7 +2,7 @@
 export * from './schema-compatibility';
 
 // Builder functions and types
-export * from './builder';
+export * from './utils';
 
 // Provider compatibility implementations
 export { AnthropicSchemaCompat } from './provider-compats/anthropic';

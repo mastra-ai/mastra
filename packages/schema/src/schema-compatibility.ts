@@ -1,7 +1,7 @@
 import type { Schema, LanguageModelV1 } from 'ai';
 import { z } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
-import { convertZodSchemaToAISDKSchema } from './builder';
+import { convertZodSchemaToAISDKSchema } from './utils';
 import { JSONSchema7 } from 'json-schema';
 
 /**

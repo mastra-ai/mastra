@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { jsonSchema } from 'ai';
 import type { LanguageModelV1, Schema } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
-import { convertZodSchemaToAISDKSchema, convertSchemaToZod, processSchema } from '../builder';
+import { convertZodSchemaToAISDKSchema, convertSchemaToZod, processSchema } from '../utils';
 import { SchemaCompatibility } from '../schema-compatibility';
 
 const mockModel = new MockLanguageModelV1({
