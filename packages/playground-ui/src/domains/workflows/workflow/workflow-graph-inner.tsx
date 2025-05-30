@@ -19,7 +19,6 @@ import { WorkflowNestedNode } from './workflow-nested-node';
 import { ZoomSlider } from './zoom-slider';
 
 import { useCurrentRun } from '../context/use-current-run';
-import { useMemo } from 'react';
 
 export interface WorkflowGraphInnerProps {
   workflow: {
