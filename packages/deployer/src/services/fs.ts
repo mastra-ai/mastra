@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 
 import fsExtra from 'fs-extra/esm';
 
+import { globby } from 'globby';
 import { FileEnvService } from './env.js';
 
 export class FileService {
@@ -43,6 +44,19 @@ export class FileService {
     for (const f of files) {
       if (fs.existsSync(f)) {
         return f;
+      }
+    }
+
+    throw new Error('Missing required file, checked the following paths: ' + files.join(', '));
+  }
+
+  public async getFirstExistingFileAsync(files: string[]): Promise<string> {
+    for (const f of files) {
+      const file = await globby(f, {
+        suppressErrors: true,
+      });
+      if (file.length > 0) {
+        return file[0]!;
       }
     }
 

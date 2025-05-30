@@ -13,12 +13,12 @@ export abstract class Deployer extends Bundler implements IDeployer {
     this.deps.__setLogger(this.logger);
   }
 
-  getEnvFiles(): Promise<string[]> {
-    const possibleFiles = ['.env.production', '.env.local', '.env'];
+  async getEnvFiles(): Promise<string[]> {
+    const possibleFiles = ['.env.production', '.env.local', '.env', '.env.*'];
 
     try {
       const fileService = new FileService();
-      const envFile = fileService.getFirstExistingFile(possibleFiles);
+      const envFile = await fileService.getFirstExistingFileAsync(possibleFiles);
 
       return Promise.resolve([envFile]);
     } catch {}

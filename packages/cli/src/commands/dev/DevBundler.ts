@@ -12,12 +12,12 @@ export class DevBundler extends Bundler {
     super('Dev');
   }
 
-  getEnvFiles(): Promise<string[]> {
-    const possibleFiles = ['.env.development', '.env.local', '.env'];
+  async getEnvFiles(): Promise<string[]> {
+    const possibleFiles = ['.env.development', '.env.local', '.env', '.env.*'];
 
     try {
       const fileService = new FileService();
-      const envFile = fileService.getFirstExistingFile(possibleFiles);
+      const envFile = await fileService.getFirstExistingFileAsync(possibleFiles);
 
       return Promise.resolve([envFile]);
     } catch {
