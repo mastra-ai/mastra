@@ -742,7 +742,7 @@ describe('Workflow', () => {
       });
     });
 
-    it.only('should have runId in the step execute function - bug #4260', async () => {
+    it('should have runId in the step execute function - bug #4260', async () => {
       const step1Action = vi.fn().mockImplementation(({ runId }) => {
         return { value: runId };
       });
