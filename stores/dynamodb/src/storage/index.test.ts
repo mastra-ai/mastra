@@ -11,7 +11,8 @@ import {
   waitUntilTableExists,
   waitUntilTableNotExists,
 } from '@aws-sdk/client-dynamodb';
-import type { MessageType, StorageThreadType, WorkflowRun, WorkflowRunState } from '@mastra/core';
+import type { MastraMessageV1, StorageThreadType, WorkflowRun, WorkflowRunState } from '@mastra/core';
+import type { MastraMessageV2 } from '@mastra/core/agent';
 import { TABLE_EVALS, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
 import { DynamoDBStore } from '..';
@@ -388,17 +389,17 @@ describe('DynamoDBStore Integration Tests', () => {
     });
 
     describe('Batch Operations', () => {
-      test('should handle batch message inserts efficiently (up to 25 items)', async () => {
+      test('should handle batch message inserts efficiently (up to 25 items) [v1 storage]', async () => {
         const startTime = Date.now(); // Get a base time
         const threadId = 'batch-thread';
-        const messages: MessageType[] = Array.from({ length: 25 }, (_, i) => ({
+        const messages: MastraMessageV1[] = Array.from({ length: 25 }, (_, i) => ({
           id: `msg-${i}`,
           threadId,
           resourceId: 'test-resource',
           content: `Message ${i}`,
           // Increment timestamp slightly for each message to ensure order
           createdAt: new Date(startTime + i),
-          role: 'user',
+          role: i % 2 === 0 ? 'user' : 'assistant',
           type: 'text',
         }));
 
@@ -412,10 +413,36 @@ describe('DynamoDBStore Integration Tests', () => {
         expect(retrieved[24]?.content).toBe('Message 24');
       });
 
+      test('should handle batch message inserts efficiently (up to 25 items) [v2 storage]', async () => {
+        const startTime = Date.now(); // Get a base time
+        const threadId = 'batch-thread';
+        const messages: MastraMessageV2[] = Array.from({ length: 25 }, (_, i) => ({
+          id: `msg-${i}`,
+          threadId,
+          resourceId: 'test-resource',
+          content: { format: 2, parts: [{ type: 'text', text: `Message ${i}` }] },
+          // Increment timestamp slightly for each message to ensure order
+          createdAt: new Date(startTime + i),
+          role: i % 2 === 0 ? 'user' : 'assistant',
+          type: 'text',
+        }));
+
+        // Assuming saveMessages uses BatchWriteItem internally
+        await expect(store.saveMessages({ messages, format: 'v2' })).resolves.not.toThrow();
+
+        const retrieved = await store.getMessages({ threadId, format: 'v2' });
+        expect(retrieved).toHaveLength(25);
+        // Now the order should be guaranteed by the ascending createdAt timestamp
+        if (retrieved[0]?.content?.parts[0]?.type !== `text`) throw new Error(`Expected text part`);
+        expect(retrieved[0].content.parts[0].text).toBe('Message 0');
+        if (retrieved[24]?.content?.parts?.[0]?.type !== `text`) throw new Error(`Expected text part`);
+        expect(retrieved[24].content.parts[0].text).toBe('Message 24');
+      });
+
       test('should handle batch inserts exceeding 25 items (if saveMessages chunks)', async () => {
         const startTime = Date.now(); // Get a base time
         const threadId = 'batch-thread-large';
-        const messages: MessageType[] = Array.from({ length: 30 }, (_, i) => ({
+        const messages: MastraMessageV1[] = Array.from({ length: 30 }, (_, i) => ({
           id: `msg-large-${i}`,
           threadId,
           resourceId: 'test-resource-large',

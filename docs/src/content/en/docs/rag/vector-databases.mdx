@@ -16,10 +16,10 @@ LLM CONTEXT: This Tabs component showcases different vector database implementat
 Each tab demonstrates the setup and configuration for a specific vector database provider.
 The tabs show consistent API patterns across different databases, helping users understand how to switch between providers.
 Each tab includes import statements, initialization code, and basic operations (createIndex, upsert) for that specific database.
-The providers include Pg Vector, Pinecone, Qdrant, Chroma, Astra, LibSQL, Upstash, Cloudflare, MongoDB, and OpenSearch.
+The providers include Pg Vector, Pinecone, Qdrant, Chroma, Astra, LibSQL, Upstash, Cloudflare, MongoDB, OpenSearch, and Couchbase.
 */}
 
-<Tabs items={['MongoDB', 'Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'OpenSearch']}>
+<Tabs items={['MongoDB', 'Pg Vector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra', 'LibSQL', 'Upstash', 'Cloudflare', 'OpenSearch', 'Couchbase']}>
   <Tabs.Tab>
     ```ts filename="vector-store.ts" showLineNumbers copy
     import { MongoDBVector } from '@mastra/mongodb'
@@ -238,6 +238,29 @@ await store.upsert({
 });
 ```
 
+</Tabs.Tab>
+<Tabs.Tab>
+  ```ts filename="vector-store.ts" showLineNumbers copy
+  import { CouchbaseVector } from '@mastra/couchbase'
+
+  const store = new CouchbaseVector({
+    connectionString: process.env.COUCHBASE_CONNECTION_STRING,
+    username: process.env.COUCHBASE_USERNAME,
+    password: process.env.COUCHBASE_PASSWORD,
+    bucketName: process.env.COUCHBASE_BUCKET,
+    scopeName: process.env.COUCHBASE_SCOPE,
+    collectionName: process.env.COUCHBASE_COLLECTION,
+  })
+  await store.createIndex({
+    indexName: "myCollection",
+    dimension: 1536,
+  });
+  await store.upsert({
+    indexName: "myCollection",
+    vectors: embeddings,
+    metadata: chunks.map(chunk => ({ text: chunk.text })),
+  });
+  ```
 </Tabs.Tab>
 </Tabs>
 
