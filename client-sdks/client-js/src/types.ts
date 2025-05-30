@@ -279,6 +279,7 @@ export interface GetTelemetryParams {
 }
 
 export interface GetNetworkResponse {
+  id: string;
   name: string;
   instructions: string;
   agents: Array<{
