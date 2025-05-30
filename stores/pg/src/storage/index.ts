@@ -1,6 +1,7 @@
+import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageV2 } from '@mastra/core/agent';
 import type { MetricResult } from '@mastra/core/eval';
-import type { StorageThreadType } from '@mastra/core/memory';
+import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
 import {
   MastraStorage,
   TABLE_MESSAGES,
@@ -677,7 +678,14 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
-  async saveMessages({ messages }: { messages: MastraMessageV2[] }): Promise<MastraMessageV2[]> {
+  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
+  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
+  async saveMessages({
+    messages,
+    format,
+  }:
+    | { messages: MastraMessageV1[]; format?: undefined | 'v1' }
+    | { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[] | MastraMessageV1[]> {
     if (messages.length === 0) return messages;
 
     try {
@@ -709,7 +717,9 @@ export class PostgresStore extends MastraStorage {
         }
       });
 
-      return messages;
+      const list = new MessageList().add(messages, 'memory');
+      if (format === `v2`) return list.get.all.v2();
+      return list.get.all.v1();
     } catch (error) {
       console.error('Error saving messages:', error);
       throw error;

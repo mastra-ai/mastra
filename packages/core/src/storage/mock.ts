@@ -1,5 +1,6 @@
+import { MessageList } from '../agent';
 import type { MastraMessageV2 } from '../agent';
-import type { StorageThreadType } from '../memory/types';
+import type { MastraMessageV1, StorageThreadType } from '../memory/types';
 import { MastraStorage } from './base';
 import type { TABLE_NAMES } from './constants';
 import type { EvalRow, StorageColumn, StorageGetMessagesArg, WorkflowRun, WorkflowRuns } from './types';
@@ -112,13 +113,21 @@ export class MockStore extends MastraStorage {
     return messages as T;
   }
 
-  async saveMessages({ messages }: { messages: MastraMessageV2[] }): Promise<MastraMessageV2[]> {
+  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
+  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
+  async saveMessages(
+    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
+  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
+    const { messages, format = 'v1' } = args;
     this.logger.debug(`MockStore: saveMessages called with ${messages.length} messages`);
     for (const message of messages) {
       const key = message.id;
       this.data.mastra_messages[key] = message;
     }
-    return messages;
+
+    const list = new MessageList().add(messages, 'memory');
+    if (format === `v2`) return list.get.all.v2();
+    return list.get.all.v1();
   }
 
   async getTraces({

@@ -1,6 +1,5 @@
 import { randomUUID } from 'crypto';
-import type { MastraMessageV2 } from '@mastra/core/agent';
-import type { MessageType } from '@mastra/core/memory';
+import type { MastraMessageV2 } from '@mastra/core';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 import {
   TABLE_MESSAGES,
@@ -26,7 +25,7 @@ const createSampleThread = (date?: Date) => ({
   metadata: { key: 'value' },
 });
 
-const createSampleMessage = (threadId: string, content: string = 'Hello'): MessageType => ({
+const createSampleMessage = (threadId: string, content: string = 'Hello'): MastraMessageV2 => ({
   id: `msg-${randomUUID()}`,
   role: 'user',
   threadId,
@@ -320,15 +319,15 @@ describe('UpstashStore', () => {
     });
 
     it('should save and retrieve messages in order', async () => {
-      const messages: MessageType[] = [
+      const messages: MastraMessageV2[] = [
         createSampleMessage(threadId, 'First'),
         createSampleMessage(threadId, 'Second'),
         createSampleMessage(threadId, 'Third'),
       ];
 
-      await store.saveMessages({ messages: messages });
+      await store.saveMessages({ messages: messages, format: 'v2' });
 
-      const retrievedMessages = await store.getMessages<MastraMessageV2[]>({ threadId });
+      const retrievedMessages = await store.getMessages({ threadId, format: 'v2' });
       expect(retrievedMessages).toHaveLength(3);
       expect(retrievedMessages.map((m: any) => m.content.parts[0].text)).toEqual(['First', 'Second', 'Third']);
     });
@@ -354,11 +353,11 @@ describe('UpstashStore', () => {
           },
           createdAt: new Date(),
         },
-      ] as MessageType[];
+      ] as MastraMessageV2[];
 
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
-      const retrievedMessages = await store.getMessages<MastraMessageV2>({ threadId });
+      const retrievedMessages = await store.getMessages({ threadId, format: 'v2' });
       expect(retrievedMessages[0].content).toEqual(messages[0].content);
     });
   });

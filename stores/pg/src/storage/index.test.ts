@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import type { MetricResult } from '@mastra/core/eval';
-import type { MessageType } from '@mastra/core/memory';
+import type { MastraMessageV1 } from '@mastra/core/memory';
 import { TABLE_WORKFLOW_SNAPSHOT, TABLE_MESSAGES, TABLE_THREADS, TABLE_EVALS } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
@@ -31,10 +31,16 @@ const createSampleThread = () => ({
   metadata: { key: 'value' },
 });
 
-const createSampleMessage = (threadId: string): MessageType => ({
+let role: 'user' | 'assistant' = 'assistant';
+const getRole = () => {
+  if (role === `user`) role = `assistant`;
+  else role = `user`;
+  return role;
+};
+const createSampleMessage = (threadId: string): MastraMessageV1 => ({
   id: `msg-${randomUUID()}`,
   resourceId: `resource-${randomUUID()}`,
-  role: 'user',
+  role: getRole(),
   type: 'text',
   threadId,
   content: [{ type: 'text', text: 'Hello' }],
@@ -260,14 +266,17 @@ describe('PostgresStore', () => {
       await store.saveThread({ thread });
 
       const messages = [
-        { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'First' }] as MessageType['content'] },
-        { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'Second' }] as MessageType['content'] },
-        { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'Third' }] as MessageType['content'] },
-      ];
+        { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'First' }] },
+        {
+          ...createSampleMessage(thread.id),
+          content: [{ type: 'text', text: 'Second' }],
+        },
+        { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'Third' }] },
+      ] satisfies MastraMessageV1[];
 
       await store.saveMessages({ messages });
 
-      const retrievedMessages = await store.getMessages<MessageType>({ threadId: thread.id });
+      const retrievedMessages = await store.getMessages<MastraMessageV1>({ threadId: thread.id });
       expect(retrievedMessages).toHaveLength(3);
 
       // Verify order is maintained

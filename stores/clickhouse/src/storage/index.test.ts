@@ -1,6 +1,5 @@
 import { randomUUID } from 'crypto';
-import type { WorkflowRunState } from '@mastra/core';
-import type { MessageType } from '@mastra/core/memory';
+import type { MastraMessageV1, WorkflowRunState } from '@mastra/core';
 import { TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi, afterEach } from 'vitest';
 
@@ -28,20 +27,27 @@ const TEST_CONFIG: ClickhouseConfig = {
 // Sample test data factory functions
 const createSampleThread = () => ({
   id: `thread-${randomUUID()}`,
-  resourceId: `resource-${randomUUID()}`,
+  resourceId: `clickhouse-test`,
   title: 'Test Thread',
   createdAt: new Date(),
   updatedAt: new Date(),
   metadata: { key: 'value' },
 });
 
-const createSampleMessage = (threadId: string, createdAt: Date = new Date()): MessageType => ({
+let role = `user`;
+const getRole = () => {
+  if (role === `user`) role = `assistant`;
+  else role = `user`;
+  return role as 'user' | 'assistant';
+};
+
+const createSampleMessage = (threadId: string, createdAt: Date = new Date()): MastraMessageV1 => ({
   id: `msg-${randomUUID()}`,
-  resourceId: `resource-${randomUUID()}`,
-  role: 'user',
+  resourceId: `clickhouse-test`,
+  role: getRole(),
   type: 'text',
   threadId,
-  content: [{ type: 'text', text: 'Hello' }] as MessageType['content'],
+  content: 'Hello',
   createdAt,
 });
 
@@ -212,24 +218,27 @@ describe('ClickhouseStore', () => {
       const thread = createSampleThread();
       await store.saveThread({ thread });
 
-      const messages: MessageType[] = [
+      const messages: MastraMessageV1[] = [
         {
           ...createSampleMessage(thread.id, new Date(Date.now() - 1000 * 3)),
           content: [{ type: 'text', text: 'First' }],
+          role: 'user',
         },
         {
           ...createSampleMessage(thread.id, new Date(Date.now() - 1000 * 2)),
           content: [{ type: 'text', text: 'Second' }],
+          role: 'assistant',
         },
         {
           ...createSampleMessage(thread.id, new Date(Date.now() - 1000 * 1)),
           content: [{ type: 'text', text: 'Third' }],
+          role: 'user',
         },
       ];
 
       await store.saveMessages({ messages });
 
-      const retrievedMessages = await store.getMessages<MessageType>({ threadId: thread.id });
+      const retrievedMessages = await store.getMessages({ threadId: thread.id });
       expect(retrievedMessages).toHaveLength(3);
 
       // Verify order is maintained
