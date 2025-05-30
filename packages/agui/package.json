@@ -37,8 +37,7 @@
     "rxjs": "7.8.1"
   },
   "peerDependencies": {
-    "@mastra/client-js": "workspace:^",
-    "@mastra/core": "workspace:^",
+    "@mastra/core": "^0.10.0-alpha.0",
     "zod": "^3.0.0"
   },
   "devDependencies": {

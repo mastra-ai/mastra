@@ -72,7 +72,7 @@
   },
   "peerDependencies": {
     "ai": "^4.0.0",
-    "@mastra/core": "^0.10.0"
+    "@mastra/core": "^0.10.1-alpha.0"
   },
   "devDependencies": {
     "@ai-sdk/openai": "latest",

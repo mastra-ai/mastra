@@ -53,7 +53,7 @@
   "license": "Elastic-2.0",
   "dependencies": {},
   "peerDependencies": {
-    "@mastra/core": "^0.10.0",
+    "@mastra/core": "^0.10.2-alpha.0",
     "zod": "^3.0.0"
   },
   "devDependencies": {
