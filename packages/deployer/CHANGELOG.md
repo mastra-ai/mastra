@@ -1,5 +1,18 @@
 # @mastra/deployer
 
+## 0.10.2-alpha.3
+
+### Patch Changes
+
+- f73e11b: fix telemetry disabled not working on playground
+- f946acf: Filter out dynamic imports by node builtins
+- Updated dependencies [ab5adbe]
+- Updated dependencies [195c428]
+- Updated dependencies [f73e11b]
+- Updated dependencies [422ee9e]
+  - @mastra/core@0.10.2-alpha.3
+  - @mastra/server@0.10.2-alpha.3
+
 ## 0.10.2-alpha.2
 
 ### Patch Changes

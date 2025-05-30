@@ -1,5 +1,15 @@
 # @mastra/inngest
 
+## 0.10.2-alpha.1
+
+### Patch Changes
+
+- 195c428: Add runId to step execute fn
+- Updated dependencies [ab5adbe]
+- Updated dependencies [195c428]
+- Updated dependencies [f73e11b]
+  - @mastra/core@0.10.2-alpha.3
+
 ## 0.10.2-alpha.0
 
 ### Patch Changes
