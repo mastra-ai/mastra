@@ -96,6 +96,7 @@ export async function handleTaskSend({
   params,
   taskStore,
   agent,
+  agentId,
   logger,
   runtimeContext,
 }: {
@@ -103,12 +104,12 @@ export async function handleTaskSend({
   params: TaskSendParams;
   taskStore: InMemoryTaskStore;
   agent: Agent;
+  agentId: string;
   logger?: IMastraLogger;
   runtimeContext: RuntimeContext;
 }) {
   validateTaskSendParams(params);
 
-  const agentId = agent.id;
   const { id: taskId, message, sessionId, metadata } = params;
 
   // Load or create task AND history
@@ -205,6 +206,7 @@ export async function* handleTaskSendSubscribe({
   params,
   taskStore,
   agent,
+  agentId,
   logger,
   runtimeContext,
 }: {
@@ -212,6 +214,7 @@ export async function* handleTaskSendSubscribe({
   params: TaskSendParams;
   taskStore: InMemoryTaskStore;
   agent: Agent;
+  agentId: string;
   logger?: IMastraLogger;
   runtimeContext: RuntimeContext;
 }) {
@@ -230,6 +233,7 @@ export async function* handleTaskSendSubscribe({
       params,
       taskStore,
       agent,
+      agentId,
       runtimeContext,
       logger,
     });
@@ -334,6 +338,7 @@ export async function getAgentExecutionHandler({
           params: params as TaskSendParams,
           taskStore,
           agent,
+          agentId,
           runtimeContext,
         });
         return result;
@@ -344,6 +349,7 @@ export async function getAgentExecutionHandler({
           taskStore,
           params: params as TaskSendParams,
           agent,
+          agentId,
           runtimeContext,
         });
         return result;
