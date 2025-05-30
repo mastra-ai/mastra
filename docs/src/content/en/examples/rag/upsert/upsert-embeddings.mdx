@@ -15,10 +15,10 @@ LLM CONTEXT: This Tabs component demonstrates how to upsert (insert/update) embe
 Each tab shows a complete example of storing embeddings in a specific vector database provider.
 The tabs help users understand the consistent API pattern across different vector stores while showing provider-specific configuration.
 Each tab includes document chunking, embedding generation, index creation, and data insertion for that specific database.
-The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upstash, Cloudflare, and MongoDB.
+The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upstash, Cloudflare, MongoDB, OpenSearch, and Couchbase.
 */}
 
-<Tabs items={['PgVector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra DB', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB']}>
+<Tabs items={['PgVector', 'Pinecone', 'Qdrant', 'Chroma', 'Astra DB', 'LibSQL', 'Upstash', 'Cloudflare', 'MongoDB', 'OpenSearch', 'Couchbase']}>
   <Tabs.Tab>
   The `PgVector` class provides methods to create indexes and insert embeddings into PostgreSQL with the pgvector extension.
     ```tsx copy
@@ -365,5 +365,78 @@ The providers include PgVector, Pinecone, Qdrant, Chroma, Astra DB, LibSQL, Upst
     });
     ```
 
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+  The `OpenSearchVector` class provides methods to create indexes and insert embeddings into OpenSearch, a distributed search engine with vector search capabilities.
+    ```tsx copy
+    import { openai } from '@ai-sdk/openai';
+    import { OpenSearchVector } from '@mastra/opensearch';
+    import { MDocument } from '@mastra/rag';
+    import { embedMany } from 'ai';
+
+    const doc = MDocument.fromText('Your text content...');
+
+    const chunks = await doc.chunk();
+
+    const { embeddings } = await embedMany({
+      values: chunks.map(chunk => chunk.text),
+      model: openai.embedding('text-embedding-3-small'),
+    });
+
+    const vectorDB = new OpenSearchVector({
+      uri: process.env.OPENSEARCH_URI!,
+    });
+
+    await vectorDB.createIndex({
+      indexName: 'test_index',
+      dimension: 1536,
+    });
+
+    await vectorDB.upsert({
+      indexName: 'test_index',
+      vectors: embeddings,
+      metadata: chunks?.map((chunk: any) => ({ text: chunk.text })),
+    });
+    ```
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+  The `CouchbaseVector` class provides methods to create indexes and insert embeddings into Couchbase, a distributed NoSQL database with vector search capabilities.
+    ```tsx copy
+    import { openai } from '@ai-sdk/openai';
+    import { CouchbaseVector } from '@mastra/couchbase';
+    import { MDocument } from '@mastra/rag';
+    import { embedMany } from 'ai';
+
+    const doc = MDocument.fromText('Your text content...');
+
+    const chunks = await doc.chunk();
+
+    const { embeddings } = await embedMany({
+      values: chunks.map(chunk => chunk.text),
+      model: openai.embedding('text-embedding-3-small'),
+    });
+
+    const couchbase = new CouchbaseVector({
+      connectionString: process.env.COUCHBASE_CONNECTION_STRING,
+      username: process.env.COUCHBASE_USERNAME,
+      password: process.env.COUCHBASE_PASSWORD,
+      bucketName: process.env.COUCHBASE_BUCKET,
+      scopeName: process.env.COUCHBASE_SCOPE,
+      collectionName: process.env.COUCHBASE_COLLECTION,
+    });
+
+    await couchbase.createIndex({
+      indexName: 'test_collection',
+      dimension: 1536,
+    });
+
+    await couchbase.upsert({
+      indexName: 'test_collection',
+      vectors: embeddings,
+      metadata: chunks?.map(chunk => ({ text: chunk.text })),
+    });
+    ```
   </Tabs.Tab>
 </Tabs>

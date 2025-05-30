@@ -1,5 +1,15 @@
 # @mastra/mcp-docs-server
 
+## 0.11.1-alpha.1
+
+### Patch Changes
+
+- f0d559f: Fix peerdeps for alpha channel
+- Updated dependencies [1e8bb40]
+- Updated dependencies [f0d559f]
+  - @mastra/core@0.10.2-alpha.2
+  - @mastra/mcp@0.10.2-alpha.1
+
 ## 0.11.1-alpha.0
 
 ### Patch Changes

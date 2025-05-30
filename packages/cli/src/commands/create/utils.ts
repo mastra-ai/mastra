@@ -115,6 +115,7 @@ export const createMastraProject = async ({
   await depsService.addScriptsToPackageJson({
     dev: 'mastra dev',
     build: 'mastra build',
+    start: 'mastra start',
   });
 
   s.stop('Project created');

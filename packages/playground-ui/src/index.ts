@@ -22,7 +22,6 @@ export * from './lib/polls';
 export * from './hooks/use-speech-recognition';
 export { useTraces } from './hooks/index';
 
-export { TraceContext, TraceProvider } from './domains/traces/context/trace-context';
 export type { TraceContextType } from './domains/traces/context/trace-context';
 export { refineTraces } from './domains/traces/utils';
 

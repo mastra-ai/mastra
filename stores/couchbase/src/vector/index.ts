@@ -351,4 +351,11 @@ export class CouchbaseVector extends MastraVector {
 
     await collection.remove(id);
   }
+
+  async disconnect() {
+    if (!this.cluster) {
+      return;
+    }
+    await this.cluster.close();
+  }
 }

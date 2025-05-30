@@ -34,6 +34,8 @@ const processOrder = createStep({
     getStepResult,
     getInitData,
     suspend,
+    runtimeContext,
+    runId,
   }) => {
     return {
       status: "processed",
@@ -127,6 +129,18 @@ const processOrder = createStep({
       name: "suspend",
       type: "() => Promise<void>",
       description: "Function to pause workflow execution",
+    },
+    {
+      name: "runId",
+      type: "string",
+      description: "Current run id",
+    },
+    {
+      name: "runtimeContext",
+      type: "RuntimeContext",
+      isOptional: true,
+      description:
+        "Runtime context for dependency injection and contextual information.",
     },
   ]}
 />

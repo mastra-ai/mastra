@@ -148,6 +148,15 @@ export class GoogleVoice extends MastraVoice {
   }
 
   /**
+   * Checks if listening capabilities are enabled.
+   *
+   * @returns {Promise<{ enabled: boolean }>}
+   */
+  async getListener() {
+    return { enabled: true };
+  }
+
+  /**
    * Converts speech to text
    * @param {NodeJS.ReadableStream} audioStream - Audio stream to transcribe. Default encoding is LINEAR16.
    * @param {Object} [options] - Recognition options
