@@ -1,0 +1,46 @@
+{
+  "name": "@mastra/auth",
+  "version": "0.1.0",
+  "description": "",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --clean --experimental-dts --treeshake=smallest --splitting --publicDir",
+    "build:watch": "pnpm build --watch",
+    "test": "vitest run",
+    "lint": "eslint ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Elastic-2.0",
+  "dependencies": {
+    "jsonwebtoken": "^9.0.2",
+    "jwks-rsa": "^3.2.0"
+  },
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@mastra/core": "workspace:*",
+    "@types/jsonwebtoken": "^9.0.9",
+    "@types/node": "^20.17.27",
+    "typescript": "^5.8.2",
+    "vitest": "^2.1.9",
+    "eslint": "^9.23.0",
+    "tsup": "^8.4.0"
+  }
+}
