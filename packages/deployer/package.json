@@ -139,6 +139,6 @@
     "vitest": "^2.1.9"
   },
   "peerDependencies": {
-    "@mastra/core": "workspace:^"
+    "@mastra/core": "^0.10.2-0"
   }
 }
