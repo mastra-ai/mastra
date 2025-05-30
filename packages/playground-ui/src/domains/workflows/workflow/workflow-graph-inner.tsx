@@ -21,7 +21,9 @@ import { ZoomSlider } from './zoom-slider';
 import { useCurrentRun } from '../context/use-current-run';
 
 export interface WorkflowGraphInnerProps {
-  workflow: GetWorkflowResponse;
+  workflow: {
+    stepGraph: GetWorkflowResponse['stepGraph'];
+  };
   onShowTrace: ({ runId, stepName }: { runId: string; stepName: string }) => void;
 }
 

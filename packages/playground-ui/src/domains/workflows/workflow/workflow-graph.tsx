@@ -1,4 +1,5 @@
 import { Skeleton } from '@/components/ui/skeleton';
+import { useEffect, useState } from 'react';
 
 import { useWorkflow } from '@/hooks/use-workflows';
 import '../../../index.css';
@@ -8,6 +9,8 @@ import { AlertCircleIcon } from 'lucide-react';
 import { ReactFlowProvider } from '@xyflow/react';
 import { WorkflowGraphInner } from './workflow-graph-inner';
 import { WorkflowNestedGraphProvider } from '../context/workflow-nested-graph-context';
+import { WorkflowRunContext } from '../context/workflow-run-context';
+import { useContext } from 'react';
 
 export interface WorkflowGraphProps {
   workflowId: string;
@@ -16,11 +19,21 @@ export interface WorkflowGraphProps {
 
 export function WorkflowGraph({ workflowId, onShowTrace }: WorkflowGraphProps) {
   const { workflow, isLoading } = useWorkflow(workflowId);
+  const { snapshotStepGraph } = useContext(WorkflowRunContext);
+  const [switching, setSwitching] = useState(false);
 
-  if (isLoading) {
+  useEffect(() => {
+    //we need to reactflow provider to get unmounted and then mount again to get the nodes and edges to be reinitialized
+    setSwitching(true);
+    setTimeout(() => {
+      setSwitching(false);
+    }, 100);
+  }, [snapshotStepGraph]);
+
+  if (isLoading || switching) {
     return (
       <div className="p-4">
-        <Skeleton className="h-[600px]" />
+        <Skeleton className="h-full" />
       </div>
     );
   }
@@ -39,7 +52,10 @@ export function WorkflowGraph({ workflowId, onShowTrace }: WorkflowGraphProps) {
   return (
     <WorkflowNestedGraphProvider>
       <ReactFlowProvider>
-        <WorkflowGraphInner workflow={workflow} onShowTrace={onShowTrace} />
+        <WorkflowGraphInner
+          workflow={snapshotStepGraph ? { stepGraph: snapshotStepGraph } : workflow}
+          onShowTrace={onShowTrace}
+        />
       </ReactFlowProvider>
     </WorkflowNestedGraphProvider>
   );
