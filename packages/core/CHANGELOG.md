@@ -1,5 +1,13 @@
 # @mastra/core
 
+## 0.10.2-alpha.3
+
+### Patch Changes
+
+- ab5adbe: Add support for runtimeContext to generateTitle
+- 195c428: Add runId to step execute fn
+- f73e11b: fix telemetry disabled not working on playground
+
 ## 0.10.2-alpha.2
 
 ### Patch Changes

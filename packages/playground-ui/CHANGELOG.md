@@ -1,5 +1,15 @@
 # @mastra/playground-ui
 
+## 5.1.2-alpha.2
+
+### Patch Changes
+
+- 068b850: fix: able to pass headers to playground components which are using the mastra client
+- Updated dependencies [ab5adbe]
+- Updated dependencies [195c428]
+- Updated dependencies [f73e11b]
+  - @mastra/core@0.10.2-alpha.3
+
 ## 5.1.2-alpha.1
 
 ### Patch Changes
