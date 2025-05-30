@@ -1412,7 +1412,43 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
               schema: {
                 type: 'object',
                 properties: {
-                  servers: { type: 'array', items: { $ref: '#/components/schemas/ServerInfo' } },
+                  servers: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        id: { type: 'string' },
+                        name: { type: 'string' },
+                        description: { type: 'string' },
+                        repository: {
+                          type: 'object',
+                          properties: {
+                            url: { type: 'string', description: 'The URL of the repository (e.g., a GitHub URL)' },
+                            source: {
+                              type: 'string',
+                              description: "The source control platform (e.g., 'github', 'gitlab')",
+                              enum: ['github', 'gitlab'],
+                            },
+                            id: { type: 'string', description: 'A unique identifier for the repository at the source' },
+                          },
+                        },
+                        version_detail: {
+                          type: 'object',
+                          properties: {
+                            version: { type: 'string', description: 'The semantic version string (e.g., "1.0.2")' },
+                            release_date: {
+                              type: 'string',
+                              description: 'The ISO 8601 date-time string when this version was released or registered',
+                            },
+                            is_latest: {
+                              type: 'boolean',
+                              description: 'Indicates if this version is the latest available',
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
                   next: { type: 'string', format: 'uri', nullable: true },
                   total_count: { type: 'integer' },
                 },
@@ -1450,12 +1486,117 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
         200: {
           description: 'Detailed information about the MCP server instance.',
           content: {
-            'application/json': { schema: { $ref: '#/components/schemas/ServerDetailInfo' } },
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  name: { type: 'string' },
+                  description: { type: 'string' },
+                  repository: {
+                    type: 'object',
+                    properties: {
+                      url: { type: 'string' },
+                      source: { type: 'string' },
+                      id: { type: 'string' },
+                    },
+                  },
+                  version_detail: {
+                    type: 'object',
+                    properties: {
+                      version: { type: 'string' },
+                      release_date: { type: 'string' },
+                      is_latest: { type: 'boolean' },
+                    },
+                  },
+                  package_canonical: { type: 'string' },
+                  packages: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        registry_name: { type: 'string' },
+                        name: { type: 'string' },
+                        version: { type: 'string' },
+                        command: {
+                          type: 'object',
+                          properties: {
+                            name: { type: 'string' },
+                            subcommands: {
+                              type: 'array',
+                              items: {
+                                type: 'object',
+                                properties: {
+                                  name: { type: 'string' },
+                                  description: { type: 'string' },
+                                  is_required: { type: 'boolean' },
+                                  subcommands: {
+                                    type: 'array',
+                                    items: { type: 'object' },
+                                  },
+                                  positional_arguments: {
+                                    type: 'array',
+                                    items: { type: 'object' },
+                                  },
+                                  named_arguments: {
+                                    type: 'array',
+                                    items: { type: 'object' },
+                                  },
+                                },
+                              },
+                            },
+                            positional_arguments: {
+                              type: 'array',
+                              items: { type: 'object' },
+                            },
+                            named_arguments: {
+                              type: 'array',
+                              items: { type: 'object' },
+                            },
+                          },
+                        },
+                        environment_variables: {
+                          type: 'array',
+                          items: {
+                            type: 'object',
+                            properties: {
+                              name: { type: 'string' },
+                              description: { type: 'string' },
+                              required: { type: 'boolean' },
+                              default_value: { type: 'string' },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                  remotes: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        transport_type: { type: 'string' },
+                        url: { type: 'string' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
           },
         },
         404: {
           description: 'MCP server instance not found.',
-          content: { 'application/json': { schema: { type: 'object', properties: { error: { type: 'string' } } } } },
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  error: { type: 'string' },
+                },
+              },
+            },
+          },
         },
       },
     }),

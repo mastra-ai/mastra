@@ -113,3 +113,24 @@ const result = await workflowRun.resume({
   },
 });
 ```
+
+### RuntimeContext
+
+When using suspend/resume with runtimeContext, you'll need to create the instance yourself first. And pass it to the start and resume functions.
+RuntimeContext is not automatically shared on a workflow run.
+
+```
+const runtimeContext = new RuntimeContext();
+const run = counterWorkflow.createRun();
+const result = await run.start({ inputData: { startValue: 0 }, runtimeContext });
+
+// Check if the workflow is in suspended state
+if (result.status === "suspended") {
+  // Resume the first suspended step with new data
+  const resumedResults = await run.resume({
+    step: result.suspended[0],
+    resumeData: { newValue: 0 },
+    runtimeContext,
+  });
+}
+```
