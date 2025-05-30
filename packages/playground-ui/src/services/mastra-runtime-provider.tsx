@@ -12,10 +12,10 @@ import { useState, ReactNode, useEffect } from 'react';
 import { RuntimeContext } from '@mastra/core/di';
 
 import { ChatProps } from '@/types';
-import { createMastraClient } from '@/lib/mastra-client';
 
 import { CoreMessage } from '@mastra/core';
 import { fileToBase64 } from '@/lib/file';
+import { useMastraClient } from '@/contexts/mastra-client-context';
 
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
@@ -45,7 +45,6 @@ export function MastraRuntimeProvider({
   agentName,
   memory,
   threadId,
-  baseUrl,
   refreshThreadList,
   modelSettings = {},
   chatWithGenerate,
@@ -100,7 +99,8 @@ export function MastraRuntimeProvider({
     }
   }, [initialMessages, threadId, memory]);
 
-  const mastra = createMastraClient(baseUrl);
+  const mastra = useMastraClient();
+
   const agent = mastra.getAgent(agentId);
 
   const onNew = async (message: AppendMessage) => {
