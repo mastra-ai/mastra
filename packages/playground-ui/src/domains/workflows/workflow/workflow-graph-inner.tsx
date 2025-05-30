@@ -19,14 +19,18 @@ import { WorkflowNestedNode } from './workflow-nested-node';
 import { ZoomSlider } from './zoom-slider';
 
 import { useCurrentRun } from '../context/use-current-run';
+import { useMemo } from 'react';
 
 export interface WorkflowGraphInnerProps {
-  workflow: GetWorkflowResponse;
+  workflow: {
+    stepGraph: GetWorkflowResponse['stepGraph'];
+  };
   onShowTrace: ({ runId, stepName }: { runId: string; stepName: string }) => void;
 }
 
 export function WorkflowGraphInner({ workflow, onShowTrace }: WorkflowGraphInnerProps) {
-  const { nodes: initialNodes, edges: initialEdges } = constructNodesAndEdges(workflow);
+  console.log({ stepGraph: workflow.stepGraph });
+  const { nodes: initialNodes, edges: initialEdges } = useMemo(() => constructNodesAndEdges(workflow), [workflow]);
   const [nodes, _, onNodesChange] = useNodesState(initialNodes);
   const [edges] = useEdgesState(initialEdges);
   const { steps, runId } = useCurrentRun();

@@ -8,6 +8,8 @@ import { AlertCircleIcon } from 'lucide-react';
 import { ReactFlowProvider } from '@xyflow/react';
 import { WorkflowGraphInner } from './workflow-graph-inner';
 import { WorkflowNestedGraphProvider } from '../context/workflow-nested-graph-context';
+import { WorkflowRunContext } from '../context/workflow-run-context';
+import { useContext } from 'react';
 
 export interface WorkflowGraphProps {
   workflowId: string;
@@ -16,6 +18,7 @@ export interface WorkflowGraphProps {
 
 export function WorkflowGraph({ workflowId, onShowTrace }: WorkflowGraphProps) {
   const { workflow, isLoading } = useWorkflow(workflowId);
+  const { snapshotStepGraph } = useContext(WorkflowRunContext);
 
   if (isLoading) {
     return (
@@ -36,10 +39,26 @@ export function WorkflowGraph({ workflowId, onShowTrace }: WorkflowGraphProps) {
     );
   }
 
+  console.log({ snapshotStepGraph, workflow: workflow.stepGraph });
+
+  // if (snapshotStepGraph) {
+  //   // if we only switch in workflow prop in WorkflowGraphInner, the change won't reflect in the node constructor
+  //   return (
+  //     <WorkflowNestedGraphProvider>
+  //       <ReactFlowProvider>
+  //         <WorkflowGraphInner workflow={{ stepGraph: snapshotStepGraph }} onShowTrace={onShowTrace} />
+  //       </ReactFlowProvider>
+  //     </WorkflowNestedGraphProvider>
+  //   );
+  // }
+
   return (
     <WorkflowNestedGraphProvider>
       <ReactFlowProvider>
-        <WorkflowGraphInner workflow={workflow} onShowTrace={onShowTrace} />
+        <WorkflowGraphInner
+          workflow={snapshotStepGraph ? { stepGraph: snapshotStepGraph } : workflow}
+          onShowTrace={onShowTrace}
+        />
       </ReactFlowProvider>
     </WorkflowNestedGraphProvider>
   );
