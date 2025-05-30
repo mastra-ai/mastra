@@ -311,3 +311,31 @@ if (!network) {
 
 console.log(await network.generate('What are the biggest cities in France?', { runtimeContext }));
 ```
+
+## Using @mastra/client-js
+
+You can use the `@mastra/client-js` package to run the network from the client side.
+
+```typescript
+import { MastraClient } from '@mastra/client-js';
+
+const client = new MastraClient();
+
+const network = client.getVNextNetwork('test-network');
+
+if (!network) {
+  throw new Error('Network not found');
+}
+
+console.log(await network.generate('What are the biggest cities in France?', { runtimeContext }));
+```
+
+You can also stream the response
+
+```typescript
+const stream = await network.stream('What are the biggest cities in France?', { runtimeContext });
+
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
