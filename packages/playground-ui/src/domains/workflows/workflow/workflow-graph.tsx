@@ -23,7 +23,7 @@ export function WorkflowGraph({ workflowId, onShowTrace }: WorkflowGraphProps) {
   const [switching, setSwitching] = useState(false);
 
   useEffect(() => {
-    //we need to runtime provider to get unmounted and then mount again to get the nodes and edges to be reinitialized
+    //we need to reactflow provider to get unmounted and then mount again to get the nodes and edges to be reinitialized
     setSwitching(true);
     setTimeout(() => {
       setSwitching(false);
