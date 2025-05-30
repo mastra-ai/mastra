@@ -173,7 +173,7 @@ export function createStep<
       outputSchema: z.object({
         text: z.string(),
       }),
-      execute: async ({ inputData, [EMITTER_SYMBOL]: emitter }) => {
+      execute: async ({ inputData, [EMITTER_SYMBOL]: emitter, runtimeContext }) => {
         let streamPromise = {} as {
           promise: Promise<string>;
           resolve: (value: string) => void;
@@ -195,6 +195,7 @@ export function createStep<
         const { fullStream } = await params.stream(inputData.prompt, {
           // resourceId: inputData.resourceId,
           // threadId: inputData.threadId,
+          runtimeContext,
           onFinish: result => {
             streamPromise.resolve(result.text);
           },
@@ -245,10 +246,11 @@ export function createStep<
       id: params.id,
       inputSchema: params.inputSchema,
       outputSchema: params.outputSchema,
-      execute: async ({ inputData, mastra }) => {
+      execute: async ({ inputData, mastra, runtimeContext }) => {
         return params.execute({
           context: inputData,
           mastra,
+          runtimeContext,
         });
       },
     };

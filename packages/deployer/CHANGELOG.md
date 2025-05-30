@@ -1,5 +1,18 @@
 # @mastra/deployer
 
+## 0.10.2-alpha.2
+
+### Patch Changes
+
+- e8d2aff: Fix non-scoped packages in mastra build
+- 4187ed4: Fix mcp server api openapijson
+- f0d559f: Fix peerdeps for alpha channel
+- Updated dependencies [1e8bb40]
+- Updated dependencies [f0d559f]
+- Updated dependencies [a0ebc3f]
+  - @mastra/core@0.10.2-alpha.2
+  - @mastra/server@0.10.2-alpha.2
+
 ## 0.10.2-alpha.1
 
 ### Patch Changes

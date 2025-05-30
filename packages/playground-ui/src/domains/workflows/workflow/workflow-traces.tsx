@@ -1,6 +1,6 @@
 import { useContext, useEffect, useRef, useState } from 'react';
 
-import { TraceContext } from '@/domains/traces/context/trace-context';
+import { TraceContext, TraceProvider } from '@/domains/traces/context/trace-context';
 
 import { TracesTable } from '@/domains/traces/traces-table';
 import { TracesSidebar } from '@/domains/traces/traces-sidebar';
@@ -8,17 +8,20 @@ import { RefinedTrace } from '@/domains/traces/types';
 
 export interface WorkflowTracesProps {
   traces: RefinedTrace[];
-  isLoading: boolean;
   error: { message: string } | null;
   runId?: string;
   stepName?: string;
 }
 
-export function WorkflowTraces({ traces, isLoading, error, runId, stepName }: WorkflowTracesProps) {
-  return <WorkflowTracesInner traces={traces} isLoading={isLoading} error={error} runId={runId} stepName={stepName} />;
+export function WorkflowTraces({ traces, error, runId, stepName }: WorkflowTracesProps) {
+  return (
+    <TraceProvider initialTraces={traces || []}>
+      <WorkflowTracesInner traces={traces} error={error} runId={runId} stepName={stepName} />
+    </TraceProvider>
+  );
 }
 
-function WorkflowTracesInner({ traces, isLoading, error, runId, stepName }: WorkflowTracesProps) {
+function WorkflowTracesInner({ traces, error, runId, stepName }: WorkflowTracesProps) {
   // This is a hack. To fix, The provider should not resolve the data like this.
   // We should resolve the data first and pass them to the provider instead of having the proving setState on the result.
   const hasRunRef = useRef(false);
@@ -44,7 +47,7 @@ function WorkflowTracesInner({ traces, isLoading, error, runId, stepName }: Work
   return (
     <main className="h-full relative overflow-hidden flex">
       <div className="h-full overflow-y-scroll w-full">
-        <TracesTable traces={traces} isLoading={isLoading} error={error} />
+        <TracesTable traces={traces} error={error} />
       </div>
 
       {open && <TracesSidebar width={sidebarWidth} onResize={setSidebarWidth} />}

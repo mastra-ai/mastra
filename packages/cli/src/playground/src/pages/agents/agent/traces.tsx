@@ -1,4 +1,4 @@
-import { AgentTraces, TraceProvider, useTraces } from '@mastra/playground-ui';
+import { AgentTraces, useTraces } from '@mastra/playground-ui';
 import { useParams } from 'react-router';
 
 import { Skeleton } from '@/components/ui/skeleton';
@@ -10,7 +10,7 @@ function AgentTracesContent() {
   const { agent, isLoading: isAgentLoading } = useAgent(agentId!);
   const { traces, firstCallLoading, error } = useTraces(agent?.name || '', '');
 
-  if (isAgentLoading) {
+  if (isAgentLoading || firstCallLoading) {
     return (
       <div className="p-4">
         <Skeleton className="h-10" />
@@ -18,11 +18,7 @@ function AgentTracesContent() {
     );
   }
 
-  return (
-    <TraceProvider initialTraces={traces || []}>
-      <AgentTraces traces={traces || []} isLoading={firstCallLoading} error={error} className="h-[calc(100vh-40px)]" />
-    </TraceProvider>
-  );
+  return <AgentTraces traces={traces || []} error={error} className="h-[calc(100vh-40px)]" />;
 }
 
 function AgentTracesPage() {
