@@ -5,15 +5,12 @@ description: Documentation for the Mastra Class, the core entry point for managi
 
 # The Mastra Class
 
-The `Mastra` class is the central orchestrator of any Mastra application. It manages agents, tools, workflows, storage, logging, telemetry, and more. Most applications create a single `Mastra` instance to coordinate everything.
+The `Mastra` class is the central orchestrator in any Mastra application, managing agents, workflows, storage, logging, telemetry, and more. Typically, you create a single instance of `Mastra` to coordinate your application.
 
 Think of `Mastra` as a top-level registry:
 
-- When you register **tools**, they become available to all agents and workflows
-- When you register **integrations**, they can be accessed by agents, workflows, and tools alike
-
-This centralized design simplifies configuration and promotes reuse across your application.
-
+- Registering **integrations** makes them accessible to **agents**, **workflows**, and **tools** alike.
+- **tools** aren’t registered on `Mastra` directly but are associated with agents and discovered automatically.
 
 
 ## Importing
