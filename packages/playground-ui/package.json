@@ -102,7 +102,7 @@
     "zustand": "^5.0.3"
   },
   "peerDependencies": {
-    "@mastra/core": "^0.10.0",
+    "@mastra/core": "^0.10.0-alpha.0",
     "lucide-react": "^0.474.0",
     "react": ">=19.0.0",
     "react-dom": ">=19.0.0",

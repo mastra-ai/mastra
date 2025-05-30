@@ -97,6 +97,6 @@
     "vitest": "^3.1.2"
   },
   "peerDependencies": {
-    "@mastra/core": "^0.10.0"
+    "@mastra/core": "^0.10.1-alpha.0"
   }
 }

@@ -42,6 +42,6 @@
     "@mastra/core": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": "^0.10.0"
+    "@mastra/core": "^0.10.0-alpha.0"
   }
 }
