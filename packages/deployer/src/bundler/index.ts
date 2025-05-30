@@ -281,7 +281,7 @@ export abstract class Bundler extends MastraBundler {
 
     this.logger.info('Installing dependencies');
     await this.installDependencies(outputDirectory);
-    q;
+
     this.logger.info('Done installing dependencies');
   }
 
