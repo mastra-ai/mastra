@@ -8,6 +8,29 @@ import type { Targets } from 'zod-to-json-schema';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { SchemaCompatibility } from './schema-compatibility';
 
+/**
+ * Converts a Zod schema to an AI SDK Schema with validation support.
+ *
+ * This function mirrors the behavior of Vercel's AI SDK zod-schema utility but allows
+ * customization of the JSON Schema target format.
+ *
+ * @param zodSchema - The Zod schema to convert
+ * @param target - The JSON Schema target format (defaults to 'jsonSchema7')
+ * @returns An AI SDK Schema object with built-in validation
+ *
+ * @example
+ * ```typescript
+ * import { z } from 'zod';
+ * import { convertZodSchemaToAISDKSchema } from '@mastra/schema';
+ *
+ * const userSchema = z.object({
+ *   name: z.string(),
+ *   age: z.number().min(0)
+ * });
+ *
+ * const aiSchema = convertZodSchemaToAISDKSchema(userSchema);
+ * ```
+ */
 // mirrors https://github.com/vercel/ai/blob/main/packages/ui-utils/src/zod-schema.ts#L21 but with a custom target
 export function convertZodSchemaToAISDKSchema(zodSchema: ZodSchema, target: Targets = 'jsonSchema7') {
   return jsonSchema(
@@ -25,9 +48,11 @@ export function convertZodSchemaToAISDKSchema(zodSchema: ZodSchema, target: Targ
 }
 
 /**
- * Checks if a value is a Zod type
+ * Checks if a value is a Zod type by examining its properties and methods.
+ *
  * @param value - The value to check
  * @returns True if the value is a Zod type, false otherwise
+ * @internal
  */
 function isZodType(value: unknown): value is z.ZodType {
   // Check if it's a Zod schema by looking for common Zod properties and methods
@@ -42,6 +67,31 @@ function isZodType(value: unknown): value is z.ZodType {
   );
 }
 
+/**
+ * Converts an AI SDK Schema or Zod schema to a Zod schema.
+ *
+ * If the input is already a Zod schema, it returns it unchanged.
+ * If the input is an AI SDK Schema, it extracts the JSON schema and converts it to Zod.
+ *
+ * @param schema - The schema to convert (AI SDK Schema or Zod schema)
+ * @returns A Zod schema equivalent of the input
+ * @throws Error if the conversion fails
+ *
+ * @example
+ * ```typescript
+ * import { jsonSchema } from 'ai';
+ * import { convertSchemaToZod } from '@mastra/schema';
+ *
+ * const aiSchema = jsonSchema({
+ *   type: 'object',
+ *   properties: {
+ *     name: { type: 'string' }
+ *   }
+ * });
+ *
+ * const zodSchema = convertSchemaToZod(aiSchema);
+ * ```
+ */
 export function convertSchemaToZod(schema: Schema | z.ZodSchema): z.ZodType {
   if (isZodType(schema)) {
     return schema;
@@ -57,6 +107,41 @@ export function convertSchemaToZod(schema: Schema | z.ZodSchema): z.ZodType {
   }
 }
 
+/**
+ * Processes a schema using provider compatibility layers and converts it to the specified format.
+ *
+ * This function automatically applies the first matching compatibility layer from the provided
+ * list based on the model configuration. If no compatibility applies, it falls back to
+ * standard conversion.
+ *
+ * @param options - Configuration object for schema processing
+ * @param options.schema - The schema to process (AI SDK Schema or Zod object schema)
+ * @param options.compatibilities - Array of compatibility layers to try
+ * @param options.mode - Output format: 'jsonSchema' for JSONSchema7 or 'aiSdkSchema' for AI SDK Schema
+ * @returns Processed schema in the requested format
+ *
+ * @example
+ * ```typescript
+ * import { z } from 'zod';
+ * import { processSchema, OpenAISchemaCompat, AnthropicSchemaCompat } from '@mastra/schema';
+ *
+ * const schema = z.object({
+ *   query: z.string().email(),
+ *   limit: z.number().min(1).max(100)
+ * });
+ *
+ * const compatibilities = [
+ *   new OpenAISchemaCompat(model),
+ *   new AnthropicSchemaCompat(model)
+ * ];
+ *
+ * const result = processSchema({
+ *   schema,
+ *   compatibilities,
+ *   mode: 'aiSdkSchema'
+ * });
+ * ```
+ */
 export function processSchema({
   schema,
   compatibilities,
