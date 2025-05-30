@@ -1,11 +1,11 @@
 import type { z } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
-import { ToolCompatibility } from '..';
-import type { MastraLanguageModel } from '../../../agent';
-import type { ShapeValue, AllZodType } from '../index';
+import { SchemaCompatibility } from '../schema-compatibility';
+import type { LanguageModelV1 } from 'ai';
+import type { ShapeValue, AllZodType } from '../schema-compatibility';
 
-export class AnthropicToolCompat extends ToolCompatibility {
-  constructor(model: MastraLanguageModel) {
+export class AnthropicSchemaCompat extends SchemaCompatibility {
+  constructor(model: LanguageModelV1) {
     super(model);
   }
 

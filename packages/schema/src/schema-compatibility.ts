@@ -1,12 +1,8 @@
-import { zodSchema } from 'ai';
-import type { Schema } from 'ai';
+import type { Schema, LanguageModelV1 } from 'ai';
 import { z } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
-import type { MastraLanguageModel } from '../../agent/types';
-import { MastraBase } from '../../base';
-import { isVercelTool } from '../../utils';
-import { convertVercelToolParameters, convertZodSchemaToAISDKSchema } from './builder';
-import type { ToolToConvert } from './builder';
+import { convertZodSchemaToAISDKSchema } from './builder';
+import { JSONSchema7 } from 'json-schema';
 
 export const ALL_STRING_CHECKS = ['regex', 'emoji', 'email', 'url', 'uuid', 'cuid', 'min', 'max'] as const;
 
@@ -74,14 +70,13 @@ type DateConstraints = {
   dateFormat?: string;
 };
 
-export abstract class ToolCompatibility extends MastraBase {
-  private model: MastraLanguageModel;
-  constructor(model: MastraLanguageModel) {
-    super({ name: 'SchemaCompatibility' });
+export abstract class SchemaCompatibility {
+  private model: LanguageModelV1;
+  constructor(model: LanguageModelV1) {
     this.model = model;
   }
 
-  getModel(): MastraLanguageModel {
+  getModel(): LanguageModelV1 {
     return this.model;
   }
 
@@ -367,24 +362,13 @@ export abstract class ToolCompatibility extends MastraBase {
     }
   }
 
-  public process(tool: ToolToConvert): {
-    description?: string;
-    parameters: Schema;
-  } {
-    if (isVercelTool(tool)) {
-      return {
-        description: tool.description,
-        // TODO: should we also process vercel tool params?
-        parameters: zodSchema(convertVercelToolParameters(tool)),
-      };
-    }
+  public processtoAISDKSchema(zodSchema: z.AnyZodObject): Schema {
+    const { schema } = this.applyZodSchemaCompatibility(zodSchema);
 
-    // Constraints are now embedded in the Zod schema descriptions, so just use the schema as-is
-    const { schema } = this.applyZodSchemaCompatibility(tool.inputSchema);
+    return convertZodSchemaToAISDKSchema(schema, this.getSchemaTarget());
+  }
 
-    return {
-      description: tool.description,
-      parameters: convertZodSchemaToAISDKSchema(schema, this.getSchemaTarget()),
-    };
+  public processToJSONSchema(zodSchema: z.AnyZodObject): JSONSchema7 {
+    return this.processtoAISDKSchema(zodSchema).jsonSchema;
   }
 }
