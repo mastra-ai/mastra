@@ -60,6 +60,14 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
     setSearchQuery(searchQuery);
   }
 
+  // Configure Algolia search options
+  const searchOptions = {
+    indexName: "docs", // Change this to your existing index name if different
+    hitsPerPage: 10,
+    attributesToRetrieve: ["title", "content", "url", "hierarchy"],
+    attributesToHighlight: ["title", "content"],
+  };
+
   return (
     <>
       <div className="hidden md:block absolute inset-0 m-auto w-[460px] h-fit">
@@ -99,6 +107,7 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
                   <div className="p-[10px]">
                     <CustomSearch
                       placeholder={getSearchPlaceholder(locale)}
+                      searchOptions={searchOptions}
                       onUseAgent={handleUseAgent}
                       closeModal={close}
                     />
