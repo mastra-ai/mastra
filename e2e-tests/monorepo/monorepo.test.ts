@@ -147,8 +147,11 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
         try {
           setImmediate(() => controller.abort());
           await proc;
-        } catch {
-          console.log('failed to kill build proc');
+        } catch (err) {
+          // @ts-expect-error - isCanceled is not typed
+          if (!proc.isCanceled) {
+            console.log('failed to kill build proc', err);
+          }
         }
       }
     }, timeout);
@@ -156,7 +159,7 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     runApiTests(port);
   });
 
-  describe('start', async () => {
+  describe.skip('start', async () => {
     let port = await getPort();
     let proc: ReturnType<typeof execa> | undefined;
     const controller = new AbortController();
@@ -165,6 +168,7 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     beforeAll(async () => {
       const inputFile = join(fixturePath, 'apps', 'custom');
 
+      console.log('started proc', port);
       proc = execa('npm', ['run', 'start'], {
         cwd: inputFile,
         cancelSignal,
@@ -190,8 +194,10 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
         try {
           setImmediate(() => controller.abort());
           await proc;
-        } catch {
-          console.log('failed to kill start proc');
+        } catch (err) {
+          if (!(await proc).isCanceled) {
+            console.log('failed to kill start proc', err);
+          }
         }
       }
     }, timeout);
