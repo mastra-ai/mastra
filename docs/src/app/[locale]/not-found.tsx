@@ -2,7 +2,7 @@
 import { T, Var } from "gt-next";
 import Image from "next/image";
 import Link from "next/link";
-import { useParams, usePathname } from "next/navigation";
+import { usePathname } from "next/navigation";
 import Image404 from "../../../public/404-image.png";
 import "../globals.css";
 
