@@ -99,26 +99,10 @@ export const blogTool = {
       } else {
         content = await fetchBlogPosts();
       }
-      return {
-        content: [
-          {
-            type: 'text',
-            text: content,
-          },
-        ],
-        isError: false,
-      };
+      return content;
     } catch (error) {
       void logger.error('Failed to execute mastraBlog tool', error);
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-        isError: true,
-      };
+      throw error;
     }
   },
 };

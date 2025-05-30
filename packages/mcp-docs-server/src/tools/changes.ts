@@ -73,38 +73,15 @@ export const changesTool = {
     try {
       if (!args.package) {
         const packages = await listPackageChangelogs();
-        return {
-          content: [
-            {
-              type: 'text',
-              text: ['Available package changelogs:', '', ...packages.map(pkg => `- ${pkg.name}`)].join('\n'),
-            },
-          ],
-          isError: false,
-        };
+        const content = ['Available package changelogs:', '', ...packages.map(pkg => `- ${pkg.name}`)].join('\n');
+        return content;
       }
 
       const content = await readPackageChangelog(args.package);
-      return {
-        content: [
-          {
-            type: 'text',
-            text: content,
-          },
-        ],
-        isError: false,
-      };
+      return content;
     } catch (error) {
       void logger.error('Failed to execute mastraChanges tool', error);
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-        isError: true,
-      };
+      throw error;
     }
   },
 };

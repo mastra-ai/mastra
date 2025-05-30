@@ -206,26 +206,10 @@ export const docsTool = {
         })
         .join('\n');
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: output,
-          },
-        ],
-        isError: false,
-      };
+      return output;
     } catch (error) {
       void logger.error('Failed to execute mastraDocs tool', error);
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-        isError: true,
-      };
+      throw error;
     }
   },
 };

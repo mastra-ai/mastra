@@ -23,20 +23,18 @@ async function listCodeExamples(): Promise<Array<{ name: string; path: string }>
   }
 }
 
-type CodeExampleResult = { found: boolean; content: string };
-
 // Helper function to read a code example
-async function readCodeExample(filename: string): Promise<CodeExampleResult> {
+async function readCodeExample(filename: string): Promise<string> {
   const filePath = path.join(examplesDir, filename);
   void logger.debug(`Reading example: ${filename}`);
 
   try {
     const content = await fs.readFile(filePath, 'utf-8');
-    return { found: true, content };
+    return content;
   } catch {
     const examples = await listCodeExamples();
     const availableExamples = examples.map(ex => `- ${ex.name}`).join('\n');
-    return { found: false, content: `Example "${filename}" not found.\n\nAvailable examples:\n${availableExamples}` };
+    return `Example "${filename}" not found.\n\nAvailable examples:\n${availableExamples}`;
   }
 }
 
@@ -68,39 +66,15 @@ export const examplesTool = {
     try {
       if (!args.example) {
         const examples = await listCodeExamples();
-        return {
-          content: [
-            {
-              type: 'text',
-              text: ['Available code examples:', '', ...examples.map(ex => `- ${ex.name}`)].join('\n'),
-            },
-          ],
-          isError: false,
-        };
+        return ['Available code examples:', '', ...examples.map(ex => `- ${ex.name}`)].join('\n');
       }
 
       const filename = args.example.endsWith('.md') ? args.example : `${args.example}.md`;
       const result = await readCodeExample(filename);
-      return {
-        content: [
-          {
-            type: 'text',
-            text: result.content,
-          },
-        ],
-        isError: !result.found,
-      };
+      return result;
     } catch (error) {
       void logger.error('Failed to execute mastraExamples tool', error);
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-        isError: true,
-      };
+      throw error;
     }
   },
 };
