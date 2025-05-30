@@ -15,6 +15,7 @@ interface DynamicFormProps<T extends z.ZodSchema> {
   defaultValues?: z.infer<T>;
   isSubmitLoading?: boolean;
   submitButtonLabel?: string;
+  className?: string;
 }
 
 function isEmptyZodObject(schema: unknown): boolean {
@@ -30,6 +31,7 @@ export function DynamicForm<T extends z.ZodSchema>({
   defaultValues,
   isSubmitLoading,
   submitButtonLabel,
+  className,
 }: DynamicFormProps<T>) {
   if (!schema) {
     console.error('no form schema found');
@@ -76,9 +78,5 @@ export function DynamicForm<T extends z.ZodSchema>({
     withSubmit: true,
   };
 
-  return (
-    <div className="h-full w-full">
-      <AutoForm {...formProps} />
-    </div>
-  );
+  return <AutoForm {...formProps} />;
 }

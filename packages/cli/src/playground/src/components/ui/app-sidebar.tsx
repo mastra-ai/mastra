@@ -155,7 +155,7 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="w-full pl-1 pt-3 pb-0">
-        <div className="flex justify-between gap-2 items-center w-full">
+        <div className="flex justify-between gap-2 items-center">
           <span className="flex shrink-0">
             {state === 'collapsed' ? (
               <LogoWithoutText className="h-10 w-10 shrink-0" />
@@ -190,7 +190,7 @@ export function AppSidebar() {
         )}
       </SidebarHeader>
 
-      <SidebarContent className={clsx('transition-transform', state === 'collapsed' && 'translate-y-10')}>
+      <SidebarContent className={clsx(' transition-transform', state === 'collapsed' && 'translate-y-10')}>
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>

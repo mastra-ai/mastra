@@ -23,7 +23,7 @@ export function AgentInformation({ agentId }: { agentId: string }) {
   const providerIcon = providerMapToIcon[(agent?.provider || 'openai.chat') as keyof typeof providerMapToIcon];
 
   return (
-    <div className="h-full overflow-y-scroll pb-5">
+    <div className="grid grid-rows-[auto_1fr] border-l-sm border-border1  ">
       <div className="p-5 border-b-sm border-border1">
         <div className="text-icon6 flex items-center gap-2 min-w-0">
           <Icon size="lg" className="bg-surface4 rounded-md p-1">
@@ -80,26 +80,26 @@ export function AgentInformation({ agentId }: { agentId: string }) {
         </div>
       </div>
 
-      <Tabs defaultValue="overview" className="h-full">
-        <TabsList className="flex shrink-0 border-b">
-          <TabsTrigger value="overview" className="group shrink-0">
+      <Tabs defaultValue="overview">
+        <TabsList className="flex border-b">
+          <TabsTrigger value="overview" className="group ">
             <p className="text-xs p-3 text-mastra-el-3 group-data-[state=active]:text-mastra-el-5 group-data-[state=active]:border-b-2 group-data-[state=active]:pb-2.5 border-white">
               Overview
             </p>
           </TabsTrigger>
 
-          <TabsTrigger value="model-settings" className="group shrink-0">
+          <TabsTrigger value="model-settings" className="group ">
             <p className="text-xs p-3 text-mastra-el-3 group-data-[state=active]:text-mastra-el-5 group-data-[state=active]:border-b-2 group-data-[state=active]:pb-2.5 border-white">
               Model settings
             </p>
           </TabsTrigger>
 
-          <TabsTrigger value="endpoints" className="group shrink-0">
+          <TabsTrigger value="endpoints" className="group ">
             <p className="text-xs p-3 text-mastra-el-3 group-data-[state=active]:text-mastra-el-5 group-data-[state=active]:border-b-2 group-data-[state=active]:pb-2.5 border-white">
               Endpoints
             </p>
           </TabsTrigger>
-          <TabsTrigger value="logs" className="group shrink-0">
+          <TabsTrigger value="logs" className="group ">
             <p className="text-xs p-3 text-mastra-el-3 group-data-[state=active]:text-mastra-el-5 group-data-[state=active]:border-b-2 group-data-[state=active]:pb-2.5 border-white">
               Log Drains
             </p>

@@ -2,7 +2,6 @@ import { formatDate } from 'date-fns';
 import { RefreshCcwIcon } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 
 import { useLogsByRunId } from '@/hooks/use-logs';
 
@@ -10,7 +9,7 @@ export function AgentLogs({ agentId }: { agentId: string }) {
   const { logs, isLoading, refetchLogs } = useLogsByRunId(agentId);
 
   return (
-    <ScrollArea className="h-[calc(100vh-126px)] px-4 pb-4 text-xs w-full">
+    <div className="px-4 pb-4 text-xs overflow-y-auto">
       <div className="flex justify-end sticky top-0 py-2">
         <Button variant="outline" onClick={() => refetchLogs()}>
           {isLoading ? <RefreshCcwIcon className="w-4 h-4 animate-spin" /> : <RefreshCcwIcon className="w-4 h-4" />}
@@ -45,6 +44,6 @@ export function AgentLogs({ agentId }: { agentId: string }) {
           })
         )}
       </div>
-    </ScrollArea>
+    </div>
   );
 }
