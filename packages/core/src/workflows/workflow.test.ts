@@ -4188,6 +4188,144 @@ describe('Workflow', () => {
 
       expect(promptAgentAction).toHaveBeenCalledTimes(2);
     });
+
+    it('should work with runtimeContext - bug #4442', async () => {
+      const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
+      const promptAgentAction = vi.fn().mockImplementation(async ({ suspend, runtimeContext, resumeData }) => {
+        if (!resumeData) {
+          runtimeContext.set('responses', [...(runtimeContext.get('responses') ?? []), 'first message']);
+          await suspend({ testPayload: 'hello' });
+          return;
+        }
+
+        runtimeContext.set('responses', [...(runtimeContext.get('responses') ?? []), 'promptAgentAction']);
+
+        return undefined;
+      });
+      const runtimeContextAction = vi.fn().mockImplementation(async ({ runtimeContext }) => {
+        return runtimeContext.get('responses');
+      });
+
+      const getUserInput = createStep({
+        id: 'getUserInput',
+        execute: getUserInputAction,
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ userInput: z.string() }),
+      });
+      const promptAgent = createStep({
+        id: 'promptAgent',
+        execute: promptAgentAction,
+        inputSchema: z.object({ userInput: z.string() }),
+        outputSchema: z.object({ modelOutput: z.string() }),
+        suspendSchema: z.object({ testPayload: z.string() }),
+        resumeSchema: z.object({ userInput: z.string() }),
+      });
+      const runtimeContextStep = createStep({
+        id: 'runtimeContextAction',
+        execute: runtimeContextAction,
+        inputSchema: z.object({ modelOutput: z.string() }),
+        outputSchema: z.array(z.string()),
+      });
+
+      const promptEvalWorkflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({}),
+      });
+
+      promptEvalWorkflow.then(getUserInput).then(promptAgent).then(runtimeContextStep).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'test-workflow': promptEvalWorkflow },
+      });
+
+      const run = promptEvalWorkflow.createRun();
+
+      const initialResult = await run.start({ inputData: { input: 'test' } });
+      expect(initialResult.steps.promptAgent.status).toBe('suspended');
+      expect(promptAgentAction).toHaveBeenCalledTimes(1);
+
+      const newCtx = {
+        userInput: 'test input for resumption',
+      };
+
+      const firstResumeResult = await run.resume({ step: 'promptAgent', resumeData: newCtx });
+      expect(promptAgentAction).toHaveBeenCalledTimes(2);
+      expect(firstResumeResult.steps.runtimeContextAction.status).toBe('success');
+      expect(firstResumeResult.steps.runtimeContextAction.output).toEqual(['promptAgentAction']);
+    });
+
+    it('should work with custom runtimeContext - bug #4442', async () => {
+      const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
+      const promptAgentAction = vi.fn().mockImplementation(async ({ suspend, runtimeContext, resumeData }) => {
+        if (!resumeData) {
+          runtimeContext.set('responses', [...(runtimeContext.get('responses') ?? []), 'first message']);
+          await suspend({ testPayload: 'hello' });
+          return;
+        }
+
+        runtimeContext.set('responses', [...(runtimeContext.get('responses') ?? []), 'promptAgentAction']);
+
+        return undefined;
+      });
+      const runtimeContextAction = vi.fn().mockImplementation(async ({ runtimeContext }) => {
+        return runtimeContext.get('responses');
+      });
+
+      const getUserInput = createStep({
+        id: 'getUserInput',
+        execute: getUserInputAction,
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ userInput: z.string() }),
+      });
+      const promptAgent = createStep({
+        id: 'promptAgent',
+        execute: promptAgentAction,
+        inputSchema: z.object({ userInput: z.string() }),
+        outputSchema: z.object({ modelOutput: z.string() }),
+        suspendSchema: z.object({ testPayload: z.string() }),
+        resumeSchema: z.object({ userInput: z.string() }),
+      });
+      const runtimeContextStep = createStep({
+        id: 'runtimeContextAction',
+        execute: runtimeContextAction,
+        inputSchema: z.object({ modelOutput: z.string() }),
+        outputSchema: z.array(z.string()),
+      });
+
+      const promptEvalWorkflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({}),
+      });
+
+      promptEvalWorkflow.then(getUserInput).then(promptAgent).then(runtimeContextStep).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'test-workflow': promptEvalWorkflow },
+      });
+
+      const run = promptEvalWorkflow.createRun();
+
+      const runtimeContext = new RuntimeContext();
+      const initialResult = await run.start({ inputData: { input: 'test' }, runtimeContext });
+      expect(initialResult.steps.promptAgent.status).toBe('suspended');
+      expect(promptAgentAction).toHaveBeenCalledTimes(1);
+      expect(runtimeContext.get('responses')).toEqual(['first message']);
+
+      const newCtx = {
+        userInput: 'test input for resumption',
+      };
+
+      const firstResumeResult = await run.resume({ step: 'promptAgent', resumeData: newCtx, runtimeContext });
+      expect(promptAgentAction).toHaveBeenCalledTimes(2);
+      expect(firstResumeResult.steps.runtimeContextAction.status).toBe('success');
+      expect(firstResumeResult.steps.runtimeContextAction.output).toEqual(['first message', 'promptAgentAction']);
+    });
   });
 
   describe('Workflow Runs', () => {
