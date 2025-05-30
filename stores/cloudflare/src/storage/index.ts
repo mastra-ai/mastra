@@ -1185,6 +1185,7 @@ export class CloudflareStore extends MastraStorage {
       runId: data.runId,
       value: data.value,
       context: data.context,
+      serializedStepGraph: data.serializedStepGraph,
       suspendedPaths: data.suspendedPaths || {},
       activePaths: data.activePaths || [],
       timestamp: data.timestamp || Date.now(),
