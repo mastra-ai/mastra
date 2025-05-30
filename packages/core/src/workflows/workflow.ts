@@ -856,6 +856,7 @@ export class Workflow<
         executionGraph: this.executionGraph,
         mastra: this.#mastra,
         retryConfig: this.retryConfig,
+        serializedStepGraph: this.serializedStepGraph,
         cleanup: () => this.#runs.delete(runIdToUse),
       });
 
@@ -990,6 +991,11 @@ export class Run<
   public executionGraph: ExecutionGraph;
 
   /**
+   * The serialized step graph for this run
+   */
+  public serializedStepGraph: SerializedStepFlowEntry[];
+
+  /**
    * The storage for this run
    */
   #mastra?: Mastra;
@@ -1015,9 +1021,11 @@ export class Run<
       delay?: number;
     };
     cleanup?: () => void;
+    serializedStepGraph: SerializedStepFlowEntry[];
   }) {
     this.workflowId = params.workflowId;
     this.runId = params.runId;
+    this.serializedStepGraph = params.serializedStepGraph;
     this.executionEngine = params.executionEngine;
     this.executionGraph = params.executionGraph;
     this.#mastra = params.mastra;
@@ -1042,6 +1050,7 @@ export class Run<
       workflowId: this.workflowId,
       runId: this.runId,
       graph: this.executionGraph,
+      serializedStepGraph: this.serializedStepGraph,
       input: inputData,
       emitter: {
         emit: async (event: string, data: any) => {
@@ -1181,6 +1190,7 @@ export class Run<
         workflowId: this.workflowId,
         runId: this.runId,
         graph: this.executionGraph,
+        serializedStepGraph: this.serializedStepGraph,
         input: params.resumeData,
         resume: {
           steps,
