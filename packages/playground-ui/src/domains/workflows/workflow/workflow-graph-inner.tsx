@@ -29,8 +29,7 @@ export interface WorkflowGraphInnerProps {
 }
 
 export function WorkflowGraphInner({ workflow, onShowTrace }: WorkflowGraphInnerProps) {
-  console.log({ stepGraph: workflow.stepGraph });
-  const { nodes: initialNodes, edges: initialEdges } = useMemo(() => constructNodesAndEdges(workflow), [workflow]);
+  const { nodes: initialNodes, edges: initialEdges } = constructNodesAndEdges(workflow);
   const [nodes, _, onNodesChange] = useNodesState(initialNodes);
   const [edges] = useEdgesState(initialEdges);
   const { steps, runId } = useCurrentRun();

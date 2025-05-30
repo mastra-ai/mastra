@@ -1,4 +1,5 @@
 import { Skeleton } from '@/components/ui/skeleton';
+import { useEffect, useState } from 'react';
 
 import { useWorkflow } from '@/hooks/use-workflows';
 import '../../../index.css';
@@ -19,11 +20,19 @@ export interface WorkflowGraphProps {
 export function WorkflowGraph({ workflowId, onShowTrace }: WorkflowGraphProps) {
   const { workflow, isLoading } = useWorkflow(workflowId);
   const { snapshotStepGraph } = useContext(WorkflowRunContext);
+  const [switching, setSwitching] = useState(false);
 
-  if (isLoading) {
+  useEffect(() => {
+    setSwitching(true);
+    setTimeout(() => {
+      setSwitching(false);
+    }, 100);
+  }, [snapshotStepGraph]);
+
+  if (isLoading || switching) {
     return (
       <div className="p-4">
-        <Skeleton className="h-[600px]" />
+        <Skeleton className="h-full" />
       </div>
     );
   }
@@ -38,19 +47,6 @@ export function WorkflowGraph({ workflowId, onShowTrace }: WorkflowGraphProps) {
       </div>
     );
   }
-
-  console.log({ snapshotStepGraph, workflow: workflow.stepGraph });
-
-  // if (snapshotStepGraph) {
-  //   // if we only switch in workflow prop in WorkflowGraphInner, the change won't reflect in the node constructor
-  //   return (
-  //     <WorkflowNestedGraphProvider>
-  //       <ReactFlowProvider>
-  //         <WorkflowGraphInner workflow={{ stepGraph: snapshotStepGraph }} onShowTrace={onShowTrace} />
-  //       </ReactFlowProvider>
-  //     </WorkflowNestedGraphProvider>
-  //   );
-  // }
 
   return (
     <WorkflowNestedGraphProvider>
