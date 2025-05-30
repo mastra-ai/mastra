@@ -69,7 +69,7 @@ import { rootHandler } from './handlers/root';
 import { getTelemetryHandler, storeTelemetryHandler } from './handlers/telemetry';
 import { executeAgentToolHandler, executeToolHandler, getToolByIdHandler, getToolsHandler } from './handlers/tools';
 import { createIndex, deleteIndex, describeIndex, listIndexes, queryVectors, upsertVectors } from './handlers/vector';
-import { getSpeakersHandler, listenHandler, speakHandler } from './handlers/voice';
+import { getSpeakersHandler, getListenerHandler, listenHandler, speakHandler } from './handlers/voice';
 import {
   createWorkflowRunHandler,
   getWorkflowByIdHandler,
@@ -1105,6 +1105,46 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
       },
     }),
     speakHandler,
+  );
+
+  app.get(
+    '/api/agents/:agentId/voice/listener',
+    describeRoute({
+      description: 'Get available listener for an agent',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Checks if listener is available for the agent',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                description: 'Listener information depending on the voice provider',
+                properties: {
+                  enabled: { type: 'boolean' },
+                },
+                additionalProperties: true,
+              },
+            },
+          },
+        },
+        400: {
+          description: 'Agent does not have voice capabilities',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    getListenerHandler,
   );
 
   app.post(

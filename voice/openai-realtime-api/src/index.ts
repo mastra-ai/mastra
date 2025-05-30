@@ -287,6 +287,15 @@ export class OpenAIRealtimeVoice extends MastraVoice {
   }
 
   /**
+   * Checks if listening capabilities are enabled.
+   *
+   * @returns {Promise<{ enabled: boolean }>}
+   */
+  async getListener() {
+    return { enabled: true };
+  }
+
+  /**
    * Processes audio input for speech recognition.
    * Takes a readable stream of audio data and emits a writing event.
    * The output of the writing event is int16 audio data.

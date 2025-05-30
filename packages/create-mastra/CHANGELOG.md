@@ -1,5 +1,12 @@
 # create-mastra
 
+## 0.10.2-alpha.1
+
+### Patch Changes
+
+- 73fec0b: Mastra start cli command"
+- f6ddf55: fix traces not showing and reduce API surface from playground ui
+
 ## 0.10.2-alpha.0
 
 ### Patch Changes

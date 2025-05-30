@@ -143,6 +143,15 @@ export class ElevenLabsVoice extends MastraVoice {
   }
 
   /**
+   * Checks if listening capabilities are enabled.
+   *
+   * @returns {Promise<{ enabled: boolean }>}
+   */
+  async getListener() {
+    return { enabled: true };
+  }
+
+  /**
    * Converts audio input to text using ElevenLabs Speech-to-Text API.
    *
    * @param input - A readable stream containing the audio data to transcribe
