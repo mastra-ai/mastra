@@ -148,7 +148,8 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
           setImmediate(() => controller.abort());
           await proc;
         } catch (err) {
-          if (!(await proc).isCanceled) {
+          // @ts-expect-error - isCanceled is not typed
+          if (!proc.isCanceled) {
             console.log('failed to kill build proc', err);
           }
         }
