@@ -28,7 +28,11 @@
       connectSSE();
     </script>
   </head>
+
   <body>
+    <script>
+      window.MASTRA_TELEMETRY_DISABLED = '%%MASTRA_TELEMETRY_DISABLED%%';
+    </script>
     <div id="root" class="dark"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
