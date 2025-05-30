@@ -6,7 +6,7 @@ import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
 import type { ExecuteFunction, Step } from './step';
 import type { StepResult, StepSuccess } from './types';
-import type { StepFlowEntry } from './workflow';
+import type { SerializedStepFlowEntry, StepFlowEntry } from './workflow';
 
 export type ExecutionContext = {
   workflowId: string;
@@ -109,6 +109,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     workflowId: string;
     runId: string;
     graph: ExecutionGraph;
+    serializedStepGraph: SerializedStepFlowEntry[];
     input?: TInput;
     resume?: {
       // TODO: add execute path
@@ -151,6 +152,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           workflowId,
           runId,
           entry,
+          serializedStepGraph: params.serializedStepGraph,
           prevStep: steps[i - 1]!,
           stepResults,
           resume,
@@ -415,6 +417,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     runId,
     entry,
     prevStep,
+    serializedStepGraph,
     stepResults,
     resume,
     executionContext,
@@ -424,6 +427,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     workflowId: string;
     runId: string;
     entry: { type: 'parallel'; steps: StepFlowEntry[] };
+    serializedStepGraph: SerializedStepFlowEntry[];
     prevStep: StepFlowEntry;
     stepResults: Record<string, StepResult<any, any, any, any>>;
     resume?: {
@@ -445,6 +449,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           entry: step,
           prevStep,
           stepResults,
+          serializedStepGraph,
           resume,
           executionContext: {
             workflowId,
@@ -488,6 +493,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     entry,
     prevOutput,
     prevStep,
+    serializedStepGraph,
     stepResults,
     resume,
     executionContext,
@@ -496,6 +502,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   }: {
     workflowId: string;
     runId: string;
+    serializedStepGraph: SerializedStepFlowEntry[];
     entry: { type: 'conditional'; steps: StepFlowEntry[]; conditions: ExecuteFunction<any, any, any, any>[] };
     prevStep: StepFlowEntry;
     prevOutput: any;
@@ -556,6 +563,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           entry: step,
           prevStep,
           stepResults,
+          serializedStepGraph,
           resume,
           executionContext: {
             workflowId,
@@ -751,11 +759,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     workflowId,
     runId,
     stepResults,
+    serializedStepGraph,
     executionContext,
   }: {
     workflowId: string;
     runId: string;
     stepResults: Record<string, StepResult<any, any, any, any>>;
+    serializedStepGraph: SerializedStepFlowEntry[];
     executionContext: ExecutionContext;
   }) {
     await this.mastra?.getStorage()?.persistWorkflowSnapshot({
@@ -766,6 +776,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         value: {},
         context: stepResults as any,
         activePaths: [],
+        serializedStepGraph,
         suspendedPaths: executionContext.suspendedPaths,
         // @ts-ignore
         timestamp: Date.now(),
@@ -778,6 +789,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     runId,
     entry,
     prevStep,
+    serializedStepGraph,
     stepResults,
     resume,
     executionContext,
@@ -788,6 +800,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     runId: string;
     entry: StepFlowEntry;
     prevStep: StepFlowEntry;
+    serializedStepGraph: SerializedStepFlowEntry[];
     stepResults: Record<string, StepResult<any, any, any, any>>;
     resume?: {
       steps: string[];
@@ -822,6 +835,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         runId,
         entry: entry.steps[idx!]!,
         prevStep,
+        serializedStepGraph,
         stepResults,
         resume,
         executionContext: {
@@ -842,6 +856,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         entry,
         prevStep,
         stepResults,
+        serializedStepGraph,
         resume,
         executionContext,
         emitter,
@@ -855,6 +870,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         prevStep,
         prevOutput,
         stepResults,
+        serializedStepGraph,
         resume,
         executionContext,
         emitter,
@@ -895,6 +911,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     await this.persistStepUpdate({
       workflowId,
       runId,
+      serializedStepGraph,
       stepResults,
       executionContext,
     });

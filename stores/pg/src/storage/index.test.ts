@@ -58,6 +58,7 @@ const createSampleWorkflowSnapshot = (status: WorkflowRunState['context'][string
       },
       input: {},
     },
+    serializedStepGraph: [],
     activePaths: [],
     suspendedPaths: {},
     runId,

@@ -53,6 +53,7 @@ export function createTestSuite(storage: MastraStorage) {
           },
           input: {},
         },
+        serializedStepGraph: [],
         activePaths: [],
         suspendedPaths: {},
         runId,
@@ -696,6 +697,7 @@ export function createTestSuite(storage: MastraStorage) {
         context: {},
         activePaths: [],
         suspendedPaths: {},
+        serializedStepGraph: [],
         timestamp: Date.now(),
       };
       await storage.persistWorkflowSnapshot({
@@ -723,6 +725,7 @@ export function createTestSuite(storage: MastraStorage) {
         context: {},
         activePaths: [],
         suspendedPaths: {},
+        serializedStepGraph: [],
         timestamp: Date.now(),
       };
       await storage.persistWorkflowSnapshot({
