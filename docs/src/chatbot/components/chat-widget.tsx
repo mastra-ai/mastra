@@ -12,17 +12,15 @@ import "@copilotkit/react-ui/styles.css";
 import { ArrowUp } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 
+const baseUrl = process.env.MASTRA_AGENT_URL || "http://localhost:4111";
+
 const DocsChat: React.FC<{
   setIsAgentMode: (isAgentMode: boolean) => void;
   searchQuery: string;
 }> = ({ setIsAgentMode, searchQuery }) => {
   return (
     <CopilotKit
-      runtimeUrl={
-        process.env.NODE_ENV === "production"
-          ? "/docs/api/copilotkit"
-          : "/api/copilotkit"
-      }
+      runtimeUrl={`${baseUrl}/api/copilotkit?resourceId=docsAgent`}
       showDevConsole={false}
       // agent lock to the relevant agent
       agent="docsAgent"

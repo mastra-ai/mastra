@@ -2152,9 +2152,15 @@ importers:
       '@ai-sdk/openai':
         specifier: ^1.3.2
         version: 1.3.22(zod@3.24.4)
+      '@copilotkit/runtime':
+        specifier: ^1.8.13
+        version: 1.8.13(8deca1124e95e51adb94c1c855395885)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
+      '@mastra/agui':
+        specifier: workspace:*
+        version: link:../agui
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
