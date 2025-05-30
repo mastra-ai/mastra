@@ -5,12 +5,12 @@ import usePolling from '@/lib/polls';
 
 import type { RefinedTrace } from '@/domains/traces/types';
 import { refineTraces } from '@/domains/traces/utils';
-import { createMastraClient } from '@/lib/mastra-client';
+import { useMastraClient } from '@/contexts/mastra-client-context';
 
-export const useTraces = (componentName: string, baseUrl: string, isWorkflow: boolean = false) => {
+export const useTraces = (componentName: string, isWorkflow: boolean = false) => {
   const [traces, setTraces] = useState<RefinedTrace[]>([]);
 
-  const client = useMemo(() => createMastraClient(baseUrl), [baseUrl]);
+  const client = useMemo(() => useMastraClient(), []);
 
   const fetchFn = useCallback(async () => {
     try {

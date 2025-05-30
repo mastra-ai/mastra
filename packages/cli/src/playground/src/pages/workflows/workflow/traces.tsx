@@ -13,7 +13,8 @@ function WorkflowTracesContent() {
   const stepName = searchParams.get('stepName');
   const { workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId!);
 
-  const { traces, error, firstCallLoading } = useTraces(workflow?.name || '', '', true);
+  // This hook will now be called within a TraceProvider context
+  const { traces, error, firstCallLoading } = useTraces(workflow?.name || '', true);
 
   if (isWorkflowLoading || firstCallLoading) {
     return (
