@@ -55,6 +55,7 @@ export const createSampleWorkflowSnapshot = (threadId: string, status: string, c
       },
       input: {},
     } as WorkflowRunState['context'],
+    serializedStepGraph: [],
     activePaths: [],
     suspendedPaths: {},
     runId,

@@ -88,6 +88,7 @@ class Test {
         },
         input: {},
       },
+      serializedStepGraph: [],
       activePaths: [],
       suspendedPaths: {},
       runId,
@@ -479,6 +480,7 @@ describe('MongoDBStore', () => {
             status: 'waiting',
           },
         ],
+        serializedStepGraph: [],
         runId: runId,
         timestamp: Date.now(),
       };

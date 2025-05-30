@@ -320,6 +320,7 @@ describe('DynamoDBStore Integration Tests', () => {
             input: { source: 'test' },
             step1: { status: 'success', output: { data: 'test' } },
           } as unknown as WorkflowRunState['context'],
+          serializedStepGraph: [],
           activePaths: [{ stepPath: ['test'], stepId: 'step1', status: 'success' }],
           suspendedPaths: { test: [1] },
           runId: 'test-run-large', // Use unique runId
@@ -486,6 +487,7 @@ describe('DynamoDBStore Integration Tests', () => {
             step1: { status: 'success', output: { data: 'test' } },
             input: { source: 'test' },
           } as unknown as WorkflowRunState['context'],
+          serializedStepGraph: [],
           activePaths: [{ stepPath: ['test'], stepId: 'step1', status: 'success' }],
           suspendedPaths: { test: [1] },
           runId: 'mixed-run',
@@ -734,6 +736,7 @@ describe('DynamoDBStore Integration Tests', () => {
           step1: { status: 'success', output: { data: 'test' } },
           input: { source: 'test' },
         } as unknown as WorkflowRunState['context'],
+        serializedStepGraph: [],
         activePaths: [],
         suspendedPaths: {},
         runId: runId,
