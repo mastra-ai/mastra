@@ -434,7 +434,7 @@ export class MCPServer extends MCPServerBase {
           content: [
             {
               type: 'text',
-              text: JSON.stringify(result),
+              text: typeof result === 'string' ? result : JSON.stringify(result),
             },
           ],
           isError: false,
