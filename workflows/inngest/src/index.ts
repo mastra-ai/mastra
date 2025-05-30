@@ -860,6 +860,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     prevOutput,
     prevStep,
     stepResults,
+    serializedStepGraph,
     resume,
     executionContext,
     emitter,
@@ -869,6 +870,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     runId: string;
     entry: { type: 'conditional'; steps: StepFlowEntry[]; conditions: ExecuteFunction<any, any, any, any>[] };
     prevStep: StepFlowEntry;
+    serializedStepGraph: SerializedStepFlowEntry[];
     prevOutput: any;
     stepResults: Record<string, StepResult<any, any, any, any>>;
     resume?: {
@@ -930,7 +932,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           prevStep,
           stepResults,
           resume,
-          serializedStepGraph: this.serializedStepGraph,
+          serializedStepGraph,
           executionContext: {
             workflowId,
             runId,
