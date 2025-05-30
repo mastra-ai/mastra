@@ -147,7 +147,7 @@ async function analyze(
     }
 
     for (const dynamicImport of o.dynamicImports) {
-      if (!depsToOptimize.has(dynamicImport)) {
+      if (!depsToOptimize.has(dynamicImport) && !isNodeBuiltin(dynamicImport)) {
         depsToOptimize.set(dynamicImport, ['*']);
       }
     }
