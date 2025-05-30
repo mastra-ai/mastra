@@ -11,7 +11,7 @@ import type { AiMessageType, MastraMemory } from './memory';
 import type { RuntimeContext } from './runtime-context';
 import { Tool } from './tools';
 import type { CoreTool, ToolAction, VercelTool } from './tools';
-import { CoreToolBuilder } from './tools/tool-compatibility/builder';
+import { CoreToolBuilder } from './tools/tool-builder/builder';
 
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 

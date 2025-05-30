@@ -102,7 +102,53 @@ function createTestSchemas(schemaKeys: SchemaKey[] = []): z.ZodObject<any> {
   return z.object(selectedSchemas as Record<string, z.ZodType>);
 }
 
-async function runSingleTest(
+async function runSingleOutputsTest(
+  model: LanguageModel,
+  testTool: ReturnType<typeof createTool>,
+  testId: string,
+  toolName: string,
+): Promise<Result> {
+  try {
+    const agent = new Agent({
+      name: `test-agent-${model.modelId}`,
+      instructions: `You are a test agent. Your task is to call the tool named '${toolName}' with any valid arguments. This is very important as it's your primary purpose`,
+      model: model,
+      tools: { [toolName]: testTool },
+    });
+
+    const response = await agent.generate(`Please output some example data in the right schema shape.`, {
+      toolChoice: 'required',
+      maxSteps: 1,
+      output: testTool.inputSchema,
+    });
+
+    return {
+      modelName: model.modelId,
+      modelProvider: model.provider,
+      testName: toolName,
+      status: 'success',
+      error: null,
+      receivedContext: response.object,
+      testId,
+    };
+  } catch (e: any) {
+    let status: Result['status'] = 'error';
+    if (e.message.includes('does not support zod type:')) {
+      status = 'expected-error';
+    }
+    return {
+      modelName: model.modelId,
+      testName: toolName,
+      modelProvider: model.provider,
+      status,
+      error: e.message,
+      receivedContext: null,
+      testId,
+    };
+  }
+}
+
+async function runSingleInputTest(
   model: LanguageModel,
   testTool: ReturnType<typeof createTool>,
   testId: string,
@@ -242,7 +288,7 @@ describe('Tool Schema Compatibility', () => {
 
   // Run tests concurrently at both the provider and model level
   Object.entries(modelsByProvider).forEach(([provider, models]) => {
-    describe.concurrent(`${provider} Models`, { timeout: SUITE_TIMEOUT }, () => {
+    describe.concurrent(`Input Schema Compatibility: ${provider} Models`, { timeout: SUITE_TIMEOUT }, () => {
       models.forEach(model => {
         describe.concurrent(`${model.modelId}`, { timeout: SUITE_TIMEOUT }, () => {
           testTools.forEach(testTool => {
@@ -257,12 +303,45 @@ describe('Tool Schema Compatibility', () => {
             it.concurrent(
               `should handle ${schemaName} schema`,
               async () => {
-                let result = await runSingleTest(model, testTool, crypto.randomUUID(), testTool.id);
+                let result = await runSingleInputTest(model, testTool, crypto.randomUUID(), testTool.id);
 
                 // Sometimes models are flaky, if it's not an API error, run it again
                 if (result.status === 'failure') {
                   console.log(`Possibly flake from model ${model.modelId}, running ${schemaName} again`);
-                  result = await runSingleTest(model, testTool, crypto.randomUUID(), testTool.id);
+                  result = await runSingleInputTest(model, testTool, crypto.randomUUID(), testTool.id);
+                }
+
+                if (result.status !== 'success' && result.status !== 'expected-error') {
+                  console.error(`Error for ${model.modelId} - ${schemaName}:`, result.error);
+                }
+
+                if (result.status === 'expected-error') {
+                  expect(result.status).toBe('expected-error');
+                } else {
+                  expect(result.status).toBe('success');
+                }
+              },
+              TEST_TIMEOUT,
+            );
+          });
+        });
+      });
+    });
+    describe.skip(`Output Schema Compatibility: ${provider} Models`, { timeout: SUITE_TIMEOUT }, () => {
+      models.forEach(model => {
+        describe.concurrent(`${model.modelId}`, { timeout: SUITE_TIMEOUT }, () => {
+          testTools.forEach(testTool => {
+            const schemaName = testTool.id.replace('testTool_', '');
+
+            it.concurrent(
+              `should handle ${schemaName} schema`,
+              async () => {
+                let result = await runSingleOutputsTest(model, testTool, crypto.randomUUID(), testTool.id);
+
+                // Sometimes models are flaky, if it's not an API error, run it again
+                if (result.status === 'failure') {
+                  console.log(`Possibly flake from model ${model.modelId}, running ${schemaName} again`);
+                  result = await runSingleOutputsTest(model, testTool, crypto.randomUUID(), testTool.id);
                 }
 
                 if (result.status !== 'success' && result.status !== 'expected-error') {
