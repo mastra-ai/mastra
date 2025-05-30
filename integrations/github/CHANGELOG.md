@@ -1,5 +1,13 @@
 # @mastra/github
 
+## 1.2.1-alpha.0
+
+### Patch Changes
+
+- f0d559f: Fix peerdeps for alpha channel
+- Updated dependencies [1e8bb40]
+  - @mastra/core@0.10.2-alpha.2
+
 ## 1.2.0
 
 ### Minor Changes

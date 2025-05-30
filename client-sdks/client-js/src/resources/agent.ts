@@ -70,6 +70,14 @@ export class AgentVoice extends BaseResource {
   getSpeakers(): Promise<Array<{ voiceId: string; [key: string]: any }>> {
     return this.request(`/api/agents/${this.agentId}/voice/speakers`);
   }
+
+  /**
+   * Get the listener configuration for the agent's voice provider
+   * @returns Promise containing a check if the agent has listening capabilities
+   */
+  getListener(): Promise<{ enabled: boolean }> {
+    return this.request(`/api/agents/${this.agentId}/voice/listener`);
+  }
 }
 
 export class Agent extends BaseResource {

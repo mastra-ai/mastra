@@ -1,5 +1,22 @@
 # @mastra/evals
 
+## 0.10.2-alpha.1
+
+### Patch Changes
+
+- f0d559f: Fix peerdeps for alpha channel
+- Updated dependencies [1e8bb40]
+  - @mastra/core@0.10.2-alpha.2
+
+## 0.10.2-alpha.0
+
+### Patch Changes
+
+- 8dde0da: Fixed contextual recall metric
+- Updated dependencies [ee77e78]
+- Updated dependencies [2901125]
+  - @mastra/core@0.10.2-alpha.1
+
 ## 0.10.1
 
 ### Patch Changes

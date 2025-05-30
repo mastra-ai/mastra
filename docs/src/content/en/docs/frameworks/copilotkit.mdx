@@ -217,6 +217,59 @@ export const POST = async (req: NextRequest) => {
 };
 ```
 
+### Using Typed Runtime Context
+
+For better type safety, you can specify the type of your runtime context:
+
+```typescript copy
+import { Mastra } from "@mastra/core/mastra";
+import { PinoLogger } from "@mastra/loggers";
+import { LibSQLStore } from "@mastra/libsql";
+import { registerCopilotKit } from "@mastra/agui";
+import { weatherAgent } from "./agents";
+
+// Define your runtime context type
+type WeatherRuntimeContext = {
+  "user-id": string;
+  "temperature-scale": "celsius" | "fahrenheit";
+  "api-key": string;
+};
+
+export const mastra = new Mastra({
+  agents: { weatherAgent },
+  storage: new LibSQLStore({
+    url: ":memory:",
+  }),
+  logger: new PinoLogger({
+    name: "Mastra",
+    level: "info",
+  }),
+  server: {
+    cors: {
+      origin: "*",
+      allowMethods: ["*"],
+      allowHeaders: ["*"],
+    },
+    apiRoutes: [
+      registerCopilotKit<WeatherRuntimeContext>({
+        path: "/copilotkit",
+        resourceId: "weatherAgent",
+        setContext: (c, runtimeContext) => {
+          // TypeScript will enforce the correct types here
+          runtimeContext.set("user-id", c.req.header("X-User-ID") || "anonymous");
+          runtimeContext.set("temperature-scale", "celsius"); // Only "celsius" | "fahrenheit" allowed
+          runtimeContext.set("api-key", process.env.WEATHER_API_KEY || "");
+
+          // This would cause a TypeScript error:
+          // runtimeContext.set("invalid-key", "value"); // ❌ Error: invalid key
+          // runtimeContext.set("temperature-scale", "kelvin"); // ❌ Error: invalid value
+        }
+      }),
+    ],
+  },
+});
+```
+
 ## Further Reading
 
 - [CopilotKit Documentation](https://docs.copilotkit.ai)

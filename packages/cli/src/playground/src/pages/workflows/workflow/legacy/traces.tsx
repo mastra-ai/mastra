@@ -1,5 +1,5 @@
 import { useParams } from 'react-router';
-import { TraceProvider, useTraces, WorkflowTraces } from '@mastra/playground-ui';
+import { useTraces, WorkflowTraces } from '@mastra/playground-ui';
 
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -13,7 +13,7 @@ function WorkflowTracesContent() {
   // This hook will now be called within a TraceProvider context
   const { traces, error, firstCallLoading } = useTraces(legacyWorkflow?.name || '', true);
 
-  if (isWorkflowLoading) {
+  if (isWorkflowLoading || firstCallLoading) {
     return (
       <main className="flex-1 relative grid grid-cols-[1fr_325px] divide-x h-full">
         <div className="p-4">
@@ -26,15 +26,11 @@ function WorkflowTracesContent() {
     );
   }
 
-  return <WorkflowTraces traces={traces} isLoading={firstCallLoading} error={error} />;
+  return <WorkflowTraces traces={traces} error={error} />;
 }
 
 function WorkflowTracesPage() {
-  return (
-    <TraceProvider>
-      <WorkflowTracesContent />
-    </TraceProvider>
-  );
+  return <WorkflowTracesContent />;
 }
 
 export default WorkflowTracesPage;
