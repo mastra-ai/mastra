@@ -8,7 +8,7 @@ import { useAgent } from '@/hooks/use-agents';
 function AgentTracesContent() {
   const { agentId } = useParams();
   const { agent, isLoading: isAgentLoading } = useAgent(agentId!);
-  const { traces, firstCallLoading, error } = useTraces(agent?.name || '', '');
+  const { traces, firstCallLoading, error } = useTraces(agent?.name || '');
 
   if (isAgentLoading || firstCallLoading) {
     return (

@@ -302,6 +302,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       try {
         let suspended: { payload: any } | undefined;
         const result = await runStep({
+          runId,
           mastra: this.mastra!,
           runtimeContext,
           inputData: prevOutput,
@@ -515,6 +516,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         entry.conditions.map(async (cond, index) => {
           try {
             const result = await cond({
+              runId,
               mastra: this.mastra!,
               runtimeContext,
               inputData: prevOutput,
@@ -645,6 +647,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       }
 
       isTrue = await condition({
+        runId,
         mastra: this.mastra!,
         runtimeContext,
         inputData: result.output,

@@ -742,16 +742,9 @@ describe('Workflow', () => {
       });
     });
 
-    it('should execute steps sequentially', async () => {
-      const executionOrder: string[] = [];
-
-      const step1Action = vi.fn().mockImplementation(() => {
-        executionOrder.push('step1');
-        return { value: 'step1' };
-      });
-      const step2Action = vi.fn().mockImplementation(() => {
-        executionOrder.push('step2');
-        return { value: 'step2' };
+    it('should have runId in the step execute function - bug #4260', async () => {
+      const step1Action = vi.fn().mockImplementation(({ runId }) => {
+        return { value: runId };
       });
 
       const step1 = createStep({
@@ -760,42 +753,25 @@ describe('Workflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({ value: z.string() }),
       });
-      const step2 = createStep({
-        id: 'step2',
-        execute: step2Action,
-        inputSchema: z.object({ value: z.string() }),
-        outputSchema: z.object({ value: z.string() }),
-      });
 
       const workflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({}),
         outputSchema: z.object({ value: z.string() }),
-        steps: [step1, step2],
+        steps: [step1],
       });
 
-      workflow.then(step1).then(step2).commit();
+      workflow.then(step1).commit();
 
       const run = workflow.createRun();
       const result = await run.start({ inputData: {} });
 
-      expect(executionOrder).toEqual(['step1', 'step2']);
       expect(result.steps).toEqual({
         input: {},
         step1: {
           status: 'success',
-          output: { value: 'step1' },
+          output: { value: run.runId },
           payload: {},
-
-          startedAt: expect.any(Number),
-          endedAt: expect.any(Number),
-        },
-        step2: {
-          status: 'success',
-          output: { value: 'step2' },
-          payload: {
-            value: 'step1',
-          },
 
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
