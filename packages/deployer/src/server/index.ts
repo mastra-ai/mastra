@@ -3052,7 +3052,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
       let indexHtml = await readFile(join(process.cwd(), './playground/index.html'), 'utf-8');
       indexHtml = indexHtml.replace(
         `'%%MASTRA_TELEMETRY_DISABLED%%'`,
-        Boolean(process.env.MASTRA_TELEMETRY_DISABLED) ? 'true' : 'false',
+        `${Boolean(process.env.MASTRA_TELEMETRY_DISABLED)}`,
       );
       return c.newResponse(indexHtml, 200, { 'Content-Type': 'text/html' });
     }
