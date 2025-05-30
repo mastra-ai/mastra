@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import type { MessageType, StorageThreadType } from '@mastra/core/memory';
+import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 import {
   TABLE_MESSAGES,
@@ -437,15 +437,15 @@ describe.skip('D1Store REST API', () => {
       const messages = [
         {
           ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'First' }] as MessageType['content'],
+          content: [{ type: 'text' as const, text: 'First' }] as MastraMessageV2['content'],
         },
         {
           ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'Second' }] as MessageType['content'],
+          content: [{ type: 'text' as const, text: 'Second' }] as MastraMessageV2['content'],
         },
         {
           ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'Third' }] as MessageType['content'],
+          content: [{ type: 'text' as const, text: 'Third' }] as MastraMessageV2['content'],
         },
       ];
 
@@ -1152,7 +1152,7 @@ describe.skip('D1Store REST API', () => {
           content: [{ type: 'text', text: 'Third' }],
           createdAt: new Date(baseTime + 2000),
         },
-      ] as MessageType[];
+      ] as MastraMessageV1[];
 
       await store.saveMessages({ messages });
 
@@ -1189,11 +1189,12 @@ describe.skip('D1Store REST API', () => {
       const thread = createSampleThread();
       const message = {
         ...createSampleMessage(thread.id),
-        content: [{ type: 'text' as const, text: '特殊字符 !@#$%^&*()' }] as MessageType['content'],
+        content: [{ type: 'text' as const, text: '特殊字符 !@#$%^&*()' }] as MastraMessageV1['content'],
+        threadId: thread.id,
       };
 
       await store.saveThread({ thread });
-      await store.saveMessages({ messages: [message] });
+      await store.saveMessages({ messages: [message], format: 'v2' });
 
       // Should retrieve correctly
       const messages = await retryUntil(
@@ -1342,7 +1343,7 @@ describe.skip('D1Store REST API', () => {
       // Test with various malformed data
       const malformedMessage = {
         ...createSampleMessage(thread.id),
-        content: [{ type: 'text' as const, text: ''.padStart(1024 * 1024, 'x') }] as MessageType['content'], // Very large content
+        content: [{ type: 'text' as const, text: ''.padStart(1024 * 1024, 'x') }] as MastraMessageV2['content'], // Very large content
       };
 
       await store.saveMessages({ messages: [malformedMessage] });

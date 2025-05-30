@@ -10,7 +10,7 @@ import { processDataStream } from '@ai-sdk/ui-utils';
 import { useState, ReactNode, useEffect } from 'react';
 
 import { ChatProps } from '@/types';
-import { createMastraClient } from '@/lib/mastra-client';
+import { useMastraClient } from '@/contexts/mastra-client-context';
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
 };
@@ -21,7 +21,6 @@ export function MastraNetworkRuntimeProvider({
   initialMessages,
   memory,
   threadId,
-  baseUrl,
   refreshThreadList,
   modelSettings = {},
 }: Readonly<{
@@ -44,7 +43,7 @@ export function MastraNetworkRuntimeProvider({
     }
   }, [initialMessages, threadId, memory, messages]);
 
-  const mastra = createMastraClient(baseUrl);
+  const mastra = useMastraClient();
 
   const network = mastra.getNetwork(agentId);
 

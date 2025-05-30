@@ -56,6 +56,15 @@ export class CloudflareVoice extends MastraVoice {
     }
   }
 
+  /**
+   * Checks if listening capabilities are enabled.
+   *
+   * @returns {Promise<{ enabled: boolean }>}
+   */
+  async getListener() {
+    return { enabled: true };
+  }
+
   async listen(audioStream: NodeJS.ReadableStream, options?: CloudflareListenOptions): Promise<string> {
     return this.traced(async () => {
       // Collect audio data into buffer

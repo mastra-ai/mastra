@@ -1,5 +1,43 @@
 # mastra
 
+## 0.10.2-alpha.3
+
+### Patch Changes
+
+- f73e11b: fix telemetry disabled not working on playground
+- 068b850: fix: able to pass headers to playground components which are using the mastra client
+- Updated dependencies [ab5adbe]
+- Updated dependencies [195c428]
+- Updated dependencies [f73e11b]
+- Updated dependencies [f946acf]
+  - @mastra/core@0.10.2-alpha.3
+  - @mastra/deployer@0.10.2-alpha.3
+
+## 0.10.2-alpha.2
+
+### Patch Changes
+
+- 73fec0b: Mastra start cli command"
+- f0d559f: Fix peerdeps for alpha channel
+- f6ddf55: fix traces not showing and reduce API surface from playground ui
+- Updated dependencies [e8d2aff]
+- Updated dependencies [1e8bb40]
+- Updated dependencies [4187ed4]
+- Updated dependencies [f0d559f]
+  - @mastra/deployer@0.10.2-alpha.2
+  - @mastra/core@0.10.2-alpha.2
+  - @mastra/loggers@0.10.1-alpha.0
+  - @mastra/mcp@0.10.2-alpha.1
+
+## 0.10.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [ee77e78]
+- Updated dependencies [2901125]
+  - @mastra/core@0.10.2-alpha.1
+  - @mastra/deployer@0.10.2-alpha.1
+
 ## 0.10.2-alpha.0
 
 ### Patch Changes

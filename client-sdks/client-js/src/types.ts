@@ -1,5 +1,5 @@
 import type {
-  MessageType,
+  MastraMessageV1,
   AiMessageType,
   CoreMessage,
   QueryResult,
@@ -172,11 +172,11 @@ export interface GetVectorIndexResponse {
 }
 
 export interface SaveMessageToMemoryParams {
-  messages: MessageType[];
+  messages: MastraMessageV1[];
   agentId: string;
 }
 
-export type SaveMessageToMemoryResponse = MessageType[];
+export type SaveMessageToMemoryResponse = MastraMessageV1[];
 
 export interface CreateMemoryThreadParams {
   title?: string;

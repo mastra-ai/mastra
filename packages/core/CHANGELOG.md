@@ -1,5 +1,28 @@
 # @mastra/core
 
+## 0.10.2-alpha.3
+
+### Patch Changes
+
+- ab5adbe: Add support for runtimeContext to generateTitle
+- 195c428: Add runId to step execute fn
+- f73e11b: fix telemetry disabled not working on playground
+
+## 0.10.2-alpha.2
+
+### Patch Changes
+
+- 1e8bb40: Add runtimeContext to tools and agents in a workflow step.
+
+  Also updated start/resume docs for runtime context.
+
+## 0.10.2-alpha.1
+
+### Patch Changes
+
+- ee77e78: Type fixes for dynamodb and MessageList
+- 2901125: feat: set mastra server middleware after Mastra has been initialized
+
 ## 0.10.2-alpha.0
 
 ### Patch Changes

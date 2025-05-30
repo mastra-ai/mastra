@@ -43,8 +43,8 @@ export class MessageList {
 
   // used to filter this.messages by how it was added: input/response/memory
   private memoryMessages = new Set<MastraMessageV2>();
-  private newMessages = new Set<MastraMessageV2>();
-  private responseMessages = new Set<MastraMessageV2>();
+  private newUserMessages = new Set<MastraMessageV2>();
+  private newResponseMessages = new Set<MastraMessageV2>();
 
   private generateMessageId?: IDGenerator;
 
@@ -88,7 +88,7 @@ export class MessageList {
     };
   }
   private all = {
-    mastra: () => this.messages,
+    v2: () => this.messages,
     v1: () => convertToV1Messages(this.messages),
     ui: () => this.messages.map(MessageList.toUIMessage),
     core: () => this.convertToCoreMessages(this.all.ui()),
@@ -97,24 +97,24 @@ export class MessageList {
     },
   };
   private remembered = {
-    mastra: () => this.messages.filter(m => this.memoryMessages.has(m)),
-    v1: () => convertToV1Messages(this.remembered.mastra()),
-    ui: () => this.remembered.mastra().map(MessageList.toUIMessage),
+    v2: () => this.messages.filter(m => this.memoryMessages.has(m)),
+    v1: () => convertToV1Messages(this.remembered.v2()),
+    ui: () => this.remembered.v2().map(MessageList.toUIMessage),
     core: () => this.convertToCoreMessages(this.remembered.ui()),
   };
   private input = {
-    mastra: () => this.messages.filter(m => this.newMessages.has(m)),
-    v1: () => convertToV1Messages(this.input.mastra()),
-    ui: () => this.input.mastra().map(MessageList.toUIMessage),
+    v2: () => this.messages.filter(m => this.newUserMessages.has(m)),
+    v1: () => convertToV1Messages(this.input.v2()),
+    ui: () => this.input.v2().map(MessageList.toUIMessage),
     core: () => this.convertToCoreMessages(this.input.ui()),
   };
   private response = {
-    mastra: () => this.messages.filter(m => this.responseMessages.has(m)),
+    v2: () => this.messages.filter(m => this.newResponseMessages.has(m)),
   };
   public drainUnsavedMessages(): MastraMessageV2[] {
-    const messages = this.messages.filter(m => this.newMessages.has(m) || this.responseMessages.has(m));
-    this.newMessages.clear();
-    this.responseMessages.clear();
+    const messages = this.messages.filter(m => this.newUserMessages.has(m) || this.newResponseMessages.has(m));
+    this.newUserMessages.clear();
+    this.newResponseMessages.clear();
     return messages;
   }
   public getSystemMessages(tag?: string): CoreMessage[] {
@@ -383,9 +383,9 @@ ${JSON.stringify(message, null, 2)}`,
       if (messageSource === `memory`) {
         this.memoryMessages.add(messageV2);
       } else if (messageSource === `response`) {
-        this.responseMessages.add(messageV2);
+        this.newResponseMessages.add(messageV2);
       } else if (messageSource === `user`) {
-        this.newMessages.add(messageV2);
+        this.newUserMessages.add(messageV2);
       } else {
         throw new Error(`Missing message source for message ${messageV2}`);
       }

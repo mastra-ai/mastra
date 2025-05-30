@@ -23,7 +23,6 @@ export interface ChatProps {
   threadId?: string;
   initialMessages?: Message[];
   memory?: boolean;
-  baseUrl?: string;
   refreshThreadList?: () => void;
   modelSettings?: ModelSettings;
   chatWithGenerate?: boolean;

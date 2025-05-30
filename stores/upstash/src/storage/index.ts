@@ -1,5 +1,5 @@
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
-import type { StorageThreadType, MessageType } from '@mastra/core/memory';
+import type { StorageThreadType, MastraMessageV1, MastraMessageV2 } from '@mastra/core/memory';
 import {
   MastraStorage,
   TABLE_MESSAGES,
@@ -18,6 +18,7 @@ import type {
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { Redis } from '@upstash/redis';
+import { MessageList } from '../../../../packages/core/dist/agent/index.cjs';
 
 export interface UpstashConfig {
   url: string;
@@ -509,7 +510,12 @@ export class UpstashStore extends MastraStorage {
     await this.redis.del(key);
   }
 
-  async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
+  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
+  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
+  async saveMessages(
+    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
+  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
+    const { messages, format = 'v1' } = args;
     if (messages.length === 0) return [];
 
     // Add an index to each message to maintain order
@@ -523,14 +529,14 @@ export class UpstashStore extends MastraStorage {
       const batch = messagesWithIndex.slice(i, i + batchSize);
       const pipeline = this.redis.pipeline();
       for (const message of batch) {
-        const key = this.getMessageKey(message.threadId, message.id);
+        const key = this.getMessageKey(message.threadId!, message.id);
         const score = message._index !== undefined ? message._index : new Date(message.createdAt).getTime();
 
         // Store the message data
         pipeline.set(key, message);
 
         // Add to sorted set for this thread
-        pipeline.zadd(this.getThreadMessagesKey(message.threadId), {
+        pipeline.zadd(this.getThreadMessagesKey(message.threadId!), {
           score,
           member: message.id,
         });
@@ -539,10 +545,18 @@ export class UpstashStore extends MastraStorage {
       await pipeline.exec();
     }
 
-    return messages;
+    const list = new MessageList().add(messages, 'memory');
+    if (format === `v2`) return list.get.all.v2();
+    return list.get.all.v1();
   }
 
-  async getMessages<T = unknown>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T[]> {
+  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
+  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
+  public async getMessages({
+    threadId,
+    selectBy,
+    format,
+  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
     const messageIds = new Set<string>();
     const threadMessagesKey = this.getThreadMessagesKey(threadId);
@@ -585,17 +599,21 @@ export class UpstashStore extends MastraStorage {
     const messages = (
       await Promise.all(
         Array.from(messageIds).map(async id =>
-          this.redis.get<MessageType & { _index?: number }>(this.getMessageKey(threadId, id)),
+          this.redis.get<MastraMessageV2 & { _index?: number }>(this.getMessageKey(threadId, id)),
         ),
       )
-    ).filter(msg => msg !== null) as (MessageType & { _index?: number })[];
+    ).filter(msg => msg !== null) as (MastraMessageV2 & { _index?: number })[];
 
     // Sort messages by their position in the sorted set
     const messageOrder = await this.redis.zrange(threadMessagesKey, 0, -1);
     messages.sort((a, b) => messageOrder.indexOf(a!.id) - messageOrder.indexOf(b!.id));
 
     // Remove _index before returning
-    return messages.map(({ _index, ...message }) => message as unknown as T);
+    const prepared = messages.map(({ _index, ...message }) => message as unknown as MastraMessageV1);
+
+    const list = new MessageList().add(prepared, 'memory');
+    if (format === `v2`) return list.get.all.v2();
+    return list.get.all.v1();
   }
 
   async persistWorkflowSnapshot(params: {

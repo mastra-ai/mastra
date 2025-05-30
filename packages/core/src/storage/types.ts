@@ -54,6 +54,7 @@ export type StorageGetMessagesArg = {
     }[];
   };
   threadConfig?: MemoryConfig;
+  format?: 'v1' | 'v2';
 };
 
 export type EvalRow = {
