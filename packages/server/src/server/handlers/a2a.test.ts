@@ -246,6 +246,7 @@ describe('A2A Handler', () => {
         params,
         taskStore: mockTaskStore,
         agent: mockAgent,
+        agentId,
         runtimeContext: new RuntimeContext(),
       });
 
