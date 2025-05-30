@@ -25,7 +25,7 @@ export async function getTelemetryHandler({ mastra, body }: TelemetryContext) {
     }
 
     if (!storage) {
-      throw new HTTPException(400, { message: 'Storage is not initialized' });
+      return [];
     }
 
     if (!body) {
@@ -66,7 +66,10 @@ export async function storeTelemetryHandler({ mastra, body }: Context & { body: 
     const logger = mastra.getLogger();
 
     if (!storage) {
-      throw new HTTPException(400, { message: 'Storage is not initialized' });
+      return {
+        status: 'error',
+        message: 'Storage is not initialized',
+      };
     }
 
     const now = new Date();
