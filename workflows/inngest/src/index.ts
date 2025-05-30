@@ -740,6 +740,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       let suspended: { payload: any } | undefined;
       try {
         const result = await step.execute({
+          runId: executionContext.runId,
           mastra: this.mastra!,
           runtimeContext,
           inputData: prevOutput,
@@ -877,6 +878,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           this.inngestStep.run(`workflow.${workflowId}.conditional.${index}`, async () => {
             try {
               const result = await cond({
+                runId,
                 mastra: this.mastra!,
                 runtimeContext,
                 inputData: prevOutput,
