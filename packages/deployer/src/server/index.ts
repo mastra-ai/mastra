@@ -3050,7 +3050,6 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
     if (options?.playground) {
       // For all other routes, serve index.html
       let indexHtml = await readFile(join(process.cwd(), './playground/index.html'), 'utf-8');
-      console.log('PLOUF', { tel: process.env.MASTRA_TELEMETRY_DISABLED });
       indexHtml = indexHtml.replace(
         `'%%MASTRA_TELEMETRY_DISABLED%%'`,
         Boolean(process.env.MASTRA_TELEMETRY_DISABLED) ? 'true' : 'false',
