@@ -1,5 +1,16 @@
 # @mastra/playground-ui
 
+## 5.1.2-alpha.1
+
+### Patch Changes
+
+- f0d559f: Fix peerdeps for alpha channel
+- f6ddf55: fix traces not showing and reduce API surface from playground ui
+- Updated dependencies [1e8bb40]
+- Updated dependencies [f0d559f]
+  - @mastra/core@0.10.2-alpha.2
+  - @mastra/client-js@0.10.2-alpha.1
+
 ## 5.1.2-alpha.0
 
 ### Patch Changes

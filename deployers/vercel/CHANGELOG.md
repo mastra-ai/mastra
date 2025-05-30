@@ -1,5 +1,17 @@
 # @mastra/deployer-vercel
 
+## 0.10.2-alpha.2
+
+### Patch Changes
+
+- f0d559f: Fix peerdeps for alpha channel
+- Updated dependencies [e8d2aff]
+- Updated dependencies [1e8bb40]
+- Updated dependencies [4187ed4]
+- Updated dependencies [f0d559f]
+  - @mastra/deployer@0.10.2-alpha.2
+  - @mastra/core@0.10.2-alpha.2
+
 ## 0.10.2-alpha.1
 
 ### Patch Changes
