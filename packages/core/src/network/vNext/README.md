@@ -323,10 +323,6 @@ const client = new MastraClient();
 
 const network = client.getVNextNetwork('test-network');
 
-if (!network) {
-  throw new Error('Network not found');
-}
-
 console.log(await network.generate('What are the biggest cities in France?', { runtimeContext }));
 ```
 
