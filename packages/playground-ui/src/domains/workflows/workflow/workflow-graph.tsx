@@ -9,8 +9,13 @@ import { ReactFlowProvider } from '@xyflow/react';
 import { WorkflowGraphInner } from './workflow-graph-inner';
 import { WorkflowNestedGraphProvider } from '../context/workflow-nested-graph-context';
 
-export function WorkflowGraph({ workflowId, baseUrl }: { workflowId: string; baseUrl: string }) {
-  const { workflow, isLoading } = useWorkflow(workflowId, baseUrl);
+export interface WorkflowGraphProps {
+  workflowId: string;
+  onShowTrace: ({ runId, stepName }: { runId: string; stepName: string }) => void;
+}
+
+export function WorkflowGraph({ workflowId, onShowTrace }: WorkflowGraphProps) {
+  const { workflow, isLoading } = useWorkflow(workflowId);
 
   if (isLoading) {
     return (
@@ -34,7 +39,7 @@ export function WorkflowGraph({ workflowId, baseUrl }: { workflowId: string; bas
   return (
     <WorkflowNestedGraphProvider>
       <ReactFlowProvider>
-        <WorkflowGraphInner workflow={workflow} />
+        <WorkflowGraphInner workflow={workflow} onShowTrace={onShowTrace} />
       </ReactFlowProvider>
     </WorkflowNestedGraphProvider>
   );

@@ -1,5 +1,109 @@
 # @mastra/playground-ui
 
+## 5.1.2-alpha.2
+
+### Patch Changes
+
+- 068b850: fix: able to pass headers to playground components which are using the mastra client
+- Updated dependencies [ab5adbe]
+- Updated dependencies [195c428]
+- Updated dependencies [f73e11b]
+  - @mastra/core@0.10.2-alpha.3
+
+## 5.1.2-alpha.1
+
+### Patch Changes
+
+- f0d559f: Fix peerdeps for alpha channel
+- f6ddf55: fix traces not showing and reduce API surface from playground ui
+- Updated dependencies [1e8bb40]
+- Updated dependencies [f0d559f]
+  - @mastra/core@0.10.2-alpha.2
+  - @mastra/client-js@0.10.2-alpha.1
+
+## 5.1.2-alpha.0
+
+### Patch Changes
+
+- 89a69d0: add a way to go to the given trace of a workflow step
+- 9faee5b: small fixes in the workflows graph
+- 9a31c09: Highlight steps in nested workflows on workflow graph
+- Updated dependencies [592a2db]
+- Updated dependencies [e5dc18d]
+  - @mastra/client-js@0.10.2-alpha.0
+  - @mastra/core@0.10.2-alpha.0
+
+## 5.1.1
+
+### Patch Changes
+
+- b4365f6: add empty states for agents network and tools
+- d0932ac: add multi modal input behind feature flag
+- 3c2dba5: add workflow run list
+- 267773e: Show map config on workflow graph
+  Highlight borders for conditions too on workflow graph
+  Fix watch stream
+- 33f1c64: revamp the experience for workflows
+- 6015bdf: Leverage defaultAgentStreamOption, defaultAgentGenerateOption in playground
+- 7a32205: add empty states for workflows, agents and mcp servers
+- Updated dependencies [d70b807]
+- Updated dependencies [6d16390]
+- Updated dependencies [1e4a421]
+- Updated dependencies [200d0da]
+- Updated dependencies [267773e]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [f622cfa]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+- Updated dependencies [6015bdf]
+  - @mastra/core@0.10.1
+  - @mastra/client-js@0.10.1
+
+## 5.1.1-alpha.5
+
+### Patch Changes
+
+- 267773e: Show map config on workflow graph
+  Highlight borders for conditions too on workflow graph
+  Fix watch stream
+- Updated dependencies [267773e]
+  - @mastra/client-js@0.10.1-alpha.3
+
+## 5.1.1-alpha.4
+
+### Patch Changes
+
+- 3c2dba5: add workflow run list
+- 33f1c64: revamp the experience for workflows
+- Updated dependencies [d70b807]
+  - @mastra/core@0.10.1-alpha.3
+
+## 5.1.1-alpha.3
+
+### Patch Changes
+
+- 6015bdf: Leverage defaultAgentStreamOption, defaultAgentGenerateOption in playground
+- Updated dependencies [6015bdf]
+  - @mastra/client-js@0.10.1-alpha.2
+  - @mastra/core@0.10.1-alpha.2
+
+## 5.1.1-alpha.2
+
+### Patch Changes
+
+- b4365f6: add empty states for agents network and tools
+- d0932ac: add multi modal input behind feature flag
+- Updated dependencies [200d0da]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+  - @mastra/core@0.10.1-alpha.1
+  - @mastra/client-js@0.10.1-alpha.1
+
 ## 5.1.1-alpha.1
 
 ### Patch Changes

@@ -1,5 +1,34 @@
 # @mastra/firecrawl
 
+## 1.2.2-alpha.0
+
+### Patch Changes
+
+- f0d559f: Fix peerdeps for alpha channel
+- Updated dependencies [1e8bb40]
+- Updated dependencies [f0d559f]
+  - @mastra/core@0.10.2-alpha.2
+  - @mastra/rag@0.10.2-alpha.0
+
+## 1.2.1
+
+### Patch Changes
+
+- Updated dependencies [d70b807]
+- Updated dependencies [6d16390]
+- Updated dependencies [1e4a421]
+- Updated dependencies [200d0da]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [38aee50]
+- Updated dependencies [8784cef]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+- Updated dependencies [f56fd29]
+- Updated dependencies [6015bdf]
+  - @mastra/core@0.10.1
+  - @mastra/rag@0.10.1
+
 ## 1.2.1-alpha.1
 
 ### Patch Changes

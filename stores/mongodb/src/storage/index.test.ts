@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import type { MessageType, MetricResult, WorkflowRunState } from '@mastra/core';
+import type { MastraMessageV1, MetricResult, WorkflowRunState } from '@mastra/core';
 import { TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { MongoDBConfig } from './index';
@@ -40,7 +40,7 @@ class Test {
     };
   }
 
-  generateSampleMessage(threadId: string): MessageType {
+  generateSampleMessage(threadId: string): MastraMessageV1 {
     return {
       id: `msg-${randomUUID()}`,
       role: 'user',
@@ -79,16 +79,16 @@ class Test {
       result: { success: true },
       value: {},
       context: {
-        steps: {
-          [stepId]: {
-            status: options.status,
-            payload: {},
-            error: undefined,
-          },
+        [stepId]: {
+          status: options.status,
+          payload: {},
+          error: undefined,
+          startedAt: timestamp.getTime(),
+          endedAt: new Date(timestamp.getTime() + 15000).getTime(),
         },
-        triggerData: {},
-        attempts: {},
+        input: {},
       },
+      serializedStepGraph: [],
       activePaths: [],
       suspendedPaths: {},
       runId,
@@ -245,7 +245,10 @@ describe('MongoDBStore', () => {
       const thread = test.generateSampleThread();
       await store.saveThread({ thread });
 
-      const messages = [test.generateSampleMessage(thread.id), test.generateSampleMessage(thread.id)];
+      const messages = [
+        test.generateSampleMessage(thread.id),
+        { ...test.generateSampleMessage(thread.id), role: 'assistant' as const },
+      ];
 
       // Save messages
       const savedMessages = await store.saveMessages({ messages });
@@ -275,15 +278,15 @@ describe('MongoDBStore', () => {
       const messages = [
         {
           ...test.generateSampleMessage(thread.id),
-          content: [{ type: 'text', text: 'First' }] as MessageType['content'],
+          content: [{ type: 'text', text: 'First' }] as MastraMessageV1['content'],
         },
         {
           ...test.generateSampleMessage(thread.id),
-          content: [{ type: 'text', text: 'Second' }] as MessageType['content'],
+          content: [{ type: 'text', text: 'Second' }] as MastraMessageV1['content'],
         },
         {
           ...test.generateSampleMessage(thread.id),
-          content: [{ type: 'text', text: 'Third' }] as MessageType['content'],
+          content: [{ type: 'text', text: 'Third' }] as MastraMessageV1['content'],
         },
       ];
 
@@ -480,6 +483,7 @@ describe('MongoDBStore', () => {
             status: 'waiting',
           },
         ],
+        serializedStepGraph: [],
         runId: runId,
         timestamp: Date.now(),
       };
@@ -538,8 +542,8 @@ describe('MongoDBStore', () => {
       expect(runs[1]!.workflowName).toBe(workflowName1);
       const firstSnapshot = runs[0]!.snapshot as WorkflowRunState;
       const secondSnapshot = runs[1]!.snapshot as WorkflowRunState;
-      expect(firstSnapshot.context?.steps[stepId2]?.status).toBe('running');
-      expect(secondSnapshot.context?.steps[stepId1]?.status).toBe('completed');
+      expect(firstSnapshot.context?.[stepId2]?.status).toBe('running');
+      expect(secondSnapshot.context?.[stepId1]?.status).toBe('completed');
     });
 
     it('filters by workflow name', async () => {
@@ -564,7 +568,7 @@ describe('MongoDBStore', () => {
       expect(total).toBe(1);
       expect(runs[0]!.workflowName).toBe(workflowName1);
       const snapshot = runs[0]!.snapshot as WorkflowRunState;
-      expect(snapshot.context?.steps[stepId1]?.status).toBe('completed');
+      expect(snapshot.context?.[stepId1]?.status).toBe('completed');
     });
 
     it('filters by date range', async () => {
@@ -630,8 +634,8 @@ describe('MongoDBStore', () => {
       expect(runs[1]!.workflowName).toBe(workflowName2);
       const firstSnapshot = runs[0]!.snapshot as WorkflowRunState;
       const secondSnapshot = runs[1]!.snapshot as WorkflowRunState;
-      expect(firstSnapshot.context?.steps[stepId3]?.status).toBe('waiting');
-      expect(secondSnapshot.context?.steps[stepId2]?.status).toBe('running');
+      expect(firstSnapshot.context?.[stepId3]?.status).toBe('waiting');
+      expect(secondSnapshot.context?.[stepId2]?.status).toBe('running');
     });
 
     it('handles pagination', async () => {
@@ -671,8 +675,8 @@ describe('MongoDBStore', () => {
       expect(page1.runs[1]!.workflowName).toBe(workflowName2);
       const firstSnapshot = page1.runs[0]!.snapshot as WorkflowRunState;
       const secondSnapshot = page1.runs[1]!.snapshot as WorkflowRunState;
-      expect(firstSnapshot.context?.steps[stepId3]?.status).toBe('waiting');
-      expect(secondSnapshot.context?.steps[stepId2]?.status).toBe('running');
+      expect(firstSnapshot.context?.[stepId3]?.status).toBe('waiting');
+      expect(secondSnapshot.context?.[stepId2]?.status).toBe('running');
 
       // Get second page
       const page2 = await store.getWorkflowRuns({ limit: 2, offset: 2 });
@@ -680,7 +684,7 @@ describe('MongoDBStore', () => {
       expect(page2.total).toBe(3);
       expect(page2.runs[0]!.workflowName).toBe(workflowName1);
       const snapshot = page2.runs[0]!.snapshot as WorkflowRunState;
-      expect(snapshot.context?.steps[stepId1]?.status).toBe('completed');
+      expect(snapshot.context?.[stepId1]?.status).toBe('completed');
     });
   });
 

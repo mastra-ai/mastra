@@ -56,18 +56,14 @@ const tabIndicatorClass = cn(
 
 const tabContentClass = cn('data-[state=inactive]:mt-0 min-h-0 h-full grid grid-rows-[1fr]');
 
-export function AgentEvals({ agentId, baseUrl }: { agentId: string; baseUrl?: string }) {
+export function AgentEvals({ agentId }: { agentId: string }) {
   const [activeTab, setActiveTab] = useState<'live' | 'ci'>('live');
   const {
     evals: liveEvals,
     isLoading: isLiveLoading,
     refetchEvals: refetchLiveEvals,
-  } = useEvalsByAgentId(agentId, 'live', baseUrl);
-  const {
-    evals: ciEvals,
-    isLoading: isCiLoading,
-    refetchEvals: refetchCiEvals,
-  } = useEvalsByAgentId(agentId, 'ci', baseUrl);
+  } = useEvalsByAgentId(agentId, 'live');
+  const { evals: ciEvals, isLoading: isCiLoading, refetchEvals: refetchCiEvals } = useEvalsByAgentId(agentId, 'ci');
 
   const contextValue = {
     handleRefresh,

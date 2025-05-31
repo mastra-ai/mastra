@@ -25,10 +25,6 @@ const logger = createLogger({
 });
 
 describe('LegacyWorkflow', async () => {
-  beforeEach(async () => {
-    await storage.init();
-  });
-
   describe('Basic LegacyWorkflow Execution', () => {
     it('should execute a single step workflow successfully', async () => {
       const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
@@ -2537,7 +2533,6 @@ describe('LegacyWorkflow', async () => {
 
       // Create a new storage instance for initial run
       const initialStorage = new MockStore();
-      await initialStorage.init();
 
       const mastra = new Mastra({
         logger,
@@ -3134,8 +3129,6 @@ describe('LegacyWorkflow', async () => {
     });
 
     it('should get workflow runs from storage', async () => {
-      await storage.init();
-
       const step1Action = vi.fn<any>().mockResolvedValue({ result: 'success1' });
       const step2Action = vi.fn<any>().mockResolvedValue({ result: 'success2' });
 

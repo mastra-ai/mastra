@@ -1,5 +1,5 @@
 import type { KVNamespace } from '@cloudflare/workers-types';
-import type { MessageType, StorageThreadType } from '@mastra/core/memory';
+import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 import {
   TABLE_MESSAGES,
@@ -264,10 +264,10 @@ describe('CloudflareStore Workers Binding', () => {
           threadId: 'thread-1',
           content: [{ type: 'text', text: 'test-data-2' }],
           role: 'user',
-        } as MessageType,
+        } as MastraMessageV1,
       });
 
-      const result = await store.load<MessageType>({
+      const result = await store.load<MastraMessageV1>({
         tableName: testTableName2,
         keys: { id: 'test2', threadId: 'thread-1' },
       });
@@ -364,7 +364,7 @@ describe('CloudflareStore Workers Binding', () => {
 
       // Add some messages
       const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
       await store.deleteThread({ threadId: thread.id });
 
@@ -376,7 +376,7 @@ describe('CloudflareStore Workers Binding', () => {
 
       // Verify messages were also deleted with retry
       const retrievedMessages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
+        async () => await store.getMessages({ threadId: thread.id, format: 'v2' }),
         messages => messages.length === 0,
       );
       expect(retrievedMessages).toHaveLength(0);
@@ -395,13 +395,13 @@ describe('CloudflareStore Workers Binding', () => {
       const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
 
       // Save messages
-      const savedMessages = await store.saveMessages({ messages });
+      const savedMessages = await store.saveMessages({ messages, format: 'v2' });
       expect(savedMessages).toEqual(messages);
 
       // Retrieve messages with retry
       const retrievedMessages = await retryUntil(
         async () => {
-          const msgs = await store.getMessages({ threadId: thread.id });
+          const msgs = await store.getMessages({ threadId: thread.id, format: 'v2' });
           return msgs;
         },
         msgs => msgs.length === 2,
@@ -421,23 +421,20 @@ describe('CloudflareStore Workers Binding', () => {
 
       const messages = [
         {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'First' }] as MessageType['content'],
+          ...createSampleMessage(thread.id, [{ type: 'text' as const, text: 'First' }]),
         },
         {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'Second' }] as MessageType['content'],
+          ...createSampleMessage(thread.id, [{ type: 'text' as const, text: 'Second' }]),
         },
         {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'Third' }] as MessageType['content'],
+          ...createSampleMessage(thread.id, [{ type: 'text' as const, text: 'Third' }]),
         },
       ];
 
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
       const retrievedMessages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
+        async () => await store.getMessages({ threadId: thread.id, format: 'v2' }),
         messages => messages.length > 0,
       );
       expect(retrievedMessages).toHaveLength(3);
@@ -581,7 +578,7 @@ describe('CloudflareStore Workers Binding', () => {
         createdAt: timestamp,
       }));
 
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
       // Verify order is maintained based on insertion order
       const orderKey = store['getThreadMessagesKey'](thread.id);
@@ -607,7 +604,7 @@ describe('CloudflareStore Workers Binding', () => {
 
       // Save messages in reverse order to verify write order is preserved
       const reversedMessages = [...messages].reverse(); // newest -> oldest
-      await Promise.all(reversedMessages.map(msg => store.saveMessages({ messages: [msg] })));
+      await Promise.all(reversedMessages.map(msg => store.saveMessages({ messages: [msg], format: 'v2' })));
 
       // Verify messages are saved and maintain write order (not timestamp order)
       const orderKey = store['getThreadMessagesKey'](thread.id);
@@ -632,7 +629,7 @@ describe('CloudflareStore Workers Binding', () => {
 
       // Create initial messages
       const messages = Array.from({ length: 3 }, () => createSampleMessage(thread.id));
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
       // Update scores to reverse order
       const orderKey = store['getThreadMessagesKey'](thread.id);
@@ -674,7 +671,7 @@ describe('CloudflareStore Workers Binding', () => {
           content: [{ type: 'text', text: 'Third' }],
           createdAt: new Date(baseTime + 2000),
         },
-      ] as MessageType[];
+      ] as MastraMessageV1[];
 
       await store.saveMessages({ messages });
 
@@ -1250,16 +1247,15 @@ describe('CloudflareStore Workers Binding', () => {
     it('should sanitize and handle special characters', async () => {
       const thread = createSampleThread();
       const message = {
-        ...createSampleMessage(thread.id),
-        content: [{ type: 'text' as const, text: '特殊字符 !@#$%^&*()' }] as MessageType['content'],
+        ...createSampleMessage(thread.id, [{ type: 'text' as const, text: '特殊字符 !@#$%^&*()' }]),
       };
 
       await store.saveThread({ thread });
-      await store.saveMessages({ messages: [message] });
+      await store.saveMessages({ messages: [message], format: 'v2' });
 
       // Should retrieve correctly
       const messages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
+        async () => await store.getMessages({ threadId: thread.id, format: 'v2' }),
         messages => messages.length > 0,
       );
       expect(messages).toHaveLength(1);
@@ -1319,7 +1315,7 @@ describe('CloudflareStore Workers Binding', () => {
 
       // Save thread and message
       await store.saveThread({ thread });
-      await store.saveMessages({ messages: [message] });
+      await store.saveMessages({ messages: [message], format: 'v2' });
 
       // Verify message key format
       const msgKey = store['getKey'](TABLE_MESSAGES, { threadId: thread.id, id: message.id });
@@ -1358,7 +1354,7 @@ describe('CloudflareStore Workers Binding', () => {
       }));
 
       // Save messages in parallel - write order should be preserved
-      await Promise.all(messages.map(msg => store.saveMessages({ messages: [msg] })));
+      await Promise.all(messages.map(msg => store.saveMessages({ messages: [msg], format: 'v2' })));
 
       // Order should reflect write order, not timestamp order
       const orderKey = store['getThreadMessagesKey'](thread.id);
@@ -1379,7 +1375,7 @@ describe('CloudflareStore Workers Binding', () => {
 
       // Create initial messages
       const messages = Array.from({ length: 3 }, () => createSampleMessage(thread.id));
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
       const orderKey = store['getThreadMessagesKey'](thread.id);
 
@@ -1413,7 +1409,7 @@ describe('CloudflareStore Workers Binding', () => {
       const messages = Array.from({ length: 3 }, () => createSampleMessage(thread.id));
 
       await store.saveThread({ thread });
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
       // Verify messages exist
       const orderKey = store['getThreadMessagesKey'](thread.id);
@@ -1450,11 +1446,11 @@ describe('CloudflareStore Workers Binding', () => {
         ...createSampleMessage(thread.id),
         createdAt: new Date(Date.now() + i * 1000),
       }));
-      await store.saveMessages({ messages: testMessages });
+      await store.saveMessages({ messages: testMessages, format: 'v2' });
 
       // Verify messages are saved
       const initialMessages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
+        async () => await store.getMessages({ threadId: thread.id, format: 'v2' }),
         messages => messages.length === testMessages.length,
       );
       expect(initialMessages).toHaveLength(testMessages.length);
@@ -1476,7 +1472,7 @@ describe('CloudflareStore Workers Binding', () => {
 
       // Verify all data is cleaned up
       const remainingMessages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
+        async () => await store.getMessages({ threadId: thread.id, format: 'v2' }),
         messages => messages.length === 0,
       );
       expect(remainingMessages).toHaveLength(0);
@@ -1562,7 +1558,7 @@ describe('CloudflareStore Workers Binding', () => {
       }));
 
       // Save messages in parallel to create race condition
-      await Promise.all(messages.map(msg => store.saveMessages({ messages: [msg] })));
+      await Promise.all(messages.map(msg => store.saveMessages({ messages: [msg], format: 'v2' })));
 
       // Verify both presence and order consistency
       const orderKey = store['getThreadMessagesKey'](thread.id);
@@ -1612,6 +1608,7 @@ describe('CloudflareStore Workers Binding', () => {
       await expect(
         store.saveMessages({
           messages: [message],
+          format: 'v2',
         }),
       ).rejects.toThrow();
     });
@@ -1621,16 +1618,15 @@ describe('CloudflareStore Workers Binding', () => {
       await store.saveThread({ thread });
 
       // Test with various malformed data
-      const malformedMessage = {
-        ...createSampleMessage(thread.id),
-        content: [{ type: 'text' as const, text: ''.padStart(1024 * 1024, 'x') }] as MessageType['content'], // Very large content
-      };
+      const malformedMessage = createSampleMessage(thread.id, [
+        { type: 'text' as const, text: ''.padStart(1024 * 1024, 'x') },
+      ]);
 
-      await store.saveMessages({ messages: [malformedMessage] });
+      await store.saveMessages({ messages: [malformedMessage], format: 'v2' });
 
       // Should still be able to retrieve and handle the message
       const messages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
+        async () => await store.getMessages({ threadId: thread.id, format: 'v2' }),
         messages => messages.length === 1,
       );
       expect(messages).toHaveLength(1);
@@ -1643,7 +1639,7 @@ describe('CloudflareStore Workers Binding', () => {
 
       // Create initial messages
       const messages = Array.from({ length: 3 }, () => createSampleMessage(thread.id));
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
       // Perform multiple concurrent updates
       const orderKey = store['getThreadMessagesKey'](thread.id);

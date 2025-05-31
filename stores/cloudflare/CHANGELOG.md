@@ -1,5 +1,61 @@
 # @mastra/cloudflare
 
+## 0.10.2-alpha.2
+
+### Patch Changes
+
+- f0d559f: Fix peerdeps for alpha channel
+- Updated dependencies [1e8bb40]
+  - @mastra/core@0.10.2-alpha.2
+
+## 0.10.2-alpha.1
+
+### Patch Changes
+
+- e9d2ca8: Add pagination to cloudflare kv listing namespaces.
+- Updated dependencies [ee77e78]
+- Updated dependencies [2901125]
+  - @mastra/core@0.10.2-alpha.1
+
+## 0.10.2-alpha.0
+
+### Patch Changes
+
+- e5dc18d: Added a backwards compatible layer to begin storing/retrieving UIMessages in storage instead of CoreMessages
+- Updated dependencies [592a2db]
+- Updated dependencies [e5dc18d]
+  - @mastra/core@0.10.2-alpha.0
+
+## 0.10.1
+
+### Patch Changes
+
+- 5c41100: Added binding support for cloudflare deployers, added cloudflare kv namespace changes, and removed randomUUID from buildExecutionGraph
+- Updated dependencies [d70b807]
+- Updated dependencies [6d16390]
+- Updated dependencies [1e4a421]
+- Updated dependencies [200d0da]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+- Updated dependencies [6015bdf]
+  - @mastra/core@0.10.1
+
+## 0.10.1-alpha.0
+
+### Patch Changes
+
+- 5c41100: Added binding support for cloudflare deployers, added cloudflare kv namespace changes, and removed randomUUID from buildExecutionGraph
+- Updated dependencies [200d0da]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+  - @mastra/core@0.10.1-alpha.1
+
 ## 0.10.0
 
 ### Minor Changes

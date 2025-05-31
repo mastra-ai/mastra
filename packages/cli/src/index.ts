@@ -11,6 +11,7 @@ import { dev } from './commands/dev/dev';
 import { init } from './commands/init/init';
 import { checkAndInstallCoreDeps, checkPkgJson, interactivePrompt } from './commands/init/utils';
 import { lint } from './commands/lint';
+import { start } from './commands/start';
 import { DepsService } from './services/service.deps';
 import { logger } from './utils/logger';
 
@@ -225,6 +226,25 @@ program
           Then deploy .mastra/output to your target platform.
           `);
         await deploy({ dir: args.dir });
+      },
+      origin,
+    });
+  });
+
+program
+  .command('start')
+  .description('Start your built Mastra application')
+  .option('-d, --dir <path>', 'Path to your built Mastra output directory (default: .mastra/output)')
+  .option('-nt, --no-telemetry', 'Disable telemetry on start')
+  .action(async args => {
+    await analytics.trackCommandExecution({
+      command: 'start',
+      args,
+      execution: async () => {
+        await start({
+          dir: args.dir,
+          telemetry: !args.noTelemetry,
+        });
       },
       origin,
     });

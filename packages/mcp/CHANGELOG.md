@@ -1,5 +1,56 @@
 # @mastra/mcp
 
+## 0.10.2-alpha.1
+
+### Patch Changes
+
+- f0d559f: Fix peerdeps for alpha channel
+- Updated dependencies [1e8bb40]
+  - @mastra/core@0.10.2-alpha.2
+
+## 0.10.2-alpha.0
+
+### Patch Changes
+
+- 592a2db: Added different icons for agents and workflows in mcp tools list
+- Updated dependencies [592a2db]
+- Updated dependencies [e5dc18d]
+  - @mastra/core@0.10.2-alpha.0
+
+## 0.10.1
+
+### Patch Changes
+
+- ab89d6a: Adds support for the full resources spec for MCP in the MCPClient and MCPServer classes. Includes resources/list, resources/read, resources/templates/list, resources/subscribe, resources/unsubscribe, notifications/resources/list_changed, and notifications/resources/updated APIs.
+- bf5f17b: Adds ability to pass workflows into MCPServer to generate tools from the workflows. Each workflow will become a tool that can start the workflow run.
+- 38aee50: Adds ability to pass an agents into an MCPServer instance to automatically generate tools from them.
+- Updated dependencies [d70b807]
+- Updated dependencies [6d16390]
+- Updated dependencies [1e4a421]
+- Updated dependencies [200d0da]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+- Updated dependencies [6015bdf]
+  - @mastra/core@0.10.1
+
+## 0.10.1-alpha.0
+
+### Patch Changes
+
+- ab89d6a: Adds support for the full resources spec for MCP in the MCPClient and MCPServer classes. Includes resources/list, resources/read, resources/templates/list, resources/subscribe, resources/unsubscribe, notifications/resources/list_changed, and notifications/resources/updated APIs.
+- bf5f17b: Adds ability to pass workflows into MCPServer to generate tools from the workflows. Each workflow will become a tool that can start the workflow run.
+- 38aee50: Adds ability to pass an agents into an MCPServer instance to automatically generate tools from them.
+- Updated dependencies [200d0da]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+  - @mastra/core@0.10.1-alpha.1
+
 ## 0.10.0
 
 ### Minor Changes

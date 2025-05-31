@@ -18,6 +18,7 @@
   --border: hsla(0, 0%, 19%, 1);
   --color-text-icon-5: hsla(0, 0%, 90%, 1);
   --color-text-icon-6: hsla(0, 0%, 100%, 1);
+  --primary: #050505;
   --border-2: hsla(0, 0%, 26%, 1);
 }
 
@@ -409,10 +410,13 @@ pre code.nextra-code:not([class*="twoslash-"]) > span[data-highlighted-line] {
     background-color: var(--color-surface-5);
   }
 }
-main h3:has(+ div.nextra-code) {
+
+h3#npx,
+h3#npm,
+h3#yarn,
+h3#pnpm {
   display: none;
 }
-
 .nextra-code {
   white-space: nowrap;
 }

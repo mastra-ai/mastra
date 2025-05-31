@@ -140,16 +140,16 @@ npx -y mastra@latest --project-name <your-project> --example --components "tools
 <Steps>
   Mastraプロジェクトを手動でセットアップしたい場合は、以下の手順に従ってください：
 
-  ### 新しいプロジェクトの作成
+### 新しいプロジェクトの作成
 
-  プロジェクトディレクトリを作成し、その中に移動します：
+プロジェクトディレクトリを作成し、その中に移動します：
 
-  ```bash copy
-  mkdir hello-mastra
-  cd hello-mastra
-  ```
+```bash copy
+mkdir hello-mastra
+cd hello-mastra
+```
 
-  次に、`@mastra/core`パッケージを含むTypeScriptプロジェクトを初期化します：
+次に、`@mastra/core`パッケージを含むTypeScriptプロジェクトを初期化します：
 
   <Tabs items={["npm", "pnpm", "yarn", "bun"]}>
     <Tabs.Tab>
@@ -171,7 +171,7 @@ npx -y mastra@latest --project-name <your-project> --example --components "tools
     </Tabs.Tab>
 
     <Tabs.Tab>
-      ```bash copy 
+      ```bash copy
       yarn init -y
       yarn add typescript tsx @types/node mastra@latest --dev
       yarn add @mastra/core@latest zod @ai-sdk/openai
@@ -187,199 +187,198 @@ npx -y mastra@latest --project-name <your-project> --example --components "tools
       bunx tsc --init
       ```
     </Tabs.Tab>
+
   </Tabs>
 
-  ### TypeScriptの初期化
+### TypeScriptの初期化
 
-  プロジェクトのルートに以下の設定で`tsconfig.json`ファイルを作成します：
+プロジェクトのルートに以下の設定で`tsconfig.json`ファイルを作成します：
 
-  ```json copy
-  {
-    "compilerOptions": {
-      "target": "ES2022",
-      "module": "ES2022",
-      "moduleResolution": "bundler",
-      "esModuleInterop": true,
-      "forceConsistentCasingInFileNames": true,
-      "strict": true,
-      "skipLibCheck": true,
-      "outDir": "dist"
-    },
-    "include": ["src/**/*"],
-    "exclude": ["node_modules", "dist", ".mastra"]
-  }
-  ```
+```json copy
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "outDir": "dist"
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", ".mastra"]
+}
+```
 
-  このTypeScript設定は、最新のモジュール解決と厳格な型チェックを使用して、Mastraプロジェクト向けに最適化されています。
+このTypeScript設定は、最新のモジュール解決と厳格な型チェックを使用して、Mastraプロジェクト向けに最適化されています。
 
-  ### APIキーの設定
+### APIキーの設定
 
-  プロジェクトのルートディレクトリに`.env`ファイルを作成し、APIキーを追加します：
+プロジェクトのルートディレクトリに`.env`ファイルを作成し、APIキーを追加します：
 
-  ```bash filename=".env" copy
-  OPENAI_API_KEY=<your-openai-key>
-  ```
+```bash filename=".env" copy
+OPENAI_API_KEY=<your-openai-key>
+```
 
-  your\_openai\_api\_keyを実際のAPIキーに置き換えてください。
+your_openai_api_keyを実際のAPIキーに置き換えてください。
 
-  ### ツールの作成
+### ツールの作成
 
-  `weather-tool`ツールファイルを作成します：
+`weather-tool`ツールファイルを作成します：
 
-  ```bash copy
-  mkdir -p src/mastra/tools && touch src/mastra/tools/weather-tool.ts
-  ```
+```bash copy
+mkdir -p src/mastra/tools && touch src/mastra/tools/weather-tool.ts
+```
 
-  次に、`src/mastra/tools/weather-tool.ts`に以下のコードを追加します：
+次に、`src/mastra/tools/weather-tool.ts`に以下のコードを追加します：
 
-  ```ts filename="src/mastra/tools/weather-tool.ts" showLineNumbers copy
-  import { createTool } from "@mastra/core/tools";
-  import { z } from "zod";
+```ts filename="src/mastra/tools/weather-tool.ts" showLineNumbers copy
+import { createTool } from "@mastra/core/tools";
+import { z } from "zod";
 
-  interface WeatherResponse {
-    current: {
-      time: string;
-      temperature_2m: number;
-      apparent_temperature: number;
-      relative_humidity_2m: number;
-      wind_speed_10m: number;
-      wind_gusts_10m: number;
-      weather_code: number;
-    };
-  }
-
-  export const weatherTool = createTool({
-    id: "get-weather",
-    description: "Get current weather for a location",
-    inputSchema: z.object({
-      location: z.string().describe("City name"),
-    }),
-    outputSchema: z.object({
-      temperature: z.number(),
-      feelsLike: z.number(),
-      humidity: z.number(),
-      windSpeed: z.number(),
-      windGust: z.number(),
-      conditions: z.string(),
-      location: z.string(),
-    }),
-    execute: async ({ context }) => {
-      return await getWeather(context.location);
-    },
-  });
-
-  const getWeather = async (location: string) => {
-    const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1`;
-    const geocodingResponse = await fetch(geocodingUrl);
-    const geocodingData = await geocodingResponse.json();
-
-    if (!geocodingData.results?.[0]) {
-      throw new Error(`Location '${location}' not found`);
-    }
-
-    const { latitude, longitude, name } = geocodingData.results[0];
-
-    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,weather_code`;
-
-    const response = await fetch(weatherUrl);
-    const data: WeatherResponse = await response.json();
-
-    return {
-      temperature: data.current.temperature_2m,
-      feelsLike: data.current.apparent_temperature,
-      humidity: data.current.relative_humidity_2m,
-      windSpeed: data.current.wind_speed_10m,
-      windGust: data.current.wind_gusts_10m,
-      conditions: getWeatherCondition(data.current.weather_code),
-      location: name,
-    };
+interface WeatherResponse {
+  current: {
+    time: string;
+    temperature_2m: number;
+    apparent_temperature: number;
+    relative_humidity_2m: number;
+    wind_speed_10m: number;
+    wind_gusts_10m: number;
+    weather_code: number;
   };
+}
 
-  function getWeatherCondition(code: number): string {
-    const conditions: Record<number, string> = {
-      0: "Clear sky",
-      1: "Mainly clear",
-      2: "Partly cloudy",
-      3: "Overcast",
-      45: "Foggy",
-      48: "Depositing rime fog",
-      51: "Light drizzle",
-      53: "Moderate drizzle",
-      55: "Dense drizzle",
-      56: "Light freezing drizzle",
-      57: "Dense freezing drizzle",
-      61: "Slight rain",
-      63: "Moderate rain",
-      65: "Heavy rain",
-      66: "Light freezing rain",
-      67: "Heavy freezing rain",
-      71: "Slight snow fall",
-      73: "Moderate snow fall",
-      75: "Heavy snow fall",
-      77: "Snow grains",
-      80: "Slight rain showers",
-      81: "Moderate rain showers",
-      82: "Violent rain showers",
-      85: "Slight snow showers",
-      86: "Heavy snow showers",
-      95: "Thunderstorm",
-      96: "Thunderstorm with slight hail",
-      99: "Thunderstorm with heavy hail",
-    };
-    return conditions[code] || "Unknown";
+export const weatherTool = createTool({
+  id: "get-weather",
+  description: "Get current weather for a location",
+  inputSchema: z.object({
+    location: z.string().describe("City name"),
+  }),
+  outputSchema: z.object({
+    temperature: z.number(),
+    feelsLike: z.number(),
+    humidity: z.number(),
+    windSpeed: z.number(),
+    windGust: z.number(),
+    conditions: z.string(),
+    location: z.string(),
+  }),
+  execute: async ({ context }) => {
+    return await getWeather(context.location);
+  },
+});
+
+const getWeather = async (location: string) => {
+  const geocodingUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1`;
+  const geocodingResponse = await fetch(geocodingUrl);
+  const geocodingData = await geocodingResponse.json();
+
+  if (!geocodingData.results?.[0]) {
+    throw new Error(`Location '${location}' not found`);
   }
-  ```
 
-  ### エージェントを作成する
+  const { latitude, longitude, name } = geocodingData.results[0];
 
-  `weather`エージェントファイルを作成します：
+  const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_gusts_10m,weather_code`;
 
-  ```bash copy
-  mkdir -p src/mastra/agents && touch src/mastra/agents/weather.ts
-  ```
+  const response = await fetch(weatherUrl);
+  const data: WeatherResponse = await response.json();
 
-  次に、以下のコードを`src/mastra/agents/weather.ts`に追加します：
+  return {
+    temperature: data.current.temperature_2m,
+    feelsLike: data.current.apparent_temperature,
+    humidity: data.current.relative_humidity_2m,
+    windSpeed: data.current.wind_speed_10m,
+    windGust: data.current.wind_gusts_10m,
+    conditions: getWeatherCondition(data.current.weather_code),
+    location: name,
+  };
+};
 
-  ```ts filename="src/mastra/agents/weather.ts" showLineNumbers copy
-  import { openai } from "@ai-sdk/openai";
-  import { Agent } from "@mastra/core/agent";
-  import { weatherTool } from "../tools/weather-tool";
+function getWeatherCondition(code: number): string {
+  const conditions: Record<number, string> = {
+    0: "Clear sky",
+    1: "Mainly clear",
+    2: "Partly cloudy",
+    3: "Overcast",
+    45: "Foggy",
+    48: "Depositing rime fog",
+    51: "Light drizzle",
+    53: "Moderate drizzle",
+    55: "Dense drizzle",
+    56: "Light freezing drizzle",
+    57: "Dense freezing drizzle",
+    61: "Slight rain",
+    63: "Moderate rain",
+    65: "Heavy rain",
+    66: "Light freezing rain",
+    67: "Heavy freezing rain",
+    71: "Slight snow fall",
+    73: "Moderate snow fall",
+    75: "Heavy snow fall",
+    77: "Snow grains",
+    80: "Slight rain showers",
+    81: "Moderate rain showers",
+    82: "Violent rain showers",
+    85: "Slight snow showers",
+    86: "Heavy snow showers",
+    95: "Thunderstorm",
+    96: "Thunderstorm with slight hail",
+    99: "Thunderstorm with heavy hail",
+  };
+  return conditions[code] || "Unknown";
+}
+```
 
-  export const weatherAgent = new Agent({
-    name: "Weather Agent",
-    instructions: `You are a helpful weather assistant that provides accurate weather information.
+### エージェントを作成する
 
-  Your primary function is to help users get weather details for specific locations. When responding:
-  - Always ask for a location if none is provided
-  - If the location name isn't in English, please translate it
-  - Include relevant details like humidity, wind conditions, and precipitation
-  - Keep responses concise but informative
+`weather`エージェントファイルを作成します：
 
-  Use the weatherTool to fetch current weather data.`,
-    model: openai("gpt-4o-mini"),
-    tools: { weatherTool },
-  });
-  ```
+```bash copy
+mkdir -p src/mastra/agents && touch src/mastra/agents/weather.ts
+```
 
-  ### エージェントの登録
+次に、以下のコードを`src/mastra/agents/weather.ts`に追加します：
 
-  最後に、`src/mastra/index.ts`にMastraのエントリーポイントを作成し、エージェントを登録します：
+```ts filename="src/mastra/agents/weather.ts" showLineNumbers copy
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { weatherTool } from "../tools/weather-tool";
 
-  ```ts filename="src/mastra/index.ts" showLineNumbers copy
-  import { Mastra } from "@mastra/core";
+export const weatherAgent = new Agent({
+  name: "Weather Agent",
+  instructions: `You are a helpful weather assistant that provides accurate weather information.
 
-  import { weatherAgent } from "./agents/weather";
+Your primary function is to help users get weather details for specific locations. When responding:
+- Always ask for a location if none is provided
+- If the location name isn't in English, please translate it
+- Include relevant details like humidity, wind conditions, and precipitation
+- Keep responses concise but informative
 
-  export const mastra = new Mastra({
-    agents: { weatherAgent },
-  });
-  ```
+Use the weatherTool to fetch current weather data.`,
+  model: openai("gpt-4o-mini"),
+  tools: { weatherTool },
+});
+```
 
-  これにより、エージェントがMastraに登録され、`mastra dev`がそれを検出して提供できるようになります。
+### エージェントの登録
+
+最後に、`src/mastra/index.ts`にMastraのエントリーポイントを作成し、エージェントを登録します：
+
+```ts filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core";
+
+import { weatherAgent } from "./agents/weather";
+
+export const mastra = new Mastra({
+  agents: { weatherAgent },
+});
+```
+
+これにより、エージェントがMastraに登録され、`mastra dev`がそれを検出して提供できるようになります。
+
 </Steps>
-
-
-
 
 ## 既存プロジェクトへのインストール
 

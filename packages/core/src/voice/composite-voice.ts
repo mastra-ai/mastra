@@ -71,6 +71,16 @@ export class CompositeVoice extends MastraVoice<unknown, unknown, unknown, Tools
     throw new Error('No speak provider or realtime provider configured');
   }
 
+  async getListener() {
+    if (this.realtimeProvider) {
+      return this.realtimeProvider.getListener();
+    } else if (this.listenProvider) {
+      return this.listenProvider.getListener();
+    }
+
+    throw new Error('No listener provider or realtime provider configured');
+  }
+
   updateConfig(options: Record<string, unknown>): void {
     if (!this.realtimeProvider) {
       return;

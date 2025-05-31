@@ -12,6 +12,7 @@ import type {
   ConvertedTool,
   MCPServerHonoSSEOptions,
   MCPServerSSEOptions,
+  MCPToolType,
 } from '@mastra/core/mcp';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import type { Workflow } from '@mastra/core/workflows';
@@ -217,6 +218,7 @@ export class MCPServer extends MCPServerBase {
         description: coreTool.description,
         parameters: coreTool.parameters,
         execute: coreTool.execute!,
+        toolType: 'agent',
       };
       this.logger.info(`Registered agent '${agent.name}' (key: '${agentKey}') as tool: '${agentToolName}'`);
     }
@@ -295,6 +297,7 @@ export class MCPServer extends MCPServerBase {
         description: coreTool.description,
         parameters: coreTool.parameters,
         execute: coreTool.execute!,
+        toolType: 'workflow',
       };
       this.logger.info(`Registered workflow '${workflow.id}' (key: '${workflowKey}') as tool: '${workflowToolName}'`);
     }
@@ -903,7 +906,9 @@ export class MCPServer extends MCPServerBase {
    * This leverages the same tool information used by the internal ListTools MCP request.
    * @returns An object containing an array of tool information.
    */
-  public getToolListInfo(): { tools: Array<{ name: string; description?: string; inputSchema: any }> } {
+  public getToolListInfo(): {
+    tools: Array<{ name: string; description?: string; inputSchema: any; toolType?: MCPToolType }>;
+  } {
     this.logger.debug(`Getting tool list information for MCPServer '${this.name}'`);
     return {
       tools: Object.entries(this.convertedTools).map(([toolId, tool]) => ({
@@ -911,6 +916,7 @@ export class MCPServer extends MCPServerBase {
         name: tool.name,
         description: tool.description,
         inputSchema: tool.parameters?.jsonSchema || tool.parameters,
+        toolType: tool.toolType,
       })),
     };
   }
@@ -920,7 +926,9 @@ export class MCPServer extends MCPServerBase {
    * @param toolId The ID/name of the tool to retrieve.
    * @returns Tool information (name, description, inputSchema) or undefined if not found.
    */
-  public getToolInfo(toolId: string): { name: string; description?: string; inputSchema: any } | undefined {
+  public getToolInfo(
+    toolId: string,
+  ): { name: string; description?: string; inputSchema: any; toolType?: MCPToolType } | undefined {
     const tool = this.convertedTools[toolId];
     if (!tool) {
       this.logger.debug(`Tool '${toolId}' not found on MCPServer '${this.name}'`);
@@ -931,6 +939,7 @@ export class MCPServer extends MCPServerBase {
       name: tool.name,
       description: tool.description,
       inputSchema: tool.parameters?.jsonSchema || tool.parameters,
+      toolType: tool.toolType,
     };
   }
 

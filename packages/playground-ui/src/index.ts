@@ -1,5 +1,6 @@
 import './index.css';
 
+export * from './contexts/mastra-client-context';
 export * from './domains/agents/index';
 export * from './domains/networks/index';
 export * from './domains/workflows/index';
@@ -19,9 +20,9 @@ export * from './ds/components/Entity/index';
 export * from './ds/components/EmptyState/index';
 export * from './ds/icons/index';
 export * from './lib/polls';
+export * from './hooks/use-speech-recognition';
 export { useTraces } from './hooks/index';
 
-export { TraceContext, TraceProvider } from './domains/traces/context/trace-context';
 export type { TraceContextType } from './domains/traces/context/trace-context';
 export { refineTraces } from './domains/traces/utils';
 
