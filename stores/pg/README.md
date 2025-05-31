@@ -20,7 +20,7 @@ npm install @mastra/pg
 ```typescript
 import { PgVector } from '@mastra/pg';
 
-const vectorStore = new PgVector('postgresql://user:pass@localhost:5432/db');
+const vectorStore = new PgVector({ connectionString: 'postgresql://user:pass@localhost:5432/db' });
 
 // Create a new table with vector support
 await vectorStore.createIndex({
