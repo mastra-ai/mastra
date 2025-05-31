@@ -114,6 +114,7 @@ For detailed configuration options, see the [`MCPClient` reference documentation
 
 MCP servers can be discovered through registries. Here's how to connect to some popular ones using `MCPClient`:
 
+
 {/*
 LLM CONTEXT: This Tabs component shows how to connect to different MCP (Model Context Protocol) registries.
 Each tab demonstrates the configuration for a specific MCP registry service (mcp.run, Composio.dev, Smithery.ai).
@@ -121,7 +122,7 @@ The tabs help users understand how to connect to various MCP server providers an
 Each tab shows the specific URL patterns and configuration needed for that registry service.
 */}
 
-<Tabs items={["mcp.run", "Composio.dev", "Smithery.ai"]}>
+<Tabs items={["mcp.run", "Composio.dev", "Smithery.ai", "Ampersand"]}>
   <Tabs.Tab>
     [mcp.run](https://www.mcp.run/) provides pre-authenticated, managed MCP servers. Tools are grouped into Profiles, each with a unique, signed URL.
 
@@ -210,6 +211,60 @@ Each tab shows the specific URL patterns and configuration needed for that regis
           ],
         },
       },
+    });
+    ```
+
+  </Tabs.Tab>
+    <Tabs.Tab>
+
+    [Ampersand](https://withampersand.com?utm_source=mastra-docs) offers a single multi-tenant [MCP Server](https://www.npmjs.com/package/@amp-labs/mcp-server) that allows you to connect your agent to 150+ B2B Integrations. 
+    
+
+    ```typescript
+
+    // MCPClient with Ampersand MCP Server with SSE
+    export const mcp = new MCPClient({
+        servers: {
+        "@amp-labs/mcp-server": {
+          "url": `https://mcp.withampersand.com/sse?${new URLSearchParams({
+            apiKey: process.env.AMPERSAND_API_KEY,
+            project: process.env.AMPERSAND_PROJECT_ID,
+            integrationName: process.env.AMPERSAND_INTEGRATION_NAME,
+            groupRef: process.env.AMPERSAND_GROUP_REF
+          })}`
+        }
+      }
+    });
+
+    ```
+
+    ```typescript
+    // If you prefer to run the MCP server locally:
+    
+    import { MCPClient } from "@mastra/mcp";
+
+    // MCPClient with Ampersand MCP Server using stdio transport
+    export const mcp = new MCPClient({
+        servers: {
+          "@amp-labs/mcp-server": {
+            command: "npx",
+            args: [
+              "-y",
+              "@amp-labs/mcp-server@latest",
+              "--transport",
+              "stdio",
+              "--project",
+              process.env.AMPERSAND_PROJECT_ID,
+              "--integrationName",
+              process.env.AMPERSAND_INTEGRATION_NAME,
+              "--groupRef",
+              process.env.AMPERSAND_GROUP_REF, // optional
+            ],
+            env: {
+              AMPERSAND_API_KEY: process.env.AMPERSAND_API_KEY,
+            },
+          },
+        },
     });
     ```
 
