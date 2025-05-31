@@ -3,6 +3,7 @@ import { isVercelTool, type GenerateReturn } from '@mastra/core';
 import type { JSONSchema7 } from 'json-schema';
 import { ZodSchema } from 'zod';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
+import { processClientTools } from '../utils/process-client-tools';
 
 import type {
   GenerateParams,
@@ -112,30 +113,7 @@ export class Agent extends BaseResource {
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
       runtimeContext: parseClientRuntimeContext(params.runtimeContext),
-      clientTools: params.clientTools
-        ? Object.fromEntries(
-            Object.entries(params.clientTools).map(([key, value]) => {
-              if (isVercelTool(value)) {
-                return [
-                  key,
-                  {
-                    ...value,
-                    parameters: value.parameters ? zodToJsonSchema(value.parameters) : undefined,
-                  },
-                ];
-              } else {
-                return [
-                  key,
-                  {
-                    ...value,
-                    inputSchema: value.inputSchema ? zodToJsonSchema(value.inputSchema) : undefined,
-                    outputSchema: value.outputSchema ? zodToJsonSchema(value.outputSchema) : undefined,
-                  },
-                ];
-              }
-            }),
-          )
-        : undefined,
+      clientTools: processClientTools(params.clientTools),
     };
 
     return this.request(`/api/agents/${this.agentId}/generate`, {
@@ -161,30 +139,7 @@ export class Agent extends BaseResource {
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
       runtimeContext: parseClientRuntimeContext(params.runtimeContext),
-      clientTools: params.clientTools
-        ? Object.fromEntries(
-            Object.entries(params.clientTools).map(([key, value]) => {
-              if (isVercelTool(value)) {
-                return [
-                  key,
-                  {
-                    ...value,
-                    parameters: value.parameters ? zodToJsonSchema(value.parameters) : undefined,
-                  },
-                ];
-              } else {
-                return [
-                  key,
-                  {
-                    ...value,
-                    inputSchema: value.inputSchema ? zodToJsonSchema(value.inputSchema) : undefined,
-                    outputSchema: value.outputSchema ? zodToJsonSchema(value.outputSchema) : undefined,
-                  },
-                ];
-              }
-            }),
-          )
-        : undefined,
+      clientTools: processClientTools(params.clientTools),
     };
 
     const response: Response & {
