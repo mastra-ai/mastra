@@ -582,33 +582,32 @@ ${JSON.stringify(message, null, 2)}`,
               details: [{ type: 'redacted', data: part.data }],
             });
             break;
+          case 'image':
+            // TODO: why do we need a part and an experimental attachment for it to work?
+            parts.push({
+              type: 'file',
+              mimeType: part.mimeType || '',
+              data: part.image.toString(),
+            });
+            experimentalAttachments.push({
+              url: part.image.toString(),
+              contentType: part.mimeType,
+            });
+            break;
           case 'file':
             // CoreMessage file parts can have mimeType and data (binary/data URL) or just a URL
             if (part.data instanceof URL) {
-              // If it's a non-data URL, add to experimental_attachments
-              if (part.data.protocol !== 'data:') {
-                experimentalAttachments.push({
-                  name: part.filename,
-                  url: part.data.toString(),
-                  contentType: part.mimeType,
-                });
-              } else {
-                // If it\'s a data URL, extract the base64 data and add to parts
-                try {
-                  const base64Match = part.data.toString().match(/^data:[^;]+;base64,(.+)$/);
-                  if (base64Match && base64Match[1]) {
-                    parts.push({
-                      type: 'file',
-                      mimeType: part.mimeType,
-                      data: base64Match[1],
-                    });
-                  } else {
-                    console.error(`Invalid data URL format: ${part.data}`);
-                  }
-                } catch (error) {
-                  console.error(`Failed to process data URL in CoreMessage file part: ${error}`, error);
-                }
-              }
+              // TODO: why do we need a part and an experimental attachment for it to work?
+              experimentalAttachments.push({
+                name: part.filename,
+                url: part.data.toString(),
+                contentType: part.mimeType,
+              });
+              parts.push({
+                type: 'file',
+                mimeType: part.mimeType,
+                data: part.data.toString(),
+              });
             } else {
               // If it's binary data, convert to base64 and add to parts
               try {
@@ -622,8 +621,6 @@ ${JSON.stringify(message, null, 2)}`,
               }
             }
             break;
-          default:
-            throw new Error(`Found unknown CoreMessage content part type: ${part.type}`);
         }
       }
     }
