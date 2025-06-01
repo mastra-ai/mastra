@@ -29,17 +29,22 @@ import {
   ListResourceTemplatesRequestSchema,
   SubscribeRequestSchema,
   UnsubscribeRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
+  PromptSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import type {
   ResourceContents,
   Resource,
   ResourceTemplate,
   ServerCapabilities,
+  Prompt,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { SSEStreamingApi } from 'hono/streaming';
 import { streamSSE } from 'hono/streaming';
 import { SSETransport } from 'hono-mcp-server-sse-transport';
 import { z } from 'zod';
+import { ServerPromptActions } from './promptActions';
 import { ServerResourceActions } from './resourceActions';
 
 export type MCPServerResourceContentCallback = ({
@@ -69,11 +74,16 @@ export class MCPServer extends MCPServerBase {
   private subscribeResourceHandlerIsRegistered: boolean = false;
   private unsubscribeResourceHandlerIsRegistered: boolean = false;
 
+  private listPromptsHandlerIsRegistered: boolean = false;
+  private getPromptHandlerIsRegistered: boolean = false;
+
   private definedResources?: Resource[];
   private definedResourceTemplates?: ResourceTemplate[];
   private resourceOptions?: MCPServerResources;
+  private definedPrompts?: Prompt[];
   private subscriptions: Set<string> = new Set();
   public readonly resources: ServerResourceActions;
+  public readonly prompts: ServerPromptActions;
 
   /**
    * Get the current stdio transport.
@@ -107,7 +117,7 @@ export class MCPServer extends MCPServerBase {
    * Construct a new MCPServer instance.
    * @param opts - Configuration options for the server, including registry metadata.
    */
-  constructor(opts: MCPServerConfig & { resources?: MCPServerResources }) {
+  constructor(opts: MCPServerConfig & { resources?: MCPServerResources; prompts?: Prompt[] }) {
     super(opts);
     this.resourceOptions = opts.resources;
 
@@ -139,6 +149,16 @@ export class MCPServer extends MCPServerBase {
         this.registerListResourceTemplatesHandler();
       }
     }
+    if (opts.prompts) {
+      // Validate prompts
+      for (const prompt of opts.prompts) {
+        PromptSchema.parse(prompt);
+      }
+      this.definedPrompts = opts.prompts;
+      this.registerListPromptsHandler();
+      this.registerGetPromptHandler();
+    }
+
     this.resources = new ServerResourceActions({
       getSubscriptions: () => this.subscriptions,
       getLogger: () => this.logger,
@@ -148,6 +168,14 @@ export class MCPServer extends MCPServerBase {
       },
       clearDefinedResourceTemplates: () => {
         this.definedResourceTemplates = undefined;
+      },
+    });
+
+    this.prompts = new ServerPromptActions({
+      getLogger: () => this.logger,
+      getSdkServer: () => this.server,
+      clearDefinedPrompts: () => {
+        this.definedPrompts = undefined;
       },
     });
   }
@@ -645,6 +673,52 @@ export class MCPServer extends MCPServerBase {
       this.subscriptions.delete(uri);
       return {};
     });
+  }
+
+  /**
+   * Register the ListPrompts handler.
+   */
+  private registerListPromptsHandler() {
+    if (this.listPromptsHandlerIsRegistered) {
+      return;
+    }
+    this.listPromptsHandlerIsRegistered = true;
+    this.server.setRequestHandler(ListPromptsRequestSchema, async () => {
+      return {
+        prompts: this.prompts,
+      };
+    });
+  }
+
+  /**
+   * Register the GetPrompt handler.
+   */
+  private registerGetPromptHandler() {
+    if (this.getPromptHandlerIsRegistered) return;
+    this.getPromptHandlerIsRegistered = true;
+    this.server.setRequestHandler(
+      GetPromptRequestSchema,
+      async (request: { params: { name: string; arguments?: any } }) => {
+        const { name, arguments: args } = request.params;
+        const prompt = this.definedPrompts?.find(p => p.name === name);
+        if (!prompt) throw new Error(`Prompt "${name}" not found`);
+        // Validate required arguments
+        if (prompt.arguments) {
+          for (const arg of prompt.arguments) {
+            if (arg.required && (args?.[arg.name] === undefined || args?.[arg.name] === null)) {
+              throw new Error(`Missing required argument: ${arg.name}`);
+            }
+          }
+        }
+        // Dynamic message generation
+        if (typeof (prompt as any).getMessages === 'function') {
+          const messages = await (prompt as any).getMessages(args);
+          return { prompt, messages };
+        }
+        // Fallback: static prompt, no messages
+        return { prompt, messages: [] };
+      },
+    );
   }
 
   /**
