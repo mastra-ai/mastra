@@ -8,6 +8,9 @@ interface PromptClientActionsConfig {
   logger: IMastraLogger;
 }
 
+/**
+ * Client-side prompt actions for listing, getting, and subscribing to prompt changes.
+ */
 export class PromptClientActions {
   private readonly client: InternalMastraMCPClient;
   private readonly logger: IMastraLogger;
@@ -19,13 +22,13 @@ export class PromptClientActions {
 
   /**
    * Get all prompts from the connected MCP server.
-   * @returns A list of prompts.
+   * @returns A list of prompts with their versions.
    */
   public async list(): Promise<Prompt[]> {
     try {
       const response = await this.client.listPrompts();
       if (response && response.prompts && Array.isArray(response.prompts)) {
-        return response.prompts;
+        return response.prompts.map((prompt) => ({ ...prompt, version: prompt.version || '' }));
       } else {
         this.logger.warn(`Prompts response from server ${this.client.name} did not have expected structure.`, {
           response,
@@ -51,10 +54,11 @@ export class PromptClientActions {
    * Get a specific prompt.
    * @param name The name of the prompt to get.
    * @param args Optional arguments for the prompt.
+   * @param version Optional version of the prompt to get.
    * @returns The prompt content.
    */
-  public async get(name: string, args?: Record<string, any>): Promise<GetPromptResult> {
-    return this.client.getPrompt(name, args);
+  public async get(name: string, args?: Record<string, any>, version?: string): Promise<GetPromptResult> {
+    return this.client.getPrompt(name, args, version);
   }
 
   /**

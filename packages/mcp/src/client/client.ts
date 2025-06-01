@@ -380,12 +380,15 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   /**
-   * Fetch a prompt and its generated messages from the MCP server.
+   * Get a prompt and its dynamic messages from the server.
+   * @param name The prompt name
+   * @param args Arguments for the prompt
+   * @param version (optional) The prompt version to retrieve
    */
-  async getPrompt(name: string, args?: Record<string, any>): Promise<GetPromptResult> {
+  async getPrompt(name: string, args?: Record<string, any>, version?: string): Promise<GetPromptResult> {
     this.log('debug', `Requesting prompt from MCP server: ${name}`);
     return await this.client.request(
-      { method: 'prompts/get', params: { name, arguments: args } },
+      { method: 'prompts/get', params: { name, arguments: args, version } },
       GetPromptResultSchema,
       { timeout: this.timeout }
     );

@@ -684,8 +684,9 @@ export class MCPServer extends MCPServerBase {
     }
     this.listPromptsHandlerIsRegistered = true;
     this.server.setRequestHandler(ListPromptsRequestSchema, async () => {
+      // Include version field if present
       return {
-        prompts: this.prompts,
+        prompts: this.definedPrompts?.map(p => ({ ...p, version: p.version ?? undefined })),
       };
     });
   }
@@ -696,12 +697,20 @@ export class MCPServer extends MCPServerBase {
   private registerGetPromptHandler() {
     if (this.getPromptHandlerIsRegistered) return;
     this.getPromptHandlerIsRegistered = true;
+    // Accept optional version parameter in prompts/get
     this.server.setRequestHandler(
       GetPromptRequestSchema,
-      async (request: { params: { name: string; arguments?: any } }) => {
-        const { name, arguments: args } = request.params;
-        const prompt = this.definedPrompts?.find(p => p.name === name);
-        if (!prompt) throw new Error(`Prompt "${name}" not found`);
+      async (request: { params: { name: string; version?: string; arguments?: any } }) => {
+        const { name, version, arguments: args } = request.params;
+        // Select prompt by name and version (if provided)
+        let prompt;
+        if (version) {
+          prompt = this.definedPrompts?.find(p => p.name === name && p.version === version);
+        } else {
+          // Select the first matching name if no version is provided.
+          prompt = this.definedPrompts?.find(p => p.name === name);
+        }
+        if (!prompt) throw new Error(`Prompt "${name}"${version ? ` (version ${version})` : ''} not found`);
         // Validate required arguments
         if (prompt.arguments) {
           for (const arg of prompt.arguments) {

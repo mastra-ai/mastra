@@ -129,9 +129,9 @@ To fix this you have three different options:
         }
         return allPrompts;
       },
-      get: async (serverName: string, name: string, args?: Record<string, any>) => {
+      get: async (serverName: string, name: string, args?: Record<string, any>, version?: string) => {
         const internalClient = await this.getConnectedClientForServer(serverName);
-        return internalClient.prompts.get(name, args);
+        return internalClient.prompts.get(name, args, version);
       },
       onListChanged: async (serverName: string, handler: () => void) => {
         const internalClient = await this.getConnectedClientForServer(serverName);
