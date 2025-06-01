@@ -53,7 +53,7 @@ import { openai } from "@ai-sdk/openai";
 接続文字列を使ってPgVectorを初期化します：
 
 ```typescript copy showLineNumbers{4} filename="src/index.ts"
-const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
+const pgVector = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING! });
 ```
 
 ## 使用例
