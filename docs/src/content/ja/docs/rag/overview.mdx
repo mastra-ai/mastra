@@ -42,7 +42,7 @@ const { embeddings } = await embedMany({
 });
 
 // 4. Store in vector database
-const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING);
+const pgVector = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING! });
 await pgVector.upsert({
   indexName: "embeddings",
   vectors: embeddings,
