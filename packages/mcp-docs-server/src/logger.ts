@@ -46,7 +46,9 @@ export function createLogger(server?: MCPServer): Logger {
     if (!server) return;
 
     try {
-      await server['server'].sendLoggingMessage({
+      const sdkServer = server.getServer();
+      if (!sdkServer) return;
+      await sdkServer.sendLoggingMessage({
         level,
         data: {
           message,
