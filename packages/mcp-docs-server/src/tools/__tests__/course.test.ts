@@ -1,7 +1,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { describe, expect, test, beforeAll, afterAll } from 'vitest';
+import { describe, expect, test, beforeAll, afterAll, afterEach } from 'vitest';
 import { callTool, mcp, server } from './test-setup';
 
 let tools: any;
@@ -230,9 +230,19 @@ describe('Course Tools', () => {
     });
 
     describe('error handling', () => {
+      afterEach(async () => {
+        await callTool(tools.mastra_clearMastraCourseHistory, { confirm: true });
+      });
+
       test('should handle missing required arguments with an error', async () => {
         const result = await callTool(tools.mastra_startMastraCourseLesson, {});
         expect(result.toLowerCase()).toContain('invalid');
+      });
+      test('should handle corrupted state file gracefully', async () => {
+        const statePath = path.join(os.homedir(), '.cache', 'mastra', 'course', 'state.json');
+        fs.writeFileSync(statePath, '{invalidJson:', 'utf-8');
+        const result = await callTool(tools.mastra_getMastraCourseStatus, {});
+        expect(result.toLowerCase()).toContain('failed to load course state');
       });
     });
   });
