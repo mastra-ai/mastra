@@ -114,6 +114,13 @@ export class MCPServer extends MCPServerBase {
   }
 
   /**
+   * Get the current server instance.
+   */
+  public getServer(): Server {
+    return this.server;
+  }
+
+  /**
    * Construct a new MCPServer instance.
    * @param opts - Configuration options for the server, including registry metadata.
    */
@@ -462,7 +469,7 @@ export class MCPServer extends MCPServerBase {
           content: [
             {
               type: 'text',
-              text: JSON.stringify(result),
+              text: typeof result === 'string' ? result : JSON.stringify(result),
             },
           ],
           isError: false,
