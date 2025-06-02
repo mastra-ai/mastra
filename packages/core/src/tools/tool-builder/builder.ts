@@ -7,12 +7,13 @@ import {
   DeepSeekSchemaCompatLayer,
   MetaSchemaCompatLayer,
   convertZodSchemaToAISDKSchema,
+  convertSchemaToZod,
 } from '@mastra/schema-compat';
 import type { ToolExecutionOptions } from 'ai';
 import { z } from 'zod';
 import { MastraBase } from '../../base';
 import { RuntimeContext } from '../../runtime-context';
-import { isVercelTool } from '../../utils';
+import { isVercelTool, isZodType } from '../../utils';
 import type { ToolOptions } from '../../utils';
 import type { CoreTool, ToolAction, VercelTool } from '../types';
 
@@ -45,10 +46,10 @@ export class CoreToolBuilder extends MastraBase {
   // Helper to get parameters based on tool type
   private getParameters = () => {
     if (isVercelTool(this.originalTool)) {
-      return convertZodSchemaToAISDKSchema(this.originalTool.parameters ?? z.object({}));
+      return this.originalTool.parameters ?? z.object({});
     }
 
-    return convertZodSchemaToAISDKSchema(this.originalTool.inputSchema ?? z.object({}));
+    return this.originalTool.inputSchema ?? z.object({});
   };
 
   // For provider-defined tools, we need to include all required properties
@@ -160,25 +161,28 @@ export class CoreToolBuilder extends MastraBase {
 
     const model = this.options.model;
 
+    const schemaCompatLayers = [];
+
     if (model) {
-      const schemaCompatLayers = [
+      schemaCompatLayers.push(
         new OpenAIReasoningSchemaCompatLayer(model),
         new OpenAISchemaCompatLayer(model),
         new GoogleSchemaCompatLayer(model),
         new AnthropicSchemaCompatLayer(model),
         new DeepSeekSchemaCompatLayer(model),
         new MetaSchemaCompatLayer(model),
-      ];
-
-      const processedSchema = applyCompatLayer({
-        schema: this.getParameters(),
-        compatLayers: schemaCompatLayers,
-        mode: 'aiSdkSchema',
-      });
-
-      definition.parameters = processedSchema;
+      );
     }
 
-    return definition;
+    const processedSchema = applyCompatLayer({
+      schema: this.getParameters(),
+      compatLayers: schemaCompatLayers,
+      mode: 'aiSdkSchema',
+    });
+
+    return {
+      ...definition,
+      parameters: processedSchema,
+    };
   }
 }
