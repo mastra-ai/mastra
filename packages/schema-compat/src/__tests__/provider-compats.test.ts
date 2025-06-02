@@ -61,7 +61,7 @@ describe('Provider Compatibility Classes', () => {
         count: z.number().min(1),
       });
 
-      const result = compat.processtoAISDKSchema(schema);
+      const result = compat.processToAISDKSchema(schema);
 
       expect(result).toHaveProperty('jsonSchema');
       expect(result).toHaveProperty('validate');
@@ -71,7 +71,7 @@ describe('Provider Compatibility Classes', () => {
   describe('OpenAISchemaCompatLayer', () => {
     it('should apply for OpenAI models without structured outputs support', () => {
       const compat = new OpenAISchemaCompatLayer(mockModels.openai);
-      expect(typeof compat.shouldApply()).toBe('boolean');
+      expect(compat.shouldApply()).toBe(true);
     });
 
     it('should return correct schema target', () => {
@@ -89,7 +89,7 @@ describe('Provider Compatibility Classes', () => {
         settings: z.record(z.boolean()),
       });
 
-      const result = compat.processtoAISDKSchema(schema);
+      const result = compat.processToAISDKSchema(schema);
 
       expect(result).toHaveProperty('jsonSchema');
       expect(result).toHaveProperty('validate');
@@ -99,7 +99,7 @@ describe('Provider Compatibility Classes', () => {
   describe('OpenAIReasoningSchemaCompatLayer', () => {
     it('should have consistent behavior', () => {
       const compat = new OpenAIReasoningSchemaCompatLayer(mockModels.openaiReasoning);
-      expect(typeof compat.shouldApply()).toBe('boolean');
+      expect(compat.shouldApply()).toBe(true);
     });
 
     it('should return correct schema target', () => {
@@ -116,8 +116,7 @@ describe('Provider Compatibility Classes', () => {
 
     it('should return correct schema target', () => {
       const compat = new GoogleSchemaCompatLayer(mockModels.google);
-      // The actual implementation may return 'jsonSchema7', not 'openApi3'
-      expect(['jsonSchema7', 'openApi3']).toContain(compat.getSchemaTarget());
+      expect(compat.getSchemaTarget()).toBe('jsonSchema7');
     });
 
     it('should handle date types correctly', () => {
@@ -128,7 +127,7 @@ describe('Provider Compatibility Classes', () => {
         title: z.string(),
       });
 
-      const result = compat.processtoAISDKSchema(schema);
+      const result = compat.processToAISDKSchema(schema);
 
       expect(result).toHaveProperty('jsonSchema');
       expect(result).toHaveProperty('validate');
@@ -160,7 +159,7 @@ describe('Provider Compatibility Classes', () => {
         text: z.string().min(10).max(1000),
       });
 
-      const result = compat.processtoAISDKSchema(schema);
+      const result = compat.processToAISDKSchema(schema);
 
       expect(result).toHaveProperty('jsonSchema');
       expect(result).toHaveProperty('validate');
@@ -186,7 +185,7 @@ describe('Provider Compatibility Classes', () => {
         priority: z.enum(['low', 'medium', 'high']),
       });
 
-      const result = compat.processtoAISDKSchema(schema);
+      const result = compat.processToAISDKSchema(schema);
 
       expect(result).toHaveProperty('jsonSchema');
       expect(result).toHaveProperty('validate');
@@ -227,7 +226,7 @@ describe('Provider Compatibility Classes', () => {
       ];
 
       providers.forEach(provider => {
-        const result = provider.processtoAISDKSchema(complexSchema);
+        const result = provider.processToAISDKSchema(complexSchema);
 
         expect(result).toHaveProperty('jsonSchema');
         expect(result).toHaveProperty('validate');

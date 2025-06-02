@@ -569,7 +569,7 @@ export abstract class SchemaCompatLayer {
    * @param zodSchema - The Zod object schema to process
    * @returns An AI SDK Schema with provider-specific compatibility applied
    */
-  public processtoAISDKSchema(zodSchema: z.AnyZodObject): Schema {
+  public processToAISDKSchema(zodSchema: z.AnyZodObject): Schema {
     const { schema } = this.applyZodSchemaCompatibility(zodSchema);
 
     return convertZodSchemaToAISDKSchema(schema, this.getSchemaTarget());
@@ -582,6 +582,6 @@ export abstract class SchemaCompatLayer {
    * @returns A JSONSchema7 object with provider-specific compatibility applied
    */
   public processToJSONSchema(zodSchema: z.AnyZodObject): JSONSchema7 {
-    return this.processtoAISDKSchema(zodSchema).jsonSchema;
+    return this.processToAISDKSchema(zodSchema).jsonSchema;
   }
 }

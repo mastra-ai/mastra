@@ -101,7 +101,7 @@ export function convertSchemaToZod(schema: Schema | z.ZodSchema): z.ZodType {
     try {
       return convertJsonSchemaToZod(jsonSchemaToConvert);
     } catch (e: unknown) {
-      const errorMessage = `[Schema Builder] Failed to convert Vercel tool JSON schema parameters to Zod. Original schema: ${JSON.stringify(jsonSchemaToConvert)}`;
+      const errorMessage = `[Schema Builder] Failed to convert schema parameters to Zod. Original schema: ${JSON.stringify(jsonSchemaToConvert)}`;
       console.error(errorMessage, e);
       throw new Error(errorMessage + (e instanceof Error ? `\n${e.stack}` : '\nUnknown error object'));
     }
@@ -175,7 +175,7 @@ export function applyCompatLayer({
 
   for (const compat of compatLayers) {
     if (compat.shouldApply()) {
-      return mode === 'jsonSchema' ? compat.processToJSONSchema(zodSchema) : compat.processtoAISDKSchema(zodSchema);
+      return mode === 'jsonSchema' ? compat.processToJSONSchema(zodSchema) : compat.processToAISDKSchema(zodSchema);
     }
   }
 

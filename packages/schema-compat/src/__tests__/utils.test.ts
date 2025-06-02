@@ -1,7 +1,7 @@
 import { jsonSchema } from 'ai';
 import type { LanguageModelV1, Schema } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
 import { SchemaCompatLayer } from '../schema-compatibility';
 import { convertZodSchemaToAISDKSchema, convertSchemaToZod, applyCompatLayer } from '../utils';
@@ -201,7 +201,7 @@ describe('Builder Functions', () => {
       expect(result).toHaveProperty('type');
     });
 
-    it('should wrap non-object Zod schemas', () => {
+    it('should handle object schema with string property', () => {
       const stringSchema = z.object({ value: z.string() });
 
       const result = applyCompatLayer({
@@ -292,6 +292,9 @@ describe('Builder Functions', () => {
       const compat1 = new MockSchemaCompatibility(mockModel, false);
       const compat2 = new MockSchemaCompatibility(mockModel, true);
 
+      vi.spyOn(compat1, 'processZodType');
+      vi.spyOn(compat2, 'processZodType');
+
       const zodSchema = z.object({
         name: z.string(),
         settings: z.object({
@@ -302,12 +305,14 @@ describe('Builder Functions', () => {
 
       const result = applyCompatLayer({
         schema: zodSchema,
-        compatLayers: [compat1, compat2], // First one doesn't apply, second one does
+        compatLayers: [compat1, compat2],
         mode: 'aiSdkSchema',
       });
 
       expect(result).toHaveProperty('jsonSchema');
       expect(result).toHaveProperty('validate');
+      expect(compat1.processZodType).not.toHaveBeenCalled();
+      expect(compat2.processZodType).toHaveBeenCalled();
     });
   });
 });

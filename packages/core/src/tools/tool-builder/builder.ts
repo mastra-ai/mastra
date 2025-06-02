@@ -6,14 +6,12 @@ import {
   AnthropicSchemaCompatLayer,
   DeepSeekSchemaCompatLayer,
   MetaSchemaCompatLayer,
-  convertZodSchemaToAISDKSchema,
-  convertSchemaToZod,
 } from '@mastra/schema-compat';
 import type { ToolExecutionOptions } from 'ai';
 import { z } from 'zod';
 import { MastraBase } from '../../base';
 import { RuntimeContext } from '../../runtime-context';
-import { isVercelTool, isZodType } from '../../utils';
+import { isVercelTool } from '../../utils';
 import type { ToolOptions } from '../../utils';
 import type { CoreTool, ToolAction, VercelTool } from '../types';
 

@@ -286,10 +286,11 @@ describe('SchemaCompatLayer', () => {
 
     it('should preserve int and finite checks', () => {
       const numberSchema = z.number().int().finite();
-
       const result = compatibility.defaultZodNumberHandler(numberSchema);
-
       expect(result).toBeInstanceOf(z.ZodNumber);
+      expect(result._def.checks).toEqual(
+        expect.arrayContaining([expect.objectContaining({ kind: 'int' }), expect.objectContaining({ kind: 'finite' })]),
+      );
     });
   });
 

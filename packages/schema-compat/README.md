@@ -31,7 +31,7 @@ class MyCustomCompat extends SchemaCompatLayer {
     return 'jsonSchema7';
   }
 
-  processZodType(value) {
+  processZodType<T extends z.AnyZodObject>(value: z.ZodTypeAny): ShapeValue<T> {
     // Your custom processing logic here
     return value;
   }
@@ -46,25 +46,25 @@ Use the `applyCompatLayer` function to automatically apply the right compatibili
 
 ```typescript
 import { applyCompatLayer, OpenAISchemaCompatLayer, AnthropicSchemaCompatLayer } from '@mastra/schema-compat';
-import { yourCustomCompatibilityLayer } from "./customComatibilityLayer"
+import { yourCustomCompatibilityLayer } from './customCompatibilityLayer';
 import { z } from 'zod';
 
 const schema = z.object({
   name: z.string().email(),
-  preferences: z.array(z.string()).min(1)
+  preferences: z.array(z.string()).min(1),
 });
 
 const compatLayers = [
   new OpenAISchemaCompatLayer(model),
-  new AnthropicSchemaCompatLayer(model)
-  new yourCustomCompatibilityLayer(model)
+  new AnthropicSchemaCompatLayer(model),
+  new yourCustomCompatibilityLayer(model),
 ];
 
 // Automatically applies the first matching compatibility
 const result = applyCompatLayer({
   schema,
   compatLayers,
-  mode: 'aiSdkSchema' // or 'jsonSchema'
+  mode: 'aiSdkSchema', // or 'jsonSchema'
 });
 ```
 
@@ -89,7 +89,7 @@ const aiSchema = convertZodSchemaToAISDKSchema(zodSchema);
 const aiSdkSchema = jsonSchema({
   type: 'object',
   properties: {
-    title: { type: 'string' },
+    name: { type: 'string' },
   },
 });
 const backToZod = convertSchemaToZod(aiSdkSchema);
