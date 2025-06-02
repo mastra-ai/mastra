@@ -5,7 +5,13 @@ description: Documentation for the Mastra Class, the core entry point for managi
 
 # The Mastra Class
 
-The `Mastra` class is the central orchestrator in any Mastra application. It is responsible for managing agents, tools, workflows, storage, logging, telemetry, and more. You typically create a single instance of the `Mastra` class for your application.
+The `Mastra` class is the central orchestrator in any Mastra application, managing agents, workflows, storage, logging, telemetry, and more. Typically, you create a single instance of `Mastra` to coordinate your application.
+
+Think of `Mastra` as a top-level registry:
+
+- Registering **integrations** makes them accessible to **agents**, **workflows**, and **tools** alike.
+- **tools** aren’t registered on `Mastra` directly but are associated with agents and discovered automatically.
+
 
 ## Importing
 
@@ -21,9 +27,28 @@ Creates a new `Mastra` instance with the specified configuration.
 constructor(config?: Config);
 ```
 
-### Configuration (`Config` object)
+## Initialization
+
+The Mastra class is typically initialized in your `src/mastra/index.ts` file:
+
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core";
+import { LibSQLStore } from "@mastra/libsql";
+import { weatherAgent } from "./agents/weather-agent";
+
+export const mastra = new Mastra({
+  agents: { weatherAgent },
+  storage: new LibSQLStore({
+    url: ":memory:",
+  }),
+});
+```
+
+## Configuration Object
 
 The constructor accepts an optional `Config` object to customize its behavior and integrate various Mastra components. All properties on the `Config` object are optional.
+
+### Properties
 
 <PropertiesTable
   content={[
@@ -112,36 +137,18 @@ The constructor accepts an optional `Config` object to customize its behavior an
   ]}
 />
 
-## Initialization
+## Usage
 
-The Mastra class is typically initialized in your `src/mastra/index.ts` file:
+Any of the below methods can be used with the Mastra class, for example:
 
-```typescript copy filename=src/mastra/index.ts
-import { Mastra } from "@mastra/core";
-import { PinoLogger } from "@mastra/loggers";
+```typescript {3} filename="example.ts" showLineNumbers
+import { mastra } from "./mastra";
 
-// Basic initialization
-export const mastra = new Mastra({});
-
-// Full initialization with all options
-export const mastra = new Mastra({
-  agents: {},
-  workflows: [],
-  integrations: [],
-  logger: new PinoLogger({
-    name: "My Project",
-    level: "info",
-  }),
-  storage: {},
-  tools: {},
-  vectors: {},
-  mcpServers: {},
-});
+const agent = mastra.getAgent("weatherAgent");
+const result = await agent.generate("What's the weather like in London?");
 ```
 
-You can think of the `Mastra` class as a top-level registry. When you register tools with Mastra, your registered agents and workflows can use them. When you register integrations with Mastra, agents, workflows, and tools can use them.
-
-## Methods
+### Methods
 
 <PropertiesTable
   content={[
@@ -270,12 +277,16 @@ You can think of the `Mastra` class as a top-level registry. When you register t
 
 The Mastra class methods throw typed errors that can be caught:
 
-```typescript copy
+```typescript {8} filename="example.ts" showLineNumbers
+import { mastra } from "./mastra";
+
 try {
-  const tool = mastra.getTool("nonexistentTool");
+  const agent = mastra.getAgent("weatherAgent");
+  const result = await agent.generate("What's the weather like in London?");
+
 } catch (error) {
   if (error instanceof Error) {
-    console.log(error.message); // "Tool with name nonexistentTool not found"
+    console.log(error.message);
   }
 }
 ```
