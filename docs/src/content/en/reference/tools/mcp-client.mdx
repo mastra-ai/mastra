@@ -428,6 +428,22 @@ async function checkWeatherResource() {
   }
 }
 checkWeatherResource();
+
+// Example of using prompt methods
+async function checkWeatherPrompt() {
+  try {
+    const weatherPrompts = await mcp.prompts.list();
+    if (weatherPrompts.weather && weatherPrompts.weather.length > 0) {
+      const currentWeatherPrompt = weatherPrompts.weather.find(
+        (p) => p.name === "current"
+      );
+      console.log("Weather prompt:", currentWeatherPrompt);
+    }
+  } catch (error) {
+    console.error("Error fetching weather prompt:", error);
+  }
+}
+checkWeatherPrompt();
 ```
 
 ### Dynamic toolsets
