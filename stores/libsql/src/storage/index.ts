@@ -401,7 +401,6 @@ export class LibSQLStore extends MastraStorage {
                 thread_id,
                 ROW_NUMBER() OVER (ORDER BY "createdAt" ASC) as row_num
               FROM "${TABLE_MESSAGES}"
-              WHERE thread_id = ?
             ),
             target_positions AS (
               SELECT row_num as target_pos
@@ -414,7 +413,7 @@ export class LibSQLStore extends MastraStorage {
             WHERE m.row_num BETWEEN (t.target_pos - ?) AND (t.target_pos + ?)
             ORDER BY m."createdAt" ASC
           `,
-          args: [threadId, ...includeIds, maxPrev, maxNext],
+          args: [...includeIds, maxPrev, maxNext],
         });
 
         if (includeResult.rows) {
