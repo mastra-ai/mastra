@@ -410,7 +410,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         expect(contents[0]).toContain('This is a test.');
       });
 
-      it('should respect searchScope for semantic search', async () => {
+      it('should respect scope for semantic search', async () => {
         // Create two threads within the same resource
         const thread1 = await memory.saveThread({
           thread: createTestThread('Search Scope Test Thread 1'),
@@ -444,7 +444,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
             semanticRecall: {
               topK: 1,
               messageRange: 1,
-              // searchScope: 'thread' // Default
+              // scope: 'thread' // Default
             },
           },
         });
@@ -465,7 +465,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
             semanticRecall: {
               topK: 5, // Increase topK to potentially get both matches
               messageRange: 2,
-              searchScope: 'resource',
+              scope: 'resource',
             },
           },
         });

@@ -106,7 +106,7 @@ export class Memory extends MastraMemory {
               queryVector: embedding,
               topK: vectorConfig.topK,
               filter:
-                typeof config?.semanticRecall === 'object' && config?.semanticRecall?.searchScope === `resource`
+                typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope === `resource`
                   ? {
                       resource_id: resourceId,
                     }
