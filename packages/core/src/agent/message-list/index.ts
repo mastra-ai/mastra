@@ -185,6 +185,9 @@ export class MessageList {
     );
   }
   private static toUIMessage(m: MastraMessageV2): UIMessage {
+    const experimentalAttachments: UIMessage['experimental_attachments'] = m.content.experimental_attachments
+      ? [...m.content.experimental_attachments]
+      : [];
     const contentString =
       typeof m.content.content === `string` && m.content.content !== ''
         ? m.content.content
@@ -196,14 +199,33 @@ export class MessageList {
             return prev;
           }, '');
 
+    const parts: MastraMessageContentV2['parts'] = [];
+    if (m.content.parts.length) {
+      for (const part of m.content.parts) {
+        if (part.type === `file`) {
+          experimentalAttachments.push({
+            contentType: part.mimeType,
+            url: part.data,
+          });
+        } else {
+          parts.push(part);
+        }
+      }
+    }
+
+    if (parts.length === 0 && experimentalAttachments.length > 0) {
+      // make sure we have atleast one part so this message doesn't get removed when converting to core message
+      parts.push({ type: 'text', text: '' });
+    }
+
     if (m.role === `user`) {
       return {
         id: m.id,
         role: m.role,
         content: m.content.content || contentString,
         createdAt: m.createdAt,
-        parts: m.content.parts,
-        experimental_attachments: m.content.experimental_attachments || [],
+        parts,
+        experimental_attachments: experimentalAttachments,
       };
     } else if (m.role === `assistant`) {
       return {
@@ -211,7 +233,7 @@ export class MessageList {
         role: m.role,
         content: m.content.content || contentString,
         createdAt: m.createdAt,
-        parts: m.content.parts,
+        parts,
         reasoning: undefined,
         toolInvocations: `toolInvocations` in m.content ? m.content.toolInvocations : undefined,
       };
@@ -222,7 +244,8 @@ export class MessageList {
       role: m.role,
       content: m.content.content || contentString,
       createdAt: m.createdAt,
-      parts: m.content.parts,
+      parts,
+      experimental_attachments: experimentalAttachments,
     };
   }
   private getMessageById(id: string) {
@@ -298,21 +321,6 @@ ${JSON.stringify(message, null, 2)}`,
       newMessageFirstPartType &&
       ((newMessageFirstPartType === `tool-invocation` && latestMessagePartType !== `text`) ||
         newMessageFirstPartType === latestMessagePartType);
-
-    const currentAndLastMessagesAreUser = latestMessage?.role === `user` && messageV2.role === `user`;
-    const couldMoveAttachmentsToPreviousMessage =
-      currentAndLastMessagesAreUser &&
-      // For now this check is explicitly for adding attachment only messages onto the last message
-      // We could refactor this (and the rest of this surrounding code) to combine messages with less logic
-      // for now, just making it work! there are a lot of weird small edge cases in current expected behaviour
-      // we should change the expected behaviour in a breaking change to allow us to simplify logic more
-      messageV2.content.parts.length === 0 &&
-      (messageV2.content.experimental_attachments?.length || 0) > 0;
-
-    if (couldMoveAttachmentsToPreviousMessage) {
-      // For now just add an empty text part to retain message ordering.
-      messageV2.content.parts.push({ type: 'text', text: '' });
-    }
 
     if (
       // backwards compat check!
@@ -604,18 +612,15 @@ ${JSON.stringify(message, null, 2)}`,
             });
             break;
           case 'image':
-            experimentalAttachments.push({
-              url: part.image.toString(),
-              contentType: part.mimeType,
-            });
+            parts.push({ type: 'file', data: part.image.toString(), mimeType: part.mimeType! });
             break;
           case 'file':
             // CoreMessage file parts can have mimeType and data (binary/data URL) or just a URL
             if (part.data instanceof URL) {
-              experimentalAttachments.push({
-                name: part.filename,
-                url: part.data.toString(),
-                contentType: part.mimeType,
+              parts.push({
+                type: 'file',
+                data: part.data.toString(),
+                mimeType: part.mimeType,
               });
             } else {
               // If it's binary data, convert to base64 and add to parts
