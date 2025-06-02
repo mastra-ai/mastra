@@ -1,15 +1,19 @@
 ---
 title: "リファレンス: MastraMCPClient | ツールディスカバリー | Mastra ドキュメント"
-description: MastraMCPClient の API リファレンス - モデルコンテキストプロトコルのクライアント実装。
+description: MastraMCPClient の API リファレンス - Model Context Protocol 用のクライアント実装。
 ---
 
-# MastraMCPClient
+# MastraMCPClient（非推奨）
 
-`MastraMCPClient` クラスは、Model Context Protocol (MCP) サーバーと対話するためのクライアント実装を提供します。これは、MCP プロトコルを通じて接続管理、リソース発見、およびツール実行を処理します。
+`MastraMCPClient` クラスは、Model Context Protocol（MCP）サーバーとやり取りするためのクライアント実装を提供します。このクラスは、MCPプロトコルを通じて接続管理、リソースの発見、およびツールの実行を行います。
 
-## コンストラクタ
+## 非推奨のお知らせ
 
-MastraMCPClientの新しいインスタンスを作成します。
+`MastraMCPClient` は [`MCPClient`](./mcp-client) への移行に伴い非推奨となります。単一のMCPサーバーと複数のMCPサーバーを管理するために異なるインターフェースを用意するのではなく、たとえ単一のMCPサーバーを使用する場合でも複数サーバー管理用のインターフェースを推奨することにしました。
+
+## コンストラクター
+
+MastraMCPClient の新しいインスタンスを作成します。
 
 ```typescript
 constructor({
@@ -27,7 +31,7 @@ constructor({
 })
 ```
 
-### パラメータ
+### パラメーター
 
 <br />
 <PropertiesTable
@@ -48,28 +52,33 @@ constructor({
       name: "server",
       type: "MastraMCPServerDefinition",
       description:
-        "stdioサーバー接続またはSSEサーバー接続のいずれかの構成パラメータ。ログハンドラーとサーバーログの構成を含めることができます。",
+        "stdio サーバー接続または SSE サーバー接続のいずれかの構成パラメーター。ログハンドラーやサーバーログの設定も含めることができます。",
     },
     {
       name: "capabilities",
       type: "ClientCapabilities",
       isOptional: true,
       defaultValue: "{}",
-      description: "クライアントのオプション機能構成。",
+      description: "クライアントのオプション機能設定。",
     },
     {
       name: "timeout",
       type: "number",
       isOptional: true,
       defaultValue: 60000,
-      description: "クライアントツール呼び出しのタイムアウト時間（ミリ秒）。",
+      description:
+        "クライアントツール呼び出しのタイムアウト時間（ミリ秒単位）。",
     },
   ]}
 />
 
 ### MastraMCPServerDefinition
 
-MCPサーバーはstdioベースまたはSSEベースのサーバーとして構成できます。構成にはサーバー固有の設定と共通オプションの両方が含まれます：
+MCP サーバーはこの定義を使って設定できます。クライアントは、指定されたパラメーターに基づいて自動的にトランスポートタイプを検出します：
+
+- `command` が指定されている場合、Stdio トランスポートを使用します。
+- `url` が指定されている場合、まず Streamable HTTP トランスポートを試み、初回接続に失敗した場合はレガシー SSE トランスポートにフォールバックします。
+
 <br />
 <PropertiesTable
   content={[
@@ -77,76 +86,79 @@ MCPサーバーはstdioベースまたはSSEベースのサーバーとして構
       name: "command",
       type: "string",
       isOptional: true,
-      description: "stdioサーバーの場合：実行するコマンド。",
+      description: "Stdio サーバー用：実行するコマンド。",
     },
     {
       name: "args",
       type: "string[]",
       isOptional: true,
-      description: "stdioサーバーの場合：コマンドに渡す引数。",
+      description: "Stdio サーバー用：コマンドに渡す引数。",
     },
     {
       name: "env",
       type: "Record<string, string>",
       isOptional: true,
-      description: "stdioサーバーの場合：コマンドに設定する環境変数。",
+      description: "Stdio サーバー用：コマンドに設定する環境変数。",
     },
     {
       name: "url",
       type: "URL",
       isOptional: true,
-      description: "SSEサーバーの場合：サーバーのURL。",
+      description:
+        "HTTP サーバー（Streamable HTTP または SSE）用：サーバーの URL。",
     },
     {
       name: "requestInit",
       type: "RequestInit",
       isOptional: true,
-      description: "SSEサーバーの場合：fetch APIのリクエスト構成。",
+      description: "HTTP サーバー用：fetch API のリクエスト設定。",
     },
     {
       name: "eventSourceInit",
       type: "EventSourceInit",
       isOptional: true,
-      description: "SSEサーバーの場合：SSE接続のカスタムフェッチ構成。カスタムヘッダーを使用する場合に必要です。",
+      description:
+        "SSE フォールバック用：SSE 接続のためのカスタム fetch 設定。SSE でカスタムヘッダーを使用する場合に必須です。",
     },
     {
       name: "logger",
       type: "LogHandler",
       isOptional: true,
-      description: "ロギング用のオプションの追加ハンドラー。",
+      description: "オプションの追加ログハンドラー。",
     },
     {
       name: "timeout",
       type: "number",
       isOptional: true,
-      description: "サーバー固有のタイムアウト（ミリ秒）。",
+      description: "サーバー固有のタイムアウト（ミリ秒単位）。",
     },
     {
       name: "capabilities",
       type: "ClientCapabilities",
       isOptional: true,
-      description: "サーバー固有の機能構成。",
+      description: "サーバー固有の機能設定。",
     },
     {
       name: "enableServerLogs",
       type: "boolean",
       isOptional: true,
       defaultValue: "true",
-      description: "このサーバーのロギングを有効にするかどうか。",
+      description: "このサーバーのログを有効にするかどうか。",
     },
   ]}
 />
 
 ### LogHandler
 
-`LogHandler`関数は`LogMessage`オブジェクトをパラメータとして受け取り、voidを返します。`LogMessage`オブジェクトには以下のプロパティがあります。`LoggingLevel`型は`debug`、`info`、`warn`、`error`の値を持つ文字列列挙型です。
+`LogHandler` 関数は `LogMessage` オブジェクトをパラメーターとして受け取り、void を返します。`LogMessage` オブジェクトには以下のプロパティがあります。`LoggingLevel` 型は `debug`、`info`、`warn`、`error` の値を持つ文字列の列挙型です。
+
 <br />
 <PropertiesTable
   content={[
     {
       name: "level",
       type: "LoggingLevel",
-      description: "ログレベル（debug、info、warn、error）",
+      description: "ログレベル（debug, info, warn, error）",
     },
     {
       name: "message",
@@ -156,12 +168,12 @@ MCPサーバーはstdioベースまたはSSEベースのサーバーとして構
     {
       name: "timestamp",
       type: "Date",
-      description: "ログが生成された時間",
+      description: "ログが生成された日時",
     },
     {
       name: "serverName",
       type: "string",
-      description: "ログを生成したサーバーの名前",
+      description: "ログを生成したサーバー名",
     },
     {
       name: "details",
@@ -176,7 +188,7 @@ MCPサーバーはstdioベースまたはSSEベースのサーバーとして構
 
 ### connect()
 
-MCPサーバーとの接続を確立します。
+MCPサーバーへの接続を確立します。
 
 ```typescript
 async connect(): Promise<void>
@@ -184,7 +196,7 @@ async connect(): Promise<void>
 
 ### disconnect()
 
-MCPサーバーとの接続を閉じます。
+MCPサーバーとの接続を切断します。
 
 ```typescript
 async disconnect(): Promise<void>
@@ -192,7 +204,7 @@ async disconnect(): Promise<void>
 
 ### resources()
 
-サーバーから利用可能なリソースのリストを取得します。
+サーバーから利用可能なリソースの一覧を取得します。
 
 ```typescript
 async resources(): Promise<ListResourcesResult>
@@ -200,19 +212,19 @@ async resources(): Promise<ListResourcesResult>
 
 ### tools()
 
-サーバーから利用可能なツールを取得し、Mastra互換のツール形式に変換して初期化します。
+サーバーから利用可能なツールを取得し、初期化してMastra互換のツール形式に変換します。
 
 ```typescript
 async tools(): Promise<Record<string, Tool>>
 ```
 
-ツール名を対応するMastraツール実装にマッピングするオブジェクトを返します。
+ツール名を対応するMastraツール実装にマッピングしたオブジェクトを返します。
 
 ## 例
 
-### Mastra Agentでの使用
+### Mastra Agentとの併用
 
-#### Stdio Serverの例
+#### Stdioサーバーを使った例
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
@@ -271,7 +283,7 @@ try {
 }
 ```
 
-### SSE Serverの例
+### SSEサーバーを使った例
 
 ```typescript
 // Initialize the MCP client using an SSE server
@@ -289,7 +301,7 @@ const sseClient = new MastraMCPClient({
     eventSourceInit: {
       fetch(input: Request | URL | string, init?: RequestInit) {
         const headers = new Headers(init?.headers || {});
-        headers.set('Authorization', 'Bearer your-token');
+        headers.set("Authorization", "Bearer your-token");
         return fetch(input, {
           ...init,
           headers,
@@ -298,24 +310,26 @@ const sseClient = new MastraMCPClient({
     },
     // Optional additional logging configuration
     logger: (logMessage) => {
-      console.log(`[${logMessage.level}] ${logMessage.serverName}: ${logMessage.message}`);
+      console.log(
+        `[${logMessage.level}] ${logMessage.serverName}: ${logMessage.message}`,
+      );
     },
     // Disable server logs
-    enableServerLogs: false
+    enableServerLogs: false,
   },
 });
 
 // The rest of the usage is identical to the stdio example
 ```
 
-### SSE認証に関する重要な注意
+### SSE認証に関する重要な注意点
 
-認証やカスタムヘッダーを使用したSSE接続を行う場合、`requestInit`と`eventSourceInit`の両方を設定する必要があります。これは、SSE接続がブラウザのEventSource APIを使用しており、このAPIは直接カスタムヘッダーをサポートしていないためです。
+SSE接続で認証やカスタムヘッダーを使用する場合、`requestInit`と`eventSourceInit`の両方を設定する必要があります。これは、SSE接続がブラウザのEventSource APIを使用しており、カスタムヘッダーを直接サポートしていないためです。
 
-`eventSourceInit`設定により、SSE接続に使用される基盤となるfetchリクエストをカスタマイズでき、認証ヘッダーが適切に含まれるようになります。
-`eventSourceInit`がなければ、`requestInit`で指定された認証ヘッダーは接続リクエストに含まれず、401 Unauthorizedエラーが発生します。
+`eventSourceInit`の設定により、SSE接続で使用される内部のfetchリクエストをカスタマイズでき、認証ヘッダーが正しく含まれるようになります。
+`eventSourceInit`がない場合、`requestInit`で指定した認証ヘッダーは接続リクエストに含まれず、401 Unauthorizedエラーが発生します。
 
 ## 関連情報
 
-- アプリケーションで複数のMCPサーバーを管理するには、[MCPConfiguration ドキュメント](./mcp-configuration)を参照してください。
-- モデルコンテキストプロトコルの詳細については、[@modelcontextprotocol/sdk ドキュメント](https://github.com/modelcontextprotocol/typescript-sdk)を参照してください。
+- アプリケーションで複数のMCPサーバーを管理する場合は、[MCPClientのドキュメント](./mcp-client)をご覧ください
+- Model Context Protocolの詳細については、[@modelcontextprotocol/sdkのドキュメント](https://github.com/modelcontextprotocol/typescript-sdk)をご参照ください。

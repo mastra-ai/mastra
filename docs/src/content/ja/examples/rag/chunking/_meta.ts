@@ -6,5 +6,4 @@ const meta = {
   "adjust-chunk-size": "チャンクサイズを調整",
   "adjust-chunk-delimiters": "チャンク区切りを調整",
 };
-
 export default meta;

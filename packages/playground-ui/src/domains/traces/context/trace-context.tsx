@@ -2,33 +2,34 @@ import { createContext, useState } from 'react';
 
 import type { Span, RefinedTrace } from '../types';
 
-type TraceContextType = {
+export type TraceContextType = {
   isOpen: boolean;
   setIsOpen: React.Dispatch<React.SetStateAction<boolean>>;
   trace: Span[] | null;
   setTrace: React.Dispatch<React.SetStateAction<Span[] | null>>;
   traces: RefinedTrace[];
-  setTraces: React.Dispatch<React.SetStateAction<RefinedTrace[]>>;
   currentTraceIndex: number;
   setCurrentTraceIndex: React.Dispatch<React.SetStateAction<number>>;
   nextTrace: () => void;
   prevTrace: () => void;
   span: Span | null;
   setSpan: React.Dispatch<React.SetStateAction<Span | null>>;
-  openDetail: boolean;
-  setOpenDetail: React.Dispatch<React.SetStateAction<boolean>>;
   clearData: () => void;
 };
 
 export const TraceContext = createContext<TraceContextType>({} as TraceContextType);
 
-export function TraceProvider({ children }: { children: React.ReactNode }) {
+export function TraceProvider({
+  children,
+  initialTraces: traces = [],
+}: {
+  children: React.ReactNode;
+  initialTraces?: RefinedTrace[];
+}) {
   const [open, setOpen] = useState(false);
   const [trace, setTrace] = useState<Span[] | null>(null);
-  const [traces, setTraces] = useState<RefinedTrace[]>([]);
   const [currentTraceIndex, setCurrentTraceIndex] = useState(0);
   const [span, setSpan] = useState<Span | null>(null);
-  const [openDetail, setOpenDetail] = useState(false);
 
   const nextTrace = () => {
     if (currentTraceIndex < traces.length - 1) {
@@ -56,7 +57,6 @@ export function TraceProvider({ children }: { children: React.ReactNode }) {
     setOpen(false);
     setTrace(null);
     setSpan(null);
-    setOpenDetail(false);
   };
 
   return (
@@ -67,15 +67,12 @@ export function TraceProvider({ children }: { children: React.ReactNode }) {
         trace,
         setTrace,
         traces,
-        setTraces,
         currentTraceIndex,
         setCurrentTraceIndex,
         nextTrace,
         prevTrace,
         span,
         setSpan,
-        openDetail,
-        setOpenDetail,
         clearData,
       }}
     >

@@ -9,13 +9,18 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^1.1.15",
-    "@ai-sdk/react": "^1.1.21",
-    "@mastra/core": "workspace:*",
-    "next": "15.1.7",
+    "@ai-sdk/anthropic": "^1.2.11",
+    "@ai-sdk/react": "^1.2.12",
+    "@mastra/core": "latest",
+    "next": "^15.3.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "zod": "^3.24.2"
+    "zod": "^3.24.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core"
+    }
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.0",
@@ -27,5 +32,6 @@
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.8.2"
-  }
+  },
+  "packageManager": "pnpm@10.10.0+sha512.d615db246fe70f25dcfea6d8d73dee782ce23e2245e3c4f6f888249fb568149318637dca73c2c5c8ef2a4ca0d5657fb9567188bfab47f566d1ee6ce987815c39"
 }

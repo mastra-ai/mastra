@@ -31,6 +31,11 @@ const nextConfig: NextConfig = {
       noParse: [/onnxruntime-node/],
     };
 
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      "@libsql/client": path.resolve("./node_modules/@libsql/client"),
+    };
+
     return config;
   },
 };

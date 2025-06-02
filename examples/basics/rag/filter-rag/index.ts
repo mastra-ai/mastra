@@ -1,8 +1,8 @@
 import { openai } from '@ai-sdk/openai';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
-import { PgVector } from '@mastra/pg';
-import { createVectorQueryTool, MDocument, PGVECTOR_PROMPT } from '@mastra/rag';
+import { PgVector, PGVECTOR_PROMPT } from '@mastra/pg';
+import { createVectorQueryTool, MDocument } from '@mastra/rag';
 import { embedMany } from 'ai';
 
 const vectorQueryTool = createVectorQueryTool({
@@ -82,7 +82,7 @@ export const ragAgent = new Agent({
   tools: { vectorQueryTool },
 });
 
-const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
+const pgVector = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING! });
 
 export const mastra = new Mastra({
   agents: { ragAgent },

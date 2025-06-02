@@ -30,6 +30,21 @@ export function createTool<
   TSchemaIn extends z.ZodSchema | undefined = undefined,
   TSchemaOut extends z.ZodSchema | undefined = undefined,
   TContext extends ToolExecutionContext<TSchemaIn> = ToolExecutionContext<TSchemaIn>,
->(opts: ToolAction<TSchemaIn, TSchemaOut, TContext>) {
-  return new Tool(opts);
+  TExecute extends ToolAction<TSchemaIn, TSchemaOut, TContext>['execute'] = ToolAction<
+    TSchemaIn,
+    TSchemaOut,
+    TContext
+  >['execute'],
+>(
+  opts: ToolAction<TSchemaIn, TSchemaOut, TContext> & {
+    execute?: TExecute;
+  },
+): [TSchemaIn, TSchemaOut, TExecute] extends [z.ZodSchema, z.ZodSchema, Function]
+  ? Tool<TSchemaIn, TSchemaOut, TContext> & {
+      inputSchema: TSchemaIn;
+      outputSchema: TSchemaOut;
+      execute: (context: TContext) => Promise<any>;
+    }
+  : Tool<TSchemaIn, TSchemaOut, TContext> {
+  return new Tool(opts) as any;
 }

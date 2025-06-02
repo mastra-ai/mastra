@@ -4,7 +4,11 @@ import type {
   CreateIndexParams,
   UpsertVectorParams,
   QueryVectorParams,
-  ParamsToArgs,
+  DescribeIndexParams,
+  DeleteIndexParams,
+  DeleteVectorParams,
+  UpdateVectorParams,
+  IndexStats,
 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import Cloudflare from 'cloudflare';
@@ -24,11 +28,11 @@ export class CloudflareVector extends MastraVector {
     });
   }
 
-  async upsert(...args: ParamsToArgs<UpsertVectorParams>): Promise<string[]> {
-    const params = this.normalizeArgs<UpsertVectorParams>('upsert', args);
+  get indexSeparator(): string {
+    return '-';
+  }
 
-    const { indexName, vectors, metadata, ids } = params;
-
+  async upsert({ indexName, vectors, metadata, ids }: UpsertVectorParams): Promise<string[]> {
     const generatedIds = ids || vectors.map(() => crypto.randomUUID());
 
     // Create NDJSON string - each line is a JSON object
@@ -62,73 +66,40 @@ export class CloudflareVector extends MastraVector {
     return translator.translate(filter);
   }
 
-  private async verifyIndexExists(indexName: string, dimension: number): Promise<boolean> {
+  async createIndex({ indexName, dimension, metric = 'cosine' }: CreateIndexParams): Promise<void> {
     try {
-      const info = await this.client.vectorize.indexes.info(indexName, {
+      await this.client.vectorize.indexes.create({
         account_id: this.accountId,
+        config: {
+          dimensions: dimension,
+          metric: metric === 'dotproduct' ? 'dot-product' : metric,
+        },
+        name: indexName,
       });
-
-      if (!info) {
-        return false; // Index doesn't exist
-      }
-      if (info.dimensions !== dimension) {
-        throw new Error(
-          `Index "${indexName}" already exists with ${info.dimensions} dimensions, but ${dimension} dimensions were requested`,
-        );
-      }
-
-      // Index exists with matching dimensions
-      return true;
     } catch (error: any) {
-      // Check if this is an expected "index doesn't exist" error
-      // This covers all variants of not found/deleted errors by checking:
-      // 1. HTTP status (404/410 both mean the index isn't there)
-      // 2. Error message content (contains common patterns)
+      // Check for 'already exists' error
       const message = error?.errors?.[0]?.message || error?.message;
       if (
-        error.status === 404 ||
-        error.status === 410 ||
-        message?.toLowerCase().includes('not found') ||
-        message?.toLowerCase().includes('deleted')
+        error.status === 409 ||
+        (typeof message === 'string' &&
+          (message.toLowerCase().includes('already exists') || message.toLowerCase().includes('duplicate')))
       ) {
-        return false;
+        // Fetch index info and check dimensions
+        await this.validateExistingIndex(indexName, dimension, metric);
+        return;
       }
-
-      // For any other errors, propagate them up
+      // For any other errors, propagate
       throw error;
     }
   }
 
-  async createIndex(...args: ParamsToArgs<CreateIndexParams>): Promise<void> {
-    const params = this.normalizeArgs<CreateIndexParams>('createIndex', args);
-
-    const { indexName, dimension, metric = 'cosine' } = params;
-
-    // Check if index exists with correct dimensions
-    const exists = await this.verifyIndexExists(indexName, dimension);
-    if (exists) {
-      this.logger.info(
-        `Index "${indexName}" already exists with ${dimension} dimensions and metric ${metric}, skipping creation.`,
-      );
-      return;
-    }
-
-    // Index doesn't exist, create it
-    await this.client.vectorize.indexes.create({
-      account_id: this.accountId,
-      config: {
-        dimensions: dimension,
-        metric: metric === 'dotproduct' ? 'dot-product' : metric,
-      },
-      name: indexName,
-    });
-  }
-
-  async query(...args: ParamsToArgs<QueryVectorParams>): Promise<QueryResult[]> {
-    const params = this.normalizeArgs<QueryVectorParams>('query', args);
-
-    const { indexName, queryVector, topK = 10, filter, includeVector = false } = params;
-
+  async query({
+    indexName,
+    queryVector,
+    topK = 10,
+    filter,
+    includeVector = false,
+  }: QueryVectorParams): Promise<QueryResult[]> {
     const translatedFilter = this.transformFilter(filter) ?? {};
     const response = await this.client.vectorize.indexes.query(indexName, {
       account_id: this.accountId,
@@ -159,7 +130,13 @@ export class CloudflareVector extends MastraVector {
     return res?.result?.map(index => index.name!) || [];
   }
 
-  async describeIndex(indexName: string) {
+  /**
+   * Retrieves statistics about a vector index.
+   *
+   * @param {string} indexName - The name of the index to describe
+   * @returns A promise that resolves to the index statistics including dimension, count and metric
+   */
+  async describeIndex({ indexName }: DescribeIndexParams): Promise<IndexStats> {
     const index = await this.client.vectorize.indexes.get(indexName, {
       account_id: this.accountId,
     });
@@ -177,7 +154,7 @@ export class CloudflareVector extends MastraVector {
     };
   }
 
-  async deleteIndex(indexName: string): Promise<void> {
+  async deleteIndex({ indexName }: DeleteIndexParams): Promise<void> {
     await this.client.vectorize.indexes.delete(indexName, {
       account_id: this.accountId,
     });
@@ -206,37 +183,55 @@ export class CloudflareVector extends MastraVector {
     return res?.metadataIndexes ?? [];
   }
 
-  async updateIndexById(
-    indexName: string,
-    id: string,
-    update: {
-      vector?: number[];
-      metadata?: Record<string, any>;
-    },
-  ): Promise<void> {
-    if (!update.vector && !update.metadata) {
-      throw new Error('No update data provided');
-    }
+  /**
+   * Updates a vector by its ID with the provided vector and/or metadata.
+   * @param indexName - The name of the index containing the vector.
+   * @param id - The ID of the vector to update.
+   * @param update - An object containing the vector and/or metadata to update.
+   * @param update.vector - An optional array of numbers representing the new vector.
+   * @param update.metadata - An optional record containing the new metadata.
+   * @returns A promise that resolves when the update is complete.
+   * @throws Will throw an error if no updates are provided or if the update operation fails.
+   */
+  async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
+    try {
+      if (!update.vector && !update.metadata) {
+        throw new Error('No update data provided');
+      }
 
-    const updatePayload: any = {
-      ids: [id],
-      account_id: this.accountId,
-    };
+      const updatePayload: any = {
+        ids: [id],
+        account_id: this.accountId,
+      };
 
-    if (update.vector) {
-      updatePayload.vectors = [update.vector];
-    }
-    if (update.metadata) {
-      updatePayload.metadata = [update.metadata];
-    }
+      if (update.vector) {
+        updatePayload.vectors = [update.vector];
+      }
+      if (update.metadata) {
+        updatePayload.metadata = [update.metadata];
+      }
 
-    await this.upsert({ indexName: indexName, vectors: updatePayload.vectors, metadata: updatePayload.metadata });
+      await this.upsert({ indexName: indexName, vectors: updatePayload.vectors, metadata: updatePayload.metadata });
+    } catch (error: any) {
+      throw new Error(`Failed to update vector by id: ${id} for index name: ${indexName}: ${error.message}`);
+    }
   }
 
-  async deleteIndexById(indexName: string, id: string): Promise<void> {
-    await this.client.vectorize.indexes.deleteByIds(indexName, {
-      ids: [id],
-      account_id: this.accountId,
-    });
+  /**
+   * Deletes a vector by its ID.
+   * @param indexName - The name of the index containing the vector.
+   * @param id - The ID of the vector to delete.
+   * @returns A promise that resolves when the deletion is complete.
+   * @throws Will throw an error if the deletion operation fails.
+   */
+  async deleteVector({ indexName, id }: DeleteVectorParams): Promise<void> {
+    try {
+      await this.client.vectorize.indexes.deleteByIds(indexName, {
+        ids: [id],
+        account_id: this.accountId,
+      });
+    } catch (error: any) {
+      throw new Error(`Failed to delete vector by id: ${id} for index name: ${indexName}: ${error.message}`);
+    }
   }
 }

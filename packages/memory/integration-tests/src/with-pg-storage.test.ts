@@ -1,3 +1,4 @@
+import { fastembed } from '@mastra/fastembed';
 import { Memory } from '@mastra/memory';
 import { PostgresStore, PgVector } from '@mastra/pg';
 import dotenv from 'dotenv';
@@ -29,12 +30,16 @@ describe('Memory with PostgresStore Integration', () => {
   const config = parseConnectionString(connectionString);
   const memory = new Memory({
     storage: new PostgresStore(config),
-    vector: new PgVector(connectionString),
+    vector: new PgVector({ connectionString }),
+    embedder: fastembed,
     options: {
       lastMessages: 10,
       semanticRecall: {
         topK: 3,
         messageRange: 2,
+      },
+      threads: {
+        generateTitle: false,
       },
     },
   });

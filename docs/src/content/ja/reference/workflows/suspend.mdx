@@ -1,11 +1,11 @@
 ---
-title: "リファレンス: suspend() | 制御フロー | Mastra ドキュメント"
-description: "Mastra ワークフローにおける suspend 関数のドキュメントで、再開されるまで実行を一時停止します。"
+title: "リファレンス: suspend() | コントロールフロー | Mastra ドキュメント"
+description: "Mastraワークフローにおけるsuspend関数のドキュメント。再開されるまで実行を一時停止します。"
 ---
 
 # suspend()
 
-ワークフローの実行を現在のステップで一時停止し、明示的に再開されるまで待機します。ワークフローの状態は保存され、後で続行することができます。
+現在のステップでワークフローの実行を一時停止し、明示的に再開されるまで待機します。ワークフローの状態は保持され、後で続行することができます。
 
 ## 使用例
 
@@ -17,20 +17,20 @@ const approvalStep = new Step({
       await suspend();
     }
     return { approved: true };
-  }
+  },
 });
 ```
 
-## パラメーター
+## パラメータ
 
 <PropertiesTable
   content={[
     {
       name: "metadata",
       type: "Record<string, any>",
-      description: "中断された状態に保存するオプションのデータ",
-      isOptional: true
-    }
+      description: "一時停止状態と共に保存するオプションのデータ",
+      isOptional: true,
+    },
   ]}
 />
 
@@ -41,14 +41,14 @@ const approvalStep = new Step({
     {
       name: "Promise<void>",
       type: "Promise",
-      description: "ワークフローが正常に一時停止されたときに解決されます"
-    }
+      description: "ワークフローが正常に一時停止されると解決します",
+    },
   ]}
 />
 
-## 追加の例
+## その他の例
 
-メタデータを使用したサスペンド:
+メタデータを含む一時停止：
 
 ```typescript
 const reviewStep = new Step({
@@ -56,15 +56,15 @@ const reviewStep = new Step({
   execute: async ({ context, suspend }) => {
     await suspend({
       reason: "Needs manager approval",
-      requestedBy: context.user
+      requestedBy: context.user,
     });
     return { reviewed: true };
-  }
+  },
 });
 ```
 
-### 関連
+### 関連項目
 
-- [ワークフローのサスペンドと再開](../../workflows/suspend-and-resume.mdx)
+- [ワークフローの一時停止と再開](../../docs/workflows/suspend-and-resume.mdx)
 - [.resume()](./resume.mdx)
 - [.watch()](./watch.mdx)

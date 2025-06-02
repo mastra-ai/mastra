@@ -4,6 +4,7 @@ description: "Learn how to use the Mastra MCP documentation server in your IDE t
 ---
 
 import YouTube from "@/components/youtube";
+import { Tabs } from "nextra/components";
 
 # Mastra Tools for your agentic IDE
 
@@ -42,17 +43,28 @@ Once it's installed in your IDE you can write prompts and assume the agent will 
 
 ## Automatic Installation
 
-Run `pnpm create mastra@latest` and select Cursor or Windsurf when prompted to install the MCP server. For other IDEs, or if you already have a Mastra project, install the MCP server by following the instructions below.
+For **new** projects, the MCP Docs Server can be added during installation either through the [interactive](/docs/getting-started/installation#interactive) setup prompts, or by specifying the `-m` flag using the [non-interactive](/docs/getting-started/installation#non-interactive) command.
 
 ## Manual Installation
 
+To add the MCP Docs Server to an existing project, install it manually.
+
 - **Cursor**: Edit `.cursor/mcp.json` in your project root, or `~/.cursor/mcp.json` for global configuration
 - **Windsurf**: Edit `~/.codeium/windsurf/mcp_config.json` (only supports global configuration)
-
-Add the following configuration:
+- **VSCode**: Edit `~/.vscode/mcp.json` in your project root
+  Add the following configuration:
 
 ### MacOS/Linux
 
+{/*
+LLM CONTEXT: This Tabs component shows MCP server configuration for different IDEs on MacOS/Linux.
+Each tab displays the JSON configuration needed to set up the Mastra MCP docs server in that specific IDE.
+The tabs help users find the correct configuration format for their IDE (Cursor, Windsurf, or VSCode).
+Each tab shows the exact JSON structure and file paths needed for that IDE's MCP configuration.
+*/}
+
+<Tabs items={["cursor", "windsurf", "vscode"]}>
+  <Tabs.Tab>
 ```json
 {
   "mcpServers": {
@@ -63,9 +75,45 @@ Add the following configuration:
   }
 }
 ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```json
+{
+  "mcpServers": {
+    "mastra": {
+      "command": "npx",
+      "args": ["-y", "@mastra/mcp-docs-server@latest"]
+    }
+  }
+}
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```json
+{
+  "servers": {
+    "mastra": {
+      "command": "npx",
+      "args": ["-y", "@mastra/mcp-docs-server@latest"]
+      "type": "stdio"
+    }
+  }
+}
+```
+  </Tabs.Tab>
+</Tabs>
 
 ### Windows
 
+{/*
+LLM CONTEXT: This Tabs component shows MCP server configuration for different IDEs on Windows.
+Each tab displays the Windows-specific JSON configuration needed to set up the Mastra MCP docs server.
+The tabs help Windows users find the correct configuration format for their IDE, using cmd instead of direct npx.
+Each tab shows the Windows-specific command structure needed for that IDE's MCP configuration.
+*/}
+
+<Tabs items={["cursor", "windsurf", "vscode"]}>
+  <Tabs.Tab>
 ```json
 {
   "mcpServers": {
@@ -76,10 +124,47 @@ Add the following configuration:
   }
 }
 ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```json
+{
+  "mcpServers": {
+    "mastra": {
+      "command": "cmd",
+      "args": ["/c", "npx", "-y", "@mastra/mcp-docs-server@latest"]
+    }
+  }
+}
+```
+  </Tabs.Tab>
+  <Tabs.Tab>
+```json
+{
+  "servers": {
+    "mastra": {
+      "command": "cmd",
+      "args": ["/c", "npx", "-y", "@mastra/mcp-docs-server@latest"],
+      "type": "stdio"
+    }
+  }
+}
+```
+  </Tabs.Tab>
+</Tabs>
 
 ## After Configuration
 
 ### Cursor
+
+If you followed the automatic installation, you'll see a popup when you open cursor in the bottom left corner to prompt you to enable the Mastra Docs MCP Server.
+
+<img
+  src="/image/enable-mastra-docs-cursor.png"
+  alt="Diagram showing cursor prompt to enable Mastra docs MCP server"
+  width={800}
+/>
+
+Otherwise, for manual installation, do the following.
 
 1. Open Cursor settings
 2. Navigate to MCP settings
@@ -92,6 +177,41 @@ Add the following configuration:
 2. If tool calls start failing, go to Windsurfs MCP settings and re-start the MCP server. This is a common Windsurf MCP issue and isn't related to Mastra. Right now Cursor's MCP implementation is more stable than Windsurfs is.
 
 In both IDEs it may take a minute for the MCP server to start the first time as it needs to download the package from npm.
+
+### VSCode
+
+1. Open VSCode settings
+2. Navigate to MCP settings
+3. Click "enable" on the Chat > MCP option
+
+<br />
+
+<img
+  src="/image/vscode-mcp-setting.png"
+  alt="Settings page of VSCode to enable MCP"
+  width={800}
+  className="rounded-lg"
+/>
+
+MCP only works in Agent mode in VSCode. Once you are in agent mode, open the `mcp.json` file and click the "start" button.
+
+<br />
+<img
+  src="/image/vscode-start-mcp.png"
+  alt="Settings page of VSCode to enable MCP"
+  width={800}
+  className="rounded-lg"
+/>
+
+After starting the mcp server, click the tools button in the copilot pane to see available tools.
+
+<br />
+<img
+  src="/image/vscode-mcp-running.png"
+  alt="Tools page of VSCode to see available tools"
+  width={800}
+  className="rounded-lg"
+/>
 
 ## Available Agent Tools
 

@@ -1,0 +1,104 @@
+---
+title: "Reference: Agent | Agents | Mastra Docs"
+description: "Documentation for the Agent class in Mastra, which provides the foundation for creating AI agents with various capabilities."
+---
+
+# Agent
+
+The `Agent` class is the foundation for creating AI agents in Mastra. It provides methods for generating responses, streaming interactions, and handling voice capabilities.
+
+## Importing
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+```
+
+## Constructor
+
+Creates a new Agent instance with the specified configuration.
+
+```typescript
+constructor(config: AgentConfig<TAgentId, TTools, TMetrics>)
+```
+
+### Parameters
+
+<br />
+
+<PropertiesTable
+  content={[
+    {
+      name: "name",
+      type: "string",
+      isOptional: false,
+      description: "Unique identifier for the agent.",
+    },
+    {
+      name: "description",
+      type: "string",
+      isOptional: true,
+      description:
+        "An optional description of the agent\'s purpose and capabilities.",
+    },
+    {
+      name: "instructions",
+      type: "string | ({ runtimeContext: RuntimeContext }) => string | Promise<string>",
+      isOptional: false,
+      description:
+        "Instructions that guide the agent's behavior. Can be a static string or a function that returns a string.",
+    },
+    {
+      name: "model",
+      type: "MastraLanguageModel | ({ runtimeContext: RuntimeContext }) => MastraLanguageModel | Promise<MastraLanguageModel>",
+      isOptional: false,
+      description:
+        "The language model to use for generating responses. Can be a model instance or a function that returns a model.",
+    },
+    {
+      name: "tools",
+      type: "ToolsInput | ({ runtimeContext: RuntimeContext }) => ToolsInput | Promise<ToolsInput>",
+      isOptional: true,
+      description:
+        "Tools that the agent can use. Can be a static object or a function that returns tools.",
+    },
+    {
+      name: "defaultGenerateOptions",
+      type: "AgentGenerateOptions",
+      isOptional: true,
+      description: "Default options to use when calling generate().",
+    },
+    {
+      name: "defaultStreamOptions",
+      type: "AgentStreamOptions",
+      isOptional: true,
+      description: "Default options to use when calling stream().",
+    },
+    {
+      name: "workflows",
+      type: "Record<string, NewWorkflow> | ({ runtimeContext: RuntimeContext }) => Record<string, NewWorkflow> | Promise<Record<string, NewWorkflow>>",
+      isOptional: true,
+      description:
+        "Workflows that the agent can execute. Can be a static object or a function that returns workflows.",
+    },
+    {
+      name: "evals",
+      type: "Record<string, Metric>",
+      isOptional: true,
+      description: "Evaluation metrics for assessing agent performance.",
+    },
+    {
+      name: "memory",
+      type: "MastraMemory",
+      isOptional: true,
+      description:
+        "Memory system for the agent to store and retrieve information.",
+    },
+    {
+      name: "voice",
+      type: "CompositeVoice",
+      isOptional: true,
+      description:
+        "Voice capabilities for speech-to-text and text-to-speech functionality.",
+    },
+  ]}
+/>

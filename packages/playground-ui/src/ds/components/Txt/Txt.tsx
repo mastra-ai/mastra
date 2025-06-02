@@ -3,10 +3,11 @@ import React from 'react';
 
 import { FontSizes } from '../../tokens';
 
-export interface TxtProps extends React.HTMLAttributes<HTMLDivElement> {
-  as?: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'p' | 'span';
+export interface TxtProps extends React.HTMLAttributes<HTMLDivElement | HTMLLabelElement> {
+  as?: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'p' | 'span' | 'label';
   variant?: keyof typeof FontSizes;
   font?: 'mono';
+  htmlFor?: string;
 }
 
 const variants = {

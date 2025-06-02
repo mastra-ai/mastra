@@ -9,107 +9,197 @@ const withNextra = nextra({
   mdxOptions: {
     rehypePrettyCodeOptions: {
       theme: {
-        displayName: "Mastra",
-        name: "mastra",
-        semanticHighlighting: true,
-        semanticTokenColors: {
-          customLiteral: "#fff",
-          newOperator: "#C586C0",
-          numberLiteral: "#b5cea8",
-          stringLiteral: "#fff",
+        light: {
+          displayName: "Mastra Light",
+          name: "mastra-light",
+          semanticHighlighting: true,
+          tokenColors: [
+            {
+              scope: ["string.unquoted.argument.shell"],
+              settings: {
+                foreground: "var(--light-color-text-6)",
+              },
+            },
+            {
+              scope: "constant",
+              settings: {
+                foreground: "var(--light-green-accent)",
+              },
+            },
+            {
+              scope: [
+                "string",
+                "string.expression",
+                "punctuation.definition.string.template.begin.ts",
+                "punctuation.definition.string.template.end.ts",
+              ],
+              settings: {
+                foreground: "#158D29",
+              },
+            },
+            {
+              scope: ["comment", "punctuation.definition.comment"],
+              settings: {
+                foreground: "#939393",
+              },
+            },
+            {
+              scope: [
+                "keyword",
+                "storage.type",
+                "support.type",
+                "storage.type.interface",
+                "entity.name.type.interface",
+                "storage.modifier.async",
+                "storage.type.async",
+                "keyword.control.loop",
+                "keyword.control.from",
+                "keyword.control.flow",
+                "entity.name.type.ts",
+              ],
+              settings: {
+                foreground: "#D81717",
+              },
+            },
+            {
+              scope: "parameter",
+              settings: {
+                foreground: "#D81717",
+              },
+            },
+            {
+              scope: ["function", "meta.function-call"],
+              settings: {
+                foreground: "#9829C7",
+              },
+            },
+            {
+              scope: [
+                "punctuation",
+                "meta.brace",
+                "meta.array",
+                "punctuation.definition",
+                "meta.import",
+                "meta.object.member",
+                "meta.object.literal",
+                "variable.object.property",
+                "meta.interface",
+                "variable.other.property",
+                "variable.other.object",
+                "variable.other.readwrite",
+                "variable",
+                "meta.statement.command.shell",
+              ],
+              settings: {
+                foreground: "var(--light-color-text-6)",
+              },
+            },
+            {
+              scope: "token.link",
+              settings: {
+                foreground: "#158D29",
+              },
+            },
+          ],
+          type: "light",
         },
-        tokenColors: [
-          {
-            scope: "constant",
-            settings: {
+        dark: {
+          displayName: "Mastra Dark",
+          name: "mastra-dark",
+          semanticHighlighting: true,
+          tokenColors: [
+            {
+              scope: "constant",
+              settings: {
+                //green
+                foreground: "#46f488",
+              },
+            },
+            {
+              scope: "string",
+              settings: {
+                //green
+                foreground: "#46f488",
+              },
+            },
+            {
+              scope: ["comment", "punctuation.definition.comment"],
+              //subtle gray
+              settings: {
+                foreground: "#939393",
+              },
+            },
+            {
+              scope: [
+                "keyword",
+                "storage.type",
+                "support.type",
+                "storage.type.interface",
+                "entity.name.type.interface",
+                "storage.modifier.async",
+                "storage.type.async",
+                "keyword.control.loop",
+                "keyword.control.from",
+                "keyword.control.flow",
+                "entity.name.type.ts",
+              ],
+              settings: {
+                //orange
+                foreground: "#fa7b6a",
+              },
+            },
+            {
+              scope: "parameter",
+              settings: {
+                foreground: "#fa7b6a",
+              },
+            },
+            {
+              scope: ["function", "entity.name.function", "meta.function-call"],
+              //purple
+              settings: {
+                foreground: "#d06bee",
+              },
+            },
+            {
+              scope: "string.expression",
               //green
-              foreground: "#46f488",
+              settings: {
+                foreground: "#46f488",
+              },
             },
-          },
-          {
-            scope: "string",
-            settings: {
-              //green
-              foreground: "#46f488",
+            {
+              scope: [
+                "punctuation",
+                "meta.brace",
+                "meta.array",
+                "punctuation.definition",
+                "meta.import",
+                "meta.object.member",
+                "meta.object.literal",
+                "variable.object.property",
+                "meta.interface",
+                "variable.other.constant",
+                "variable.other.property",
+                "variable.other.object",
+                "variable.other.readwrite",
+                "variable",
+                "meta.statement.command.shell",
+              ],
+              //white
+              settings: {
+                foreground: "#fff",
+              },
             },
-          },
-          {
-            scope: ["comment", "punctuation.definition.comment"],
-            //subtle gray
-            settings: {
-              foreground: "#939393",
+            {
+              scope: "token.link",
+              settings: {
+                foreground: "#fff",
+              },
             },
-          },
-          {
-            scope: [
-              "keyword",
-              "storage.type",
-              "support.type",
-              "storage.type.interface",
-              "entity.name.type.interface",
-              "storage.modifier.async",
-              "storage.type.async",
-              "keyword.control.loop",
-              "keyword.control.from",
-              "keyword.control.flow",
-              "entity.name.type.ts",
-            ],
-            settings: {
-              //orange
-              foreground: "#fa7b6a",
-            },
-          },
-          {
-            scope: "parameter",
-            settings: {
-              foreground: "#fa7b6a",
-            },
-          },
-          {
-            scope: ["function", "entity.name.function", "meta.function-call"],
-            //purple
-            settings: {
-              foreground: "#d06bee",
-            },
-          },
-          {
-            scope: "string.expression",
-            //green
-            settings: {
-              foreground: "#46f488",
-            },
-          },
-          {
-            scope: [
-              "punctuation",
-              "meta.brace",
-              "meta.array",
-              "punctuation.definition",
-              "meta.import",
-              "meta.object.member",
-              "meta.object.literal",
-              "variable.object.property",
-              "meta.interface",
-              "variable.other.constant",
-              "variable.other.property",
-              "variable.other.object",
-              "variable.other.readwrite",
-              "variable",
-              "meta.statement.command.shell",
-            ],
-            //white
-            settings: {
-              foreground: "#fff",
-            },
-          },
-          {
-            scope: "token.link",
-            settings: {
-              foreground: "#fff",
-            },
-          },
-        ],
-        type: "dark",
+          ],
+          type: "dark",
+        },
       },
     },
   },
@@ -127,6 +217,18 @@ export default withGT(
     async rewrites() {
       return {
         beforeFiles: [
+          {
+            source: "/en/docs/api/copilotkit",
+            destination: "/api/copilotkit",
+          },
+          {
+            source: "/ja/docs/api/copilotkit",
+            destination: "/api/copilotkit",
+          },
+          {
+            source: "/docs/api/copilotkit",
+            destination: "/api/copilotkit",
+          },
           {
             source: "/:locale/docs/_next/:path+",
             destination: "/_next/:path+",
@@ -165,8 +267,18 @@ export default withGT(
         permanent: true,
       },
       {
+        source: "/docs/agents/adding-tools",
+        destination: "/docs/agents/using-tools-and-mcp",
+        permanent: true,
+      },
+      {
         source: "/docs/agents/02a-mcp-guide",
         destination: "/docs/agents/mcp-guide",
+        permanent: true,
+      },
+      {
+        source: "/docs/agents/mcp-guide",
+        destination: "/docs/agents/using-tools-and-mcp",
         permanent: true,
       },
       {
@@ -205,26 +317,6 @@ export default withGT(
         permanent: true,
       },
       {
-        source: "/docs/guides/01-chef-michel",
-        destination: "/docs/guides/chef-michel",
-        permanent: true,
-      },
-      {
-        source: "/docs/guides/02-stock-agent",
-        destination: "/docs/guides/stock-agent",
-        permanent: true,
-      },
-      {
-        source: "/docs/guides/03-recruiter",
-        destination: "/docs/guides/ai-recruiter",
-        permanent: true,
-      },
-      {
-        source: "/docs/guides/04-research-assistant",
-        destination: "/docs/guides/research-assistant",
-        permanent: true,
-      },
-      {
         source: "/docs/workflows/00-overview",
         destination: "/docs/workflows/overview",
         permanent: true,
@@ -240,7 +332,18 @@ export default withGT(
         permanent: false, // we should have a memory-processors reference
       },
       {
+        source: "/reference/memory/memory-processors",
+        destination: "/docs/memory/memory-processors",
+        permanent: true,
+      },
+      {
         source: "/docs/memory/getting-started",
+        destination: "/docs/memory/overview",
+        permanent: true,
+      },
+      {
+        source:
+          "/docs/memory/getting-started#conversation-history-last-messages",
         destination: "/docs/memory/overview",
         permanent: true,
       },
@@ -310,6 +413,16 @@ export default withGT(
         permanent: true,
       },
       {
+        source: "/workflows",
+        destination: "/docs/workflows/steps",
+        permanent: true,
+      },
+      {
+        source: "/workflows/:path*",
+        destination: "/docs/workflows/:path*",
+        permanent: true,
+      },
+      {
         source: "/docs/workflows/data-flow",
         destination: "/docs/workflows/variables",
         permanent: true,
@@ -350,11 +463,6 @@ export default withGT(
         permanent: true,
       },
       {
-        source: "/examples/rag/query/metadata-extraction",
-        destination: "/examples/rag/query/retrieve-results",
-        permanent: true,
-      },
-      {
         source: "/docs/showcase",
         destination: "/showcase",
         permanent: true,
@@ -362,6 +470,11 @@ export default withGT(
       {
         source: "/docs/local-dev/integrations",
         destination: "/docs/integrations",
+        permanent: true,
+      },
+      {
+        source: "/docs/integrations",
+        destination: "/docs/tools-mcp/mcp-overview",
         permanent: true,
       },
       {
@@ -405,6 +518,11 @@ export default withGT(
         permanent: true,
       },
       {
+        source: "/docs/guides/chef-michel",
+        destination: "/guides/guide/chef-michel",
+        permanent: true,
+      },
+      {
         source: "/docs/guide/guides/03-stock-agent",
         destination: "/guides/guide/stock-agent",
         permanent: true,
@@ -430,6 +548,16 @@ export default withGT(
         permanent: true,
       },
       {
+        source: "/docs/reference/workflows/step-retries",
+        destination: "/reference/workflows/step-retries",
+        permanent: true,
+      },
+      {
+        source: "/docs/reference/observability/otel-config",
+        destination: "/reference/observability/otel-config",
+        permanent: true,
+      },
+      {
         source: "/docs/reference/client-js",
         destination: "/reference/client-js/agents",
         permanent: true,
@@ -447,6 +575,11 @@ export default withGT(
       {
         source: "/docs/reference/observability/combine-loggers",
         destination: "/reference/observability/logger",
+        permanent: true,
+      },
+      {
+        source: "/reference/rag/retrieval",
+        destination: "/examples/rag/query/retrieve-results",
         permanent: true,
       },
       {
@@ -747,6 +880,16 @@ export default withGT(
       {
         source: "/docs/voice/voice-to-voice",
         destination: "/docs/voice/speech-to-speech",
+        permanent: true,
+      },
+      {
+        source: "/reference/tools/mcp-configuration",
+        destination: "/reference/tools/mcp-client",
+        permanent: true,
+      },
+      {
+        source: "/reference/observability/create-logger",
+        destination: "/reference/observability/logger",
         permanent: true,
       },
     ],

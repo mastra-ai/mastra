@@ -12,6 +12,9 @@ import { FC, memo, useState } from 'react';
 import remarkGfm from 'remark-gfm';
 import { makePrismAsyncSyntaxHighlighter } from '@assistant-ui/react-syntax-highlighter';
 import { coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
+import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button';
+import { cn } from '@/lib/utils';
+import { ImageWithFallback } from './image-with-fallback';
 
 const SyntaxHighlighter = makePrismAsyncSyntaxHighlighter({
   style: coldarkDark,
@@ -20,10 +23,6 @@ const SyntaxHighlighter = makePrismAsyncSyntaxHighlighter({
     backgroundColor: 'black',
   },
 });
-
-import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button';
-
-import { cn } from '@/lib/utils';
 
 const MarkdownTextImpl = () => {
   return <MarkdownTextPrimitive remarkPlugins={[remarkGfm]} className="aui-md" components={defaultComponents} />;
@@ -156,16 +155,7 @@ const defaultComponents = memoizeMarkdownComponents({
       }}
     />
   ),
-  p: ({ className, ...props }) => (
-    <p
-      className={cn('leading-7 first:mt-0 last:mb-0', className)}
-      {...props}
-      style={{
-        marginBottom: '1.25rem',
-        marginTop: '1.25rem',
-      }}
-    />
-  ),
+  p: ({ className, ...props }) => <p className={cn('leading-7 first:mt-0 last:mb-0', className)} {...props} />,
   a: ({ className, ...props }) => (
     <a className={cn('text-primary font-medium underline underline-offset-4', className)} {...props} />
   ),
@@ -243,4 +233,5 @@ const defaultComponents = memoizeMarkdownComponents({
   },
   CodeHeader,
   SyntaxHighlighter,
+  img: ImageWithFallback,
 });

@@ -36,23 +36,6 @@ describe('Telemetry Handler', () => {
     ).rejects.toThrow('Telemetry is not initialized');
   });
 
-  it('should throw error when storage is not initialized', async () => {
-    mockMastra.getTelemetry.mockReturnValue({});
-    mockMastra.getStorage.mockReturnValue(null);
-
-    await expect(
-      getTelemetryHandler({
-        mastra: mockMastra,
-        body: {
-          name: 'test',
-          scope: 'test',
-          page: 0,
-          perPage: 100,
-        },
-      }),
-    ).rejects.toThrow('Storage is not initialized');
-  });
-
   it('should throw error when body is not provided', async () => {
     mockMastra.getTelemetry.mockReturnValue({});
     mockMastra.getStorage.mockReturnValue(mockStorage);
@@ -78,7 +61,7 @@ describe('Telemetry Handler', () => {
       },
     });
 
-    expect(result).toEqual({ traces: mockTraces });
+    expect(result).toEqual(mockTraces);
     expect(mockStorage.getTraces).toHaveBeenCalledWith({
       name: 'test',
       scope: 'test',
@@ -104,7 +87,7 @@ describe('Telemetry Handler', () => {
       },
     });
 
-    expect(result).toEqual({ traces: mockTraces });
+    expect(result).toEqual(mockTraces);
     expect(mockStorage.getTraces).toHaveBeenCalledWith({
       name: 'test',
       scope: 'test',
@@ -129,7 +112,7 @@ describe('Telemetry Handler', () => {
       },
     });
 
-    expect(result).toEqual({ traces: mockTraces });
+    expect(result).toEqual(mockTraces);
     expect(mockStorage.getTraces).toHaveBeenCalledWith({
       name: 'test',
       scope: 'test',
@@ -156,7 +139,7 @@ describe('Telemetry Handler', () => {
       },
     });
 
-    expect(result).toEqual({ traces: mockTraces });
+    expect(result).toEqual(mockTraces);
     expect(mockStorage.getTraces).toHaveBeenCalledWith({
       name: 'test',
       scope: 'test',

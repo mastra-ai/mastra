@@ -4,5 +4,4 @@ const meta = {
   "custom-eval": "カスタム評価",
   "running-in-ci": "CIでの実行",
 };
-
 export default meta;

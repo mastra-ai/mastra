@@ -1,34 +1,35 @@
-import { useState } from 'react';
+import { client } from '@/lib/client';
+import { RuntimeContext } from '@mastra/core/di';
+
+import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 export const useExecuteTool = () => {
-  const [isExecuting, setIsExecuting] = useState(false);
-
-  const executeTool = async ({ toolId, input }: { toolId: string; input: any }) => {
-    try {
-      setIsExecuting(true);
-      const response = await fetch(`/api/tools/${toolId}/execute`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ data: input }),
+  return useMutation({
+    mutationFn: async ({
+      toolId,
+      input,
+      runtimeContext: playgroundRuntimeContext,
+    }: {
+      toolId: string;
+      input: any;
+      runtimeContext?: Record<string, any>;
+    }) => {
+      const runtimeContext = new RuntimeContext();
+      Object.entries(playgroundRuntimeContext ?? {}).forEach(([key, value]) => {
+        runtimeContext.set(key, value);
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        toast.error(error?.error || 'Error executing dev tool');
-        throw new Error(`Error executing dev tool: ${error?.error || response.statusText}`);
+      try {
+        const tool = client.getTool(toolId);
+        const response = await tool.execute({ data: input, runtimeContext });
+
+        return response;
+      } catch (error) {
+        toast.error('Error executing dev tool');
+        console.error('Error executing dev tool:', error);
+        throw error;
       }
-
-      return await response.json();
-    } catch (error) {
-      console.error('Error executing dev tool:', error);
-      throw error;
-    } finally {
-      setIsExecuting(false);
-    }
-  };
-
-  return { executeTool, isExecuting };
+    },
+  });
 };

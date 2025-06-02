@@ -1,0 +1,30 @@
+---
+title: "mastra lint"
+description: "Mastraプロジェクトのリント"
+---
+
+`mastra lint` コマンドは、あなたのMastraプロジェクトの構造とコードを検証します。
+
+## 使用方法
+
+```bash
+mastra lint [options]
+```
+
+## オプション
+
+| オプション                | 説明                                             |
+| ------------------------- | ------------------------------------------------ |
+| `-d, --dir <path>`        | Mastra フォルダへのパス                          |
+| `-r, --root <path>`       | ルートフォルダへのパス                           |
+| `-t, --tools <toolsDirs>` | 含めるツールファイルへのパスをカンマ区切りで指定 |
+
+## 高度な使い方
+
+### テレメトリーの無効化
+
+リント（および他のコマンド）を実行中にCLIの分析機能を無効にするには、`MASTRA_TELEMETRY_DISABLED=1` を設定してください。
+
+```bash
+MASTRA_TELEMETRY_DISABLED=1 mastra lint
+```

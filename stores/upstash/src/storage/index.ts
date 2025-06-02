@@ -1,5 +1,5 @@
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
-import type { StorageThreadType, MessageType } from '@mastra/core/memory';
+import type { StorageThreadType, MastraMessageV1, MastraMessageV2 } from '@mastra/core/memory';
 import {
   MastraStorage,
   TABLE_MESSAGES,
@@ -8,9 +8,17 @@ import {
   TABLE_EVALS,
   TABLE_TRACES,
 } from '@mastra/core/storage';
-import type { TABLE_NAMES, StorageColumn, StorageGetMessagesArg, EvalRow } from '@mastra/core/storage';
+import type {
+  TABLE_NAMES,
+  StorageColumn,
+  StorageGetMessagesArg,
+  EvalRow,
+  WorkflowRuns,
+  WorkflowRun,
+} from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { Redis } from '@upstash/redis';
+import { MessageList } from '../../../../packages/core/dist/agent/index.cjs';
 
 export interface UpstashConfig {
   url: string;
@@ -18,15 +26,189 @@ export interface UpstashConfig {
 }
 
 export class UpstashStore extends MastraStorage {
-  batchInsert(_input: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    throw new Error('Method not implemented.');
+  private redis: Redis;
+
+  constructor(config: UpstashConfig) {
+    super({ name: 'Upstash' });
+    this.redis = new Redis({
+      url: config.url,
+      token: config.token,
+    });
+  }
+
+  private transformEvalRecord(record: Record<string, any>): EvalRow {
+    // Parse JSON strings if needed
+    let result = record.result;
+    if (typeof result === 'string') {
+      try {
+        result = JSON.parse(result);
+      } catch {
+        console.warn('Failed to parse result JSON:');
+      }
+    }
+
+    let testInfo = record.test_info;
+    if (typeof testInfo === 'string') {
+      try {
+        testInfo = JSON.parse(testInfo);
+      } catch {
+        console.warn('Failed to parse test_info JSON:');
+      }
+    }
+
+    return {
+      agentName: record.agent_name,
+      input: record.input,
+      output: record.output,
+      result: result as MetricResult,
+      metricName: record.metric_name,
+      instructions: record.instructions,
+      testInfo: testInfo as TestInfo | undefined,
+      globalRunId: record.global_run_id,
+      runId: record.run_id,
+      createdAt:
+        typeof record.created_at === 'string'
+          ? record.created_at
+          : record.created_at instanceof Date
+            ? record.created_at.toISOString()
+            : new Date().toISOString(),
+    };
+  }
+
+  private parseJSON(value: any): any {
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
+    }
+    return value;
+  }
+
+  private getKey(tableName: TABLE_NAMES, keys: Record<string, any>): string {
+    const keyParts = Object.entries(keys)
+      .filter(([_, value]) => value !== undefined)
+      .map(([key, value]) => `${key}:${value}`);
+    return `${tableName}:${keyParts.join(':')}`;
+  }
+
+  private ensureDate(date: Date | string | undefined): Date | undefined {
+    if (!date) return undefined;
+    return date instanceof Date ? date : new Date(date);
+  }
+
+  private serializeDate(date: Date | string | undefined): string | undefined {
+    if (!date) return undefined;
+    const dateObj = this.ensureDate(date);
+    return dateObj?.toISOString();
+  }
+
+  /**
+   * Scans for keys matching the given pattern using SCAN and returns them as an array.
+   * @param pattern Redis key pattern, e.g. "table:*"
+   * @param batchSize Number of keys to scan per batch (default: 1000)
+   */
+  private async scanKeys(pattern: string, batchSize = 10000): Promise<string[]> {
+    let cursor = '0';
+    let keys: string[] = [];
+    do {
+      // Upstash: scan(cursor, { match, count })
+      const [nextCursor, batch] = await this.redis.scan(cursor, {
+        match: pattern,
+        count: batchSize,
+      });
+      keys.push(...batch);
+      cursor = nextCursor;
+    } while (cursor !== '0');
+    return keys;
+  }
+
+  /**
+   * Deletes all keys matching the given pattern using SCAN and DEL in batches.
+   * @param pattern Redis key pattern, e.g. "table:*"
+   * @param batchSize Number of keys to delete per batch (default: 1000)
+   */
+  private async scanAndDelete(pattern: string, batchSize = 10000): Promise<number> {
+    let cursor = '0';
+    let totalDeleted = 0;
+    do {
+      const [nextCursor, keys] = await this.redis.scan(cursor, {
+        match: pattern,
+        count: batchSize,
+      });
+      if (keys.length > 0) {
+        await this.redis.del(...keys);
+        totalDeleted += keys.length;
+      }
+      cursor = nextCursor;
+    } while (cursor !== '0');
+    return totalDeleted;
+  }
+
+  private getMessageKey(threadId: string, messageId: string): string {
+    return this.getKey(TABLE_MESSAGES, { threadId, id: messageId });
+  }
+
+  private getThreadMessagesKey(threadId: string): string {
+    return `thread:${threadId}:messages`;
+  }
+
+  private parseWorkflowRun(row: any): WorkflowRun {
+    let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+    if (typeof parsedSnapshot === 'string') {
+      try {
+        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+      } catch (e) {
+        // If parsing fails, return the raw snapshot string
+        console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+      }
+    }
+
+    return {
+      workflowName: row.workflow_name,
+      runId: row.run_id,
+      snapshot: parsedSnapshot,
+      createdAt: this.ensureDate(row.createdAt)!,
+      updatedAt: this.ensureDate(row.updatedAt)!,
+      resourceId: row.resourceId,
+    };
+  }
+
+  private processRecord(tableName: TABLE_NAMES, record: Record<string, any>) {
+    let key: string;
+
+    if (tableName === TABLE_MESSAGES) {
+      // For messages, use threadId as the primary key component
+      key = this.getKey(tableName, { threadId: record.threadId, id: record.id });
+    } else if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
+      key = this.getKey(tableName, {
+        namespace: record.namespace || 'workflows',
+        workflow_name: record.workflow_name,
+        run_id: record.run_id,
+        ...(record.resourceId ? { resourceId: record.resourceId } : {}),
+      });
+    } else if (tableName === TABLE_EVALS) {
+      key = this.getKey(tableName, { id: record.run_id });
+    } else {
+      key = this.getKey(tableName, { id: record.id });
+    }
+
+    // Convert dates to ISO strings before storing
+    const processedRecord = {
+      ...record,
+      createdAt: this.serializeDate(record.createdAt),
+      updatedAt: this.serializeDate(record.updatedAt),
+    };
+
+    return { key, processedRecord };
   }
 
   async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
     try {
       // Get all keys that match the evals table pattern
       const pattern = `${TABLE_EVALS}:*`;
-      const keys = await this.redis.keys(pattern);
+      const keys = await this.scanKeys(pattern);
 
       // Fetch all eval records
       const evalRecords = await Promise.all(
@@ -89,45 +271,6 @@ export class UpstashStore extends MastraStorage {
     }
   }
 
-  private transformEvalRecord(record: Record<string, any>): EvalRow {
-    // Parse JSON strings if needed
-    let result = record.result;
-    if (typeof result === 'string') {
-      try {
-        result = JSON.parse(result);
-      } catch {
-        console.warn('Failed to parse result JSON:');
-      }
-    }
-
-    let testInfo = record.test_info;
-    if (typeof testInfo === 'string') {
-      try {
-        testInfo = JSON.parse(testInfo);
-      } catch {
-        console.warn('Failed to parse test_info JSON:');
-      }
-    }
-
-    return {
-      agentName: record.agent_name,
-      input: record.input,
-      output: record.output,
-      result: result as MetricResult,
-      metricName: record.metric_name,
-      instructions: record.instructions,
-      testInfo: testInfo as TestInfo | undefined,
-      globalRunId: record.global_run_id,
-      runId: record.run_id,
-      createdAt:
-        typeof record.created_at === 'string'
-          ? record.created_at
-          : record.created_at instanceof Date
-            ? record.created_at.toISOString()
-            : new Date().toISOString(),
-    };
-  }
-
   async getTraces(
     {
       name,
@@ -136,6 +279,8 @@ export class UpstashStore extends MastraStorage {
       perPage = 100,
       attributes,
       filters,
+      fromDate,
+      toDate,
     }: {
       name?: string;
       scope?: string;
@@ -143,6 +288,8 @@ export class UpstashStore extends MastraStorage {
       perPage: number;
       attributes?: Record<string, string>;
       filters?: Record<string, any>;
+      fromDate?: Date;
+      toDate?: Date;
     } = {
       page: 0,
       perPage: 100,
@@ -151,7 +298,7 @@ export class UpstashStore extends MastraStorage {
     try {
       // Get all keys that match the traces table pattern
       const pattern = `${TABLE_TRACES}:*`;
-      const keys = await this.redis.keys(pattern);
+      const keys = await this.scanKeys(pattern);
 
       // Fetch all trace records
       const traceRecords = await Promise.all(
@@ -197,6 +344,20 @@ export class UpstashStore extends MastraStorage {
         );
       }
 
+      // Apply fromDate filter if provided
+      if (fromDate) {
+        filteredTraces = filteredTraces.filter(
+          record => new Date(record.createdAt).getTime() >= new Date(fromDate).getTime(),
+        );
+      }
+
+      // Apply toDate filter if provided
+      if (toDate) {
+        filteredTraces = filteredTraces.filter(
+          record => new Date(record.createdAt).getTime() <= new Date(toDate).getTime(),
+        );
+      }
+
       // Sort traces by creation date (newest first)
       filteredTraces.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
@@ -228,45 +389,6 @@ export class UpstashStore extends MastraStorage {
     }
   }
 
-  private parseJSON(value: any): any {
-    if (typeof value === 'string') {
-      try {
-        return JSON.parse(value);
-      } catch {
-        return value;
-      }
-    }
-    return value;
-  }
-
-  private redis: Redis;
-
-  constructor(config: UpstashConfig) {
-    super({ name: 'Upstash' });
-    this.redis = new Redis({
-      url: config.url,
-      token: config.token,
-    });
-  }
-
-  private getKey(tableName: TABLE_NAMES, keys: Record<string, any>): string {
-    const keyParts = Object.entries(keys)
-      .filter(([_, value]) => value !== undefined)
-      .map(([key, value]) => `${key}:${value}`);
-    return `${tableName}:${keyParts.join(':')}`;
-  }
-
-  private ensureDate(date: Date | string | undefined): Date | undefined {
-    if (!date) return undefined;
-    return date instanceof Date ? date : new Date(date);
-  }
-
-  private serializeDate(date: Date | string | undefined): string | undefined {
-    if (!date) return undefined;
-    const dateObj = this.ensureDate(date);
-    return dateObj?.toISOString();
-  }
-
   async createTable({
     tableName,
     schema,
@@ -281,38 +403,29 @@ export class UpstashStore extends MastraStorage {
 
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     const pattern = `${tableName}:*`;
-    const keys = await this.redis.keys(pattern);
-    if (keys.length > 0) {
-      await this.redis.del(...keys);
-    }
+    await this.scanAndDelete(pattern);
   }
 
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    let key: string;
-
-    if (tableName === TABLE_MESSAGES) {
-      // For messages, use threadId as the primary key component
-      key = this.getKey(tableName, { threadId: record.threadId, id: record.id });
-    } else if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
-      key = this.getKey(tableName, {
-        namespace: record.namespace || 'workflows',
-        workflow_name: record.workflow_name,
-        run_id: record.run_id,
-      });
-    } else if (tableName === TABLE_EVALS) {
-      key = this.getKey(tableName, { id: record.run_id });
-    } else {
-      key = this.getKey(tableName, { id: record.id });
-    }
-
-    // Convert dates to ISO strings before storing
-    const processedRecord = {
-      ...record,
-      createdAt: this.serializeDate(record.createdAt),
-      updatedAt: this.serializeDate(record.updatedAt),
-    };
+    const { key, processedRecord } = this.processRecord(tableName, record);
 
     await this.redis.set(key, processedRecord);
+  }
+
+  async batchInsert(input: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
+    const { tableName, records } = input;
+    if (!records.length) return;
+
+    const batchSize = 1000;
+    for (let i = 0; i < records.length; i += batchSize) {
+      const batch = records.slice(i, i + batchSize);
+      const pipeline = this.redis.pipeline();
+      for (const record of batch) {
+        const { key, processedRecord } = this.processRecord(tableName, record);
+        pipeline.set(key, processedRecord);
+      }
+      await pipeline.exec();
+    }
   }
 
   async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
@@ -339,7 +452,7 @@ export class UpstashStore extends MastraStorage {
 
   async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
     const pattern = `${TABLE_THREADS}:*`;
-    const keys = await this.redis.keys(pattern);
+    const keys = await this.scanKeys(pattern);
     const threads = await Promise.all(
       keys.map(async key => {
         const data = await this.redis.get<StorageThreadType>(key);
@@ -397,18 +510,13 @@ export class UpstashStore extends MastraStorage {
     await this.redis.del(key);
   }
 
-  private getMessageKey(threadId: string, messageId: string): string {
-    return this.getKey(TABLE_MESSAGES, { threadId, id: messageId });
-  }
-
-  private getThreadMessagesKey(threadId: string): string {
-    return `thread:${threadId}:messages`;
-  }
-
-  async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
+  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
+  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
+  async saveMessages(
+    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
+  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
+    const { messages, format = 'v1' } = args;
     if (messages.length === 0) return [];
-
-    const pipeline = this.redis.pipeline();
 
     // Add an index to each message to maintain order
     const messagesWithIndex = messages.map((message, index) => ({
@@ -416,25 +524,39 @@ export class UpstashStore extends MastraStorage {
       _index: index,
     }));
 
-    for (const message of messagesWithIndex) {
-      const key = this.getMessageKey(message.threadId, message.id);
-      const score = message._index !== undefined ? message._index : new Date(message.createdAt).getTime();
+    const batchSize = 1000;
+    for (let i = 0; i < messagesWithIndex.length; i += batchSize) {
+      const batch = messagesWithIndex.slice(i, i + batchSize);
+      const pipeline = this.redis.pipeline();
+      for (const message of batch) {
+        const key = this.getMessageKey(message.threadId!, message.id);
+        const score = message._index !== undefined ? message._index : new Date(message.createdAt).getTime();
 
-      // Store the message data
-      pipeline.set(key, message);
+        // Store the message data
+        pipeline.set(key, message);
 
-      // Add to sorted set for this thread
-      pipeline.zadd(this.getThreadMessagesKey(message.threadId), {
-        score,
-        member: message.id,
-      });
+        // Add to sorted set for this thread
+        pipeline.zadd(this.getThreadMessagesKey(message.threadId!), {
+          score,
+          member: message.id,
+        });
+      }
+
+      await pipeline.exec();
     }
 
-    await pipeline.exec();
-    return messages;
+    const list = new MessageList().add(messages, 'memory');
+    if (format === `v2`) return list.get.all.v2();
+    return list.get.all.v1();
   }
 
-  async getMessages<T = unknown>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T[]> {
+  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
+  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
+  public async getMessages({
+    threadId,
+    selectBy,
+    format,
+  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
     const messageIds = new Set<string>();
     const threadMessagesKey = this.getThreadMessagesKey(threadId);
@@ -477,17 +599,21 @@ export class UpstashStore extends MastraStorage {
     const messages = (
       await Promise.all(
         Array.from(messageIds).map(async id =>
-          this.redis.get<MessageType & { _index?: number }>(this.getMessageKey(threadId, id)),
+          this.redis.get<MastraMessageV2 & { _index?: number }>(this.getMessageKey(threadId, id)),
         ),
       )
-    ).filter(msg => msg !== null) as (MessageType & { _index?: number })[];
+    ).filter(msg => msg !== null) as (MastraMessageV2 & { _index?: number })[];
 
     // Sort messages by their position in the sorted set
     const messageOrder = await this.redis.zrange(threadMessagesKey, 0, -1);
     messages.sort((a, b) => messageOrder.indexOf(a!.id) - messageOrder.indexOf(b!.id));
 
     // Remove _index before returning
-    return messages.map(({ _index, ...message }) => message as unknown as T);
+    const prepared = messages.map(({ _index, ...message }) => message as unknown as MastraMessageV1);
+
+    const list = new MessageList().add(prepared, 'memory');
+    if (format === `v2`) return list.get.all.v2();
+    return list.get.all.v1();
   }
 
   async persistWorkflowSnapshot(params: {
@@ -539,6 +665,7 @@ export class UpstashStore extends MastraStorage {
       toDate,
       limit,
       offset,
+      resourceId,
     }: {
       namespace: string;
       workflowName?: string;
@@ -546,74 +673,98 @@ export class UpstashStore extends MastraStorage {
       toDate?: Date;
       limit?: number;
       offset?: number;
+      resourceId?: string;
     } = { namespace: 'workflows' },
-  ): Promise<{
-    runs: Array<{
-      workflowName: string;
-      runId: string;
-      snapshot: WorkflowRunState | string;
-      createdAt: Date;
-      updatedAt: Date;
-    }>;
-    total: number;
-  }> {
-    // Get all workflow keys
-    const pattern = workflowName
-      ? this.getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace, workflow_name: workflowName }) + ':*'
-      : this.getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace }) + ':*';
+  ): Promise<WorkflowRuns> {
+    try {
+      // Get all workflow keys
+      let pattern = this.getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace }) + ':*';
+      if (workflowName && resourceId) {
+        pattern = this.getKey(TABLE_WORKFLOW_SNAPSHOT, {
+          namespace,
+          workflow_name: workflowName,
+          run_id: '*',
+          resourceId,
+        });
+      } else if (workflowName) {
+        pattern = this.getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace, workflow_name: workflowName }) + ':*';
+      } else if (resourceId) {
+        pattern = this.getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace, workflow_name: '*', run_id: '*', resourceId });
+      }
+      const keys = await this.scanKeys(pattern);
 
-    const keys = await this.redis.keys(pattern);
+      // Get all workflow data
+      const workflows = await Promise.all(
+        keys.map(async key => {
+          const data = await this.redis.get<{
+            workflow_name: string;
+            run_id: string;
+            snapshot: WorkflowRunState | string;
+            createdAt: string | Date;
+            updatedAt: string | Date;
+            resourceId: string;
+          }>(key);
+          return data;
+        }),
+      );
 
-    // Get all workflow data
-    const workflows = await Promise.all(
-      keys.map(async key => {
-        const data = await this.redis.get<{
-          workflow_name: string;
-          run_id: string;
-          snapshot: WorkflowRunState | string;
-          createdAt: string | Date;
-          updatedAt: string | Date;
-        }>(key);
-        return data;
-      }),
-    );
+      // Filter and transform results
+      let runs = workflows
+        .filter(w => w !== null)
+        .map(w => this.parseWorkflowRun(w!))
+        .filter(w => {
+          if (fromDate && w.createdAt < fromDate) return false;
+          if (toDate && w.createdAt > toDate) return false;
+          return true;
+        })
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
-    // Filter and transform results
-    let runs = workflows
-      .filter(w => w !== null)
-      .map(w => {
-        let parsedSnapshot: WorkflowRunState | string = w!.snapshot as string;
-        if (typeof parsedSnapshot === 'string') {
-          try {
-            parsedSnapshot = JSON.parse(w!.snapshot as string) as WorkflowRunState;
-          } catch {
-            // If parsing fails, return the raw snapshot string
-            console.warn(`Failed to parse snapshot for workflow ${w!.workflow_name}:`);
-          }
-        }
-        return {
-          workflowName: w!.workflow_name,
-          runId: w!.run_id,
-          snapshot: parsedSnapshot,
-          createdAt: this.ensureDate(w!.createdAt)!,
-          updatedAt: this.ensureDate(w!.updatedAt)!,
-        };
-      })
-      .filter(w => {
-        if (fromDate && w.createdAt < fromDate) return false;
-        if (toDate && w.createdAt > toDate) return false;
-        return true;
-      })
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      const total = runs.length;
 
-    const total = runs.length;
+      // Apply pagination if requested
+      if (limit !== undefined && offset !== undefined) {
+        runs = runs.slice(offset, offset + limit);
+      }
 
-    // Apply pagination if requested
-    if (limit !== undefined && offset !== undefined) {
-      runs = runs.slice(offset, offset + limit);
+      return { runs, total };
+    } catch (error) {
+      console.error('Error getting workflow runs:', error);
+      throw error;
     }
+  }
 
-    return { runs, total };
+  async getWorkflowRunById({
+    namespace = 'workflows',
+    runId,
+    workflowName,
+  }: {
+    namespace: string;
+    runId: string;
+    workflowName?: string;
+  }): Promise<WorkflowRun | null> {
+    try {
+      const key = this.getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace, workflow_name: workflowName, run_id: runId }) + '*';
+      const keys = await this.scanKeys(key);
+      const workflows = await Promise.all(
+        keys.map(async key => {
+          const data = await this.redis.get<{
+            workflow_name: string;
+            run_id: string;
+            snapshot: WorkflowRunState | string;
+            createdAt: string | Date;
+            updatedAt: string | Date;
+            resourceId: string;
+          }>(key);
+          return data;
+        }),
+      );
+      const data = workflows.find(w => w?.run_id === runId && w?.workflow_name === workflowName) as WorkflowRun | null;
+      if (!data) return null;
+      return this.parseWorkflowRun(data);
+    } catch (error) {
+      console.error('Error getting workflow run by ID:', error);
+      throw error;
+    }
   }
 
   async close(): Promise<void> {

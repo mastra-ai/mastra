@@ -18,32 +18,32 @@ const voice = new GoogleVoice();
 // Initialize with custom configuration
 const voice = new GoogleVoice({
   speechModel: {
-    apiKey: 'your-speech-api-key',
+    apiKey: "your-speech-api-key",
   },
   listeningModel: {
-    apiKey: 'your-listening-api-key',
+    apiKey: "your-listening-api-key",
   },
-  speaker: 'en-US-Casual-K',
+  speaker: "en-US-Casual-K",
 });
 
 // Text-to-Speech
 const audioStream = await voice.speak("Hello, world!", {
-  languageCode: 'en-US',
+  languageCode: "en-US",
   audioConfig: {
-    audioEncoding: 'LINEAR16',
+    audioEncoding: "LINEAR16",
   },
 });
 
 // Speech-to-Text
 const transcript = await voice.listen(audioStream, {
   config: {
-    encoding: 'LINEAR16',
-    languageCode: 'en-US',
+    encoding: "LINEAR16",
+    languageCode: "en-US",
   },
 });
 
 // Get available voices for a specific language
-const voices = await voice.getSpeakers({ languageCode: 'en-US' });
+const voices = await voice.getSpeakers({ languageCode: "en-US" });
 ```
 
 ## Constructor Parameters
@@ -81,7 +81,8 @@ const voices = await voice.getSpeakers({ languageCode: 'en-US' });
     {
       name: "apiKey",
       type: "string",
-      description: "Google Cloud API key. Falls back to GOOGLE_API_KEY environment variable",
+      description:
+        "Google Cloud API key. Falls back to GOOGLE_API_KEY environment variable",
       isOptional: true,
     },
   ]}
@@ -98,7 +99,8 @@ Converts text to speech using Google Cloud Text-to-Speech service.
     {
       name: "input",
       type: "string | NodeJS.ReadableStream",
-      description: "Text to convert to speech. If a stream is provided, it will be converted to text first.",
+      description:
+        "Text to convert to speech. If a stream is provided, it will be converted to text first.",
       isOptional: false,
     },
     {
@@ -116,13 +118,15 @@ Converts text to speech using Google Cloud Text-to-Speech service.
     {
       name: "options.languageCode",
       type: "string",
-      description: "Language code for the voice (e.g., 'en-US'). Defaults to the language code from the speaker ID or 'en-US'",
+      description:
+        "Language code for the voice (e.g., 'en-US'). Defaults to the language code from the speaker ID or 'en-US'",
       isOptional: true,
     },
     {
       name: "options.audioConfig",
       type: "ISynthesizeSpeechRequest['audioConfig']",
-      description: "Audio configuration options from Google Cloud Text-to-Speech API",
+      description:
+        "Audio configuration options from Google Cloud Text-to-Speech API",
       isOptional: true,
       defaultValue: "{ audioEncoding: 'LINEAR16' }",
     },
@@ -158,7 +162,8 @@ Converts speech to text using Google Cloud Speech-to-Text service.
     {
       name: "options.config",
       type: "IRecognitionConfig",
-      description: "Recognition configuration from Google Cloud Speech-to-Text API",
+      description:
+        "Recognition configuration from Google Cloud Speech-to-Text API",
       isOptional: true,
       defaultValue: "{ encoding: 'LINEAR16', languageCode: 'en-US' }",
     },
@@ -184,7 +189,7 @@ Returns an array of available voice options, where each node contains:
       type: "string[]",
       description: "List of language codes supported by this voice",
       isOptional: false,
-    }
+    },
   ]}
 />
 

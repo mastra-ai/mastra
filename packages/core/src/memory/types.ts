@@ -1,5 +1,6 @@
 import type { AssistantContent, CoreMessage, EmbeddingModel, ToolContent, UserContent } from 'ai';
 
+export type { MastraMessageV2 } from '../agent';
 import type { MastraStorage } from '../storage';
 import type { MastraVector } from '../vector';
 import type { MemoryProcessor } from '.';
@@ -7,18 +8,23 @@ import type { MemoryProcessor } from '.';
 export type { Message as AiMessageType } from 'ai';
 
 // Types for the memory system
-export type MessageType = {
+export type MastraMessageV1 = {
   id: string;
-  content: UserContent | AssistantContent | ToolContent;
+  content: string | UserContent | AssistantContent | ToolContent;
   role: 'system' | 'user' | 'assistant' | 'tool';
   createdAt: Date;
-  threadId: string;
-  resourceId: string;
+  threadId?: string;
+  resourceId?: string;
   toolCallIds?: string[];
   toolCallArgs?: Record<string, unknown>[];
   toolNames?: string[];
   type: 'text' | 'tool-call' | 'tool-result';
 };
+
+/**
+ * @deprecated use MastraMessageV1 or MastraMessageV2
+ */
+export type MessageType = MastraMessageV1;
 
 export type StorageThreadType = {
   id: string;
@@ -30,7 +36,7 @@ export type StorageThreadType = {
 };
 
 export type MessageResponse<T extends 'raw' | 'core_message'> = {
-  raw: MessageType[];
+  raw: MastraMessageV1[];
   core_message: CoreMessage[];
 }[T];
 
@@ -46,7 +52,8 @@ export type MemoryConfig = {
   workingMemory?: {
     enabled: boolean;
     template?: string;
-    use?: 'text-stream' | 'tool-call';
+    /** @deprecated The `use` option has been removed. Working memory always uses tool-call mode. */
+    use?: never;
   };
   threads?: {
     generateTitle?: boolean;

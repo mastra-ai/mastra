@@ -2,7 +2,6 @@ import {
   NodeSDK,
   getNodeAutoInstrumentations,
   ATTR_SERVICE_NAME,
-  Resource,
   ParentBasedSampler,
   TraceIdRatioBasedSampler,
   AlwaysOnSampler,
@@ -10,6 +9,7 @@ import {
   OTLPHttpExporter,
   OTLPGrpcExporter,
   CompositeExporter,
+  resourceFromAttributes,
 } from '@mastra/core/telemetry/otel-vendor';
 import { telemetry } from './telemetry-config.mjs';
 
@@ -44,6 +44,9 @@ async function getExporters(config) {
   if (!config.disableLocalExport) {
     exporters.push(new OTLPHttpExporter({
       url: `http://localhost:${process.env.PORT ?? 4111}/api/telemetry`,
+      headers: process.env.MASTRA_DEV ? {
+        'x-mastra-dev-playground': 'true',
+      } : {},
     }));
   }
 
@@ -71,7 +74,7 @@ const exporters = await getExporters(telemetry);
 const compositeExporter = new CompositeExporter(exporters);
 
 const sdk = new NodeSDK({
-  resource: new Resource({
+  resource: resourceFromAttributes({
     [ATTR_SERVICE_NAME]: telemetry.serviceName || 'default-service',
   }),
   sampler,

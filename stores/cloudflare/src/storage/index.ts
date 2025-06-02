@@ -1,5 +1,7 @@
 import type { KVNamespace } from '@cloudflare/workers-types';
-import type { StorageThreadType, MessageType } from '@mastra/core/memory';
+import { MessageList } from '@mastra/core/agent';
+import type { MastraMessageV2 } from '@mastra/core/agent';
+import type { StorageThreadType, MastraMessageV1 } from '@mastra/core/memory';
 import {
   MastraStorage,
   TABLE_MESSAGES,
@@ -8,11 +10,18 @@ import {
   TABLE_EVALS,
   TABLE_TRACES,
 } from '@mastra/core/storage';
-import type { TABLE_NAMES, StorageColumn, StorageGetMessagesArg, EvalRow, WorkflowRuns } from '@mastra/core/storage';
+import type {
+  TABLE_NAMES,
+  StorageColumn,
+  StorageGetMessagesArg,
+  EvalRow,
+  WorkflowRuns,
+  WorkflowRun,
+} from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import Cloudflare from 'cloudflare';
 import { isWorkersConfig } from './types';
-import type { CloudflareStoreConfig, RecordTypes } from './types';
+import type { CloudflareStoreConfig, ListOptions, RecordTypes } from './types';
 
 export class CloudflareStore extends MastraStorage {
   private client?: Cloudflare;
@@ -73,7 +82,8 @@ export class CloudflareStore extends MastraStorage {
         this.logger.info('Using Cloudflare KV REST API');
       }
     } catch (error) {
-      this.logger.error('Failed to initialize CloudflareStore:', { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error('Failed to initialize CloudflareStore:', { message });
       throw error;
     }
   }
@@ -99,7 +109,30 @@ export class CloudflareStore extends MastraStorage {
         })),
       };
     }
-    return await this.client!.kv.namespaces.list({ account_id: this.accountId! });
+
+    let allNamespaces: Array<Cloudflare.KV.Namespace> = [];
+    let currentPage = 1;
+    const perPage = 50; // Using 50, max is 100 for namespaces.list
+    let morePagesExist = true;
+
+    while (morePagesExist) {
+      const response = await this.client!.kv.namespaces.list({
+        account_id: this.accountId!,
+        page: currentPage,
+        per_page: perPage,
+      });
+
+      if (response.result) {
+        allNamespaces = allNamespaces.concat(response.result);
+      }
+
+      morePagesExist = response.result ? response.result.length === perPage : false;
+
+      if (morePagesExist) {
+        currentPage++;
+      }
+    }
+    return { result: allNamespaces };
   }
 
   private async getNamespaceValue(tableName: TABLE_NAMES, key: string) {
@@ -120,7 +153,8 @@ export class CloudflareStore extends MastraStorage {
       if (error.message && error.message.includes('key not found')) {
         return null;
       }
-      this.logger.error(`Failed to get value for ${tableName} ${key}:`, { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to get value for ${tableName} ${key}:`, { message });
       throw error;
     }
   }
@@ -153,7 +187,8 @@ export class CloudflareStore extends MastraStorage {
         });
       }
     } catch (error) {
-      this.logger.error(`Failed to put value for ${tableName} ${key}:`, { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to put value for ${tableName} ${key}:`, { message });
       throw error;
     }
   }
@@ -170,7 +205,7 @@ export class CloudflareStore extends MastraStorage {
     }
   }
 
-  async listNamespaceKeys(tableName: TABLE_NAMES, options?: { limit?: number; prefix?: string }) {
+  async listNamespaceKeys(tableName: TABLE_NAMES, options?: ListOptions) {
     try {
       if (this.bindings) {
         const binding = this.getBinding(tableName);
@@ -253,17 +288,61 @@ export class CloudflareStore extends MastraStorage {
     const prefix = this.namespacePrefix ? `${this.namespacePrefix}_` : '';
 
     try {
-      if (tableName === TABLE_MESSAGES || tableName === TABLE_THREADS) {
-        return await this.getOrCreateNamespaceId(`${prefix}mastra_threads`);
-      } else if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
-        return await this.getOrCreateNamespaceId(`${prefix}mastra_workflows`);
-      } else {
-        return await this.getOrCreateNamespaceId(`${prefix}mastra_evals`);
+      const legacyNamespaceId = await this.checkLegacyNamespace(tableName, prefix);
+      if (legacyNamespaceId) {
+        return legacyNamespaceId;
       }
+      return await this.getOrCreateNamespaceId(`${prefix}${tableName}`);
     } catch (error: any) {
       this.logger.error('Error fetching namespace ID:', error);
       throw new Error(`Failed to fetch namespace ID for table ${tableName}: ${error.message}`);
     }
+  }
+
+  private LEGACY_NAMESPACE_MAP: Record<string, string> = {
+    [TABLE_MESSAGES]: TABLE_THREADS,
+    [TABLE_WORKFLOW_SNAPSHOT]: 'mastra_workflows',
+    [TABLE_TRACES]: TABLE_EVALS,
+  };
+
+  /**
+   * There were a few legacy mappings for tables such as
+   * - messages -> threads
+   * - workflow_snapshot -> mastra_workflows
+   * - traces -> evals
+   * This has been updated to use dedicated namespaces for each table.
+   * In the case of data for a table existing in the legacy namespace, warn the user to migrate to the new namespace.
+   *
+   * @param tableName The table name to check for legacy data
+   * @param prefix The namespace prefix
+   * @returns The legacy namespace ID if data exists; otherwise, null
+   */
+  private async checkLegacyNamespace(tableName: TABLE_NAMES, prefix: string): Promise<string | null> {
+    const legacyNamespaceBase = this.LEGACY_NAMESPACE_MAP[tableName];
+
+    // 1. If legacy mapping exists, check for legacy data
+    if (legacyNamespaceBase) {
+      const legacyNamespace = `${prefix}${legacyNamespaceBase}`;
+      const keyPrefix = this.namespacePrefix ? `${this.namespacePrefix}:` : '';
+      const prefixKey = `${keyPrefix}${tableName}:`;
+      const legacyId = await this.getNamespaceIdByName(legacyNamespace);
+      if (legacyId) {
+        // Check for any keys for this table in the legacy namespace
+        const response = await this.client!.kv.namespaces.keys.list(legacyId, {
+          account_id: this.accountId!,
+          prefix: prefixKey,
+        });
+        const keys = response.result;
+        const hasTableData = keys.length > 0;
+        if (hasTableData) {
+          this.logger.warn(
+            `Using legacy namespace "${legacyNamespace}" for ${tableName}. Consider migrating to a dedicated namespace "${prefix}${tableName}".`,
+          );
+          return legacyId;
+        }
+      }
+    }
+    return null;
   }
 
   /**
@@ -294,7 +373,8 @@ export class CloudflareStore extends MastraStorage {
       }
       return data;
     } catch (error) {
-      this.logger.error('Failed to parse text:', { error, text });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error('Failed to parse text:', { message, text });
       return null;
     }
   }
@@ -337,9 +417,9 @@ export class CloudflareStore extends MastraStorage {
     }
   }
 
-  private async listKV(tableName: TABLE_NAMES): Promise<Array<{ name: string }>> {
+  private async listKV(tableName: TABLE_NAMES, options?: ListOptions): Promise<Array<{ name: string }>> {
     try {
-      return await this.listNamespaceKeys(tableName);
+      return await this.listNamespaceKeys(tableName, options);
     } catch (error: any) {
       this.logger.error(`Failed to list KV for ${tableName}:`, error);
       throw new Error(`Failed to list KV: ${error.message}`);
@@ -363,7 +443,7 @@ export class CloudflareStore extends MastraStorage {
     }
   }
 
-  private async updateSorting(threadMessages: (MessageType & { _index?: number })[]) {
+  private async updateSorting(threadMessages: (MastraMessageV1 & { _index?: number })[]) {
     // Sort messages by index or timestamp
     return threadMessages
       .map(msg => ({
@@ -424,7 +504,7 @@ export class CloudflareStore extends MastraStorage {
   private async fetchAndParseMessages(
     threadId: string,
     messageIds: string[],
-  ): Promise<(MessageType & { _index?: number })[]> {
+  ): Promise<(MastraMessageV1 & { _index?: number })[]> {
     const messages = await Promise.all(
       messageIds.map(async id => {
         try {
@@ -433,12 +513,13 @@ export class CloudflareStore extends MastraStorage {
           if (!data) return null;
           return typeof data === 'string' ? JSON.parse(data) : data;
         } catch (error) {
-          this.logger.error(`Error retrieving message ${id}:`, { error });
+          const message = error instanceof Error ? error.message : String(error);
+          this.logger.error(`Error retrieving message ${id}:`, { message });
           return null;
         }
       }),
     );
-    return messages.filter((msg): msg is MessageType & { _index?: number } => msg !== null);
+    return messages.filter((msg): msg is MastraMessageV1 & { _index?: number } => msg !== null);
   }
 
   /**
@@ -482,7 +563,8 @@ export class CloudflareStore extends MastraStorage {
           value: JSON.stringify(updatedOrder),
         });
       } catch (error) {
-        this.logger.error(`Error updating sorted order for key ${orderKey}:`, { error });
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.error(`Error updating sorted order for key ${orderKey}:`, { message });
         throw error; // Let caller handle the error
       } finally {
         // Clean up the queue if this was the last operation
@@ -537,7 +619,11 @@ export class CloudflareStore extends MastraStorage {
         if (!record.namespace || !record.workflow_name || !record.run_id) {
           throw new Error('Namespace, workflow name, and run ID are required');
         }
-        return `${prefix}${tableName}:${record.namespace}:${record.workflow_name}:${record.run_id}`;
+        let key = `${prefix}${tableName}:${record.namespace}:${record.workflow_name}:${record.run_id}`;
+        if (record.resourceId) {
+          key = `${key}:${record.resourceId}`;
+        }
+        return key;
       case TABLE_TRACES:
         if (!record.id) throw new Error('Trace ID is required');
         return `${prefix}${tableName}:${record.id}`;
@@ -557,7 +643,8 @@ export class CloudflareStore extends MastraStorage {
       const schemaKey = this.getSchemaKey(tableName);
       return await this.getKV(tableName, schemaKey);
     } catch (error) {
-      this.logger.error(`Failed to get schema for ${tableName}:`, { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to get schema for ${tableName}:`, { message });
       return null;
     }
   }
@@ -611,7 +698,8 @@ export class CloudflareStore extends MastraStorage {
         }
       }
     } catch (error) {
-      this.logger.error(`Error validating record against schema:`, { error, record, schema });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error validating record against schema:`, { message, record, schema });
       throw error;
     }
   }
@@ -649,7 +737,7 @@ export class CloudflareStore extends MastraStorage {
           }
           break;
         case TABLE_WORKFLOW_SNAPSHOT:
-          if (!('namespace' in recordTyped) || !('workflowName' in recordTyped) || !('runId' in recordTyped)) {
+          if (!('namespace' in recordTyped) || !('workflow_name' in recordTyped) || !('run_id' in recordTyped)) {
             throw new Error('Workflow record missing required fields');
           }
           break;
@@ -662,7 +750,8 @@ export class CloudflareStore extends MastraStorage {
           throw new Error(`Unknown table type: ${tableName}`);
       }
     } catch (error) {
-      this.logger.error(`Failed to validate record for ${tableName}:`, { error, record });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to validate record for ${tableName}:`, { message, record });
       throw error;
     }
   }
@@ -711,7 +800,13 @@ export class CloudflareStore extends MastraStorage {
     }
   }
 
-  async insert<T extends TABLE_NAMES>({ tableName, record }: { tableName: T; record: RecordTypes[T] }): Promise<void> {
+  async insert<T extends TABLE_NAMES>({
+    tableName,
+    record,
+  }: {
+    tableName: T;
+    record: Record<string, any>;
+  }): Promise<void> {
     try {
       const key = this.getKey(tableName, record);
 
@@ -727,7 +822,8 @@ export class CloudflareStore extends MastraStorage {
       await this.validateRecord(processedRecord, tableName);
       await this.putKV({ tableName, key, value: processedRecord });
     } catch (error) {
-      this.logger.error(`Failed to insert record for ${tableName}:`, { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to insert record for ${tableName}:`, { message });
       throw error;
     }
   }
@@ -751,7 +847,9 @@ export class CloudflareStore extends MastraStorage {
 
       return processed as R;
     } catch (error) {
-      this.logger.error(`Failed to load data for ${tableName}:`, { error });
+      this.logger.error(`Failed to load data for ${tableName}:`, {
+        error: error instanceof Error ? error.message : String(error),
+      });
       return null;
     }
   }
@@ -768,7 +866,9 @@ export class CloudflareStore extends MastraStorage {
         metadata: this.ensureMetadata(thread.metadata),
       };
     } catch (error) {
-      this.logger.error(`Error processing thread ${threadId}:`, { error });
+      this.logger.error(`Error processing thread ${threadId}:`, {
+        error: error instanceof Error ? error.message : String(error),
+      });
       return null;
     }
   }
@@ -792,14 +892,16 @@ export class CloudflareStore extends MastraStorage {
               metadata: this.ensureMetadata(thread.metadata),
             };
           } catch (error) {
-            this.logger.error(`Error processing thread from key ${keyObj.name}:`, { error });
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.error(`Error processing thread from key ${keyObj.name}:`, { message });
             return null;
           }
         }),
       );
       return threads.filter((thread): thread is StorageThreadType => thread !== null);
     } catch (error) {
-      this.logger.error(`Error getting threads for resourceId ${resourceId}:`, { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error getting threads for resourceId ${resourceId}:`, { message });
       return [];
     }
   }
@@ -809,7 +911,8 @@ export class CloudflareStore extends MastraStorage {
       await this.insert({ tableName: TABLE_THREADS, record: thread });
       return thread;
     } catch (error) {
-      this.logger.error('Error saving thread:', { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error('Error saving thread:', { message });
       throw error;
     }
   }
@@ -842,7 +945,8 @@ export class CloudflareStore extends MastraStorage {
       await this.insert({ tableName: TABLE_THREADS, record: updatedThread });
       return updatedThread;
     } catch (error) {
-      this.logger.error(`Error updating thread ${id}:`, { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error updating thread ${id}:`, { message });
       throw error;
     }
   }
@@ -869,7 +973,8 @@ export class CloudflareStore extends MastraStorage {
         this.deleteKV(TABLE_THREADS, this.getKey(TABLE_THREADS, { id: threadId })),
       ]);
     } catch (error) {
-      this.logger.error(`Error deleting thread ${threadId}:`, { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error deleting thread ${threadId}:`, { message });
       throw error;
     }
   }
@@ -878,7 +983,8 @@ export class CloudflareStore extends MastraStorage {
     try {
       return this.getKey(TABLE_MESSAGES, { threadId, id: messageId });
     } catch (error) {
-      this.logger.error(`Error getting message key for thread ${threadId} and message ${messageId}:`, { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error getting message key for thread ${threadId} and message ${messageId}:`, { message });
       throw error;
     }
   }
@@ -886,12 +992,18 @@ export class CloudflareStore extends MastraStorage {
     try {
       return this.getKey(TABLE_MESSAGES, { threadId, id: 'messages' });
     } catch (error) {
-      this.logger.error(`Error getting thread messages key for thread ${threadId}:`, { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error getting thread messages key for thread ${threadId}:`, { message });
       throw error;
     }
   }
 
-  async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
+  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
+  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
+  async saveMessages(
+    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
+  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
+    const { messages, format = 'v1' } = args;
     if (!Array.isArray(messages) || messages.length === 0) return [];
 
     try {
@@ -911,19 +1023,21 @@ export class CloudflareStore extends MastraStorage {
         return {
           ...message,
           createdAt: this.ensureDate(message.createdAt)!,
-          type: message.type || 'text',
+          type: message.type || 'v2',
           _index: index,
         };
       });
 
       // Group messages by thread for batch processing
       const messagesByThread = validatedMessages.reduce((acc, message) => {
-        if (!acc.has(message.threadId)) {
+        if (message.threadId && !acc.has(message.threadId)) {
           acc.set(message.threadId, []);
         }
-        acc.get(message.threadId)!.push(message as MessageType & { _index?: number });
+        if (message.threadId) {
+          acc.get(message.threadId)!.push(message as MastraMessageV1 & { _index?: number });
+        }
         return acc;
-      }, new Map<string, (MessageType & { _index?: number })[]>());
+      }, new Map<string, (MastraMessageV1 & { _index?: number })[]>());
 
       // Process each thread's messages
       await Promise.all(
@@ -938,7 +1052,7 @@ export class CloudflareStore extends MastraStorage {
             // Save messages with serialized dates
             await Promise.all(
               threadMessages.map(async message => {
-                const key = await this.getMessageKey(threadId, message.id);
+                const key = this.getMessageKey(threadId, message.id);
                 // Strip _index and serialize dates before saving
                 const { _index, ...cleanMessage } = message;
                 const serializedMessage = {
@@ -962,7 +1076,13 @@ export class CloudflareStore extends MastraStorage {
       );
 
       // Remove _index from returned messages
-      return validatedMessages.map(({ _index, ...message }) => message as MessageType);
+      const prepared = validatedMessages.map(
+        ({ _index, ...message }) =>
+          ({ ...message, type: message.type !== 'v2' ? message.type : undefined }) as MastraMessageV1,
+      );
+      const list = new MessageList().add(prepared, 'memory');
+      if (format === `v2`) return list.get.all.v2();
+      return list.get.all.v1();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error(`Error saving messages: ${errorMessage}`);
@@ -970,7 +1090,14 @@ export class CloudflareStore extends MastraStorage {
     }
   }
 
-  async getMessages<T extends MessageType = MessageType>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T[]> {
+  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
+  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
+  public async getMessages({
+    threadId,
+    resourceId,
+    selectBy,
+    format,
+  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     if (!threadId) throw new Error('threadId is required');
 
     // Handle selectBy.last type safely - it can be number or false
@@ -1019,10 +1146,15 @@ export class CloudflareStore extends MastraStorage {
       }
 
       // Remove _index and ensure dates before returning, just like Upstash
-      return messages.map(({ _index, ...message }) => ({
+      const prepared = messages.map(({ _index, ...message }) => ({
         ...message,
+        type: message.type === (`v2` as `text`) ? undefined : message.type,
         createdAt: this.ensureDate(message.createdAt)!,
-      })) as T[];
+      }));
+      const list = new MessageList({ threadId, resourceId }).add(prepared as MastraMessageV1[], 'memory');
+
+      if (format === `v1`) return list.get.all.v1();
+      return list.get.all.v2();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error(`Error retrieving messages for thread ${threadId}: ${errorMessage}`);
@@ -1038,14 +1170,7 @@ export class CloudflareStore extends MastraStorage {
   }
 
   private validateWorkflowState(state: any): void {
-    if (
-      !state?.runId ||
-      !state?.value ||
-      !state?.context?.steps ||
-      !state?.context?.triggerData ||
-      !state?.context?.attempts ||
-      !state?.activePaths
-    ) {
+    if (!state?.runId || !state?.value || !state?.context?.input || !state?.activePaths) {
       throw new Error('Invalid workflow state structure');
     }
   }
@@ -1079,15 +1204,12 @@ export class CloudflareStore extends MastraStorage {
   }
 
   private normalizeWorkflowState(data: any): WorkflowRunState {
-    const steps = data.context?.stepResults || data.context?.steps || {};
     return {
       runId: data.runId,
       value: data.value,
-      context: {
-        steps: this.normalizeSteps(steps),
-        triggerData: data.context?.triggerData || {},
-        attempts: data.context?.attempts || {},
-      },
+      context: data.context,
+      serializedStepGraph: data.serializedStepGraph,
+      suspendedPaths: data.suspendedPaths || {},
       activePaths: data.activePaths || [],
       timestamp: data.timestamp || Date.now(),
     };
@@ -1106,10 +1228,20 @@ export class CloudflareStore extends MastraStorage {
       const normalizedState = this.normalizeWorkflowState(snapshot);
       this.validateWorkflowState(normalizedState);
 
-      const key = this.getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace, workflow_name: workflowName, run_id: runId });
-      await this.putKV({ tableName: TABLE_WORKFLOW_SNAPSHOT, key, value: normalizedState });
+      await this.insert({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        record: {
+          namespace,
+          workflow_name: workflowName,
+          run_id: runId,
+          snapshot: normalizedState,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
     } catch (error) {
-      this.logger.error('Error persisting workflow snapshot:', { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error('Error persisting workflow snapshot:', { message });
       throw error;
     }
   }
@@ -1127,11 +1259,13 @@ export class CloudflareStore extends MastraStorage {
       const data = await this.getKV(TABLE_WORKFLOW_SNAPSHOT, key);
       if (!data) return null;
 
-      const state = this.normalizeWorkflowState(data);
+      const state = this.normalizeWorkflowState(data.snapshot || data);
       this.validateWorkflowState(state);
       return state;
     } catch (error) {
-      this.logger.error('Error loading workflow snapshot:', { error });
+      this.logger.error('Error loading workflow snapshot:', {
+        error: error instanceof Error ? error.message : String(error),
+      });
       return null;
     }
   }
@@ -1157,7 +1291,8 @@ export class CloudflareStore extends MastraStorage {
         }),
       );
     } catch (error) {
-      this.logger.error('Error in batch insert:', { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error('Error in batch insert:', { message });
       throw error;
     }
   }
@@ -1168,12 +1303,16 @@ export class CloudflareStore extends MastraStorage {
     page = 0,
     perPage = 100,
     attributes,
+    fromDate,
+    toDate,
   }: {
     name?: string;
     scope?: string;
     page: number;
     perPage: number;
     attributes?: Record<string, string>;
+    fromDate?: Date;
+    toDate?: Date;
   }): Promise<any[]> {
     try {
       // Get all keys for traces table
@@ -1224,6 +1363,16 @@ export class CloudflareStore extends MastraStorage {
         });
       }
 
+      // Apply fromDate filter if provided
+      if (fromDate) {
+        filteredTraces = filteredTraces.filter(record => new Date(record.createdAt).getTime() >= fromDate.getTime());
+      }
+
+      // Apply toDate filter if provided
+      if (toDate) {
+        filteredTraces = filteredTraces.filter(record => new Date(record.createdAt).getTime() <= toDate.getTime());
+      }
+
       // Sort by createdAt desc
       filteredTraces.sort((a, b) => {
         const dateA = new Date(a.createdAt).getTime();
@@ -1254,7 +1403,8 @@ export class CloudflareStore extends MastraStorage {
         createdAt: record.createdAt,
       }));
     } catch (error) {
-      this.logger.error('Failed to get traces:', { message: error instanceof Error ? error.message : String(error) });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error('Failed to get traces:', { message });
       return [];
     }
   }
@@ -1274,15 +1424,150 @@ export class CloudflareStore extends MastraStorage {
     throw new Error('Method not implemented.');
   }
 
-  getWorkflowRuns(_args?: {
+  private parseWorkflowRun(row: any): WorkflowRun {
+    let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+    if (typeof parsedSnapshot === 'string') {
+      try {
+        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+      } catch (e) {
+        // If parsing fails, return the raw snapshot string
+        console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+      }
+    }
+
+    return {
+      workflowName: row.workflow_name,
+      runId: row.run_id,
+      snapshot: parsedSnapshot,
+      createdAt: this.ensureDate(row.createdAt)!,
+      updatedAt: this.ensureDate(row.updatedAt)!,
+      resourceId: row.resourceId,
+    };
+  }
+
+  private buildWorkflowSnapshotPrefix({
+    namespace,
+    workflowName,
+    runId,
+    resourceId,
+  }: {
     namespace?: string;
     workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
+    runId?: string;
+    resourceId?: string;
+  }): string {
+    // Add namespace prefix if configured
+    const prefix = this.namespacePrefix ? `${this.namespacePrefix}:` : '';
+    let key = `${prefix}${TABLE_WORKFLOW_SNAPSHOT}`;
+    if (namespace) key += `:${namespace}`;
+    if (workflowName) key += `:${workflowName}`;
+    if (runId) key += `:${runId}`;
+    if (resourceId) key += `:${resourceId}`;
+    // If partial, ensure trailing colon for correct prefix match
+    if (!resourceId && (runId || workflowName || namespace)) key += ':';
+    return key;
+  }
+
+  async getWorkflowRuns({
+    namespace,
+    workflowName,
+    limit = 20,
+    offset = 0,
+    resourceId,
+    fromDate,
+    toDate,
+  }: {
+    namespace?: string;
+    workflowName?: string;
     limit?: number;
     offset?: number;
-  }): Promise<WorkflowRuns> {
-    throw new Error('Method not implemented.');
+    resourceId?: string;
+    fromDate?: Date;
+    toDate?: Date;
+  } = {}): Promise<WorkflowRuns> {
+    try {
+      // List all keys in the workflow snapshot table
+      const prefix = this.buildWorkflowSnapshotPrefix({ namespace, workflowName });
+      const keyObjs = await this.listKV(TABLE_WORKFLOW_SNAPSHOT, { prefix });
+      const runs: WorkflowRun[] = [];
+      for (const { name: key } of keyObjs) {
+        // Extract namespace, workflow_name, run_id, resourceId from key
+        const parts = key.split(':');
+        const idx = parts.indexOf(TABLE_WORKFLOW_SNAPSHOT);
+        if (idx === -1 || parts.length < idx + 4) continue;
+        const ns = parts[idx + 1];
+        const wfName = parts[idx + 2];
+        // If resourceId is present in the key, it's at idx+4
+        const keyResourceId = parts.length > idx + 4 ? parts[idx + 4] : undefined;
+        // Filter by namespace, workflowName, resourceId if provided
+        if ((namespace && ns !== namespace) || (workflowName && wfName !== workflowName)) continue;
+        if (resourceId && keyResourceId && keyResourceId !== resourceId) continue;
+        // Load the snapshot
+        const data = await this.getKV(TABLE_WORKFLOW_SNAPSHOT, key);
+        if (!data) continue;
+        try {
+          // Filter by resourceId in value if not in key
+          if (resourceId && data.resourceId && data.resourceId !== resourceId) continue;
+          // Filter by fromDate/toDate
+          const createdAt = this.ensureDate(data.createdAt);
+          if (fromDate && createdAt && createdAt < fromDate) continue;
+          if (toDate && createdAt && createdAt > toDate) continue;
+          const state = this.normalizeWorkflowState(data.snapshot || data);
+          this.validateWorkflowState(state);
+          const run = this.parseWorkflowRun({ ...data, snapshot: state });
+          runs.push(run);
+        } catch (err) {
+          this.logger.error('Failed to parse workflow snapshot:', { key, error: err });
+        }
+      }
+      // Sort by createdAt descending
+      runs.sort((a, b) => {
+        const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return bDate - aDate;
+      });
+      // Apply pagination
+      const pagedRuns = runs.slice(offset, offset + limit);
+      return {
+        runs: pagedRuns,
+        total: runs.length,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error('Error in getWorkflowRuns:', { message });
+      return { runs: [], total: 0 };
+    }
+  }
+
+  async getWorkflowRunById({
+    namespace,
+    runId,
+    workflowName,
+  }: {
+    namespace: string;
+    runId: string;
+    workflowName: string;
+  }): Promise<WorkflowRun | null> {
+    try {
+      if (!runId || !workflowName || !namespace) {
+        throw new Error('runId, workflowName, and namespace are required');
+      }
+      // Use prefix to list all possible keys for this run (with/without resourceId)
+      const prefix = this.buildWorkflowSnapshotPrefix({ namespace, workflowName, runId });
+      const keyObjs = await this.listKV(TABLE_WORKFLOW_SNAPSHOT, { prefix });
+      if (!keyObjs.length) return null;
+      const key = keyObjs[0]?.name;
+      const data = await this.getKV(TABLE_WORKFLOW_SNAPSHOT, key as string);
+      if (!data) return null;
+      // Normalize to WorkflowRun type
+      const state = this.normalizeWorkflowState(data.snapshot || data);
+      this.validateWorkflowState(state);
+      return this.parseWorkflowRun({ ...data, snapshot: state });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error('Error in getWorkflowRunById:', { message });
+      return null;
+    }
   }
 
   async close(): Promise<void> {

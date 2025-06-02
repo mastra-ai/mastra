@@ -9,5 +9,4 @@ const meta = {
     theme: { sidebar: false, layout: "full" },
   },
 };
-
 export default meta;

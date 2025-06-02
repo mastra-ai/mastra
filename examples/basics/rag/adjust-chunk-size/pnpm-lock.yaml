@@ -1,0 +1,16 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+overrides:
+  '@mastra/rag': link:../../../../packages/rag
+
+importers:
+
+  .:
+    dependencies:
+      '@mastra/rag':
+        specifier: link:../../../../packages/rag
+        version: link:../../../../packages/rag

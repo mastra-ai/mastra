@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { resolve } from "path";
 
 const nextConfig: NextConfig = {
   /* config options here */
@@ -33,6 +34,11 @@ const nextConfig: NextConfig = {
       ...config.module,
       exprContextCritical: false,
       noParse: [/onnxruntime-node/],
+    };
+
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      "@libsql/client": resolve("./node_modules/@libsql/client"),
     };
 
     return config;

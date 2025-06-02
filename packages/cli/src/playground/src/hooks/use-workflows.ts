@@ -1,21 +1,21 @@
-import type { Workflow } from '@mastra/core/workflows';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { GetWorkflowResponse, WorkflowRunResult } from '@mastra/client-js';
+import { GetWorkflowResponse, GetLegacyWorkflowResponse } from '@mastra/client-js';
 import { client } from '@/lib/client';
 
 export const useWorkflows = () => {
+  const [legacyWorkflows, setLegacyWorkflows] = useState<Record<string, GetLegacyWorkflowResponse>>({});
   const [workflows, setWorkflows] = useState<Record<string, GetWorkflowResponse>>({});
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const fetchWorkflows = async () => {
+    const fetchLegacyWorkflows = async () => {
       setIsLoading(true);
       try {
-        const res = await client.getWorkflows();
-        setWorkflows(res);
+        const [legacyWorkflows, workflows] = await Promise.all([client.getLegacyWorkflows(), client.getWorkflows()]);
+        setLegacyWorkflows(legacyWorkflows);
+        setWorkflows(workflows);
       } catch (error) {
-        setWorkflows({});
         console.error('Error fetching workflows', error);
         toast.error('Error fetching workflows');
       } finally {
@@ -23,14 +23,46 @@ export const useWorkflows = () => {
       }
     };
 
-    fetchWorkflows();
+    fetchLegacyWorkflows();
   }, []);
 
-  return { workflows, isLoading };
+  return { legacyWorkflows, workflows, isLoading };
 };
 
-export const useWorkflow = (workflowId: string) => {
-  const [workflow, setWorkflow] = useState<Workflow | null>(null);
+export const useLegacyWorkflow = (workflowId: string, enabled = true) => {
+  const [legacyWorkflow, setLegacyWorkflow] = useState<GetLegacyWorkflowResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchWorkflow = async () => {
+      setIsLoading(true);
+      try {
+        if (!workflowId) {
+          setLegacyWorkflow(null);
+          setIsLoading(false);
+          return;
+        }
+        const res = await client.getLegacyWorkflow(workflowId).details();
+        setLegacyWorkflow(res);
+      } catch (error) {
+        setLegacyWorkflow(null);
+        console.error('Error fetching legacy workflow', error);
+        toast.error('Error fetching legacy workflow');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (enabled) {
+      fetchWorkflow();
+    }
+  }, [workflowId, enabled]);
+
+  return { legacyWorkflow, isLoading };
+};
+
+export const useWorkflow = (workflowId: string, enabled = true) => {
+  const [workflow, setWorkflow] = useState<GetWorkflowResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -42,16 +74,8 @@ export const useWorkflow = (workflowId: string) => {
           setIsLoading(false);
           return;
         }
-        const res = await fetch(`/api/workflows/${workflowId}`);
-        if (!res.ok) {
-          const error = await res.json();
-          setWorkflow(null);
-          console.error('Error fetching workflow', error);
-          toast.error(error?.error || 'Error fetching workflow');
-          return;
-        }
-        const workflow = await res.json();
-        setWorkflow(workflow);
+        const res = await client.getWorkflow(workflowId).details();
+        setWorkflow(res);
       } catch (error) {
         setWorkflow(null);
         console.error('Error fetching workflow', error);
@@ -61,94 +85,10 @@ export const useWorkflow = (workflowId: string) => {
       }
     };
 
-    fetchWorkflow();
-  }, [workflowId]);
+    if (enabled) {
+      fetchWorkflow();
+    }
+  }, [workflowId, enabled]);
 
   return { workflow, isLoading };
-};
-
-export const useExecuteWorkflow = () => {
-  const [isExecutingWorkflow, setIsExecutingWorkflow] = useState(false);
-
-  const executeWorkflow = async ({ workflowId, input }: { workflowId: string; input: any }) => {
-    try {
-      setIsExecutingWorkflow(true);
-      const response = await client.getWorkflow(workflowId).execute(input || {});
-      return response;
-    } catch (error) {
-      console.error('Error executing workflow:', error);
-      throw error;
-    } finally {
-      setIsExecutingWorkflow(false);
-    }
-  };
-
-  const createWorkflowRun = async ({ workflowId, input }: { workflowId: string; input: any }) => {
-    try {
-      const response = await client.getWorkflow(workflowId).startRun(input || {});
-      return response;
-    } catch (error) {
-      console.error('Error creating workflow run:', error);
-      throw error;
-    }
-  };
-
-  return { executeWorkflow, createWorkflowRun, isExecutingWorkflow };
-};
-
-export const useWatchWorkflow = () => {
-  const [isWatchingWorkflow, setIsWatchingWorkflow] = useState(false);
-  const [watchResult, setWatchResult] = useState<WorkflowRunResult | null>(null);
-
-  const watchWorkflow = async ({ workflowId, runId }: { workflowId: string; runId: string }) => {
-    try {
-      setIsWatchingWorkflow(true);
-
-      const watchSubscription = client.getWorkflow(workflowId).watch({ runId });
-
-      if (!watchSubscription) {
-        throw new Error('Error watching workflow');
-      }
-
-      for await (const record of watchSubscription) {
-        setWatchResult(record);
-      }
-    } catch (error) {
-      console.error('Error watching workflow:', error);
-      throw error;
-    } finally {
-      setIsWatchingWorkflow(false);
-    }
-  };
-
-  return { watchWorkflow, isWatchingWorkflow, watchResult };
-};
-
-export const useResumeWorkflow = () => {
-  const [isResumingWorkflow, setIsResumingWorkflow] = useState(false);
-
-  const resumeWorkflow = async ({
-    workflowId,
-    stepId,
-    runId,
-    context,
-  }: {
-    workflowId: string;
-    stepId: string;
-    runId: string;
-    context: any;
-  }) => {
-    try {
-      setIsResumingWorkflow(true);
-      const response = await client.getWorkflow(workflowId).resume({ stepId, runId, context });
-      return response;
-    } catch (error) {
-      console.error('Error resuming workflow:', error);
-      throw error;
-    } finally {
-      setIsResumingWorkflow(false);
-    }
-  };
-
-  return { resumeWorkflow, isResumingWorkflow };
 };

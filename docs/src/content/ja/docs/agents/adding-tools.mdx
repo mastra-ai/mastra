@@ -104,9 +104,9 @@ const result = await agent.generate("What is the weather in San Francisco?", {
 
 ## リクエスト/ユーザー固有の変数の注入
 
-ツールとワークフローに対する依存性注入をサポートしています。コンテナを`generate`または`stream`関数呼び出しに直接渡すか、[サーバーミドルウェア](/docs/deployment/server#Middleware)を使用して注入することができます。
+ツールとワークフローの依存性注入をサポートしています。`generate`または`stream`関数呼び出しに直接runtimeContextを渡すか、[サーバーミドルウェア](/docs/deployment/server#Middleware)を使用して注入することができます。
 
-以下は、華氏と摂氏の間で温度スケールを変更する例です：
+以下は、温度スケールを華氏と摂氏の間で変更する例です：
 
 ```typescript filename="src/agents/weather-agent.ts"
 import { Agent } from "@mastra/core/agent";
@@ -120,8 +120,8 @@ export const agent = new Agent({
       id: "Get Weather Information",
       description: "Get the weather in a location",
       inputSchema: z.object({ location: z.string() }),
-      execute: async ({ context: { location }, container }) => {
-        const scale = container.get("temperature-scale");
+      execute: async ({ context: { location }, runtimeContext }) => {
+        const scale = runtimeContext.get("temperature-scale");
 
         const result = await fetch(
           `https://api.weatherapi.com/v1/current.json?q=${location}`,
@@ -141,42 +141,13 @@ export const agent = new Agent({
 ```typescript
 import { agent } from "./agents/weather";
 
-type MyContainer = {"temperature-scale", "celsius" | "farenheit"}
+type MyRuntimeContext = {"temperature-scale", "celsius" | "farenheit"}
 
-const container = new Container<MyContainer>();
-container.set("temperature-scale", "celsius");
+const runtimeContext = new RuntimeContext<MyRuntimeContext>();
+runtimeContext.set("temperature-scale", "celsius");
 
 const result = await agent.generate("What is the weather in San Francisco?", {
-  container,
-});
-```
-
-Cloudflare `CF-IPCountry`ヘッダーを使用して、ユーザーの国から温度を導き出してみましょう。上記の例と同じエージェントコードを使用します。
-
-```typescript filename="src/index.ts"
-import { Mastra } from "@mastra/core";
-import { Container } from "@mastra/core/di";
-import { agent as weatherAgent } from "./agents/weather";
-
-type MyContainer = {"temperature-scale", "celsius" | "farenheit"}
-
-export const mastra = new Mastra({
-  agents: {
-    weather: weatherAgent,
-  },
-  server: {
-    middleware: [
-      (c, next) => {
-        const country = c.req.header("CF-IPCountry");
-        const container: MyContainer = c.get("container");
-
-        container.set(
-          "temperature-scale",
-          country === "US" ? "farenheit" : "celsius",
-        );
-      },
-    ],
-  },
+  runtimeContext,
 });
 ```
 

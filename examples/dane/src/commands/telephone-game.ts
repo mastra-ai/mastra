@@ -11,15 +11,21 @@ export async function telephone() {
 
   const { runId, start } = workflow.createRun();
 
+  // @ts-expect-error
   workflow.watch(async ({ activePaths, context }) => {
     for (const path of activePaths) {
+      // @ts-expect-error
       const ctx = context.steps?.[path.stepId]?.status;
       if (ctx === 'suspended') {
         // Handle suspension
+
+        // @ts-expect-error
         if (path.stepId === 'stepC2' && ctx === 'suspended') {
           const confirmed = await confirm({ message: 'Do you want to change the message?' });
           if (confirmed) {
+            // @ts-expect-error
             await workflow.resume({
+              // @ts-expect-error
               stepId: path.stepId,
               runId,
               context: {

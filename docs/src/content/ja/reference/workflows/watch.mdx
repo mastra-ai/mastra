@@ -1,11 +1,11 @@
 ---
 title: "リファレンス: run.watch() | ワークフロー | Mastra ドキュメント"
-description: ワークフロー内の `.watch()` メソッドに関するドキュメントで、ワークフローの実行状況を監視します。
+description: ワークフロー実行のステータスを監視する `.watch()` メソッドのドキュメント。
 ---
 
 # run.watch()
 
-`.watch()` 関数は、mastra の実行における状態の変化を購読し、実行の進行状況を監視し、状態の更新に反応することを可能にします。
+`.watch()` 関数は mastra run の状態変化を購読し、実行の進行状況を監視したり、状態の更新に反応したりすることができます。
 
 ## 使用例
 
@@ -13,23 +13,23 @@ description: ワークフロー内の `.watch()` メソッドに関するドキ�
 import { Workflow } from "@mastra/core/workflows";
 
 const workflow = new Workflow({
-  name: "document-processor"
+  name: "document-processor",
 });
 
 const run = workflow.createRun();
 
-// 状態の変化を購読する
-const unsubscribe = run.watch(({results, activePaths}) => {
-  console.log('結果:', results);
-  console.log('アクティブパス:', activePaths);
+// Subscribe to state changes
+const unsubscribe = run.watch(({ results, activePaths }) => {
+  console.log("Results:", results);
+  console.log("Active paths:", activePaths);
 });
 
-// ワークフローを実行する
+// Run the workflow
 await run.start({
-  input: { text: "このドキュメントを処理する" }
+  input: { text: "Process this document" },
 });
 
-// 監視を停止する
+// Stop watching
 unsubscribe();
 ```
 
@@ -41,12 +41,12 @@ unsubscribe();
       name: "callback",
       type: "(state: WorkflowState) => void",
       description: "ワークフローの状態が変化するたびに呼び出される関数",
-      isOptional: false
-    }
+      isOptional: false,
+    },
   ]}
 />
 
-### WorkflowState プロパティ
+### WorkflowState のプロパティ
 
 <PropertiesTable
   content={[
@@ -54,26 +54,26 @@ unsubscribe();
       name: "results",
       type: "Record<string, any>",
       description: "完了したワークフローステップからの出力",
-      isOptional: false
+      isOptional: false,
     },
     {
       name: "activePaths",
       type: "Map<string, { status: string; suspendPayload?: any; stepPath: string[] }>",
       description: "各ステップの現在のステータス",
-      isOptional: false
+      isOptional: false,
     },
     {
       name: "runId",
       type: "string",
       description: "ワークフロー実行のID",
-      isOptional: false
+      isOptional: false,
     },
     {
       name: "timestamp",
       type: "number",
       description: "ワークフロー実行のタイムスタンプ",
-      isOptional: false
-    }
+      isOptional: false,
+    },
   ]}
 />
 
@@ -84,8 +84,8 @@ unsubscribe();
     {
       name: "unsubscribe",
       type: "() => void",
-      description: "ワークフローの状態変化の監視を停止する関数"
-    }
+      description: "ワークフローの状態変更の監視を停止する関数",
+    },
   ]}
 />
 
@@ -94,25 +94,31 @@ unsubscribe();
 特定のステップの完了を監視する:
 
 ```typescript
-run.watch(({results, activePaths}) => {
-  if (activePaths.get('processDocument')?.status === 'completed') {
-    console.log('Document processing output:', results['processDocument'].output);
+run.watch(({ results, activePaths }) => {
+  if (activePaths.get("processDocument")?.status === "completed") {
+    console.log(
+      "Document processing output:",
+      results["processDocument"].output,
+    );
   }
 });
 ```
 
-エラーハンドリング:
+エラー処理:
 
 ```typescript
-run.watch(({results, activePaths}) => {
-  if (activePaths.get('processDocument')?.status === 'failed') {
-    console.error('Document processing failed:', results['processDocument'].error);
+run.watch(({ results, activePaths }) => {
+  if (activePaths.get("processDocument")?.status === "failed") {
+    console.error(
+      "Document processing failed:",
+      results["processDocument"].error,
+    );
     // Implement error recovery logic
   }
 });
 ```
 
-### 関連
+### 関連項目
 
-- [ワークフローの作成](/reference/workflows/createRun)
-- [ステップの設定](/reference/workflows/step-class)
+- [ワークフローの作成](../../reference/workflows/createRun.mdx)
+- [ステップの設定](../../reference/workflows/step-class.mdx)

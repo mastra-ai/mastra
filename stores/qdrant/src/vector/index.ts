@@ -5,7 +5,10 @@ import type {
   CreateIndexParams,
   UpsertVectorParams,
   QueryVectorParams,
-  ParamsToArgs,
+  DescribeIndexParams,
+  DeleteIndexParams,
+  DeleteVectorParams,
+  UpdateVectorParams,
 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import { QdrantClient } from '@qdrant/js-client-rest';
@@ -23,15 +26,19 @@ const DISTANCE_MAPPING: Record<string, Schemas['Distance']> = {
 export class QdrantVector extends MastraVector {
   private client: QdrantClient;
 
-  constructor(url: string, apiKey?: string, https?: boolean) {
+  /**
+   * Creates a new QdrantVector client.
+   * @param url - The URL of the Qdrant server.
+   * @param apiKey - The API key for Qdrant.
+   * @param https - Whether to use HTTPS.
+   */
+  constructor({ url, apiKey, https }: { url: string; apiKey?: string; https?: boolean }) {
     super();
-
     const baseClient = new QdrantClient({
       url,
       apiKey,
       https,
     });
-
     const telemetry = this.__getTelemetry();
     this.client =
       telemetry?.traceClass(baseClient, {
@@ -42,11 +49,7 @@ export class QdrantVector extends MastraVector {
       }) ?? baseClient;
   }
 
-  async upsert(...args: ParamsToArgs<UpsertVectorParams>): Promise<string[]> {
-    const params = this.normalizeArgs<UpsertVectorParams>('upsert', args);
-
-    const { indexName, vectors, metadata, ids } = params;
-
+  async upsert({ indexName, vectors, metadata, ids }: UpsertVectorParams): Promise<string[]> {
     const pointIds = ids || vectors.map(() => crypto.randomUUID());
 
     const records = vectors.map((vector, i) => ({
@@ -67,22 +70,29 @@ export class QdrantVector extends MastraVector {
     return pointIds;
   }
 
-  async createIndex(...args: ParamsToArgs<CreateIndexParams>): Promise<void> {
-    const params = this.normalizeArgs<CreateIndexParams>('createIndex', args);
-
-    const { indexName, dimension, metric = 'cosine' } = params;
-
+  async createIndex({ indexName, dimension, metric = 'cosine' }: CreateIndexParams): Promise<void> {
     if (!Number.isInteger(dimension) || dimension <= 0) {
       throw new Error('Dimension must be a positive integer');
     }
-    await this.client.createCollection(indexName, {
-      vectors: {
-        // @ts-expect-error
-        size: dimension,
-        // @ts-expect-error
-        distance: DISTANCE_MAPPING[metric],
-      },
-    });
+    if (!DISTANCE_MAPPING[metric]) {
+      throw new Error(`Invalid metric: "${metric}". Must be one of: cosine, euclidean, dotproduct`);
+    }
+    try {
+      await this.client.createCollection(indexName, {
+        vectors: {
+          size: dimension,
+          distance: DISTANCE_MAPPING[metric],
+        },
+      });
+    } catch (error: any) {
+      const message = error?.message || error?.toString();
+      // Qdrant typically returns 409 for existing collection
+      if (error?.status === 409 || (typeof message === 'string' && message.toLowerCase().includes('exists'))) {
+        // Fetch collection info and check dimension
+        await this.validateExistingIndex(indexName, dimension, metric);
+        return;
+      }
+    }
   }
 
   transformFilter(filter?: VectorFilter) {
@@ -90,11 +100,13 @@ export class QdrantVector extends MastraVector {
     return translator.translate(filter);
   }
 
-  async query(...args: ParamsToArgs<QueryVectorParams>): Promise<QueryResult[]> {
-    const params = this.normalizeArgs<QueryVectorParams>('query', args);
-
-    const { indexName, queryVector, topK = 10, filter, includeVector = false } = params;
-
+  async query({
+    indexName,
+    queryVector,
+    topK = 10,
+    filter,
+    includeVector = false,
+  }: QueryVectorParams): Promise<QueryResult[]> {
     const translatedFilter = this.transformFilter(filter) ?? {};
 
     const results = (
@@ -133,7 +145,13 @@ export class QdrantVector extends MastraVector {
     return response.collections.map(collection => collection.name) || [];
   }
 
-  async describeIndex(indexName: string): Promise<IndexStats> {
+  /**
+   * Retrieves statistics about a vector index.
+   *
+   * @param {string} indexName - The name of the index to describe
+   * @returns A promise that resolves to the index statistics including dimension, count and metric
+   */
+  async describeIndex({ indexName }: DescribeIndexParams): Promise<IndexStats> {
     const { config, points_count } = await this.client.getCollection(indexName);
 
     const distance = config.params.vectors?.distance as Schemas['Distance'];
@@ -145,18 +163,21 @@ export class QdrantVector extends MastraVector {
     };
   }
 
-  async deleteIndex(indexName: string): Promise<void> {
+  async deleteIndex({ indexName }: DeleteIndexParams): Promise<void> {
     await this.client.deleteCollection(indexName);
   }
 
-  async updateIndexById(
-    indexName: string,
-    id: string,
-    update: {
-      vector?: number[];
-      metadata?: Record<string, any>;
-    },
-  ): Promise<void> {
+  /**
+   * Updates a vector by its ID with the provided vector and/or metadata.
+   * @param indexName - The name of the index containing the vector.
+   * @param id - The ID of the vector to update.
+   * @param update - An object containing the vector and/or metadata to update.
+   * @param update.vector - An optional array of numbers representing the new vector.
+   * @param update.metadata - An optional record containing the new metadata.
+   * @returns A promise that resolves when the update is complete.
+   * @throws Will throw an error if no updates are provided or if the update operation fails.
+   */
+  async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
     if (!update.vector && !update.metadata) {
       throw new Error('No updates provided');
     }
@@ -198,19 +219,30 @@ export class QdrantVector extends MastraVector {
         return;
       }
     } catch (error) {
-      console.error('Error updating point in Qdrant:', error);
+      console.error(`Failed to update vector by id: ${id} for index name: ${indexName}:`, error);
       throw error;
     }
   }
 
-  async deleteIndexById(indexName: string, id: string): Promise<void> {
-    // Parse the ID - Qdrant supports both string and numeric IDs
-    const pointId = this.parsePointId(id);
+  /**
+   * Deletes a vector by its ID.
+   * @param indexName - The name of the index containing the vector.
+   * @param id - The ID of the vector to delete.
+   * @returns A promise that resolves when the deletion is complete.
+   * @throws Will throw an error if the deletion operation fails.
+   */
+  async deleteVector({ indexName, id }: DeleteVectorParams): Promise<void> {
+    try {
+      // Parse the ID - Qdrant supports both string and numeric IDs
+      const pointId = this.parsePointId(id);
 
-    // Use the Qdrant client to delete the point from the collection
-    await this.client.delete(indexName, {
-      points: [pointId],
-    });
+      // Use the Qdrant client to delete the point from the collection
+      await this.client.delete(indexName, {
+        points: [pointId],
+      });
+    } catch (error: any) {
+      throw new Error(`Failed to delete vector by id: ${id} for index name: ${indexName}: ${error.message}`);
+    }
   }
 
   /**

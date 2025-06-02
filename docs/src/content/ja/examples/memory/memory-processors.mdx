@@ -9,14 +9,14 @@ description: 呼び出されたメッセージをフィルタリングおよび�
 
 ## セットアップ
 
-まず、memoryパッケージをインストールします:
+まず、メモリパッケージをインストールします：
 
-```bash
-npm install @mastra/memory
-# または
-pnpm add @mastra/memory
-# または
-yarn add @mastra/memory
+```bash copy
+npm install @mastra/memory@latest
+# or
+pnpm add @mastra/memory@latest
+# or
+yarn add @mastra/memory@latest
 ```
 
 ## プロセッサを使用した基本的なメモリ設定
@@ -179,12 +179,12 @@ for await (const chunk of response.textStream) {
 
 ## 概要
 
-この例では以下を示します：
+この例では以下のことを示しています：
 
-1. コンテキストウィンドウのオーバーフローを防ぐためのトークン制限を使用したメモリの設定
+1. コンテキストウィンドウのオーバーフローを防ぐためのトークン制限付きメモリの設定
 2. ノイズとトークン使用量を減らすためのツール呼び出しのフィルタリング
-3. 最近のメッセージのみを保持するためのシンプルなカスタムプロセッサの作成
+3. 最近のメッセージのみを保持するシンプルなカスタムプロセッサの作成
 4. 複数のプロセッサを正しい順序で組み合わせる
 5. 処理されたメモリをエージェントと統合する
 
-メモリプロセッサの詳細については、[メモリプロセッサのドキュメント](/reference/memory/memory-processors)を参照してください。
+メモリプロセッサの詳細については、[メモリプロセッサのドキュメント](/docs/memory/memory-processors)をご覧ください。

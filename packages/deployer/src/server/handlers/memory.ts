@@ -145,11 +145,21 @@ export async function getMessagesHandler(c: Context) {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.query('agentId');
     const threadId = c.req.param('threadId');
+    const rawLimit = c.req.query('limit');
+    let limit: number | undefined = undefined;
+
+    if (rawLimit !== undefined) {
+      const n = Number(rawLimit);
+      if (Number.isFinite(n) && Number.isInteger(n) && n > 0) {
+        limit = n;
+      }
+    }
 
     const result = await getOriginalGetMessagesHandler({
       mastra,
       agentId,
       threadId,
+      limit,
     });
 
     return c.json(result);

@@ -1,14 +1,20 @@
+import clsx from 'clsx';
 import React from 'react';
 
 import { Txt } from '../Txt';
 
 export interface HeaderProps {
   children?: React.ReactNode;
+  border?: boolean;
 }
 
-export const Header = ({ children }: HeaderProps) => {
+export const Header = ({ children, border = true }: HeaderProps) => {
   return (
-    <header className="h-header-default bg-surface2 border-b-sm border-border1 z-50 flex w-full items-center gap-[18px] px-5">
+    <header
+      className={clsx('h-header-default z-50 flex w-full items-center gap-[18px] bg-transparent px-5', {
+        'border-b-sm border-border1': border,
+      })}
+    >
       {children}
     </header>
   );

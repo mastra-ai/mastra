@@ -9,6 +9,7 @@ const meta: Meta = {
   agents: "Agents",
   tools: "Tools",
   workflows: "Workflows",
+  legacyWorkflows: "Legacy Workflows",
   networks: "Networks",
   memory: "Memory",
   storage: "Storage",

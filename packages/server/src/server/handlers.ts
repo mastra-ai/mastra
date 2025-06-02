@@ -1,9 +1,11 @@
 export * as agents from './handlers/agents';
+export * as a2a from './handlers/a2a';
 export * as logs from './handlers/logs';
 export * as memory from './handlers/memory';
 export * as network from './handlers/network';
 export * as telemetry from './handlers/telemetry';
 export * as tools from './handlers/tools';
+export * as legacyWorkflows from './handlers/legacyWorkflows';
 export * as workflows from './handlers/workflows';
 export * as vector from './handlers/vector';
 export * as voice from './handlers/voice';

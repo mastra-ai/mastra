@@ -110,10 +110,12 @@ export const createMastraProject = async ({
   // use npm not ${pm} because this just creates a package.json - compatible with all PMs, each PM has a slightly different init command, ex pnpm does not have a -y flag. Use npm here for simplicity
   await exec(`npm init -y`);
   await exec(`npm pkg set type="module"`);
+  await exec(`npm pkg set engines.node=">=20.9.0"`);
   const depsService = new DepsService();
   await depsService.addScriptsToPackageJson({
     dev: 'mastra dev',
     build: 'mastra build',
+    start: 'mastra start',
   });
 
   s.stop('Project created');
@@ -144,9 +146,11 @@ export const createMastraProject = async ({
   await installMastraDependency(pm, 'mastra', versionTag, true, timeout);
   s.stop('mastra installed');
 
-  s.start('Installing @mastra/core');
+  s.start('Installing dependencies');
   await installMastraDependency(pm, '@mastra/core', versionTag, false, timeout);
-  s.stop('@mastra/core installed');
+  await installMastraDependency(pm, '@mastra/libsql', versionTag, false, timeout);
+  await installMastraDependency(pm, '@mastra/memory', versionTag, false, timeout);
+  s.stop('Dependencies installed');
 
   s.start('Adding .gitignore');
   await exec(`echo output.txt >> .gitignore`);

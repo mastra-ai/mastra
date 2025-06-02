@@ -1,8 +1,8 @@
+import { processDataStream } from '@ai-sdk/ui-utils';
 import type { GenerateReturn } from '@mastra/core';
 import type { JSONSchema7 } from 'json-schema';
 import { ZodSchema } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
-import { processDataStream } from '@ai-sdk/ui-utils';
+import { zodToJsonSchema } from '../utils/zod-to-json-schema';
 
 import type {
   GenerateParams,
@@ -14,29 +14,8 @@ import type {
 } from '../types';
 
 import { BaseResource } from './base';
-
-export class AgentTool extends BaseResource {
-  constructor(
-    options: ClientOptions,
-    private agentId: string,
-    private toolId: string,
-  ) {
-    super(options);
-  }
-
-  /**
-   * Executes a specific tool for an agent
-   * @param params - Parameters required for tool execution
-   * @returns Promise containing tool execution results
-   */
-  /** @deprecated use CreateRun/startRun */
-  execute(params: { data: any }): Promise<any> {
-    return this.request(`/api/agents/${this.agentId}/tools/${this.toolId}/execute`, {
-      method: 'POST',
-      body: params,
-    });
-  }
-}
+import type { RuntimeContext } from '@mastra/core/runtime-context';
+import { parseClientRuntimeContext } from '../utils';
 
 export class AgentVoice extends BaseResource {
   constructor(
@@ -70,7 +49,7 @@ export class AgentVoice extends BaseResource {
    * @param options - Optional provider-specific options
    * @returns Promise containing the transcribed text
    */
-  listen(audio: Blob, options?: Record<string, any>): Promise<Response> {
+  listen(audio: Blob, options?: Record<string, any>): Promise<{ text: string }> {
     const formData = new FormData();
     formData.append('audio', audio);
 
@@ -90,6 +69,14 @@ export class AgentVoice extends BaseResource {
    */
   getSpeakers(): Promise<Array<{ voiceId: string; [key: string]: any }>> {
     return this.request(`/api/agents/${this.agentId}/voice/speakers`);
+  }
+
+  /**
+   * Get the listener configuration for the agent's voice provider
+   * @returns Promise containing a check if the agent has listening capabilities
+   */
+  getListener(): Promise<{ enabled: boolean }> {
+    return this.request(`/api/agents/${this.agentId}/voice/listener`);
   }
 }
 
@@ -122,11 +109,9 @@ export class Agent extends BaseResource {
   ): Promise<GenerateReturn<T>> {
     const processedParams = {
       ...params,
-      output: params.output instanceof ZodSchema ? zodToJsonSchema(params.output) : params.output,
-      experimental_output:
-        params.experimental_output instanceof ZodSchema
-          ? zodToJsonSchema(params.experimental_output)
-          : params.experimental_output,
+      output: params.output ? zodToJsonSchema(params.output) : undefined,
+      experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
+      runtimeContext: parseClientRuntimeContext(params.runtimeContext),
     };
 
     return this.request(`/api/agents/${this.agentId}/generate`, {
@@ -149,11 +134,9 @@ export class Agent extends BaseResource {
   > {
     const processedParams = {
       ...params,
-      output: params.output instanceof ZodSchema ? zodToJsonSchema(params.output) : params.output,
-      experimental_output:
-        params.experimental_output instanceof ZodSchema
-          ? zodToJsonSchema(params.experimental_output)
-          : params.experimental_output,
+      output: params.output ? zodToJsonSchema(params.output) : undefined,
+      experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
+      runtimeContext: parseClientRuntimeContext(params.runtimeContext),
     };
 
     const response: Response & {
@@ -185,6 +168,23 @@ export class Agent extends BaseResource {
    */
   getTool(toolId: string): Promise<GetToolResponse> {
     return this.request(`/api/agents/${this.agentId}/tools/${toolId}`);
+  }
+
+  /**
+   * Executes a tool for the agent
+   * @param toolId - ID of the tool to execute
+   * @param params - Parameters required for tool execution
+   * @returns Promise containing the tool execution results
+   */
+  executeTool(toolId: string, params: { data: any; runtimeContext?: RuntimeContext }): Promise<any> {
+    const body = {
+      data: params.data,
+      runtimeContext: params.runtimeContext ? Object.fromEntries(params.runtimeContext.entries()) : undefined,
+    };
+    return this.request(`/api/agents/${this.agentId}/tools/${toolId}/execute`, {
+      method: 'POST',
+      body,
+    });
   }
 
   /**

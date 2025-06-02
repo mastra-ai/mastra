@@ -6,12 +6,17 @@ import * as p from '@clack/prompts';
 import fsExtra from 'fs-extra/esm';
 import color from 'picocolors';
 import prettier from 'prettier';
+import shellQuote from 'shell-quote';
 import yoctoSpinner from 'yocto-spinner';
 
 import { DepsService } from '../../services/service.deps';
 import { FileService } from '../../services/service.file';
 import { logger } from '../../utils/logger';
-import { globalWindsurfMCPIsAlreadyInstalled, windsurfGlobalMCPConfigPath } from './mcp-docs-server-install';
+import {
+  cursorGlobalMCPConfigPath,
+  globalMCPIsAlreadyInstalled,
+  windsurfGlobalMCPConfigPath,
+} from './mcp-docs-server-install';
 
 const exec = util.promisify(child_process.exec);
 
@@ -41,7 +46,7 @@ export const getProviderImportAndModelItem = (llmProvider: LLMProvider) => {
 
   if (llmProvider === 'openai') {
     providerImport = `import { openai } from '${getAISDKPackage(llmProvider)}';`;
-    modelItem = `openai('gpt-4o')`;
+    modelItem = `openai('gpt-4o-mini')`;
   } else if (llmProvider === 'anthropic') {
     providerImport = `import { anthropic } from '${getAISDKPackage(llmProvider)}';`;
     modelItem = `anthropic('claude-3-5-sonnet-20241022')`;
@@ -76,13 +81,20 @@ export async function writeAgentSample(llmProvider: LLMProvider, destPath: strin
   const content = `
 ${providerImport}
 import { Agent } from '@mastra/core/agent';
-${addExampleTool ? `import { weatherTool } from '../tools';` : ''}
+import { Memory } from '@mastra/memory';
+import { LibSQLStore } from '@mastra/libsql';
+${addExampleTool ? `import { weatherTool } from '../tools/weather-tool';` : ''}
 
 export const weatherAgent = new Agent({
   name: 'Weather Agent',
   instructions: \`${instructions}\`,
   model: ${modelItem},
   ${addExampleTool ? 'tools: { weatherTool },' : ''}
+  memory: new Memory({
+    storage: new LibSQLStore({
+      url: "file:../mastra.db", // path is relative to the .mastra/output directory
+    })
+  })
 });
     `;
   const formattedContent = await prettier.format(content, {
@@ -99,7 +111,7 @@ export async function writeWorkflowSample(destPath: string, llmProvider: LLMProv
 
   const content = `${providerImport}
 import { Agent } from '@mastra/core/agent';
-import { Step, Workflow } from '@mastra/core/workflows';
+import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 
 const llm = ${modelItem};
@@ -152,102 +164,14 @@ const agent = new Agent({
       \`,
 });
 
-const forecastSchema = z.array(
-  z.object({
-    date: z.string(),
-    maxTemp: z.number(),
-    minTemp: z.number(),
-    precipitationChance: z.number(),
-    condition: z.string(),
-    location: z.string(),
-  }),
-);
-
-const fetchWeather = new Step({
-  id: 'fetch-weather',
-  description: 'Fetches weather forecast for a given city',
-  inputSchema: z.object({
-    city: z.string().describe('The city to get the weather for'),
-  }),
-  outputSchema: forecastSchema,
-  execute: async ({ context }) => {
-    const triggerData = context?.getStepResult<{ city: string }>('trigger');
-
-    if (!triggerData) {
-      throw new Error('Trigger data not found');
-    }
-
-    const geocodingUrl = \`https://geocoding-api.open-meteo.com/v1/search?name=\${encodeURIComponent(triggerData.city)}&count=1\`;
-    const geocodingResponse = await fetch(geocodingUrl);
-    const geocodingData = (await geocodingResponse.json()) as {
-      results: { latitude: number; longitude: number; name: string }[];
-    };
-
-    if (!geocodingData.results?.[0]) {
-      throw new Error(\`Location '\${triggerData.city}' not found\`);
-    }
-
-    const { latitude, longitude, name } = geocodingData.results[0];
-
-    const weatherUrl = \`https://api.open-meteo.com/v1/forecast?latitude=\${latitude}&longitude=\${longitude}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_mean,weathercode&timezone=auto\`;
-    const response = await fetch(weatherUrl);
-    const data = (await response.json()) as {
-      daily: {
-        time: string[];
-        temperature_2m_max: number[];
-        temperature_2m_min: number[];
-        precipitation_probability_mean: number[];
-        weathercode: number[];
-      };
-    };
-
-    const forecast = data.daily.time.map((date: string, index: number) => ({
-      date,
-      maxTemp: data.daily.temperature_2m_max[index],
-      minTemp: data.daily.temperature_2m_min[index],
-      precipitationChance: data.daily.precipitation_probability_mean[index],
-      condition: getWeatherCondition(data.daily.weathercode[index]!),
-      location: name,
-    }));
-
-    return forecast;
-  },
-});
-
-
-const planActivities = new Step({
-  id: 'plan-activities',
-  description: 'Suggests activities based on weather conditions',
-  execute: async ({ context, mastra }) => {
-    const forecast = context?.getStepResult(fetchWeather);
-
-    if (!forecast || forecast.length === 0) {
-      throw new Error('Forecast data not found');
-    }
-
-    const prompt = \`Based on the following weather forecast for \${forecast[0]?.location}, suggest appropriate activities:
-      \${JSON.stringify(forecast, null, 2)}
-      \`;
-
-    const response = await agent.stream([
-      {
-        role: 'user',
-        content: prompt,
-      },
-    ]);
-
-    let activitiesText = '';
-    
-    for await (const chunk of response.textStream) {
-      process.stdout.write(chunk);
-      activitiesText += chunk;
-    }
-
-    return {
-      activities: activitiesText,
-    };
-  },
-});
+const forecastSchema = z.object({
+  date: z.string(),
+  maxTemp: z.number(),
+  minTemp: z.number(),
+  precipitationChance: z.number(),
+  condition: z.string(),
+  location: z.string(),
+})
 
 function getWeatherCondition(code: number): string {
   const conditions: Record<number, string> = {
@@ -267,17 +191,113 @@ function getWeatherCondition(code: number): string {
     73: 'Moderate snow fall',
     75: 'Heavy snow fall',
     95: 'Thunderstorm',
-  };
-  return conditions[code] || 'Unknown';
+  }
+  return conditions[code] || 'Unknown'
 }
 
-const weatherWorkflow = new Workflow({
-  name: 'weather-workflow',
-  triggerSchema: z.object({
+const fetchWeather = createStep({
+  id: 'fetch-weather',
+  description: 'Fetches weather forecast for a given city',
+  inputSchema: z.object({
     city: z.string().describe('The city to get the weather for'),
   }),
+  outputSchema: forecastSchema,
+  execute: async ({ inputData }) => {
+    if (!inputData) {
+      throw new Error('Input data not found');
+    }
+
+    const geocodingUrl = \`https://geocoding-api.open-meteo.com/v1/search?name=\${encodeURIComponent(inputData.city)}&count=1\`;
+    const geocodingResponse = await fetch(geocodingUrl);
+    const geocodingData = (await geocodingResponse.json()) as {
+      results: { latitude: number; longitude: number; name: string }[];
+    };
+
+    if (!geocodingData.results?.[0]) {
+      throw new Error(\`Location '\${inputData.city}' not found\`);
+    }
+
+    const { latitude, longitude, name } = geocodingData.results[0];
+
+    const weatherUrl = \`https://api.open-meteo.com/v1/forecast?latitude=\${latitude}&longitude=\${longitude}&current=precipitation,weathercode&timezone=auto,&hourly=precipitation_probability,temperature_2m\`;
+    const response = await fetch(weatherUrl);
+    const data = (await response.json()) as {
+      current: {
+        time: string
+        precipitation: number
+        weathercode: number
+      }
+      hourly: {
+        precipitation_probability: number[]
+        temperature_2m: number[]
+      }
+    }
+
+    const forecast = {
+      date: new Date().toISOString(),
+      maxTemp: Math.max(...data.hourly.temperature_2m),
+      minTemp: Math.min(...data.hourly.temperature_2m),
+      condition: getWeatherCondition(data.current.weathercode),
+      precipitationChance: data.hourly.precipitation_probability.reduce(
+        (acc, curr) => Math.max(acc, curr),
+        0
+      ),
+      location: name
+    }
+
+    return forecast;
+  },
+});
+
+
+const planActivities = createStep({
+  id: 'plan-activities',
+  description: 'Suggests activities based on weather conditions',
+  inputSchema: forecastSchema,
+  outputSchema: z.object({
+    activities: z.string(),
+  }),
+  execute: async ({ inputData }) => {
+    const forecast = inputData
+
+    if (!forecast) {
+      throw new Error('Forecast data not found')
+    }
+
+    const prompt = \`Based on the following weather forecast for \${forecast.location}, suggest appropriate activities:
+      \${JSON.stringify(forecast, null, 2)}
+      \`;
+
+    const response = await agent.stream([
+      {
+        role: 'user',
+        content: prompt,
+      },
+    ]);
+
+    let activitiesText = '';
+
+    for await (const chunk of response.textStream) {
+      process.stdout.write(chunk);
+      activitiesText += chunk;
+    }
+
+    return {
+      activities: activitiesText,
+    };
+  },
+});
+
+const weatherWorkflow = createWorkflow({
+  id: 'weather-workflow',
+  inputSchema: z.object({
+    city: z.string().describe('The city to get the weather for'),
+  }),
+  outputSchema: z.object({
+    activities: z.string(),
+  })
 })
-  .step(fetchWeather)
+  .then(fetchWeather)
   .then(planActivities);
 
 weatherWorkflow.commit();
@@ -357,13 +377,18 @@ export const mastra = new Mastra()
       destPath,
       `
 import { Mastra } from '@mastra/core/mastra';
-import { createLogger } from '@mastra/core/logger';
-${addWorkflow ? `import { weatherWorkflow } from './workflows';` : ''}
-${addAgent ? `import { weatherAgent } from './agents';` : ''}
+import { PinoLogger } from '@mastra/loggers';
+import { LibSQLStore } from '@mastra/libsql';
+${addWorkflow ? `import { weatherWorkflow } from './workflows/weather-workflow';` : ''}
+${addAgent ? `import { weatherAgent } from './agents/weather-agent';` : ''}
 
 export const mastra = new Mastra({
   ${filteredExports.join('\n  ')}
-  logger: createLogger({
+  storage: new LibSQLStore({
+    // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
+    url: ":memory:",
+  }),
+  logger: new PinoLogger({
     name: 'Mastra',
     level: 'info',
   }),
@@ -384,20 +409,28 @@ export const checkInitialization = async (dirPath: string) => {
   }
 };
 
-export const checkAndInstallCoreDeps = async () => {
+export const checkAndInstallCoreDeps = async (addExample: boolean) => {
   const depsService = new DepsService();
-  const depCheck = await depsService.checkDependencies(['@mastra/core']);
+  let depCheck = await depsService.checkDependencies(['@mastra/core']);
 
   if (depCheck !== 'ok') {
-    await installCoreDeps();
+    await installCoreDeps('@mastra/core');
+  }
+
+  if (addExample) {
+    depCheck = await depsService.checkDependencies(['@mastra/libsql']);
+
+    if (depCheck !== 'ok') {
+      await installCoreDeps('@mastra/libsql');
+    }
   }
 };
 
 const spinner = yoctoSpinner({ text: 'Installing Mastra core dependencies\n' });
-export async function installCoreDeps() {
+export async function installCoreDeps(pkg: string) {
   try {
     const confirm = await p.confirm({
-      message: 'You do not have the @mastra/core package installed. Would you like to install it?',
+      message: `You do not have the ${pkg} package installed. Would you like to install it?`,
       initialValue: false,
     });
 
@@ -415,7 +448,7 @@ export async function installCoreDeps() {
 
     const depsService = new DepsService();
 
-    await depsService.installPackages(['@mastra/core@latest']);
+    await depsService.installPackages([`${pkg}@latest`]);
     spinner.success('@mastra/core installed successfully');
   } catch (err) {
     console.error(err);
@@ -450,7 +483,9 @@ export const writeAPIKey = async ({
   apiKey?: string;
 }) => {
   const key = await getAPIKey(provider);
-  await exec(`echo ${key}=${apiKey} >> .env.development`);
+  const escapedKey = shellQuote.quote([key]);
+  const escapedApiKey = shellQuote.quote([apiKey]);
+  await exec(`echo ${escapedKey}=${escapedApiKey} >> .env`);
 };
 export const createMastraDir = async (directory: string): Promise<{ ok: true; dirPath: string } | { ok: false }> => {
   let dir = directory
@@ -475,7 +510,7 @@ export const writeCodeSample = async (
   llmProvider: LLMProvider,
   importComponents: Components[],
 ) => {
-  const destPath = dirPath + `/${component}/index.ts`;
+  const destPath = dirPath + `/${component}/weather-${component.slice(0, -1)}.ts`;
 
   try {
     await writeCodeSampleForComponents(llmProvider, component, destPath, importComponents);
@@ -545,17 +580,33 @@ export const interactivePrompt = async () => {
           initialValue: false,
         }),
       configureEditorWithDocsMCP: async () => {
-        const windsurfIsAlreadyInstalled = await globalWindsurfMCPIsAlreadyInstalled();
+        const windsurfIsAlreadyInstalled = await globalMCPIsAlreadyInstalled(`windsurf`);
+        const cursorIsAlreadyInstalled = await globalMCPIsAlreadyInstalled(`cursor`);
+        const vscodeIsAlreadyInstalled = await globalMCPIsAlreadyInstalled(`vscode`);
 
         const editor = await p.select({
           message: `Make your AI IDE into a Mastra expert? (installs Mastra docs MCP server)`,
           options: [
             { value: 'skip', label: 'Skip for now', hint: 'default' },
-            { value: 'cursor', label: 'Cursor' },
+            {
+              value: 'cursor',
+              label: 'Cursor (project only)',
+              hint: cursorIsAlreadyInstalled ? `Already installed globally` : undefined,
+            },
+            {
+              value: 'cursor-global',
+              label: 'Cursor (global, all projects)',
+              hint: cursorIsAlreadyInstalled ? `Already installed` : undefined,
+            },
             {
               value: 'windsurf',
               label: 'Windsurf',
               hint: windsurfIsAlreadyInstalled ? `Already installed` : undefined,
+            },
+            {
+              value: 'vscode',
+              label: 'VSCode',
+              hint: vscodeIsAlreadyInstalled ? `Already installed` : undefined,
             },
           ],
         });
@@ -565,11 +616,28 @@ export const interactivePrompt = async () => {
           p.log.message(`\nWindsurf is already installed, skipping.`);
           return undefined;
         }
+        if (editor === `vscode` && vscodeIsAlreadyInstalled) {
+          p.log.message(`\nVSCode is already installed, skipping.`);
+          return undefined;
+        }
 
         if (editor === `cursor`) {
           p.log.message(
             `\nNote: you will need to go into Cursor Settings -> MCP Settings and manually enable the installed Mastra MCP server.\n`,
           );
+        }
+
+        if (editor === `cursor-global`) {
+          const confirm = await p.select({
+            message: `Global install will add/update ${cursorGlobalMCPConfigPath} and make the Mastra docs MCP server available in all your Cursor projects. Continue?`,
+            options: [
+              { value: 'yes', label: 'Yes, I understand' },
+              { value: 'skip', label: 'No, skip for now' },
+            ],
+          });
+          if (confirm !== `yes`) {
+            return undefined;
+          }
         }
 
         if (editor === `windsurf`) {

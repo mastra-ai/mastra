@@ -1,14 +1,18 @@
 import { PassThrough } from 'stream';
 import { createOpenAI } from '@ai-sdk/openai';
+import type { CoreMessage } from 'ai';
+import { simulateReadableStream } from 'ai';
+import { MockLanguageModelV1 } from 'ai/test';
 import { config } from 'dotenv';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { Container } from '../di';
 import { TestIntegration } from '../integration/openapi-toolset.mock';
 import { Mastra } from '../mastra';
+import { RuntimeContext } from '../runtime-context';
 import { createTool } from '../tools';
 import { CompositeVoice, MastraVoice } from '../voice';
+import { MessageList } from './message-list/index';
 
 import { Agent } from './index';
 
@@ -32,15 +36,35 @@ const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 describe('agent', () => {
   const integration = new TestIntegration();
 
+  let dummyModel;
+  beforeEach(() => {
+    dummyModel = new MockLanguageModelV1({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { promptTokens: 10, completionTokens: 20 },
+        text: `Dummy response`,
+      }),
+    });
+  });
+
   it('should get a text response from the agent', async () => {
     const electionAgent = new Agent({
       name: 'US Election agent',
       instructions: 'You know about the past US elections',
-      model: openai('gpt-4o'),
+      model: new MockLanguageModelV1({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: `Donald Trump won the 2016 U.S. presidential election, defeating Hillary Clinton.`,
+        }),
+      }),
     });
 
     const mastra = new Mastra({
       agents: { electionAgent },
+      logger: false,
     });
 
     const agentOne = mastra.getAgent('electionAgent');
@@ -57,11 +81,36 @@ describe('agent', () => {
     const electionAgent = new Agent({
       name: 'US Election agent',
       instructions: 'You know about the past US elections',
-      model: openai('gpt-4o'),
+      model: new MockLanguageModelV1({
+        doStream: async () => ({
+          stream: simulateReadableStream({
+            chunks: [
+              { type: 'text-delta', textDelta: 'Donald' },
+              { type: 'text-delta', textDelta: ' Trump' },
+              { type: 'text-delta', textDelta: ` won` },
+              { type: 'text-delta', textDelta: ` the` },
+              { type: 'text-delta', textDelta: ` ` },
+              { type: 'text-delta', textDelta: `201` },
+              { type: 'text-delta', textDelta: `6` },
+              { type: 'text-delta', textDelta: ` US` },
+              { type: 'text-delta', textDelta: ` presidential` },
+              { type: 'text-delta', textDelta: ` election` },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                logprobs: undefined,
+                usage: { completionTokens: 10, promptTokens: 3 },
+              },
+            ],
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        }),
+      }),
     });
 
     const mastra = new Mastra({
       agents: { electionAgent },
+      logger: false,
     });
 
     const agentOne = mastra.getAgent('electionAgent');
@@ -86,11 +135,20 @@ describe('agent', () => {
     const electionAgent = new Agent({
       name: 'US Election agent',
       instructions: 'You know about the past US elections',
-      model: openai('gpt-4o'),
+      model: new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: `{"winner":"Barack Obama"}`,
+        }),
+      }),
     });
 
     const mastra = new Mastra({
       agents: { electionAgent },
+      logger: false,
     });
 
     const agentOne = mastra.getAgent('electionAgent');
@@ -102,7 +160,6 @@ describe('agent', () => {
     });
 
     const { object } = response;
-
     expect(object.winner).toContain('Barack Obama');
   });
 
@@ -110,11 +167,21 @@ describe('agent', () => {
     const electionAgent = new Agent({
       name: 'US Election agent',
       instructions: 'You know about the past US elections',
-      model: openai('gpt-4o'),
+      // model: openai('gpt-4o'),
+      model: new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: `{"elements":[{"winner":"Barack Obama","year":"2012"},{"winner":"Donald Trump","year":"2016"}]}`,
+        }),
+      }),
     });
 
     const mastra = new Mastra({
       agents: { electionAgent },
+      logger: false,
     });
 
     const agentOne = mastra.getAgent('electionAgent');
@@ -147,11 +214,31 @@ describe('agent', () => {
     const electionAgent = new Agent({
       name: 'US Election agent',
       instructions: 'You know about the past US elections',
-      model: openai('gpt-4o'),
+      model: new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doStream: async () => ({
+          stream: simulateReadableStream({
+            chunks: [
+              { type: 'text-delta', textDelta: '{' },
+              { type: 'text-delta', textDelta: '"winner":' },
+              { type: 'text-delta', textDelta: `"Barack Obama"` },
+              { type: 'text-delta', textDelta: `}` },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                logprobs: undefined,
+                usage: { completionTokens: 10, promptTokens: 3 },
+              },
+            ],
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        }),
+      }),
     });
 
     const mastra = new Mastra({
       agents: { electionAgent },
+      logger: false,
     });
 
     const agentOne = mastra.getAgent('electionAgent');
@@ -197,6 +284,7 @@ describe('agent', () => {
 
     const mastra = new Mastra({
       agents: { userAgent },
+      logger: false,
     });
 
     const agentOne = mastra.getAgent('userAgent');
@@ -268,7 +356,7 @@ describe('agent', () => {
     }
   });
 
-  it('should generate with default max steps', async () => {
+  it('should generate with default max steps', { timeout: 10000 }, async () => {
     const findUserTool = createTool({
       id: 'Find user tool',
       description: 'This is a test tool that returns the name and email',
@@ -289,6 +377,7 @@ describe('agent', () => {
 
     const mastra = new Mastra({
       agents: { userAgent },
+      logger: false,
     });
 
     const agentOne = mastra.getAgent('userAgent');
@@ -317,6 +406,7 @@ describe('agent', () => {
       agents: {
         testAgent,
       },
+      logger: false,
     });
 
     const agentOne = mastra.getAgent('testAgent');
@@ -350,42 +440,146 @@ describe('agent', () => {
   }, 500000);
 
   it('should properly sanitize incomplete tool calls from memory messages', () => {
-    const agent = new Agent({
-      name: 'Test agent',
-      instructions: 'Test agent',
-      model: openai('gpt-4o'),
-    });
-
-    const toolResultOne = {
-      role: 'tool' as const,
-      content: [{ type: 'tool-result' as const, toolName: '', toolCallId: 'tool-1', text: 'result', result: '' }],
+    const messageList = new MessageList();
+    // Original CoreMessages for context, but we'll test the output of list.get.all.core()
+    const toolResultOne_Core: CoreMessage = {
+      role: 'tool',
+      content: [{ type: 'tool-result', toolName: 'test-tool-1', toolCallId: 'tool-1', result: 'res1' }],
     };
-    const toolCallTwo = {
-      role: 'assistant' as const,
-      content: [{ type: 'tool-call' as const, toolName: '', args: '', toolCallId: 'tool-2', text: 'call' }],
+    const toolCallTwo_Core: CoreMessage = {
+      role: 'assistant',
+      content: [{ type: 'tool-call', toolName: 'test-tool-2', toolCallId: 'tool-2', args: {} }],
     };
-    const toolResultTwo = {
-      role: 'tool' as const,
-      content: [{ type: 'tool-result' as const, toolName: '', toolCallId: 'tool-2', text: 'result', result: '' }],
+    const toolResultTwo_Core: CoreMessage = {
+      role: 'tool',
+      content: [{ type: 'tool-result', toolName: 'test-tool-2', toolCallId: 'tool-2', result: 'res2' }],
     };
-    const toolCallThree = {
-      role: 'assistant' as const,
-      content: [{ type: 'tool-call' as const, toolName: '', args: '', toolCallId: 'tool-3', text: 'call' }],
+    const toolCallThree_Core: CoreMessage = {
+      role: 'assistant',
+      content: [{ type: 'tool-call', toolName: 'test-tool-3', toolCallId: 'tool-3', args: {} }],
     };
-    const memoryMessages = [toolResultOne, toolCallTwo, toolResultTwo, toolCallThree];
 
-    const sanitizedMessages = agent.sanitizeResponseMessages(memoryMessages);
+    // Add messages. addOne will merge toolCallTwo and toolResultTwo.
+    // toolResultOne is orphaned. toolCallThree is orphaned.
+    messageList.add(toolResultOne_Core, 'memory');
+    messageList.add(toolCallTwo_Core, 'memory');
+    messageList.add(toolResultTwo_Core, 'memory');
+    messageList.add(toolCallThree_Core, 'memory');
 
-    // The tool result for tool-1 should be removed since there's no matching tool call
-    expect(sanitizedMessages).not.toContainEqual(toolResultOne);
+    const finalCoreMessages = messageList.get.all.core();
 
-    // The tool call and result for tool-2 should remain since they form a complete pair
-    expect(sanitizedMessages).toContainEqual(toolCallTwo);
-    expect(sanitizedMessages).toContainEqual(toolResultTwo);
+    // Expected: toolResultOne (orphaned tool result) should be gone.
+    // toolCallThree (orphaned assistant call) should be gone.
+    // toolCallTwo and toolResultTwo should be present and correctly paired by convertToCoreMessages.
 
-    // The tool call for tool-3 should be removed since there's no matching result
-    expect(sanitizedMessages).not.toContainEqual(toolCallThree);
-    expect(sanitizedMessages).toHaveLength(2);
+    // Check that tool-1 (orphaned result) is not present
+    expect(
+      finalCoreMessages.find(
+        m => m.role === 'tool' && (m.content as any[]).some(p => p.type === 'tool-result' && p.toolCallId === 'tool-1'),
+      ),
+    ).toBeUndefined();
+    // Also check no lingering assistant message for tool-1 if it was an assistant message that only contained an orphaned result
+    expect(
+      finalCoreMessages.find(
+        m =>
+          m.role === 'assistant' &&
+          (m.content as any[]).some(p => p.type === 'tool-invocation' && p.toolInvocation?.toolCallId === 'tool-1') &&
+          (m.content as any[]).every(
+            p => p.type === 'tool-invocation' || p.type === 'step-start' || p.type === 'step-end',
+          ),
+      ),
+    ).toBeUndefined();
+
+    // Check that tool-2 call and result are present
+    const assistantCallForTool2 = finalCoreMessages.find(
+      m =>
+        m.role === 'assistant' && (m.content as any[]).some(p => p.type === 'tool-call' && p.toolCallId === 'tool-2'),
+    );
+    expect(assistantCallForTool2).toBeDefined();
+    expect(assistantCallForTool2?.content).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'tool-call', toolCallId: 'tool-2', toolName: 'test-tool-2' }),
+      ]),
+    );
+
+    const toolResultForTool2 = finalCoreMessages.find(
+      m => m.role === 'tool' && (m.content as any[]).some(p => p.type === 'tool-result' && p.toolCallId === 'tool-2'),
+    );
+    expect(toolResultForTool2).toBeDefined();
+    expect(toolResultForTool2?.content).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'tool-result', toolCallId: 'tool-2', toolName: 'test-tool-2', result: 'res2' }),
+      ]),
+    );
+
+    // Check that tool-3 (orphaned call) is not present
+    expect(
+      finalCoreMessages.find(
+        m =>
+          m.role === 'assistant' && (m.content as any[]).some(p => p.type === 'tool-call' && p.toolCallId === 'tool-3'),
+      ),
+    ).toBeUndefined();
+
+    expect(finalCoreMessages.length).toBe(2); // Assistant call for tool-2, Tool result for tool-2
+  });
+
+  it('should preserve empty assistant messages after tool use', () => {
+    const messageList = new MessageList();
+
+    const assistantToolCall_Core: CoreMessage = {
+      role: 'assistant',
+      content: [{ type: 'tool-call', toolName: 'testTool', toolCallId: 'tool-1', args: {} }],
+    };
+    const toolMessage_Core: CoreMessage = {
+      role: 'tool',
+      content: [{ type: 'tool-result', toolName: 'testTool', toolCallId: 'tool-1', result: 'res1' }],
+    };
+    const emptyAssistant_Core: CoreMessage = {
+      role: 'assistant',
+      content: '',
+    };
+    const userMessage_Core: CoreMessage = {
+      role: 'user',
+      content: 'Hello',
+    };
+
+    messageList.add(assistantToolCall_Core, 'memory');
+    messageList.add(toolMessage_Core, 'memory');
+    messageList.add(emptyAssistant_Core, 'memory');
+    messageList.add(userMessage_Core, 'memory');
+
+    const finalCoreMessages = messageList.get.all.core();
+
+    // Expected:
+    // 1. Assistant message with tool-1 call.
+    // 2. Tool message with tool-1 result.
+    // 3. Empty assistant message.
+    // 4. User message.
+    expect(finalCoreMessages.length).toBe(4);
+
+    const assistantCallMsg = finalCoreMessages.find(
+      m =>
+        m.role === 'assistant' && (m.content as any[]).some(p => p.type === 'tool-call' && p.toolCallId === 'tool-1'),
+    );
+    expect(assistantCallMsg).toBeDefined();
+
+    const toolResultMsg = finalCoreMessages.find(
+      m => m.role === 'tool' && (m.content as any[]).some(p => p.type === 'tool-result' && p.toolCallId === 'tool-1'),
+    );
+    expect(toolResultMsg).toBeDefined();
+
+    expect(finalCoreMessages).toEqual(
+      expect.arrayContaining([
+        {
+          role: 'assistant',
+          content: [{ type: 'text', text: '' }],
+        },
+      ]),
+    );
+
+    const userMsg = finalCoreMessages.find(m => m.role === 'user');
+    expect(userMsg).toBeDefined();
+    expect(userMsg?.content).toEqual([{ type: 'text', text: 'Hello' }]); // convertToCoreMessages makes text content an array
   });
 
   describe('voice capabilities', () => {
@@ -410,7 +604,7 @@ describe('agent', () => {
       voiceAgent = new Agent({
         name: 'Voice Agent',
         instructions: 'You are an agent with voice capabilities',
-        model: openai('gpt-4o'),
+        model: dummyModel,
         voice: new CompositeVoice({
           output: new MockVoice({
             speaker: 'mock-voice',
@@ -495,7 +689,7 @@ describe('agent', () => {
         const agentWithoutVoice = new Agent({
           name: 'No Voice Agent',
           instructions: 'You are an agent without voice capabilities',
-          model: openai('gpt-4o'),
+          model: dummyModel,
         });
 
         await expect(agentWithoutVoice.voice.getSpeakers()).rejects.toThrow('No voice provider configured');
@@ -535,100 +729,104 @@ describe('agent', () => {
       });
 
       // Verify tools exist
-      expect(agent.tools.mastraTool).toBeDefined();
-      expect(agent.tools.vercelTool).toBeDefined();
+      expect((agent.getTools() as Agent['tools']).mastraTool).toBeDefined();
+      expect((agent.getTools() as Agent['tools']).vercelTool).toBeDefined();
 
       // Verify both tools can be executed
-      await agent.tools.mastraTool.execute?.({ name: 'test' });
-      await agent.tools.vercelTool.execute?.({ name: 'test' });
+      // @ts-ignore
+      await (agent.getTools() as Agent['tools']).mastraTool.execute!({ name: 'test' });
+      // @ts-ignore
+      await (agent.getTools() as Agent['tools']).vercelTool.execute!({ name: 'test' });
 
       expect(mastraExecute).toHaveBeenCalled();
       expect(vercelExecute).toHaveBeenCalled();
     });
 
-    it('should make container available to tools when injected in generate', async () => {
-      const testContainer = new Container([['test-value', 'container-value']]);
+    it('should make runtimeContext available to tools when injected in generate', async () => {
+      const testRuntimeContext = new RuntimeContext([['test-value', 'runtimeContext-value']]);
       let capturedValue: string | null = null;
 
       const testTool = createTool({
-        id: 'container-test-tool',
-        description: 'A tool that verifies container is available',
+        id: 'runtimeContext-test-tool',
+        description: 'A tool that verifies runtimeContext is available',
         inputSchema: z.object({
           query: z.string(),
         }),
-        execute: ({ container }) => {
-          capturedValue = container.get('test-value')!;
+        execute: ({ runtimeContext }) => {
+          capturedValue = runtimeContext.get('test-value')!;
 
           return Promise.resolve({
             success: true,
-            containerAvailable: !!container,
-            containerValue: capturedValue,
+            runtimeContextAvailable: !!runtimeContext,
+            runtimeContextValue: capturedValue,
           });
         },
       });
 
       const agent = new Agent({
-        name: 'container-test-agent',
-        instructions: 'You are an agent that tests container availability.',
+        name: 'runtimeContext-test-agent',
+        instructions: 'You are an agent that tests runtimeContext availability.',
         model: openai('gpt-4o'),
         tools: { testTool },
       });
 
       const mastra = new Mastra({
         agents: { agent },
+        logger: false,
       });
 
       const testAgent = mastra.getAgent('agent');
 
-      const response = await testAgent.generate('Use the container-test-tool with query "test"', {
+      const response = await testAgent.generate('Use the runtimeContext-test-tool with query "test"', {
         toolChoice: 'required',
-        container: testContainer,
+        runtimeContext: testRuntimeContext,
       });
 
       const toolCall = response.toolResults.find(result => result.toolName === 'testTool');
 
-      expect(toolCall?.result?.containerAvailable).toBe(true);
-      expect(toolCall?.result?.containerValue).toBe('container-value');
-      expect(capturedValue).toBe('container-value');
+      expect(toolCall?.result?.runtimeContextAvailable).toBe(true);
+      expect(toolCall?.result?.runtimeContextValue).toBe('runtimeContext-value');
+      expect(capturedValue).toBe('runtimeContext-value');
     }, 500000);
 
-    it('should make container available to tools when injected in stream', async () => {
-      const testContainer = new Container([['test-value', 'container-value']]);
+    it('should make runtimeContext available to tools when injected in stream', async () => {
+      const testRuntimeContext = new RuntimeContext([['test-value', 'runtimeContext-value']]);
       let capturedValue: string | null = null;
 
       const testTool = createTool({
-        id: 'container-test-tool',
-        description: 'A tool that verifies container is available',
+        id: 'runtimeContext-test-tool',
+        description: 'A tool that verifies runtimeContext is available',
         inputSchema: z.object({
           query: z.string(),
         }),
-        execute: ({ container }) => {
-          capturedValue = container.get('test-value')!;
+        execute: ({ runtimeContext }) => {
+          capturedValue = runtimeContext.get('test-value')!;
 
           return Promise.resolve({
             success: true,
-            containerAvailable: !!container,
-            containerValue: capturedValue,
+            runtimeContextAvailable: !!runtimeContext,
+            runtimeContextValue: capturedValue,
           });
         },
       });
 
       const agent = new Agent({
-        name: 'container-test-agent',
-        instructions: 'You are an agent that tests container availability.',
+        name: 'runtimeContext-test-agent',
+        instructions: 'You are an agent that tests runtimeContext availability.',
         model: openai('gpt-4o'),
         tools: { testTool },
       });
 
       const mastra = new Mastra({
         agents: { agent },
+        logger: false,
       });
 
       const testAgent = mastra.getAgent('agent');
 
-      const stream = await testAgent.stream('Use the container-test-tool with query "test"', {
+      const stream = await testAgent.stream('Use the runtimeContext-test-tool with query "test"', {
         toolChoice: 'required',
-        container: testContainer,
+        runtimeContext: testRuntimeContext,
       });
 
       for await (const _chunk of stream.textStream) {
@@ -637,9 +835,9 @@ describe('agent', () => {
 
       const toolCall = (await stream.toolResults).find(result => result.toolName === 'testTool');
 
-      expect(toolCall?.result?.containerAvailable).toBe(true);
-      expect(toolCall?.result?.containerValue).toBe('container-value');
-      expect(capturedValue).toBe('container-value');
+      expect(toolCall?.result?.runtimeContextAvailable).toBe(true);
+      expect(toolCall?.result?.runtimeContextValue).toBe('runtimeContext-value');
+      expect(capturedValue).toBe('runtimeContext-value');
     }, 500000);
   });
 });

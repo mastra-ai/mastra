@@ -1,26 +1,16 @@
-import { useCallback, useContext, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import usePolling from '@/lib/polls';
-import { MastraClient } from '@mastra/client-js';
 
 import type { RefinedTrace } from '@/domains/traces/types';
 import { refineTraces } from '@/domains/traces/utils';
-import { TraceContext } from '@/domains/traces/context/trace-context';
+import { useMastraClient } from '@/contexts/mastra-client-context';
 
-export const useTraces = (componentName: string, baseUrl: string, isWorkflow: boolean = false) => {
+export const useTraces = (componentName: string, isWorkflow: boolean = false) => {
   const [traces, setTraces] = useState<RefinedTrace[]>([]);
 
-  const { setTraces: setTraceContextTraces } = useContext(TraceContext);
-
-  // Memoize the client instance
-  const client = useMemo(
-    () =>
-      new MastraClient({
-        baseUrl: baseUrl || '',
-      }),
-    [baseUrl],
-  );
+  const client = useMemo(() => useMastraClient(), []);
 
   const fetchFn = useCallback(async () => {
     try {
@@ -32,6 +22,7 @@ export const useTraces = (componentName: string, baseUrl: string, isWorkflow: bo
       if (!res.traces) {
         throw new Error('Error fetching traces');
       }
+
       const refinedTraces = refineTraces(res?.traces || [], isWorkflow);
       return refinedTraces;
     } catch (error) {
@@ -39,17 +30,14 @@ export const useTraces = (componentName: string, baseUrl: string, isWorkflow: bo
     }
   }, [client, componentName, isWorkflow]);
 
-  const onSuccess = useCallback(
-    (newTraces: RefinedTrace[]) => {
-      if (newTraces.length > 0) {
-        setTraces(() => newTraces);
-        setTraceContextTraces(() => newTraces);
-      }
-    },
-    [setTraceContextTraces],
-  );
+  const onSuccess = useCallback((newTraces: RefinedTrace[]) => {
+    if (newTraces.length > 0) {
+      setTraces(() => newTraces);
+    }
+  }, []);
 
   const onError = useCallback((error: { message: string }) => {
+    console.log(`error, onError`, error);
     toast.error(error.message);
   }, []);
 

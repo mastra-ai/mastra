@@ -23,10 +23,11 @@ export interface ChatProps {
   threadId?: string;
   initialMessages?: Message[];
   memory?: boolean;
-  baseUrl?: string;
   refreshThreadList?: () => void;
   modelSettings?: ModelSettings;
   chatWithGenerate?: boolean;
+  runtimeContext?: Record<string, any>;
+  showFileSupport?: boolean;
 }
 
 export type SpanStatus = {
@@ -64,11 +65,6 @@ export type Span = {
   createdAt: string;
 };
 
-export type SpanNode = Span & {
-  children: SpanNode[];
-  relativePercentage?: number;
-};
-
 export type RefinedTrace = {
   traceId: string;
   serviceName: string;
@@ -76,4 +72,7 @@ export type RefinedTrace = {
   started: number;
   status: SpanStatus;
   trace: Span[];
+  runId?: string;
 };
+
+export * from './domains/traces/types';

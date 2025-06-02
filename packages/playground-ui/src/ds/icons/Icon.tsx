@@ -3,18 +3,19 @@ import React from 'react';
 
 export interface IconProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
-  size?: 'default' | 'lg';
+  size?: 'default' | 'lg' | 'sm';
 }
 
 const sizes = {
+  sm: '[&>svg]:h-icon-sm [&>svg]:w-icon-sm',
   default: '[&>svg]:h-icon-default [&>svg]:w-icon-default',
   lg: '[&>svg]:h-icon-lg [&>svg]:w-icon-lg',
 };
 
 export const Icon = ({ children, className, size = 'default', ...props }: IconProps) => {
   return (
-    <div className={clsx(sizes[size], className)} {...props}>
+    <span className={clsx('block', sizes[size], className)} {...props}>
       {children}
-    </div>
+    </span>
   );
 };

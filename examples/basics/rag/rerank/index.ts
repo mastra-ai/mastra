@@ -39,7 +39,7 @@ const { embeddings } = await embedMany({
 });
 
 // Store embeddings in PgVector
-const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
+const pgVector = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING! });
 await pgVector.createIndex({
   indexName: 'embeddings',
   dimension: 1536,

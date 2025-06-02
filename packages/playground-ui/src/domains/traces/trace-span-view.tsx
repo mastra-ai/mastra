@@ -1,32 +1,68 @@
-import { TreeNode } from './trace-tree-view';
+import { TraceTree } from '@/ds/components/TraceTree';
+
 import type { Span, SpanNode } from './types';
+import { Trace } from '@/ds/components/TraceTree/Trace';
+import { Spans } from '@/ds/components/TraceTree/Spans';
+import { Span as SpanComponent } from '@/ds/components/TraceTree/Span';
+import { TraceContext } from './context/trace-context';
+import { useContext } from 'react';
+import { getSpanVariant } from './utils/getSpanVariant';
+import { createSpanTree } from './utils/createSpanTree';
 
-export function TreeView({ tree }: { tree: SpanNode[] }) {
+interface NestedSpansProps {
+  spanNodes: SpanNode[];
+}
+
+const NestedSpans = ({ spanNodes }: NestedSpansProps) => {
+  const { span: activeSpan, setSpan } = useContext(TraceContext);
+
   return (
-    <ul>
-      {tree.map(node => (
-        <TreeNode key={node.id} node={node} />
-      ))}
-    </ul>
+    <Spans>
+      {spanNodes.map(spanNode => {
+        const isActive = spanNode.id === activeSpan?.id;
+
+        return (
+          <SpanComponent
+            key={spanNode.id}
+            spans={spanNode.children.length > 0 && <NestedSpans spanNodes={spanNode.children} />}
+            durationMs={spanNode.duration}
+            offsetMs={spanNode.offset}
+            variant={getSpanVariant(spanNode)}
+            isActive={isActive}
+            onClick={() => setSpan(spanNode)}
+            totalDurationMs={spanNode.totalDurationMs}
+          >
+            {spanNode.name}
+          </SpanComponent>
+        );
+      })}
+    </Spans>
   );
+};
+
+export interface SpanViewProps {
+  trace: Span[];
 }
 
-function buildTree(items: Span[], parentSpanId: string | null = null): SpanNode[] {
-  return items
-    .filter(item => item.parentSpanId === parentSpanId)
-    .map(item => ({
-      ...item,
-      children: buildTree(items, item.id),
-    }));
-}
-
-export default function SpanView({ trace }: { trace: Span[] }) {
+export default function SpanView({ trace }: SpanViewProps) {
   // SQL query sorts by startTime in descending order, so we need to reverse and copy the array for spans to show in correct order
-  const tree = buildTree(trace.concat([])!.reverse());
+  const { span: activeSpan, setSpan } = useContext(TraceContext);
+
+  const tree = createSpanTree(trace);
 
   return (
-    <div>
-      <TreeView tree={tree} />
-    </div>
+    <TraceTree>
+      {tree.map(node => (
+        <Trace
+          name={node.name}
+          durationMs={node.duration}
+          totalDurationMs={node.totalDurationMs}
+          spans={<NestedSpans spanNodes={node.children} />}
+          variant={getSpanVariant(node)}
+          isActive={node.id === activeSpan?.id}
+          onClick={() => setSpan(node)}
+        />
+      ))}
+    </TraceTree>
   );
 }

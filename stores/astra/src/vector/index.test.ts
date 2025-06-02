@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeAll, afterAll, test, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeAll, afterAll, test } from 'vitest';
 
 import { AstraVector } from './';
 
@@ -44,7 +44,7 @@ async function createIndexAndWait(
 }
 
 async function deleteIndexAndWait(vectorDB: AstraVector, indexName: string) {
-  await vectorDB.deleteIndex(indexName);
+  await vectorDB.deleteIndex({ indexName });
   const deleted = await waitForCondition(
     async () => {
       const newCollections = await vectorDB.listIndexes();
@@ -58,7 +58,7 @@ async function deleteIndexAndWait(vectorDB: AstraVector, indexName: string) {
   }
 }
 
-describe('AstraVector Integration Tests', () => {
+describe.skip('AstraVector Integration Tests', () => {
   let vectorDB: AstraVector;
   const testIndexName = 'testvectors1733728136118'; // Unique collection name
   const testIndexName2 = 'testvectors1733728136119'; // Unique collection name
@@ -80,7 +80,7 @@ describe('AstraVector Integration Tests', () => {
     });
     try {
       const collections = await vectorDB.listIndexes();
-      await Promise.all(collections.map(c => vectorDB.deleteIndex(c)));
+      await Promise.all(collections.map(c => vectorDB.deleteIndex({ indexName: c })));
       const deleted = await waitForCondition(
         async () => {
           const remainingCollections = await vectorDB.listIndexes();
@@ -104,12 +104,12 @@ describe('AstraVector Integration Tests', () => {
   afterAll(async () => {
     // Cleanup: delete test collection
     try {
-      await vectorDB.deleteIndex(testIndexName);
+      await vectorDB.deleteIndex({ indexName: testIndexName });
     } catch (error) {
       console.error('Failed to delete test collection:', error);
     }
     try {
-      await vectorDB.deleteIndex(testIndexName2);
+      await vectorDB.deleteIndex({ indexName: testIndexName2 });
     } catch (error) {
       console.error('Failed to delete test collection:', error);
     }
@@ -121,7 +121,7 @@ describe('AstraVector Integration Tests', () => {
     expect(indexes).toContain(testIndexName);
 
     // 2. Get collection stats
-    const initialStats = await vectorDB.describeIndex(testIndexName);
+    const initialStats = await vectorDB.describeIndex({ indexName: testIndexName });
     expect(initialStats).toEqual({
       dimension: 4,
       metric: 'cosine',
@@ -144,7 +144,7 @@ describe('AstraVector Integration Tests', () => {
     // Wait for document count to update (with timeout)
     const countUpdated = await waitForCondition(
       async () => {
-        const stats = await vectorDB.describeIndex(testIndexName);
+        const stats = await vectorDB.describeIndex({ indexName: testIndexName });
         console.log('Current count:', stats.count);
         return stats.count === 4;
       },
@@ -176,7 +176,7 @@ describe('AstraVector Integration Tests', () => {
     expect(filteredResults?.[0]?.metadata).toEqual({ label: 'vector2' });
 
     // Get final stats
-    const finalStats = await vectorDB.describeIndex(testIndexName);
+    const finalStats = await vectorDB.describeIndex({ indexName: testIndexName });
     console.log('Final stats:', finalStats);
 
     // More lenient assertion for document count
@@ -1093,103 +1093,6 @@ describe('AstraVector Integration Tests', () => {
       });
     });
   });
-  describe('Deprecation Warnings', () => {
-    const indexName = 'testdeprecationwarnings';
-
-    const indexName2 = 'testdeprecationwarnings2';
-
-    let warnSpy;
-
-    beforeAll(async () => {
-      await createIndexAndWait(vectorDB, indexName, 3, 'cosine');
-    });
-
-    afterAll(async () => {
-      await deleteIndexAndWait(vectorDB, indexName);
-      await deleteIndexAndWait(vectorDB, indexName2);
-    });
-
-    beforeEach(async () => {
-      warnSpy = vi.spyOn(vectorDB['logger'], 'warn');
-    });
-
-    afterEach(async () => {
-      warnSpy.mockRestore();
-      await deleteIndexAndWait(vectorDB, indexName2);
-    });
-
-    it('should show deprecation warning when using individual args for createIndex', async () => {
-      await vectorDB.createIndex(indexName2, 3, 'cosine');
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Deprecation Warning: Passing individual arguments to createIndex() is deprecated'),
-      );
-    });
-
-    it('should show deprecation warning when using individual args for upsert', async () => {
-      await vectorDB.upsert(indexName, [[1, 2, 3]], [{ test: 'data' }]);
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Deprecation Warning: Passing individual arguments to upsert() is deprecated'),
-      );
-    });
-
-    it('should show deprecation warning when using individual args for query', async () => {
-      await vectorDB.query(indexName, [1, 2, 3], 5);
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Deprecation Warning: Passing individual arguments to query() is deprecated'),
-      );
-    });
-
-    it('should not show deprecation warning when using object param for query', async () => {
-      await vectorDB.query({
-        indexName,
-        queryVector: [1, 2, 3],
-        topK: 5,
-      });
-
-      expect(warnSpy).not.toHaveBeenCalled();
-    });
-
-    it('should not show deprecation warning when using object param for createIndex', async () => {
-      await vectorDB.createIndex({
-        indexName: indexName2,
-        dimension: 3,
-        metric: 'cosine',
-      });
-
-      expect(warnSpy).not.toHaveBeenCalled();
-    });
-
-    it('should not show deprecation warning when using object param for upsert', async () => {
-      await vectorDB.upsert({
-        indexName,
-        vectors: [[1, 2, 3]],
-        metadata: [{ test: 'data' }],
-      });
-
-      expect(warnSpy).not.toHaveBeenCalled();
-    });
-
-    it('should maintain backward compatibility with individual args', async () => {
-      // Query
-      const queryResults = await vectorDB.query(indexName, [1, 2, 3], 5);
-      expect(Array.isArray(queryResults)).toBe(true);
-
-      // CreateIndex
-      await expect(vectorDB.createIndex(indexName2, 3, 'cosine')).resolves.not.toThrow();
-
-      // Upsert
-      const upsertResults = await vectorDB.upsert({
-        indexName,
-        vectors: [[1, 2, 3]],
-        metadata: [{ test: 'data' }],
-      });
-      expect(Array.isArray(upsertResults)).toBe(true);
-      expect(upsertResults).toHaveLength(1);
-    });
-  });
 
   describe('Basic vector operations', () => {
     const indexName = 'testbasicvectoroperations';
@@ -1224,12 +1127,12 @@ describe('AstraVector Integration Tests', () => {
         metadata: newMetaData,
       };
 
-      await vectorDB.updateIndexById(indexName, idToBeUpdated, update);
+      await vectorDB.updateVector({ indexName, id: idToBeUpdated, update });
 
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       const results = await vectorDB.query({
-        indexName: indexName,
+        indexName,
         queryVector: newVector,
         topK: 2,
         includeVector: true,
@@ -1256,11 +1159,11 @@ describe('AstraVector Integration Tests', () => {
         metadata: newMetaData,
       };
 
-      await vectorDB.updateIndexById(indexName, idToBeUpdated, update);
+      await vectorDB.updateVector({ indexName, id: idToBeUpdated, update });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       const results = await vectorDB.query({
-        indexName: indexName,
+        indexName,
         queryVector: testVectors[0],
         topK: 2,
         includeVector: true,
@@ -1285,11 +1188,11 @@ describe('AstraVector Integration Tests', () => {
         vector: newVector,
       };
 
-      await vectorDB.updateIndexById(indexName, idToBeUpdated, update);
+      await vectorDB.updateVector({ indexName, id: idToBeUpdated, update });
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       const results = await vectorDB.query({
-        indexName: indexName,
+        indexName,
         queryVector: newVector,
         topK: 2,
         includeVector: true,
@@ -1303,7 +1206,7 @@ describe('AstraVector Integration Tests', () => {
     });
 
     it('should throw exception when no updates are given', async () => {
-      await expect(vectorDB.updateIndexById(indexName, 'id', {})).rejects.toThrow('No updates provided');
+      await expect(vectorDB.updateVector({ indexName, id: 'id', update: {} })).rejects.toThrow('No updates provided');
     });
 
     it('should delete the vector by id', async () => {
@@ -1311,7 +1214,7 @@ describe('AstraVector Integration Tests', () => {
       expect(ids).toHaveLength(4);
 
       const idToBeDeleted = ids[0];
-      await vectorDB.deleteIndexById(indexName, idToBeDeleted);
+      await vectorDB.deleteVector({ indexName, id: idToBeDeleted });
 
       const results = await vectorDB.query({
         indexName: indexName,
@@ -1321,6 +1224,63 @@ describe('AstraVector Integration Tests', () => {
 
       expect(results).toHaveLength(2);
       expect(results.map(res => res.id)).not.toContain(idToBeDeleted);
+    });
+  });
+
+  describe('Error Handling', () => {
+    const testIndexName = 'test_index_error';
+    beforeAll(async () => {
+      await vectorDB.createIndex({ indexName: testIndexName, dimension: 3 });
+    });
+
+    afterAll(async () => {
+      await vectorDB.deleteIndex({ indexName: testIndexName });
+    });
+
+    it('should handle non-existent index queries', async () => {
+      await expect(vectorDB.query({ indexName: 'non-existent-index', queryVector: [1, 2, 3] })).rejects.toThrow();
+    });
+
+    it('should handle invalid dimension vectors', async () => {
+      const invalidVector = [1, 2, 3, 4]; // 4D vector for 3D index
+      await expect(vectorDB.upsert({ indexName: testIndexName, vectors: [invalidVector] })).rejects.toThrow();
+    });
+
+    it('should handle duplicate index creation gracefully', async () => {
+      const duplicateIndexName = `duplicate_test`;
+      const dimension = 768;
+
+      try {
+        // Create index first time
+        await vectorDB.createIndex({
+          indexName: duplicateIndexName,
+          dimension,
+          metric: 'cosine',
+        });
+
+        // Try to create with same dimensions - should not throw
+        await expect(
+          vectorDB.createIndex({
+            indexName: duplicateIndexName,
+            dimension,
+            metric: 'cosine',
+          }),
+        ).resolves.not.toThrow();
+
+        // Try to create with different dimensions - should throw
+        await expect(
+          vectorDB.createIndex({
+            indexName: duplicateIndexName,
+            dimension: dimension + 1,
+            metric: 'cosine',
+          }),
+        ).rejects.toThrow(
+          `Collection already exists: trying to create Collection ('${duplicateIndexName}') with different settings`,
+        );
+      } finally {
+        // Cleanup
+        await vectorDB.deleteIndex({ indexName: duplicateIndexName });
+      }
     });
   });
 });

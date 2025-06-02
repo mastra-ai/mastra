@@ -1,4 +1,4 @@
-const meta = {
+export default {
   chunk: ".chunk()",
   embeddings: ".embed()",
   "extract-params": "ExtractParams",
@@ -11,10 +11,10 @@ const meta = {
   vectorize: "CloudflareVector",
   pg: "PgVector",
   libsql: "LibSQLVector",
+  mongodb: "MongoDBVector",
+  opensearch: "OpenSearchVector",
   pinecone: "PineconeVector",
   qdrant: "QdrantVector",
   turbopuffer: "TurboPuffer",
   upstash: "UpstashVector",
 };
-
-export default meta;

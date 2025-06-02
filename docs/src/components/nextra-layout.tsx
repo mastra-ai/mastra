@@ -3,38 +3,37 @@ import { T } from "gt-next/client";
 import { usePathname } from "next/navigation";
 import { PageMapItem } from "nextra";
 import { Layout } from "nextra-theme-docs";
-import { Search } from "nextra/components";
 import { Footer } from "./footer";
 import { Nav } from "./navbar";
+import { SearchWrapper } from "./search-wrapper";
 import { SubscribeForm } from "./subscribe-form";
 import { TabSwitcher } from "./tab-switcher";
-import { getSearchPlaceholder } from "./search-placeholder";
+
 const footer = <Footer />;
 
 export const NextraLayout = ({
   pageMap,
   children,
   locale,
+  stars,
 }: {
   pageMap: PageMapItem[];
   children: React.ReactNode;
   locale: string;
+  stars: number;
 }) => {
   const pathname = usePathname();
   const isReference = pathname.includes("/reference");
   return (
     <Layout
-      search={<Search placeholder={getSearchPlaceholder(locale)} />}
+      search={<SearchWrapper locale={locale} />}
       navbar={
-        <div className="flex  sticky top-0 z-30 bg-[var(--primary-bg)] flex-col">
-          <Nav />
+        <div className="flex  sticky top-0 z-30 bg-light-color-surface-15 dark:bg-[var(--primary-bg)] flex-col">
+          <Nav stars={stars} locale={locale} />
           <TabSwitcher />
         </div>
       }
       pageMap={pageMap}
-      nextThemes={{
-        forcedTheme: "dark",
-      }}
       toc={{
         title: <T id="_locale_.layout.toc">On This Page</T>,
         extraContent: (
@@ -45,6 +44,9 @@ export const NextraLayout = ({
             />
           </div>
         ),
+      }}
+      nextThemes={{
+        attribute: "class",
       }}
       docsRepositoryBase="https://github.com/mastra-ai/mastra/blob/main/docs"
       footer={footer}

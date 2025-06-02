@@ -1,0 +1,21 @@
+services:
+  mastra_couchbase_testing:
+    image: couchbase:enterprise-7.6.4
+    ports:
+      - '8091-8095:8091-8095'
+      - '11210:11210'
+      - '9102:9102'
+    expose:
+      - '8091'
+      - '8092'
+      - '8093'
+      - '8094'
+      - '8095'
+      - '9102'
+      - '11210'
+    healthcheck: # checks couchbase server is up
+      test: ['CMD', 'curl', '-v', 'http://localhost:8091/pools']
+      interval: 20s
+      timeout: 20s
+      retries: 5
+    container_name: mastra_couchbase_testing

@@ -1,5 +1,7 @@
+import { MessageList } from '@mastra/core/agent';
+import type { MastraMessageV2 } from '@mastra/core/agent';
 import type { MetricResult } from '@mastra/core/eval';
-import type { MessageType, StorageThreadType } from '@mastra/core/memory';
+import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
 import {
   MastraStorage,
   TABLE_MESSAGES,
@@ -8,17 +10,21 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_EVALS,
 } from '@mastra/core/storage';
-import type { EvalRow, StorageColumn, StorageGetMessagesArg, TABLE_NAMES } from '@mastra/core/storage';
+import type {
+  EvalRow,
+  StorageColumn,
+  StorageGetMessagesArg,
+  TABLE_NAMES,
+  WorkflowRun,
+  WorkflowRuns,
+} from '@mastra/core/storage';
+import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
 import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
 
 export type PostgresConfig = {
   schemaName?: string;
-  /**
-   * @deprecated Use `schemaName` instead. Support for `schema` will be removed in a future release.
-   */
-  schema?: string;
 } & (
   | {
       host: string;
@@ -64,13 +70,7 @@ export class PostgresStore extends MastraStorage {
     }
     super({ name: 'PostgresStore' });
     this.pgp = pgPromise();
-    // Deprecation notice for schema (old option)
-    if ('schema' in config && config.schema) {
-      console.warn(
-        '[DEPRECATION NOTICE] The "schema" option in PostgresStore is deprecated. Please use "schemaName" instead. Support for "schema" will be removed in a future release.',
-      );
-    }
-    this.schema = config.schemaName ?? config.schema;
+    this.schema = config.schemaName;
     this.db = this.pgp(
       `connectionString` in config
         ? { connectionString: config.connectionString }
@@ -86,7 +86,9 @@ export class PostgresStore extends MastraStorage {
   }
 
   private getTableName(indexName: string) {
-    return this.schema ? `${this.schema}."${indexName}"` : `"${indexName}"`;
+    const parsedIndexName = parseSqlIdentifier(indexName, 'table name');
+    const parsedSchemaName = this.schema ? parseSqlIdentifier(this.schema, 'schema name') : undefined;
+    return parsedSchemaName ? `${parsedSchemaName}."${parsedIndexName}"` : `"${parsedIndexName}"`;
   }
 
   async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
@@ -158,6 +160,8 @@ export class PostgresStore extends MastraStorage {
     perPage,
     attributes,
     filters,
+    fromDate,
+    toDate,
   }: {
     name?: string;
     scope?: string;
@@ -165,6 +169,8 @@ export class PostgresStore extends MastraStorage {
     perPage: number;
     attributes?: Record<string, string>;
     filters?: Record<string, any>;
+    fromDate?: Date;
+    toDate?: Date;
   }): Promise<any[]> {
     let idx = 1;
     const limit = perPage;
@@ -181,14 +187,24 @@ export class PostgresStore extends MastraStorage {
     }
     if (attributes) {
       Object.keys(attributes).forEach(key => {
-        conditions.push(`attributes->>'${key}' = \$${idx++}`);
+        const parsedKey = parseSqlIdentifier(key, 'attribute key');
+        conditions.push(`attributes->>'${parsedKey}' = \$${idx++}`);
       });
     }
 
     if (filters) {
       Object.entries(filters).forEach(([key]) => {
-        conditions.push(`${key} = \$${idx++}`);
+        const parsedKey = parseSqlIdentifier(key, 'filter key');
+        conditions.push(`${parsedKey} = \$${idx++}`);
       });
+    }
+
+    if (fromDate) {
+      conditions.push(`createdAt >= \$${idx++}`);
+    }
+
+    if (toDate) {
+      conditions.push(`createdAt <= \$${idx++}`);
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -211,6 +227,14 @@ export class PostgresStore extends MastraStorage {
       for (const [, value] of Object.entries(filters)) {
         args.push(value);
       }
+    }
+
+    if (fromDate) {
+      args.push(fromDate.toISOString());
+    }
+
+    if (toDate) {
+      args.push(toDate.toISOString());
     }
 
     const result = await this.db.manyOrNone<{
@@ -314,10 +338,11 @@ export class PostgresStore extends MastraStorage {
     try {
       const columns = Object.entries(schema)
         .map(([name, def]) => {
+          const parsedName = parseSqlIdentifier(name, 'column name');
           const constraints = [];
           if (def.primaryKey) constraints.push('PRIMARY KEY');
           if (!def.nullable) constraints.push('NOT NULL');
-          return `"${name}" ${def.type.toUpperCase()} ${constraints.join(' ')}`;
+          return `"${parsedName}" ${def.type.toUpperCase()} ${constraints.join(' ')}`;
         })
         .join(',\n');
 
@@ -365,7 +390,7 @@ export class PostgresStore extends MastraStorage {
 
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     try {
-      const columns = Object.keys(record);
+      const columns = Object.keys(record).map(col => parseSqlIdentifier(col, 'column name'));
       const values = Object.values(record);
       const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
 
@@ -381,7 +406,7 @@ export class PostgresStore extends MastraStorage {
 
   async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
     try {
-      const keyEntries = Object.entries(keys);
+      const keyEntries = Object.entries(keys).map(([key, value]) => [parseSqlIdentifier(key, 'column name'), value]);
       const conditions = keyEntries.map(([key], index) => `"${key}" = $${index + 1}`).join(' AND ');
       const values = keyEntries.map(([_, value]) => value);
 
@@ -561,7 +586,7 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
-  async getMessages<T = unknown>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T> {
+  async getMessages<T = unknown>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T[]> {
     try {
       const messages: any[] = [];
       const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
@@ -643,16 +668,24 @@ export class PostgresStore extends MastraStorage {
             // If parsing fails, leave as string
           }
         }
+        if (message.type === `v2`) delete message.type;
       });
 
-      return messages as T;
+      return messages as T[];
     } catch (error) {
       console.error('Error getting messages:', error);
       throw error;
     }
   }
 
-  async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
+  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
+  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
+  async saveMessages({
+    messages,
+    format,
+  }:
+    | { messages: MastraMessageV1[]; format?: undefined | 'v1' }
+    | { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[] | MastraMessageV1[]> {
     if (messages.length === 0) return messages;
 
     try {
@@ -678,13 +711,15 @@ export class PostgresStore extends MastraStorage {
               typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
               message.createdAt || new Date().toISOString(),
               message.role,
-              message.type,
+              message.type || 'v2',
             ],
           );
         }
       });
 
-      return messages;
+      const list = new MessageList().add(messages, 'memory');
+      if (format === `v2`) return list.get.all.v2();
+      return list.get.all.v1();
     } catch (error) {
       console.error('Error saving messages:', error);
       throw error;
@@ -748,96 +783,166 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
+  private async hasColumn(table: string, column: string): Promise<boolean> {
+    // Use this.schema to scope the check
+    const schema = this.schema || 'public';
+    const result = await this.db.oneOrNone(
+      `SELECT 1 FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND (column_name = $3 OR column_name = $4)`,
+      [schema, table, column, column.toLowerCase()],
+    );
+    return !!result;
+  }
+
+  private parseWorkflowRun(row: any): WorkflowRun {
+    let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+    if (typeof parsedSnapshot === 'string') {
+      try {
+        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+      } catch (e) {
+        // If parsing fails, return the raw snapshot string
+        console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+      }
+    }
+
+    return {
+      workflowName: row.workflow_name,
+      runId: row.run_id,
+      snapshot: parsedSnapshot,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      resourceId: row.resourceId,
+    };
+  }
+
   async getWorkflowRuns({
     workflowName,
     fromDate,
     toDate,
     limit,
     offset,
+    resourceId,
   }: {
     workflowName?: string;
     fromDate?: Date;
     toDate?: Date;
     limit?: number;
     offset?: number;
-  } = {}): Promise<{
-    runs: Array<{
-      workflowName: string;
-      runId: string;
-      snapshot: WorkflowRunState | string;
-      createdAt: Date;
-      updatedAt: Date;
-    }>;
-    total: number;
-  }> {
-    const conditions: string[] = [];
-    const values: any[] = [];
-    let paramIndex = 1;
+    resourceId?: string;
+  } = {}): Promise<WorkflowRuns> {
+    try {
+      const conditions: string[] = [];
+      const values: any[] = [];
+      let paramIndex = 1;
 
-    if (workflowName) {
-      conditions.push(`workflow_name = $${paramIndex}`);
-      values.push(workflowName);
-      paramIndex++;
-    }
+      if (workflowName) {
+        conditions.push(`workflow_name = $${paramIndex}`);
+        values.push(workflowName);
+        paramIndex++;
+      }
 
-    if (fromDate) {
-      conditions.push(`"createdAt" >= $${paramIndex}`);
-      values.push(fromDate);
-      paramIndex++;
-    }
+      if (resourceId) {
+        const hasResourceId = await this.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
+        if (hasResourceId) {
+          conditions.push(`"resourceId" = $${paramIndex}`);
+          values.push(resourceId);
+          paramIndex++;
+        } else {
+          console.warn(`[${TABLE_WORKFLOW_SNAPSHOT}] resourceId column not found. Skipping resourceId filter.`);
+        }
+      }
 
-    if (toDate) {
-      conditions.push(`"createdAt" <= $${paramIndex}`);
-      values.push(toDate);
-      paramIndex++;
-    }
+      if (fromDate) {
+        conditions.push(`"createdAt" >= $${paramIndex}`);
+        values.push(fromDate);
+        paramIndex++;
+      }
 
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+      if (toDate) {
+        conditions.push(`"createdAt" <= $${paramIndex}`);
+        values.push(toDate);
+        paramIndex++;
+      }
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    let total = 0;
-    // Only get total count when using pagination
-    if (limit !== undefined && offset !== undefined) {
-      const countResult = await this.db.one(
-        `SELECT COUNT(*) as count FROM ${this.getTableName(TABLE_WORKFLOW_SNAPSHOT)} ${whereClause}`,
-        values,
-      );
-      total = Number(countResult.count);
-    }
+      let total = 0;
+      // Only get total count when using pagination
+      if (limit !== undefined && offset !== undefined) {
+        const countResult = await this.db.one(
+          `SELECT COUNT(*) as count FROM ${this.getTableName(TABLE_WORKFLOW_SNAPSHOT)} ${whereClause}`,
+          values,
+        );
+        total = Number(countResult.count);
+      }
 
-    // Get results
-    const query = `
+      // Get results
+      const query = `
       SELECT * FROM ${this.getTableName(TABLE_WORKFLOW_SNAPSHOT)} 
       ${whereClause} 
       ORDER BY "createdAt" DESC
       ${limit !== undefined && offset !== undefined ? ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}` : ''}
     `;
 
-    const queryValues = limit !== undefined && offset !== undefined ? [...values, limit, offset] : values;
+      const queryValues = limit !== undefined && offset !== undefined ? [...values, limit, offset] : values;
 
-    const result = await this.db.manyOrNone(query, queryValues);
+      const result = await this.db.manyOrNone(query, queryValues);
 
-    const runs = (result || []).map(row => {
-      let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
-      if (typeof parsedSnapshot === 'string') {
-        try {
-          parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
-        } catch (e) {
-          // If parsing fails, return the raw snapshot string
-          console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
-        }
+      const runs = (result || []).map(row => {
+        return this.parseWorkflowRun(row);
+      });
+
+      // Use runs.length as total when not paginating
+      return { runs, total: total || runs.length };
+    } catch (error) {
+      console.error('Error getting workflow runs:', error);
+      throw error;
+    }
+  }
+
+  async getWorkflowRunById({
+    runId,
+    workflowName,
+  }: {
+    runId: string;
+    workflowName?: string;
+  }): Promise<WorkflowRun | null> {
+    try {
+      const conditions: string[] = [];
+      const values: any[] = [];
+      let paramIndex = 1;
+
+      if (runId) {
+        conditions.push(`run_id = $${paramIndex}`);
+        values.push(runId);
+        paramIndex++;
       }
 
-      return {
-        workflowName: row.workflow_name,
-        runId: row.run_id,
-        snapshot: parsedSnapshot,
-        createdAt: row.createdAt,
-        updatedAt: row.updatedAt,
-      };
-    });
+      if (workflowName) {
+        conditions.push(`workflow_name = $${paramIndex}`);
+        values.push(workflowName);
+        paramIndex++;
+      }
 
-    // Use runs.length as total when not paginating
-    return { runs, total: total || runs.length };
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+      // Get results
+      const query = `
+      SELECT * FROM ${this.getTableName(TABLE_WORKFLOW_SNAPSHOT)} 
+      ${whereClause} 
+    `;
+
+      const queryValues = values;
+
+      const result = await this.db.oneOrNone(query, queryValues);
+
+      if (!result) {
+        return null;
+      }
+
+      return this.parseWorkflowRun(result);
+    } catch (error) {
+      console.error('Error getting workflow run by ID:', error);
+      throw error;
+    }
   }
 
   async close(): Promise<void> {

@@ -4,6 +4,7 @@ import color from 'picocolors';
 import { init } from '../init/init';
 import { interactivePrompt } from '../init/utils';
 import type { LLMProvider } from '../init/utils';
+import { getPackageManager } from '../utils.js';
 
 import { createMastraProject } from './utils';
 
@@ -15,15 +16,21 @@ export const create = async (args: {
   llmApiKey?: string;
   createVersionTag?: string;
   timeout?: number;
+  directory?: string;
+  mcpServer?: 'windsurf' | 'cursor' | 'cursor-global';
 }) => {
   const { projectName } = await createMastraProject({
     projectName: args?.projectName,
     createVersionTag: args?.createVersionTag,
     timeout: args?.timeout,
   });
-  const directory = '/src';
+  const directory = args.directory || 'src/';
 
-  if (!args.components || !args.llmProvider || !args.addExample) {
+  // We need to explicitly check for undefined instead of using the falsy (!)
+  // check because the user might have passed args that are explicitly set
+  // to false (in this case, no example code) and we need to distinguish
+  // between those and the case where the args were not passed at all.
+  if (args.components === undefined || args.llmProvider === undefined || args.addExample === undefined) {
     const result = await interactivePrompt();
     await init({
       ...result,
@@ -41,16 +48,18 @@ export const create = async (args: {
     llmProvider,
     addExample,
     llmApiKey,
+    configureEditorWithDocsMCP: args.mcpServer,
   });
 
   postCreate({ projectName });
 };
 
 const postCreate = ({ projectName }: { projectName: string }) => {
+  const packageManager = getPackageManager();
   p.outro(`
    ${color.green('To start your project:')}
 
     ${color.cyan('cd')} ${projectName}
-    ${color.cyan('npm run dev')}
+    ${color.cyan(`${packageManager} run dev`)}
   `);
 };

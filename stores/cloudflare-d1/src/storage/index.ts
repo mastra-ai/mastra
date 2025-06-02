@@ -1,5 +1,6 @@
 import type { D1Database } from '@cloudflare/workers-types';
-import type { StorageThreadType, MessageType } from '@mastra/core/memory';
+import { MessageList } from '@mastra/core/agent';
+import type { StorageThreadType, MastraMessageV1, MastraMessageV2 } from '@mastra/core/memory';
 import {
   MastraStorage,
   TABLE_MESSAGES,
@@ -8,23 +9,18 @@ import {
   TABLE_EVALS,
   TABLE_TRACES,
 } from '@mastra/core/storage';
-import type { TABLE_NAMES, StorageColumn, StorageGetMessagesArg, EvalRow, WorkflowRuns } from '@mastra/core/storage';
+import type {
+  TABLE_NAMES,
+  StorageColumn,
+  StorageGetMessagesArg,
+  EvalRow,
+  WorkflowRuns,
+  WorkflowRun,
+} from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import Cloudflare from 'cloudflare';
 import { createSqlBuilder } from './sql-builder';
-import type { SqlParam } from './sql-builder';
-
-/**
- * Interface for SQL query options with generic type support
- */
-export interface SqlQueryOptions {
-  /** SQL query to execute */
-  sql: string;
-  /** Parameters to bind to the query */
-  params?: SqlParam[];
-  /** Whether to return only the first result */
-  first?: boolean;
-}
+import type { SqlParam, SqlQueryOptions } from './sql-builder';
 
 /**
  * Configuration for D1 using the REST API
@@ -73,6 +69,10 @@ export class D1Store extends MastraStorage {
   constructor(config: D1StoreConfig) {
     super({ name: 'D1' });
 
+    if (config.tablePrefix && !/^[a-zA-Z0-9_]*$/.test(config.tablePrefix)) {
+      throw new Error('Invalid tablePrefix: only letters, numbers, and underscores are allowed.');
+    }
+
     this.tablePrefix = config.tablePrefix || '';
 
     // Determine which API to use based on provided config
@@ -102,42 +102,6 @@ export class D1Store extends MastraStorage {
 
   private formatSqlParams(params: SqlParam[]): string[] {
     return params.map(p => (p === undefined || p === null ? null : p) as string);
-  }
-
-  // Helper method to create SQL indexes for better query performance
-  private async createIndexIfNotExists(
-    tableName: TABLE_NAMES,
-    columnName: string,
-    indexType: string = '',
-  ): Promise<void> {
-    const fullTableName = this.getTableName(tableName);
-    const indexName = `idx_${tableName}_${columnName}`;
-
-    try {
-      // Check if index exists
-      const checkQuery = createSqlBuilder().checkIndexExists(indexName, fullTableName);
-      const { sql: checkSql, params: checkParams } = checkQuery.build();
-
-      const indexExists = await this.executeQuery({
-        sql: checkSql,
-        params: checkParams,
-        first: true,
-      });
-
-      if (!indexExists) {
-        // Create the index if it doesn't exist
-        const createQuery = createSqlBuilder().createIndex(indexName, fullTableName, columnName, indexType);
-        const { sql: createSql, params: createParams } = createQuery.build();
-
-        await this.executeQuery({ sql: createSql, params: createParams });
-        this.logger.debug(`Created index ${indexName} on ${fullTableName}(${columnName})`);
-      }
-    } catch (error) {
-      this.logger.error(`Error creating index on ${fullTableName}(${columnName}):`, {
-        message: error instanceof Error ? error.message : String(error),
-      });
-      // Non-fatal error, continue execution
-    }
   }
 
   private async executeWorkersBindingQuery({
@@ -421,7 +385,8 @@ export class D1Store extends MastraStorage {
     try {
       await this.executeQuery({ sql, params });
     } catch (error) {
-      this.logger.error(`Error inserting into ${fullTableName}:`, { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error inserting into ${fullTableName}:`, { message });
       throw new Error(`Failed to insert into ${fullTableName}: ${error}`);
     }
   }
@@ -555,7 +520,8 @@ export class D1Store extends MastraStorage {
       await this.executeQuery({ sql, params });
       return thread;
     } catch (error) {
-      this.logger.error(`Error saving thread to ${fullTableName}:`, { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error saving thread to ${fullTableName}:`, { message });
       throw error;
     }
   }
@@ -600,7 +566,8 @@ export class D1Store extends MastraStorage {
         updatedAt: new Date(),
       };
     } catch (error) {
-      this.logger.error('Error updating thread:', { error });
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error('Error updating thread:', { message });
       throw error;
     }
   }
@@ -631,7 +598,13 @@ export class D1Store extends MastraStorage {
 
   // Thread and message management methods
 
-  async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
+  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
+  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
+  async saveMessages(args: {
+    messages: MastraMessageV1[] | MastraMessageV2[];
+    format?: undefined | 'v1' | 'v2';
+  }): Promise<MastraMessageV2[] | MastraMessageV1[]> {
+    const { messages, format = 'v1' } = args;
     if (messages.length === 0) return [];
 
     try {
@@ -658,7 +631,7 @@ export class D1Store extends MastraStorage {
           content: typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
           createdAt: createdAt.toISOString(),
           role: message.role,
-          type: message.type,
+          type: message.type || 'v2',
         };
       });
 
@@ -668,14 +641,22 @@ export class D1Store extends MastraStorage {
       });
 
       this.logger.debug(`Saved ${messages.length} messages`);
-      return messages;
+      const list = new MessageList().add(messages, 'memory');
+      if (format === `v2`) return list.get.all.v2();
+      return list.get.all.v1();
     } catch (error) {
       this.logger.error('Error saving messages:', { message: error instanceof Error ? error.message : String(error) });
       throw error;
     }
   }
 
-  async getMessages<T = MessageType>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T[]> {
+  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
+  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
+  public async getMessages({
+    threadId,
+    selectBy,
+    format,
+  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     const fullTableName = this.getTableName(TABLE_MESSAGES);
     const limit = typeof selectBy?.last === 'number' ? selectBy.last : 40;
     const include = selectBy?.include || [];
@@ -703,7 +684,7 @@ export class D1Store extends MastraStorage {
           m.role,
           m.type,
           m.createdAt,
-          m.thread_id AS "threadId"
+          m.thread_id AS threadId
         FROM ordered_messages m
         WHERE m.id IN (${includeIds.map(() => '?').join(',')})
         OR EXISTS (
@@ -731,7 +712,7 @@ export class D1Store extends MastraStorage {
       // Exclude already fetched ids
       const excludeIds = messages.map(m => m.id);
       let query = createSqlBuilder()
-        .select(['id', 'content', 'role', 'type', '"createdAt"', 'thread_id AS "threadId"'])
+        .select(['id', 'content', 'role', 'type', 'createdAt', 'thread_id AS threadId'])
         .from(fullTableName)
         .where('thread_id = ?', threadId)
         .andWhere(`id NOT IN (${excludeIds.map(() => '?').join(',')})`, ...excludeIds)
@@ -758,13 +739,16 @@ export class D1Store extends MastraStorage {
         const processedMsg: Record<string, any> = {};
 
         for (const [key, value] of Object.entries(message)) {
+          if (key === `type` && value === `v2`) continue;
           processedMsg[key] = this.deserializeValue(value);
         }
 
-        return processedMsg as T;
+        return processedMsg;
       });
       this.logger.debug(`Retrieved ${messages.length} messages for thread ${threadId}`);
-      return processedMessages as T[];
+      const list = new MessageList().add(processedMessages as MastraMessageV1[] | MastraMessageV2[], 'memory');
+      if (format === `v2`) return list.get.all.v2();
+      return list.get.all.v1();
     } catch (error) {
       this.logger.error('Error retrieving messages for thread', {
         threadId,
@@ -912,12 +896,16 @@ export class D1Store extends MastraStorage {
     page,
     perPage,
     attributes,
+    fromDate,
+    toDate,
   }: {
     name?: string;
     scope?: string;
     page: number;
     perPage: number;
     attributes?: Record<string, string>;
+    fromDate?: Date;
+    toDate?: Date;
   }): Promise<Record<string, any>[]> {
     const fullTableName = this.getTableName(TABLE_TRACES);
 
@@ -937,6 +925,14 @@ export class D1Store extends MastraStorage {
         for (const [key, value] of Object.entries(attributes)) {
           query.jsonLike('attributes', key, value);
         }
+      }
+
+      if (fromDate) {
+        query.andWhere('createdAt >= ?', fromDate instanceof Date ? fromDate.toISOString() : fromDate);
+      }
+
+      if (toDate) {
+        query.andWhere('createdAt <= ?', toDate instanceof Date ? toDate.toISOString() : toDate);
       }
 
       query
@@ -1011,14 +1007,129 @@ export class D1Store extends MastraStorage {
     }
   }
 
-  getWorkflowRuns(_args?: {
+  private parseWorkflowRun(row: any): WorkflowRun {
+    let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+    if (typeof parsedSnapshot === 'string') {
+      try {
+        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+      } catch (e) {
+        // If parsing fails, return the raw snapshot string
+        console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+      }
+    }
+
+    return {
+      workflowName: row.workflow_name,
+      runId: row.run_id,
+      snapshot: parsedSnapshot,
+      createdAt: this.ensureDate(row.createdAt)!,
+      updatedAt: this.ensureDate(row.updatedAt)!,
+      resourceId: row.resourceId,
+    };
+  }
+
+  private async hasColumn(table: string, column: string): Promise<boolean> {
+    // For D1/SQLite, use PRAGMA table_info to get column info
+    const sql = `PRAGMA table_info(${table});`;
+    const result = await this.executeQuery({ sql, params: [] });
+    if (!result || !Array.isArray(result)) return false;
+    return result.some((col: any) => col.name === column || col.name === column.toLowerCase());
+  }
+
+  async getWorkflowRuns({
+    workflowName,
+    fromDate,
+    toDate,
+    limit,
+    offset,
+    resourceId,
+  }: {
     workflowName?: string;
     fromDate?: Date;
     toDate?: Date;
     limit?: number;
     offset?: number;
-  }): Promise<WorkflowRuns> {
-    throw new Error('Method not implemented.');
+    resourceId?: string;
+  } = {}): Promise<WorkflowRuns> {
+    const fullTableName = this.getTableName(TABLE_WORKFLOW_SNAPSHOT);
+    try {
+      const builder = createSqlBuilder().select().from(fullTableName);
+      const countBuilder = createSqlBuilder().count().from(fullTableName);
+
+      if (workflowName) builder.whereAnd('workflow_name = ?', workflowName);
+      if (resourceId) {
+        const hasResourceId = await this.hasColumn(fullTableName, 'resourceId');
+        if (hasResourceId) {
+          builder.whereAnd('resourceId = ?', resourceId);
+          countBuilder.whereAnd('resourceId = ?', resourceId);
+        } else {
+          console.warn(`[${fullTableName}] resourceId column not found. Skipping resourceId filter.`);
+        }
+      }
+      if (fromDate) {
+        builder.whereAnd('createdAt >= ?', fromDate instanceof Date ? fromDate.toISOString() : fromDate);
+        countBuilder.whereAnd('createdAt >= ?', fromDate instanceof Date ? fromDate.toISOString() : fromDate);
+      }
+      if (toDate) {
+        builder.whereAnd('createdAt <= ?', toDate instanceof Date ? toDate.toISOString() : toDate);
+        countBuilder.whereAnd('createdAt <= ?', toDate instanceof Date ? toDate.toISOString() : toDate);
+      }
+
+      builder.orderBy('createdAt', 'DESC');
+      if (typeof limit === 'number') builder.limit(limit);
+      if (typeof offset === 'number') builder.offset(offset);
+
+      const { sql, params } = builder.build();
+
+      let total = 0;
+
+      if (limit !== undefined && offset !== undefined) {
+        const { sql: countSql, params: countParams } = countBuilder.build();
+        const countResult = await this.executeQuery({ sql: countSql, params: countParams, first: true });
+        total = Number((countResult as Record<string, any>)?.count ?? 0);
+      }
+
+      const results = await this.executeQuery({ sql, params });
+      const runs = (isArrayOfRecords(results) ? results : []).map((row: any) => this.parseWorkflowRun(row));
+      return { runs, total: total || runs.length };
+    } catch (error) {
+      this.logger.error('Error getting workflow runs:', {
+        message: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  }
+
+  async getWorkflowRunById({
+    runId,
+    workflowName,
+  }: {
+    runId: string;
+    workflowName?: string;
+  }): Promise<WorkflowRun | null> {
+    const fullTableName = this.getTableName(TABLE_WORKFLOW_SNAPSHOT);
+    try {
+      const conditions: string[] = [];
+      const params: SqlParam[] = [];
+      if (runId) {
+        conditions.push('run_id = ?');
+        params.push(runId);
+      }
+      if (workflowName) {
+        conditions.push('workflow_name = ?');
+        params.push(workflowName);
+      }
+      const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
+      const sql = `SELECT * FROM ${fullTableName} ${whereClause} ORDER BY createdAt DESC LIMIT 1`;
+      const result = await this.executeQuery({ sql, params, first: true });
+      if (!result) return null;
+      return this.parseWorkflowRun(result);
+    } catch (error) {
+      this.logger.error('Error getting workflow run by ID:', {
+        message: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
   }
 
   /**

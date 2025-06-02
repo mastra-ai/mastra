@@ -1,37 +1,44 @@
 import type { Agent } from '../agent';
+import type { BundlerConfig } from '../bundler/types';
 import type { MastraDeployer } from '../deployer';
-import { LogLevel, createLogger, noopLogger } from '../logger';
-import type { Logger } from '../logger';
+import { LogLevel, noopLogger, ConsoleLogger } from '../logger';
+import type { IMastraLogger } from '../logger';
+import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory/memory';
 import type { AgentNetwork } from '../network';
-import type { ServerConfig } from '../server/types';
+import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraStorage } from '../storage';
-import { DefaultProxyStorage } from '../storage/default-proxy-storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import { InstrumentClass, Telemetry } from '../telemetry';
 import type { OtelConfig } from '../telemetry';
 import type { MastraTTS } from '../tts';
 import type { MastraVector } from '../vector';
 import type { Workflow } from '../workflows';
+import type { LegacyWorkflow } from '../workflows/legacy';
 
 export interface Config<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
+  TLegacyWorkflows extends Record<string, LegacyWorkflow> = Record<string, LegacyWorkflow>,
   TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
-  TLogger extends Logger = Logger,
+  TLogger extends IMastraLogger = IMastraLogger,
   TNetworks extends Record<string, AgentNetwork> = Record<string, AgentNetwork>,
+  TMCPServers extends Record<string, MCPServerBase> = Record<string, MCPServerBase>,
 > {
   agents?: TAgents;
   networks?: TNetworks;
   storage?: MastraStorage;
   vectors?: TVectors;
   logger?: TLogger | false;
+  legacy_workflows?: TLegacyWorkflows;
   workflows?: TWorkflows;
   tts?: TTTS;
   telemetry?: OtelConfig;
   deployer?: MastraDeployer;
   server?: ServerConfig;
+  mcpServers?: TMCPServers;
+  bundler?: BundlerConfig;
 
   /**
    * Server middleware functions to be applied to API routes
@@ -44,7 +51,7 @@ export interface Config<
   }>;
 
   // @deprecated add memory to your Agent directly instead
-  memory?: MastraMemory;
+  memory?: never;
 }
 
 @InstrumentClass({
@@ -53,15 +60,18 @@ export interface Config<
 })
 export class Mastra<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
+  TLegacyWorkflows extends Record<string, LegacyWorkflow> = Record<string, LegacyWorkflow>,
   TWorkflows extends Record<string, Workflow> = Record<string, Workflow>,
   TVectors extends Record<string, MastraVector> = Record<string, MastraVector>,
   TTTS extends Record<string, MastraTTS> = Record<string, MastraTTS>,
-  TLogger extends Logger = Logger,
+  TLogger extends IMastraLogger = IMastraLogger,
   TNetworks extends Record<string, AgentNetwork> = Record<string, AgentNetwork>,
+  TMCPServers extends Record<string, MCPServerBase> = Record<string, MCPServerBase>,
 > {
   #vectors?: TVectors;
   #agents: TAgents;
   #logger: TLogger;
+  #legacy_workflows: TLegacyWorkflows;
   #workflows: TWorkflows;
   #tts?: TTTS;
   #deployer?: MastraDeployer;
@@ -74,6 +84,8 @@ export class Mastra<
   #memory?: MastraMemory;
   #networks?: TNetworks;
   #server?: ServerConfig;
+  #mcpServers?: TMCPServers;
+  #bundler?: BundlerConfig;
 
   /**
    * @deprecated use getTelemetry() instead
@@ -96,7 +108,7 @@ export class Mastra<
     return this.#memory;
   }
 
-  constructor(config?: Config<TAgents, TWorkflows, TVectors, TTTS, TLogger>) {
+  constructor(config?: Config<TAgents, TLegacyWorkflows, TWorkflows, TVectors, TTTS, TLogger, TNetworks, TMCPServers>) {
     // Store server middleware with default path
     if (config?.serverMiddleware) {
       this.#serverMiddleware = config.serverMiddleware.map(m => ({
@@ -116,22 +128,18 @@ export class Mastra<
       if (config?.logger) {
         logger = config.logger;
       } else {
-        const levleOnEnv = process.env.NODE_ENV === 'production' ? LogLevel.WARN : LogLevel.INFO;
-        logger = createLogger({ name: 'Mastra', level: levleOnEnv }) as unknown as TLogger;
+        const levelOnEnv =
+          process.env.NODE_ENV === 'production' && process.env.MASTRA_DEV !== 'true' ? LogLevel.WARN : LogLevel.INFO;
+        logger = new ConsoleLogger({ name: 'Mastra', level: levelOnEnv }) as unknown as TLogger;
       }
     }
     this.#logger = logger;
 
     let storage = config?.storage;
-    if (!storage) {
-      storage = new DefaultProxyStorage({
-        config: {
-          url: process.env.MASTRA_DEFAULT_STORAGE_URL || `:memory:`,
-        },
-      });
-    }
 
-    storage = augmentWithInit(storage);
+    if (storage) {
+      storage = augmentWithInit(storage);
+    }
 
     /*
     Telemetry
@@ -141,9 +149,9 @@ export class Mastra<
     /*
       Storage
     */
-    if (this.#telemetry) {
+    if (this.#telemetry && storage) {
       this.#storage = this.#telemetry.traceClass(storage, {
-        excludeMethods: ['__setTelemetry', '__getTelemetry', 'batchTraceInsert'],
+        excludeMethods: ['__setTelemetry', '__getTelemetry', 'batchTraceInsert', 'getTraces', 'getEvalsByAgentName'],
       });
       this.#storage.__setTelemetry(this.#telemetry);
     } else {
@@ -173,18 +181,26 @@ export class Mastra<
       this.#vectors = config.vectors;
     }
 
-    if (config?.memory) {
-      this.#memory = config.memory;
-      if (this.#telemetry) {
-        this.#memory = this.#telemetry.traceClass(config.memory, {
-          excludeMethods: ['__setTelemetry', '__getTelemetry'],
-        });
-        this.#memory.__setTelemetry(this.#telemetry);
-      }
+    if (config?.networks) {
+      this.#networks = config.networks;
+    }
+
+    if (config?.mcpServers) {
+      this.#mcpServers = config.mcpServers;
+
+      // Set logger/telemetry/Mastra instance/id for MCP servers
+      Object.entries(this.#mcpServers).forEach(([key, server]) => {
+        server.setId(key);
+        if (this.#telemetry) {
+          server.__setTelemetry(this.#telemetry);
+        }
+
+        server.__registerMastra(this);
+      });
     }
 
     if (config && `memory` in config) {
-      this.#logger.warn(`
+      throw new Error(`
   Memory should be added to Agents, not to Mastra.
 
 Instead of:
@@ -192,8 +208,6 @@ Instead of:
 
 do:
   new Agent({ memory: new Memory() })
-
-This is a warning for now, but will throw an error in the future
 `);
     }
 
@@ -253,10 +267,36 @@ This is a warning for now, but will throw an error in the future
     }
 
     /*
-    Workflows
+    Legacy Workflows
     */
-    this.#workflows = {} as TWorkflows;
+    this.#legacy_workflows = {} as TLegacyWorkflows;
 
+    if (config?.legacy_workflows) {
+      Object.entries(config.legacy_workflows).forEach(([key, workflow]) => {
+        workflow.__registerMastra(this);
+        workflow.__registerPrimitives({
+          logger: this.getLogger(),
+          telemetry: this.#telemetry,
+          storage: this.storage,
+          memory: this.memory,
+          agents: agents,
+          tts: this.#tts,
+          vectors: this.#vectors,
+        });
+        // @ts-ignore
+        this.#legacy_workflows[key] = workflow;
+
+        const workflowSteps = Object.values(workflow.steps).filter(step => !!step.workflowId && !!step.workflow);
+        if (workflowSteps.length > 0) {
+          workflowSteps.forEach(step => {
+            // @ts-ignore
+            this.#legacy_workflows[step.workflowId] = step.workflow;
+          });
+        }
+      });
+    }
+
+    this.#workflows = {} as TWorkflows;
     if (config?.workflows) {
       Object.entries(config.workflows).forEach(([key, workflow]) => {
         workflow.__registerMastra(this);
@@ -271,14 +311,6 @@ This is a warning for now, but will throw an error in the future
         });
         // @ts-ignore
         this.#workflows[key] = workflow;
-
-        const workflowSteps = Object.values(workflow.steps).filter(step => !!step.workflowId && !!step.workflow);
-        if (workflowSteps.length > 0) {
-          workflowSteps.forEach(step => {
-            // @ts-ignore
-            this.#workflows[step.workflowId] = step.workflow;
-          });
-        }
       });
     }
 
@@ -317,6 +349,22 @@ This is a warning for now, but will throw an error in the future
     return this.#deployer;
   }
 
+  public legacy_getWorkflow<TWorkflowId extends keyof TLegacyWorkflows>(
+    id: TWorkflowId,
+    { serialized }: { serialized?: boolean } = {},
+  ): TLegacyWorkflows[TWorkflowId] {
+    const workflow = this.#legacy_workflows?.[id];
+    if (!workflow) {
+      throw new Error(`Workflow with ID ${String(id)} not found`);
+    }
+
+    if (serialized) {
+      return { name: workflow.name } as TLegacyWorkflows[TWorkflowId];
+    }
+
+    return workflow;
+  }
+
   public getWorkflow<TWorkflowId extends keyof TWorkflows>(
     id: TWorkflowId,
     { serialized }: { serialized?: boolean } = {},
@@ -331,6 +379,18 @@ This is a warning for now, but will throw an error in the future
     }
 
     return workflow;
+  }
+
+  public legacy_getWorkflows(props: { serialized?: boolean } = {}): Record<string, LegacyWorkflow> {
+    if (props.serialized) {
+      return Object.entries(this.#legacy_workflows).reduce((acc, [k, v]) => {
+        return {
+          ...acc,
+          [k]: { name: v.name },
+        };
+      }, {});
+    }
+    return this.#legacy_workflows;
   }
 
   public getWorkflows(props: { serialized?: boolean } = {}): Record<string, Workflow> {
@@ -379,6 +439,12 @@ This is a warning for now, but will throw an error in the future
     if (this.#vectors) {
       Object.keys(this.#vectors).forEach(key => {
         this.#vectors?.[key]?.__setLogger(this.#logger);
+      });
+    }
+
+    if (this.#mcpServers) {
+      Object.keys(this.#mcpServers).forEach(key => {
+        this.#mcpServers?.[key]?.__setLogger(this.#logger);
       });
     }
   }
@@ -466,12 +532,45 @@ This is a warning for now, but will throw an error in the future
     return this.#serverMiddleware;
   }
 
+  public setServerMiddleware(serverMiddleware: Middleware | Middleware[]) {
+    if (typeof serverMiddleware === 'function') {
+      this.#serverMiddleware = [
+        {
+          handler: serverMiddleware,
+          path: '/api/*',
+        },
+      ];
+      return;
+    }
+
+    if (!Array.isArray(serverMiddleware)) {
+      throw new Error(`Invalid middleware: expected a function or array, received ${typeof serverMiddleware}`);
+    }
+
+    this.#serverMiddleware = serverMiddleware.map(m => {
+      if (typeof m === 'function') {
+        return {
+          handler: m,
+          path: '/api/*',
+        };
+      }
+      return {
+        handler: m.handler,
+        path: m.path || '/api/*',
+      };
+    });
+  }
+
   public getNetworks() {
     return Object.values(this.#networks || {});
   }
 
   public getServer() {
     return this.#server;
+  }
+
+  public getBundlerConfig() {
+    return this.#bundler;
   }
 
   /**
@@ -511,5 +610,79 @@ This is a warning for now, but will throw an error in the future
     console.log(this.#logger);
 
     return await this.#logger.getLogs(transportId);
+  }
+
+  /**
+   * Get all registered MCP server instances.
+   * @returns A record of MCP server ID to MCPServerBase instance, or undefined if none are registered.
+   */
+  public getMCPServers(): Record<string, MCPServerBase> | undefined {
+    return this.#mcpServers;
+  }
+
+  /**
+   * Get a specific MCP server instance.
+   * If a version is provided, it attempts to find the server with that exact logical ID and version.
+   * If no version is provided, it returns the server with the specified logical ID that has the most recent releaseDate.
+   * The logical ID should match the `id` property of the MCPServer instance (typically set via MCPServerConfig.id).
+   * @param serverId - The logical ID of the MCP server to retrieve.
+   * @param version - Optional specific version of the MCP server to retrieve.
+   * @returns The MCP server instance, or undefined if not found or if the specific version is not found.
+   */
+  public getMCPServer(serverId: string, version?: string): MCPServerBase | undefined {
+    if (!this.#mcpServers) {
+      return undefined;
+    }
+
+    const allRegisteredServers = Object.values(this.#mcpServers || {});
+
+    const matchingLogicalIdServers = allRegisteredServers.filter(server => server.id === serverId);
+
+    if (matchingLogicalIdServers.length === 0) {
+      this.#logger?.debug(`No MCP servers found with logical ID: ${serverId}`);
+      return undefined;
+    }
+
+    if (version) {
+      const specificVersionServer = matchingLogicalIdServers.find(server => server.version === version);
+      if (!specificVersionServer) {
+        this.#logger?.debug(`MCP server with logical ID '${serverId}' found, but not version '${version}'.`);
+      }
+      return specificVersionServer;
+    } else {
+      // No version specified, find the one with the most recent releaseDate
+      if (matchingLogicalIdServers.length === 1) {
+        return matchingLogicalIdServers[0];
+      }
+
+      matchingLogicalIdServers.sort((a, b) => {
+        // Ensure releaseDate exists and is a string before creating a Date object
+        const dateAVal = a.releaseDate && typeof a.releaseDate === 'string' ? new Date(a.releaseDate).getTime() : NaN;
+        const dateBVal = b.releaseDate && typeof b.releaseDate === 'string' ? new Date(b.releaseDate).getTime() : NaN;
+
+        if (isNaN(dateAVal) && isNaN(dateBVal)) return 0;
+        if (isNaN(dateAVal)) return 1; // Treat invalid/missing dates as older
+        if (isNaN(dateBVal)) return -1; // Treat invalid/missing dates as older
+
+        return dateBVal - dateAVal; // Sorts in descending order of time (latest first)
+      });
+
+      // After sorting, the first element should be the latest if its date is valid
+      if (matchingLogicalIdServers.length > 0) {
+        const latestServer = matchingLogicalIdServers[0];
+        if (
+          latestServer &&
+          latestServer.releaseDate &&
+          typeof latestServer.releaseDate === 'string' &&
+          !isNaN(new Date(latestServer.releaseDate).getTime())
+        ) {
+          return latestServer;
+        }
+      }
+      this.#logger?.warn(
+        `Could not determine the latest server for logical ID '${serverId}' due to invalid or missing release dates, or no servers left after filtering.`,
+      );
+      return undefined;
+    }
   }
 }

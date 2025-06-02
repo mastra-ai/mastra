@@ -18,7 +18,7 @@ export async function getToolsHandler(c: Context) {
       tools,
     });
 
-    return c.json(result);
+    return c.json(result || {});
   } catch (error) {
     return handleError(error, 'Error getting tools');
   }
@@ -44,15 +44,18 @@ export function executeToolHandler(tools: Record<string, any>) {
   return async (c: Context) => {
     try {
       const mastra: Mastra = c.get('mastra');
-      const container = c.get('container');
+      const runtimeContext = c.get('runtimeContext');
       const toolId = decodeURIComponent(c.req.param('toolId'));
-      const { data } = await c.req.json();
+      const runId = c.req.query('runId');
+      const { data, runtimeContext: runtimeContextFromRequest } = await c.req.json();
 
       const result = await getOriginalExecuteToolHandler(tools)({
         mastra,
         toolId,
         data,
-        container,
+        runtimeContext,
+        runId,
+        runtimeContextFromRequest,
       });
 
       return c.json(result);
@@ -65,17 +68,18 @@ export function executeToolHandler(tools: Record<string, any>) {
 export async function executeAgentToolHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const container = c.get('container');
+    const runtimeContext = c.get('runtimeContext');
     const agentId = c.req.param('agentId');
     const toolId = c.req.param('toolId');
-    const { data } = await c.req.json();
+    const { data, runtimeContext: runtimeContextFromRequest } = await c.req.json();
 
     const result = await getOriginalExecuteAgentToolHandler({
       mastra,
       agentId,
       toolId,
       data,
-      container,
+      runtimeContext,
+      runtimeContextFromRequest,
     });
 
     return c.json(result);

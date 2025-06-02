@@ -1,5 +1,6 @@
 import { processApifyServers } from './processors/apify';
 import { processApiTrackerServers } from './processors/apitracker';
+import { processDockerServers } from './processors/docker';
 import { processFleurServers } from './processors/fleur';
 import { processMcpRunServers } from './processors/mcprun';
 import { processPulseMcpServers } from './processors/pulse';
@@ -18,12 +19,23 @@ export const registryData: RegistryFile = {
       postProcessServers: processApiTrackerServers,
     },
     {
+      id: 'docker-mcp-catalog',
+      name: 'Docker MCP Catalog',
+      description: 'A collection of secure, high quality MCP servers as docker images',
+      url: 'https://hub.docker.com/catalogs/mcp',
+      servers_url: 'https://hub.docker.com/v2/repositories/mcp/',
+      tags: ['verified'],
+      count: 102,
+      postProcessServers: processDockerServers,
+    },
+    {
       id: 'apify',
       name: 'Apify',
-      description: 'Your full‑stack platform for web scraping',
-      url: 'https://apify.com/',
+      description: 'A MCP marketplace enabling AI agents to use 5,000+ ready-made servers and Actors.',
+      url: 'https://apify.com/store',
       servers_url: 'https://api.apify.com/v2/store',
       tags: ['verified'],
+      count: '5000+',
       postProcessServers: processApifyServers,
     },
     {
@@ -80,6 +92,13 @@ export const registryData: RegistryFile = {
       url: 'https://www.gumloop.com/mcp',
       tags: ['open-source'],
       count: 20,
+    },
+    {
+      id: 'klavisai',
+      name: 'Klavis AI',
+      description: 'Klavis AI is open source MCP integrations for AI Applications',
+      url: 'https://github.com/Klavis-AI/klavis',
+      tags: ['open-source'],
     },
     {
       id: 'make',

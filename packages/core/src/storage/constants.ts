@@ -21,6 +21,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     run_id: {
       type: 'text',
     },
+    resourceId: { type: 'text', nullable: true },
     snapshot: {
       type: 'text',
     },

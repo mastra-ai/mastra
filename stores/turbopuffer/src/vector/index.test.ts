@@ -20,7 +20,7 @@ function waitUntilVectorsIndexed(vectorDB: TurbopufferVector, indexName: string,
     let attempts = 0;
     const interval = setInterval(async () => {
       try {
-        const stats = await vectorDB.describeIndex(indexName);
+        const stats = await vectorDB.describeIndex({ indexName });
         console.log(`Index ${indexName} has ${stats.count} vectors indexed, waiting for ${expectedCount}`);
         if (stats && stats.count >= expectedCount) {
           clearInterval(interval);
@@ -84,7 +84,7 @@ function waitUntilVectorsIndexed(vectorDB: TurbopufferVector, indexName: string,
         console.log(`Deleting test index: ${testIndexName}`);
         try {
           // Cleanup: delete test index
-          await vectorDB.deleteIndex(testIndexName);
+          await vectorDB.deleteIndex({ indexName: testIndexName });
           console.log(`Successfully deleted test index: ${testIndexName}`);
         } catch (deleteError) {
           console.error(`Error deleting test index ${testIndexName}:`, deleteError);
@@ -151,7 +151,7 @@ function waitUntilVectorsIndexed(vectorDB: TurbopufferVector, indexName: string,
     }, 500000);
 
     it('should describe index with correct properties', async () => {
-      const stats = await vectorDB.describeIndex(testIndexName);
+      const stats = await vectorDB.describeIndex({ indexName: testIndexName });
       expect(stats.dimension).toBe(dimension);
       expect(stats.metric).toBe('cosine');
       expect(typeof stats.count).toBe('number');
@@ -159,6 +159,15 @@ function waitUntilVectorsIndexed(vectorDB: TurbopufferVector, indexName: string,
   });
 
   describe('Error Handling', () => {
+    const testIndexName = 'test_index_error';
+    beforeAll(async () => {
+      await vectorDB.createIndex({ indexName: testIndexName, dimension: 3 });
+    });
+
+    afterAll(async () => {
+      await vectorDB.deleteIndex({ indexName: testIndexName });
+    });
+
     it('should handle non-existent index query gracefully', async () => {
       const nonExistentIndex = 'non-existent-index';
       await expect(vectorDB.query({ indexName: nonExistentIndex, queryVector: [1, 0, 0] })).rejects.toThrow(
@@ -170,6 +179,30 @@ function waitUntilVectorsIndexed(vectorDB: TurbopufferVector, indexName: string,
       const wrongDimVector = [[1, 0]]; // 2D vector for 3D index
       await expect(vectorDB.upsert({ indexName: testIndexName, vectors: wrongDimVector })).rejects.toThrow();
     }, 500000);
+
+    it('should handle duplicate index creation gracefully', async () => {
+      const duplicateIndexName = `duplicate-test`;
+      const dimension = 768;
+
+      // Create index first time
+      await vectorDB.createIndex({
+        indexName: duplicateIndexName,
+        dimension,
+        metric: 'cosine',
+      });
+
+      // Try to create with same dimensions - should not throw
+      await expect(
+        vectorDB.createIndex({
+          indexName: duplicateIndexName,
+          dimension,
+          metric: 'cosine',
+        }),
+      ).resolves.not.toThrow();
+
+      // Cleanup
+      await vectorDB.deleteIndex({ indexName: duplicateIndexName });
+    });
   });
 
   describe('Performance Tests', () => {

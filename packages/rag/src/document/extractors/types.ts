@@ -6,7 +6,7 @@ import type {
   SummaryPrompt,
   TitleExtractorPrompt,
   TitleCombinePrompt,
-} from 'llamaindex';
+} from '../prompts';
 
 export type KeywordExtractArgs = {
   llm?: MastraLanguageModel;

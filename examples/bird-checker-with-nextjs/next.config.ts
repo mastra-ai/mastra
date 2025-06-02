@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import { PrismaPlugin } from "@prisma/nextjs-monorepo-workaround-plugin";
+import { resolve } from "path";
 
 const nextConfig: NextConfig = {
   /* config options here */
@@ -26,6 +27,11 @@ const nextConfig: NextConfig = {
     config.module = {
       ...config.module,
       noParse: [/onnxruntime-node/],
+    };
+
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      "@libsql/client": resolve("./node_modules/@libsql/client"),
     };
 
     return config;

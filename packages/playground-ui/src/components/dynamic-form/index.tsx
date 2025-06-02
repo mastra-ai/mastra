@@ -1,12 +1,13 @@
 'use client';
 
 import { Loader2 } from 'lucide-react';
-import { Button } from '../ui/button';
+import { Button } from '../../ds/components/Button';
 import { ScrollArea } from '../ui/scroll-area';
 import { AutoForm, CustomZodProvider } from '@/components/ui/autoform';
-import type { ExtendableAutoFormProps, AutoFormFieldComponents } from '@autoform/react';
-import z from 'zod';
+import type { ExtendableAutoFormProps } from '@autoform/react';
+import z, { ZodObject } from 'zod';
 import { Label } from '../ui/label';
+import { Icon } from '@/ds/icons';
 
 interface DynamicFormProps<T extends z.ZodSchema> {
   schema: T;
@@ -16,12 +17,19 @@ interface DynamicFormProps<T extends z.ZodSchema> {
   submitButtonLabel?: string;
 }
 
+function isEmptyZodObject(schema: unknown): boolean {
+  if (schema instanceof ZodObject) {
+    return Object.keys(schema.shape).length === 0;
+  }
+  return false;
+}
+
 export function DynamicForm<T extends z.ZodSchema>({
   schema,
   onSubmit,
   defaultValues,
   isSubmitLoading,
-  submitButtonLabel = 'Submit',
+  submitButtonLabel,
 }: DynamicFormProps<T>) {
   if (!schema) {
     console.error('no form schema found');
@@ -29,6 +37,9 @@ export function DynamicForm<T extends z.ZodSchema>({
   }
 
   const normalizedSchema = (schema: z.ZodSchema) => {
+    if (isEmptyZodObject(schema)) {
+      return z.object({});
+    }
     // using a non-printable character to avoid conflicts with the form data
     return z.object({
       '\u200B': schema,
@@ -40,16 +51,22 @@ export function DynamicForm<T extends z.ZodSchema>({
   const formProps: ExtendableAutoFormProps<z.infer<T>> = {
     schema: schemaProvider,
     onSubmit: async values => {
-      await onSubmit(values['\u200B']);
+      await onSubmit(values?.['\u200B'] || {});
     },
-    defaultValues,
+    defaultValues: defaultValues ? { '\u200B': defaultValues } : undefined,
     formProps: {
-      className: 'space-y-4 p-4',
+      className: '',
     },
     uiComponents: {
       SubmitButton: ({ children }) => (
-        <Button className="w-full" type="submit" disabled={isSubmitLoading}>
-          {isSubmitLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : children || submitButtonLabel}
+        <Button variant="light" className="w-full" size="lg" disabled={isSubmitLoading}>
+          {isSubmitLoading ? (
+            <Icon>
+              <Loader2 className="animate-spin" />
+            </Icon>
+          ) : (
+            submitButtonLabel || children
+          )}
         </Button>
       ),
     },
@@ -60,8 +77,8 @@ export function DynamicForm<T extends z.ZodSchema>({
   };
 
   return (
-    <ScrollArea className="h-full w-full">
+    <div className="h-full w-full">
       <AutoForm {...formProps} />
-    </ScrollArea>
+    </div>
   );
 }

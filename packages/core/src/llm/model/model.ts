@@ -1,4 +1,4 @@
-import type { CoreMessage, CoreToolMessage, LanguageModel, Schema, ToolInvocation, ToolResultPart } from 'ai';
+import type { CoreMessage, LanguageModel, Schema } from 'ai';
 import { generateObject, generateText, jsonSchema, Output, streamObject, streamText } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
@@ -14,13 +14,9 @@ import type {
   StreamReturn,
 } from '../';
 import type { MastraPrimitives } from '../../action';
-import type { AiMessageType, ToolsInput } from '../../agent/types';
-import type { Container } from '../../di';
 import type { Mastra } from '../../mastra';
-import type { MessageType } from '../../memory';
 import type { MastraMemory } from '../../memory/memory';
-import type { CoreTool } from '../../tools';
-import { createMastraProxy, delay, makeCoreTool } from '../../utils';
+import { delay } from '../../utils';
 
 import { MastraLLMBase } from './base';
 
@@ -36,7 +32,7 @@ export class MastraLLM extends MastraLLMBase {
     if (mastra) {
       this.#mastra = mastra;
       if (mastra.getLogger()) {
-        this.__setLogger(mastra.getLogger());
+        this.__setLogger(this.#mastra.getLogger());
       }
     }
   }
@@ -67,63 +63,11 @@ export class MastraLLM extends MastraLLMBase {
     return this.#model;
   }
 
-  convertTools({
-    tools,
-    runId,
-    threadId,
-    resourceId,
-    memory,
-    container,
-  }: {
-    tools?: ToolsInput;
-    runId?: string;
-    threadId?: string;
-    resourceId?: string;
-    memory?: MastraMemory;
-    container: Container;
-  }): Record<string, CoreTool> {
-    this.logger.debug('Starting tool conversion for LLM');
-
-    let mastraProxy = undefined;
-    const logger = this.logger;
-    if (this.#mastra) {
-      mastraProxy = createMastraProxy({ mastra: this.#mastra, logger });
-    }
-
-    const converted = Object.entries(tools || {}).reduce(
-      (memo, value) => {
-        const k = value[0] as string;
-        const tool = value[1];
-
-        if (tool) {
-          const options = {
-            name: k,
-            runId,
-            threadId,
-            resourceId,
-            logger: this.logger,
-            memory,
-            mastra: mastraProxy,
-            container,
-          };
-          memo[k] = makeCoreTool(tool, options);
-        }
-        return memo;
-      },
-      {} as Record<string, CoreTool>,
-    );
-
-    this.logger.debug(`Converted tools for LLM`);
-
-    return converted;
-  }
-
   async __text<Z extends ZodSchema | JSONSchema7 | undefined>({
     runId,
     messages,
     maxSteps = 5,
-    tools,
-    convertedTools,
+    tools = {},
     temperature,
     toolChoice = 'auto',
     onStepFinish,
@@ -132,7 +76,7 @@ export class MastraLLM extends MastraLLMBase {
     threadId,
     resourceId,
     memory,
-    container,
+    runtimeContext,
     ...rest
   }: LLMTextOptions<Z> & { memory?: MastraMemory }) {
     const model = this.#model;
@@ -143,21 +87,19 @@ export class MastraLLM extends MastraLLMBase {
       maxSteps,
       threadId,
       resourceId,
-      tools: Object.keys(tools || convertedTools || {}),
+      tools: Object.keys(tools),
     });
-
-    const finalTools = convertedTools || this.convertTools({ tools, runId, threadId, resourceId, memory, container });
 
     const argsForExecute = {
       model,
       temperature,
       tools: {
-        ...finalTools,
+        ...tools,
       },
       toolChoice,
       maxSteps,
       onStepFinish: async (props: any) => {
-        void onStepFinish?.(props);
+        await onStepFinish?.(props);
 
         this.logger.debug('[LLM] - Step Change:', {
           text: props?.text,
@@ -214,8 +156,7 @@ export class MastraLLM extends MastraLLMBase {
     messages,
     onStepFinish,
     maxSteps = 5,
-    tools,
-    convertedTools,
+    tools = {},
     structuredOutput,
     runId,
     temperature,
@@ -224,25 +165,23 @@ export class MastraLLM extends MastraLLMBase {
     threadId,
     resourceId,
     memory,
-    container,
+    runtimeContext,
     ...rest
   }: LLMTextObjectOptions<T> & { memory?: MastraMemory }) {
     const model = this.#model;
 
     this.logger.debug(`[LLM] - Generating a text object`, { runId });
 
-    const finalTools = convertedTools || this.convertTools({ tools, runId, threadId, resourceId, memory, container });
-
     const argsForExecute = {
       model,
       temperature,
       tools: {
-        ...finalTools,
+        ...tools,
       },
       maxSteps,
       toolChoice,
       onStepFinish: async (props: any) => {
-        void onStepFinish?.(props);
+        await onStepFinish?.(props);
 
         this.logger.debug('[LLM] - Step Change:', {
           text: props?.text,
@@ -294,8 +233,7 @@ export class MastraLLM extends MastraLLMBase {
     onStepFinish,
     onFinish,
     maxSteps = 5,
-    tools,
-    convertedTools,
+    tools = {},
     runId,
     temperature,
     toolChoice = 'auto',
@@ -304,7 +242,7 @@ export class MastraLLM extends MastraLLMBase {
     threadId,
     resourceId,
     memory,
-    container,
+    runtimeContext,
     ...rest
   }: LLMInnerStreamOptions<Z> & { memory?: MastraMemory }) {
     const model = this.#model;
@@ -314,21 +252,19 @@ export class MastraLLM extends MastraLLMBase {
       resourceId,
       messages,
       maxSteps,
-      tools: Object.keys(tools || convertedTools || {}),
+      tools: Object.keys(tools || {}),
     });
-
-    const finalTools = convertedTools || this.convertTools({ tools, runId, threadId, resourceId, memory, container });
 
     const argsForExecute = {
       model,
       temperature,
       tools: {
-        ...finalTools,
+        ...tools,
       },
       maxSteps,
       toolChoice,
       onStepFinish: async (props: any) => {
-        void onStepFinish?.(props);
+        await onStepFinish?.(props);
 
         this.logger.debug('[LLM] - Stream Step Change:', {
           text: props?.text,
@@ -348,7 +284,7 @@ export class MastraLLM extends MastraLLMBase {
         }
       },
       onFinish: async (props: any) => {
-        void onFinish?.(props);
+        await onFinish?.(props);
 
         this.logger.debug('[LLM] - Stream Finished:', {
           text: props?.text,
@@ -398,11 +334,10 @@ export class MastraLLM extends MastraLLMBase {
   async __streamObject<T extends ZodSchema | JSONSchema7 | undefined>({
     messages,
     runId,
-    tools,
-    convertedTools,
+    tools = {},
     maxSteps = 5,
     toolChoice = 'auto',
-    container,
+    runtimeContext,
     threadId,
     resourceId,
     memory,
@@ -418,10 +353,10 @@ export class MastraLLM extends MastraLLMBase {
       runId,
       messages,
       maxSteps,
-      tools: Object.keys(tools || convertedTools || {}),
+      tools: Object.keys(tools || {}),
     });
 
-    const finalTools = convertedTools || this.convertTools({ tools, runId, threadId, resourceId, memory, container });
+    const finalTools = tools;
 
     const argsForExecute = {
       model,
@@ -432,7 +367,7 @@ export class MastraLLM extends MastraLLMBase {
       maxSteps,
       toolChoice,
       onStepFinish: async (props: any) => {
-        void onStepFinish?.(props);
+        await onStepFinish?.(props);
 
         this.logger.debug('[LLM] - Stream Step Change:', {
           text: props?.text,
@@ -454,7 +389,7 @@ export class MastraLLM extends MastraLLMBase {
         }
       },
       onFinish: async (props: any) => {
-        void onFinish?.(props);
+        await onFinish?.(props);
 
         this.logger.debug('[LLM] - Stream Finished:', {
           text: props?.text,
@@ -537,95 +472,5 @@ export class MastraLLM extends MastraLLMBase {
       maxSteps,
       ...rest,
     })) as unknown as StreamReturn<Z>;
-  }
-
-  protected convertToUIMessages(messages: CoreMessage[]): AiMessageType[] {
-    function addToolMessageToChat({
-      toolMessage,
-      messages,
-      toolResultContents,
-    }: {
-      toolMessage: CoreToolMessage;
-      messages: Array<AiMessageType>;
-      toolResultContents: Array<ToolResultPart>;
-    }): { chatMessages: Array<AiMessageType>; toolResultContents: Array<ToolResultPart> } {
-      const chatMessages = messages.map(message => {
-        if (message.toolInvocations) {
-          return {
-            ...message,
-            toolInvocations: message.toolInvocations.map(toolInvocation => {
-              const toolResult = toolMessage.content.find(tool => tool.toolCallId === toolInvocation.toolCallId);
-
-              if (toolResult) {
-                return {
-                  ...toolInvocation,
-                  state: 'result',
-                  result: toolResult.result,
-                };
-              }
-
-              return toolInvocation;
-            }),
-          };
-        }
-
-        return message;
-      }) as Array<AiMessageType>;
-
-      const resultContents = [...toolResultContents, ...toolMessage.content];
-
-      return { chatMessages, toolResultContents: resultContents };
-    }
-
-    const { chatMessages } = messages.reduce(
-      (obj: { chatMessages: Array<AiMessageType>; toolResultContents: Array<ToolResultPart> }, message) => {
-        if (message.role === 'tool') {
-          return addToolMessageToChat({
-            toolMessage: message as CoreToolMessage,
-            messages: obj.chatMessages,
-            toolResultContents: obj.toolResultContents,
-          });
-        }
-
-        let textContent = '';
-        let toolInvocations: Array<ToolInvocation> = [];
-
-        if (typeof message.content === 'string') {
-          textContent = message.content;
-        } else if (typeof message.content === 'number') {
-          textContent = String(message.content);
-        } else if (Array.isArray(message.content)) {
-          for (const content of message.content) {
-            if (content.type === 'text') {
-              textContent += content.text;
-            } else if (content.type === 'tool-call') {
-              const toolResult = obj.toolResultContents.find(tool => tool.toolCallId === content.toolCallId);
-              toolInvocations.push({
-                state: toolResult ? 'result' : 'call',
-                toolCallId: content.toolCallId,
-                toolName: content.toolName,
-                args: content.args,
-                result: toolResult?.result,
-              });
-            }
-          }
-        }
-
-        obj.chatMessages.push({
-          id: (message as MessageType).id,
-          role: message.role as AiMessageType['role'],
-          content: textContent,
-          toolInvocations,
-        });
-
-        return obj;
-      },
-      { chatMessages: [], toolResultContents: [] } as {
-        chatMessages: Array<AiMessageType>;
-        toolResultContents: Array<ToolResultPart>;
-      },
-    );
-
-    return chatMessages;
   }
 }

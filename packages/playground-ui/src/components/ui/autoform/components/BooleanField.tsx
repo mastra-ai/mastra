@@ -1,9 +1,9 @@
 import React from 'react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { AutoFormFieldProps } from '@autoform/react';
-import { Label } from '../../label';
+import { Txt } from '@/ds/components/Txt';
 
-export const BooleanField: React.FC<AutoFormFieldProps> = ({ field, label, id, inputProps }) => (
+export const BooleanField: React.FC<AutoFormFieldProps> = ({ field, label, id, inputProps, value }) => (
   <div className="flex items-center space-x-2">
     <Checkbox
       id={id}
@@ -11,17 +11,17 @@ export const BooleanField: React.FC<AutoFormFieldProps> = ({ field, label, id, i
         // react-hook-form expects an event object
         const event = {
           target: {
-            name: field.key,
+            name: inputProps.name,
             value: checked,
           },
         };
         inputProps.onChange(event);
       }}
-      checked={inputProps.value}
+      defaultChecked={field.default}
     />
-    <Label htmlFor={id}>
+    <Txt as="label" variant="ui-sm" className="text-icon3" htmlFor={id}>
       {label}
-      {field.required && <span className="text-destructive"> *</span>}
-    </Label>
+      {field.required && <span className="text-accent2"> *</span>}
+    </Txt>
   </div>
 );

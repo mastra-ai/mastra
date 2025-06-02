@@ -47,12 +47,32 @@ Mastra is organized as a monorepo with the following key directories:
    ```
 
 3. **Install dependencies and build initial packages**:
+
    ```bash
    pnpm setup
    ```
+
+   or
+
+   ```bash
+   pnpm run setup
+   ```
+
    This command installs all dependencies and builds the CLI package, which is required for other packages.
 
 ### Building Packages
+
+If you run into the following error during a build:
+
+```text
+Error [ERR_WORKER_OUT_OF_MEMORY]: Worker terminated due to reaching memory limit: JS heap out of memory
+```
+
+you can increase Node’s heap size by prepending your build command with:
+
+```bash
+NODE_OPTIONS="--max-old-space-size=4096" pnpm build
+```
 
 - **Build all packages**:
 
@@ -106,12 +126,13 @@ Mastra uses Vitest for testing. To run tests:
      ```
    - Specific package tests:
      ```bash
-     pnpm test:core        # Core package tests
-     pnpm test:cli         # CLI tests
-     pnpm test:rag         # RAG tests
-     pnpm test:memory      # Memory tests
-     pnpm test:evals       # Evals tests
-     pnpm test:clients     # Client SDK tests
+     pnpm test:core             # Core package tests
+     pnpm test:cli              # CLI tests
+     pnpm test:rag              # RAG tests
+     pnpm test:memory           # Memory tests
+     pnpm test:evals            # Evals tests
+     pnpm test:clients          # Client SDK tests
+     pnpm test:combined-stores  # Combined stores tests
      ```
    - Watch mode (for development):
      ```bash

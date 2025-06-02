@@ -7,7 +7,7 @@ import { checkEvalStorageFields } from '@mastra/core/utils';
 import { mastra } from '#mastra';
 import { createNodeServer } from '#server';
 // @ts-ignore
-await createNodeServer(mastra, { playground: true, swaggerUI: true });
+await createNodeServer(mastra, { playground: true, isDev: true });
 
 registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName, instructions }) => {
   evaluate({
@@ -20,11 +20,6 @@ registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agen
     instructions,
   });
 });
-
-if (mastra.getStorage()) {
-  // start storage init in the background
-  mastra.getStorage().init();
-}
 
 registerHook(AvailableHooks.ON_EVALUATION, async traceObject => {
   const storage = mastra.getStorage();

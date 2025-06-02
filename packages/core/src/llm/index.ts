@@ -15,14 +15,17 @@ import type {
   streamObject,
   generateText,
   generateObject,
+  UIMessage,
 } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 
-import type { MastraLanguageModel, ToolsInput } from '../agent/types';
-import type { Container } from '../di';
+import type { MastraLanguageModel } from '../agent/types';
 import type { Run } from '../run/types';
+import type { RuntimeContext } from '../runtime-context';
 import type { CoreTool } from '../tools/types';
+
+export { createMockModel } from './model/mock';
 
 export type LanguageModel = MastraLanguageModel;
 
@@ -100,18 +103,17 @@ export type DefaultLLMStreamOptions = Omit<StreamTextOptions, MastraCustomLLMOpt
 export type DefaultLLMStreamObjectOptions = Omit<StreamObjectOptions, MastraCustomLLMOptionsKeys>;
 
 type MastraCustomLLMOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
-  tools?: ToolsInput;
-  convertedTools?: Record<string, CoreTool>;
-  onStepFinish?: (step: unknown) => void;
+  tools?: Record<string, CoreTool>;
+  onStepFinish?: (step: unknown) => Promise<void> | void;
   experimental_output?: Z;
   telemetry?: TelemetrySettings;
   threadId?: string;
   resourceId?: string;
-  container: Container;
+  runtimeContext: RuntimeContext;
 } & Run;
 
 export type LLMTextOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
-  messages: CoreMessage[];
+  messages: UIMessage[] | CoreMessage[];
 } & MastraCustomLLMOptions<Z> &
   DefaultLLMTextOptions;
 
@@ -127,7 +129,7 @@ export type LLMStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = und
   DefaultLLMStreamOptions;
 
 export type LLMInnerStreamOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
-  messages: CoreMessage[];
+  messages: UIMessage[] | CoreMessage[];
   onFinish?: (result: string) => Promise<void> | void;
 } & MastraCustomLLMOptions<Z> &
   DefaultLLMStreamOptions;

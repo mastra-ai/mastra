@@ -1,5 +1,634 @@
 # @mastra/deployer
 
+## 0.10.2-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [c5bf1ce]
+- Updated dependencies [12b7002]
+  - @mastra/server@0.10.2-alpha.4
+  - @mastra/core@0.10.2-alpha.4
+
+## 0.10.2-alpha.3
+
+### Patch Changes
+
+- f73e11b: fix telemetry disabled not working on playground
+- f946acf: Filter out dynamic imports by node builtins
+- Updated dependencies [ab5adbe]
+- Updated dependencies [195c428]
+- Updated dependencies [f73e11b]
+- Updated dependencies [422ee9e]
+  - @mastra/core@0.10.2-alpha.3
+  - @mastra/server@0.10.2-alpha.3
+
+## 0.10.2-alpha.2
+
+### Patch Changes
+
+- e8d2aff: Fix non-scoped packages in mastra build
+- 4187ed4: Fix mcp server api openapijson
+- f0d559f: Fix peerdeps for alpha channel
+- Updated dependencies [1e8bb40]
+- Updated dependencies [f0d559f]
+- Updated dependencies [a0ebc3f]
+  - @mastra/core@0.10.2-alpha.2
+  - @mastra/server@0.10.2-alpha.2
+
+## 0.10.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [ee77e78]
+- Updated dependencies [2901125]
+  - @mastra/core@0.10.2-alpha.1
+  - @mastra/server@0.10.2-alpha.1
+
+## 0.10.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [592a2db]
+- Updated dependencies [e5dc18d]
+- Updated dependencies [e2228f6]
+  - @mastra/core@0.10.2-alpha.0
+  - @mastra/server@0.10.2-alpha.0
+
+## 0.10.1
+
+### Patch Changes
+
+- 6d16390: Support custom bundle externals on mastra Instance
+- bed0916: Handle wildcards in tools discovery
+- 5343f93: Move emitter to symbol to make private
+- fe68410: Fix mcp server routes
+- Updated dependencies [d70b807]
+- Updated dependencies [6d16390]
+- Updated dependencies [1e4a421]
+- Updated dependencies [200d0da]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+- Updated dependencies [6015bdf]
+  - @mastra/core@0.10.1
+  - @mastra/server@0.10.1
+
+## 0.10.1-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [d70b807]
+  - @mastra/core@0.10.1-alpha.3
+  - @mastra/server@0.10.1-alpha.3
+
+## 0.10.1-alpha.2
+
+### Patch Changes
+
+- fe68410: Fix mcp server routes
+- Updated dependencies [6015bdf]
+  - @mastra/server@0.10.1-alpha.1
+  - @mastra/core@0.10.1-alpha.2
+
+## 0.10.1-alpha.1
+
+### Patch Changes
+
+- bed0916: Handle wildcards in tools discovery
+- 5343f93: Move emitter to symbol to make private
+- Updated dependencies [200d0da]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+  - @mastra/core@0.10.1-alpha.1
+  - @mastra/server@0.10.1-alpha.0
+
+## 0.10.1-alpha.0
+
+### Patch Changes
+
+- 6d16390: Support custom bundle externals on mastra Instance
+- Updated dependencies [6d16390]
+- Updated dependencies [1e4a421]
+  - @mastra/core@0.10.1-alpha.0
+
+## 0.10.0
+
+### Minor Changes
+
+- 83da932: Move @mastra/core to peerdeps
+- 5eb5a99: Remove pino from @mastra/core into @mastra/loggers
+- b2ae5aa: Added support for experimental authentication and authorization
+
+### Patch Changes
+
+- b3a3d63: BREAKING: Make vnext workflow the default worklow, and old workflow legacy_workflow
+- 1e9fbfa: Upgrade to OpenTelemetry JS SDK 2.x
+- 8d9feae: Add missing x-mastra-dev-playground headers
+- aaf0e48: Add nodemailer to mastra bundler external deps
+- 48e5910: Mastra server hostname, fallback to undefined
+- 23f258c: Add new list and get routes for mcp servers. Changed route make-up for more consistency with existing API routes. Lastly, added in a lot of extra detail that can be optionally passed to the mcp server per the mcp spec.
+- 2672a05: Add MCP servers and tool call execution to playground
+- Updated dependencies [b3a3d63]
+- Updated dependencies [344f453]
+- Updated dependencies [0215b0b]
+- Updated dependencies [0a3ae6d]
+- Updated dependencies [95911be]
+- Updated dependencies [83da932]
+- Updated dependencies [f53a6ac]
+- Updated dependencies [5eb5a99]
+- Updated dependencies [7e632c5]
+- Updated dependencies [1e9fbfa]
+- Updated dependencies [eabdcd9]
+- Updated dependencies [90be034]
+- Updated dependencies [99f050a]
+- Updated dependencies [d0ee3c6]
+- Updated dependencies [b2ae5aa]
+- Updated dependencies [23f258c]
+- Updated dependencies [a7292b0]
+- Updated dependencies [0dcb9f0]
+- Updated dependencies [2672a05]
+  - @mastra/server@0.10.0
+  - @mastra/core@0.10.0
+
+## 0.4.0-alpha.1
+
+### Minor Changes
+
+- 83da932: Move @mastra/core to peerdeps
+- 5eb5a99: Remove pino from @mastra/core into @mastra/loggers
+- b2ae5aa: Added support for experimental authentication and authorization
+
+### Patch Changes
+
+- b3a3d63: BREAKING: Make vnext workflow the default worklow, and old workflow legacy_workflow
+- 1e9fbfa: Upgrade to OpenTelemetry JS SDK 2.x
+- 8d9feae: Add missing x-mastra-dev-playground headers
+- Updated dependencies [b3a3d63]
+- Updated dependencies [344f453]
+- Updated dependencies [0215b0b]
+- Updated dependencies [0a3ae6d]
+- Updated dependencies [95911be]
+- Updated dependencies [83da932]
+- Updated dependencies [5eb5a99]
+- Updated dependencies [7e632c5]
+- Updated dependencies [1e9fbfa]
+- Updated dependencies [b2ae5aa]
+- Updated dependencies [a7292b0]
+- Updated dependencies [0dcb9f0]
+  - @mastra/server@2.1.0-alpha.1
+  - @mastra/core@0.10.0-alpha.1
+
+## 0.3.5-alpha.0
+
+### Patch Changes
+
+- aaf0e48: Add nodemailer to mastra bundler external deps
+- 48e5910: Mastra server hostname, fallback to undefined
+- 23f258c: Add new list and get routes for mcp servers. Changed route make-up for more consistency with existing API routes. Lastly, added in a lot of extra detail that can be optionally passed to the mcp server per the mcp spec.
+- 2672a05: Add MCP servers and tool call execution to playground
+- Updated dependencies [f53a6ac]
+- Updated dependencies [eabdcd9]
+- Updated dependencies [90be034]
+- Updated dependencies [99f050a]
+- Updated dependencies [d0ee3c6]
+- Updated dependencies [23f258c]
+- Updated dependencies [2672a05]
+  - @mastra/server@2.0.5-alpha.0
+  - @mastra/core@0.9.5-alpha.0
+
+## 0.3.4
+
+### Patch Changes
+
+- 396be50: updated mcp server routes for MCP SSE for use with hono server
+- 5c70b8a: [MASTRA-3234] added limit for client-js getMessages
+- 03c40d1: instructions is only available in playground
+- cb1f698: Set runtimeContext from playground for agents, tools, workflows
+- 0b8b868: Added A2A support + streaming
+- edf1e88: allows ability to pass McpServer into the mastra class and creates an endpoint /api/servers/:serverId/mcp to POST messages to an MCP server
+- Updated dependencies [396be50]
+- Updated dependencies [ab80e7e]
+- Updated dependencies [5c70b8a]
+- Updated dependencies [c3bd795]
+- Updated dependencies [da082f8]
+- Updated dependencies [0c3d117]
+- Updated dependencies [a5810ce]
+- Updated dependencies [3e9c131]
+- Updated dependencies [3171b5b]
+- Updated dependencies [cb1f698]
+- Updated dependencies [973e5ac]
+- Updated dependencies [daf942f]
+- Updated dependencies [0b8b868]
+- Updated dependencies [9e1eff5]
+- Updated dependencies [6fa1ad1]
+- Updated dependencies [c28d7a0]
+- Updated dependencies [edf1e88]
+  - @mastra/core@0.9.4
+  - @mastra/server@2.0.4
+
+## 0.3.4-alpha.4
+
+### Patch Changes
+
+- 5c70b8a: [MASTRA-3234] added limit for client-js getMessages
+- Updated dependencies [5c70b8a]
+- Updated dependencies [3e9c131]
+  - @mastra/server@2.0.4-alpha.4
+  - @mastra/core@0.9.4-alpha.4
+
+## 0.3.4-alpha.3
+
+### Patch Changes
+
+- 396be50: updated mcp server routes for MCP SSE for use with hono server
+- Updated dependencies [396be50]
+- Updated dependencies [c3bd795]
+- Updated dependencies [da082f8]
+- Updated dependencies [0c3d117]
+- Updated dependencies [a5810ce]
+  - @mastra/core@0.9.4-alpha.3
+  - @mastra/server@2.0.4-alpha.3
+
+## 0.3.4-alpha.2
+
+### Patch Changes
+
+- 03c40d1: instructions is only available in playground
+- Updated dependencies [3171b5b]
+- Updated dependencies [973e5ac]
+- Updated dependencies [9e1eff5]
+  - @mastra/core@0.9.4-alpha.2
+  - @mastra/server@2.0.4-alpha.2
+
+## 0.3.4-alpha.1
+
+### Patch Changes
+
+- edf1e88: allows ability to pass McpServer into the mastra class and creates an endpoint /api/servers/:serverId/mcp to POST messages to an MCP server
+- Updated dependencies [ab80e7e]
+- Updated dependencies [6fa1ad1]
+- Updated dependencies [c28d7a0]
+- Updated dependencies [edf1e88]
+  - @mastra/server@2.0.4-alpha.1
+  - @mastra/core@0.9.4-alpha.1
+
+## 0.3.4-alpha.0
+
+### Patch Changes
+
+- cb1f698: Set runtimeContext from playground for agents, tools, workflows
+- 0b8b868: Added A2A support + streaming
+- Updated dependencies [cb1f698]
+- Updated dependencies [daf942f]
+- Updated dependencies [0b8b868]
+  - @mastra/server@2.0.4-alpha.0
+  - @mastra/core@0.9.4-alpha.0
+
+## 0.3.3
+
+### Patch Changes
+
+- 8902157: added an optional `bodySizeLimit` to server config so that users can pass custom bodylimit size in mb. If not, it defaults to 4.5 mb
+- 70dbf51: [MASTRA-2452] updated setBaggage for tracing
+- Updated dependencies [e450778]
+- Updated dependencies [8902157]
+- Updated dependencies [ca0dc88]
+- Updated dependencies [526c570]
+- Updated dependencies [d7a6a33]
+- Updated dependencies [9cd1a46]
+- Updated dependencies [b5d2de0]
+- Updated dependencies [644f8ad]
+- Updated dependencies [70dbf51]
+  - @mastra/core@0.9.3
+  - @mastra/server@2.0.3
+
+## 0.3.3-alpha.1
+
+### Patch Changes
+
+- 8902157: added an optional `bodySizeLimit` to server config so that users can pass custom bodylimit size in mb. If not, it defaults to 4.5 mb
+- 70dbf51: [MASTRA-2452] updated setBaggage for tracing
+- Updated dependencies [e450778]
+- Updated dependencies [8902157]
+- Updated dependencies [ca0dc88]
+- Updated dependencies [9cd1a46]
+- Updated dependencies [70dbf51]
+  - @mastra/core@0.9.3-alpha.1
+  - @mastra/server@2.0.3-alpha.1
+
+## 0.3.3-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [526c570]
+- Updated dependencies [b5d2de0]
+- Updated dependencies [644f8ad]
+  - @mastra/server@2.0.3-alpha.0
+  - @mastra/core@0.9.3-alpha.0
+
+## 0.3.2
+
+### Patch Changes
+
+- 2cf3b8f: dependencies updates:
+  - Updated dependency [`zod@^3.24.3` ↗︎](https://www.npmjs.com/package/zod/v/3.24.3) (from `^3.24.2`, in `dependencies`)
+- 4155f47: Add parameters to filter workflow runs
+  Add fromDate and toDate to telemetry parameters
+- 254f5c3: Audit, cleanup MastraClient
+- 8607972: Introduce Mastra lint cli command
+- a798090: Do not break on tools not being to import
+- Updated dependencies [6052aa6]
+- Updated dependencies [967b41c]
+- Updated dependencies [3d2fb5c]
+- Updated dependencies [26738f4]
+- Updated dependencies [4155f47]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [b804723]
+- Updated dependencies [8607972]
+- Updated dependencies [ccef9f9]
+- Updated dependencies [0097d50]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [17826a9]
+- Updated dependencies [7d8b7c7]
+- Updated dependencies [fba031f]
+- Updated dependencies [3a5f1e1]
+- Updated dependencies [51e6923]
+- Updated dependencies [8398d89]
+  - @mastra/server@2.0.2
+  - @mastra/core@0.9.2
+
+## 0.3.2-alpha.6
+
+### Patch Changes
+
+- a798090: Do not break on tools not being to import
+- Updated dependencies [6052aa6]
+- Updated dependencies [7d8b7c7]
+- Updated dependencies [3a5f1e1]
+- Updated dependencies [8398d89]
+  - @mastra/server@2.0.2-alpha.6
+  - @mastra/core@0.9.2-alpha.6
+
+## 0.3.2-alpha.5
+
+### Patch Changes
+
+- 8607972: Introduce Mastra lint cli command
+- Updated dependencies [3d2fb5c]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [8607972]
+- Updated dependencies [7eeb2bc]
+- Updated dependencies [fba031f]
+  - @mastra/core@0.9.2-alpha.5
+  - @mastra/server@2.0.2-alpha.5
+
+## 0.3.2-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [ccef9f9]
+- Updated dependencies [51e6923]
+  - @mastra/core@0.9.2-alpha.4
+  - @mastra/server@2.0.2-alpha.4
+
+## 0.3.2-alpha.3
+
+### Patch Changes
+
+- 4155f47: Add parameters to filter workflow runs
+  Add fromDate and toDate to telemetry parameters
+- Updated dependencies [967b41c]
+- Updated dependencies [4155f47]
+- Updated dependencies [17826a9]
+  - @mastra/core@0.9.2-alpha.3
+  - @mastra/server@2.0.2-alpha.3
+
+## 0.3.2-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [26738f4]
+  - @mastra/core@0.9.2-alpha.2
+  - @mastra/server@2.0.2-alpha.2
+
+## 0.3.2-alpha.1
+
+### Patch Changes
+
+- 254f5c3: Audit, cleanup MastraClient
+- Updated dependencies [b804723]
+  - @mastra/core@0.9.2-alpha.1
+  - @mastra/server@2.0.2-alpha.1
+
+## 0.3.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [0097d50]
+  - @mastra/server@2.0.2-alpha.0
+  - @mastra/core@0.9.2-alpha.0
+
+## 0.3.1
+
+### Patch Changes
+
+- e7c2881: fix: support dynamic imports when bundling
+- 0ccb8b4: Fix deployer bundling when custom mastra dir is set
+- 92c598d: Remove API request logs from local dev server
+- ebdb781: Fix writing tools in correct folder
+- 35955b0: Rename import to runtime-contxt
+- 6262bd5: Mastra server custom host config
+- c1409ef: Add vNextWorkflow handlers and APIs
+  Add stepGraph and steps to vNextWorkflow
+- 3e7b69d: Dynamic agent props
+- 11d4485: Show VNext workflows on the playground
+  Show running status for step in vNext workflowState
+- 530ced1: Fix cloudflare deployer by removing import.meta.url reference
+- 611aa4a: add all builds to run postinstall
+- 1d3b1cd: Rebump
+- Updated dependencies [34a76ca]
+- Updated dependencies [405b63d]
+- Updated dependencies [81fb7f6]
+- Updated dependencies [20275d4]
+- Updated dependencies [7d1892c]
+- Updated dependencies [a90a082]
+- Updated dependencies [2d17c73]
+- Updated dependencies [61e92f5]
+- Updated dependencies [35955b0]
+- Updated dependencies [6262bd5]
+- Updated dependencies [c1409ef]
+- Updated dependencies [3e7b69d]
+- Updated dependencies [e4943b8]
+- Updated dependencies [f200fed]
+- Updated dependencies [11d4485]
+- Updated dependencies [479f490]
+- Updated dependencies [57b25ed]
+- Updated dependencies [c23a81c]
+- Updated dependencies [2d4001d]
+- Updated dependencies [c71013a]
+- Updated dependencies [1d3b1cd]
+  - @mastra/server@2.0.1
+  - @mastra/core@0.9.1
+
+## 0.3.1-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [2d17c73]
+  - @mastra/core@0.9.1-alpha.8
+  - @mastra/server@2.0.1-alpha.8
+
+## 0.3.1-alpha.7
+
+### Patch Changes
+
+- 1d3b1cd: Rebump
+- Updated dependencies [1d3b1cd]
+  - @mastra/core@0.9.1-alpha.7
+  - @mastra/server@2.0.1-alpha.7
+
+## 0.3.1-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [c23a81c]
+  - @mastra/core@0.9.1-alpha.6
+  - @mastra/server@2.0.1-alpha.6
+
+## 0.3.1-alpha.5
+
+### Patch Changes
+
+- 3e7b69d: Dynamic agent props
+- Updated dependencies [3e7b69d]
+  - @mastra/core@0.9.1-alpha.5
+  - @mastra/server@2.0.1-alpha.5
+
+## 0.3.1-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [e4943b8]
+- Updated dependencies [479f490]
+  - @mastra/core@0.9.1-alpha.4
+  - @mastra/server@2.0.1-alpha.4
+
+## 0.3.1-alpha.3
+
+### Patch Changes
+
+- 6262bd5: Mastra server custom host config
+- Updated dependencies [34a76ca]
+- Updated dependencies [6262bd5]
+  - @mastra/server@2.0.1-alpha.3
+  - @mastra/core@0.9.1-alpha.3
+
+## 0.3.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [405b63d]
+- Updated dependencies [61e92f5]
+- Updated dependencies [57b25ed]
+- Updated dependencies [c71013a]
+  - @mastra/core@0.9.1-alpha.2
+  - @mastra/server@2.0.1-alpha.2
+
+## 0.3.1-alpha.1
+
+### Patch Changes
+
+- e7c2881: fix: support dynamic imports when bundling
+- 0ccb8b4: Fix deployer bundling when custom mastra dir is set
+- 92c598d: Remove API request logs from local dev server
+- ebdb781: Fix writing tools in correct folder
+- 35955b0: Rename import to runtime-contxt
+- c1409ef: Add vNextWorkflow handlers and APIs
+  Add stepGraph and steps to vNextWorkflow
+- 11d4485: Show VNext workflows on the playground
+  Show running status for step in vNext workflowState
+- 530ced1: Fix cloudflare deployer by removing import.meta.url reference
+- 611aa4a: add all builds to run postinstall
+- Updated dependencies [20275d4]
+- Updated dependencies [7d1892c]
+- Updated dependencies [a90a082]
+- Updated dependencies [35955b0]
+- Updated dependencies [c1409ef]
+- Updated dependencies [f200fed]
+- Updated dependencies [11d4485]
+- Updated dependencies [2d4001d]
+  - @mastra/core@0.9.1-alpha.1
+  - @mastra/server@2.0.1-alpha.1
+
+## 0.3.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [81fb7f6]
+  - @mastra/core@0.9.1-alpha.0
+  - @mastra/server@2.0.1-alpha.0
+
+## 0.3.0
+
+### Minor Changes
+
+- fe3ae4d: Remove \_\_ functions in storage and move to storage proxy to make sure init is called
+
+### Patch Changes
+
+- b9122b0: fix: When using a third party exporter such as Langfuse we were not installing external deps imported from the telemetry config
+- 3527610: Fix multi slash imports during bundling
+- 7e92011: Include tools with deployment builds
+- 2538066: Fix memory thread creation from client SDK
+- 63fe16a: Support monorepo workspace packages with native bindings
+- 0f4eae3: Rename Container into RuntimeContext
+- 3f9d151: Add support for tsconfig paths in server-configuration
+- 735ead7: Add support for process.env.development
+- 16a8648: Disable swaggerUI, playground for production builds, mastra instance server build config to enable swaggerUI, apiReqLogs, openAPI documentation for prod builds
+- Updated dependencies [000a6d4]
+- Updated dependencies [08bb78e]
+- Updated dependencies [ed2f549]
+- Updated dependencies [7e92011]
+- Updated dependencies [9ee4293]
+- Updated dependencies [03f3cd0]
+- Updated dependencies [c0f22b4]
+- Updated dependencies [71d9444]
+- Updated dependencies [157c741]
+- Updated dependencies [8a8a73b]
+- Updated dependencies [0a033fa]
+- Updated dependencies [fe3ae4d]
+- Updated dependencies [9c26508]
+- Updated dependencies [0f4eae3]
+- Updated dependencies [1c0d2b7]
+- Updated dependencies [16a8648]
+- Updated dependencies [6f92295]
+  - @mastra/core@0.9.0
+  - @mastra/server@2.0.0
+
+## 0.3.0-alpha.9
+
+### Patch Changes
+
+- b9122b0: fix: When using a third party exporter such as Langfuse we were not installing external deps imported from the telemetry config
+- 2538066: Fix memory thread creation from client SDK
+- 0f4eae3: Rename Container into RuntimeContext
+- 16a8648: Disable swaggerUI, playground for production builds, mastra instance server build config to enable swaggerUI, apiReqLogs, openAPI documentation for prod builds
+- Updated dependencies [000a6d4]
+- Updated dependencies [ed2f549]
+- Updated dependencies [c0f22b4]
+- Updated dependencies [0a033fa]
+- Updated dependencies [9c26508]
+- Updated dependencies [0f4eae3]
+- Updated dependencies [1c0d2b7]
+- Updated dependencies [16a8648]
+  - @mastra/core@0.9.0-alpha.8
+  - @mastra/server@2.0.0-alpha.8
+
 ## 0.3.0-alpha.8
 
 ### Patch Changes

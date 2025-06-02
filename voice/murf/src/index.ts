@@ -142,6 +142,15 @@ export class MurfVoice extends MastraVoice {
     }, 'voice.murf.speak')();
   }
 
+  /**
+   * Checks if listening capabilities are enabled.
+   *
+   * @returns {Promise<{ enabled: boolean }>}
+   */
+  async getListener() {
+    return { enabled: false };
+  }
+
   async listen(
     _input: NodeJS.ReadableStream,
     _options?: Record<string, unknown>,

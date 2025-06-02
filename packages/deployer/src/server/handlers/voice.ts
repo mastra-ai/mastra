@@ -2,6 +2,7 @@ import type { Mastra } from '@mastra/core';
 import {
   getSpeakersHandler as getOriginalSpeakersHandler,
   generateSpeechHandler as getOriginalSpeakHandler,
+  getListenerHandler as getOriginalListenerHandler,
   transcribeSpeechHandler as getOriginalListenHandler,
 } from '@mastra/server/handlers/voice';
 import type { Context } from 'hono';
@@ -53,6 +54,25 @@ export async function speakHandler(c: Context) {
 }
 
 /**
+ * Get available speakers for an agent
+ */
+export async function getListenerHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const agentId = c.req.param('agentId');
+
+    const listeners = await getOriginalListenerHandler({
+      mastra,
+      agentId,
+    });
+
+    return c.json(listeners);
+  } catch (error) {
+    return handleError(error, 'Error getting listener');
+  }
+}
+
+/**
  * Convert speech to text using the agent's voice provider
  */
 export async function listenHandler(c: Context) {
@@ -86,7 +106,7 @@ export async function listenHandler(c: Context) {
       },
     });
 
-    return c.json({ text: transcription });
+    return c.json({ text: transcription?.text });
   } catch (error) {
     return handleError(error, 'Error transcribing speech');
   }

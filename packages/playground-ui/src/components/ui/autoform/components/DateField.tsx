@@ -1,10 +1,20 @@
 import { AutoFormFieldProps } from '@autoform/react';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { DatePicker } from '../../date-picker';
+import { isValid } from 'date-fns';
 
-export const DateField: React.FC<AutoFormFieldProps> = ({ inputProps, error, id }) => {
+export const DateField: React.FC<AutoFormFieldProps> = ({ inputProps, field, error, id }) => {
   const { key, ...props } = inputProps;
   const [value, setValue] = useState<Date | null>(null);
+
+  useEffect(() => {
+    if (field.default) {
+      const date = new Date(field.default);
+      if (isValid(date)) {
+        setValue(date);
+      }
+    }
+  }, [field]);
 
   return (
     <DatePicker

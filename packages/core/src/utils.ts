@@ -1,126 +1,19 @@
 import { createHash } from 'crypto';
-import { convertToCoreMessages } from 'ai';
-import type { CoreMessage, ToolExecutionOptions } from 'ai';
+import type { CoreMessage, LanguageModelV1 } from 'ai';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
-import type { ZodObject } from 'zod';
 
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
-import { Container } from './di';
-import type { Logger } from './logger';
+import type { IMastraLogger } from './logger';
 import type { Mastra } from './mastra';
 import type { AiMessageType, MastraMemory } from './memory';
+import type { RuntimeContext } from './runtime-context';
 import { Tool } from './tools';
 import type { CoreTool, ToolAction, VercelTool } from './tools';
+import { CoreToolBuilder } from './tools/tool-compatibility/builder';
 
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-export function jsonSchemaPropertiesToTSTypes(value: any): z.ZodTypeAny {
-  if (!value.type) {
-    return z.object({});
-  }
-
-  // Handle case where type is an array of strings
-  if (Array.isArray(value.type)) {
-    const types = value.type.map((type: string) => {
-      return jsonSchemaPropertiesToTSTypes({ ...value, type });
-    });
-    return z
-      .union(types)
-      .describe((value.description || '') + (value.examples ? `\nExamples: ${value.examples.join(', ')}` : ''));
-  }
-
-  let zodType;
-  switch (value.type) {
-    case 'string':
-      zodType = z
-        .string()
-        .describe((value.description || '') + (value.examples ? `\nExamples: ${value.examples.join(', ')}` : ''));
-      break;
-    case 'number':
-      zodType = z
-        .number()
-        .describe((value.description || '') + (value.examples ? `\nExamples: ${value.examples.join(', ')}` : ''));
-      break;
-    case 'integer':
-      zodType = z
-        .number()
-        .int()
-        .describe((value.description || '') + (value.examples ? `\nExamples: ${value.examples.join(', ')}` : ''));
-      break;
-    case 'boolean':
-      zodType = z
-        .boolean()
-        .describe((value.description || '') + (value.examples ? `\nExamples: ${value.examples.join(', ')}` : ''));
-      break;
-    case 'array':
-      zodType = z
-        .array(jsonSchemaPropertiesToTSTypes(value.items))
-        .describe((value.description || '') + (value.examples ? `\nExamples: ${value.examples.join(', ')}` : ''));
-      break;
-    case 'object':
-      zodType = jsonSchemaToModel(value).describe(
-        (value.description || '') + (value.examples ? `\nExamples: ${value.examples.join(', ')}` : ''),
-      );
-      break;
-    case 'null':
-      zodType = z.null().describe(value.description || '');
-      break;
-    default:
-      throw new Error(`Unsupported JSON schema type: ${value.type}`);
-  }
-
-  return zodType;
-}
-
-export function jsonSchemaToModel(jsonSchema: Record<string, any>): ZodObject<any> {
-  const properties = jsonSchema.properties;
-  const requiredFields = jsonSchema.required || [];
-  if (!properties) {
-    return z.object({});
-  }
-
-  const zodSchema: Record<string, any> = {};
-  for (const [key, _] of Object.entries(properties)) {
-    const value = _ as any;
-    let zodType;
-    if (value.anyOf) {
-      const anyOfTypes = value.anyOf.map((schema: any) => jsonSchemaPropertiesToTSTypes(schema));
-      zodType = z
-        .union(anyOfTypes)
-        .describe((value.description || '') + (value.examples ? `\nExamples: ${value.examples.join(', ')}` : ''));
-    } else if (value.allOf) {
-      const allOfTypes = value.allOf.map((schema: any) => jsonSchemaPropertiesToTSTypes(schema));
-      zodType = z
-        .intersection(
-          allOfTypes[0],
-          allOfTypes.slice(1).reduce((acc: z.ZodTypeAny, schema: z.ZodTypeAny) => acc.and(schema), allOfTypes[0]),
-        )
-        .describe((value.description || '') + (value.examples ? `\nExamples: ${value.examples.join(', ')}` : ''));
-    } else {
-      if (!value.type) {
-        value.type = 'string';
-      }
-      zodType = jsonSchemaPropertiesToTSTypes(value);
-    }
-
-    if (value.description) {
-      zodType = zodType.describe(value.description);
-    }
-
-    // Add check for null type requiring the field
-    const isTypeRequired = value.type === 'null';
-
-    if (requiredFields.includes(key) || isTypeRequired) {
-      zodSchema[key] = zodType;
-    } else {
-      zodSchema[key] = zodType.nullable().optional();
-    }
-  }
-
-  return z.object(zodSchema);
-}
 
 /**
  * Deep merges two objects, recursively merging nested objects and arrays
@@ -307,98 +200,28 @@ export function isVercelTool(tool?: ToolToConvert): tool is VercelTool {
   return !!(tool && !(tool instanceof Tool) && 'parameters' in tool);
 }
 
-interface ToolOptions {
+export interface ToolOptions {
   name: string;
   runId?: string;
   threadId?: string;
   resourceId?: string;
-  logger: Logger;
+  logger?: IMastraLogger;
   description?: string;
   mastra?: (Mastra & MastraPrimitives) | MastraPrimitives;
-  container: Container;
+  runtimeContext: RuntimeContext;
   memory?: MastraMemory;
   agentName?: string;
+  model?: LanguageModelV1;
 }
 
 type ToolToConvert = VercelTool | ToolAction<any, any, any>;
-
-interface LogOptions {
-  agentName?: string;
-  toolName: string;
-  type?: 'tool' | 'toolset' | 'client-tool';
-}
-
-interface LogMessageOptions {
-  start: string;
-  error: string;
-}
-
-function createLogMessageOptions({ agentName, toolName, type }: LogOptions): LogMessageOptions {
-  // If no agent name, use default format
-  if (!agentName) {
-    return {
-      start: `Executing tool ${toolName}`,
-      error: `Failed tool execution`,
-    };
-  }
-
-  const prefix = `[Agent:${agentName}]`;
-  const toolType = type === 'toolset' ? 'toolset' : 'tool';
-
-  return {
-    start: `${prefix} - Executing ${toolType} ${toolName}`,
-    error: `${prefix} - Failed ${toolType} execution`,
-  };
-}
-
-function createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'tool' | 'toolset' | 'client-tool') {
-  // dont't add memory or mastra to logging
-  const { logger, mastra: _mastra, memory: _memory, container, ...rest } = options;
-
-  const { start, error } = createLogMessageOptions({
-    agentName: options.agentName,
-    toolName: options.name,
-    type: logType,
-  });
-
-  const execFunction = async (args: any, execOptions: ToolExecutionOptions) => {
-    if (isVercelTool(tool)) {
-      return tool?.execute?.(args, execOptions) ?? undefined;
-    }
-
-    return (
-      tool?.execute?.(
-        {
-          context: args,
-          threadId: options.threadId,
-          resourceId: options.resourceId,
-          mastra: options.mastra,
-          memory: options.memory,
-          runId: options.runId,
-          container: container ?? new Container(),
-        },
-        execOptions,
-      ) ?? undefined
-    );
-  };
-
-  return async (args: any, execOptions?: any) => {
-    try {
-      logger.debug(start, { ...rest, args });
-      return await execFunction(args, execOptions);
-    } catch (err) {
-      logger.error(error, { ...rest, error: err, args });
-      throw err;
-    }
-  };
-}
 
 /**
  * Checks if a value is a Zod type
  * @param value - The value to check
  * @returns True if the value is a Zod type, false otherwise
  */
-function isZodType(value: unknown): value is z.ZodType {
+export function isZodType(value: unknown): value is z.ZodType {
   // Check if it's a Zod schema by looking for common Zod properties and methods
   return (
     typeof value === 'object' &&
@@ -463,59 +286,19 @@ function convertVercelToolParameters(tool: VercelTool): z.ZodType {
   return isZodType(schema) ? schema : resolveSerializedZodOutput(jsonSchemaToZod(schema));
 }
 
-function convertInputSchema(tool: ToolAction<any, any, any>): z.ZodType {
-  const schema = tool.inputSchema ?? z.object({});
-  return isZodType(schema) ? schema : resolveSerializedZodOutput(jsonSchemaToZod(schema));
-}
-
 /**
  * Converts a Vercel Tool or Mastra Tool into a CoreTool format
- * @param tool - The tool to convert (either VercelTool or ToolAction)
+ * @param originalTool - The tool to convert (either VercelTool or ToolAction)
  * @param options - Tool options including Mastra-specific settings
  * @param logType - Type of tool to log (tool or toolset)
  * @returns A CoreTool that can be used by the system
  */
 export function makeCoreTool(
-  tool: ToolToConvert,
+  originalTool: ToolToConvert,
   options: ToolOptions,
   logType?: 'tool' | 'toolset' | 'client-tool',
 ): CoreTool {
-  // Helper to get parameters based on tool type
-  const getParameters = () => {
-    if (isVercelTool(tool)) {
-      return convertVercelToolParameters(tool);
-    }
-
-    return convertInputSchema(tool);
-  };
-
-  // Check if this is a provider-defined tool
-  const isProviderDefined =
-    'type' in tool &&
-    tool.type === 'provider-defined' &&
-    'id' in tool &&
-    typeof tool.id === 'string' &&
-    tool.id.includes('.');
-
-  // For provider-defined tools, we need to include all required properties
-  if (isProviderDefined) {
-    return {
-      type: 'provider-defined' as const,
-      id: tool.id as `${string}.${string}`,
-      args: ('args' in tool ? tool.args : {}) as Record<string, unknown>,
-      description: tool.description!,
-      parameters: getParameters(),
-      execute: tool.execute ? createExecute(tool, { ...options, description: tool.description }, logType) : undefined,
-    };
-  }
-
-  // For function tools
-  return {
-    type: 'function' as const,
-    description: tool.description!,
-    parameters: getParameters(),
-    execute: tool.execute ? createExecute(tool, { ...options, description: tool.description }, logType) : undefined,
-  };
+  return new CoreToolBuilder({ originalTool, options, logType }).build();
 }
 
 /**
@@ -524,7 +307,7 @@ export function makeCoreTool(
  * @param logger - The logger to use for warnings
  * @returns A proxy for the Mastra instance
  */
-export function createMastraProxy({ mastra, logger }: { mastra: Mastra; logger: Logger }) {
+export function createMastraProxy({ mastra, logger }: { mastra: Mastra; logger: IMastraLogger }) {
   return new Proxy(mastra, {
     get(target, prop) {
       const hasProp = Reflect.has(target, prop);
@@ -578,7 +361,7 @@ export function createMastraProxy({ mastra, logger }: { mastra: Mastra; logger: 
   });
 }
 
-export function checkEvalStorageFields(traceObject: any, logger?: Logger) {
+export function checkEvalStorageFields(traceObject: any, logger?: IMastraLogger) {
   const missingFields = [];
   if (!traceObject.input) missingFields.push('input');
   if (!traceObject.output) missingFields.push('output');
@@ -645,26 +428,68 @@ function detectSingleMessageCharacteristics(
   }
 }
 
-function isUiMessage(message: CoreMessage | AiMessageType): message is AiMessageType {
+export function isUiMessage(message: CoreMessage | AiMessageType): message is AiMessageType {
   return detectSingleMessageCharacteristics(message) === `has-ui-specific-parts`;
 }
-function isCoreMessage(message: CoreMessage | AiMessageType): message is CoreMessage {
+export function isCoreMessage(message: CoreMessage | AiMessageType): message is CoreMessage {
   return [`has-core-specific-parts`, `message`].includes(detectSingleMessageCharacteristics(message));
 }
 
-export function ensureAllMessagesAreCoreMessages(messages: (CoreMessage | AiMessageType)[]) {
-  return messages
-    .map(message => {
-      if (isUiMessage(message)) {
-        return convertToCoreMessages([message]);
-      }
-      if (isCoreMessage(message)) {
-        return message;
-      }
-      const characteristics = detectSingleMessageCharacteristics(message);
-      throw new Error(
-        `Message does not appear to be a core message or a UI message but must be one of the two, found "${characteristics}" type for message:\n\n${JSON.stringify(message, null, 2)}\n`,
-      );
-    })
-    .flat();
+/** Represents a validated SQL identifier (e.g., table or column name). */
+type SqlIdentifier = string & { __brand: 'SqlIdentifier' };
+/** Represents a validated dot-separated SQL field key. */
+type FieldKey = string & { __brand: 'FieldKey' };
+
+const SQL_IDENTIFIER_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+
+/**
+ * Parses and returns a valid SQL identifier (such as a table or column name).
+ * The identifier must:
+ *   - Start with a letter (a-z, A-Z) or underscore (_)
+ *   - Contain only letters, numbers, or underscores
+ *   - Be at most 63 characters long
+ *
+ * @param name - The identifier string to parse.
+ * @param kind - Optional label for error messages (e.g., 'table name').
+ * @returns The validated identifier as a branded type.
+ * @throws {Error} If the identifier does not conform to SQL naming rules.
+ *
+ * @example
+ * const id = parseSqlIdentifier('my_table'); // Ok
+ * parseSqlIdentifier('123table'); // Throws error
+ */
+export function parseSqlIdentifier(name: string, kind = 'identifier'): SqlIdentifier {
+  if (!SQL_IDENTIFIER_PATTERN.test(name) || name.length > 63) {
+    throw new Error(
+      `Invalid ${kind}: ${name}. Must start with a letter or underscore, contain only letters, numbers, or underscores, and be at most 63 characters long.`,
+    );
+  }
+  return name as SqlIdentifier;
+}
+
+/**
+ * Parses and returns a valid dot-separated SQL field key (e.g., 'user.profile.name').
+ * Each segment must:
+ *   - Start with a letter (a-z, A-Z) or underscore (_)
+ *   - Contain only letters, numbers, or underscores
+ *   - Be at most 63 characters long
+ *
+ * @param key - The dot-separated field key string to parse.
+ * @returns The validated field key as a branded type.
+ * @throws {Error} If any segment of the key is invalid.
+ *
+ * @example
+ * const key = parseFieldKey('user_profile.name'); // Ok
+ * parseFieldKey('user..name'); // Throws error
+ * parseFieldKey('user.123name'); // Throws error
+ */
+export function parseFieldKey(key: string): FieldKey {
+  if (!key) throw new Error('Field key cannot be empty');
+  const segments = key.split('.');
+  for (const segment of segments) {
+    if (!SQL_IDENTIFIER_PATTERN.test(segment) || segment.length > 63) {
+      throw new Error(`Invalid field key segment: ${segment} in ${key}`);
+    }
+  }
+  return key as FieldKey;
 }

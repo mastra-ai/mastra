@@ -55,9 +55,7 @@ export async function generateSpeechHandler({
     }
 
     validateBody({
-      text: undefined,
-      speakerId: undefined,
-      ...body,
+      text: body?.text,
     });
 
     const agent = mastra.getAgent(agentId);
@@ -76,13 +74,7 @@ export async function generateSpeechHandler({
       throw new HTTPException(500, { message: 'Failed to generate speech' });
     }
 
-    const chunks: Buffer[] = [];
-    for await (const chunk of audioStream) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-    }
-    const audioData = Buffer.concat(chunks);
-
-    return { audioData };
+    return audioStream;
   } catch (error) {
     return handleError(error, 'Error generating speech');
   }
@@ -128,5 +120,31 @@ export async function transcribeSpeechHandler({
     return { text };
   } catch (error) {
     return handleError(error, 'Error transcribing speech');
+  }
+}
+
+/**
+ * Get available listeners for an agent
+ */
+export async function getListenerHandler({ mastra, agentId }: VoiceContext) {
+  try {
+    if (!agentId) {
+      throw new HTTPException(400, { message: 'Agent ID is required' });
+    }
+
+    const agent = mastra.getAgent(agentId);
+
+    if (!agent) {
+      throw new HTTPException(404, { message: 'Agent not found' });
+    }
+
+    if (!agent.voice) {
+      throw new HTTPException(400, { message: 'Agent does not have voice capabilities' });
+    }
+
+    const listeners = await agent.voice.getListener();
+    return listeners;
+  } catch (error) {
+    return handleError(error, 'Error getting listeners');
   }
 }

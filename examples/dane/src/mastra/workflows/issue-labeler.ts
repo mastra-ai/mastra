@@ -38,7 +38,9 @@ const getIssue = new Step({
       },
     });
 
-    const labelNames = labels?.data?.map((label: any) => label.name);
+    const labelNames = labels?.data
+      ?.map((label: any) => label.name)
+      .filter((name: string) => !name.includes('priority:'));
 
     return { title: issue?.data?.title!, body: issue?.data?.body!, labelNames: labelNames! };
   },

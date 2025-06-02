@@ -3,15 +3,16 @@ title: "例一覧：ワークフロー、エージェント、RAG | Mastra Docs"
 description: "Mastraを使ったAI開発の実用的な例を探索してください。テキスト生成、RAG実装、構造化された出力、マルチモーダルインタラクションなどが含まれます。OpenAI、Anthropic、Google Geminiを使用してAIアプリケーションを構築する方法を学びましょう。"
 ---
 
-import { CardItems, CardItem, CardTitle } from "@/components/example-cards";
+import { CardItems } from "@/components/cards/card-items";
 import { Tabs } from "nextra/components";
 
 # 例
 
-例のセクションは、Mastraを使用した基本的なAIエンジニアリングを示す短いプロジェクト例のリストで、テキスト生成、構造化された出力、ストリーミングレスポンス、検索拡張生成（RAG）、音声などが含まれています。
+例のセクションでは、Mastraを使用した基本的なAIエンジニアリングを示す短いプロジェクト例のリストを紹介しています。これには、テキスト生成、構造化された出力、ストリーミングレスポンス、検索拡張生成（RAG）、音声などが含まれます。
 
-<CardItems titles={["Agent", "Workflow", "Memory", "RAG", "Evals", "Voice"]} items={
-  {Agent: [
+<CardItems titles={["Agent", "Workflow", "vNextWorkflow", "Memory", "RAG", "Evals", "Voice"]} items={
+  {
+    Agent: [
       {
         title: "システムプロンプトを使用したエージェント",
         href: "/examples/agents/system-prompt",
@@ -62,6 +63,36 @@ import { Tabs } from "nextra/components";
       },
       { title: "エージェントの呼び出し", href: "/examples/workflows/calling-agent" },
     ],
+    vNextWorkflow: [
+      {
+        title: "条件分岐",
+        href: "/examples/workflows_vNext/conditional-branching",
+      },
+      {
+        title: "並列ステップ",
+        href: "/examples/workflows_vNext/parallel-steps",
+      },
+      {
+        title: "エージェントの呼び出し",
+        href: "/examples/workflows_vNext/calling-agent",
+      },
+      {
+        title: "ステップとしてのツールとエージェント",
+        href: "/examples/workflows_vNext/agent-and-tool-interop",
+      },
+      {
+        title: "ヒューマンインザループ",
+        href: "/examples/workflows_vNext/human-in-the-loop",
+      },
+      {
+        title: "制御フロー",
+        href: "/examples/workflows_vNext/control-flow",
+      },
+      {
+        title: "配列を入力として",
+        href: "/examples/workflows_vNext/array-as-input",
+      }
+    ],
     Memory:[
       {
         title: "LibSQLを使用した長期メモリ",
@@ -74,6 +105,10 @@ import { Tabs } from "nextra/components";
       {
         title: "Upstashを使用した長期メモリ",
         href: "/examples/memory/memory-with-upstash",
+      },
+      {
+        title: "Mem0を使用した長期記憶",
+        href: "/examples/memory/memory-with-mem0",
       },
       {
         title: "ストリーミングワーキングメモリ（クイックスタート）",
@@ -93,7 +128,7 @@ import { Tabs } from "nextra/components";
       { title: "チャンク配列の埋め込み", href: "/examples/rag/embedding/embed-chunk-array" },
       { title: "チャンクサイズの調整", href: "/examples/rag/chunking/adjust-chunk-size" },
       {
-        title: "チャンク区切りの調整",
+        title: "チャンク区切り文字の調整",
         href: "/examples/rag/chunking/adjust-chunk-delimiters",
       },
       {
@@ -120,11 +155,11 @@ import { Tabs } from "nextra/components";
       },
       { title: "メタデータフィルタリング", href: "/examples/rag/usage/filter-rag" },
       {
-        title: "結果の再ランキング",
+        title: "結果の再ランク付け",
         href: "/examples/rag/rerank/rerank",
       },
       {
-        title: "ツールを使用した結果の再ランキング",
+        title: "ツールを使用した結果の再ランク付け",
         href: "/examples/rag/rerank/rerank-rag",
       },
       { title: "思考連鎖プロンプティング", href: "/examples/rag/usage/cot-rag" },
@@ -168,7 +203,7 @@ import { Tabs } from "nextra/components";
       href: "/examples/evals/contextual-recall",
     },
     {
-      title: "LLMを審査員とするカスタム評価",
+      title: "LLMを審判とするカスタム評価",
       href: "/examples/evals/custom-eval",
     },
     {
@@ -192,11 +227,11 @@ import { Tabs } from "nextra/components";
       href: "/examples/evals/summarization",
     },
     {
-      title: "テキストの差異",
+      title: "テキスト差異",
       href: "/examples/evals/textual-difference",
     },
     {
-      title: "トーンの一貫性", 
+      title: "トーン一貫性", 
       href: "/examples/evals/tone-consistency",
     },
     {
@@ -204,7 +239,7 @@ import { Tabs } from "nextra/components";
       href: "/examples/evals/toxicity",
     },
     {
-      title: "単語の包含",
+      title: "単語包含",
       href: "/examples/evals/word-inclusion",
     },
   ],
@@ -216,9 +251,16 @@ import { Tabs } from "nextra/components";
     {
       title: "音声認識",
       href: "/examples/voice/speech-to-text",
-    }
+    },
+    {
+      title: "ターンテイキング",
+      href: "/examples/voice/turn-taking",
+    },
+    {
+      title: "音声から音声へ",
+      href: "/examples/voice/speech-to-speech",
+    },
   ],
 }}>
 
 </CardItems>
-

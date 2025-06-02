@@ -1,5 +1,5 @@
 import type { Mastra } from '@mastra/core';
-import type { Container } from '@mastra/core/di';
+import type { RuntimeContext } from '@mastra/core/runtime-context';
 import {
   getNetworksHandler as getOriginalNetworksHandler,
   getNetworkByIdHandler as getOriginalNetworkByIdHandler,
@@ -13,9 +13,11 @@ import { handleError } from './error';
 export async function getNetworksHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
+    const runtimeContext: RuntimeContext = c.get('runtimeContext');
 
     const networks = await getOriginalNetworksHandler({
       mastra,
+      runtimeContext,
     });
 
     return c.json(networks);
@@ -28,10 +30,12 @@ export async function getNetworkByIdHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const networkId = c.req.param('networkId');
+    const runtimeContext: RuntimeContext = c.get('runtimeContext');
 
     const network = await getOriginalNetworkByIdHandler({
       mastra,
       networkId,
+      runtimeContext,
     });
 
     return c.json(network);
@@ -43,13 +47,13 @@ export async function getNetworkByIdHandler(c: Context) {
 export async function generateHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const container: Container = c.get('container');
+    const runtimeContext: RuntimeContext = c.get('runtimeContext');
     const networkId = c.req.param('networkId');
     const body = await c.req.json();
 
     const result = await getOriginalGenerateHandler({
       mastra,
-      container,
+      runtimeContext,
       networkId,
       body,
     });
@@ -63,13 +67,13 @@ export async function generateHandler(c: Context) {
 export async function streamGenerateHandler(c: Context): Promise<Response | undefined> {
   try {
     const mastra: Mastra = c.get('mastra');
-    const container: Container = c.get('container');
+    const runtimeContext: RuntimeContext = c.get('runtimeContext');
     const networkId = c.req.param('networkId');
     const body = await c.req.json();
 
     const streamResponse = await getOriginalStreamGenerateHandler({
       mastra,
-      container,
+      runtimeContext,
       networkId,
       body,
     });

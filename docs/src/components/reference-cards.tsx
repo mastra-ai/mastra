@@ -1,4 +1,4 @@
-import { CardItems } from "./example-cards";
+import { CardItems } from "./cards/card-items";
 
 export const ReferenceCards = () => {
   return (
@@ -7,7 +7,7 @@ export const ReferenceCards = () => {
         "Core",
         "CLI",
         "Agents",
-        "Tools",
+        "Tools & MCP",
         "Workflows",
         "Networks",
         "Memory",
@@ -46,6 +46,10 @@ export const ReferenceCards = () => {
         ],
         Agents: [
           {
+            title: "Agent",
+            href: "/reference/agents/agent",
+          },
+          {
             title: "getAgent()",
             href: "/reference/agents/getAgent",
           },
@@ -62,7 +66,7 @@ export const ReferenceCards = () => {
             href: "/reference/agents/stream",
           },
         ],
-        Tools: [
+        "Tools & MCP": [
           {
             title: "createDocumentChunkerTool()",
             href: "/reference/tools/document-chunker-tool",
@@ -80,8 +84,8 @@ export const ReferenceCards = () => {
             href: "/reference/tools/client",
           },
           {
-            title: "MCPConfiguration",
-            href: "/reference/tools/mcp-configuration",
+            title: "MCPClient",
+            href: "/reference/tools/mcp-client",
           },
         ],
         Workflows: [
@@ -374,10 +378,6 @@ export const ReferenceCards = () => {
           {
             title: "OTelConfig",
             href: "/reference/observability/otel-config",
-          },
-          {
-            title: ".createLogger()",
-            href: "/reference/observability/create-logger",
           },
         ],
         "Client SDK - JS": [

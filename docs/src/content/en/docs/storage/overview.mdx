@@ -32,18 +32,28 @@ Mastra can be configured with a default storage option:
 
 ```typescript copy
 import { Mastra } from "@mastra/core/mastra";
-import { DefaultStorage } from "@mastra/core/storage/libsql";
+import { LibSQLStore } from "@mastra/libsql";
 
 const mastra = new Mastra({
-  storage: new DefaultStorage({
-    config: {
-      url: "file:.mastra/mastra.db",
-    },
+  storage: new LibSQLStore({
+    url: "file:./mastra.db",
   }),
 });
 ```
 
+If you do not specify any `storage` configuration, Mastra will not persist data across application restarts or deployments. For any
+deployment beyond local testing you should provide your own storage
+configuration either on `Mastra` or directly within `new Memory()`.
+
 ## Data Schema
+
+{/*
+LLM CONTEXT: This Tabs component displays the database schema for different data types stored by Mastra.
+Each tab shows the table structure and column definitions for a specific data entity (Messages, Threads, Workflows, etc.).
+The tabs help users understand the data model and relationships between different storage entities.
+Each tab includes detailed column information with types, constraints, and example data structures.
+The data types include Messages, Threads, Workflows, Eval Datasets, and Traces.
+*/}
 
 <Tabs items={['Messages', 'Threads', 'Workflows', 'Eval Datasets', 'Traces']}>
   <Tabs.Tab>

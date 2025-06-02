@@ -172,6 +172,15 @@ export class AzureVoice extends MastraVoice {
   }
 
   /**
+   * Checks if listening capabilities are enabled.
+   *
+   * @returns {Promise<{ enabled: boolean }>}
+   */
+  async getListener() {
+    return { enabled: true };
+  }
+
+  /**
    * Transcribes audio (STT) from a Node.js stream using Azure.
    *
    * @param {NodeJS.ReadableStream} audioStream - The audio to be transcribed, must be in .wav format.

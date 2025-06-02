@@ -1,6 +1,19 @@
+---
+title: Mastra Client Memory API
+description: Learn how to manage conversation threads and message history in Mastra using the client-js SDK.
+---
+
 # Memory API
 
 The Memory API provides methods to manage conversation threads and message history in Mastra.
+
+## Initialize Mastra Client
+
+```typescript
+import { MastraClient } from "@mastra/client-js";
+
+const client = new MastraClient();
+```
 
 ## Memory Thread Operations
 
@@ -11,7 +24,7 @@ Retrieve all memory threads for a specific resource:
 ```typescript
 const threads = await client.getMemoryThreads({
   resourceId: "resource-1",
-  agentId: "agent-1"
+  agentId: "agent-1",
 });
 ```
 
@@ -24,7 +37,7 @@ const thread = await client.createMemoryThread({
   title: "New Conversation",
   metadata: { category: "support" },
   resourceid: "resource-1",
-  agentId: "agent-1"
+  agentId: "agent-1",
 });
 ```
 
@@ -84,7 +97,7 @@ const savedMessages = await client.saveMessageToMemory({
       type: "text",
     },
   ],
-  agentId: "agent-1"
+  agentId: "agent-1",
 });
 ```
 

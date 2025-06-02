@@ -7,7 +7,7 @@ import { removeAllExceptDeployer } from './babel/get-deployer';
 import commonjs from '@rollup/plugin-commonjs';
 import { recursiveRemoveNonReferencedNodes } from './plugins/remove-unused-references';
 
-export function getDeployerBundler(entryFile: string) {
+export function getDeployerBundler(entryFile: string, result: { isDeployerRemoved: boolean }) {
   return rollup({
     logLevel: 'silent',
     input: {
@@ -34,6 +34,7 @@ export function getDeployerBundler(entryFile: string) {
             return;
           }
 
+          result.isDeployerRemoved = true;
           return new Promise((resolve, reject) => {
             babel.transform(
               code,
@@ -84,14 +85,18 @@ export function getDeployerBundler(entryFile: string) {
 }
 
 export async function getDeployer(entryFile: string, outputDir: string) {
-  console.log('entryFile', entryFile);
-  const bundle = await getDeployerBundler(entryFile);
+  const result: { isDeployerRemoved: boolean } = { isDeployerRemoved: false };
+  const bundle = await getDeployerBundler(entryFile, result);
 
   await bundle.write({
     dir: outputDir,
     format: 'es',
     entryFileNames: '[name].mjs',
   });
+
+  if (!result.isDeployerRemoved) {
+    return;
+  }
 
   return (await import(`file:${outputDir}/deployer.mjs`)).deployer as unknown as MastraDeployer;
 }

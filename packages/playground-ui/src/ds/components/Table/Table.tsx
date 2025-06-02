@@ -37,7 +37,10 @@ export interface ThProps extends React.TdHTMLAttributes<HTMLTableCellElement> {
 export const Th = ({ className, children, ...props }: ThProps) => {
   return (
     <th
-      className={clsx('text-icon3 text-ui-sm h-full text-left font-normal uppercase first:pl-5 last:pr-5', className)}
+      className={clsx(
+        'text-icon3 text-ui-sm h-full text-left font-normal uppercase first:pl-5 last:pr-5 whitespace-nowrap',
+        className,
+      )}
       {...props}
     >
       {children}
@@ -58,11 +61,20 @@ export interface RowProps {
   className?: string;
   children: React.ReactNode;
   selected?: boolean;
+  onClick?: () => void;
 }
 
-export const Row = ({ className, children, selected = false }: RowProps) => {
+export const Row = ({ className, children, selected = false, onClick }: RowProps) => {
   return (
-    <tr className={clsx('border-b-sm border-border1 hover:bg-surface3', selected && 'bg-surface4', className)}>
+    <tr
+      className={clsx(
+        'border-b-sm border-border1 hover:bg-surface3',
+        selected && 'bg-surface4',
+        onClick && 'cursor-pointer',
+        className,
+      )}
+      onClick={onClick}
+    >
       {children}
     </tr>
   );

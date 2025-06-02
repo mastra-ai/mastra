@@ -1,6 +1,8 @@
+import { createMockModel } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { AgentNetwork } from '@mastra/core/network';
+import { RuntimeContext } from '@mastra/core/runtime-context';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import { getNetworksHandler, getNetworkByIdHandler, generateHandler, streamGenerateHandler } from './network';
@@ -9,10 +11,7 @@ function createMockAgent(name: string) {
   return new Agent({
     name,
     instructions: 'You are a helpful assistant',
-    model: {
-      provider: 'test-provider',
-      modelId: 'test-model',
-    } as any,
+    model: createMockModel({ mockText: 'Hello, world!' }),
   });
 }
 
@@ -21,10 +20,7 @@ function createMockNetwork(name: string, agents: Agent[] = []) {
     name,
     instructions: 'You are a helpful assistant',
     agents,
-    model: {
-      provider: 'test-provider',
-      modelId: 'test-model',
-    } as any,
+    model: createMockModel({ mockText: 'Hello, world!' }),
   });
 }
 
@@ -32,6 +28,8 @@ describe('Network Handlers', () => {
   let mockMastra: Mastra;
   let mockNetwork: AgentNetwork;
   let mockAgents: Agent[];
+
+  const runtimeContext = new RuntimeContext();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -47,7 +45,7 @@ describe('Network Handlers', () => {
 
   describe('getNetworksHandler', () => {
     it('should get all networks successfully', async () => {
-      const result = await getNetworksHandler({ mastra: mockMastra });
+      const result = await getNetworksHandler({ mastra: mockMastra, runtimeContext });
 
       expect(result).toEqual([
         {
@@ -55,10 +53,10 @@ describe('Network Handlers', () => {
           name: 'test-network',
           instructions: expect.any(String),
           agents: [
-            { name: 'agent1', provider: 'test-provider', modelId: 'test-model' },
-            { name: 'agent2', provider: 'test-provider', modelId: 'test-model' },
+            { name: 'agent1', provider: 'mock-provider', modelId: 'mock-model-id' },
+            { name: 'agent2', provider: 'mock-provider', modelId: 'mock-model-id' },
           ],
-          routingModel: { provider: 'test-provider', modelId: 'test-model' },
+          routingModel: { provider: 'mock-provider', modelId: 'mock-model-id' },
         },
       ]);
     });
@@ -66,18 +64,19 @@ describe('Network Handlers', () => {
 
   describe('getNetworkByIdHandler', () => {
     it('should throw error when networkId is not provided', async () => {
-      await expect(getNetworkByIdHandler({ mastra: mockMastra })).rejects.toThrow('Network not found');
+      await expect(getNetworkByIdHandler({ mastra: mockMastra, runtimeContext })).rejects.toThrow('Network not found');
     });
 
     it('should throw error when network is not found', async () => {
-      await expect(getNetworkByIdHandler({ mastra: mockMastra, networkId: 'non-existent' })).rejects.toThrow(
-        'Network not found',
-      );
+      await expect(
+        getNetworkByIdHandler({ mastra: mockMastra, runtimeContext, networkId: 'non-existent' }),
+      ).rejects.toThrow('Network not found');
     });
 
     it('should get network by ID successfully', async () => {
       const result = await getNetworkByIdHandler({
         mastra: mockMastra,
+        runtimeContext,
         networkId: 'test-network',
       });
 
@@ -86,10 +85,10 @@ describe('Network Handlers', () => {
         name: 'test-network',
         instructions: expect.any(String),
         agents: [
-          { name: 'agent1', provider: 'test-provider', modelId: 'test-model' },
-          { name: 'agent2', provider: 'test-provider', modelId: 'test-model' },
+          { name: 'agent1', provider: 'mock-provider', modelId: 'mock-model-id' },
+          { name: 'agent2', provider: 'mock-provider', modelId: 'mock-model-id' },
         ],
-        routingModel: { provider: 'test-provider', modelId: 'test-model' },
+        routingModel: { provider: 'mock-provider', modelId: 'mock-model-id' },
       });
     });
   });
@@ -99,7 +98,13 @@ describe('Network Handlers', () => {
       await expect(
         generateHandler({
           mastra: mockMastra,
-          messages: ['test message'],
+          body: {
+            messages: ['test message'],
+            resourceId: 'test-resource',
+            threadId: 'test-thread',
+            experimental_output: undefined,
+          },
+          runtimeContext: new RuntimeContext(),
         }),
       ).rejects.toThrow(new HTTPException(404, { message: 'Network not found' }));
     });
@@ -109,7 +114,13 @@ describe('Network Handlers', () => {
         generateHandler({
           mastra: mockMastra,
           networkId: 'non-existent',
-          messages: ['test message'],
+          body: {
+            messages: ['test message'],
+            resourceId: 'test-resource',
+            threadId: 'test-thread',
+            experimental_output: undefined,
+          },
+          runtimeContext: new RuntimeContext(),
         }),
       ).rejects.toThrow(new HTTPException(404, { message: 'Network not found' }));
     });
@@ -119,19 +130,31 @@ describe('Network Handlers', () => {
         generateHandler({
           mastra: mockMastra,
           networkId: 'test-network',
+          body: {
+            resourceId: 'test-resource',
+            threadId: 'test-thread',
+            experimental_output: undefined,
+          },
+          runtimeContext: new RuntimeContext(),
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Argument "messages" is required' }));
     });
 
     it('should generate successfully', async () => {
       const mockMessages = ['test message'];
-      const mockResult = { text: 'generated response' };
+      const mockResult = { text: 'generated response' } as any;
       vi.spyOn(mockNetwork, 'generate').mockResolvedValue(mockResult);
 
       const result = await generateHandler({
         mastra: mockMastra,
         networkId: 'test-network',
-        messages: mockMessages,
+        body: {
+          messages: mockMessages,
+          resourceId: 'test-resource',
+          threadId: 'test-thread',
+          experimental_output: undefined,
+        },
+        runtimeContext: new RuntimeContext(),
       });
 
       expect(result).toEqual(mockResult);
@@ -143,7 +166,13 @@ describe('Network Handlers', () => {
       await expect(
         streamGenerateHandler({
           mastra: mockMastra,
-          messages: ['test message'],
+          body: {
+            messages: ['test message'],
+            resourceId: 'test-resource',
+            threadId: 'test-thread',
+            experimental_output: undefined,
+          },
+          runtimeContext: new RuntimeContext(),
         }),
       ).rejects.toThrow(new HTTPException(404, { message: 'Network not found' }));
     });
@@ -153,7 +182,13 @@ describe('Network Handlers', () => {
         streamGenerateHandler({
           mastra: mockMastra,
           networkId: 'non-existent',
-          messages: ['test message'],
+          body: {
+            messages: ['test message'],
+            resourceId: 'test-resource',
+            threadId: 'test-thread',
+            experimental_output: undefined,
+          },
+          runtimeContext: new RuntimeContext(),
         }),
       ).rejects.toThrow(new HTTPException(404, { message: 'Network not found' }));
     });
@@ -163,26 +198,42 @@ describe('Network Handlers', () => {
         streamGenerateHandler({
           mastra: mockMastra,
           networkId: 'test-network',
+          body: {
+            resourceId: 'test-resource',
+            threadId: 'test-thread',
+            experimental_output: undefined,
+          },
+          runtimeContext: new RuntimeContext(),
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Argument "messages" is required' }));
     });
 
     it('should stream generate successfully', async () => {
       const mockMessages = ['test message'];
-      const mockStream = {
+      const mockStreamResult = {
         [Symbol.asyncIterator]: async function* () {
           yield { text: 'streamed response' };
         },
+      } as any;
+      const mockStream = {
+        toDataStreamResponse: vi.fn().mockReturnValue(mockStreamResult),
       };
-      vi.spyOn(mockNetwork, 'stream').mockResolvedValue(mockStream);
+
+      vi.spyOn(mockNetwork, 'stream').mockResolvedValue(mockStream as any);
 
       const result = await streamGenerateHandler({
         mastra: mockMastra,
         networkId: 'test-network',
-        messages: mockMessages,
+        body: {
+          messages: mockMessages,
+          resourceId: 'test-resource',
+          threadId: 'test-thread',
+          experimental_output: undefined,
+        },
+        runtimeContext: new RuntimeContext(),
       });
 
-      expect(result).toEqual(mockStream);
+      expect(result).toEqual(mockStreamResult);
     });
   });
 });

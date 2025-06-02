@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import { PassThrough } from 'stream';
 import type { ToolsInput } from '@mastra/core/agent';
+import type { RuntimeContext } from '@mastra/core/runtime-context';
 import { MastraVoice } from '@mastra/core/voice';
 import type { Realtime, RealtimeServerEvents } from 'openai-realtime-api';
 import { WebSocket } from 'ws';
@@ -91,10 +92,8 @@ type RealtimeClientServerEventMap = {
  * @example
  * ```typescript
  * const voice = new OpenAIRealtimeVoice({
- *   chatModel: {
- *     apiKey: process.env.OPENAI_API_KEY,
- *     model: 'gpt-4o-mini-realtime'
- *   }
+ *   apiKey: process.env.OPENAI_API_KEY,
+ *   model: 'gpt-4o-mini-realtime'
  * });
  *
  * await voice.open();
@@ -115,7 +114,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
   private debug: boolean;
   private queue: unknown[] = [];
   private transcriber: Realtime.AudioTranscriptionModel;
-
+  private runtimeContext?: RuntimeContext;
   /**
    * Creates a new instance of OpenAIRealtimeVoice.
    *
@@ -129,10 +128,8 @@ export class OpenAIRealtimeVoice extends MastraVoice {
    * @example
    * ```typescript
    * const voice = new OpenAIRealtimeVoice({
-   *   chatModel: {
-   *     apiKey: 'your-api-key',
-   *     model: 'gpt-4o-mini-realtime',
-   *   },
+   *   apiKey: 'your-api-key',
+   *   model: 'gpt-4o-mini-realtime',
    *   speaker: 'alloy'
    * });
    * ```
@@ -290,6 +287,15 @@ export class OpenAIRealtimeVoice extends MastraVoice {
   }
 
   /**
+   * Checks if listening capabilities are enabled.
+   *
+   * @returns {Promise<{ enabled: boolean }>}
+   */
+  async getListener() {
+    return { enabled: true };
+  }
+
+  /**
    * Processes audio input for speech recognition.
    * Takes a readable stream of audio data and emits a writing event.
    * The output of the writing event is int16 audio data.
@@ -367,9 +373,11 @@ export class OpenAIRealtimeVoice extends MastraVoice {
    * // Now ready for voice interactions
    * ```
    */
-  async connect() {
+  async connect({ runtimeContext }: { runtimeContext?: RuntimeContext } = {}) {
     const url = `${this.options.url || DEFAULT_URL}?model=${this.options.model || DEFAULT_MODEL}`;
     const apiKey = this.options.apiKey || process.env.OPENAI_API_KEY;
+    this.runtimeContext = runtimeContext;
+
     this.ws = new WebSocket(url, undefined, {
       headers: {
         Authorization: 'Bearer ' + apiKey,
@@ -638,7 +646,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
       }
 
       const result = await tool?.execute?.(
-        { context },
+        { context, runtimeContext: this.runtimeContext },
         {
           toolCallId: output.call_id,
           messages: [],

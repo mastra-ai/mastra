@@ -3,9 +3,13 @@ title: "Reference: MastraMCPClient | Tool Discovery | Mastra Docs"
 description: API Reference for MastraMCPClient - A client implementation for the Model Context Protocol.
 ---
 
-# MastraMCPClient
+# MastraMCPClient (Deprecated)
 
 The `MastraMCPClient` class provides a client implementation for interacting with Model Context Protocol (MCP) servers. It handles connection management, resource discovery, and tool execution through the MCP protocol.
+
+## Deprecation notice
+
+`MastraMCPClient` is being deprecated in favour of [`MCPClient`](./mcp-client). Rather than having two different interfaces for managing a single MCP server vs multiple MCP servers, we opted to recommend using the interface to manage multiple even when using a single MCP server.
 
 ## Constructor
 
@@ -62,14 +66,19 @@ constructor({
       type: "number",
       isOptional: true,
       defaultValue: 60000,
-      description: "The timeout duration, in milliseconds, for client tool calls.",
+      description:
+        "The timeout duration, in milliseconds, for client tool calls.",
     },
   ]}
 />
 
 ### MastraMCPServerDefinition
 
-MCP servers can be configured as either stdio-based or SSE-based servers. The configuration includes both server-specific settings and common options:
+MCP servers can be configured using this definition. The client automatically detects the transport type based on the provided parameters:
+
+- If `command` is provided, it uses the Stdio transport.
+- If `url` is provided, it first attempts to use the Streamable HTTP transport and falls back to the legacy SSE transport if the initial connection fails.
+
 <br />
 <PropertiesTable
   content={[
@@ -77,37 +86,40 @@ MCP servers can be configured as either stdio-based or SSE-based servers. The co
       name: "command",
       type: "string",
       isOptional: true,
-      description: "For stdio servers: The command to execute.",
+      description: "For Stdio servers: The command to execute.",
     },
     {
       name: "args",
       type: "string[]",
       isOptional: true,
-      description: "For stdio servers: Arguments to pass to the command.",
+      description: "For Stdio servers: Arguments to pass to the command.",
     },
     {
       name: "env",
       type: "Record<string, string>",
       isOptional: true,
-      description: "For stdio servers: Environment variables to set for the command.",
+      description:
+        "For Stdio servers: Environment variables to set for the command.",
     },
     {
       name: "url",
       type: "URL",
       isOptional: true,
-      description: "For SSE servers: The URL of the server.",
+      description:
+        "For HTTP servers (Streamable HTTP or SSE): The URL of the server.",
     },
     {
       name: "requestInit",
       type: "RequestInit",
       isOptional: true,
-      description: "For SSE servers: Request configuration for the fetch API.",
+      description: "For HTTP servers: Request configuration for the fetch API.",
     },
     {
       name: "eventSourceInit",
       type: "EventSourceInit",
       isOptional: true,
-      description: "For SSE servers: Custom fetch configuration for SSE connections. Required when using custom headers.",
+      description:
+        "For SSE fallback: Custom fetch configuration for SSE connections. Required when using custom headers with SSE.",
     },
     {
       name: "logger",
@@ -140,6 +152,7 @@ MCP servers can be configured as either stdio-based or SSE-based servers. The co
 ### LogHandler
 
 The `LogHandler` function takes a `LogMessage` object as its parameter and returns void. The `LogMessage` object has the following properties. The `LoggingLevel` type is a string enum with values: `debug`, `info`, `warn`, and `error`.
+
 <br />
 <PropertiesTable
   content={[
@@ -289,7 +302,7 @@ const sseClient = new MastraMCPClient({
     eventSourceInit: {
       fetch(input: Request | URL | string, init?: RequestInit) {
         const headers = new Headers(init?.headers || {});
-        headers.set('Authorization', 'Bearer your-token');
+        headers.set("Authorization", "Bearer your-token");
         return fetch(input, {
           ...init,
           headers,
@@ -298,10 +311,12 @@ const sseClient = new MastraMCPClient({
     },
     // Optional additional logging configuration
     logger: (logMessage) => {
-      console.log(`[${logMessage.level}] ${logMessage.serverName}: ${logMessage.message}`);
+      console.log(
+        `[${logMessage.level}] ${logMessage.serverName}: ${logMessage.message}`,
+      );
     },
     // Disable server logs
-    enableServerLogs: false
+    enableServerLogs: false,
   },
 });
 
@@ -310,12 +325,12 @@ const sseClient = new MastraMCPClient({
 
 ### Important Note About SSE Authentication
 
-When using SSE connections with authentication or custom headers, you need to configure both `requestInit` and `eventSourceInit`. This is because SSE connections use the browser's EventSource API, which doesn't support custom headers directly. 
+When using SSE connections with authentication or custom headers, you need to configure both `requestInit` and `eventSourceInit`. This is because SSE connections use the browser's EventSource API, which doesn't support custom headers directly.
 
 The `eventSourceInit` configuration allows you to customize the underlying fetch request used for the SSE connection, ensuring your authentication headers are properly included.
 Without `eventSourceInit`, authentication headers specified in `requestInit` won't be included in the connection request, leading to 401 Unauthorized errors.
 
 ## Related Information
 
-- For managing multiple MCP servers in your application, see the [MCPConfiguration documentation](./mcp-configuration)
+- For managing multiple MCP servers in your application, see the [MCPClient documentation](./mcp-client)
 - For more details about the Model Context Protocol, see the [@modelcontextprotocol/sdk documentation](https://github.com/modelcontextprotocol/typescript-sdk).

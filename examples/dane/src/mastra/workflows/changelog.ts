@@ -23,6 +23,7 @@ const stepA1 = new Step({
   execute: async ({ mastra }) => {
     // For today
     try {
+      // @ts-ignore
       await slack.connect();
     } catch (e) {
       console.error(e);
@@ -212,7 +213,7 @@ const stepA2 = new Step({
     const today = new Date().toISOString().split('T')[0];
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-    const tools = await slack.tools();
+    const tools = await slack.getTools();
 
     const channelId = context.triggerData.channelId;
 

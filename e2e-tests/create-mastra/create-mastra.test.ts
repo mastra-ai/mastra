@@ -1,34 +1,37 @@
-import { it, describe, expect, beforeAll, afterAll } from 'vitest';
+import { it, describe, expect, beforeAll, afterAll, inject } from 'vitest';
 import { join } from 'path';
-import { setupRegistry, runCreateMastra } from './setup';
-import { copyFile, mkdtemp, rm } from 'fs/promises';
+import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import getPort from 'get-port';
-import { existsSync, fstat } from 'fs';
-import { chdir } from 'process';
+import { existsSync } from 'fs';
 import { execa } from 'execa';
+import { execSync } from 'child_process';
 
 describe('create mastra', () => {
   let fixturePath: string;
-  let cleanup: () => void;
+  let projectPath: string;
 
   beforeAll(
     async () => {
-      const port = await getPort();
-      fixturePath = await mkdtemp(join(tmpdir(), 'mastra-create-test-'));
-      await copyFile('./verdaccio.yaml', join(fixturePath, 'verdaccio.yaml'));
-      cleanup = await setupRegistry(fixturePath, port);
+      const tag = inject('tag');
+      const registry = inject('registry');
 
-      process.env.npm_config_registry = `http://localhost:${port}/`;
-      await runCreateMastra(fixturePath, 'pnpm', port);
-      chdir(join(fixturePath, 'project'));
+      console.log('registry', registry);
+      console.log('tag', tag);
+
+      fixturePath = await mkdtemp(join(tmpdir(), 'mastra-create-test-'));
+      projectPath = join(fixturePath, 'project');
+      process.env.npm_config_registry = registry;
+      execSync(`pnpm dlx create-mastra@${tag} -c agents,tools,workflows -l openai -e project`, {
+        cwd: fixturePath,
+        stdio: ['inherit', 'inherit', 'inherit'],
+      });
     },
-    15 * 60 * 1000,
+    10 * 60 * 1000,
   );
 
   afterAll(async () => {
     try {
-      cleanup();
       await rm(fixturePath, {
         force: true,
       });
@@ -36,7 +39,7 @@ describe('create mastra', () => {
   });
 
   it('folder should exist', async () => {
-    expect(existsSync(join(fixturePath, 'project', 'src', 'mastra', 'index.ts'))).toBe(true);
+    expect(existsSync(join(projectPath, 'src', 'mastra', 'index.ts'))).toBe(true);
   });
 
   describe('dev', () => {
@@ -45,12 +48,15 @@ describe('create mastra', () => {
     beforeAll(async () => {
       port = await getPort();
       proc = execa('pnpm', ['dev', '--port', port.toString()], {
-        cwd: join(fixturePath, 'project'),
+        cwd: projectPath,
       });
-
+      proc!.stderr?.on('data', data => {
+        console.error(data?.toString());
+      });
       await new Promise<void>(resolve => {
         console.log('waiting for server to start');
         proc!.stdout?.on('data', data => {
+          console.log(data?.toString());
           if (data?.toString()?.includes(`http://localhost:${port}`)) {
             resolve();
           }
@@ -86,6 +92,8 @@ describe('create mastra', () => {
         await expect(response.json()).resolves.toMatchInlineSnapshot(`
           {
             "weatherAgent": {
+              "defaultGenerateOptions": {},
+              "defaultStreamOptions": {},
               "instructions": "
                 You are a helpful weather assistant that provides accurate weather information.
 
@@ -98,7 +106,7 @@ describe('create mastra', () => {
 
                 Use the weatherTool to fetch current weather data.
           ",
-              "modelId": "gpt-4o",
+              "modelId": "gpt-4o-mini",
               "name": "Weather Agent",
               "provider": "openai.chat",
               "tools": {
@@ -109,6 +117,7 @@ describe('create mastra', () => {
                   "outputSchema": "{"json":{"type":"object","properties":{"temperature":{"type":"number"},"feelsLike":{"type":"number"},"humidity":{"type":"number"},"windSpeed":{"type":"number"},"windGust":{"type":"number"},"conditions":{"type":"string"},"location":{"type":"string"}},"required":["temperature","feelsLike","humidity","windSpeed","windGust","conditions","location"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}",
                 },
               },
+              "workflows": {},
             },
           }
         `);

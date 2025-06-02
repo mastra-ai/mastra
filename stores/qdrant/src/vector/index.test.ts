@@ -13,12 +13,12 @@ describe('QdrantVector', () => {
 
   describe('Index Operations', () => {
     beforeAll(async () => {
-      qdrant = new QdrantVector('http://localhost:6333/');
+      qdrant = new QdrantVector({ url: 'http://localhost:6333/' });
       await qdrant.createIndex({ indexName: testCollectionName, dimension });
     });
 
     afterAll(async () => {
-      await qdrant.deleteIndex(testCollectionName);
+      await qdrant.deleteIndex({ indexName: testCollectionName });
     }, 50000);
 
     it('should list collections including ours', async () => {
@@ -27,7 +27,7 @@ describe('QdrantVector', () => {
     }, 50000);
 
     it('should describe index with correct properties', async () => {
-      const stats = await qdrant.describeIndex(testCollectionName);
+      const stats = await qdrant.describeIndex({ indexName: testCollectionName });
       expect(stats.dimension).toBe(dimension);
       expect(stats.metric).toBe('cosine');
       expect(typeof stats.count).toBe('number');
@@ -36,12 +36,12 @@ describe('QdrantVector', () => {
 
   describe('Vector Operations', () => {
     beforeAll(async () => {
-      qdrant = new QdrantVector('http://localhost:6333/');
+      qdrant = new QdrantVector({ url: 'http://localhost:6333/' });
       await qdrant.createIndex({ indexName: testCollectionName, dimension });
     });
 
     afterAll(async () => {
-      await qdrant.deleteIndex(testCollectionName);
+      await qdrant.deleteIndex({ indexName: testCollectionName });
     }, 50000);
 
     const testVectors = [
@@ -100,7 +100,7 @@ describe('QdrantVector', () => {
     });
 
     afterEach(async () => {
-      await qdrant.deleteIndex(testCollectionName);
+      await qdrant.deleteIndex({ indexName: testCollectionName });
     });
 
     it('should update the vector by id', async () => {
@@ -118,7 +118,7 @@ describe('QdrantVector', () => {
         metadata: newMetaData,
       };
 
-      await qdrant.updateIndexById(testCollectionName, idToBeUpdated, update);
+      await qdrant.updateVector({ indexName: testCollectionName, id: idToBeUpdated, update });
 
       const results: QueryResult[] = await qdrant.query({
         indexName: testCollectionName,
@@ -146,7 +146,7 @@ describe('QdrantVector', () => {
         metadata: newMetaData,
       };
 
-      await qdrant.updateIndexById(testCollectionName, idToBeUpdated, update);
+      await qdrant.updateVector({ indexName: testCollectionName, id: idToBeUpdated, update });
 
       const results: QueryResult[] = await qdrant.query({
         indexName: testCollectionName,
@@ -171,7 +171,7 @@ describe('QdrantVector', () => {
         vector: newVector,
       };
 
-      await qdrant.updateIndexById(testCollectionName, idToBeUpdated, update);
+      await qdrant.updateVector({ indexName: testCollectionName, id: idToBeUpdated, update });
 
       const results: QueryResult[] = await qdrant.query({
         indexName: testCollectionName,
@@ -184,13 +184,17 @@ describe('QdrantVector', () => {
       // expect(results[0]?.vector).toEqual(newVector);
     });
 
-    it('should throw exception when no updates are given', () => {
-      expect(qdrant.updateIndexById(testCollectionName, 'id', {})).rejects.toThrow('No updates provided');
+    it('should throw exception when no updates are given', async () => {
+      await expect(qdrant.updateVector({ indexName: testCollectionName, id: 'id', update: {} })).rejects.toThrow(
+        'No updates provided',
+      );
     });
 
     it('should throw error for non-existent index', async () => {
       const nonExistentIndex = 'non-existent-index';
-      await expect(qdrant.updateIndexById(nonExistentIndex, 'test-id', { vector: [1, 2, 3] })).rejects.toThrow();
+      await expect(
+        qdrant.updateVector({ indexName: nonExistentIndex, id: 'test-id', update: { vector: [1, 2, 3] } }),
+      ).rejects.toThrow();
     });
 
     it('should throw error for invalid vector dimension', async () => {
@@ -201,7 +205,7 @@ describe('QdrantVector', () => {
       });
 
       await expect(
-        qdrant.updateIndexById(testCollectionName, id, { vector: [1, 2] }), // Wrong dimension
+        qdrant.updateVector({ indexName: testCollectionName, id, update: { vector: [1, 2] } }), // Wrong dimension
       ).rejects.toThrow();
     });
   });
@@ -218,7 +222,7 @@ describe('QdrantVector', () => {
     });
 
     afterEach(async () => {
-      await qdrant.deleteIndex(testCollectionName);
+      await qdrant.deleteIndex({ indexName: testCollectionName });
     });
 
     it('should delete the vector by id', async () => {
@@ -226,7 +230,7 @@ describe('QdrantVector', () => {
       expect(ids).toHaveLength(3);
       const idToBeDeleted = ids[0];
 
-      await qdrant.deleteIndexById(testCollectionName, idToBeDeleted);
+      await qdrant.deleteVector({ indexName: testCollectionName, id: idToBeDeleted });
 
       const results: QueryResult[] = await qdrant.query({
         indexName: testCollectionName,
@@ -335,13 +339,13 @@ describe('QdrantVector', () => {
     ];
 
     beforeAll(async () => {
-      qdrant = new QdrantVector('http://localhost:6333/');
+      qdrant = new QdrantVector({ url: 'http://localhost:6333/' });
       await qdrant.createIndex({ indexName: testCollectionName, dimension });
       await qdrant.upsert({ indexName: testCollectionName, vectors: filterTestVectors, metadata: filterTestMetadata });
     });
 
     afterAll(async () => {
-      await qdrant.deleteIndex(testCollectionName);
+      await qdrant.deleteIndex({ indexName: testCollectionName });
     }, 50000);
 
     describe('Basic Operators', () => {
@@ -755,6 +759,15 @@ describe('QdrantVector', () => {
     });
   });
   describe('Error Handling', () => {
+    const testIndexName = 'test_index_error';
+    beforeAll(async () => {
+      await qdrant.createIndex({ indexName: testIndexName, dimension: 3 });
+    });
+
+    afterAll(async () => {
+      await qdrant.deleteIndex({ indexName: testIndexName });
+    });
+
     it('should handle non-existent index query gracefully', async () => {
       const nonExistentIndex = 'non-existent-index';
       await expect(qdrant.query({ indexName: nonExistentIndex, queryVector: [1, 0, 0] })).rejects.toThrow();
@@ -764,6 +777,65 @@ describe('QdrantVector', () => {
       const wrongDimVector = [[1, 0]]; // 2D vector for 3D index
       await expect(qdrant.upsert({ indexName: testCollectionName, vectors: wrongDimVector })).rejects.toThrow();
     }, 50000);
+
+    it('should handle mismatched metadata and vectors length', async () => {
+      const vectors = [[1, 2, 3]];
+      const metadata = [{}, {}];
+      await expect(qdrant.upsert({ indexName: testCollectionName, vectors, metadata })).rejects.toThrow();
+    });
+
+    it('should handle duplicate index creation gracefully', async () => {
+      const duplicateIndexName = `duplicate_test`;
+      const dimension = 768;
+      const infoSpy = vi.spyOn(qdrant['logger'], 'info');
+      const warnSpy = vi.spyOn(qdrant['logger'], 'warn');
+      try {
+        // Create index first time
+        await qdrant.createIndex({
+          indexName: duplicateIndexName,
+          dimension,
+          metric: 'cosine',
+        });
+
+        // Try to create with same dimensions - should not throw
+        await expect(
+          qdrant.createIndex({
+            indexName: duplicateIndexName,
+            dimension,
+            metric: 'cosine',
+          }),
+        ).resolves.not.toThrow();
+
+        expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('already exists with'));
+
+        // Try to create with same dimensions and different metric - should not throw
+        await expect(
+          qdrant.createIndex({
+            indexName: duplicateIndexName,
+            dimension,
+            metric: 'euclidean',
+          }),
+        ).resolves.not.toThrow();
+
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Attempted to create index with metric'));
+
+        // Try to create with different dimensions - should throw
+        await expect(
+          qdrant.createIndex({
+            indexName: duplicateIndexName,
+            dimension: dimension + 1,
+            metric: 'cosine',
+          }),
+        ).rejects.toThrow(
+          `Index "${duplicateIndexName}" already exists with ${dimension} dimensions, but ${dimension + 1} dimensions were requested`,
+        );
+      } finally {
+        infoSpy.mockRestore();
+        warnSpy.mockRestore();
+        // Cleanup
+        await qdrant.deleteIndex({ indexName: duplicateIndexName });
+      }
+    });
   });
 
   describe('Empty/Undefined Filters', () => {
@@ -802,13 +874,13 @@ describe('QdrantVector', () => {
     ];
 
     beforeAll(async () => {
-      qdrant = new QdrantVector('http://localhost:6333/');
+      qdrant = new QdrantVector({ url: 'http://localhost:6333/' });
       await qdrant.createIndex({ indexName: testCollectionName, dimension });
       await qdrant.upsert({ indexName: testCollectionName, vectors: filterTestVectors, metadata: filterTestMetadata });
     });
 
     afterAll(async () => {
-      await qdrant.deleteIndex(testCollectionName);
+      await qdrant.deleteIndex({ indexName: testCollectionName });
     }, 50000);
     it('should handle undefined filter', async () => {
       const results1 = await qdrant.query({ indexName: testCollectionName, queryVector: [1, 0, 0], filter: undefined });
@@ -834,12 +906,12 @@ describe('QdrantVector', () => {
 
   describe('Performance Tests', () => {
     beforeAll(async () => {
-      qdrant = new QdrantVector('http://localhost:6333/');
+      qdrant = new QdrantVector({ url: 'http://localhost:6333/' });
       await qdrant.createIndex({ indexName: testCollectionName, dimension });
     });
 
     afterAll(async () => {
-      await qdrant.deleteIndex(testCollectionName);
+      await qdrant.deleteIndex({ indexName: testCollectionName });
     }, 50000);
 
     it('should handle batch upsert of 1000 vectors', async () => {
@@ -876,102 +948,5 @@ describe('QdrantVector', () => {
       expect(results).toHaveLength(numQueries);
       console.log(`${numQueries} concurrent queries took ${duration}ms`);
     }, 50000);
-  });
-  describe('Deprecation Warnings', () => {
-    const indexName = 'testdeprecationwarnings';
-
-    const indexName2 = 'testdeprecationwarnings2';
-
-    let warnSpy;
-
-    beforeAll(async () => {
-      await qdrant.createIndex({ indexName: indexName, dimension: 3 });
-    });
-
-    afterAll(async () => {
-      await qdrant.deleteIndex(indexName);
-      await qdrant.deleteIndex(indexName2);
-    });
-
-    beforeEach(async () => {
-      warnSpy = vi.spyOn(qdrant['logger'], 'warn');
-    });
-
-    afterEach(async () => {
-      warnSpy.mockRestore();
-      await qdrant.deleteIndex(indexName2);
-    });
-
-    it('should show deprecation warning when using individual args for createIndex', async () => {
-      await qdrant.createIndex(indexName2, 3, 'cosine');
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Deprecation Warning: Passing individual arguments to createIndex() is deprecated'),
-      );
-    });
-
-    it('should show deprecation warning when using individual args for upsert', async () => {
-      await qdrant.upsert(indexName, [[1, 2, 3]], [{ test: 'data' }]);
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Deprecation Warning: Passing individual arguments to upsert() is deprecated'),
-      );
-    });
-
-    it('should show deprecation warning when using individual args for query', async () => {
-      await qdrant.query(indexName, [1, 2, 3], 5);
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Deprecation Warning: Passing individual arguments to query() is deprecated'),
-      );
-    });
-
-    it('should not show deprecation warning when using object param for query', async () => {
-      await qdrant.query({
-        indexName,
-        queryVector: [1, 2, 3],
-        topK: 5,
-      });
-
-      expect(warnSpy).not.toHaveBeenCalled();
-    });
-
-    it('should not show deprecation warning when using object param for createIndex', async () => {
-      await qdrant.createIndex({
-        indexName: indexName2,
-        dimension: 3,
-        metric: 'cosine',
-      });
-
-      expect(warnSpy).not.toHaveBeenCalled();
-    });
-
-    it('should not show deprecation warning when using object param for upsert', async () => {
-      await qdrant.upsert({
-        indexName,
-        vectors: [[1, 2, 3]],
-        metadata: [{ test: 'data' }],
-      });
-
-      expect(warnSpy).not.toHaveBeenCalled();
-    });
-
-    it('should maintain backward compatibility with individual args', async () => {
-      // Query
-      const queryResults = await qdrant.query(indexName, [1, 2, 3], 5);
-      expect(Array.isArray(queryResults)).toBe(true);
-
-      // CreateIndex
-      await expect(qdrant.createIndex(indexName2, 3, 'cosine')).resolves.not.toThrow();
-
-      // Upsert
-      const upsertResults = await qdrant.upsert({
-        indexName,
-        vectors: [[1, 2, 3]],
-        metadata: [{ test: 'data' }],
-      });
-      expect(Array.isArray(upsertResults)).toBe(true);
-      expect(upsertResults).toHaveLength(1);
-    });
   });
 });

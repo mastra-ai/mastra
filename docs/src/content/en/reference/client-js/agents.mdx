@@ -1,6 +1,19 @@
+---
+title: Mastra Client Agents API
+description: Learn how to interact with Mastra AI agents, including generating responses, streaming interactions, and managing agent tools using the client-js SDK.
+---
+
 # Agents API
 
 The Agents API provides methods to interact with Mastra AI agents, including generating responses, streaming interactions, and managing agent tools.
+
+## Initialize Mastra Client
+
+```typescript
+import { MastraClient } from "@mastra/client-js";
+
+const client = new MastraClient();
+```
 
 ## Getting All Agents
 
@@ -50,7 +63,6 @@ const response = await agent.generate({
 
 Stream responses from the agent for real-time interactions:
 
-
 ```typescript
 const response = await agent.stream({
   messages: [
@@ -62,20 +74,20 @@ const response = await agent.stream({
 });
 
 // Process data stream with the processDataStream util
- response.processDataStream({
-      onTextPart: (text) => {
-        process.stdout.write(text);
-      },
-      onFilePart: (file) => {
-        console.log(file);
-      },
-      onDataPart: (data) => {
-        console.log(data);
-      },
-      onErrorPart: (error) => {
-        console.error(error);
-      },
-  });
+response.processDataStream({
+  onTextPart: (text) => {
+    process.stdout.write(text);
+  },
+  onFilePart: (file) => {
+    console.log(file);
+  },
+  onDataPart: (data) => {
+    console.log(data);
+  },
+  onErrorPart: (error) => {
+    console.error(error);
+  },
+});
 
 // You can also read from response body directly
 const reader = response.body.getReader();

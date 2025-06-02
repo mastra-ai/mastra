@@ -1,12 +1,12 @@
 import { Mastra } from '@mastra/core';
-import { createLogger } from '@mastra/core/logger';
+import { PinoLogger } from '@mastra/loggers';
 
 import { catOne } from './agents/index';
 import { sequentialWorkflow, parallelWorkflow, branchedWorkflow, cyclicalWorkflow } from './workflows';
 
 export const mastra = new Mastra({
   agents: { catOne },
-  logger: createLogger({
+  logger: new PinoLogger({
     name: 'Mastra',
     level: 'debug',
   }),

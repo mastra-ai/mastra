@@ -1,31 +1,33 @@
-import { useState } from 'react';
+import { client } from '@/lib/client';
+
+import { RuntimeContext } from '@mastra/core/di';
+import { toast } from 'sonner';
+import { useMutation } from '@tanstack/react-query';
+
+export interface ExecuteToolInput {
+  agentId: string;
+  toolId: string;
+  input: any;
+  playgroundRuntimeContext?: Record<string, any>;
+}
 
 export const useExecuteTool = () => {
-  const [isExecutingTool, setIsExecutingTool] = useState(false);
-
-  const executeTool = async ({ agentId, toolId, input }: { agentId: string; toolId: string; input: any }) => {
-    try {
-      setIsExecutingTool(true);
-      const response = await fetch(`/api/agents/${agentId}/tools/${toolId}/execute`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ data: input }),
+  return useMutation({
+    mutationFn: async ({ agentId, toolId, input, playgroundRuntimeContext }: ExecuteToolInput) => {
+      const runtimeContext = new RuntimeContext();
+      Object.entries(playgroundRuntimeContext ?? {}).forEach(([key, value]) => {
+        runtimeContext.set(key, value);
       });
+      try {
+        const agent = client.getAgent(agentId);
+        const response = await agent.executeTool(toolId, { data: input, runtimeContext });
 
-      if (!response.ok) {
-        throw new Error(`Error executing tool: ${response.statusText}`);
+        return response;
+      } catch (error) {
+        toast.error('Error executing agent tool');
+        console.error('Error executing tool:', error);
+        throw error;
       }
-
-      return await response.json();
-    } catch (error) {
-      console.error('Error executing tool:', error);
-      throw error;
-    } finally {
-      setIsExecutingTool(false);
-    }
-  };
-
-  return { executeTool, isExecutingTool };
+    },
+  });
 };

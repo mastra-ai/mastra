@@ -9,27 +9,23 @@ The LibSQL storage implementation provides a SQLite-compatible storage solution 
 
 ## Installation
 
-```bash
-npm install @mastra/storage-libsql
+```bash copy
+npm install @mastra/libsql@latest
 ```
 
 ## Usage
 
 ```typescript copy showLineNumbers
-import { LibSQLStore } from "@mastra/core/storage/libsql";
+import { LibSQLStore } from "@mastra/libsql";
 
 // File database (development)
 const storage = new LibSQLStore({
-    config: {
-        url: 'file:storage.db',
-    }
+  url: "file:./storage.db",
 });
 
 // Persistent database (production)
 const storage = new LibSQLStore({
-    config: {
-        url: process.env.DATABASE_URL,
-    }
+  url: process.env.DATABASE_URL,
 });
 ```
 

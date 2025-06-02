@@ -83,13 +83,10 @@ export class DevBundler extends Bundler {
           {
             name: 'tools-watcher',
             async buildEnd() {
-              const toolsInputOptions = Array.from(Object.keys(inputOptions.input || {}))
+              const toolsInputPaths = Array.from(Object.keys(toolsInputOptions || {}))
                 .filter(key => key.startsWith('tools/'))
                 .map(key => `./${key}.mjs`);
-              await writeFile(
-                join(outputDir, 'tools.mjs'),
-                `export const tools = ${JSON.stringify(toolsInputOptions)};`,
-              );
+              await writeFile(join(outputDir, 'tools.mjs'), `export const tools = ${JSON.stringify(toolsInputPaths)};`);
             },
           },
         ],

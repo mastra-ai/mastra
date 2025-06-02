@@ -47,7 +47,10 @@ export function transformKey(key: string) {
   if (key.includes('.result')) {
     return 'Output';
   }
-  return key.split('.').join(' ').split('_');
+
+  const newKey = key.split('.').join(' ').split('_').join(' ').replaceAll('ai', 'AI');
+
+  return newKey.substring(0, 1).toUpperCase() + newKey.substring(1);
 }
 
 export function cleanString(string: string) {
@@ -89,10 +92,11 @@ export const refineTraces = (traces: Span[], isWorkflow: boolean = false): Refin
     const enrichedSpans = value.map(span => ({
       ...span,
       parentSpanId: parentSpan?.id === span.id ? null : span?.parentSpanId,
-      relativePercentage: parentSpan ? span.duration / parentSpan.duration : 0,
     }));
 
     const failedStatus = value.find(span => span.status.code !== 0)?.status;
+
+    const runId = value?.[0]?.attributes?.runId;
 
     return {
       traceId: key,
@@ -101,6 +105,7 @@ export const refineTraces = (traces: Span[], isWorkflow: boolean = false): Refin
       status: failedStatus || parentSpan?.status || value[0].status,
       started: value[0].startTime,
       trace: enrichedSpans,
+      runId: runId ? String(runId) : undefined,
     };
   });
 

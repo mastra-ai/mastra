@@ -17,6 +17,7 @@ let allPackages = await globby(
     '!./e2e-tests/**',
     '!**/mcp-docs-server/**',
     '!**/mcp-registry-registry/**',
+    '!**/stores/_test-utils/**',
   ],
   {
     cwd: resolve(__dirname, '..', '..'),
@@ -83,5 +84,13 @@ describe.for(allPackages.map(pkg => [relative(join(__dirname.replaceAll('\\', '/
         },
       );
     });
+
+    it.skipIf(!pkgJson.name.startsWith('@mastra/') && pkgJson.name !== 'mastra' && pkgJson.name !== 'create-mastra')(
+      'should have @mastra/core as a peer dependency if used',
+      async () => {
+        const hasMastraCoreAsDependency = pkgJson?.dependencies?.['@mastra/core'];
+        expect(hasMastraCoreAsDependency).toBe(undefined);
+      },
+    );
   },
 );

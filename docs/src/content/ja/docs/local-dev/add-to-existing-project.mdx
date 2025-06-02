@@ -1,48 +1,43 @@
 ---
-title: "既存プロジェクトへの追加 | Mastra ローカル開発ドキュメント"
+title: "既存のプロジェクトへの追加 | Mastraローカル開発ドキュメント"
 description: "既存のNode.jsアプリケーションにMastraを追加する"
 ---
 
-# 既存プロジェクトへの追加
+# 既存のプロジェクトに追加する
 
 CLIを使用して既存のプロジェクトにMastraを追加できます：
 
 ```bash npm2yarn copy
-npm install -g mastra@latest 
+npm install -g mastra@latest
 mastra init
 ```
 
-プロジェクトに加えられる変更:
-1. エントリーポイントを持つ`src/mastra`ディレクトリを作成
+プロジェクトに加えられる変更：
+
+1. エントリーポイントを含む`src/mastra`ディレクトリを作成
 2. 必要な依存関係を追加
 3. TypeScriptコンパイラオプションを設定
 
-
 ## インタラクティブセットアップ
 
-引数なしでコマンドを実行すると、CLIプロンプトが開始されます：
+引数なしでコマンドを実行すると、以下のためのCLIプロンプトが開始されます：
 
 1. コンポーネントの選択
 2. LLMプロバイダーの設定
 3. APIキーのセットアップ
-4. サンプルコードの含有
+4. サンプルコードの組み込み
 
-## 非対話型セットアップ
+## 非対話式セットアップ
 
-非対話型モードでmastraを初期化するには、次のコマンド引数を使用します:
+非対話モードでmastraを初期化するには、以下のコマンド引数を使用します：
 
 ```bash
 Arguments:
-  --components     指定するコンポーネント: agents, tools, workflows
-  --llm-provider   LLMプロバイダー: openai, anthropic, または groq
-  --add-example    例の実装を含める
-  --llm-api-key    プロバイダーのAPIキー
-  --dir            Mastraファイルのディレクトリ (デフォルトはsrc/)
+  --components     Specify components: agents, tools, workflows
+  --llm            LLM provider: openai, anthropic, groq, google or cerebras
+  --llm-api-key    Provider API key
+  --example        Include example implementation
+  --dir            Directory for Mastra files (defaults to src/)
 ```
-詳細については、[mastra init CLI ドキュメント](../../reference/cli/init)を参照してください。
 
-
-
-
-
-
+詳細については、[mastra init CLIドキュメント](../../reference/cli/init)を参照してください。

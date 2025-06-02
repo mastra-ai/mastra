@@ -1,5 +1,5 @@
 import { Mastra } from '@mastra/core';
-import { createLogger } from '@mastra/core/logger';
+import { PinoLogger } from '@mastra/loggers';
 import { researchNetwork } from './network';
 import { webSearchAgent } from './agents';
 import { agentWorkflow } from './workflows';
@@ -14,7 +14,7 @@ export const mastra = new Mastra({
   workflows: {
     agentWorkflow,
   },
-  logger: createLogger({ name: 'Chef', level: 'info' }),
+  logger: new PinoLogger({ name: 'Chef', level: 'info' }),
   serverMiddleware: [
     {
       handler: (c, next) => {

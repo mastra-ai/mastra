@@ -3,7 +3,7 @@ import type { ExportResult } from '@opentelemetry/core';
 import { JsonTraceSerializer } from '@opentelemetry/otlp-transformer';
 import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
 
-import type { Logger } from '../logger';
+import type { IMastraLogger } from '../logger';
 import type { MastraStorage } from '../storage/base';
 import { TABLE_TRACES } from '../storage/constants';
 
@@ -11,10 +11,10 @@ export class OTLPTraceExporter implements SpanExporter {
   private storage: MastraStorage;
   private queue: { data: any[]; resultCallback: (result: ExportResult) => void }[] = [];
   private serializer: typeof JsonTraceSerializer;
-  private logger: Logger;
+  private logger: IMastraLogger;
   private activeFlush: Promise<void> | undefined = undefined;
 
-  constructor({ logger, storage }: { logger: Logger; storage: MastraStorage }) {
+  constructor({ logger, storage }: { logger: IMastraLogger; storage: MastraStorage }) {
     this.storage = storage;
     this.serializer = JsonTraceSerializer;
     this.logger = logger;
@@ -123,7 +123,7 @@ export class OTLPTraceExporter implements SpanExporter {
     }
   }
 
-  __setLogger(logger: Logger) {
+  __setLogger(logger: IMastraLogger) {
     this.logger = logger;
   }
 }

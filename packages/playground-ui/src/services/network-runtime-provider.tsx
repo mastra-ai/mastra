@@ -7,11 +7,10 @@ import {
   AssistantRuntimeProvider,
 } from '@assistant-ui/react';
 import { processDataStream } from '@ai-sdk/ui-utils';
-import { MastraClient } from '@mastra/client-js';
 import { useState, ReactNode, useEffect } from 'react';
 
 import { ChatProps } from '@/types';
-
+import { useMastraClient } from '@/contexts/mastra-client-context';
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
 };
@@ -22,8 +21,8 @@ export function MastraNetworkRuntimeProvider({
   initialMessages,
   memory,
   threadId,
-  baseUrl,
   refreshThreadList,
+  modelSettings = {},
 }: Readonly<{
   children: ReactNode;
 }> &
@@ -31,6 +30,9 @@ export function MastraNetworkRuntimeProvider({
   const [isRunning, setIsRunning] = useState(false);
   const [messages, setMessages] = useState<ThreadMessageLike[]>(initialMessages || []);
   const [currentThreadId, setCurrentThreadId] = useState<string | undefined>(threadId);
+
+  const { frequencyPenalty, presencePenalty, maxRetries, maxSteps, maxTokens, temperature, topK, topP, instructions } =
+    modelSettings;
 
   useEffect(() => {
     if (messages.length === 0 || currentThreadId !== threadId) {
@@ -41,13 +43,7 @@ export function MastraNetworkRuntimeProvider({
     }
   }, [initialMessages, threadId, memory, messages]);
 
-  const mastra = new MastraClient({
-    baseUrl: baseUrl || '',
-  });
-
-  console.log('MastraClient initialized');
-
-  console.log(messages, '###');
+  const mastra = useMastraClient();
 
   const network = mastra.getNetwork(agentId);
 
@@ -67,6 +63,15 @@ export function MastraNetworkRuntimeProvider({
           },
         ],
         runId: agentId,
+        frequencyPenalty,
+        presencePenalty,
+        maxRetries,
+        maxSteps,
+        maxTokens,
+        temperature,
+        topK,
+        topP,
+        instructions,
         ...(memory ? { threadId, resourceId: agentId } : {}),
       });
 
@@ -207,7 +212,7 @@ export function MastraNetworkRuntimeProvider({
 
       setIsRunning(false);
     } catch (error) {
-      console.error('Error occured in MastraRuntimeProvider', error);
+      console.error('Error occurred in MastraRuntimeProvider', error);
       setIsRunning(false);
     }
   };

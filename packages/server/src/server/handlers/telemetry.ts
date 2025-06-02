@@ -10,6 +10,8 @@ interface TelemetryContext extends Context {
     page?: number;
     perPage?: number;
     attribute?: string | string[];
+    fromDate?: Date;
+    toDate?: Date;
   };
 }
 
@@ -23,14 +25,14 @@ export async function getTelemetryHandler({ mastra, body }: TelemetryContext) {
     }
 
     if (!storage) {
-      throw new HTTPException(400, { message: 'Storage is not initialized' });
+      return [];
     }
 
     if (!body) {
       throw new HTTPException(400, { message: 'Body is required' });
     }
 
-    const { name, scope, page, perPage, attribute } = body;
+    const { name, scope, page, perPage, attribute, fromDate, toDate } = body;
 
     // Parse attribute query parameter if present
     const attributes = attribute
@@ -48,6 +50,8 @@ export async function getTelemetryHandler({ mastra, body }: TelemetryContext) {
       page: Number(page ?? 0),
       perPage: Number(perPage ?? 100),
       attributes,
+      fromDate: fromDate ? new Date(fromDate) : undefined,
+      toDate: toDate ? new Date(toDate) : undefined,
     });
 
     return traces;
@@ -62,7 +66,10 @@ export async function storeTelemetryHandler({ mastra, body }: Context & { body: 
     const logger = mastra.getLogger();
 
     if (!storage) {
-      throw new HTTPException(400, { message: 'Storage is not initialized' });
+      return {
+        status: 'error',
+        message: 'Storage is not initialized',
+      };
     }
 
     const now = new Date();

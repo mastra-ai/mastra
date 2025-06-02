@@ -66,7 +66,7 @@ export default function App() {
 		Array<ConfiguredServer>
 	>([])
 	const [browsedServer, setBrowsedServer] = useState<ServerDefinition | null>(
-		null
+		null,
 	)
 
 	const refreshConfiguredServerList = () =>
@@ -90,7 +90,7 @@ export default function App() {
 	}, [])
 
 	const existingConfig = configuredServers.find(
-		(c) => c.serverId === browsedServer?.id
+		(c) => c.serverId === browsedServer?.id,
 	)
 
 	switch (view) {
@@ -106,7 +106,7 @@ export default function App() {
 								? {
 										value: "edit-configurations" as const,
 										label: `Edit server configurations (${configuredServers.length})`,
-								  }
+									}
 								: null,
 							{ value: "browse-servers" as const, label: "Browse MCP servers" },
 							{ value: "exit" as const, label: "Exit" },
@@ -140,7 +140,7 @@ export default function App() {
 			}
 
 			const c = browsedServer?.schemas?.find(
-				(c) => c.command === chosenConfigurationType
+				(c) => c.command === chosenConfigurationType,
 			)!
 			return (
 				<>
@@ -164,9 +164,9 @@ export default function App() {
 													description: `${
 														c.runtimeArgs.description
 													} - default: ${JSON.stringify(
-														c.runtimeArgs.default || []
+														c.runtimeArgs.default || [],
 													)} (use comma separated list for multiple)`,
-											  }
+												}
 											: null,
 										...Object.entries(c?.env || {})?.map(([k, v]) => ({
 											name: k,
@@ -238,7 +238,7 @@ export default function App() {
 								? {
 										value: "delete-configuration" as const,
 										label: "Delete configuration",
-								  }
+									}
 								: null,
 							{ value: "go-back" as const, label: "[Back to servers]" },
 						].filter((v): v is NonNullable<typeof v> => Boolean(v))}
@@ -283,7 +283,7 @@ export default function App() {
 							setBrowsedServer(
 								await registry.getServerDefinition({
 									id: item.value,
-								})
+								}),
 							)
 							selectView("browse-server")
 						}}

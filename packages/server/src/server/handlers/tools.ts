@@ -1,4 +1,4 @@
-import type { Container } from '@mastra/core/di';
+import { RuntimeContext } from '@mastra/core/di';
 import { isVercelTool } from '@mastra/core/tools';
 import type { ToolAction, VercelTool } from '@mastra/core/tools';
 import { stringify } from 'superjson';
@@ -67,8 +67,13 @@ export function executeToolHandler(tools: ToolsContext['tools']) {
     runId,
     toolId,
     data,
-    container,
-  }: Pick<ToolsContext, 'mastra' | 'toolId' | 'runId'> & { data?: unknown; container: Container }) => {
+    runtimeContext,
+    runtimeContextFromRequest,
+  }: Pick<ToolsContext, 'mastra' | 'toolId' | 'runId'> & {
+    data?: unknown;
+    runtimeContext: RuntimeContext;
+    runtimeContextFromRequest: Record<string, unknown>;
+  }) => {
     try {
       if (!toolId) {
         throw new HTTPException(400, { message: 'Tool ID is required' });
@@ -91,11 +96,16 @@ export function executeToolHandler(tools: ToolsContext['tools']) {
         return result;
       }
 
+      const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
+        ...Array.from(runtimeContext.entries()),
+        ...Array.from(Object.entries(runtimeContextFromRequest ?? {})),
+      ]);
+
       const result = await tool.execute({
         context: data!,
         mastra,
         runId,
-        container,
+        runtimeContext: finalRuntimeContext,
       });
       return result;
     } catch (error) {
@@ -109,8 +119,14 @@ export async function executeAgentToolHandler({
   agentId,
   toolId,
   data,
-  container,
-}: Pick<ToolsContext, 'mastra' | 'toolId'> & { agentId?: string; data: any; container: Container }) {
+  runtimeContext,
+  runtimeContextFromRequest,
+}: Pick<ToolsContext, 'mastra' | 'toolId'> & {
+  agentId?: string;
+  data: any;
+  runtimeContext: RuntimeContext;
+  runtimeContextFromRequest: Record<string, unknown>;
+}) {
   try {
     const agent = agentId ? mastra.getAgent(agentId) : null;
     if (!agent) {
@@ -132,9 +148,14 @@ export async function executeAgentToolHandler({
     //   return result;
     // }
 
+    const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
+      ...Array.from(runtimeContext.entries()),
+      ...Array.from(Object.entries(runtimeContextFromRequest ?? {})),
+    ]);
+
     const result = await tool.execute({
       context: data,
-      container,
+      runtimeContext: finalRuntimeContext,
       mastra,
       runId: agentId,
     });

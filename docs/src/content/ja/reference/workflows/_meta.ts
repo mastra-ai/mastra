@@ -23,5 +23,4 @@ const meta = {
   resumeWithEvent: ".resumeWithEvent()",
   "step-retries": "ステップ再試行",
 };
-
 export default meta;

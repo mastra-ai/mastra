@@ -133,7 +133,7 @@ describe('changesTool', () => {
 
       try {
         const result = await callTool(tools.mastra_mastraChanges, { package: '@mastra/test-empty' });
-        expect(result).toContain('Error: Changelog for "@mastra/test-empty" not found');
+        expect(result).toContain('Changelog for "@mastra/test-empty" not found');
       } finally {
         // Restore original function
         tools.mastra_mastraChanges.getChangelog = originalGetChangelog;
@@ -147,7 +147,7 @@ describe('changesTool', () => {
 
       try {
         const result = await callTool(tools.mastra_mastraChanges, { package: '@mastra/test-header-only' });
-        expect(result).toContain('Error: Changelog for "@mastra/test-header-only" not found');
+        expect(result).toContain('Changelog for "@mastra/test-header-only" not found');
       } finally {
         // Restore original function
         tools.mastra_mastraChanges.getChangelog = originalGetChangelog;

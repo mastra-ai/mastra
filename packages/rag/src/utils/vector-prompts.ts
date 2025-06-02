@@ -1,8 +1,18 @@
 /**
- * Vector store specific prompts that detail supported operators and examples.
- * These prompts help users construct valid filters for each vector store.
+ * @deprecated These prompts have been moved to their respective vector store packages.
+ * Import them directly from the vector store package instead:
+ * - ASTRA_PROMPT: @mastra/astra/vector/prompt
+ * - CHROMA_PROMPT: @mastra/chroma/vector/prompt
+ * - LIBSQL_PROMPT: @mastra/libsql/vector/prompt
+ * - PGVECTOR_PROMPT: @mastra/pg/vector/prompt
+ * - PINECONE_PROMPT: @mastra/pinecone/vector/prompt
+ * - QDRANT_PROMPT: @mastra/qdrant/vector/prompt
+ * - UPSTASH_PROMPT: @mastra/upstash/vector/prompt
+ * - VECTORIZE_PROMPT: @mastra/vectorize/vector/prompt
+ * - MONGODB_PROMPT: @mastra/mongodb/vector/prompt
  */
 
+/** @deprecated Import from @mastra/astra instead */
 export const ASTRA_PROMPT = `When querying Astra, you can ONLY use the operators listed below. Any other operators will be rejected.
 Important: Don't explain how to construct the filter - use the specified operators and fields to search the content and return relevant results.
 If a user tries to give an explicit operator that is not supported, reject the filter entirely and let them know that the operator is not supported.
@@ -91,6 +101,7 @@ Example Complex Query:
   ]
 }`;
 
+/** @deprecated Import from @mastra/chroma instead */
 export const CHROMA_PROMPT = `When querying Chroma, you can ONLY use the operators listed below. Any other operators will be rejected.
 Important: Don't explain how to construct the filter - use the specified operators and fields to search the content and return relevant results.
 If a user tries to give an explicit operator that is not supported, reject the filter entirely and let them know that the operator is not supported.
@@ -159,6 +170,7 @@ Example Complex Query:
   ]
 }`;
 
+/** @deprecated Import from @mastra/libsql instead */
 export const LIBSQL_PROMPT = `When querying LibSQL Vector, you can ONLY use the operators listed below. Any other operators will be rejected.
 Important: Don't explain how to construct the filter - use the specified operators and fields to search the content and return relevant results.
 If a user tries to give an explicit operator that is not supported, reject the filter entirely and let them know that the operator is not supported.
@@ -257,6 +269,7 @@ Example Complex Query:
   ]
 }`;
 
+/** @deprecated Import from @mastra/pg instead */
 export const PGVECTOR_PROMPT = `When querying PG Vector, you can ONLY use the operators listed below. Any other operators will be rejected.
 Important: Don't explain how to construct the filter - use the specified operators and fields to search the content and return relevant results.
 If a user tries to give an explicit operator that is not supported, reject the filter entirely and let them know that the operator is not supported.
@@ -358,6 +371,7 @@ Example Complex Query:
   ]
 }`;
 
+/** @deprecated Import from @mastra/pinecone instead */
 export const PINECONE_PROMPT = `When querying Pinecone, you can ONLY use the operators listed below. Any other operators will be rejected.
 Important: Don't explain how to construct the filter - use the specified operators and fields to search the content and return relevant results.
 If a user tries to give an explicit operator that is not supported, reject the filter entirely and let them know that the operator is not supported.
@@ -435,6 +449,7 @@ Example Complex Query:
   ]
 }`;
 
+/** @deprecated Import from @mastra/qdrant instead */
 export const QDRANT_PROMPT = `When querying Qdrant, you can ONLY use the operators listed below. Any other operators will be rejected.
 Important: Don't explain how to construct the filter - use the specified operators and fields to search the content and return relevant results.
 If a user tries to give an explicit operator that is not supported, reject the filter entirely and let them know that the operator is not supported.
@@ -582,6 +597,7 @@ Example Complex Query:
   ]
 }`;
 
+/** @deprecated Import from @mastra/upstash instead */
 export const UPSTASH_PROMPT = `When querying Upstash Vector, you can ONLY use the operators listed below. Any other operators will be rejected.
 Important: Don't explain how to construct the filter - use the specified operators and fields to search the content and return relevant results.
 If a user tries to give an explicit operator that is not supported, reject the filter entirely and let them know that the operator is not supported.
@@ -675,6 +691,7 @@ Example Complex Query:
   ]
 }`;
 
+/** @deprecated Import from @mastra/vectorize instead */
 export const VECTORIZE_PROMPT = `When querying Vectorize, you can ONLY use the operators listed below. Any other operators will be rejected.
 Important: Don't explain how to construct the filter - use the specified operators and fields to search the content and return relevant results.
 If a user tries to give an explicit operator that is not supported, reject the filter entirely and let them know that the operator is not supported.
@@ -727,3 +744,89 @@ Example Complex Query:
   "price": { "$gte": 100, "$lte": 1000 },
   "inStock": true
 }`;
+
+/** @deprecated Import from @mastra/mongodb instead */
+export const MONGODB_PROMPT = `When querying MongoDB, you can ONLY use the operators listed below. Any other operators will be rejected.
+Important: Don't explain how to construct the filter - use the specified operators and fields to search the content and return relevant results.
+If a user tries to give an explicit operator that is not supported, reject the filter entirely and let them know that the operator is not supported.
+
+Basic Comparison Operators:
+- $eq: Exact match (default when using field: value)
+  Example: { "category": "electronics" }
+- $ne: Not equal
+  Example: { "category": { "$ne": "electronics" } }
+- $gt: Greater than
+  Example: { "price": { "$gt": 100 } }
+- $gte: Greater than or equal
+  Example: { "price": { "$gte": 100 } }
+- $lt: Less than
+  Example: { "price": { "$lt": 100 } }
+- $lte: Less than or equal
+  Example: { "price": { "$lte": 100 } }
+
+Array Operators:
+- $in: Match any value in array
+  Example: { "category": { "$in": ["electronics", "books"] } }
+- $nin: Does not match any value in array
+  Example: { "category": { "$nin": ["electronics", "books"] } }
+- $all: Match all values in array
+  Example: { "tags": { "$all": ["premium", "sale"] } }
+- $elemMatch: Match array elements by criteria
+  Example: { "scores": { "$elemMatch": { "$gt": 80 } } }
+
+Logical Operators:
+- $and: Logical AND (can be implicit or explicit)
+  Implicit Example: { "price": { "$gt": 100 }, "category": "electronics" }
+  Explicit Example: { "$and": [{ "price": { "$gt": 100 } }, { "category": "electronics" }] }
+- $or: Logical OR
+  Example: { "$or": [{ "price": { "$lt": 50 } }, { "category": "books" }] }
+- $not: Logical NOT
+  Example: { "field": { "$not": { "$eq": "value" } } }
+- $nor: Logical NOR
+  Example: { "$nor": [{ "price": { "$lt": 50 } }, { "category": "books" }] }
+
+Element Operators:
+- $exists: Check if field exists
+  Example: { "rating": { "$exists": true } }
+
+Special Operators:
+- $regex: Regular expression match
+  Example: { "title": { "$regex": "^laptop", "$options": "i" } }
+- $size: Array length check
+  Example: { "tags": { "$size": 2 } }
+
+Usage Notes:
+- You can use both 'filter' (for metadata fields) and 'documentFilter' (for document content fields).
+- Nested fields are supported using dot notation (e.g., "metadata.author.name").
+- Multiple conditions on the same field are supported with both implicit and explicit $and.
+- Empty arrays in $in/$nin will return no results.
+- All logical operators ($and, $or, $not, $nor) can be used at the top level or nested.
+- All other operators must be used within a field condition.
+  Valid: { "field": { "$gt": 100 } }
+  Valid: { "$and": [...] }
+  Invalid: { "$gt": 100 }
+- $not operator:
+  - Must be an object
+  - Cannot be empty
+  - Can be used at field level or top level
+  - Valid: { "$not": { "field": "value" } }
+  - Valid: { "field": { "$not": { "$eq": "value" } } }
+- Logical operators must contain field conditions, not direct operators
+  Valid: { "$and": [{ "field": { "$gt": 100 } }] }
+  Invalid: { "$and": [{ "$gt": 100 }] }
+- Regex uses standard MongoDB regex syntax (with optional $options).
+- Metadata values can be strings, numbers, booleans, or arrays.
+- Metadata and document fields can be filtered in the same query.
+
+Example Complex Query:
+{
+  "category": { "$in": ["electronics", "computers"] },
+  "price": { "$gte": 100, "$lte": 1000 },
+  "inStock": true,
+  "title": { "$regex": "laptop", "$options": "i" },
+  "$or": [
+    { "brand": "Apple" },
+    { "rating": { "$gte": 4.5 } }
+  ]
+}
+`;

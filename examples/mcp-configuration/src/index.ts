@@ -1,6 +1,6 @@
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
-import { MCPConfiguration } from '@mastra/mcp';
+import { MCPClient } from '@mastra/mcp';
 import chalk from 'chalk';
 
 // start sse server - in real life this would already be running but want to show using sse and stdio in this example
@@ -14,8 +14,8 @@ export const stockWeatherAgent = new Agent({
   model: openai('gpt-4o'),
 });
 
-console.log(chalk.blue(`Creating MCPConfiguration`));
-const mcp = new MCPConfiguration({
+console.log(chalk.blue(`Creating MCPClient`));
+const mcp = new MCPClient({
   servers: {
     stockPrice: {
       command: 'npx',

@@ -1,5 +1,4 @@
 import { Meta } from "nextra";
-
 const meta: Meta = {
   index: {
     title: "概要",
@@ -19,5 +18,4 @@ const meta: Meta = {
   "client-js": "クライアント SDK - JS",
   deployer: "デプロイヤー",
 };
-
 export default meta;

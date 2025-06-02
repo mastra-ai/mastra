@@ -61,6 +61,7 @@ describe('Vector Handlers', () => {
         upsertVectors({
           mastra: new Mastra({ logger: false, vectors: { 'test-vector': mockVector as unknown as MastraVector } }),
           vectorName: 'test-vector',
+          // @ts-expect-error
           index: {
             indexName: 'test-index',
           },
@@ -184,6 +185,7 @@ describe('Vector Handlers', () => {
         queryVectors({
           mastra: new Mastra({ logger: false, vectors: { 'test-vector': mockVector as unknown as MastraVector } }),
           vectorName: 'test-vector',
+          // @ts-expect-error
           query: {
             indexName: 'test-index',
           },
@@ -210,7 +212,7 @@ describe('Vector Handlers', () => {
         },
       });
 
-      expect(result).toEqual({ results: mockResults });
+      expect(result).toEqual(mockResults);
       expect(mockVector.query).toHaveBeenCalledWith({
         indexName: 'test-index',
         queryVector: [1, 2, 3],
@@ -239,7 +241,7 @@ describe('Vector Handlers', () => {
         vectorName: 'test-vector',
       });
 
-      expect(result).toEqual({ indexes: mockIndexes });
+      expect(result).toEqual(mockIndexes);
       expect(mockVector.listIndexes).toHaveBeenCalled();
     });
   });
@@ -282,7 +284,7 @@ describe('Vector Handlers', () => {
         count: 100,
         metric: 'cosine',
       });
-      expect(mockVector.describeIndex).toHaveBeenCalledWith('test-index');
+      expect(mockVector.describeIndex).toHaveBeenCalledWith({ indexName: 'test-index' });
     });
   });
 
@@ -315,7 +317,7 @@ describe('Vector Handlers', () => {
       });
 
       expect(result).toEqual({ success: true });
-      expect(mockVector.deleteIndex).toHaveBeenCalledWith('test-index');
+      expect(mockVector.deleteIndex).toHaveBeenCalledWith({ indexName: 'test-index' });
     });
   });
 });

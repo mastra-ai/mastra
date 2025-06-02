@@ -1,24 +1,16 @@
 import { MessagePrimitive } from '@assistant-ui/react';
-import { FC } from 'react';
+import { UserMessageAttachments } from './attachment';
 
-export const UserMessage: FC = () => {
+export const UserMessage = () => {
   return (
-    <MessagePrimitive.Root
-      style={{
-        placeItems: 'end',
-      }}
-      className="grid w-full"
-    >
+    <MessagePrimitive.Root className="w-full flex items-end pb-4 flex-col">
       {/* <UserActionBar /> */}
 
-      <div
-        style={{
-          maxWidth: '60%',
-        }}
-        className="bg-primary w-fit text-primary-foreground max-w-[calc(var(--thread-max-width)*0.8)] sm:max-w-[60%] break-words rounded-xl px-3 py-2 text-sm col-start-2 row-start-2"
-      >
+      <div className="max-w-[366px] px-5 py-3 text-icon6 text-ui-lg leading-ui-lg rounded-lg bg-surface3">
         <MessagePrimitive.Content />
       </div>
+
+      <UserMessageAttachments />
 
       {/* <BranchPicker className="col-span-full col-start-1 row-start-3 -mr-1 justify-end" /> */}
     </MessagePrimitive.Root>

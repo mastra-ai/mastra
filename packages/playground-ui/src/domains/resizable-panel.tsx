@@ -31,16 +31,16 @@ export const MastraResizablePanel = ({
     <div className={cn('w-full h-full relative', className)} ref={containerRef} style={{ width: `${sidebarWidth}%` }}>
       {!disabled && dividerPosition === 'left' ? (
         <div
-          className={`w-1 bg-mastra-bg-1 bg-[#121212] h-full cursor-col-resize hover:w-1.5 hover:bg-mastra-border-2 hover:bg-[#424242] active:bg-mastra-border-3 active:bg-[#3e3e3e] transition-colors absolute inset-y-0 -left-1 -right-1 z-10
-          ${isDragging ? 'bg-mastra-border-2 bg-[#424242] w-1.5 cursor- col-resize' : ''}`}
+          className={`w-px bg-border1 h-full cursor-col-resize hover:w-1.5 hover:bg-mastra-border-2 hover:bg-[#424242] active:bg-mastra-border-3 active:bg-[#3e3e3e] transition-colors absolute inset-y-0 z-10
+          ${isDragging ? 'bg-border2 w-1.5 cursor- col-resize' : ''}`}
           onMouseDown={handleMouseDown}
         />
       ) : null}
       {children}
       {!disabled && dividerPosition === 'right' ? (
         <div
-          className={`w-1 bg-mastra-bg-1 bg-[#121212] h-full cursor-col-resize hover:w-1.5 hover:bg-mastra-border-2 hover:bg-[#424242] active:bg-mastra-border-3 active:bg-[#3e3e3e] transition-colors absolute inset-y-0 -left-1 -right-1 z-10
-          ${isDragging ? 'bg-mastra-border-2 bg-[#424242] w-1.5 cursor- col-resize' : ''}`}
+          className={`w-px bg-border1 h-full cursor-col-resize hover:w-1.5 hover:bg-border2 active:bg-border3 transition-colors absolute inset-y-0 z-10
+          ${isDragging ? 'bg-border2 w-1.5 cursor- col-resize' : ''}`}
           onMouseDown={handleMouseDown}
         />
       ) : null}

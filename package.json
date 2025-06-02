@@ -3,7 +3,7 @@
   "version": "0.1.11",
   "type": "module",
   "devDependencies": {
-    "@changesets/cli": "^2.28.1",
+    "@changesets/cli": "^2.29.3",
     "@types/node": "^20.17.24",
     "husky": "^9.1.7",
     "lint-staged": "^15.5.0",
@@ -11,7 +11,7 @@
     "prettier": "^3.5.3",
     "turbo": "^2.4.4",
     "typescript": "^5.8.2",
-    "vitest": "^3.0.9"
+    "vitest": "^3.1.2"
   },
   "scripts": {
     "ci:publish": "pnpm publish -r",
@@ -25,6 +25,8 @@
     "build:deployer": "pnpm turbo build --filter ./packages/deployer",
     "build:server": "pnpm turbo build --filter ./packages/server",
     "build:core": "pnpm turbo build --filter ./packages/core",
+    "build:mcp": "pnpm turbo build --filter ./packages/mcp",
+    "build:playground-ui": "pnpm turbo build --filter ./packages/playground-ui/",
     "build:rag": "pnpm turbo build --filter ./packages/rag",
     "build:memory": "pnpm turbo build --filter ./packages/memory",
     "build:docs-mcp": "pnpm turbo build --filter ./packages/mcp-docs-server",
@@ -33,12 +35,15 @@
     "generate:integration": "pnpx tsx ./integration-generator/index.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",
+    "test:watch:combined-stores": "pnpm --filter \"./stores/*\" test:watch",
     "test:cli": "pnpm --filter ./packages/cli test",
-    "test:core": "pnpm --filter ./packages/core test",
+    "test:core": "pnpm --filter ./packages/core test --exclude \"./src/tools/tool-compatibility/**\"",
+    "test:mcp": "pnpm --filter ./packages/mcp test",
     "test:rag": "pnpm --filter ./packages/rag test",
     "test:clients": "pnpm --filter \"./client-sdks/*\" test",
     "test:combined-stores": "pnpm --filter \"./stores/*\" test",
     "test:memory": "pnpm --filter ./packages/memory test",
+    "test:tool-compatibility": "pnpm test packages/core/src/tools/tool-compatibility/**",
     "test:docs-mcp": "pnpm --filter ./packages/mcp-docs-server test",
     "test:evals": "pnpm --filter ./packages/evals test",
     "test:evals:nlp": "pnpm --filter ./packages/evals test src/metrics/nlp",
@@ -54,7 +59,7 @@
     "setup": "pnpm install --ignore-scripts && pnpm run build:cli && pnpm install --shamefully-hoist"
   },
   "lint-staged": {
-    "*.{js,ts,tsx,md,json,graphql,gql}": [
+    "*.{js,mjs,ts,tsx,md,mdx,json,graphql,gql}": [
       "prettier --write"
     ]
   },
@@ -62,9 +67,12 @@
     "pnpm": ">=9.7.0"
   },
   "resolutions": {
-    "typescript": "^5.7.3",
-    "@types/node": "^20.17.27"
+    "typescript": "^5.8.3",
+    "@types/node": "^20.17.32"
   },
   "license": "Elastic-2.0",
-  "packageManager": "pnpm@10.8.0+sha512.0e82714d1b5b43c74610193cb20734897c1d00de89d0e18420aebc5977fa13d780a9cb05734624e81ebd81cc876cd464794850641c48b9544326b5622ca29971"
+  "packageManager": "pnpm@10.10.0+sha512.d615db246fe70f25dcfea6d8d73dee782ce23e2245e3c4f6f888249fb568149318637dca73c2c5c8ef2a4ca0d5657fb9567188bfab47f566d1ee6ce987815c39",
+  "dependencies": {
+    "resolve-from": "^5.0.0"
+  }
 }

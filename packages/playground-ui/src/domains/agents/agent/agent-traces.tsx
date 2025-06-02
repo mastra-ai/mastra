@@ -1,45 +1,37 @@
-import { ReactNode, useContext, useState } from 'react';
-
-import { cn } from '@/lib/utils';
+import { useContext, useState } from 'react';
 
 import { TraceContext, TraceProvider } from '@/domains/traces/context/trace-context';
 
-import { useTraces } from '@/hooks/use-traces';
 import { TracesTable } from '../../traces/traces-table';
 import { TracesSidebar } from '@/domains/traces/traces-sidebar';
+import clsx from 'clsx';
+import { RefinedTrace } from '@/domains/traces/types';
 
 export interface AgentTracesProps {
-  agentName: string;
-  baseUrl: string;
-  sidebarChild: ReactNode;
+  className?: string;
+  traces: RefinedTrace[];
+  error: { message: string } | null;
 }
 
-export function AgentTraces({ agentName, baseUrl, sidebarChild }: AgentTracesProps) {
+export function AgentTraces({ className, traces, error }: AgentTracesProps) {
   return (
-    <TraceProvider>
-      <AgentTracesInner agentName={agentName} baseUrl={baseUrl} sidebarChild={sidebarChild} />
+    <TraceProvider initialTraces={traces || []}>
+      <AgentTracesInner className={className} traces={traces} error={error} />
     </TraceProvider>
   );
 }
 
-function AgentTracesInner({ agentName, baseUrl, sidebarChild }: AgentTracesProps) {
-  const [sidebarWidth, setSidebarWidth] = useState(30);
-  const { traces, firstCallLoading, error } = useTraces(agentName, baseUrl);
+function AgentTracesInner({ className, traces, error }: AgentTracesProps) {
+  const [sidebarWidth, setSidebarWidth] = useState(100);
   const { isOpen: open } = useContext(TraceContext);
 
   return (
-    <main className="h-full relative overflow-hidden flex flex-row">
-      <div className="flex-1 block mr-[30%]">
-        <TracesTable traces={traces} isLoading={firstCallLoading} error={error} />
+    <div className={clsx('h-full relative overflow-hidden flex', className)}>
+      <div className="h-full overflow-y-scroll w-full">
+        <TracesTable traces={traces} error={error} />
       </div>
 
-      <TracesSidebar
-        className={cn(open ? 'grid grid-cols-2 w-[60%]' : 'min-w-[325px]')}
-        width={100 - sidebarWidth}
-        onResize={setSidebarWidth}
-      >
-        {sidebarChild}
-      </TracesSidebar>
-    </main>
+      {open && <TracesSidebar width={sidebarWidth} onResize={setSidebarWidth} />}
+    </div>
   );
 }

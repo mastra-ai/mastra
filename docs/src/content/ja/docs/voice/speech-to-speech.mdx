@@ -1,42 +1,29 @@
 ---
-title: Mastraにおける音声対音声機能 | Mastra Docs
-description: Mastraにおける音声対音声機能の概要（リアルタイム対話とイベント駆動型アーキテクチャを含む）。
+title: Mastraにおける音声対音声機能 | Mastra ドキュメント
+description: Mastraの音声対音声機能の概要。リアルタイムの対話やイベント駆動型アーキテクチャについて説明します。
 ---
 
 # Mastraの音声対音声機能
 
 ## はじめに
 
-MastraのSpeech-to-Speech（STS）は、複数のプロバイダー間でリアルタイムの対話を行うための標準化されたインターフェースを提供します。  
-STSは、リアルタイムモデルからのイベントをリッスンすることで、継続的な双方向オーディオ通信を可能にします。個別のTTSとSTT操作とは異なり、STSは両方向で継続的に音声を処理するオープン接続を維持します。
+MastraのSpeech-to-Speech（STS）は、複数のプロバイダー間でリアルタイムなやり取りを可能にする標準化されたインターフェースを提供します。  
+STSは、Realtimeモデルからのイベントをリッスンすることで、継続的な双方向音声通信を実現します。個別のTTSやSTT操作とは異なり、STSは両方向の音声を継続的に処理するオープンな接続を維持します。
 
 ## 設定
 
-- **`chatModel`**: リアルタイムモデルの設定。
-  - **`apiKey`**: あなたのOpenAI APIキー。`OPENAI_API_KEY`環境変数にフォールバックします。
-  - **`model`**: リアルタイム音声インタラクションに使用するモデルID（例：`gpt-4o-mini-realtime`）。
-  - **`options`**: セッション設定などのリアルタイムクライアントの追加オプション。
-- **`speaker`**: 音声合成のデフォルトボイスID。音声出力に使用するボイスを指定できます。
+- **`apiKey`**: あなたのOpenAI APIキー。`OPENAI_API_KEY`環境変数にフォールバックします。
+- **`model`**: リアルタイム音声対話に使用するモデルID（例：`gpt-4o-mini-realtime`）。
+- **`speaker`**: 音声合成のデフォルトボイスID。音声出力に使用する声を指定できます。
 
 ```typescript
 const voice = new OpenAIRealtimeVoice({
-  chatModel: {
-    apiKey: 'your-openai-api-key',
-    model: 'gpt-4o-mini-realtime',
-    options: {
-      sessionConfig: {
-        turn_detection: {
-          type: 'server_vad',
-          threshold: 0.6,
-          silence_duration_ms: 1200,
-        },
-      },
-    },
-  },
-  speaker: 'alloy', // デフォルトボイス
+  apiKey: "your-openai-api-key",
+  model: "gpt-4o-mini-realtime",
+  speaker: "alloy", // Default voice
 });
 
-// デフォルト設定を使用する場合、設定は以下のように簡略化できます：
+// If using default settings the configuration can be simplified to:
 const voice = new OpenAIRealtimeVoice();
 ```
 
@@ -48,9 +35,9 @@ import { OpenAIRealtimeVoice } from "@mastra/voice-openai-realtime";
 import { playAudio, getMicrophoneStream } from "@mastra/node-audio";
 
 const agent = new Agent({
-  name: 'Agent',
+  name: "Agent",
   instructions: `You are a helpful assistant with real-time voice capabilities.`,
-  model: openai('gpt-4o'),
+  model: openai("gpt-4o"),
   voice: new OpenAIRealtimeVoice(),
 });
 
@@ -58,12 +45,12 @@ const agent = new Agent({
 await agent.voice.connect();
 
 // Listen for agent audio responses
-agent.voice.on('speaker', ({ audio }) => {
+agent.voice.on("speaker", ({ audio }) => {
   playAudio(audio);
 });
 
 // Initiate the conversation
-await agent.voice.speak('How can I help you today?');
+await agent.voice.speak("How can I help you today?");
 
 // Send continuous audio from the microphone
 const micStream = getMicrophoneStream();

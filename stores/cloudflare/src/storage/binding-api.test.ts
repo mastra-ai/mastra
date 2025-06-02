@@ -1,5 +1,5 @@
 import type { KVNamespace } from '@cloudflare/workers-types';
-import type { MessageType, StorageThreadType } from '@mastra/core/memory';
+import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 import {
   TABLE_MESSAGES,
@@ -13,6 +13,7 @@ import dotenv from 'dotenv';
 import { Miniflare } from 'miniflare';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 import {
+  checkWorkflowSnapshot,
   createSampleMessage,
   createSampleThread,
   createSampleTrace,
@@ -263,10 +264,10 @@ describe('CloudflareStore Workers Binding', () => {
           threadId: 'thread-1',
           content: [{ type: 'text', text: 'test-data-2' }],
           role: 'user',
-        } as MessageType,
+        } as MastraMessageV1,
       });
 
-      const result = await store.load<MessageType>({
+      const result = await store.load<MastraMessageV1>({
         tableName: testTableName2,
         keys: { id: 'test2', threadId: 'thread-1' },
       });
@@ -363,7 +364,7 @@ describe('CloudflareStore Workers Binding', () => {
 
       // Add some messages
       const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
       await store.deleteThread({ threadId: thread.id });
 
@@ -375,7 +376,7 @@ describe('CloudflareStore Workers Binding', () => {
 
       // Verify messages were also deleted with retry
       const retrievedMessages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
+        async () => await store.getMessages({ threadId: thread.id, format: 'v2' }),
         messages => messages.length === 0,
       );
       expect(retrievedMessages).toHaveLength(0);
@@ -394,13 +395,13 @@ describe('CloudflareStore Workers Binding', () => {
       const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
 
       // Save messages
-      const savedMessages = await store.saveMessages({ messages });
+      const savedMessages = await store.saveMessages({ messages, format: 'v2' });
       expect(savedMessages).toEqual(messages);
 
       // Retrieve messages with retry
       const retrievedMessages = await retryUntil(
         async () => {
-          const msgs = await store.getMessages({ threadId: thread.id });
+          const msgs = await store.getMessages({ threadId: thread.id, format: 'v2' });
           return msgs;
         },
         msgs => msgs.length === 2,
@@ -420,23 +421,20 @@ describe('CloudflareStore Workers Binding', () => {
 
       const messages = [
         {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'First' }] as MessageType['content'],
+          ...createSampleMessage(thread.id, [{ type: 'text' as const, text: 'First' }]),
         },
         {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'Second' }] as MessageType['content'],
+          ...createSampleMessage(thread.id, [{ type: 'text' as const, text: 'Second' }]),
         },
         {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'Third' }] as MessageType['content'],
+          ...createSampleMessage(thread.id, [{ type: 'text' as const, text: 'Third' }]),
         },
       ];
 
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
       const retrievedMessages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
+        async () => await store.getMessages({ threadId: thread.id, format: 'v2' }),
         messages => messages.length > 0,
       );
       expect(retrievedMessages).toHaveLength(3);
@@ -451,13 +449,13 @@ describe('CloudflareStore Workers Binding', () => {
   describe('Workflow Operations', () => {
     it('should save and retrieve workflow snapshots', async () => {
       const thread = createSampleThread();
-      const workflow = createSampleWorkflowSnapshot(thread.id);
+      const { snapshot, runId } = createSampleWorkflowSnapshot(thread.id, 'running');
 
       await store.persistWorkflowSnapshot({
         namespace: 'test',
         workflowName: 'test-workflow',
-        runId: workflow.runId,
-        snapshot: workflow,
+        runId,
+        snapshot,
       });
       await new Promise(resolve => setTimeout(resolve, 5000));
 
@@ -466,12 +464,12 @@ describe('CloudflareStore Workers Binding', () => {
           await store.loadWorkflowSnapshot({
             namespace: 'test',
             workflowName: 'test-workflow',
-            runId: workflow.runId,
+            runId,
           }),
-        snapshot => snapshot?.runId === workflow.runId,
+        snapshot => snapshot?.runId === runId,
       );
 
-      expect(retrieved).toEqual(workflow);
+      expect(retrieved).toEqual(snapshot);
     });
 
     it('should handle non-existent workflow snapshots', async () => {
@@ -485,25 +483,25 @@ describe('CloudflareStore Workers Binding', () => {
 
     it('should update workflow snapshot status', async () => {
       const thread = createSampleThread();
-      const workflow = createSampleWorkflowSnapshot(thread.id);
+      const { snapshot, runId } = createSampleWorkflowSnapshot(thread.id, 'running');
 
       await store.persistWorkflowSnapshot({
         namespace: 'test',
         workflowName: 'test-workflow',
-        runId: workflow.runId,
-        snapshot: workflow,
+        runId,
+        snapshot,
       });
 
       const updatedSnapshot = {
-        ...workflow,
-        value: { [workflow.runId]: 'completed' },
+        ...snapshot,
+        value: { [runId]: 'completed' },
         timestamp: Date.now(),
       };
 
       await store.persistWorkflowSnapshot({
         namespace: 'test',
         workflowName: 'test-workflow',
-        runId: workflow.runId,
+        runId,
         snapshot: updatedSnapshot,
       });
 
@@ -512,13 +510,13 @@ describe('CloudflareStore Workers Binding', () => {
           await store.loadWorkflowSnapshot({
             namespace: 'test',
             workflowName: 'test-workflow',
-            runId: workflow.runId,
+            runId,
           }),
-        snapshot => snapshot?.value[workflow.runId] === 'completed',
+        snapshot => snapshot?.value[runId] === 'completed',
       );
 
-      expect(retrieved?.value[workflow.runId]).toBe('completed');
-      expect(retrieved?.timestamp).toBeGreaterThan(workflow.timestamp);
+      expect(retrieved?.value[runId]).toBe('completed');
+      expect(retrieved?.timestamp).toBeGreaterThan(snapshot.timestamp);
     });
   });
 
@@ -580,7 +578,7 @@ describe('CloudflareStore Workers Binding', () => {
         createdAt: timestamp,
       }));
 
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
       // Verify order is maintained based on insertion order
       const orderKey = store['getThreadMessagesKey'](thread.id);
@@ -606,7 +604,7 @@ describe('CloudflareStore Workers Binding', () => {
 
       // Save messages in reverse order to verify write order is preserved
       const reversedMessages = [...messages].reverse(); // newest -> oldest
-      await Promise.all(reversedMessages.map(msg => store.saveMessages({ messages: [msg] })));
+      await Promise.all(reversedMessages.map(msg => store.saveMessages({ messages: [msg], format: 'v2' })));
 
       // Verify messages are saved and maintain write order (not timestamp order)
       const orderKey = store['getThreadMessagesKey'](thread.id);
@@ -631,7 +629,7 @@ describe('CloudflareStore Workers Binding', () => {
 
       // Create initial messages
       const messages = Array.from({ length: 3 }, () => createSampleMessage(thread.id));
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
       // Update scores to reverse order
       const orderKey = store['getThreadMessagesKey'](thread.id);
@@ -673,7 +671,7 @@ describe('CloudflareStore Workers Binding', () => {
           content: [{ type: 'text', text: 'Third' }],
           createdAt: new Date(baseTime + 2000),
         },
-      ] as MessageType[];
+      ] as MastraMessageV1[];
 
       await store.saveMessages({ messages });
 
@@ -725,16 +723,14 @@ describe('CloudflareStore Workers Binding', () => {
         value: { 'test-run': 'running' },
         timestamp: Date.now(),
         context: {
-          steps: {
-            'step-1': {
-              status: 'waiting' as const,
-              payload: { input: 'test' },
-            },
+          'step-1': {
+            status: 'success' as const,
+            output: { input: 'test' },
           },
-          triggerData: { source: 'test' },
-          attempts: { 'step-1': 0 },
-        },
-        activePaths: [{ stepPath: ['main'], stepId: 'step-1', status: 'waiting' }],
+          input: { source: 'test' },
+        } as unknown as WorkflowRunState['context'],
+        activePaths: [],
+        suspendedPaths: {},
       };
 
       await store.persistWorkflowSnapshot({
@@ -773,16 +769,14 @@ describe('CloudflareStore Workers Binding', () => {
         value: { 'test-run-2': 'running' },
         timestamp: Date.now(),
         context: {
-          steps: {
-            'step-1': {
-              status: 'waiting' as const,
-              payload: { input: 'test' },
-            },
+          'step-1': {
+            status: 'success' as const,
+            output: { input: 'test' },
           },
-          triggerData: { source: 'test' },
-          attempts: { 'step-1': 0 },
-        },
-        activePaths: [{ stepPath: ['main'], stepId: 'step-1', status: 'waiting' }],
+          input: { source: 'test' },
+        } as unknown as WorkflowRunState['context'],
+        activePaths: [],
+        suspendedPaths: {},
       };
 
       await store.persistWorkflowSnapshot({
@@ -833,23 +827,18 @@ describe('CloudflareStore Workers Binding', () => {
         value: { 'test-run-3': 'running' },
         timestamp: Date.now(),
         context: {
-          steps: {
-            'step-1': {
-              status: 'waiting' as const,
-              payload: { input: 'test' },
-            },
-            'step-2': {
-              status: 'waiting' as const,
-              payload: { input: 'test2' },
-            },
+          'step-1': {
+            status: 'success' as const,
+            output: { input: 'test' },
           },
-          triggerData: { source: 'test' },
-          attempts: { 'step-1': 0, 'step-2': 0 },
-        },
-        activePaths: [
-          { stepPath: ['main'], stepId: 'step-1', status: 'waiting' },
-          { stepPath: ['main'], stepId: 'step-2', status: 'waiting' },
-        ],
+          'step-2': {
+            status: 'success' as const,
+            output: { input: 'test2' },
+          },
+          input: { source: 'test' },
+        } as unknown as WorkflowRunState['context'],
+        activePaths: [],
+        suspendedPaths: {},
       };
 
       await store.persistWorkflowSnapshot({
@@ -866,16 +855,13 @@ describe('CloudflareStore Workers Binding', () => {
         ...workflow,
         context: {
           ...workflow.context,
-          steps: {
-            ...workflow.context.steps,
-            'step-1': {
-              status: 'success' as const,
-              payload: { result: 'done' },
-            },
+          'step-1': {
+            status: 'success' as const,
+            output: { result: 'done' },
           },
         },
-        activePaths: [{ stepPath: ['main'], stepId: 'step-2', status: 'waiting' }],
-      };
+        activePaths: [],
+      } as unknown as WorkflowRunState;
 
       await store.persistWorkflowSnapshot({
         namespace: 'test',
@@ -892,10 +878,351 @@ describe('CloudflareStore Workers Binding', () => {
         runId: workflow.runId,
       });
 
-      expect(retrieved?.context.steps['step-1'].status).toBe('success');
-      expect(retrieved?.context.steps['step-1'].payload).toEqual({ result: 'done' });
-      expect(retrieved?.context.steps['step-2'].status).toBe('waiting');
-      expect(retrieved?.activePaths).toEqual([{ stepPath: ['main'], stepId: 'step-2', status: 'waiting' }]);
+      expect(retrieved?.context['step-1'].status).toBe('success');
+      expect((retrieved?.context['step-1'] as any).output).toEqual({ result: 'done' });
+      expect(retrieved?.context['step-2'].status).toBe('success');
+      expect(retrieved?.activePaths).toEqual([]);
+    });
+  });
+
+  describe('getWorkflowRuns', () => {
+    const testNamespace = 'test-namespace';
+    it('returns empty array when no workflows exist', async () => {
+      const { runs, total } = await store.getWorkflowRuns();
+      expect(runs).toEqual([]);
+      expect(total).toBe(0);
+    });
+
+    it('returns all workflows by default', async () => {
+      const workflowName1 = 'default_test_1';
+      const workflowName2 = 'default_test_2';
+      const thread1 = createSampleThread();
+      const thread2 = createSampleThread();
+
+      const {
+        snapshot: workflow1,
+        runId: runId1,
+        stepId: stepId1,
+      } = createSampleWorkflowSnapshot(thread1.id, 'success');
+      const {
+        snapshot: workflow2,
+        runId: runId2,
+        stepId: stepId2,
+      } = createSampleWorkflowSnapshot(thread2.id, 'waiting');
+
+      await store.persistWorkflowSnapshot({
+        namespace: 'test',
+        workflowName: workflowName1,
+        runId: runId1,
+        snapshot: workflow1,
+      });
+      await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
+      await store.persistWorkflowSnapshot({
+        namespace: 'test',
+        workflowName: workflowName2,
+        runId: runId2,
+        snapshot: workflow2,
+      });
+
+      const { runs, total } = await store.getWorkflowRuns({ namespace: 'test' });
+      expect(runs).toHaveLength(2);
+      expect(total).toBe(2);
+      expect(runs[0]!.workflowName).toBe(workflowName2); // Most recent first
+      expect(runs[1]!.workflowName).toBe(workflowName1);
+      const firstSnapshot = runs[0]!.snapshot;
+      const secondSnapshot = runs[1]!.snapshot;
+      checkWorkflowSnapshot(firstSnapshot, stepId2, 'waiting');
+      checkWorkflowSnapshot(secondSnapshot, stepId1, 'success');
+    });
+
+    it('filters by workflow name', async () => {
+      const workflowName1 = 'filter_test_1';
+      const workflowName2 = 'filter_test_2';
+      const thread = createSampleThread();
+
+      const {
+        snapshot: workflow1,
+        runId: runId1,
+        stepId: stepId1,
+      } = createSampleWorkflowSnapshot(thread.id, 'success');
+      const { snapshot: workflow2, runId: runId2 } = createSampleWorkflowSnapshot(thread.id, 'failed');
+
+      await store.persistWorkflowSnapshot({
+        namespace: 'test',
+        workflowName: workflowName1,
+        runId: runId1,
+        snapshot: workflow1,
+      });
+      await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
+      await store.persistWorkflowSnapshot({
+        namespace: 'test',
+        workflowName: workflowName2,
+        runId: runId2,
+        snapshot: workflow2,
+      });
+
+      const { runs, total } = await store.getWorkflowRuns({ namespace: 'test', workflowName: workflowName1 });
+      expect(runs).toHaveLength(1);
+      expect(total).toBe(1);
+      expect(runs[0]!.workflowName).toBe(workflowName1);
+      const snapshot = runs[0]!.snapshot;
+      if (typeof snapshot === 'string') {
+        throw new Error('Expected WorkflowRunState, got string');
+      }
+      expect(snapshot.context?.[stepId1]?.status).toBe('success');
+    });
+
+    it('filters by date range', async () => {
+      const now = new Date();
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
+      const workflowName1 = 'date_test_1';
+      const workflowName2 = 'date_test_2';
+      const workflowName3 = 'date_test_3';
+      const thread = createSampleThread();
+
+      const { snapshot: workflow1, runId: runId1 } = createSampleWorkflowSnapshot(thread.id, 'success');
+      const {
+        snapshot: workflow2,
+        runId: runId2,
+        stepId: stepId2,
+      } = createSampleWorkflowSnapshot(thread.id, 'waiting');
+      const {
+        snapshot: workflow3,
+        runId: runId3,
+        stepId: stepId3,
+      } = createSampleWorkflowSnapshot(thread.id, 'skipped');
+
+      await store.insert({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        record: {
+          namespace: testNamespace,
+          workflow_name: workflowName1,
+          run_id: runId1,
+          snapshot: workflow1,
+          createdAt: twoDaysAgo,
+          updatedAt: twoDaysAgo,
+        },
+      });
+      await store.insert({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        record: {
+          namespace: testNamespace,
+          workflow_name: workflowName2,
+          run_id: runId2,
+          snapshot: workflow2,
+          createdAt: yesterday,
+          updatedAt: yesterday,
+        },
+      });
+      await store.insert({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        record: {
+          namespace: testNamespace,
+          workflow_name: workflowName3,
+          run_id: runId3,
+          snapshot: workflow3,
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+
+      const { runs } = await store.getWorkflowRuns({
+        namespace: testNamespace,
+        fromDate: yesterday,
+        toDate: now,
+      });
+
+      expect(runs).toHaveLength(2);
+      expect(runs[0]!.workflowName).toBe(workflowName3);
+      expect(runs[1]!.workflowName).toBe(workflowName2);
+      const firstSnapshot = runs[0]!.snapshot;
+      const secondSnapshot = runs[1]!.snapshot;
+      checkWorkflowSnapshot(firstSnapshot, stepId3, 'skipped');
+      checkWorkflowSnapshot(secondSnapshot, stepId2, 'waiting');
+    });
+
+    it('handles pagination', async () => {
+      const workflowName1 = 'page_test_1';
+      const workflowName2 = 'page_test_2';
+      const workflowName3 = 'page_test_3';
+      const thread = createSampleThread();
+
+      const {
+        snapshot: workflow1,
+        runId: runId1,
+        stepId: stepId1,
+      } = createSampleWorkflowSnapshot(thread.id, 'success');
+      const {
+        snapshot: workflow2,
+        runId: runId2,
+        stepId: stepId2,
+      } = createSampleWorkflowSnapshot(thread.id, 'waiting');
+      const {
+        snapshot: workflow3,
+        runId: runId3,
+        stepId: stepId3,
+      } = createSampleWorkflowSnapshot(thread.id, 'skipped');
+
+      await store.persistWorkflowSnapshot({
+        namespace: testNamespace,
+        workflowName: workflowName1,
+        runId: runId1,
+        snapshot: workflow1,
+      });
+      await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
+      await store.persistWorkflowSnapshot({
+        namespace: testNamespace,
+        workflowName: workflowName2,
+        runId: runId2,
+        snapshot: workflow2,
+      });
+      await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
+      await store.persistWorkflowSnapshot({
+        namespace: testNamespace,
+        workflowName: workflowName3,
+        runId: runId3,
+        snapshot: workflow3,
+      });
+
+      // Get first page
+      const page1 = await store.getWorkflowRuns({
+        namespace: testNamespace,
+        limit: 2,
+        offset: 0,
+      });
+      expect(page1.runs).toHaveLength(2);
+      expect(page1.total).toBe(3); // Total count of all records
+      expect(page1.runs[0]!.workflowName).toBe(workflowName3);
+      expect(page1.runs[1]!.workflowName).toBe(workflowName2);
+      const firstSnapshot = page1.runs[0]!.snapshot;
+      const secondSnapshot = page1.runs[1]!.snapshot;
+      checkWorkflowSnapshot(firstSnapshot, stepId3, 'skipped');
+      checkWorkflowSnapshot(secondSnapshot, stepId2, 'waiting');
+
+      // Get second page
+      const page2 = await store.getWorkflowRuns({
+        namespace: testNamespace,
+        limit: 2,
+        offset: 2,
+      });
+      expect(page2.runs).toHaveLength(1);
+      expect(page2.total).toBe(3);
+      expect(page2.runs[0]!.workflowName).toBe(workflowName1);
+      const snapshot = page2.runs[0]!.snapshot;
+      checkWorkflowSnapshot(snapshot, stepId1, 'success');
+    });
+  });
+  describe('getWorkflowRunById', () => {
+    const testNamespace = 'test-workflows-id';
+    const workflowName = 'workflow-id-test';
+    let runId: string;
+    let stepId: string;
+
+    beforeEach(async () => {
+      const thread = createSampleThread();
+      // Insert a workflow run for positive test
+      const sample = createSampleWorkflowSnapshot(thread.id, 'success');
+      runId = sample.runId;
+      stepId = sample.stepId;
+      await store.insert({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        record: {
+          namespace: testNamespace,
+          workflow_name: workflowName,
+          run_id: runId,
+          resourceId: 'resource-abc',
+          snapshot: sample.snapshot,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+    });
+
+    it('should retrieve a workflow run by ID', async () => {
+      const found = await store.getWorkflowRunById({
+        namespace: testNamespace,
+        runId,
+        workflowName,
+      });
+      expect(found).not.toBeNull();
+      expect(found?.runId).toBe(runId);
+      const snapshot = found?.snapshot;
+      checkWorkflowSnapshot(snapshot!, stepId, 'success');
+    });
+
+    it('should return null for non-existent workflow run ID', async () => {
+      const notFound = await store.getWorkflowRunById({
+        namespace: testNamespace,
+        runId: 'non-existent-id',
+        workflowName,
+      });
+      expect(notFound).toBeNull();
+    });
+  });
+  describe('getWorkflowRuns with resourceId', () => {
+    const testNamespace = 'test-workflows-id';
+    const workflowName = 'workflow-id-test';
+    let resourceId: string;
+    let runIds: string[] = [];
+
+    beforeEach(async () => {
+      const thread = createSampleThread();
+      // Insert multiple workflow runs for the same resourceId
+      resourceId = 'resource-shared';
+      for (const status of ['success', 'waiting']) {
+        const sample = createSampleWorkflowSnapshot(thread.id, status);
+        runIds.push(sample.runId);
+        await store.insert({
+          tableName: TABLE_WORKFLOW_SNAPSHOT,
+          record: {
+            namespace: testNamespace,
+            workflow_name: workflowName,
+            run_id: sample.runId,
+            resourceId,
+            snapshot: sample.snapshot,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+      }
+      // Insert a run with a different resourceId
+      const other = createSampleWorkflowSnapshot(thread.id, 'waiting');
+      await store.insert({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        record: {
+          namespace: testNamespace,
+          workflow_name: workflowName,
+          run_id: other.runId,
+          resourceId: 'resource-other',
+          snapshot: other.snapshot,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+    });
+
+    it('should retrieve all workflow runs by resourceId', async () => {
+      const { runs } = await store.getWorkflowRuns({
+        namespace: testNamespace,
+        resourceId,
+        workflowName,
+      });
+      expect(Array.isArray(runs)).toBe(true);
+      expect(runs.length).toBeGreaterThanOrEqual(2);
+      for (const run of runs) {
+        expect(run.resourceId).toBe(resourceId);
+      }
+    });
+
+    it('should return an empty array if no workflow runs match resourceId', async () => {
+      const { runs } = await store.getWorkflowRuns({
+        namespace: testNamespace,
+        resourceId: 'non-existent-resource',
+        workflowName,
+      });
+      expect(Array.isArray(runs)).toBe(true);
+      expect(runs.length).toBe(0);
     });
   });
 
@@ -920,16 +1247,15 @@ describe('CloudflareStore Workers Binding', () => {
     it('should sanitize and handle special characters', async () => {
       const thread = createSampleThread();
       const message = {
-        ...createSampleMessage(thread.id),
-        content: [{ type: 'text' as const, text: '特殊字符 !@#$%^&*()' }] as MessageType['content'],
+        ...createSampleMessage(thread.id, [{ type: 'text' as const, text: '特殊字符 !@#$%^&*()' }]),
       };
 
       await store.saveThread({ thread });
-      await store.saveMessages({ messages: [message] });
+      await store.saveMessages({ messages: [message], format: 'v2' });
 
       // Should retrieve correctly
       const messages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
+        async () => await store.getMessages({ threadId: thread.id, format: 'v2' }),
         messages => messages.length > 0,
       );
       expect(messages).toHaveLength(1);
@@ -989,7 +1315,7 @@ describe('CloudflareStore Workers Binding', () => {
 
       // Save thread and message
       await store.saveThread({ thread });
-      await store.saveMessages({ messages: [message] });
+      await store.saveMessages({ messages: [message], format: 'v2' });
 
       // Verify message key format
       const msgKey = store['getKey'](TABLE_MESSAGES, { threadId: thread.id, id: message.id });
@@ -1028,7 +1354,7 @@ describe('CloudflareStore Workers Binding', () => {
       }));
 
       // Save messages in parallel - write order should be preserved
-      await Promise.all(messages.map(msg => store.saveMessages({ messages: [msg] })));
+      await Promise.all(messages.map(msg => store.saveMessages({ messages: [msg], format: 'v2' })));
 
       // Order should reflect write order, not timestamp order
       const orderKey = store['getThreadMessagesKey'](thread.id);
@@ -1049,7 +1375,7 @@ describe('CloudflareStore Workers Binding', () => {
 
       // Create initial messages
       const messages = Array.from({ length: 3 }, () => createSampleMessage(thread.id));
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
       const orderKey = store['getThreadMessagesKey'](thread.id);
 
@@ -1083,7 +1409,7 @@ describe('CloudflareStore Workers Binding', () => {
       const messages = Array.from({ length: 3 }, () => createSampleMessage(thread.id));
 
       await store.saveThread({ thread });
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
       // Verify messages exist
       const orderKey = store['getThreadMessagesKey'](thread.id);
@@ -1120,11 +1446,11 @@ describe('CloudflareStore Workers Binding', () => {
         ...createSampleMessage(thread.id),
         createdAt: new Date(Date.now() + i * 1000),
       }));
-      await store.saveMessages({ messages: testMessages });
+      await store.saveMessages({ messages: testMessages, format: 'v2' });
 
       // Verify messages are saved
       const initialMessages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
+        async () => await store.getMessages({ threadId: thread.id, format: 'v2' }),
         messages => messages.length === testMessages.length,
       );
       expect(initialMessages).toHaveLength(testMessages.length);
@@ -1146,7 +1472,7 @@ describe('CloudflareStore Workers Binding', () => {
 
       // Verify all data is cleaned up
       const remainingMessages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
+        async () => await store.getMessages({ threadId: thread.id, format: 'v2' }),
         messages => messages.length === 0,
       );
       expect(remainingMessages).toHaveLength(0);
@@ -1232,7 +1558,7 @@ describe('CloudflareStore Workers Binding', () => {
       }));
 
       // Save messages in parallel to create race condition
-      await Promise.all(messages.map(msg => store.saveMessages({ messages: [msg] })));
+      await Promise.all(messages.map(msg => store.saveMessages({ messages: [msg], format: 'v2' })));
 
       // Verify both presence and order consistency
       const orderKey = store['getThreadMessagesKey'](thread.id);
@@ -1282,6 +1608,7 @@ describe('CloudflareStore Workers Binding', () => {
       await expect(
         store.saveMessages({
           messages: [message],
+          format: 'v2',
         }),
       ).rejects.toThrow();
     });
@@ -1291,16 +1618,15 @@ describe('CloudflareStore Workers Binding', () => {
       await store.saveThread({ thread });
 
       // Test with various malformed data
-      const malformedMessage = {
-        ...createSampleMessage(thread.id),
-        content: [{ type: 'text' as const, text: ''.padStart(1024 * 1024, 'x') }] as MessageType['content'], // Very large content
-      };
+      const malformedMessage = createSampleMessage(thread.id, [
+        { type: 'text' as const, text: ''.padStart(1024 * 1024, 'x') },
+      ]);
 
-      await store.saveMessages({ messages: [malformedMessage] });
+      await store.saveMessages({ messages: [malformedMessage], format: 'v2' });
 
       // Should still be able to retrieve and handle the message
       const messages = await retryUntil(
-        async () => await store.getMessages({ threadId: thread.id }),
+        async () => await store.getMessages({ threadId: thread.id, format: 'v2' }),
         messages => messages.length === 1,
       );
       expect(messages).toHaveLength(1);
@@ -1313,7 +1639,7 @@ describe('CloudflareStore Workers Binding', () => {
 
       // Create initial messages
       const messages = Array.from({ length: 3 }, () => createSampleMessage(thread.id));
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
       // Perform multiple concurrent updates
       const orderKey = store['getThreadMessagesKey'](thread.id);

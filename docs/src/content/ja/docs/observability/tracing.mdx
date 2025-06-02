@@ -1,21 +1,21 @@
 ---
-title: "トレーシング | Mastra オブザーバビリティ ドキュメント"
-description: "Mastra アプリケーションのための OpenTelemetry トレーシングの設定"
+title: "トレーシング | Mastra 可観測性ドキュメント"
+description: "Mastraアプリケーション用のOpenTelemetryトレーシングをセットアップする"
 ---
 
 import Image from "next/image";
 
 # トレーシング
 
-Mastraは、アプリケーションのトレーシングとモニタリングのためにOpenTelemetry Protocol (OTLP) をサポートしています。テレメトリーが有効化されると、Mastraはエージェント操作、LLMインタラクション、ツール実行、統合呼び出し、ワークフロー実行、データベース操作を含むすべてのコアプリミティブを自動的にトレースします。その後、テレメトリーデータを任意のOTELコレクターにエクスポートできます。
+MastraはアプリケーションのトレーシングとモニタリングのためにOpenTelemetryプロトコル（OTLP）をサポートしています。テレメトリが有効になっている場合、Mastraはエージェント操作、LLM連携、ツール実行、インテグレーション呼び出し、ワークフロー実行、データベース操作などのすべてのコアプリミティブを自動的にトレースします。テレメトリデータは任意のOTELコレクターにエクスポートできます。
 
 ### 基本設定
 
-テレメトリーを有効にする簡単な例を示します：
+テレメトリを有効にする簡単な例を示します：
 
 ```ts filename="mastra.config.ts" showLineNumbers copy
 export const mastra = new Mastra({
-  // ... 他の設定
+  // ... other config
   telemetry: {
     serviceName: "my-app",
     enabled: true,
@@ -24,7 +24,7 @@ export const mastra = new Mastra({
     },
     export: {
       type: "otlp",
-      endpoint: "http://localhost:4318", // SigNozのローカルエンドポイント
+      endpoint: "http://localhost:4318", // SigNoz local endpoint
     },
   },
 });
@@ -32,17 +32,17 @@ export const mastra = new Mastra({
 
 ### 設定オプション
 
-テレメトリー設定は以下のプロパティを受け入れます：
+テレメトリ設定は以下のプロパティを受け付けます：
 
 ```ts
 type OtelConfig = {
-  // トレースでサービスを識別するための名前（オプション）
+  // トレースでサービスを識別する名前（オプション）
   serviceName?: string;
 
-  // テレメトリーの有効/無効化（デフォルトはtrue）
+  // テレメトリの有効/無効（デフォルトはtrue）
   enabled?: boolean;
 
-  // サンプリングされるトレースの数を制御
+  // サンプリングするトレースの数を制御
   sampling?: {
     type: "ratio" | "always_on" | "always_off" | "parent_based";
     probability?: number; // 比率サンプリング用
@@ -51,7 +51,7 @@ type OtelConfig = {
     };
   };
 
-  // テレメトリーデータの送信先
+  // テレメトリデータの送信先
   export?: {
     type: "otlp" | "console";
     endpoint?: string;
@@ -60,22 +60,22 @@ type OtelConfig = {
 };
 ```
 
-詳細は [OtelConfig リファレンスドキュメント](../../reference/observability/otel-config.mdx) を参照してください。
+詳細については[OtelConfig リファレンスドキュメント](../../reference/observability/otel-config.mdx)を参照してください。
 
 ### 環境変数
 
-OTLPエンドポイントとヘッダーは環境変数を通じて設定できます：
+環境変数を通じてOTLPエンドポイントとヘッダーを設定できます：
 
 ```env filename=".env" copy
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 OTEL_EXPORTER_OTLP_HEADERS=x-api-key=your-api-key
 ```
 
-その後、設定で：
+そして設定では：
 
 ```ts filename="mastra.config.ts" showLineNumbers copy
 export const mastra = new Mastra({
-  // ... 他の設定
+  // ... other config
   telemetry: {
     serviceName: "my-app",
     enabled: true,
@@ -87,12 +87,12 @@ export const mastra = new Mastra({
 });
 ```
 
-### 例: SigNoz統合
+### 例：SigNoz連携
 
-[SigNoz](https://signoz.io) でのトレースされたエージェントインタラクションの例：
+[SigNoz](https://signoz.io)でのトレースされたエージェントインタラクションの例です：
 
 <img
-  src="/docs/signoz-telemetry-demo.png"
+  src="/image/signoz-telemetry-demo.png"
   alt="スパン、LLM呼び出し、ツール実行を示すエージェントインタラクショントレース"
   style={{ maxWidth: "800px", width: "100%", margin: "8px 0" }}
   className="nextra-image rounded-md"
@@ -103,13 +103,14 @@ export const mastra = new Mastra({
 
 ### その他のサポートされているプロバイダー
 
-サポートされている観測可能性プロバイダーとその設定の詳細については、[Observability Providers リファレンス](../../reference/observability/providers/) を参照してください。
+サポートされている監視プロバイダーの完全なリストとその設定の詳細については、[監視プロバイダーリファレンス](../../reference/observability/providers/)を参照してください。
 
-### Next.js特有のトレーシング手順
+### Next.js固有のトレーシング手順
 
-Next.jsを使用している場合、追加の設定手順が3つあります：
-1. `next.config.ts`でインストゥルメンテーションフックを有効にする
-2. Mastraのテレメトリー設定を構成する
-3. OpenTelemetryエクスポーターを設定する
+Next.jsを使用している場合は、3つの追加設定手順があります：
 
-実装の詳細については、[Next.js Tracing](./nextjs-tracing) ガイドを参照してください。
+1. `next.config.ts`で計測フックを有効にする
+2. Mastraテレメトリ設定を構成する
+3. OpenTelemetryエクスポーターをセットアップする
+
+実装の詳細については、[Next.jsトレーシング](./nextjs-tracing)ガイドを参照してください。

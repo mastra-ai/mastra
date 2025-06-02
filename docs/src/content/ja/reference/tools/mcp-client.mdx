@@ -1,0 +1,330 @@
+---
+title: "リファレンス: MCPClient | ツール管理 | Mastra ドキュメント"
+description: MCPClientのAPIリファレンス - 複数のModel Context Protocolサーバーとそのツールを管理するためのクラス。
+---
+
+# MCPClient
+
+`MCPClient`クラスは、Mastraアプリケーションで複数のMCPサーバー接続とそのツールを管理する方法を提供します。接続のライフサイクル、ツールの名前空間管理を処理し、設定されたすべてのサーバーにわたるツールへのアクセスを提供します。
+
+このクラスは非推奨の[`MastraMCPClient`](/reference/tools/client)に代わるものです。
+
+## コンストラクタ
+
+MCPClientクラスの新しいインスタンスを作成します。
+
+```typescript
+constructor({
+  id?: string;
+  servers: Record<string, MastraMCPServerDefinition>;
+  timeout?: number;
+}: MCPClientOptions)
+```
+
+### MCPClientOptions
+
+<br />
+<PropertiesTable
+  content={[
+    {
+      name: "id",
+      type: "string",
+      isOptional: true,
+      description:
+        "設定インスタンスのオプションの一意識別子。同一の設定で複数のインスタンスを作成する際にメモリリークを防ぐために使用します。",
+    },
+    {
+      name: "servers",
+      type: "Record<string, MastraMCPServerDefinition>",
+      description:
+        "サーバー設定のマップ。各キーは一意のサーバー識別子であり、値はサーバー設定です。",
+    },
+    {
+      name: "timeout",
+      type: "number",
+      isOptional: true,
+      defaultValue: "60000",
+      description:
+        "個々のサーバー設定で上書きされない限り、すべてのサーバーに適用されるグローバルタイムアウト値（ミリ秒単位）。",
+    },
+  ]}
+/>
+
+### MastraMCPServerDefinition
+
+`servers`マップ内の各サーバーは`MastraMCPServerDefinition`タイプを使用して設定されます。トランスポートタイプは提供されたパラメータに基づいて検出されます：
+
+- `command`が提供されている場合、Stdioトランスポートを使用します。
+- `url`が提供されている場合、最初にStreamable HTTPトランスポートを試み、初期接続が失敗した場合はレガシーSSEトランスポートにフォールバックします。
+
+<br />
+<PropertiesTable
+  content={[
+    {
+      name: "command",
+      type: "string",
+      isOptional: true,
+      description: "Stdioサーバーの場合：実行するコマンド。",
+    },
+    {
+      name: "args",
+      type: "string[]",
+      isOptional: true,
+      description: "Stdioサーバーの場合：コマンドに渡す引数。",
+    },
+    {
+      name: "env",
+      type: "Record<string, string>",
+      isOptional: true,
+      description: "Stdioサーバーの場合：コマンドに設定する環境変数。",
+    },
+    {
+      name: "url",
+      type: "URL",
+      isOptional: true,
+      description:
+        "HTTPサーバー（Streamable HTTPまたはSSE）の場合：サーバーのURL。",
+    },
+    {
+      name: "requestInit",
+      type: "RequestInit",
+      isOptional: true,
+      description: "HTTPサーバーの場合：fetch APIのリクエスト設定。",
+    },
+    {
+      name: "eventSourceInit",
+      type: "EventSourceInit",
+      isOptional: true,
+      description:
+        "SSEフォールバックの場合：SSE接続用のカスタムフェッチ設定。SSEでカスタムヘッダーを使用する場合に必要です。",
+    },
+    {
+      name: "logger",
+      type: "LogHandler",
+      isOptional: true,
+      description: "ロギング用のオプションの追加ハンドラー。",
+    },
+    {
+      name: "timeout",
+      type: "number",
+      isOptional: true,
+      description: "サーバー固有のタイムアウト（ミリ秒単位）。",
+    },
+    {
+      name: "capabilities",
+      type: "ClientCapabilities",
+      isOptional: true,
+      description: "サーバー固有の機能設定。",
+    },
+    {
+      name: "enableServerLogs",
+      type: "boolean",
+      isOptional: true,
+      defaultValue: "true",
+      description: "このサーバーのロギングを有効にするかどうか。",
+    },
+  ]}
+/>
+
+## メソッド
+
+### getTools()
+
+設定されたすべてのサーバーからすべてのツールを取得し、ツール名はサーバー名で名前空間化されます（`serverName_toolName`の形式）。これは競合を防ぐためです。
+Agentの定義に渡すことを意図しています。
+
+```ts
+new Agent({ tools: await mcp.getTools() });
+```
+
+### getToolsets()
+
+名前空間化されたツール名（`serverName.toolName`の形式）をそのツール実装にマッピングするオブジェクトを返します。
+generateまたはstreamメソッドに動的に渡すことを意図しています。
+
+```typescript
+const res = await agent.stream(prompt, {
+  toolsets: await mcp.getToolsets(),
+});
+```
+
+### disconnect()
+
+すべてのMCPサーバーから切断し、リソースをクリーンアップします。
+
+```typescript
+async disconnect(): Promise<void>
+```
+
+## 例
+
+### 静的ツール設定
+
+アプリ全体で単一のMCPサーバー接続を持つツールの場合、`getTools()`を使用してツールをエージェントに渡します：
+
+```typescript
+import { MCPClient } from "@mastra/mcp";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+
+const mcp = new MCPClient({
+  servers: {
+    stockPrice: {
+      command: "npx",
+      args: ["tsx", "stock-price.ts"],
+      env: {
+        API_KEY: "your-api-key",
+      },
+      log: (logMessage) => {
+        console.log(`[${logMessage.level}] ${logMessage.message}`);
+      },
+    },
+    weather: {
+      url: new URL("http://localhost:8080/sse"),∂
+    },
+  },
+  timeout: 30000, // グローバルな30秒タイムアウト
+});
+
+// すべてのツールにアクセスできるエージェントを作成
+const agent = new Agent({
+  name: "Multi-tool Agent",
+  instructions: "You have access to multiple tool servers.",
+  model: openai("gpt-4"),
+  tools: await mcp.getTools(),
+});
+```
+
+### 動的ツールセット
+
+各ユーザーに新しいMCP接続が必要な場合は、`getToolsets()`を使用し、streamまたはgenerateを呼び出す際にツールを追加します：
+
+```typescript
+import { Agent } from "@mastra/core/agent";
+import { MCPClient } from "@mastra/mcp";
+import { openai } from "@ai-sdk/openai";
+
+// まずツールなしでエージェントを作成
+const agent = new Agent({
+  name: "Multi-tool Agent",
+  instructions: "You help users check stocks and weather.",
+  model: openai("gpt-4"),
+});
+
+// 後で、ユーザー固有の設定でMCPを構成
+const mcp = new MCPClient({
+  servers: {
+    stockPrice: {
+      command: "npx",
+      args: ["tsx", "stock-price.ts"],
+      env: {
+        API_KEY: "user-123-api-key",
+      },
+      timeout: 20000, // サーバー固有のタイムアウト
+    },
+    weather: {
+      url: new URL("http://localhost:8080/sse"),
+      requestInit: {
+        headers: {
+          Authorization: `Bearer user-123-token`,
+        },
+      },
+    },
+  },
+});
+
+// すべてのツールセットをstream()またはgenerate()に渡す
+const response = await agent.stream(
+  "How is AAPL doing and what is the weather?",
+  {
+    toolsets: await mcp.getToolsets(),
+  },
+);
+```
+
+## リソース管理
+
+`MCPClient`クラスには、複数のインスタンスを管理するためのメモリリーク防止機能が組み込まれています：
+
+1. 同一の構成で`id`なしの複数のインスタンスを作成すると、メモリリークを防ぐためにエラーがスローされます
+2. 同一の構成で複数のインスタンスが必要な場合は、各インスタンスに一意の`id`を提供してください
+3. 同じ構成でインスタンスを再作成する前に`await configuration.disconnect()`を呼び出してください
+4. 1つのインスタンスだけが必要な場合は、再作成を避けるために構成をより高いスコープに移動することを検討してください
+
+例えば、`id`なしで同じ構成の複数のインスタンスを作成しようとすると：
+
+```typescript
+// 最初のインスタンス - OK
+const mcp1 = new MCPClient({
+  servers: {
+    /* ... */
+  },
+});
+
+// 同じ構成の2番目のインスタンス - エラーがスローされます
+const mcp2 = new MCPClient({
+  servers: {
+    /* ... */
+  },
+});
+
+// 修正するには、以下のいずれかを行います：
+// 1. 一意のIDを追加する
+const mcp3 = new MCPClient({
+  id: "instance-1",
+  servers: {
+    /* ... */
+  },
+});
+
+// 2. または再作成する前に切断する
+await mcp1.disconnect();
+const mcp4 = new MCPClient({
+  servers: {
+    /* ... */
+  },
+});
+```
+
+## サーバーライフサイクル
+
+MCPClientはサーバー接続を適切に処理します：
+
+1. 複数のサーバーへの自動接続管理
+2. 開発中にエラーメッセージが表示されないようにするための適切なサーバーシャットダウン
+3. 切断時のリソースの適切なクリーンアップ
+
+## SSEリクエストヘッダーの使用
+
+レガシーSSE MCPトランスポートを使用する場合、MCP SDKのバグにより、`requestInit`と`eventSourceInit`の両方を設定する必要があります：
+
+```ts
+const sseClient = new MCPClient({
+  servers: {
+    exampleServer: {
+      url: new URL("https://your-mcp-server.com/sse"),
+      // 注意：requestInitだけではSSEには不十分です
+      requestInit: {
+        headers: {
+          Authorization: "Bearer your-token",
+        },
+      },
+      // これもカスタムヘッダーを持つSSE接続には必要です
+      eventSourceInit: {
+        fetch(input: Request | URL | string, init?: RequestInit) {
+          const headers = new Headers(init?.headers || {});
+          headers.set("Authorization", "Bearer your-token");
+          return fetch(input, {
+            ...init,
+            headers,
+          });
+        },
+      },
+    },
+  },
+});
+```
+
+## 関連情報
+
+- Model Context Protocolの詳細については、[@modelcontextprotocol/sdkのドキュメント](https://github.com/modelcontextprotocol/typescript-sdk)を参照してください

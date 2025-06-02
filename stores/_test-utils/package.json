@@ -1,0 +1,22 @@
+{
+  "name": "@internal/storage-test-utils",
+  "version": "0.0.3",
+  "description": "",
+  "type": "module",
+  "main": "src/default-tests.ts",
+  "private": true,
+  "exports": {
+    ".": "./src/default-tests.ts"
+  },
+  "scripts": {},
+  "keywords": [],
+  "author": "",
+  "license": "Elastic-2.0",
+  "peerDependencies": {
+    "vitest": "*",
+    "@mastra/core": "^0.10.0-alpha.0"
+  },
+  "devDependencies": {
+    "@mastra/core": "workspace:*"
+  }
+}

@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import type { D1Database } from '@cloudflare/workers-types';
-import type { MessageType, StorageThreadType } from '@mastra/core/memory';
+import type { MastraMessageV2, WorkflowRunState } from '@mastra/core';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 import {
   TABLE_MESSAGES,
@@ -9,12 +9,12 @@ import {
   TABLE_EVALS,
   TABLE_TRACES,
 } from '@mastra/core/storage';
-import type { WorkflowRunState } from '@mastra/core/workflows';
 import dotenv from 'dotenv';
 import { Miniflare } from 'miniflare';
-import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll, vi, afterEach } from 'vitest';
 
 import {
+  checkWorkflowSnapshot,
   createSampleMessage,
   createSampleThread,
   createSampleThreadWithParams,
@@ -170,7 +170,7 @@ describe('D1Store', () => {
       // Insert test data
       await store.insert({
         tableName: testTableName as TABLE_NAMES,
-        record: { id: 'test1', data: 'test-data' } as unknown as StorageThreadType,
+        record: { id: 'test1', data: 'test-data' },
       });
 
       // Clear the table
@@ -361,7 +361,7 @@ describe('D1Store', () => {
 
       // Add some messages
       const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
       await store.deleteThread({ threadId: thread.id });
 
@@ -374,7 +374,7 @@ describe('D1Store', () => {
       expect(threads).toHaveLength(0);
 
       // Verify messages were also deleted
-      const retrievedMessages = await store.getMessages({ threadId: thread.id });
+      const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v2' });
       expect(retrievedMessages).toHaveLength(0);
     });
   });
@@ -391,15 +391,15 @@ describe('D1Store', () => {
       const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
 
       // Save messages
-      const savedMessages = await store.saveMessages({ messages });
+      const savedMessages = await store.saveMessages({ messages, format: 'v2' });
       expect(savedMessages).toEqual(messages);
 
       // Retrieve messages
-      const retrievedMessages = await store.getMessages({ threadId: thread.id });
-      const checkMessages = messages.map(m => ({
-        ...m,
-        createdAt: m.createdAt.toISOString(),
-      }));
+      const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v2' });
+      const checkMessages = messages.map(m => {
+        const { resourceId, ...rest } = m;
+        return rest;
+      });
       expect(retrievedMessages).toEqual(expect.arrayContaining(checkMessages));
     });
 
@@ -413,23 +413,14 @@ describe('D1Store', () => {
       await store.saveThread({ thread });
 
       const messages = [
-        {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'First' }] as MessageType['content'],
-        },
-        {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'Second' }] as MessageType['content'],
-        },
-        {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'Third' }] as MessageType['content'],
-        },
-      ];
+        createSampleMessage(thread.id, [{ type: 'text' as const, text: 'First' }]),
+        createSampleMessage(thread.id, [{ type: 'text' as const, text: 'Second' }]),
+        createSampleMessage(thread.id, [{ type: 'text' as const, text: 'Third' }]),
+      ] satisfies MastraMessageV2[];
 
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
-      const retrievedMessages = await store.getMessages({ threadId: thread.id });
+      const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v2' });
       expect(retrievedMessages).toHaveLength(3);
 
       // Verify order is maintained
@@ -445,12 +436,12 @@ describe('D1Store', () => {
       const messages = [
         createSampleMessage(thread.id),
         { ...createSampleMessage(thread.id), id: null }, // This will cause an error
-      ] as MessageType[];
+      ] as any as MastraMessageV2[];
 
-      await expect(store.saveMessages({ messages })).rejects.toThrow();
+      await expect(store.saveMessages({ messages, format: 'v2' })).rejects.toThrow();
 
       // Verify no messages were saved
-      const savedMessages = await store.getMessages({ threadId: thread.id });
+      const savedMessages = await store.getMessages({ threadId: thread.id, format: 'v2' });
       expect(savedMessages).toHaveLength(0);
     });
   });
@@ -471,20 +462,20 @@ describe('D1Store', () => {
     });
     it('should save and retrieve workflow snapshots', async () => {
       const thread = createSampleThread();
-      const workflow = createSampleWorkflowSnapshot(thread.id);
+      const { snapshot, runId } = createSampleWorkflowSnapshot(thread.id, 'success');
 
       await store.persistWorkflowSnapshot({
         workflowName: 'test-workflow',
-        runId: workflow.runId,
-        snapshot: workflow,
+        runId,
+        snapshot,
       });
       await new Promise(resolve => setTimeout(resolve, 5000));
 
       const retrieved = await store.loadWorkflowSnapshot({
         workflowName: 'test-workflow',
-        runId: workflow.runId,
+        runId,
       });
-      expect(retrieved).toEqual(workflow);
+      expect(retrieved).toEqual(snapshot);
     });
 
     it('should handle non-existent workflow snapshots', async () => {
@@ -497,32 +488,32 @@ describe('D1Store', () => {
 
     it('should update workflow snapshot status', async () => {
       const thread = createSampleThread();
-      const workflow = createSampleWorkflowSnapshot(thread.id);
+      const { snapshot, runId } = createSampleWorkflowSnapshot(thread.id, 'success');
 
       await store.persistWorkflowSnapshot({
         workflowName: 'test-workflow',
-        runId: workflow.runId,
-        snapshot: workflow,
+        runId,
+        snapshot,
       });
 
       const updatedSnapshot = {
-        ...workflow,
-        value: { [workflow.runId]: 'completed' },
+        ...snapshot,
+        value: { [runId]: 'completed' },
         timestamp: Date.now(),
       };
 
       await store.persistWorkflowSnapshot({
         workflowName: 'test-workflow',
-        runId: workflow.runId,
+        runId,
         snapshot: updatedSnapshot,
       });
 
       const retrieved = await store.loadWorkflowSnapshot({
         workflowName: 'test-workflow',
-        runId: workflow.runId,
+        runId,
       });
-      expect(retrieved?.value[workflow.runId]).toBe('completed');
-      expect(retrieved?.timestamp).toBeGreaterThan(workflow.timestamp);
+      expect(retrieved?.value[runId]).toBe('completed');
+      expect(retrieved?.timestamp).toBeGreaterThan(snapshot.timestamp);
     });
   });
 
@@ -578,10 +569,10 @@ describe('D1Store', () => {
         createdAt: timestamp,
       }));
 
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
       // Verify order is maintained based on insertion order
-      const order = await store.getMessages({ threadId: thread.id });
+      const order = await store.getMessages({ threadId: thread.id, format: 'v2' });
       const orderIds = order.map(m => m.id);
       const messageIds = messages.map(m => m.id);
 
@@ -602,10 +593,10 @@ describe('D1Store', () => {
 
       // Save messages in reverse order to verify write order is preserved
       const reversedMessages = [...messages].reverse(); // newest -> oldest
-      await Promise.all(reversedMessages.map(msg => store.saveMessages({ messages: [msg] })));
+      await Promise.all(reversedMessages.map(msg => store.saveMessages({ messages: [msg], format: 'v2' })));
 
       // Verify messages are saved and maintain write order (not timestamp order)
-      const order = await store.getMessages({ threadId: thread.id });
+      const order = await store.getMessages({ threadId: thread.id, format: 'v2' });
       const orderIds = order.map(m => m.id);
       const messageIds = messages.map(m => m.id);
 
@@ -621,28 +612,25 @@ describe('D1Store', () => {
       const baseTime = new Date('2025-03-14T23:30:20.930Z').getTime();
       const messages = [
         {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text', text: 'First' }],
+          ...createSampleMessage(thread.id, [{ type: 'text', text: 'First' }]),
           createdAt: new Date(baseTime),
         },
         {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text', text: 'Second' }],
+          ...createSampleMessage(thread.id, [{ type: 'text', text: 'Second' }]),
           createdAt: new Date(baseTime + 1000),
         },
         {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text', text: 'Third' }],
+          ...createSampleMessage(thread.id, [{ type: 'text', text: 'Third' }]),
           createdAt: new Date(baseTime + 2000),
         },
-      ] as MessageType[];
+      ] as MastraMessageV2[];
 
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
       await new Promise(resolve => setTimeout(resolve, 5000));
 
       // Get messages and verify order
-      const order = await store.getMessages({ threadId: thread.id });
+      const order = await store.getMessages({ threadId: thread.id, format: 'v2' });
       expect(order.length).toBe(3);
     });
   });
@@ -654,35 +642,22 @@ describe('D1Store', () => {
     });
 
     it('should persist and load workflow snapshots', async () => {
-      const workflow: WorkflowRunState = {
-        runId: 'test-run',
-        value: { 'test-run': 'running' },
-        timestamp: Date.now(),
-        context: {
-          steps: {
-            'step-1': {
-              status: 'waiting' as const,
-              payload: { input: 'test' },
-            },
-          },
-          triggerData: { source: 'test' },
-          attempts: { 'step-1': 0 },
-        },
-        activePaths: [{ stepPath: ['main'], stepId: 'step-1', status: 'waiting' }],
-      };
+      const thread = createSampleThread();
+      const { snapshot, runId } = createSampleWorkflowSnapshot(thread.id, 'running');
 
       await store.persistWorkflowSnapshot({
         workflowName: 'test-workflow',
-        runId: workflow.runId,
-        snapshot: workflow,
+        runId,
+        snapshot,
       });
+      await new Promise(resolve => setTimeout(resolve, 5000));
 
       const retrieved = await store.loadWorkflowSnapshot({
         workflowName: 'test-workflow',
-        runId: workflow.runId,
+        runId,
       });
 
-      expect(retrieved).toEqual(workflow);
+      expect(retrieved).toEqual(snapshot);
     });
 
     it('should handle non-existent workflow snapshots', async () => {
@@ -695,50 +670,29 @@ describe('D1Store', () => {
     });
 
     it('should update existing workflow snapshot', async () => {
-      const workflowName = 'test-workflow';
-      const runId = `run-${randomUUID()}`;
-      const initialSnapshot = {
-        runId,
-        value: { currentState: 'running' },
-        timestamp: Date.now(),
-        activePaths: [],
-        context: {
-          steps: {},
-          stepResults: {},
-          attempts: {},
-          triggerData: { type: 'manual' },
-        },
-      } as WorkflowRunState;
-
-      const updatedSnapshot = {
-        runId,
-        value: { currentState: 'completed' },
-        timestamp: Date.now(),
-        activePaths: [],
-        context: {
-          steps: {},
-          stepResults: {
-            'step-1': { status: 'success', result: { data: 'test' } },
-          },
-          attempts: { 'step-1': 1 },
-          triggerData: { type: 'manual' },
-        },
-      } as WorkflowRunState;
+      const thread = createSampleThread();
+      const { snapshot, runId } = createSampleWorkflowSnapshot(thread.id, 'running');
 
       await store.persistWorkflowSnapshot({
-        workflowName,
+        workflowName: 'test-workflow',
         runId,
-        snapshot: initialSnapshot,
+        snapshot,
       });
 
+      const updatedSnapshot = {
+        ...snapshot,
+        value: { [runId]: 'completed' },
+        timestamp: Date.now(),
+      };
+
       await store.persistWorkflowSnapshot({
-        workflowName,
+        workflowName: 'test-workflow',
         runId,
         snapshot: updatedSnapshot,
       });
 
       const loadedSnapshot = await store.loadWorkflowSnapshot({
-        workflowName,
+        workflowName: 'test-workflow',
         runId,
       });
 
@@ -754,25 +708,21 @@ describe('D1Store', () => {
         value: { currentState: 'running' },
         timestamp: Date.now(),
         context: {
-          steps: {},
-          stepResults: {
-            'step-1': {
-              status: 'success',
-              result: {
-                nestedData: {
-                  array: [1, 2, 3],
-                  object: { key: 'value' },
-                  date: new Date().toISOString(),
-                },
+          'step-1': {
+            status: 'success',
+            output: {
+              nestedData: {
+                array: [1, 2, 3],
+                object: { key: 'value' },
+                date: new Date().toISOString(),
               },
             },
-            'step-2': {
-              status: 'waiting',
-              dependencies: ['step-3', 'step-4'],
-            },
           },
-          attempts: { 'step-1': 1, 'step-2': 0 },
-          triggerData: {
+          'step-2': {
+            status: 'suspended',
+            dependencies: ['step-3', 'step-4'],
+          },
+          input: {
             type: 'scheduled',
             metadata: {
               schedule: '0 0 * * *',
@@ -780,19 +730,9 @@ describe('D1Store', () => {
             },
           },
         },
-        activePaths: [
-          {
-            stepPath: ['step-1'],
-            stepId: 'step-1',
-            status: 'success',
-          },
-          {
-            stepPath: ['step-2'],
-            stepId: 'step-2',
-            status: 'waiting',
-          },
-        ],
-      };
+        activePaths: [],
+        suspendedPaths: {},
+      } as unknown as WorkflowRunState;
 
       await store.persistWorkflowSnapshot({
         workflowName,
@@ -806,6 +746,309 @@ describe('D1Store', () => {
       });
 
       expect(loadedSnapshot).toEqual(complexSnapshot);
+    });
+  });
+
+  describe('getWorkflowRuns', () => {
+    beforeEach(async () => {
+      await store.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+    });
+    it('returns empty array when no workflows exist', async () => {
+      const { runs, total } = await store.getWorkflowRuns();
+      expect(runs).toEqual([]);
+      expect(total).toBe(0);
+    });
+
+    it('returns all workflows by default', async () => {
+      const workflowName1 = 'default_test_1';
+      const workflowName2 = 'default_test_2';
+      const thread = createSampleThread();
+
+      const {
+        snapshot: workflow1,
+        runId: runId1,
+        stepId: stepId1,
+      } = createSampleWorkflowSnapshot(thread.id, 'success');
+      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot(thread.id, 'failed');
+
+      await store.persistWorkflowSnapshot({ workflowName: workflowName1, runId: runId1, snapshot: workflow1 });
+      await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
+      await store.persistWorkflowSnapshot({ workflowName: workflowName2, runId: runId2, snapshot: workflow2 });
+
+      const { runs, total } = await store.getWorkflowRuns();
+      expect(runs).toHaveLength(2);
+      expect(total).toBe(2);
+      expect(runs[0]!.workflowName).toBe(workflowName2); // Most recent first
+      expect(runs[1]!.workflowName).toBe(workflowName1);
+      const firstSnapshot = runs[0]!.snapshot;
+      const secondSnapshot = runs[1]!.snapshot;
+      checkWorkflowSnapshot(firstSnapshot, stepId2, 'failed');
+      checkWorkflowSnapshot(secondSnapshot, stepId1, 'success');
+    });
+
+    it('filters by workflow name', async () => {
+      const workflowName1 = 'filter_test_1';
+      const workflowName2 = 'filter_test_2';
+      const thread = createSampleThread();
+
+      const {
+        snapshot: workflow1,
+        runId: runId1,
+        stepId: stepId1,
+      } = createSampleWorkflowSnapshot(thread.id, 'success');
+      const { snapshot: workflow2, runId: runId2 } = createSampleWorkflowSnapshot(thread.id, 'failed');
+
+      await store.persistWorkflowSnapshot({ workflowName: workflowName1, runId: runId1, snapshot: workflow1 });
+      await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
+      await store.persistWorkflowSnapshot({ workflowName: workflowName2, runId: runId2, snapshot: workflow2 });
+
+      const { runs, total } = await store.getWorkflowRuns({ workflowName: workflowName1 });
+      expect(runs).toHaveLength(1);
+      expect(total).toBe(1);
+      expect(runs[0]!.workflowName).toBe(workflowName1);
+      const snapshot = runs[0]!.snapshot;
+      checkWorkflowSnapshot(snapshot, stepId1, 'success');
+    });
+
+    it('filters by date range', async () => {
+      const now = new Date();
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
+      const workflowName1 = 'date_test_1';
+      const workflowName2 = 'date_test_2';
+      const workflowName3 = 'date_test_3';
+      const thread = createSampleThread();
+
+      const { snapshot: workflow1, runId: runId1 } = createSampleWorkflowSnapshot(thread.id, 'success');
+      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot(thread.id, 'failed');
+      const {
+        snapshot: workflow3,
+        runId: runId3,
+        stepId: stepId3,
+      } = createSampleWorkflowSnapshot(thread.id, 'suspended');
+
+      await store.insert({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        record: {
+          workflow_name: workflowName1,
+          run_id: runId1,
+          snapshot: workflow1,
+          createdAt: twoDaysAgo,
+          updatedAt: twoDaysAgo,
+        },
+      });
+      await store.insert({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        record: {
+          workflow_name: workflowName2,
+          run_id: runId2,
+          snapshot: workflow2,
+          createdAt: yesterday,
+          updatedAt: yesterday,
+        },
+      });
+      await store.insert({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        record: {
+          workflow_name: workflowName3,
+          run_id: runId3,
+          snapshot: workflow3,
+          createdAt: now,
+          updatedAt: now,
+        },
+      });
+
+      const { runs } = await store.getWorkflowRuns({
+        fromDate: yesterday,
+        toDate: now,
+      });
+
+      expect(runs).toHaveLength(2);
+      expect(runs[0]!.workflowName).toBe(workflowName3);
+      expect(runs[1]!.workflowName).toBe(workflowName2);
+      const firstSnapshot = runs[0]!.snapshot;
+      const secondSnapshot = runs[1]!.snapshot;
+      checkWorkflowSnapshot(firstSnapshot, stepId3, 'suspended');
+      checkWorkflowSnapshot(secondSnapshot, stepId2, 'failed');
+    });
+
+    it('handles pagination', async () => {
+      const workflowName1 = 'page_test_1';
+      const workflowName2 = 'page_test_2';
+      const workflowName3 = 'page_test_3';
+      const thread = createSampleThread();
+
+      const {
+        snapshot: workflow1,
+        runId: runId1,
+        stepId: stepId1,
+      } = createSampleWorkflowSnapshot(thread.id, 'success');
+      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot(thread.id, 'failed');
+      const {
+        snapshot: workflow3,
+        runId: runId3,
+        stepId: stepId3,
+      } = createSampleWorkflowSnapshot(thread.id, 'suspended');
+
+      await store.persistWorkflowSnapshot({ workflowName: workflowName1, runId: runId1, snapshot: workflow1 });
+      await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
+      await store.persistWorkflowSnapshot({ workflowName: workflowName2, runId: runId2, snapshot: workflow2 });
+      await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
+      await store.persistWorkflowSnapshot({ workflowName: workflowName3, runId: runId3, snapshot: workflow3 });
+
+      // Get first page
+      const page1 = await store.getWorkflowRuns({ limit: 2, offset: 0 });
+      expect(page1.runs).toHaveLength(2);
+      expect(page1.total).toBe(3); // Total count of all records
+      expect(page1.runs[0]!.workflowName).toBe(workflowName3);
+      expect(page1.runs[1]!.workflowName).toBe(workflowName2);
+      const firstSnapshot = page1.runs[0]!.snapshot;
+      const secondSnapshot = page1.runs[1]!.snapshot;
+      checkWorkflowSnapshot(firstSnapshot, stepId3, 'suspended');
+      checkWorkflowSnapshot(secondSnapshot, stepId2, 'failed');
+
+      // Get second page
+      const page2 = await store.getWorkflowRuns({ limit: 2, offset: 2 });
+      expect(page2.runs).toHaveLength(1);
+      expect(page2.total).toBe(3);
+      expect(page2.runs[0]!.workflowName).toBe(workflowName1);
+      const snapshot = page2.runs[0]!.snapshot;
+      checkWorkflowSnapshot(snapshot, stepId1, 'success');
+    });
+  });
+
+  describe('getWorkflowRunById', () => {
+    const workflowName = 'workflow-id-test';
+    let runId: string;
+    let stepId: string;
+
+    beforeEach(async () => {
+      // Insert a workflow run for positive test
+      const thread = createSampleThread();
+      const sample = createSampleWorkflowSnapshot(thread.id, 'success');
+      runId = sample.runId;
+      stepId = sample.stepId;
+      await store.insert({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        record: {
+          workflow_name: workflowName,
+          run_id: runId,
+          resourceId: 'resource-abc',
+          snapshot: sample.snapshot,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+    });
+
+    it('should retrieve a workflow run by ID', async () => {
+      const found = await store.getWorkflowRunById({
+        runId,
+        workflowName,
+      });
+      expect(found).not.toBeNull();
+      expect(found?.runId).toBe(runId);
+      checkWorkflowSnapshot(found?.snapshot!, stepId, 'success');
+    });
+
+    it('should return null for non-existent workflow run ID', async () => {
+      const notFound = await store.getWorkflowRunById({
+        runId: 'non-existent-id',
+        workflowName,
+      });
+      expect(notFound).toBeNull();
+    });
+  });
+  describe('getWorkflowRuns with resourceId', () => {
+    const workflowName = 'workflow-id-test';
+    let resourceId: string;
+    let runIds: string[] = [];
+
+    beforeEach(async () => {
+      const thread = createSampleThread();
+      // Insert multiple workflow runs for the same resourceId
+      resourceId = 'resource-shared';
+      for (const status of ['success', 'failed']) {
+        const sample = createSampleWorkflowSnapshot(thread.id, status);
+        runIds.push(sample.runId);
+        await store.insert({
+          tableName: TABLE_WORKFLOW_SNAPSHOT,
+          record: {
+            workflow_name: workflowName,
+            run_id: sample.runId,
+            resourceId,
+            snapshot: sample.snapshot,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+      }
+      // Insert a run with a different resourceId
+      const other = createSampleWorkflowSnapshot(thread.id, 'waiting');
+      await store.insert({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        record: {
+          workflow_name: workflowName,
+          run_id: other.runId,
+          resourceId: 'resource-other',
+          snapshot: other.snapshot,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+    });
+
+    it('should retrieve all workflow runs by resourceId', async () => {
+      const { runs } = await store.getWorkflowRuns({
+        resourceId,
+        workflowName,
+      });
+      expect(Array.isArray(runs)).toBe(true);
+      expect(runs.length).toBeGreaterThanOrEqual(2);
+      for (const run of runs) {
+        expect(run.resourceId).toBe(resourceId);
+      }
+    });
+
+    it('should return an empty array if no workflow runs match resourceId', async () => {
+      const { runs } = await store.getWorkflowRuns({
+        resourceId: 'non-existent-resource',
+        workflowName,
+      });
+      expect(Array.isArray(runs)).toBe(true);
+      expect(runs.length).toBe(0);
+    });
+  });
+
+  describe('hasColumn', () => {
+    const tempTable = 'temp_test_table';
+
+    beforeEach(async () => {
+      // Always try to drop the table before each test, ignore errors if it doesn't exist
+      try {
+        await store['executeQuery']({ sql: `DROP TABLE IF EXISTS ${tempTable}` });
+      } catch {
+        /* ignore */
+      }
+    });
+
+    it('returns true if the column exists', async () => {
+      await store['executeQuery']({ sql: `CREATE TABLE ${tempTable} (id SERIAL PRIMARY KEY, resourceId TEXT)` });
+      expect(await store['hasColumn'](tempTable, 'resourceId')).toBe(true);
+    });
+
+    it('returns false if the column does not exist', async () => {
+      await store['executeQuery']({ sql: `CREATE TABLE ${tempTable} (id SERIAL PRIMARY KEY)` });
+      expect(await store['hasColumn'](tempTable, 'resourceId')).toBe(false);
+    });
+
+    afterEach(async () => {
+      // Always try to drop the table after each test, ignore errors if it doesn't exist
+      try {
+        await store['executeQuery']({ sql: `DROP TABLE IF EXISTS ${tempTable}` });
+      } catch {
+        /* ignore */
+      }
     });
   });
 
@@ -826,16 +1069,13 @@ describe('D1Store', () => {
 
     it('should sanitize and handle special characters', async () => {
       const thread = createSampleThread();
-      const message = {
-        ...createSampleMessage(thread.id),
-        content: [{ type: 'text' as const, text: '特殊字符 !@#$%^&*()' }] as MessageType['content'],
-      };
+      const message = createSampleMessage(thread.id, [{ type: 'text' as const, text: '特殊字符 !@#$%^&*()' }]);
 
       await store.saveThread({ thread });
-      await store.saveMessages({ messages: [message] });
+      await store.saveMessages({ messages: [message], format: 'v2' });
 
       // Should retrieve correctly
-      const messages = await store.getMessages({ threadId: thread.id });
+      const messages = await store.getMessages({ threadId: thread.id, format: 'v2' });
       expect(messages).toHaveLength(1);
       expect(messages[0].content).toEqual(message.content);
     });
@@ -854,10 +1094,10 @@ describe('D1Store', () => {
       }));
 
       // Save messages in parallel - write order should be preserved
-      await Promise.all(messages.map(msg => store.saveMessages({ messages: [msg] })));
+      await Promise.all(messages.map(msg => store.saveMessages({ messages: [msg], format: 'v2' })));
 
       // Order should reflect write order, not timestamp order
-      const order = await store.getMessages({ threadId: thread.id });
+      const order = await store.getMessages({ threadId: thread.id, format: 'v2' });
 
       // Verify messages exist in write order
       const orderIds = order.map(m => m.id);
@@ -876,10 +1116,10 @@ describe('D1Store', () => {
       const messages = Array.from({ length: 3 }, () => createSampleMessage(thread.id));
 
       await store.saveThread({ thread });
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
       // Verify messages exist
-      const initialOrder = await store.getMessages({ threadId: thread.id });
+      const initialOrder = await store.getMessages({ threadId: thread.id, format: 'v2' });
       expect(initialOrder).toHaveLength(messages.length);
 
       // Delete thread
@@ -888,7 +1128,7 @@ describe('D1Store', () => {
       await new Promise(resolve => setTimeout(resolve, 5000));
 
       // Verify messages are cleaned up
-      const finalOrder = await store.getMessages({ threadId: thread.id });
+      const finalOrder = await store.getMessages({ threadId: thread.id, format: 'v2' });
       expect(finalOrder).toHaveLength(0);
 
       // Verify thread is gone
@@ -958,6 +1198,7 @@ describe('D1Store', () => {
       await expect(
         store.saveMessages({
           messages: [message],
+          format: 'v2',
         }),
       ).rejects.toThrow();
     });
@@ -967,15 +1208,14 @@ describe('D1Store', () => {
       await store.saveThread({ thread });
 
       // Test with various malformed data
-      const malformedMessage = {
-        ...createSampleMessage(thread.id),
-        content: [{ type: 'text' as const, text: ''.padStart(1024 * 1024, 'x') }] as MessageType['content'], // Very large content
-      };
+      const malformedMessage = createSampleMessage(thread.id, [
+        { type: 'text' as const, text: ''.padStart(1024 * 1024, 'x') },
+      ]);
 
-      await store.saveMessages({ messages: [malformedMessage] });
+      await store.saveMessages({ messages: [malformedMessage], format: 'v2' });
 
       // Should still be able to retrieve and handle the message
-      const messages = await store.getMessages({ threadId: thread.id });
+      const messages = await store.getMessages({ threadId: thread.id, format: 'v2' });
       expect(messages).toHaveLength(1);
       expect(messages[0].id).toBe(malformedMessage.id);
     });

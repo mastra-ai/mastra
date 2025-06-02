@@ -1,0 +1,141 @@
+---
+title: "例：制御フロー | ワークフロー | Mastra ドキュメント"
+description: 提供された条件に基づいてループを持つワークフローを作成するためにMastraを使用する例。
+---
+
+# ステップ実行のループ処理
+
+## セットアップ
+
+```sh copy
+npm install @ai-sdk/openai @mastra/core
+```
+
+## ループ実行ワークフローの定義
+
+提供された条件が満たされるまでネストされたワークフローを実行するワークフローを定義します。
+
+```ts showLineNumbers copy filename="looping-workflow.ts"
+import { createWorkflow, createStep } from "@mastra/core/workflows/vNext";
+import { z } from "zod";
+
+// Step that increments the input value by 1
+const incrementStep = createStep({
+  id: "increment",
+  inputSchema: z.object({
+    value: z.number(),
+  }),
+  outputSchema: z.object({
+    value: z.number(),
+  }),
+  execute: async ({ inputData }) => {
+    return { value: inputData.value + 1 };
+  },
+});
+
+// Step that logs the current value (side effect)
+const sideEffectStep = createStep({
+  id: "side-effect",
+  inputSchema: z.object({
+    value: z.number(),
+  }),
+  outputSchema: z.object({
+    value: z.number(),
+  }),
+  execute: async ({ inputData }) => {
+    console.log("log", inputData.value);
+    return { value: inputData.value };
+  },
+});
+
+// Final step that returns the final value
+const finalStep = createStep({
+  id: "final",
+  inputSchema: z.object({
+    value: z.number(),
+  }),
+  outputSchema: z.object({
+    value: z.number(),
+  }),
+  execute: async ({ inputData }) => {
+    return { value: inputData.value };
+  },
+});
+
+// Create a workflow that:
+// 1. Increments a number until it reaches 10
+// 2. Logs each increment (side effect)
+// 3. Returns the final value
+const workflow = createWorkflow({
+  id: "increment-workflow",
+  inputSchema: z.object({
+    value: z.number(),
+  }),
+  outputSchema: z.object({
+    value: z.number(),
+  }),
+})
+  .dountil(
+    // Nested workflow that performs the increment and logging
+    createWorkflow({
+      id: "increment-workflow",
+      inputSchema: z.object({
+        value: z.number(),
+      }),
+      outputSchema: z.object({
+        value: z.number(),
+      }),
+      steps: [incrementStep, sideEffectStep],
+    })
+      .then(incrementStep)
+      .then(sideEffectStep)
+      .commit(),
+    // Condition to check if we should stop the loop
+    async ({ inputData }) => inputData.value >= 10,
+  )
+  .then(finalStep);
+
+workflow.commit();
+
+export { workflow as incrementWorkflow };
+```
+
+## MastraクラスでWorkflowインスタンスを登録する
+
+ワークフローをmastraインスタンスに登録します。
+
+```ts showLineNumbers copy filename="index.ts"
+import { Mastra } from "@mastra/core/mastra";
+import { PinoLogger } from "@mastra/loggers";
+import { incrementWorkflow } from "./workflows";
+
+// Initialize Mastra with the increment workflow
+// This enables the workflow to be executed
+const mastra = new Mastra({
+  vnext_workflows: {
+    incrementWorkflow,
+  },
+  logger: new PinoLogger({
+    name: "Mastra",
+    level: "info",
+  }),
+});
+
+export { mastra };
+```
+
+## ワークフローを実行する
+
+ここでは、mastraインスタンスからインクリメントワークフローを取得し、実行を作成して、必要なinputDataで作成した実行を実行します。
+
+```ts showLineNumbers copy filename="exec.ts"
+import { mastra } from "./";
+
+const workflow = mastra.vnext_getWorkflow("incrementWorkflow");
+const run = workflow.createRun();
+
+// Start the workflow with initial value 0
+// This will increment until reaching 10
+const result = await run.start({ inputData: { value: 0 } });
+console.dir(result, { depth: null });
+```

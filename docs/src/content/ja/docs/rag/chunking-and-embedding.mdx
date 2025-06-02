@@ -1,11 +1,11 @@
 ---
-title: ドキュメントのチャンク化と埋め込み | RAG | Mastra ドキュメント
-description: 効率的な処理と取得のためのMastraにおけるドキュメントのチャンク化と埋め込みに関するガイド。
+title: 文書のチャンキングと埋め込み | RAG | Mastra ドキュメント
+description: Mastraでの効率的な処理と検索のための文書のチャンキングと埋め込みに関するガイド。
 ---
 
 ## ドキュメントのチャンク化と埋め込み
 
-処理の前に、コンテンツからMDocumentインスタンスを作成します。さまざまな形式から初期化できます：
+処理を行う前に、コンテンツからMDocumentインスタンスを作成します。様々な形式から初期化することができます：
 
 ```ts showLineNumbers copy
 const docFromText = MDocument.fromText("Your plain text content...");
@@ -14,19 +14,19 @@ const docFromMarkdown = MDocument.fromMarkdown("# Your Markdown content...");
 const docFromJSON = MDocument.fromJSON(`{ "key": "value" }`);
 ```
 
-## ステップ 1: ドキュメント処理
+## ステップ1：ドキュメント処理
 
-`chunk` を使用して、ドキュメントを管理しやすい部分に分割します。Mastra は、異なるドキュメントタイプに最適化された複数のチャンク戦略をサポートしています:
+`chunk`を使用してドキュメントを管理しやすい部分に分割します。Mastraは異なるドキュメントタイプに最適化された複数のチャンキング戦略をサポートしています：
 
-- `recursive`: コンテンツ構造に基づくスマートな分割
-- `character`: 単純な文字ベースの分割
-- `token`: トークン認識の分割
-- `markdown`: Markdown 認識の分割
-- `html`: HTML 構造認識の分割
-- `json`: JSON 構造認識の分割
-- `latex`: LaTeX 構造認識の分割
+- `recursive`：コンテンツ構造に基づくスマートな分割
+- `character`：シンプルな文字ベースの分割
+- `token`：トークンを考慮した分割
+- `markdown`：Markdownを考慮した分割
+- `html`：HTML構造を考慮した分割
+- `json`：JSON構造を考慮した分割
+- `latex`：LaTeX構造を考慮した分割
 
-以下は、`recursive` 戦略を使用する例です:
+以下は`recursive`戦略を使用する例です：
 
 ```ts showLineNumbers copy
 const chunks = await doc.chunk({
@@ -40,72 +40,79 @@ const chunks = await doc.chunk({
 });
 ```
 
-**注意:** メタデータの抽出には LLM コールが使用される場合があるため、API キーが設定されていることを確認してください。
+**注意：** メタデータ抽出にはLLM呼び出しが使用される場合があるため、APIキーが設定されていることを確認してください。
 
-チャンク戦略については、[チャンクドキュメント](/reference/rag/chunk.mdx)で詳しく説明しています。
+チャンキング戦略についての詳細は[チャンクドキュメント](/reference/rag/chunk.mdx)で説明しています。
 
 ## ステップ 2: 埋め込み生成
 
-お好みのプロバイダーを使用してチャンクを埋め込みに変換します。Mastraは、OpenAIやCohereを含む多くの埋め込みプロバイダーをサポートしています。
+チャンクをお好みのプロバイダーを使って埋め込みに変換します。Mastra は OpenAI や Cohere など、多くの埋め込みプロバイダーをサポートしています。
 
-### OpenAIを使用する
+### OpenAI を使う場合
 
 ```ts showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { embedMany } from "ai";
 
 const { embeddings } = await embedMany({
-  model: openai.embedding('text-embedding-3-small'),
-  values: chunks.map(chunk => chunk.text),
+  model: openai.embedding("text-embedding-3-small"),
+  values: chunks.map((chunk) => chunk.text),
 });
 ```
 
-### Cohereを使用する
+### Cohere を使う場合
 
 ```ts showLineNumbers copy
-import { cohere } from '@ai-sdk/cohere';
-import { embedMany } from 'ai';
+import { cohere } from "@ai-sdk/cohere";
+import { embedMany } from "ai";
 
 const { embeddings } = await embedMany({
-  model: cohere.embedding('embed-english-v3.0'),
-  values: chunks.map(chunk => chunk.text),
+  model: cohere.embedding("embed-english-v3.0"),
+  values: chunks.map((chunk) => chunk.text),
 });
 ```
 
-埋め込み関数はベクトルを返します。これは、テキストの意味を表す数値の配列であり、ベクトルデータベースでの類似性検索に準備が整っています。
+埋め込み関数は、テキストの意味的な内容を表す数値の配列（ベクトル）を返します。これらはベクトルデータベースでの類似検索にすぐに利用できます。
 
-### 埋め込み次元の設定
+### 埋め込み次元数の設定
 
-埋め込みモデルは通常、固定された次元数（例: OpenAIの`text-embedding-3-small`では1536）のベクトルを出力します。
-一部のモデルはこの次元数を減らすことをサポートしており、以下の利点があります:
-- ベクトルデータベースでのストレージ要件を減少させる
-- 類似性検索の計算コストを削減する
+埋め込みモデルは通常、固定された次元数（例: OpenAI の `text-embedding-3-small` なら 1536）のベクトルを出力します。
+一部のモデルではこの次元数を減らすことができ、以下のような利点があります:
 
-サポートされているモデルの例を以下に示します:
+- ベクトルデータベースでの保存容量を削減できる
+- 類似検索時の計算コストを抑えられる
 
-OpenAI (text-embedding-3モデル):
-  ```ts
-  const { embeddings } = await embedMany({
-    model: openai.embedding('text-embedding-3-small', {
-      dimensions: 256  // text-embedding-3以降でのみサポート
-    }),
-    values: chunks.map(chunk => chunk.text),
-  });
-  ```
+以下はサポートされているモデルの例です:
 
-Google (text-embedding-004):
-  ```ts
-  const { embeddings } = await embedMany({
-    model: google.textEmbeddingModel('text-embedding-004', {
-      outputDimensionality: 256  // 末尾から過剰な値を切り捨て
-    }),
-    values: chunks.map(chunk => chunk.text),
-  });
-  ```
+OpenAI（text-embedding-3 モデル）:
 
-## 例: 完全なパイプライン
+```ts
+const { embeddings } = await embedMany({
+  model: openai.embedding("text-embedding-3-small", {
+    dimensions: 256, // text-embedding-3 以降でのみサポート
+  }),
+  values: chunks.map((chunk) => chunk.text),
+});
+```
 
-こちらは、両方のプロバイダーを使用したドキュメント処理と埋め込み生成の例です:
+Google（text-embedding-004）:
+
+```ts
+const { embeddings } = await embedMany({
+  model: google.textEmbeddingModel("text-embedding-004", {
+    outputDimensionality: 256, // 末尾から余分な値を切り捨てます
+  }),
+  values: chunks.map((chunk) => chunk.text),
+});
+```
+
+### ベクトルデータベースの互換性
+
+埋め込みを保存する際は、ベクトルデータベースのインデックスが埋め込みモデルの出力サイズと一致するように設定する必要があります。次元数が一致しない場合、エラーやデータの破損が発生することがあります。
+
+## 例：完全なパイプライン
+
+以下は、両方のプロバイダーを使用したドキュメント処理と埋め込み生成の例です：
 
 ```ts showLineNumbers copy
 import { embedMany } from "ai";
@@ -129,16 +136,16 @@ const chunks = await doc.chunk({
 
 // Generate embeddings with OpenAI
 const { embeddings: openAIEmbeddings } = await embedMany({
-  model: openai.embedding('text-embedding-3-small'),
-  values: chunks.map(chunk => chunk.text),
+  model: openai.embedding("text-embedding-3-small"),
+  values: chunks.map((chunk) => chunk.text),
 });
 
 // OR
 
 // Generate embeddings with Cohere
 const { embeddings: cohereEmbeddings } = await embedMany({
-  model: cohere.embedding('embed-english-v3.0'),
-  values: chunks.map(chunk => chunk.text),
+  model: cohere.embedding("embed-english-v3.0"),
+  values: chunks.map((chunk) => chunk.text),
 });
 
 // Store embeddings in your vector database
@@ -149,8 +156,14 @@ await vectorStore.upsert({
 ```
 
 ##
-さまざまなチャンク戦略と埋め込み構成の例については、以下を参照してください：
+
+異なるチャンキング戦略と埋め込み設定の例については、以下を参照してください：
 
 - [チャンクサイズの調整](/reference/rag/chunk.mdx#adjust-chunk-size)
-- [チャンク区切りの調整](/reference/rag/chunk.mdx#adjust-chunk-delimiters)
+- [チャンク区切り文字の調整](/reference/rag/chunk.mdx#adjust-chunk-delimiters)
 - [Cohereを使用したテキストの埋め込み](/reference/rag/embeddings.mdx#using-cohere)
+
+ベクトルデータベースと埋め込みの詳細については、以下を参照してください：
+
+- [ベクトルデータベース](./vector-databases.mdx)
+- [埋め込みAPIリファレンス](/reference/rag/embeddings.mdx)
