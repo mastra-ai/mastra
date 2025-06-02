@@ -729,8 +729,10 @@ const myPromptHandlers: MCPServerPrompts = {
   getPromptMessages: async ({ name, version, args }) => {
     if (name === "analyze-code") {
       if (version === "v2") {
+        const prompt = prompts.find(p => p.name === name && p.version === "v2");
+        if (!prompt) throw new Error("Prompt version not found");
         return {
-          prompt: prompts.find(p => p.name === name && p.version === "v2"),
+          prompt,
           messages: [
             {
               role: "user",
@@ -740,8 +742,10 @@ const myPromptHandlers: MCPServerPrompts = {
         };
       }
       // Default or v1
+      const prompt = prompts.find(p => p.name === name && p.version === "v1");
+      if (!prompt) throw new Error("Prompt version not found");
       return {
-        prompt: prompts.find(p => p.name === name && p.version === "v1"),
+        prompt,
         messages: [
           {
             role: "user",
