@@ -12,8 +12,8 @@ Model providers are used to interact with different language models.
 [Vercel's AI SDK](https://sdk.vercel.ai) is one of the most popular Typescript AI libraries.
 The AI SDK offers model routing (a unified interface on top of OpenAI, Anthropic, etc), structured output, and tool calling.
 
-Mastra is built on top of the AI SDK to help teams build their proof-of-concepts into production-ready apps.
-When creating agents in Mastra, you plug in any AI SDK-compatible model provider.
+Mastra is compatible with the AI SDK to help teams build their proof-of-concepts into production-ready apps.
+When creating agents in Mastra, you can use any AI SDK-compatible model provider.
 
 Here's a minimal example of an agent using the OpenAI provider from the AI SDK:
 
@@ -135,7 +135,7 @@ Here are some examples of how Mastra agents can be configured to use the differe
     Following this specification, you can create your own model provider compatible with the AI SDK.
 
     Some community providers have implemented this specification and are compatible with the AI SDK.
-    We will look at one such provider, the Ollama provider available in the `ollama-ai-provider` package.
+    We will look at one such provider, the Ollama provider available in the [`ollama-ai-provider`](https://github.com/sgomez/ollama-ai-provider) package.
 
     Here's an example:
 
