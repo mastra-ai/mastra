@@ -260,7 +260,7 @@ export class MastraClient extends BaseResource {
    * Retrieves all available networks
    * @returns Promise containing map of network IDs to network details
    */
-  public getNetworks(): Promise<Record<string, GetNetworkResponse>> {
+  public getNetworks(): Promise<Array<GetNetworkResponse>> {
     return this.request('/api/networks');
   }
 
@@ -268,7 +268,7 @@ export class MastraClient extends BaseResource {
    * Retrieves all available vNext networks
    * @returns Promise containing map of vNext network IDs to vNext network details
    */
-  public getVNextNetworks(): Promise<Record<string, GetVNextNetworkResponse>> {
+  public getVNextNetworks(): Promise<Array<GetVNextNetworkResponse>> {
     return this.request('/api/networks/v-next');
   }
 

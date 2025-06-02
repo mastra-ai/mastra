@@ -1,19 +1,27 @@
 import { Mastra } from '@mastra/core';
 import { PinoLogger } from '@mastra/loggers';
-import { researchNetwork } from './network';
+// import { researchNetwork } from './network';
 import { webSearchAgent } from './agents';
-import { agentWorkflow } from './workflows';
+// import { agentWorkflow } from './workflows';
+import { v_nextNetwork } from './network/v-next';
+import { LibSQLStore } from '@mastra/libsql';
 
 export const mastra = new Mastra({
   agents: {
     webSearchAgent,
   },
-  networks: {
-    researchNetwork,
+  // networks: {
+  //   researchNetwork,
+  // },
+  vnext_networks: {
+    v_nextNetwork,
   },
-  workflows: {
-    agentWorkflow,
-  },
+  storage: new LibSQLStore({
+    url: 'file:../mastra.db', // Or your database URL
+  }),
+  // workflows: {
+  //   agentWorkflow,
+  // },
   logger: new PinoLogger({ name: 'Chef', level: 'info' }),
   serverMiddleware: [
     {
