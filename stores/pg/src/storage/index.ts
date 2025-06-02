@@ -608,7 +608,6 @@ export class PostgresStore extends MastraStorage {
               *,
               ROW_NUMBER() OVER (ORDER BY "createdAt" DESC) as row_num
             FROM ${this.getTableName(TABLE_MESSAGES)}
-            WHERE thread_id = $1
           )
           SELECT
             m.id, 
@@ -618,22 +617,21 @@ export class PostgresStore extends MastraStorage {
             m."createdAt", 
             m.thread_id AS "threadId"
           FROM ordered_messages m
-          WHERE m.id = ANY($2)
+          WHERE m.id = ANY($1)
           OR EXISTS (
             SELECT 1 FROM ordered_messages target
-            WHERE target.id = ANY($2)
+            WHERE target.id = ANY($1)
             AND (
               -- Get previous messages based on the max withPreviousMessages
-              (m.row_num <= target.row_num + $3 AND m.row_num > target.row_num)
+              (m.row_num <= target.row_num + $2 AND m.row_num > target.row_num)
               OR
               -- Get next messages based on the max withNextMessages
-              (m.row_num >= target.row_num - $4 AND m.row_num < target.row_num)
+              (m.row_num >= target.row_num - $3 AND m.row_num < target.row_num)
             )
           )
           ORDER BY m."createdAt" DESC
           `,
           [
-            threadId,
             include.map(i => i.id),
             Math.max(...include.map(i => i.withPreviousMessages || 0)),
             Math.max(...include.map(i => i.withNextMessages || 0)),
