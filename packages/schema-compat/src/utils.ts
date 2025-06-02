@@ -109,6 +109,36 @@ export function convertSchemaToZod(schema: Schema | z.ZodSchema): z.ZodType {
 }
 
 /**
+ * Processes a schema using provider compatibility layers and converts it to an AI SDK Schema.
+ *
+ * @param options - Configuration object for schema processing
+ * @param options.schema - The schema to process (AI SDK Schema or Zod object schema)
+ * @param options.compatLayers - Array of compatibility layers to try
+ * @param options.mode - Must be 'aiSdkSchema'
+ * @returns Processed schema as an AI SDK Schema
+ */
+export function applyCompatLayer(options: {
+  schema: Schema | z.AnyZodObject;
+  compatLayers: SchemaCompatLayer[];
+  mode: 'aiSdkSchema';
+}): Schema;
+
+/**
+ * Processes a schema using provider compatibility layers and converts it to a JSON Schema.
+ *
+ * @param options - Configuration object for schema processing
+ * @param options.schema - The schema to process (AI SDK Schema or Zod object schema)
+ * @param options.compatLayers - Array of compatibility layers to try
+ * @param options.mode - Must be 'jsonSchema'
+ * @returns Processed schema as a JSONSchema7
+ */
+export function applyCompatLayer(options: {
+  schema: Schema | z.AnyZodObject;
+  compatLayers: SchemaCompatLayer[];
+  mode: 'jsonSchema';
+}): JSONSchema7;
+
+/**
  * Processes a schema using provider compatibility layers and converts it to the specified format.
  *
  * This function automatically applies the first matching compatibility layer from the provided
