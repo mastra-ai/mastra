@@ -346,6 +346,63 @@ export class NewAgentNetwork extends MastraBase {
     return result;
   }
 
+  async loopStream(
+    message: string,
+    {
+      runtimeContext,
+      maxIterations,
+    }: {
+      runtimeContext?: RuntimeContext;
+      maxIterations?: number;
+    },
+  ) {
+    const networkWorkflow = this.createWorkflow({ runtimeContext });
+
+    const finalStep = createStep({
+      id: 'final-step',
+      inputSchema: networkWorkflow.outputSchema,
+      outputSchema: networkWorkflow.outputSchema,
+      execute: async ({ inputData }) => {
+        if (maxIterations && inputData.iteration >= maxIterations) {
+          return {
+            ...inputData,
+            completionReason: `Max iterations reached: ${maxIterations}`,
+          };
+        }
+
+        return inputData;
+      },
+    });
+
+    const mainWorkflow = createWorkflow({
+      id: 'Agent-Network-Main-Workflow',
+      inputSchema: z.object({
+        iteration: z.number(),
+        task: z.string(),
+        resourceType: RESOURCE_TYPES,
+      }),
+      outputSchema: z.object({
+        text: z.string(),
+        iteration: z.number(),
+      }),
+    })
+      .dountil(networkWorkflow, async ({ inputData }) => {
+        return inputData.isComplete || (maxIterations && inputData.iteration >= maxIterations);
+      })
+      .then(finalStep)
+      .commit();
+
+    const run = mainWorkflow.createRun();
+
+    return run.stream({
+      inputData: {
+        task: message,
+        resourceType: 'none',
+        iteration: 0,
+      },
+    });
+  }
+
   createWorkflow({ runtimeContext }: { runtimeContext?: RuntimeContext }) {
     const runId = randomUUID();
 
