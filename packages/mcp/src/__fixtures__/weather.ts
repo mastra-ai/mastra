@@ -4,7 +4,7 @@ import { createTool } from '@mastra/core';
 import type { Resource, ResourceTemplate } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { MCPServer } from '../server/server';
-import type { MCPServerResources, MCPServerResourceContent } from '../server/server';
+import type { MCPServerResources, MCPServerResourceContent } from '../server/types';
 
 const getWeather = async (location: string) => {
   // Return mock data for testing
