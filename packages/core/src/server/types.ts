@@ -3,6 +3,7 @@ import type { cors } from 'hono/cors';
 import type { DescribeRouteOptions } from 'hono-openapi';
 import type { Mastra } from '../mastra';
 import type { RuntimeContext } from '../runtime-context';
+import type { MastraAuthProvider } from './auth';
 
 export type Methods = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'ALL';
 
@@ -132,5 +133,5 @@ export type ServerConfig = {
   /**
    * Authentication configuration for the server
    */
-  experimental_auth?: MastraAuthConfig<any>;
+  experimental_auth?: MastraAuthConfig<any> | MastraAuthProvider<any>;
 };
