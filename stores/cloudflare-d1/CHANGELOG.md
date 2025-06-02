@@ -1,5 +1,14 @@
 # @mastra/cloudflare-d1
 
+## 0.10.1-alpha.2
+
+### Patch Changes
+
+- c5bf1ce: Add backwards compat code for new MessageList in storage
+- Updated dependencies [c5bf1ce]
+- Updated dependencies [12b7002]
+  - @mastra/core@0.10.2-alpha.4
+
 ## 0.10.1-alpha.1
 
 ### Patch Changes
