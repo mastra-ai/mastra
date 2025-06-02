@@ -148,7 +148,7 @@ export abstract class MastraStorage extends MastraBase {
 
     await this.hasInitialized;
 
-    await this.alterTable({
+    await this?.alterTable?.({
       tableName: TABLE_MESSAGES,
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
       ifNotExists: ['resourceId'],
