@@ -1,10 +1,10 @@
 import type { LanguageModelV1 } from 'ai';
 import type { z } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
-import { SchemaCompatibility, UNSUPPORTED_ZOD_TYPES } from '../schema-compatibility';
+import { SchemaCompatLayer, UNSUPPORTED_ZOD_TYPES } from '../schema-compatibility';
 import type { ShapeValue } from '../schema-compatibility';
 
-export class GoogleSchemaCompat extends SchemaCompatibility {
+export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
   constructor(model: LanguageModelV1) {
     super(model);
   }

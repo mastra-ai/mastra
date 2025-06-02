@@ -1,8 +1,8 @@
 import type { Schema, LanguageModelV1 } from 'ai';
+import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
 import { convertZodSchemaToAISDKSchema } from './utils';
-import { JSONSchema7 } from 'json-schema';
 
 /**
  * All supported string validation check types that can be processed or converted to descriptions.
@@ -142,10 +142,10 @@ type DateConstraints = {
  *
  * @example
  * ```typescript
- * import { SchemaCompatibility } from '@mastra/schema';
+ * import { SchemaCompatLayer } from '@mastra/schema-compat';
  * import type { LanguageModelV1 } from 'ai';
  *
- * class CustomProviderCompat extends SchemaCompatibility {
+ * class CustomProviderCompat extends SchemaCompatLayer {
  *   constructor(model: LanguageModelV1) {
  *     super(model);
  *   }
@@ -170,7 +170,7 @@ type DateConstraints = {
  * }
  * ```
  */
-export abstract class SchemaCompatibility {
+export abstract class SchemaCompatLayer {
   private model: LanguageModelV1;
 
   /**

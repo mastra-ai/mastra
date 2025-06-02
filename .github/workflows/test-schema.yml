@@ -29,8 +29,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Build @mastra/schema
+      - name: Build @mastra/schema-compat
         run: pnpm turbo --filter="./packages/schema" build
 
       - name: Run Schema tests
-        run: pnpm run test:schema
+        run: pnpm run test:schema-compat

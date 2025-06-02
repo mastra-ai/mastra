@@ -1,10 +1,10 @@
 import type { LanguageModelV1 } from 'ai';
 import type { z } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
-import { SchemaCompatibility } from '../schema-compatibility';
+import { SchemaCompatLayer } from '../schema-compatibility';
 import type { ShapeValue } from '../schema-compatibility';
 
-export class DeepSeekSchemaCompat extends SchemaCompatibility {
+export class DeepSeekSchemaCompatLayer extends SchemaCompatLayer {
   constructor(model: LanguageModelV1) {
     super(model);
   }

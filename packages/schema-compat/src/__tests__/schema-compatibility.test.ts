@@ -1,10 +1,10 @@
-import { z } from 'zod';
-import { describe, it, expect, beforeEach } from 'vitest';
 import type { LanguageModelV1 } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
-import { SchemaCompatibility } from '../schema-compatibility';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { z } from 'zod';
+import { SchemaCompatLayer } from '../schema-compatibility';
 
-class MockSchemaCompatibility extends SchemaCompatibility {
+class MockSchemaCompatibility extends SchemaCompatLayer {
   constructor(model: LanguageModelV1) {
     super(model);
   }
@@ -27,7 +27,7 @@ const mockModel = new MockLanguageModelV1({
   defaultObjectGenerationMode: 'json',
 });
 
-describe('SchemaCompatibility', () => {
+describe('SchemaCompatLayer', () => {
   let compatibility: MockSchemaCompatibility;
 
   beforeEach(() => {

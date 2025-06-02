@@ -1,12 +1,12 @@
 import {
-  processSchema,
-  OpenAIReasoningSchemaCompat,
-  OpenAISchemaCompat,
-  GoogleSchemaCompat,
-  AnthropicSchemaCompat,
-  DeepSeekSchemaCompat,
-  MetaSchemaCompat,
-} from '@mastra/schema';
+  applyCompatLayer,
+  OpenAIReasoningSchemaCompatLayer,
+  OpenAISchemaCompatLayer,
+  GoogleSchemaCompatLayer,
+  AnthropicSchemaCompatLayer,
+  DeepSeekSchemaCompatLayer,
+  MetaSchemaCompatLayer,
+} from '@mastra/schema-compat';
 import type { ToolExecutionOptions } from 'ai';
 import { z } from 'zod';
 import { MastraBase } from '../../base';
@@ -64,7 +64,7 @@ export class CoreToolBuilder extends MastraBase {
         id: tool.id,
         args: ('args' in this.originalTool ? this.originalTool.args : {}) as Record<string, unknown>,
         description: tool.description,
-        parameters: processSchema({ schema: this.getParameters(), compatibilities: [], mode: 'aiSdkSchema' }),
+        parameters: applyCompatLayer({ schema: this.getParameters(), compatLayers: [], mode: 'aiSdkSchema' }),
         execute: this.originalTool.execute
           ? this.createExecute(
               this.originalTool,
@@ -159,24 +159,25 @@ export class CoreToolBuilder extends MastraBase {
 
     const model = this.options.model;
 
-    const schemaCompatibilities = [
-      new OpenAIReasoningSchemaCompat(model),
-      new OpenAISchemaCompat(model),
-      new GoogleSchemaCompat(model),
-      new AnthropicSchemaCompat(model),
-      new DeepSeekSchemaCompat(model),
-      new MetaSchemaCompat(model),
-    ];
+    if (model) {
+      const schemaCompatLayers = [
+        new OpenAIReasoningSchemaCompatLayer(model),
+        new OpenAISchemaCompatLayer(model),
+        new GoogleSchemaCompatLayer(model),
+        new AnthropicSchemaCompatLayer(model),
+        new DeepSeekSchemaCompatLayer(model),
+        new MetaSchemaCompatLayer(model),
+      ];
 
-    const processedSchema = processSchema({
-      schema: this.getParameters(),
-      compatibilities: schemaCompatibilities,
-      mode: 'aiSdkSchema',
-    });
+      const processedSchema = applyCompatLayer({
+        schema: this.getParameters(),
+        compatLayers: schemaCompatLayers,
+        mode: 'aiSdkSchema',
+      });
 
-    return {
-      ...definition,
-      parameters: processedSchema,
-    };
+      definition.parameters = processedSchema;
+    }
+
+    return definition;
   }
 }

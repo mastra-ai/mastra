@@ -1,17 +1,17 @@
-import { z } from 'zod';
-import { describe, it, expect, beforeEach } from 'vitest';
 import { jsonSchema } from 'ai';
 import type { LanguageModelV1, Schema } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
-import { convertZodSchemaToAISDKSchema, convertSchemaToZod, processSchema } from '../utils';
-import { SchemaCompatibility } from '../schema-compatibility';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { z } from 'zod';
+import { SchemaCompatLayer } from '../schema-compatibility';
+import { convertZodSchemaToAISDKSchema, convertSchemaToZod, applyCompatLayer } from '../utils';
 
 const mockModel = new MockLanguageModelV1({
   modelId: 'test-model',
   defaultObjectGenerationMode: 'json',
 });
 
-class MockSchemaCompatibility extends SchemaCompatibility {
+class MockSchemaCompatibility extends SchemaCompatLayer {
   constructor(
     model: LanguageModelV1,
     private shouldApplyValue: boolean = true,
@@ -160,7 +160,7 @@ describe('Builder Functions', () => {
     });
   });
 
-  describe('processSchema', () => {
+  describe('applyCompatLayer', () => {
     let mockCompatibility: MockSchemaCompatibility;
 
     beforeEach(() => {
@@ -173,9 +173,9 @@ describe('Builder Functions', () => {
         age: z.number(),
       });
 
-      const result = processSchema({
+      const result = applyCompatLayer({
         schema: zodSchema,
-        compatibilities: [mockCompatibility],
+        compatLayers: [mockCompatibility],
         mode: 'aiSdkSchema',
       });
 
@@ -191,9 +191,9 @@ describe('Builder Functions', () => {
         },
       });
 
-      const result = processSchema({
+      const result = applyCompatLayer({
         schema: aiSchema,
-        compatibilities: [mockCompatibility],
+        compatLayers: [mockCompatibility],
         mode: 'jsonSchema',
       });
 
@@ -204,9 +204,9 @@ describe('Builder Functions', () => {
     it('should wrap non-object Zod schemas', () => {
       const stringSchema = z.object({ value: z.string() });
 
-      const result = processSchema({
+      const result = applyCompatLayer({
         schema: stringSchema,
-        compatibilities: [mockCompatibility],
+        compatLayers: [mockCompatibility],
         mode: 'aiSdkSchema',
       });
 
@@ -219,9 +219,9 @@ describe('Builder Functions', () => {
         name: z.string(),
       });
 
-      const result = processSchema({
+      const result = applyCompatLayer({
         schema: zodSchema,
-        compatibilities: [mockCompatibility],
+        compatLayers: [mockCompatibility],
         mode: 'aiSdkSchema',
       });
 
@@ -235,9 +235,9 @@ describe('Builder Functions', () => {
         name: z.string(),
       });
 
-      const result = processSchema({
+      const result = applyCompatLayer({
         schema: zodSchema,
-        compatibilities: [nonApplyingCompatibility],
+        compatLayers: [nonApplyingCompatibility],
         mode: 'aiSdkSchema',
       });
 
@@ -250,9 +250,9 @@ describe('Builder Functions', () => {
         name: z.string(),
       });
 
-      const result = processSchema({
+      const result = applyCompatLayer({
         schema: zodSchema,
-        compatibilities: [mockCompatibility],
+        compatLayers: [mockCompatibility],
         mode: 'jsonSchema',
       });
 
@@ -260,14 +260,14 @@ describe('Builder Functions', () => {
       expect(result).toHaveProperty('type');
     });
 
-    it('should handle empty compatibilities array', () => {
+    it('should handle empty compatLayers array', () => {
       const zodSchema = z.object({
         name: z.string(),
       });
 
-      const result = processSchema({
+      const result = applyCompatLayer({
         schema: zodSchema,
-        compatibilities: [],
+        compatLayers: [],
         mode: 'aiSdkSchema',
       });
 
@@ -278,9 +278,9 @@ describe('Builder Functions', () => {
     it('should convert non-object AI SDK schema correctly', () => {
       const stringSchema: Schema = jsonSchema({ type: 'string' });
 
-      const result = processSchema({
+      const result = applyCompatLayer({
         schema: stringSchema,
-        compatibilities: [mockCompatibility],
+        compatLayers: [mockCompatibility],
         mode: 'aiSdkSchema',
       });
 
@@ -288,7 +288,7 @@ describe('Builder Functions', () => {
       expect(result).toHaveProperty('validate');
     });
 
-    it('should handle complex schema with multiple compatibilities', () => {
+    it('should handle complex schema with multiple compatLayers', () => {
       const compat1 = new MockSchemaCompatibility(mockModel, false);
       const compat2 = new MockSchemaCompatibility(mockModel, true);
 
@@ -300,9 +300,9 @@ describe('Builder Functions', () => {
         }),
       });
 
-      const result = processSchema({
+      const result = applyCompatLayer({
         schema: zodSchema,
-        compatibilities: [compat1, compat2], // First one doesn't apply, second one does
+        compatLayers: [compat1, compat2], // First one doesn't apply, second one does
         mode: 'aiSdkSchema',
       });
 

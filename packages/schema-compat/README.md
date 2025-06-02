@@ -1,24 +1,24 @@
-# @mastra/schema
+# @mastra/schema-compat
 
 Schema compatibility layer for Mastra.ai that provides compatibility fixes for different AI model providers when using Zod schemas with tools.
 
 ## Installation
 
 ```bash
-pnpm add @mastra/schema
+pnpm add @mastra/schema-compat
 ```
 
 ## Usage
 
 ### Basic Usage
 
-The package provides a base `SchemaCompatibility` class that you can extend to create custom compatibility layers for different AI model providers:
+The package provides a base `SchemaCompatLayer` class that you can extend to create custom compatibility layers for different AI model providers:
 
 ```typescript
-import { SchemaCompatibility } from '@mastra/schema';
+import { SchemaCompatLayer } from '@mastra/schema-compat';
 import type { LanguageModelV1 } from 'ai';
 
-class MyCustomCompat extends SchemaCompatibility {
+class MyCustomCompat extends SchemaCompatLayer {
   constructor(model: LanguageModelV1) {
     super(model);
   }
@@ -42,10 +42,10 @@ class MyCustomCompat extends SchemaCompatibility {
 
 The package includes pre-built compatibility layers for popular AI providers:
 
-Use the `processSchema` function to automatically apply the right compatibility layer:
+Use the `applyCompatLayer` function to automatically apply the right compatibility layer:
 
 ```typescript
-import { processSchema, OpenAISchemaCompat, AnthropicSchemaCompat } from '@mastra/schema';
+import { applyCompatLayer, OpenAISchemaCompatLayer, AnthropicSchemaCompatLayer } from '@mastra/schema-compat';
 import { yourCustomCompatibilityLayer } from "./customComatibilityLayer"
 import { z } from 'zod';
 
@@ -54,16 +54,16 @@ const schema = z.object({
   preferences: z.array(z.string()).min(1)
 });
 
-const compatibilities = [
-  new OpenAISchemaCompat(model),
-  new AnthropicSchemaCompat(model)
+const compatLayers = [
+  new OpenAISchemaCompatLayer(model),
+  new AnthropicSchemaCompatLayer(model)
   new yourCustomCompatibilityLayer(model)
 ];
 
 // Automatically applies the first matching compatibility
-const result = processSchema({
+const result = applyCompatLayer({
   schema,
-  compatibilities,
+  compatLayers,
   mode: 'aiSdkSchema' // or 'jsonSchema'
 });
 ```
@@ -73,7 +73,7 @@ const result = processSchema({
 The package also provides utility functions for schema conversion:
 
 ```typescript
-import { convertZodSchemaToAISDKSchema, convertSchemaToZod } from '@mastra/schema';
+import { convertZodSchemaToAISDKSchema, convertSchemaToZod } from '@mastra/schema-compat';
 import { z } from 'zod';
 import { jsonSchema } from 'ai';
 
@@ -99,17 +99,17 @@ const backToZod = convertSchemaToZod(aiSdkSchema);
 
 ### Classes
 
-- `SchemaCompatibility` - Base abstract class for creating compatibility layers
-- `AnthropicSchemaCompat` - Compatibility for Anthropic Claude models
-- `OpenAISchemaCompat` - Compatibility for OpenAI models (without structured outputs)
-- `OpenAIReasoningSchemaCompat` - Compatibility for OpenAI reasoning models (o1 series)
-- `GoogleSchemaCompat` - Compatibility for Google Gemini models
-- `DeepSeekSchemaCompat` - Compatibility for DeepSeek models
-- `MetaSchemaCompat` - Compatibility for Meta Llama models
+- `SchemaCompatLayer` - Base abstract class for creating compatibility layers
+- `AnthropicSchemaCompatLayer` - Compatibility for Anthropic Claude models
+- `OpenAISchemaCompatLayer` - Compatibility for OpenAI models (without structured outputs)
+- `OpenAIReasoningSchemaCompatLayer` - Compatibility for OpenAI reasoning models (o1 series)
+- `GoogleSchemaCompatLayer` - Compatibility for Google Gemini models
+- `DeepSeekSchemaCompatLayer` - Compatibility for DeepSeek models
+- `MetaSchemaCompatLayer` - Compatibility for Meta Llama models
 
 ### Functions
 
-- `processSchema(options)` - Process schema with automatic compatibility detection
+- `applyCompatLayer(options)` - Process schema with automatic compatibility detection
 - `convertZodSchemaToAISDKSchema(zodSchema, target?)` - Convert Zod schema to AI SDK Schema
 - `convertSchemaToZod(schema)` - Convert AI SDK Schema to Zod schema
 

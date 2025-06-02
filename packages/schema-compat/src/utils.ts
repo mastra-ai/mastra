@@ -1,4 +1,5 @@
-import { jsonSchema, Schema } from 'ai';
+import { jsonSchema } from 'ai';
+import type { Schema } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import { z } from 'zod';
@@ -6,7 +7,7 @@ import { convertJsonSchemaToZod } from 'zod-from-json-schema';
 import type { JSONSchema as ZodFromJSONSchema_JSONSchema } from 'zod-from-json-schema';
 import type { Targets } from 'zod-to-json-schema';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import { SchemaCompatibility } from './schema-compatibility';
+import type { SchemaCompatLayer } from './schema-compatibility';
 
 /**
  * Converts a Zod schema to an AI SDK Schema with validation support.
@@ -21,7 +22,7 @@ import { SchemaCompatibility } from './schema-compatibility';
  * @example
  * ```typescript
  * import { z } from 'zod';
- * import { convertZodSchemaToAISDKSchema } from '@mastra/schema';
+ * import { convertZodSchemaToAISDKSchema } from '@mastra/schema-compat';
  *
  * const userSchema = z.object({
  *   name: z.string(),
@@ -80,7 +81,7 @@ function isZodType(value: unknown): value is z.ZodType {
  * @example
  * ```typescript
  * import { jsonSchema } from 'ai';
- * import { convertSchemaToZod } from '@mastra/schema';
+ * import { convertSchemaToZod } from '@mastra/schema-compat';
  *
  * const aiSchema = jsonSchema({
  *   type: 'object',
@@ -116,39 +117,39 @@ export function convertSchemaToZod(schema: Schema | z.ZodSchema): z.ZodType {
  *
  * @param options - Configuration object for schema processing
  * @param options.schema - The schema to process (AI SDK Schema or Zod object schema)
- * @param options.compatibilities - Array of compatibility layers to try
+ * @param options.compatLayers - Array of compatibility layers to try
  * @param options.mode - Output format: 'jsonSchema' for JSONSchema7 or 'aiSdkSchema' for AI SDK Schema
  * @returns Processed schema in the requested format
  *
  * @example
  * ```typescript
  * import { z } from 'zod';
- * import { processSchema, OpenAISchemaCompat, AnthropicSchemaCompat } from '@mastra/schema';
+ * import { applyCompatLayer, OpenAISchemaCompatLayer, AnthropicSchemaCompatLayer } from '@mastra/schema-compat';
  *
  * const schema = z.object({
  *   query: z.string().email(),
  *   limit: z.number().min(1).max(100)
  * });
  *
- * const compatibilities = [
- *   new OpenAISchemaCompat(model),
- *   new AnthropicSchemaCompat(model)
+ * const compatLayers = [
+ *   new OpenAISchemaCompatLayer(model),
+ *   new AnthropicSchemaCompatLayer(model)
  * ];
  *
- * const result = processSchema({
+ * const result = applyCompatLayer({
  *   schema,
- *   compatibilities,
+ *   compatLayers,
  *   mode: 'aiSdkSchema'
  * });
  * ```
  */
-export function processSchema({
+export function applyCompatLayer({
   schema,
-  compatibilities,
+  compatLayers,
   mode,
 }: {
   schema: Schema | z.AnyZodObject;
-  compatibilities: SchemaCompatibility[];
+  compatLayers: SchemaCompatLayer[];
   mode: 'jsonSchema' | 'aiSdkSchema';
 }): JSONSchema7 | Schema {
   let zodSchema: z.AnyZodObject;
@@ -172,7 +173,7 @@ export function processSchema({
     }
   }
 
-  for (const compat of compatibilities) {
+  for (const compat of compatLayers) {
     if (compat.shouldApply()) {
       return mode === 'jsonSchema' ? compat.processToJSONSchema(zodSchema) : compat.processtoAISDKSchema(zodSchema);
     }

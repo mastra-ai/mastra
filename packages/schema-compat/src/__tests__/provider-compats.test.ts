@@ -1,13 +1,13 @@
-import { z } from 'zod';
-import { describe, it, expect } from 'vitest';
 import { MockLanguageModelV1 } from 'ai/test';
+import { describe, it, expect } from 'vitest';
+import { z } from 'zod';
 import {
-  AnthropicSchemaCompat,
-  OpenAISchemaCompat,
-  OpenAIReasoningSchemaCompat,
-  GoogleSchemaCompat,
-  DeepSeekSchemaCompat,
-  MetaSchemaCompat,
+  AnthropicSchemaCompatLayer,
+  OpenAISchemaCompatLayer,
+  OpenAIReasoningSchemaCompatLayer,
+  GoogleSchemaCompatLayer,
+  DeepSeekSchemaCompatLayer,
+  MetaSchemaCompatLayer,
 } from '../index';
 
 describe('Provider Compatibility Classes', () => {
@@ -38,24 +38,24 @@ describe('Provider Compatibility Classes', () => {
     }),
   };
 
-  describe('AnthropicSchemaCompat', () => {
+  describe('AnthropicSchemaCompatLayer', () => {
     it('should apply for Anthropic models', () => {
-      const compat = new AnthropicSchemaCompat(mockModels.anthropic);
+      const compat = new AnthropicSchemaCompatLayer(mockModels.anthropic);
       expect(compat.shouldApply()).toBe(true);
     });
 
     it('should not apply for non-Anthropic models', () => {
-      const compat = new AnthropicSchemaCompat(mockModels.openai);
+      const compat = new AnthropicSchemaCompatLayer(mockModels.openai);
       expect(compat.shouldApply()).toBe(false);
     });
 
     it('should return correct schema target', () => {
-      const compat = new AnthropicSchemaCompat(mockModels.anthropic);
+      const compat = new AnthropicSchemaCompatLayer(mockModels.anthropic);
       expect(compat.getSchemaTarget()).toBe('jsonSchema7');
     });
 
     it('should process schemas correctly', () => {
-      const compat = new AnthropicSchemaCompat(mockModels.anthropic);
+      const compat = new AnthropicSchemaCompatLayer(mockModels.anthropic);
       const schema = z.object({
         text: z.string().min(1).max(100),
         count: z.number().min(1),
@@ -68,19 +68,19 @@ describe('Provider Compatibility Classes', () => {
     });
   });
 
-  describe('OpenAISchemaCompat', () => {
+  describe('OpenAISchemaCompatLayer', () => {
     it('should apply for OpenAI models without structured outputs support', () => {
-      const compat = new OpenAISchemaCompat(mockModels.openai);
+      const compat = new OpenAISchemaCompatLayer(mockModels.openai);
       expect(typeof compat.shouldApply()).toBe('boolean');
     });
 
     it('should return correct schema target', () => {
-      const compat = new OpenAISchemaCompat(mockModels.openai);
+      const compat = new OpenAISchemaCompatLayer(mockModels.openai);
       expect(compat.getSchemaTarget()).toBe('jsonSchema7');
     });
 
     it('should process complex schemas', () => {
-      const compat = new OpenAISchemaCompat(mockModels.openai);
+      const compat = new OpenAISchemaCompatLayer(mockModels.openai);
       const schema = z.object({
         user: z.object({
           name: z.string().email(),
@@ -96,32 +96,32 @@ describe('Provider Compatibility Classes', () => {
     });
   });
 
-  describe('OpenAIReasoningSchemaCompat', () => {
+  describe('OpenAIReasoningSchemaCompatLayer', () => {
     it('should have consistent behavior', () => {
-      const compat = new OpenAIReasoningSchemaCompat(mockModels.openaiReasoning);
+      const compat = new OpenAIReasoningSchemaCompatLayer(mockModels.openaiReasoning);
       expect(typeof compat.shouldApply()).toBe('boolean');
     });
 
     it('should return correct schema target', () => {
-      const compat = new OpenAIReasoningSchemaCompat(mockModels.openaiReasoning);
+      const compat = new OpenAIReasoningSchemaCompatLayer(mockModels.openaiReasoning);
       expect(compat.getSchemaTarget()).toBe('openApi3');
     });
   });
 
-  describe('GoogleSchemaCompat', () => {
+  describe('GoogleSchemaCompatLayer', () => {
     it('should have consistent behavior', () => {
-      const compat = new GoogleSchemaCompat(mockModels.google);
+      const compat = new GoogleSchemaCompatLayer(mockModels.google);
       expect(typeof compat.shouldApply()).toBe('boolean');
     });
 
     it('should return correct schema target', () => {
-      const compat = new GoogleSchemaCompat(mockModels.google);
+      const compat = new GoogleSchemaCompatLayer(mockModels.google);
       // The actual implementation may return 'jsonSchema7', not 'openApi3'
       expect(['jsonSchema7', 'openApi3']).toContain(compat.getSchemaTarget());
     });
 
     it('should handle date types correctly', () => {
-      const compat = new GoogleSchemaCompat(mockModels.google);
+      const compat = new GoogleSchemaCompatLayer(mockModels.google);
       const schema = z.object({
         startDate: z.date(),
         endDate: z.date().optional(),
@@ -135,24 +135,24 @@ describe('Provider Compatibility Classes', () => {
     });
   });
 
-  describe('DeepSeekSchemaCompat', () => {
+  describe('DeepSeekSchemaCompatLayer', () => {
     it('should apply for DeepSeek models', () => {
-      const compat = new DeepSeekSchemaCompat(mockModels.deepseek);
+      const compat = new DeepSeekSchemaCompatLayer(mockModels.deepseek);
       expect(compat.shouldApply()).toBe(true);
     });
 
     it('should not apply for non-DeepSeek models', () => {
-      const compat = new DeepSeekSchemaCompat(mockModels.openai);
+      const compat = new DeepSeekSchemaCompatLayer(mockModels.openai);
       expect(compat.shouldApply()).toBe(false);
     });
 
     it('should return correct schema target', () => {
-      const compat = new DeepSeekSchemaCompat(mockModels.deepseek);
+      const compat = new DeepSeekSchemaCompatLayer(mockModels.deepseek);
       expect(compat.getSchemaTarget()).toBe('jsonSchema7');
     });
 
     it('should handle string constraints', () => {
-      const compat = new DeepSeekSchemaCompat(mockModels.deepseek);
+      const compat = new DeepSeekSchemaCompatLayer(mockModels.deepseek);
       const schema = z.object({
         email: z.string().email(),
         url: z.string().url(),
@@ -167,19 +167,19 @@ describe('Provider Compatibility Classes', () => {
     });
   });
 
-  describe('MetaSchemaCompat', () => {
+  describe('MetaSchemaCompatLayer', () => {
     it('should have consistent behavior', () => {
-      const compat = new MetaSchemaCompat(mockModels.meta);
+      const compat = new MetaSchemaCompatLayer(mockModels.meta);
       expect(typeof compat.shouldApply()).toBe('boolean');
     });
 
     it('should return correct schema target', () => {
-      const compat = new MetaSchemaCompat(mockModels.meta);
+      const compat = new MetaSchemaCompatLayer(mockModels.meta);
       expect(compat.getSchemaTarget()).toBe('jsonSchema7');
     });
 
     it('should handle array and union types', () => {
-      const compat = new MetaSchemaCompat(mockModels.meta);
+      const compat = new MetaSchemaCompatLayer(mockModels.meta);
       const schema = z.object({
         tags: z.array(z.string()).min(1).max(10),
         status: z.union([z.literal('active'), z.literal('inactive')]),
@@ -218,15 +218,15 @@ describe('Provider Compatibility Classes', () => {
       });
 
       const providers = [
-        new AnthropicSchemaCompat(mockModels.anthropic),
-        new OpenAISchemaCompat(mockModels.openai),
-        new OpenAIReasoningSchemaCompat(mockModels.openaiReasoning),
-        new GoogleSchemaCompat(mockModels.google),
-        new DeepSeekSchemaCompat(mockModels.deepseek),
-        new MetaSchemaCompat(mockModels.meta),
+        new AnthropicSchemaCompatLayer(mockModels.anthropic),
+        new OpenAISchemaCompatLayer(mockModels.openai),
+        new OpenAIReasoningSchemaCompatLayer(mockModels.openaiReasoning),
+        new GoogleSchemaCompatLayer(mockModels.google),
+        new DeepSeekSchemaCompatLayer(mockModels.deepseek),
+        new MetaSchemaCompatLayer(mockModels.meta),
       ];
 
-      providers.forEach((provider, index) => {
+      providers.forEach(provider => {
         const result = provider.processtoAISDKSchema(complexSchema);
 
         expect(result).toHaveProperty('jsonSchema');

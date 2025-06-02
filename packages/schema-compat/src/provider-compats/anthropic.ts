@@ -1,10 +1,10 @@
+import type { LanguageModelV1 } from 'ai';
 import type { z } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
-import { SchemaCompatibility } from '../schema-compatibility';
-import type { LanguageModelV1 } from 'ai';
+import { SchemaCompatLayer } from '../schema-compatibility';
 import type { ShapeValue, AllZodType } from '../schema-compatibility';
 
-export class AnthropicSchemaCompat extends SchemaCompatibility {
+export class AnthropicSchemaCompatLayer extends SchemaCompatLayer {
   constructor(model: LanguageModelV1) {
     super(model);
   }
