@@ -303,7 +303,7 @@ const mcpClient = new MCPClient({
 // Access prompt methods via mcpClient.prompts
 const allPromptsByServer = await mcpClient.prompts.list();
 const { prompt, messages } = await mcpClient.prompts.get({
-  serverName: "weather",
+  serverName: "myWeatherServer",
   name: "current",
 });
 ```
@@ -347,7 +347,7 @@ Example:
 
 ```typescript
 const { prompt, messages } = await mcpClient.prompts.get({
-  serverName: "weather",
+  serverName: "myWeatherServer",
   name: "current",
   args: { location: "London" },
 });
@@ -366,8 +366,8 @@ async onListChanged(serverName: string, handler: () => void): Promise<void>
 Example:
 
 ```typescript
-mcpClient.prompts.onListChanged("weather", () => {
-  console.log("Prompt list changed on weather server.");
+mcpClient.prompts.onListChanged("myWeatherServer", () => {
+  console.log("Prompt list changed on myWeatherServer.");
   // You should re-fetch the list of prompts
   // await mcpClient.prompts.list();
 });
@@ -437,7 +437,11 @@ async function checkWeatherPrompt() {
       const currentWeatherPrompt = weatherPrompts.weather.find(
         (p) => p.name === "current"
       );
-      console.log("Weather prompt:", currentWeatherPrompt);
+      if (currentWeatherPrompt) {
+        console.log("Weather prompt:", currentWeatherPrompt);
+      } else {
+        console.log("Current weather prompt not found");
+      }
     }
   } catch (error) {
     console.error("Error fetching weather prompt:", error);

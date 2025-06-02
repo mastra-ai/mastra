@@ -133,7 +133,7 @@ To fix this you have three different options:
         const internalClient = await this.getConnectedClientForServer(serverName);
         return internalClient.prompts.get({name, args, version});
       },
-      onListChanged: async ({serverName, handler}: {serverName: string, handler: () => void}) => {
+      onListChanged: async (serverName: string, handler: () => void) => {
         const internalClient = await this.getConnectedClientForServer(serverName);
         return internalClient.prompts.onListChanged(handler);
       },

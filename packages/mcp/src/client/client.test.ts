@@ -154,7 +154,6 @@ describe('MastraMCPClient with Streamable HTTP', () => {
 
     it('should get a specific prompt', async () => {
       const result = await client.getPrompt({name: 'greet'});
-      console.log('result', result);
       const {prompt, messages} = result;
       expect(prompt).toBeDefined();
       expect(prompt).toMatchObject({

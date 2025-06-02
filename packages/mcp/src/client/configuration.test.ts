@@ -353,10 +353,10 @@ describe('MCPClient', () => {
       await mcp.prompts.list();
 
       const promptListChangedPromise = new Promise<void>((resolve, reject) => {
-        mcp.prompts.onListChanged({serverName, handler: () => {
+        mcp.prompts.onListChanged(serverName, () => {
           notificationReceived = true;
           resolve();
-        }});
+        });
         setTimeout(() => reject(new Error('Timeout waiting for promptListChanged notification')), 4500);
       });
 
