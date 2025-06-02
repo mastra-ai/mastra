@@ -285,6 +285,114 @@ describe('MCPClient', () => {
     });
   })
 
+  describe('Prompts', () => {
+    it('should get prompts from connected MCP servers', async () => {
+      const prompts = await mcp.prompts.list();
+
+      expect(prompts).toHaveProperty('weather');
+      expect(prompts['weather']).toBeDefined();
+      expect(prompts['weather']).toHaveLength(3);
+
+      // Verify that each expected resource exists with the correct structure
+      const promptResources = prompts['weather'];
+      const currentWeatherPrompt = promptResources.find(r => r.name === 'current');
+      expect(currentWeatherPrompt).toBeDefined();
+      expect(currentWeatherPrompt).toMatchObject({
+        name: 'current',
+        version: 'v1',
+        description: expect.any(String),
+        mimeType: 'application/json',
+      });
+
+      const forecast = promptResources.find(r => r.name === 'forecast');
+      expect(forecast).toBeDefined();
+      expect(forecast).toMatchObject({
+        name: 'forecast',
+        version: 'v1',
+        description: expect.any(String),
+        mimeType: 'application/json',
+      });
+
+      const historical = promptResources.find(r => r.name === 'historical');
+      expect(historical).toBeDefined();
+      expect(historical).toMatchObject({
+        name: 'historical',
+        version: 'v1',
+        description: expect.any(String),
+        mimeType: 'application/json',
+      });
+    });
+
+    it('should get a specific prompt from a server', async () => {
+      const {prompt, messages} = await mcp.prompts.get({serverName: 'weather', name: 'current'});
+      expect(prompt).toBeDefined();
+      expect(prompt).toMatchObject({
+        name: 'current',
+        version: 'v1',
+        description: expect.any(String),
+        mimeType: 'application/json',
+      });
+      expect(messages).toBeDefined();
+      const messageItem = messages[0];
+      let parsedText: any = {};
+      if (messageItem.content.text && typeof messageItem.content.text === 'string') {
+        try {
+          parsedText = JSON.parse(messageItem.content.text);
+        } catch {
+          // If parsing fails, parsedText remains an empty object
+          // console.error("Failed to parse resource content text:", _e);
+        }
+      }
+      expect(parsedText).toHaveProperty('location');
+    });
+
+    it('should receive prompt list changed notification from a specific server', async () => {
+      const serverName = 'weather';
+      let notificationReceived = false;
+
+      await mcp.prompts.list();
+
+      const promptListChangedPromise = new Promise<void>((resolve, reject) => {
+        mcp.prompts.onListChanged({serverName, handler: () => {
+          notificationReceived = true;
+          resolve();
+        }});
+        setTimeout(() => reject(new Error('Timeout waiting for promptListChanged notification')), 4500);
+      });
+
+      await expect(promptListChangedPromise).resolves.toBeUndefined();
+
+      expect(notificationReceived).toBe(true);
+    });
+
+    it('should handle errors when getting prompts', async () => {
+      const errorClient = new MCPClient({
+        id: 'error-test-client',
+        servers: {
+          weather: {
+            url: new URL(`http://localhost:${weatherServerPort}/sse`),
+          },
+          nonexistentServer: {
+            command: 'nonexistent-command',
+            args: [],
+          },
+        },
+      });
+
+      try {
+        const prompts = await errorClient.prompts.list();
+
+        expect(prompts).toHaveProperty('weather');
+        expect(prompts['weather']).toBeDefined();
+        expect(prompts['weather'].length).toBeGreaterThan(0);
+
+        expect(prompts).not.toHaveProperty('nonexistentServer');
+      } finally {
+        await errorClient.disconnect();
+      }
+    });
+  })
+
   describe('Instance Management', () => {
     it('should allow multiple instances with different IDs', async () => {
       const config2 = new MCPClient({

@@ -57,8 +57,8 @@ export class PromptClientActions {
    * @param version Optional version of the prompt to get.
    * @returns The prompt content.
    */
-  public async get(name: string, args?: Record<string, any>, version?: string): Promise<GetPromptResult> {
-    return this.client.getPrompt(name, args, version);
+  public async get({name, args, version}: {name: string, args?: Record<string, any>, version?: string}): Promise<GetPromptResult> {
+    return this.client.getPrompt({name, args, version});
   }
 
   /**
