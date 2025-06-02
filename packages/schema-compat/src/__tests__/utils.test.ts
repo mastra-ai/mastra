@@ -286,6 +286,16 @@ describe('Builder Functions', () => {
 
       expect(result).toHaveProperty('jsonSchema');
       expect(result).toHaveProperty('validate');
+
+      // Verify the schema structure shows the string was wrapped in a 'value' property
+      const resultSchema = (result as Schema).jsonSchema;
+      expect(resultSchema).toHaveProperty('type', 'object');
+      expect(resultSchema).toHaveProperty('properties');
+      expect(resultSchema.properties).toHaveProperty('value');
+
+      // Verify the string property has the description added by the mock compatibility layer
+      const valueProperty = resultSchema.properties!.value as any;
+      expect(valueProperty).toHaveProperty('description', 'processed string');
     });
 
     it('should handle complex schema with multiple compatLayers', () => {

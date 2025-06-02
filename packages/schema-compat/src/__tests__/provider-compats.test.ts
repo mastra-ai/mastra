@@ -17,11 +17,11 @@ describe('Provider Compatibility Classes', () => {
       doGenerate: async () => ({ response: { id: 'test' } }) as any,
     }),
     openai: new MockLanguageModelV1({
-      modelId: 'gpt-4',
+      modelId: 'openai/gpt-4',
       doGenerate: async () => ({ response: { id: 'test' } }) as any,
     }),
     openaiReasoning: new MockLanguageModelV1({
-      modelId: 'o1-preview',
+      modelId: 'openai/o3-mini',
       doGenerate: async () => ({ response: { id: 'test' } }) as any,
     }),
     google: new MockLanguageModelV1({
