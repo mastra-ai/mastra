@@ -12,9 +12,15 @@ export type MCPServerResources = {
   resourceTemplates?: () => Promise<ResourceTemplate[]>;
 };
 
-export type MCPServerPromptMessagesCallback = {
-  ({ name, version, args }: { name: string; version?: string; args?: any }): Promise<PromptMessage[]>;
-};
+export type MCPServerPromptMessagesCallback = ({
+  name,
+  version,
+  args,
+}: {
+  name: string;
+  version?: string;
+  args?: any;
+}) => Promise<PromptMessage[]>;
 
 export type MCPServerPrompts = {
   listPrompts: () => Promise<Prompt[]>;

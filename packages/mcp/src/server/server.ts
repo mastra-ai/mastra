@@ -702,7 +702,7 @@ export class MCPServer extends MCPServerBase {
       } else {
         try {
           const prompts = await capturedPromptOptions.listPrompts();
-          // Cache the resources
+          // Parse and cache the prompts
           for (const prompt of prompts) {
             PromptSchema.parse(prompt);
           }
@@ -712,7 +712,9 @@ export class MCPServer extends MCPServerBase {
             prompts: this.definedPrompts?.map(p => ({ ...p, version: p.version ?? undefined })),
           };
         } catch (error) {
-          this.logger.error('Error fetching resources via listResources():', { error });
+          this.logger.error('Error fetching prompts via listPrompts():', {
+            error: error instanceof Error ? error.message : String(error),
+          });
           // Re-throw to let the MCP Server SDK handle formatting the error response
           throw error;
         }

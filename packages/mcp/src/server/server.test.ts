@@ -679,7 +679,6 @@ describe('MCPServer', () => {
           messagePath: '/messages',
           req,
           res,
-          // options: { sessionIdGenerator: undefined },
         });
       });
       await new Promise<void>(resolve => promptHttpServer.listen(PROMPT_PORT, () => resolve()));
