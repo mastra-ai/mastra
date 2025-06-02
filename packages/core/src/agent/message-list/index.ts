@@ -299,6 +299,21 @@ ${JSON.stringify(message, null, 2)}`,
       ((newMessageFirstPartType === `tool-invocation` && latestMessagePartType !== `text`) ||
         newMessageFirstPartType === latestMessagePartType);
 
+    const currentAndLastMessagesAreUser = latestMessage?.role === `user` && messageV2.role === `user`;
+    const couldMoveAttachmentsToPreviousMessage =
+      currentAndLastMessagesAreUser &&
+      // For now this check is explicitly for adding attachment only messages onto the last message
+      // We could refactor this (and the rest of this surrounding code) to combine messages with less logic
+      // for now, just making it work! there are a lot of weird small edge cases in current expected behaviour
+      // we should change the expected behaviour in a breaking change to allow us to simplify logic more
+      messageV2.content.parts.length === 0 &&
+      (messageV2.content.experimental_attachments?.length || 0) > 0;
+
+    if (couldMoveAttachmentsToPreviousMessage) {
+      // For now just add an empty text part to retain message ordering.
+      messageV2.content.parts.push({ type: 'text', text: '' });
+    }
+
     if (
       // backwards compat check!
       // this condition can technically be removed and it will make it so all new assistant parts will be added to the last assistant message parts instead of creating new db entries.
@@ -363,6 +378,14 @@ ${JSON.stringify(message, null, 2)}`,
         // Match what AI SDK does - content string is always the latest text part.
         latestMessage.content.content = messageV2.content.content;
       }
+      // This code would combine attachment only messages onto the prev message,
+      // but for anyone using CoreMessage or MastraMessageV1 still they would lose the ordering in multi-step interactions
+      // } else if (couldMoveAttachmentsToPreviousMessage && messageV2.content.experimental_attachments?.length) {
+      //   latestMessage.content.experimental_attachments ||= [];
+      //   latestMessage.content.experimental_attachments.push(...messageV2.content.experimental_attachments);
+      //   if (latestMessage.createdAt.getTime() < messageV2.createdAt.getTime()) {
+      //     latestMessage.createdAt = messageV2.createdAt;
+      //   }
     }
     // Else the last message and this message are not both assistant messages OR an existing message has been updated and should be replaced. add a new message to the array or update an existing one.
     else {
@@ -567,15 +590,13 @@ ${JSON.stringify(message, null, 2)}`,
             break;
 
           case 'reasoning':
-            // CoreMessage reasoning parts have text and signature
             parts.push({
               type: 'reasoning',
-              reasoning: part.text, // Assuming text is the main reasoning content
+              reasoning: '', // leave this blank so we aren't double storing it in the db along with details
               details: [{ type: 'text', text: part.text, signature: part.signature }],
             });
             break;
           case 'redacted-reasoning':
-            // CoreMessage redacted-reasoning parts have data
             parts.push({
               type: 'reasoning',
               reasoning: '', // No text reasoning for redacted parts
@@ -583,12 +604,6 @@ ${JSON.stringify(message, null, 2)}`,
             });
             break;
           case 'image':
-            // TODO: why do we need a part and an experimental attachment for it to work?
-            parts.push({
-              type: 'file',
-              mimeType: part.mimeType || '',
-              data: part.image.toString(),
-            });
             experimentalAttachments.push({
               url: part.image.toString(),
               contentType: part.mimeType,
@@ -597,16 +612,10 @@ ${JSON.stringify(message, null, 2)}`,
           case 'file':
             // CoreMessage file parts can have mimeType and data (binary/data URL) or just a URL
             if (part.data instanceof URL) {
-              // TODO: why do we need a part and an experimental attachment for it to work?
               experimentalAttachments.push({
                 name: part.filename,
                 url: part.data.toString(),
                 contentType: part.mimeType,
-              });
-              parts.push({
-                type: 'file',
-                mimeType: part.mimeType,
-                data: part.data.toString(),
               });
             } else {
               // If it's binary data, convert to base64 and add to parts
@@ -679,6 +688,8 @@ ${JSON.stringify(message, null, 2)}`,
     for (const part of parts) {
       key += part.type;
       if (part.type === `text`) {
+        // TODO: we may need to hash this with something like xxhash instead of using length
+        // for 99.999% of cases this will be fine though because we're comparing messages that have the same ID already.
         key += part.text.length;
       }
       if (part.type === `tool-invocation`) {
@@ -686,9 +697,19 @@ ${JSON.stringify(message, null, 2)}`,
         key += part.toolInvocation.state;
       }
       if (part.type === `reasoning`) {
+        // TODO: we may need to hash this with something like xxhash instead of using length
+        // for 99.999% of cases this will be fine though because we're comparing messages that have the same ID already.
         key += part.reasoning.length;
+        key += part.details.reduce((prev, current) => {
+          if (current.type === `text`) {
+            return prev + current.text.length + (current.signature?.length || 0);
+          }
+          return prev;
+        }, 0);
       }
       if (part.type === `file`) {
+        // TODO: we may need to hash this with something like xxhash instead of using length
+        // for 99.999% of cases this will be fine though because we're comparing messages that have the same ID already.
         key += part.data.length;
         key += part.mimeType;
       }
