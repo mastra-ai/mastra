@@ -295,6 +295,34 @@ export interface GetNetworkResponse {
   state?: Record<string, any>;
 }
 
+export interface GetVNextNetworkResponse {
+  id: string;
+  name: string;
+  instructions: string;
+  agents: Array<{
+    name: string;
+    provider: string;
+    modelId: string;
+  }>;
+  routingModel: {
+    provider: string;
+    modelId: string;
+  };
+  workflows: Array<{
+    name: string;
+    description: string;
+    inputSchema: string | undefined;
+    outputSchema: string | undefined;
+  }>;
+}
+
+export interface GenerateVNextNetworkResponse {
+  task: string;
+  result: string;
+  resourceId: string;
+  resourceType: 'none' | 'tool' | 'agent' | 'workflow';
+}
+
 export interface McpServerListResponse {
   servers: ServerInfo[];
   next: string | null;
