@@ -785,13 +785,6 @@ describe('MessageList', () => {
                 type: 'file',
               },
             ],
-            experimental_attachments: [
-              {
-                name: 'image.jpg',
-                url: 'https://example.com/image.jpg',
-                contentType: 'image/jpeg',
-              },
-            ],
           },
           threadId,
           resourceId,
@@ -828,13 +821,6 @@ describe('MessageList', () => {
                 type: 'file',
                 data: 'https://example.com/another-image.png',
                 mimeType: 'image/png',
-              },
-            ],
-            experimental_attachments: [
-              {
-                name: 'another-image.png',
-                url: 'https://example.com/another-image.png',
-                contentType: 'image/png',
               },
             ],
           },
@@ -1163,13 +1149,6 @@ describe('MessageList', () => {
                 type: 'file',
                 mimeType: 'image/gif',
                 data: 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==',
-              },
-            ],
-            experimental_attachments: [
-              {
-                contentType: 'image/gif',
-                name: undefined,
-                url: 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==',
               },
             ],
           },
