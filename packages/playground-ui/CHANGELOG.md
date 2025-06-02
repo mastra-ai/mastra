@@ -1,5 +1,12 @@
 # @mastra/playground-ui
 
+## 5.1.2-alpha.4
+
+### Patch Changes
+
+- 401bbae: Show workflow graph from stepGraph of previous runs when viewing a previous run
+- 4b23936: fix: typos
+
 ## 5.1.2-alpha.3
 
 ### Patch Changes
