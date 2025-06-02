@@ -28,7 +28,7 @@ export class ServerPromptActions {
     try {
       await this.getSdkServer().sendPromptListChanged();
     } catch (error) {
-      this.getLogger().error('Failed to send prompt list changed notification:', { error });
+      this.getLogger().error('Failed to send prompt list changed notification:', { error: error instanceof Error ? error.message : String(error) });
       throw error;
     }
   }
