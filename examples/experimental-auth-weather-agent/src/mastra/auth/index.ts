@@ -4,6 +4,7 @@ import { MastraAuthSupabase } from '@mastra/auth-supabase';
 import { MastraAuthAuth0 } from '@mastra/auth-auth0';
 import { MastraJwtAuth } from '@mastra/auth';
 
+// Get the configured auth provider based on environment
 export function getAuthProvider() {
   const provider = process.env.AUTH_PROVIDER?.toLowerCase();
 
