@@ -1,7 +1,7 @@
 import type { ContextWithMastra } from '@mastra/core/server';
 import type { Next } from 'hono';
 import { defaultAuthConfig } from './defaults';
-import { canAccessPublicly, checkRules } from './helpers';
+import { canAccessPublicly, checkRules, isProtectedPath } from './helpers';
 
 export const authenticationMiddleware = async (c: ContextWithMastra, next: Next) => {
   const mastra = c.get('mastra');
@@ -9,6 +9,10 @@ export const authenticationMiddleware = async (c: ContextWithMastra, next: Next)
 
   if (!authConfig) {
     // No auth config, skip authentication
+    return next();
+  }
+
+  if (!isProtectedPath(c.req.path, c.req.method, authConfig)) {
     return next();
   }
 
