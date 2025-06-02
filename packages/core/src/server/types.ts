@@ -33,6 +33,11 @@ export type ContextWithMastra = Context<{
 
 export type MastraAuthConfig<TUser = unknown> = {
   /**
+   * Protected paths for the server
+   */
+  protected?: (RegExp | string | [string, Methods | Methods[]])[];
+
+  /**
    * Public paths for the server
    */
   public?: (RegExp | string | [string, Methods | Methods[]])[];
