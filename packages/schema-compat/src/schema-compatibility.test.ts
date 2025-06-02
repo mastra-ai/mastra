@@ -2,7 +2,7 @@ import type { LanguageModelV1 } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
-import { SchemaCompatLayer } from '../schema-compatibility';
+import { SchemaCompatLayer } from './schema-compatibility';
 
 class MockSchemaCompatibility extends SchemaCompatLayer {
   constructor(model: LanguageModelV1) {

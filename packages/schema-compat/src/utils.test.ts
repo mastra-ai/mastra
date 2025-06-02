@@ -3,8 +3,8 @@ import type { LanguageModelV1, Schema } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
-import { SchemaCompatLayer } from '../schema-compatibility';
-import { convertZodSchemaToAISDKSchema, convertSchemaToZod, applyCompatLayer } from '../utils';
+import { SchemaCompatLayer } from './schema-compatibility';
+import { convertZodSchemaToAISDKSchema, convertSchemaToZod, applyCompatLayer } from './utils';
 
 const mockModel = new MockLanguageModelV1({
   modelId: 'test-model',

@@ -15,26 +15,6 @@
         "default": "./dist/index.cjs"
       }
     },
-    "./schema-compatibility": {
-      "import": {
-        "types": "./dist/schema-compatibility.d.ts",
-        "default": "./dist/schema-compatibility.js"
-      },
-      "require": {
-        "types": "./dist/schema-compatibility.d.cts",
-        "default": "./dist/schema-compatibility.cjs"
-      }
-    },
-    "./utils": {
-      "import": {
-        "types": "./dist/utils.d.ts",
-        "default": "./dist/utils.js"
-      },
-      "require": {
-        "types": "./dist/utils.d.cts",
-        "default": "./dist/utils.cjs"
-      }
-    },
     "./package.json": "./package.json"
   },
   "scripts": {

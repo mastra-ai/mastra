@@ -8,7 +8,7 @@ import {
   GoogleSchemaCompatLayer,
   DeepSeekSchemaCompatLayer,
   MetaSchemaCompatLayer,
-} from '../index';
+} from './index';
 
 describe('Provider Compatibility Classes', () => {
   const mockModels = {
