@@ -10,6 +10,8 @@ overrides:
   '@mastra/auth': link:../../packages/auth
   '@mastra/auth-supabase': link:../../auth/supabase
   '@mastra/auth-firebase': link:../../auth/firebase
+  '@mastra/auth-auth0': link:../../auth/auth0
+  '@mastra/auth-workos': link:../../auth/workos
 
 importers:
 
@@ -21,12 +23,18 @@ importers:
       '@mastra/auth':
         specifier: link:../../packages/auth
         version: link:../../packages/auth
+      '@mastra/auth-auth0':
+        specifier: link:../../auth/auth0
+        version: link:../../auth/auth0
       '@mastra/auth-firebase':
         specifier: link:../../auth/firebase
         version: link:../../auth/firebase
       '@mastra/auth-supabase':
         specifier: link:../../auth/supabase
         version: link:../../auth/supabase
+      '@mastra/auth-workos':
+        specifier: link:../../auth/workos
+        version: link:../../auth/workos
       '@mastra/core':
         specifier: link:../../packages/core
         version: link:../../packages/core

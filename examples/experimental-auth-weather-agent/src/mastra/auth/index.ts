@@ -2,6 +2,7 @@
 import { MastraAuthFirebase } from '@mastra/auth-firebase';
 import { MastraAuthSupabase } from '@mastra/auth-supabase';
 import { MastraAuthAuth0 } from '@mastra/auth-auth0';
+import { MastraAuthWorkos } from '@mastra/auth-workos';
 import { MastraJwtAuth } from '@mastra/auth';
 
 // Get the configured auth provider based on environment
@@ -15,6 +16,8 @@ export function getAuthProvider() {
       return new MastraAuthFirebase();
     case 'supabase':
       return new MastraAuthSupabase();
+    case 'workos':
+      return new MastraAuthWorkos();
     case 'jwt':
     default:
       return new MastraJwtAuth();
