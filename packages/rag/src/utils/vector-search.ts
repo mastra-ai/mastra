@@ -1,4 +1,4 @@
-import type { MastraVector, QueryResult } from '@mastra/core/vector';
+import type { MastraVector, QueryResult, QueryVectorParams } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import { embed } from 'ai';
 import type { EmbeddingModel } from 'ai';
@@ -22,6 +22,14 @@ interface VectorQuerySearchResult {
   queryEmbedding: number[];
 }
 
+enum DatabaseType {
+  Pinecone = 'pinecone',
+  PgVector = 'pgvector',
+  Chroma = 'chroma',
+}
+
+const DATABASE_TYPE_MAP = Object.keys(DatabaseType)
+
 // Helper function to handle vector query search
 export const vectorQuerySearch = async ({
   indexName,
@@ -32,7 +40,7 @@ export const vectorQuerySearch = async ({
   topK,
   includeVectors = false,
   maxRetries = 2,
-  databaseConfig,
+  databaseConfig = {},
 }: VectorQuerySearchParams): Promise<VectorQuerySearchResult> => {
   const { embedding } = await embed({
     value: queryText,
@@ -41,63 +49,69 @@ export const vectorQuerySearch = async ({
   });
 
   // Build query parameters with database-specific configurations
-  const queryParams: any = {
+  const queryParams: QueryVectorParams = {
     indexName,
     queryVector: embedding,
     topK,
     filter: queryFilter,
     includeVector: includeVectors,
   };
+  
+  // Get relevant chunks from the vector database
+  const results = await vectorStore.query({ ...queryParams, ...databaseSpecificParams(databaseConfig) });
+
+  return { results, queryEmbedding: embedding };
+};
+
+const databaseSpecificParams = (databaseConfig: DatabaseConfig) => {
+  const databaseSpecificParams: DatabaseConfig = {};
 
   // Apply database-specific configurations
   if (databaseConfig) {
     // Pinecone-specific configurations
     if (databaseConfig.pinecone) {
       if (databaseConfig.pinecone.namespace) {
-        queryParams.namespace = databaseConfig.pinecone.namespace;
+        databaseSpecificParams.namespace = databaseConfig.pinecone.namespace;
       }
       if (databaseConfig.pinecone.sparseVector) {
-        queryParams.sparseVector = databaseConfig.pinecone.sparseVector;
+        databaseSpecificParams.sparseVector = databaseConfig.pinecone.sparseVector;
       }
     }
 
     // pgVector-specific configurations
     if (databaseConfig.pgvector) {
       if (databaseConfig.pgvector.minScore !== undefined) {
-        queryParams.minScore = databaseConfig.pgvector.minScore;
+        databaseSpecificParams.minScore = databaseConfig.pgvector.minScore;
       }
       if (databaseConfig.pgvector.ef !== undefined) {
-        queryParams.ef = databaseConfig.pgvector.ef;
+        databaseSpecificParams.ef = databaseConfig.pgvector.ef;
       }
       if (databaseConfig.pgvector.probes !== undefined) {
-        queryParams.probes = databaseConfig.pgvector.probes;
+        databaseSpecificParams.probes = databaseConfig.pgvector.probes;
       }
     }
 
     // Chroma-specific configurations
     if (databaseConfig.chroma) {
       if (databaseConfig.chroma.where) {
-        queryParams.where = databaseConfig.chroma.where;
+        databaseSpecificParams.where = databaseConfig.chroma.where;
       }
       if (databaseConfig.chroma.whereDocument) {
-        queryParams.whereDocument = databaseConfig.chroma.whereDocument;
+        databaseSpecificParams.whereDocument = databaseConfig.chroma.whereDocument;
       }
     }
 
     // Handle any additional database configs
     Object.keys(databaseConfig).forEach(dbName => {
-      if (!['pinecone', 'pgvector', 'chroma'].includes(dbName)) {
+      if (!DATABASE_TYPE_MAP.includes(dbName)) {
         // For unknown database types, merge the config directly
         const config = databaseConfig[dbName];
         if (config && typeof config === 'object') {
-          Object.assign(queryParams, config);
+          Object.assign(databaseSpecificParams, config);
         }
       }
     });
   }
 
-  // Get relevant chunks from the vector database
-  const results = await vectorStore.query(queryParams);
-
-  return { results, queryEmbedding: embedding };
+  return databaseSpecificParams;
 };

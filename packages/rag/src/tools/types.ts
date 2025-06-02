@@ -15,10 +15,32 @@ export interface PgVectorConfig {
   probes?: number; // IVFFlat probe parameter
 }
 
+// Chroma types
+type LiteralValue = string | number | boolean;
+type ListLiteralValue = LiteralValue[];
+type LiteralNumber = number;
+type LogicalOperator = "$and" | "$or";
+type InclusionOperator = "$in" | "$nin";
+type WhereOperator = "$gt" | "$gte" | "$lt" | "$lte" | "$ne" | "$eq";
+type OperatorExpression = {
+    [key in WhereOperator | InclusionOperator | LogicalOperator]?: LiteralValue | ListLiteralValue;
+};
+type BaseWhere = {
+    [key: string]: LiteralValue | OperatorExpression;
+};
+type LogicalWhere = {
+    [key in LogicalOperator]?: Where[];
+};
+type Where = BaseWhere | LogicalWhere;
+type WhereDocumentOperator = "$contains" | "$not_contains" | LogicalOperator;
+type WhereDocument = {
+    [key in WhereDocumentOperator]?: LiteralValue | LiteralNumber | WhereDocument[];
+};
+
 export interface ChromaConfig {
   // Add Chroma-specific configs here if needed
-  where?: Record<string, any>;
-  whereDocument?: Record<string, any>;
+  where?: Where;
+  whereDocument?: WhereDocument
 }
 
 // Union type for all database-specific configs

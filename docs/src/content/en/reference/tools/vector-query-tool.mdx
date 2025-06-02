@@ -529,8 +529,8 @@ const runtimeContext = new RuntimeContext<{
   vectorStoreName: string;
   indexName: string;
   topK: number;
-  filter: any;
-  databaseConfig: any;
+  filter: VectorFilter;
+  databaseConfig: DatabaseConfig;
 }>();
 runtimeContext.set("vectorStoreName", "my-store");
 runtimeContext.set("indexName", "my-index");
