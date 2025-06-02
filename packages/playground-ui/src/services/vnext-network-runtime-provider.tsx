@@ -10,7 +10,8 @@ import { processDataStream } from '@ai-sdk/ui-utils';
 import { useState, ReactNode, useEffect } from 'react';
 
 import { ChatProps } from '@/types';
-import { createMastraClient } from '@/lib/mastra-client';
+import { useMastraClient } from '@/contexts/mastra-client-context';
+
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
 };
@@ -23,7 +24,6 @@ export function VNextMastraNetworkRuntimeProvider({
   initialMessages,
   memory,
   threadId,
-  baseUrl,
   refreshThreadList,
   modelSettings = {},
 }: Readonly<{
@@ -34,19 +34,19 @@ export function VNextMastraNetworkRuntimeProvider({
   const [messages, setMessages] = useState<ThreadMessageLike[]>(initialMessages || []);
   const [currentThreadId, setCurrentThreadId] = useState<string | undefined>(threadId);
 
-  const { frequencyPenalty, presencePenalty, maxRetries, maxSteps, maxTokens, temperature, topK, topP, instructions } =
-    modelSettings;
+  // const { frequencyPenalty, presencePenalty, maxRetries, maxSteps, maxTokens, temperature, topK, topP, instructions } =
+  //   modelSettings;
 
-  useEffect(() => {
-    if (messages.length === 0 || currentThreadId !== threadId) {
-      if (initialMessages && threadId && memory) {
-        setMessages(initialMessages);
-        setCurrentThreadId(threadId);
-      }
-    }
-  }, [initialMessages, threadId, memory, messages]);
+  // useEffect(() => {
+  //   if (messages.length === 0 || currentThreadId !== threadId) {
+  //     if (initialMessages && threadId && memory) {
+  //       setMessages(initialMessages);
+  //       setCurrentThreadId(threadId);
+  //     }
+  //   }
+  // }, [initialMessages, threadId, memory, messages]);
 
-  const mastra = createMastraClient(baseUrl);
+  const mastra = useMastraClient();
 
   const network = mastra.getVNextNetwork(networkId);
 
@@ -58,146 +58,173 @@ export function VNextMastraNetworkRuntimeProvider({
     setIsRunning(true);
 
     try {
-      const response = await network.stream({
-        message: input,
-      });
-
-      if (!response) {
-        throw new Error('No response');
-      }
-
-      const parts = [];
-      let content = '';
-      let currentTextPart: { type: 'text'; text: string } | null = null;
-
-      let assistantMessageAdded = false;
-
-      function updater() {
-        setMessages(currentConversation => {
-          const message: ThreadMessageLike = {
-            role: 'assistant',
-            content: [{ type: 'text', text: content }],
-          };
-
-          if (!assistantMessageAdded) {
-            assistantMessageAdded = true;
-            return [...currentConversation, message];
-          }
-          return [...currentConversation.slice(0, -1), message];
-        });
-      }
-
-      await processDataStream({
-        stream: response,
-        onDataPart(value) {
-          console.log('Data part received:', value);
+      const response = await network.stream(
+        {
+          message: input,
         },
-        onTextPart(value) {
-          console.log('Text part received:', value);
-          if (currentTextPart == null) {
-            currentTextPart = {
-              type: 'text',
-              text: value,
-            };
-            parts.push(currentTextPart);
-          } else {
-            currentTextPart.text += value;
-          }
-          content += value;
-          updater();
+        record => {
+          console.log('record in playground-ui==', record);
+          // if (record.type === 'tool-call') {
+          // }
+          setMessages(currentConversation => [
+            ...currentConversation,
+            {
+              role: 'assistant',
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify(record),
+                },
+              ],
+            },
+          ]);
         },
-        // async onToolCallPart(value) {
-        //   console.log('Tool call received:', value);
+      );
 
-        //   // Update the messages state
-        //   setMessages(currentConversation => {
-        //     // Get the last message (should be the assistant's message)
-        //     const lastMessage = currentConversation[currentConversation.length - 1];
+      // if (!response) {
+      //   throw new Error('No response');
+      // }
 
-        //     // Only process if the last message is from the assistant
-        //     if (lastMessage && lastMessage.role === 'assistant') {
-        //       // Create a new message with the tool call part
-        //       const updatedMessage: ThreadMessageLike = {
-        //         ...lastMessage,
-        //         content: Array.isArray(lastMessage.content)
-        //           ? [
-        //               ...lastMessage.content,
-        //               {
-        //                 type: 'tool-call',
-        //                 toolCallId: value.toolCallId,
-        //                 toolName: value.toolName,
-        //                 args: value.args,
-        //               },
-        //             ]
-        //           : [
-        //               ...(typeof lastMessage.content === 'string' ? [{ type: 'text', text: lastMessage.content }] : []),
-        //               {
-        //                 type: 'tool-call',
-        //                 toolCallId: value.toolCallId,
-        //                 toolName: value.toolName,
-        //                 args: value.args,
-        //               },
-        //             ],
-        //       };
+      // console.log('response==', response);
 
-        //       // Replace the last message with the updated one
-        //       return [...currentConversation.slice(0, -1), updatedMessage];
-        //     }
+      //@ts-ignore
+      // for await (const chunk of response.stream) {
+      //   console.log('chunk response==', chunk);
+      // }
 
-        //     // If there's no assistant message yet, create one
-        //     const newMessage: ThreadMessageLike = {
-        //       role: 'assistant',
-        //       content: [
-        //         { type: 'text', text: content },
-        //         {
-        //           type: 'tool-call',
-        //           toolCallId: value.toolCallId,
-        //           toolName: value.toolName,
-        //           args: value.args,
-        //         },
-        //       ],
-        //     };
-        //     return [...currentConversation, newMessage];
-        //   });
-        // },
-        // async onToolResultPart(value: any) {
-        //   console.log('Tool call result received:', value);
+      // const parts = [];
+      // let content = '';
+      // let currentTextPart: { type: 'text'; text: string } | null = null;
 
-        //   // Update the messages state
-        //   setMessages(currentConversation => {
-        //     // Get the last message (should be the assistant's message)
-        //     const lastMessage = currentConversation[currentConversation.length - 1];
+      // let assistantMessageAdded = false;
 
-        //     // Only process if the last message is from the assistant and has content array
-        //     if (lastMessage && lastMessage.role === 'assistant' && Array.isArray(lastMessage.content)) {
-        //       // Find the tool call content part that this result belongs to
-        //       const updatedContent = lastMessage.content.map(part => {
-        //         if (typeof part === 'object' && part.type === 'tool-call' && part.toolCallId === value.toolCallId) {
-        //           return {
-        //             ...part,
-        //             result: value.result,
-        //           };
-        //         }
-        //         return part;
-        //       });
+      // function updater() {
+      //   setMessages(currentConversation => {
+      //     const message: ThreadMessageLike = {
+      //       role: 'assistant',
+      //       content: [{ type: 'text', text: content }],
+      //     };
 
-        //       // Create a new message with the updated content
-        //       const updatedMessage: ThreadMessageLike = {
-        //         ...lastMessage,
-        //         content: updatedContent,
-        //       };
+      //     if (!assistantMessageAdded) {
+      //       assistantMessageAdded = true;
+      //       return [...currentConversation, message];
+      //     }
+      //     return [...currentConversation.slice(0, -1), message];
+      //   });
+      // }
 
-        //       // Replace the last message with the updated one
-        //       return [...currentConversation.slice(0, -1), updatedMessage];
-        //     }
+      // await processDataStream({
+      //   //@ts-ignore
+      //   stream: response.stream,
+      //   onDataPart(value) {
+      //     console.log('Data part received:', value);
+      //   },
+      //   onTextPart(value) {
+      //     console.log('Text part received:', value);
+      //     if (currentTextPart == null) {
+      //       currentTextPart = {
+      //         type: 'text',
+      //         text: value,
+      //       };
+      //       parts.push(currentTextPart);
+      //     } else {
+      //       currentTextPart.text += value;
+      //     }
+      //     content += value;
+      //     updater();
+      //   },
+      //   // async onToolCallPart(value) {
+      //   //   console.log('Tool call received:', value);
 
-        //     return currentConversation;
-        //   });
-        // },
-        onErrorPart(error) {
-          throw new Error(error);
-        },
-      });
+      //   //   // Update the messages state
+      //   //   setMessages(currentConversation => {
+      //   //     // Get the last message (should be the assistant's message)
+      //   //     const lastMessage = currentConversation[currentConversation.length - 1];
+
+      //   //     // Only process if the last message is from the assistant
+      //   //     if (lastMessage && lastMessage.role === 'assistant') {
+      //   //       // Create a new message with the tool call part
+      //   //       const updatedMessage: ThreadMessageLike = {
+      //   //         ...lastMessage,
+      //   //         content: Array.isArray(lastMessage.content)
+      //   //           ? [
+      //   //               ...lastMessage.content,
+      //   //               {
+      //   //                 type: 'tool-call',
+      //   //                 toolCallId: value.toolCallId,
+      //   //                 toolName: value.toolName,
+      //   //                 args: value.args,
+      //   //               },
+      //   //             ]
+      //   //           : [
+      //   //               ...(typeof lastMessage.content === 'string' ? [{ type: 'text', text: lastMessage.content }] : []),
+      //   //               {
+      //   //                 type: 'tool-call',
+      //   //                 toolCallId: value.toolCallId,
+      //   //                 toolName: value.toolName,
+      //   //                 args: value.args,
+      //   //               },
+      //   //             ],
+      //   //       };
+
+      //   //       // Replace the last message with the updated one
+      //   //       return [...currentConversation.slice(0, -1), updatedMessage];
+      //   //     }
+
+      //   //     // If there's no assistant message yet, create one
+      //   //     const newMessage: ThreadMessageLike = {
+      //   //       role: 'assistant',
+      //   //       content: [
+      //   //         { type: 'text', text: content },
+      //   //         {
+      //   //           type: 'tool-call',
+      //   //           toolCallId: value.toolCallId,
+      //   //           toolName: value.toolName,
+      //   //           args: value.args,
+      //   //         },
+      //   //       ],
+      //   //     };
+      //   //     return [...currentConversation, newMessage];
+      //   //   });
+      //   // },
+      //   // async onToolResultPart(value: any) {
+      //   //   console.log('Tool call result received:', value);
+
+      //   //   // Update the messages state
+      //   //   setMessages(currentConversation => {
+      //   //     // Get the last message (should be the assistant's message)
+      //   //     const lastMessage = currentConversation[currentConversation.length - 1];
+
+      //   //     // Only process if the last message is from the assistant and has content array
+      //   //     if (lastMessage && lastMessage.role === 'assistant' && Array.isArray(lastMessage.content)) {
+      //   //       // Find the tool call content part that this result belongs to
+      //   //       const updatedContent = lastMessage.content.map(part => {
+      //   //         if (typeof part === 'object' && part.type === 'tool-call' && part.toolCallId === value.toolCallId) {
+      //   //           return {
+      //   //             ...part,
+      //   //             result: value.result,
+      //   //           };
+      //   //         }
+      //   //         return part;
+      //   //       });
+
+      //   //       // Create a new message with the updated content
+      //   //       const updatedMessage: ThreadMessageLike = {
+      //   //         ...lastMessage,
+      //   //         content: updatedContent,
+      //   //       };
+
+      //   //       // Replace the last message with the updated one
+      //   //       return [...currentConversation.slice(0, -1), updatedMessage];
+      //   //     }
+
+      //   //     return currentConversation;
+      //   //   });
+      //   // },
+      //   onErrorPart(error) {
+      //     throw new Error(error);
+      //   },
+      // });
 
       console.log(messages);
 

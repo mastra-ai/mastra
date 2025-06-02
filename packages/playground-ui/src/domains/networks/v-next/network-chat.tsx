@@ -1,4 +1,4 @@
-import { Thread } from '@/components/assistant-ui/thread';
+import { VNextThread } from '@/components/assistant-ui/threads-two';
 import { MastraNetworkRuntimeProvider } from '@/services/network-runtime-provider';
 import { ChatProps } from '@/types';
 // import { ToolFallback } from './tool-fallback';
@@ -11,7 +11,7 @@ export const VNextNetworkChat = ({ networkId }: { networkId: string }) => {
   return (
     <VNextMastraNetworkRuntimeProvider networkId={networkId}>
       <div className="h-full pb-4">
-        <Thread />
+        <VNextThread />
       </div>
     </VNextMastraNetworkRuntimeProvider>
   );

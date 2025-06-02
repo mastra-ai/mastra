@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 import { VNextNetworkChat } from '@mastra/playground-ui';
 import { useParams } from 'react-router';
 
-export default function Network() {
+export default function VNextNetwork() {
   const { networkId } = useParams();
 
   // const { vNextNetwork: network, isLoading: isNetworkLoading } = useVNextNetwork(networkId!);
