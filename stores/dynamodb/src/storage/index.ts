@@ -115,7 +115,7 @@ export class DynamoDBStore extends MastraStorage {
     schema: Record<string, StorageColumn>;
     ifNotExists: string[];
   }): Promise<void> {
-    // Nothing to do here, MongoDB is schemaless
+    // Nothing to do here, DynamoDB has a flexible schema and handles new attributes automatically upon insertion/update.
   }
 
   /**

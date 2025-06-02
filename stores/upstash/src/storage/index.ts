@@ -406,7 +406,7 @@ export class UpstashStore extends MastraStorage {
     schema: Record<string, StorageColumn>;
     ifNotExists: string[];
   }): Promise<void> {
-    // Nothing to do here, MongoDB is schemaless
+    // Nothing to do here, Redis is schemaless
   }
 
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
