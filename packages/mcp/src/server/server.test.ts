@@ -721,9 +721,9 @@ describe('MCPServer', () => {
       expect(result).toBeDefined();
       expect(result.prompts).toBeInstanceOf(Array);
       // Should contain both explain-code v1 and v2 and summarize v1
-      const explainV1 = result.prompts.find((p: any) => p.name === 'explain-code' && p.version === 'v1');
-      const explainV2 = result.prompts.find((p: any) => p.name === 'explain-code' && p.version === 'v2');
-      const summarizeV1 = result.prompts.find((p: any) => p.name === 'summarize' && p.version === 'v1');
+      const explainV1 = result.prompts.find((p: Prompt) => p.name === 'explain-code' && p.version === 'v1');
+      const explainV2 = result.prompts.find((p: Prompt) => p.name === 'explain-code' && p.version === 'v2');
+      const summarizeV1 = result.prompts.find((p: Prompt) => p.name === 'summarize' && p.version === 'v1');
       expect(explainV1).toBeDefined();
       expect(explainV2).toBeDefined();
       expect(summarizeV1).toBeDefined();
@@ -815,7 +815,7 @@ describe('MCPServer', () => {
     });
     it('should list prompts with required fields', async () => {
       const result = await promptInternalClient.listPrompts();
-      result.prompts.forEach((p: any) => {
+      result.prompts.forEach((p: Prompt) => {
         expect(p.name).toBeDefined();
         expect(p.description).toBeDefined();
         expect(p.arguments).toBeDefined();
