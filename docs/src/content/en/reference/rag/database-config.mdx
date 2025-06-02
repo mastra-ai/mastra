@@ -38,7 +38,7 @@ Configuration options specific to Pinecone vector store.
     {
       name: "sparseVector",
       type: "{ indices: number[]; values: number[]; }",
-      description: "Sparse vector for hybrid search combining dense and sparse embeddings. Enables better search quality for keyword-based queries.",
+      description: "Sparse vector for hybrid search combining dense and sparse embeddings. Enables better search quality for keyword-based queries.  The indices and values arrays must be the same length.",
       isOptional: true,
       properties: [
         {

@@ -19,28 +19,28 @@ export interface PgVectorConfig {
 type LiteralValue = string | number | boolean;
 type ListLiteralValue = LiteralValue[];
 type LiteralNumber = number;
-type LogicalOperator = "$and" | "$or";
-type InclusionOperator = "$in" | "$nin";
-type WhereOperator = "$gt" | "$gte" | "$lt" | "$lte" | "$ne" | "$eq";
+type LogicalOperator = '$and' | '$or';
+type InclusionOperator = '$in' | '$nin';
+type WhereOperator = '$gt' | '$gte' | '$lt' | '$lte' | '$ne' | '$eq';
 type OperatorExpression = {
-    [key in WhereOperator | InclusionOperator | LogicalOperator]?: LiteralValue | ListLiteralValue;
+  [key in WhereOperator | InclusionOperator | LogicalOperator]?: LiteralValue | ListLiteralValue;
 };
 type BaseWhere = {
-    [key: string]: LiteralValue | OperatorExpression;
+  [key: string]: LiteralValue | OperatorExpression;
 };
 type LogicalWhere = {
-    [key in LogicalOperator]?: Where[];
+  [key in LogicalOperator]?: Where[];
 };
 type Where = BaseWhere | LogicalWhere;
-type WhereDocumentOperator = "$contains" | "$not_contains" | LogicalOperator;
+type WhereDocumentOperator = '$contains' | '$not_contains' | LogicalOperator;
 type WhereDocument = {
-    [key in WhereDocumentOperator]?: LiteralValue | LiteralNumber | WhereDocument[];
+  [key in WhereDocumentOperator]?: LiteralValue | LiteralNumber | WhereDocument[];
 };
 
 export interface ChromaConfig {
   // Add Chroma-specific configs here if needed
   where?: Where;
-  whereDocument?: WhereDocument
+  whereDocument?: WhereDocument;
 }
 
 // Union type for all database-specific configs

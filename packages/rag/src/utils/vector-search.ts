@@ -28,7 +28,7 @@ enum DatabaseType {
   Chroma = 'chroma',
 }
 
-const DATABASE_TYPE_MAP = Object.keys(DatabaseType)
+const DATABASE_TYPE_MAP = Object.keys(DatabaseType);
 
 // Helper function to handle vector query search
 export const vectorQuerySearch = async ({
@@ -56,7 +56,7 @@ export const vectorQuerySearch = async ({
     filter: queryFilter,
     includeVector: includeVectors,
   };
-  
+
   // Get relevant chunks from the vector database
   const results = await vectorStore.query({ ...queryParams, ...databaseSpecificParams(databaseConfig) });
 

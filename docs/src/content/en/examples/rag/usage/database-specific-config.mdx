@@ -226,7 +226,7 @@ interface Tenant {
 }
 
 class MultiTenantSearchService {
-  private searchTool: any;
+  private searchTool: RagTool
 
   constructor() {
     this.searchTool = createVectorQueryTool({
