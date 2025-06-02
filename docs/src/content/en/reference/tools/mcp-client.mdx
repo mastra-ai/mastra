@@ -291,6 +291,88 @@ mcpClient.resources.onListChanged("myWeatherServer", () => {
 });
 ```
 
+### `prompts` Property
+
+The `MCPClient` instance has a `prompts` property that provides access to prompt-related operations.
+
+```typescript
+const mcpClient = new MCPClient({
+  /* ...servers configuration... */
+});
+
+// Access prompt methods via mcpClient.prompts
+const allPromptsByServer = await mcpClient.prompts.list();
+const { prompt, messages } = await mcpClient.prompts.get({
+  serverName: "weather",
+  name: "current",
+});
+```
+
+#### `prompts.list()`
+
+Retrieves all available prompts from all connected MCP servers, grouped by server name.
+
+```typescript
+async list(): Promise<Record<string, Prompt[]>>
+```
+
+Example:
+
+```typescript
+const promptsByServer = await mcpClient.prompts.list();
+for (const serverName in promptsByServer) {
+  console.log(`Prompts from ${serverName}:`, promptsByServer[serverName]);
+}
+```
+
+#### `prompts.get({ serverName, name, args?, version? })`
+
+Retrieves a specific prompt and its messages from a server.
+
+```typescript
+async get({
+  serverName,
+  name,
+  args?,
+  version?,
+}: {
+  serverName: string;
+  name: string;
+  args?: Record<string, any>;
+  version?: string;
+}): Promise<{ prompt: Prompt; messages: PromptMessage[] }>
+```
+
+Example:
+
+```typescript
+const { prompt, messages } = await mcpClient.prompts.get({
+  serverName: "weather",
+  name: "current",
+  args: { location: "London" },
+});
+console.log(prompt);
+console.log(messages);
+```
+
+#### `prompts.onListChanged(serverName: string, handler: () => void)`
+
+Sets a notification handler that will be called when the list of available prompts changes on a specific server.
+
+```typescript
+async onListChanged(serverName: string, handler: () => void): Promise<void>
+```
+
+Example:
+
+```typescript
+mcpClient.prompts.onListChanged("weather", () => {
+  console.log("Prompt list changed on weather server.");
+  // You should re-fetch the list of prompts
+  // await mcpClient.prompts.list();
+});
+```
+
 ## Examples
 
 ### Static Tool Configuration
