@@ -1,5 +1,4 @@
 import {
-  applyCompatLayer,
   OpenAIReasoningSchemaCompatLayer,
   OpenAISchemaCompatLayer,
   GoogleSchemaCompatLayer,
@@ -7,6 +6,7 @@ import {
   DeepSeekSchemaCompatLayer,
   MetaSchemaCompatLayer,
 } from '@mastra/schema-compat';
+import { applyCompatLayer } from '@mastra/schema-compat/utils';
 import type { ToolExecutionOptions } from 'ai';
 import { z } from 'zod';
 import { MastraBase } from '../../base';

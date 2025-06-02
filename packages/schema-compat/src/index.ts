@@ -1,9 +1,3 @@
-// Main schema compatibility class and types
-export * from './schema-compatibility';
-
-// Builder functions and types
-export * from './utils';
-
 // Provider compatibility implementations
 export { AnthropicSchemaCompatLayer } from './provider-compats/anthropic';
 export { DeepSeekSchemaCompatLayer } from './provider-compats/deepseek';
