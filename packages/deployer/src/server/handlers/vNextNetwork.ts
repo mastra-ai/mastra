@@ -5,6 +5,7 @@ import {
   getVNextNetworkByIdHandler as getOriginalVNextNetworkByIdHandler,
   generateVNextNetworkHandler as getOriginalGenerateVNextNetworkHandler,
   streamGenerateVNextNetworkHandler as getOriginalStreamGenerateVNextNetworkHandler,
+  loopVNextNetworkHandler as getOriginalLoopVNextNetworkHandler,
 } from '@mastra/server/handlers/vNextNetwork';
 import type { Context } from 'hono';
 import { stream } from 'hono/streaming';
@@ -104,5 +105,25 @@ export async function streamGenerateVNextNetworkHandler(c: Context) {
     );
   } catch (error) {
     return handleError(error, 'Error streaming from network');
+  }
+}
+
+export async function loopVNextNetworkHandler(c: Context) {
+  try {
+    const mastra: Mastra = c.get('mastra');
+    const runtimeContext: RuntimeContext = c.get('runtimeContext');
+    const networkId = c.req.param('networkId');
+    const body = await c.req.json();
+
+    const result = await getOriginalLoopVNextNetworkHandler({
+      mastra,
+      runtimeContext,
+      networkId,
+      body,
+    });
+
+    return c.json(result);
+  } catch (error) {
+    return handleError(error, 'Error looping from network');
   }
 }

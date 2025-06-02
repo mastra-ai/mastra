@@ -1,4 +1,9 @@
-import type { ClientOptions, GetVNextNetworkResponse, GenerateVNextNetworkResponse } from '../types';
+import type {
+  ClientOptions,
+  GetVNextNetworkResponse,
+  GenerateVNextNetworkResponse,
+  LoopVNextNetworkResponse,
+} from '../types';
 
 import { BaseResource } from './base';
 
@@ -27,6 +32,18 @@ export class VNextNetwork extends BaseResource {
    */
   generate(params: { message: string }): Promise<GenerateVNextNetworkResponse> {
     return this.request(`/api/networks/${this.networkId}/generate`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Generates a response from the v-next network
+   * @param params - Generation parameters including message
+   * @returns Promise containing the generated response
+   */
+  loop(params: { message: string }): Promise<LoopVNextNetworkResponse> {
+    return this.request(`/api/networks/${this.networkId}/loop`, {
       method: 'POST',
       body: params,
     });

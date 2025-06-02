@@ -300,7 +300,7 @@ export class NewAgentNetwork extends MastraBase {
       throw new Error('Workflow suspended');
     }
 
-    return result.result;
+    return result;
   }
 
   createWorkflow({ runtimeContext }: { runtimeContext?: RuntimeContext }) {

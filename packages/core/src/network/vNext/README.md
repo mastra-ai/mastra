@@ -335,3 +335,15 @@ for await (const chunk of stream) {
   console.log(chunk);
 }
 ```
+
+And for loops
+
+```typescript
+console.log(
+  // specifying the task, note that there is a mention here about using an agent for synthesis. This is because the routing agent can actually do some synthesis on results on its own, so this will force it to use agent2 instead
+  await network.loop(
+    'What are the biggest cities in France? Give me 3. How are they like? Find cities, then do thorough research on each city, and give me a final full report synthesizing all that information. Make sure to use an agent for synthesis.',
+    { runtimeContext },
+  ),
+);
+```

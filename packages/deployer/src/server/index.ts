@@ -74,6 +74,7 @@ import {
   getVNextNetworkByIdHandler,
   getVNextNetworksHandler,
   streamGenerateVNextNetworkHandler,
+  loopVNextNetworkHandler,
 } from './handlers/vNextNetwork';
 import { getSpeakersHandler, getListenerHandler, listenHandler, speakHandler } from './handlers/voice';
 import {
@@ -518,6 +519,49 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
       },
     }),
     generateVNextNetworkHandler,
+  );
+
+  app.post(
+    '/api/networks/v-next/:networkId/loop',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Loop a v-next network',
+      tags: ['vNextNetworks'],
+      parameters: [
+        {
+          name: 'networkId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                message: {
+                  type: 'string',
+                  description: 'Message for the v-next network',
+                },
+              },
+              required: ['message'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Looped response',
+        },
+        404: {
+          description: 'v-next Network not found',
+        },
+      },
+    }),
+    loopVNextNetworkHandler,
   );
 
   app.post(

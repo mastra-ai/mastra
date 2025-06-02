@@ -323,6 +323,14 @@ export interface GenerateVNextNetworkResponse {
   resourceType: 'none' | 'tool' | 'agent' | 'workflow';
 }
 
+export interface LoopVNextNetworkResponse {
+  status: 'success';
+  result: {
+    text: string;
+  };
+  steps: WorkflowResult<any, any>['steps'];
+}
+
 export interface McpServerListResponse {
   servers: ServerInfo[];
   next: string | null;

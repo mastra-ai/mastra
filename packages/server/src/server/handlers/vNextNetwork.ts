@@ -171,3 +171,32 @@ export async function streamGenerateVNextNetworkHandler({
     return handleError(error, 'Error streaming from network');
   }
 }
+
+export async function loopVNextNetworkHandler({
+  mastra,
+  networkId,
+  body,
+  runtimeContext,
+}: NetworkContext & {
+  runtimeContext: RuntimeContext;
+  body: { message: string };
+}) {
+  try {
+    const network = mastra.vnext_getNetwork(networkId!);
+
+    if (!network) {
+      throw new HTTPException(404, { message: 'Network not found' });
+    }
+
+    validateBody({ message: body.message });
+
+    const { message } = body;
+    const result = await network.loop(message, {
+      runtimeContext,
+    });
+
+    return result;
+  } catch (error) {
+    return handleError(error, 'Error streaming from network');
+  }
+}
