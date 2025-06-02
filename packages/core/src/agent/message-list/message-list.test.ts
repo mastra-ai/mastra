@@ -777,14 +777,7 @@ describe('MessageList', () => {
           createdAt: expect.any(Date),
           content: {
             format: 2,
-            parts: [
-              { type: 'text', text: 'Here is an image URL:' },
-              {
-                data: 'https://example.com/image.jpg',
-                mimeType: 'image/jpeg',
-                type: 'file',
-              },
-            ],
+            parts: [{ type: 'text', text: 'Here is an image URL:' }],
             experimental_attachments: [
               {
                 name: 'image.jpg',
@@ -822,14 +815,7 @@ describe('MessageList', () => {
           createdAt: expect.any(Date),
           content: {
             format: 2,
-            parts: [
-              { type: 'text', text: 'Here is another image URL:' },
-              {
-                type: 'file',
-                data: 'https://example.com/another-image.png',
-                mimeType: 'image/png',
-              },
-            ],
+            parts: [{ type: 'text', text: 'Here is another image URL:' }],
             experimental_attachments: [
               {
                 name: 'another-image.png',
@@ -1157,14 +1143,7 @@ describe('MessageList', () => {
           createdAt: expect.any(Date),
           content: {
             format: 2,
-            parts: [
-              { type: 'text', text: 'Here is an embedded image:' },
-              {
-                type: 'file',
-                mimeType: 'image/gif',
-                data: 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==',
-              },
-            ],
+            parts: [{ type: 'text', text: 'Here is an embedded image:' }],
             experimental_attachments: [
               {
                 contentType: 'image/gif',
