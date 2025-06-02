@@ -131,7 +131,7 @@ class MockMemory extends MastraMemory {
 }
 
 describe('NewAgentNetwork', () => {
-  it('should create a new agent network', async () => {
+  it.only('should create a new agent network', async () => {
     const memory = new MockMemory({
       name: 'test-memory',
     });
@@ -231,12 +231,12 @@ describe('NewAgentNetwork', () => {
     console.log(
       await network.loop(
         'What are the biggest cities in France? Give me 3. How are they like? Find cities, then do thorough research on each city, and give me a final full report synthesizing all that information. Make sure to use an agent for synthesis.',
-        { runtimeContext },
+        { runtimeContext, maxIterations: 10 },
       ),
     );
   });
 
-  it.only('should create a new agent network single call', async () => {
+  it('should create a new agent network single call', async () => {
     const memory = new MockMemory({
       name: 'test-memory',
     });
