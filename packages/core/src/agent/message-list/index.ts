@@ -398,7 +398,15 @@ ${JSON.stringify(message, null, 2)}`,
   }
 
   private inputToMastraMessageV2(message: MessageInput, messageSource: MessageSource): MastraMessageV2 {
-    if (`threadId` in message && message.threadId && this.memoryInfo && message.threadId !== this.memoryInfo.threadId) {
+    if (
+      // we can't throw if the threadId doesn't match and this message came from memory
+      // this is because per-user semantic recall can retrieve messages from other threads
+      messageSource !== `memory` &&
+      `threadId` in message &&
+      message.threadId &&
+      this.memoryInfo &&
+      message.threadId !== this.memoryInfo.threadId
+    ) {
       throw new Error(
         `Received input message with wrong threadId. Input ${message.threadId}, expected ${this.memoryInfo.threadId}`,
       );
