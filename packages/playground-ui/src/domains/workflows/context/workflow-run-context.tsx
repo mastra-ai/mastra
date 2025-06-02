@@ -53,7 +53,7 @@ export function WorkflowRunProvider({
         payload,
         setPayload,
         clearData,
-        snapshot: snapshot,
+        snapshot,
       }}
     >
       {children}
