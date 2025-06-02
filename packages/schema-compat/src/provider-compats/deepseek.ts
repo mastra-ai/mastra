@@ -14,7 +14,8 @@ export class DeepSeekSchemaCompatLayer extends SchemaCompatLayer {
   }
 
   shouldApply(): boolean {
-    return this.getModel().modelId.includes('deepseek');
+    // Deepseek R1 performs perfectly without this compat layer
+    return this.getModel().modelId.includes('deepseek') && !this.getModel().modelId.includes('r1');
   }
 
   processZodType<T extends z.AnyZodObject>(value: z.ZodTypeAny): ShapeValue<T> {

@@ -30,7 +30,7 @@ jobs:
         run: pnpm install
 
       - name: Build @mastra/schema-compat
-        run: pnpm turbo --filter="./packages/schema" build
+        run: pnpm turbo --filter="./packages/schema-compat" build
 
       - name: Run Schema tests
         run: pnpm run test:schema-compat
