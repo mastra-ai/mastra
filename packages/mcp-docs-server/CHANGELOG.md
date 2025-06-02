@@ -1,5 +1,82 @@
 # @mastra/mcp-docs-server
 
+## 0.11.1-alpha.2
+
+### Patch Changes
+
+- beb9dfa: Update mcp docs server to use MCPServer component
+- Updated dependencies [c5bf1ce]
+- Updated dependencies [12b7002]
+  - @mastra/core@0.10.2-alpha.4
+
+## 0.11.1-alpha.1
+
+### Patch Changes
+
+- f0d559f: Fix peerdeps for alpha channel
+- Updated dependencies [1e8bb40]
+- Updated dependencies [f0d559f]
+  - @mastra/core@0.10.2-alpha.2
+  - @mastra/mcp@0.10.2-alpha.1
+
+## 0.11.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [592a2db]
+- Updated dependencies [e5dc18d]
+  - @mastra/core@0.10.2-alpha.0
+  - @mastra/mcp@0.10.2-alpha.0
+
+## 0.11.0
+
+### Minor Changes
+
+- 3240a80: feat: add mastra interactive course
+
+### Patch Changes
+
+- 96f3fb2: Change logging for non existent paths when using mcp-docs-server
+- Updated dependencies [d70b807]
+- Updated dependencies [6d16390]
+- Updated dependencies [1e4a421]
+- Updated dependencies [ab89d6a]
+- Updated dependencies [200d0da]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+- Updated dependencies [6015bdf]
+  - @mastra/core@0.10.1
+  - @mastra/mcp@0.10.1
+
+## 0.11.0-alpha.2
+
+### Minor Changes
+
+- 3240a80: feat: add mastra interactive course
+
+## 0.10.1-alpha.1
+
+### Patch Changes
+
+- 96f3fb2: Change logging for non existent paths when using mcp-docs-server
+
+## 0.10.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [ab89d6a]
+- Updated dependencies [200d0da]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+  - @mastra/mcp@0.10.1-alpha.0
+  - @mastra/core@0.10.1-alpha.1
+
 ## 0.10.0
 
 ### Minor Changes

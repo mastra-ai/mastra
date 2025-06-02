@@ -13,6 +13,9 @@ import {
   AgentIcon,
   Icon,
   Txt,
+  ToolCoinIcon,
+  EmptyState,
+  Button,
 } from '@mastra/playground-ui';
 import { Link } from 'react-router';
 import { startTransition, useMemo, useRef, useState } from 'react';
@@ -98,6 +101,39 @@ const ToolsInner = ({ toolsWithAgents }: { toolsWithAgents: ToolWithAgents[] }) 
       );
     });
   };
+
+  if (filteredTools.length === 0 && !value) {
+    return (
+      <>
+        <Header>
+          <HeaderTitle>Tools</HeaderTitle>
+        </Header>
+
+        <div className="flex h-full items-center justify-center">
+          <EmptyState
+            iconSlot={<ToolCoinIcon />}
+            titleSlot="Configure Tools"
+            descriptionSlot="Mastra tools are not configured yet. You can find more information in the documentation."
+            actionSlot={
+              <Button
+                size="lg"
+                className="w-full"
+                variant="light"
+                as="a"
+                href="https://mastra.ai/en/docs/agents/using-tools-and-mcp"
+                target="_blank"
+              >
+                <Icon>
+                  <ToolsIcon />
+                </Icon>
+                Docs
+              </Button>
+            }
+          />
+        </div>
+      </>
+    );
+  }
 
   return (
     <>

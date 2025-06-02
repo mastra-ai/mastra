@@ -13,7 +13,9 @@ import type {
   StepFlowEntry,
   StepResult,
   WorkflowResult,
+  SerializedStepFlowEntry,
 } from '@mastra/core/workflows';
+import { EMITTER_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Span } from '@opentelemetry/api';
 import type { Inngest, BaseContext } from 'inngest';
 import { serve as inngestServe } from 'inngest/hono';
@@ -40,6 +42,7 @@ export class InngestRun<
   TOutput extends z.ZodType<any> = z.ZodType<any>,
 > extends Run<TSteps, TInput, TOutput> {
   private inngest: Inngest;
+  serializedStepGraph: SerializedStepFlowEntry[];
   #mastra: Mastra;
 
   constructor(
@@ -48,6 +51,7 @@ export class InngestRun<
       runId: string;
       executionEngine: ExecutionEngine;
       executionGraph: ExecutionGraph;
+      serializedStepGraph: SerializedStepFlowEntry[];
       mastra?: Mastra;
       retryConfig?: {
         attempts?: number;
@@ -59,6 +63,7 @@ export class InngestRun<
   ) {
     super(params);
     this.inngest = inngest;
+    this.serializedStepGraph = params.serializedStepGraph;
     this.#mastra = params.mastra!;
   }
 
@@ -95,6 +100,7 @@ export class InngestRun<
       runId: this.runId,
       snapshot: {
         runId: this.runId,
+        serializedStepGraph: this.serializedStepGraph,
         value: {},
         context: {} as any,
         activePaths: [],
@@ -277,6 +283,7 @@ export class InngestWorkflow<
           runId: runIdToUse,
           executionEngine: this.executionEngine,
           executionGraph: this.executionGraph,
+          serializedStepGraph: this.serializedStepGraph,
           mastra: this.#mastra,
           retryConfig: this.retryConfig,
           cleanup: () => this.runs.delete(runIdToUse),
@@ -328,6 +335,7 @@ export class InngestWorkflow<
           workflowId: this.id,
           runId,
           graph: this.executionGraph,
+          serializedStepGraph: this.serializedStepGraph,
           input: inputData,
           emitter,
           retryConfig: this.retryConfig,
@@ -415,8 +423,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   protected async fmtReturnValue<TOutput>(
     executionSpan: Span | undefined,
     emitter: { emit: (event: string, data: any) => Promise<void> },
-    stepResults: Record<string, StepResult<any>>,
-    lastOutput: StepResult<any>,
+    stepResults: Record<string, StepResult<any, any, any, any>>,
+    lastOutput: StepResult<any, any, any, any>,
     error?: Error | string,
   ): Promise<TOutput> {
     const base: any = {
@@ -500,7 +508,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     workflowId: string;
     runId: string;
     step: Step<string, any, any>;
-    stepResults: Record<string, StepResult<any>>;
+    stepResults: Record<string, StepResult<any, any, any, any>>;
     executionContext: ExecutionContext;
     resume?: {
       steps: string[];
@@ -509,7 +517,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     prevOutput: any;
     emitter: { emit: (event: string, data: any) => Promise<void> };
     runtimeContext: RuntimeContext;
-  }): Promise<StepResult<any>> {
+  }): Promise<StepResult<any, any, any, any>> {
     return super.executeStep({
       workflowId,
       runId,
@@ -533,7 +541,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     runtimeContext,
   }: {
     step: Step<string, any, any>;
-    stepResults: Record<string, StepResult<any>>;
+    stepResults: Record<string, StepResult<any, any, any, any>>;
     executionContext: {
       workflowId: string;
       runId: string;
@@ -549,7 +557,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     prevOutput: any;
     emitter: { emit: (event: string, data: any) => Promise<void> };
     runtimeContext: RuntimeContext;
-  }): Promise<StepResult<any>> {
+  }): Promise<StepResult<any, any, any, any>> {
     await this.inngestStep.run(
       `workflow.${executionContext.workflowId}.run.${executionContext.runId}.step.${step.id}.running_ev`,
       async () => {
@@ -643,7 +651,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             return { executionContext, result: { status: 'failed', error: result?.error } };
           } else if (result.status === 'suspended') {
             const suspendedSteps = Object.entries(result.steps).filter(([_stepName, stepResult]) => {
-              const stepRes: StepResult<any> = stepResult as StepResult<any>;
+              const stepRes: StepResult<any, any, any, any> = stepResult as StepResult<any, any, any, any>;
               return stepRes?.status === 'suspended';
             });
 
@@ -731,7 +739,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       );
 
       Object.assign(executionContext, res.executionContext);
-      return res.result as StepResult<any>;
+      return res.result as StepResult<any, any, any, any>;
     }
 
     const stepRes = await this.inngestStep.run(`workflow.${executionContext.workflowId}.step.${step.id}`, async () => {
@@ -739,6 +747,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       let suspended: { payload: any } | undefined;
       try {
         const result = await step.execute({
+          runId: executionContext.runId,
           mastra: this.mastra!,
           runtimeContext,
           inputData: prevOutput,
@@ -815,10 +824,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     runId,
     stepResults,
     executionContext,
+    serializedStepGraph,
   }: {
     workflowId: string;
     runId: string;
-    stepResults: Record<string, StepResult<any>>;
+    stepResults: Record<string, StepResult<any, any, any, any>>;
+    serializedStepGraph: SerializedStepFlowEntry[];
     executionContext: ExecutionContext;
   }) {
     await this.inngestStep.run(
@@ -833,6 +844,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             context: stepResults as any,
             activePaths: [],
             suspendedPaths: executionContext.suspendedPaths,
+            serializedStepGraph,
             // @ts-ignore
             timestamp: Date.now(),
           },
@@ -848,6 +860,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     prevOutput,
     prevStep,
     stepResults,
+    serializedStepGraph,
     resume,
     executionContext,
     emitter,
@@ -857,18 +870,19 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     runId: string;
     entry: { type: 'conditional'; steps: StepFlowEntry[]; conditions: ExecuteFunction<any, any, any, any>[] };
     prevStep: StepFlowEntry;
+    serializedStepGraph: SerializedStepFlowEntry[];
     prevOutput: any;
-    stepResults: Record<string, StepResult<any>>;
+    stepResults: Record<string, StepResult<any, any, any, any>>;
     resume?: {
       steps: string[];
-      stepResults: Record<string, StepResult<any>>;
+      stepResults: Record<string, StepResult<any, any, any, any>>;
       resumePayload: any;
       resumePath: number[];
     };
     executionContext: ExecutionContext;
     emitter: { emit: (event: string, data: any) => Promise<void> };
     runtimeContext: RuntimeContext;
-  }): Promise<StepResult<any>> {
+  }): Promise<StepResult<any, any, any, any>> {
     let execResults: any;
     const truthyIndexes = (
       await Promise.all(
@@ -876,6 +890,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           this.inngestStep.run(`workflow.${workflowId}.conditional.${index}`, async () => {
             try {
               const result = await cond({
+                runId,
                 mastra: this.mastra!,
                 runtimeContext,
                 inputData: prevOutput,
@@ -895,7 +910,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
                 // TODO: this function shouldn't have suspend probably?
                 suspend: async (_suspendPayload: any) => {},
-                emitter,
+                [EMITTER_SYMBOL]: emitter,
               });
               return result ? index : null;
               // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -908,7 +923,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     ).filter((index: any): index is number => index !== null);
 
     const stepsToRun = entry.steps.filter((_, index) => truthyIndexes.includes(index));
-    const results: StepResult<any>[] = await Promise.all(
+    const results: StepResult<any, any, any, any>[] = await Promise.all(
       stepsToRun.map((step, index) =>
         this.executeEntry({
           workflowId,
@@ -917,6 +932,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           prevStep,
           stepResults,
           resume,
+          serializedStepGraph,
           executionContext: {
             workflowId,
             runId,

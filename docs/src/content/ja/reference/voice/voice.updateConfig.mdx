@@ -69,15 +69,13 @@ await voice.speak("Hello with my new voice!");
     {
       name: "voice",
       type: "string",
-      description:
-        "音声合成に使用するボイスID（例: 'alloy', 'echo', 'nova'）",
+      description: "音声合成に使用するボイスID（例: 'alloy', 'echo', 'nova'）",
       isOptional: true,
     },
     {
       name: "turn_detection",
       type: "{ type: string, threshold?: number, silence_duration_ms?: number }",
-      description:
-        "ユーザーが話し終えたことを検出するための設定",
+      description: "ユーザーが話し終えたことを検出するための設定",
       isOptional: true,
     },
   ]}

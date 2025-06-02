@@ -1,3 +1,5 @@
+import { AgentIcon, ToolsIcon, WorkflowIcon } from '@mastra/playground-ui';
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant';
@@ -13,3 +15,9 @@ export interface ChatProps {
   memory?: boolean;
   url?: string;
 }
+
+export const ToolIconMap = {
+  agent: AgentIcon,
+  workflow: WorkflowIcon,
+  tool: ToolsIcon,
+};

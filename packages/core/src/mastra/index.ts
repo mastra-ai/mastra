@@ -6,7 +6,7 @@ import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory/memory';
 import type { AgentNetwork } from '../network';
-import type { ServerConfig } from '../server/types';
+import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraStorage } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import { InstrumentClass, Telemetry } from '../telemetry';
@@ -530,6 +530,35 @@ do:
 
   public getServerMiddleware() {
     return this.#serverMiddleware;
+  }
+
+  public setServerMiddleware(serverMiddleware: Middleware | Middleware[]) {
+    if (typeof serverMiddleware === 'function') {
+      this.#serverMiddleware = [
+        {
+          handler: serverMiddleware,
+          path: '/api/*',
+        },
+      ];
+      return;
+    }
+
+    if (!Array.isArray(serverMiddleware)) {
+      throw new Error(`Invalid middleware: expected a function or array, received ${typeof serverMiddleware}`);
+    }
+
+    this.#serverMiddleware = serverMiddleware.map(m => {
+      if (typeof m === 'function') {
+        return {
+          handler: m,
+          path: '/api/*',
+        };
+      }
+      return {
+        handler: m.handler,
+        path: m.path || '/api/*',
+      };
+    });
   }
 
   public getNetworks() {

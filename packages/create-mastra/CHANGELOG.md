@@ -1,5 +1,79 @@
 # create-mastra
 
+## 0.10.2-alpha.3
+
+### Patch Changes
+
+- 401bbae: Show workflow graph from stepGraph of previous runs when viewing a previous run
+
+## 0.10.2-alpha.2
+
+### Patch Changes
+
+- f73e11b: fix telemetry disabled not working on playground
+
+## 0.10.2-alpha.1
+
+### Patch Changes
+
+- 73fec0b: Mastra start cli command"
+- f6ddf55: fix traces not showing and reduce API surface from playground ui
+
+## 0.10.2-alpha.0
+
+### Patch Changes
+
+- 89a69d0: add a way to go to the given trace of a workflow step
+- 9faee5b: small fixes in the workflows graph
+- 9a31c09: Highlight steps in nested workflows on workflow graph
+
+## 0.10.1
+
+### Patch Changes
+
+- b4365f6: add empty states for agents network and tools
+- d0932ac: add multi modal input behind feature flag
+- bed0916: Update default tools path in mastra dev,build
+- 3c2dba5: add workflow run list
+- 23d56b1: Handle dev server errors, restart, exit
+- 267773e: Show map config on workflow graph
+  Highlight borders for conditions too on workflow graph
+  Fix watch stream
+- 35bb6a3: Allow undefined temprature, topP model setting from playground
+- 33f1c64: revamp the experience for workflows
+- 6015bdf: Leverage defaultAgentStreamOption, defaultAgentGenerateOption in playground
+- 7a32205: add empty states for workflows, agents and mcp servers
+
+## 0.10.1-alpha.5
+
+### Patch Changes
+
+- 267773e: Show map config on workflow graph
+  Highlight borders for conditions too on workflow graph
+  Fix watch stream
+
+## 0.10.1-alpha.4
+
+### Patch Changes
+
+- 3c2dba5: add workflow run list
+- 33f1c64: revamp the experience for workflows
+
+## 0.10.1-alpha.3
+
+### Patch Changes
+
+- 6015bdf: Leverage defaultAgentStreamOption, defaultAgentGenerateOption in playground
+
+## 0.10.1-alpha.2
+
+### Patch Changes
+
+- b4365f6: add empty states for agents network and tools
+- d0932ac: add multi modal input behind feature flag
+- bed0916: Update default tools path in mastra dev,build
+- 23d56b1: Handle dev server errors, restart, exit
+
 ## 0.10.1-alpha.1
 
 ### Patch Changes

@@ -38,7 +38,7 @@ Define the copywriter step that executes the agent and handles the response:
 
 ```typescript
 const copywriterStep = createStep({
-  id: 'copywriterStep',
+  id: "copywriterStep",
   inputSchema: z.object({
     topic: z.string(),
   }),
@@ -47,10 +47,12 @@ const copywriterStep = createStep({
   }),
   execute: async ({ inputData }) => {
     if (!inputData?.topic) {
-      throw new Error('Topic not found in trigger data');
+      throw new Error("Topic not found in trigger data");
     }
-    const result = await copywriterAgent.generate(`Create a blog post about ${inputData.topic}`);
-    console.log('copywriter result', result.text);
+    const result = await copywriterAgent.generate(
+      `Create a blog post about ${inputData.topic}`,
+    );
+    console.log("copywriter result", result.text);
     return {
       copy: result.text,
     };
@@ -72,7 +74,7 @@ Create the editor step that processes the copywriter's output:
 
 ```typescript
 const editorStep = createStep({
-  id: 'editorStep',
+  id: "editorStep",
   inputSchema: z.object({
     copy: z.string(),
   }),
@@ -82,8 +84,10 @@ const editorStep = createStep({
   execute: async ({ inputData }) => {
     const copy = inputData?.copy;
 
-    const result = await editorAgent.generate(`Edit the following blog post only returning the edited copy: ${copy}`);
-    console.log('editor result', result.text);
+    const result = await editorAgent.generate(
+      `Edit the following blog post only returning the edited copy: ${copy}`,
+    );
+    console.log("editor result", result.text);
     return {
       finalCopy: result.text,
     };
@@ -95,7 +99,7 @@ Configure the workflow and execute the steps:
 
 ```typescript
 const myWorkflow = createWorkflow({
-  id: 'my-workflow',
+  id: "my-workflow",
   inputSchema: z.object({
     topic: z.string(),
   }),
@@ -109,8 +113,10 @@ myWorkflow.then(copywriterStep).then(editorStep).commit();
 
 const run = myWorkflow.createRun();
 
-const res = await run.start({ inputData: { topic: 'React JavaScript frameworks' } });
-console.log('Response: ', res);
+const res = await run.start({
+  inputData: { topic: "React JavaScript frameworks" },
+});
+console.log("Response: ", res);
 ```
 
 <br />

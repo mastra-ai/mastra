@@ -1,4 +1,4 @@
-import type { Mastra } from '..';
+import type { Mastra, SerializedStepFlowEntry } from '..';
 import { MastraBase } from '../base';
 import type { RuntimeContext } from '../di';
 import { RegisteredLogger } from '../logger';
@@ -38,10 +38,11 @@ export abstract class ExecutionEngine extends MastraBase {
     workflowId: string;
     runId: string;
     graph: ExecutionGraph;
+    serializedStepGraph: SerializedStepFlowEntry[];
     input?: TInput;
     resume?: {
       steps: string[];
-      stepResults: Record<string, StepResult<any>>;
+      stepResults: Record<string, StepResult<any, any, any, any>>;
       resumePayload: any;
       resumePath: number[];
     };

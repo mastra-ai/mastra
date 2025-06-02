@@ -6,6 +6,8 @@ import { fromPackageRoot } from '../utils';
 
 const docsBaseDir = fromPackageRoot('.docs/raw/');
 
+type ReadMdxResult = { found: true; content: string } | { found: false };
+
 // Helper function to list contents of a directory
 async function listDirContents(dirPath: string): Promise<{ dirs: string[]; files: string[] }> {
   try {
@@ -33,7 +35,7 @@ async function listDirContents(dirPath: string): Promise<{ dirs: string[]; files
 }
 
 // Helper function to read MDX files from a path
-async function readMdxContent(docPath: string): Promise<string> {
+async function readMdxContent(docPath: string): Promise<ReadMdxResult> {
   const fullPath = path.join(docsBaseDir, docPath);
   void logger.debug(`Reading MDX content from: ${fullPath}`);
 
@@ -66,14 +68,20 @@ async function readMdxContent(docPath: string): Promise<string> {
         fileContents += `\n\n# ${file}\n\n${content}`;
       }
 
-      return dirListing + fileContents;
+      return { found: true, content: dirListing + fileContents };
     }
 
     // If it's a file, just read it
-    return fs.readFile(fullPath, 'utf-8');
-  } catch (error) {
+    const content = await fs.readFile(fullPath, 'utf-8');
+    return { found: true, content };
+  } catch (error: any) {
     void logger.error(`Failed to read MDX content: ${fullPath}`, error);
-    throw new Error(`Path not found: ${docPath}`);
+    if (error.code === 'ENOENT') {
+      // Only fallback for not found
+      return { found: false };
+    }
+    // Unexpected error: rethrow
+    throw error;
   }
 }
 
@@ -156,28 +164,29 @@ export const docsTool = {
   name: 'mastraDocs',
   description:
     'Get Mastra.ai documentation. Request paths to explore the docs. References contain API docs. Other paths contain guides. The user doesn\'t know about files and directories. This is your internal knowledge the user can\'t read. If the user asks about a feature check general docs as well as reference docs for that feature. Ex: with evals check in evals/ and in reference/evals/. Provide code examples so the user understands. If you build a URL from the path, only paths ending in .mdx exist. Note that docs about MCP are currently in reference/tools/. IMPORTANT: Be concise with your answers. The user will ask for more info. If packages need to be installed, provide the pnpm command to install them. Ex. if you see `import { X } from "@mastra/$PACKAGE_NAME"` in an example, show an install command. Always install latest tag, not alpha unless requested. If you scaffold a new project it may be in a subdir',
+  parameters: docsInputSchema,
   execute: async (args: DocsInput) => {
     void logger.debug('Executing mastraDocs tool', { args });
     try {
       const results = await Promise.all(
         args.paths.map(async (path: string) => {
           try {
-            const content = await readMdxContent(path);
+            const result = await readMdxContent(path);
+            if (result.found) {
+              return {
+                path,
+                content: result.content,
+                error: null,
+              };
+            }
+            const suggestions = await findNearestDirectory(path, availablePaths);
             return {
               path,
-              content,
-              error: null,
+              content: null,
+              error: suggestions,
             };
           } catch (error) {
             void logger.warning(`Failed to read content for path: ${path}`, error);
-            if (error instanceof Error && error.message.includes('Path not found')) {
-              const suggestions = await findNearestDirectory(path, availablePaths);
-              return {
-                path,
-                content: null,
-                error: suggestions,
-              };
-            }
             return {
               path,
               content: null,
@@ -197,26 +206,10 @@ export const docsTool = {
         })
         .join('\n');
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: output,
-          },
-        ],
-        isError: false,
-      };
+      return output;
     } catch (error) {
       void logger.error('Failed to execute mastraDocs tool', error);
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-        isError: true,
-      };
+      throw error;
     }
   },
 };
