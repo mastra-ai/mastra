@@ -11,7 +11,7 @@ type WorkflowRunContextType = {
   payload: any;
   setPayload: React.Dispatch<React.SetStateAction<any>>;
   clearData: () => void;
-  snapshotStepGraph?: WorkflowRunState['serializedStepGraph'];
+  snapshot?: WorkflowRunState;
 };
 
 export const WorkflowRunContext = createContext<WorkflowRunContextType>({} as WorkflowRunContextType);
@@ -53,7 +53,7 @@ export function WorkflowRunProvider({
         payload,
         setPayload,
         clearData,
-        snapshotStepGraph: snapshot?.serializedStepGraph,
+        snapshot: snapshot,
       }}
     >
       {children}

@@ -19,18 +19,18 @@ export interface WorkflowGraphProps {
 
 export function WorkflowGraph({ workflowId, onShowTrace }: WorkflowGraphProps) {
   const { workflow, isLoading } = useWorkflow(workflowId);
-  const { snapshotStepGraph } = useContext(WorkflowRunContext);
-  const [switching, setSwitching] = useState(false);
+  const { snapshot } = useContext(WorkflowRunContext);
+  // const [switching, setSwitching] = useState(false);
 
-  useEffect(() => {
-    //we need to reactflow provider to get unmounted and then mount again to get the nodes and edges to be reinitialized
-    setSwitching(true);
-    setTimeout(() => {
-      setSwitching(false);
-    }, 100);
-  }, [snapshotStepGraph]);
+  // useEffect(() => {
+  //   //we need to reactflow provider to get unmounted and then mount again to get the nodes and edges to be reinitialized
+  //   setSwitching(true);
+  //   setTimeout(() => {
+  //     setSwitching(false);
+  //   }, 100);
+  // }, [snapshotStepGraph]);
 
-  if (isLoading || switching) {
+  if (isLoading) {
     return (
       <div className="p-4">
         <Skeleton className="h-full" />
@@ -50,10 +50,10 @@ export function WorkflowGraph({ workflowId, onShowTrace }: WorkflowGraphProps) {
   }
 
   return (
-    <WorkflowNestedGraphProvider>
+    <WorkflowNestedGraphProvider key={snapshot?.runId ?? workflowId}>
       <ReactFlowProvider>
         <WorkflowGraphInner
-          workflow={snapshotStepGraph ? { stepGraph: snapshotStepGraph } : workflow}
+          workflow={snapshot?.serializedStepGraph ? { stepGraph: snapshot?.serializedStepGraph } : workflow}
           onShowTrace={onShowTrace}
         />
       </ReactFlowProvider>
