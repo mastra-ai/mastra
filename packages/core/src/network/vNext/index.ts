@@ -20,6 +20,7 @@ interface NewAgentNetworkConfig {
   workflows?: DynamicArgument<Record<string, Workflow>>;
   tools?: DynamicArgument<Record<string, Tool>>;
   memory?: DynamicArgument<MastraMemory>;
+  defaultAgent?: DynamicArgument<Agent>;
 }
 
 const RESOURCE_TYPES = z.enum(['agent', 'workflow', 'none', 'tool', 'none']);
@@ -106,12 +107,23 @@ export class NewAgentNetwork extends MastraBase {
   #instructions: DynamicArgument<string>;
   #model: DynamicArgument<MastraLanguageModel>;
   #agents: DynamicArgument<Record<string, Agent>>;
+  #defaultAgent: DynamicArgument<Agent> | undefined;
   #workflows: DynamicArgument<Record<string, Workflow>> | undefined;
   #tools: DynamicArgument<Record<string, Tool>> | undefined;
   #memory?: DynamicArgument<MastraMemory>;
   #mastra?: Mastra;
 
-  constructor({ id, name, instructions, model, agents, workflows, memory, tools }: NewAgentNetworkConfig) {
+  constructor({
+    id,
+    name,
+    instructions,
+    model,
+    agents,
+    workflows,
+    memory,
+    tools,
+    defaultAgent,
+  }: NewAgentNetworkConfig) {
     super({
       component: RegisteredLogger.NETWORK,
       name: name || 'NewAgentNetwork',
@@ -125,6 +137,7 @@ export class NewAgentNetwork extends MastraBase {
     this.#workflows = workflows;
     this.#memory = memory;
     this.#tools = tools;
+    this.#defaultAgent = defaultAgent;
   }
 
   __registerMastra(mastra: Mastra) {
@@ -242,6 +255,13 @@ export class NewAgentNetwork extends MastraBase {
 
           ## Available Tools in Network (make sure to use inputs corresponding to the input schema when calling a tool)
           ${toolList}
+
+          ${
+            this.#defaultAgent
+              ? `If none of the agents or workflows are appropriate, call the default agent: ${this.#defaultAgent.name}.` +
+                `This should not be done lightly. You should only do this if you have exhausted all other options.`
+              : ''
+          }
 
           If you have multiple entries that need to be called with a workflow or agent, call them separately with each input.
           When calling a workflow, the prompt should be a JSON value that corresponds to the input schema of the workflow. The JSON value is stringified.

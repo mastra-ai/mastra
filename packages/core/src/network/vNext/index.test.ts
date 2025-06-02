@@ -429,6 +429,7 @@ describe('NewAgentNetwork', () => {
       workflows: {
         workflow1,
       },
+      defaultAgent: agent2,
       memory: memory,
     });
 
