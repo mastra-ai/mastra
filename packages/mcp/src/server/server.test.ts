@@ -712,7 +712,6 @@ describe('MCPServer', () => {
           resolve();
         });
       });
-      // await new Promise(r => setTimeout(r, 100)); // Diagnostic only!
       await promptServer.prompts.notifyListChanged();
 
       await expect(listChangedPromise).resolves.toBeUndefined(); // Wait for the notification
