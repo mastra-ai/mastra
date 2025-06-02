@@ -36,14 +36,13 @@ export class PromptClientActions {
         return [];
       }
     } catch (e: any) {
-      // MCP Server might not support resources, so we return an empty array
+      // MCP Server might not support prompts, so we return an empty array
       if (e.code === ErrorCode.MethodNotFound) {      
         return []
       }
       this.logger.error(`Error getting prompts from server ${this.client.name}`, {
         error: e instanceof Error ? e.message : String(e),
       });
-      console.log('errorheere', e)
       throw new Error(
         `Failed to fetch prompts from server ${this.client.name}: ${e instanceof Error ? e.stack || e.message : String(e)}`,
       );

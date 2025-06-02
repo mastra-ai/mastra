@@ -52,20 +52,20 @@ async function setupTestServer(withSessionManagement: boolean) {
     'greet',
     'A simple greeting prompt',
     () => {
-    return {
-      prompt: {
-        name: 'greet',
-        version: 'v1',
-        description: 'A simple greeting prompt',
-        mimeType: 'application/json',
-      },
-      messages: [
-        {
-          role: 'assistant',
-          content: { type: 'text', text: `Hello, World!` }
-        }
-      ]
-    };
+      return {
+        prompt: {
+          name: 'greet',
+          version: 'v1',
+          description: 'A simple greeting prompt',
+          mimeType: 'application/json',
+        },
+        messages: [
+          {
+            role: 'assistant',
+            content: { type: 'text', text: `Hello, World!` }
+          }
+        ]
+      };
     },
   );
 
@@ -150,6 +150,7 @@ describe('MastraMCPClient with Streamable HTTP', () => {
       expect(prompts).toHaveLength(1);
       expect(prompts[0]).toHaveProperty('name');
       expect(prompts[0]).toHaveProperty('description');
+      expect(prompts[0].description).toBe('A simple greeting prompt');
     });
 
     it('should get a specific prompt', async () => {
