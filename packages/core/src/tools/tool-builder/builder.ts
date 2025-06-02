@@ -6,6 +6,7 @@ import {
   AnthropicSchemaCompatLayer,
   DeepSeekSchemaCompatLayer,
   MetaSchemaCompatLayer,
+  convertZodSchemaToAISDKSchema,
 } from '@mastra/schema-compat';
 import type { ToolExecutionOptions } from 'ai';
 import { z } from 'zod';
@@ -44,10 +45,10 @@ export class CoreToolBuilder extends MastraBase {
   // Helper to get parameters based on tool type
   private getParameters = () => {
     if (isVercelTool(this.originalTool)) {
-      return this.originalTool.parameters ?? z.object({});
+      return convertZodSchemaToAISDKSchema(this.originalTool.parameters ?? z.object({}));
     }
 
-    return this.originalTool.inputSchema ?? z.object({});
+    return convertZodSchemaToAISDKSchema(this.originalTool.inputSchema ?? z.object({}));
   };
 
   // For provider-defined tools, we need to include all required properties
