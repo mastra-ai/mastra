@@ -401,6 +401,14 @@ export class UpstashStore extends MastraStorage {
     await this.redis.set(`schema:${tableName}`, schema);
   }
 
+  async alterTable(_args: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void> {
+    // Nothing to do here, MongoDB is schemaless
+  }
+
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     const pattern = `${tableName}:*`;
     await this.scanAndDelete(pattern);

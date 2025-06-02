@@ -38,6 +38,12 @@ export abstract class MastraStorage extends MastraBase {
 
   abstract createTable({ tableName }: { tableName: TABLE_NAMES; schema: Record<string, StorageColumn> }): Promise<void>;
 
+  abstract alterTable(args: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void>;
+
   abstract clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void>;
 
   abstract insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void>;
@@ -141,6 +147,12 @@ export abstract class MastraStorage extends MastraBase {
     ]).then(() => true);
 
     await this.hasInitialized;
+
+    await this.alterTable({
+      tableName: TABLE_MESSAGES,
+      schema: TABLE_SCHEMAS[TABLE_MESSAGES],
+      ifNotExists: ['resourceId'],
+    });
   }
 
   async persistWorkflowSnapshot({

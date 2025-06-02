@@ -379,6 +379,14 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
+  async alterTable(_args: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void> {
+    // Nothing to do here, MongoDB is schemaless
+  }
+
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     try {
       await this.db.none(`TRUNCATE TABLE ${this.getTableName(tableName)} CASCADE`);
