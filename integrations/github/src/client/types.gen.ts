@@ -1673,7 +1673,7 @@ export type codeowners_errors = {
      */
     message: string;
     /**
-     * The path of the file where the error occured.
+     * The path of the file where the error occurred.
      */
     path: string;
     /**
