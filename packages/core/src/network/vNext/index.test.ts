@@ -236,7 +236,7 @@ describe('NewAgentNetwork', () => {
     );
   });
 
-  it('should create a new agent network single call', async () => {
+  it.only('should create a new agent network single call', async () => {
     const memory = new MockMemory({
       name: 'test-memory',
     });
@@ -443,7 +443,7 @@ describe('NewAgentNetwork', () => {
     }
   });
 
-  it.only('should create a new agent network single call with tools', async () => {
+  it('should create a new agent network single call with tools', async () => {
     const memory = new MockMemory({
       name: 'test-memory',
     });

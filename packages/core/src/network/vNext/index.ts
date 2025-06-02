@@ -540,7 +540,7 @@ export class NewAgentNetwork extends MastraBase {
         result: z.string(),
         isComplete: z.boolean().optional(),
       }),
-      execute: async ({ inputData }) => {
+      execute: async ({ inputData, [EMITTER_SYMBOL]: emitter }) => {
         console.log('calling workflow', inputData.resourceId, inputData.prompt);
         const workflowsMap = await this.getWorkflows({ runtimeContext: runtimeContextToUse });
         const wf = workflowsMap[inputData.resourceId];
@@ -557,21 +557,72 @@ export class NewAgentNetwork extends MastraBase {
           throw new Error(`Invalid task input: ${inputData.task}`);
         }
 
+        let streamPromise = {} as {
+          promise: Promise<any>;
+          resolve: (value: any) => void;
+          reject: (reason?: any) => void;
+        };
+
+        streamPromise.promise = new Promise((resolve, reject) => {
+          streamPromise.resolve = resolve;
+          streamPromise.reject = reject;
+        });
+        const toolData = {
+          name: wf.name,
+          args: inputData,
+        };
+        await emitter.emit('watch-v2', {
+          type: 'tool-call-streaming-start',
+          ...toolData,
+        });
         const run = wf.createRun();
-        const resp = await run.start({
+        const stream = run.stream({
           inputData: input,
+          runtimeContext: runtimeContextToUse,
         });
 
-        if (resp.status === 'failed') {
-          throw resp.error;
+        let result: any;
+        let stepResults: Record<string, any> = {};
+        // @ts-ignore
+        for await (const chunk of stream.stream) {
+          switch (chunk.type) {
+            case 'text-delta':
+              await emitter.emit('watch-v2', {
+                type: 'tool-call-delta',
+                ...toolData,
+                argsTextDelta: chunk.textDelta,
+              });
+              break;
+
+            case 'step-result':
+              if (chunk?.payload?.output) {
+                result = chunk?.payload?.output;
+                stepResults[chunk?.payload?.id] = chunk?.payload?.output;
+              }
+              break;
+            case 'finish':
+              streamPromise.resolve(result);
+              break;
+
+            case 'step-start':
+            case 'step-finish':
+            case 'tool-call':
+            case 'tool-result':
+            case 'tool-call-streaming-start':
+            case 'tool-call-delta':
+            case 'source':
+            case 'file':
+            default:
+              await emitter.emit('watch-v2', chunk);
+              break;
+          }
         }
 
-        if (resp.status === 'suspended') {
-          throw new Error('Workflow suspended');
-        }
+        const resp = await streamPromise.promise;
+        console.log('RESP', resp);
 
         return {
-          result: JSON.stringify(resp?.result) || '',
+          result: JSON.stringify(resp) || '',
           task: inputData.task,
           resourceId: inputData.resourceId,
           resourceType: inputData.resourceType,
@@ -720,7 +771,7 @@ export class NewAgentNetwork extends MastraBase {
 
     const result = await run.start({
       inputData: {
-        task: message,
+        task: `You are executing just one primitive based on the following: ${message}`,
         resourceId: '',
         resourceType: 'none',
       },
@@ -748,7 +799,7 @@ export class NewAgentNetwork extends MastraBase {
 
     return run.stream({
       inputData: {
-        task: message,
+        task: `You are executing just one primitive based on the following: ${message}`,
         resourceId: '',
         resourceType: 'none',
       },
