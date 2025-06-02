@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.10.2-alpha.2
+
+### Patch Changes
+
+- f73e11b: fix telemetry disabled not working on playground
+
 ## 0.10.2-alpha.1
 
 ### Patch Changes

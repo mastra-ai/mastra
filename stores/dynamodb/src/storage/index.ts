@@ -1,7 +1,6 @@
 import { DynamoDBClient, DescribeTableCommand } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import type { StorageThreadType, WorkflowRunState, MastraMessageV1 } from '@mastra/core';
-import type { MastraMessageV2 } from '@mastra/core/agent';
+import type { StorageThreadType, WorkflowRunState, MastraMessageV1, MastraMessageV2 } from '@mastra/core';
 import { MessageList } from '@mastra/core/agent';
 import {
   MastraStorage,
@@ -542,7 +541,7 @@ export class DynamoDBStore extends MastraStorage {
           results.data.map((data: any) => this.parseMessageData(data)),
           'memory',
         );
-        if (format === `v2`) return list.get.all.mastra();
+        if (format === `v2`) return list.get.all.v2();
         return list.get.all.v1();
       }
 
@@ -553,7 +552,7 @@ export class DynamoDBStore extends MastraStorage {
         results.data.map((data: any) => this.parseMessageData(data)),
         'memory',
       );
-      if (format === `v2`) return list.get.all.mastra();
+      if (format === `v2`) return list.get.all.v2();
       return list.get.all.v1();
     } catch (error) {
       this.logger.error('Failed to get messages', { threadId, error });
@@ -618,7 +617,7 @@ export class DynamoDBStore extends MastraStorage {
 
       const list = new MessageList().add(messages, 'memory');
       if (format === `v1`) return list.get.all.v1();
-      return list.get.all.mastra();
+      return list.get.all.v2();
     } catch (error) {
       this.logger.error('Failed to save messages', { error });
       throw error;

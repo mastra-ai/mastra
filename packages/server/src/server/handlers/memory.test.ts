@@ -1,7 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
-import type { MessageType } from '@mastra/core/memory';
+import type { MastraMessageV1, MastraMessageV2 } from '@mastra/core/memory';
 import { MastraMemory } from '@mastra/core/memory';
 import { MockStore } from '@mastra/core/storage';
 import type { Mock } from 'vitest';
@@ -241,7 +241,7 @@ describe('Memory Handlers', () => {
         saveMessagesHandler({
           mastra,
           agentId: 'test-agent',
-          body: {} as { messages: MessageType[] },
+          body: {} as { messages: MastraMessageV2[] },
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Messages are required' }));
     });
@@ -257,13 +257,13 @@ describe('Memory Handlers', () => {
         saveMessagesHandler({
           mastra,
           agentId: 'test-agent',
-          body: { messages: 'not-an-array' as unknown as MessageType[] },
+          body: { messages: 'not-an-array' as unknown as MastraMessageV2[] },
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Messages should be an array' }));
     });
 
     it('should save messages successfully', async () => {
-      const mockMessages: MessageType[] = [
+      const mockMessages: MastraMessageV1[] = [
         {
           id: 'test-id',
           content: 'Test message',

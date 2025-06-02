@@ -13,6 +13,7 @@ import type {
   StepFlowEntry,
   StepResult,
   WorkflowResult,
+  SerializedStepFlowEntry,
 } from '@mastra/core/workflows';
 import { EMITTER_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Span } from '@opentelemetry/api';
@@ -41,6 +42,7 @@ export class InngestRun<
   TOutput extends z.ZodType<any> = z.ZodType<any>,
 > extends Run<TSteps, TInput, TOutput> {
   private inngest: Inngest;
+  serializedStepGraph: SerializedStepFlowEntry[];
   #mastra: Mastra;
 
   constructor(
@@ -49,6 +51,7 @@ export class InngestRun<
       runId: string;
       executionEngine: ExecutionEngine;
       executionGraph: ExecutionGraph;
+      serializedStepGraph: SerializedStepFlowEntry[];
       mastra?: Mastra;
       retryConfig?: {
         attempts?: number;
@@ -60,6 +63,7 @@ export class InngestRun<
   ) {
     super(params);
     this.inngest = inngest;
+    this.serializedStepGraph = params.serializedStepGraph;
     this.#mastra = params.mastra!;
   }
 
@@ -96,6 +100,7 @@ export class InngestRun<
       runId: this.runId,
       snapshot: {
         runId: this.runId,
+        serializedStepGraph: this.serializedStepGraph,
         value: {},
         context: {} as any,
         activePaths: [],
@@ -278,6 +283,7 @@ export class InngestWorkflow<
           runId: runIdToUse,
           executionEngine: this.executionEngine,
           executionGraph: this.executionGraph,
+          serializedStepGraph: this.serializedStepGraph,
           mastra: this.#mastra,
           retryConfig: this.retryConfig,
           cleanup: () => this.runs.delete(runIdToUse),
@@ -329,6 +335,7 @@ export class InngestWorkflow<
           workflowId: this.id,
           runId,
           graph: this.executionGraph,
+          serializedStepGraph: this.serializedStepGraph,
           input: inputData,
           emitter,
           retryConfig: this.retryConfig,
@@ -817,10 +824,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     runId,
     stepResults,
     executionContext,
+    serializedStepGraph,
   }: {
     workflowId: string;
     runId: string;
     stepResults: Record<string, StepResult<any, any, any, any>>;
+    serializedStepGraph: SerializedStepFlowEntry[];
     executionContext: ExecutionContext;
   }) {
     await this.inngestStep.run(
@@ -835,6 +844,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             context: stepResults as any,
             activePaths: [],
             suspendedPaths: executionContext.suspendedPaths,
+            serializedStepGraph,
             // @ts-ignore
             timestamp: Date.now(),
           },
@@ -850,6 +860,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     prevOutput,
     prevStep,
     stepResults,
+    serializedStepGraph,
     resume,
     executionContext,
     emitter,
@@ -859,6 +870,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     runId: string;
     entry: { type: 'conditional'; steps: StepFlowEntry[]; conditions: ExecuteFunction<any, any, any, any>[] };
     prevStep: StepFlowEntry;
+    serializedStepGraph: SerializedStepFlowEntry[];
     prevOutput: any;
     stepResults: Record<string, StepResult<any, any, any, any>>;
     resume?: {
@@ -920,6 +932,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           prevStep,
           stepResults,
           resume,
+          serializedStepGraph,
           executionContext: {
             workflowId,
             runId,
