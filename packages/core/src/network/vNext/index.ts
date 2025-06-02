@@ -692,21 +692,23 @@ export class NewAgentNetwork extends MastraBase {
 
         let result: any;
         let stepResults: Record<string, any> = {};
+        // TODO: streaming types are broken
         // @ts-ignore
         for await (const chunk of stream.stream) {
-          switch (chunk.type) {
+          const c: any = chunk;
+          switch (c.type) {
             case 'text-delta':
               await emitter.emit('watch-v2', {
                 type: 'tool-call-delta',
                 ...toolData,
-                argsTextDelta: chunk.textDelta,
+                argsTextDelta: c.textDelta,
               });
               break;
 
             case 'step-result':
-              if (chunk?.payload?.output) {
-                result = chunk?.payload?.output;
-                stepResults[chunk?.payload?.id] = chunk?.payload?.output;
+              if (c?.payload?.output) {
+                result = c?.payload?.output;
+                stepResults[c?.payload?.id] = c?.payload?.output;
               }
               break;
             case 'finish':
@@ -722,7 +724,7 @@ export class NewAgentNetwork extends MastraBase {
             case 'source':
             case 'file':
             default:
-              await emitter.emit('watch-v2', chunk);
+              await emitter.emit('watch-v2', c);
               break;
           }
         }
