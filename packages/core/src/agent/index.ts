@@ -427,12 +427,13 @@ export class Agent<
     return userMessages.at(-1);
   }
 
-  async genTitle(userMessage: UIMessage | undefined) {
+  async genTitle(userMessage: UIMessage | undefined, runtimeContext: RuntimeContext) {
     let title = `New Thread ${new Date().toISOString()}`;
     try {
       if (userMessage) {
         title = await this.generateTitleFromUserMessage({
           message: userMessage,
+          runtimeContext,
         });
       }
     } catch (e) {
@@ -485,7 +486,7 @@ export class Agent<
                   config: memoryConfig,
                   vectorMessageSearch: lastUserMessageContent,
                 })
-                .then(r => r.messages),
+                .then(r => r.messagesV2),
               memory.getSystemMessage({ threadId, memoryConfig }),
             ])
           : [[], null];
@@ -1019,7 +1020,7 @@ export class Agent<
           .addSystem(memorySystemMessage)
           .add(context || [], 'user')
           .add(processedMemoryMessages, 'memory')
-          .add(messageList.get.input.mastra(), 'user')
+          .add(messageList.get.input.v2(), 'user')
           .get.all.prompt();
 
         return {
@@ -1103,7 +1104,9 @@ export class Agent<
               const config = memory.getMergedThreadConfig(memoryConfig);
               const userMessage = this.getMostRecentUserMessage(messageList.get.all.ui());
               const title =
-                config?.threads?.generateTitle && userMessage ? await this.genTitle(userMessage) : undefined;
+                config?.threads?.generateTitle && userMessage
+                  ? await this.genTitle(userMessage, runtimeContext)
+                  : undefined;
               if (!title) {
                 return;
               }

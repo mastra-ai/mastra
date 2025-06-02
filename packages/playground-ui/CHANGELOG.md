@@ -1,5 +1,54 @@
 # @mastra/playground-ui
 
+## 5.1.2-alpha.4
+
+### Patch Changes
+
+- 401bbae: Show workflow graph from stepGraph of previous runs when viewing a previous run
+- 4b23936: fix: typos
+
+## 5.1.2-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [c5bf1ce]
+- Updated dependencies [12b7002]
+  - @mastra/client-js@0.10.2-alpha.2
+  - @mastra/core@0.10.2-alpha.4
+
+## 5.1.2-alpha.2
+
+### Patch Changes
+
+- 068b850: fix: able to pass headers to playground components which are using the mastra client
+- Updated dependencies [ab5adbe]
+- Updated dependencies [195c428]
+- Updated dependencies [f73e11b]
+  - @mastra/core@0.10.2-alpha.3
+
+## 5.1.2-alpha.1
+
+### Patch Changes
+
+- f0d559f: Fix peerdeps for alpha channel
+- f6ddf55: fix traces not showing and reduce API surface from playground ui
+- Updated dependencies [1e8bb40]
+- Updated dependencies [f0d559f]
+  - @mastra/core@0.10.2-alpha.2
+  - @mastra/client-js@0.10.2-alpha.1
+
+## 5.1.2-alpha.0
+
+### Patch Changes
+
+- 89a69d0: add a way to go to the given trace of a workflow step
+- 9faee5b: small fixes in the workflows graph
+- 9a31c09: Highlight steps in nested workflows on workflow graph
+- Updated dependencies [592a2db]
+- Updated dependencies [e5dc18d]
+  - @mastra/client-js@0.10.2-alpha.0
+  - @mastra/core@0.10.2-alpha.0
+
 ## 5.1.1
 
 ### Patch Changes

@@ -8,20 +8,22 @@ import { AlertCircleIcon } from 'lucide-react';
 import { ReactFlowProvider } from '@xyflow/react';
 import { WorkflowGraphInner } from './workflow-graph-inner';
 import { WorkflowNestedGraphProvider } from '../context/workflow-nested-graph-context';
+import { WorkflowRunContext } from '../context/workflow-run-context';
+import { useContext } from 'react';
 
 export interface WorkflowGraphProps {
   workflowId: string;
-  baseUrl: string;
   onShowTrace: ({ runId, stepName }: { runId: string; stepName: string }) => void;
 }
 
-export function WorkflowGraph({ workflowId, baseUrl, onShowTrace }: WorkflowGraphProps) {
-  const { workflow, isLoading } = useWorkflow(workflowId, baseUrl);
+export function WorkflowGraph({ workflowId, onShowTrace }: WorkflowGraphProps) {
+  const { workflow, isLoading } = useWorkflow(workflowId);
+  const { snapshot } = useContext(WorkflowRunContext);
 
   if (isLoading) {
     return (
       <div className="p-4">
-        <Skeleton className="h-[600px]" />
+        <Skeleton className="h-full" />
       </div>
     );
   }
@@ -38,9 +40,12 @@ export function WorkflowGraph({ workflowId, baseUrl, onShowTrace }: WorkflowGrap
   }
 
   return (
-    <WorkflowNestedGraphProvider>
+    <WorkflowNestedGraphProvider key={snapshot?.runId ?? workflowId}>
       <ReactFlowProvider>
-        <WorkflowGraphInner workflow={workflow} onShowTrace={onShowTrace} />
+        <WorkflowGraphInner
+          workflow={snapshot?.serializedStepGraph ? { stepGraph: snapshot?.serializedStepGraph } : workflow}
+          onShowTrace={onShowTrace}
+        />
       </ReactFlowProvider>
     </WorkflowNestedGraphProvider>
   );

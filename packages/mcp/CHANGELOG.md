@@ -1,5 +1,22 @@
 # @mastra/mcp
 
+## 0.10.2-alpha.1
+
+### Patch Changes
+
+- f0d559f: Fix peerdeps for alpha channel
+- Updated dependencies [1e8bb40]
+  - @mastra/core@0.10.2-alpha.2
+
+## 0.10.2-alpha.0
+
+### Patch Changes
+
+- 592a2db: Added different icons for agents and workflows in mcp tools list
+- Updated dependencies [592a2db]
+- Updated dependencies [e5dc18d]
+  - @mastra/core@0.10.2-alpha.0
+
 ## 0.10.1
 
 ### Patch Changes

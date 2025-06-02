@@ -12,7 +12,6 @@ export const AgentChat = ({
   threadId,
   initialMessages,
   memory,
-  baseUrl,
   refreshThreadList,
   showFileSupport,
 }: ChatProps) => {
@@ -25,7 +24,6 @@ export const AgentChat = ({
       threadId={threadId}
       initialMessages={initialMessages}
       memory={memory}
-      baseUrl={baseUrl}
       refreshThreadList={refreshThreadList}
       modelSettings={modelSettings}
       chatWithGenerate={chatWithGenerate}

@@ -6,7 +6,7 @@ import { MastraMemory } from '@mastra/core/memory';
 import type { MemoryConfig, SharedMemoryConfig, StorageThreadType } from '@mastra/core/memory';
 import type { StorageGetMessagesArg } from '@mastra/core/storage';
 import { embedMany } from 'ai';
-import type { TextPart, UIMessage } from 'ai';
+import type { CoreMessage, TextPart, UIMessage } from 'ai';
 
 import xxhash from 'xxhash-wasm';
 import { updateWorkingMemoryTool } from './tools/working-memory';
@@ -56,7 +56,7 @@ export class Memory extends MastraMemory {
     threadConfig,
   }: StorageGetMessagesArg & {
     threadConfig?: MemoryConfig;
-  }): Promise<{ messages: MastraMessageV1[]; uiMessages: UIMessage[] }> {
+  }): Promise<{ messages: CoreMessage[]; uiMessages: UIMessage[]; messagesV2: MastraMessageV2[] }> {
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId);
 
     const vectorResults: {
@@ -117,6 +117,7 @@ export class Memory extends MastraMemory {
     // Get raw messages from storage
     const rawMessages = await this.storage.getMessages({
       threadId,
+      format: 'v2',
       selectBy: {
         ...selectBy,
         ...(vectorResults?.length
@@ -138,9 +139,7 @@ export class Memory extends MastraMemory {
       threadConfig: config,
     });
 
-    const orderedByDate = rawMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-    const list = new MessageList({ threadId, resourceId }).add(orderedByDate, 'memory');
+    const list = new MessageList({ threadId, resourceId }).add(rawMessages, 'memory');
     return {
       get messages() {
         // returning v1 messages for backwards compat! v1 messages were CoreMessages stored in the db.
@@ -152,12 +151,17 @@ export class Memory extends MastraMemory {
         if (selectBy?.last && v1Messages.length > selectBy.last) {
           // ex: 23 (v1 messages) minus 20 (selectBy.last messages)
           // means we will start from index 3 and keep all the later newer messages from index 3 til the end of the array
-          return v1Messages.slice(v1Messages.length - selectBy.last);
+          return v1Messages.slice(v1Messages.length - selectBy.last) as CoreMessage[];
         }
-        return v1Messages;
+        // TODO: this is absolutely wrong but became apparent that this is what we were doing before adding MessageList. Our public types said CoreMessage but we were returning MessageType which is equivalent to MastraMessageV1
+        // In a breaking change we should make this the type it actually is.
+        return v1Messages as CoreMessage[];
       },
       get uiMessages() {
         return list.get.all.ui();
+      },
+      get messagesV2() {
+        return list.get.all.v2();
       },
     };
   }
@@ -190,12 +194,13 @@ export class Memory extends MastraMemory {
         vectorSearchString: threadConfig.semanticRecall && vectorMessageSearch ? vectorMessageSearch : undefined,
       },
       threadConfig: config,
+      format: 'v2',
     });
     // Using MessageList here just to convert mixed input messages to single type output messages
-    const list = new MessageList({ threadId, resourceId }).add(messagesResult.messages, 'memory');
+    const list = new MessageList({ threadId, resourceId }).add(messagesResult.messagesV2, 'memory');
 
     this.logger.debug(`Remembered message history includes ${messagesResult.messages.length} messages.`);
-    return { messages: list.get.all.v1(), messagesV2: list.get.all.mastra() };
+    return { messages: list.get.all.v1(), messagesV2: list.get.all.v2() };
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
@@ -326,13 +331,25 @@ export class Memory extends MastraMemory {
     return result;
   }
 
+  async saveMessages(args: {
+    messages: (MastraMessageV1 | MastraMessageV2)[] | MastraMessageV1[] | MastraMessageV2[];
+    memoryConfig?: MemoryConfig | undefined;
+    format?: 'v1';
+  }): Promise<MastraMessageV1[]>;
+  async saveMessages(args: {
+    messages: (MastraMessageV1 | MastraMessageV2)[] | MastraMessageV1[] | MastraMessageV2[];
+    memoryConfig?: MemoryConfig | undefined;
+    format: 'v2';
+  }): Promise<MastraMessageV2[]>;
   async saveMessages({
     messages,
     memoryConfig,
+    format = `v1`,
   }: {
     messages: (MastraMessageV1 | MastraMessageV2)[];
-    memoryConfig?: MemoryConfig;
-  }): Promise<MastraMessageV2[]> {
+    memoryConfig?: MemoryConfig | undefined;
+    format?: 'v1' | 'v2';
+  }): Promise<MastraMessageV2[] | MastraMessageV1[]> {
     // Then strip working memory tags from all messages
     const updatedMessages = messages
       .map(m => {
@@ -347,7 +364,10 @@ export class Memory extends MastraMemory {
 
     const config = this.getMergedThreadConfig(memoryConfig);
 
-    const result = this.storage.saveMessages({ messages: updatedMessages });
+    const result = this.storage.saveMessages({
+      messages: new MessageList().add(updatedMessages, 'memory').get.all.v2(),
+      format: 'v2',
+    });
 
     if (this.vector && config.semanticRecall) {
       let indexName: Promise<string>;
@@ -412,6 +432,7 @@ export class Memory extends MastraMemory {
       );
     }
 
+    if (format === `v1`) return new MessageList().add(await result, 'memory').get.all.v1(); // for backwards compat convert to v1 message format
     return result;
   }
   protected updateMessageToHideWorkingMemory(message: MastraMessageV1): MastraMessageV1 | null {

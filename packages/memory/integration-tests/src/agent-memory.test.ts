@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { openai } from '@ai-sdk/openai';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
+import { RuntimeContext } from '@mastra/core/runtime-context';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
@@ -144,6 +145,14 @@ describe('Agent Memory Tests', () => {
       tools: { get_weather: weatherTool },
     });
 
+    const agentWithDynamicModelTitle = new Agent({
+      name: 'title-on',
+      instructions: 'Test agent with generateTitle on.',
+      model: ({ runtimeContext }) => openai(runtimeContext.get('model') as string),
+      memory: memoryWithTitle,
+      tools: { get_weather: weatherTool },
+    });
+
     // Agent with generateTitle: false
     const memoryNoTitle = new Memory({
       options: {
@@ -179,6 +188,33 @@ describe('Agent Memory Tests', () => {
 
       await agentWithTitle.generate([{ role: 'user', content: 'Hello, world!' }], { threadId, resourceId });
       await agentWithTitle.generate([{ role: 'user', content: 'Hello, world!' }], { threadId, resourceId });
+
+      const existingThread = await memoryWithTitle.getThreadById({ threadId });
+      expect(existingThread).toBeDefined();
+      expect(existingThread?.metadata).toMatchObject(metadata);
+    });
+
+    it('should use generateTitle with runtime context', async () => {
+      const threadId = randomUUID();
+      const resourceId = 'gen-title-metadata';
+      const metadata = { foo: 'bar', custom: 123 };
+
+      const thread = await memoryWithTitle.createThread({
+        threadId,
+        resourceId,
+        metadata,
+      });
+
+      expect(thread).toBeDefined();
+      expect(thread?.metadata).toMatchObject(metadata);
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('model', 'gpt-4o-mini');
+      await agentWithDynamicModelTitle.generate([{ role: 'user', content: 'Hello, world!' }], {
+        threadId,
+        resourceId,
+        runtimeContext,
+      });
 
       const existingThread = await memoryWithTitle.getThreadById({ threadId });
       expect(existingThread).toBeDefined();

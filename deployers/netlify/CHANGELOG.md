@@ -1,5 +1,55 @@
 # @mastra/deployer-netlify
 
+## 0.10.2-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [c5bf1ce]
+- Updated dependencies [12b7002]
+  - @mastra/core@0.10.2-alpha.4
+  - @mastra/deployer@0.10.2-alpha.4
+
+## 0.10.2-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [ab5adbe]
+- Updated dependencies [195c428]
+- Updated dependencies [f73e11b]
+- Updated dependencies [f946acf]
+  - @mastra/core@0.10.2-alpha.3
+  - @mastra/deployer@0.10.2-alpha.3
+
+## 0.10.2-alpha.2
+
+### Patch Changes
+
+- f0d559f: Fix peerdeps for alpha channel
+- Updated dependencies [e8d2aff]
+- Updated dependencies [1e8bb40]
+- Updated dependencies [4187ed4]
+- Updated dependencies [f0d559f]
+  - @mastra/deployer@0.10.2-alpha.2
+  - @mastra/core@0.10.2-alpha.2
+
+## 0.10.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [ee77e78]
+- Updated dependencies [2901125]
+  - @mastra/core@0.10.2-alpha.1
+  - @mastra/deployer@0.10.2-alpha.1
+
+## 0.10.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [592a2db]
+- Updated dependencies [e5dc18d]
+  - @mastra/core@0.10.2-alpha.0
+  - @mastra/deployer@0.10.2-alpha.0
+
 ## 0.10.1
 
 ### Patch Changes

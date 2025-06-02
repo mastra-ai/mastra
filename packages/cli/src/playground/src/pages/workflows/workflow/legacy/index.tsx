@@ -8,7 +8,7 @@ function Workflow() {
   return (
     <main className="flex-1 relative divide-x flex w-full h-full">
       <div className="min-w-[325px] grow">
-        <LegacyWorkflowGraph workflowId={workflowId!} baseUrl="" />
+        <LegacyWorkflowGraph workflowId={workflowId!} />
       </div>
       <MastraResizablePanel
         defaultWidth={20}

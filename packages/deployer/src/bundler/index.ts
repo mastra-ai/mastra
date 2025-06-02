@@ -55,11 +55,14 @@ export abstract class Bundler extends MastraBundler {
     const dependenciesMap = new Map();
     for (const [key, value] of dependencies.entries()) {
       if (key.startsWith('@')) {
+        // Handle scoped packages (e.g. @org/package)
         const pkgChunks = key.split('/');
         dependenciesMap.set(`${pkgChunks[0]}/${pkgChunks[1]}`, value);
-        continue;
+      } else {
+        // For non-scoped packages, take only the first part before any slash
+        const pkgName = key.split('/')[0] || key;
+        dependenciesMap.set(pkgName, value);
       }
-      dependenciesMap.set(key, value);
     }
 
     dependenciesMap.set('@opentelemetry/instrumentation', 'latest');
@@ -247,14 +250,6 @@ export abstract class Bundler extends MastraBundler {
       }
     }
 
-    // temporary fix for mastra-memory and fastembed
-    if (
-      analyzedBundleInfo.externalDependencies.has('@mastra/memory') ||
-      analyzedBundleInfo.dependencies.has('@mastra/memory')
-    ) {
-      dependenciesToInstall.set('fastembed', 'latest');
-    }
-
     await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall, resolutions);
     await this.writeInstrumentationFile(join(outputDirectory, this.outputDir));
 
@@ -286,6 +281,7 @@ export abstract class Bundler extends MastraBundler {
 
     this.logger.info('Installing dependencies');
     await this.installDependencies(outputDirectory);
+
     this.logger.info('Done installing dependencies');
   }
 

@@ -85,9 +85,9 @@ export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: stri
           {workflowId ? (
             <>
               {isLegacy ? (
-                <LegacyWorkflowTrigger workflowId={workflowId} setRunId={setRunId} baseUrl="" />
+                <LegacyWorkflowTrigger workflowId={workflowId} setRunId={setRunId} />
               ) : (
-                <WorkflowTrigger workflowId={workflowId} setRunId={setRunId} baseUrl="" />
+                <WorkflowTrigger workflowId={workflowId} setRunId={setRunId} />
               )}
             </>
           ) : null}

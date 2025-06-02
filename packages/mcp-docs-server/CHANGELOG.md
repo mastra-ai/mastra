@@ -1,5 +1,33 @@
 # @mastra/mcp-docs-server
 
+## 0.11.1-alpha.2
+
+### Patch Changes
+
+- beb9dfa: Update mcp docs server to use MCPServer component
+- Updated dependencies [c5bf1ce]
+- Updated dependencies [12b7002]
+  - @mastra/core@0.10.2-alpha.4
+
+## 0.11.1-alpha.1
+
+### Patch Changes
+
+- f0d559f: Fix peerdeps for alpha channel
+- Updated dependencies [1e8bb40]
+- Updated dependencies [f0d559f]
+  - @mastra/core@0.10.2-alpha.2
+  - @mastra/mcp@0.10.2-alpha.1
+
+## 0.11.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [592a2db]
+- Updated dependencies [e5dc18d]
+  - @mastra/core@0.10.2-alpha.0
+  - @mastra/mcp@0.10.2-alpha.0
+
 ## 0.11.0
 
 ### Minor Changes

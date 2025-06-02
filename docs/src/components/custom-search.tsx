@@ -1,11 +1,5 @@
 "use client";
 
-import {
-  Combobox,
-  ComboboxInput,
-  ComboboxOption,
-  ComboboxOptions,
-} from "@headlessui/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import cn from "clsx";
 import { Search, Zap } from "lucide-react";
@@ -53,6 +47,17 @@ type SearchProps = {
   closeModal: () => void;
 };
 
+// Type for flattened search results
+type FlattenedResult = {
+  excerpt: string;
+  title: string;
+  url: string;
+  parentUrl: string;
+};
+
+// Union type for search results
+type SearchResult = PagefindResult | FlattenedResult | { url: "use-ai" };
+
 /**
  * A built-in search component provides a seamless and fast search
  * experience out of the box. Under the hood, it leverages the
@@ -77,6 +82,14 @@ export const CustomSearch: FC<SearchProps> = ({
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null!);
   const resultsContainerRef = useRef<HTMLDivElement>(null);
+  const [selectedIndex, setSelectedIndex] = useState(-1);
+
+  // Ensure input is focused when component mounts
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, []);
 
   // Check if screen is mobile size
   const isMobile = useMediaQuery("(max-width: 768px)");
@@ -101,12 +114,25 @@ export const CustomSearch: FC<SearchProps> = ({
       )
     : [];
 
+  const totalItems = flattenedResults.length + 1; // +1 for AI option
+
   const handleChange = (event: SyntheticEvent<HTMLInputElement>) => {
     const { value } = event.currentTarget;
     setSearch(value);
+    // Set first item as selected when there's a search query, reset when empty
+    setSelectedIndex(value ? 0 : -1);
   };
 
-  const handleSelect = (searchResult: PagefindResult | null) => {
+  // Auto-select first item when search results change
+  useEffect(() => {
+    if (search && (results.length > 0 || isSearchLoading)) {
+      setSelectedIndex(0);
+    } else if (!search) {
+      setSelectedIndex(-1);
+    }
+  }, [search, results.length, isSearchLoading]);
+
+  const handleSelect = (searchResult: SearchResult | null) => {
     if (!searchResult) return;
     if (searchResult.url === "use-ai") {
       onUseAgent({ searchQuery: `Tell me about ${search}` });
@@ -129,14 +155,55 @@ export const CustomSearch: FC<SearchProps> = ({
     setSearch("");
   };
 
-  const handleBlur = () => {
-    closeModal();
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!search) return;
+
+    switch (event.key) {
+      case "ArrowDown":
+        event.preventDefault();
+        setSelectedIndex((prev) => {
+          const newIndex = prev < totalItems - 1 ? prev + 1 : 0;
+          // Scroll to the selected item
+          requestAnimationFrame(() => {
+            virtualizer.scrollToIndex(newIndex, { align: "auto" });
+          });
+          return newIndex;
+        });
+        break;
+      case "ArrowUp":
+        event.preventDefault();
+        setSelectedIndex((prev) => {
+          const newIndex = prev > 0 ? prev - 1 : totalItems - 1;
+          // Scroll to the selected item
+          requestAnimationFrame(() => {
+            virtualizer.scrollToIndex(newIndex, { align: "auto" });
+          });
+          return newIndex;
+        });
+        break;
+      case "Enter":
+        event.preventDefault();
+        if (selectedIndex === 0) {
+          handleSelect({ url: "use-ai" });
+        } else if (selectedIndex > 0) {
+          const resultIndex = selectedIndex - 1;
+          const selectedResult = flattenedResults[resultIndex];
+          if (selectedResult) {
+            handleSelect(selectedResult);
+          }
+        }
+        break;
+      case "Escape":
+        event.preventDefault();
+        closeModal();
+        break;
+    }
   };
 
   const isSearchEmpty = !search;
 
   return (
-    <Combobox onChange={handleSelect}>
+    <div className="w-full">
       <div
         className={cn(
           className,
@@ -146,22 +213,20 @@ export const CustomSearch: FC<SearchProps> = ({
         <span className="relative" onClick={() => inputRef.current.focus()}>
           <Search className="w-4 h-4 md:w-5 md:h-5 dark:text-icons-3 text-[var(--light-color-accent-3)]" />
         </span>
-        <ComboboxInput
+        <input
           ref={inputRef}
           spellCheck={false}
-          className={() =>
-            cn(
-              "x:[&::-webkit-search-cancel-button]:appearance-none",
-              "outline-none caret-[var(--light-green-accent-2)]  dark:caret-accent-green dark:text-icons-6 text-[var(--light-color-text-4)] focus:outline-none w-full placeholder-[var(--light-color-text-4)] dark:placeholder:text-icons-4 placeholder:text-base md:placeholder:text-lg placeholder:font-normal",
-            )
-          }
+          className={cn(
+            "x:[&::-webkit-search-cancel-button]:appearance-none",
+            "outline-none caret-[var(--light-green-accent-2)]  dark:caret-accent-green dark:text-icons-6 text-[var(--light-color-text-4)] focus:outline-none w-full placeholder-[var(--light-color-text-4)] dark:placeholder:text-icons-4 placeholder:text-base md:placeholder:text-lg placeholder:font-normal",
+          )}
           autoComplete="off"
           type="search"
           autoFocus
           onChange={handleChange}
+          onKeyDown={handleKeyDown}
           value={search}
           placeholder={placeholder}
-          onBlur={handleBlur}
         />
       </div>
       <div
@@ -177,11 +242,7 @@ export const CustomSearch: FC<SearchProps> = ({
           className="h-full overflow-auto"
           id="docs-search-results"
         >
-          <ComboboxOptions
-            transition
-            static
-            modal={false}
-            unmount={true}
+          <div
             className={cn(
               "x:motion-reduce:transition-none",
               "x:origin-top x:transition x:duration-200 x:ease-out x:data-closed:scale-95 x:data-closed:opacity-0 x:empty:invisible",
@@ -212,6 +273,7 @@ export const CustomSearch: FC<SearchProps> = ({
                 {virtualizer.getVirtualItems().map((virtualItem) => {
                   // First item is the AI suggestion
                   if (virtualItem.index === 0) {
+                    const isSelected = selectedIndex === 0;
                     return (
                       <div
                         key="use-ai"
@@ -226,16 +288,15 @@ export const CustomSearch: FC<SearchProps> = ({
                       >
                         <div className="mt-3">
                           <div className="border-t-[0.5px] border-[var(--light-border-code)] dark:border-borders-1 pt-3">
-                            <ComboboxOption
-                              className={({ focus }) =>
-                                cn(
-                                  "w-full flex items-center font-medium justify-between gap-2 cursor-pointer text-base rounded-md px-2 md:px-4 py-2 bg-[url('/image/bloom-2.png')] bg-cover mb-2 bg-right",
-                                  focus
-                                    ? "dark:bg-surface-5 bg-[var(--light-color-surface-2)]"
-                                    : "dark:bg-surface-4 bg-[var(--light-color-surface-2)]",
-                                )
-                              }
-                              value={{ url: "use-ai" }}
+                            <div
+                              className={cn(
+                                "w-full flex items-center font-medium justify-between gap-2 cursor-pointer text-base rounded-md px-2 md:px-4 py-2 bg-[url('/image/bloom-2.png')] bg-cover mb-2 bg-right",
+                                isSelected
+                                  ? "dark:bg-surface-5 bg-[var(--light-color-surface-2)]"
+                                  : "dark:bg-surface-4 bg-[var(--light-color-surface-2)]",
+                              )}
+                              onClick={() => handleSelect({ url: "use-ai" })}
+                              onMouseEnter={() => setSelectedIndex(0)}
                             >
                               <div className="flex items-center gap-2">
                                 <span className="dark:text-accent-green text-[var(--light-green-accent-2)] shrink-0">
@@ -262,7 +323,7 @@ export const CustomSearch: FC<SearchProps> = ({
                               <span className="flex items-center opacity-90 dark:opacity-100 h-6 px-2 text-xs font-medium rounded-sm md:h-8 md:px-3 md:text-sm dark:bg-tag-green-2 bg-[var(--light-color-surface-15)] dark:text-accent-green text-[var(--light-color-text-4)] justify-self-end">
                                 experimental
                               </span>
-                            </ComboboxOption>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -272,6 +333,7 @@ export const CustomSearch: FC<SearchProps> = ({
                   // Rest are search results
                   const resultIndex = virtualItem.index - 1; // Subtract 1 because first item is AI option
                   const subResult = flattenedResults[resultIndex];
+                  const isSelected = selectedIndex === virtualItem.index;
 
                   if (!subResult) return null;
 
@@ -287,16 +349,15 @@ export const CustomSearch: FC<SearchProps> = ({
                         transform: `translateY(${virtualItem.start}px)`,
                       }}
                     >
-                      <ComboboxOption
-                        value={subResult}
-                        className={({ focus }) =>
-                          cn(
-                            "flex flex-col gap-2 md:gap-3 p-2 md:p-4 rounded-md cursor-pointer",
-                            focus
-                              ? "dark:bg-surface-5 bg-[var(--light-color-surface-2)] "
-                              : "bg-[var(--light-color-surface-15)] dark:bg-surface-4",
-                          )
-                        }
+                      <div
+                        className={cn(
+                          "flex flex-col gap-1 p-2 md:p-4 rounded-md cursor-pointer",
+                          isSelected
+                            ? "dark:bg-surface-5 bg-[var(--light-color-surface-2)] "
+                            : "bg-[var(--light-color-surface-15)] dark:bg-surface-4",
+                        )}
+                        onClick={() => handleSelect(subResult)}
+                        onMouseEnter={() => setSelectedIndex(virtualItem.index)}
                       >
                         <div className="flex gap-2 md:gap-[14px] items-center">
                           <BookIcon className="w-4 h-4 md:w-5 md:h-5 text-icons-3" />
@@ -304,16 +365,16 @@ export const CustomSearch: FC<SearchProps> = ({
                             {subResult.title}
                           </span>
                         </div>
-                        <div className="ml-2 flex items-center gap-2 md:gap-[14px] truncate border-l-2 dark:border-borders-2 border-[var(--light-border-code)] pl-2 md:pl-4">
-                          <BurgerIcon className="w-3.5 h-3.5 md:w-4 md:h-4 shrink-0 text-icons-3" />
+                        <div className="ml-2 flex items-center gap-2 truncate border-l-2 dark:border-borders-2 border-[var(--light-border-code)] pl-2 md:pl-6">
+                          <BurgerIcon className="w-3 h-3 md:w-3.5 md:h-3.5 shrink-0 text-icons-3" />
                           <div
-                            className="text-base md:text-lg font-normal truncate text-icons-3 [&_mark]:text-[var(--light-green-accent-2)] dark:[&_mark]:text-accent-green [&_mark]:bg-transparent"
+                            className="text-sm md:text-base font-normal truncate text-icons-3 [&_mark]:text-[var(--light-green-accent-2)] dark:[&_mark]:text-accent-green [&_mark]:bg-transparent"
                             dangerouslySetInnerHTML={{
                               __html: subResult.excerpt,
                             }}
                           />
                         </div>
-                      </ComboboxOption>
+                      </div>
                     </div>
                   );
                 })}
@@ -321,10 +382,10 @@ export const CustomSearch: FC<SearchProps> = ({
             ) : (
               <EmptyState setSearch={setSearch} />
             )}
-          </ComboboxOptions>
+          </div>
         </div>
       </div>
-    </Combobox>
+    </div>
   );
 };
 
@@ -374,7 +435,7 @@ function EmptyState({ setSearch }: { setSearch: (search: string) => void }) {
             )}
           >
             <Zap className="w-4 h-4 md:w-5 md:h-5 shrink-0 text-accent-green" />
-            <span className="text-base font-normal truncate dark:text-icons-6 text-[var(--light-color-text-4)]">
+            <span className="text-sm font-normal truncate dark:text-icons-6 text-[var(--light-color-text-4)]">
               {search.label}
             </span>
           </Button>

@@ -1,8 +1,9 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { createClient } from '@clickhouse/client';
+import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageV2 } from '@mastra/core/agent';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
-import type { StorageThreadType } from '@mastra/core/memory';
+import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
 import {
   MastraStorage,
   TABLE_EVALS,
@@ -647,7 +648,14 @@ export class ClickhouseStore extends MastraStorage {
     }
   }
 
-  async getMessages<T = unknown>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T[]> {
+  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
+  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
+  public async getMessages({
+    threadId,
+    resourceId,
+    selectBy,
+    format,
+  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     try {
       const messages: any[] = [];
       const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
@@ -752,21 +760,28 @@ export class ClickhouseStore extends MastraStorage {
             // If parsing fails, leave as string
           }
         }
-        if (message.type === `v2`) delete message.type;
       });
 
-      return messages as T[];
+      const list = new MessageList({ threadId, resourceId }).add(messages, 'memory');
+      if (format === `v2`) return list.get.all.v2();
+      return list.get.all.v1();
     } catch (error) {
       console.error('Error getting messages:', error);
       throw error;
     }
   }
 
-  async saveMessages({ messages }: { messages: MastraMessageV2[] }): Promise<MastraMessageV2[]> {
+  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
+  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
+  async saveMessages(
+    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
+  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
+    const { messages, format = 'v1' } = args;
     if (messages.length === 0) return messages;
 
     try {
       const threadId = messages[0]?.threadId;
+      const resourceId = messages[0]?.resourceId;
       if (!threadId) {
         throw new Error('Thread ID is required');
       }
@@ -796,7 +811,9 @@ export class ClickhouseStore extends MastraStorage {
         },
       });
 
-      return messages;
+      const list = new MessageList({ threadId, resourceId }).add(messages, 'memory');
+      if (format === `v2`) return list.get.all.v2();
+      return list.get.all.v1();
     } catch (error) {
       console.error('Error saving messages:', error);
       throw error;

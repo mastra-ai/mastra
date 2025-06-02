@@ -1,5 +1,41 @@
 # @mastra/cloudflare
 
+## 0.10.2-alpha.3
+
+### Patch Changes
+
+- c5bf1ce: Add backwards compat code for new MessageList in storage
+- 12b7002: Add serializedStepGraph to workflow run snapshot in storage
+- Updated dependencies [c5bf1ce]
+- Updated dependencies [12b7002]
+  - @mastra/core@0.10.2-alpha.4
+
+## 0.10.2-alpha.2
+
+### Patch Changes
+
+- f0d559f: Fix peerdeps for alpha channel
+- Updated dependencies [1e8bb40]
+  - @mastra/core@0.10.2-alpha.2
+
+## 0.10.2-alpha.1
+
+### Patch Changes
+
+- e9d2ca8: Add pagination to cloudflare kv listing namespaces.
+- Updated dependencies [ee77e78]
+- Updated dependencies [2901125]
+  - @mastra/core@0.10.2-alpha.1
+
+## 0.10.2-alpha.0
+
+### Patch Changes
+
+- e5dc18d: Added a backwards compatible layer to begin storing/retrieving UIMessages in storage instead of CoreMessages
+- Updated dependencies [592a2db]
+- Updated dependencies [e5dc18d]
+  - @mastra/core@0.10.2-alpha.0
+
 ## 0.10.1
 
 ### Patch Changes

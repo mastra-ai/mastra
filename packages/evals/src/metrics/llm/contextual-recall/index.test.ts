@@ -24,14 +24,14 @@ const testCases: TestCaseWithContext[] = [
   {
     input: `What were the major causes of World War I?`,
     output:
-      '"World War I was triggered by the assassination of Archduke Franz Ferdinand. The underlying causes included militarism among European powers, a complex system of alliances, imperialism and competition for colonies, and rising nationalism. The alliance system drew various nations into the conflict, turning it into a global war. Economic competition between major powers also played a significant role.',
+      '"World War I was triggered by the assassination of Archduke Franz Ferdinand. The underlying causes included militarism among European powers, imperialism and competition for colonies, and rising nationalism. Economic competition between major powers also played a significant role.',
     context: [
       'The immediate trigger for World War I was the assassination of Archduke Franz Ferdinand in Sarajevo.',
       'The system of alliances in Europe meant that countries were obligated to support their allies in case of war.',
       'Military buildup among European nations created an atmosphere of tension and distrust.',
     ],
     expectedResult: {
-      score: 0.5,
+      score: 0.67, // two of the three causes were mentioned
     },
   },
   {
@@ -46,6 +46,14 @@ const testCases: TestCaseWithContext[] = [
     ],
     expectedResult: {
       score: 0,
+    },
+  },
+  {
+    input: `What is the capital of France?`,
+    output: `The capital of France is Paris. Incidentally, the sky is blue due to atmospheric diffusion.`,
+    context: ['Paris is the capital of France.'],
+    expectedResult: {
+      score: 1,
     },
   },
 ];
@@ -72,7 +80,6 @@ describe(
       const testCase = testCases[1]!;
       const metric = new ContextualRecallMetric(model, { context: testCase.context });
       const result = await metric.measure(testCase.input, testCase.output);
-
       expect(isCloserTo(result.score, testCase.expectedResult.score, 1)).toBe(true);
     });
 
@@ -81,6 +88,13 @@ describe(
       const metric = new ContextualRecallMetric(model, { context: testCase.context });
       const result = await metric.measure(testCase.input, testCase.output);
       expect(result.score).toBeCloseTo(testCase.expectedResult.score, 1);
+    });
+
+    it('should allow non-contextual outputs', async () => {
+      const testCase = testCases[3]!;
+      const metric = new ContextualRecallMetric(model, { context: testCase.context });
+      const result = await metric.measure(testCase.input, testCase.output);
+      expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
     });
   },
   {

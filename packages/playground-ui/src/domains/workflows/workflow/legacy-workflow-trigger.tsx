@@ -30,24 +30,20 @@ interface SuspendedStep {
 
 export function LegacyWorkflowTrigger({
   workflowId,
-  baseUrl,
   setRunId,
 }: {
   workflowId: string;
-  baseUrl: string;
   setRunId?: (runId: string) => void;
 }) {
   const { legacyResult: result, setLegacyResult: setResult, payload, setPayload } = useContext(WorkflowRunContext);
-  const { isLoading, legacyWorkflow: workflow } = useLegacyWorkflow(workflowId, baseUrl);
-  const { createLegacyWorkflowRun: createWorkflowRun, startLegacyWorkflowRun: startWorkflowRun } =
-    useExecuteWorkflow(baseUrl);
+  const { isLoading, legacyWorkflow: workflow } = useLegacyWorkflow(workflowId);
+  const { createLegacyWorkflowRun: createWorkflowRun, startLegacyWorkflowRun: startWorkflowRun } = useExecuteWorkflow();
   const {
     watchLegacyWorkflow: watchWorkflow,
     legacyWatchResult: watchResult,
     isWatchingLegacyWorkflow: isWatchingWorkflow,
-  } = useWatchWorkflow(baseUrl);
-  const { resumeLegacyWorkflow: resumeWorkflow, isResumingLegacyWorkflow: isResumingWorkflow } =
-    useResumeWorkflow(baseUrl);
+  } = useWatchWorkflow();
+  const { resumeLegacyWorkflow: resumeWorkflow, isResumingLegacyWorkflow: isResumingWorkflow } = useResumeWorkflow();
   const [suspendedSteps, setSuspendedSteps] = useState<SuspendedStep[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const triggerSchema = workflow?.triggerSchema;
