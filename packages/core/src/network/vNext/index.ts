@@ -8,6 +8,7 @@ import { RuntimeContext } from '../../runtime-context';
 import { createWorkflow, type Workflow, createStep } from '../../workflows';
 import type { MastraMemory } from '../../memory';
 import { randomUUID } from 'crypto';
+import type { Mastra } from '../..';
 
 interface NewAgentNetworkConfig {
   id: string;
@@ -105,6 +106,7 @@ export class NewAgentNetwork extends MastraBase {
   #agents: DynamicArgument<Record<string, Agent>>;
   #workflows: DynamicArgument<Record<string, Workflow>> | undefined;
   #memory?: DynamicArgument<MastraMemory>;
+  #mastra?: Mastra;
 
   constructor({ id, name, instructions, model, agents, workflows, memory }: NewAgentNetworkConfig) {
     super({
@@ -119,6 +121,10 @@ export class NewAgentNetwork extends MastraBase {
     this.#agents = agents;
     this.#workflows = workflows;
     this.#memory = memory;
+  }
+
+  __registerMastra(mastra: Mastra) {
+    this.#mastra = mastra;
   }
 
   async getAgents({ runtimeContext }: { runtimeContext?: RuntimeContext }) {
