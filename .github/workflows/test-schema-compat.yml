@@ -8,7 +8,7 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - 'packages/schema/**'
+      - 'packages/schema-compat/**'
       - '.github/workflows/test-schema.yml'
 
 jobs:

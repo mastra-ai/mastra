@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'packages/core/src/tools/tool-builder/**'
+      - 'packages/schema-compat/**'
       - '.github/workflows/tool-builder-test.yml'
 
 jobs:
