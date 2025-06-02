@@ -69,6 +69,12 @@ import { rootHandler } from './handlers/root';
 import { getTelemetryHandler, storeTelemetryHandler } from './handlers/telemetry';
 import { executeAgentToolHandler, executeToolHandler, getToolByIdHandler, getToolsHandler } from './handlers/tools';
 import { createIndex, deleteIndex, describeIndex, listIndexes, queryVectors, upsertVectors } from './handlers/vector';
+import {
+  generateVNextNetworkHandler,
+  getVNextNetworkByIdHandler,
+  getVNextNetworksHandler,
+  streamGenerateVNextNetworkHandler,
+} from './handlers/vNextNetwork';
 import { getSpeakersHandler, getListenerHandler, listenHandler, speakHandler } from './handlers/voice';
 import {
   createWorkflowRunHandler,
@@ -429,6 +435,132 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
       },
     }),
     getAgentsHandler,
+  );
+
+  // VNext Network routes
+  app.get(
+    '/api/networks/v-next',
+    describeRoute({
+      description: 'Get all available v-next networks',
+      tags: ['vNextNetworks'],
+      responses: {
+        200: {
+          description: 'List of all v-next networks',
+        },
+      },
+    }),
+    getVNextNetworksHandler,
+  );
+
+  app.get(
+    '/api/networks/v-next/:networkId',
+    describeRoute({
+      description: 'Get v-next network by ID',
+      tags: ['vNextNetworks'],
+      parameters: [
+        {
+          name: 'networkId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'v-next Network details',
+        },
+        404: {
+          description: 'v-next Network not found',
+        },
+      },
+    }),
+    getVNextNetworkByIdHandler,
+  );
+
+  app.post(
+    '/api/networks/v-next/:networkId/generate',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Generate a response from a v-next network',
+      tags: ['vNextNetworks'],
+      parameters: [
+        {
+          name: 'networkId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                message: {
+                  type: 'string',
+                  description: 'Message for the v-next network',
+                },
+              },
+              required: ['message'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Generated response',
+        },
+        404: {
+          description: 'v-next Network not found',
+        },
+      },
+    }),
+    generateVNextNetworkHandler,
+  );
+
+  app.post(
+    '/api/networks/v-next/:networkId/stream',
+    bodyLimit(bodyLimitOptions),
+    describeRoute({
+      description: 'Generate a response from a v-next network',
+      tags: ['vNextNetworks'],
+      parameters: [
+        {
+          name: 'networkId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                message: {
+                  type: 'string',
+                  description: 'Message for the v-next network',
+                },
+              },
+              required: ['message'],
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Generated response',
+        },
+        404: {
+          description: 'v-next Network not found',
+        },
+      },
+    }),
+    streamGenerateVNextNetworkHandler,
   );
 
   // Network routes
