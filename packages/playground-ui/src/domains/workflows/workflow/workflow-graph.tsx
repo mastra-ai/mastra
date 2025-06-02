@@ -1,5 +1,4 @@
 import { Skeleton } from '@/components/ui/skeleton';
-import { useEffect, useState } from 'react';
 
 import { useWorkflow } from '@/hooks/use-workflows';
 import '../../../index.css';
@@ -20,15 +19,6 @@ export interface WorkflowGraphProps {
 export function WorkflowGraph({ workflowId, onShowTrace }: WorkflowGraphProps) {
   const { workflow, isLoading } = useWorkflow(workflowId);
   const { snapshot } = useContext(WorkflowRunContext);
-  // const [switching, setSwitching] = useState(false);
-
-  // useEffect(() => {
-  //   //we need to reactflow provider to get unmounted and then mount again to get the nodes and edges to be reinitialized
-  //   setSwitching(true);
-  //   setTimeout(() => {
-  //     setSwitching(false);
-  //   }, 100);
-  // }, [snapshotStepGraph]);
 
   if (isLoading) {
     return (
