@@ -21,7 +21,7 @@ export const WorkflowRuns = ({ workflowId, runId, isLoading, runs, onPressRun }:
     );
   }
 
-  if (runs.length > 0) {
+  if (runs.length === 0) {
     return (
       <div className="p-4">
         <Txt variant="ui-md" className="text-icon6 text-center">
