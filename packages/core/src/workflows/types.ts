@@ -1,3 +1,4 @@
+import type { TextStreamPart } from 'ai';
 import type { z } from 'zod';
 import type { ExecuteFunction, Step } from './step';
 import type { SerializedStepFlowEntry } from './workflow';
@@ -90,6 +91,12 @@ export type VariableReference<
       path: TVarPath;
     }
   | { value: any; schema: z.ZodTypeAny };
+
+export type StreamEvent = TextStreamPart<any> & {
+  type: 'step-suspended';
+  payload: any;
+  id: string;
+};
 
 export type WatchEvent = {
   type: 'watch';
