@@ -7,6 +7,7 @@ import {
   AssistantRuntimeProvider,
   SimpleImageAttachmentAdapter,
   CompositeAttachmentAdapter,
+  SimpleTextAttachmentAdapter,
 } from '@assistant-ui/react';
 import { useState, ReactNode, useEffect } from 'react';
 import { RuntimeContext } from '@mastra/core/di';
@@ -16,6 +17,7 @@ import { ChatProps } from '@/types';
 import { CoreMessage } from '@mastra/core';
 import { fileToBase64 } from '@/lib/file';
 import { useMastraClient } from '@/contexts/mastra-client-context';
+import { PDFAttachmentAdapter } from '@/components/assistant-ui/attachment-adapters/pdfs-adapter';
 
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
@@ -404,7 +406,11 @@ export function MastraRuntimeProvider({
     convertMessage,
     onNew,
     adapters: {
-      attachments: new CompositeAttachmentAdapter([new SimpleImageAttachmentAdapter()]),
+      attachments: new CompositeAttachmentAdapter([
+        new SimpleImageAttachmentAdapter(),
+        new SimpleTextAttachmentAdapter(),
+        new PDFAttachmentAdapter(),
+      ]),
     },
   });
 
