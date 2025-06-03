@@ -39,7 +39,7 @@ program
     '-p, --project-name <string>',
     'Project name that will be used in package.json and as the project directory name.',
   )
-  .option('--default', 'Quick start with defaults(src, OpenAI, no examples)')
+  .option('--default', 'Quick start with defaults(src, OpenAI, examples)')
   .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows)')
   .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, groq, google, or cerebras)')
   .option('-k, --llm-api-key <api-key>', 'API key for the model provider')
@@ -52,6 +52,7 @@ program
     // Unify: use argument if present, else option
     const projectName = projectNameArg || args.projectName;
     const timeout = args?.timeout ? (args?.timeout === true ? 60000 : parseInt(args?.timeout, 10)) : undefined;
+
     if (args.default) {
       await create({
         components: ['agents', 'tools', 'workflows'],
@@ -60,6 +61,7 @@ program
         createVersionTag,
         timeout,
         mcpServer: args.mcp,
+        directory: 'src/',
       });
       return;
     }
