@@ -486,6 +486,12 @@ export class LibSQLStore extends MastraStorage {
         };
       });
 
+      const now = new Date().toISOString();
+      batchStatements.push({
+        sql: `UPDATE ${TABLE_THREADS} SET updatedAt = ? WHERE id = ?`,
+        args: [now, threadId],
+      });
+
       // Execute all inserts in a single batch
       await this.client.batch(batchStatements, 'write');
 

@@ -73,7 +73,7 @@ export const createMastraProject = async ({
   createVersionTag?: string;
   timeout?: number;
 }) => {
-  p.intro(color.inverse('Mastra Create'));
+  p.intro(color.inverse(' Mastra Create '));
 
   const projectName =
     name ??

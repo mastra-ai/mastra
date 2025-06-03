@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
 import type { MastraLanguageModel } from '../../agent/types';
 import { MastraBase } from '../../base';
-import { isVercelTool } from '../../utils';
+import { isVercelTool } from '../../tools/toolchecks';
 import { convertVercelToolParameters, convertZodSchemaToAISDKSchema } from './builder';
 import type { ToolToConvert } from './builder';
 

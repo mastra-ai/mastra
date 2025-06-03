@@ -133,7 +133,9 @@ export async function executeAgentToolHandler({
       throw new HTTPException(404, { message: 'Tool not found' });
     }
 
-    const tool = Object.values(agent?.tools || {}).find((tool: any) => tool.id === toolId) as any;
+    const agentTools = await agent.getTools({ runtimeContext });
+
+    const tool = Object.values(agentTools || {}).find((tool: any) => tool.id === toolId) as any;
 
     if (!tool) {
       throw new HTTPException(404, { message: 'Tool not found' });

@@ -9,7 +9,7 @@ import { createTool, Mastra, Telemetry } from '..';
 import { Agent } from '../agent';
 import { RuntimeContext } from '../di';
 import { MockStore } from '../storage/mock';
-import type { WatchEvent } from './types';
+import type { StreamEvent, WatchEvent } from './types';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow } from './workflow';
 
 const testStorage = new MockStore();
@@ -57,7 +57,7 @@ describe('Workflow', () => {
       workflow.then(step1).then(step2).commit();
 
       const runId = 'test-run-id';
-      let watchData: WatchEvent[] = [];
+      let watchData: StreamEvent[] = [];
       const run = workflow.createRun({
         runId,
       });
@@ -65,7 +65,7 @@ describe('Workflow', () => {
       const { stream, getWorkflowState } = run.stream({ inputData: {} });
 
       // Start watching the workflow
-      const collectedStreamData: WatchEvent[] = [];
+      const collectedStreamData: StreamEvent[] = [];
       for await (const data of stream) {
         collectedStreamData.push(JSON.parse(JSON.stringify(data)));
       }
@@ -399,7 +399,7 @@ describe('Workflow', () => {
         },
       });
 
-      const values: WatchEvent[] = [];
+      const values: StreamEvent[] = [];
       for await (const value of stream.values()) {
         values.push(value);
       }
@@ -3312,7 +3312,7 @@ describe('Workflow', () => {
 
       const { stream, getWorkflowState } = await workflow.createRun().stream({ inputData: {} });
 
-      const values: WatchEvent[] = [];
+      const values: StreamEvent[] = [];
       for await (const value of stream.values()) {
         values.push(value);
       }
@@ -4230,6 +4230,7 @@ describe('Workflow', () => {
       const firstResumeResult = await run.resume({ step: 'promptAgent', resumeData: newCtx });
       expect(promptAgentAction).toHaveBeenCalledTimes(2);
       expect(firstResumeResult.steps.runtimeContextAction.status).toBe('success');
+      // @ts-ignore
       expect(firstResumeResult.steps.runtimeContextAction.output).toEqual(['promptAgentAction']);
     });
 
@@ -4300,6 +4301,7 @@ describe('Workflow', () => {
       const firstResumeResult = await run.resume({ step: 'promptAgent', resumeData: newCtx, runtimeContext });
       expect(promptAgentAction).toHaveBeenCalledTimes(2);
       expect(firstResumeResult.steps.runtimeContextAction.status).toBe('success');
+      // @ts-ignore
       expect(firstResumeResult.steps.runtimeContextAction.output).toEqual(['first message', 'promptAgentAction']);
     });
   });
