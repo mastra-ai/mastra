@@ -12,6 +12,7 @@ overrides:
   '@mastra/auth-firebase': link:../../auth/firebase
   '@mastra/auth-auth0': link:../../auth/auth0
   '@mastra/auth-workos': link:../../auth/workos
+  '@mastra/auth-clerk': link:../../auth/clerk
 
 importers:
 
@@ -26,6 +27,9 @@ importers:
       '@mastra/auth-auth0':
         specifier: link:../../auth/auth0
         version: link:../../auth/auth0
+      '@mastra/auth-clerk':
+        specifier: link:../../auth/clerk
+        version: link:../../auth/clerk
       '@mastra/auth-firebase':
         specifier: link:../../auth/firebase
         version: link:../../auth/firebase

@@ -20,6 +20,7 @@
     "@mastra/auth-firebase": "latest",
     "@mastra/auth-auth0": "latest",
     "@mastra/auth-workos": "latest",
+    "@mastra/auth-clerk": "latest",
     "zod": "^3.24.3"
   },
   "devDependencies": {
@@ -34,7 +35,8 @@
       "@mastra/auth-supabase": "link:../../auth/supabase",
       "@mastra/auth-firebase": "link:../../auth/firebase",
       "@mastra/auth-auth0": "link:../../auth/auth0",
-      "@mastra/auth-workos": "link:../../auth/workos"
+      "@mastra/auth-workos": "link:../../auth/workos",
+      "@mastra/auth-clerk": "link:../../auth/clerk"
     }
   },
   "packageManager": "pnpm@10.10.0+sha512.d615db246fe70f25dcfea6d8d73dee782ce23e2245e3c4f6f888249fb568149318637dca73c2c5c8ef2a4ca0d5657fb9567188bfab47f566d1ee6ce987815c39"
