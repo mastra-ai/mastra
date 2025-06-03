@@ -2,16 +2,15 @@ import { createHash } from 'crypto';
 import type { CoreMessage, LanguageModelV1 } from 'ai';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
-
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
 import type { IMastraLogger } from './logger';
 import type { Mastra } from './mastra';
 import type { AiMessageType, MastraMemory } from './memory';
 import type { RuntimeContext } from './runtime-context';
-import { Tool } from './tools';
 import type { CoreTool, ToolAction, VercelTool } from './tools';
 import { CoreToolBuilder } from './tools/tool-compatibility/builder';
+import { isVercelTool } from './tools/toolchecks';
 
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -188,16 +187,6 @@ export function resolveSerializedZodOutput(schema: string): z.ZodType {
   // The function body is a string that returns the serialized zod schema
   // When executed with the 'z' parameter, it reconstructs the zod schema in the current context
   return Function('z', `"use strict";return (${schema});`)(z);
-}
-
-/**
- * Checks if a tool is a Vercel Tool
- * @param tool - The tool to check
- * @returns True if the tool is a Vercel Tool, false otherwise
- */
-export function isVercelTool(tool?: ToolToConvert): tool is VercelTool {
-  // Checks if this tool is not an instance of Tool
-  return !!(tool && !(tool instanceof Tool) && 'parameters' in tool);
 }
 
 export interface ToolOptions {
