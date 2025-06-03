@@ -2,16 +2,15 @@ import { createHash } from 'crypto';
 import type { CoreMessage, LanguageModelV1 } from 'ai';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
-
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
 import type { IMastraLogger } from './logger';
 import type { Mastra } from './mastra';
 import type { AiMessageType, MastraMemory } from './memory';
 import type { RuntimeContext } from './runtime-context';
-import { isVercelTool } from './tools/toolchecks';
 import { type CoreTool, type ToolAction, type VercelTool } from './tools';
 import { CoreToolBuilder } from './tools/tool-compatibility/builder';
+import { isVercelTool } from './tools/toolchecks';
 
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
