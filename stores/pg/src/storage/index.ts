@@ -270,7 +270,6 @@ export class PostgresStore extends MastraStorage {
       return [];
     }
 
-    // Get paginated results
     const dataQuery = `SELECT * FROM ${this.getTableName(TABLE_TRACES)} ${whereClause} ORDER BY "createdAt" DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
     const finalQueryParams = [...queryParams, perPage, currentOffset];
 
@@ -282,13 +281,13 @@ export class PostgresStore extends MastraStorage {
       name: row.name,
       scope: row.scope,
       kind: row.kind,
-      status: row.status, // Assuming status is already parsed or fine as is from DB
-      events: row.events, // Assuming events are already parsed or fine as is from DB
-      links: row.links, // Assuming links are already parsed or fine as is from DB
-      attributes: row.attributes, // Assuming attributes are already parsed or fine as is from DB
+      status: row.status,
+      events: row.events,
+      links: row.links,
+      attributes: row.attributes,
       startTime: row.startTime,
       endTime: row.endTime,
-      other: row.other, // Assuming other is already parsed or fine as is from DB
+      other: row.other,
       createdAt: row.createdAt,
     }));
 
@@ -563,11 +562,11 @@ export class PostgresStore extends MastraStorage {
         }));
       }
     } catch (error) {
-      console.error(`Error getting threads for resource ${resourceId}:`, error);
+      this.logger.error(`Error getting threads for resource ${resourceId}:`, error);
       if (page !== undefined) {
         return { threads: [], total: 0, page, perPage: perPageInput || 100, hasMore: false };
       }
-      throw error; // Or return [] for non-paginated error
+      return [];
     }
   }
 
@@ -664,7 +663,6 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
-  // Overloads for getMessages
   public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
   public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
   public async getMessages(
@@ -685,11 +683,10 @@ export class PostgresStore extends MastraStorage {
   public async getMessages(
     args: StorageGetMessagesArg & {
       format?: 'v1' | 'v2';
-      page?: number; // Optional for the implementation to handle both paths
+      page?: number;
       perPage?: number;
       fromDate?: Date;
       toDate?: Date;
-      // selectBy is still part of StorageGetMessagesArg
     },
   ): Promise<
     | MastraMessageV1[]
@@ -706,8 +703,7 @@ export class PostgresStore extends MastraStorage {
 
     try {
       if (page !== undefined) {
-        // Pagination path
-        const perPage = perPageInput !== undefined ? perPageInput : 40; // Default perPage for pagination
+        const perPage = perPageInput !== undefined ? perPageInput : 40;
         const currentOffset = page * perPage;
 
         const conditions: string[] = [`thread_id = $1`];
@@ -749,8 +745,8 @@ export class PostgresStore extends MastraStorage {
               /* ignore */
             }
           }
-          if (message.type === 'v2') delete message.type; // Align with existing logic
-          return message as MastraMessageV1; // Base type, will convert to V2 if needed
+          if (message.type === 'v2') delete message.type;
+          return message as MastraMessageV1;
         });
 
         const messagesToReturn =
@@ -772,8 +768,6 @@ export class PostgresStore extends MastraStorage {
           hasMore: currentOffset + fetchedMessages.length < total,
         };
       } else {
-        // Non-paginated path (simplified to fetch all or based on selectBy.last)
-        // For strict Upstash parity, this would ignore complex selectBy.include
         const limit = typeof selectBy?.last === 'number' ? selectBy.last : undefined;
 
         let query = `SELECT id, content, role, type, "createdAt", thread_id AS "threadId" FROM ${this.getTableName(TABLE_MESSAGES)} WHERE thread_id = $1 ORDER BY "createdAt" ASC`;
@@ -804,11 +798,11 @@ export class PostgresStore extends MastraStorage {
           : fetchedMessages;
       }
     } catch (error) {
-      console.error('Error getting messages:', error);
+      this.logger.error('Error getting messages:', error);
       if (page !== undefined) {
         return { messages: [], total: 0, page, perPage: perPageInput || 40, hasMore: false };
       }
-      throw error; // Or return [] for non-paginated error?
+      return [];
     }
   }
 
@@ -1128,12 +1122,10 @@ export class PostgresStore extends MastraStorage {
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    // Get total count
     const countQuery = `SELECT COUNT(*) FROM ${this.getTableName(TABLE_EVALS)} ${whereClause}`;
     const countResult = await this.db.one(countQuery, queryParams);
     const total = parseInt(countResult.count, 10);
 
-    // Determine pagination parameters
     let currentLimit: number;
     let currentOffset: number;
     let currentPage: number | undefined = page;
@@ -1143,7 +1135,7 @@ export class PostgresStore extends MastraStorage {
     if (limit !== undefined && offset !== undefined) {
       currentLimit = limit;
       currentOffset = offset;
-      currentPage = undefined; // Explicitly undefined when using limit/offset
+      currentPage = undefined;
       currentPerPage = undefined;
       hasMore = currentOffset + currentLimit < total;
     } else if (page !== undefined && perPage !== undefined) {
@@ -1151,11 +1143,9 @@ export class PostgresStore extends MastraStorage {
       currentOffset = page * perPage;
       hasMore = currentOffset + currentLimit < total;
     } else {
-      // Default: no pagination or use sensible defaults if only one of page/perPage is given
-      // (though the signature implies both or neither for page-based)
-      currentLimit = perPage || 100; // Default perPage
+      currentLimit = perPage || 100;
       currentOffset = (page || 0) * currentLimit;
-      if (page === undefined) currentPage = 0; // default page to 0 if not provided
+      if (page === undefined) currentPage = 0;
       if (currentPerPage === undefined) currentPerPage = currentLimit;
       hasMore = currentOffset + currentLimit < total;
     }
@@ -1170,7 +1160,6 @@ export class PostgresStore extends MastraStorage {
       };
     }
 
-    // Get paginated results
     const dataQuery = `SELECT * FROM ${this.getTableName(TABLE_EVALS)} ${whereClause} ORDER BY created_at DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
     const rows = await this.db.manyOrNone(dataQuery, [...queryParams, currentLimit, currentOffset]);
 
