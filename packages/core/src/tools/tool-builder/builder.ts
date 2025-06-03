@@ -12,7 +12,7 @@ import type { ToolExecutionOptions } from 'ai';
 import { z } from 'zod';
 import { MastraBase } from '../../base';
 import { RuntimeContext } from '../../runtime-context';
-import { isVercelTool } from '../../utils';
+import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import type { CoreTool, ToolAction, VercelTool } from '../types';
 
