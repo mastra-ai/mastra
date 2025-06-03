@@ -1,5 +1,12 @@
 # @mastra/dane
 
+## 0.0.23-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [a3f1b39]
+  - @mastra/libsql@0.10.1-alpha.3
+
 ## 0.0.23-alpha.7
 
 ### Patch Changes
