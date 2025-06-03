@@ -1,5 +1,36 @@
 # @mastra/deployer
 
+## 0.10.2
+
+### Patch Changes
+
+- e5dc18d: Added a backwards compatible layer to begin storing/retrieving UIMessages in storage instead of CoreMessages
+- 1b5fc55: Fixed an issue where the playground wouldn't display images saved in memory. Fixed memory to always store images as strings. Removed duplicate storage of reasoning and file/image parts in storage dbs
+- e2228f6: Remove stray server log
+- a399086: Bumping because we forgot to
+- c5bf1ce: Add backwards compat code for new MessageList in storage
+- 422ee9e: Fix a2a getTask to be undefined
+- f0d559f: Fix peerdeps for alpha channel
+- a0ebc3f: Do not throw on lack of storage
+- Updated dependencies [ee77e78]
+- Updated dependencies [592a2db]
+- Updated dependencies [e5dc18d]
+- Updated dependencies [ab5adbe]
+- Updated dependencies [1e8bb40]
+- Updated dependencies [1b5fc55]
+- Updated dependencies [195c428]
+- Updated dependencies [f73e11b]
+- Updated dependencies [37643b8]
+- Updated dependencies [99fd6cf]
+- Updated dependencies [c5bf1ce]
+- Updated dependencies [add596e]
+- Updated dependencies [8dc94d8]
+- Updated dependencies [ecebbeb]
+- Updated dependencies [79d5145]
+- Updated dependencies [12b7002]
+- Updated dependencies [2901125]
+  - @mastra/core@0.10.2
+
 ## 0.10.2-alpha.8
 
 ### Patch Changes

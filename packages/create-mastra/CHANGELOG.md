@@ -1,5 +1,21 @@
 # create-mastra
 
+## 0.10.2
+
+### Patch Changes
+
+- 73fec0b: Mastra start cli command"
+- 401bbae: Show workflow graph from stepGraph of previous runs when viewing a previous run
+- f73e11b: fix telemetry disabled not working on playground
+- 9666468: move the fetch traces call to the playground instead of playground-ui
+- 90e96de: Fix: prevent default flag from triggering interactive prompt
+- 89a69d0: add a way to go to the given trace of a workflow step
+- 6fd77b5: add docs and txt support for multi modal
+- 9faee5b: small fixes in the workflows graph
+- 631683f: move workflow runs list in playground-ui instead of playground
+- f6ddf55: fix traces not showing and reduce API surface from playground ui
+- 9a31c09: Highlight steps in nested workflows on workflow graph
+
 ## 0.10.2-alpha.6
 
 ### Patch Changes

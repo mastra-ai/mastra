@@ -1,5 +1,54 @@
 # mastra
 
+## 0.10.2
+
+### Patch Changes
+
+- 73fec0b: Mastra start cli command"
+- 401bbae: Show workflow graph from stepGraph of previous runs when viewing a previous run
+- 592a2db: Added different icons for agents and workflows in mcp tools list
+- 1b5fc55: Fixed an issue where the playground wouldn't display images saved in memory. Fixed memory to always store images as strings. Removed duplicate storage of reasoning and file/image parts in storage dbs
+- f73e11b: fix telemetry disabled not working on playground
+- 9666468: move the fetch traces call to the playground instead of playground-ui
+- 1fcc048: chore: generate sourcemaps in dev build
+- 90e96de: Fix: prevent default flag from triggering interactive prompt
+- a399086: Bumping because we forgot to
+- 89a69d0: add a way to go to the given trace of a workflow step
+- 6fd77b5: add docs and txt support for multi modal
+- 9faee5b: small fixes in the workflows graph
+- 631683f: move workflow runs list in playground-ui instead of playground
+- 068b850: fix: able to pass headers to playground components which are using the mastra client
+- 668af6d: Fix mastra dev server restarts
+- f0d559f: Fix peerdeps for alpha channel
+- f6ddf55: fix traces not showing and reduce API surface from playground ui
+- 9a31c09: Highlight steps in nested workflows on workflow graph
+- Updated dependencies [ee77e78]
+- Updated dependencies [592a2db]
+- Updated dependencies [e5dc18d]
+- Updated dependencies [ab5adbe]
+- Updated dependencies [e8d2aff]
+- Updated dependencies [1e8bb40]
+- Updated dependencies [1b5fc55]
+- Updated dependencies [195c428]
+- Updated dependencies [f73e11b]
+- Updated dependencies [37643b8]
+- Updated dependencies [99fd6cf]
+- Updated dependencies [1fcc048]
+- Updated dependencies [c5bf1ce]
+- Updated dependencies [f946acf]
+- Updated dependencies [add596e]
+- Updated dependencies [8dc94d8]
+- Updated dependencies [ecebbeb]
+- Updated dependencies [4187ed4]
+- Updated dependencies [79d5145]
+- Updated dependencies [12b7002]
+- Updated dependencies [f0d559f]
+- Updated dependencies [2901125]
+  - @mastra/core@0.10.2
+  - @mastra/mcp@0.10.2
+  - @mastra/deployer@0.10.2
+  - @mastra/loggers@0.10.1
+
 ## 0.10.2-alpha.9
 
 ### Patch Changes

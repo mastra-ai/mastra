@@ -1,5 +1,42 @@
 # @mastra/deployer
 
+## 0.10.2
+
+### Patch Changes
+
+- e8d2aff: Fix non-scoped packages in mastra build
+- f73e11b: fix telemetry disabled not working on playground
+- 1fcc048: chore: generate sourcemaps in dev build
+- f946acf: Filter out dynamic imports by node builtins
+- add596e: Mastra protected auth
+- ecebbeb: Mastra core auth abstract definition
+- 4187ed4: Fix mcp server api openapijson
+- f0d559f: Fix peerdeps for alpha channel
+- Updated dependencies [ee77e78]
+- Updated dependencies [592a2db]
+- Updated dependencies [e5dc18d]
+- Updated dependencies [ab5adbe]
+- Updated dependencies [1e8bb40]
+- Updated dependencies [1b5fc55]
+- Updated dependencies [195c428]
+- Updated dependencies [f73e11b]
+- Updated dependencies [37643b8]
+- Updated dependencies [e2228f6]
+- Updated dependencies [99fd6cf]
+- Updated dependencies [a399086]
+- Updated dependencies [c5bf1ce]
+- Updated dependencies [add596e]
+- Updated dependencies [8dc94d8]
+- Updated dependencies [ecebbeb]
+- Updated dependencies [79d5145]
+- Updated dependencies [422ee9e]
+- Updated dependencies [12b7002]
+- Updated dependencies [f0d559f]
+- Updated dependencies [2901125]
+- Updated dependencies [a0ebc3f]
+  - @mastra/core@0.10.2
+  - @mastra/server@0.10.2
+
 ## 0.10.2-alpha.8
 
 ### Patch Changes

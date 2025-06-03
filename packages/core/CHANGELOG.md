@@ -1,5 +1,30 @@
 # @mastra/core
 
+## 0.10.2
+
+### Patch Changes
+
+- ee77e78: Type fixes for dynamodb and MessageList
+- 592a2db: Added different icons for agents and workflows in mcp tools list
+- e5dc18d: Added a backwards compatible layer to begin storing/retrieving UIMessages in storage instead of CoreMessages
+- ab5adbe: Add support for runtimeContext to generateTitle
+- 1e8bb40: Add runtimeContext to tools and agents in a workflow step.
+
+  Also updated start/resume docs for runtime context.
+
+- 1b5fc55: Fixed an issue where the playground wouldn't display images saved in memory. Fixed memory to always store images as strings. Removed duplicate storage of reasoning and file/image parts in storage dbs
+- 195c428: Add runId to step execute fn
+- f73e11b: fix telemetry disabled not working on playground
+- 37643b8: Fix tool access
+- 99fd6cf: Fix workflow stream chunk type
+- c5bf1ce: Add backwards compat code for new MessageList in storage
+- add596e: Mastra protected auth
+- 8dc94d8: Enhance workflow DI runtimeContext get method type safety
+- ecebbeb: Mastra core auth abstract definition
+- 79d5145: Fixes passing telemetry configuration when Agent.stream is used with experimental_output
+- 12b7002: Add serializedStepGraph to workflow run snapshot in storage
+- 2901125: feat: set mastra server middleware after Mastra has been initialized
+
 ## 0.10.2-alpha.8
 
 ### Patch Changes
