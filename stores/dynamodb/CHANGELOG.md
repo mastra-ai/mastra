@@ -1,5 +1,14 @@
 # @mastra/dynamodb
 
+## 0.10.1-alpha.3
+
+### Patch Changes
+
+- 05d3c89: Dynamo db type fix
+- Updated dependencies [37643b8]
+- Updated dependencies [79d5145]
+  - @mastra/core@0.10.2-alpha.8
+
 ## 0.10.1-alpha.2
 
 ### Patch Changes

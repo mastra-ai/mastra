@@ -1,5 +1,15 @@
 # mastra
 
+## 0.10.2-alpha.9
+
+### Patch Changes
+
+- 90e96de: Fix: prevent default flag from triggering interactive prompt
+- Updated dependencies [37643b8]
+- Updated dependencies [79d5145]
+  - @mastra/core@0.10.2-alpha.8
+  - @mastra/deployer@0.10.2-alpha.8
+
 ## 0.10.2-alpha.8
 
 ### Patch Changes

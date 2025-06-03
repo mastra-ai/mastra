@@ -1,5 +1,15 @@
 # @mastra/client-js
 
+## 0.10.2-alpha.3
+
+### Patch Changes
+
+- 37643b8: Fix tool access
+- b72c768: [Bug fix] Serialize parameters in clientTools
+- Updated dependencies [37643b8]
+- Updated dependencies [79d5145]
+  - @mastra/core@0.10.2-alpha.8
+
 ## 0.10.2-alpha.2
 
 ### Patch Changes

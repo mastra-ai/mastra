@@ -1,5 +1,13 @@
 # @mastra/dane
 
+## 0.0.23-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [37643b8]
+- Updated dependencies [79d5145]
+  - @mastra/core@0.10.2-alpha.8
+
 ## 0.0.23-alpha.9
 
 ### Patch Changes

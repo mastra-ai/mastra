@@ -1,5 +1,12 @@
 # @mastra/core
 
+## 0.10.2-alpha.8
+
+### Patch Changes
+
+- 37643b8: Fix tool access
+- 79d5145: Fixes passing telemetry configuration when Agent.stream is used with experimental_output
+
 ## 0.10.2-alpha.7
 
 ## 0.10.2-alpha.6
