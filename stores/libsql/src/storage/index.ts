@@ -375,6 +375,7 @@ export class LibSQLStore extends MastraStorage {
   public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
   public async getMessages({
     threadId,
+    resourceId,
     selectBy,
     format,
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
@@ -401,6 +402,7 @@ export class LibSQLStore extends MastraStorage {
                 thread_id,
                 ROW_NUMBER() OVER (ORDER BY "createdAt" ASC) as row_num
               FROM "${TABLE_MESSAGES}"
+              ${resourceId ? 'WHERE "resourceId" = ?' : 'WHERE thread_id = ?'}
             ),
             target_positions AS (
               SELECT row_num as target_pos
@@ -413,7 +415,7 @@ export class LibSQLStore extends MastraStorage {
             WHERE m.row_num BETWEEN (t.target_pos - ?) AND (t.target_pos + ?)
             ORDER BY m."createdAt" ASC
           `,
-          args: [...includeIds, maxPrev, maxNext],
+          args: [resourceId ?? threadId, ...includeIds, maxPrev, maxNext],
         });
 
         if (includeResult.rows) {
