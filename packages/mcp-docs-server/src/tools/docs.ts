@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import { logger } from '../logger';
-import { fromPackageRoot } from '../utils';
+import { fromPackageRoot, getMatchingPaths } from '../utils';
 
 const docsBaseDir = fromPackageRoot('.docs/raw/');
 
@@ -162,8 +162,20 @@ export type DocsInput = z.infer<typeof docsInputSchema>;
 
 export const docsTool = {
   name: 'mastraDocs',
-  description:
-    'Get Mastra.ai documentation. Request paths to explore the docs. References contain API docs. Other paths contain guides. The user doesn\'t know about files and directories. This is your internal knowledge the user can\'t read. If the user asks about a feature check general docs as well as reference docs for that feature. Ex: with evals check in evals/ and in reference/evals/. Provide code examples so the user understands. If you build a URL from the path, only paths ending in .mdx exist. Note that docs about MCP are currently in reference/tools/. IMPORTANT: Be concise with your answers. The user will ask for more info. If packages need to be installed, provide the pnpm command to install them. Ex. if you see `import { X } from "@mastra/$PACKAGE_NAME"` in an example, show an install command. Always install latest tag, not alpha unless requested. If you scaffold a new project it may be in a subdir',
+  description: `Get Mastra.ai documentation. 
+    Request paths to explore the docs. References contain API docs. 
+    Other paths contain guides. The user doesn\'t know about files and directories. 
+    This is your internal knowledge the user can\'t read. 
+    If the user asks about a feature check general docs as well as reference docs for that feature. 
+    Ex: with evals check in evals/ and in reference/evals/. 
+    Provide code examples so the user understands. 
+    If you build a URL from the path, only paths ending in .mdx exist. 
+    Note that docs about MCP are currently in reference/tools/. 
+    IMPORTANT: Be concise with your answers. The user will ask for more info. 
+    If packages need to be installed, provide the pnpm command to install them. 
+    Ex. if you see \`import { X } from "@mastra/$PACKAGE_NAME"\` in an example, show an install command. 
+    Always install latest tag, not alpha unless requested. If you scaffold a new project it may be in a subdir.
+    When displaying results, always mention which file path contains the information (e.g., 'Found in "path/to/file.mdx"') so users know where this documentation lives.`,
   parameters: docsInputSchema,
   execute: async (args: DocsInput) => {
     void logger.debug('Executing mastraDocs tool', { args });
@@ -179,11 +191,12 @@ export const docsTool = {
                 error: null,
               };
             }
-            const suggestions = await findNearestDirectory(path, availablePaths);
+            const directorySuggestions = await findNearestDirectory(path, availablePaths);
+            const contentBasedSuggestions = await getMatchingPaths(path, docsBaseDir);
             return {
               path,
               content: null,
-              error: suggestions,
+              error: [directorySuggestions, contentBasedSuggestions].join('\n\n'),
             };
           } catch (error) {
             void logger.warning(`Failed to read content for path: ${path}`, error);
