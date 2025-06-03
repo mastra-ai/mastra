@@ -83,7 +83,7 @@ const AttachmentPreviewDialog: FC<PropsWithChildren> = ({ children }) => {
 
 const AttachmentThumbnail: FC = () => {
   const isImage = useAttachment(a => a.type === 'image');
-  const isPDF = useAttachment(a => a.type === 'document');
+  const document = useAttachment(a => (a.type === 'document' ? a : undefined));
   const src = useAttachmentSrc();
   const canRemove = useAttachment(a => a.source !== 'message');
 
@@ -98,7 +98,7 @@ const AttachmentThumbnail: FC = () => {
                   <div className="rounded-lg border-sm border-border1 overflow-hidden">
                     <img src={src} className="object-cover aspect-ratio size-16" alt="Preview" height={64} width={64} />
                   </div>
-                ) : isPDF ? (
+                ) : document?.contentType === 'application/pdf' ? (
                   <div className="rounded-lg border-sm border-border1 flex items-center justify-center">
                     <FileText className="text-accent2" />
                   </div>
@@ -142,7 +142,7 @@ export const UserMessageAttachments: FC = () => {
 
 const InMessageAttachment = () => {
   const isImage = useAttachment(a => a.type === 'image');
-  const isPDF = useAttachment(a => a.type === 'document');
+  const document = useAttachment(a => (a.type === 'document' ? a : undefined));
   const src = useAttachmentSrc();
 
   return (
@@ -156,7 +156,7 @@ const InMessageAttachment = () => {
                   <div className="rounded-lg border-sm border-border1 overflow-hidden">
                     <img src={src} className="object-cover aspect-ratio max-h-[140px] max-w-[320px]" alt="Preview" />
                   </div>
-                ) : isPDF ? (
+                ) : document?.contentType === 'application/pdf' ? (
                   <div className="rounded-lg border-sm border-border1 flex items-center justify-center p-4">
                     <FileText className="text-accent2" />
                   </div>

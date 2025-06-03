@@ -13,7 +13,7 @@ import type { Message } from '@/types';
 import { useFeatureFlagEnabled } from 'posthog-js/react';
 
 function Agent() {
-  const isCliShowMultiModal = true; //useFeatureFlagEnabled('cli_ShowMultiModal');
+  const isCliShowMultiModal = useFeatureFlagEnabled('cli_ShowMultiModal');
 
   const { agentId, threadId } = useParams();
   const { agent, isLoading: isAgentLoading } = useAgent(agentId!);
