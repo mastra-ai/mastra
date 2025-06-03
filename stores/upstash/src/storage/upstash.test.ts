@@ -360,6 +360,136 @@ describe('UpstashStore', () => {
       const retrievedMessages = await store.getMessages({ threadId, format: 'v2' });
       expect(retrievedMessages[0].content).toEqual(messages[0].content);
     });
+
+    describe('getPaginatedMessages', () => {
+      it('should return paginated messages with total count', async () => {
+        const thread = createSampleThread();
+        await store.saveThread({ thread });
+
+        const messages = Array.from({ length: 15 }, (_, i) => createSampleMessage(thread.id, `Message ${i + 1}`));
+
+        await store.saveMessages({ messages, format: 'v2' });
+
+        const page1 = await store.getMessages({
+          threadId: thread.id,
+          page: 0,
+          perPage: 5,
+          format: 'v2',
+        });
+        expect(page1.messages).toHaveLength(5);
+        expect(page1.total).toBe(15);
+        expect(page1.page).toBe(0);
+        expect(page1.perPage).toBe(5);
+        expect(page1.hasMore).toBe(true);
+
+        const page3 = await store.getMessages({
+          threadId: thread.id,
+          page: 2,
+          perPage: 5,
+          format: 'v2',
+        });
+        expect(page3.messages).toHaveLength(5);
+        expect(page3.total).toBe(15);
+        expect(page3.hasMore).toBe(false);
+
+        const page4 = await store.getMessages({
+          threadId: thread.id,
+          page: 3,
+          perPage: 5,
+          format: 'v2',
+        });
+        expect(page4.messages).toHaveLength(0);
+        expect(page4.total).toBe(15);
+        expect(page4.hasMore).toBe(false);
+      });
+
+      it('should maintain chronological order in pagination', async () => {
+        const thread = createSampleThread();
+        await store.saveThread({ thread });
+
+        const messages = Array.from({ length: 10 }, (_, i) => {
+          const message = createSampleMessage(thread.id, `Message ${i + 1}`);
+          // Ensure different timestamps
+          message.createdAt = new Date(Date.now() + i * 1000);
+          return message;
+        });
+
+        await store.saveMessages({ messages, format: 'v2' });
+
+        const page1 = await store.getMessages({
+          threadId: thread.id,
+          page: 0,
+          perPage: 3,
+          format: 'v2',
+        });
+
+        // Check that messages are in chronological order
+        for (let i = 1; i < page1.messages.length; i++) {
+          const prevMessage = page1.messages[i - 1] as MastraMessageV2;
+          const currentMessage = page1.messages[i] as MastraMessageV2;
+          expect(new Date(prevMessage.createdAt).getTime()).toBeLessThanOrEqual(
+            new Date(currentMessage.createdAt).getTime(),
+          );
+        }
+      });
+
+      it('should maintain backward compatibility when no pagination params provided', async () => {
+        const thread = createSampleThread();
+        await store.saveThread({ thread });
+
+        const messages = Array.from({ length: 5 }, (_, i) => createSampleMessage(thread.id, `Message ${i + 1}`));
+
+        await store.saveMessages({ messages, format: 'v2' });
+
+        // Test original format without pagination - should return array
+        const messagesV1 = await store.getMessages({
+          threadId: thread.id,
+          format: 'v1',
+        });
+        expect(Array.isArray(messagesV1)).toBe(true);
+        expect(messagesV1).toHaveLength(5);
+
+        const messagesV2 = await store.getMessages({
+          threadId: thread.id,
+          format: 'v2',
+        });
+        expect(Array.isArray(messagesV2)).toBe(true);
+        expect(messagesV2).toHaveLength(5);
+      });
+
+      it('should support date filtering with pagination', async () => {
+        const thread = createSampleThread();
+        await store.saveThread({ thread });
+
+        const now = new Date();
+        const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+        const oldMessages = Array.from({ length: 3 }, (_, i) => {
+          const message = createSampleMessage(thread.id, `Old Message ${i + 1}`);
+          message.createdAt = yesterday;
+          return message;
+        });
+
+        const newMessages = Array.from({ length: 4 }, (_, i) => {
+          const message = createSampleMessage(thread.id, `New Message ${i + 1}`);
+          message.createdAt = tomorrow;
+          return message;
+        });
+
+        await store.saveMessages({ messages: [...oldMessages, ...newMessages], format: 'v2' });
+
+        const recentMessages = await store.getMessages({
+          threadId: thread.id,
+          page: 0,
+          perPage: 10,
+          fromDate: now,
+          format: 'v2',
+        });
+        expect(recentMessages.messages).toHaveLength(4);
+        expect(recentMessages.total).toBe(4);
+      });
+    });
   });
 
   describe('Trace Operations', () => {
@@ -862,6 +992,189 @@ describe('UpstashStore', () => {
       });
       expect(Array.isArray(runs)).toBe(true);
       expect(runs.length).toBe(0);
+    });
+  });
+
+  describe('Pagination Features', () => {
+    beforeEach(async () => {
+      // Clear all test data
+      await store.clearTable({ tableName: TABLE_THREADS });
+      await store.clearTable({ tableName: TABLE_MESSAGES });
+      await store.clearTable({ tableName: TABLE_EVALS });
+      await store.clearTable({ tableName: TABLE_TRACES });
+    });
+
+    describe('getEvals with pagination', () => {
+      it('should return paginated evals with total count', async () => {
+        const agentName = 'test-agent';
+        const evals = Array.from({ length: 25 }, (_, i) => createSampleEval(agentName, i % 2 === 0));
+
+        // Insert all evals
+        for (const evalRecord of evals) {
+          await store.insert({
+            tableName: TABLE_EVALS,
+            record: evalRecord,
+          });
+        }
+
+        // Test page-based pagination
+        const page1 = await store.getEvals({ agentName, page: 0, perPage: 10 });
+        expect(page1.evals).toHaveLength(10);
+        expect(page1.total).toBe(25);
+        expect(page1.page).toBe(0);
+        expect(page1.perPage).toBe(10);
+        expect(page1.hasMore).toBe(true);
+
+        const page2 = await store.getEvals({ agentName, page: 1, perPage: 10 });
+        expect(page2.evals).toHaveLength(10);
+        expect(page2.total).toBe(25);
+        expect(page2.hasMore).toBe(true);
+
+        const page3 = await store.getEvals({ agentName, page: 2, perPage: 10 });
+        expect(page3.evals).toHaveLength(5);
+        expect(page3.total).toBe(25);
+        expect(page3.hasMore).toBe(false);
+      });
+
+      it('should support limit/offset pagination', async () => {
+        const agentName = 'test-agent-2';
+        const evals = Array.from({ length: 15 }, () => createSampleEval(agentName));
+
+        for (const evalRecord of evals) {
+          await store.insert({
+            tableName: TABLE_EVALS,
+            record: evalRecord,
+          });
+        }
+
+        // Test offset-based pagination
+        const result1 = await store.getEvals({ agentName, limit: 5, offset: 0 });
+        expect(result1.evals).toHaveLength(5);
+        expect(result1.total).toBe(15);
+        expect(result1.hasMore).toBe(true);
+
+        const result2 = await store.getEvals({ agentName, limit: 5, offset: 10 });
+        expect(result2.evals).toHaveLength(5);
+        expect(result2.total).toBe(15);
+        expect(result2.hasMore).toBe(false);
+      });
+
+      it('should filter by type with pagination', async () => {
+        const agentName = 'test-agent-3';
+        const testEvals = Array.from({ length: 10 }, () => createSampleEval(agentName, true));
+        const liveEvals = Array.from({ length: 8 }, () => createSampleEval(agentName, false));
+
+        for (const evalRecord of [...testEvals, ...liveEvals]) {
+          await store.insert({
+            tableName: TABLE_EVALS,
+            record: evalRecord,
+          });
+        }
+
+        const testResults = await store.getEvals({ agentName, type: 'test', page: 0, perPage: 5 });
+        expect(testResults.evals).toHaveLength(5);
+        expect(testResults.total).toBe(10);
+
+        const liveResults = await store.getEvals({ agentName, type: 'live', page: 0, perPage: 5 });
+        expect(liveResults.evals).toHaveLength(5);
+        expect(liveResults.total).toBe(8);
+      });
+    });
+
+    describe('getTracesPaginated', () => {
+      it('should return paginated traces with total count', async () => {
+        const traces = Array.from({ length: 18 }, (_, i) => createSampleTrace(`test-trace-${i}`, 'test-scope'));
+
+        for (const trace of traces) {
+          await store.insert({
+            tableName: TABLE_TRACES,
+            record: trace,
+          });
+        }
+
+        const page1 = await store.getTraces({
+          scope: 'test-scope',
+          page: 0,
+          perPage: 8,
+          returnPaginationResults: true,
+        });
+        expect(page1.traces).toHaveLength(8);
+        expect(page1.total).toBe(18);
+        expect(page1.page).toBe(0);
+        expect(page1.perPage).toBe(8);
+        expect(page1.hasMore).toBe(true);
+
+        const page3 = await store.getTraces({
+          scope: 'test-scope',
+          page: 2,
+          perPage: 8,
+          returnPaginationResults: true,
+        });
+        expect(page3.traces).toHaveLength(2);
+        expect(page3.total).toBe(18);
+        expect(page3.hasMore).toBe(false);
+      });
+
+      it('should filter by attributes with pagination', async () => {
+        const tracesWithAttr = Array.from({ length: 8 }, (_, i) =>
+          createSampleTrace(`trace-${i}`, 'test-scope', { environment: 'prod' }),
+        );
+        const tracesWithoutAttr = Array.from({ length: 5 }, (_, i) =>
+          createSampleTrace(`trace-other-${i}`, 'test-scope', { environment: 'dev' }),
+        );
+
+        for (const trace of [...tracesWithAttr, ...tracesWithoutAttr]) {
+          await store.insert({
+            tableName: TABLE_TRACES,
+            record: trace,
+          });
+        }
+
+        const prodTraces = await store.getTraces({
+          scope: 'test-scope',
+          attributes: { environment: 'prod' },
+          page: 0,
+          perPage: 5,
+          returnPaginationResults: true,
+        });
+        expect(prodTraces.traces).toHaveLength(5);
+        expect(prodTraces.total).toBe(8);
+        expect(prodTraces.hasMore).toBe(true);
+
+        const devTraces = await store.getTraces({
+          scope: 'test-scope',
+          attributes: { environment: 'dev' },
+          page: 0,
+          perPage: 10,
+          returnPaginationResults: true,
+        });
+        expect(devTraces.traces).toHaveLength(5);
+        expect(devTraces.total).toBe(5);
+        expect(devTraces.hasMore).toBe(false);
+      });
+    });
+
+    describe('Enhanced existing methods with pagination', () => {
+      it('should support pagination in getThreadsByResourceId', async () => {
+        const resourceId = 'enhanced-resource';
+        const threads = Array.from({ length: 17 }, () => ({
+          ...createSampleThread(),
+          resourceId,
+        }));
+
+        for (const thread of threads) {
+          await store.saveThread({ thread });
+        }
+
+        const page1 = await store.getThreadsByResourceId({ resourceId, page: 0, perPage: 7 });
+        expect(page1.threads).toHaveLength(7);
+
+        const page3 = await store.getThreadsByResourceId({ resourceId, page: 2, perPage: 7 });
+        expect(page3.threads).toHaveLength(3);
+
+        const limited = await store.getThreadsByResourceId({ resourceId, page: 1, perPage: 5 });
+        expect(limited.threads).toHaveLength(5);
+      });
     });
   });
 });
