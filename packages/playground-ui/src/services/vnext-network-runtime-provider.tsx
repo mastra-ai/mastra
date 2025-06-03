@@ -12,6 +12,7 @@ import { useState, ReactNode, useEffect } from 'react';
 import { ChatProps } from '@/types';
 import { useMastraClient } from '@/contexts/mastra-client-context';
 import { useVNextNetworkChat } from '@/services/vnext-network-chat-provider';
+import { useMessages } from './vnext-message-provider';
 
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
@@ -22,7 +23,6 @@ type VNextMastraNetworkRuntimeProviderProps = Omit<ChatProps, 'agentId'> & { net
 export function VNextMastraNetworkRuntimeProvider({
   children,
   networkId,
-  initialMessages,
   memory,
   threadId,
   refreshThreadList,
@@ -32,10 +32,10 @@ export function VNextMastraNetworkRuntimeProvider({
 }> &
   VNextMastraNetworkRuntimeProviderProps) {
   const [isRunning, setIsRunning] = useState(false);
-  const [messages, setMessages] = useState<ThreadMessageLike[]>(initialMessages || []);
+  const { messages, setMessages } = useMessages();
   const [currentThreadId, setCurrentThreadId] = useState<string | undefined>(threadId);
 
-  const { handleStep } = useVNextNetworkChat();
+  const { handleStep, agents } = useVNextNetworkChat();
 
   // const { frequencyPenalty, presencePenalty, maxRetries, maxSteps, maxTokens, temperature, topK, topP, instructions } =
   //   modelSettings;
@@ -86,7 +86,6 @@ export function VNextMastraNetworkRuntimeProvider({
           message: input,
         },
         record => {
-          console.log('record in playground-ui==', record);
           // if (record.type === 'tool-call') {
           // }
           //save step start

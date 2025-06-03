@@ -5,17 +5,20 @@ import { ChatProps } from '@/types';
 // import { useContext } from 'react';
 import { VNextMastraNetworkRuntimeProvider } from '@/services/vnext-network-runtime-provider';
 import { VNextNetworkChatProvider } from '@/services/vnext-network-chat-provider';
+import { MessagesProvider } from '@/services/vnext-message-provider';
 
 export const VNextNetworkChat = ({ networkId }: { networkId: string }) => {
   // const { modelSettings } = useContext(NetworkContext);
 
   return (
-    <VNextNetworkChatProvider networkId={networkId}>
-      <VNextMastraNetworkRuntimeProvider networkId={networkId}>
-        <div className="h-full pb-4">
-          <VNextThread />
-        </div>
-      </VNextMastraNetworkRuntimeProvider>
-    </VNextNetworkChatProvider>
+    <MessagesProvider initialMessages={[]}>
+      <VNextNetworkChatProvider networkId={networkId}>
+        <VNextMastraNetworkRuntimeProvider networkId={networkId}>
+          <div className="h-full pb-4">
+            <VNextThread />
+          </div>
+        </VNextMastraNetworkRuntimeProvider>
+      </VNextNetworkChatProvider>
+    </MessagesProvider>
   );
 };

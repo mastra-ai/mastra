@@ -31,7 +31,9 @@ export const NextAssistantMessage: FC<{ ToolFallback?: ToolCallContentPartCompon
   console.log('Data===', data);
   const textContent = (content as TextContentPart).text;
 
-  return <StepDropdown />;
+  if (textContent === 'start') {
+    return <StepDropdown />;
+  }
 
   // console.log('parsedContent==', parsedContent);
 
@@ -47,20 +49,20 @@ export const NextAssistantMessage: FC<{ ToolFallback?: ToolCallContentPartCompon
   // // }
   // return <p>{parsedContent.payload?.output?.result}</p>;
 
-  // return (
-  //   <MessagePrimitive.Root className="max-w-full">
-  //     <div className="text-icon6 text-ui-lg leading-ui-lg">
-  //       <MessagePrimitive.Content
-  //         components={{
-  //           Text: MarkdownText,
-  //           tools: { Fallback: ToolFallbackCustom || ToolFallback },
-  //         }}
-  //       />
-  //     </div>
+  return (
+    <MessagePrimitive.Root className="max-w-full">
+      <div className="text-icon6 text-ui-lg leading-ui-lg">
+        <MessagePrimitive.Content
+          components={{
+            Text: MarkdownText,
+            tools: { Fallback: ToolFallbackCustom || ToolFallback },
+          }}
+        />
+      </div>
 
-  //     <div className="h-6 pt-1">{!isSolelyToolCall && <AssistantActionBar />}</div>
-  //   </MessagePrimitive.Root>
-  // );
+      <div className="h-6 pt-1">{!isSolelyToolCall && <AssistantActionBar />}</div>
+    </MessagePrimitive.Root>
+  );
 };
 
 const AssistantActionBar: FC = () => {

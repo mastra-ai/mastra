@@ -1,11 +1,11 @@
 import { createContext, useContext, ReactNode, useState } from 'react';
+import { useMessages } from './vnext-message-provider';
 
 //the whole workflow execution state.
 
 type VNextNetworkChatContextType = {
   executionSteps: Array<string>;
   steps: Record<string, any>;
-  allSteps: Array<Record<string, any>>;
   workflows: Record<string, any>;
   agents: Record<string, any>;
   handleStep: (record: Record<string, any>) => void;
@@ -14,38 +14,85 @@ type VNextNetworkChatContextType = {
 const VNextNetworkChatContext = createContext<VNextNetworkChatContextType | undefined>(undefined);
 
 export const VNextNetworkChatProvider = ({ children, networkId }: { children: ReactNode; networkId: string }) => {
-  // const []
-  const [executionSteps, setExecutionSteps] = useState([] as Array<string>);
-  const [allSteps, setAllSteps] = useState([] as Array<Record<string, any>>);
-  const [workflows, setWorkflows] = useState({} as Record<string, any>);
-  const [agents, setAgents] = useState({} as Record<string, any>);
-  const [steps, setSteps] = useState({} as Record<string, any>);
+  const { appendToLastMessage, setMessages } = useMessages();
+  const [state, setState] = useState<Omit<VNextNetworkChatContextType, 'handleStep'>>({
+    executionSteps: [],
+    steps: {},
+    workflows: {},
+    agents: {},
+  });
 
   const handleStep = (record: Record<string, any>) => {
-    //handle record
-    // if (record.type === 'step-start') {
-    // }
-    if (record.type === 'tool-call-delta') return;
-    if (record.type === 'tool-call-streaming-start') return;
+    if (record.type === 'tool-call-delta') {
+      setState(current => ({
+        ...current,
+        agents: {
+          ...current.agents,
+          [record.name]: {
+            ...current.agents[record.name],
+            contentToShow: current.agents[record.name].contentToShow + record.argsTextDelta,
+          },
+        },
+      }));
 
-    const id = record.payload?.id ?? record.payload?.runId;
+      appendToLastMessage(record.argsTextDelta);
 
-    setAllSteps(current => [...current, record]);
-    setExecutionSteps(current => [...current, id]);
+      return;
+    }
 
-    setSteps(current => ({
-      ...current,
-      [id]: {
-        ...(current[id] || {}),
-        [record.type]: record.payload,
-      },
-    }));
+    if (record.type === 'tool-call-streaming-start') {
+      setState(current => ({
+        ...current,
+        agents: {
+          ...current.agents,
+          [record.name]: {
+            ...current.agents[record.name],
+            contentToShow: '', // SETUP AN EMPTY CONTENT AT THE BEGINNING
+          },
+        },
+      }));
+
+      setMessages(msgs => [...msgs, { role: 'assistant', content: [{ type: 'text', text: '' }] }]);
+
+      return;
+    }
+
+    const id = record?.type === 'finish' ? 'finish' : record.payload?.id;
+
+    setState(current => {
+      const currentMetadata = current?.steps?.[id]?.metadata;
+
+      let startTime = currentMetadata?.startTime;
+      let endTime = currentMetadata?.endTime;
+
+      if (record.type === 'step-start') {
+        startTime = Date.now();
+      }
+
+      if (record.type === 'step-finish') {
+        endTime = Date.now();
+      }
+
+      return {
+        ...current,
+        executionSteps: current.steps[id] ? current.executionSteps : [...current.executionSteps, id],
+        steps: {
+          ...current.steps,
+          [id]: {
+            ...(current.steps[id] || {}),
+            [record.type]: record.payload,
+            metadata: {
+              startTime,
+              endTime,
+            },
+          },
+        },
+      };
+    });
   };
 
   return (
-    <VNextNetworkChatContext.Provider value={{ executionSteps, steps, workflows, agents, handleStep, allSteps }}>
-      {children}
-    </VNextNetworkChatContext.Provider>
+    <VNextNetworkChatContext.Provider value={{ ...state, handleStep }}>{children}</VNextNetworkChatContext.Provider>
   );
 };
 

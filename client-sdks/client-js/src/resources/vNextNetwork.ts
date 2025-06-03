@@ -75,8 +75,6 @@ export class VNextNetwork extends BaseResource {
           // Split the combined buffer and new data by record separator
           const chunks = (buffer + decoded).split(RECORD_SEPARATOR);
 
-          console.log('chunks===', chunks);
-
           // The last chunk might be incomplete, so save it for the next iteration
           buffer = chunks.pop() || '';
 
@@ -185,7 +183,6 @@ export class VNextNetwork extends BaseResource {
     // return response.body.pipeThrough(transformStream);
 
     for await (const record of this.streamProcessor(response.body)) {
-      console.log('record===', record);
       if (typeof record === 'string') {
         onRecord(JSON.parse(record));
       } else {
