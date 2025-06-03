@@ -35,10 +35,9 @@ export interface IErrorDefinition {
    */
   text: string | ((context: IErrorContext) => string);
   /**
-   * Functional domain of the error (e.g., CONFIG, BUILD, API).
-   * Can be a static domain or a function deriving domain from context.
+   * Functional domain of the error (e.g., TOOL, AGENT, WORKFLOW).
    */
-  domain: Domain | ((context: IErrorContext) => Domain);
+  domain: Domain;
   /** Broad category of the error (e.g., USER, SYSTEM, THIRD_PARTY). */
   category: ErrorCategory;
 }
