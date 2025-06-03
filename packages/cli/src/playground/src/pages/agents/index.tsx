@@ -58,7 +58,7 @@ function Agents() {
           />
         </div>
       ) : (
-        <ScrollArea className="overflow-w-auto h-[calc(100vh-4rem)]">
+        <ScrollArea className="overflow-x-auto h-[calc(100vh-4rem)]">
           <DataTable
             columns={agentsTableColumns}
             data={agentListData}
