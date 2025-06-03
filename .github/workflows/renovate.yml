@@ -1,4 +1,6 @@
 name: Renovate
+permissions:
+  contents: read
 on:
   # This lets you dispatch a renovate job with different cache options if you want to reset or disable the cache manually.
   workflow_dispatch:
