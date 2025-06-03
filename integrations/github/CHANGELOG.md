@@ -1,5 +1,11 @@
 # @mastra/github
 
+## 1.2.1-alpha.1
+
+### Patch Changes
+
+- 4b23936: fix: typos
+
 ## 1.2.1-alpha.0
 
 ### Patch Changes

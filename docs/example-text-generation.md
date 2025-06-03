@@ -22,7 +22,7 @@ The first sentence or two should describe the problem that is being solved by th
 
 **Topic: Streaming Objects**
 
-**Purpose Setence:** "By streaming the output, you can display partial results as they arrive, providing immediate feedback to users."
+**Purpose Sentence:** "By streaming the output, you can display partial results as they arrive, providing immediate feedback to users."
 
 The last sentence should describe the purpose of the code.
 

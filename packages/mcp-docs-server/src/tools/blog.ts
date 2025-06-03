@@ -89,6 +89,7 @@ export const blogTool = {
   name: 'mastraBlog',
   description:
     'Get Mastra.ai blog content. Without a URL, returns a list of all blog posts. With a URL, returns the specific blog post content in markdown format. The blog contains changelog posts as well as announcements and posts about Mastra features and AI news',
+  parameters: blogInputSchema,
   execute: async (args: BlogInput) => {
     void logger.debug('Executing mastraBlog tool', { url: args.url });
     try {
@@ -98,26 +99,10 @@ export const blogTool = {
       } else {
         content = await fetchBlogPosts();
       }
-      return {
-        content: [
-          {
-            type: 'text',
-            text: content,
-          },
-        ],
-        isError: false,
-      };
+      return content;
     } catch (error) {
       void logger.error('Failed to execute mastraBlog tool', error);
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-        isError: true,
-      };
+      throw error;
     }
   },
 };

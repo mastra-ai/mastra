@@ -1,5 +1,39 @@
 # @mastra/deployer
 
+## 0.10.2-alpha.7
+
+### Patch Changes
+
+- a399086: Bumping because we forgot to
+  - @mastra/core@0.10.2-alpha.7
+
+## 0.10.2-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [99fd6cf]
+- Updated dependencies [8dc94d8]
+  - @mastra/core@0.10.2-alpha.6
+
+## 0.10.2-alpha.5
+
+### Patch Changes
+
+- 1b5fc55: Fixed an issue where the playground wouldn't display images saved in memory. Fixed memory to always store images as strings. Removed duplicate storage of reasoning and file/image parts in storage dbs
+- Updated dependencies [1b5fc55]
+- Updated dependencies [add596e]
+- Updated dependencies [ecebbeb]
+  - @mastra/core@0.10.2-alpha.5
+
+## 0.10.2-alpha.4
+
+### Patch Changes
+
+- c5bf1ce: Add backwards compat code for new MessageList in storage
+- Updated dependencies [c5bf1ce]
+- Updated dependencies [12b7002]
+  - @mastra/core@0.10.2-alpha.4
+
 ## 0.10.2-alpha.3
 
 ### Patch Changes

@@ -1,5 +1,24 @@
 # @mastra/inngest
 
+## 0.10.2-alpha.3
+
+### Patch Changes
+
+- 1ee6894: inngest production url fix
+- Updated dependencies [1b5fc55]
+- Updated dependencies [add596e]
+- Updated dependencies [ecebbeb]
+  - @mastra/core@0.10.2-alpha.5
+
+## 0.10.2-alpha.2
+
+### Patch Changes
+
+- 12b7002: Add serializedStepGraph to workflow run snapshot in storage
+- Updated dependencies [c5bf1ce]
+- Updated dependencies [12b7002]
+  - @mastra/core@0.10.2-alpha.4
+
 ## 0.10.2-alpha.1
 
 ### Patch Changes

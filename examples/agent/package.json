@@ -34,6 +34,7 @@
   "scripts": {
     "start-deployed": "npx bun src/with-deployed.ts",
     "start": "npx bun src/index.ts",
+    "mastra:build": "mastra build",
     "mastra:dev": "mastra dev"
   },
   "keywords": [],

@@ -1,5 +1,20 @@
 # @mastra/libsql
 
+## 0.10.1-alpha.3
+
+### Patch Changes
+
+- a3f1b39: feat(libsql): update thread timestamp when saving messages
+
+## 0.10.1-alpha.2
+
+### Patch Changes
+
+- c5bf1ce: Add backwards compat code for new MessageList in storage
+- Updated dependencies [c5bf1ce]
+- Updated dependencies [12b7002]
+  - @mastra/core@0.10.2-alpha.4
+
 ## 0.10.1-alpha.1
 
 ### Patch Changes

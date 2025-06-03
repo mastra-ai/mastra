@@ -37,7 +37,7 @@ const { embedding } = await embed({
 });
 
 // Query vector store
-const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING);
+const pgVector = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING });
 const results = await pgVector.query({
   indexName: "embeddings",
   queryVector: embedding,

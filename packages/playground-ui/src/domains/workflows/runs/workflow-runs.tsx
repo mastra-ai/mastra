@@ -1,18 +1,18 @@
 import { Skeleton } from '@/components/ui/skeleton';
-import { useWorkflowRuns } from '../hooks/use-workflow-runs';
-import { Txt } from '@mastra/playground-ui';
-import { Link } from 'react-router';
+import { Txt } from '@/ds/components/Txt';
 import { formatDate } from 'date-fns';
 import clsx from 'clsx';
+import { WorkflowRun } from '@mastra/core';
 
 export interface WorkflowRunsProps {
   workflowId: string;
   runId?: string;
+  isLoading: boolean;
+  runs: WorkflowRun[];
+  onPressRun: ({ workflowId, runId }: { workflowId: string; runId: string }) => void;
 }
 
-export const WorkflowRuns = ({ workflowId, runId }: WorkflowRunsProps) => {
-  const { isLoading, data: runs } = useWorkflowRuns({ workflowId });
-
+export const WorkflowRuns = ({ workflowId, runId, isLoading, runs, onPressRun }: WorkflowRunsProps) => {
   if (isLoading) {
     return (
       <div className="p-4">
@@ -21,13 +21,23 @@ export const WorkflowRuns = ({ workflowId, runId }: WorkflowRunsProps) => {
     );
   }
 
+  if (runs.length === 0) {
+    return (
+      <div className="p-4">
+        <Txt variant="ui-md" className="text-icon6 text-center">
+          No previous run
+        </Txt>
+      </div>
+    );
+  }
+
   return (
     <ol className="pb-10">
-      {runs?.runs.map(run => (
+      {runs.map(run => (
         <li key={run.runId}>
-          <Link
-            to={`/workflows/${workflowId}/graph/${run.runId}`}
-            className={clsx('px-3 py-2 border-b-sm border-border1 block w-full hover:bg-surface4', {
+          <button
+            onClick={() => onPressRun({ workflowId, runId: run.runId })}
+            className={clsx('px-3 py-2 border-b-sm border-border1 block w-full hover:bg-surface4 text-left', {
               'bg-surface4': run.runId === runId,
             })}
           >
@@ -42,7 +52,7 @@ export const WorkflowRuns = ({ workflowId, runId }: WorkflowRunsProps) => {
                   ? formatDate(run?.snapshot?.timestamp, 'MMM d, yyyy h:mm a')
                   : ''}
             </Txt>
-          </Link>
+          </button>
         </li>
       ))}
     </ol>
