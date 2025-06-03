@@ -8,7 +8,7 @@ export function getAuthProvider() {
 
   switch (provider) {
     case 'supabase':
-      return new MastraAuthSupabase(); // Default to Supabase
+      return new MastraAuthSupabase();
     case 'jwt':
     default:
       return new MastraJwtAuth();
