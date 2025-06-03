@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.10.2-alpha.6
+
+### Patch Changes
+
+- 90e96de: Fix: prevent default flag from triggering interactive prompt
+
 ## 0.10.2-alpha.5
 
 ### Patch Changes
