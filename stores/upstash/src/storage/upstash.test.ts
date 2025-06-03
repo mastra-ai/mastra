@@ -1081,7 +1081,7 @@ describe('UpstashStore', () => {
       });
     });
 
-    describe('getTracesWithCount', () => {
+    describe('getTracesPaginated', () => {
       it('should return paginated traces with total count', async () => {
         const traces = Array.from({ length: 18 }, (_, i) => createSampleTrace(`test-trace-${i}`, 'test-scope'));
 
@@ -1092,10 +1092,11 @@ describe('UpstashStore', () => {
           });
         }
 
-        const page1 = await store.getTracesWithCount({
+        const page1 = await store.getTraces({
           scope: 'test-scope',
           page: 0,
           perPage: 8,
+          returnPaginationResults: true,
         });
         expect(page1.traces).toHaveLength(8);
         expect(page1.total).toBe(18);
@@ -1103,10 +1104,11 @@ describe('UpstashStore', () => {
         expect(page1.perPage).toBe(8);
         expect(page1.hasMore).toBe(true);
 
-        const page3 = await store.getTracesWithCount({
+        const page3 = await store.getTraces({
           scope: 'test-scope',
           page: 2,
           perPage: 8,
+          returnPaginationResults: true,
         });
         expect(page3.traces).toHaveLength(2);
         expect(page3.total).toBe(18);
@@ -1128,21 +1130,23 @@ describe('UpstashStore', () => {
           });
         }
 
-        const prodTraces = await store.getTracesWithCount({
+        const prodTraces = await store.getTraces({
           scope: 'test-scope',
           attributes: { environment: 'prod' },
           page: 0,
           perPage: 5,
+          returnPaginationResults: true,
         });
         expect(prodTraces.traces).toHaveLength(5);
         expect(prodTraces.total).toBe(8);
         expect(prodTraces.hasMore).toBe(true);
 
-        const devTraces = await store.getTracesWithCount({
+        const devTraces = await store.getTraces({
           scope: 'test-scope',
           attributes: { environment: 'dev' },
           page: 0,
           perPage: 10,
+          returnPaginationResults: true,
         });
         expect(devTraces.traces).toHaveLength(5);
         expect(devTraces.total).toBe(5);

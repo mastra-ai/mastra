@@ -316,108 +316,122 @@ export class UpstashStore extends MastraStorage {
     }
   }
 
-  /**
-   * @deprecated Use getTracesWithCount instead
-   */
-  async getTraces(
-    {
-      name,
-      scope,
-      page = 0,
-      perPage = 100,
-      attributes,
-      filters,
-      fromDate,
-      toDate,
-    }: {
-      name?: string;
-      scope?: string;
-      page: number;
-      perPage: number;
-      attributes?: Record<string, string>;
-      filters?: Record<string, any>;
-      fromDate?: Date;
-      toDate?: Date;
-    } = {
-      page: 0,
-      perPage: 100,
-    },
-  ): Promise<any[]> {
+  public async getTraces(args: {
+    name?: string;
+    scope?: string;
+    attributes?: Record<string, string>;
+    filters?: Record<string, any>;
+    page?: number;
+    perPage?: number;
+    fromDate?: Date;
+    toDate?: Date;
+  }): Promise<any[]>;
+  public async getTraces(args: {
+    name?: string;
+    scope?: string;
+    page?: number;
+    perPage?: number;
+    attributes?: Record<string, string>;
+    filters?: Record<string, any>;
+    fromDate?: Date;
+    toDate?: Date;
+    returnPaginationResults: boolean; // When true, return pagination results
+  }): Promise<{
+    traces: any[];
+    total: number;
+    page: number;
+    perPage: number;
+    hasMore: boolean;
+  }>;
+  public async getTraces({
+    name,
+    scope,
+    page = 0,
+    perPage = 100,
+    attributes,
+    filters,
+    fromDate,
+    toDate,
+    returnPaginationResults,
+  }: {
+    name?: string;
+    scope?: string;
+    page?: number; // Make page optional for the implementation
+    perPage?: number;
+    attributes?: Record<string, string>;
+    filters?: Record<string, any>;
+    fromDate?: Date;
+    toDate?: Date;
+    returnPaginationResults?: boolean;
+  } = {}): Promise<
+    | any[]
+    | {
+        traces: any[];
+        total: number;
+        page: number;
+        perPage: number;
+        hasMore: boolean;
+      }
+  > {
     try {
-      // Get all keys that match the traces table pattern using cursor-based scanning
       const pattern = `${TABLE_TRACES}:*`;
       const keys = await this.scanKeys(pattern);
 
-      // Check if we have any keys before using pipeline
       if (keys.length === 0) {
+        if (page !== undefined) {
+          return {
+            traces: [],
+            total: 0,
+            page,
+            perPage: perPage || 100,
+            hasMore: false,
+          };
+        }
         return [];
       }
 
-      // Use pipeline for batch fetching to improve performance
       const pipeline = this.redis.pipeline();
       keys.forEach(key => pipeline.get(key));
       const results = await pipeline.exec();
 
-      // Process results and filter out nulls - handle undefined results
       let filteredTraces = results
         .map((result: any) => result as Record<string, any> | null)
         .filter((record): record is Record<string, any> => record !== null && typeof record === 'object');
 
-      // Apply name filter if provided
       if (name) {
         filteredTraces = filteredTraces.filter(record => record.name?.toLowerCase().startsWith(name.toLowerCase()));
       }
-
-      // Apply scope filter if provided
       if (scope) {
         filteredTraces = filteredTraces.filter(record => record.scope === scope);
       }
-
-      // Apply attributes filter if provided
       if (attributes) {
         filteredTraces = filteredTraces.filter(record => {
           const recordAttributes = record.attributes;
           if (!recordAttributes) return false;
-
-          // Parse attributes if stored as string
           const parsedAttributes =
             typeof recordAttributes === 'string' ? JSON.parse(recordAttributes) : recordAttributes;
-
           return Object.entries(attributes).every(([key, value]) => parsedAttributes[key] === value);
         });
       }
-
-      // Apply custom filters if provided
       if (filters) {
         filteredTraces = filteredTraces.filter(record =>
           Object.entries(filters).every(([key, value]) => record[key] === value),
         );
       }
-
-      // Apply fromDate filter if provided
       if (fromDate) {
         filteredTraces = filteredTraces.filter(
           record => new Date(record.createdAt).getTime() >= new Date(fromDate).getTime(),
         );
       }
-
-      // Apply toDate filter if provided
       if (toDate) {
         filteredTraces = filteredTraces.filter(
           record => new Date(record.createdAt).getTime() <= new Date(toDate).getTime(),
         );
       }
 
-      // Sort traces by creation date (newest first)
       filteredTraces.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-      // Apply pagination
-      const start = page * perPage;
-      const end = start + perPage;
-      const paginatedTraces = filteredTraces.slice(start, end);
-
-      // Transform and return the traces
-      return paginatedTraces.map(record => ({
+      const transformedTraces = filteredTraces.map(record => ({
         id: record.id,
         parentSpanId: record.parentSpanId,
         traceId: record.traceId,
@@ -433,8 +447,35 @@ export class UpstashStore extends MastraStorage {
         other: this.parseJSON(record.other),
         createdAt: this.ensureDate(record.createdAt),
       }));
+
+      if (returnPaginationResults) {
+        const total = transformedTraces.length;
+        const resolvedPerPage = perPage || 100;
+        const start = page * resolvedPerPage;
+        const end = start + resolvedPerPage;
+        const paginatedTraces = transformedTraces.slice(start, end);
+        const hasMore = end < total;
+        return {
+          traces: paginatedTraces,
+          total,
+          page,
+          perPage: resolvedPerPage,
+          hasMore,
+        };
+      }
+
+      return transformedTraces;
     } catch (error) {
       console.error('Failed to get traces:', error);
+      if (returnPaginationResults) {
+        return {
+          traces: [],
+          total: 0,
+          page,
+          perPage: perPage || 100,
+          hasMore: false,
+        };
+      }
       return [];
     }
   }
@@ -1175,159 +1216,5 @@ export class UpstashStore extends MastraStorage {
 
   async close(): Promise<void> {
     // No explicit cleanup needed for Upstash Redis
-  }
-
-  /**
-   * Get traces with pagination and total count
-   * @param options Trace filtering and pagination options
-   * @returns Object with traces array and total count
-   */
-  async getTracesWithCount(
-    {
-      name,
-      scope,
-      page = 0,
-      perPage = 100,
-      attributes,
-      filters,
-      fromDate,
-      toDate,
-    }: {
-      name?: string;
-      scope?: string;
-      page?: number;
-      perPage?: number;
-      attributes?: Record<string, string>;
-      filters?: Record<string, any>;
-      fromDate?: Date;
-      toDate?: Date;
-    } = {
-      page: 0,
-      perPage: 100,
-    },
-  ): Promise<{
-    traces: any[];
-    total: number;
-    page: number;
-    perPage: number;
-    hasMore: boolean;
-  }> {
-    try {
-      // Get all keys that match the traces table pattern using cursor-based scanning
-      const pattern = `${TABLE_TRACES}:*`;
-      const keys = await this.scanKeys(pattern);
-
-      // Check if we have any keys before using pipeline
-      if (keys.length === 0) {
-        return {
-          traces: [],
-          total: 0,
-          page,
-          perPage,
-          hasMore: false,
-        };
-      }
-
-      // Use pipeline for batch fetching to improve performance
-      const pipeline = this.redis.pipeline();
-      keys.forEach(key => pipeline.get(key));
-      const results = await pipeline.exec();
-
-      // Process results and filter out nulls - handle undefined results
-      let filteredTraces = results
-        .map((result: any) => result as Record<string, any> | null)
-        .filter((record): record is Record<string, any> => record !== null && typeof record === 'object');
-
-      // Apply name filter if provided
-      if (name) {
-        filteredTraces = filteredTraces.filter(record => record.name?.toLowerCase().startsWith(name.toLowerCase()));
-      }
-
-      // Apply scope filter if provided
-      if (scope) {
-        filteredTraces = filteredTraces.filter(record => record.scope === scope);
-      }
-
-      // Apply attributes filter if provided
-      if (attributes) {
-        filteredTraces = filteredTraces.filter(record => {
-          const recordAttributes = record.attributes;
-          if (!recordAttributes) return false;
-
-          // Parse attributes if stored as string
-          const parsedAttributes =
-            typeof recordAttributes === 'string' ? JSON.parse(recordAttributes) : recordAttributes;
-
-          return Object.entries(attributes).every(([key, value]) => parsedAttributes[key] === value);
-        });
-      }
-
-      // Apply custom filters if provided
-      if (filters) {
-        filteredTraces = filteredTraces.filter(record =>
-          Object.entries(filters).every(([key, value]) => record[key] === value),
-        );
-      }
-
-      // Apply fromDate filter if provided
-      if (fromDate) {
-        filteredTraces = filteredTraces.filter(
-          record => new Date(record.createdAt).getTime() >= new Date(fromDate).getTime(),
-        );
-      }
-
-      // Apply toDate filter if provided
-      if (toDate) {
-        filteredTraces = filteredTraces.filter(
-          record => new Date(record.createdAt).getTime() <= new Date(toDate).getTime(),
-        );
-      }
-
-      // Sort traces by creation date (newest first)
-      filteredTraces.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-      const total = filteredTraces.length;
-
-      // Apply pagination
-      const start = page * perPage;
-      const end = start + perPage;
-      const hasMore = end < total;
-      const paginatedTraces = filteredTraces.slice(start, end);
-
-      // Transform and return the traces
-      const traces = paginatedTraces.map(record => ({
-        id: record.id,
-        parentSpanId: record.parentSpanId,
-        traceId: record.traceId,
-        name: record.name,
-        scope: record.scope,
-        kind: record.kind,
-        status: this.parseJSON(record.status),
-        events: this.parseJSON(record.events),
-        links: this.parseJSON(record.links),
-        attributes: this.parseJSON(record.attributes),
-        startTime: record.startTime,
-        endTime: record.endTime,
-        other: this.parseJSON(record.other),
-        createdAt: this.ensureDate(record.createdAt),
-      }));
-
-      return {
-        traces,
-        total,
-        page,
-        perPage,
-        hasMore,
-      };
-    } catch (error) {
-      console.error('Failed to get traces with count:', error);
-      return {
-        traces: [],
-        total: 0,
-        page,
-        perPage,
-        hasMore: false,
-      };
-    }
   }
 }
