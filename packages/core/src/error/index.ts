@@ -26,14 +26,14 @@ export interface IErrorContext {
  * Defines the structure for an error's metadata.
  * This is used to create instances of MastraError.
  */
-export interface IErrorDefinition {
+export interface IErrorDefinition<T extends IErrorContext> {
   /** Unique identifier for the error. */
   id: string | number;
   /**
    * The error message template or a function to generate it.
    * If a function, it receives context to interpolate values.
    */
-  text: string | ((context: IErrorContext) => string);
+  text: string | ((context: T) => string);
   /**
    * Functional domain of the error (e.g., CONFIG, BUILD, API).
    */
@@ -52,7 +52,7 @@ export class MastraError<T extends IErrorContext> extends Error {
   public readonly category: `${ErrorCategory}`;
   public readonly originalError?: Error;
 
-  constructor(errorDefinition: IErrorDefinition, context: T = {} as T, originalError?: Error | MastraError<T>) {
+  constructor(errorDefinition: IErrorDefinition<T>, context: T = {} as T, originalError?: Error | MastraError<T>) {
     const message = typeof errorDefinition.text === 'function' ? errorDefinition.text(context) : errorDefinition.text;
 
     super(message, originalError);
