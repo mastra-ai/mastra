@@ -1,5 +1,12 @@
 # @mastra/core
 
+## 0.10.2-alpha.6
+
+### Patch Changes
+
+- 99fd6cf: Fix workflow stream chunk type
+- 8dc94d8: Enhance workflow DI runtimeContext get method type safety
+
 ## 0.10.2-alpha.5
 
 ### Patch Changes
