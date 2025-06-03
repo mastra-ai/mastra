@@ -7,33 +7,61 @@ import {
   AssistantRuntimeProvider,
   SimpleImageAttachmentAdapter,
   CompositeAttachmentAdapter,
+  SimpleTextAttachmentAdapter,
 } from '@assistant-ui/react';
 import { useState, ReactNode, useEffect } from 'react';
 import { RuntimeContext } from '@mastra/core/di';
 
 import { ChatProps } from '@/types';
 
-import { CoreMessage } from '@mastra/core';
+import { CoreUserMessage } from '@mastra/core';
 import { fileToBase64 } from '@/lib/file';
 import { useMastraClient } from '@/contexts/mastra-client-context';
+import { PDFAttachmentAdapter } from '@/components/assistant-ui/attachment-adapters/pdfs-adapter';
 
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
 };
 
-const convertToAIAttachments = async (attachments: AppendMessage['attachments']): Promise<Array<CoreMessage>> => {
+const convertToAIAttachments = async (attachments: AppendMessage['attachments']): Promise<Array<CoreUserMessage>> => {
   const promises = attachments
-    .filter(attachment => attachment.file)
-    .map(async attachment => ({
-      role: 'user' as const,
-      content: [
-        {
-          type: 'image' as const,
-          image: await fileToBase64(attachment.file!),
-          mimeType: attachment.file!.type,
-        },
-      ],
-    }));
+    .filter(attachment => attachment.type === 'image' || attachment.type === 'document')
+    .map(async attachment => {
+      if (attachment.type === 'document') {
+        if (attachment.contentType === 'application/pdf') {
+          return {
+            role: 'user' as const,
+            content: [
+              {
+                type: 'file' as const,
+                // @ts-expect-error - TODO: fix this type issue somehow
+                data: attachment.content?.[0]?.text || '',
+                mimeType: attachment.contentType,
+                filename: attachment.name,
+              },
+            ],
+          };
+        }
+
+        return {
+          role: 'user' as const,
+          // @ts-expect-error - TODO: fix this type issue somehow
+          content: attachment.content[0]?.text || '',
+        };
+      }
+
+      return {
+        role: 'user' as const,
+
+        content: [
+          {
+            type: 'image' as const,
+            image: await fileToBase64(attachment.file!),
+            mimeType: attachment.file!.type,
+          },
+        ],
+      };
+    });
 
   return Promise.all(promises);
 };
@@ -404,7 +432,11 @@ export function MastraRuntimeProvider({
     convertMessage,
     onNew,
     adapters: {
-      attachments: new CompositeAttachmentAdapter([new SimpleImageAttachmentAdapter()]),
+      attachments: new CompositeAttachmentAdapter([
+        new SimpleImageAttachmentAdapter(),
+        new SimpleTextAttachmentAdapter(),
+        new PDFAttachmentAdapter(),
+      ]),
     },
   });
 

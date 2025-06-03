@@ -1,5 +1,11 @@
 # @mastra/libsql
 
+## 0.10.1-alpha.3
+
+### Patch Changes
+
+- a3f1b39: feat(libsql): update thread timestamp when saving messages
+
 ## 0.10.1-alpha.2
 
 ### Patch Changes

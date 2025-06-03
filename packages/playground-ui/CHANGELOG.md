@@ -1,5 +1,25 @@
 # @mastra/playground-ui
 
+## 5.1.2-alpha.6
+
+### Patch Changes
+
+- 6fd77b5: add docs and txt support for multi modal
+- 631683f: move workflow runs list in playground-ui instead of playground
+- Updated dependencies [99fd6cf]
+- Updated dependencies [8dc94d8]
+  - @mastra/core@0.10.2-alpha.6
+
+## 5.1.2-alpha.5
+
+### Patch Changes
+
+- 9666468: move the fetch traces call to the playground instead of playground-ui
+- Updated dependencies [1b5fc55]
+- Updated dependencies [add596e]
+- Updated dependencies [ecebbeb]
+  - @mastra/core@0.10.2-alpha.5
+
 ## 5.1.2-alpha.4
 
 ### Patch Changes

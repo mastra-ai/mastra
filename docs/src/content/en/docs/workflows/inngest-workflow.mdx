@@ -31,17 +31,28 @@ This guide walks through creating a workflow with Inngest and Mastra, demonstrat
 
 Initialize the Inngest integration to obtain Mastra-compatible workflow helpers. The createWorkflow and createStep functions are used to create workflow and step objects that are compatible with Mastra and inngest.
 
+In development
+
 ```ts showLineNumbers copy filename="src/mastra/inngest/index.ts"
 import { Inngest } from "inngest";
 import { realtimeMiddleware } from "@inngest/realtime";
 
 export const inngest = new Inngest({
   id: "mastra",
-  baseUrl:
-    process.env.NODE_ENV === "production"
-      ? "https://api.inngest.com"
-      : "http://localhost:8288",
-  isDev: process.env.NODE_ENV !== "production",
+  baseUrl:"http://localhost:8288",
+  isDev: true,
+  middleware: [realtimeMiddleware()],
+});
+```
+
+In production
+
+```ts showLineNumbers copy filename="src/mastra/inngest/index.ts"
+import { Inngest } from "inngest";
+import { realtimeMiddleware } from "@inngest/realtime";
+
+export const inngest = new Inngest({
+  id: "mastra",
   middleware: [realtimeMiddleware()],
 });
 ```
