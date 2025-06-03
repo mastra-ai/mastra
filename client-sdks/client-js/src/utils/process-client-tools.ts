@@ -1,4 +1,4 @@
-import { isVercelTool } from '@mastra/core';
+import { isVercelTool } from '@mastra/core/tools';
 import { zodToJsonSchema } from './zod-to-json-schema';
 
 export function processClientTools(clientTools: Record<string, any> | undefined): Record<string, any> | undefined {

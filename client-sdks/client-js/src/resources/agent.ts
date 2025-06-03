@@ -1,5 +1,5 @@
 import { processDataStream } from '@ai-sdk/ui-utils';
-import { isVercelTool, type GenerateReturn } from '@mastra/core';
+import { type GenerateReturn } from '@mastra/core';
 import type { JSONSchema7 } from 'json-schema';
 import { ZodSchema } from 'zod';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';

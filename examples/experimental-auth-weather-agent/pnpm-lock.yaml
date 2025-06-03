@@ -7,6 +7,12 @@ settings:
 overrides:
   '@mastra/core': link:../../packages/core
   mastra: link:../../packages/cli
+  '@mastra/auth': link:../../packages/auth
+  '@mastra/auth-supabase': link:../../auth/supabase
+  '@mastra/auth-firebase': link:../../auth/firebase
+  '@mastra/auth-auth0': link:../../auth/auth0
+  '@mastra/auth-workos': link:../../auth/workos
+  '@mastra/auth-clerk': link:../../auth/clerk
 
 importers:
 
@@ -15,6 +21,24 @@ importers:
       '@ai-sdk/openai':
         specifier: ^1.3.22
         version: 1.3.22(zod@3.25.7)
+      '@mastra/auth':
+        specifier: link:../../packages/auth
+        version: link:../../packages/auth
+      '@mastra/auth-auth0':
+        specifier: link:../../auth/auth0
+        version: link:../../auth/auth0
+      '@mastra/auth-clerk':
+        specifier: link:../../auth/clerk
+        version: link:../../auth/clerk
+      '@mastra/auth-firebase':
+        specifier: link:../../auth/firebase
+        version: link:../../auth/firebase
+      '@mastra/auth-supabase':
+        specifier: link:../../auth/supabase
+        version: link:../../auth/supabase
+      '@mastra/auth-workos':
+        specifier: link:../../auth/workos
+        version: link:../../auth/workos
       '@mastra/core':
         specifier: link:../../packages/core
         version: link:../../packages/core
