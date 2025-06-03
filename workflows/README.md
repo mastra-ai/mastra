@@ -24,6 +24,7 @@ docker run --rm -p 8288:8288 \
 
 ```ts
 import { init } from '@mastra/inngest';
+import { PinoLogger } from '@mastra/loggers';
 import { Inngest, serve as inngestServe } from 'inngest';
 import { z } from 'zod';
 
@@ -116,7 +117,7 @@ export const mastra = new Mastra({
       },
     ],
   },
-  logger: createLogger({
+  logger: new PinoLogger({
     name: 'Mastra',
     level: 'info',
   }),

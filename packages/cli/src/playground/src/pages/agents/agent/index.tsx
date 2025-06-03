@@ -10,8 +10,11 @@ import { AgentSidebar } from '@/domains/agents/agent-sidebar';
 import { useAgent } from '@/hooks/use-agents';
 import { useMemory, useMessages, useThreads } from '@/hooks/use-memory';
 import type { Message } from '@/types';
+import { useFeatureFlagEnabled } from 'posthog-js/react';
 
 function Agent() {
+  const isCliShowMultiModal = useFeatureFlagEnabled('cli_ShowMultiModal');
+
   const { agentId, threadId } = useParams();
   const { agent, isLoading: isAgentLoading } = useAgent(agentId!);
   const { memory } = useMemory(agentId!);
@@ -41,8 +44,12 @@ function Agent() {
   }
 
   return (
-    <AgentProvider>
-      <section className={cn('relative h-[calc(100%-40px)] divide-x flex w-full')}>
+    <AgentProvider
+      agentId={agentId!}
+      defaultGenerateOptions={agent?.defaultGenerateOptions}
+      defaultStreamOptions={agent?.defaultStreamOptions}
+    >
+      <section className={cn('relative h-[calc(100%-40px)] flex w-full')}>
         {sidebar && memory?.result ? (
           <div className="h-full w-[300px] overflow-y-auto">
             <AgentSidebar agentId={agentId!} threadId={threadId!} threads={threads} isLoading={isThreadsLoading} />
@@ -57,6 +64,7 @@ function Agent() {
             initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
             memory={memory?.result}
             refreshThreadList={refreshThreads}
+            showFileSupport={isCliShowMultiModal}
           />
         </div>
 
@@ -64,7 +72,7 @@ function Agent() {
           defaultWidth={30}
           minimumWidth={30}
           maximumWidth={60}
-          className="flex flex-col min-w-[325px] right-0 top-0 h-full z-20 bg-[#121212] [&>div:first-child]:-left-[1px] [&>div:first-child]:-right-[1px] [&>div:first-child]:w-[1px] [&>div:first-child]:bg-[#424242] [&>div:first-child]:hover:w-[2px] [&>div:first-child]:active:w-[2px]"
+          className="flex flex-col min-w-[325px] right-0 top-0 h-full z-20 bg-surface2 [&>div:first-child]:-left-[1px] [&>div:first-child]:-right-[1px] [&>div:first-child]:w-[1px] [&>div:first-child]:bg-[#424242] [&>div:first-child]:hover:w-[2px] [&>div:first-child]:active:w-[2px]"
         >
           <AgentInformation agentId={agentId!} />
         </MastraResizablePanel>

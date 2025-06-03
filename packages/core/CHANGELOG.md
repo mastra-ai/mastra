@@ -1,5 +1,177 @@
 # @mastra/core
 
+## 0.10.2-alpha.5
+
+### Patch Changes
+
+- 1b5fc55: Fixed an issue where the playground wouldn't display images saved in memory. Fixed memory to always store images as strings. Removed duplicate storage of reasoning and file/image parts in storage dbs
+- add596e: Mastra protected auth
+- ecebbeb: Mastra core auth abstract definition
+
+## 0.10.2-alpha.4
+
+### Patch Changes
+
+- c5bf1ce: Add backwards compat code for new MessageList in storage
+- 12b7002: Add serializedStepGraph to workflow run snapshot in storage
+
+## 0.10.2-alpha.3
+
+### Patch Changes
+
+- ab5adbe: Add support for runtimeContext to generateTitle
+- 195c428: Add runId to step execute fn
+- f73e11b: fix telemetry disabled not working on playground
+
+## 0.10.2-alpha.2
+
+### Patch Changes
+
+- 1e8bb40: Add runtimeContext to tools and agents in a workflow step.
+
+  Also updated start/resume docs for runtime context.
+
+## 0.10.2-alpha.1
+
+### Patch Changes
+
+- ee77e78: Type fixes for dynamodb and MessageList
+- 2901125: feat: set mastra server middleware after Mastra has been initialized
+
+## 0.10.2-alpha.0
+
+### Patch Changes
+
+- 592a2db: Added different icons for agents and workflows in mcp tools list
+- e5dc18d: Added a backwards compatible layer to begin storing/retrieving UIMessages in storage instead of CoreMessages
+
+## 0.10.1
+
+### Patch Changes
+
+- d70b807: Improve storage.init
+- 6d16390: Support custom bundle externals on mastra Instance
+- 1e4a421: Fix duplication of items in array results in workflow
+- 200d0da: Return payload data, start time, end time, resume time and suspend time for each step in workflow state
+  Return error stack for failed workflow runs
+- bf5f17b: Adds ability to pass workflows into MCPServer to generate tools from the workflows. Each workflow will become a tool that can start the workflow run.
+- 5343f93: Move emitter to symbol to make private
+- 38aee50: Adds ability to pass an agents into an MCPServer instance to automatically generate tools from them.
+- 5c41100: Added binding support for cloudflare deployers, added cloudflare kv namespace changes, and removed randomUUID from buildExecutionGraph
+- d6a759b: Update workflows code in core readme'
+- 6015bdf: Leverage defaultAgentStreamOption, defaultAgentGenerateOption in playground
+
+## 0.10.1-alpha.3
+
+### Patch Changes
+
+- d70b807: Improve storage.init
+
+## 0.10.1-alpha.2
+
+### Patch Changes
+
+- 6015bdf: Leverage defaultAgentStreamOption, defaultAgentGenerateOption in playground
+
+## 0.10.1-alpha.1
+
+### Patch Changes
+
+- 200d0da: Return payload data, start time, end time, resume time and suspend time for each step in workflow state
+  Return error stack for failed workflow runs
+- bf5f17b: Adds ability to pass workflows into MCPServer to generate tools from the workflows. Each workflow will become a tool that can start the workflow run.
+- 5343f93: Move emitter to symbol to make private
+- 38aee50: Adds ability to pass an agents into an MCPServer instance to automatically generate tools from them.
+- 5c41100: Added binding support for cloudflare deployers, added cloudflare kv namespace changes, and removed randomUUID from buildExecutionGraph
+- d6a759b: Update workflows code in core readme'
+
+## 0.10.1-alpha.0
+
+### Patch Changes
+
+- 6d16390: Support custom bundle externals on mastra Instance
+- 1e4a421: Fix duplication of items in array results in workflow
+
+## 0.10.0
+
+### Minor Changes
+
+- 5eb5a99: Remove pino from @mastra/core into @mastra/loggers
+- 7e632c5: Removed default LibSQLStore and LibSQLVector from @mastra/core. These now live in a separate package @mastra/libsql
+- b2ae5aa: Added support for experimental authentication and authorization
+- 0dcb9f0: Memory breaking changes: storage, vector, and embedder are now required. Working memory text streaming has been removed, only tool calling is supported for working memory updates now. Default settings have changed (lastMessages: 40->10, semanticRecall: true->false, threads.generateTitle: true->false)
+
+### Patch Changes
+
+- b3a3d63: BREAKING: Make vnext workflow the default worklow, and old workflow legacy_workflow
+- 344f453: Await onFinish & onStepFinish to ensure the stream doesn't close early
+- 0a3ae6d: Fixed a bug where tool input schema properties that were optional became required
+- 95911be: Fixed an issue where if @mastra/core was not released at the same time as create-mastra, create-mastra would match the alpha tag instead of latest tag when running npm create mastra@latest
+- f53a6ac: Add VNextWorkflowRuns type
+- 1e9fbfa: Upgrade to OpenTelemetry JS SDK 2.x
+- eabdcd9: [MASTRA-3451] SQL Injection Protection
+- 90be034: Pass zod schema directly to getInitData
+- 99f050a: Bumped a workspace package zod version to attempt to prevent duplicate dep installs of @mastra/core
+- d0ee3c6: Change all public functions and constructors in vector stores to use named args and prepare to phase out positional args
+- 23f258c: Add new list and get routes for mcp servers. Changed route make-up for more consistency with existing API routes. Lastly, added in a lot of extra detail that can be optionally passed to the mcp server per the mcp spec.
+- a7292b0: BREAKING(@mastra/core, all vector stores): Vector store breaking changes (remove deprecated functions and positional arguments)
+- 2672a05: Add MCP servers and tool call execution to playground
+
+## 0.10.0-alpha.1
+
+### Minor Changes
+
+- 5eb5a99: Remove pino from @mastra/core into @mastra/loggers
+- 7e632c5: Removed default LibSQLStore and LibSQLVector from @mastra/core. These now live in a separate package @mastra/libsql
+- b2ae5aa: Added support for experimental authentication and authorization
+- 0dcb9f0: Memory breaking changes: storage, vector, and embedder are now required. Working memory text streaming has been removed, only tool calling is supported for working memory updates now. Default settings have changed (lastMessages: 40->10, semanticRecall: true->false, threads.generateTitle: true->false)
+
+### Patch Changes
+
+- b3a3d63: BREAKING: Make vnext workflow the default worklow, and old workflow legacy_workflow
+- 344f453: Await onFinish & onStepFinish to ensure the stream doesn't close early
+- 0a3ae6d: Fixed a bug where tool input schema properties that were optional became required
+- 95911be: Fixed an issue where if @mastra/core was not released at the same time as create-mastra, create-mastra would match the alpha tag instead of latest tag when running npm create mastra@latest
+- 1e9fbfa: Upgrade to OpenTelemetry JS SDK 2.x
+- a7292b0: BREAKING(@mastra/core, all vector stores): Vector store breaking changes (remove deprecated functions and positional arguments)
+
+## 0.9.5-alpha.0
+
+### Patch Changes
+
+- f53a6ac: Add VNextWorkflowRuns type
+- eabdcd9: [MASTRA-3451] SQL Injection Protection
+- 90be034: Pass zod schema directly to getInitData
+- 99f050a: Bumped a workspace package zod version to attempt to prevent duplicate dep installs of @mastra/core
+- d0ee3c6: Change all public functions and constructors in vector stores to use named args and prepare to phase out positional args
+- 23f258c: Add new list and get routes for mcp servers. Changed route make-up for more consistency with existing API routes. Lastly, added in a lot of extra detail that can be optionally passed to the mcp server per the mcp spec.
+- 2672a05: Add MCP servers and tool call execution to playground
+
+## 0.9.4
+
+### Patch Changes
+
+- 396be50: updated mcp server routes for MCP SSE for use with hono server
+- ab80e7e: Fix resume workflow throwing workflow run not found error
+- c3bd795: [MASTRA-3358] Deprecate updateIndexById and deleteIndexById
+- da082f8: Switch from serializing json schema string as a function to a library that creates a zod object in memory from the json schema. This reduces the errors we were seeing from zod schema code that could not be serialized.
+- a5810ce: Add support for experimental_generateMessageId and remove it from client-js types since it's not serializable
+- 3e9c131: Typo resoolve.
+- 3171b5b: Fix jsonSchema on vercel tools
+- 973e5ac: Add workflows to agents properly
+- daf942f: [MASTRA-3367] updated createthread when using generatetitle to perserve thread metadata
+- 0b8b868: Added A2A support + streaming
+- 9e1eff5: Fix tool compatibility schema handling by ensuring zodSchema.shape is safely accessed, preventing potential runtime errors.
+- 6fa1ad1: Fixes and issue when a tool provides no inputSchema and when a tool uses a non-zod schema.
+- c28d7a0: Fix watch workflow not streaming response back in legacy workflow
+- edf1e88: allows ability to pass McpServer into the mastra class and creates an endpoint /api/servers/:serverId/mcp to POST messages to an MCP server
+
+## 0.9.4-alpha.4
+
+### Patch Changes
+
+- 3e9c131: Typo resoolve.
+
 ## 0.9.4-alpha.3
 
 ### Patch Changes

@@ -1,6 +1,7 @@
 import type { MetricResult, TestInfo } from '../eval';
 import type { MemoryConfig } from '../memory/types';
 import type { WorkflowRunState } from '../workflows';
+import type { LegacyWorkflowRunState } from '../workflows/legacy';
 
 export interface StorageColumn {
   type: 'text' | 'timestamp' | 'uuid' | 'jsonb' | 'integer' | 'bigint';
@@ -10,6 +11,20 @@ export interface StorageColumn {
     table: string;
     column: string;
   };
+}
+
+export interface LegacyWorkflowRuns {
+  runs: LegacyWorkflowRun[];
+  total: number;
+}
+
+export interface LegacyWorkflowRun {
+  workflowName: string;
+  runId: string;
+  snapshot: LegacyWorkflowRunState | string;
+  createdAt: Date;
+  updatedAt: Date;
+  resourceId?: string;
 }
 
 export interface WorkflowRuns {
@@ -39,6 +54,7 @@ export type StorageGetMessagesArg = {
     }[];
   };
   threadConfig?: MemoryConfig;
+  format?: 'v1' | 'v2';
 };
 
 export type EvalRow = {

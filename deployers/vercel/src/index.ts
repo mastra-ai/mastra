@@ -127,11 +127,6 @@ registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agen
   });
 });
 
-if (mastra.getStorage()) {
-  // start storage init in the background
-  mastra.getStorage().init();
-}
-
 registerHook(AvailableHooks.ON_EVALUATION, async traceObject => {
   const storage = mastra.getStorage();
   if (storage) {
@@ -162,6 +157,10 @@ const app = await createHonoServer(mastra);
 
 export const GET = handle(app);
 export const POST = handle(app);
+export const PUT = handle(app);
+export const DELETE = handle(app);
+export const OPTIONS = handle(app);
+export const HEAD = handle(app);
 `;
   }
 

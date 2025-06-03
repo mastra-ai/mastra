@@ -1,11 +1,14 @@
+import type { RuntimeContext } from '@mastra/core/runtime-context';
 import type {
-  GetWorkflowResponse,
   ClientOptions,
-  WorkflowRunResult,
+  GetWorkflowResponse,
   GetWorkflowRunsResponse,
   GetWorkflowRunsParams,
+  WorkflowRunResult,
+  WorkflowWatchResult,
 } from '../types';
 
+import { parseClientRuntimeContext } from '../utils';
 import { BaseResource } from './base';
 
 const RECORD_SEPARATOR = '\x1E';
@@ -19,150 +22,13 @@ export class Workflow extends BaseResource {
   }
 
   /**
-   * Retrieves details about the workflow
-   * @returns Promise containing workflow details including steps and graphs
-   */
-  details(): Promise<GetWorkflowResponse> {
-    return this.request(`/api/workflows/${this.workflowId}`);
-  }
-
-  /**
-   * Retrieves all runs for a workflow
-   * @param params - Parameters for filtering runs
-   * @returns Promise containing workflow runs array
-   */
-  runs(params?: GetWorkflowRunsParams): Promise<GetWorkflowRunsResponse> {
-    const searchParams = new URLSearchParams();
-    if (params?.fromDate) {
-      searchParams.set('fromDate', params.fromDate.toISOString());
-    }
-    if (params?.toDate) {
-      searchParams.set('toDate', params.toDate.toISOString());
-    }
-    if (params?.limit) {
-      searchParams.set('limit', String(params.limit));
-    }
-    if (params?.offset) {
-      searchParams.set('offset', String(params.offset));
-    }
-    if (params?.resourceId) {
-      searchParams.set('resourceId', params.resourceId);
-    }
-
-    if (searchParams.size) {
-      return this.request(`/api/workflows/${this.workflowId}/runs?${searchParams}`);
-    } else {
-      return this.request(`/api/workflows/${this.workflowId}/runs`);
-    }
-  }
-
-  /**
-   * @deprecated Use `startAsync` instead
-   * Executes the workflow with the provided parameters
-   * @param params - Parameters required for workflow execution
-   * @returns Promise containing the workflow execution results
-   */
-  execute(params: Record<string, any>): Promise<WorkflowRunResult> {
-    return this.request(`/api/workflows/${this.workflowId}/execute`, {
-      method: 'POST',
-      body: params,
-    });
-  }
-
-  /**
-   * Creates a new workflow run
-   * @returns Promise containing the generated run ID
-   */
-  createRun(params?: { runId?: string }): Promise<{ runId: string }> {
-    const searchParams = new URLSearchParams();
-
-    if (!!params?.runId) {
-      searchParams.set('runId', params.runId);
-    }
-
-    return this.request(`/api/workflows/${this.workflowId}/createRun?${searchParams.toString()}`, {
-      method: 'POST',
-    });
-  }
-
-  /**
-   * Starts a workflow run synchronously without waiting for the workflow to complete
-   * @param params - Object containing the runId and triggerData
-   * @returns Promise containing success message
-   */
-  start(params: { runId: string; triggerData: Record<string, any> }): Promise<{ message: string }> {
-    return this.request(`/api/workflows/${this.workflowId}/start?runId=${params.runId}`, {
-      method: 'POST',
-      body: params?.triggerData,
-    });
-  }
-
-  /**
-   * Resumes a suspended workflow step synchronously without waiting for the workflow to complete
-   * @param stepId - ID of the step to resume
-   * @param runId - ID of the workflow run
-   * @param context - Context to resume the workflow with
-   * @returns Promise containing the workflow resume results
-   */
-  resume({
-    stepId,
-    runId,
-    context,
-  }: {
-    stepId: string;
-    runId: string;
-    context: Record<string, any>;
-  }): Promise<{ message: string }> {
-    return this.request(`/api/workflows/${this.workflowId}/resume?runId=${runId}`, {
-      method: 'POST',
-      body: {
-        stepId,
-        context,
-      },
-    });
-  }
-
-  /**
-   * Starts a workflow run asynchronously and returns a promise that resolves when the workflow is complete
-   * @param params - Object containing the optional runId and triggerData
-   * @returns Promise containing the workflow execution results
-   */
-  startAsync(params: { runId?: string; triggerData: Record<string, any> }): Promise<WorkflowRunResult> {
-    const searchParams = new URLSearchParams();
-
-    if (!!params?.runId) {
-      searchParams.set('runId', params.runId);
-    }
-
-    return this.request(`/api/workflows/${this.workflowId}/start-async?${searchParams.toString()}`, {
-      method: 'POST',
-      body: params?.triggerData,
-    });
-  }
-
-  /**
-   * Resumes a suspended workflow step asynchronously and returns a promise that resolves when the workflow is complete
-   * @param params - Object containing the runId, stepId, and context
-   * @returns Promise containing the workflow resume results
-   */
-  resumeAsync(params: { runId: string; stepId: string; context: Record<string, any> }): Promise<WorkflowRunResult> {
-    return this.request(`/api/workflows/${this.workflowId}/resume-async?runId=${params.runId}`, {
-      method: 'POST',
-      body: {
-        stepId: params.stepId,
-        context: params.context,
-      },
-    });
-  }
-
-  /**
-   * Creates an async generator that processes a readable stream and yields records
+   * Creates an async generator that processes a readable stream and yields workflow records
    * separated by the Record Separator character (\x1E)
    *
    * @param stream - The readable stream to process
    * @returns An async generator that yields parsed records
    */
-  private async *streamProcessor(stream: ReadableStream): AsyncGenerator<WorkflowRunResult, void, unknown> {
+  private async *streamProcessor(stream: ReadableStream): AsyncGenerator<WorkflowWatchResult, void, unknown> {
     const reader = stream.getReader();
 
     // Track if we've finished reading from the stream
@@ -227,11 +93,219 @@ export class Workflow extends BaseResource {
   }
 
   /**
+   * Retrieves details about the workflow
+   * @returns Promise containing workflow details including steps and graphs
+   */
+  details(): Promise<GetWorkflowResponse> {
+    return this.request(`/api/workflows/${this.workflowId}`);
+  }
+
+  /**
+   * Retrieves all runs for a workflow
+   * @param params - Parameters for filtering runs
+   * @returns Promise containing workflow runs array
+   */
+  runs(params?: GetWorkflowRunsParams): Promise<GetWorkflowRunsResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.fromDate) {
+      searchParams.set('fromDate', params.fromDate.toISOString());
+    }
+    if (params?.toDate) {
+      searchParams.set('toDate', params.toDate.toISOString());
+    }
+    if (params?.limit) {
+      searchParams.set('limit', String(params.limit));
+    }
+    if (params?.offset) {
+      searchParams.set('offset', String(params.offset));
+    }
+    if (params?.resourceId) {
+      searchParams.set('resourceId', params.resourceId);
+    }
+
+    if (searchParams.size) {
+      return this.request(`/api/workflows/${this.workflowId}/runs?${searchParams}`);
+    } else {
+      return this.request(`/api/workflows/${this.workflowId}/runs`);
+    }
+  }
+
+  /**
+   * Creates a new workflow run
+   * @param params - Optional object containing the optional runId
+   * @returns Promise containing the runId of the created run
+   */
+  createRun(params?: { runId?: string }): Promise<{ runId: string }> {
+    const searchParams = new URLSearchParams();
+
+    if (!!params?.runId) {
+      searchParams.set('runId', params.runId);
+    }
+
+    return this.request(`/api/workflows/${this.workflowId}/create-run?${searchParams.toString()}`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Starts a workflow run synchronously without waiting for the workflow to complete
+   * @param params - Object containing the runId, inputData and runtimeContext
+   * @returns Promise containing success message
+   */
+  start(params: {
+    runId: string;
+    inputData: Record<string, any>;
+    runtimeContext?: RuntimeContext | Record<string, any>;
+  }): Promise<{ message: string }> {
+    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
+    return this.request(`/api/workflows/${this.workflowId}/start?runId=${params.runId}`, {
+      method: 'POST',
+      body: { inputData: params?.inputData, runtimeContext },
+    });
+  }
+
+  /**
+   * Resumes a suspended workflow step synchronously without waiting for the workflow to complete
+   * @param params - Object containing the runId, step, resumeData and runtimeContext
+   * @returns Promise containing success message
+   */
+  resume({
+    step,
+    runId,
+    resumeData,
+    ...rest
+  }: {
+    step: string | string[];
+    runId: string;
+    resumeData?: Record<string, any>;
+    runtimeContext?: RuntimeContext | Record<string, any>;
+  }): Promise<{ message: string }> {
+    const runtimeContext = parseClientRuntimeContext(rest.runtimeContext);
+    return this.request(`/api/workflows/${this.workflowId}/resume?runId=${runId}`, {
+      method: 'POST',
+      stream: true,
+      body: {
+        step,
+        resumeData,
+        runtimeContext,
+      },
+    });
+  }
+
+  /**
+   * Starts a workflow run asynchronously and returns a promise that resolves when the workflow is complete
+   * @param params - Object containing the optional runId, inputData and runtimeContext
+   * @returns Promise containing the workflow execution results
+   */
+  startAsync(params: {
+    runId?: string;
+    inputData: Record<string, any>;
+    runtimeContext?: RuntimeContext | Record<string, any>;
+  }): Promise<WorkflowRunResult> {
+    const searchParams = new URLSearchParams();
+
+    if (!!params?.runId) {
+      searchParams.set('runId', params.runId);
+    }
+
+    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
+
+    return this.request(`/api/workflows/${this.workflowId}/start-async?${searchParams.toString()}`, {
+      method: 'POST',
+      body: { inputData: params.inputData, runtimeContext },
+    });
+  }
+
+  /**
+   * Starts a vNext workflow run and returns a stream
+   * @param params - Object containing the optional runId, inputData and runtimeContext
+   * @returns Promise containing the vNext workflow execution results
+   */
+  async stream(params: { runId?: string; inputData: Record<string, any>; runtimeContext?: RuntimeContext }) {
+    const searchParams = new URLSearchParams();
+
+    if (!!params?.runId) {
+      searchParams.set('runId', params.runId);
+    }
+
+    const runtimeContext = params.runtimeContext ? Object.fromEntries(params.runtimeContext.entries()) : undefined;
+    const response: Response = await this.request(
+      `/api/workflows/${this.workflowId}/stream?${searchParams.toString()}`,
+      {
+        method: 'POST',
+        body: { inputData: params.inputData, runtimeContext },
+        stream: true,
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to stream vNext workflow: ${response.statusText}`);
+    }
+
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    // Create a transform stream that processes the response body
+    const transformStream = new TransformStream<ArrayBuffer, WorkflowWatchResult>({
+      start() {},
+      async transform(chunk, controller) {
+        try {
+          // Decode binary data to text
+          const decoded = new TextDecoder().decode(chunk);
+
+          // Split by record separator
+          const chunks = decoded.split(RECORD_SEPARATOR);
+
+          // Process each chunk
+          for (const chunk of chunks) {
+            if (chunk) {
+              try {
+                const parsedChunk = JSON.parse(chunk);
+                controller.enqueue(parsedChunk);
+              } catch {
+                // Silently ignore parsing errors
+              }
+            }
+          }
+        } catch {
+          // Silently ignore processing errors
+        }
+      },
+    });
+
+    // Pipe the response body through the transform stream
+    return response.body.pipeThrough(transformStream);
+  }
+
+  /**
+   * Resumes a suspended workflow step asynchronously and returns a promise that resolves when the workflow is complete
+   * @param params - Object containing the runId, step, resumeData and runtimeContext
+   * @returns Promise containing the workflow resume results
+   */
+  resumeAsync(params: {
+    runId: string;
+    step: string | string[];
+    resumeData?: Record<string, any>;
+    runtimeContext?: RuntimeContext | Record<string, any>;
+  }): Promise<WorkflowRunResult> {
+    const runtimeContext = parseClientRuntimeContext(params.runtimeContext);
+    return this.request(`/api/workflows/${this.workflowId}/resume-async?runId=${params.runId}`, {
+      method: 'POST',
+      body: {
+        step: params.step,
+        resumeData: params.resumeData,
+        runtimeContext,
+      },
+    });
+  }
+
+  /**
    * Watches workflow transitions in real-time
    * @param runId - Optional run ID to filter the watch stream
    * @returns AsyncGenerator that yields parsed records from the workflow watch stream
    */
-  async watch({ runId }: { runId?: string }, onRecord: (record: WorkflowRunResult) => void) {
+  async watch({ runId }: { runId?: string }, onRecord: (record: WorkflowWatchResult) => void) {
     const response: Response = await this.request(`/api/workflows/${this.workflowId}/watch?runId=${runId}`, {
       stream: true,
     });
@@ -245,7 +319,35 @@ export class Workflow extends BaseResource {
     }
 
     for await (const record of this.streamProcessor(response.body)) {
-      onRecord(record);
+      if (typeof record === 'string') {
+        onRecord(JSON.parse(record));
+      } else {
+        onRecord(record);
+      }
     }
+  }
+
+  /**
+   * Creates a new ReadableStream from an iterable or async iterable of objects,
+   * serializing each as JSON and separating them with the record separator (\x1E).
+   *
+   * @param records - An iterable or async iterable of objects to stream
+   * @returns A ReadableStream emitting the records as JSON strings separated by the record separator
+   */
+  static createRecordStream(records: Iterable<any> | AsyncIterable<any>): ReadableStream {
+    const encoder = new TextEncoder();
+    return new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const record of records as AsyncIterable<any>) {
+            const json = JSON.stringify(record) + RECORD_SEPARATOR;
+            controller.enqueue(encoder.encode(json));
+          }
+          controller.close();
+        } catch (err) {
+          controller.error(err);
+        }
+      },
+    });
   }
 }

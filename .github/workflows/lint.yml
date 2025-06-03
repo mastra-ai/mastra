@@ -38,6 +38,8 @@ jobs:
 
       - name: Lint
         run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/**/*" --filter "!./integrations/**/*" --filter "!@mastra/playground" lint
+      - name: Format
+        run: pnpm prettier --check .
 
   prebuild:
     name: Prebuild
@@ -276,7 +278,7 @@ jobs:
         run: pnpm install
 
       - name: Build
-        run: pnpm turbo --filter "@mastra/core" build
+        run: pnpm turbo --filter "@mastra/core" --filter "@mastra/loggers" build
 
       - name: Install e2e test dependencies
         working-directory: ./e2e-tests/commonjs

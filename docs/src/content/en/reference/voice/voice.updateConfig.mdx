@@ -30,8 +30,8 @@ voice.updateConfig({
   turn_detection: {
     type: "server_vad",
     threshold: 0.5,
-    silence_duration_ms: 1000
-  }
+    silence_duration_ms: 1000,
+  },
 });
 
 // The next speak() call will use the new configuration
@@ -39,15 +39,17 @@ await voice.speak("Hello with my new voice!");
 ```
 
 ## Parameters
+
 <br />
 <PropertiesTable
   content={[
     {
       name: "options",
       type: "Record<string, unknown>",
-      description: "Configuration options to update. The specific properties depend on the voice provider.",
+      description:
+        "Configuration options to update. The specific properties depend on the voice provider.",
       isOptional: false,
-    }
+    },
   ]}
 />
 
@@ -60,21 +62,24 @@ This method does not return a value.
 Different voice providers support different configuration options:
 
 ### OpenAI Realtime
-<br/>
+
+<br />
 <PropertiesTable
   content={[
     {
       name: "voice",
       type: "string",
-      description: "Voice ID to use for speech synthesis (e.g., 'alloy', 'echo', 'nova')",
+      description:
+        "Voice ID to use for speech synthesis (e.g., 'alloy', 'echo', 'nova')",
       isOptional: true,
     },
     {
       name: "turn_detection",
       type: "{ type: string, threshold?: number, silence_duration_ms?: number }",
-      description: "Configuration for detecting when a user has finished speaking",
+      description:
+        "Configuration for detecting when a user has finished speaking",
       isOptional: true,
-    }
+    },
   ]}
 />
 

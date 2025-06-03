@@ -1,10 +1,13 @@
-import { Handle, Position } from '@xyflow/react';
-import type { NodeProps, Node } from '@xyflow/react';
-import { Footprints } from 'lucide-react';
+import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
+import { CircleDashed, Loader2, PauseIcon } from 'lucide-react';
+import { useCurrentRun } from '../context/use-current-run';
+import { CheckIcon, CrossIcon, Icon } from '@/ds/icons';
+import { Txt } from '@/ds/components/Txt';
 
-import { Text } from '@/components/ui/text';
+import { Clock } from './workflow-clock';
 
 import { cn } from '@/lib/utils';
+import { WorkflowStepActionBar } from './workflow-step-action-bar';
 
 export type DefaultNode = Node<
   {
@@ -12,27 +15,74 @@ export type DefaultNode = Node<
     description?: string;
     withoutTopHandle?: boolean;
     withoutBottomHandle?: boolean;
+    mapConfig?: string;
   },
   'default-node'
 >;
 
-export function WorkflowDefaultNode({ data }: NodeProps<DefaultNode>) {
+export interface WorkflowDefaultNodeProps {
+  data: DefaultNode['data'];
+  onShowTrace?: ({ runId, stepName }: { runId: string; stepName: string }) => void;
+  parentWorkflowName?: string;
+}
+
+export function WorkflowDefaultNode({
+  data,
+  onShowTrace,
+  parentWorkflowName,
+}: NodeProps<DefaultNode> & WorkflowDefaultNodeProps) {
+  const { steps, isRunning, runId } = useCurrentRun();
   const { label, description, withoutTopHandle, withoutBottomHandle } = data;
+
+  const fullLabel = parentWorkflowName ? `${parentWorkflowName}.${label}` : label;
+
+  const step = steps[fullLabel];
+
   return (
-    <div className={cn('bg-mastra-bg-8 rounded-md w-[274px]')}>
+    <>
       {!withoutTopHandle && <Handle type="target" position={Position.Top} style={{ visibility: 'hidden' }} />}
-      <div className="p-2">
-        <div className="text-sm bg-mastra-bg-9 flex items-center gap-[6px] rounded-sm  p-2">
-          <Footprints className="text-current w-4 h-4" />
-          <Text size="xs" weight="medium" className="text-mastra-el-6 capitalize">
-            {label}
-          </Text>
+
+      <div
+        className={cn(
+          'bg-surface3 rounded-lg w-[274px] border-sm border-border1 pt-2',
+          step?.status === 'success' && 'ring-2 ring-accent1',
+          step?.status === 'failed' && 'ring-2 ring-accent2',
+        )}
+      >
+        <div className={cn('flex items-center gap-2 px-3', !description && 'pb-2')}>
+          {isRunning && (
+            <Icon>
+              {step?.status === 'failed' && <CrossIcon className="text-accent2" />}
+              {step?.status === 'success' && <CheckIcon className="text-accent1" />}
+              {step?.status === 'suspended' && <PauseIcon className="text-icon3" />}
+              {step?.status === 'running' && <Loader2 className="text-icon6 animate-spin" />}
+              {!step && <CircleDashed className="text-icon2" />}
+            </Icon>
+          )}
+          <Txt variant="ui-lg" className="text-icon6 font-medium inline-flex items-center gap-1 justify-between w-full">
+            {label} {step?.startedAt && <Clock startedAt={step.startedAt} endedAt={step.endedAt} />}
+          </Txt>
         </div>
+
+        {description && (
+          <Txt variant="ui-sm" className="text-icon3 px-3 pb-2">
+            {description}
+          </Txt>
+        )}
+
+        <WorkflowStepActionBar
+          stepName={label}
+          input={step?.input}
+          output={step?.output}
+          error={step?.error}
+          mapConfig={data.mapConfig}
+          onShowTrace={runId ? () => onShowTrace?.({ runId, stepName: fullLabel }) : undefined}
+        />
       </div>
-      {description && (
-        <div className="bg-mastra-bg-4 rounded-b-md p-2 text-[10px] text-left text-mastra-el-4">{description}</div>
+
+      {!withoutBottomHandle && (
+        <Handle type="source" position={Position.Bottom} style={{ visibility: 'hidden', color: 'red' }} />
       )}
-      {!withoutBottomHandle && <Handle type="source" position={Position.Bottom} style={{ visibility: 'hidden' }} />}
-    </div>
+    </>
   );
 }

@@ -1,12 +1,11 @@
 import { createHash } from 'crypto';
-import { convertToCoreMessages } from 'ai';
 import type { CoreMessage, LanguageModelV1 } from 'ai';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
 
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
-import type { Logger } from './logger';
+import type { IMastraLogger } from './logger';
 import type { Mastra } from './mastra';
 import type { AiMessageType, MastraMemory } from './memory';
 import type { RuntimeContext } from './runtime-context';
@@ -206,7 +205,7 @@ export interface ToolOptions {
   runId?: string;
   threadId?: string;
   resourceId?: string;
-  logger?: Logger;
+  logger?: IMastraLogger;
   description?: string;
   mastra?: (Mastra & MastraPrimitives) | MastraPrimitives;
   runtimeContext: RuntimeContext;
@@ -308,7 +307,7 @@ export function makeCoreTool(
  * @param logger - The logger to use for warnings
  * @returns A proxy for the Mastra instance
  */
-export function createMastraProxy({ mastra, logger }: { mastra: Mastra; logger: Logger }) {
+export function createMastraProxy({ mastra, logger }: { mastra: Mastra; logger: IMastraLogger }) {
   return new Proxy(mastra, {
     get(target, prop) {
       const hasProp = Reflect.has(target, prop);
@@ -362,7 +361,7 @@ export function createMastraProxy({ mastra, logger }: { mastra: Mastra; logger: 
   });
 }
 
-export function checkEvalStorageFields(traceObject: any, logger?: Logger) {
+export function checkEvalStorageFields(traceObject: any, logger?: IMastraLogger) {
   const missingFields = [];
   if (!traceObject.input) missingFields.push('input');
   if (!traceObject.output) missingFields.push('output');
@@ -429,26 +428,68 @@ function detectSingleMessageCharacteristics(
   }
 }
 
-function isUiMessage(message: CoreMessage | AiMessageType): message is AiMessageType {
+export function isUiMessage(message: CoreMessage | AiMessageType): message is AiMessageType {
   return detectSingleMessageCharacteristics(message) === `has-ui-specific-parts`;
 }
-function isCoreMessage(message: CoreMessage | AiMessageType): message is CoreMessage {
+export function isCoreMessage(message: CoreMessage | AiMessageType): message is CoreMessage {
   return [`has-core-specific-parts`, `message`].includes(detectSingleMessageCharacteristics(message));
 }
 
-export function ensureAllMessagesAreCoreMessages(messages: (CoreMessage | AiMessageType)[]) {
-  return messages
-    .map(message => {
-      if (isUiMessage(message)) {
-        return convertToCoreMessages([message]);
-      }
-      if (isCoreMessage(message)) {
-        return message;
-      }
-      const characteristics = detectSingleMessageCharacteristics(message);
-      throw new Error(
-        `Message does not appear to be a core message or a UI message but must be one of the two, found "${characteristics}" type for message:\n\n${JSON.stringify(message, null, 2)}\n`,
-      );
-    })
-    .flat();
+/** Represents a validated SQL identifier (e.g., table or column name). */
+type SqlIdentifier = string & { __brand: 'SqlIdentifier' };
+/** Represents a validated dot-separated SQL field key. */
+type FieldKey = string & { __brand: 'FieldKey' };
+
+const SQL_IDENTIFIER_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+
+/**
+ * Parses and returns a valid SQL identifier (such as a table or column name).
+ * The identifier must:
+ *   - Start with a letter (a-z, A-Z) or underscore (_)
+ *   - Contain only letters, numbers, or underscores
+ *   - Be at most 63 characters long
+ *
+ * @param name - The identifier string to parse.
+ * @param kind - Optional label for error messages (e.g., 'table name').
+ * @returns The validated identifier as a branded type.
+ * @throws {Error} If the identifier does not conform to SQL naming rules.
+ *
+ * @example
+ * const id = parseSqlIdentifier('my_table'); // Ok
+ * parseSqlIdentifier('123table'); // Throws error
+ */
+export function parseSqlIdentifier(name: string, kind = 'identifier'): SqlIdentifier {
+  if (!SQL_IDENTIFIER_PATTERN.test(name) || name.length > 63) {
+    throw new Error(
+      `Invalid ${kind}: ${name}. Must start with a letter or underscore, contain only letters, numbers, or underscores, and be at most 63 characters long.`,
+    );
+  }
+  return name as SqlIdentifier;
+}
+
+/**
+ * Parses and returns a valid dot-separated SQL field key (e.g., 'user.profile.name').
+ * Each segment must:
+ *   - Start with a letter (a-z, A-Z) or underscore (_)
+ *   - Contain only letters, numbers, or underscores
+ *   - Be at most 63 characters long
+ *
+ * @param key - The dot-separated field key string to parse.
+ * @returns The validated field key as a branded type.
+ * @throws {Error} If any segment of the key is invalid.
+ *
+ * @example
+ * const key = parseFieldKey('user_profile.name'); // Ok
+ * parseFieldKey('user..name'); // Throws error
+ * parseFieldKey('user.123name'); // Throws error
+ */
+export function parseFieldKey(key: string): FieldKey {
+  if (!key) throw new Error('Field key cannot be empty');
+  const segments = key.split('.');
+  for (const segment of segments) {
+    if (!SQL_IDENTIFIER_PATTERN.test(segment) || segment.length > 63) {
+      throw new Error(`Invalid field key segment: ${segment} in ${key}`);
+    }
+  }
+  return key as FieldKey;
 }

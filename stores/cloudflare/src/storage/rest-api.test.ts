@@ -1,4 +1,4 @@
-import type { MessageType, StorageThreadType } from '@mastra/core/memory';
+import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 import {
   TABLE_MESSAGES,
@@ -46,7 +46,16 @@ describe.skip('CloudflareStore REST API', () => {
 
   // Helper to clean up KV namespaces
   const cleanupNamespaces = async () => {
-    const tables = [TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_TRACES] as TABLE_NAMES[];
+    const dummyTables = Array.from({ length: 100 }, (_, i) => `test${i + 1}`);
+
+    const tables = [
+      ...dummyTables,
+      TABLE_THREADS,
+      TABLE_MESSAGES,
+      TABLE_WORKFLOW_SNAPSHOT,
+      TABLE_EVALS,
+      TABLE_TRACES,
+    ] as TABLE_NAMES[];
 
     for (const table of tables) {
       try {
@@ -164,10 +173,10 @@ describe.skip('CloudflareStore REST API', () => {
           threadId: 'thread-1',
           content: [{ type: 'text', text: 'test-data-2' }],
           role: 'user',
-        } as MessageType,
+        } as MastraMessageV1,
       });
 
-      const result = await store.load<MessageType>({
+      const result = await store.load<MastraMessageV1>({
         tableName: testTableName2,
         keys: { id: 'test2', threadId: 'thread-1' },
       });
@@ -180,8 +189,7 @@ describe.skip('CloudflareStore REST API', () => {
     });
   });
 
-  // eslint-disable-next-line vitest/no-focused-tests
-  describe.only('Trace Operations', () => {
+  describe('Trace Operations', () => {
     beforeEach(async () => {
       await store.clearTable({ tableName: TABLE_TRACES });
     });
@@ -414,15 +422,15 @@ describe.skip('CloudflareStore REST API', () => {
       const messages = [
         {
           ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'First' }] as MessageType['content'],
+          content: [{ type: 'text' as const, text: 'First' }] as MastraMessageV1['content'],
         },
         {
           ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'Second' }] as MessageType['content'],
+          content: [{ type: 'text' as const, text: 'Second' }] as MastraMessageV1['content'],
         },
         {
           ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'Third' }] as MessageType['content'],
+          content: [{ type: 'text' as const, text: 'Third' }] as MastraMessageV1['content'],
         },
       ];
 
@@ -668,7 +676,7 @@ describe.skip('CloudflareStore REST API', () => {
           content: [{ type: 'text', text: 'Third' }],
           createdAt: new Date(baseTime + 2000),
         },
-      ] as MessageType[];
+      ] as MastraMessageV1[];
 
       await store.saveMessages({ messages });
 
@@ -720,16 +728,13 @@ describe.skip('CloudflareStore REST API', () => {
         value: { 'test-run': 'running' },
         timestamp: Date.now(),
         context: {
-          steps: {
-            'step-1': {
-              status: 'waiting' as const,
-              payload: { input: 'test' },
-            },
+          'step-1': {
+            status: 'success' as const,
+            output: { input: 'test' },
           },
-          triggerData: { source: 'test' },
-          attempts: { 'step-1': 0 },
-        },
-        activePaths: [{ stepPath: ['main'], stepId: 'step-1', status: 'waiting' }],
+          input: {},
+        } as unknown as WorkflowRunState['context'],
+        activePaths: [],
         suspendedPaths: {},
       };
 
@@ -769,16 +774,13 @@ describe.skip('CloudflareStore REST API', () => {
         value: { 'test-run-2': 'running' },
         timestamp: Date.now(),
         context: {
-          steps: {
-            'step-1': {
-              status: 'waiting' as const,
-              payload: { input: 'test' },
-            },
+          'step-1': {
+            status: 'success' as const,
+            output: { input: 'test' },
           },
-          triggerData: { source: 'test' },
-          attempts: { 'step-1': 0 },
-        },
-        activePaths: [{ stepPath: ['main'], stepId: 'step-1', status: 'waiting' }],
+          input: {},
+        } as unknown as WorkflowRunState['context'],
+        activePaths: [],
         suspendedPaths: {},
       };
 
@@ -830,23 +832,17 @@ describe.skip('CloudflareStore REST API', () => {
         value: { 'test-run-3': 'running' },
         timestamp: Date.now(),
         context: {
-          steps: {
-            'step-1': {
-              status: 'waiting' as const,
-              payload: { input: 'test' },
-            },
-            'step-2': {
-              status: 'waiting' as const,
-              payload: { input: 'test2' },
-            },
+          'step-1': {
+            status: 'success' as const,
+            output: { input: 'test' },
           },
-          triggerData: { source: 'test' },
-          attempts: { 'step-1': 0, 'step-2': 0 },
-        },
-        activePaths: [
-          { stepPath: ['main'], stepId: 'step-1', status: 'waiting' },
-          { stepPath: ['main'], stepId: 'step-2', status: 'waiting' },
-        ],
+          'step-2': {
+            status: 'success' as const,
+            output: { input: 'test2' },
+          },
+          input: {},
+        } as unknown as WorkflowRunState['context'],
+        activePaths: [],
         suspendedPaths: {},
       };
 
@@ -864,16 +860,13 @@ describe.skip('CloudflareStore REST API', () => {
         ...workflow,
         context: {
           ...workflow.context,
-          steps: {
-            ...workflow.context.steps,
-            'step-1': {
-              status: 'success' as const,
-              payload: { result: 'done' },
-            },
+          'step-1': {
+            status: 'success' as const,
+            output: { result: 'done' },
           },
         },
-        activePaths: [{ stepPath: ['main'], stepId: 'step-2', status: 'waiting' }],
-      };
+        activePaths: [],
+      } as unknown as WorkflowRunState;
 
       await store.persistWorkflowSnapshot({
         namespace: 'test',
@@ -890,10 +883,10 @@ describe.skip('CloudflareStore REST API', () => {
         runId: workflow.runId,
       });
 
-      expect(retrieved?.context.steps['step-1'].status).toBe('success');
-      expect(retrieved?.context.steps['step-1'].payload).toEqual({ result: 'done' });
-      expect(retrieved?.context.steps['step-2'].status).toBe('waiting');
-      expect(retrieved?.activePaths).toEqual([{ stepPath: ['main'], stepId: 'step-2', status: 'waiting' }]);
+      expect(retrieved?.context['step-1'].status).toBe('success');
+      expect((retrieved?.context['step-1'] as any).output).toEqual({ result: 'done' });
+      expect(retrieved?.context['step-2'].status).toBe('success');
+      expect(retrieved?.activePaths).toEqual([]);
     });
   });
 
@@ -1263,7 +1256,7 @@ describe.skip('CloudflareStore REST API', () => {
       const thread = createSampleThread();
       const message = {
         ...createSampleMessage(thread.id),
-        content: [{ type: 'text' as const, text: '特殊字符 !@#$%^&*()' }] as MessageType['content'],
+        content: [{ type: 'text' as const, text: '特殊字符 !@#$%^&*()' }] as MastraMessageV1['content'],
       };
 
       await store.saveThread({ thread });
@@ -1635,7 +1628,7 @@ describe.skip('CloudflareStore REST API', () => {
       // Test with various malformed data
       const malformedMessage = {
         ...createSampleMessage(thread.id),
-        content: [{ type: 'text' as const, text: ''.padStart(1024 * 1024, 'x') }] as MessageType['content'], // Very large content
+        content: [{ type: 'text' as const, text: ''.padStart(1024 * 1024, 'x') }] as MastraMessageV1['content'], // Very large content
       };
 
       await store.saveMessages({ messages: [malformedMessage] });

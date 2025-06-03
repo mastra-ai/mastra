@@ -1,7 +1,7 @@
 import type { z } from 'zod';
 
 import type { Agent } from '../agent';
-import type { Logger } from '../logger';
+import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory';
 import type { MastraStorage } from '../storage';
@@ -10,7 +10,7 @@ import type { MastraTTS } from '../tts';
 import type { MastraVector } from '../vector';
 
 export type MastraPrimitives = {
-  logger?: Logger;
+  logger?: IMastraLogger;
   telemetry?: Telemetry;
   storage?: MastraStorage;
   agents?: Record<string, Agent>;

@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import type { MetricResult } from '@mastra/core/eval';
-import type { MessageType } from '@mastra/core/memory';
+import type { MastraMessageV1 } from '@mastra/core/memory';
 import { TABLE_WORKFLOW_SNAPSHOT, TABLE_MESSAGES, TABLE_THREADS, TABLE_EVALS } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
@@ -31,20 +31,23 @@ const createSampleThread = () => ({
   metadata: { key: 'value' },
 });
 
-const createSampleMessage = (threadId: string): MessageType => ({
+let role: 'user' | 'assistant' = 'assistant';
+const getRole = () => {
+  if (role === `user`) role = `assistant`;
+  else role = `user`;
+  return role;
+};
+const createSampleMessage = (threadId: string): MastraMessageV1 => ({
   id: `msg-${randomUUID()}`,
   resourceId: `resource-${randomUUID()}`,
-  role: 'user',
+  role: getRole(),
   type: 'text',
   threadId,
   content: [{ type: 'text', text: 'Hello' }],
   createdAt: new Date(),
 });
 
-const createSampleWorkflowSnapshot = (
-  status: WorkflowRunState['context']['steps'][string]['status'],
-  createdAt?: Date,
-) => {
+const createSampleWorkflowSnapshot = (status: WorkflowRunState['context'][string]['status'], createdAt?: Date) => {
   const runId = `run-${randomUUID()}`;
   const stepId = `step-${randomUUID()}`;
   const timestamp = createdAt || new Date();
@@ -52,21 +55,21 @@ const createSampleWorkflowSnapshot = (
     result: { success: true },
     value: {},
     context: {
-      steps: {
-        [stepId]: {
-          status,
-          payload: {},
-          error: undefined,
-        },
+      [stepId]: {
+        status,
+        payload: {},
+        error: undefined,
+        startedAt: timestamp.getTime(),
+        endedAt: new Date(timestamp.getTime() + 15000).getTime(),
       },
-      triggerData: {},
-      attempts: {},
+      input: {},
     },
+    serializedStepGraph: [],
     activePaths: [],
     suspendedPaths: {},
     runId,
     timestamp: timestamp.getTime(),
-  };
+  } as unknown as WorkflowRunState;
   return { snapshot, runId, stepId };
 };
 
@@ -92,7 +95,7 @@ const checkWorkflowSnapshot = (snapshot: WorkflowRunState | string, stepId: stri
   if (typeof snapshot === 'string') {
     throw new Error('Expected WorkflowRunState, got string');
   }
-  expect(snapshot.context?.steps[stepId]?.status).toBe(status);
+  expect(snapshot.context?.[stepId]?.status).toBe(status);
 };
 
 describe('PostgresStore', () => {
@@ -263,14 +266,17 @@ describe('PostgresStore', () => {
       await store.saveThread({ thread });
 
       const messages = [
-        { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'First' }] as MessageType['content'] },
-        { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'Second' }] as MessageType['content'] },
-        { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'Third' }] as MessageType['content'] },
-      ];
+        { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'First' }] },
+        {
+          ...createSampleMessage(thread.id),
+          content: [{ type: 'text', text: 'Second' }],
+        },
+        { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'Third' }] },
+      ] satisfies MastraMessageV1[];
 
       await store.saveMessages({ messages });
 
-      const retrievedMessages = await store.getMessages<MessageType>({ threadId: thread.id });
+      const retrievedMessages = await store.getMessages<MastraMessageV1>({ threadId: thread.id });
       expect(retrievedMessages).toHaveLength(3);
 
       // Verify order is maintained
@@ -356,17 +362,15 @@ describe('PostgresStore', () => {
       const snapshot = {
         status: 'running',
         context: {
-          steps: {},
-          stepResults: {},
-          attempts: {},
-          triggerData: { type: 'manual' },
+          input: { type: 'manual' },
+          step1: { status: 'success', output: { data: 'test' } },
         },
         value: {},
         activePaths: [],
         suspendedPaths: {},
         runId,
         timestamp: new Date().getTime(),
-      };
+      } as unknown as WorkflowRunState;
 
       await store.persistWorkflowSnapshot({
         workflowName,
@@ -397,10 +401,7 @@ describe('PostgresStore', () => {
       const initialSnapshot = {
         status: 'running',
         context: {
-          steps: {},
-          stepResults: {},
-          attempts: {},
-          triggerData: { type: 'manual' },
+          input: { type: 'manual' },
         },
         value: {},
         activePaths: [],
@@ -412,18 +413,14 @@ describe('PostgresStore', () => {
       await store.persistWorkflowSnapshot({
         workflowName,
         runId,
-        snapshot: initialSnapshot,
+        snapshot: initialSnapshot as unknown as WorkflowRunState,
       });
 
       const updatedSnapshot = {
-        status: 'completed',
+        status: 'success',
         context: {
-          steps: {},
-          stepResults: {
-            'step-1': { status: 'success', result: { data: 'test' } },
-          },
-          attempts: { 'step-1': 1 },
-          triggerData: { type: 'manual' },
+          input: { type: 'manual' },
+          'step-1': { status: 'success', result: { data: 'test' } },
         },
         value: {},
         activePaths: [],
@@ -435,7 +432,7 @@ describe('PostgresStore', () => {
       await store.persistWorkflowSnapshot({
         workflowName,
         runId,
-        snapshot: updatedSnapshot,
+        snapshot: updatedSnapshot as unknown as WorkflowRunState,
       });
 
       const loadedSnapshot = await store.loadWorkflowSnapshot({
@@ -452,25 +449,21 @@ describe('PostgresStore', () => {
       const complexSnapshot = {
         value: { currentState: 'running' },
         context: {
-          stepResults: {
-            'step-1': {
-              status: 'success',
-              result: {
-                nestedData: {
-                  array: [1, 2, 3],
-                  object: { key: 'value' },
-                  date: new Date().toISOString(),
-                },
+          'step-1': {
+            status: 'success',
+            output: {
+              nestedData: {
+                array: [1, 2, 3],
+                object: { key: 'value' },
+                date: new Date().toISOString(),
               },
             },
-            'step-2': {
-              status: 'waiting',
-              dependencies: ['step-3', 'step-4'],
-            },
           },
-          steps: {},
-          attempts: { 'step-1': 1, 'step-2': 0 },
-          triggerData: {
+          'step-2': {
+            status: 'waiting',
+            dependencies: ['step-3', 'step-4'],
+          },
+          input: {
             type: 'scheduled',
             metadata: {
               schedule: '0 0 * * *',
@@ -498,7 +491,7 @@ describe('PostgresStore', () => {
       await store.persistWorkflowSnapshot({
         workflowName,
         runId,
-        snapshot: complexSnapshot,
+        snapshot: complexSnapshot as unknown as WorkflowRunState,
       });
 
       const loadedSnapshot = await store.loadWorkflowSnapshot({
@@ -704,7 +697,7 @@ describe('PostgresStore', () => {
       // Insert multiple workflow runs for the same resourceId
       resourceId = 'resource-shared';
       for (const status of ['success', 'failed']) {
-        const sample = createSampleWorkflowSnapshot(status as WorkflowRunState['context']['steps'][string]['status']);
+        const sample = createSampleWorkflowSnapshot(status as WorkflowRunState['context'][string]['status']);
         runIds.push(sample.runId);
         await store.insert({
           tableName: TABLE_WORKFLOW_SNAPSHOT,
@@ -719,7 +712,7 @@ describe('PostgresStore', () => {
         });
       }
       // Insert a run with a different resourceId
-      const other = createSampleWorkflowSnapshot('waiting');
+      const other = createSampleWorkflowSnapshot('suspended');
       await store.insert({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         record: {

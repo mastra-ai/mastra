@@ -1,5 +1,165 @@
 # create-mastra
 
+## 0.10.2-alpha.4
+
+### Patch Changes
+
+- 9666468: move the fetch traces call to the playground instead of playground-ui
+
+## 0.10.2-alpha.3
+
+### Patch Changes
+
+- 401bbae: Show workflow graph from stepGraph of previous runs when viewing a previous run
+
+## 0.10.2-alpha.2
+
+### Patch Changes
+
+- f73e11b: fix telemetry disabled not working on playground
+
+## 0.10.2-alpha.1
+
+### Patch Changes
+
+- 73fec0b: Mastra start cli command"
+- f6ddf55: fix traces not showing and reduce API surface from playground ui
+
+## 0.10.2-alpha.0
+
+### Patch Changes
+
+- 89a69d0: add a way to go to the given trace of a workflow step
+- 9faee5b: small fixes in the workflows graph
+- 9a31c09: Highlight steps in nested workflows on workflow graph
+
+## 0.10.1
+
+### Patch Changes
+
+- b4365f6: add empty states for agents network and tools
+- d0932ac: add multi modal input behind feature flag
+- bed0916: Update default tools path in mastra dev,build
+- 3c2dba5: add workflow run list
+- 23d56b1: Handle dev server errors, restart, exit
+- 267773e: Show map config on workflow graph
+  Highlight borders for conditions too on workflow graph
+  Fix watch stream
+- 35bb6a3: Allow undefined temprature, topP model setting from playground
+- 33f1c64: revamp the experience for workflows
+- 6015bdf: Leverage defaultAgentStreamOption, defaultAgentGenerateOption in playground
+- 7a32205: add empty states for workflows, agents and mcp servers
+
+## 0.10.1-alpha.5
+
+### Patch Changes
+
+- 267773e: Show map config on workflow graph
+  Highlight borders for conditions too on workflow graph
+  Fix watch stream
+
+## 0.10.1-alpha.4
+
+### Patch Changes
+
+- 3c2dba5: add workflow run list
+- 33f1c64: revamp the experience for workflows
+
+## 0.10.1-alpha.3
+
+### Patch Changes
+
+- 6015bdf: Leverage defaultAgentStreamOption, defaultAgentGenerateOption in playground
+
+## 0.10.1-alpha.2
+
+### Patch Changes
+
+- b4365f6: add empty states for agents network and tools
+- d0932ac: add multi modal input behind feature flag
+- bed0916: Update default tools path in mastra dev,build
+- 23d56b1: Handle dev server errors, restart, exit
+
+## 0.10.1-alpha.1
+
+### Patch Changes
+
+- 7a32205: add empty states for workflows, agents and mcp servers
+
+## 0.10.1-alpha.0
+
+### Patch Changes
+
+- 35bb6a3: Allow undefined temprature, topP model setting from playground
+
+## 0.10.0
+
+### Patch Changes
+
+- bdb7934: fix tools not showing (discoverability)
+- b3a3d63: BREAKING: Make vnext workflow the default worklow, and old workflow legacy_workflow
+- ae122cc: show the entities ID close to the copy button
+- 99552bc: revamp the UI of the tools page
+- f2d3352: fix overflow scroll in runtime context
+- 95911be: Fixed an issue where if @mastra/core was not released at the same time as create-mastra, create-mastra would match the alpha tag instead of latest tag when running npm create mastra@latest
+- db4211d: improve the UI/UX of the runtime context with formatting, copying, docs and syntax highlighting
+- 9b7294a: Revamp the UI for the right sidebar of the agents page
+- e2c2cf1: Persist playground agent settings across refresh
+- 47776b4: update the mcp pages
+- fd69cc3: revamp UI of workflow "Run" pane
+- 1270183: Add waterfull traces instead of stacked progressbar (UI improvement mostly)
+- 392a14d: changing the empty state for threads in agent chat
+- cbf153f: Handle broken images on the playground
+- 0cae9b1: sidebar adjustments (storing status + showing the action of collapsing / expanding)
+- d2b595a: a better tools playground page
+- 1f6886f: bring back the memory not activated warning in agent chat
+- 8a68886: revamp the UI of the workflow form input
+
+## 0.3.4-alpha.2
+
+### Patch Changes
+
+- 47776b4: update the mcp pages
+
+## 0.3.4-alpha.1
+
+### Patch Changes
+
+- bdb7934: fix tools not showing (discoverability)
+- b3a3d63: BREAKING: Make vnext workflow the default worklow, and old workflow legacy_workflow
+- ae122cc: show the entities ID close to the copy button
+- f2d3352: fix overflow scroll in runtime context
+- 95911be: Fixed an issue where if @mastra/core was not released at the same time as create-mastra, create-mastra would match the alpha tag instead of latest tag when running npm create mastra@latest
+- fd69cc3: revamp UI of workflow "Run" pane
+- cbf153f: Handle broken images on the playground
+- 0cae9b1: sidebar adjustments (storing status + showing the action of collapsing / expanding)
+- d2b595a: a better tools playground page
+- 1f6886f: bring back the memory not activated warning in agent chat
+- 8a68886: revamp the UI of the workflow form input
+
+## 0.3.4-alpha.0
+
+### Patch Changes
+
+- 99552bc: revamp the UI of the tools page
+- db4211d: improve the UI/UX of the runtime context with formatting, copying, docs and syntax highlighting
+- 9b7294a: Revamp the UI for the right sidebar of the agents page
+- e2c2cf1: Persist playground agent settings across refresh
+- 1270183: Add waterfull traces instead of stacked progressbar (UI improvement mostly)
+- 392a14d: changing the empty state for threads in agent chat
+
+## 0.3.3
+
+### Patch Changes
+
+- a3435f8: Add node engine to create-mastra project package.json
+
+## 0.3.3-alpha.0
+
+### Patch Changes
+
+- a3435f8: Add node engine to create-mastra project package.json
+
 ## 0.3.2
 
 ### Patch Changes

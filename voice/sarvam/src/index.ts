@@ -153,6 +153,15 @@ export class SarvamVoice extends MastraVoice {
     }, 'voice.deepgram.getSpeakers')();
   }
 
+  /**
+   * Checks if listening capabilities are enabled.
+   *
+   * @returns {Promise<{ enabled: boolean }>}
+   */
+  async getListener() {
+    return { enabled: true };
+  }
+
   async listen(input: NodeJS.ReadableStream, options?: SarvamListenOptions): Promise<string> {
     return this.traced(async () => {
       // Collect audio data into buffer

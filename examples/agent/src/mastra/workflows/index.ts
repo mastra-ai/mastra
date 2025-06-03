@@ -1,4 +1,4 @@
-import { createStep, createWorkflow } from '@mastra/core/workflows/vNext';
+import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 
 export const myWorkflow = createWorkflow({

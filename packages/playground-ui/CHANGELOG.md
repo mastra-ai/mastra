@@ -1,5 +1,283 @@
 # @mastra/playground-ui
 
+## 5.1.2-alpha.5
+
+### Patch Changes
+
+- 9666468: move the fetch traces call to the playground instead of playground-ui
+- Updated dependencies [1b5fc55]
+- Updated dependencies [add596e]
+- Updated dependencies [ecebbeb]
+  - @mastra/core@0.10.2-alpha.5
+
+## 5.1.2-alpha.4
+
+### Patch Changes
+
+- 401bbae: Show workflow graph from stepGraph of previous runs when viewing a previous run
+- 4b23936: fix: typos
+
+## 5.1.2-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [c5bf1ce]
+- Updated dependencies [12b7002]
+  - @mastra/client-js@0.10.2-alpha.2
+  - @mastra/core@0.10.2-alpha.4
+
+## 5.1.2-alpha.2
+
+### Patch Changes
+
+- 068b850: fix: able to pass headers to playground components which are using the mastra client
+- Updated dependencies [ab5adbe]
+- Updated dependencies [195c428]
+- Updated dependencies [f73e11b]
+  - @mastra/core@0.10.2-alpha.3
+
+## 5.1.2-alpha.1
+
+### Patch Changes
+
+- f0d559f: Fix peerdeps for alpha channel
+- f6ddf55: fix traces not showing and reduce API surface from playground ui
+- Updated dependencies [1e8bb40]
+- Updated dependencies [f0d559f]
+  - @mastra/core@0.10.2-alpha.2
+  - @mastra/client-js@0.10.2-alpha.1
+
+## 5.1.2-alpha.0
+
+### Patch Changes
+
+- 89a69d0: add a way to go to the given trace of a workflow step
+- 9faee5b: small fixes in the workflows graph
+- 9a31c09: Highlight steps in nested workflows on workflow graph
+- Updated dependencies [592a2db]
+- Updated dependencies [e5dc18d]
+  - @mastra/client-js@0.10.2-alpha.0
+  - @mastra/core@0.10.2-alpha.0
+
+## 5.1.1
+
+### Patch Changes
+
+- b4365f6: add empty states for agents network and tools
+- d0932ac: add multi modal input behind feature flag
+- 3c2dba5: add workflow run list
+- 267773e: Show map config on workflow graph
+  Highlight borders for conditions too on workflow graph
+  Fix watch stream
+- 33f1c64: revamp the experience for workflows
+- 6015bdf: Leverage defaultAgentStreamOption, defaultAgentGenerateOption in playground
+- 7a32205: add empty states for workflows, agents and mcp servers
+- Updated dependencies [d70b807]
+- Updated dependencies [6d16390]
+- Updated dependencies [1e4a421]
+- Updated dependencies [200d0da]
+- Updated dependencies [267773e]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [f622cfa]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+- Updated dependencies [6015bdf]
+  - @mastra/core@0.10.1
+  - @mastra/client-js@0.10.1
+
+## 5.1.1-alpha.5
+
+### Patch Changes
+
+- 267773e: Show map config on workflow graph
+  Highlight borders for conditions too on workflow graph
+  Fix watch stream
+- Updated dependencies [267773e]
+  - @mastra/client-js@0.10.1-alpha.3
+
+## 5.1.1-alpha.4
+
+### Patch Changes
+
+- 3c2dba5: add workflow run list
+- 33f1c64: revamp the experience for workflows
+- Updated dependencies [d70b807]
+  - @mastra/core@0.10.1-alpha.3
+
+## 5.1.1-alpha.3
+
+### Patch Changes
+
+- 6015bdf: Leverage defaultAgentStreamOption, defaultAgentGenerateOption in playground
+- Updated dependencies [6015bdf]
+  - @mastra/client-js@0.10.1-alpha.2
+  - @mastra/core@0.10.1-alpha.2
+
+## 5.1.1-alpha.2
+
+### Patch Changes
+
+- b4365f6: add empty states for agents network and tools
+- d0932ac: add multi modal input behind feature flag
+- Updated dependencies [200d0da]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+  - @mastra/core@0.10.1-alpha.1
+  - @mastra/client-js@0.10.1-alpha.1
+
+## 5.1.1-alpha.1
+
+### Patch Changes
+
+- 7a32205: add empty states for workflows, agents and mcp servers
+
+## 5.1.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [6d16390]
+- Updated dependencies [1e4a421]
+- Updated dependencies [f622cfa]
+  - @mastra/core@0.10.1-alpha.0
+  - @mastra/client-js@0.10.1-alpha.0
+
+## 5.1.0
+
+### Minor Changes
+
+- 83da932: Move @mastra/core to peerdeps
+
+### Patch Changes
+
+- b3a3d63: BREAKING: Make vnext workflow the default worklow, and old workflow legacy_workflow
+- 99552bc: revamp the UI of the tools page
+- 9b7294a: Revamp the UI for the right sidebar of the agents page
+- e2c2cf1: Persist playground agent settings across refresh
+- fd69cc3: revamp UI of workflow "Run" pane
+- 1270183: Add waterfull traces instead of stacked progressbar (UI improvement mostly)
+- cbf153f: Handle broken images on the playground
+- 0cae9b1: sidebar adjustments (storing status + showing the action of collapsing / expanding)
+- 1f6886f: bring back the memory not activated warning in agent chat
+- 8a68886: revamp the UI of the workflow form input
+- Updated dependencies [b3a3d63]
+- Updated dependencies [344f453]
+- Updated dependencies [0215b0b]
+- Updated dependencies [0a3ae6d]
+- Updated dependencies [95911be]
+- Updated dependencies [83da932]
+- Updated dependencies [f53a6ac]
+- Updated dependencies [5eb5a99]
+- Updated dependencies [7e632c5]
+- Updated dependencies [1e9fbfa]
+- Updated dependencies [eabdcd9]
+- Updated dependencies [90be034]
+- Updated dependencies [ccdabdc]
+- Updated dependencies [99f050a]
+- Updated dependencies [d0ee3c6]
+- Updated dependencies [b2ae5aa]
+- Updated dependencies [a6e3881]
+- Updated dependencies [fddae56]
+- Updated dependencies [23f258c]
+- Updated dependencies [a7292b0]
+- Updated dependencies [0dcb9f0]
+- Updated dependencies [5063646]
+- Updated dependencies [2672a05]
+  - @mastra/client-js@0.10.0
+  - @mastra/core@0.10.0
+
+## 5.1.0-alpha.1
+
+### Minor Changes
+
+- 83da932: Move @mastra/core to peerdeps
+
+### Patch Changes
+
+- b3a3d63: BREAKING: Make vnext workflow the default worklow, and old workflow legacy_workflow
+- fd69cc3: revamp UI of workflow "Run" pane
+- cbf153f: Handle broken images on the playground
+- 0cae9b1: sidebar adjustments (storing status + showing the action of collapsing / expanding)
+- 1f6886f: bring back the memory not activated warning in agent chat
+- 8a68886: revamp the UI of the workflow form input
+- Updated dependencies [b3a3d63]
+- Updated dependencies [344f453]
+- Updated dependencies [0215b0b]
+- Updated dependencies [0a3ae6d]
+- Updated dependencies [95911be]
+- Updated dependencies [83da932]
+- Updated dependencies [5eb5a99]
+- Updated dependencies [7e632c5]
+- Updated dependencies [1e9fbfa]
+- Updated dependencies [b2ae5aa]
+- Updated dependencies [a7292b0]
+- Updated dependencies [0dcb9f0]
+- Updated dependencies [5063646]
+  - @mastra/client-js@0.2.0-alpha.1
+  - @mastra/core@0.10.0-alpha.1
+
+## 5.0.5-alpha.0
+
+### Patch Changes
+
+- 99552bc: revamp the UI of the tools page
+- 9b7294a: Revamp the UI for the right sidebar of the agents page
+- e2c2cf1: Persist playground agent settings across refresh
+- 1270183: Add waterfull traces instead of stacked progressbar (UI improvement mostly)
+- Updated dependencies [f53a6ac]
+- Updated dependencies [eabdcd9]
+- Updated dependencies [90be034]
+- Updated dependencies [ccdabdc]
+- Updated dependencies [99f050a]
+- Updated dependencies [d0ee3c6]
+- Updated dependencies [a6e3881]
+- Updated dependencies [fddae56]
+- Updated dependencies [23f258c]
+- Updated dependencies [2672a05]
+  - @mastra/client-js@0.1.23-alpha.0
+  - @mastra/core@0.9.5-alpha.0
+
+## 5.0.4
+
+### Patch Changes
+
+- cb1f698: Set runtimeContext from playground for agents, tools, workflows
+- Updated dependencies [396be50]
+- Updated dependencies [ab80e7e]
+- Updated dependencies [c2f9e60]
+- Updated dependencies [5c70b8a]
+- Updated dependencies [c3bd795]
+- Updated dependencies [da082f8]
+- Updated dependencies [b4c6c87]
+- Updated dependencies [0c3d117]
+- Updated dependencies [a5810ce]
+- Updated dependencies [3e9c131]
+- Updated dependencies [3171b5b]
+- Updated dependencies [c2b980b]
+- Updated dependencies [cb1f698]
+- Updated dependencies [973e5ac]
+- Updated dependencies [daf942f]
+- Updated dependencies [0b8b868]
+- Updated dependencies [9e1eff5]
+- Updated dependencies [6fa1ad1]
+- Updated dependencies [c28d7a0]
+- Updated dependencies [edf1e88]
+  - @mastra/core@0.9.4
+  - @mastra/client-js@0.1.22
+
+## 5.0.4-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [5c70b8a]
+- Updated dependencies [3e9c131]
+  - @mastra/client-js@0.1.22-alpha.4
+  - @mastra/core@0.9.4-alpha.4
+
 ## 5.0.4-alpha.3
 
 ### Patch Changes

@@ -1,10 +1,10 @@
 import { Mastra } from '@mastra/core/mastra';
-import { createLogger } from '@mastra/core/logger';
+import { PinoLogger } from '@mastra/loggers';
 import { agent } from './agents';
 
 export const mastra = new Mastra({
   agents: { agent },
-  logger: createLogger({
+  logger: new PinoLogger({
     name: 'Mastra',
     level: 'info',
   }),

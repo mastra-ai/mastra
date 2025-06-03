@@ -4,7 +4,8 @@ import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { TokenLimiter } from '@mastra/memory/processors';
-import { createLogger, Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core';
+import { PinoLogger } from '@mastra/loggers';
 
 const memory = new Memory({
   processors: [new TokenLimiter(500)],
@@ -25,7 +26,7 @@ const techSupport = new Agent({
 
 const mastra = new Mastra({
   agents: { techSupport },
-  logger: createLogger({ level: 'info' }),
+  logger: new PinoLogger({ level: 'info' }),
 });
 
 console.log(`

@@ -4,11 +4,11 @@ import type {
   UpsertVectorParams,
   QueryVectorParams,
   IndexStats,
-  ParamsToArgs,
   QueryResult,
-  CreateIndexArgs,
-  UpsertVectorArgs,
-  QueryVectorArgs,
+  UpdateVectorParams,
+  DeleteVectorParams,
+  DescribeIndexParams,
+  DeleteIndexParams,
 } from './types';
 
 export abstract class MastraVector extends MastraBase {
@@ -20,66 +20,26 @@ export abstract class MastraVector extends MastraBase {
     return '_';
   }
 
-  private readonly baseKeys = {
-    query: ['queryVector', 'topK', 'filter', 'includeVector'],
-    upsert: ['vectors', 'metadata', 'ids'],
-    createIndex: ['dimension', 'metric'],
-  } as const;
-
-  protected normalizeArgs<T, E extends any[] = never>(
-    method: string,
-    [first, ...rest]: ParamsToArgs<T> | E,
-    extendedKeys: string[] = [],
-  ): T {
-    if (typeof first === 'object') {
-      return first as T;
-    }
-
-    this.logger.warn(
-      `Deprecation Warning: Passing individual arguments to ${method}() is deprecated.
-      Please use an object parameter instead.
-      Individual arguments will be removed on May 20th, 2025.`,
-    );
-
-    const baseKeys = this.baseKeys[method as keyof typeof this.baseKeys] || [];
-    const paramKeys = [...baseKeys, ...extendedKeys].slice(0, rest.length);
-
-    return {
-      indexName: first as string,
-      ...Object.fromEntries(paramKeys.map((key, i) => [key, rest[i]])),
-    } as T;
-  }
+  abstract query(params: QueryVectorParams): Promise<QueryResult[]>;
   // Adds type checks for positional arguments if used
-  abstract query<E extends QueryVectorArgs = QueryVectorArgs>(
-    ...args: ParamsToArgs<QueryVectorParams> | E
-  ): Promise<QueryResult[]>;
+  abstract upsert(params: UpsertVectorParams): Promise<string[]>;
   // Adds type checks for positional arguments if used
-  abstract upsert<E extends UpsertVectorArgs = UpsertVectorArgs>(
-    ...args: ParamsToArgs<UpsertVectorParams> | E
-  ): Promise<string[]>;
-  // Adds type checks for positional arguments if used
-  abstract createIndex<E extends CreateIndexArgs = CreateIndexArgs>(
-    ...args: ParamsToArgs<CreateIndexParams> | E
-  ): Promise<void>;
+  abstract createIndex(params: CreateIndexParams): Promise<void>;
 
   abstract listIndexes(): Promise<string[]>;
 
-  abstract describeIndex(indexName: string): Promise<IndexStats>;
+  abstract describeIndex(params: DescribeIndexParams): Promise<IndexStats>;
 
-  abstract deleteIndex(indexName: string): Promise<void>;
+  abstract deleteIndex(params: DeleteIndexParams): Promise<void>;
 
-  abstract updateVector(
-    indexName: string,
-    id: string,
-    update: { vector?: number[]; metadata?: Record<string, any> },
-  ): Promise<void>;
+  abstract updateVector(params: UpdateVectorParams): Promise<void>;
 
-  abstract deleteVector(indexName: string, id: string): Promise<void>;
+  abstract deleteVector(params: DeleteVectorParams): Promise<void>;
 
   protected async validateExistingIndex(indexName: string, dimension: number, metric: string) {
     let info: IndexStats;
     try {
-      info = await this.describeIndex(indexName);
+      info = await this.describeIndex({ indexName });
     } catch (infoError) {
       const message = `Index "${indexName}" already exists, but failed to fetch index info for dimension check: ${infoError}`;
       this.logger?.error(message);

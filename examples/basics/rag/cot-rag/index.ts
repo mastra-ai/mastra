@@ -39,7 +39,7 @@ Remember: Explain how you're using the retrieved information to reach your concl
   tools: { vectorQueryTool },
 });
 
-const pgVector = new PgVector(process.env.POSTGRES_CONNECTION_STRING!);
+const pgVector = new PgVector({ connectionString: process.env.POSTGRES_CONNECTION_STRING! });
 
 export const mastra = new Mastra({
   agents: { ragAgent },

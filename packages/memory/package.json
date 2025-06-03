@@ -1,6 +1,6 @@
 {
   "name": "@mastra/memory",
-  "version": "0.3.4-alpha.3",
+  "version": "0.10.2-alpha.2",
   "description": "",
   "type": "module",
   "main": "./dist/index.js",
@@ -30,7 +30,7 @@
   },
   "scripts": {
     "check": "tsc --noEmit",
-    "build": "pnpm run check && tsup src/index.ts src/processors/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
+    "build": "pnpm run check && tsup --silent src/index.ts src/processors/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
     "build:watch": "pnpm build --watch",
     "test:integration": "cd integration-tests && pnpm run test",
     "test:unit": "pnpm vitest run ./src/*",
@@ -41,7 +41,6 @@
   "author": "",
   "license": "Elastic-2.0",
   "dependencies": {
-    "@mastra/core": "workspace:^",
     "@upstash/redis": "^1.34.5",
     "ai": "^4.2.2",
     "js-tiktoken": "^1.0.19",
@@ -62,6 +61,10 @@
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
     "typescript-eslint": "^8.26.1",
-    "vitest": "^3.1.2"
+    "vitest": "^3.1.2",
+    "@mastra/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@mastra/core": "^0.10.1-alpha.0"
   }
 }

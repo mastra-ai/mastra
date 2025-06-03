@@ -12,7 +12,9 @@ const { embeddings } = await embedMany({
   values: chunks.map(chunk => chunk.text),
 });
 
-const pinecone = new PineconeVector(process.env.PINECONE_API_KEY!);
+const pinecone = new PineconeVector({
+  apiKey: process.env.PINECONE_API_KEY!,
+});
 
 await pinecone.createIndex({
   indexName: 'testindex',

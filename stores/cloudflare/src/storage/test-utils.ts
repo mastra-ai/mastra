@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import type { MessageType, WorkflowRunState } from '@mastra/core';
+import type { MastraMessageV2, WorkflowRunState } from '@mastra/core';
 import { expect } from 'vitest';
 
 export const createSampleTrace = (name: string, scope?: string, attributes?: Record<string, string>) => ({
@@ -29,15 +29,21 @@ export const createSampleThread = () => ({
   metadata: { key: 'value' },
 });
 
-export const createSampleMessage = (threadId: string): MessageType => ({
-  id: `msg-${randomUUID()}`,
-  role: 'user',
-  type: 'text',
-  threadId,
-  content: [{ type: 'text' as const, text: 'Hello' }] as MessageType['content'],
-  createdAt: new Date(),
-  resourceId: `resource-${randomUUID()}`,
-});
+let role: 'assistant' | 'user' = 'assistant';
+const getRole = () => {
+  if (role === 'user') role = 'assistant';
+  else role = 'user';
+  return role;
+};
+export const createSampleMessage = (threadId: string, parts?: MastraMessageV2['content']['parts']): MastraMessageV2 =>
+  ({
+    id: `msg-${randomUUID()}`,
+    role: getRole(),
+    threadId,
+    content: { format: 2, parts: parts || [{ type: 'text' as const, text: 'Hello' }] },
+    createdAt: new Date(),
+    resourceId: `resource-${randomUUID()}`,
+  }) satisfies MastraMessageV2;
 
 export const createSampleWorkflowSnapshot = (threadId: string, status: string, createdAt?: Date) => {
   const runId = `run-${randomUUID()}`;
@@ -46,16 +52,16 @@ export const createSampleWorkflowSnapshot = (threadId: string, status: string, c
   const snapshot: WorkflowRunState = {
     value: { [threadId]: 'running' },
     context: {
-      steps: {
-        [stepId]: {
-          status: status as WorkflowRunState['context']['steps'][string]['status'],
-          payload: {},
-          error: undefined,
-        },
+      [stepId]: {
+        status: status as WorkflowRunState['context'][string]['status'],
+        payload: {},
+        error: undefined,
+        startedAt: timestamp.getTime(),
+        endedAt: new Date(timestamp.getTime() + 15000).getTime(),
       },
-      triggerData: {},
-      attempts: {},
-    },
+      input: {},
+    } as WorkflowRunState['context'],
+    serializedStepGraph: [],
     activePaths: [],
     suspendedPaths: {},
     runId,
@@ -88,5 +94,5 @@ export const checkWorkflowSnapshot = (snapshot: WorkflowRunState | string, stepI
   if (typeof snapshot === 'string') {
     throw new Error('Expected WorkflowRunState, got string');
   }
-  expect(snapshot.context?.steps[stepId]?.status).toBe(status);
+  expect(snapshot.context?.[stepId]?.status).toBe(status);
 };

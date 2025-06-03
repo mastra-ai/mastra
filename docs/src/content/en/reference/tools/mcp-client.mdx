@@ -44,17 +44,18 @@ constructor({
       type: "number",
       isOptional: true,
       defaultValue: "60000",
-      description: "Global timeout value in milliseconds for all servers unless overridden in individual server configs.",
+      description:
+        "Global timeout value in milliseconds for all servers unless overridden in individual server configs.",
     },
   ]}
 />
 
 ### MastraMCPServerDefinition
 
-Each server in the `servers` map is configured using the `MastraMCPServerDefinition` type. The `MastraMCPClient` used internally automatically detects the transport type based on the provided parameters:
+Each server in the `servers` map is configured using the `MastraMCPServerDefinition` type. The transport type is detected based on the provided parameters:
 
--   If `command` is provided, it uses the Stdio transport.
--   If `url` is provided, it first attempts to use the Streamable HTTP transport and falls back to the legacy SSE transport if the initial connection fails.
+- If `command` is provided, it uses the Stdio transport.
+- If `url` is provided, it first attempts to use the Streamable HTTP transport and falls back to the legacy SSE transport if the initial connection fails.
 
 <br />
 <PropertiesTable
@@ -75,13 +76,15 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
       name: "env",
       type: "Record<string, string>",
       isOptional: true,
-      description: "For Stdio servers: Environment variables to set for the command.",
+      description:
+        "For Stdio servers: Environment variables to set for the command.",
     },
     {
       name: "url",
       type: "URL",
       isOptional: true,
-      description: "For HTTP servers (Streamable HTTP or SSE): The URL of the server.",
+      description:
+        "For HTTP servers (Streamable HTTP or SSE): The URL of the server.",
     },
     {
       name: "requestInit",
@@ -93,7 +96,8 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
       name: "eventSourceInit",
       type: "EventSourceInit",
       isOptional: true,
-      description: "For SSE fallback: Custom fetch configuration for SSE connections. Required when using custom headers with SSE.",
+      description:
+        "For SSE fallback: Custom fetch configuration for SSE connections. Required when using custom headers with SSE.",
     },
     {
       name: "logger",
@@ -153,9 +157,145 @@ Disconnects from all MCP servers and cleans up resources.
 async disconnect(): Promise<void>
 ```
 
+### `resources` Property
+
+The `MCPClient` instance has a `resources` property that provides access to resource-related operations.
+
+```typescript
+const mcpClient = new MCPClient({
+  /* ...servers configuration... */
+});
+
+// Access resource methods via mcpClient.resources
+const allResourcesByServer = await mcpClient.resources.list();
+const templatesByServer = await mcpClient.resources.templates();
+// ... and so on for other resource methods.
+```
+
+#### `resources.list()`
+
+Retrieves all available resources from all connected MCP servers, grouped by server name.
+
+```typescript
+async list(): Promise<Record<string, Resource[]>>
+```
+
+Example:
+
+```typescript
+const resourcesByServer = await mcpClient.resources.list();
+for (const serverName in resourcesByServer) {
+  console.log(`Resources from ${serverName}:`, resourcesByServer[serverName]);
+}
+```
+
+#### `resources.templates()`
+
+Retrieves all available resource templates from all connected MCP servers, grouped by server name.
+
+```typescript
+async templates(): Promise<Record<string, ResourceTemplate[]>>
+```
+
+Example:
+
+```typescript
+const templatesByServer = await mcpClient.resources.templates();
+for (const serverName in templatesByServer) {
+  console.log(`Templates from ${serverName}:`, templatesByServer[serverName]);
+}
+```
+
+#### `resources.read(serverName: string, uri: string)`
+
+Reads the content of a specific resource from a named server.
+
+```typescript
+async read(serverName: string, uri: string): Promise<ReadResourceResult>
+```
+
+- `serverName`: The identifier of the server (key used in the `servers` constructor option).
+- `uri`: The URI of the resource to read.
+
+Example:
+
+```typescript
+const content = await mcpClient.resources.read(
+  "myWeatherServer",
+  "weather://current",
+);
+console.log("Current weather:", content.contents[0].text);
+```
+
+#### `resources.subscribe(serverName: string, uri: string)`
+
+Subscribes to updates for a specific resource on a named server.
+
+```typescript
+async subscribe(serverName: string, uri: string): Promise<object>
+```
+
+Example:
+
+```typescript
+await mcpClient.resources.subscribe("myWeatherServer", "weather://current");
+```
+
+#### `resources.unsubscribe(serverName: string, uri: string)`
+
+Unsubscribes from updates for a specific resource on a named server.
+
+```typescript
+async unsubscribe(serverName: string, uri: string): Promise<object>
+```
+
+Example:
+
+```typescript
+await mcpClient.resources.unsubscribe("myWeatherServer", "weather://current");
+```
+
+#### `resources.onUpdated(serverName: string, handler: (params: { uri: string }) => void)`
+
+Sets a notification handler that will be called when a subscribed resource on a specific server is updated.
+
+```typescript
+async onUpdated(serverName: string, handler: (params: { uri: string }) => void): Promise<void>
+```
+
+Example:
+
+```typescript
+mcpClient.resources.onUpdated("myWeatherServer", (params) => {
+  console.log(`Resource updated on myWeatherServer: ${params.uri}`);
+  // You might want to re-fetch the resource content here
+  // await mcpClient.resources.read("myWeatherServer", params.uri);
+});
+```
+
+#### `resources.onListChanged(serverName: string, handler: () => void)`
+
+Sets a notification handler that will be called when the overall list of available resources changes on a specific server.
+
+```typescript
+async onListChanged(serverName: string, handler: () => void): Promise<void>
+```
+
+Example:
+
+```typescript
+mcpClient.resources.onListChanged("myWeatherServer", () => {
+  console.log("Resource list changed on myWeatherServer.");
+  // You should re-fetch the list of resources
+  // await mcpClient.resources.list();
+});
+```
+
 ## Examples
 
-### Basic Usage
+### Static Tool Configuration
+
+For tools where you have a single connection to the MCP server for you entire app, use `getTools()` and pass the tools to your agent:
 
 ```typescript
 import { MCPClient } from "@mastra/mcp";
@@ -175,7 +315,7 @@ const mcp = new MCPClient({
       },
     },
     weather: {
-      url: new URL("http://localhost:8080/sse"),∂
+      url: new URL("http://localhost:8080/sse"),
     },
   },
   timeout: 30000, // Global 30s timeout
@@ -188,9 +328,29 @@ const agent = new Agent({
   model: openai("gpt-4"),
   tools: await mcp.getTools(),
 });
+
+// Example of using resource methods
+async function checkWeatherResource() {
+  try {
+    const weatherResources = await mcp.resources.list();
+    if (weatherResources.weather && weatherResources.weather.length > 0) {
+      const currentWeatherURI = weatherResources.weather[0].uri;
+      const weatherData = await mcp.resources.read(
+        "weather",
+        currentWeatherURI,
+      );
+      console.log("Weather data:", weatherData.contents[0].text);
+    }
+  } catch (error) {
+    console.error("Error fetching weather resource:", error);
+  }
+}
+checkWeatherResource();
 ```
 
-### Using Toolsets in generate() or stream()
+### Dynamic toolsets
+
+When you need a new MCP connection for each user, use `getToolsets()` and add the tools when calling stream or generate:
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
@@ -235,7 +395,7 @@ const response = await agent.stream(
 );
 ```
 
-## Resource Management
+## Instance Management
 
 The `MCPClient` class includes built-in memory leak prevention for managing multiple instances:
 
@@ -287,6 +447,38 @@ MCPClient handles server connections gracefully:
 2. Graceful server shutdown to prevent error messages during development
 3. Proper cleanup of resources when disconnecting
 
+## Using SSE Request Headers
+
+When using the legacy SSE MCP transport, you must configure both `requestInit` and `eventSourceInit` due to a bug in the MCP SDK:
+
+```ts
+const sseClient = new MCPClient({
+  servers: {
+    exampleServer: {
+      url: new URL("https://your-mcp-server.com/sse"),
+      // Note: requestInit alone isn't enough for SSE
+      requestInit: {
+        headers: {
+          Authorization: "Bearer your-token",
+        },
+      },
+      // This is also required for SSE connections with custom headers
+      eventSourceInit: {
+        fetch(input: Request | URL | string, init?: RequestInit) {
+          const headers = new Headers(init?.headers || {});
+          headers.set("Authorization", "Bearer your-token");
+          return fetch(input, {
+            ...init,
+            headers,
+          });
+        },
+      },
+    },
+  },
+});
+```
+
 ## Related Information
 
-- For more about the Model Context Protocol, see the [@modelcontextprotocol/sdk documentation](https://github.com/modelcontextprotocol/typescript-sdk)
+- For creating MCP servers, see the [MCPServer documentation](./mcp-server).
+- For more about the Model Context Protocol, see the [@modelcontextprotocol/sdk documentation](https://github.com/modelcontextprotocol/typescript-sdk).

@@ -23,6 +23,19 @@ If you haven't already, install the Mastra MCP package:
 npm install @mastra/mcp@latest
 ```
 
+### Registering the MCPServer
+
+Register your MCP server with Mastra to enable logging and access to configured tools and integrations:
+
+```ts showLineNumbers filename="src/mastra/index.ts" copy
+import { Mastra } from "@mastra/core";
+import { myMcpServer } from "./mcpServers";
+
+export const mastra = new Mastra({
+  mcpServers: { myMcpServer },
+});
+```
+
 ### Configuring `MCPClient`
 
 You configure `MCPClient` with a map of servers you want to connect to. It supports connections via subprocess (Stdio) or HTTP (Streamable HTTP with SSE fallback).
@@ -56,48 +69,57 @@ For detailed configuration options, see the [`MCPClient` reference documentation
 
 `MCPClient` offers two approaches to retrieving tools from connected servers, suitable for different application architectures:
 
-| Feature          | Static Configuration (`await mcp.getTools()`) | Dynamic Configuration (`await mcp.getToolsets()`) |
-| :--------------- | :-------------------------------------------- | :---------------------------------------------------- |
-| **Use Case**     | Single-user, static config (e.g., CLI tool) | Multi-user, dynamic config (e.g., SaaS app)         |
-| **Configuration**| Fixed at agent initialization                 | Per-request, dynamic                                |
-| **Credentials**  | Shared across all uses                        | Can vary per user/request                             |
-| **Agent Setup**  | Tools added in `Agent` constructor            | Tools passed in `generate()` or `stream()` options  |
+| Feature           | Static Configuration (`await mcp.getTools()`) | Dynamic Configuration (`await mcp.getToolsets()`)  |
+| :---------------- | :-------------------------------------------- | :------------------------------------------------- |
+| **Use Case**      | Single-user, static config (e.g., CLI tool)   | Multi-user, dynamic config (e.g., SaaS app)        |
+| **Configuration** | Fixed at agent initialization                 | Per-request, dynamic                               |
+| **Credentials**   | Shared across all uses                        | Can vary per user/request                          |
+| **Agent Setup**   | Tools added in `Agent` constructor            | Tools passed in `generate()` or `stream()` options |
 
-*   **Static Configuration (`getTools()`):** Fetches all tools from all configured servers. Best when the tool configuration (like API keys) is static and shared across all users or requests. You typically call this once and pass the result to the `tools` property when defining your `Agent`.
-    [Reference: `getTools()`](/reference/tools/mcp-client#gettools)
+- **Static Configuration (`getTools()`):** Fetches all tools from all configured servers. Best when the tool configuration (like API keys) is static and shared across all users or requests. You typically call this once and pass the result to the `tools` property when defining your `Agent`.
+  [Reference: `getTools()`](/reference/tools/mcp-client#gettools)
 
-    ```typescript
-    import { Agent } from "@mastra/core/agent";
-    // ... mcp client setup
+  ```typescript
+  import { Agent } from "@mastra/core/agent";
+  // ... mcp client setup
 
-    const agent = new Agent({
-      // ... other agent config
-      tools: await mcp.getTools(),
+  const agent = new Agent({
+    // ... other agent config
+    tools: await mcp.getTools(),
+  });
+  ```
+
+- **Dynamic Configuration (`getToolsets()`):** Designed for scenarios where configuration might change per request or per user (e.g., different API keys for different tenants in a multi-user application). You pass the result of `getToolsets()` to the `toolsets` option in the agent's `generate()` or `stream()` method.
+  [Reference: `getToolsets()`](/reference/tools/mcp-client#gettoolsets)
+
+  ```typescript
+  import { Agent } from "@mastra/core/agent";
+  // ... agent setup without tools initially
+
+  async function handleRequest(userPrompt: string, userApiKey: string) {
+    const userMcp = new MCPClient({
+      /* config with userApiKey */
     });
-    ```
+    const toolsets = await userMcp.getToolsets();
 
-*   **Dynamic Configuration (`getToolsets()`):** Designed for scenarios where configuration might change per request or per user (e.g., different API keys for different tenants in a multi-user application). You pass the result of `getToolsets()` to the `toolsets` option in the agent's `generate()` or `stream()` method.
-    [Reference: `getToolsets()`](/reference/tools/mcp-client#gettoolsets)
-
-    ```typescript
-    import { Agent } from "@mastra/core/agent";
-    // ... agent setup without tools initially
-
-    async function handleRequest(userPrompt: string, userApiKey: string) {
-      const userMcp = new MCPClient({ /* config with userApiKey */ });
-      const toolsets = await userMcp.getToolsets();
-
-      const response = await agent.stream(userPrompt, {
-        toolsets, // Pass dynamic toolsets
-      });
-      // ... handle response
-      await userMcp.disconnect();
-    }
-    ```
+    const response = await agent.stream(userPrompt, {
+      toolsets, // Pass dynamic toolsets
+    });
+    // ... handle response
+    await userMcp.disconnect();
+  }
+  ```
 
 ## Connecting to an MCP registry
 
-MCP servers can be discovered through registries. Here’s how to connect to some popular ones using `MCPClient`:
+MCP servers can be discovered through registries. Here's how to connect to some popular ones using `MCPClient`:
+
+{/*
+LLM CONTEXT: This Tabs component shows how to connect to different MCP (Model Context Protocol) registries.
+Each tab demonstrates the configuration for a specific MCP registry service (mcp.run, Composio.dev, Smithery.ai).
+The tabs help users understand how to connect to various MCP server providers and their different authentication methods.
+Each tab shows the specific URL patterns and configuration needed for that registry service.
+*/}
 
 <Tabs items={["mcp.run", "Composio.dev", "Smithery.ai"]}>
   <Tabs.Tab>
@@ -198,20 +220,28 @@ MCP servers can be discovered through registries. Here’s how to connect to som
 
 If you have created your own Mastra tools, you can expose them to any MCP-compatible client using Mastra's `MCPServer` class.
 
-This allows others to use your tools without needing direct access to your codebase.
+Similarly, Mastra `Agent` and `Workflow` instances can also be exposed as tools via `MCPServer`. This allows other MCP clients to interact with your agents by "asking" them questions or run your workflows. Each agent provided in the `MCPServer` configuration will be converted into a tool named `ask_<agentKey>`, using the agent's `description` property. Each workflow will be converted into a tool named `run_<workflowKey>`, using its `inputSchema` and `description`.
+
+This allows others to use your tools, agents, and workflows without needing direct access to your codebase.
 
 ### Using `MCPServer`
 
-You initialize `MCPServer` with a name, version, and the Mastra tools you want to share.
+You initialize `MCPServer` with a name, version, and the Mastra tools, agents, and/or workflows you want to share.
 
 ```typescript
 import { MCPServer } from "@mastra/mcp";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
 import { weatherTool } from "./tools"; // Your Mastra tool
+import { weatherAgent } from "./agents"; // Your Mastra Agent
+import { dataWorkflow } from "./workflows"; // Your Mastra Workflow
 
 const server = new MCPServer({
-  name: "My Weather Server",
+  name: "My Custom Server",
   version: "1.0.0",
   tools: { weatherTool }, // Provide your tool(s) here
+  agents: { weatherAgent }, // Provide your agent(s) here
+  workflows: { dataWorkflow }, // Provide your workflow(s) here
 });
 
 // Start the server (e.g., using stdio for a CLI tool)
@@ -220,5 +250,8 @@ const server = new MCPServer({
 // Or integrate with an HTTP server using startSSE()
 // See MCPServer reference for details
 ```
+
+For an agent to be exposed as a tool, it must have a non-empty `description` string. Similarly, for a workflow to be exposed, its `description` must also be a non-empty string. If the description is missing or empty for either, `MCPServer` will throw an error during initialization.
+Workflows will use their `inputSchema` for the tool's input.
 
 For detailed usage and examples, see the [`MCPServer` reference documentation](/reference/tools/mcp-server).

@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import type { MessageType } from '@mastra/core/memory';
+import type { MastraMessageV2 } from '@mastra/core';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 import {
   TABLE_MESSAGES,
@@ -14,7 +14,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vites
 import { UpstashStore } from './index';
 
 // Increase timeout for all tests in this file to 30 seconds
-vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
+vi.setConfig({ testTimeout: 200_000, hookTimeout: 200_000 });
 
 const createSampleThread = (date?: Date) => ({
   id: `thread-${randomUUID()}`,
@@ -25,12 +25,11 @@ const createSampleThread = (date?: Date) => ({
   metadata: { key: 'value' },
 });
 
-const createSampleMessage = (threadId: string, content: string = 'Hello'): MessageType => ({
+const createSampleMessage = (threadId: string, content: string = 'Hello'): MastraMessageV2 => ({
   id: `msg-${randomUUID()}`,
   role: 'user',
-  type: 'text',
   threadId,
-  content: [{ type: 'text', text: content }],
+  content: { format: 2, parts: [{ type: 'text', text: content }] },
   createdAt: new Date(),
   resourceId: `resource-${randomUUID()}`,
 });
@@ -42,16 +41,16 @@ const createSampleWorkflowSnapshot = (status: string, createdAt?: Date) => {
   const snapshot: WorkflowRunState = {
     value: {},
     context: {
-      steps: {
-        [stepId]: {
-          status: status as WorkflowRunState['context']['steps'][string]['status'],
-          payload: {},
-          error: undefined,
-        },
+      [stepId]: {
+        status: status,
+        payload: {},
+        error: undefined,
+        startedAt: timestamp.getTime(),
+        endedAt: new Date(timestamp.getTime() + 15000).getTime(),
       },
-      triggerData: {},
-      attempts: {},
-    },
+      input: {},
+    } as WorkflowRunState['context'],
+    serializedStepGraph: [],
     activePaths: [],
     suspendedPaths: {},
     runId,
@@ -98,7 +97,7 @@ const checkWorkflowSnapshot = (snapshot: WorkflowRunState | string, stepId: stri
   if (typeof snapshot === 'string') {
     throw new Error('Expected WorkflowRunState, got string');
   }
-  expect(snapshot.context?.steps[stepId]?.status).toBe(status);
+  expect(snapshot.context?.[stepId]?.status).toBe(status);
 };
 
 describe('UpstashStore', () => {
@@ -227,6 +226,16 @@ describe('UpstashStore', () => {
         updated: 'value',
       });
     });
+    it('should fetch >100000 threads by resource ID', async () => {
+      const resourceId = `resource-${randomUUID()}`;
+      const total = 100_000;
+      const threads = Array.from({ length: total }, () => ({ ...createSampleThread(), resourceId }));
+
+      await store.batchInsert({ tableName: TABLE_THREADS, records: threads });
+
+      const retrievedThreads = await store.getThreadsByResourceId({ resourceId });
+      expect(retrievedThreads).toHaveLength(total);
+    });
   });
 
   describe('Date Handling', () => {
@@ -310,17 +319,17 @@ describe('UpstashStore', () => {
     });
 
     it('should save and retrieve messages in order', async () => {
-      const messages: MessageType[] = [
+      const messages: MastraMessageV2[] = [
         createSampleMessage(threadId, 'First'),
         createSampleMessage(threadId, 'Second'),
         createSampleMessage(threadId, 'Third'),
       ];
 
-      await store.saveMessages({ messages: messages });
+      await store.saveMessages({ messages: messages, format: 'v2' });
 
-      const retrievedMessages = await store.getMessages<MessageType[]>({ threadId });
+      const retrievedMessages = await store.getMessages({ threadId, format: 'v2' });
       expect(retrievedMessages).toHaveLength(3);
-      expect(retrievedMessages.map((m: any) => m.content[0].text)).toEqual(['First', 'Second', 'Third']);
+      expect(retrievedMessages.map((m: any) => m.content.parts[0].text)).toEqual(['First', 'Second', 'Third']);
     });
 
     it('should handle empty message array', async () => {
@@ -334,19 +343,21 @@ describe('UpstashStore', () => {
           id: 'msg-1',
           threadId,
           role: 'user',
-          type: 'text',
-          content: [
-            { type: 'text', text: 'Message with' },
-            { type: 'code', text: 'code block', language: 'typescript' },
-            { type: 'text', text: 'and more text' },
-          ],
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'Message with' },
+              { type: 'code', text: 'code block', language: 'typescript' },
+              { type: 'text', text: 'and more text' },
+            ],
+          },
           createdAt: new Date(),
         },
-      ] as MessageType[];
+      ] as MastraMessageV2[];
 
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
-      const retrievedMessages = await store.getMessages<MessageType>({ threadId });
+      const retrievedMessages = await store.getMessages({ threadId, format: 'v2' });
       expect(retrievedMessages[0].content).toEqual(messages[0].content);
     });
   });
@@ -455,13 +466,15 @@ describe('UpstashStore', () => {
       const mockSnapshot = {
         value: { step1: 'completed' },
         context: {
-          stepResults: {
-            step1: { status: 'success', payload: { result: 'done' } },
+          step1: {
+            status: 'success',
+            output: { result: 'done' },
+            payload: {},
+            startedAt: new Date().getTime(),
+            endedAt: new Date(Date.now() + 15000).getTime(),
           },
-          steps: {},
-          attempts: {},
-          triggerData: {},
-        },
+        } as WorkflowRunState['context'],
+        serializedStepGraph: [],
         runId: testRunId,
         activePaths: [],
         suspendedPaths: {},
@@ -619,10 +632,7 @@ describe('UpstashStore', () => {
       expect(total).toBe(1);
       expect(runs[0]!.workflowName).toBe(workflowName1);
       const snapshot = runs[0]!.snapshot;
-      if (typeof snapshot === 'string') {
-        throw new Error('Expected WorkflowRunState, got string');
-      }
-      expect(snapshot.context?.steps[stepId1]?.status).toBe('success');
+      checkWorkflowSnapshot(snapshot, stepId1, 'success');
     });
 
     it('filters by date range', async () => {

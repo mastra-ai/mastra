@@ -16,7 +16,10 @@ export const AssistantMessage: FC<{ ToolFallback?: ToolCallContentPartComponent 
     <MessagePrimitive.Root className="max-w-full">
       <div className="text-icon6 text-ui-lg leading-ui-lg">
         <MessagePrimitive.Content
-          components={{ Text: MarkdownText, tools: { Fallback: ToolFallbackCustom || ToolFallback } }}
+          components={{
+            Text: MarkdownText,
+            tools: { Fallback: ToolFallbackCustom || ToolFallback },
+          }}
         />
       </div>
 

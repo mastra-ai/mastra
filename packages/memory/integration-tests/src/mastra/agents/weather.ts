@@ -10,12 +10,8 @@ export const memory = new Memory({
   options: {
     workingMemory: {
       enabled: true,
-      use: 'tool-call',
     },
     lastMessages: 10,
-    threads: {
-      generateTitle: false,
-    },
     semanticRecall: true,
   },
   storage: new LibSQLStore({

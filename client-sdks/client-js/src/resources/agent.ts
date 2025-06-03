@@ -14,7 +14,8 @@ import type {
 } from '../types';
 
 import { BaseResource } from './base';
-import type { RuntimeContext } from '@mastra/core/di';
+import type { RuntimeContext } from '@mastra/core/runtime-context';
+import { parseClientRuntimeContext } from '../utils';
 
 export class AgentVoice extends BaseResource {
   constructor(
@@ -69,6 +70,14 @@ export class AgentVoice extends BaseResource {
   getSpeakers(): Promise<Array<{ voiceId: string; [key: string]: any }>> {
     return this.request(`/api/agents/${this.agentId}/voice/speakers`);
   }
+
+  /**
+   * Get the listener configuration for the agent's voice provider
+   * @returns Promise containing a check if the agent has listening capabilities
+   */
+  getListener(): Promise<{ enabled: boolean }> {
+    return this.request(`/api/agents/${this.agentId}/voice/listener`);
+  }
 }
 
 export class Agent extends BaseResource {
@@ -109,9 +118,9 @@ export class Agent extends BaseResource {
   ): Promise<GenerateReturn<T>> {
     const processedParams = {
       ...params,
-      output: zodToJsonSchema(params.output),
-      experimental_output: zodToJsonSchema(params.experimental_output),
-      runtimeContext: params.runtimeContext ? Object.fromEntries(params.runtimeContext.entries()) : undefined,
+      output: params.output ? zodToJsonSchema(params.output) : undefined,
+      experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
+      runtimeContext: parseClientRuntimeContext(params.runtimeContext),
     };
 
     return this.request(`/api/agents/${this.agentId}/generate`, {
@@ -134,9 +143,9 @@ export class Agent extends BaseResource {
   > {
     const processedParams = {
       ...params,
-      output: zodToJsonSchema(params.output),
-      experimental_output: zodToJsonSchema(params.experimental_output),
-      runtimeContext: params.runtimeContext ? Object.fromEntries(params.runtimeContext.entries()) : undefined,
+      output: params.output ? zodToJsonSchema(params.output) : undefined,
+      experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
+      runtimeContext: parseClientRuntimeContext(params.runtimeContext),
     };
 
     const response: Response & {

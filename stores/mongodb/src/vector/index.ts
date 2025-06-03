@@ -5,9 +5,10 @@ import type {
   CreateIndexParams,
   UpsertVectorParams,
   QueryVectorParams,
-  ParamsToArgs,
-  QueryVectorArgs,
-  UpsertVectorArgs,
+  DescribeIndexParams,
+  DeleteIndexParams,
+  DeleteVectorParams,
+  UpdateVectorParams,
 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import { MongoClient } from 'mongodb';
@@ -17,16 +18,18 @@ import { v4 as uuidv4 } from 'uuid';
 import { MongoDBFilterTranslator } from './filter';
 
 // Define necessary types and interfaces
-export type MongoDBUpsertArgs = [...UpsertVectorArgs, string[]?];
-export type MongoDBQueryArgs = [...QueryVectorArgs, string?];
-export type MongoDBUpsertParams = ParamsToArgs<MongoDBUpsertArgs>;
-
 export interface MongoDBUpsertVectorParams extends UpsertVectorParams {
   documents?: string[];
 }
 
 export interface MongoDBQueryVectorParams extends QueryVectorParams {
   documentFilter?: VectorFilter;
+}
+
+export interface MongoDBIndexReadyParams {
+  indexName: string;
+  timeoutMs?: number;
+  checkIntervalMs?: number;
 }
 
 // Define the document interface
@@ -68,9 +71,7 @@ export class MongoDBVector extends MastraVector {
     await this.client.close();
   }
 
-  async createIndex(params: CreateIndexParams): Promise<void> {
-    const { indexName, dimension, metric = 'cosine' } = params;
-
+  async createIndex({ indexName, dimension, metric = 'cosine' }: CreateIndexParams): Promise<void> {
     if (!Number.isInteger(dimension) || dimension <= 0) {
       throw new Error('Dimension must be a positive integer');
     }
@@ -118,7 +119,19 @@ export class MongoDBVector extends MastraVector {
     await collection.updateOne({ _id: '__index_metadata__' }, { $set: { dimension, metric } }, { upsert: true });
   }
 
-  async waitForIndexReady(indexName: string, timeoutMs: number = 60000, checkIntervalMs: number = 2000): Promise<void> {
+  /**
+   * Waits for the index to be ready.
+   *
+   * @param {string} indexName - The name of the index to wait for
+   * @param {number} timeoutMs - The maximum time in milliseconds to wait for the index to be ready (default: 60000)
+   * @param {number} checkIntervalMs - The interval in milliseconds at which to check if the index is ready (default: 2000)
+   * @returns A promise that resolves when the index is ready
+   */
+  async waitForIndexReady({
+    indexName,
+    timeoutMs = 60000,
+    checkIntervalMs = 2000,
+  }: MongoDBIndexReadyParams): Promise<void> {
     const collection = await this.getCollection(indexName, true);
     const indexNameInternal = `${indexName}_vector_index`;
 
@@ -135,15 +148,13 @@ export class MongoDBVector extends MastraVector {
     throw new Error(`Index "${indexNameInternal}" did not become ready within timeout`);
   }
 
-  async upsert(params: MongoDBUpsertVectorParams): Promise<string[]> {
-    const { indexName, vectors, metadata, ids, documents } = params;
-
+  async upsert({ indexName, vectors, metadata, ids, documents }: MongoDBUpsertVectorParams): Promise<string[]> {
     const collection = await this.getCollection(indexName);
 
     this.collectionForValidation = collection;
 
     // Get index stats to check dimension
-    const stats = await this.describeIndex(indexName);
+    const stats = await this.describeIndex({ indexName });
 
     // Validate vector dimensions
     await this.validateVectorDimensions(vectors, stats.dimension);
@@ -187,9 +198,14 @@ export class MongoDBVector extends MastraVector {
     return generatedIds;
   }
 
-  async query(params: MongoDBQueryVectorParams): Promise<QueryResult[]> {
-    const { indexName, queryVector, topK = 10, filter, includeVector = false, documentFilter } = params;
-
+  async query({
+    indexName,
+    queryVector,
+    topK = 10,
+    filter,
+    includeVector = false,
+    documentFilter,
+  }: MongoDBQueryVectorParams): Promise<QueryResult[]> {
     const collection = await this.getCollection(indexName, true);
     const indexNameInternal = `${indexName}_vector_index`;
 
@@ -255,7 +271,13 @@ export class MongoDBVector extends MastraVector {
     return collections.map(col => col.name);
   }
 
-  async describeIndex(indexName: string): Promise<IndexStats> {
+  /**
+   * Retrieves statistics about a vector index.
+   *
+   * @param {string} indexName - The name of the index to describe
+   * @returns A promise that resolves to the index statistics including dimension, count and metric
+   */
+  async describeIndex({ indexName }: DescribeIndexParams): Promise<IndexStats> {
     const collection = await this.getCollection(indexName, true);
 
     // Get the count of documents, excluding the metadata document
@@ -273,7 +295,7 @@ export class MongoDBVector extends MastraVector {
     };
   }
 
-  async deleteIndex(indexName: string): Promise<void> {
+  async deleteIndex({ indexName }: DeleteIndexParams): Promise<void> {
     const collection = await this.getCollection(indexName, false); // Do not throw error if collection doesn't exist
     if (collection) {
       await collection.drop();
@@ -285,8 +307,6 @@ export class MongoDBVector extends MastraVector {
   }
 
   /**
-   * @deprecated Use {@link updateVector} instead. This method will be removed on May 20th, 2025.
-   *
    * Updates a vector by its ID with the provided vector and/or metadata.
    * @param indexName - The name of the index containing the vector.
    * @param id - The ID of the vector to update.
@@ -296,34 +316,7 @@ export class MongoDBVector extends MastraVector {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateIndexById(
-    indexName: string,
-    id: string,
-    update: { vector?: number[]; metadata?: Record<string, any> },
-  ): Promise<void> {
-    this.logger.warn(
-      `Deprecation Warning: updateIndexById() is deprecated. 
-      Please use updateVector() instead. 
-      updateIndexById() will be removed on May 20th, 2025.`,
-    );
-    await this.updateVector(indexName, id, update);
-  }
-
-  /**
-   * Updates a vector by its ID with the provided vector and/or metadata.
-   * @param indexName - The name of the index containing the vector.
-   * @param id - The ID of the vector to update.
-   * @param update - An object containing the vector and/or metadata to update.
-   * @param update.vector - An optional array of numbers representing the new vector.
-   * @param update.metadata - An optional record containing the new metadata.
-   * @returns A promise that resolves when the update is complete.
-   * @throws Will throw an error if no updates are provided or if the update operation fails.
-   */
-  async updateVector(
-    indexName: string,
-    id: string,
-    update: { vector?: number[]; metadata?: Record<string, any> },
-  ): Promise<void> {
+  async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
     try {
       if (!update.vector && !update.metadata) {
         throw new Error('No updates provided');
@@ -333,7 +326,7 @@ export class MongoDBVector extends MastraVector {
       const updateDoc: Record<string, any> = {};
 
       if (update.vector) {
-        const stats = await this.describeIndex(indexName);
+        const stats = await this.describeIndex({ indexName });
         await this.validateVectorDimensions([update.vector], stats.dimension);
         updateDoc[this.embeddingFieldName] = update.vector;
       }
@@ -359,31 +352,13 @@ export class MongoDBVector extends MastraVector {
   }
 
   /**
-   * @deprecated Use {@link deleteVector} instead. This method will be removed on May 20th, 2025.
-   *
    * Deletes a vector by its ID.
    * @param indexName - The name of the index containing the vector.
    * @param id - The ID of the vector to delete.
    * @returns A promise that resolves when the deletion is complete.
    * @throws Will throw an error if the deletion operation fails.
    */
-  async deleteIndexById(indexName: string, id: string): Promise<void> {
-    this.logger.warn(
-      `Deprecation Warning: deleteIndexById() is deprecated. 
-      Please use deleteVector() instead. 
-      deleteIndexById() will be removed on May 20th, 2025.`,
-    );
-    await this.deleteVector(indexName, id);
-  }
-
-  /**
-   * Deletes a vector by its ID.
-   * @param indexName - The name of the index containing the vector.
-   * @param id - The ID of the vector to delete.
-   * @returns A promise that resolves when the deletion is complete.
-   * @throws Will throw an error if the deletion operation fails.
-   */
-  async deleteVector(indexName: string, id: string): Promise<void> {
+  async deleteVector({ indexName, id }: DeleteVectorParams): Promise<void> {
     try {
       const collection = await this.getCollection(indexName, true);
       await collection.deleteOne({ _id: id });

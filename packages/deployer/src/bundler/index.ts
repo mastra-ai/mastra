@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { MastraBundler } from '@mastra/core/bundler';
 import virtual from '@rollup/plugin-virtual';
 import fsExtra, { copy, ensureDir, readJSON, emptyDir } from 'fs-extra/esm';
+import { globby } from 'globby';
 import resolveFrom from 'resolve-from';
 import type { InputOptions, OutputOptions } from 'rollup';
 
@@ -54,11 +55,14 @@ export abstract class Bundler extends MastraBundler {
     const dependenciesMap = new Map();
     for (const [key, value] of dependencies.entries()) {
       if (key.startsWith('@')) {
+        // Handle scoped packages (e.g. @org/package)
         const pkgChunks = key.split('/');
         dependenciesMap.set(`${pkgChunks[0]}/${pkgChunks[1]}`, value);
-        continue;
+      } else {
+        // For non-scoped packages, take only the first part before any slash
+        const pkgName = key.split('/')[0] || key;
+        dependenciesMap.set(pkgName, value);
       }
-      dependenciesMap.set(key, value);
     }
 
     dependenciesMap.set('@opentelemetry/instrumentation', 'latest');
@@ -148,25 +152,28 @@ export abstract class Bundler extends MastraBundler {
     const inputs: Record<string, string> = {};
 
     for (const toolPath of toolsPaths) {
-      if (await fsExtra.pathExists(toolPath)) {
-        const fileService = new FileService();
-        const entryFile = fileService.getFirstExistingFile([
-          join(toolPath, 'index.ts'),
-          join(toolPath, 'index.js'),
-          toolPath, // if toolPath itself is a file
-        ]);
+      const expandedPaths = await globby(toolPath, {});
 
-        // if it doesn't exist or is a dir skip it. using a dir as a tool will crash the process
-        if (!entryFile || (await stat(entryFile)).isDirectory()) {
-          this.logger.warn(`No entry file found in ${toolPath}, skipping...`);
-          continue;
+      for (const path of expandedPaths) {
+        if (await fsExtra.pathExists(path)) {
+          const fileService = new FileService();
+          const entryFile = fileService.getFirstExistingFile([
+            join(path, 'index.ts'),
+            join(path, 'index.js'),
+            path, // if path itself is a file
+          ]);
+
+          // if it doesn't exist or is a dir skip it. using a dir as a tool will crash the process
+          if (!entryFile || (await stat(entryFile)).isDirectory()) {
+            this.logger.warn(`No entry file found in ${path}, skipping...`);
+            continue;
+          }
+
+          const uniqueToolID = crypto.randomUUID();
+          inputs[`tools/${uniqueToolID}`] = entryFile;
+        } else {
+          this.logger.warn(`Tool path ${path} does not exist, skipping...`);
         }
-
-        const uniqueToolID = crypto.randomUUID();
-
-        inputs[`tools/${uniqueToolID}`] = entryFile;
-      } else {
-        this.logger.warn(`Tool path ${toolPath} does not exist, skipping...`);
       }
     }
 
@@ -243,14 +250,6 @@ export abstract class Bundler extends MastraBundler {
       }
     }
 
-    // temporary fix for mastra-memory and fastembed
-    if (
-      analyzedBundleInfo.externalDependencies.has('@mastra/memory') ||
-      analyzedBundleInfo.dependencies.has('@mastra/memory')
-    ) {
-      dependenciesToInstall.set('fastembed', 'latest');
-    }
-
     await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall, resolutions);
     await this.writeInstrumentationFile(join(outputDirectory, this.outputDir));
 
@@ -282,6 +281,7 @@ export abstract class Bundler extends MastraBundler {
 
     this.logger.info('Installing dependencies');
     await this.installDependencies(outputDirectory);
+
     this.logger.info('Done installing dependencies');
   }
 

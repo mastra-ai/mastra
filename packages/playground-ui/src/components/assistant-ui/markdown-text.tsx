@@ -12,6 +12,9 @@ import { FC, memo, useState } from 'react';
 import remarkGfm from 'remark-gfm';
 import { makePrismAsyncSyntaxHighlighter } from '@assistant-ui/react-syntax-highlighter';
 import { coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
+import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button';
+import { cn } from '@/lib/utils';
+import { ImageWithFallback } from './image-with-fallback';
 
 const SyntaxHighlighter = makePrismAsyncSyntaxHighlighter({
   style: coldarkDark,
@@ -20,10 +23,6 @@ const SyntaxHighlighter = makePrismAsyncSyntaxHighlighter({
     backgroundColor: 'black',
   },
 });
-
-import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button';
-
-import { cn } from '@/lib/utils';
 
 const MarkdownTextImpl = () => {
   return <MarkdownTextPrimitive remarkPlugins={[remarkGfm]} className="aui-md" components={defaultComponents} />;
@@ -234,4 +233,5 @@ const defaultComponents = memoizeMarkdownComponents({
   },
   CodeHeader,
   SyntaxHighlighter,
+  img: ImageWithFallback,
 });

@@ -1,4 +1,4 @@
-import type { Logger } from '@mastra/core';
+import type { IMastraLogger } from '@mastra/core/logger';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
@@ -14,8 +14,20 @@ import { join } from 'node:path';
 import { validate } from '../validator/validate';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
 import { writeFile } from 'node:fs/promises';
+import { getBundlerOptions } from './bundlerOptions';
 
-const globalExternals = ['pino', 'pino-pretty', '@libsql/client', 'pg', 'libsql', 'jsdom', 'sqlite3'];
+// TODO: Make thie extendable or find a rollup plugin that can do this
+const globalExternals = [
+  'pino',
+  'pino-pretty',
+  '@libsql/client',
+  'pg',
+  'libsql',
+  'jsdom',
+  'sqlite3',
+  'fastembed',
+  'nodemailer',
+];
 
 function findExternalImporter(module: OutputChunk, external: string, allOutputs: OutputChunk[]): OutputChunk | null {
   const capturedFiles = new Set();
@@ -60,7 +72,7 @@ async function analyze(
   mastraEntry: string,
   isVirtualFile: boolean,
   platform: 'node' | 'browser',
-  logger: Logger,
+  logger: IMastraLogger,
 ) {
   logger.info('Analyzing dependencies...');
   let virtualPlugin = null;
@@ -135,7 +147,7 @@ async function analyze(
     }
 
     for (const dynamicImport of o.dynamicImports) {
-      if (!depsToOptimize.has(dynamicImport)) {
+      if (!depsToOptimize.has(dynamicImport) && !isNodeBuiltin(dynamicImport)) {
         depsToOptimize.set(dynamicImport, ['*']);
       }
     }
@@ -153,7 +165,12 @@ async function analyze(
  * @param logger - Logger instance for debugging
  * @returns Object containing bundle output and reference map for validation
  */
-async function bundleExternals(depsToOptimize: Map<string, string[]>, outputDir: string, logger: Logger) {
+async function bundleExternals(
+  depsToOptimize: Map<string, string[]>,
+  outputDir: string,
+  logger: IMastraLogger,
+  customExternals?: string[],
+) {
   logger.info('Optimizing dependencies...');
   logger.debug(
     `${Array.from(depsToOptimize.keys())
@@ -161,6 +178,7 @@ async function bundleExternals(depsToOptimize: Map<string, string[]>, outputDir:
       .join('\n')}`,
   );
 
+  const allExternals = [...globalExternals, ...(customExternals || [])];
   const reverseVirtualReferenceMap = new Map<string, string>();
   const virtualDependencies = new Map();
   for (const [dep, exports] of depsToOptimize.entries()) {
@@ -200,7 +218,7 @@ async function bundleExternals(depsToOptimize: Map<string, string[]>, outputDir:
     ),
     // this dependency breaks the build, so we need to exclude it
     // TODO actually fix this so we don't need to exclude it
-    external: globalExternals,
+    external: allExternals,
     treeshake: 'smallest',
     plugins: [
       virtual(
@@ -239,7 +257,7 @@ async function bundleExternals(depsToOptimize: Map<string, string[]>, outputDir:
   const filteredChunks = output.filter(o => o.type === 'chunk');
 
   for (const o of filteredChunks.filter(o => o.isEntry || o.isDynamicEntry)) {
-    for (const external of globalExternals) {
+    for (const external of allExternals) {
       const importer = findExternalImporter(o, external, filteredChunks);
 
       if (importer) {
@@ -285,7 +303,7 @@ async function validateOutput(
     usedExternals: Record<string, Record<string, string>>;
     outputDir: string;
   },
-  logger: Logger,
+  logger: IMastraLogger,
 ) {
   const result = {
     invalidChunks: new Set<string>(),
@@ -355,15 +373,18 @@ export async function analyzeBundle(
   mastraEntry: string,
   outputDir: string,
   platform: 'node' | 'browser',
-  logger: Logger,
+  logger: IMastraLogger,
 ) {
   const isVirtualFile = entry.includes('\n') || !existsSync(entry);
 
   const depsToOptimize = await analyze(entry, mastraEntry, isVirtualFile, platform, logger);
+  const customExternals = (await getBundlerOptions(mastraEntry, outputDir))?.externals;
+
   const { output, reverseVirtualReferenceMap, usedExternals } = await bundleExternals(
     depsToOptimize,
     outputDir,
     logger,
+    customExternals,
   );
   const result = await validateOutput({ output, reverseVirtualReferenceMap, usedExternals, outputDir }, logger);
 

@@ -12,7 +12,9 @@ const { embeddings } = await embedMany({
   model: openai.embedding('text-embedding-3-small'),
 });
 
-const pinecone = new PineconeVector(process.env.PINECONE_API_KEY!);
+const pinecone = new PineconeVector({
+  apiKey: process.env.PINECONE_API_KEY!,
+});
 
 await pinecone.createIndex({
   indexName: 'test_index',

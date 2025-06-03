@@ -92,6 +92,8 @@ describe('create mastra', () => {
         await expect(response.json()).resolves.toMatchInlineSnapshot(`
           {
             "weatherAgent": {
+              "defaultGenerateOptions": {},
+              "defaultStreamOptions": {},
               "instructions": "
                 You are a helpful weather assistant that provides accurate weather information.
 
@@ -104,7 +106,7 @@ describe('create mastra', () => {
 
                 Use the weatherTool to fetch current weather data.
           ",
-              "modelId": "gpt-4o",
+              "modelId": "gpt-4o-mini",
               "name": "Weather Agent",
               "provider": "openai.chat",
               "tools": {

@@ -26,6 +26,16 @@ export class OpenAIToolCompat extends ToolCompatibility {
 
   processZodType<T extends z.AnyZodObject>(value: z.ZodTypeAny): ShapeValue<T> {
     switch (value._def.typeName) {
+      case 'ZodOptional':
+        return this.defaultZodOptionalHandler(value, [
+          'ZodObject',
+          'ZodArray',
+          'ZodUnion',
+          'ZodString',
+          'ZodNever',
+          'ZodUndefined',
+          'ZodTuple',
+        ]);
       case 'ZodObject': {
         return this.defaultZodObjectHandler(value);
       }

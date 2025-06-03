@@ -38,3 +38,8 @@ export * from './VariablesIcon';
 export * from './WorkflowIcon';
 export * from './WorkflowCoinIcon';
 export * from './LatencyIcon';
+export * from './McpServerIcon';
+export * from './FolderIcon';
+export * from './McpCoinIcon';
+export * from './ToolCoinIcon';
+export * from './AgentNetworkCoinIcon';

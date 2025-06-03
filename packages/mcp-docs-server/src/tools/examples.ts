@@ -29,11 +29,12 @@ async function readCodeExample(filename: string): Promise<string> {
   void logger.debug(`Reading example: ${filename}`);
 
   try {
-    return await fs.readFile(filePath, 'utf-8');
+    const content = await fs.readFile(filePath, 'utf-8');
+    return content;
   } catch {
     const examples = await listCodeExamples();
     const availableExamples = examples.map(ex => `- ${ex.name}`).join('\n');
-    throw new Error(`Example "${filename}" not found.\n\nAvailable examples:\n${availableExamples}`);
+    return `Example "${filename}" not found.\n\nAvailable examples:\n${availableExamples}`;
   }
 }
 
@@ -59,44 +60,21 @@ export const examplesTool = {
   name: 'mastraExamples',
   description:
     'Get code examples from the Mastra.ai examples directory. Without a specific example name, lists all available examples. With an example name, returns the full source code of that example.',
+  parameters: examplesInputSchema,
   execute: async (args: ExamplesInput) => {
     void logger.debug('Executing mastraExamples tool', { example: args.example });
     try {
       if (!args.example) {
         const examples = await listCodeExamples();
-        return {
-          content: [
-            {
-              type: 'text',
-              text: ['Available code examples:', '', ...examples.map(ex => `- ${ex.name}`)].join('\n'),
-            },
-          ],
-          isError: false,
-        };
+        return ['Available code examples:', '', ...examples.map(ex => `- ${ex.name}`)].join('\n');
       }
 
       const filename = args.example.endsWith('.md') ? args.example : `${args.example}.md`;
-      const content = await readCodeExample(filename);
-      return {
-        content: [
-          {
-            type: 'text',
-            text: content,
-          },
-        ],
-        isError: false,
-      };
+      const result = await readCodeExample(filename);
+      return result;
     } catch (error) {
       void logger.error('Failed to execute mastraExamples tool', error);
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-        isError: true,
-      };
+      throw error;
     }
   },
 };

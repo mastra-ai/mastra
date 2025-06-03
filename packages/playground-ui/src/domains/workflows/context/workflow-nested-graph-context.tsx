@@ -1,19 +1,21 @@
 import { Dialog, DialogContent, DialogPortal, DialogTitle } from '@/components/ui/dialog';
 import { createContext, useState } from 'react';
-import { WorkflowNestedGraph } from '../workflow/workflow-nested-graph';
 import { ReactFlowProvider } from '@xyflow/react';
+import { SerializedStepFlowEntry } from '@mastra/core/workflows';
 import { Workflow } from 'lucide-react';
 import { Text } from '@/components/ui/text';
+import { WorkflowNestedGraph } from '../workflow/workflow-nested-graph';
+import Spinner from '@/components/ui/spinner';
 
 type WorkflowNestedGraphContextType = {
   showNestedGraph: ({
     label,
     stepGraph,
-    stepSubscriberGraph,
+    fullStep,
   }: {
     label: string;
-    stepGraph: any;
-    stepSubscriberGraph: any;
+    stepGraph: SerializedStepFlowEntry[];
+    fullStep: string;
   }) => void;
   closeNestedGraph: () => void;
 };
@@ -23,31 +25,54 @@ export const WorkflowNestedGraphContext = createContext<WorkflowNestedGraphConte
 );
 
 export function WorkflowNestedGraphProvider({ children }: { children: React.ReactNode }) {
-  const [stepGraph, setStepGraph] = useState<any>(null);
-  const [stepSubscriberGraph, setStepSubscriberGraph] = useState<any>(null);
+  const [stepGraph, setStepGraph] = useState<SerializedStepFlowEntry[] | null>(null);
+  const [parentStepGraphList, setParentStepGraphList] = useState<
+    { stepGraph: SerializedStepFlowEntry[]; label: string; fullStep: string }[]
+  >([]);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
   const [label, setLabel] = useState<string>('');
+  const [fullStep, setFullStep] = useState<string>('');
+  const [switching, setSwitching] = useState(false);
 
   const closeNestedGraph = () => {
-    setOpenDialog(false);
-    setStepGraph(null);
-    setStepSubscriberGraph(null);
-    setLabel('');
+    if (parentStepGraphList.length) {
+      setSwitching(true);
+      const lastStepGraph = parentStepGraphList[parentStepGraphList.length - 1];
+      setStepGraph(lastStepGraph.stepGraph);
+      setLabel(lastStepGraph.label);
+      setFullStep(lastStepGraph.fullStep);
+      setParentStepGraphList(parentStepGraphList.slice(0, -1));
+      setTimeout(() => {
+        setSwitching(false);
+      }, 500);
+    } else {
+      setOpenDialog(false);
+      setStepGraph(null);
+      setLabel('');
+      setFullStep('');
+    }
   };
 
   const showNestedGraph = ({
-    label,
-    stepGraph,
-    stepSubscriberGraph,
+    label: newLabel,
+    stepGraph: newStepGraph,
+    fullStep: newFullStep,
   }: {
     label: string;
-    stepGraph: any;
-    stepSubscriberGraph: any;
+    stepGraph: SerializedStepFlowEntry[];
+    fullStep: string;
   }) => {
-    setLabel(label);
-    setStepGraph(stepGraph);
-    setStepSubscriberGraph(stepSubscriberGraph);
+    if (stepGraph) {
+      setSwitching(true);
+      setParentStepGraphList([...parentStepGraphList, { stepGraph, label, fullStep }]);
+    }
+    setLabel(newLabel);
+    setFullStep(newFullStep);
+    setStepGraph(newStepGraph);
     setOpenDialog(true);
+    setTimeout(() => {
+      setSwitching(false);
+    }, 500);
   };
 
   return (
@@ -61,16 +86,22 @@ export function WorkflowNestedGraphProvider({ children }: { children: React.Reac
 
       <Dialog open={openDialog} onOpenChange={closeNestedGraph}>
         <DialogPortal>
-          <DialogContent className="w-[40rem] h-[40rem] bg-[#121212] p-[0.5rem]">
+          <DialogContent className="w-[45rem] h-[45rem] max-w-[unset] bg-[#121212] p-[0.5rem]">
             <DialogTitle className="flex items-center gap-1.5 absolute top-2.5 left-2.5">
               <Workflow className="text-current w-4 h-4" />
               <Text size="xs" weight="medium" className="text-mastra-el-6 capitalize">
                 {label} workflow
               </Text>
             </DialogTitle>
-            <ReactFlowProvider>
-              <WorkflowNestedGraph stepGraph={stepGraph} open={openDialog} stepSubscriberGraph={stepSubscriberGraph} />
-            </ReactFlowProvider>
+            {switching ? (
+              <div className="w-full h-full flex items-center justify-center">
+                <Spinner />
+              </div>
+            ) : (
+              <ReactFlowProvider>
+                <WorkflowNestedGraph stepGraph={stepGraph!} open={openDialog} workflowName={fullStep} />
+              </ReactFlowProvider>
+            )}
           </DialogContent>
         </DialogPortal>
       </Dialog>

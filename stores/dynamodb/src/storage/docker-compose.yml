@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    # Use host network mode for simpler connection from tests,
+    # or define ports if running in bridge mode.
+    # network_mode: host
+    ports:
+      - '8000:8000' # Map container port 8000 to host port 8000
+    command: ['-jar', 'DynamoDBLocal.jar', '-sharedDb']
+    volumes:
+      - dynamodb_data:/home/dynamodblocal/data
+
+volumes:
+  dynamodb_data: {}

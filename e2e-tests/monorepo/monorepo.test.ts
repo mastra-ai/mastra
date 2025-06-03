@@ -60,6 +60,19 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       expect(res.status).toBe(200);
       expect(body).toEqual({ message: 'Hello, world!' });
     });
+    it('should resolve api ALL routes', async () => {
+      let res = await fetch(`http://localhost:${port}/all`);
+      let body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body).toEqual({ message: 'Hello, GET!' });
+
+      res = await fetch(`http://localhost:${port}/all`, {
+        method: 'POST',
+      });
+      body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body).toEqual({ message: 'Hello, POST!' });
+    });
   }
 
   describe('dev', async () => {
@@ -134,8 +147,57 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
         try {
           setImmediate(() => controller.abort());
           await proc;
-        } catch {
-          console.log('failed to kill build proc');
+        } catch (err) {
+          // @ts-expect-error - isCanceled is not typed
+          if (!proc.isCanceled) {
+            console.log('failed to kill build proc', err);
+          }
+        }
+      }
+    }, timeout);
+
+    runApiTests(port);
+  });
+
+  describe.skip('start', async () => {
+    let port = await getPort();
+    let proc: ReturnType<typeof execa> | undefined;
+    const controller = new AbortController();
+    const cancelSignal = controller.signal;
+
+    beforeAll(async () => {
+      const inputFile = join(fixturePath, 'apps', 'custom');
+
+      console.log('started proc', port);
+      proc = execa('npm', ['run', 'start'], {
+        cwd: inputFile,
+        cancelSignal,
+        gracefulCancel: true,
+        env: {
+          OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+          MASTRA_PORT: port.toString(),
+        },
+      });
+
+      await new Promise<void>(resolve => {
+        proc!.stdout?.on('data', data => {
+          console.log(data?.toString());
+          if (data?.toString()?.includes(`http://localhost:${port}`)) {
+            resolve();
+          }
+        });
+      });
+    }, timeout);
+
+    afterAll(async () => {
+      if (proc) {
+        try {
+          setImmediate(() => controller.abort());
+          await proc;
+        } catch (err) {
+          if (!(await proc).isCanceled) {
+            console.log('failed to kill start proc', err);
+          }
         }
       }
     }, timeout);

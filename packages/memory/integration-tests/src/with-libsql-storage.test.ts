@@ -1,49 +1,37 @@
-import { DefaultStorage } from '@mastra/core/storage/libsql';
+import { fastembed } from '@mastra/fastembed';
+import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import dotenv from 'dotenv';
 import { describe } from 'vitest';
-
-import { getResuableTests } from './reusable-tests';
+import { getResuableTests, StorageType } from './reusable-tests';
 
 dotenv.config({ path: '.env.test' });
 
 describe('Memory with LibSQL Integration', () => {
-  describe('with explicit storage', () => {
-    const memory = new Memory({
-      storage: new DefaultStorage({
-        config: {
-          url: 'file:libsql-test.db',
-        },
-      }),
-      options: {
-        lastMessages: 10,
-        semanticRecall: {
-          topK: 3,
-          messageRange: 2,
-        },
-        threads: {
-          generateTitle: false,
-        },
-      },
-    });
-
-    getResuableTests(memory);
+  const memoryOptions = {
+    lastMessages: 10,
+    semanticRecall: {
+      topK: 3,
+      messageRange: 2,
+    },
+    threads: {
+      generateTitle: false,
+    },
+  };
+  const memory = new Memory({
+    storage: new LibSQLStore({
+      url: 'file:libsql-test.db',
+    }),
+    vector: new LibSQLVector({
+      connectionUrl: 'file:libsql-test.db',
+    }),
+    embedder: fastembed,
+    options: memoryOptions,
   });
 
-  describe('with default storage', () => {
-    const memory = new Memory({
-      options: {
-        lastMessages: 10,
-        semanticRecall: {
-          topK: 3,
-          messageRange: 2,
-        },
-        threads: {
-          generateTitle: false,
-        },
-      },
-    });
-
-    getResuableTests(memory);
+  getResuableTests(memory, {
+    storageTypeForWorker: StorageType.LibSQL,
+    storageConfigForWorker: { url: 'file:libsql-test.db' },
+    memoryOptionsForWorker: memoryOptions,
   });
 });

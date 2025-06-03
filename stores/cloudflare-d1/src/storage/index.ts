@@ -1,5 +1,6 @@
 import type { D1Database } from '@cloudflare/workers-types';
-import type { StorageThreadType, MessageType } from '@mastra/core/memory';
+import { MessageList } from '@mastra/core/agent';
+import type { StorageThreadType, MastraMessageV1, MastraMessageV2 } from '@mastra/core/memory';
 import {
   MastraStorage,
   TABLE_MESSAGES,
@@ -19,19 +20,7 @@ import type {
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import Cloudflare from 'cloudflare';
 import { createSqlBuilder } from './sql-builder';
-import type { SqlParam } from './sql-builder';
-
-/**
- * Interface for SQL query options with generic type support
- */
-export interface SqlQueryOptions {
-  /** SQL query to execute */
-  sql: string;
-  /** Parameters to bind to the query */
-  params?: SqlParam[];
-  /** Whether to return only the first result */
-  first?: boolean;
-}
+import type { SqlParam, SqlQueryOptions } from './sql-builder';
 
 /**
  * Configuration for D1 using the REST API
@@ -80,6 +69,10 @@ export class D1Store extends MastraStorage {
   constructor(config: D1StoreConfig) {
     super({ name: 'D1' });
 
+    if (config.tablePrefix && !/^[a-zA-Z0-9_]*$/.test(config.tablePrefix)) {
+      throw new Error('Invalid tablePrefix: only letters, numbers, and underscores are allowed.');
+    }
+
     this.tablePrefix = config.tablePrefix || '';
 
     // Determine which API to use based on provided config
@@ -109,42 +102,6 @@ export class D1Store extends MastraStorage {
 
   private formatSqlParams(params: SqlParam[]): string[] {
     return params.map(p => (p === undefined || p === null ? null : p) as string);
-  }
-
-  // Helper method to create SQL indexes for better query performance
-  private async createIndexIfNotExists(
-    tableName: TABLE_NAMES,
-    columnName: string,
-    indexType: string = '',
-  ): Promise<void> {
-    const fullTableName = this.getTableName(tableName);
-    const indexName = `idx_${tableName}_${columnName}`;
-
-    try {
-      // Check if index exists
-      const checkQuery = createSqlBuilder().checkIndexExists(indexName, fullTableName);
-      const { sql: checkSql, params: checkParams } = checkQuery.build();
-
-      const indexExists = await this.executeQuery({
-        sql: checkSql,
-        params: checkParams,
-        first: true,
-      });
-
-      if (!indexExists) {
-        // Create the index if it doesn't exist
-        const createQuery = createSqlBuilder().createIndex(indexName, fullTableName, columnName, indexType);
-        const { sql: createSql, params: createParams } = createQuery.build();
-
-        await this.executeQuery({ sql: createSql, params: createParams });
-        this.logger.debug(`Created index ${indexName} on ${fullTableName}(${columnName})`);
-      }
-    } catch (error) {
-      this.logger.error(`Error creating index on ${fullTableName}(${columnName}):`, {
-        message: error instanceof Error ? error.message : String(error),
-      });
-      // Non-fatal error, continue execution
-    }
   }
 
   private async executeWorkersBindingQuery({
@@ -641,7 +598,13 @@ export class D1Store extends MastraStorage {
 
   // Thread and message management methods
 
-  async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
+  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
+  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
+  async saveMessages(args: {
+    messages: MastraMessageV1[] | MastraMessageV2[];
+    format?: undefined | 'v1' | 'v2';
+  }): Promise<MastraMessageV2[] | MastraMessageV1[]> {
+    const { messages, format = 'v1' } = args;
     if (messages.length === 0) return [];
 
     try {
@@ -668,7 +631,7 @@ export class D1Store extends MastraStorage {
           content: typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
           createdAt: createdAt.toISOString(),
           role: message.role,
-          type: message.type,
+          type: message.type || 'v2',
         };
       });
 
@@ -678,14 +641,22 @@ export class D1Store extends MastraStorage {
       });
 
       this.logger.debug(`Saved ${messages.length} messages`);
-      return messages;
+      const list = new MessageList().add(messages, 'memory');
+      if (format === `v2`) return list.get.all.v2();
+      return list.get.all.v1();
     } catch (error) {
       this.logger.error('Error saving messages:', { message: error instanceof Error ? error.message : String(error) });
       throw error;
     }
   }
 
-  async getMessages<T = MessageType>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T[]> {
+  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
+  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
+  public async getMessages({
+    threadId,
+    selectBy,
+    format,
+  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     const fullTableName = this.getTableName(TABLE_MESSAGES);
     const limit = typeof selectBy?.last === 'number' ? selectBy.last : 40;
     const include = selectBy?.include || [];
@@ -713,7 +684,7 @@ export class D1Store extends MastraStorage {
           m.role,
           m.type,
           m.createdAt,
-          m.thread_id AS "threadId"
+          m.thread_id AS threadId
         FROM ordered_messages m
         WHERE m.id IN (${includeIds.map(() => '?').join(',')})
         OR EXISTS (
@@ -741,7 +712,7 @@ export class D1Store extends MastraStorage {
       // Exclude already fetched ids
       const excludeIds = messages.map(m => m.id);
       let query = createSqlBuilder()
-        .select(['id', 'content', 'role', 'type', '"createdAt"', 'thread_id AS "threadId"'])
+        .select(['id', 'content', 'role', 'type', 'createdAt', 'thread_id AS threadId'])
         .from(fullTableName)
         .where('thread_id = ?', threadId)
         .andWhere(`id NOT IN (${excludeIds.map(() => '?').join(',')})`, ...excludeIds)
@@ -768,13 +739,16 @@ export class D1Store extends MastraStorage {
         const processedMsg: Record<string, any> = {};
 
         for (const [key, value] of Object.entries(message)) {
+          if (key === `type` && value === `v2`) continue;
           processedMsg[key] = this.deserializeValue(value);
         }
 
-        return processedMsg as T;
+        return processedMsg;
       });
       this.logger.debug(`Retrieved ${messages.length} messages for thread ${threadId}`);
-      return processedMessages as T[];
+      const list = new MessageList().add(processedMessages as MastraMessageV1[] | MastraMessageV2[], 'memory');
+      if (format === `v2`) return list.get.all.v2();
+      return list.get.all.v1();
     } catch (error) {
       this.logger.error('Error retrieving messages for thread', {
         threadId,

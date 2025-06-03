@@ -39,18 +39,22 @@ export interface WorkflowRunState {
   value: Record<string, string>; // Current state machine value
   context: {
     // Workflow context
-    steps: Record<
+    [key: string]: Record<
       string,
-      {
-        // Step execution results
-        status: "success" | "failed" | "suspended" | "waiting" | "skipped";
-        payload?: any; // Step-specific data
-        error?: string; // Error info if failed
-      }
+      | {
+          status: "success";
+          output: any;
+        }
+      | {
+          status: "failed";
+          error: string;
+        }
+      | {
+          status: "suspended";
+          payload?: any;
+        }
     >;
-    triggerData: Record<string, any>; // Initial trigger data
-    attempts: Record<string, number>; // Remaining retry attempts
-    inputData: Record<string, any>; // Initial input data
+    input: Record<string, any>; // Initial input data
   };
 
   activePaths: Array<{
@@ -60,13 +64,12 @@ export interface WorkflowRunState {
     status: string;
   }>;
 
+  // Paths to suspended steps
+  suspendedPaths: Record<string, number[]>;
+
   // Metadata
   runId: string; // Unique run identifier
   timestamp: number; // Time snapshot was created
-
-  // For nested workflows and suspended steps
-  childStates?: Record<string, WorkflowRunState>; // Child workflow states
-  suspendedSteps?: Record<string, string>; // Mapping of suspended steps
 }
 ```
 
@@ -201,7 +204,6 @@ run.watch(async ({ activePaths }) => {
 
 ## Related
 
-- [Suspend Function Reference](./suspend.mdx)
-- [Resume Function Reference](./resume.mdx)
+- [Suspend and resume](../../docs/workflows/suspend-and-resume.mdx)
+- [Human in the loop example](../../examples/workflows/human-in-the-loop.mdx)
 - [Watch Function Reference](./watch.mdx)
-- [Suspend and Resume Guide](../../docs/workflows/suspend-and-resume.mdx)

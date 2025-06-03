@@ -1,4 +1,4 @@
-import { MastraLogo } from './ui/icons';
+import { MastraLogo } from "./ui/icons";
 
 export default function Footer() {
   return (
