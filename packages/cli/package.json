@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.10.2-alpha.6",
+  "version": "0.10.2-alpha.7",
   "license": "Elastic-2.0",
   "description": "cli for mastra",
   "type": "module",

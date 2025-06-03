@@ -1,5 +1,15 @@
 # @mastra/deployer
 
+## 0.10.2-alpha.6
+
+### Patch Changes
+
+- 1fcc048: chore: generate sourcemaps in dev build
+- Updated dependencies [99fd6cf]
+- Updated dependencies [8dc94d8]
+  - @mastra/core@0.10.2-alpha.6
+  - @mastra/server@0.10.2-alpha.6
+
 ## 0.10.2-alpha.5
 
 ### Patch Changes
