@@ -1,16 +1,14 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
+import { client } from '@/lib/client';
 
 import usePolling from '@/lib/polls';
 
-import type { RefinedTrace } from '@/domains/traces/types';
-import { refineTraces } from '@/domains/traces/utils';
-import { useMastraClient } from '@/contexts/mastra-client-context';
+import { RefinedTrace } from '@mastra/playground-ui';
+import { refineTraces } from '../utils/refine-traces';
 
 export const useTraces = (componentName: string, isWorkflow: boolean = false) => {
   const [traces, setTraces] = useState<RefinedTrace[]>([]);
-
-  const client = useMemo(() => useMastraClient(), []);
 
   const fetchFn = useCallback(async () => {
     try {
