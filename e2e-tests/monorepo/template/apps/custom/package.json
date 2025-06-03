@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "mastra dev",
-    "build": "mastra build"
+    "build": "mastra build",
+    "start": "mastra start"
   },
   "keywords": [],
   "author": "",

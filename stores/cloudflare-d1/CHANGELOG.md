@@ -1,5 +1,81 @@
 # @mastra/cloudflare-d1
 
+## 0.10.1-alpha.2
+
+### Patch Changes
+
+- c5bf1ce: Add backwards compat code for new MessageList in storage
+- Updated dependencies [c5bf1ce]
+- Updated dependencies [12b7002]
+  - @mastra/core@0.10.2-alpha.4
+
+## 0.10.1-alpha.1
+
+### Patch Changes
+
+- f0d559f: Fix peerdeps for alpha channel
+- Updated dependencies [1e8bb40]
+  - @mastra/core@0.10.2-alpha.2
+
+## 0.10.1-alpha.0
+
+### Patch Changes
+
+- e5dc18d: Added a backwards compatible layer to begin storing/retrieving UIMessages in storage instead of CoreMessages
+- Updated dependencies [592a2db]
+- Updated dependencies [e5dc18d]
+  - @mastra/core@0.10.2-alpha.0
+
+## 0.10.0
+
+### Minor Changes
+
+- 83da932: Move @mastra/core to peerdeps
+
+### Patch Changes
+
+- b3a3d63: BREAKING: Make vnext workflow the default worklow, and old workflow legacy_workflow
+- eabdcd9: [MASTRA-3451] SQL Injection Protection
+- Updated dependencies [b3a3d63]
+- Updated dependencies [344f453]
+- Updated dependencies [0a3ae6d]
+- Updated dependencies [95911be]
+- Updated dependencies [f53a6ac]
+- Updated dependencies [5eb5a99]
+- Updated dependencies [7e632c5]
+- Updated dependencies [1e9fbfa]
+- Updated dependencies [eabdcd9]
+- Updated dependencies [90be034]
+- Updated dependencies [99f050a]
+- Updated dependencies [d0ee3c6]
+- Updated dependencies [b2ae5aa]
+- Updated dependencies [23f258c]
+- Updated dependencies [a7292b0]
+- Updated dependencies [0dcb9f0]
+- Updated dependencies [2672a05]
+  - @mastra/core@0.10.0
+
+## 0.2.0-alpha.1
+
+### Minor Changes
+
+- 83da932: Move @mastra/core to peerdeps
+
+### Patch Changes
+
+- b3a3d63: BREAKING: Make vnext workflow the default worklow, and old workflow legacy_workflow
+- Updated dependencies [b3a3d63]
+- Updated dependencies [344f453]
+- Updated dependencies [0a3ae6d]
+- Updated dependencies [95911be]
+- Updated dependencies [5eb5a99]
+- Updated dependencies [7e632c5]
+- Updated dependencies [1e9fbfa]
+- Updated dependencies [b2ae5aa]
+- Updated dependencies [a7292b0]
+- Updated dependencies [0dcb9f0]
+  - @mastra/core@0.10.0-alpha.1
+
 ## 0.1.10-alpha.0
 
 ### Patch Changes

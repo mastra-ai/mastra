@@ -24,8 +24,9 @@ import type { MemoryConfig } from '../memory/types';
 import type { RuntimeContext } from '../runtime-context';
 import type { ToolAction, VercelTool } from '../tools';
 import type { CompositeVoice } from '../voice';
-import type { NewWorkflow } from '../workflows/vNext';
+import type { Workflow } from '../workflows';
 
+export type { MastraMessageV2, MastraMessageContentV2, MessageList } from './message-list/index.ts';
 export type { Message as AiMessageType } from 'ai';
 
 export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool>;
@@ -42,10 +43,11 @@ export interface AgentConfig<
   TMetrics extends Record<string, Metric> = Record<string, Metric>,
 > {
   name: TAgentId;
+  description?: string;
   instructions: DynamicArgument<string>;
   model: DynamicArgument<MastraLanguageModel>;
   tools?: DynamicArgument<TTools>;
-  workflows?: DynamicArgument<Record<string, NewWorkflow>>;
+  workflows?: DynamicArgument<Record<string, Workflow>>;
   defaultGenerateOptions?: AgentGenerateOptions;
   defaultStreamOptions?: AgentStreamOptions;
   mastra?: Mastra;

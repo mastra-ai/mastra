@@ -8,7 +8,7 @@ description: 提供された条件に基づいてループを持つワークフ�
 ## セットアップ
 
 ```sh copy
-npm install @ai-sdk/openai @mastra/core 
+npm install @ai-sdk/openai @mastra/core
 ```
 
 ## ループ実行ワークフローの定義
@@ -91,7 +91,7 @@ const workflow = createWorkflow({
       .then(sideEffectStep)
       .commit(),
     // Condition to check if we should stop the loop
-    async ({ inputData }) => inputData.value >= 10
+    async ({ inputData }) => inputData.value >= 10,
   )
   .then(finalStep);
 
@@ -106,7 +106,7 @@ export { workflow as incrementWorkflow };
 
 ```ts showLineNumbers copy filename="index.ts"
 import { Mastra } from "@mastra/core/mastra";
-import { createLogger } from "@mastra/core/logger";
+import { PinoLogger } from "@mastra/loggers";
 import { incrementWorkflow } from "./workflows";
 
 // Initialize Mastra with the increment workflow
@@ -115,7 +115,7 @@ const mastra = new Mastra({
   vnext_workflows: {
     incrementWorkflow,
   },
-  logger: createLogger({
+  logger: new PinoLogger({
     name: "Mastra",
     level: "info",
   }),
@@ -136,6 +136,6 @@ const run = workflow.createRun();
 
 // Start the workflow with initial value 0
 // This will increment until reaching 10
-const result = await run.start({ inputData: { value: 0 } })
-console.dir(result, { depth: null })
+const result = await run.start({ inputData: { value: 0 } });
+console.dir(result, { depth: null });
 ```

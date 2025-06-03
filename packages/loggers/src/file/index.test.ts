@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
-import { createLogger, LogLevel } from '@mastra/core/logger';
+import { LogLevel } from '@mastra/core/logger';
 import { describe, it, expect, beforeEach, vi, afterAll } from 'vitest';
+import { PinoLogger } from '../pino.js';
 
 import { FileTransport } from './index.js';
 
@@ -29,8 +30,8 @@ describe('FileTransport', () => {
     expect(fileLogger.path).toBe(testPath);
   });
 
-  it('should work with createLogger', async () => {
-    const logger = createLogger({
+  it('should work with PinoLogger', async () => {
+    const logger = new PinoLogger({
       name: 'test-logger',
       level: LogLevel.INFO,
       transports: {
@@ -49,7 +50,7 @@ describe('FileTransport', () => {
   });
 
   it('should handle multiple log messages', async () => {
-    const logger = createLogger({
+    const logger = new PinoLogger({
       name: 'test-logger',
       level: LogLevel.INFO,
       transports: {
@@ -69,11 +70,20 @@ describe('FileTransport', () => {
     });
   });
 
-  it('should properly clean up resources on destroy', () => {
+  it('should properly clean up resources on destroy', async () => {
     const destroySpy = vi.spyOn(fileLogger.fileStream, 'destroy');
+    expect.assertions(1);
 
-    fileLogger._destroy(new Error('test'), () => {
-      expect(destroySpy).toHaveBeenCalled();
+    await new Promise<void>(resolve => {
+      try {
+        fileLogger._destroy(null, () => {
+          expect(destroySpy).toHaveBeenCalled();
+        });
+      } catch {
+        // nothing
+      } finally {
+        resolve();
+      }
     });
   });
 
@@ -106,7 +116,7 @@ describe('FileTransport', () => {
     });
 
     it('should return empty array for getLogsByRunId', async () => {
-      const logger = createLogger({
+      const logger = new PinoLogger({
         name: 'test-logger',
         level: LogLevel.INFO,
         transports: {

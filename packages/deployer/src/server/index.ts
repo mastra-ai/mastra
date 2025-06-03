@@ -24,8 +24,20 @@ import {
   setAgentInstructionsHandler,
   streamGenerateHandler,
 } from './handlers/agents';
+import { authorizationMiddleware, authenticationMiddleware } from './handlers/auth';
 import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client';
 import { errorHandler } from './handlers/error';
+import {
+  createLegacyWorkflowRunHandler,
+  getLegacyWorkflowByIdHandler,
+  getLegacyWorkflowRunsHandler,
+  getLegacyWorkflowsHandler,
+  resumeAsyncLegacyWorkflowHandler,
+  resumeLegacyWorkflowHandler,
+  startAsyncLegacyWorkflowHandler,
+  startLegacyWorkflowRunHandler,
+  watchLegacyWorkflowHandler,
+} from './handlers/legacyWorkflows.js';
 import { getLogsByRunIdHandler, getLogsHandler, getLogTransports } from './handlers/logs';
 import {
   getMcpServerMessageHandler,
@@ -57,23 +69,13 @@ import { rootHandler } from './handlers/root';
 import { getTelemetryHandler, storeTelemetryHandler } from './handlers/telemetry';
 import { executeAgentToolHandler, executeToolHandler, getToolByIdHandler, getToolsHandler } from './handlers/tools';
 import { createIndex, deleteIndex, describeIndex, listIndexes, queryVectors, upsertVectors } from './handlers/vector';
+import { getSpeakersHandler, getListenerHandler, listenHandler, speakHandler } from './handlers/voice';
 import {
-  createVNextWorkflowRunHandler,
-  getVNextWorkflowByIdHandler,
-  getVNextWorkflowRunsHandler,
-  getVNextWorkflowsHandler,
-  resumeAsyncVNextWorkflowHandler,
-  resumeVNextWorkflowHandler,
-  startAsyncVNextWorkflowHandler,
-  startVNextWorkflowRunHandler,
-  watchVNextWorkflowHandler,
-} from './handlers/vNextWorkflows.js';
-import { getSpeakersHandler, listenHandler, speakHandler } from './handlers/voice';
-import {
-  createRunHandler,
+  createWorkflowRunHandler,
   getWorkflowByIdHandler,
   getWorkflowRunsHandler,
   getWorkflowsHandler,
+  streamWorkflowHandler,
   resumeAsyncWorkflowHandler,
   resumeWorkflowHandler,
   startAsyncWorkflowHandler,
@@ -194,6 +196,10 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
     };
     app.use('*', timeout(server?.timeout ?? 3 * 60 * 1000), cors(corsConfig));
   }
+
+  // Run AUTH middlewares after CORS middleware
+  app.use('*', authenticationMiddleware);
+  app.use('*', authorizationMiddleware);
 
   const bodyLimitOptions = {
     maxSize: server?.bodySizeLimit ?? 4.5 * 1024 * 1024, // 4.5 MB,
@@ -1101,6 +1107,46 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
     speakHandler,
   );
 
+  app.get(
+    '/api/agents/:agentId/voice/listener',
+    describeRoute({
+      description: 'Get available listener for an agent',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Checks if listener is available for the agent',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                description: 'Listener information depending on the voice provider',
+                properties: {
+                  enabled: { type: 'boolean' },
+                },
+                additionalProperties: true,
+              },
+            },
+          },
+        },
+        400: {
+          description: 'Agent does not have voice capabilities',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    getListenerHandler,
+  );
+
   app.post(
     '/api/agents/:agentId/listen',
     bodyLimit({
@@ -1406,7 +1452,43 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
               schema: {
                 type: 'object',
                 properties: {
-                  servers: { type: 'array', items: { $ref: '#/components/schemas/ServerInfo' } },
+                  servers: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        id: { type: 'string' },
+                        name: { type: 'string' },
+                        description: { type: 'string' },
+                        repository: {
+                          type: 'object',
+                          properties: {
+                            url: { type: 'string', description: 'The URL of the repository (e.g., a GitHub URL)' },
+                            source: {
+                              type: 'string',
+                              description: "The source control platform (e.g., 'github', 'gitlab')",
+                              enum: ['github', 'gitlab'],
+                            },
+                            id: { type: 'string', description: 'A unique identifier for the repository at the source' },
+                          },
+                        },
+                        version_detail: {
+                          type: 'object',
+                          properties: {
+                            version: { type: 'string', description: 'The semantic version string (e.g., "1.0.2")' },
+                            release_date: {
+                              type: 'string',
+                              description: 'The ISO 8601 date-time string when this version was released or registered',
+                            },
+                            is_latest: {
+                              type: 'boolean',
+                              description: 'Indicates if this version is the latest available',
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
                   next: { type: 'string', format: 'uri', nullable: true },
                   total_count: { type: 'integer' },
                 },
@@ -1444,12 +1526,117 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
         200: {
           description: 'Detailed information about the MCP server instance.',
           content: {
-            'application/json': { schema: { $ref: '#/components/schemas/ServerDetailInfo' } },
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  name: { type: 'string' },
+                  description: { type: 'string' },
+                  repository: {
+                    type: 'object',
+                    properties: {
+                      url: { type: 'string' },
+                      source: { type: 'string' },
+                      id: { type: 'string' },
+                    },
+                  },
+                  version_detail: {
+                    type: 'object',
+                    properties: {
+                      version: { type: 'string' },
+                      release_date: { type: 'string' },
+                      is_latest: { type: 'boolean' },
+                    },
+                  },
+                  package_canonical: { type: 'string' },
+                  packages: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        registry_name: { type: 'string' },
+                        name: { type: 'string' },
+                        version: { type: 'string' },
+                        command: {
+                          type: 'object',
+                          properties: {
+                            name: { type: 'string' },
+                            subcommands: {
+                              type: 'array',
+                              items: {
+                                type: 'object',
+                                properties: {
+                                  name: { type: 'string' },
+                                  description: { type: 'string' },
+                                  is_required: { type: 'boolean' },
+                                  subcommands: {
+                                    type: 'array',
+                                    items: { type: 'object' },
+                                  },
+                                  positional_arguments: {
+                                    type: 'array',
+                                    items: { type: 'object' },
+                                  },
+                                  named_arguments: {
+                                    type: 'array',
+                                    items: { type: 'object' },
+                                  },
+                                },
+                              },
+                            },
+                            positional_arguments: {
+                              type: 'array',
+                              items: { type: 'object' },
+                            },
+                            named_arguments: {
+                              type: 'array',
+                              items: { type: 'object' },
+                            },
+                          },
+                        },
+                        environment_variables: {
+                          type: 'array',
+                          items: {
+                            type: 'object',
+                            properties: {
+                              name: { type: 'string' },
+                              description: { type: 'string' },
+                              required: { type: 'boolean' },
+                              default_value: { type: 'string' },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                  remotes: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        transport_type: { type: 'string' },
+                        url: { type: 'string' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
           },
         },
         404: {
           description: 'MCP server instance not found.',
-          content: { 'application/json': { schema: { type: 'object', properties: { error: { type: 'string' } } } } },
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  error: { type: 'string' },
+                },
+              },
+            },
+          },
         },
       },
     }),
@@ -1826,26 +2013,26 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
     storeTelemetryHandler,
   );
 
-  // vNextWorkflow routes
+  // Legacy Workflow routes
   app.get(
-    '/api/workflows/v-next',
+    '/api/workflows/legacy',
     describeRoute({
-      description: 'Get all vNext workflows',
-      tags: ['vNextWorkflows'],
+      description: 'Get all legacy workflows',
+      tags: ['legacyWorkflows'],
       responses: {
         200: {
-          description: 'List of all vNext workflows',
+          description: 'List of all legacy workflows',
         },
       },
     }),
-    getVNextWorkflowsHandler,
+    getLegacyWorkflowsHandler,
   );
 
   app.get(
-    '/api/workflows/v-next/:workflowId',
+    '/api/workflows/legacy/:workflowId',
     describeRoute({
-      description: 'Get vNext workflow by ID',
-      tags: ['vNextWorkflows'],
+      description: 'Get legacy workflow by ID',
+      tags: ['legacyWorkflows'],
       parameters: [
         {
           name: 'workflowId',
@@ -1856,21 +2043,21 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
       ],
       responses: {
         200: {
-          description: 'vNext workflow details',
+          description: 'Legacy Workflow details',
         },
         404: {
-          description: 'vNext workflow not found',
+          description: 'Legacy Workflow not found',
         },
       },
     }),
-    getVNextWorkflowByIdHandler,
+    getLegacyWorkflowByIdHandler,
   );
 
   app.get(
-    '/api/workflows/v-next/:workflowId/runs',
+    '/api/workflows/legacy/:workflowId/runs',
     describeRoute({
-      description: 'Get all runs for a vNext workflow',
-      tags: ['vNextWorkflows'],
+      description: 'Get all runs for a legacy workflow',
+      tags: ['legacyWorkflows'],
       parameters: [
         {
           name: 'workflowId',
@@ -1886,18 +2073,18 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
       ],
       responses: {
         200: {
-          description: 'List of vNext workflow runs from storage',
+          description: 'List of legacy workflow runs from storage',
         },
       },
     }),
-    getVNextWorkflowRunsHandler,
+    getLegacyWorkflowRunsHandler,
   );
 
   app.post(
-    '/api/workflows/v-next/:workflowId/resume',
+    '/api/workflows/legacy/:workflowId/resume',
     describeRoute({
-      description: 'Resume a suspended vNext workflow step',
-      tags: ['vNextWorkflows'],
+      description: 'Resume a suspended legacy workflow step',
+      tags: ['legacyWorkflows'],
       parameters: [
         {
           name: 'workflowId',
@@ -1919,30 +2106,23 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
             schema: {
               type: 'object',
               properties: {
-                step: {
-                  oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
-                },
-                resumeData: { type: 'object' },
-                runtimeContext: {
-                  type: 'object',
-                  description: 'Runtime context for the workflow execution',
-                },
+                stepId: { type: 'string' },
+                context: { type: 'object' },
               },
-              required: ['step'],
             },
           },
         },
       },
     }),
-    resumeVNextWorkflowHandler,
+    resumeLegacyWorkflowHandler,
   );
 
   app.post(
-    '/api/workflows/v-next/:workflowId/resume-async',
+    '/api/workflows/legacy/:workflowId/resume-async',
     bodyLimit(bodyLimitOptions),
     describeRoute({
-      description: 'Resume a suspended vNext workflow step',
-      tags: ['vNextWorkflows'],
+      description: 'Resume a suspended legacy workflow step',
+      tags: ['legacyWorkflows'],
       parameters: [
         {
           name: 'workflowId',
@@ -1964,30 +2144,22 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
             schema: {
               type: 'object',
               properties: {
-                step: {
-                  oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
-                },
-                resumeData: { type: 'object' },
-                runtimeContext: {
-                  type: 'object',
-                  description: 'Runtime context for the workflow execution',
-                },
+                stepId: { type: 'string' },
+                context: { type: 'object' },
               },
-              required: ['step'],
             },
           },
         },
       },
     }),
-    resumeAsyncVNextWorkflowHandler,
+    resumeAsyncLegacyWorkflowHandler,
   );
 
   app.post(
-    '/api/workflows/v-next/:workflowId/create-run',
-    bodyLimit(bodyLimitOptions),
+    '/api/workflows/legacy/:workflowId/create-run',
     describeRoute({
-      description: 'Create a new vNext workflow run',
-      tags: ['vNextWorkflows'],
+      description: 'Create a new legacy workflow run',
+      tags: ['legacyWorkflows'],
       parameters: [
         {
           name: 'workflowId',
@@ -2004,19 +2176,19 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
       ],
       responses: {
         200: {
-          description: 'New vNext workflow run created',
+          description: 'New legacy workflow run created',
         },
       },
     }),
-    createVNextWorkflowRunHandler,
+    createLegacyWorkflowRunHandler,
   );
 
   app.post(
-    '/api/workflows/v-next/:workflowId/start-async',
+    '/api/workflows/legacy/:workflowId/start-async',
     bodyLimit(bodyLimitOptions),
     describeRoute({
-      description: 'Execute/Start a vNext workflow',
-      tags: ['vNextWorkflows'],
+      description: 'Execute/Start a legacy workflow',
+      tags: ['legacyWorkflows'],
       parameters: [
         {
           name: 'workflowId',
@@ -2038,11 +2210,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
             schema: {
               type: 'object',
               properties: {
-                inputData: { type: 'object' },
-                runtimeContext: {
-                  type: 'object',
-                  description: 'Runtime context for the workflow execution',
-                },
+                input: { type: 'object' },
               },
             },
           },
@@ -2050,21 +2218,21 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
       },
       responses: {
         200: {
-          description: 'vNext workflow execution result',
+          description: 'Legacy Workflow execution result',
         },
         404: {
-          description: 'vNext workflow not found',
+          description: 'Legacy Workflow not found',
         },
       },
     }),
-    startAsyncVNextWorkflowHandler,
+    startAsyncLegacyWorkflowHandler,
   );
 
   app.post(
-    '/api/workflows/v-next/:workflowId/start',
+    '/api/workflows/legacy/:workflowId/start',
     describeRoute({
-      description: 'Create and start a new vNext workflow run',
-      tags: ['vNextWorkflows'],
+      description: 'Create and start a new legacy workflow run',
+      tags: ['legacyWorkflows'],
       parameters: [
         {
           name: 'workflowId',
@@ -2076,6 +2244,77 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
           name: 'runId',
           in: 'query',
           required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                input: { type: 'object' },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'Legacy Workflow run started',
+        },
+        404: {
+          description: 'Legacy Workflow not found',
+        },
+      },
+    }),
+    startLegacyWorkflowRunHandler,
+  );
+
+  app.get(
+    '/api/workflows/legacy/:workflowId/watch',
+    describeRoute({
+      description: 'Watch legacy workflow transitions in real-time',
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+      ],
+      tags: ['legacyWorkflows'],
+      responses: {
+        200: {
+          description: 'Legacy Workflow transitions in real-time',
+        },
+      },
+    }),
+    watchLegacyWorkflowHandler,
+  );
+
+  app.post(
+    '/api/workflows/:workflowId/stream',
+    describeRoute({
+      description: 'Stream workflow in real-time',
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: false,
           schema: { type: 'string' },
         },
       ],
@@ -2104,36 +2343,9 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
           description: 'vNext workflow not found',
         },
       },
-    }),
-    startVNextWorkflowRunHandler,
-  );
-
-  app.get(
-    '/api/workflows/v-next/:workflowId/watch',
-    describeRoute({
-      description: 'Watch vNext workflow transitions in real-time',
-      parameters: [
-        {
-          name: 'workflowId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-        {
-          name: 'runId',
-          in: 'query',
-          required: false,
-          schema: { type: 'string' },
-        },
-      ],
       tags: ['vNextWorkflows'],
-      responses: {
-        200: {
-          description: 'vNext workflow transitions in real-time',
-        },
-      },
     }),
-    watchVNextWorkflowHandler,
+    streamWorkflowHandler,
   );
 
   // Workflow routes
@@ -2229,56 +2441,22 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
             schema: {
               type: 'object',
               properties: {
-                stepId: { type: 'string' },
-                context: { type: 'object' },
+                step: {
+                  oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
+                },
+                resumeData: { type: 'object' },
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the workflow execution',
+                },
               },
+              required: ['step'],
             },
           },
         },
       },
     }),
     resumeWorkflowHandler,
-  );
-
-  /**
-   * @deprecated Use /api/workflows/:workflowId/resume-async instead
-   */
-  app.post(
-    '/api/workflows/:workflowId/resumeAsync',
-    bodyLimit(bodyLimitOptions),
-    describeRoute({
-      description: '@deprecated Use /api/workflows/:workflowId/resume-async instead',
-      tags: ['workflows'],
-      parameters: [
-        {
-          name: 'workflowId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-        {
-          name: 'runId',
-          in: 'query',
-          required: true,
-          schema: { type: 'string' },
-        },
-      ],
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: {
-              type: 'object',
-              properties: {
-                stepId: { type: 'string' },
-                context: { type: 'object' },
-              },
-            },
-          },
-        },
-      },
-    }),
-    resumeAsyncWorkflowHandler,
   );
 
   app.post(
@@ -2308,9 +2486,16 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
             schema: {
               type: 'object',
               properties: {
-                stepId: { type: 'string' },
-                context: { type: 'object' },
+                step: {
+                  oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
+                },
+                resumeData: { type: 'object' },
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the workflow execution',
+                },
               },
+              required: ['step'],
             },
           },
         },
@@ -2320,7 +2505,8 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
   );
 
   app.post(
-    '/api/workflows/:workflowId/createRun',
+    '/api/workflows/:workflowId/create-run',
+    bodyLimit(bodyLimitOptions),
     describeRoute({
       description: 'Create a new workflow run',
       tags: ['workflows'],
@@ -2344,55 +2530,7 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
         },
       },
     }),
-    createRunHandler,
-  );
-
-  /**
-   * @deprecated Use /api/workflows/:workflowId/start-async instead
-   */
-  app.post(
-    '/api/workflows/:workflowId/startAsync',
-    bodyLimit(bodyLimitOptions),
-    describeRoute({
-      description: '@deprecated Use /api/workflows/:workflowId/start-async instead',
-      tags: ['workflows'],
-      parameters: [
-        {
-          name: 'workflowId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-        {
-          name: 'runId',
-          in: 'query',
-          required: false,
-          schema: { type: 'string' },
-        },
-      ],
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: {
-              type: 'object',
-              properties: {
-                input: { type: 'object' },
-              },
-            },
-          },
-        },
-      },
-      responses: {
-        200: {
-          description: 'Workflow execution result',
-        },
-        404: {
-          description: 'Workflow not found',
-        },
-      },
-    }),
-    startAsyncWorkflowHandler,
+    createWorkflowRunHandler,
   );
 
   app.post(
@@ -2422,7 +2560,11 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
             schema: {
               type: 'object',
               properties: {
-                input: { type: 'object' },
+                inputData: { type: 'object' },
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the workflow execution',
+                },
               },
             },
           },
@@ -2430,10 +2572,10 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
       },
       responses: {
         200: {
-          description: 'Workflow execution result',
+          description: 'workflow execution result',
         },
         404: {
-          description: 'Workflow not found',
+          description: 'workflow not found',
         },
       },
     }),
@@ -2466,7 +2608,11 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
             schema: {
               type: 'object',
               properties: {
-                input: { type: 'object' },
+                inputData: { type: 'object' },
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the workflow execution',
+                },
               },
             },
           },
@@ -2474,10 +2620,10 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
       },
       responses: {
         200: {
-          description: 'Workflow run started',
+          description: 'workflow run started',
         },
         404: {
-          description: 'Workflow not found',
+          description: 'workflow not found',
         },
       },
     }),
@@ -2505,13 +2651,12 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
       tags: ['workflows'],
       responses: {
         200: {
-          description: 'Workflow transitions in real-time',
+          description: 'workflow transitions in real-time',
         },
       },
     }),
     watchWorkflowHandler,
   );
-
   // Log routes
   app.get(
     '/api/logs',
@@ -2944,7 +3089,11 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
 
     if (options?.playground) {
       // For all other routes, serve index.html
-      const indexHtml = await readFile(join(process.cwd(), './playground/index.html'), 'utf-8');
+      let indexHtml = await readFile(join(process.cwd(), './playground/index.html'), 'utf-8');
+      indexHtml = indexHtml.replace(
+        `'%%MASTRA_TELEMETRY_DISABLED%%'`,
+        `${Boolean(process.env.MASTRA_TELEMETRY_DISABLED)}`,
+      );
       return c.newResponse(indexHtml, 200, { 'Content-Type': 'text/html' });
     }
 

@@ -1,33 +1,40 @@
-import type { Workflow } from '@mastra/core/workflows';
 import {
   ReactFlow,
   MiniMap,
-  Controls,
   Background,
   useNodesState,
   useEdgesState,
   BackgroundVariant,
+  NodeProps,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { GetWorkflowResponse } from '@mastra/client-js';
 
-import { contructNodesAndEdges, WStep } from './utils';
+import { constructNodesAndEdges } from './utils';
 import { WorkflowConditionNode } from './workflow-condition-node';
-import { WorkflowDefaultNode } from './workflow-default-node';
+import { DefaultNode, WorkflowDefaultNode } from './workflow-default-node';
 import { WorkflowAfterNode } from './workflow-after-node';
 import { WorkflowLoopResultNode } from './workflow-loop-result-node';
 import { WorkflowNestedNode } from './workflow-nested-node';
+import { ZoomSlider } from './zoom-slider';
 
-export function WorkflowGraphInner({ workflow }: { workflow: Workflow }) {
-  const { nodes: initialNodes, edges: initialEdges } = contructNodesAndEdges({
-    stepGraph: workflow.serializedStepGraph || workflow.stepGraph,
-    stepSubscriberGraph: workflow.serializedStepSubscriberGraph || workflow.stepSubscriberGraph,
-    steps: workflow.steps as WStep,
-  });
+import { useCurrentRun } from '../context/use-current-run';
+
+export interface WorkflowGraphInnerProps {
+  workflow: {
+    stepGraph: GetWorkflowResponse['stepGraph'];
+  };
+  onShowTrace: ({ runId, stepName }: { runId: string; stepName: string }) => void;
+}
+
+export function WorkflowGraphInner({ workflow, onShowTrace }: WorkflowGraphInnerProps) {
+  const { nodes: initialNodes, edges: initialEdges } = constructNodesAndEdges(workflow);
   const [nodes, _, onNodesChange] = useNodesState(initialNodes);
   const [edges] = useEdgesState(initialEdges);
+  const { steps, runId } = useCurrentRun();
 
   const nodeTypes = {
-    'default-node': WorkflowDefaultNode,
+    'default-node': (props: NodeProps<DefaultNode>) => <WorkflowDefaultNode onShowTrace={onShowTrace} {...props} />,
     'condition-node': WorkflowConditionNode,
     'after-node': WorkflowAfterNode,
     'loop-result-node': WorkflowLoopResultNode,
@@ -35,18 +42,29 @@ export function WorkflowGraphInner({ workflow }: { workflow: Workflow }) {
   };
 
   return (
-    <div className="w-full h-full">
+    <div className="w-full h-full bg-surface1">
       <ReactFlow
         nodes={nodes}
-        edges={edges}
+        edges={edges.map(e => ({
+          ...e,
+          style: {
+            ...e.style,
+            stroke:
+              steps[e.data?.previousStepId as string]?.status === 'success' && steps[e.data?.nextStepId as string]
+                ? '#22c55e'
+                : undefined,
+          },
+        }))}
         nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
         fitView
         fitViewOptions={{
-          maxZoom: 0.85,
+          maxZoom: 1,
         }}
+        minZoom={0.01}
+        maxZoom={1}
       >
-        <Controls />
+        <ZoomSlider position="bottom-left" />
         <MiniMap pannable zoomable maskColor="#121212" bgColor="#171717" nodeColor="#2c2c2c" />
         <Background variant={BackgroundVariant.Dots} gap={12} size={0.5} />
       </ReactFlow>

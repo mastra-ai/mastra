@@ -23,6 +23,11 @@ export function augmentWithInit(storage: MastraStorage): MastraStorage {
   // override al functions to wait until init is complete
   const proxy = new Proxy(storage, {
     get(target, prop) {
+      // Handle the isAugmentedSymbol specifically
+      if (prop === isAugmentedSymbol) {
+        return true;
+      }
+
       const value = target[prop as keyof typeof target];
       if (typeof value === 'function' && prop !== 'init') {
         return async (...args: unknown[]) => {
@@ -34,12 +39,6 @@ export function augmentWithInit(storage: MastraStorage): MastraStorage {
 
       return Reflect.get(target, prop);
     },
-  });
-
-  Object.defineProperty(proxy, isAugmentedSymbol, {
-    value: true,
-    enumerable: false, // Won't show up in Object.keys() or for...in loops
-    configurable: true, // Allows the property to be deleted or modified later if needed
   });
 
   return proxy;

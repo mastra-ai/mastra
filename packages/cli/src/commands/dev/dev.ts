@@ -7,11 +7,12 @@ import { execa } from 'execa';
 
 import { logger } from '../../utils/logger.js';
 
-import { convertToViteEnvVar } from '../utils.js';
 import { DevBundler } from './DevBundler';
 
 let currentServerProcess: ChildProcess | undefined;
 let isRestarting = false;
+let errorRestartCount = 0;
+const ON_ERROR_MAX_RESTARTS = 3;
 
 const startServer = async (dotMastraPath: string, port: number, env: Map<string, string>) => {
   try {
@@ -39,11 +40,26 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
       reject: false,
     }) as any as ChildProcess;
 
+    // Handle server process exit
+    currentServerProcess.on('close', code => {
+      if (!code) {
+        logger.info('Server exited, restarting...');
+        setTimeout(() => {
+          if (!isRestarting) {
+            // eslint-disable-next-line @typescript-eslint/no-floating-promises
+            startServer(dotMastraPath, port, env);
+          }
+        }, 1000);
+      }
+    });
+
     if (currentServerProcess?.exitCode && currentServerProcess?.exitCode !== 0) {
       if (!currentServerProcess) {
         throw new Error(`Server failed to start`);
       }
-      throw new Error(`Server failed to start with error: ${currentServerProcess.stderr}`);
+      throw new Error(
+        `Server failed to start with error: ${currentServerProcess.stderr || currentServerProcess.stdout}`,
+      );
     }
 
     // Wait for server to be ready
@@ -73,13 +89,30 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
     }
 
     if (currentServerProcess.exitCode !== null) {
-      logger.error('Server failed to start with error:', { message: currentServerProcess.stderr });
-      return;
+      throw new Error(
+        `Server failed to start with error: ${currentServerProcess.stderr || currentServerProcess.stdout}`,
+      );
     }
   } catch (err) {
     const execaError = err as { stderr?: string; stdout?: string };
     if (execaError.stderr) logger.error('Server error output:', { stderr: execaError.stderr });
     if (execaError.stdout) logger.debug('Server output:', { stdout: execaError.stdout });
+
+    // Attempt to restart on error after a delay
+    setTimeout(() => {
+      if (!isRestarting) {
+        errorRestartCount++;
+        if (errorRestartCount > ON_ERROR_MAX_RESTARTS) {
+          logger.error(`Server failed to start after ${ON_ERROR_MAX_RESTARTS} error attempts. Giving up.`);
+          process.exit(1);
+        }
+        logger.error(
+          `Attempting to restart server after error... (Attempt ${errorRestartCount}/${ON_ERROR_MAX_RESTARTS})`,
+        );
+        // eslint-disable-next-line @typescript-eslint/no-floating-promises
+        startServer(dotMastraPath, port, env);
+      }
+    }, 1000);
   }
 };
 
@@ -115,11 +148,14 @@ export async function dev({
   port: number | null;
   tools?: string[];
 }) {
+  // Reset restart counter at the start of dev
+  errorRestartCount = 0;
+
   const rootDir = root || process.cwd();
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');
   const dotMastraPath = join(rootDir, '.mastra');
 
-  const defaultToolsPath = join(mastraDir, 'tools');
+  const defaultToolsPath = join(mastraDir, 'tools/**/*');
   const discoveredTools = [defaultToolsPath, ...(tools || [])];
 
   const fileService = new FileService();
@@ -131,12 +167,11 @@ export async function dev({
   const watcher = await bundler.watch(entryFile, dotMastraPath, discoveredTools);
 
   const env = await bundler.loadEnvVars();
-  const formattedEnv = convertToViteEnvVar(env, ['MASTRA_TELEMETRY_DISABLED']);
 
   const serverOptions = await getServerOptions(entryFile, join(dotMastraPath, 'output'));
 
   const startPort = port ?? serverOptions?.port ?? 4111;
-  await startServer(join(dotMastraPath, 'output'), startPort, formattedEnv);
+  await startServer(join(dotMastraPath, 'output'), startPort, env);
 
   watcher.on('event', (event: { code: string }) => {
     if (event.code === 'BUNDLE_END') {

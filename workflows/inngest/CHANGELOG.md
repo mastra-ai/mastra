@@ -1,5 +1,126 @@
 # @mastra/inngest
 
+## 0.10.2-alpha.3
+
+### Patch Changes
+
+- 1ee6894: inngest production url fix
+- Updated dependencies [1b5fc55]
+- Updated dependencies [add596e]
+- Updated dependencies [ecebbeb]
+  - @mastra/core@0.10.2-alpha.5
+
+## 0.10.2-alpha.2
+
+### Patch Changes
+
+- 12b7002: Add serializedStepGraph to workflow run snapshot in storage
+- Updated dependencies [c5bf1ce]
+- Updated dependencies [12b7002]
+  - @mastra/core@0.10.2-alpha.4
+
+## 0.10.2-alpha.1
+
+### Patch Changes
+
+- 195c428: Add runId to step execute fn
+- Updated dependencies [ab5adbe]
+- Updated dependencies [195c428]
+- Updated dependencies [f73e11b]
+  - @mastra/core@0.10.2-alpha.3
+
+## 0.10.2-alpha.0
+
+### Patch Changes
+
+- f0d559f: Fix peerdeps for alpha channel
+- Updated dependencies [1e8bb40]
+  - @mastra/core@0.10.2-alpha.2
+
+## 0.10.1
+
+### Patch Changes
+
+- 200d0da: Return payload data, start time, end time, resume time and suspend time for each step in workflow state
+  Return error stack for failed workflow runs
+- 5343f93: Move emitter to symbol to make private
+- Updated dependencies [d70b807]
+- Updated dependencies [6d16390]
+- Updated dependencies [1e4a421]
+- Updated dependencies [200d0da]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+- Updated dependencies [6015bdf]
+  - @mastra/core@0.10.1
+
+## 0.10.1-alpha.0
+
+### Patch Changes
+
+- 200d0da: Return payload data, start time, end time, resume time and suspend time for each step in workflow state
+  Return error stack for failed workflow runs
+- 5343f93: Move emitter to symbol to make private
+- Updated dependencies [200d0da]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+  - @mastra/core@0.10.1-alpha.1
+
+## 0.10.0
+
+### Minor Changes
+
+- 83da932: Move @mastra/core to peerdeps
+
+### Patch Changes
+
+- b3a3d63: BREAKING: Make vnext workflow the default worklow, and old workflow legacy_workflow
+- e4172d9: Update getWorkflowRuns type for inngest workflow
+- Updated dependencies [b3a3d63]
+- Updated dependencies [344f453]
+- Updated dependencies [0a3ae6d]
+- Updated dependencies [95911be]
+- Updated dependencies [f53a6ac]
+- Updated dependencies [5eb5a99]
+- Updated dependencies [7e632c5]
+- Updated dependencies [1e9fbfa]
+- Updated dependencies [eabdcd9]
+- Updated dependencies [90be034]
+- Updated dependencies [99f050a]
+- Updated dependencies [d0ee3c6]
+- Updated dependencies [b2ae5aa]
+- Updated dependencies [23f258c]
+- Updated dependencies [a7292b0]
+- Updated dependencies [0dcb9f0]
+- Updated dependencies [2672a05]
+  - @mastra/core@0.10.0
+
+## 0.1.0-alpha.1
+
+### Minor Changes
+
+- 83da932: Move @mastra/core to peerdeps
+
+### Patch Changes
+
+- b3a3d63: BREAKING: Make vnext workflow the default worklow, and old workflow legacy_workflow
+- Updated dependencies [b3a3d63]
+- Updated dependencies [344f453]
+- Updated dependencies [0a3ae6d]
+- Updated dependencies [95911be]
+- Updated dependencies [5eb5a99]
+- Updated dependencies [7e632c5]
+- Updated dependencies [1e9fbfa]
+- Updated dependencies [b2ae5aa]
+- Updated dependencies [a7292b0]
+- Updated dependencies [0dcb9f0]
+  - @mastra/core@0.10.0-alpha.1
+
 ## 0.0.4-alpha.0
 
 ### Patch Changes

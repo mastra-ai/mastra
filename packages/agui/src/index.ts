@@ -1,16 +1,18 @@
 import type {
   AgentConfig,
+  AssistantMessage,
   BaseEvent,
   Message,
+  MessagesSnapshotEvent,
   RunAgentInput,
   RunFinishedEvent,
   RunStartedEvent,
-  TextMessageContentEvent,
-  TextMessageEndEvent,
-  TextMessageStartEvent,
+  TextMessageChunkEvent,
+  ToolCall,
   ToolCallArgsEvent,
   ToolCallEndEvent,
   ToolCallStartEvent,
+  ToolMessage,
 } from '@ag-ui/client';
 import { AbstractAgent, EventType } from '@ag-ui/client';
 import {
@@ -23,6 +25,8 @@ import { processDataStream } from '@ai-sdk/ui-utils';
 import type { CoreMessage, Mastra } from '@mastra/core';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Agent } from '@mastra/core/agent';
+import type { Context } from 'hono';
+import { RuntimeContext } from '@mastra/core/runtime-context';
 import { randomUUID } from 'crypto';
 import { Observable } from 'rxjs';
 
@@ -30,21 +34,26 @@ interface MastraAgentConfig extends AgentConfig {
   agent: Agent;
   agentId: string;
   resourceId?: string;
+  runtimeContext?: RuntimeContext;
 }
 
 export class AGUIAdapter extends AbstractAgent {
   agent: Agent;
   resourceId?: string;
-  constructor({ agent, agentId, resourceId, ...rest }: MastraAgentConfig) {
+  runtimeContext?: RuntimeContext;
+  constructor({ agent, agentId, resourceId, runtimeContext, ...rest }: MastraAgentConfig) {
     super({
       agentId,
       ...rest,
     });
     this.agent = agent;
     this.resourceId = resourceId;
+    this.runtimeContext = runtimeContext;
   }
 
   protected run(input: RunAgentInput): Observable<BaseEvent> {
+    const finalMessages: Message[] = [...input.messages];
+
     return new Observable<BaseEvent>(subscriber => {
       const convertedMessages = convertMessagesToMastraMessages(input.messages);
       subscriber.next({
@@ -69,41 +78,38 @@ export class AGUIAdapter extends AbstractAgent {
             },
             {} as Record<string, any>,
           ),
+          runtimeContext: this.runtimeContext,
         })
         .then(response => {
-          let currentMessageId: string | undefined = undefined;
-          let isInTextMessage = false;
+          let messageId = randomUUID();
+          let assistantMessage: AssistantMessage = {
+            id: messageId,
+            role: 'assistant',
+            content: '',
+            toolCalls: [],
+          };
+          finalMessages.push(assistantMessage);
 
           return processDataStream({
             stream: response.toDataStreamResponse().body!,
             onTextPart: text => {
-              if (currentMessageId === undefined) {
-                currentMessageId = randomUUID();
-                const message: TextMessageStartEvent = {
-                  type: EventType.TEXT_MESSAGE_START,
-                  messageId: currentMessageId,
-                  role: 'assistant',
-                };
-                subscriber.next(message);
-                isInTextMessage = true;
-              }
-
-              const message: TextMessageContentEvent = {
-                type: EventType.TEXT_MESSAGE_CONTENT,
-                messageId: currentMessageId,
+              assistantMessage.content += text;
+              const event: TextMessageChunkEvent = {
+                type: EventType.TEXT_MESSAGE_CHUNK,
+                role: 'assistant',
+                messageId,
                 delta: text,
               };
-              subscriber.next(message);
+              subscriber.next(event);
             },
             onFinishMessagePart: () => {
-              if (currentMessageId !== undefined) {
-                const message: TextMessageEndEvent = {
-                  type: EventType.TEXT_MESSAGE_END,
-                  messageId: currentMessageId,
-                };
-                subscriber.next(message);
-                isInTextMessage = false;
-              }
+              // Emit message snapshot
+              const event: MessagesSnapshotEvent = {
+                type: EventType.MESSAGES_SNAPSHOT,
+                messages: finalMessages,
+              };
+              subscriber.next(event);
+
               // Emit run finished event
               subscriber.next({
                 type: EventType.RUN_FINISHED,
@@ -115,35 +121,45 @@ export class AGUIAdapter extends AbstractAgent {
               subscriber.complete();
             },
             onToolCallPart(streamPart) {
-              const parentMessageId = currentMessageId || randomUUID();
-              if (isInTextMessage) {
-                const message: TextMessageEndEvent = {
-                  type: EventType.TEXT_MESSAGE_END,
-                  messageId: parentMessageId,
-                };
-                subscriber.next(message);
-                isInTextMessage = false;
-              }
+              let toolCall: ToolCall = {
+                id: streamPart.toolCallId,
+                type: 'function',
+                function: {
+                  name: streamPart.toolName,
+                  arguments: JSON.stringify(streamPart.args),
+                },
+              };
+              assistantMessage.toolCalls!.push(toolCall);
 
-              subscriber.next({
+              const startEvent: ToolCallStartEvent = {
                 type: EventType.TOOL_CALL_START,
+                parentMessageId: messageId,
                 toolCallId: streamPart.toolCallId,
                 toolCallName: streamPart.toolName,
-                parentMessageId,
-              } as ToolCallStartEvent);
+              };
+              subscriber.next(startEvent);
 
-              subscriber.next({
+              const argsEvent: ToolCallArgsEvent = {
                 type: EventType.TOOL_CALL_ARGS,
                 toolCallId: streamPart.toolCallId,
                 delta: JSON.stringify(streamPart.args),
-                parentMessageId,
-              } as ToolCallArgsEvent);
+              };
+              subscriber.next(argsEvent);
 
-              subscriber.next({
+              const endEvent: ToolCallEndEvent = {
                 type: EventType.TOOL_CALL_END,
                 toolCallId: streamPart.toolCallId,
-                parentMessageId,
-              } as ToolCallEndEvent);
+              };
+              subscriber.next(endEvent);
+            },
+            onToolResultPart(streamPart) {
+              const toolMessage: ToolMessage = {
+                role: 'tool',
+                id: randomUUID(),
+                toolCallId: streamPart.toolCallId,
+                content: JSON.stringify(streamPart.result),
+              };
+              finalMessages.push(toolMessage);
             },
           });
         })
@@ -157,7 +173,6 @@ export class AGUIAdapter extends AbstractAgent {
     });
   }
 }
-
 export function convertMessagesToMastraMessages(messages: Message[]): CoreMessage[] {
   const result: CoreMessage[] = [];
 
@@ -176,30 +191,30 @@ export function convertMessagesToMastraMessages(messages: Message[]): CoreMessag
         role: 'assistant',
         content: parts,
       });
-      if (message.toolCalls?.length) {
-        result.push({
-          role: 'tool',
-          content: message.toolCalls.map(toolCall => ({
-            type: 'tool-result',
-            toolCallId: toolCall.id,
-            toolName: toolCall.function.name,
-            result: JSON.parse(toolCall.function.arguments),
-          })),
-        });
-      }
     } else if (message.role === 'user') {
       result.push({
         role: 'user',
         content: message.content || '',
       });
     } else if (message.role === 'tool') {
+      let toolName = 'unknown';
+      for (const msg of messages) {
+        if (msg.role === 'assistant') {
+          for (const toolCall of msg.toolCalls ?? []) {
+            if (toolCall.id === message.toolCallId) {
+              toolName = toolCall.function.name;
+              break;
+            }
+          }
+        }
+      }
       result.push({
         role: 'tool',
         content: [
           {
             type: 'tool-result',
             toolCallId: message.toolCallId,
-            toolName: 'unknown',
+            toolName: toolName,
             result: message.content,
           },
         ],
@@ -210,7 +225,15 @@ export function convertMessagesToMastraMessages(messages: Message[]): CoreMessag
   return result;
 }
 
-export function getAGUI({ mastra, resourceId }: { mastra: Mastra; resourceId?: string }) {
+export function getAGUI({
+  mastra,
+  resourceId,
+  runtimeContext,
+}: {
+  mastra: Mastra;
+  resourceId?: string;
+  runtimeContext?: RuntimeContext;
+}) {
   const agents = mastra.getAgents() || {};
   const networks = mastra.getNetworks() || [];
 
@@ -220,10 +243,11 @@ export function getAGUI({ mastra, resourceId }: { mastra: Mastra; resourceId?: s
         agentId: network.name!,
         agent: network as unknown as Agent,
         resourceId,
+        runtimeContext,
       });
       return acc;
     },
-    {} as Record<string, AGUIAdapter>,
+    {} as Record<string, AbstractAgent>,
   );
 
   const agentAGUI = Object.entries(agents).reduce(
@@ -232,10 +256,11 @@ export function getAGUI({ mastra, resourceId }: { mastra: Mastra; resourceId?: s
         agentId,
         agent,
         resourceId,
+        runtimeContext,
       });
       return acc;
     },
-    {} as Record<string, AGUIAdapter>,
+    {} as Record<string, AbstractAgent>,
   );
 
   return {
@@ -248,10 +273,12 @@ export function getAGUIAgent({
   mastra,
   agentId,
   resourceId,
+  runtimeContext,
 }: {
   mastra: Mastra;
   agentId: string;
   resourceId?: string;
+  runtimeContext?: RuntimeContext;
 }) {
   const agent = mastra.getAgent(agentId);
   if (!agent) {
@@ -261,17 +288,20 @@ export function getAGUIAgent({
     agentId,
     agent,
     resourceId,
-  });
+    runtimeContext,
+  }) as AbstractAgent;
 }
 
 export function getAGUINetwork({
   mastra,
   networkId,
   resourceId,
+  runtimeContext,
 }: {
   mastra: Mastra;
   networkId: string;
   resourceId?: string;
+  runtimeContext?: RuntimeContext;
 }) {
   const network = mastra.getNetwork(networkId);
   if (!network) {
@@ -281,33 +311,48 @@ export function getAGUINetwork({
     agentId: network.name!,
     agent: network as unknown as Agent,
     resourceId,
-  });
+    runtimeContext,
+  }) as AbstractAgent;
 }
 
-export function registerCopilotKit({
+export function registerCopilotKit<T extends Record<string, any> | unknown = unknown>({
   path,
   resourceId,
   serviceAdapter = new ExperimentalEmptyAdapter(),
   agents,
+  setContext,
 }: {
   path: string;
   resourceId: string;
   serviceAdapter?: CopilotServiceAdapter;
-  agents?: Record<string, AGUIAdapter>;
+  agents?: Record<string, AbstractAgent>;
+  setContext?: (
+    c: Context<{
+      Variables: {
+        mastra: Mastra;
+      };
+    }>,
+    runtimeContext: RuntimeContext<T>,
+  ) => void | Promise<void>;
 }) {
   return registerApiRoute(path, {
     method: `ALL`,
     handler: async c => {
       const mastra = c.get('mastra');
 
+      const runtimeContext = new RuntimeContext<T>();
+
+      if (setContext) {
+        await setContext(c, runtimeContext);
+      }
+
       const aguiAgents =
         agents ||
         getAGUI({
           resourceId,
           mastra,
+          runtimeContext,
         });
-
-      console.log('aguiAgents', aguiAgents);
 
       const runtime = new CopilotRuntime({
         agents: aguiAgents,

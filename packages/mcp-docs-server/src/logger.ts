@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import type { MCPServer } from '@mastra/mcp';
 
 // Logger interface for type safety
 export interface Logger {
@@ -41,12 +41,14 @@ export const writeErrorLog = (message: string, data?: any) => {
 };
 
 // Create logger factory to inject server instance
-export function createLogger(server?: Server): Logger {
+export function createLogger(server?: MCPServer): Logger {
   const sendLog = async (level: 'error' | 'debug' | 'info' | 'warning', message: string, data?: any) => {
     if (!server) return;
 
     try {
-      await server.sendLoggingMessage({
+      const sdkServer = server.getServer();
+      if (!sdkServer) return;
+      await sdkServer.sendLoggingMessage({
         level,
         data: {
           message,

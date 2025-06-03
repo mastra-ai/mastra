@@ -4,6 +4,7 @@ exports[`Remove deployer > should remove the deployer from ./__fixtures__/basic.
 "import { Mastra } from '@mastra/core/mastra';
 import { createLogger } from '@mastra/core/logger';
 import { weatherAgent } from '@/agents';
+import { createApiRoute } from '@mastra/core/server';
 
 const mastra = new Mastra({
   agents: {
@@ -21,6 +22,17 @@ const mastra = new Mastra({
       endpoint: "http://localhost:4318"
       // SigNoz local endpoint
     }
+  },
+  server: {
+    port: 3e3,
+    timeout: 5e3,
+    apiRoutes: [createApiRoute({
+      path: "/hello",
+      method: "get",
+      handler: async (req, res) => {
+        res.send("Hello World");
+      }
+    })]
   }
 });
 
@@ -73,6 +85,7 @@ export { mastra };
 exports[`Remove deployer > should remove the deployer from ./__fixtures__/basic-with-function.js 1`] = `
 "import { Mastra } from '@mastra/core/mastra';
 import { createLogger } from '@mastra/core/logger';
+import { createApiRoute } from '@mastra/core/server';
 import { weatherAgent } from '@/agents';
 
 function getTelemetryConfig() {
@@ -86,6 +99,19 @@ function getTelemetryConfig() {
     }
   };
 }
+function getServerOptions() {
+  return {
+    port: 3e3,
+    timeout: 5e3,
+    apiRoutes: [createApiRoute({
+      path: "/hello",
+      method: "get",
+      handler: async (req, res) => {
+        res.send("Hello World");
+      }
+    })]
+  };
+}
 const mastra = new Mastra({
   agents: {
     weatherAgent
@@ -94,7 +120,8 @@ const mastra = new Mastra({
     name: "Mastra",
     level: "info"
   }),
-  telemetry: getTelemetryConfig()
+  telemetry: getTelemetryConfig(),
+  server: getServerOptions()
 });
 
 export { mastra };
@@ -106,6 +133,7 @@ exports[`Remove deployer > should remove the deployer from ./__fixtures__/basic-
 import { createLogger } from '@mastra/core/logger';
 import { weatherAgent } from '@/agents';
 import { telemetryConfig } from '@/telemetry';
+import { serverOptions } from '@/server';
 
 const mastra = new Mastra({
   agents: {
@@ -115,7 +143,8 @@ const mastra = new Mastra({
     name: "Mastra",
     level: "info"
   }),
-  telemetry: telemetryConfig
+  telemetry: telemetryConfig,
+  server: serverOptions
 });
 
 export { mastra };

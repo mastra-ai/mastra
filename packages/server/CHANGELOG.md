@@ -1,5 +1,162 @@
 # @mastra/deployer
 
+## 0.10.2-alpha.5
+
+### Patch Changes
+
+- 1b5fc55: Fixed an issue where the playground wouldn't display images saved in memory. Fixed memory to always store images as strings. Removed duplicate storage of reasoning and file/image parts in storage dbs
+- Updated dependencies [1b5fc55]
+- Updated dependencies [add596e]
+- Updated dependencies [ecebbeb]
+  - @mastra/core@0.10.2-alpha.5
+
+## 0.10.2-alpha.4
+
+### Patch Changes
+
+- c5bf1ce: Add backwards compat code for new MessageList in storage
+- Updated dependencies [c5bf1ce]
+- Updated dependencies [12b7002]
+  - @mastra/core@0.10.2-alpha.4
+
+## 0.10.2-alpha.3
+
+### Patch Changes
+
+- 422ee9e: Fix a2a getTask to be undefined
+- Updated dependencies [ab5adbe]
+- Updated dependencies [195c428]
+- Updated dependencies [f73e11b]
+  - @mastra/core@0.10.2-alpha.3
+
+## 0.10.2-alpha.2
+
+### Patch Changes
+
+- f0d559f: Fix peerdeps for alpha channel
+- a0ebc3f: Do not throw on lack of storage
+- Updated dependencies [1e8bb40]
+  - @mastra/core@0.10.2-alpha.2
+
+## 0.10.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [ee77e78]
+- Updated dependencies [2901125]
+  - @mastra/core@0.10.2-alpha.1
+
+## 0.10.2-alpha.0
+
+### Patch Changes
+
+- e5dc18d: Added a backwards compatible layer to begin storing/retrieving UIMessages in storage instead of CoreMessages
+- e2228f6: Remove stray server log
+- Updated dependencies [592a2db]
+- Updated dependencies [e5dc18d]
+  - @mastra/core@0.10.2-alpha.0
+
+## 0.10.1
+
+### Patch Changes
+
+- 5343f93: Move emitter to symbol to make private
+- 6015bdf: Leverage defaultAgentStreamOption, defaultAgentGenerateOption in playground
+- Updated dependencies [d70b807]
+- Updated dependencies [6d16390]
+- Updated dependencies [1e4a421]
+- Updated dependencies [200d0da]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+- Updated dependencies [6015bdf]
+  - @mastra/core@0.10.1
+
+## 0.10.1-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [d70b807]
+  - @mastra/core@0.10.1-alpha.3
+
+## 0.10.1-alpha.1
+
+### Patch Changes
+
+- 6015bdf: Leverage defaultAgentStreamOption, defaultAgentGenerateOption in playground
+- Updated dependencies [6015bdf]
+  - @mastra/core@0.10.1-alpha.2
+
+## 0.10.1-alpha.0
+
+### Patch Changes
+
+- 5343f93: Move emitter to symbol to make private
+- Updated dependencies [200d0da]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+  - @mastra/core@0.10.1-alpha.1
+
+## 0.10.0
+
+### Minor Changes
+
+- 83da932: Move @mastra/core to peerdeps
+- 5eb5a99: Remove pino from @mastra/core into @mastra/loggers
+
+### Patch Changes
+
+- b3a3d63: BREAKING: Make vnext workflow the default worklow, and old workflow legacy_workflow
+- 0215b0b: Add description to vnext workflow response
+- f53a6ac: Add VNextWorkflowRuns type
+- d0ee3c6: Change all public functions and constructors in vector stores to use named args and prepare to phase out positional args
+- Updated dependencies [b3a3d63]
+- Updated dependencies [344f453]
+- Updated dependencies [0a3ae6d]
+- Updated dependencies [95911be]
+- Updated dependencies [f53a6ac]
+- Updated dependencies [5eb5a99]
+- Updated dependencies [7e632c5]
+- Updated dependencies [1e9fbfa]
+- Updated dependencies [eabdcd9]
+- Updated dependencies [90be034]
+- Updated dependencies [99f050a]
+- Updated dependencies [d0ee3c6]
+- Updated dependencies [b2ae5aa]
+- Updated dependencies [23f258c]
+- Updated dependencies [a7292b0]
+- Updated dependencies [0dcb9f0]
+- Updated dependencies [2672a05]
+  - @mastra/core@0.10.0
+
+## 2.1.0-alpha.1
+
+### Minor Changes
+
+- 83da932: Move @mastra/core to peerdeps
+- 5eb5a99: Remove pino from @mastra/core into @mastra/loggers
+
+### Patch Changes
+
+- b3a3d63: BREAKING: Make vnext workflow the default worklow, and old workflow legacy_workflow
+- 0215b0b: Add description to vnext workflow response
+- Updated dependencies [b3a3d63]
+- Updated dependencies [344f453]
+- Updated dependencies [0a3ae6d]
+- Updated dependencies [95911be]
+- Updated dependencies [5eb5a99]
+- Updated dependencies [7e632c5]
+- Updated dependencies [1e9fbfa]
+- Updated dependencies [b2ae5aa]
+- Updated dependencies [a7292b0]
+- Updated dependencies [0dcb9f0]
+  - @mastra/core@0.10.0-alpha.1
+
 ## 2.0.5-alpha.0
 
 ### Patch Changes

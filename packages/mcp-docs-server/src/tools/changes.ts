@@ -44,9 +44,7 @@ async function readPackageChangelog(filename: string): Promise<string> {
   } catch {
     const packages = await listPackageChangelogs();
     const availablePackages = packages.map(pkg => `- ${pkg.name}`).join('\n');
-    throw new Error(
-      `Changelog for "${filename.replace('.md', '')}" not found.\n\nAvailable packages:\n${availablePackages}`,
-    );
+    return `Changelog for "${filename.replace('.md', '')}" not found.\n\nAvailable packages:\n${availablePackages}`;
   }
 }
 
@@ -69,43 +67,21 @@ export type ChangesInput = z.infer<typeof changesInputSchema>;
 export const changesTool = {
   name: 'mastraChanges',
   description: `Get changelog information for Mastra.ai packages. ${packagesListing}`,
+  parameters: changesInputSchema,
   execute: async (args: ChangesInput) => {
     void logger.debug('Executing mastraChanges tool', { package: args.package });
     try {
       if (!args.package) {
         const packages = await listPackageChangelogs();
-        return {
-          content: [
-            {
-              type: 'text',
-              text: ['Available package changelogs:', '', ...packages.map(pkg => `- ${pkg.name}`)].join('\n'),
-            },
-          ],
-          isError: false,
-        };
+        const content = ['Available package changelogs:', '', ...packages.map(pkg => `- ${pkg.name}`)].join('\n');
+        return content;
       }
 
       const content = await readPackageChangelog(args.package);
-      return {
-        content: [
-          {
-            type: 'text',
-            text: content,
-          },
-        ],
-        isError: false,
-      };
+      return content;
     } catch (error) {
       void logger.error('Failed to execute mastraChanges tool', error);
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-        isError: true,
-      };
+      throw error;
     }
   },
 };

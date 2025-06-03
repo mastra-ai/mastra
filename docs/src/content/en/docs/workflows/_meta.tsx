@@ -1,14 +1,11 @@
 import { Tag } from "@/components/tag";
 const meta = {
-  overview: "Overview",
-  steps: "Steps",
-  "control-flow": "Control Flow",
-  variables: "Variables",
+  overview: <Tag text="new">Overview</Tag>,
+  "flow-control": "Flow Control",
   "suspend-and-resume": "Suspend & Resume",
-  "dynamic-workflows": <Tag text="new">Dynamic Workflows</Tag>,
-  "error-handling": "Error Handling",
-  "nested-workflows": <Tag text="new">Nested Workflows</Tag>,
-  "runtime-variables": "Runtime/Dynamic Variables",
+  "input-data-mapping": "Input Data Mapping",
+  "using-with-agents-and-tools": "Using with Agents and Tools",
+  "inngest-workflow": <Tag text="experimental">Inngest Workflow</Tag>,
 };
 
 export default meta;

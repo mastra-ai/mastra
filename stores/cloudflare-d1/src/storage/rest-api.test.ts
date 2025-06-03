@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import type { MessageType, StorageThreadType } from '@mastra/core/memory';
+import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 import {
   TABLE_MESSAGES,
@@ -437,15 +437,15 @@ describe.skip('D1Store REST API', () => {
       const messages = [
         {
           ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'First' }] as MessageType['content'],
+          content: [{ type: 'text' as const, text: 'First' }] as MastraMessageV2['content'],
         },
         {
           ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'Second' }] as MessageType['content'],
+          content: [{ type: 'text' as const, text: 'Second' }] as MastraMessageV2['content'],
         },
         {
           ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'Third' }] as MessageType['content'],
+          content: [{ type: 'text' as const, text: 'Third' }] as MastraMessageV2['content'],
         },
       ];
 
@@ -552,25 +552,21 @@ describe.skip('D1Store REST API', () => {
         value: { currentState: 'running' },
         timestamp: Date.now(),
         context: {
-          steps: {},
-          stepResults: {
-            'step-1': {
-              status: 'success',
-              result: {
-                nestedData: {
-                  array: [1, 2, 3],
-                  object: { key: 'value' },
-                  date: new Date().toISOString(),
-                },
+          'step-1': {
+            status: 'success',
+            output: {
+              nestedData: {
+                array: [1, 2, 3],
+                object: { key: 'value' },
+                date: new Date().toISOString(),
               },
             },
-            'step-2': {
-              status: 'waiting',
-              dependencies: ['step-3', 'step-4'],
-            },
           },
-          attempts: { 'step-1': 1, 'step-2': 0 },
-          triggerData: {
+          'step-2': {
+            status: 'suspended',
+            dependencies: ['step-3', 'step-4'],
+          },
+          input: {
             type: 'scheduled',
             metadata: {
               schedule: '0 0 * * *',
@@ -578,20 +574,9 @@ describe.skip('D1Store REST API', () => {
             },
           },
         },
-        activePaths: [
-          {
-            stepPath: ['step-1'],
-            stepId: 'step-1',
-            status: 'success',
-          },
-          {
-            stepPath: ['step-2'],
-            stepId: 'step-2',
-            status: 'waiting',
-          },
-        ],
+        activePaths: [],
         suspendedPaths: {},
-      };
+      } as unknown as WorkflowRunState;
 
       await store.persistWorkflowSnapshot({
         workflowName,
@@ -682,30 +667,24 @@ describe.skip('D1Store REST API', () => {
     });
 
     it('should handle workflow step updates', async () => {
-      const workflow: WorkflowRunState = {
+      const workflow = {
         runId: 'test-run-3',
         value: { 'test-run-3': 'running' },
         timestamp: Date.now(),
         context: {
-          steps: {
-            'step-1': {
-              status: 'waiting' as const,
-              payload: { input: 'test' },
-            },
-            'step-2': {
-              status: 'waiting' as const,
-              payload: { input: 'test2' },
-            },
+          'step-1': {
+            status: 'success' as const,
+            output: { input: 'test' },
           },
-          triggerData: { source: 'test' },
-          attempts: { 'step-1': 0, 'step-2': 0 },
+          'step-2': {
+            status: 'success' as const,
+            output: { input: 'test2' },
+          },
+          input: { source: 'test' },
         },
-        activePaths: [
-          { stepPath: ['main'], stepId: 'step-1', status: 'waiting' },
-          { stepPath: ['main'], stepId: 'step-2', status: 'waiting' },
-        ],
+        activePaths: [],
         suspendedPaths: {},
-      };
+      } as unknown as WorkflowRunState;
 
       await store.persistWorkflowSnapshot({
         workflowName: 'test-workflow',
@@ -720,16 +699,13 @@ describe.skip('D1Store REST API', () => {
         ...workflow,
         context: {
           ...workflow.context,
-          steps: {
-            ...workflow.context.steps,
-            'step-1': {
-              status: 'success' as const,
-              payload: { result: 'done' },
-            },
+          'step-1': {
+            status: 'success' as const,
+            output: { result: 'done' },
           },
         },
-        activePaths: [{ stepPath: ['main'], stepId: 'step-2', status: 'waiting' }],
-      };
+        activePaths: [],
+      } as unknown as WorkflowRunState;
 
       await store.persistWorkflowSnapshot({
         workflowName: 'test-workflow',
@@ -744,10 +720,10 @@ describe.skip('D1Store REST API', () => {
         runId: workflow.runId,
       });
 
-      expect(retrieved?.context.steps['step-1'].status).toBe('success');
-      expect(retrieved?.context.steps['step-1'].payload).toEqual({ result: 'done' });
-      expect(retrieved?.context.steps['step-2'].status).toBe('waiting');
-      expect(retrieved?.activePaths).toEqual([{ stepPath: ['main'], stepId: 'step-2', status: 'waiting' }]);
+      expect(retrieved?.context['step-1'].status).toBe('success');
+      expect((retrieved?.context['step-1'] as any).output).toEqual({ result: 'done' });
+      expect(retrieved?.context['step-2'].status).toBe('success');
+      expect(retrieved?.activePaths).toEqual([]);
     });
   });
 
@@ -1176,7 +1152,7 @@ describe.skip('D1Store REST API', () => {
           content: [{ type: 'text', text: 'Third' }],
           createdAt: new Date(baseTime + 2000),
         },
-      ] as MessageType[];
+      ] as MastraMessageV1[];
 
       await store.saveMessages({ messages });
 
@@ -1213,11 +1189,12 @@ describe.skip('D1Store REST API', () => {
       const thread = createSampleThread();
       const message = {
         ...createSampleMessage(thread.id),
-        content: [{ type: 'text' as const, text: '特殊字符 !@#$%^&*()' }] as MessageType['content'],
+        content: [{ type: 'text' as const, text: '特殊字符 !@#$%^&*()' }] as MastraMessageV1['content'],
+        threadId: thread.id,
       };
 
       await store.saveThread({ thread });
-      await store.saveMessages({ messages: [message] });
+      await store.saveMessages({ messages: [message], format: 'v2' });
 
       // Should retrieve correctly
       const messages = await retryUntil(
@@ -1366,7 +1343,7 @@ describe.skip('D1Store REST API', () => {
       // Test with various malformed data
       const malformedMessage = {
         ...createSampleMessage(thread.id),
-        content: [{ type: 'text' as const, text: ''.padStart(1024 * 1024, 'x') }] as MessageType['content'], // Very large content
+        content: [{ type: 'text' as const, text: ''.padStart(1024 * 1024, 'x') }] as MastraMessageV2['content'], // Very large content
       };
 
       await store.saveMessages({ messages: [malformedMessage] });

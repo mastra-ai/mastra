@@ -1,22 +1,30 @@
 import { useState } from 'react';
 
-import { Badge, Icon, Txt, VNextWorkflowTrigger, WorkflowIcon, WorkflowTrigger } from '@mastra/playground-ui';
+import { Badge, Icon, Txt, LegacyWorkflowTrigger, WorkflowIcon, WorkflowTrigger } from '@mastra/playground-ui';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-import { WorkflowEndpoints } from './workflow-endpoints';
 import { WorkflowLogs } from './workflow-logs';
-import { useWorkflow } from '@/hooks/use-workflows';
+import { useLegacyWorkflow, useWorkflow } from '@/hooks/use-workflows';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CopyIcon } from 'lucide-react';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
+import { WorkflowRuns } from '@/pages/workflows/workflow/components/workflow-runs';
+import { useNavigate, useParams } from 'react-router';
 
-export function WorkflowInformation({ workflowId, isVNext }: { workflowId: string; isVNext?: boolean }) {
-  const { workflow, isLoading } = useWorkflow(workflowId);
+export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: string; isLegacy?: boolean }) {
+  const params = useParams();
+  const navigate = useNavigate();
+  const { workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId, !isLegacy);
+  const { legacyWorkflow, isLoading: isLegacyWorkflowLoading } = useLegacyWorkflow(workflowId, !!isLegacy);
+
   const [runId, setRunId] = useState<string>('');
   const { handleCopy } = useCopyToClipboard({ text: workflowId });
 
   const stepsCount = Object.keys(workflow?.steps ?? {}).length;
+
+  const isLoading = isLegacy ? isLegacyWorkflowLoading : isWorkflowLoading;
+  const workflowToUse = isLegacy ? legacyWorkflow : workflow;
 
   return (
     <div className="h-full overflow-y-scroll pb-5">
@@ -29,9 +37,11 @@ export function WorkflowInformation({ workflowId, isVNext }: { workflowId: strin
           {isLoading ? (
             <Skeleton className="h-3 w-1/3" />
           ) : (
-            <Txt variant="header-md" as="h2" className="font-medium">
-              {workflow?.name}
-            </Txt>
+            <div className="flex items-center gap-4 min-w-0">
+              <Txt variant="header-md" as="h2" className="font-medium truncate">
+                {workflowToUse?.name}
+              </Txt>
+            </div>
           )}
         </div>
 
@@ -55,14 +65,14 @@ export function WorkflowInformation({ workflowId, isVNext }: { workflowId: strin
 
       <Tabs defaultValue="run" className="h-full">
         <TabsList className="flex shrink-0 border-b">
-          <TabsTrigger value="run" className="group">
+          <TabsTrigger value="run" className="group" onClick={() => navigate(`/workflows/${workflowId}/graph`)}>
             <p className="text-xs p-3 text-mastra-el-3 group-data-[state=active]:text-mastra-el-5 group-data-[state=active]:border-b-2 group-data-[state=active]:pb-2.5 border-white">
               Run
             </p>
           </TabsTrigger>
-          <TabsTrigger value="endpoints" className="group">
+          <TabsTrigger value="runs" className="group">
             <p className="text-xs p-3 text-mastra-el-3 group-data-[state=active]:text-mastra-el-5 group-data-[state=active]:border-b-2 group-data-[state=active]:pb-2.5 border-white">
-              Endpoints
+              Runs
             </p>
           </TabsTrigger>
           <TabsTrigger value="logs" className="group">
@@ -74,16 +84,16 @@ export function WorkflowInformation({ workflowId, isVNext }: { workflowId: strin
         <TabsContent value="run">
           {workflowId ? (
             <>
-              {isVNext ? (
-                <VNextWorkflowTrigger workflowId={workflowId} setRunId={setRunId} baseUrl="" />
+              {isLegacy ? (
+                <LegacyWorkflowTrigger workflowId={workflowId} setRunId={setRunId} />
               ) : (
-                <WorkflowTrigger workflowId={workflowId} setRunId={setRunId} baseUrl="" />
+                <WorkflowTrigger workflowId={workflowId} setRunId={setRunId} />
               )}
             </>
           ) : null}
         </TabsContent>
-        <TabsContent value="endpoints">
-          <WorkflowEndpoints workflowId={workflowId} isVNext={isVNext} />
+        <TabsContent value="runs">
+          <WorkflowRuns workflowId={workflowId} runId={params?.runId} />
         </TabsContent>
         <TabsContent value="logs">
           <WorkflowLogs runId={runId} />

@@ -18,3 +18,12 @@ Use the weatherTool to fetch current weather data.`,
   model: openai('gpt-4o'),
   tools: { weatherTool },
 });
+
+export const weatherReporterAgent = new Agent({
+  name: 'weatherExplainerAgent',
+  model: openai('gpt-4o'),
+  instructions: `
+  You are a weather explainer. You have access to input that will help you get weather-specific activities for any city. 
+  The tool uses agents to plan the activities, you just need to provide the city. Explain the weather report like a weather reporter.
+  `,
+});

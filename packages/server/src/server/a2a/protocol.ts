@@ -2,13 +2,13 @@ import { A2AError } from '@mastra/core/a2a';
 
 import type { JSONRPCError, JSONRPCResponse, Message, Part } from '@mastra/core/a2a';
 import type { CoreMessage } from '@mastra/core/llm';
-import type { Logger } from '@mastra/core/logger';
+import type { IMastraLogger } from '@mastra/core/logger';
 
 export function normalizeError(
   error: any,
   reqId: number | string | null,
   taskId?: string,
-  logger?: Logger,
+  logger?: IMastraLogger,
 ): JSONRPCResponse<null, unknown> {
   let a2aError: A2AError;
   if (error instanceof A2AError) {

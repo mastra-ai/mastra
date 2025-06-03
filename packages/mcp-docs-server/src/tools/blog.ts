@@ -44,7 +44,18 @@ async function fetchBlogPost(url: string): Promise<string> {
     if (response.status === 429) {
       throw new Error('Rate limit exceeded');
     }
-    throw new Error('Failed to fetch blog post');
+    let blogList: string;
+    try {
+      const blogPosts = await fetchBlogPosts();
+      blogList = `Here are available blog posts:\n\n${blogPosts}`;
+    } catch (e) {
+      void logger.error(
+        `Blog post not found or failed to fetch: ${url}, and failed to fetch blog post listing as fallback.`,
+        e,
+      );
+      blogList = 'Additionally, the list of available blog posts could not be fetched at this time.';
+    }
+    return `The requested blog post could not be found or fetched: ${url}\n\n${blogList}`;
   }
   const html = await response.text();
 
@@ -78,6 +89,7 @@ export const blogTool = {
   name: 'mastraBlog',
   description:
     'Get Mastra.ai blog content. Without a URL, returns a list of all blog posts. With a URL, returns the specific blog post content in markdown format. The blog contains changelog posts as well as announcements and posts about Mastra features and AI news',
+  parameters: blogInputSchema,
   execute: async (args: BlogInput) => {
     void logger.debug('Executing mastraBlog tool', { url: args.url });
     try {
@@ -87,26 +99,10 @@ export const blogTool = {
       } else {
         content = await fetchBlogPosts();
       }
-      return {
-        content: [
-          {
-            type: 'text',
-            text: content,
-          },
-        ],
-        isError: false,
-      };
+      return content;
     } catch (error) {
       void logger.error('Failed to execute mastraBlog tool', error);
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-        isError: true,
-      };
+      throw error;
     }
   },
 };

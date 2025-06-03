@@ -1,76 +1,40 @@
 import { createTool } from '@mastra/core/tools';
-import type { EmbeddingModel } from 'ai';
 import { z } from 'zod';
 
 import { rerank } from '../rerank';
 import type { RerankConfig } from '../rerank';
-import {
-  vectorQuerySearch,
-  defaultVectorQueryDescription,
-  filterDescription,
-  topKDescription,
-  queryTextDescription,
-} from '../utils';
+import { vectorQuerySearch, defaultVectorQueryDescription, filterSchema, outputSchema, baseSchema } from '../utils';
+import type { RagTool } from '../utils';
 import { convertToSources } from '../utils/convert-sources';
+import type { VectorQueryToolOptions } from './types';
 
-export const createVectorQueryTool = ({
-  vectorStoreName,
-  indexName,
-  model,
-  enableFilter = false,
-  includeVectors = false,
-  includeSources = true,
-  reranker,
-  id,
-  description,
-}: {
-  vectorStoreName: string;
-  indexName: string;
-  model: EmbeddingModel<string>;
-  enableFilter?: boolean;
-  includeVectors?: boolean;
-  includeSources?: boolean;
-  reranker?: RerankConfig;
-  id?: string;
-  description?: string;
-}) => {
-  const toolId = id || `VectorQuery ${vectorStoreName} ${indexName} Tool`;
+export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
+  const { model, id, description } = options;
+  const toolId = id || `VectorQuery ${options.vectorStoreName} ${options.indexName} Tool`;
   const toolDescription = description || defaultVectorQueryDescription();
-  // Create base schema with required fields
-  const baseSchema = {
-    queryText: z.string().describe(queryTextDescription),
-    topK: z.coerce.number().describe(topKDescription),
-  };
-  const inputSchema = enableFilter
-    ? z
-        .object({
-          ...baseSchema,
-          filter: z.coerce.string().describe(filterDescription),
-        })
-        .passthrough()
-    : z.object(baseSchema).passthrough();
+  const inputSchema = options.enableFilter ? filterSchema : z.object(baseSchema).passthrough();
+
   return createTool({
     id: toolId,
-    inputSchema,
-    // Output schema includes `sources`, which exposes the full set of retrieved chunks (QueryResult objects)
-    // Each source contains all information needed to reference
-    // the original document, chunk, and similarity score.
-    outputSchema: z.object({
-      // Array of metadata or content for compatibility with prior usage
-      relevantContext: z.any(),
-      // Array of full retrieval result objects
-      sources: z.array(
-        z.object({
-          id: z.string(), // Unique chunk/document identifier
-          metadata: z.any(), // All metadata fields (document ID, etc.)
-          vector: z.array(z.number()), // Embedding vector (if available)
-          score: z.number(), // Similarity score for this retrieval
-          document: z.string(), // Full chunk/document text (if available)
-        }),
-      ),
-    }),
     description: toolDescription,
-    execute: async ({ context: { queryText, topK, filter }, mastra }) => {
+    inputSchema,
+    outputSchema,
+    execute: async ({ context, mastra, runtimeContext }) => {
+      const indexName: string = runtimeContext.get('indexName') ?? options.indexName;
+      const vectorStoreName: string = runtimeContext.get('vectorStoreName') ?? options.vectorStoreName;
+      const includeVectors: boolean = runtimeContext.get('includeVectors') ?? options.includeVectors ?? false;
+      const includeSources: boolean = runtimeContext.get('includeSources') ?? options.includeSources ?? true;
+      const reranker: RerankConfig = runtimeContext.get('reranker') ?? options.reranker;
+      const databaseConfig = runtimeContext.get('databaseConfig') ?? options.databaseConfig;
+
+      if (!indexName) throw new Error(`indexName is required, got: ${indexName}`);
+      if (!vectorStoreName) throw new Error(`vectorStoreName is required, got: ${vectorStoreName}`);
+
+      const topK: number = runtimeContext.get('topK') ?? context.topK ?? 10;
+      const filter: Record<string, any> = runtimeContext.get('filter') ?? context.filter;
+      const queryText = context.queryText;
+      const enableFilter = !!runtimeContext.get('filter') || (options.enableFilter ?? false);
+
       const logger = mastra?.getLogger();
       if (!logger) {
         console.warn(
@@ -78,7 +42,7 @@ export const createVectorQueryTool = ({
         );
       }
       if (logger) {
-        logger.debug('[VectorQueryTool] execute called with:', { queryText, topK, filter });
+        logger.debug('[VectorQueryTool] execute called with:', { queryText, topK, filter, databaseConfig });
       }
       try {
         const topKValue =
@@ -112,7 +76,7 @@ export const createVectorQueryTool = ({
           })();
         }
         if (logger) {
-          logger.debug('Prepared vector query parameters', { queryText, topK: topKValue, queryFilter });
+          logger.debug('Prepared vector query parameters', { queryText, topK: topKValue, queryFilter, databaseConfig });
         }
 
         const { results } = await vectorQuerySearch({
@@ -123,6 +87,7 @@ export const createVectorQueryTool = ({
           queryFilter: Object.keys(queryFilter || {}).length > 0 ? queryFilter : undefined,
           topK: topKValue,
           includeVectors,
+          databaseConfig,
         });
         if (logger) {
           logger.debug('vectorQuerySearch returned results', { count: results.length });
@@ -167,5 +132,6 @@ export const createVectorQueryTool = ({
         return { relevantContext: [], sources: [] };
       }
     },
-  });
+    // Use any for output schema as the structure of the output causes type inference issues
+  }) as RagTool<typeof inputSchema, any>;
 };

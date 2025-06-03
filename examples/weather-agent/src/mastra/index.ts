@@ -1,9 +1,11 @@
 import { Mastra } from '@mastra/core';
 
 import { weatherAgent } from './agents';
-import { weatherWorkflow } from './workflows';
+import { weatherWorkflow as legacyWeatherWorkflow } from './workflows';
+import { weatherWorkflow, weatherWorkflow2 } from './workflows/new-workflow';
 
 export const mastra = new Mastra({
   agents: { weatherAgent },
-  workflows: { weatherWorkflow },
+  legacy_workflows: { legacyWeatherWorkflow },
+  workflows: { weatherWorkflow, weatherWorkflow2 },
 });

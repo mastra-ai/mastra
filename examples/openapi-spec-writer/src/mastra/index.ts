@@ -1,11 +1,11 @@
-import { createLogger } from "@mastra/core/logger";
+import { PinoLogger } from "@mastra/loggers";
 import { Mastra } from "@mastra/core/mastra";
 import { UpstashTransport } from "@mastra/loggers/upstash";
 import { agentOne } from "./agents";
 import { makePRToMastraWorkflow, openApiSpecGenWorkflow } from "./workflows";
 
 export const mastra = new Mastra({
-  logger: createLogger({
+  logger: new PinoLogger({
     name: "OPENAPI_SPEC_WRITER",
     level: "debug",
     transports: {

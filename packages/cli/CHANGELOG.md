@@ -1,5 +1,297 @@
 # mastra
 
+## 0.10.2-alpha.6
+
+### Patch Changes
+
+- 1b5fc55: Fixed an issue where the playground wouldn't display images saved in memory. Fixed memory to always store images as strings. Removed duplicate storage of reasoning and file/image parts in storage dbs
+- 9666468: move the fetch traces call to the playground instead of playground-ui
+- 668af6d: Fix mastra dev server restarts
+- Updated dependencies [1b5fc55]
+- Updated dependencies [add596e]
+- Updated dependencies [ecebbeb]
+  - @mastra/core@0.10.2-alpha.5
+  - @mastra/deployer@0.10.2-alpha.5
+
+## 0.10.2-alpha.5
+
+### Patch Changes
+
+- 401bbae: Show workflow graph from stepGraph of previous runs when viewing a previous run
+
+## 0.10.2-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [c5bf1ce]
+- Updated dependencies [12b7002]
+  - @mastra/core@0.10.2-alpha.4
+  - @mastra/deployer@0.10.2-alpha.4
+
+## 0.10.2-alpha.3
+
+### Patch Changes
+
+- f73e11b: fix telemetry disabled not working on playground
+- 068b850: fix: able to pass headers to playground components which are using the mastra client
+- Updated dependencies [ab5adbe]
+- Updated dependencies [195c428]
+- Updated dependencies [f73e11b]
+- Updated dependencies [f946acf]
+  - @mastra/core@0.10.2-alpha.3
+  - @mastra/deployer@0.10.2-alpha.3
+
+## 0.10.2-alpha.2
+
+### Patch Changes
+
+- 73fec0b: Mastra start cli command"
+- f0d559f: Fix peerdeps for alpha channel
+- f6ddf55: fix traces not showing and reduce API surface from playground ui
+- Updated dependencies [e8d2aff]
+- Updated dependencies [1e8bb40]
+- Updated dependencies [4187ed4]
+- Updated dependencies [f0d559f]
+  - @mastra/deployer@0.10.2-alpha.2
+  - @mastra/core@0.10.2-alpha.2
+  - @mastra/loggers@0.10.1-alpha.0
+  - @mastra/mcp@0.10.2-alpha.1
+
+## 0.10.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [ee77e78]
+- Updated dependencies [2901125]
+  - @mastra/core@0.10.2-alpha.1
+  - @mastra/deployer@0.10.2-alpha.1
+
+## 0.10.2-alpha.0
+
+### Patch Changes
+
+- 592a2db: Added different icons for agents and workflows in mcp tools list
+- 89a69d0: add a way to go to the given trace of a workflow step
+- 9faee5b: small fixes in the workflows graph
+- 9a31c09: Highlight steps in nested workflows on workflow graph
+- Updated dependencies [592a2db]
+- Updated dependencies [e5dc18d]
+  - @mastra/core@0.10.2-alpha.0
+  - @mastra/mcp@0.10.2-alpha.0
+  - @mastra/deployer@0.10.2-alpha.0
+
+## 0.10.1
+
+### Patch Changes
+
+- d70b807: Improve storage.init
+- b4365f6: add empty states for agents network and tools
+- d0932ac: add multi modal input behind feature flag
+- bed0916: Update default tools path in mastra dev,build
+- 3c2dba5: add workflow run list
+- 23d56b1: Handle dev server errors, restart, exit
+- 3240a80: feat: add vscode as option to interactive prompt
+- 992fe17: chore: remove check for alpha and non-alpha mastra packages from mastra lint
+- 267773e: Show map config on workflow graph
+  Highlight borders for conditions too on workflow graph
+  Fix watch stream
+- 35bb6a3: Allow undefined temprature, topP model setting from playground
+- 33f1c64: revamp the experience for workflows
+- 6015bdf: Leverage defaultAgentStreamOption, defaultAgentGenerateOption in playground
+- 7a32205: add empty states for workflows, agents and mcp servers
+- Updated dependencies [d70b807]
+- Updated dependencies [6d16390]
+- Updated dependencies [1e4a421]
+- Updated dependencies [ab89d6a]
+- Updated dependencies [200d0da]
+- Updated dependencies [bed0916]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+- Updated dependencies [fe68410]
+- Updated dependencies [6015bdf]
+  - @mastra/core@0.10.1
+  - @mastra/deployer@0.10.1
+  - @mastra/mcp@0.10.1
+
+## 0.10.1-alpha.6
+
+### Patch Changes
+
+- 3240a80: feat: add vscode as option to interactive prompt
+
+## 0.10.1-alpha.5
+
+### Patch Changes
+
+- 992fe17: chore: remove check for alpha and non-alpha mastra packages from mastra lint
+- 267773e: Show map config on workflow graph
+  Highlight borders for conditions too on workflow graph
+  Fix watch stream
+
+## 0.10.1-alpha.4
+
+### Patch Changes
+
+- d70b807: Improve storage.init
+- 3c2dba5: add workflow run list
+- 33f1c64: revamp the experience for workflows
+- Updated dependencies [d70b807]
+  - @mastra/core@0.10.1-alpha.3
+  - @mastra/deployer@0.10.1-alpha.3
+
+## 0.10.1-alpha.3
+
+### Patch Changes
+
+- 6015bdf: Leverage defaultAgentStreamOption, defaultAgentGenerateOption in playground
+- Updated dependencies [fe68410]
+- Updated dependencies [6015bdf]
+  - @mastra/deployer@0.10.1-alpha.2
+  - @mastra/core@0.10.1-alpha.2
+
+## 0.10.1-alpha.2
+
+### Patch Changes
+
+- b4365f6: add empty states for agents network and tools
+- d0932ac: add multi modal input behind feature flag
+- bed0916: Update default tools path in mastra dev,build
+- 23d56b1: Handle dev server errors, restart, exit
+- Updated dependencies [ab89d6a]
+- Updated dependencies [200d0da]
+- Updated dependencies [bed0916]
+- Updated dependencies [bf5f17b]
+- Updated dependencies [5343f93]
+- Updated dependencies [38aee50]
+- Updated dependencies [5c41100]
+- Updated dependencies [d6a759b]
+  - @mastra/mcp@0.10.1-alpha.0
+  - @mastra/core@0.10.1-alpha.1
+  - @mastra/deployer@0.10.1-alpha.1
+
+## 0.10.1-alpha.1
+
+### Patch Changes
+
+- 7a32205: add empty states for workflows, agents and mcp servers
+
+## 0.10.1-alpha.0
+
+### Patch Changes
+
+- 35bb6a3: Allow undefined temprature, topP model setting from playground
+- Updated dependencies [6d16390]
+- Updated dependencies [1e4a421]
+  - @mastra/deployer@0.10.1-alpha.0
+  - @mastra/core@0.10.1-alpha.0
+
+## 0.10.0
+
+### Minor Changes
+
+- 83da932: Move @mastra/core to peerdeps
+- 5eb5a99: Remove pino from @mastra/core into @mastra/loggers
+- 0dcb9f0: Memory breaking changes: storage, vector, and embedder are now required. Working memory text streaming has been removed, only tool calling is supported for working memory updates now. Default settings have changed (lastMessages: 40->10, semanticRecall: true->false, threads.generateTitle: true->false)
+
+### Patch Changes
+
+- bdb7934: fix tools not showing (discoverability)
+- b3a3d63: BREAKING: Make vnext workflow the default worklow, and old workflow legacy_workflow
+- ae122cc: show the entities ID close to the copy button
+- 99552bc: revamp the UI of the tools page
+- f2d3352: fix overflow scroll in runtime context
+- db4211d: improve the UI/UX of the runtime context with formatting, copying, docs and syntax highlighting
+- 9b7294a: Revamp the UI for the right sidebar of the agents page
+- e2c2cf1: Persist playground agent settings across refresh
+- 47776b4: update the mcp pages
+- fd69cc3: revamp UI of workflow "Run" pane
+- 1270183: Add waterfull traces instead of stacked progressbar (UI improvement mostly)
+- 392a14d: changing the empty state for threads in agent chat
+- 8d9feae: Add missing x-mastra-dev-playground headers
+- cbf153f: Handle broken images on the playground
+- 0cae9b1: sidebar adjustments (storing status + showing the action of collapsing / expanding)
+- d2b595a: a better tools playground page
+- 1f6886f: bring back the memory not activated warning in agent chat
+- 8a68886: revamp the UI of the workflow form input
+- 8332970: Rename agents, tools, workflow example files.
+- 2672a05: Add MCP servers and tool call execution to playground
+- Updated dependencies [b3a3d63]
+- Updated dependencies [344f453]
+- Updated dependencies [0a3ae6d]
+- Updated dependencies [95911be]
+- Updated dependencies [83da932]
+- Updated dependencies [f53a6ac]
+- Updated dependencies [5eb5a99]
+- Updated dependencies [7e632c5]
+- Updated dependencies [1e9fbfa]
+- Updated dependencies [eabdcd9]
+- Updated dependencies [90be034]
+- Updated dependencies [129b5f5]
+- Updated dependencies [8d9feae]
+- Updated dependencies [aaf0e48]
+- Updated dependencies [99f050a]
+- Updated dependencies [d0ee3c6]
+- Updated dependencies [b2ae5aa]
+- Updated dependencies [48e5910]
+- Updated dependencies [23f258c]
+- Updated dependencies [a7292b0]
+- Updated dependencies [0dcb9f0]
+- Updated dependencies [2672a05]
+  - @mastra/deployer@0.10.0
+  - @mastra/core@0.10.0
+  - @mastra/mcp@0.10.0
+  - @mastra/loggers@0.10.0
+
+## 0.7.0-alpha.2
+
+### Patch Changes
+
+- 47776b4: update the mcp pages
+- Updated dependencies [129b5f5]
+  - @mastra/loggers@0.2.0-alpha.2
+
+## 0.7.0-alpha.1
+
+### Minor Changes
+
+- 83da932: Move @mastra/core to peerdeps
+- 5eb5a99: Remove pino from @mastra/core into @mastra/loggers
+- 0dcb9f0: Memory breaking changes: storage, vector, and embedder are now required. Working memory text streaming has been removed, only tool calling is supported for working memory updates now. Default settings have changed (lastMessages: 40->10, semanticRecall: true->false, threads.generateTitle: true->false)
+
+### Patch Changes
+
+- bdb7934: fix tools not showing (discoverability)
+- b3a3d63: BREAKING: Make vnext workflow the default worklow, and old workflow legacy_workflow
+- ae122cc: show the entities ID close to the copy button
+- f2d3352: fix overflow scroll in runtime context
+- fd69cc3: revamp UI of workflow "Run" pane
+- 8d9feae: Add missing x-mastra-dev-playground headers
+- cbf153f: Handle broken images on the playground
+- 0cae9b1: sidebar adjustments (storing status + showing the action of collapsing / expanding)
+- d2b595a: a better tools playground page
+- 1f6886f: bring back the memory not activated warning in agent chat
+- 8a68886: revamp the UI of the workflow form input
+- 8332970: Rename agents, tools, workflow example files.
+- Updated dependencies [b3a3d63]
+- Updated dependencies [344f453]
+- Updated dependencies [0a3ae6d]
+- Updated dependencies [95911be]
+- Updated dependencies [83da932]
+- Updated dependencies [5eb5a99]
+- Updated dependencies [7e632c5]
+- Updated dependencies [1e9fbfa]
+- Updated dependencies [8d9feae]
+- Updated dependencies [b2ae5aa]
+- Updated dependencies [a7292b0]
+- Updated dependencies [0dcb9f0]
+  - @mastra/deployer@0.4.0-alpha.1
+  - @mastra/core@0.10.0-alpha.1
+  - @mastra/mcp@0.6.0-alpha.1
+  - @mastra/loggers@0.2.0-alpha.1
+
 ## 0.6.4-alpha.0
 
 ### Patch Changes

@@ -1,7 +1,7 @@
 import { A2AError } from '@mastra/core/a2a';
 import type { TaskSendParams, TaskQueryParams, TaskIdParams, AgentCard, TaskStatus, TaskState } from '@mastra/core/a2a';
 import type { Agent } from '@mastra/core/agent';
-import type { Logger } from '@mastra/core/logger';
+import type { IMastraLogger } from '@mastra/core/logger';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
 import { z } from 'zod';
 import { convertToCoreMessage, normalizeError, createSuccessResponse, createErrorResponse } from '../a2a/protocol';
@@ -96,6 +96,7 @@ export async function handleTaskSend({
   params,
   taskStore,
   agent,
+  agentId,
   logger,
   runtimeContext,
 }: {
@@ -103,12 +104,12 @@ export async function handleTaskSend({
   params: TaskSendParams;
   taskStore: InMemoryTaskStore;
   agent: Agent;
-  logger?: Logger;
+  agentId: string;
+  logger?: IMastraLogger;
   runtimeContext: RuntimeContext;
 }) {
   validateTaskSendParams(params);
 
-  const agentId = agent.id;
   const { id: taskId, message, sessionId, metadata } = params;
 
   // Load or create task AND history
@@ -205,6 +206,7 @@ export async function* handleTaskSendSubscribe({
   params,
   taskStore,
   agent,
+  agentId,
   logger,
   runtimeContext,
 }: {
@@ -212,7 +214,8 @@ export async function* handleTaskSendSubscribe({
   params: TaskSendParams;
   taskStore: InMemoryTaskStore;
   agent: Agent;
-  logger?: Logger;
+  agentId: string;
+  logger?: IMastraLogger;
   runtimeContext: RuntimeContext;
 }) {
   yield createSuccessResponse(requestId, {
@@ -230,6 +233,7 @@ export async function* handleTaskSendSubscribe({
       params,
       taskStore,
       agent,
+      agentId,
       runtimeContext,
       logger,
     });
@@ -255,7 +259,7 @@ export async function handleTaskCancel({
   taskStore: InMemoryTaskStore;
   agentId: string;
   taskId: string;
-  logger?: Logger;
+  logger?: IMastraLogger;
 }) {
   // Load task and history
   let data = await taskStore.load({
@@ -315,7 +319,7 @@ export async function getAgentExecutionHandler({
   method: 'tasks/send' | 'tasks/sendSubscribe' | 'tasks/get' | 'tasks/cancel';
   params: TaskSendParams | TaskQueryParams | TaskIdParams;
   taskStore?: InMemoryTaskStore;
-  logger?: Logger;
+  logger?: IMastraLogger;
 }): Promise<any> {
   const agent = mastra.getAgent(agentId);
 
@@ -334,6 +338,7 @@ export async function getAgentExecutionHandler({
           params: params as TaskSendParams,
           taskStore,
           agent,
+          agentId,
           runtimeContext,
         });
         return result;
@@ -344,6 +349,7 @@ export async function getAgentExecutionHandler({
           taskStore,
           params: params as TaskSendParams,
           agent,
+          agentId,
           runtimeContext,
         });
         return result;
