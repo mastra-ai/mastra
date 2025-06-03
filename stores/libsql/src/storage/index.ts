@@ -274,24 +274,92 @@ export class LibSQLStore extends MastraStorage {
     };
   }
 
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    const result = await this.client.execute({
-      sql: `SELECT * FROM ${TABLE_THREADS} WHERE resourceId = ?`,
-      args: [resourceId],
-    });
+  public async getThreadsByResourceId(args: { resourceId: string }): Promise<StorageThreadType[]>;
+  public async getThreadsByResourceId(args: { resourceId: string; page: number; perPage?: number }): Promise<{
+    threads: StorageThreadType[];
+    total: number;
+    page: number;
+    perPage: number;
+    hasMore: boolean;
+  }>;
+  public async getThreadsByResourceId(args: { resourceId: string; page?: number; perPage?: number }): Promise<
+    | StorageThreadType[]
+    | {
+        threads: StorageThreadType[];
+        total: number;
+        page: number;
+        perPage: number;
+        hasMore: boolean;
+      }
+  > {
+    const { resourceId, page, perPage: perPageInput } = args;
 
-    if (!result.rows) {
+    try {
+      const baseQuery = `FROM ${TABLE_THREADS} WHERE resourceId = ?`;
+      const queryParams: InValue[] = [resourceId];
+
+      const mapRowToStorageThreadType = (row: any): StorageThreadType => ({
+        id: row.id as string,
+        resourceId: row.resourceId as string,
+        title: row.title as string,
+        createdAt: new Date(row.createdAt as string), // Convert string to Date
+        updatedAt: new Date(row.updatedAt as string), // Convert string to Date
+        metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
+      });
+
+      if (page !== undefined) {
+        const perPage = perPageInput !== undefined ? perPageInput : 100;
+        const currentOffset = page * perPage;
+
+        const countResult = await this.client.execute({
+          sql: `SELECT COUNT(*) as count ${baseQuery}`,
+          args: queryParams,
+        });
+        const total = Number(countResult.rows?.[0]?.count ?? 0);
+
+        if (total === 0) {
+          return {
+            threads: [],
+            total: 0,
+            page,
+            perPage,
+            hasMore: false,
+          };
+        }
+
+        const dataResult = await this.client.execute({
+          sql: `SELECT * ${baseQuery} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
+          args: [...queryParams, perPage, currentOffset],
+        });
+
+        const threads = (dataResult.rows || []).map(mapRowToStorageThreadType);
+
+        return {
+          threads,
+          total,
+          page,
+          perPage,
+          hasMore: currentOffset + threads.length < total,
+        };
+      } else {
+        // Non-paginated path
+        const result = await this.client.execute({
+          sql: `SELECT * ${baseQuery} ORDER BY createdAt DESC`,
+          args: queryParams,
+        });
+
+        if (!result.rows) {
+          return [];
+        }
+        return result.rows.map(mapRowToStorageThreadType);
+      }
+    } catch (error) {
+      this.logger.error(`Error getting threads for resource ${resourceId}:`, error);
+      if (page !== undefined) {
+        return { threads: [], total: 0, page, perPage: perPageInput || 100, hasMore: false };
+      }
       return [];
     }
-
-    return result.rows.map(thread => ({
-      id: thread.id,
-      resourceId: thread.resourceId,
-      title: thread.title,
-      createdAt: thread.createdAt,
-      updatedAt: thread.updatedAt,
-      metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
-    })) as any as StorageThreadType[];
   }
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
@@ -365,90 +433,159 @@ export class LibSQLStore extends MastraStorage {
 
   public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
   public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
+  public async getMessages(
+    args: StorageGetMessagesArg & {
+      format?: 'v1' | 'v2';
+      page: number;
+      perPage?: number;
+      fromDate?: Date;
+      toDate?: Date;
+    },
+  ): Promise<{
+    messages: MastraMessageV1[] | MastraMessageV2[];
+    total: number;
+    page: number;
+    perPage: number;
+    hasMore: boolean;
+  }>;
   public async getMessages({
     threadId,
     selectBy,
     format,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+    page,
+    perPage: perPageInput,
+    fromDate,
+    toDate,
+  }: StorageGetMessagesArg & {
+    format?: 'v1' | 'v2';
+    page?: number;
+    perPage?: number;
+    fromDate?: Date;
+    toDate?: Date;
+  }): Promise<
+    | MastraMessageV1[]
+    | MastraMessageV2[]
+    | {
+        messages: MastraMessageV1[] | MastraMessageV2[];
+        total: number;
+        page: number;
+        perPage: number;
+        hasMore: boolean;
+      }
+  > {
     try {
-      const messages: MastraMessageV2[] = [];
-      const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
+      if (page !== undefined) {
+        const perPage = perPageInput !== undefined ? perPageInput : 40;
+        const currentOffset = page * perPage;
 
-      // If we have specific messages to select
-      if (selectBy?.include?.length) {
-        const includeIds = selectBy.include.map(i => i.id);
-        const maxPrev = Math.max(...selectBy.include.map(i => i.withPreviousMessages || 0));
-        const maxNext = Math.max(...selectBy.include.map(i => i.withNextMessages || 0));
+        const conditions: string[] = [`thread_id = ?`];
+        const queryParams: InValue[] = [threadId];
 
-        // Get messages around all specified IDs in one query using row numbers
-        const includeResult = await this.client.execute({
-          sql: `
-            WITH numbered_messages AS (
-              SELECT 
-                id,
-                content,
-                role,
-                type,
-                "createdAt",
-                thread_id,
-                ROW_NUMBER() OVER (ORDER BY "createdAt" ASC) as row_num
-              FROM "${TABLE_MESSAGES}"
-              WHERE thread_id = ?
-            ),
-            target_positions AS (
-              SELECT row_num as target_pos
-              FROM numbered_messages
-              WHERE id IN (${includeIds.map(() => '?').join(', ')})
-            )
-            SELECT DISTINCT m.*
-            FROM numbered_messages m
-            CROSS JOIN target_positions t
-            WHERE m.row_num BETWEEN (t.target_pos - ?) AND (t.target_pos + ?)
-            ORDER BY m."createdAt" ASC
-          `,
-          args: [threadId, ...includeIds, maxPrev, maxNext],
+        if (fromDate) {
+          conditions.push(`"createdAt" >= ?`);
+          queryParams.push(fromDate.toISOString());
+        }
+        if (toDate) {
+          conditions.push(`"createdAt" <= ?`);
+          queryParams.push(toDate.toISOString());
+        }
+        const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+        const countResult = await this.client.execute({
+          sql: `SELECT COUNT(*) as count FROM ${TABLE_MESSAGES} ${whereClause}`,
+          args: queryParams,
+        });
+        const total = Number(countResult.rows?.[0]?.count ?? 0);
+
+        if (total === 0) {
+          return {
+            messages: [],
+            total: 0,
+            page,
+            perPage,
+            hasMore: false,
+          };
+        }
+
+        const dataResult = await this.client.execute({
+          sql: `SELECT id, content, role, type, "createdAt", thread_id FROM ${TABLE_MESSAGES} ${whereClause} ORDER BY "createdAt" ASC LIMIT ? OFFSET ?`,
+          args: [...queryParams, perPage, currentOffset],
         });
 
-        if (includeResult.rows) {
-          messages.push(...includeResult.rows.map((row: any) => this.parseRow(row)));
+        const fetchedMessages = (dataResult.rows || []).map((row: any) => this.parseRow(row));
+
+        const messagesToReturn =
+          format === 'v1'
+            ? new MessageList().add(fetchedMessages, 'memory').get.all.v1()
+            : new MessageList().add(fetchedMessages, 'memory').get.all.v2();
+
+        return {
+          messages: messagesToReturn,
+          total,
+          page,
+          perPage,
+          hasMore: currentOffset + fetchedMessages.length < total,
+        };
+      } else {
+        // Non-paginated path (existing logic)
+        const messages: MastraMessageV2[] = [];
+        const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
+
+        if (selectBy?.include?.length) {
+          const includeIds = selectBy.include.map(i => i.id);
+          const maxPrev = Math.max(...selectBy.include.map(i => i.withPreviousMessages || 0));
+          const maxNext = Math.max(...selectBy.include.map(i => i.withNextMessages || 0));
+
+          const includeResult = await this.client.execute({
+            sql: `
+              WITH numbered_messages AS (
+                SELECT 
+                  id, content, role, type, "createdAt", thread_id,
+                  ROW_NUMBER() OVER (ORDER BY "createdAt" ASC) as row_num
+                FROM "${TABLE_MESSAGES}"
+                WHERE thread_id = ?
+              ),
+              target_positions AS (
+                SELECT row_num as target_pos
+                FROM numbered_messages
+                WHERE id IN (${includeIds.map(() => '?').join(', ')})
+              )
+              SELECT DISTINCT m.*
+              FROM numbered_messages m
+              CROSS JOIN target_positions t
+              WHERE m.row_num BETWEEN (t.target_pos - ?) AND (t.target_pos + ?)
+              ORDER BY m."createdAt" ASC
+            `,
+            args: [threadId, ...includeIds, maxPrev, maxNext],
+          });
+          if (includeResult.rows) {
+            messages.push(...includeResult.rows.map((row: any) => this.parseRow(row)));
+          }
         }
+
+        const excludeIds = messages.map(m => m.id);
+        const remainingSql = `
+          SELECT id, content, role, type, "createdAt", thread_id
+          FROM "${TABLE_MESSAGES}"
+          WHERE thread_id = ?
+          ${excludeIds.length ? `AND id NOT IN (${excludeIds.map(() => '?').join(', ')})` : ''}
+          ORDER BY "createdAt" DESC LIMIT ?
+        `;
+        const remainingArgs = [threadId, ...(excludeIds.length ? excludeIds : []), limit];
+        const remainingResult = await this.client.execute({ sql: remainingSql, args: remainingArgs });
+        if (remainingResult.rows) {
+          messages.push(...remainingResult.rows.map((row: any) => this.parseRow(row)));
+        }
+        messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+        const list = new MessageList().add(messages, 'memory');
+        if (format === `v2`) return list.get.all.v2();
+        return list.get.all.v1();
       }
-
-      // Get remaining messages, excluding already fetched IDs
-      const excludeIds = messages.map(m => m.id);
-      const remainingSql = `
-        SELECT 
-          id, 
-          content, 
-          role, 
-          type,
-          "createdAt", 
-          thread_id
-        FROM "${TABLE_MESSAGES}"
-        WHERE thread_id = ?
-        ${excludeIds.length ? `AND id NOT IN (${excludeIds.map(() => '?').join(', ')})` : ''}
-        ORDER BY "createdAt" DESC
-        LIMIT ?
-      `;
-      const remainingArgs = [threadId, ...(excludeIds.length ? excludeIds : []), limit];
-
-      const remainingResult = await this.client.execute({
-        sql: remainingSql,
-        args: remainingArgs,
-      });
-
-      if (remainingResult.rows) {
-        messages.push(...remainingResult.rows.map((row: any) => this.parseRow(row)));
-      }
-
-      // Sort all messages by creation date
-      messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-
-      const list = new MessageList().add(messages, 'memory');
-      if (format === `v2`) return list.get.all.v2();
-      return list.get.all.v1();
     } catch (error) {
       this.logger.error('Error getting messages:', error as Error);
+      if (page !== undefined) {
+        return { messages: [], total: 0, page, perPage: perPageInput || 40, hasMore: false };
+      }
       throw error;
     }
   }
@@ -526,6 +663,7 @@ export class LibSQLStore extends MastraStorage {
     };
   }
 
+  /** @deprecated use getEvals instead */
   async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
     try {
       const baseQuery = `SELECT * FROM ${TABLE_EVALS} WHERE agent_name = ?`;
@@ -552,120 +690,259 @@ export class LibSQLStore extends MastraStorage {
     }
   }
 
-  // TODO: add types
-  async getTraces(
-    {
-      name,
-      scope,
-      page,
-      perPage,
-      attributes,
-      filters,
-      fromDate,
-      toDate,
-    }: {
-      name?: string;
-      scope?: string;
-      page: number;
-      perPage: number;
-      attributes?: Record<string, string>;
-      filters?: Record<string, any>;
-      fromDate?: Date;
-      toDate?: Date;
-    } = {
-      page: 0,
-      perPage: 100,
-    },
-  ): Promise<any[]> {
-    const limit = perPage;
-    const offset = page * perPage;
-
-    const args: (string | number)[] = [];
+  async getEvals(options?: {
+    agentName?: string;
+    type?: 'test' | 'live';
+    page?: number;
+    perPage?: number;
+    limit?: number;
+    offset?: number;
+    fromDate?: Date;
+    toDate?: Date;
+  }): Promise<{
+    evals: EvalRow[];
+    total: number;
+    page?: number;
+    perPage?: number;
+    hasMore?: boolean;
+  }> {
+    const { agentName, type, page, perPage, limit, offset, fromDate, toDate } = options || {};
 
     const conditions: string[] = [];
-    if (name) {
-      conditions.push("name LIKE CONCAT(?, '%')");
-    }
-    if (scope) {
-      conditions.push('scope = ?');
-    }
-    if (attributes) {
-      Object.keys(attributes).forEach(key => {
-        conditions.push(`attributes->>'$.${key}' = ?`);
-      });
+    const queryParams: InValue[] = [];
+
+    if (agentName) {
+      conditions.push(`agent_name = ?`);
+      queryParams.push(agentName);
     }
 
-    if (filters) {
-      Object.entries(filters).forEach(([key, _value]) => {
-        conditions.push(`${key} = ?`);
-      });
+    if (type === 'test') {
+      conditions.push(`(test_info IS NOT NULL AND json_extract(test_info, '$.testPath') IS NOT NULL)`);
+    } else if (type === 'live') {
+      conditions.push(`(test_info IS NULL OR json_extract(test_info, '$.testPath') IS NULL)`);
     }
 
     if (fromDate) {
-      conditions.push('createdAt >= ?');
+      conditions.push(`created_at >= ?`);
+      queryParams.push(fromDate.toISOString());
     }
 
     if (toDate) {
-      conditions.push('createdAt <= ?');
+      conditions.push(`created_at <= ?`);
+      queryParams.push(toDate.toISOString());
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    if (name) {
-      args.push(name);
+    const countResult = await this.client.execute({
+      sql: `SELECT COUNT(*) as count FROM ${TABLE_EVALS} ${whereClause}`,
+      args: queryParams,
+    });
+    const total = Number(countResult.rows?.[0]?.count ?? 0);
+
+    let currentLimit: number;
+    let currentOffset: number;
+    let currentPage: number | undefined = page;
+    let currentPerPage: number | undefined = perPage;
+    let hasMore = false;
+
+    if (limit !== undefined && offset !== undefined) {
+      currentLimit = limit;
+      currentOffset = offset;
+      currentPage = undefined;
+      currentPerPage = undefined;
+      hasMore = currentOffset + currentLimit < total;
+    } else if (page !== undefined && perPage !== undefined) {
+      currentLimit = perPage;
+      currentOffset = page * perPage;
+      hasMore = currentOffset + currentLimit < total;
+    } else {
+      currentLimit = perPage || 100; // Default perPage
+      currentOffset = (page || 0) * currentLimit;
+      if (page === undefined) currentPage = 0;
+      if (currentPerPage === undefined) currentPerPage = currentLimit;
+      hasMore = currentOffset + currentLimit < total;
     }
 
-    if (scope) {
-      args.push(scope);
+    if (total === 0) {
+      return {
+        evals: [],
+        total: 0,
+        page: currentPage,
+        perPage: currentPerPage,
+        hasMore: false,
+      };
     }
 
-    if (attributes) {
-      for (const [, value] of Object.entries(attributes)) {
-        args.push(value);
-      }
-    }
-
-    if (filters) {
-      for (const [, value] of Object.entries(filters)) {
-        args.push(value);
-      }
-    }
-
-    if (fromDate) {
-      args.push(fromDate.toISOString());
-    }
-
-    if (toDate) {
-      args.push(toDate.toISOString());
-    }
-
-    args.push(limit, offset);
-
-    const result = await this.client.execute({
-      sql: `SELECT * FROM ${TABLE_TRACES} ${whereClause} ORDER BY "startTime" DESC LIMIT ? OFFSET ?`,
-      args,
+    const dataResult = await this.client.execute({
+      sql: `SELECT * FROM ${TABLE_EVALS} ${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+      args: [...queryParams, currentLimit, currentOffset],
     });
 
-    if (!result.rows) {
+    return {
+      evals: dataResult.rows?.map(row => this.transformEvalRow(row)) ?? [],
+      total,
+      page: currentPage,
+      perPage: currentPerPage,
+      hasMore,
+    };
+  }
+
+  public async getTraces(args: {
+    name?: string;
+    scope?: string;
+    attributes?: Record<string, string>;
+    filters?: Record<string, any>;
+    page: number;
+    perPage?: number;
+    fromDate?: Date;
+    toDate?: Date;
+  }): Promise<any[]>;
+  public async getTraces(args: {
+    name?: string;
+    scope?: string;
+    page: number;
+    perPage?: number;
+    attributes?: Record<string, string>;
+    filters?: Record<string, any>;
+    fromDate?: Date;
+    toDate?: Date;
+    returnPaginationResults: true;
+  }): Promise<{
+    traces: any[];
+    total: number;
+    page: number;
+    perPage: number;
+    hasMore: boolean;
+  }>;
+  public async getTraces(
+    args: {
+      name?: string;
+      scope?: string;
+      page: number;
+      perPage?: number;
+      attributes?: Record<string, string>;
+      filters?: Record<string, any>;
+      fromDate?: Date;
+      toDate?: Date;
+      returnPaginationResults?: boolean;
+    } = {
+      page: 0,
+      // perPage: 100, // Default perPage will be handled inside
+    },
+  ): Promise<
+    | any[]
+    | {
+        traces: any[];
+        total: number;
+        page: number;
+        perPage: number;
+        hasMore: boolean;
+      }
+  > {
+    const {
+      name,
+      scope,
+      page,
+      perPage: perPageInput,
+      attributes,
+      filters,
+      fromDate,
+      toDate,
+      returnPaginationResults,
+    } = args;
+
+    const perPage = perPageInput !== undefined ? perPageInput : 100; // Default perPage
+    const currentOffset = page * perPage;
+
+    const queryArgs: InValue[] = [];
+    const conditions: string[] = [];
+
+    if (name) {
+      conditions.push('name LIKE ?'); // LibSQL uses ? for placeholders, CONCAT is not standard
+      queryArgs.push(`${name}%`); // Wildcard for LIKE
+    }
+    if (scope) {
+      conditions.push('scope = ?');
+      queryArgs.push(scope);
+    }
+    if (attributes) {
+      Object.entries(attributes).forEach(([key, value]) => {
+        // For LibSQL/SQLite, JSON functions are used like json_extract
+        conditions.push(`json_extract(attributes, '$.${key}') = ?`);
+        queryArgs.push(value);
+      });
+    }
+    if (filters) {
+      Object.entries(filters).forEach(([key, value]) => {
+        // Assuming filters apply to direct columns
+        conditions.push(`${parseSqlIdentifier(key, 'filter key')} = ?`);
+        queryArgs.push(value);
+      });
+    }
+    if (fromDate) {
+      conditions.push('createdAt >= ?');
+      queryArgs.push(fromDate.toISOString());
+    }
+    if (toDate) {
+      conditions.push('createdAt <= ?');
+      queryArgs.push(toDate.toISOString());
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const countResult = await this.client.execute({
+      sql: `SELECT COUNT(*) as count FROM ${TABLE_TRACES} ${whereClause}`,
+      args: queryArgs,
+    });
+    const total = Number(countResult.rows?.[0]?.count ?? 0);
+
+    if (total === 0 && returnPaginationResults) {
+      return {
+        traces: [],
+        total: 0,
+        page,
+        perPage,
+        hasMore: false,
+      };
+    } else if (total === 0) {
       return [];
     }
 
-    return result.rows.map(row => ({
-      id: row.id,
-      parentSpanId: row.parentSpanId,
-      traceId: row.traceId,
-      name: row.name,
-      scope: row.scope,
-      kind: row.kind,
-      status: safelyParseJSON(row.status as string),
-      events: safelyParseJSON(row.events as string),
-      links: safelyParseJSON(row.links as string),
-      attributes: safelyParseJSON(row.attributes as string),
-      startTime: row.startTime,
-      endTime: row.endTime,
-      other: safelyParseJSON(row.other as string),
-      createdAt: row.createdAt,
-    })) as any;
+    const dataResult = await this.client.execute({
+      sql: `SELECT * FROM ${TABLE_TRACES} ${whereClause} ORDER BY "startTime" DESC LIMIT ? OFFSET ?`,
+      args: [...queryArgs, perPage, currentOffset],
+    });
+
+    const traces =
+      dataResult.rows?.map(row => ({
+        id: row.id,
+        parentSpanId: row.parentSpanId,
+        traceId: row.traceId,
+        name: row.name,
+        scope: row.scope,
+        kind: row.kind,
+        status: safelyParseJSON(row.status as string),
+        events: safelyParseJSON(row.events as string),
+        links: safelyParseJSON(row.links as string),
+        attributes: safelyParseJSON(row.attributes as string),
+        startTime: row.startTime,
+        endTime: row.endTime,
+        other: safelyParseJSON(row.other as string),
+        createdAt: row.createdAt,
+      })) ?? [];
+
+    if (returnPaginationResults) {
+      return {
+        traces,
+        total,
+        page,
+        perPage,
+        hasMore: currentOffset + traces.length < total,
+      };
+    } else {
+      return traces;
+    }
   }
 
   async getWorkflowRuns({
