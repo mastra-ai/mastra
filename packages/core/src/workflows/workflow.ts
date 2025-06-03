@@ -24,7 +24,6 @@ import type {
   DynamicMapping,
   StreamEvent,
 } from './types';
-import type { TextStreamPart } from 'ai';
 
 export type StepFlowEntry =
   | { type: 'step'; step: Step }
