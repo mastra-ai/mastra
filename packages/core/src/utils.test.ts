@@ -4,8 +4,8 @@ import { z } from 'zod';
 import { ConsoleLogger } from './logger';
 import { RuntimeContext } from './runtime-context';
 import type { InternalCoreTool } from './tools';
-import { createTool } from './tools';
-import { isVercelTool, makeCoreTool, maskStreamTags, resolveSerializedZodOutput } from './utils';
+import { createTool, isVercelTool } from './tools';
+import { makeCoreTool, maskStreamTags, resolveSerializedZodOutput } from './utils';
 
 describe('maskStreamTags', () => {
   async function* makeStream(chunks: string[]) {
