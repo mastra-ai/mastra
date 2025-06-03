@@ -1,5 +1,12 @@
 # create-mastra
 
+## 0.10.2-alpha.5
+
+### Patch Changes
+
+- 6fd77b5: add docs and txt support for multi modal
+- 631683f: move workflow runs list in playground-ui instead of playground
+
 ## 0.10.2-alpha.4
 
 ### Patch Changes
