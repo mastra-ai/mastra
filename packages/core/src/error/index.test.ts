@@ -8,22 +8,20 @@ interface TestContext extends IErrorContext {
 }
 
 describe('MastraError (Base Class)', () => {
+  const sampleContext: TestContext = {
+    fileName: 'test.ts',
+    lineNumber: 42,
+  };
   const sampleErrorDefinition: IErrorDefinition = {
     id: 'BASE_TEST_001',
     text: 'This is a base test error',
     domain: Domain.AGENT,
     category: ErrorCategory.UNKNOWN,
+    details: sampleContext,
   };
-
-  const sampleContext: TestContext = {
-    fileName: 'test.ts',
-    lineNumber: 42,
-  };
-
-  const emptyContext: TestContext = {};
 
   it('should create a base error with definition and context', () => {
-    const error = new MastraError(sampleErrorDefinition, emptyContext);
+    const error = new MastraError(sampleErrorDefinition);
     expect(error).toBeInstanceOf(MastraError);
     expect(error).toBeInstanceOf(Error);
     expect(error.id).toBe('BASE_TEST_001');
@@ -37,16 +35,15 @@ describe('MastraError (Base Class)', () => {
     const definitionWithTextFn: IErrorDefinition = {
       ...sampleErrorDefinition,
       id: 'BASE_TEXTFN_001',
-      text: (ctx: IErrorContext) =>
-        `Error in ${(ctx as TestContext).fileName} at line ${(ctx as TestContext).lineNumber}`,
+      text: `Error in ${sampleContext.fileName} at line ${sampleContext.lineNumber}`,
     };
-    const error = new MastraError(definitionWithTextFn, sampleContext);
+    const error = new MastraError(definitionWithTextFn);
     expect(error.message).toBe('Error in test.ts at line 42');
   });
 
   it('should create a base error with an originalError (cause)', () => {
     const cause = new Error('Original cause');
-    const error = new MastraError(sampleErrorDefinition, sampleContext, cause);
+    const error = new MastraError(sampleErrorDefinition, cause);
     expect(error.originalError).toBe(cause);
     if (error.cause) {
       expect(error.cause).toBe(cause);
@@ -57,13 +54,14 @@ describe('MastraError (Base Class)', () => {
     it('should correctly serialize to JSON with toJSON() and toJSONDetails()', () => {
       const cause = new Error('Original cause');
       cause.stack = 'original stack trace';
-      const error = new MastraError(sampleErrorDefinition, sampleContext, cause);
+      const error = new MastraError(sampleErrorDefinition, cause);
       error.stack = 'mastra error stack trace';
 
       const jsonDetails = error.toJSONDetails();
       expect(jsonDetails.message).toBe('This is a base test error');
       expect(jsonDetails.domain).toBe(Domain.AGENT);
       expect(jsonDetails.category).toBe(ErrorCategory.UNKNOWN);
+      expect(jsonDetails.details).toEqual(sampleContext);
       expect(jsonDetails.stack).toBe('mastra error stack trace');
       expect(jsonDetails.originalError).toBeDefined();
       expect(jsonDetails.originalError?.name).toBe('Error');
@@ -77,7 +75,7 @@ describe('MastraError (Base Class)', () => {
     });
 
     it('should serialize to JSON without an original error', () => {
-      const error = new MastraError(sampleErrorDefinition, emptyContext);
+      const error = new MastraError(sampleErrorDefinition);
       error.stack = 'mastra error stack trace';
 
       const jsonDetails = error.toJSONDetails();
