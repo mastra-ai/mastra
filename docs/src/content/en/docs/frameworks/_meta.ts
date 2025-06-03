@@ -5,6 +5,7 @@ const meta = {
   astro: "With Astro",
   express: "With Express",
   copilotkit: "With CopilotKit",
+  "assistant-ui": "With Assistant UI",
   openrouter: "With OpenRouter",
 };
 

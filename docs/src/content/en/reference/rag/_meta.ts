@@ -5,6 +5,7 @@ export default {
   rerank: "rerank()",
   document: "MDocument",
   "metadata-filters": "Metadata Filters",
+  "database-config": "DatabaseConfig",
   "graph-rag": "GraphRAG",
   astra: "AstraVector",
   chroma: "ChromaVector",

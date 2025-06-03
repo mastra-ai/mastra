@@ -34,7 +34,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
     const message = messages[i];
     const isLastMessage = i === messages.length - 1;
     if (!message?.content) continue;
-    const { content, experimental_attachments, parts } = message.content;
+    const { content, experimental_attachments: inputAttachments = [], parts: inputParts } = message.content;
     const { role } = message;
     const fields = {
       id: message.id,
@@ -42,6 +42,19 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
       resourceId: message.resourceId!,
       threadId: message.threadId!,
     };
+
+    const experimental_attachments = [...inputAttachments];
+    const parts: typeof inputParts = [];
+    for (const part of inputParts) {
+      if (part.type === 'file') {
+        experimental_attachments.push({
+          url: part.data,
+          contentType: part.mimeType,
+        });
+      } else {
+        parts.push(part);
+      }
+    }
 
     switch (role) {
       case 'user': {
@@ -55,11 +68,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
             type: 'text',
             // @ts-ignore
             content: userContent,
-            // Array.isArray(userContent) && userContent.length === 1 && userContent[0]?.type === `text`
-            //   ? userContent[0].text
-            //   : userContent,
           });
-          throw new Error(`will we ever hit this code?`);
         } else {
           const textParts = message.content.parts
             .filter(part => part.type === 'text')
@@ -75,8 +84,6 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
             role: 'user',
             ...fields,
             type: 'text',
-            // content: userContent,
-            // @ts-ignore
             content:
               Array.isArray(userContent) &&
               userContent.length === 1 &&

@@ -411,7 +411,7 @@ describe('MessageList', () => {
               { type: 'step-start' },
               {
                 type: 'reasoning',
-                reasoning: 'Step 1: Analyze',
+                reasoning: '',
                 details: [{ type: 'text', text: 'Step 1: Analyze', signature: 'sig-a' }],
               },
               { type: 'reasoning', reasoning: '', details: [{ type: 'redacted', data: 'sensitive data' }] },
@@ -481,7 +481,7 @@ describe('MessageList', () => {
               { type: 'step-start' },
               {
                 type: 'reasoning',
-                reasoning: 'Analyzing data...',
+                reasoning: '',
                 details: [{ type: 'text', text: 'Analyzing data...', signature: 'sig-b' }],
               },
               { type: 'reasoning', reasoning: '', details: [{ type: 'redacted', data: 'more sensitive data' }] },
@@ -699,7 +699,7 @@ describe('MessageList', () => {
               { type: 'step-start' },
               {
                 type: 'reasoning',
-                reasoning: 'First, I need to gather some data.',
+                reasoning: '',
                 details: [{ type: 'text', text: 'First, I need to gather some data.', signature: 'sig-gather' }],
               },
               { type: 'text', text: 'Calling data tool...' },
@@ -737,7 +737,7 @@ describe('MessageList', () => {
               { type: 'step-start' },
               {
                 type: 'reasoning',
-                reasoning: 'Data gathered, now processing.',
+                reasoning: '',
                 details: [{ type: 'text', text: 'Data gathered, now processing.', signature: 'sig-process' }],
               },
               { type: 'text', text: 'Task completed successfully with gathered data.' },
@@ -777,12 +777,12 @@ describe('MessageList', () => {
           createdAt: expect.any(Date),
           content: {
             format: 2,
-            parts: [{ type: 'text', text: 'Here is an image URL:' }],
-            experimental_attachments: [
+            parts: [
+              { type: 'text', text: 'Here is an image URL:' },
               {
-                name: 'image.jpg',
-                url: 'https://example.com/image.jpg',
-                contentType: 'image/jpeg',
+                data: 'https://example.com/image.jpg',
+                mimeType: 'image/jpeg',
+                type: 'file',
               },
             ],
           },
@@ -815,12 +815,12 @@ describe('MessageList', () => {
           createdAt: expect.any(Date),
           content: {
             format: 2,
-            parts: [{ type: 'text', text: 'Here is another image URL:' }],
-            experimental_attachments: [
+            parts: [
+              { type: 'text', text: 'Here is another image URL:' },
               {
-                name: 'another-image.png',
-                url: 'https://example.com/another-image.png',
-                contentType: 'image/png',
+                type: 'file',
+                data: 'https://example.com/another-image.png',
+                mimeType: 'image/png',
               },
             ],
           },
@@ -1130,7 +1130,7 @@ describe('MessageList', () => {
             type: 'file',
             mimeType: 'image/gif',
             data: new URL('data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=='),
-          }, // 1x1 transparent GIF
+          },
         ],
       } satisfies VercelCoreMessage;
 
@@ -1145,7 +1145,11 @@ describe('MessageList', () => {
             format: 2,
             parts: [
               { type: 'text', text: 'Here is an embedded image:' },
-              { type: 'file', mimeType: 'image/gif', data: 'R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==' }, // Base64 data
+              {
+                type: 'file',
+                mimeType: 'image/gif',
+                data: 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==',
+              },
             ],
           },
           threadId,
@@ -1178,7 +1182,7 @@ describe('MessageList', () => {
               { type: 'step-start' },
               {
                 type: 'reasoning',
-                reasoning: 'First, I need to gather some data.',
+                reasoning: '',
                 details: [{ type: 'text', text: 'First, I need to gather some data.', signature: 'sig-gather' }],
               },
               { type: 'text', text: 'Gathering data...' },
@@ -1193,7 +1197,7 @@ describe('MessageList', () => {
               },
               {
                 type: 'reasoning',
-                reasoning: 'Data gathered, now I will process it.',
+                reasoning: '',
                 details: [{ type: 'text', text: 'Data gathered, now I will process it.', signature: 'sig-process' }],
               },
             ],
@@ -1351,13 +1355,13 @@ describe('MessageList', () => {
               { type: 'step-start' },
               {
                 type: 'reasoning',
-                reasoning: 'Thinking step 1...',
+                reasoning: '',
                 details: [{ type: 'text', text: 'Thinking step 1...', signature: 'sig-1' }],
               },
               { type: 'reasoning', reasoning: '', details: [{ type: 'redacted', data: 'some hidden data' }] },
               {
                 type: 'reasoning',
-                reasoning: 'Final thought.',
+                reasoning: '',
                 details: [{ type: 'text', text: 'Final thought.', signature: 'sig-2' }],
               },
             ],

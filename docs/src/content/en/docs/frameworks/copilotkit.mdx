@@ -12,7 +12,7 @@ CopilotKit provides React components to quickly integrate customizable AI copilo
 Combined with Mastra, you can build sophisticated AI apps featuring bidirectional state synchronization and interactive UIs.
 
 ## Create a Mastra Project
-
+{/*
 LLM CONTEXT:
 This Tabs component shows commands for creating a new Mastra project using different package managers.
 Each tab displays the command for that specific package manager to create a Mastra project.
@@ -21,11 +21,28 @@ All commands create the same Mastra project but use different package manager sy
 */}
 
 <Tabs items={["npx", "npm", "yarn", "pnpm"]}>
-  <Tabs.Tab>```bash copy npx create-mastra@latest ```</Tabs.Tab>
-  <Tabs.Tab>```bash copy npm create mastra ```</Tabs.Tab>
-  <Tabs.Tab>```bash copy yarn create mastra ```</Tabs.Tab>
-  <Tabs.Tab>```bash copy pnpm create mastra ```</Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    npx create-mastra@latest
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    npm create mastra
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    yarn create mastra
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    pnpm create mastra
+    ```
+  </Tabs.Tab>
 </Tabs>
+
 
 Select the agent example when scaffolding your project. This will give you a weather agent.
 
@@ -34,7 +51,6 @@ For detailed setup instructions, see the [installation guide](/docs/getting-star
 ## Basic Setup
 
 Integrating Mastra with CopilotKit involves two main steps: setting up the backend runtime and configuring your frontend components.
-
 {/*
 LLM CONTEXT: This Tabs component shows installation commands for the CopilotKit runtime package.
 Each tab displays the installation command for that specific package manager.
@@ -43,9 +59,21 @@ All commands install the same @copilotkit/runtime package but use different pack
 */}
 
 <Tabs items={["npm", "yarn", "pnpm"]}>
-  <Tabs.Tab>```bash copy npm install @copilotkit/runtime ```</Tabs.Tab>
-  <Tabs.Tab>```bash copy yarn add @copilotkit/runtime ```</Tabs.Tab>
-  <Tabs.Tab>```bash copy pnpm add @copilotkit/runtime ```</Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    npm install @copilotkit/runtime
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    yarn add @copilotkit/runtime
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    pnpm add @copilotkit/runtime
+    ```
+  </Tabs.Tab>
 </Tabs>
 
 ## Set up the runtime
@@ -62,24 +90,32 @@ All commands install the same @mastra/agui@alpha package but use different packa
 */}
 
 <Tabs items={["npm", "yarn", "pnpm"]}>
-  <Tabs.Tab>```bash copy npm install @mastra/agui@alpha ```</Tabs.Tab>
-  <Tabs.Tab>```bash copy yarn add @mastra/agui@alpha ```</Tabs.Tab>
-  <Tabs.Tab>```bash copy pnpm add @mastra/agui@alpha ```</Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    npm install @mastra/agui@alpha
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    yarn add @mastra/agui@alpha
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash copy
+    pnpm add @mastra/agui@alpha
+    ```
+  </Tabs.Tab>
 </Tabs>
 
 Next, let's update the Mastra instance with a custom API route for CopilotKit.
 
-```typescript copy
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
 import { PinoLogger } from "@mastra/loggers";
 import { LibSQLStore } from "@mastra/libsql";
-import {
-  CopilotRuntime,
-  copilotRuntimeNodeHttpEndpoint,
-  ExperimentalEmptyAdapter,
-} from "@copilotkit/runtime";
+import { CopilotRuntime, copilotRuntimeNodeHttpEndpoint, ExperimentalEmptyAdapter } from "@copilotkit/runtime";
 import { registerCopilotKit } from "@mastra/agui";
-import { weatherAgent } from "./agents";
+import { weatherAgent } from "./agents/weather-agent";
 
 const serviceAdapter = new ExperimentalEmptyAdapter();
 
@@ -88,18 +124,18 @@ export const mastra = new Mastra({
   storage: new LibSQLStore({
     // stores telemetry, evals, ... into memory storage,
     // if you need to persist, change to file:../mastra.db
-    url: ":memory:",
+    url: ":memory:"
   }),
   logger: new PinoLogger({
     name: "Mastra",
-    level: "info",
+    level: "info"
   }),
   server: {
     // We will be calling this from a Vite App. Allow CORS
     cors: {
       origin: "*",
       allowMethods: ["*"],
-      allowHeaders: ["*"],
+      allowHeaders: ["*"]
     },
     apiRoutes: [
       registerCopilotKit({
@@ -110,9 +146,9 @@ export const mastra = new Mastra({
           runtimeContext.set("user-id", c.req.header("X-User-ID"));
           runtimeContext.set("temperature-scale", "celsius");
         }
-      }),
-    ],
-  },
+      })
+    ]
+  }
 });
 ```
 
@@ -121,7 +157,6 @@ With this setup you now have CopilotKit running on your Mastra server. You can s
 ## Set up the UI
 
 Install CopilotKit's React components:
-
 {/*
 LLM CONTEXT: This Tabs component shows installation commands for CopilotKit's React UI components.
 Each tab displays the installation command for that specific package manager.
@@ -131,13 +166,19 @@ All commands install the same @copilotkit/react-core and @copilotkit/react-ui pa
 
 <Tabs items={["npm", "yarn", "pnpm"]}>
   <Tabs.Tab>
-    ```bash copy npm install @copilotkit/react-core @copilotkit/react-ui ```
+    ```bash copy
+    npm install @copilotkit/react-core @copilotkit/react-ui
+    ```
   </Tabs.Tab>
   <Tabs.Tab>
-    ```bash copy yarn add @copilotkit/react-core @copilotkit/react-ui ```
+    ```bash copy
+    yarn add @copilotkit/react-core @copilotkit/react-ui
+    ```
   </Tabs.Tab>
   <Tabs.Tab>
-    ```bash copy pnpm add @copilotkit/react-core @copilotkit/react-ui ```
+    ```bash copy
+    pnpm add @copilotkit/react-core @copilotkit/react-ui
+    ```
   </Tabs.Tab>
 </Tabs>
 
@@ -221,7 +262,7 @@ export const POST = async (req: NextRequest) => {
 
 For better type safety, you can specify the type of your runtime context:
 
-```typescript copy
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core/mastra";
 import { PinoLogger } from "@mastra/loggers";
 import { LibSQLStore } from "@mastra/libsql";

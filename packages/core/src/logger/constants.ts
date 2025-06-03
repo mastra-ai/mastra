@@ -1,6 +1,7 @@
 // Constants and Types (keeping from original implementation)
 export const RegisteredLogger = {
   AGENT: 'AGENT',
+  AUTH: 'AUTH',
   NETWORK: 'NETWORK',
   WORKFLOW: 'WORKFLOW',
   LLM: 'LLM',

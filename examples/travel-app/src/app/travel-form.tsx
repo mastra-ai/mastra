@@ -135,7 +135,7 @@ export default function TravelForm({
 
       setContent(sidebarContent.submitted);
     } catch (error) {
-      toast.error("An error occured, I can't plan trip");
+      toast.error("An error occurred, I can't plan your trip");
       setStatus("error");
       console.error("Error submitting form:", error);
     } finally {

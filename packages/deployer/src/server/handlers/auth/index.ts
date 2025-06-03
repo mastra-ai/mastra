@@ -1,7 +1,7 @@
 import type { ContextWithMastra } from '@mastra/core/server';
 import type { Next } from 'hono';
 import { defaultAuthConfig } from './defaults';
-import { canAccessPublicly, checkRules } from './helpers';
+import { canAccessPublicly, checkRules, isProtectedPath } from './helpers';
 
 export const authenticationMiddleware = async (c: ContextWithMastra, next: Next) => {
   const mastra = c.get('mastra');
@@ -9,6 +9,10 @@ export const authenticationMiddleware = async (c: ContextWithMastra, next: Next)
 
   if (!authConfig) {
     // No auth config, skip authentication
+    return next();
+  }
+
+  if (!isProtectedPath(c.req.path, c.req.method, authConfig)) {
     return next();
   }
 
@@ -74,8 +78,23 @@ export const authorizationMiddleware = async (c: ContextWithMastra, next: Next) 
 
   const user = c.get('runtimeContext').get('user');
 
+  if ('authorizeUser' in authConfig && typeof authConfig.authorizeUser === 'function') {
+    try {
+      const isAuthorized = await authConfig.authorizeUser(user, c.req);
+
+      if (isAuthorized) {
+        return next();
+      }
+
+      return c.json({ error: 'Access denied' }, 403);
+    } catch (err) {
+      console.error(err);
+      return c.json({ error: 'Authorization error' }, 500);
+    }
+  }
+
   // Client-provided authorization function
-  if (typeof authConfig.authorize === 'function') {
+  if ('authorize' in authConfig && typeof authConfig.authorize === 'function') {
     try {
       const isAuthorized = await authConfig.authorize(path, method, user, c);
 
@@ -91,7 +110,7 @@ export const authorizationMiddleware = async (c: ContextWithMastra, next: Next) 
   }
 
   // Custom rule-based authorization
-  if (authConfig.rules && authConfig.rules.length > 0) {
+  if ('rules' in authConfig && authConfig.rules && authConfig.rules.length > 0) {
     const isAuthorized = await checkRules(authConfig.rules, path, method, user);
 
     if (isAuthorized) {

@@ -166,6 +166,82 @@ This is particularly useful when:
 - The retrieval process requires complex decision-making
 - You want the agent to combine multiple retrieval strategies based on context
 
+#### Database-Specific Configurations
+
+The Vector Query Tool supports database-specific configurations that enable you to leverage unique features and optimizations of different vector stores:
+
+```ts showLineNumbers copy
+// Pinecone with namespace
+const pineconeQueryTool = createVectorQueryTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding("text-embedding-3-small"),
+  databaseConfig: {
+    pinecone: {
+      namespace: "production"  // Isolate data by environment
+    }
+  }
+});
+
+// pgVector with performance tuning
+const pgVectorQueryTool = createVectorQueryTool({
+  vectorStoreName: "postgres",
+  indexName: "embeddings", 
+  model: openai.embedding("text-embedding-3-small"),
+  databaseConfig: {
+    pgvector: {
+      minScore: 0.7,    // Filter low-quality results
+      ef: 200,          // HNSW search parameter
+      probes: 10        // IVFFlat probe parameter
+    }
+  }
+});
+
+// Chroma with advanced filtering
+const chromaQueryTool = createVectorQueryTool({
+  vectorStoreName: "chroma",
+  indexName: "documents",
+  model: openai.embedding("text-embedding-3-small"),
+  databaseConfig: {
+    chroma: {
+      where: { "category": "technical" },
+      whereDocument: { "$contains": "API" }
+    }
+  }
+});
+```
+
+**Key Benefits:**
+- **Pinecone namespaces**: Organize vectors by tenant, environment, or data type
+- **pgVector optimization**: Control search accuracy and speed with ef/probes parameters
+- **Quality filtering**: Set minimum similarity thresholds to improve result relevance
+- **Runtime flexibility**: Override configurations dynamically based on context
+
+**Common Use Cases:**
+- Multi-tenant applications using Pinecone namespaces
+- Performance optimization in high-load scenarios
+- Environment-specific configurations (dev/staging/prod)
+- Quality-gated search results
+
+You can also override these configurations at runtime using the runtime context:
+
+```ts showLineNumbers copy
+import { RuntimeContext } from '@mastra/core/runtime-context';
+
+const runtimeContext = new RuntimeContext();
+runtimeContext.set('databaseConfig', {
+  pinecone: {
+    namespace: 'runtime-namespace'
+  }
+});
+
+await pineconeQueryTool.execute({
+  context: { queryText: 'search query' },
+  mastra,
+  runtimeContext
+});
+```
+
 For detailed configuration options and advanced usage, see the [Vector Query Tool Reference](/reference/tools/vector-query-tool).
 
 ### Vector Store Prompts

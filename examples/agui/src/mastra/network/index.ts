@@ -3,7 +3,7 @@ import { weatherAgent } from '../agents';
 import { openai } from '@ai-sdk/openai';
 
 export const myNetwork = new AgentNetwork({
-  name: 'My Network',
+  name: 'myNetwork',
   agents: [weatherAgent],
   model: openai('gpt-4o'),
   instructions: `

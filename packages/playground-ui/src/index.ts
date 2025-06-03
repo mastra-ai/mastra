@@ -21,9 +21,7 @@ export * from './ds/components/EmptyState/index';
 export * from './ds/icons/index';
 export * from './lib/polls';
 export * from './hooks/use-speech-recognition';
-export { useTraces } from './hooks/index';
 
 export type { TraceContextType } from './domains/traces/context/trace-context';
-export { refineTraces } from './domains/traces/utils';
 
 export * from './store/playground-store';

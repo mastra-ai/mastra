@@ -4,10 +4,11 @@ description: Documentation for the Vector Query Tool in Mastra, which facilitate
 ---
 
 import { Callout } from "nextra/components";
+import { Tabs } from "nextra/components";
 
 # createVectorQueryTool()
 
-The `createVectorQueryTool()` function creates a tool for semantic search over vector stores. It supports filtering, reranking, and integrates with various vector store backends.
+The `createVectorQueryTool()` function creates a tool for semantic search over vector stores. It supports filtering, reranking, database-specific configurations, and integrates with various vector store backends.
 
 ## Basic Usage
 
@@ -100,8 +101,106 @@ const queryTool = createVectorQueryTool({
         "Options for reranking results. (Can be set at creation or overridden at runtime.)",
       isOptional: true,
     },
+    {
+      name: "databaseConfig",
+      type: "DatabaseConfig",
+      description:
+        "Database-specific configuration options for optimizing queries. (Can be set at creation or overridden at runtime.)",
+      isOptional: true,
+    },
   ]}
 />
+
+### DatabaseConfig
+
+The `DatabaseConfig` type allows you to specify database-specific configurations that are automatically applied to query operations. This enables you to take advantage of unique features and optimizations offered by different vector stores.
+
+<PropertiesTable
+  content={[
+    {
+      name: "pinecone",
+      type: "PineconeConfig",
+      description: "Configuration specific to Pinecone vector store",
+      isOptional: true,
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "namespace",
+              description: "Pinecone namespace for organizing vectors",
+              isOptional: true,
+              type: "string",
+            },
+            {
+              name: "sparseVector",
+              description: "Sparse vector for hybrid search",
+              isOptional: true,
+              type: "{ indices: number[]; values: number[]; }",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "pgvector",
+      type: "PgVectorConfig",
+      description: "Configuration specific to PostgreSQL with pgvector extension",
+      isOptional: true,
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "minScore",
+              description: "Minimum similarity score threshold for results",
+              isOptional: true,
+              type: "number",
+            },
+            {
+              name: "ef",
+              description: "HNSW search parameter - controls accuracy vs speed tradeoff",
+              isOptional: true,
+              type: "number",
+            },
+            {
+              name: "probes",
+              description: "IVFFlat probe parameter - number of cells to visit during search",
+              isOptional: true,
+              type: "number",
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "chroma",
+      type: "ChromaConfig",
+      description: "Configuration specific to Chroma vector store",
+      isOptional: true,
+      properties: [
+        {
+          type: "object",
+          parameters: [
+            {
+              name: "where",
+              description: "Metadata filtering conditions",
+              isOptional: true,
+              type: "Record<string, any>",
+            },
+            {
+              name: "whereDocument",
+              description: "Document content filtering conditions",
+              isOptional: true,
+              type: "Record<string, any>",
+            },
+          ],
+        },
+      ],
+    },
+  ]}
+/>
+
 ### RerankConfig
 
 <PropertiesTable
@@ -261,6 +360,158 @@ const queryTool = createVectorQueryTool({
 
 This example shows how to customize the tool description for a specific use case while maintaining its core purpose of information retrieval.
 
+## Database-Specific Configuration Examples
+
+The `databaseConfig` parameter allows you to leverage unique features and optimizations specific to each vector database. These configurations are automatically applied during query execution.
+
+<Tabs items={['Pinecone', 'pgVector', 'Chroma', 'Multiple Configs']}>
+  <Tabs.Tab>
+    ### Pinecone Configuration
+
+    ```typescript
+    const pineconeQueryTool = createVectorQueryTool({
+      vectorStoreName: "pinecone",
+      indexName: "docs",
+      model: openai.embedding("text-embedding-3-small"),
+      databaseConfig: {
+        pinecone: {
+          namespace: "production",  // Organize vectors by environment
+          sparseVector: {          // Enable hybrid search
+            indices: [0, 1, 2, 3],
+            values: [0.1, 0.2, 0.15, 0.05]
+          }
+        }
+      }
+    });
+    ```
+
+    **Pinecone Features:**
+    - **Namespace**: Isolate different data sets within the same index
+    - **Sparse Vector**: Combine dense and sparse embeddings for improved search quality
+    - **Use Cases**: Multi-tenant applications, hybrid semantic search
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ### pgVector Configuration
+
+    ```typescript
+    const pgVectorQueryTool = createVectorQueryTool({
+      vectorStoreName: "postgres",
+      indexName: "embeddings",
+      model: openai.embedding("text-embedding-3-small"),
+      databaseConfig: {
+        pgvector: {
+          minScore: 0.7,    // Only return results above 70% similarity
+          ef: 200,          // Higher value = better accuracy, slower search
+          probes: 10        // For IVFFlat: more probes = better recall
+        }
+      }
+    });
+    ```
+
+    **pgVector Features:**
+    - **minScore**: Filter out low-quality matches
+    - **ef (HNSW)**: Control accuracy vs speed for HNSW indexes
+    - **probes (IVFFlat)**: Control recall vs speed for IVFFlat indexes
+    - **Use Cases**: Performance tuning, quality filtering
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ### Chroma Configuration
+
+    ```typescript
+    const chromaQueryTool = createVectorQueryTool({
+      vectorStoreName: "chroma",
+      indexName: "documents",
+      model: openai.embedding("text-embedding-3-small"),
+      databaseConfig: {
+        chroma: {
+          where: {                    // Metadata filtering
+            "category": "technical",
+            "status": "published"
+          },
+          whereDocument: {            // Document content filtering
+            "$contains": "API"
+          }
+        }
+      }
+    });
+    ```
+
+    **Chroma Features:**
+    - **where**: Filter by metadata fields
+    - **whereDocument**: Filter by document content
+    - **Use Cases**: Advanced filtering, content-based search
+  </Tabs.Tab>
+
+  <Tabs.Tab>
+    ### Multiple Database Configurations
+
+    ```typescript
+    // Configure for multiple databases (useful for dynamic stores)
+    const multiDbQueryTool = createVectorQueryTool({
+      vectorStoreName: "dynamic-store", // Will be set at runtime
+      indexName: "docs",
+      model: openai.embedding("text-embedding-3-small"),
+      databaseConfig: {
+        pinecone: {
+          namespace: "default"
+        },
+        pgvector: {
+          minScore: 0.8,
+          ef: 150
+        },
+        chroma: {
+          where: { "type": "documentation" }
+        }
+      }
+    });
+    ```
+
+    **Multi-Config Benefits:**
+    - Support multiple vector stores with one tool
+    - Database-specific optimizations are automatically applied
+    - Flexible deployment scenarios
+  </Tabs.Tab>
+</Tabs>
+
+### Runtime Configuration Override
+
+You can override database configurations at runtime to adapt to different scenarios:
+
+```typescript
+import { RuntimeContext } from '@mastra/core/runtime-context';
+
+const queryTool = createVectorQueryTool({
+  vectorStoreName: "pinecone",
+  indexName: "docs",
+  model: openai.embedding("text-embedding-3-small"),
+  databaseConfig: {
+    pinecone: {
+      namespace: "development"
+    }
+  }
+});
+
+// Override at runtime
+const runtimeContext = new RuntimeContext();
+runtimeContext.set('databaseConfig', {
+  pinecone: {
+    namespace: 'production'  // Switch to production namespace
+  }
+});
+
+const response = await agent.generate(
+  "Find information about deployment",
+  { runtimeContext }
+);
+```
+
+This approach allows you to:
+- Switch between environments (dev/staging/prod)
+- Adjust performance parameters based on load
+- Apply different filtering strategies per request
+
 ## Example: Using Runtime Context
 
 ```typescript
@@ -278,12 +529,16 @@ const runtimeContext = new RuntimeContext<{
   vectorStoreName: string;
   indexName: string;
   topK: number;
-  filter: any;
+  filter: VectorFilter;
+  databaseConfig: DatabaseConfig;
 }>();
 runtimeContext.set("vectorStoreName", "my-store");
 runtimeContext.set("indexName", "my-index");
 runtimeContext.set("topK", 5);
 runtimeContext.set("filter", { category: "docs" });
+runtimeContext.set("databaseConfig", {
+  pinecone: { namespace: "runtime-namespace" }
+});
 
 const response = await agent.generate(
   "Find documentation from the knowledge base.",

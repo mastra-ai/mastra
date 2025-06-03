@@ -249,7 +249,7 @@ export async function getMessagesHandler({
       threadId: threadId!,
       ...(limit && { selectBy: { last: limit } }),
     });
-    return result;
+    return { messages: result.messages, uiMessages: result.uiMessages };
   } catch (error) {
     return handleError(error, 'Error getting messages');
   }
