@@ -1155,30 +1155,6 @@ describe('UpstashStore', () => {
     });
 
     describe('Enhanced existing methods with pagination', () => {
-      it('should support pagination in getEvalsByAgentName', async () => {
-        const agentName = 'enhanced-agent';
-        const evals = Array.from({ length: 20 }, (_, i) => createSampleEval(agentName, i < 10));
-
-        for (const evalRecord of evals) {
-          await store.insert({
-            tableName: TABLE_EVALS,
-            record: evalRecord,
-          });
-        }
-
-        // Test with page/perPage
-        const page1 = await store.getEvalsByAgentName(agentName, undefined, { page: 0, perPage: 8 });
-        expect(page1).toHaveLength(8);
-
-        // Test with limit/offset
-        const limited = await store.getEvalsByAgentName(agentName, undefined, { limit: 5, offset: 10 });
-        expect(limited).toHaveLength(5);
-
-        // Test with type filter and pagination
-        const testEvals = await store.getEvalsByAgentName(agentName, 'test', { page: 0, perPage: 15 });
-        expect(testEvals).toHaveLength(10); // Only test evals
-      });
-
       it('should support pagination in getThreadsByResourceId', async () => {
         const resourceId = 'enhanced-resource';
         const threads = Array.from({ length: 17 }, () => ({
@@ -1190,16 +1166,14 @@ describe('UpstashStore', () => {
           await store.saveThread({ thread });
         }
 
-        // Test with page/perPage
         const page1 = await store.getThreadsByResourceId({ resourceId, page: 0, perPage: 7 });
-        expect(page1).toHaveLength(7);
+        expect(page1.threads).toHaveLength(7);
 
         const page3 = await store.getThreadsByResourceId({ resourceId, page: 2, perPage: 7 });
-        expect(page3).toHaveLength(3);
+        expect(page3.threads).toHaveLength(3);
 
-        // Test with limit/offset
-        const limited = await store.getThreadsByResourceId({ resourceId, limit: 5, offset: 12 });
-        expect(limited).toHaveLength(5);
+        const limited = await store.getThreadsByResourceId({ resourceId, page: 1, perPage: 5 });
+        expect(limited.threads).toHaveLength(5);
       });
     });
   });

@@ -207,24 +207,8 @@ export class UpstashStore extends MastraStorage {
   /**
    * @deprecated Use getEvals instead
    */
-  async getEvalsByAgentName(
-    agentName: string,
-    type?: 'test' | 'live',
-    options?: {
-      page?: number;
-      perPage?: number;
-      limit?: number;
-      offset?: number;
-    },
-  ): Promise<EvalRow[]> {
+  async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
     try {
-      // Default pagination parameters
-      const page = options?.page ?? 0;
-      const perPage = options?.perPage ?? 100;
-      const limit = options?.limit;
-      const offset = options?.offset;
-
-      // Get all keys that match the evals table pattern using cursor-based scanning
       const pattern = `${TABLE_EVALS}:*`;
       const keys = await this.scanKeys(pattern);
 
@@ -238,20 +222,13 @@ export class UpstashStore extends MastraStorage {
       keys.forEach(key => pipeline.get(key));
       const results = await pipeline.exec();
 
-      // Process results and filter by agent name - handle undefined results
-      const evalRecords = results
-        .map((result: any) => result as Record<string, any> | null)
-        .filter(
-          (record): record is Record<string, any> =>
-            record !== null &&
-            record !== undefined &&
-            typeof record === 'object' &&
-            'agent_name' in record &&
-            record.agent_name === agentName,
-        );
+      // Filter by agent name and remove nulls
+      const nonNullRecords = results.filter(
+        (record): record is Record<string, any> =>
+          record !== null && typeof record === 'object' && 'agent_name' in record && record.agent_name === agentName,
+      );
 
-      // Apply additional filtering based on type
-      let filteredEvals = evalRecords;
+      let filteredEvals = nonNullRecords;
 
       if (type === 'test') {
         filteredEvals = filteredEvals.filter(record => {
@@ -289,27 +266,8 @@ export class UpstashStore extends MastraStorage {
         });
       }
 
-      // Sort by creation date (newest first)
-      filteredEvals.sort((a, b) => {
-        const dateA = new Date(a.created_at || a.createdAt || 0).getTime();
-        const dateB = new Date(b.created_at || b.createdAt || 0).getTime();
-        return dateB - dateA;
-      });
-
-      // Apply pagination - support both page/perPage and limit/offset patterns
-      let paginatedEvals: Record<string, any>[];
-      if (limit !== undefined && offset !== undefined) {
-        // Offset-based pagination
-        paginatedEvals = filteredEvals.slice(offset, offset + limit);
-      } else {
-        // Page-based pagination
-        const start = page * perPage;
-        const end = start + perPage;
-        paginatedEvals = filteredEvals.slice(start, end);
-      }
-
       // Transform to EvalRow format
-      return paginatedEvals.map(record => this.transformEvalRecord(record));
+      return filteredEvals.map(record => this.transformEvalRecord(record));
     } catch (error) {
       console.error('Failed to get evals for the specified agent:', error);
       return [];
@@ -335,7 +293,7 @@ export class UpstashStore extends MastraStorage {
     filters?: Record<string, any>;
     fromDate?: Date;
     toDate?: Date;
-    returnPaginationResults: boolean; // When true, return pagination results
+    returnPaginationResults: true;
   }): Promise<{
     traces: any[];
     total: number;
@@ -343,27 +301,17 @@ export class UpstashStore extends MastraStorage {
     perPage: number;
     hasMore: boolean;
   }>;
-  public async getTraces({
-    name,
-    scope,
-    page = 0,
-    perPage = 100,
-    attributes,
-    filters,
-    fromDate,
-    toDate,
-    returnPaginationResults,
-  }: {
+  public async getTraces(args: {
     name?: string;
     scope?: string;
-    page?: number; // Make page optional for the implementation
+    page: number;
     perPage?: number;
     attributes?: Record<string, string>;
     filters?: Record<string, any>;
     fromDate?: Date;
     toDate?: Date;
     returnPaginationResults?: boolean;
-  } = {}): Promise<
+  }): Promise<
     | any[]
     | {
         traces: any[];
@@ -373,6 +321,20 @@ export class UpstashStore extends MastraStorage {
         hasMore: boolean;
       }
   > {
+    const {
+      name,
+      scope,
+      page,
+      perPage: perPageInput,
+      attributes,
+      filters,
+      fromDate,
+      toDate,
+      returnPaginationResults,
+    } = args;
+
+    const perPage = perPageInput !== undefined ? perPageInput : 100;
+
     try {
       const pattern = `${TABLE_TRACES}:*`;
       const keys = await this.scanKeys(pattern);
@@ -394,9 +356,9 @@ export class UpstashStore extends MastraStorage {
       keys.forEach(key => pipeline.get(key));
       const results = await pipeline.exec();
 
-      let filteredTraces = results
-        .map((result: any) => result as Record<string, any> | null)
-        .filter((record): record is Record<string, any> => record !== null && typeof record === 'object');
+      let filteredTraces = results.filter(
+        (record): record is Record<string, any> => record !== null && typeof record === 'object',
+      );
 
       if (name) {
         filteredTraces = filteredTraces.filter(record => record.name?.toLowerCase().startsWith(name.toLowerCase()));
@@ -448,27 +410,23 @@ export class UpstashStore extends MastraStorage {
         createdAt: this.ensureDate(record.createdAt),
       }));
 
-      if (page !== undefined) {
-        const total = transformedTraces.length;
-        const resolvedPerPage = perPage || 100;
-        const start = page * resolvedPerPage;
-        const end = start + resolvedPerPage;
-        const paginatedTraces = transformedTraces.slice(start, end);
-        const hasMore = end < total;
-        if (returnPaginationResults) {
-          return {
-            traces: paginatedTraces,
-            total,
-            page,
-            perPage: resolvedPerPage,
-            hasMore,
-          };
-        } else {
-          return paginatedTraces;
-        }
+      const total = transformedTraces.length;
+      const resolvedPerPage = perPage || 100;
+      const start = page * resolvedPerPage;
+      const end = start + resolvedPerPage;
+      const paginatedTraces = transformedTraces.slice(start, end);
+      const hasMore = end < total;
+      if (returnPaginationResults) {
+        return {
+          traces: paginatedTraces,
+          total,
+          page,
+          perPage: resolvedPerPage,
+          hasMore,
+        };
+      } else {
+        return paginatedTraces;
       }
-
-      return transformedTraces;
     } catch (error) {
       console.error('Failed to get traces:', error);
       if (returnPaginationResults) {
@@ -545,41 +503,56 @@ export class UpstashStore extends MastraStorage {
     };
   }
 
-  async getThreadsByResourceId({
-    resourceId,
-    page,
-    perPage = 100,
-    limit,
-    offset,
-  }: {
-    resourceId: string;
-    page?: number;
-    perPage?: number;
-    limit?: number;
-    offset?: number;
-  }): Promise<StorageThreadType[]> {
+  async getThreadsByResourceId(args: { resourceId: string }): Promise<StorageThreadType[]>;
+  async getThreadsByResourceId(args: { resourceId: string; page: number; perPage?: number }): Promise<{
+    threads: StorageThreadType[];
+    total: number;
+    page: number;
+    perPage: number;
+    hasMore: boolean;
+  }>;
+  async getThreadsByResourceId(args: { resourceId: string; page?: number; perPage?: number }): Promise<
+    | StorageThreadType[]
+    | {
+        threads: StorageThreadType[];
+        total: number;
+        page: number;
+        perPage: number;
+        hasMore: boolean;
+      }
+  > {
+    const resourceId: string = args.resourceId;
+    const page: number | undefined = args.page;
+    // Determine perPage only if page is actually provided. Otherwise, its value is not critical for the non-paginated path.
+    // If page is provided, perPage defaults to 100 if not specified.
+    const perPage: number = page !== undefined ? (args.perPage !== undefined ? args.perPage : 100) : 100;
+
     try {
       const pattern = `${TABLE_THREADS}:*`;
       const keys = await this.scanKeys(pattern);
 
       if (keys.length === 0) {
+        if (page !== undefined) {
+          return {
+            threads: [],
+            total: 0,
+            page,
+            perPage, // perPage is number here
+            hasMore: false,
+          };
+        }
         return [];
       }
 
-      // Fetch all threads matching the pattern
-      const threads: StorageThreadType[] = [];
-
-      // Use pipeline for efficient batch fetching
+      const allThreads: StorageThreadType[] = [];
       const pipeline = this.redis.pipeline();
       keys.forEach(key => pipeline.get(key));
       const results = await pipeline.exec();
 
-      // Process results and filter by resourceId
       for (let i = 0; i < results.length; i++) {
         const thread = results[i] as StorageThreadType | null;
-
         if (thread && thread.resourceId === resourceId) {
-          threads.push({
+          allThreads.push({
             ...thread,
             createdAt: this.ensureDate(thread.createdAt)!,
             updatedAt: this.ensureDate(thread.updatedAt)!,
@@ -588,24 +561,37 @@ export class UpstashStore extends MastraStorage {
         }
       }
 
-      // Sort by creation date (newest first)
-      threads.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      allThreads.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
-      // Apply pagination only if pagination parameters are provided
-      if (limit !== undefined && offset !== undefined) {
-        // Offset-based pagination
-        return threads.slice(offset, offset + limit);
-      } else if (page !== undefined) {
-        // Page-based pagination
+      if (page !== undefined) {
+        // If page is defined, perPage is also a number (due to the defaulting logic above)
+        const total = allThreads.length;
         const start = page * perPage;
         const end = start + perPage;
-        return threads.slice(start, end);
+        const paginatedThreads = allThreads.slice(start, end);
+        const hasMore = end < total;
+        return {
+          threads: paginatedThreads,
+          total,
+          page,
+          perPage,
+          hasMore,
+        };
       } else {
-        // No pagination - return all results
-        return threads;
+        // page is undefined, return all threads
+        return allThreads;
       }
     } catch (error) {
       console.error('Error in getThreadsByResourceId:', error);
+      if (page !== undefined) {
+        return {
+          threads: [],
+          total: 0,
+          page,
+          perPage, // perPage is number here
+          hasMore: false,
+        };
+      }
       return [];
     }
   }
