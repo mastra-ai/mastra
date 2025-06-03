@@ -22,6 +22,7 @@ import type {
   PathsToStringProps,
   ZodPathType,
   DynamicMapping,
+  StreamEvent,
 } from './types';
 
 export type StepFlowEntry =
@@ -1072,15 +1073,16 @@ export class Run<
    * @returns A promise that resolves to the workflow output
    */
   stream({ inputData, runtimeContext }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}): {
-    stream: ReadableStream<WatchEvent>;
+    stream: ReadableStream<StreamEvent>;
     getWorkflowState: () => Promise<WorkflowResult<TOutput, TSteps>>;
   } {
-    const { readable, writable } = new TransformStream<WatchEvent, WatchEvent>();
+    const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
 
     const writer = writable.getWriter();
     const unwatch = this.watch(async event => {
       try {
-        await writer.write(event);
+        // watch-v2 events are data stream events, so we need to cast them to the correct type
+        await writer.write(event as any);
       } catch {}
     }, 'watch-v2');
 

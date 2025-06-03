@@ -1,5 +1,15 @@
 # @mastra/deployer
 
+## 0.10.2-alpha.5
+
+### Patch Changes
+
+- 1b5fc55: Fixed an issue where the playground wouldn't display images saved in memory. Fixed memory to always store images as strings. Removed duplicate storage of reasoning and file/image parts in storage dbs
+- Updated dependencies [1b5fc55]
+- Updated dependencies [add596e]
+- Updated dependencies [ecebbeb]
+  - @mastra/core@0.10.2-alpha.5
+
 ## 0.10.2-alpha.4
 
 ### Patch Changes

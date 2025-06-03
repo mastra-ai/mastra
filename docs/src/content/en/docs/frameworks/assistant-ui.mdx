@@ -1,0 +1,310 @@
+---
+title: Using with Assistant UI
+description: "Learn how to integrate Assistant UI with Mastra"
+---
+
+import { Callout, FileTree, Steps } from 'nextra/components'
+
+# Using with Assistant UI
+
+[Assistant UI](https://assistant-ui.com) is the TypeScript/React library for AI Chat.
+Built on shadcn/ui and Tailwind CSS, it enables developers to create beautiful, enterprise-grade chat experiences in minutes.
+
+## Integrating with Next.js and Assistant UI
+
+There are two primary ways to integrate Mastra into your Next.js project when using Assistant UI:
+
+1. **Full-Stack Integration**: Integrate Mastra directly into your Next.js application's API routes. This approach keeps your backend and frontend code within the same project. [Learn how to set up Full-Stack Integration](#full-stack-integration)
+2. **Separate Backend Integration**: Run Mastra as a standalone server and connect your Next.js frontend to its API endpoints. This approach separates concerns and allows for independent scaling. [Learn how to set up Separate Backend Integration](#separate-backend-integration)
+
+## Full-Stack Integration
+
+<Steps>
+### Initialize Assistant UI
+
+There are two options when setting up Assistant UI using the `assistant-ui` CLI:
+
+1. **New Project**: Create a new Next.js project with Assistant UI.
+2. **Existing Project**: Initialize Assistant UI into an existing React project.
+
+#### New Project
+
+```bash copy
+npx assistant-ui@latest create
+```
+
+#### Existing Project
+
+```bash copy
+npx assistant-ui@latest init
+```
+
+<Callout>For detailed setup instructions, including adding API keys, basic configuration, and manual setup steps, please refer to [assistant-ui's official documentation](https://assistant-ui.com/docs).</Callout>
+
+
+### Install Mastra Packages
+
+Install the required Mastra packages:
+
+```bash copy
+npm install @mastra/core@latest @mastra/memory@latest @mastra/libsql@latest
+```
+
+### Configure Next.js
+
+To ensure Next.js correctly bundles your application when using Mastra directly in API routes, you need to configure `serverExternalPackages`.
+
+Update your `next.config.js` file to include `@mastra/`:
+
+```js showLineNumbers copy {3}
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  serverExternalPackages: ["@mastra/*"],
+  // ... your other Next.js config
+};
+
+module.exports = nextConfig;
+```
+
+### Configure Mastra Memory and Storage
+
+```typescript showLineNumbers copy filename="mastra/memory.ts" {4,8}
+import { LibSQLStore } from "@mastra/libsql";
+import { Memory } from "@mastra/memory";
+
+export const storage = new LibSQLStore({
+    url: 'file:./memory.db',
+})
+
+export const memory = new Memory({
+    storage,
+})
+```
+
+<Callout>
+If deploying to the edge, you should use a compatible storage solution and not a file-based storage.
+</Callout>
+
+### Define Mastra Agent
+
+```typescript showLineNumbers copy filename="mastra/agents/chef-agent.ts" {5-12}
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { memory} from "../memory";
+
+export const chefAgent = new Agent({
+  name: "chefAgent",
+  instructions:
+    "You are Michel, a practical and experienced home chef. " +
+    "You help people cook with whatever ingredients they have available.",
+  model: openai("gpt-4o-mini"),
+  memory,
+});
+```
+
+### Register Agent to Mastra Instance
+
+```typescript showLineNumbers copy filename="mastra/index.ts" {4-5}
+import { Mastra } from "@mastra/core";
+import { chefAgent } from "./agents/chef-agent";
+
+export const mastra = new Mastra({
+    agents: { chefAgent },
+    // ... other config
+});
+```
+
+This initializes Mastra and makes the `chefAgent` available for use.
+
+### Modify the Chat API endpoints
+
+The initial bootstrapped Next.js project has a `app/api/chat/route.ts` file that exports a `POST` handler. The initial implementation may look like this:
+
+```typescript showLineNumbers copy filename="app/api/chat/route.ts" {11-21}
+import { openai } from "@ai-sdk/openai";
+import { frontendTools } from "@assistant-ui/react-ai-sdk";
+import { streamText } from "ai";
+
+export const runtime = "edge";
+export const maxDuration = 30;
+
+export async function POST(req: Request) {
+  const { messages, system, tools } = await req.json();
+
+  const result = streamText({
+    model: openai("gpt-4o"),
+    messages,
+    // forward system prompt and tools from the frontend
+    toolCallStreaming: true,
+    system,
+    tools: {
+      ...frontendTools(tools),
+    },
+    onError: console.log,
+  });
+
+  return result.toDataStreamResponse();
+}
+```
+
+Now we need to modify the `POST` handler to use the `chefAgent` instead of this implementation.
+
+```typescript showLineNumbers copy filename="app/api/chat/route.ts" {1,6,8}
+import { mastra } from "@/mastra";
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+
+  const agent = mastra.getAgent("chefAgent");
+
+  const stream = await agent.stream(messages);
+
+  return stream.toDataStreamResponse();
+}
+```
+
+Key changes
+- We import the `mastra` instance we created.
+- We use the `mastra.getAgent("chefAgent")` to get the agent we want to use.
+- We use the `agent.stream(messages)` to get the stream of messages from the agent.
+- We return the stream as a data stream response which is compatible with `assistant-ui`.
+
+### Run the application
+
+You're all set! Start your Next.js development server:
+
+```bash copy
+npm run dev
+```
+
+You should now be able to chat with your agent in the browser.
+
+</Steps>
+
+Congratulations! You have successfully integrated Mastra into your Next.js application using the full-stack approach. Your Assistant UI frontend now communicates with a Mastra agent running in your Next.js backend API route.
+
+## Separate Backend Integration
+
+Run Mastra as a standalone server and connect your Next.js frontend (with Assistant UI) to its API endpoints.
+
+<Steps>
+### Create Standalone Mastra Server
+
+Set up your directory structure. A possible directory structure could look like this:
+
+<FileTree>
+    <FileTree.Folder name="project-root" defaultOpen>
+        <FileTree.Folder name="mastra-server" defaultOpen>
+            <FileTree.Folder name="src">
+                <FileTree.Folder name="mastra" />
+            </FileTree.Folder>
+            <FileTree.File name="package.json" />
+        </FileTree.Folder>
+        <FileTree.Folder name="nextjs-frontend">
+            <FileTree.File name="package.json" />
+        </FileTree.Folder>
+    </FileTree.Folder>
+</FileTree>
+
+Bootstrap your Mastra server:
+
+```bash copy
+npx create-mastra@latest
+```
+
+This command will launch an interactive wizard to help you scaffold a new Mastra project, including prompting you for a project name and setting up basic configurations.
+Follow the prompts to create your server project.
+
+You now have a basic Mastra server project ready.
+
+<Callout>
+Ensure that you have set the appropriate environment variables for your LLM provider in the `.env` file.
+</Callout>
+
+### Define Mastra Agent
+
+```typescript showLineNumbers copy filename="mastra/agents/chef-agent.ts" {5-12}
+import { openai } from "@ai-sdk/openai";
+import { Agent } from "@mastra/core/agent";
+import { memory} from "../memory";
+
+export const chefAgent = new Agent({
+  name: "chefAgent",
+  instructions:
+    "You are Michel, a practical and experienced home chef. " +
+    "You help people cook with whatever ingredients they have available.",
+  model: openai("gpt-4o-mini"),
+  memory,
+});
+```
+
+### Register Agent to Mastra Instance
+
+```typescript copy filename="mastra/index.ts" showLineNumbers
+import { Mastra } from "@mastra/core";
+import { chefAgent } from "./agents/chef-agent";
+
+export const mastra = new Mastra({
+    agents: { chefAgent },
+    // ... other config
+});
+```
+
+### Run the Mastra Server
+
+Run the Mastra server using the following command:
+
+```bash copy
+npm run dev
+```
+
+By default, the Mastra server will run on http://localhost:4111. Your chefAgent should now be accessible via a POST request endpoint, typically http://localhost:4111/api/agents/chefAgent/stream. Keep this server running for the next steps where we'll set up the Assistant UI frontend to connect to it.
+
+### Initialize Assistant UI
+
+There are two options when setting up Assistant UI using the `assistant-ui` CLI:
+
+1. **New Project**: Create a new Next.js project with Assistant UI.
+2. **Existing Project**: Initialize Assistant UI into an existing React project.
+
+#### New Project
+
+```bash copy
+npx assistant-ui@latest create
+```
+
+#### Existing Project
+
+```bash copy
+npx assistant-ui@latest init
+```
+
+<Callout>For detailed setup instructions, including adding API keys, basic configuration, and manual setup steps, please refer to [assistant-ui's official documentation](https://assistant-ui.com/docs).</Callout>
+
+### Configure Frontend API Endpoint
+
+The default Assistant UI setup configures the chat runtime to use a local API route (`/api/chat`) within the Next.js project. Since our Mastra agent is running on a separate server, we need to update the frontend to point to that server's endpoint.
+
+Open the main page file in your Assistant UI frontend project (usually `app/page.tsx` or `src/app/page.tsx`). Find the `useChatRuntime` hook and change the `api` property to the full URL of your Mastra agent's stream endpoint:
+
+```typescript showLineNumbers copy filename="app/page.tsx" {2}
+const runtime = useChatRuntime({
+    api: "http://localhost:4111/api/agents/chefAgent/stream",
+});
+```
+
+Now, the Assistant UI frontend will send chat requests directly to your running Mastra server.
+
+### Run the Application
+
+You're ready to connect the pieces! Make sure both the Mastra server and the Assistant UI frontend are running. Start the Next.js development server:
+
+```bash copy
+npm run dev
+```
+
+You should now be able to chat with your agent in the browser.
+
+</Steps>
+
+Congratulations! You have successfully integrated Mastra with Assistant UI using a separate server approach. Your Assistant UI frontend now communicates with a standalone Mastra agent server.

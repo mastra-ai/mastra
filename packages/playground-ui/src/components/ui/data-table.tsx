@@ -113,7 +113,7 @@ export const DataTable = <TData, TValue>({
   return (
     <div>
       <Table>
-        <Thead className="sticky top-0">
+        <Thead className="sticky top-0 bg-surface2">
           {ths.headers.map(header => {
             const size = header.column.getSize();
             const meta = header.column.columnDef.meta as { width?: string };
