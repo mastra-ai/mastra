@@ -148,12 +148,10 @@ export class UpstashStore extends MastraStorage {
 
   private getMessageKey(threadId: string, messageId: string): string {
     const key = this.getKey(TABLE_MESSAGES, { threadId, id: messageId });
-    // console.log(`getMessagesKey`, key);
     return key;
   }
   private getThreadKeyByResourceAndMessage(resourceId: string, messageId: string): string {
     const key = 'to-threadid:' + this.getKey(TABLE_MESSAGES, { resourceId, messageId });
-    console.log(`getResourceMessageKey`, key);
     return key;
   }
 
@@ -586,7 +584,6 @@ export class UpstashStore extends MastraStorage {
     const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
     const messageIds = new Set<string>();
     const threadMessagesKey = this.getThreadMessagesKey(threadId);
-    const resourceMessagesKey = resourceId ? this.getResourceMessagesKey(resourceId) : undefined;
 
     if (limit === 0 && !selectBy?.include) {
       return [];
@@ -605,14 +602,12 @@ export class UpstashStore extends MastraStorage {
           // Get the rank of this message in the sorted set
           const rank = await this.redis.zrank(itemThreadMessagesKey, item.id);
 
-          console.log({ resourceMessagesKey, threadMessagesKey, rank, item });
           if (rank === null) continue;
 
           // Get previous messages if requested
           if (item.withPreviousMessages) {
             const start = Math.max(0, rank - item.withPreviousMessages);
             const prevIds = rank === 0 ? [] : await this.redis.zrange(itemThreadMessagesKey, start, rank - 1);
-            console.log(prevIds);
             prevIds.forEach(id => messageIds.add(id as string));
           }
 
@@ -620,7 +615,6 @@ export class UpstashStore extends MastraStorage {
           if (item.withNextMessages) {
             const nextIds = await this.redis.zrange(itemThreadMessagesKey, rank + 1, rank + item.withNextMessages);
             nextIds.forEach(id => messageIds.add(id as string));
-            console.log(nextIds);
           }
         }
       }
@@ -630,7 +624,6 @@ export class UpstashStore extends MastraStorage {
     const latestIds = limit === 0 ? [] : await this.redis.zrange(threadMessagesKey, -limit, -1);
     latestIds.forEach(id => messageIds.add(id as string));
 
-    console.log({ messageIds: messageIds.keys() });
     // Fetch all needed messages in parallel
     const messages = (
       await Promise.all(
@@ -646,19 +639,15 @@ export class UpstashStore extends MastraStorage {
             this.getThreadKeyByResourceAndMessage(resourceId, id),
           );
 
-          if (threadIdByResource) {
-            const value = await this.redis.get<MastraMessageV2 & { _index?: number }>(
-              this.getMessageKey(threadIdByResource, id),
-            );
-            return value;
-          }
+          if (!threadIdByResource) return null;
 
-          return null;
+          return await this.redis.get<MastraMessageV2 & { _index?: number }>(
+            this.getMessageKey(threadIdByResource, id),
+          );
         }),
       )
     ).filter(msg => msg !== null) as (MastraMessageV2 & { _index?: number })[];
 
-    console.log({ messages });
     // Sort messages by their position in the sorted set
     const messageOrder = await this.redis.zrange(threadMessagesKey, 0, -1);
     messages.sort((a, b) => messageOrder.indexOf(a!.id) - messageOrder.indexOf(b!.id));
@@ -666,7 +655,6 @@ export class UpstashStore extends MastraStorage {
     // Remove _index before returning
     const prepared = messages.map(({ _index, ...message }) => message as unknown as MastraMessageV1);
 
-    console.log({ prepared });
     const list = new MessageList().add(prepared, 'memory');
     if (format === `v2`) return list.get.all.v2();
     return list.get.all.v1();

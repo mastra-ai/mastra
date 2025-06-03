@@ -336,7 +336,7 @@ describe('UpstashStore', () => {
       expect(retrievedMessages.map((m: any) => m.content.parts[0].text)).toEqual(['First', 'Second', 'Third']);
     });
 
-    it.only('should retrieve messages w/ next/prev messages by message id + resource id', async () => {
+    it('should retrieve messages w/ next/prev messages by message id + resource id', async () => {
       const messages: MastraMessageV2[] = [
         createSampleMessage('thread-one', 'First', 'cross-thread-resource'),
         createSampleMessage('thread-one', 'Second', 'cross-thread-resource'),
@@ -352,17 +352,17 @@ describe('UpstashStore', () => {
 
       await store.saveMessages({ messages: messages, format: 'v2' });
 
-      // const retrievedMessages = await store.getMessages({ threadId: 'thread-one', format: 'v2' });
-      // expect(retrievedMessages).toHaveLength(3);
-      // expect(retrievedMessages.map((m: any) => m.content.parts[0].text)).toEqual(['First', 'Second', 'Third']);
-      //
-      // const retrievedMessages2 = await store.getMessages({ threadId: 'thread-two', format: 'v2' });
-      // expect(retrievedMessages2).toHaveLength(3);
-      // expect(retrievedMessages2.map((m: any) => m.content.parts[0].text)).toEqual(['Fourth', 'Fifth', 'Sixth']);
-      //
-      // const retrievedMessages3 = await store.getMessages({ threadId: 'thread-three', format: 'v2' });
-      // expect(retrievedMessages3).toHaveLength(2);
-      // expect(retrievedMessages3.map((m: any) => m.content.parts[0].text)).toEqual(['Seventh', 'Eighth']);
+      const retrievedMessages = await store.getMessages({ threadId: 'thread-one', format: 'v2' });
+      expect(retrievedMessages).toHaveLength(3);
+      expect(retrievedMessages.map((m: any) => m.content.parts[0].text)).toEqual(['First', 'Second', 'Third']);
+
+      const retrievedMessages2 = await store.getMessages({ threadId: 'thread-two', format: 'v2' });
+      expect(retrievedMessages2).toHaveLength(3);
+      expect(retrievedMessages2.map((m: any) => m.content.parts[0].text)).toEqual(['Fourth', 'Fifth', 'Sixth']);
+
+      const retrievedMessages3 = await store.getMessages({ threadId: 'thread-three', format: 'v2' });
+      expect(retrievedMessages3).toHaveLength(2);
+      expect(retrievedMessages3.map((m: any) => m.content.parts[0].text)).toEqual(['Seventh', 'Eighth']);
 
       const crossThreadMessages = await store.getMessages({
         threadId: 'thread-doesnt-exist',
@@ -385,7 +385,6 @@ describe('UpstashStore', () => {
         },
       });
 
-      console.log(crossThreadMessages);
       expect(crossThreadMessages).toHaveLength(6);
       expect(crossThreadMessages.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
       expect(crossThreadMessages.filter(m => m.threadId === `thread-two`)).toHaveLength(3);
