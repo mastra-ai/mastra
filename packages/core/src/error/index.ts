@@ -111,6 +111,7 @@ export const MASTRA_ERRORS = {
   }),
 };
 
+throw new MASTRA_ERRORS.TOOL_EXECUTE_ERROR({ toolName: 'test' });
 /**
  * Example of how MastraError can be extended if you prefer dedicated error classes
  * for certain groups of errors, potentially with their own error map.
@@ -146,8 +147,6 @@ export const MASTRA_ERRORS = {
  *     } else {
  *       super(definition, context, cause);
  *     }
- *     // It's good practice to set the name for custom error classes.
- *     this.name = 'ModuleXyzError';
  *   }
  * }
  *

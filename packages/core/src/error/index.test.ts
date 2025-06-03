@@ -114,7 +114,7 @@ describe('MastraError (Base Class)', () => {
 
 describe('MASTRA_ERRORS (Generated Error Classes)', () => {
   it('TOOL_EXECUTE_ERROR should create an error with strongly-typed context', () => {
-    const toolErrorContext = { toolName: 'user123', whatever: 'config issue' };
+    const toolErrorContext = { toolName: 'user123' };
     const error = new MASTRA_ERRORS.TOOL_EXECUTE_ERROR(toolErrorContext);
 
     expect(error).toBeInstanceOf(MastraError);
@@ -126,7 +126,7 @@ describe('MASTRA_ERRORS (Generated Error Classes)', () => {
   });
 
   it('TOOL_EXECUTE_ERROR should accept a cause', () => {
-    const toolErrorContext = { toolName: 'user456', whatever: 'network fail' };
+    const toolErrorContext = { toolName: 'user456' };
     const cause = new Error('Underlying network issue');
     const error = new MASTRA_ERRORS.TOOL_EXECUTE_ERROR(toolErrorContext, cause);
 
@@ -136,10 +136,6 @@ describe('MASTRA_ERRORS (Generated Error Classes)', () => {
     if (error.cause) {
       expect(error.cause).toBe(cause);
     }
-  });
-
-  it('MASTRA_ERRORS.TOOL_EXECUTE_ERROR constructor should enforce context type', () => {
-    expect(true).toBe(true);
   });
 
   describe('toJSON methods for Generated MASTRA_ERRORS.TOOL_EXECUTE_ERROR', () => {
