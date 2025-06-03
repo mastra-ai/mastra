@@ -2,7 +2,6 @@ import { openai } from '@ai-sdk/openai';
 import { describe, it } from 'vitest';
 import {
   createStep,
-  createTool,
   createWorkflow,
   type CoreMessage,
   type MemoryConfig,
@@ -10,6 +9,7 @@ import {
   type StorageGetMessagesArg,
   type StorageThreadType,
 } from '../../';
+import { createTool } from '../../tools/index';
 import type { AiMessageType, MastraMessageV2 } from '../../agent';
 import { Agent } from '../../agent';
 import { MastraMemory, MastraMessageV1 } from '../../memory';

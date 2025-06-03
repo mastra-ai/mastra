@@ -696,6 +696,7 @@ export class NewAgentNetwork extends MastraBase {
         // @ts-ignore
         for await (const chunk of stream.stream) {
           const c: any = chunk;
+          // const c = chunk;
           switch (c.type) {
             case 'text-delta':
               await emitter.emit('watch-v2', {
