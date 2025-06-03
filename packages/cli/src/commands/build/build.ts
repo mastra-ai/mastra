@@ -38,7 +38,8 @@ export async function build({ dir, tools, root }: { dir?: string; tools?: string
     logger.info('You can now deploy the .mastra/output directory to your target platform.');
   } catch (error) {
     if (error instanceof Error) {
-      logger.debug(`error: ${error.message}`, { error });
+      logger.error(`Mastra Build failed`);
     }
+    process.exit(1);
   }
 }
