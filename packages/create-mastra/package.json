@@ -1,6 +1,6 @@
 {
   "name": "create-mastra",
-  "version": "0.10.2-alpha.3",
+  "version": "0.10.2-alpha.4",
   "description": "Create Mastra apps with one command",
   "license": "Elastic-2.0",
   "type": "module",

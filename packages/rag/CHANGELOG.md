@@ -1,5 +1,15 @@
 # @mastra/rag
 
+## 0.10.2-alpha.1
+
+### Patch Changes
+
+- a60d630: Adds runtime and initialization DB specific configuration to createVectorQueryTool to account for different configuration between db providers.
+- Updated dependencies [1b5fc55]
+- Updated dependencies [add596e]
+- Updated dependencies [ecebbeb]
+  - @mastra/core@0.10.2-alpha.5
+
 ## 0.10.2-alpha.0
 
 ### Patch Changes
