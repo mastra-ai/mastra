@@ -65,6 +65,15 @@ describe('Provider Compatibility Classes', () => {
 
       expect(result).toHaveProperty('jsonSchema');
       expect(result).toHaveProperty('validate');
+
+      const validData = {
+        text: 'Hello, world!',
+        count: 10,
+      };
+
+      const validationResult = result.validate!(validData);
+      expect(typeof validationResult).toBe('object');
+      expect(validationResult).toHaveProperty('success');
     });
   });
 
@@ -91,8 +100,23 @@ describe('Provider Compatibility Classes', () => {
 
       const result = compat.processToAISDKSchema(schema);
 
+      const validData = {
+        user: {
+          name: 'John Doe',
+          preferences: ['dark'],
+        },
+        settings: {
+          public: true,
+          featured: false,
+        },
+      };
+
       expect(result).toHaveProperty('jsonSchema');
       expect(result).toHaveProperty('validate');
+
+      const validationResult = result.validate!(validData);
+      expect(typeof validationResult).toBe('object');
+      expect(validationResult).toHaveProperty('success');
     });
   });
 
@@ -131,6 +155,15 @@ describe('Provider Compatibility Classes', () => {
 
       expect(result).toHaveProperty('jsonSchema');
       expect(result).toHaveProperty('validate');
+
+      const validData = {
+        startDate: new Date(),
+        title: 'Hello, world!',
+      };
+
+      const validationResult = result.validate!(validData);
+      expect(typeof validationResult).toBe('object');
+      expect(validationResult).toHaveProperty('success');
     });
   });
 
@@ -163,6 +196,17 @@ describe('Provider Compatibility Classes', () => {
 
       expect(result).toHaveProperty('jsonSchema');
       expect(result).toHaveProperty('validate');
+
+      const validData = {
+        email: 'john@example.com',
+        url: 'https://example.com',
+        uuid: '123e4567-e89b-12d3-a456-426614174000',
+        text: 'Hello, world!',
+      };
+
+      const validationResult = result.validate!(validData);
+      expect(typeof validationResult).toBe('object');
+      expect(validationResult).toHaveProperty('success');
     });
   });
 
@@ -189,6 +233,16 @@ describe('Provider Compatibility Classes', () => {
 
       expect(result).toHaveProperty('jsonSchema');
       expect(result).toHaveProperty('validate');
+
+      const validData = {
+        tags: ['tag1'],
+        status: 'active',
+        priority: 'high',
+      };
+
+      const validationResult = result.validate!(validData);
+      expect(typeof validationResult).toBe('object');
+      expect(validationResult).toHaveProperty('success');
     });
   });
 

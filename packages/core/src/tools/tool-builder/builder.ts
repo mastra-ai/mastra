@@ -6,6 +6,7 @@ import {
   DeepSeekSchemaCompatLayer,
   MetaSchemaCompatLayer,
   applyCompatLayer,
+  convertZodSchemaToAISDKSchema,
 } from '@mastra/schema-compat';
 import type { ToolExecutionOptions } from 'ai';
 import { z } from 'zod';
@@ -64,7 +65,7 @@ export class CoreToolBuilder extends MastraBase {
         id: tool.id,
         args: ('args' in this.originalTool ? this.originalTool.args : {}) as Record<string, unknown>,
         description: tool.description,
-        parameters: applyCompatLayer({ schema: this.getParameters(), compatLayers: [], mode: 'aiSdkSchema' }),
+        parameters: convertZodSchemaToAISDKSchema(this.getParameters()),
         execute: this.originalTool.execute
           ? this.createExecute(
               this.originalTool,
