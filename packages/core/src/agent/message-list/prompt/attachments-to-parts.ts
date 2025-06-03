@@ -25,7 +25,7 @@ export function attachmentsToParts(attachments: Attachment[]): ContentPart[] {
       case 'http:':
       case 'https:': {
         if (attachment.contentType?.startsWith('image/')) {
-          parts.push({ type: 'image', image: url });
+          parts.push({ type: 'image', image: url.toString(), mimeType: attachment.contentType });
         } else {
           if (!attachment.contentType) {
             throw new Error('If the attachment is not an image, it must specify a content type');
@@ -33,7 +33,7 @@ export function attachmentsToParts(attachments: Attachment[]): ContentPart[] {
 
           parts.push({
             type: 'file',
-            data: url,
+            data: url.toString(),
             mimeType: attachment.contentType,
           });
         }
@@ -59,7 +59,8 @@ export function attachmentsToParts(attachments: Attachment[]): ContentPart[] {
         if (attachment.contentType?.startsWith('image/')) {
           parts.push({
             type: 'image',
-            image: convertDataContentToUint8Array(base64Content),
+            image: attachment.url,
+            mimeType: attachment.contentType,
           });
         } else if (attachment.contentType?.startsWith('text/')) {
           parts.push({
