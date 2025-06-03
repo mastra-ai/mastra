@@ -86,7 +86,7 @@ export const useMessages = ({ threadId, memory, agentId }: { threadId: string; m
     }
   }, [threadId, memory]);
 
-  return { messages: data?.uiMessages, isLoading, mutate };
+  return { messages: data?.messages, isLoading, mutate };
 };
 
 export const useDeleteThread = () => {

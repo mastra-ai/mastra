@@ -25,6 +25,8 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
       const includeVectors: boolean = runtimeContext.get('includeVectors') ?? options.includeVectors ?? false;
       const includeSources: boolean = runtimeContext.get('includeSources') ?? options.includeSources ?? true;
       const reranker: RerankConfig = runtimeContext.get('reranker') ?? options.reranker;
+      const databaseConfig = runtimeContext.get('databaseConfig') ?? options.databaseConfig;
+
       if (!indexName) throw new Error(`indexName is required, got: ${indexName}`);
       if (!vectorStoreName) throw new Error(`vectorStoreName is required, got: ${vectorStoreName}`);
 
@@ -40,7 +42,7 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
         );
       }
       if (logger) {
-        logger.debug('[VectorQueryTool] execute called with:', { queryText, topK, filter });
+        logger.debug('[VectorQueryTool] execute called with:', { queryText, topK, filter, databaseConfig });
       }
       try {
         const topKValue =
@@ -74,7 +76,7 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
           })();
         }
         if (logger) {
-          logger.debug('Prepared vector query parameters', { queryText, topK: topKValue, queryFilter });
+          logger.debug('Prepared vector query parameters', { queryText, topK: topKValue, queryFilter, databaseConfig });
         }
 
         const { results } = await vectorQuerySearch({
@@ -85,6 +87,7 @@ export const createVectorQueryTool = (options: VectorQueryToolOptions) => {
           queryFilter: Object.keys(queryFilter || {}).length > 0 ? queryFilter : undefined,
           topK: topKValue,
           includeVectors,
+          databaseConfig,
         });
         if (logger) {
           logger.debug('vectorQuerySearch returned results', { count: results.length });
