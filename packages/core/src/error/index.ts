@@ -35,11 +35,11 @@ export interface IErrorDefinition {
    */
   text: string | ((context: IErrorContext) => string);
   /**
-   * Functional domain of the error (e.g., TOOL, AGENT, WORKFLOW).
+   * Functional domain of the error (e.g., CONFIG, BUILD, API).
    */
-  domain: Domain;
+  domain: `${Domain}`;
   /** Broad category of the error (e.g., USER, SYSTEM, THIRD_PARTY). */
-  category: ErrorCategory;
+  category: `${ErrorCategory}`;
 }
 
 /**
@@ -48,23 +48,17 @@ export interface IErrorDefinition {
  */
 export class MastraError<T extends IErrorContext> extends Error {
   public readonly id: string | number;
-  public readonly domain: Domain;
-  public readonly category: ErrorCategory;
-  public readonly message: string;
+  public readonly domain: `${Domain}`;
+  public readonly category: `${ErrorCategory}`;
   public readonly originalError?: Error;
 
-  constructor(errorDefinition: IErrorDefinition, context: T, originalError?: Error | MastraError<T>) {
-    const message =
-      typeof errorDefinition.text === 'function' ? errorDefinition.text(context || {}) : errorDefinition.text;
+  constructor(errorDefinition: IErrorDefinition, context: T = {} as T, originalError?: Error | MastraError<T>) {
+    const message = typeof errorDefinition.text === 'function' ? errorDefinition.text(context) : errorDefinition.text;
 
     super(message, originalError);
-    this.message = message;
 
     this.id = errorDefinition.id;
-
-    this.domain =
-      typeof errorDefinition.domain === 'function' ? errorDefinition.domain(context || {}) : errorDefinition.domain;
-
+    this.domain = errorDefinition.domain;
     this.category = errorDefinition.category;
     this.originalError = originalError;
 
@@ -92,63 +86,3 @@ export class MastraError<T extends IErrorContext> extends Error {
     };
   }
 }
-
-export function makeMastraError<T extends IErrorContext>(definition: IErrorDefinition) {
-  return class extends MastraError<T> {
-    constructor(context: T, originalError?: Error) {
-      super(definition, context, originalError);
-    }
-  };
-}
-
-export const MASTRA_ERRORS = {
-  TOOL_EXECUTE_ERROR: makeMastraError<{ toolName: string }>({
-    id: 'TOOL_EXECUTE_ERROR',
-    text: ctx => `Tool ${ctx.toolName} failed to execute`,
-    domain: Domain.TOOL,
-    category: ErrorCategory.USER,
-  }),
-};
-
-throw new MASTRA_ERRORS.TOOL_EXECUTE_ERROR({ toolName: 'test' });
-/**
- * Example of how MastraError can be extended if you prefer dedicated error classes
- * for certain groups of errors, potentially with their own error map.
- *
- * export const CustomErrorMap: Record<string, IErrorDefinition> = {
- *   "MODULE_XYZ_001": {
- *     id: "MODULE_XYZ_001",
- *     text: (ctx: IErrorContext) => `Module XYZ operation failed for item: ${ctx.itemId}. Details: ${ctx.details}`,
- *     // Assuming Domain.AGENT is a relevant domain from your enum
- *     domain: Domain.AGENT,
- *     category: ErrorCategory.SYSTEM,
- *   },
- * };
- *
- * // This custom error class would take a context of type IErrorContext by default
- * // or could be made generic itself if its specific errors need varying context types.
- * export class ModuleXyzError extends MastraError<IErrorContext> {
- *   constructor(errorCode: keyof typeof CustomErrorMap, context: IErrorContext, cause?: Error) {
- *     const definition = CustomErrorMap[errorCode];
- *     if (!definition) {
- *       // Fallback for an unknown error code within this specific error domain
- *       super(
- *         {
- *           id: errorCode,
- *           text: (ctx: IErrorContext) => `Unknown Module XYZ error: ${errorCode}. Context: ${JSON.stringify(ctx)}`,
- *           // Provide a sensible default domain and category for unknown errors of this type
- *           domain: Domain.AGENT,
- *           category: ErrorCategory.UNKNOWN,
- *         },
- *         context,
- *         cause
- *       );
- *     } else {
- *       super(definition, context, cause);
- *     }
- *   }
- * }
- *
- * // Example usage:
- * // throw new ModuleXyzError("MODULE_XYZ_001", { itemId: "item123", details: "Network timeout" });
- */
