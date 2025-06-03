@@ -9,7 +9,8 @@ import type { IMastraLogger } from './logger';
 import type { Mastra } from './mastra';
 import type { AiMessageType, MastraMemory } from './memory';
 import type { RuntimeContext } from './runtime-context';
-import { isVercelTool, type CoreTool, type ToolAction, type VercelTool } from './tools';
+import { isVercelTool } from './tools/toolchecks';
+import { type CoreTool, type ToolAction, type VercelTool } from './tools';
 import { CoreToolBuilder } from './tools/tool-compatibility/builder';
 
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
