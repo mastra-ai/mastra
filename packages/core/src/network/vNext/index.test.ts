@@ -2,7 +2,6 @@ import { openai } from '@ai-sdk/openai';
 import { describe, it } from 'vitest';
 import {
   createStep,
-  createTool,
   createWorkflow,
   type CoreMessage,
   type MemoryConfig,
@@ -10,12 +9,14 @@ import {
   type StorageGetMessagesArg,
   type StorageThreadType,
 } from '../../';
-import type { AiMessageType } from '../../agent';
+import { createTool } from '../../tools/index';
+import type { AiMessageType, MastraMessageV2 } from '../../agent';
 import { Agent } from '../../agent';
-import { MastraMemory } from '../../memory';
+import { MastraMemory, MastraMessageV1 } from '../../memory';
 import { RuntimeContext } from '../../runtime-context';
 import { NewAgentNetwork } from './index';
 import { z } from 'zod';
+import { UIMessage } from '@ai-sdk/ui-utils';
 
 class MockMemory extends MastraMemory {
   #byResourceId: Map<string, any[]> = new Map();
@@ -46,9 +47,27 @@ class MockMemory extends MastraMemory {
     };
   }
 
-  async saveMessages({ messages }: { messages: MessageType[] }) {
+  async saveMessages(args: {
+    messages: (MastraMessageV1 | MastraMessageV2)[] | MastraMessageV1[] | MastraMessageV2[];
+    memoryConfig?: MemoryConfig | undefined;
+    format?: 'v1';
+  }): Promise<MastraMessageV1[]>;
+  async saveMessages(args: {
+    messages: (MastraMessageV1 | MastraMessageV2)[] | MastraMessageV1[] | MastraMessageV2[];
+    memoryConfig?: MemoryConfig | undefined;
+    format: 'v2';
+  }): Promise<MastraMessageV2[]>;
+  async saveMessages(args: {
+    messages: (MastraMessageV1 | MastraMessageV2)[] | MastraMessageV1[] | MastraMessageV2[];
+    memoryConfig?: MemoryConfig | undefined;
+    format?: 'v1' | 'v2';
+  }): Promise<MastraMessageV2[] | MastraMessageV1[]> {
     // console.log('MEM saveMessages', messages);
-    for (const message of messages) {
+    for (const message of args.messages) {
+      if (!message.threadId) {
+        throw new Error('Message has no threadId');
+      }
+
       const thread = this.#byThreadId.get(message.threadId) ?? [];
       thread.push(message);
       this.#byThreadId.set(message.threadId, thread);
@@ -59,47 +78,23 @@ class MockMemory extends MastraMemory {
         this.#byResourceId.set(message.resourceId, resource);
       }
     }
-    return messages;
+    return args.messages as MastraMessageV1[];
   }
 
   async rememberMessages({
     threadId,
     resourceId,
     vectorMessageSearch,
-    systemMessage,
     config,
   }: {
     threadId: string;
     resourceId?: string;
     vectorMessageSearch?: string;
-    systemMessage?: CoreMessage;
     config?: MemoryConfig;
-  }): Promise<{
-    threadId: string;
-    messages: CoreMessage[];
-    uiMessages: AiMessageType[];
-  }> {
-    // console.log('MEM rememberMessages', threadId, resourceId, vectorMessageSearch, systemMessage, config);
-    const thread = this.#byThreadId.get(threadId) ?? [];
-    thread.push(systemMessage);
-    this.#byThreadId.set(threadId, thread);
-
-    if (resourceId) {
-      const resource = this.#byResourceId.get(resourceId) ?? [];
-      resource.push(systemMessage);
-      this.#byResourceId.set(resourceId, resource);
-    }
-
+  }): Promise<{ messages: MastraMessageV1[]; messagesV2: MastraMessageV2[] }> {
     return {
-      threadId,
-      messages: thread,
-      uiMessages: thread.map(msg => ({
-        id: msg.id,
-        role: msg.role,
-        content: msg.content,
-        createdAt: msg.createdAt,
-        updatedAt: msg.updatedAt,
-      })),
+      messages: [],
+      messagesV2: [],
     };
   }
 
@@ -107,7 +102,7 @@ class MockMemory extends MastraMemory {
     threadId,
     resourceId,
     selectBy,
-  }: StorageGetMessagesArg): Promise<{ messages: CoreMessage[]; uiMessages: AiMessageType[] }> {
+  }: StorageGetMessagesArg): Promise<{ messages: CoreMessage[]; uiMessages: UIMessage[] }> {
     // console.log('MEM query', threadId, resourceId, selectBy);
     const thread = this.#byThreadId.get(threadId) ?? [];
     return {
@@ -118,6 +113,7 @@ class MockMemory extends MastraMemory {
         content: msg.content,
         createdAt: msg.createdAt,
         updatedAt: msg.updatedAt,
+        parts: [],
       })),
     };
   }
@@ -135,7 +131,7 @@ class MockMemory extends MastraMemory {
 }
 
 describe('NewAgentNetwork', () => {
-  it('should create a new agent network', async () => {
+  it.only('should create a new agent network', async () => {
     const memory = new MockMemory({
       name: 'test-memory',
     });
@@ -235,7 +231,7 @@ describe('NewAgentNetwork', () => {
     console.log(
       await network.loop(
         'What are the biggest cities in France? Give me 3. How are they like? Find cities, then do thorough research on each city, and give me a final full report synthesizing all that information. Make sure to use an agent for synthesis.',
-        { runtimeContext },
+        { runtimeContext, maxIterations: 10 },
       ),
     );
   });
@@ -433,6 +429,7 @@ describe('NewAgentNetwork', () => {
       workflows: {
         workflow1,
       },
+      defaultAgent: agent2,
       memory: memory,
     });
 
@@ -447,7 +444,7 @@ describe('NewAgentNetwork', () => {
     }
   });
 
-  it.only('should create a new agent network single call with tools', async () => {
+  it('should create a new agent network single call with tools', async () => {
     const memory = new MockMemory({
       name: 'test-memory',
     });

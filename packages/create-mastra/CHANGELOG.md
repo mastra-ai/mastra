@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.10.2-alpha.3
+
+### Patch Changes
+
+- 401bbae: Show workflow graph from stepGraph of previous runs when viewing a previous run
+
 ## 0.10.2-alpha.2
 
 ### Patch Changes
