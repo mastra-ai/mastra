@@ -23,6 +23,7 @@ import type {
   ZodPathType,
   DynamicMapping,
 } from './types';
+import type { TextStreamPart } from 'ai';
 
 export type StepFlowEntry =
   | { type: 'step'; step: Step }
@@ -1072,15 +1073,16 @@ export class Run<
    * @returns A promise that resolves to the workflow output
    */
   stream({ inputData, runtimeContext }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}): {
-    stream: ReadableStream<WatchEvent>;
+    stream: ReadableStream<TextStreamPart<any>>;
     getWorkflowState: () => Promise<WorkflowResult<TOutput, TSteps>>;
   } {
-    const { readable, writable } = new TransformStream<WatchEvent, WatchEvent>();
+    const { readable, writable } = new TransformStream<TextStreamPart<any>, TextStreamPart<any>>();
 
     const writer = writable.getWriter();
     const unwatch = this.watch(async event => {
       try {
-        await writer.write(event);
+        // watch-v2 events are data stream events, so we need to cast them to the correct type
+        await writer.write(event as any);
       } catch {}
     }, 'watch-v2');
 
