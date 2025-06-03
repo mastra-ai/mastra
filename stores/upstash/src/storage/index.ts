@@ -321,7 +321,7 @@ export class UpstashStore extends MastraStorage {
     scope?: string;
     attributes?: Record<string, string>;
     filters?: Record<string, any>;
-    page?: number;
+    page: number;
     perPage?: number;
     fromDate?: Date;
     toDate?: Date;
@@ -329,7 +329,7 @@ export class UpstashStore extends MastraStorage {
   public async getTraces(args: {
     name?: string;
     scope?: string;
-    page?: number;
+    page: number;
     perPage?: number;
     attributes?: Record<string, string>;
     filters?: Record<string, any>;
@@ -378,7 +378,7 @@ export class UpstashStore extends MastraStorage {
       const keys = await this.scanKeys(pattern);
 
       if (keys.length === 0) {
-        if (page !== undefined) {
+        if (returnPaginationResults) {
           return {
             traces: [],
             total: 0,
@@ -448,20 +448,24 @@ export class UpstashStore extends MastraStorage {
         createdAt: this.ensureDate(record.createdAt),
       }));
 
-      if (returnPaginationResults) {
+      if (page !== undefined) {
         const total = transformedTraces.length;
         const resolvedPerPage = perPage || 100;
         const start = page * resolvedPerPage;
         const end = start + resolvedPerPage;
         const paginatedTraces = transformedTraces.slice(start, end);
         const hasMore = end < total;
-        return {
-          traces: paginatedTraces,
-          total,
-          page,
-          perPage: resolvedPerPage,
-          hasMore,
-        };
+        if (returnPaginationResults) {
+          return {
+            traces: paginatedTraces,
+            total,
+            page,
+            perPage: resolvedPerPage,
+            hasMore,
+          };
+        } else {
+          return paginatedTraces;
+        }
       }
 
       return transformedTraces;
@@ -755,7 +759,7 @@ export class UpstashStore extends MastraStorage {
         // Process messages and apply filters - handle undefined results from pipeline
         let messages = results
           .map((result: any) => result as MastraMessageV2 | null)
-          .filter((msg): msg is MastraMessageV2 => msg !== null);
+          .filter((msg): msg is MastraMessageV2 => msg !== null) as (MastraMessageV2 & { _index?: number })[];
 
         // Apply date filters if provided
         if (fromDate) {
