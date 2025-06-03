@@ -14,7 +14,7 @@ import { RuntimeContext } from '@mastra/core/di';
 
 import { ChatProps } from '@/types';
 
-import { CoreMessage } from '@mastra/core';
+import { CoreUserMessage } from '@mastra/core';
 import { fileToBase64 } from '@/lib/file';
 import { useMastraClient } from '@/contexts/mastra-client-context';
 import { PDFAttachmentAdapter } from '@/components/assistant-ui/attachment-adapters/pdfs-adapter';
@@ -23,33 +23,36 @@ const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
 };
 
-const convertToAIAttachments = async (attachments: AppendMessage['attachments']): Promise<Array<CoreMessage>> => {
-  const promises = attachments.map(async attachment => {
-    if (attachment.type === 'document') {
-      if (attachment.contentType === 'application/pdf') {
+const convertToAIAttachments = async (attachments: AppendMessage['attachments']): Promise<Array<CoreUserMessage>> => {
+  const promises = attachments
+    .filter(attachment => attachment.type === 'image' || attachment.type === 'document')
+    .map(async attachment => {
+      if (attachment.type === 'document') {
+        if (attachment.contentType === 'application/pdf') {
+          return {
+            role: 'user' as const,
+            content: [
+              {
+                type: 'file' as const,
+                // @ts-expect-error - TODO: fix this type issue somehow
+                data: attachment.content?.[0]?.text || '',
+                mimeType: attachment.contentType,
+                filename: attachment.name,
+              },
+            ],
+          };
+        }
+
         return {
           role: 'user' as const,
-          content: [
-            {
-              type: 'file' as const,
-              // @ts-expect-error - TODO: fix this type issue somehow
-              data: attachment.content?.[0]?.text || '',
-              mimeType: attachment.contentType,
-              filename: attachment.name,
-            },
-          ],
+          // @ts-expect-error - TODO: fix this type issue somehow
+          content: attachment.content[0]?.text || '',
         };
       }
 
       return {
         role: 'user' as const,
-        content: attachment.content,
-      };
-    }
 
-    if (attachment.type === 'image') {
-      return {
-        role: 'user' as const,
         content: [
           {
             type: 'image' as const,
@@ -58,8 +61,7 @@ const convertToAIAttachments = async (attachments: AppendMessage['attachments'])
           },
         ],
       };
-    }
-  });
+    });
 
   return Promise.all(promises);
 };
