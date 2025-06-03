@@ -59,7 +59,8 @@
     "@mastra/voice-playai": "0.10.0",
     "@mastra/voice-sarvam": "0.10.0",
     "@mastra/voice-speechify": "0.10.0",
-    "@mastra/inngest": "0.10.1"
+    "@mastra/inngest": "0.10.1",
+    "@mastra/auth": "0.1.0"
   },
   "changesets": [
     "angry-cloths-peel",
@@ -72,14 +73,19 @@
     "dull-hands-give",
     "early-bats-search",
     "famous-humans-chew",
+    "fast-hands-lay",
+    "funny-falcons-go",
     "gentle-tigers-bake",
     "heavy-insects-attend",
+    "huge-memes-punch",
     "icy-groups-tell",
     "loud-forks-search",
     "moody-snakes-walk",
     "nasty-hotels-rule",
+    "nervous-pillows-explode",
     "nice-eagles-fall",
     "petite-snakes-exist",
+    "purple-cups-remain",
     "purple-experts-sink",
     "real-dryers-dance",
     "short-donkeys-spend",
@@ -87,11 +93,13 @@
     "six-geese-decide",
     "slimy-parents-punch",
     "slimy-places-win",
+    "smart-bananas-sneeze",
     "social-friends-thank",
     "solid-parks-pay",
     "sour-adults-act",
     "sweet-lies-reply",
     "true-pillows-argue",
-    "wide-dingos-do"
+    "wide-dingos-do",
+    "young-showers-sing"
   ]
 }

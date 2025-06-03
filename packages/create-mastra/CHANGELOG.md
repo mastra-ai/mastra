@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.10.2-alpha.4
+
+### Patch Changes
+
+- 9666468: move the fetch traces call to the playground instead of playground-ui
+
 ## 0.10.2-alpha.3
 
 ### Patch Changes
