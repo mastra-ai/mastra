@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import { logger } from '../logger';
-import { fromPackageRoot } from '../utils';
+import { fromPackageRoot, getMatchingPaths } from '../utils';
 
 const examplesDir = fromPackageRoot('.docs/organized/code-examples');
 
@@ -34,7 +34,8 @@ async function readCodeExample(filename: string): Promise<string> {
   } catch {
     const examples = await listCodeExamples();
     const availableExamples = examples.map(ex => `- ${ex.name}`).join('\n');
-    return `Example "${filename}" not found.\n\nAvailable examples:\n${availableExamples}`;
+    const contentBasedSuggestions = await getMatchingPaths(filename, examplesDir);
+    return `Example "${filename}" not found.\n\nAvailable examples:\n${availableExamples}\n\n${contentBasedSuggestions}`;
   }
 }
 
