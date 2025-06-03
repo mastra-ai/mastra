@@ -22,6 +22,7 @@ import type {
   PathsToStringProps,
   ZodPathType,
   DynamicMapping,
+  StreamEvent,
 } from './types';
 import type { TextStreamPart } from 'ai';
 
@@ -1073,10 +1074,10 @@ export class Run<
    * @returns A promise that resolves to the workflow output
    */
   stream({ inputData, runtimeContext }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}): {
-    stream: ReadableStream<TextStreamPart<any>>;
+    stream: ReadableStream<StreamEvent>;
     getWorkflowState: () => Promise<WorkflowResult<TOutput, TSteps>>;
   } {
-    const { readable, writable } = new TransformStream<TextStreamPart<any>, TextStreamPart<any>>();
+    const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
 
     const writer = writable.getWriter();
     const unwatch = this.watch(async event => {
