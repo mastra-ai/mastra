@@ -1,5 +1,11 @@
 # @mastra/dane
 
+## 0.0.23-alpha.9
+
+### Patch Changes
+
+- @mastra/core@0.10.2-alpha.7
+
 ## 0.0.23-alpha.8
 
 ### Patch Changes
