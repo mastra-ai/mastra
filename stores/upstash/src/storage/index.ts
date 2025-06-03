@@ -721,11 +721,11 @@ export class UpstashStore extends MastraStorage {
   > {
     const threadMessagesKey = this.getThreadMessagesKey(threadId);
 
+    const allMessageIds = await this.redis.zrange(threadMessagesKey, 0, -1);
     // If pagination is requested, use the new pagination logic
     if (page !== undefined) {
       try {
         // Get all message IDs from the sorted set
-        const allMessageIds = await this.redis.zrange(threadMessagesKey, 0, -1);
 
         if (allMessageIds.length === 0) {
           return {
@@ -757,8 +757,7 @@ export class UpstashStore extends MastraStorage {
         }
 
         // Sort messages by their position in the sorted set
-        const messageOrder = await this.redis.zrange(threadMessagesKey, 0, -1);
-        messages.sort((a, b) => messageOrder.indexOf(a!.id) - messageOrder.indexOf(b!.id));
+        messages.sort((a, b) => allMessageIds.indexOf(a!.id) - allMessageIds.indexOf(b!.id));
 
         const total = messages.length;
 
@@ -877,8 +876,7 @@ export class UpstashStore extends MastraStorage {
     ).filter(msg => msg !== null) as (MastraMessageV2 & { _index?: number })[];
 
     // Sort messages by their position in the sorted set
-    const messageOrder = await this.redis.zrange(threadMessagesKey, 0, -1);
-    messages.sort((a, b) => messageOrder.indexOf(a!.id) - messageOrder.indexOf(b!.id));
+    messages.sort((a, b) => allMessageIds.indexOf(a!.id) - allMessageIds.indexOf(b!.id));
 
     // Remove _index before returning and handle format conversion properly
     const prepared = messages
