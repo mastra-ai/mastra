@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { simulateReadableStream } from 'ai';
+import { simulateReadableStream, TextStreamPart } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -57,7 +57,7 @@ describe('Workflow', () => {
       workflow.then(step1).then(step2).commit();
 
       const runId = 'test-run-id';
-      let watchData: WatchEvent[] = [];
+      let watchData: TextStreamPart<any>[] = [];
       const run = workflow.createRun({
         runId,
       });
@@ -65,7 +65,7 @@ describe('Workflow', () => {
       const { stream, getWorkflowState } = run.stream({ inputData: {} });
 
       // Start watching the workflow
-      const collectedStreamData: WatchEvent[] = [];
+      const collectedStreamData: TextStreamPart<any>[] = [];
       for await (const data of stream) {
         collectedStreamData.push(JSON.parse(JSON.stringify(data)));
       }
