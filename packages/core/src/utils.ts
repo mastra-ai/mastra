@@ -8,7 +8,7 @@ import type { IMastraLogger } from './logger';
 import type { Mastra } from './mastra';
 import type { AiMessageType, MastraMemory } from './memory';
 import type { RuntimeContext } from './runtime-context';
-import { type CoreTool, type ToolAction, type VercelTool } from './tools';
+import type { CoreTool, ToolAction, VercelTool } from './tools';
 import { CoreToolBuilder } from './tools/tool-compatibility/builder';
 import { isVercelTool } from './tools/toolchecks';
 
