@@ -38,7 +38,7 @@ export class PDFAttachmentAdapter implements AttachmentAdapter {
       content: [
         {
           type: 'text',
-          text: `[PDF Document: ${attachment.name}]\nBase64 data: ${base64Data.substring(0, 50)}...`,
+          text: base64Data,
         },
       ],
       status: { type: 'complete' },

@@ -24,18 +24,42 @@ const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
 };
 
 const convertToAIAttachments = async (attachments: AppendMessage['attachments']): Promise<Array<CoreMessage>> => {
-  const promises = attachments
-    .filter(attachment => attachment.file)
-    .map(async attachment => ({
-      role: 'user' as const,
-      content: [
-        {
-          type: 'image' as const,
-          image: await fileToBase64(attachment.file!),
-          mimeType: attachment.file!.type,
-        },
-      ],
-    }));
+  const promises = attachments.map(async attachment => {
+    if (attachment.type === 'document') {
+      if (attachment.contentType === 'application/pdf') {
+        return {
+          role: 'user' as const,
+          content: [
+            {
+              type: 'file' as const,
+              // @ts-expect-error - TODO: fix this type issue somehow
+              data: attachment.content?.[0]?.text || '',
+              mimeType: attachment.contentType,
+              filename: attachment.name,
+            },
+          ],
+        };
+      }
+
+      return {
+        role: 'user' as const,
+        content: attachment.content,
+      };
+    }
+
+    if (attachment.type === 'image') {
+      return {
+        role: 'user' as const,
+        content: [
+          {
+            type: 'image' as const,
+            image: await fileToBase64(attachment.file!),
+            mimeType: attachment.file!.type,
+          },
+        ],
+      };
+    }
+  });
 
   return Promise.all(promises);
 };
