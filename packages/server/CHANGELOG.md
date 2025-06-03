@@ -1,5 +1,12 @@
 # @mastra/deployer
 
+## 0.10.2-alpha.7
+
+### Patch Changes
+
+- a399086: Bumping because we forgot to
+  - @mastra/core@0.10.2-alpha.7
+
 ## 0.10.2-alpha.6
 
 ### Patch Changes
