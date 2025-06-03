@@ -97,6 +97,7 @@ export class DevBundler extends Bundler {
       },
       {
         dir: outputDir,
+        sourcemap: true,
       },
     );
 
