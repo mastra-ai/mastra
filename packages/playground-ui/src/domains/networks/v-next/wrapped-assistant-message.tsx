@@ -14,6 +14,7 @@ import { ToolFallback } from '@/components/assistant-ui/tool-fallback';
 import { MarkdownText } from '@/components/assistant-ui/markdown-text';
 import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button';
 import { Button } from '@/ds/components/Button';
+import { StepDropdown } from './step-dropdown';
 
 export const NextAssistantMessage: FC<{ ToolFallback?: ToolCallContentPartComponent }> = ({
   ToolFallback: ToolFallbackCustom,
@@ -28,21 +29,23 @@ export const NextAssistantMessage: FC<{ ToolFallback?: ToolCallContentPartCompon
   }
 
   console.log('Data===', data);
-  const parsedContent = JSON.parse((content as TextContentPart).text);
+  const textContent = (content as TextContentPart).text;
 
-  console.log('parsedContent==', parsedContent);
+  return <StepDropdown />;
 
-  if (parsedContent.type === 'step-start') {
-    return <Button>Step Start</Button>;
-  }
+  // console.log('parsedContent==', parsedContent);
 
-  if (parsedContent.type === 'tool-call-delta') {
-    return null;
-  }
-
-  // if (parsedContent.type === 'step-result') {
+  // if (parsedContent.type === 'step-start') {
+  //   return <Button>Step Start</Button>;
   // }
-  return <p>{parsedContent.payload?.output?.result}</p>;
+
+  // if (parsedContent.type === 'tool-call-delta') {
+  //   return null;
+  // }
+
+  // // if (parsedContent.type === 'step-result') {
+  // // }
+  // return <p>{parsedContent.payload?.output?.result}</p>;
 
   // return (
   //   <MessagePrimitive.Root className="max-w-full">

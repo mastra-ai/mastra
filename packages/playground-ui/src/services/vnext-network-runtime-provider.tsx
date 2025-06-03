@@ -11,6 +11,7 @@ import { useState, ReactNode, useEffect } from 'react';
 
 import { ChatProps } from '@/types';
 import { useMastraClient } from '@/contexts/mastra-client-context';
+import { useVNextNetworkChat } from '@/services/vnext-network-chat-provider';
 
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
@@ -33,6 +34,8 @@ export function VNextMastraNetworkRuntimeProvider({
   const [isRunning, setIsRunning] = useState(false);
   const [messages, setMessages] = useState<ThreadMessageLike[]>(initialMessages || []);
   const [currentThreadId, setCurrentThreadId] = useState<string | undefined>(threadId);
+
+  const { handleStep } = useVNextNetworkChat();
 
   // const { frequencyPenalty, presencePenalty, maxRetries, maxSteps, maxTokens, temperature, topK, topP, instructions } =
   //   modelSettings;
@@ -58,6 +61,26 @@ export function VNextMastraNetworkRuntimeProvider({
     setIsRunning(true);
 
     try {
+      let content = '';
+      let currentTextPart: { type: 'text'; text: string } | null = null;
+
+      let assistantMessageAdded = false;
+
+      function updater() {
+        setMessages(currentConversation => {
+          const message: ThreadMessageLike = {
+            role: 'assistant',
+            content: [{ type: 'text', text: content }],
+          };
+
+          if (!assistantMessageAdded) {
+            assistantMessageAdded = true;
+            return [...currentConversation, message];
+          }
+          return [...currentConversation.slice(0, -1), message];
+        });
+      }
+
       const response = await network.stream(
         {
           message: input,
@@ -66,18 +89,45 @@ export function VNextMastraNetworkRuntimeProvider({
           console.log('record in playground-ui==', record);
           // if (record.type === 'tool-call') {
           // }
-          setMessages(currentConversation => [
-            ...currentConversation,
-            {
-              role: 'assistant',
-              content: [
+          //save step start
+          //tool-delta-call, replaces the step start content
+          //step result - saved as new message (text to display)
+
+          //OR
+          //stream output in step result
+
+          // setMessages(currentConversation => {
+          //   return [
+          //     ...currentConversation,
+          //     {
+          //       role: 'assistant',
+          //       content: [
+          //         {
+          //           type: 'text',
+          //           text: JSON.stringify(record),
+          //         },
+          //       ],
+          //     },
+          //   ];
+          // });
+          if ((record as any).type === 'start') {
+            setMessages(currentConversation => {
+              return [
+                ...currentConversation,
                 {
-                  type: 'text',
-                  text: JSON.stringify(record),
+                  role: 'assistant',
+                  content: [
+                    {
+                      type: 'text',
+                      text: 'start',
+                    },
+                  ],
                 },
-              ],
-            },
-          ]);
+              ];
+            });
+          } else {
+            handleStep(record);
+          }
         },
       );
 
