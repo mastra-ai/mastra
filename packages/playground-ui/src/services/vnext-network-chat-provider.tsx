@@ -6,8 +6,6 @@ import { useMessages } from './vnext-message-provider';
 type VNextNetworkChatContextType = {
   executionSteps: Array<string>;
   steps: Record<string, any>;
-  workflows: Record<string, any>;
-  agents: Record<string, any>;
   handleStep: (record: Record<string, any>) => void;
 };
 
@@ -18,47 +16,34 @@ export const VNextNetworkChatProvider = ({ children, networkId }: { children: Re
   const [state, setState] = useState<Omit<VNextNetworkChatContextType, 'handleStep'>>({
     executionSteps: [],
     steps: {},
-    workflows: {},
-    agents: {},
   });
 
   const handleStep = (record: Record<string, any>) => {
     if (record.type === 'tool-call-delta') {
-      setState(current => ({
-        ...current,
-        agents: {
-          ...current.agents,
-          [record.name]: {
-            ...current.agents[record.name],
-            contentToShow: current.agents[record.name].contentToShow + record.argsTextDelta,
-          },
-        },
-      }));
-
-      appendToLastMessage(record.argsTextDelta);
-
-      return;
+      return appendToLastMessage(record.argsTextDelta);
     }
 
     if (record.type === 'tool-call-streaming-start') {
-      setState(current => ({
-        ...current,
-        agents: {
-          ...current.agents,
-          [record.name]: {
-            ...current.agents[record.name],
-            contentToShow: '', // SETUP AN EMPTY CONTENT AT THE BEGINNING
-          },
-        },
-      }));
-
-      setMessages(msgs => [...msgs, { role: 'assistant', content: [{ type: 'text', text: '' }] }]);
-
-      return;
+      return setMessages(msgs => [...msgs, { role: 'assistant', content: [{ type: 'text', text: '' }] }]);
     }
 
     const id = record?.type === 'finish' ? 'finish' : record.payload?.id;
     if (id.includes('mapping_')) return;
+
+    if (id === 'finish') {
+      console.log('ARE WE FINISHED', state);
+      const workflowStep = state.steps?.['workflow-step'];
+
+      if (workflowStep) {
+        const workflowStepResult = workflowStep['step-result'];
+
+        if (workflowStepResult) {
+          const workflowStepResultPayload = workflowStepResult.output;
+
+          console.log('plouf', { workflowStepResultPayload });
+        }
+      }
+    }
 
     setState(current => {
       const currentMetadata = current?.steps?.[id]?.metadata;
@@ -92,7 +77,7 @@ export const VNextNetworkChatProvider = ({ children, networkId }: { children: Re
     });
   };
 
-  console.log('state==', state);
+  // console.log('state==', state);
 
   return (
     <VNextNetworkChatContext.Provider value={{ ...state, handleStep }}>{children}</VNextNetworkChatContext.Provider>
