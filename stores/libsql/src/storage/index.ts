@@ -415,6 +415,7 @@ export class LibSQLStore extends MastraStorage {
       role: row.role,
       createdAt: new Date(row.createdAt as string),
       threadId: row.thread_id,
+      resourceId: row.resourceId,
     } as MastraMessageV2;
     if (row.type && row.type !== `v2`) result.type = row.type;
     return result;
@@ -437,6 +438,8 @@ export class LibSQLStore extends MastraStorage {
         const includeIds = selectBy.include.map(i => i.id);
         const maxPrev = Math.max(...selectBy.include.map(i => i.withPreviousMessages || 0));
         const maxNext = Math.max(...selectBy.include.map(i => i.withNextMessages || 0));
+        const includeScope = selectBy.includeScope;
+        const searchId = resourceId && includeScope === 'resource' ? resourceId : threadId;
 
         // Get messages around all specified IDs in one query using row numbers
         const includeResult = await this.client.execute({
@@ -449,9 +452,10 @@ export class LibSQLStore extends MastraStorage {
                 type,
                 "createdAt",
                 thread_id,
+                "resourceId",
                 ROW_NUMBER() OVER (ORDER BY "createdAt" ASC) as row_num
               FROM "${TABLE_MESSAGES}"
-              ${resourceId ? 'WHERE "resourceId" = ?' : 'WHERE thread_id = ?'}
+              ${resourceId && includeScope === 'resource' ? 'WHERE "resourceId" = ?' : 'WHERE thread_id = ?'}
             ),
             target_positions AS (
               SELECT row_num as target_pos
@@ -464,7 +468,7 @@ export class LibSQLStore extends MastraStorage {
             WHERE m.row_num BETWEEN (t.target_pos - ?) AND (t.target_pos + ?)
             ORDER BY m."createdAt" ASC
           `,
-          args: [resourceId ?? threadId, ...includeIds, maxPrev, maxNext],
+          args: [searchId, ...includeIds, maxPrev, maxNext],
         });
 
         if (includeResult.rows) {
@@ -481,7 +485,8 @@ export class LibSQLStore extends MastraStorage {
           role, 
           type,
           "createdAt", 
-          thread_id
+          thread_id,
+          "resourceId"
         FROM "${TABLE_MESSAGES}"
         WHERE thread_id = ?
         ${excludeIds.length ? `AND id NOT IN (${excludeIds.map(() => '?').join(', ')})` : ''}
@@ -530,16 +535,27 @@ export class LibSQLStore extends MastraStorage {
       // Prepare batch statements for all messages
       const batchStatements = messages.map(message => {
         const time = message.createdAt || new Date();
+        if (!message.threadId) {
+          throw new Error(
+            `Expected to find a threadId for message, but couldn't find one. An unexpected error has occurred.`,
+          );
+        }
+        if (!message.resourceId) {
+          throw new Error(
+            `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
+          );
+        }
         return {
-          sql: `INSERT INTO ${TABLE_MESSAGES} (id, thread_id, content, role, type, createdAt) 
-                VALUES (?, ?, ?, ?, ?, ?)`,
+          sql: `INSERT INTO ${TABLE_MESSAGES} (id, thread_id, content, role, type, createdAt, resourceId) 
+                VALUES (?, ?, ?, ?, ?, ?, ?)`,
           args: [
             message.id,
-            threadId,
+            message.threadId!,
             typeof message.content === 'object' ? JSON.stringify(message.content) : message.content,
             message.role,
             message.type || 'v2',
             time instanceof Date ? time.toISOString() : time,
+            message.resourceId,
           ],
         };
       });
