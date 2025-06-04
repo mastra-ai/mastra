@@ -28,7 +28,7 @@ export type MastraMessageV2 = {
 };
 
 type MessageInput = UIMessage | Message | MastraMessageV1 | CoreMessage | MastraMessageV2;
-type MessageSource = 'memory' | 'response' | 'user' | 'system';
+type MessageSource = 'memory' | 'response' | 'user' | 'system' | 'context';
 type MemoryInfo = { threadId: string; resourceId?: string };
 
 export class MessageList {
@@ -45,6 +45,7 @@ export class MessageList {
   private memoryMessages = new Set<MastraMessageV2>();
   private newUserMessages = new Set<MastraMessageV2>();
   private newResponseMessages = new Set<MastraMessageV2>();
+  private userContextMessages = new Set<MastraMessageV2>();
 
   private generateMessageId?: IDGenerator;
 
@@ -417,6 +418,8 @@ ${JSON.stringify(message, null, 2)}`,
         this.newResponseMessages.add(messageV2);
       } else if (messageSource === `user`) {
         this.newUserMessages.add(messageV2);
+      } else if (messageSource === `context`) {
+        this.userContextMessages.add(messageV2);
       } else {
         throw new Error(`Missing message source for message ${messageV2}`);
       }
