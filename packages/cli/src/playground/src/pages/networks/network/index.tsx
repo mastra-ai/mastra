@@ -1,7 +1,6 @@
 import { NetworkInformation } from '@/domains/networks/network-information';
 import { useMessages } from '@/hooks/use-memory';
 import { useNetwork } from '@/hooks/use-networks';
-import { cn } from '@/lib/utils';
 import { Message, NetworkChat, NetworkProvider } from '@mastra/playground-ui';
 import { useParams } from 'react-router';
 
@@ -18,17 +17,19 @@ export default function Network() {
 
   if (isNetworkLoading) {
     return (
-      <section className="flex-1 relative grid grid-cols-[1fr_400px] divide-x">
+      <section className="grid grid-cols-[1fr_1fr]">
+        <div />
         <div className="flex flex-col">
           <NetworkInformation networkId={networkId!} />
         </div>
       </section>
     );
   }
+
   return (
     <NetworkProvider>
-      <section className={cn('relative grid h-[calc(100%-40px)] divide-x', 'grid-cols-[1fr_400px]')}>
-        <div className="relative overflow-y-hidden grow h-full min-w-[325px]">
+      <div className="grid grid-cols-[1fr_1fr] h-full overflow-y-auto">
+        <div className="grid overflow-y-auto relative bg-surface1 py-4">
           <NetworkChat
             agentId={networkId!}
             agentName={network?.name}
@@ -37,10 +38,10 @@ export default function Network() {
             initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
           />
         </div>
-        <div>
+        <div className="border-l-sm h-full overflow-y-auto">
           <NetworkInformation networkId={networkId!} />
         </div>
-      </section>
+      </div>
     </NetworkProvider>
   );
 }
