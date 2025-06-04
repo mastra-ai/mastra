@@ -1,7 +1,13 @@
 import { randomUUID } from 'crypto';
 import type { MetricResult } from '@mastra/core/eval';
 import type { MastraMessageV1 } from '@mastra/core/memory';
-import { TABLE_WORKFLOW_SNAPSHOT, TABLE_MESSAGES, TABLE_THREADS, TABLE_EVALS } from '@mastra/core/storage';
+import {
+  TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_MESSAGES,
+  TABLE_THREADS,
+  TABLE_EVALS,
+  TABLE_TRACES,
+} from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach, vi } from 'vitest';
@@ -77,7 +83,6 @@ const createSampleEval = (agentName: string, isTest = false) => {
   const testInfo = isTest ? { testPath: 'test/path.ts', testName: 'Test Name' } : undefined;
 
   return {
-    id: randomUUID(),
     agentName,
     input: 'Sample input',
     output: 'Sample output',
@@ -114,6 +119,7 @@ describe('PostgresStore', () => {
       await store.clearTable({ tableName: TABLE_MESSAGES });
       await store.clearTable({ tableName: TABLE_THREADS });
       await store.clearTable({ tableName: TABLE_EVALS });
+      await store.clearTable({ tableName: TABLE_TRACES });
     } catch (error) {
       // Ignore errors during table clearing
       console.warn('Error clearing tables:', error);
@@ -247,7 +253,7 @@ describe('PostgresStore', () => {
       expect(savedMessages).toEqual(messages);
 
       // Retrieve messages
-      const retrievedMessages = await store.getMessages({ threadId: thread.id });
+      const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v1' });
       expect(retrievedMessages).toHaveLength(2);
       const checkMessages = messages.map(m => {
         const { resourceId, ...rest } = m;
@@ -276,7 +282,7 @@ describe('PostgresStore', () => {
 
       await store.saveMessages({ messages });
 
-      const retrievedMessages = await store.getMessages<MastraMessageV1>({ threadId: thread.id });
+      const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v1' });
       expect(retrievedMessages).toHaveLength(3);
 
       // Verify order is maintained
@@ -300,6 +306,43 @@ describe('PostgresStore', () => {
       // Verify no messages were saved
       const savedMessages = await store.getMessages({ threadId: thread.id });
       expect(savedMessages).toHaveLength(0);
+    });
+
+    it('should filter by date with pagination for getMessages', async () => {
+      const thread = createSampleThread();
+      await store.saveThread({ thread });
+      const now = new Date();
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const dayBeforeYesterday = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+
+      const createMsgAtDate = (date: Date) => {
+        return store.saveMessages({ messages: [{ ...createSampleMessage(thread.id), createdAt: date }] });
+      };
+      await Promise.all([
+        createMsgAtDate(dayBeforeYesterday),
+        createMsgAtDate(dayBeforeYesterday),
+        createMsgAtDate(yesterday),
+        createMsgAtDate(yesterday),
+        createMsgAtDate(yesterday),
+        createMsgAtDate(now),
+        createMsgAtDate(now),
+      ]);
+
+      const resultPage = await store.getMessages({
+        threadId: thread.id,
+        fromDate: yesterday,
+        page: 0,
+        perPage: 3,
+        format: 'v1',
+      });
+      expect(resultPage.total).toBe(5);
+      expect(resultPage.messages).toHaveLength(3);
+
+      expect(new Date((resultPage.messages[0] as MastraMessageV1).createdAt).toISOString()).toBe(now.toISOString());
+      expect(new Date((resultPage.messages[1] as MastraMessageV1).createdAt).toISOString()).toBe(now.toISOString());
+      expect(new Date((resultPage.messages[2] as MastraMessageV1).createdAt).toISOString()).toBe(
+        yesterday.toISOString(),
+      );
     });
   });
 
@@ -770,8 +813,7 @@ describe('PostgresStore', () => {
           test_info: null,
           global_run_id: liveEval.globalRunId,
           run_id: liveEval.runId,
-          created_at: liveEval.createdAt,
-          createdAt: new Date(liveEval.createdAt),
+          created_at: new Date(liveEval.createdAt),
         },
       });
 
@@ -787,8 +829,7 @@ describe('PostgresStore', () => {
           test_info: JSON.stringify(testEval.testInfo),
           global_run_id: testEval.globalRunId,
           run_id: testEval.runId,
-          created_at: testEval.createdAt,
-          createdAt: new Date(testEval.createdAt),
+          created_at: new Date(testEval.createdAt),
         },
       });
 
@@ -804,8 +845,7 @@ describe('PostgresStore', () => {
           test_info: null,
           global_run_id: otherAgentEval.globalRunId,
           run_id: otherAgentEval.runId,
-          created_at: otherAgentEval.createdAt,
-          createdAt: new Date(otherAgentEval.createdAt),
+          created_at: new Date(otherAgentEval.createdAt),
         },
       });
 
@@ -927,6 +967,424 @@ describe('PostgresStore', () => {
 
         expect(defaultInCustom).toBeNull();
         expect(customInDefault).toBeNull();
+      });
+    });
+  });
+
+  describe('Pagination Features', () => {
+    beforeEach(async () => {
+      await store.clearTable({ tableName: TABLE_EVALS });
+      await store.clearTable({ tableName: TABLE_TRACES });
+      await store.clearTable({ tableName: TABLE_MESSAGES });
+      await store.clearTable({ tableName: TABLE_THREADS });
+    });
+
+    describe('getEvals with pagination', () => {
+      it('should return paginated evals with total count (page/perPage)', async () => {
+        const agentName = 'pagination-agent-evals';
+        const evalPromises = Array.from({ length: 25 }, (_, i) => {
+          const evalData = createSampleEval(agentName, i % 2 === 0);
+          return store.insert({
+            tableName: TABLE_EVALS,
+            record: {
+              run_id: evalData.runId,
+              agent_name: evalData.agentName,
+              input: evalData.input,
+              output: evalData.output,
+              result: evalData.result,
+              metric_name: evalData.metricName,
+              instructions: evalData.instructions,
+              test_info: evalData.testInfo,
+              global_run_id: evalData.globalRunId,
+              created_at: new Date(evalData.createdAt),
+            },
+          });
+        });
+        await Promise.all(evalPromises);
+
+        const page1 = await store.getEvals({ agentName, page: 0, perPage: 10 });
+        expect(page1.evals).toHaveLength(10);
+        expect(page1.total).toBe(25);
+        expect(page1.page).toBe(0);
+        expect(page1.perPage).toBe(10);
+        expect(page1.hasMore).toBe(true);
+
+        const page3 = await store.getEvals({ agentName, page: 2, perPage: 10 });
+        expect(page3.evals).toHaveLength(5);
+        expect(page3.total).toBe(25);
+        expect(page3.page).toBe(2);
+        expect(page3.hasMore).toBe(false);
+      });
+
+      it('should support limit/offset pagination for getEvals', async () => {
+        const agentName = 'pagination-agent-lo-evals';
+        const evalPromises = Array.from({ length: 15 }, () => {
+          const evalData = createSampleEval(agentName);
+          return store.insert({
+            tableName: TABLE_EVALS,
+            record: {
+              run_id: evalData.runId,
+              agent_name: evalData.agentName,
+              input: evalData.input,
+              output: evalData.output,
+              result: evalData.result,
+              metric_name: evalData.metricName,
+              instructions: evalData.instructions,
+              test_info: evalData.testInfo,
+              global_run_id: evalData.globalRunId,
+              created_at: new Date(evalData.createdAt),
+            },
+          });
+        });
+        await Promise.all(evalPromises);
+
+        const result = await store.getEvals({ agentName, limit: 5, offset: 10 });
+        expect(result.evals).toHaveLength(5);
+        expect(result.total).toBe(15);
+        expect(result.page).toBeUndefined(); // Page is undefined for limit/offset
+        expect(result.perPage).toBeUndefined(); // PerPage is undefined for limit/offset
+        expect(result.hasMore).toBe(false);
+      });
+
+      it('should filter by type with pagination for getEvals', async () => {
+        const agentName = 'pagination-agent-type-evals';
+        const testEvalPromises = Array.from({ length: 10 }, () => {
+          const evalData = createSampleEval(agentName, true);
+          return store.insert({
+            tableName: TABLE_EVALS,
+            record: {
+              run_id: evalData.runId,
+              agent_name: evalData.agentName,
+              input: evalData.input,
+              output: evalData.output,
+              result: evalData.result,
+              metric_name: evalData.metricName,
+              instructions: evalData.instructions,
+              test_info: evalData.testInfo,
+              global_run_id: evalData.globalRunId,
+              created_at: new Date(evalData.createdAt),
+            },
+          });
+        });
+        const liveEvalPromises = Array.from({ length: 8 }, () => {
+          const evalData = createSampleEval(agentName, false);
+          return store.insert({
+            tableName: TABLE_EVALS,
+            record: {
+              run_id: evalData.runId,
+              agent_name: evalData.agentName,
+              input: evalData.input,
+              output: evalData.output,
+              result: evalData.result,
+              metric_name: evalData.metricName,
+              instructions: evalData.instructions,
+              test_info: evalData.testInfo,
+              global_run_id: evalData.globalRunId,
+              created_at: new Date(evalData.createdAt),
+            },
+          });
+        });
+        await Promise.all([...testEvalPromises, ...liveEvalPromises]);
+
+        const testResults = await store.getEvals({ agentName, type: 'test', page: 0, perPage: 5 });
+        expect(testResults.evals).toHaveLength(5);
+        expect(testResults.total).toBe(10);
+
+        const liveResults = await store.getEvals({ agentName, type: 'live', page: 1, perPage: 3 });
+        expect(liveResults.evals).toHaveLength(3);
+        expect(liveResults.total).toBe(8);
+        expect(liveResults.hasMore).toBe(true);
+      });
+
+      it('should filter by date with pagination for getEvals', async () => {
+        const agentName = 'pagination-agent-date-evals';
+        const now = new Date();
+        const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        const dayBeforeYesterday = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+
+        const createEvalAtDate = (date: Date) => {
+          const evalData = createSampleEval(agentName);
+          return store.insert({
+            tableName: TABLE_EVALS,
+            record: {
+              run_id: evalData.runId,
+              agent_name: evalData.agentName,
+              input: evalData.input,
+              output: evalData.output,
+              result: evalData.result,
+              metric_name: evalData.metricName,
+              instructions: evalData.instructions,
+              test_info: evalData.testInfo,
+              global_run_id: evalData.globalRunId,
+              created_at: date,
+            },
+          });
+        };
+
+        await Promise.all([
+          createEvalAtDate(dayBeforeYesterday),
+          createEvalAtDate(dayBeforeYesterday),
+          createEvalAtDate(yesterday),
+          createEvalAtDate(yesterday),
+          createEvalAtDate(yesterday),
+          createEvalAtDate(now),
+          createEvalAtDate(now),
+          createEvalAtDate(now),
+          createEvalAtDate(now),
+        ]);
+
+        const fromYesterday = await store.getEvals({ agentName, fromDate: yesterday, page: 0, perPage: 3 });
+        expect(fromYesterday.total).toBe(7); // 3 yesterday + 4 now
+        expect(fromYesterday.evals).toHaveLength(3);
+        // Evals are sorted DESC, so first 3 are from 'now'
+        fromYesterday.evals.forEach(e =>
+          expect(new Date(e.createdAt).getTime()).toBeGreaterThanOrEqual(yesterday.getTime()),
+        );
+
+        const onlyDayBefore = await store.getEvals({
+          agentName,
+          toDate: new Date(yesterday.getTime() - 1),
+          page: 0,
+          perPage: 5,
+        });
+        expect(onlyDayBefore.total).toBe(2);
+        expect(onlyDayBefore.evals).toHaveLength(2);
+      });
+    });
+
+    describe('getTraces with pagination', () => {
+      const createSampleTraceForDB = (
+        name: string,
+        scope?: string,
+        attributes?: Record<string, string>,
+        createdAt?: Date,
+      ) => ({
+        id: `trace-${randomUUID()}`,
+        parentSpanId: `span-${randomUUID()}`,
+        traceId: `trace-${randomUUID()}`,
+        name,
+        scope,
+        kind: 0,
+        status: JSON.stringify({ code: 'success' }),
+        events: JSON.stringify([{ name: 'start', timestamp: Date.now() }]),
+        links: JSON.stringify([]),
+        attributes: attributes ? attributes : undefined,
+        startTime: (createdAt || new Date()).getTime(),
+        endTime: (createdAt || new Date()).getTime(),
+        other: JSON.stringify({ custom: 'data' }),
+        createdAt: createdAt || new Date(),
+      });
+
+      it('should return paginated traces with total count', async () => {
+        const tracePromises = Array.from({ length: 18 }, (_, i) =>
+          store.insert({ tableName: TABLE_TRACES, record: createSampleTraceForDB(`test-trace-${i}`, 'pg-test-scope') }),
+        );
+        await Promise.all(tracePromises);
+
+        const page1 = await store.getTraces({
+          scope: 'pg-test-scope',
+          page: 0,
+          perPage: 8,
+          returnPaginationResults: true,
+        });
+        expect(page1.traces).toHaveLength(8);
+        expect(page1.total).toBe(18);
+        expect(page1.page).toBe(0);
+        expect(page1.perPage).toBe(8);
+        expect(page1.hasMore).toBe(true);
+
+        const page3 = await store.getTraces({
+          scope: 'pg-test-scope',
+          page: 2,
+          perPage: 8,
+          returnPaginationResults: true,
+        });
+        expect(page3.traces).toHaveLength(2);
+        expect(page3.total).toBe(18);
+        expect(page3.hasMore).toBe(false);
+      });
+
+      it('should filter by attributes with pagination for getTraces', async () => {
+        const tracesWithAttr = Array.from({ length: 8 }, (_, i) =>
+          store.insert({
+            tableName: TABLE_TRACES,
+            record: createSampleTraceForDB(`trace-${i}`, 'pg-attr-scope', { environment: 'prod' }),
+          }),
+        );
+        const tracesWithoutAttr = Array.from({ length: 5 }, (_, i) =>
+          store.insert({
+            tableName: TABLE_TRACES,
+            record: createSampleTraceForDB(`trace-other-${i}`, 'pg-attr-scope', { environment: 'dev' }),
+          }),
+        );
+        await Promise.all([...tracesWithAttr, ...tracesWithoutAttr]);
+
+        const prodTraces = await store.getTraces({
+          scope: 'pg-attr-scope',
+          attributes: { environment: 'prod' },
+          page: 0,
+          perPage: 5,
+          returnPaginationResults: true,
+        });
+        expect(prodTraces.traces).toHaveLength(5);
+        expect(prodTraces.total).toBe(8);
+        expect(prodTraces.hasMore).toBe(true);
+      });
+
+      it('should filter by date with pagination for getTraces', async () => {
+        const scope = 'pg-date-traces';
+        const now = new Date();
+        const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        const dayBeforeYesterday = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+
+        await Promise.all([
+          store.insert({
+            tableName: TABLE_TRACES,
+            record: createSampleTraceForDB('t1', scope, undefined, dayBeforeYesterday),
+          }),
+          store.insert({ tableName: TABLE_TRACES, record: createSampleTraceForDB('t2', scope, undefined, yesterday) }),
+          store.insert({ tableName: TABLE_TRACES, record: createSampleTraceForDB('t3', scope, undefined, yesterday) }),
+          store.insert({ tableName: TABLE_TRACES, record: createSampleTraceForDB('t4', scope, undefined, now) }),
+          store.insert({ tableName: TABLE_TRACES, record: createSampleTraceForDB('t5', scope, undefined, now) }),
+        ]);
+
+        const fromYesterday = await store.getTraces({
+          scope,
+          fromDate: yesterday,
+          page: 0,
+          perPage: 2,
+          returnPaginationResults: true,
+        });
+        expect(fromYesterday.total).toBe(4); // 2 yesterday + 2 now
+        expect(fromYesterday.traces).toHaveLength(2);
+        fromYesterday.traces.forEach(t =>
+          expect(new Date(t.createdAt).getTime()).toBeGreaterThanOrEqual(yesterday.getTime()),
+        );
+
+        const onlyNow = await store.getTraces({
+          scope,
+          fromDate: now,
+          toDate: now,
+          page: 0,
+          perPage: 5,
+          returnPaginationResults: true,
+        });
+        expect(onlyNow.total).toBe(2);
+        expect(onlyNow.traces).toHaveLength(2);
+      });
+
+      it('should return array when returnPaginationResults is false or undefined', async () => {
+        await store.insert({ tableName: TABLE_TRACES, record: createSampleTraceForDB('trace-arr', 'pg-array-scope') });
+        const tracesArray = await store.getTraces({ scope: 'pg-array-scope', page: 0, perPage: 5 }); // returnPaginationResults is undefined
+        expect(Array.isArray(tracesArray)).toBe(true);
+        expect(tracesArray.length).toBe(1);
+      });
+    });
+
+    describe('getMessages with pagination', () => {
+      it('should return paginated messages with total count', async () => {
+        const thread = createSampleThread();
+        await store.saveThread({ thread });
+        const messagePromises = Array.from({ length: 15 }, (_, i) =>
+          store.saveMessages({
+            messages: [{ ...createSampleMessage(thread.id), content: [{ type: 'text', text: `Message ${i + 1}` }] }],
+          }),
+        );
+        await Promise.all(messagePromises);
+
+        const page1 = await store.getMessages({ threadId: thread.id, page: 0, perPage: 5, format: 'v1' });
+        expect(page1.messages).toHaveLength(5);
+        expect(page1.total).toBe(15);
+        expect(page1.page).toBe(0);
+        expect(page1.perPage).toBe(5);
+        expect(page1.hasMore).toBe(true);
+
+        const page3 = await store.getMessages({ threadId: thread.id, page: 2, perPage: 5, format: 'v1' });
+        expect(page3.messages).toHaveLength(5);
+        expect(page3.total).toBe(15);
+        expect(page3.hasMore).toBe(false);
+      });
+
+      it('should filter by date with pagination for getMessages', async () => {
+        const thread = createSampleThread();
+        await store.saveThread({ thread });
+        const now = new Date();
+        const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        const dayBeforeYesterday = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+
+        const createMsgAtDate = (date: Date) => {
+          return store.saveMessages({ messages: [{ ...createSampleMessage(thread.id), createdAt: date }] });
+        };
+        await Promise.all([
+          createMsgAtDate(dayBeforeYesterday),
+          createMsgAtDate(dayBeforeYesterday),
+          createMsgAtDate(yesterday),
+          createMsgAtDate(yesterday),
+          createMsgAtDate(yesterday),
+          createMsgAtDate(now),
+          createMsgAtDate(now),
+        ]);
+
+        const resultPage = await store.getMessages({
+          threadId: thread.id,
+          fromDate: yesterday,
+          page: 0,
+          perPage: 3,
+          format: 'v1',
+        });
+        expect(resultPage.total).toBe(5);
+        expect(resultPage.messages).toHaveLength(3);
+
+        expect(new Date((resultPage.messages[0] as MastraMessageV1).createdAt).toISOString()).toBe(now.toISOString());
+        expect(new Date((resultPage.messages[1] as MastraMessageV1).createdAt).toISOString()).toBe(now.toISOString());
+        expect(new Date((resultPage.messages[2] as MastraMessageV1).createdAt).toISOString()).toBe(
+          yesterday.toISOString(),
+        );
+      });
+
+      it('should maintain backward compatibility for getMessages (no pagination params)', async () => {
+        const thread = createSampleThread();
+        await store.saveThread({ thread });
+        await store.saveMessages({ messages: [createSampleMessage(thread.id)] });
+
+        const messages = await store.getMessages({ threadId: thread.id, format: 'v1' });
+        expect(Array.isArray(messages)).toBe(true);
+        expect(messages.length).toBe(1);
+        // @ts-expect-error - messages should not have pagination properties
+        expect(messages.total).toBeUndefined();
+      });
+    });
+
+    describe('getThreadsByResourceId with pagination', () => {
+      it('should return paginated threads with total count', async () => {
+        const resourceId = `pg-paginated-resource-${randomUUID()}`;
+        const threadPromises = Array.from({ length: 17 }, () =>
+          store.saveThread({ thread: { ...createSampleThread(), resourceId } }),
+        );
+        await Promise.all(threadPromises);
+
+        const page1 = await store.getThreadsByResourceId({ resourceId, page: 0, perPage: 7 });
+        expect(page1.threads).toHaveLength(7);
+        expect(page1.total).toBe(17);
+        expect(page1.page).toBe(0);
+        expect(page1.perPage).toBe(7);
+        expect(page1.hasMore).toBe(true);
+
+        const page3 = await store.getThreadsByResourceId({ resourceId, page: 2, perPage: 7 });
+        expect(page3.threads).toHaveLength(3); // 17 total, 7 per page, 3rd page has 17 - 2*7 = 3
+        expect(page3.total).toBe(17);
+        expect(page3.hasMore).toBe(false);
+      });
+
+      it('should return array when no pagination params for getThreadsByResourceId', async () => {
+        const resourceId = `pg-non-paginated-resource-${randomUUID()}`;
+        await store.saveThread({ thread: { ...createSampleThread(), resourceId } });
+
+        const threads = await store.getThreadsByResourceId({ resourceId });
+        expect(Array.isArray(threads)).toBe(true);
+        expect(threads.length).toBe(1);
+        // @ts-expect-error - threads should not have pagination properties
+        expect(threads.total).toBeUndefined();
       });
     });
   });
