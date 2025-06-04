@@ -35,6 +35,8 @@ export class Memory extends MastraMemory {
       },
     });
     this.threadConfig = mergedConfig;
+
+    this.checkStorageFeatureSupport(mergedConfig);
   }
 
   private async validateThreadIsOwnedByResource(threadId: string, resourceId: string) {
@@ -45,6 +47,18 @@ export class Memory extends MastraMemory {
     if (thread.resourceId !== resourceId) {
       throw new Error(
         `Thread with id ${threadId} is for resource with id ${thread.resourceId} but resource ${resourceId} was queried.`,
+      );
+    }
+  }
+
+  private checkStorageFeatureSupport(config: MemoryConfig) {
+    if (
+      typeof config.semanticRecall === `object` &&
+      config.semanticRecall.scope === `resource` &&
+      !this.storage.supports.selectByIncludeResourceScope
+    ) {
+      throw new Error(
+        `Memory error: Attached storage adapter "${this.storage.name || 'unknown'}" doesn't support semanticRecall: { scope: "resource" } yet and currently only supports per-thread semantic recall.`,
       );
     }
   }
@@ -73,6 +87,8 @@ export class Memory extends MastraMemory {
     });
 
     const config = this.getMergedThreadConfig(threadConfig || {});
+
+    this.checkStorageFeatureSupport(config);
 
     const defaultRange = DEFAULT_MESSAGE_RANGE;
     const defaultTopK = DEFAULT_TOP_K;

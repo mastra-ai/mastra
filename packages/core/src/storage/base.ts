@@ -36,6 +36,14 @@ export abstract class MastraStorage extends MastraBase {
     });
   }
 
+  public get supports(): {
+    selectByIncludeResourceScope: boolean;
+  } {
+    return {
+      selectByIncludeResourceScope: false,
+    };
+  }
+
   abstract createTable({ tableName }: { tableName: TABLE_NAMES; schema: Record<string, StorageColumn> }): Promise<void>;
 
   abstract alterTable(args: {
