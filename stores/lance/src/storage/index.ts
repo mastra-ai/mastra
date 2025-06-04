@@ -8,6 +8,7 @@ import type {
   StorageGetMessagesArg,
   StorageThreadType,
   TraceType,
+  WorkflowRun,
   WorkflowRuns,
   WorkflowRunState,
 } from '@mastra/core';
@@ -80,6 +81,11 @@ export class LanceStorage extends MastraStorage {
     } catch (error: any) {
       throw new Error(`Failed to create table: ${error}`);
     }
+  }
+
+  private ensureDate(date: Date | string | undefined): Date | undefined {
+    if (!date) return undefined;
+    return date instanceof Date ? date : new Date(date);
   }
 
   private translateSchema(schema: Record<string, StorageColumn>): Schema {
@@ -805,22 +811,25 @@ export class LanceStorage extends MastraStorage {
     }
   }
 
-  async saveWorkflowRuns({ runs }: { runs: WorkflowRuns }): Promise<WorkflowRuns> {
-    try {
-      const table = await this.lanceClient.openTable(TABLE_WORKFLOW_SNAPSHOT);
-      const records = runs.runs.map(run => ({
-        workflow_name: run.workflowName,
-        run_id: run.runId,
-        snapshot: run.snapshot,
-        createdAt: run.createdAt.getTime(),
-        updatedAt: run.updatedAt.getTime(),
-      }));
-
-      await table.add(records, { mode: 'append' });
-      return runs;
-    } catch (error: any) {
-      throw new Error(`Failed to save workflow runs: ${error}`);
+  private parseWorkflowRun(row: any): WorkflowRun {
+    let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+    if (typeof parsedSnapshot === 'string') {
+      try {
+        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+      } catch (e) {
+        // If parsing fails, return the raw snapshot string
+        console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+      }
     }
+
+    return {
+      workflowName: row.workflow_name,
+      runId: row.run_id,
+      snapshot: parsedSnapshot,
+      createdAt: this.ensureDate(row.createdAt)!,
+      updatedAt: this.ensureDate(row.updatedAt)!,
+      resourceId: row.resourceId,
+    };
   }
 
   async getWorkflowRuns(args?: {
@@ -857,13 +866,7 @@ export class LanceStorage extends MastraStorage {
 
       const records = await query.toArray();
       return {
-        runs: records.map(record => ({
-          workflowName: record.workflow_name,
-          runId: record.run_id,
-          snapshot: record.snapshot,
-          createdAt: new Date(record.createdAt),
-          updatedAt: new Date(record.updatedAt),
-        })),
+        runs: records.map(record => this.parseWorkflowRun(record)),
         total: records.length,
       };
     } catch (error: any) {
@@ -893,13 +896,7 @@ export class LanceStorage extends MastraStorage {
       const records = await query.toArray();
       if (records.length === 0) return null;
       const record = records[0];
-      return {
-        workflowName: record.workflow_name,
-        runId: record.run_id,
-        snapshot: record.snapshot,
-        createdAt: new Date(record.createdAt),
-        updatedAt: new Date(record.updatedAt),
-      };
+      return this.parseWorkflowRun(record);
     } catch (error: any) {
       throw new Error(`Failed to get workflow run by id: ${error}`);
     }
@@ -916,19 +913,34 @@ export class LanceStorage extends MastraStorage {
   }): Promise<void> {
     try {
       const table = await this.lanceClient.openTable(TABLE_WORKFLOW_SNAPSHOT);
+
+      // Try to find the existing record
+      const query = table.query().where(`workflow_name = '${workflowName}' AND run_id = '${runId}'`);
+      const records = await query.toArray();
+      let createdAt: number;
+      const now = Date.now();
+      let mode: 'append' | 'overwrite' = 'append';
+
+      if (records.length > 0) {
+        createdAt = records[0].createdAt ?? now;
+        mode = 'overwrite';
+      } else {
+        createdAt = now;
+      }
+
       const record = {
         workflow_name: workflowName,
         run_id: runId,
         snapshot: JSON.stringify(snapshot),
-        createdAt: new Date().getTime(),
-        updatedAt: new Date().getTime(),
+        createdAt,
+        updatedAt: now,
       };
-      await table.add([record], { mode: 'append' });
+
+      await table.add([record], { mode });
     } catch (error: any) {
       throw new Error(`Failed to persist workflow snapshot: ${error}`);
     }
   }
-
   async loadWorkflowSnapshot({
     workflowName,
     runId,
