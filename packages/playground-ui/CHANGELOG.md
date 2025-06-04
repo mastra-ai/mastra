@@ -1,5 +1,11 @@
 # @mastra/playground-ui
 
+## 5.1.3-alpha.0
+
+### Patch Changes
+
+- 6303367: Fixed an issue where a recent memory images in playground fix broke playground tool calls
+
 ## 5.1.2
 
 ### Patch Changes
