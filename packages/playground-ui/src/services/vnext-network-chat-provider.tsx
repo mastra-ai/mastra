@@ -1,5 +1,6 @@
 import { createContext, useContext, ReactNode, useState, useEffect } from 'react';
 import { useMessages } from './vnext-message-provider';
+import { formatJSON } from '@/lib/formatting';
 
 //the whole workflow execution state.
 
@@ -31,13 +32,16 @@ export const VNextNetworkChatProvider = ({ children, networkId }: { children: Re
     const workflowStepResultOutput = workflowStepResult?.output;
     if (!workflowStepResultOutput) return;
 
-    setMessages(msgs => [
-      ...msgs,
-      {
-        role: 'assistant',
-        content: [{ type: 'text', text: `\`\`\`json\n${workflowStepResult?.output?.result}\`\`\`` }],
-      },
-    ]);
+    const run = async () => {
+      const formatted = await formatJSON(workflowStepResult?.output?.result);
+
+      setMessages(msgs => [
+        ...msgs,
+        { role: 'assistant', content: [{ type: 'text', text: `\`\`\`json\n${formatted}\`\`\`` }] },
+      ]);
+    };
+
+    run();
   }, [state, setMessages]);
 
   const handleStep = (record: Record<string, any>) => {
