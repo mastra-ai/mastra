@@ -1,6 +1,6 @@
+import type { LanguageModelV2 } from '@ai-sdk/provider';
 import type {
   GenerateTextOnStepFinishCallback,
-  LanguageModelV1,
   StreamObjectOnFinishCallback,
   StreamTextOnFinishCallback,
   StreamTextOnStepFinishCallback,
@@ -27,13 +27,13 @@ import type { CompositeVoice } from '../voice';
 import type { Workflow } from '../workflows';
 
 export type { MastraMessageV2, MastraMessageContentV2, MessageList } from './message-list/index.ts';
-export type { Message as AiMessageType } from 'ai';
+export type { UIMessage as AiMessageType } from 'ai';
 
 export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool>;
 
 export type ToolsetsInput = Record<string, ToolsInput>;
 
-export type MastraLanguageModel = LanguageModelV1;
+export type MastraLanguageModel = LanguageModelV2;
 
 export type DynamicArgument<T> = T | (({ runtimeContext }: { runtimeContext: RuntimeContext }) => Promise<T> | T);
 

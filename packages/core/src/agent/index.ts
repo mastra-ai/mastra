@@ -472,9 +472,7 @@ export class Agent<
       // Get current user messages from the list for vector search and processMessages
       // Assuming user messages are the last ones added after system/context.
       // This might need refinement based on how messageList is populated before this call.
-      const allUIMessages = messageList.get.all.ui();
-      const currentUserMessages = allUIMessages.filter(m => m.role === 'user');
-      const lastUserMessageContent = currentUserMessages.at(-1)?.content ?? '';
+      const lastUserMessageContent = messageList.getLatestUserContent() ?? '';
 
       const [memoryMessages, memorySystemMessage] =
         threadId && memory
@@ -1137,7 +1135,7 @@ export class Agent<
         }
 
         if (Object.keys(this.evals || {}).length > 0) {
-          const userInputMessages = messageList.get.all.ui().filter(m => m.role === 'user');
+          const userInputMessages = messageList.get.all.core().filter(m => m.role === 'user');
           const input = userInputMessages
             .map(message => (typeof message.content === 'string' ? message.content : ''))
             .join('\n');

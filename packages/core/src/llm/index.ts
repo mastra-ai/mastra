@@ -81,10 +81,18 @@ export type StreamReturn<Z extends ZodSchema | JSONSchema7 | undefined = undefin
 
 export type OutputType = StructuredOutput | ZodSchema | JSONSchema7 | undefined;
 
-type GenerateTextOptions = Parameters<typeof generateText>[0];
-type StreamTextOptions = Parameters<typeof streamText>[0];
-type GenerateObjectOptions = Parameters<typeof generateObject>[0];
-type StreamObjectOptions = Parameters<typeof streamObject>[0];
+type JSONValue = null | string | number | boolean | JSONObject | JSONArray;
+type JSONObject = {
+  [key: string]: JSONValue;
+};
+type JSONArray = JSONValue[];
+
+// without <any> there's extremely deep type recursion happening here.
+// not sure if there's a better fix than any, or if we even need one
+type GenerateTextOptions = Parameters<typeof generateText<any>>[0];
+type StreamTextOptions = Parameters<typeof streamText<any>>[0];
+type GenerateObjectOptions = Parameters<typeof generateObject<any>>[0];
+type StreamObjectOptions = Parameters<typeof streamObject<any>>[0];
 
 type MastraCustomLLMOptionsKeys =
   | 'messages'
@@ -110,6 +118,7 @@ type MastraCustomLLMOptions<Z extends ZodSchema | JSONSchema7 | undefined = unde
   threadId?: string;
   resourceId?: string;
   runtimeContext: RuntimeContext;
+  model: MastraLanguageModel;
 } & Run;
 
 export type LLMTextOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
