@@ -7,7 +7,6 @@ import { ThemeProvider } from './ui/theme-provider';
 
 export const Layout = ({ children }: { children: React.ReactNode }) => {
   return (
-    // <div className="bg-surface1 overflow-hidden font-sans">
     <div className="bg-surface1 font-sans h-screen">
       <ThemeProvider defaultTheme="dark" attribute="class">
         <SidebarProvider>
