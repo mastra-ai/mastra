@@ -7,7 +7,7 @@ import type {
   WorkflowRuns,
   LegacyWorkflowRuns,
 } from '@mastra/core';
-import type { AgentGenerateOptions, AgentStreamOptions } from '@mastra/core/agent';
+import type { AgentGenerateOptions, AgentStreamOptions, ToolsInput } from '@mastra/core/agent';
 import type { BaseLogMessage } from '@mastra/core/logger';
 
 import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
@@ -69,14 +69,16 @@ export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undef
   output?: T;
   experimental_output?: T;
   runtimeContext?: RuntimeContext | Record<string, any>;
-} & WithoutMethods<Omit<AgentGenerateOptions<T>, 'output' | 'experimental_output' | 'runtimeContext'>>;
+  clientTools?: ToolsInput;
+} & WithoutMethods<Omit<AgentGenerateOptions<T>, 'output' | 'experimental_output' | 'runtimeContext' | 'clientTools'>>;
 
 export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[];
   output?: T;
   experimental_output?: T;
   runtimeContext?: RuntimeContext | Record<string, any>;
-} & WithoutMethods<Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'runtimeContext'>>;
+  clientTools?: ToolsInput;
+} & WithoutMethods<Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'runtimeContext' | 'clientTools'>>;
 
 export interface GetEvalsByAgentIdResponse extends GetAgentResponse {
   evals: any[];

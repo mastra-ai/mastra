@@ -63,7 +63,7 @@ const supportAgent = new Agent({
 });
 ```
 
-Now, let's create a function to handle support requests:
+RuntimeContext can be passed from the client/server directly to your agent generate and stream calls
 
 ```typescript
 async function handleSupportRequest(userId: string, message: string) {
@@ -81,7 +81,7 @@ async function handleSupportRequest(userId: string, message: string) {
 }
 ```
 
-Let's set up the middleware to handle runtime context:
+RuntimeContext can also be set from the server middleware layer
 
 ```typescript
 import { Mastra } from "@mastra/core";

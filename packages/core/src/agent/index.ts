@@ -1430,6 +1430,7 @@ export class Agent<
         runId,
         toolChoice,
         experimental_output,
+        telemetry,
         memory: this.getMemory(),
         runtimeContext,
         ...args,
