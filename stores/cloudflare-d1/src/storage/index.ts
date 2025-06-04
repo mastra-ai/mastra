@@ -533,7 +533,7 @@ export class D1Store extends MastraStorage {
           hasMore: currentOffset + threads.length < total,
         };
       } else {
-        // Non-paginated path (existing behavior)
+        // Non-paginated path
         const query = createSqlBuilder()
           .select('*')
           .from(fullTableName)
@@ -805,7 +805,6 @@ export class D1Store extends MastraStorage {
         }
         const whereClause = conditions.join(' AND ');
 
-        // Get total count
         const countQueryBuilder = createSqlBuilder()
           .count()
           .from(fullTableName)
@@ -847,7 +846,7 @@ export class D1Store extends MastraStorage {
           hasMore: currentOffset + allMessages.length < total,
         };
       } else {
-        // Non-paginated path (existing logic with selectBy.include or selectBy.last)
+        // Non-paginated path
         const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
         const include = selectBy?.include || [];
         let messages: any[] = []; // Keep as any[] for intermediate results
@@ -1139,7 +1138,6 @@ export class D1Store extends MastraStorage {
         }
       }
       if (filters) {
-        // filters are assumed to be direct column filters for D1
         Object.entries(filters).forEach(([key, value]) => {
           conditions.push(`${key} = ?`);
           queryParams.push(value as SqlParam);
@@ -1156,7 +1154,6 @@ export class D1Store extends MastraStorage {
 
       const whereClause = conditions.length > 0 ? conditions.join(' AND ') : '1=1'; // Use '1=1' if no conditions
 
-      // Get total count if pagination results are requested
       let total = 0;
       if (returnPaginationResults) {
         const countQueryBuilder = createSqlBuilder()
@@ -1180,7 +1177,6 @@ export class D1Store extends MastraStorage {
         }
       }
 
-      // Get data
       const dataQueryBuilder = createSqlBuilder()
         .select('*')
         .from(fullTableName)
@@ -1212,7 +1208,7 @@ export class D1Store extends MastraStorage {
           hasMore: currentOffset + traces.length < total,
         };
       }
-      return traces; // Return as array if not requesting pagination results
+      return traces;
     } catch (error) {
       this.logger.error('Error getting traces:', { message: error instanceof Error ? error.message : String(error) });
       if (returnPaginationResults) {
@@ -1320,9 +1316,6 @@ export class D1Store extends MastraStorage {
       queryParams.push(this.serializeDate(toDate));
     }
 
-    // const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
-    // Get total count
     const countQueryBuilder = createSqlBuilder().count().from(fullTableName);
     if (conditions.length > 0) {
       countQueryBuilder.where(conditions.join(' AND '), ...queryParams);
@@ -1369,7 +1362,6 @@ export class D1Store extends MastraStorage {
       };
     }
 
-    // Get data query
     const dataQueryBuilder = createSqlBuilder().select('*').from(fullTableName);
     if (conditions.length > 0) {
       dataQueryBuilder.where(conditions.join(' AND '), ...queryParams);
