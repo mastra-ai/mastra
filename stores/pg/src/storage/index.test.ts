@@ -307,6 +307,43 @@ describe('PostgresStore', () => {
       const savedMessages = await store.getMessages({ threadId: thread.id });
       expect(savedMessages).toHaveLength(0);
     });
+
+    it('should filter by date with pagination for getMessages', async () => {
+      const thread = createSampleThread();
+      await store.saveThread({ thread });
+      const now = new Date();
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const dayBeforeYesterday = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+
+      const createMsgAtDate = (date: Date) => {
+        return store.saveMessages({ messages: [{ ...createSampleMessage(thread.id), createdAt: date }] });
+      };
+      await Promise.all([
+        createMsgAtDate(dayBeforeYesterday),
+        createMsgAtDate(dayBeforeYesterday),
+        createMsgAtDate(yesterday),
+        createMsgAtDate(yesterday),
+        createMsgAtDate(yesterday),
+        createMsgAtDate(now),
+        createMsgAtDate(now),
+      ]);
+
+      const resultPage = await store.getMessages({
+        threadId: thread.id,
+        fromDate: yesterday,
+        page: 0,
+        perPage: 3,
+        format: 'v1',
+      });
+      expect(resultPage.total).toBe(5);
+      expect(resultPage.messages).toHaveLength(3);
+
+      expect(new Date((resultPage.messages[0] as MastraMessageV1).createdAt).toISOString()).toBe(now.toISOString());
+      expect(new Date((resultPage.messages[1] as MastraMessageV1).createdAt).toISOString()).toBe(now.toISOString());
+      expect(new Date((resultPage.messages[2] as MastraMessageV1).createdAt).toISOString()).toBe(
+        yesterday.toISOString(),
+      );
+    });
   });
 
   describe('Edge Cases and Error Handling', () => {
@@ -1288,19 +1325,21 @@ describe('PostgresStore', () => {
           createMsgAtDate(now),
         ]);
 
-        const fromYesterday = await store.getMessages({
+        const resultPage = await store.getMessages({
           threadId: thread.id,
           fromDate: yesterday,
           page: 0,
           perPage: 3,
           format: 'v1',
         });
-        expect(fromYesterday.total).toBe(5); // 3 yesterday + 2 now
-        expect(fromYesterday.messages).toHaveLength(3);
-        // Messages are sorted ASC by date in PostgresStore
-        const firstMessageTime = new Date((fromYesterday.messages[0] as MastraMessageV1).createdAt).getTime();
-        expect(firstMessageTime).toBeGreaterThanOrEqual(yesterday.getTime());
-        expect(firstMessageTime).toBeLessThan(now.getTime());
+        expect(resultPage.total).toBe(5);
+        expect(resultPage.messages).toHaveLength(3);
+
+        expect(new Date((resultPage.messages[0] as MastraMessageV1).createdAt).toISOString()).toBe(now.toISOString());
+        expect(new Date((resultPage.messages[1] as MastraMessageV1).createdAt).toISOString()).toBe(now.toISOString());
+        expect(new Date((resultPage.messages[2] as MastraMessageV1).createdAt).toISOString()).toBe(
+          yesterday.toISOString(),
+        );
       });
 
       it('should maintain backward compatibility for getMessages (no pagination params)', async () => {
