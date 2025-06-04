@@ -144,26 +144,7 @@ const SidebarProvider = React.forwardRef<
 
   return (
     <SidebarContext.Provider value={contextValue}>
-      <TooltipProvider delayDuration={0}>
-        {children}
-        {/* <div
-          style={
-            {
-              '--sidebar-width': SIDEBAR_WIDTH,
-              '--sidebar-width-icon': SIDEBAR_WIDTH_ICON,
-              ...style,
-            } as React.CSSProperties
-          }
-          className={cn(
-            'group/sidebar-wrapper has-[[data-variant=inset]]:bg-sidebar flex h-svh w-full bg-black',
-            className,
-          )}
-          ref={ref}
-          {...props}
-        >
-          {children}
-        </div> */}
-      </TooltipProvider>
+      <TooltipProvider delayDuration={0}>{children}</TooltipProvider>
     </SidebarContext.Provider>
   );
 });
