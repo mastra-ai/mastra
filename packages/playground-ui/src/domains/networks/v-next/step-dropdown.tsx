@@ -12,6 +12,7 @@ import clsx from 'clsx';
 const LabelMappings = {
   'routing-step': 'Decision making process',
   'agent-step': 'Agent execution',
+  'workflow-step': 'Workflow execution',
 };
 
 export const StepDropdown = () => {

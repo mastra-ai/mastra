@@ -7,7 +7,7 @@ import {
   AssistantRuntimeProvider,
 } from '@assistant-ui/react';
 import { processDataStream } from '@ai-sdk/ui-utils';
-import { useState, ReactNode, useEffect } from 'react';
+import { useState, ReactNode, useEffect, useRef } from 'react';
 
 import { ChatProps } from '@/types';
 import { useMastraClient } from '@/contexts/mastra-client-context';
@@ -31,11 +31,12 @@ export function VNextMastraNetworkRuntimeProvider({
   children: ReactNode;
 }> &
   VNextMastraNetworkRuntimeProviderProps) {
+  const hasStartedRef = useRef(false);
   const [isRunning, setIsRunning] = useState(false);
   const { messages, setMessages } = useMessages();
   const [currentThreadId, setCurrentThreadId] = useState<string | undefined>(threadId);
 
-  const { handleStep, agents } = useVNextNetworkChat();
+  const { handleStep } = useVNextNetworkChat();
 
   // const { frequencyPenalty, presencePenalty, maxRetries, maxSteps, maxTokens, temperature, topK, topP, instructions } =
   //   modelSettings;
@@ -110,6 +111,9 @@ export function VNextMastraNetworkRuntimeProvider({
           //   ];
           // });
           if ((record as any).type === 'start') {
+            if (hasStartedRef.current) return;
+            hasStartedRef.current = true;
+
             setMessages(currentConversation => {
               return [
                 ...currentConversation,
@@ -125,6 +129,7 @@ export function VNextMastraNetworkRuntimeProvider({
               ];
             });
           } else {
+            console.log('rec==', record);
             handleStep(record);
           }
         },

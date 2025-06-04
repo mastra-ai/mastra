@@ -30,7 +30,7 @@ const agent2 = new Agent({
 });
 
 const agentStep1 = createStep({
-  id: 'agent-step',
+  id: 'agent-workflow-step-1',
   description: 'This step is used to do research and text synthesis.',
   inputSchema: z.object({
     city: z.string().describe('The city to research'),
@@ -50,7 +50,7 @@ const agentStep1 = createStep({
 });
 
 const agentStep2 = createStep({
-  id: 'agent-step',
+  id: 'agent-workflow-step-2',
   description: 'This step is used to do research and text synthesis.',
   inputSchema: z.object({
     text: z.string().describe('The city to research'),
