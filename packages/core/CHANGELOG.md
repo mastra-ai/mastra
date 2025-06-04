@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.10.3
+
+### Patch Changes
+
+- 2b0fc7e: Ensure context messages aren't saved to the storage db
+
 ## 0.10.3-alpha.0
 
 ### Patch Changes
