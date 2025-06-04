@@ -22,8 +22,8 @@ const connectionString = `postgresql://${TEST_CONFIG.user}:${TEST_CONFIG.passwor
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
 // Sample test data factory functions
-const createSampleThread = () => ({
-  id: `thread-${randomUUID()}`,
+const createSampleThread = (id?: string) => ({
+  id: id || `thread-${randomUUID()}`,
   resourceId: `resource-${randomUUID()}`,
   title: 'Test Thread',
   createdAt: new Date(),
@@ -328,6 +328,15 @@ describe('PostgresStore', () => {
     });
 
     it('should retrieve messages w/ next/prev messages by message id + resource id', async () => {
+      const thread = createSampleThread('thread-one');
+      await store.saveThread({ thread });
+
+      const thread2 = createSampleThread('thread-two');
+      await store.saveThread({ thread: thread2 });
+
+      const thread3 = createSampleThread('thread-three');
+      await store.saveThread({ thread: thread3 });
+
       const messages: MastraMessageV2[] = [
         createSampleMessageV2({ threadId: 'thread-one', content: 'First', resourceId: 'cross-thread-resource' }),
         createSampleMessageV2({ threadId: 'thread-one', content: 'Second', resourceId: 'cross-thread-resource' }),
@@ -373,6 +382,7 @@ describe('PostgresStore', () => {
               withNextMessages: 2,
             },
           ],
+          includeScope: 'resource',
         },
       });
 
@@ -390,9 +400,10 @@ describe('PostgresStore', () => {
             {
               id: messages[4].id,
               withPreviousMessages: 1,
-              withNextMessages: 30,
+              withNextMessages: 1,
             },
           ],
+          includeScope: 'resource',
         },
       });
 
@@ -413,6 +424,7 @@ describe('PostgresStore', () => {
               withPreviousMessages: 1,
             },
           ],
+          includeScope: 'resource',
         },
       });
 

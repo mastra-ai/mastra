@@ -644,13 +644,16 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
-  async getMessages<T = unknown>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T[]> {
+  async getMessages<T = unknown>({ threadId, resourceId, selectBy }: StorageGetMessagesArg): Promise<T[]> {
     try {
       const messages: any[] = [];
       const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
       const include = selectBy?.include || [];
 
       if (include.length) {
+        const includeScope = selectBy?.includeScope;
+        const searchId = resourceId && includeScope === 'resource' ? resourceId : threadId;
+
         const includeResult = await this.db.manyOrNone(
           `
           WITH ordered_messages AS (
@@ -658,6 +661,7 @@ export class PostgresStore extends MastraStorage {
               *,
               ROW_NUMBER() OVER (ORDER BY "createdAt" DESC) as row_num
             FROM ${this.getTableName(TABLE_MESSAGES)}
+            ${resourceId && includeScope === 'resource' ? 'WHERE "resourceId" = $1' : 'WHERE thread_id = $1'}
           )
           SELECT
             m.id, 
@@ -665,23 +669,25 @@ export class PostgresStore extends MastraStorage {
             m.role, 
             m.type,
             m."createdAt", 
-            m.thread_id AS "threadId"
+            m.thread_id AS "threadId",
+            m."resourceId"
           FROM ordered_messages m
-          WHERE m.id = ANY($1)
+          WHERE m.id = ANY($2)
           OR EXISTS (
             SELECT 1 FROM ordered_messages target
-            WHERE target.id = ANY($1)
+            WHERE target.id = ANY($2)
             AND (
               -- Get previous messages based on the max withPreviousMessages
-              (m.row_num <= target.row_num + $2 AND m.row_num > target.row_num)
+              (m.row_num <= target.row_num + $3 AND m.row_num > target.row_num)
               OR
               -- Get next messages based on the max withNextMessages
-              (m.row_num >= target.row_num - $3 AND m.row_num < target.row_num)
+              (m.row_num >= target.row_num - $4 AND m.row_num < target.row_num)
             )
           )
           ORDER BY m."createdAt" DESC
           `,
           [
+            searchId,
             include.map(i => i.id),
             Math.max(...include.map(i => i.withPreviousMessages || 0)),
             Math.max(...include.map(i => i.withNextMessages || 0)),
@@ -758,16 +764,27 @@ export class PostgresStore extends MastraStorage {
 
       await this.db.tx(async t => {
         for (const message of messages) {
+          if (!message.threadId) {
+            throw new Error(
+              `Expected to find a threadId for message, but couldn't find one. An unexpected error has occurred.`,
+            );
+          }
+          if (!message.resourceId) {
+            throw new Error(
+              `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
+            );
+          }
           await t.none(
-            `INSERT INTO ${this.getTableName(TABLE_MESSAGES)} (id, thread_id, content, "createdAt", role, type) 
-             VALUES ($1, $2, $3, $4, $5, $6)`,
+            `INSERT INTO ${this.getTableName(TABLE_MESSAGES)} (id, thread_id, content, "createdAt", role, type, "resourceId") 
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
             [
               message.id,
-              threadId,
+              message.threadId,
               typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
               message.createdAt || new Date().toISOString(),
               message.role,
               message.type || 'v2',
+              message.resourceId,
             ],
           );
         }
