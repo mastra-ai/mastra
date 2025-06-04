@@ -387,6 +387,61 @@ describe('DynamoDBStore Integration Tests', () => {
         expect(retrieved?.title).toBe('Updated Thread 2');
         expect(retrieved?.metadata?.update).toBe(2);
       });
+
+      test('getMessages should return the N most recent messages [v2 storage]', async () => {
+        const threadId = 'last-selector-thread';
+        const start = Date.now();
+
+        // Insert 10 messages with increasing timestamps
+        const messages: MastraMessageV2[] = Array.from({ length: 10 }, (_, i) => ({
+          id: `m-${i}`,
+          threadId,
+          resourceId: 'r',
+          content: { format: 2, parts: [{ type: 'text', text: `msg-${i}` }] },
+          createdAt: new Date(start + i), // 0..9 ms apart
+          role: 'user',
+          type: 'text',
+        }));
+        await store.saveMessages({ messages, format: 'v2' });
+
+        const last3 = await store.getMessages({
+          format: 'v2',
+          threadId,
+          selectBy: { last: 3 },
+        });
+
+        expect(last3).toHaveLength(3);
+        expect(last3.map(m => (m.content.parts[0] as { type: string; text: string }).text)).toEqual([
+          'msg-7',
+          'msg-8',
+          'msg-9',
+        ]);
+      });
+
+      test('getMessages should return the N most recent messages [v1 storage]', async () => {
+        const threadId = 'last-selector-thread';
+        const start = Date.now();
+
+        // Insert 10 messages with increasing timestamps
+        const messages: MastraMessageV1[] = Array.from({ length: 10 }, (_, i) => ({
+          id: `m-${i}`,
+          threadId,
+          resourceId: 'r',
+          content: `msg-${i}`,
+          createdAt: new Date(start + i), // 0..9 ms apart
+          role: 'user',
+          type: 'text',
+        }));
+        await store.saveMessages({ messages });
+
+        const last3 = await store.getMessages({
+          threadId,
+          selectBy: { last: 3 },
+        });
+
+        expect(last3).toHaveLength(3);
+        expect(last3.map(m => m.content)).toEqual(['msg-7', 'msg-8', 'msg-9']);
+      });
     });
 
     describe('Batch Operations', () => {
