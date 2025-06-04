@@ -65,7 +65,7 @@ export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: stri
         </div>
       </div>
 
-      <div className="overflow-y-auto ">
+      <div className="overflow-y-auto">
         <Tabs defaultValue="run" className="h-full grid grid-rows-[auto_1fr] overflow-y-auto">
           <TabsList className="flex shrink-0 border-b">
             <TabsTrigger value="run" className="group" onClick={() => navigate(`/workflows/${workflowId}/graph`)}>

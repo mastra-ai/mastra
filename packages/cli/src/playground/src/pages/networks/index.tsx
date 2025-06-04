@@ -38,7 +38,7 @@ function Networks() {
           />
         </div>
       ) : (
-        <div className="overflow-y-auto ">
+        <div className="overflow-y-auto">
           <DataTable isLoading={isLoading} data={networks} columns={networksTableColumns} />
         </div>
       )}

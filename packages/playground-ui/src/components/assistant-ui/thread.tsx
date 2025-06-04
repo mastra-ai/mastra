@@ -105,7 +105,7 @@ const Composer: FC<{ hasMemory?: boolean; showFileSupport?: boolean }> = ({ hasM
           <ComposerAttachments />
         </div>
 
-        <div className="bg-surface3 rounded-lg border-sm border-border1  py-4 mt-auto max-w-[568px] w-full mx-auto px-4">
+        <div className="bg-surface3 rounded-lg border-sm border-border1 py-4 mt-auto max-w-[568px] w-full mx-auto px-4">
           <ComposerPrimitive.Input asChild className="w-full">
             <textarea
               className="text-ui-lg leading-ui-lg placeholder:text-icon3 text-icon6 bg-transparent focus:outline-none resize-none"

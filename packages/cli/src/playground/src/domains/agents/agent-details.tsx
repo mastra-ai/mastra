@@ -23,7 +23,7 @@ export function AgentDetails({ agent }: AgentDetailsProps) {
   const workflowsArray = Object.entries(agent?.workflows ?? {});
 
   return (
-    <div className=" px-5 pb-4 text-xs py-2">
+    <div className="px-5 text-xs py-2 pb-4">
       <section className="space-y-7">
         <Entry label="Chat Method">
           <RadioGroup

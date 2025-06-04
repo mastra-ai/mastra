@@ -4,7 +4,6 @@ import React from 'react';
 export interface IconProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
   size?: 'default' | 'lg' | 'sm';
-  className?: string;
 }
 
 const sizes = {
