@@ -1133,7 +1133,9 @@ export class D1Store extends MastraStorage {
       }
       if (attributes && Object.keys(attributes).length > 0) {
         for (const [key, value] of Object.entries(attributes)) {
-          conditions.push(`json_extract(attributes, '$.${key}') = ?`);
+          // Sanitize the key by escaping single quotes for safe inclusion in the JSON path string literal
+          const sanitizedKey = key.replace(/'/g, "''");
+          conditions.push(`json_extract(attributes, '$.${sanitizedKey}') = ?`);
           queryParams.push(value);
         }
       }
