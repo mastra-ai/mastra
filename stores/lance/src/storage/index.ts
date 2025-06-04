@@ -4,7 +4,6 @@ import type {
   EvalRow,
   MastraMessageV1,
   MastraMessageV2,
-  MessageType,
   StorageColumn,
   StorageGetMessagesArg,
   StorageThreadType,
@@ -12,6 +11,7 @@ import type {
   WorkflowRuns,
   WorkflowRunState,
 } from '@mastra/core';
+import { MessageList } from '@mastra/core/agent';
 import {
   MastraStorage,
   TABLE_EVALS,
@@ -595,7 +595,7 @@ export class LanceStorage extends MastraStorage {
       let records = await query.toArray();
 
       // Sort the records chronologically
-      records.sort((a: MessageType, b: MessageType) => {
+      records.sort((a, b) => {
         const dateA = new Date(a.createdAt).getTime();
         const dateB = new Date(b.createdAt).getTime();
         return dateA - dateB; // Ascending order
@@ -611,14 +611,35 @@ export class LanceStorage extends MastraStorage {
         records = records.slice(-selectBy.last);
       }
 
-      return this.processResultWithTypeConversion(records, await this.getTableSchema(TABLE_MESSAGES)) as MessageType[];
+      const messages = this.processResultWithTypeConversion(records, await this.getTableSchema(TABLE_MESSAGES));
+      const normalized = messages.map((msg: MastraMessageV2 | MastraMessageV1) => ({
+        ...msg,
+        content:
+          typeof msg.content === 'string'
+            ? (() => {
+                try {
+                  return JSON.parse(msg.content);
+                } catch {
+                  return msg.content;
+                }
+              })()
+            : msg.content,
+      }));
+      const list = new MessageList({ threadId, resourceId }).add(normalized, 'memory');
+      if (format === 'v2') return list.get.all.v2();
+      return list.get.all.v1();
     } catch (error: any) {
       throw new Error(`Failed to get messages: ${error}`);
     }
   }
 
-  async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
+  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
+  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
+  async saveMessages(
+    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
+  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
     try {
+      const { messages, format = 'v1' } = args;
       if (messages.length === 0) {
         return [];
       }
@@ -629,14 +650,16 @@ export class LanceStorage extends MastraStorage {
         throw new Error('Thread ID is required');
       }
 
-      const transformedMessages = messages.map(message => ({
+      const transformedMessages = messages.map((message: MastraMessageV2 | MastraMessageV1) => ({
         ...message,
         content: JSON.stringify(message.content),
       }));
 
       const table = await this.lanceClient.openTable(TABLE_MESSAGES);
       await table.add(transformedMessages, { mode: 'overwrite' });
-      return messages;
+      const list = new MessageList().add(messages, 'memory');
+      if (format === `v2`) return list.get.all.v2();
+      return list.get.all.v1();
     } catch (error: any) {
       throw new Error(`Failed to save messages: ${error}`);
     }
@@ -845,6 +868,40 @@ export class LanceStorage extends MastraStorage {
       };
     } catch (error: any) {
       throw new Error(`Failed to get workflow runs: ${error}`);
+    }
+  }
+
+  /**
+   * Retrieve a single workflow run by its runId.
+   * @param args The ID of the workflow run to retrieve
+   * @returns The workflow run object or null if not found
+   */
+  async getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<{
+    workflowName: string;
+    runId: string;
+    snapshot: any;
+    createdAt: Date;
+    updatedAt: Date;
+  } | null> {
+    try {
+      const table = await this.lanceClient.openTable(TABLE_WORKFLOW_SNAPSHOT);
+      let whereClause = `run_id = '${args.runId}'`;
+      if (args.workflowName) {
+        whereClause += ` AND workflow_name = '${args.workflowName}'`;
+      }
+      const query = table.query().where(whereClause);
+      const records = await query.toArray();
+      if (records.length === 0) return null;
+      const record = records[0];
+      return {
+        workflowName: record.workflow_name,
+        runId: record.run_id,
+        snapshot: record.snapshot,
+        createdAt: new Date(record.createdAt),
+        updatedAt: new Date(record.updatedAt),
+      };
+    } catch (error: any) {
+      throw new Error(`Failed to get workflow run by id: ${error}`);
     }
   }
 

@@ -1,4 +1,12 @@
-import type { EvalRow, MessageType, StorageThreadType, TraceType, WorkflowRuns } from '@mastra/core';
+import type {
+  EvalRow,
+  MastraMessageV2,
+  StepResult,
+  StorageThreadType,
+  TraceType,
+  WorkflowRuns,
+  WorkflowRunState,
+} from '@mastra/core';
 import {
   TABLE_EVALS,
   TABLE_MESSAGES,
@@ -41,10 +49,10 @@ function generateRecords(count: number): MessageRecord[] {
   }));
 }
 
-function generateMessageRecords(count: number, threadId?: string): MessageType[] {
+function generateMessageRecords(count: number, threadId?: string): MastraMessageV2[] {
   return Array.from({ length: count }, (_, index) => ({
     id: (index + 1).toString(),
-    content: `Test message ${index + 1}`,
+    content: { format: 2, parts: [{ type: 'text', text: `Test message ${index + 1}` }] },
     role: 'user',
     createdAt: new Date(),
     threadId: threadId ?? `12333d567-e89b-12d3-a456-${(426614174000 + index).toString()}`,
@@ -52,7 +60,6 @@ function generateMessageRecords(count: number, threadId?: string): MessageType[]
     toolCallIds: [],
     toolCallArgs: [],
     toolNames: [],
-    type: 'text',
   }));
 }
 
@@ -529,17 +536,17 @@ describe('LanceStorage tests', async () => {
     });
 
     it('should save messages without error', async () => {
-      const messages: MessageType[] = generateMessageRecords(10);
+      const messages = generateMessageRecords(10);
       expect(async () => {
-        await storage.saveMessages({ messages });
+        await storage.saveMessages({ messages, format: 'v2' });
       }).not.toThrow();
     });
 
     it('should get messages by thread ID', async () => {
       const threadId = '12333d567-e89b-12d3-a456-426614174000';
-      const messages: MessageType[] = generateMessageRecords(10, threadId);
-      await storage.saveMessages({ messages });
-      const loadedMessages = await storage.getMessages({ threadId });
+      const messages = generateMessageRecords(10, threadId);
+      await storage.saveMessages({ messages, format: 'v2' });
+      const loadedMessages = await storage.getMessages({ threadId, format: 'v2' });
 
       expect(loadedMessages).not.toBeNull();
       expect(loadedMessages.length).toEqual(10);
@@ -551,22 +558,20 @@ describe('LanceStorage tests', async () => {
         expect(new Date(message.createdAt)).toEqual(new Date(messages[index].createdAt));
         expect(message.role).toEqual(messages[index].role);
         expect(message.resourceId).toEqual(messages[index].resourceId);
-        expect(message.toolCallIds).toEqual('');
-        expect(message.toolCallArgs).toEqual('');
-        expect(message.toolNames).toEqual('');
         expect(message.type).toEqual(messages[index].type);
       });
     });
 
     it('should get the last N messages when selectBy.last is specified', async () => {
       const threadId = '12333d567-e89b-12d3-a456-426614174000';
-      const messages: MessageType[] = generateMessageRecords(10, threadId);
-      await storage.saveMessages({ messages });
+      const messages = generateMessageRecords(10, threadId);
+      await storage.saveMessages({ messages, format: 'v2' });
 
       // Get the last 3 messages
       const loadedMessages = await storage.getMessages({
         threadId,
         selectBy: { last: 3 },
+        format: 'v2',
       });
 
       expect(loadedMessages).not.toBeNull();
@@ -581,8 +586,8 @@ describe('LanceStorage tests', async () => {
 
     it('should get specific messages when selectBy.include is specified', async () => {
       const threadId = '12333d567-e89b-12d3-a456-426614174000';
-      const messages: MessageType[] = generateMessageRecords(10, threadId);
-      await storage.saveMessages({ messages });
+      const messages = generateMessageRecords(10, threadId);
+      await storage.saveMessages({ messages, format: 'v2' });
 
       // Select specific messages by ID
       const messageIds = [messages[2].id, messages[5].id, messages[8].id];
@@ -591,6 +596,7 @@ describe('LanceStorage tests', async () => {
         selectBy: {
           include: messageIds.map(id => ({ id })),
         },
+        format: 'v2',
       });
 
       expect(loadedMessages).not.toBeNull();
@@ -607,13 +613,14 @@ describe('LanceStorage tests', async () => {
     it('should handle empty results when using selectBy filters', async () => {
       const threadId = '12333d567-e89b-12d3-a456-426614174000';
       // Create messages for a different thread ID
-      const messages: MessageType[] = generateMessageRecords(5, 'different-thread-id');
-      await storage.saveMessages({ messages });
+      const messages = generateMessageRecords(5, 'different-thread-id');
+      await storage.saveMessages({ messages, format: 'v2' });
 
       // Try to get messages for our test threadId, which should return empty
       const loadedMessages = await storage.getMessages({
         threadId,
         selectBy: { last: 3 },
+        format: 'v2',
       });
 
       expect(loadedMessages).not.toBeNull();
@@ -622,8 +629,8 @@ describe('LanceStorage tests', async () => {
 
     it('should throw error when threadConfig is provided', async () => {
       const threadId = '12333d567-e89b-12d3-a456-426614174000';
-      const messages: MessageType[] = generateMessageRecords(5, threadId);
-      await storage.saveMessages({ messages });
+      const messages = generateMessageRecords(5, threadId);
+      await storage.saveMessages({ messages, format: 'v2' });
 
       // Test that providing a threadConfig throws an error
       await expect(
@@ -648,8 +655,8 @@ describe('LanceStorage tests', async () => {
 
     it('should retrieve messages with context using withPreviousMessages and withNextMessages', async () => {
       const threadId = '12333d567-e89b-12d3-a456-426614174000';
-      const messages: MessageType[] = generateMessageRecords(10, threadId);
-      await storage.saveMessages({ messages });
+      const messages = generateMessageRecords(10, threadId);
+      await storage.saveMessages({ messages, format: 'v2' });
 
       // Get a specific message with context (previous and next messages)
       const targetMessageId = messages[5].id;
@@ -664,6 +671,7 @@ describe('LanceStorage tests', async () => {
             },
           ],
         },
+        format: 'v2',
       });
 
       expect(loadedMessages).not.toBeNull();
@@ -881,30 +889,6 @@ describe('LanceStorage tests', async () => {
         );
       });
     });
-    interface WorkflowRunState {
-      value: Record<string, string>;
-      context: {
-        steps: Record<
-          string,
-          {
-            status: 'success' | 'failed' | 'suspended' | 'waiting' | 'skipped';
-            payload?: any;
-            error?: string;
-          }
-        >;
-        triggerData: Record<string, any>;
-        attempts: Record<string, number>;
-      };
-      activePaths: Array<{
-        stepPath: string[];
-        stepId: string;
-        status: string;
-      }>;
-      runId: string;
-      timestamp: number;
-      childStates?: Record<string, WorkflowRunState>;
-      suspendedSteps?: Record<string, string>;
-    }
 
     it('should save workflow snapshot', async () => {
       const workflow: {
@@ -919,19 +903,14 @@ describe('LanceStorage tests', async () => {
             key: 'value',
           },
           context: {
-            steps: {
-              step1: {
-                status: 'failed',
-                payload: 'payload',
-                error: 'error',
-              },
+            step1: {
+              status: 'failed',
+              payload: 'payload',
+              error: 'error',
+              startedAt: new Date().getTime(),
+              endedAt: new Date().getTime(),
             },
-            triggerData: {
-              key: 'value',
-            },
-            attempts: {
-              key: 1,
-            },
+            input: {} as StepResult<any, any, any, any>,
           },
           activePaths: [
             {
@@ -942,6 +921,8 @@ describe('LanceStorage tests', async () => {
           ],
           runId: '123',
           timestamp: new Date().getTime(),
+          suspendedPaths: {},
+          serializedStepGraph: [],
         },
       };
 
