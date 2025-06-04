@@ -85,6 +85,14 @@ export class PostgresStore extends MastraStorage {
     );
   }
 
+  public get supports(): {
+    selectByIncludeResourceScope: boolean;
+  } {
+    return {
+      selectByIncludeResourceScope: true,
+    };
+  }
+
   private getTableName(indexName: string) {
     const parsedIndexName = parseSqlIdentifier(indexName, 'table name');
     const parsedSchemaName = this.schema ? parseSqlIdentifier(this.schema, 'schema name') : undefined;

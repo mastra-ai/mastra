@@ -36,6 +36,14 @@ export class UpstashStore extends MastraStorage {
     });
   }
 
+  public get supports(): {
+    selectByIncludeResourceScope: boolean;
+  } {
+    return {
+      selectByIncludeResourceScope: true,
+    };
+  }
+
   private transformEvalRecord(record: Record<string, any>): EvalRow {
     // Parse JSON strings if needed
     let result = record.result;
