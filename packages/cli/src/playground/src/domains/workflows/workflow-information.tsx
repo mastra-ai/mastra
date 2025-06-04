@@ -29,10 +29,7 @@ export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: stri
   const workflowToUse = isLegacy ? legacyWorkflow : workflow;
 
   return (
-    <div
-      // className="h-full overflow-y-scroll pb-5"
-      className="grid grid-rows-[auto_1fr] h-full overflow-y-auto"
-    >
+    <div className="grid grid-rows-[auto_1fr] h-full overflow-y-auto">
       <div className="p-5 border-b-sm border-border1">
         <div className="text-icon6 flex items-center gap-2">
           <Icon size="lg" className="bg-surface4 rounded-md p-1">
