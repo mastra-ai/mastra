@@ -204,27 +204,30 @@ export class UpstashStore extends MastraStorage {
     return { key, processedRecord };
   }
 
+  /**
+   * @deprecated Use getEvals instead
+   */
   async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
     try {
-      // Get all keys that match the evals table pattern
       const pattern = `${TABLE_EVALS}:*`;
       const keys = await this.scanKeys(pattern);
 
-      // Fetch all eval records
-      const evalRecords = await Promise.all(
-        keys.map(async key => {
-          const data = await this.redis.get<Record<string, any>>(key);
-          return data;
-        }),
-      );
+      // Check if we have any keys before using pipeline
+      if (keys.length === 0) {
+        return [];
+      }
+
+      // Use pipeline for batch fetching to improve performance
+      const pipeline = this.redis.pipeline();
+      keys.forEach(key => pipeline.get(key));
+      const results = await pipeline.exec();
 
       // Filter by agent name and remove nulls
-      const nonNullRecords = evalRecords.filter(
+      const nonNullRecords = results.filter(
         (record): record is Record<string, any> =>
           record !== null && typeof record === 'object' && 'agent_name' in record && record.agent_name === agentName,
       );
 
-      // Apply additional filtering based on type
       let filteredEvals = nonNullRecords;
 
       if (type === 'test') {
@@ -271,103 +274,126 @@ export class UpstashStore extends MastraStorage {
     }
   }
 
-  async getTraces(
-    {
+  public async getTraces(args: {
+    name?: string;
+    scope?: string;
+    attributes?: Record<string, string>;
+    filters?: Record<string, any>;
+    page: number;
+    perPage?: number;
+    fromDate?: Date;
+    toDate?: Date;
+  }): Promise<any[]>;
+  public async getTraces(args: {
+    name?: string;
+    scope?: string;
+    page: number;
+    perPage?: number;
+    attributes?: Record<string, string>;
+    filters?: Record<string, any>;
+    fromDate?: Date;
+    toDate?: Date;
+    returnPaginationResults: true;
+  }): Promise<{
+    traces: any[];
+    total: number;
+    page: number;
+    perPage: number;
+    hasMore: boolean;
+  }>;
+  public async getTraces(args: {
+    name?: string;
+    scope?: string;
+    page: number;
+    perPage?: number;
+    attributes?: Record<string, string>;
+    filters?: Record<string, any>;
+    fromDate?: Date;
+    toDate?: Date;
+    returnPaginationResults?: boolean;
+  }): Promise<
+    | any[]
+    | {
+        traces: any[];
+        total: number;
+        page: number;
+        perPage: number;
+        hasMore: boolean;
+      }
+  > {
+    const {
       name,
       scope,
-      page = 0,
-      perPage = 100,
+      page,
+      perPage: perPageInput,
       attributes,
       filters,
       fromDate,
       toDate,
-    }: {
-      name?: string;
-      scope?: string;
-      page: number;
-      perPage: number;
-      attributes?: Record<string, string>;
-      filters?: Record<string, any>;
-      fromDate?: Date;
-      toDate?: Date;
-    } = {
-      page: 0,
-      perPage: 100,
-    },
-  ): Promise<any[]> {
+      returnPaginationResults,
+    } = args;
+
+    const perPage = perPageInput !== undefined ? perPageInput : 100;
+
     try {
-      // Get all keys that match the traces table pattern
       const pattern = `${TABLE_TRACES}:*`;
       const keys = await this.scanKeys(pattern);
 
-      // Fetch all trace records
-      const traceRecords = await Promise.all(
-        keys.map(async key => {
-          const data = await this.redis.get<Record<string, any>>(key);
-          return data;
-        }),
-      );
+      if (keys.length === 0) {
+        if (returnPaginationResults) {
+          return {
+            traces: [],
+            total: 0,
+            page,
+            perPage: perPage || 100,
+            hasMore: false,
+          };
+        }
+        return [];
+      }
 
-      // Filter out nulls and apply filters
-      let filteredTraces = traceRecords.filter(
+      const pipeline = this.redis.pipeline();
+      keys.forEach(key => pipeline.get(key));
+      const results = await pipeline.exec();
+
+      let filteredTraces = results.filter(
         (record): record is Record<string, any> => record !== null && typeof record === 'object',
       );
 
-      // Apply name filter if provided
       if (name) {
         filteredTraces = filteredTraces.filter(record => record.name?.toLowerCase().startsWith(name.toLowerCase()));
       }
-
-      // Apply scope filter if provided
       if (scope) {
         filteredTraces = filteredTraces.filter(record => record.scope === scope);
       }
-
-      // Apply attributes filter if provided
       if (attributes) {
         filteredTraces = filteredTraces.filter(record => {
           const recordAttributes = record.attributes;
           if (!recordAttributes) return false;
-
-          // Parse attributes if stored as string
           const parsedAttributes =
             typeof recordAttributes === 'string' ? JSON.parse(recordAttributes) : recordAttributes;
-
           return Object.entries(attributes).every(([key, value]) => parsedAttributes[key] === value);
         });
       }
-
-      // Apply custom filters if provided
       if (filters) {
         filteredTraces = filteredTraces.filter(record =>
           Object.entries(filters).every(([key, value]) => record[key] === value),
         );
       }
-
-      // Apply fromDate filter if provided
       if (fromDate) {
         filteredTraces = filteredTraces.filter(
           record => new Date(record.createdAt).getTime() >= new Date(fromDate).getTime(),
         );
       }
-
-      // Apply toDate filter if provided
       if (toDate) {
         filteredTraces = filteredTraces.filter(
           record => new Date(record.createdAt).getTime() <= new Date(toDate).getTime(),
         );
       }
 
-      // Sort traces by creation date (newest first)
       filteredTraces.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-      // Apply pagination
-      const start = page * perPage;
-      const end = start + perPage;
-      const paginatedTraces = filteredTraces.slice(start, end);
-
-      // Transform and return the traces
-      return paginatedTraces.map(record => ({
+      const transformedTraces = filteredTraces.map(record => ({
         id: record.id,
         parentSpanId: record.parentSpanId,
         traceId: record.traceId,
@@ -383,8 +409,35 @@ export class UpstashStore extends MastraStorage {
         other: this.parseJSON(record.other),
         createdAt: this.ensureDate(record.createdAt),
       }));
+
+      const total = transformedTraces.length;
+      const resolvedPerPage = perPage || 100;
+      const start = page * resolvedPerPage;
+      const end = start + resolvedPerPage;
+      const paginatedTraces = transformedTraces.slice(start, end);
+      const hasMore = end < total;
+      if (returnPaginationResults) {
+        return {
+          traces: paginatedTraces,
+          total,
+          page,
+          perPage: resolvedPerPage,
+          hasMore,
+        };
+      } else {
+        return paginatedTraces;
+      }
     } catch (error) {
       console.error('Failed to get traces:', error);
+      if (returnPaginationResults) {
+        return {
+          traces: [],
+          total: 0,
+          page,
+          perPage: perPage || 100,
+          hasMore: false,
+        };
+      }
       return [];
     }
   }
@@ -450,24 +503,97 @@ export class UpstashStore extends MastraStorage {
     };
   }
 
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    const pattern = `${TABLE_THREADS}:*`;
-    const keys = await this.scanKeys(pattern);
-    const threads = await Promise.all(
-      keys.map(async key => {
-        const data = await this.redis.get<StorageThreadType>(key);
-        return data;
-      }),
-    );
+  async getThreadsByResourceId(args: { resourceId: string }): Promise<StorageThreadType[]>;
+  async getThreadsByResourceId(args: { resourceId: string; page: number; perPage?: number }): Promise<{
+    threads: StorageThreadType[];
+    total: number;
+    page: number;
+    perPage: number;
+    hasMore: boolean;
+  }>;
+  async getThreadsByResourceId(args: { resourceId: string; page?: number; perPage?: number }): Promise<
+    | StorageThreadType[]
+    | {
+        threads: StorageThreadType[];
+        total: number;
+        page: number;
+        perPage: number;
+        hasMore: boolean;
+      }
+  > {
+    const resourceId: string = args.resourceId;
+    const page: number | undefined = args.page;
+    // Determine perPage only if page is actually provided. Otherwise, its value is not critical for the non-paginated path.
+    // If page is provided, perPage defaults to 100 if not specified.
+    const perPage: number = page !== undefined ? (args.perPage !== undefined ? args.perPage : 100) : 100;
 
-    return threads
-      .filter(thread => thread && thread.resourceId === resourceId)
-      .map(thread => ({
-        ...thread!,
-        createdAt: this.ensureDate(thread!.createdAt)!,
-        updatedAt: this.ensureDate(thread!.updatedAt)!,
-        metadata: typeof thread!.metadata === 'string' ? JSON.parse(thread!.metadata) : thread!.metadata,
-      }));
+    try {
+      const pattern = `${TABLE_THREADS}:*`;
+      const keys = await this.scanKeys(pattern);
+
+      if (keys.length === 0) {
+        if (page !== undefined) {
+          return {
+            threads: [],
+            total: 0,
+            page,
+            perPage, // perPage is number here
+            hasMore: false,
+          };
+        }
+        return [];
+      }
+
+      const allThreads: StorageThreadType[] = [];
+      const pipeline = this.redis.pipeline();
+      keys.forEach(key => pipeline.get(key));
+      const results = await pipeline.exec();
+
+      for (let i = 0; i < results.length; i++) {
+        const thread = results[i] as StorageThreadType | null;
+        if (thread && thread.resourceId === resourceId) {
+          allThreads.push({
+            ...thread,
+            createdAt: this.ensureDate(thread.createdAt)!,
+            updatedAt: this.ensureDate(thread.updatedAt)!,
+            metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
+          });
+        }
+      }
+
+      allThreads.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+      if (page !== undefined) {
+        // If page is defined, perPage is also a number (due to the defaulting logic above)
+        const total = allThreads.length;
+        const start = page * perPage;
+        const end = start + perPage;
+        const paginatedThreads = allThreads.slice(start, end);
+        const hasMore = end < total;
+        return {
+          threads: paginatedThreads,
+          total,
+          page,
+          perPage,
+          hasMore,
+        };
+      } else {
+        // page is undefined, return all threads
+        return allThreads;
+      }
+    } catch (error) {
+      console.error('Error in getThreadsByResourceId:', error);
+      if (page !== undefined) {
+        return {
+          threads: [],
+          total: 0,
+          page,
+          perPage, // perPage is number here
+          hasMore: false,
+        };
+      }
+      return [];
+    }
   }
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
@@ -550,16 +676,154 @@ export class UpstashStore extends MastraStorage {
     return list.get.all.v1();
   }
 
+  // Function overloads for different return types
   public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
   public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
+  public async getMessages(
+    args: StorageGetMessagesArg & {
+      format?: 'v1' | 'v2';
+      page: number;
+      perPage?: number;
+      fromDate?: Date;
+      toDate?: Date;
+    },
+  ): Promise<{
+    messages: MastraMessageV1[] | MastraMessageV2[];
+    total: number;
+    page: number;
+    perPage: number;
+    hasMore: boolean;
+  }>;
   public async getMessages({
     threadId,
     selectBy,
     format,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
-    const messageIds = new Set<string>();
+    page,
+    perPage = 40,
+    fromDate,
+    toDate,
+  }: StorageGetMessagesArg & {
+    format?: 'v1' | 'v2';
+    page?: number;
+    perPage?: number;
+    fromDate?: Date;
+    toDate?: Date;
+  }): Promise<
+    | MastraMessageV1[]
+    | MastraMessageV2[]
+    | {
+        messages: MastraMessageV1[] | MastraMessageV2[];
+        total: number;
+        page: number;
+        perPage: number;
+        hasMore: boolean;
+      }
+  > {
     const threadMessagesKey = this.getThreadMessagesKey(threadId);
+
+    const allMessageIds = await this.redis.zrange(threadMessagesKey, 0, -1);
+    // If pagination is requested, use the new pagination logic
+    if (page !== undefined) {
+      try {
+        // Get all message IDs from the sorted set
+
+        if (allMessageIds.length === 0) {
+          return {
+            messages: [],
+            total: 0,
+            page,
+            perPage,
+            hasMore: false,
+          };
+        }
+
+        // Use pipeline to fetch all messages efficiently
+        const pipeline = this.redis.pipeline();
+        allMessageIds.forEach(id => pipeline.get(this.getMessageKey(threadId, id as string)));
+        const results = await pipeline.exec();
+
+        // Process messages and apply filters - handle undefined results from pipeline
+        let messages = results
+          .map((result: any) => result as MastraMessageV2 | null)
+          .filter((msg): msg is MastraMessageV2 => msg !== null) as (MastraMessageV2 & { _index?: number })[];
+
+        // Apply date filters if provided
+        if (fromDate) {
+          messages = messages.filter(msg => msg && new Date(msg.createdAt).getTime() >= fromDate.getTime());
+        }
+
+        if (toDate) {
+          messages = messages.filter(msg => msg && new Date(msg.createdAt).getTime() <= toDate.getTime());
+        }
+
+        // Sort messages by their position in the sorted set
+        messages.sort((a, b) => allMessageIds.indexOf(a!.id) - allMessageIds.indexOf(b!.id));
+
+        const total = messages.length;
+
+        // Apply pagination
+        const start = page * perPage;
+        const end = start + perPage;
+        const hasMore = end < total;
+        const paginatedMessages = messages.slice(start, end);
+
+        // Remove _index before returning and handle format conversion properly
+        const prepared = paginatedMessages
+          .filter(message => message !== null && message !== undefined)
+          .map(message => {
+            const { _index, ...messageWithoutIndex } = message as MastraMessageV2 & { _index?: number };
+            return messageWithoutIndex as unknown as MastraMessageV1;
+          });
+
+        // Return pagination object with correct format
+        if (format === 'v2') {
+          // Convert V1 format back to V2 format
+          const v2Messages = prepared.map(msg => ({
+            ...msg,
+            content: msg.content || { format: 2, parts: [{ type: 'text', text: '' }] },
+          })) as MastraMessageV2[];
+
+          return {
+            messages: v2Messages,
+            total,
+            page,
+            perPage,
+            hasMore,
+          };
+        }
+
+        return {
+          messages: prepared,
+          total,
+          page,
+          perPage,
+          hasMore,
+        };
+      } catch (error) {
+        console.error('Failed to get paginated messages:', error);
+        return {
+          messages: [],
+          total: 0,
+          page,
+          perPage,
+          hasMore: false,
+        };
+      }
+    }
+
+    // Original logic for backward compatibility
+    // When selectBy is undefined or selectBy.last is undefined, get ALL messages (not just 40)
+    let limit: number;
+    if (typeof selectBy?.last === 'number') {
+      limit = Math.max(0, selectBy.last);
+    } else if (selectBy?.last === false) {
+      limit = 0;
+    } else {
+      // No limit specified - get all messages
+      limit = Number.MAX_SAFE_INTEGER;
+    }
+
+    const messageIds = new Set<string>();
 
     if (limit === 0 && !selectBy?.include) {
       return [];
@@ -591,9 +855,16 @@ export class UpstashStore extends MastraStorage {
       }
     }
 
-    // Then get the most recent messages
-    const latestIds = limit === 0 ? [] : await this.redis.zrange(threadMessagesKey, -limit, -1);
-    latestIds.forEach(id => messageIds.add(id as string));
+    // Then get the most recent messages (or all if no limit)
+    if (limit === Number.MAX_SAFE_INTEGER) {
+      // Get all messages
+      const allIds = await this.redis.zrange(threadMessagesKey, 0, -1);
+      allIds.forEach(id => messageIds.add(id as string));
+    } else if (limit > 0) {
+      // Get limited number of recent messages
+      const latestIds = await this.redis.zrange(threadMessagesKey, -limit, -1);
+      latestIds.forEach(id => messageIds.add(id as string));
+    }
 
     // Fetch all needed messages in parallel
     const messages = (
@@ -605,15 +876,27 @@ export class UpstashStore extends MastraStorage {
     ).filter(msg => msg !== null) as (MastraMessageV2 & { _index?: number })[];
 
     // Sort messages by their position in the sorted set
-    const messageOrder = await this.redis.zrange(threadMessagesKey, 0, -1);
-    messages.sort((a, b) => messageOrder.indexOf(a!.id) - messageOrder.indexOf(b!.id));
+    messages.sort((a, b) => allMessageIds.indexOf(a!.id) - allMessageIds.indexOf(b!.id));
 
-    // Remove _index before returning
-    const prepared = messages.map(({ _index, ...message }) => message as unknown as MastraMessageV1);
+    // Remove _index before returning and handle format conversion properly
+    const prepared = messages
+      .filter(message => message !== null && message !== undefined)
+      .map(message => {
+        const { _index, ...messageWithoutIndex } = message as MastraMessageV2 & { _index?: number };
+        return messageWithoutIndex as unknown as MastraMessageV1;
+      });
 
-    const list = new MessageList().add(prepared, 'memory');
-    if (format === `v2`) return list.get.all.v2();
-    return list.get.all.v1();
+    // For backward compatibility, return messages directly without using MessageList
+    // since MessageList has deduplication logic that can cause issues
+    if (format === 'v2') {
+      // Convert V1 format back to V2 format
+      return prepared.map(msg => ({
+        ...msg,
+        content: msg.content || { format: 2, parts: [{ type: 'text', text: '' }] },
+      })) as MastraMessageV2[];
+    }
+
+    return prepared;
   }
 
   async persistWorkflowSnapshot(params: {
@@ -657,6 +940,157 @@ export class UpstashStore extends MastraStorage {
     return data.snapshot;
   }
 
+  /**
+   * Get all evaluations with pagination and total count
+   * @param options Pagination and filtering options
+   * @returns Object with evals array and total count
+   */
+  async getEvals(options?: {
+    agentName?: string;
+    type?: 'test' | 'live';
+    page?: number;
+    perPage?: number;
+    limit?: number;
+    offset?: number;
+    fromDate?: Date;
+    toDate?: Date;
+  }): Promise<{
+    evals: EvalRow[];
+    total: number;
+    page?: number;
+    perPage?: number;
+    hasMore?: boolean;
+  }> {
+    try {
+      // Default pagination parameters
+      const page = options?.page ?? 0;
+      const perPage = options?.perPage ?? 100;
+      const limit = options?.limit;
+      const offset = options?.offset;
+
+      // Get all keys that match the evals table pattern using cursor-based scanning
+      const pattern = `${TABLE_EVALS}:*`;
+      const keys = await this.scanKeys(pattern);
+
+      // Check if we have any keys before using pipeline
+      if (keys.length === 0) {
+        return {
+          evals: [],
+          total: 0,
+          page: options?.page ?? 0,
+          perPage: options?.perPage ?? 100,
+          hasMore: false,
+        };
+      }
+
+      // Use pipeline for batch fetching to improve performance
+      const pipeline = this.redis.pipeline();
+      keys.forEach(key => pipeline.get(key));
+      const results = await pipeline.exec();
+
+      // Process results and apply filters
+      let filteredEvals = results
+        .map((result: any) => result as Record<string, any> | null)
+        .filter((record): record is Record<string, any> => record !== null && typeof record === 'object');
+
+      // Apply agent name filter if provided
+      if (options?.agentName) {
+        filteredEvals = filteredEvals.filter(record => record.agent_name === options.agentName);
+      }
+
+      // Apply type filter if provided
+      if (options?.type === 'test') {
+        filteredEvals = filteredEvals.filter(record => {
+          if (!record.test_info) return false;
+
+          try {
+            if (typeof record.test_info === 'string') {
+              const parsedTestInfo = JSON.parse(record.test_info);
+              return parsedTestInfo && typeof parsedTestInfo === 'object' && 'testPath' in parsedTestInfo;
+            }
+            return typeof record.test_info === 'object' && 'testPath' in record.test_info;
+          } catch {
+            return false;
+          }
+        });
+      } else if (options?.type === 'live') {
+        filteredEvals = filteredEvals.filter(record => {
+          if (!record.test_info) return true;
+
+          try {
+            if (typeof record.test_info === 'string') {
+              const parsedTestInfo = JSON.parse(record.test_info);
+              return !(parsedTestInfo && typeof parsedTestInfo === 'object' && 'testPath' in parsedTestInfo);
+            }
+            return !(typeof record.test_info === 'object' && 'testPath' in record.test_info);
+          } catch {
+            return true;
+          }
+        });
+      }
+
+      // Apply date filters if provided
+      if (options?.fromDate) {
+        filteredEvals = filteredEvals.filter(record => {
+          const createdAt = new Date(record.created_at || record.createdAt || 0);
+          return createdAt.getTime() >= options.fromDate!.getTime();
+        });
+      }
+
+      if (options?.toDate) {
+        filteredEvals = filteredEvals.filter(record => {
+          const createdAt = new Date(record.created_at || record.createdAt || 0);
+          return createdAt.getTime() <= options.toDate!.getTime();
+        });
+      }
+
+      // Sort by creation date (newest first)
+      filteredEvals.sort((a, b) => {
+        const dateA = new Date(a.created_at || a.createdAt || 0).getTime();
+        const dateB = new Date(b.created_at || b.createdAt || 0).getTime();
+        return dateB - dateA;
+      });
+
+      const total = filteredEvals.length;
+
+      // Apply pagination - support both page/perPage and limit/offset patterns
+      let paginatedEvals: Record<string, any>[];
+      let hasMore = false;
+
+      if (limit !== undefined && offset !== undefined) {
+        // Offset-based pagination
+        paginatedEvals = filteredEvals.slice(offset, offset + limit);
+        hasMore = offset + limit < total;
+      } else {
+        // Page-based pagination
+        const start = page * perPage;
+        const end = start + perPage;
+        paginatedEvals = filteredEvals.slice(start, end);
+        hasMore = end < total;
+      }
+
+      // Transform to EvalRow format
+      const evals = paginatedEvals.map(record => this.transformEvalRecord(record));
+
+      return {
+        evals,
+        total,
+        page: limit !== undefined ? undefined : page,
+        perPage: limit !== undefined ? undefined : perPage,
+        hasMore,
+      };
+    } catch (error) {
+      console.error('Failed to get evals:', error);
+      return {
+        evals: [],
+        total: 0,
+        page: options?.page ?? 0,
+        perPage: options?.perPage ?? 100,
+        hasMore: false,
+      };
+    }
+  }
+
   async getWorkflowRuns(
     {
       namespace,
@@ -693,24 +1127,25 @@ export class UpstashStore extends MastraStorage {
       }
       const keys = await this.scanKeys(pattern);
 
-      // Get all workflow data
-      const workflows = await Promise.all(
-        keys.map(async key => {
-          const data = await this.redis.get<{
-            workflow_name: string;
-            run_id: string;
-            snapshot: WorkflowRunState | string;
-            createdAt: string | Date;
-            updatedAt: string | Date;
-            resourceId: string;
-          }>(key);
-          return data;
-        }),
-      );
+      // Check if we have any keys before using pipeline
+      if (keys.length === 0) {
+        return { runs: [], total: 0 };
+      }
 
-      // Filter and transform results
-      let runs = workflows
-        .filter(w => w !== null)
+      // Use pipeline for batch fetching to improve performance
+      const pipeline = this.redis.pipeline();
+      keys.forEach(key => pipeline.get(key));
+      const results = await pipeline.exec();
+
+      // Filter and transform results - handle undefined results
+      let runs = results
+        .map((result: any) => result as Record<string, any> | null)
+        .filter(
+          (record): record is Record<string, any> =>
+            record !== null && record !== undefined && typeof record === 'object' && 'workflow_name' in record,
+        )
+        // Only filter by workflowName if it was specifically requested
+        .filter(record => !workflowName || record.workflow_name === workflowName)
         .map(w => this.parseWorkflowRun(w!))
         .filter(w => {
           if (fromDate && w.createdAt < fromDate) return false;
