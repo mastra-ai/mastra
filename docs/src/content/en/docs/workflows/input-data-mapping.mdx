@@ -98,7 +98,7 @@ Use `getStepResult` to access the full output of a specific step by referencing 
 
 ```typescript {3} showLineNumbers
   .then(cityCoordinatesStep)
-  .map(({ getStepResult}) => {
+  .map(({ getStepResult }) => {
     console.log(getStepResult(cityCoordinatesStep));
     ...
   })
@@ -147,7 +147,7 @@ You can rename step outputs using the object syntax in `.map()`. In the example 
   })
 ```
 
-The output would similar to the below:
+The output would be similar to the below:
 
 ```typescript showLineNumbers
 { details: 'London' }
@@ -179,7 +179,7 @@ testWorkflow
   })
 ```
 
-The output would similar to the below:
+The output would be similar to the below:
 
 ```typescript showLineNumbers
 { details: 'London' }
