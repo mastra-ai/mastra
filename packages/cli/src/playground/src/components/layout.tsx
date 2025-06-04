@@ -10,7 +10,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
     <div className="bg-surface1 font-sans h-screen">
       <ThemeProvider defaultTheme="dark" attribute="class">
         <SidebarProvider>
-          <div className="grid md:grid-cols-[auto_1fr] grid-cols-1 h-full">
+          <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] h-full">
             <AppSidebar />
             <div className="bg-surface2 my-3 mr-3 rounded-lg border-sm border-border1 overflow-y-auto">{children}</div>
           </div>
