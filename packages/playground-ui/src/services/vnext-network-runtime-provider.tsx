@@ -110,8 +110,10 @@ export function VNextMastraNetworkRuntimeProvider({
           //     },
           //   ];
           // });
-          if ((record as any).type === 'start') {
-            if (hasStartedRef.current) return;
+
+          if (hasStartedRef.current) {
+            handleStep(record);
+          } else if ((record as any).type === 'start') {
             hasStartedRef.current = true;
 
             setMessages(currentConversation => {
@@ -129,7 +131,6 @@ export function VNextMastraNetworkRuntimeProvider({
               ];
             });
           } else {
-            console.log('rec==', record);
             handleStep(record);
           }
         },

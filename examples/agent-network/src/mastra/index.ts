@@ -5,6 +5,7 @@ import { webSearchAgent } from './agents';
 // import { agentWorkflow } from './workflows';
 import { v_nextNetwork } from './network/v-next';
 import { LibSQLStore } from '@mastra/libsql';
+import { workflow1 } from './network/v-next';
 
 export const mastra = new Mastra({
   agents: {
@@ -19,9 +20,9 @@ export const mastra = new Mastra({
   storage: new LibSQLStore({
     url: 'file:../mastra.db', // Or your database URL
   }),
-  // workflows: {
-  //   agentWorkflow,
-  // },
+  workflows: {
+    workflow1,
+  },
   logger: new PinoLogger({ name: 'Chef', level: 'info' }),
   serverMiddleware: [
     {

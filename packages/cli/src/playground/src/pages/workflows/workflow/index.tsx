@@ -8,7 +8,6 @@ export const Workflow = () => {
   return (
     <WorkflowGraph
       workflowId={workflowId!}
-      baseUrl=""
       onShowTrace={({ runId, stepName }) => {
         navigate(`/workflows/${workflowId}/traces?runId=${runId}&stepName=${stepName}`);
       }}

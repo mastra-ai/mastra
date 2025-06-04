@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useVNextNetworkChat } from '@/services/vnext-network-chat-provider';
 import { Button } from '@/ds/components/Button';
 import Spinner from '@/components/ui/spinner';
@@ -8,6 +8,10 @@ import { Clock } from '@/domains/workflows/workflow/workflow-clock';
 import { Badge } from '@/ds/components/Badge';
 import { ChevronDown } from 'lucide-react';
 import clsx from 'clsx';
+import { WorkflowGraph } from '@/domains/workflows/workflow/workflow-graph';
+import { Dialog, DialogContent, DialogPortal, DialogTitle } from '@/components/ui/dialog';
+import { WorkflowRunProvider } from '@/domains/workflows/context/workflow-run-context';
+import { useWorkflowRuns } from '@/hooks/use-workflow-runs';
 
 const LabelMappings = {
   'routing-step': 'Decision making process',
@@ -52,20 +56,26 @@ export const StepDropdown = () => {
 };
 
 const Steps = () => {
-  const { executionSteps, steps } = useVNextNetworkChat();
+  const { executionSteps, steps, runId } = useVNextNetworkChat();
 
   return (
     <ol className="flex flex-col gap-px rounded-lg overflow-hidden">
-      {executionSteps.map((stepId: any, index: number) => (
-        <StepEntry key={index} stepId={stepId} step={steps[stepId]} />
-      ))}
+      {executionSteps
+        .filter(stepId => stepId !== 'start')
+        .map((stepId: any, index: number) => (
+          <StepEntry key={index} stepId={stepId} step={steps[stepId]} runId={runId} />
+        ))}
     </ol>
   );
 };
 
-const StepEntry = ({ stepId, step }: { stepId: any; step: any }) => {
+const StepEntry = ({ stepId, step, runId }: { stepId: any; step: any; runId?: string }) => {
   const [expanded, setExpanded] = useState(false);
   const stepResult = step['step-result'];
+
+  if (stepId === 'workflow-step') {
+    console.log('workflow-step', step);
+  }
 
   if (stepId === 'finish') {
     return (
@@ -116,7 +126,45 @@ const StepEntry = ({ stepId, step }: { stepId: any; step: any }) => {
           </div>
         </div>
       )}
+
+      {stepId === 'workflow-step' && stepResult?.output?.resourceId ? (
+        <WorkflowStepResultDialog
+          open={expanded}
+          onOpenChange={setExpanded}
+          workflowId={stepResult?.output?.resourceId}
+          runId={runId}
+        />
+      ) : null}
     </li>
+  );
+};
+
+interface WorkflowStepResultDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  workflowId: string;
+  runId?: string;
+}
+
+const WorkflowStepResultDialog = ({ open, onOpenChange, workflowId, runId }: WorkflowStepResultDialogProps) => {
+  const { runs } = useWorkflowRuns(workflowId);
+  const run = runs?.runs.find((run: any) => run.runId === runId);
+
+  console.log('runId', runId);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogPortal>
+        <DialogContent className="h-[90vh] w-[90%] max-w-[unset]">
+          <div className="flex-1 h-full">
+            <DialogTitle>Workflow details</DialogTitle>
+            <WorkflowRunProvider snapshot={typeof run?.snapshot === 'object' ? run.snapshot : undefined}>
+              <WorkflowGraph workflowId={workflowId} onShowTrace={() => {}} />
+            </WorkflowRunProvider>
+          </div>
+        </DialogContent>
+      </DialogPortal>
+    </Dialog>
   );
 };
 

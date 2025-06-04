@@ -8,6 +8,7 @@ type VNextNetworkChatContextType = {
   executionSteps: Array<string>;
   steps: Record<string, any>;
   handleStep: (record: Record<string, any>) => void;
+  runId?: string;
 };
 
 const VNextNetworkChatContext = createContext<VNextNetworkChatContextType | undefined>(undefined);
@@ -17,6 +18,7 @@ export const VNextNetworkChatProvider = ({ children, networkId }: { children: Re
   const [state, setState] = useState<Omit<VNextNetworkChatContextType, 'handleStep'>>({
     executionSteps: [],
     steps: {},
+    runId: undefined,
   });
 
   useEffect(() => {
@@ -53,7 +55,7 @@ export const VNextNetworkChatProvider = ({ children, networkId }: { children: Re
       return setMessages(msgs => [...msgs, { role: 'assistant', content: [{ type: 'text', text: '' }] }]);
     }
 
-    const id = record?.type === 'finish' ? 'finish' : record.payload?.id;
+    const id = record?.type === 'finish' ? 'finish' : record.type === 'start' ? 'start' : record.payload?.id;
     if (id.includes('mapping_')) return;
 
     setState(current => {
@@ -72,6 +74,7 @@ export const VNextNetworkChatProvider = ({ children, networkId }: { children: Re
 
       return {
         ...current,
+        runId: current?.runId || record?.payload?.runId,
         executionSteps: current.steps[id] ? current.executionSteps : [...current.executionSteps, id],
         steps: {
           ...current.steps,
@@ -88,7 +91,7 @@ export const VNextNetworkChatProvider = ({ children, networkId }: { children: Re
     });
   };
 
-  // console.log('state==', state);
+  console.log('state==', state);
 
   return (
     <VNextNetworkChatContext.Provider value={{ ...state, handleStep }}>{children}</VNextNetworkChatContext.Provider>

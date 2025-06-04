@@ -69,7 +69,7 @@ const agentStep2 = createStep({
   },
 });
 
-const workflow1 = createWorkflow({
+export const workflow1 = createWorkflow({
   id: 'workflow1',
   description: 'This workflow is perfect for researching a specific city.',
   steps: [],
