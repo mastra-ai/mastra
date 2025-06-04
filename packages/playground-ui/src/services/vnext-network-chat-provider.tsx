@@ -1,4 +1,4 @@
-import { createContext, useContext, ReactNode, useState } from 'react';
+import { createContext, useContext, ReactNode, useState, useEffect } from 'react';
 import { useMessages } from './vnext-message-provider';
 
 //the whole workflow execution state.
@@ -18,6 +18,28 @@ export const VNextNetworkChatProvider = ({ children, networkId }: { children: Re
     steps: {},
   });
 
+  useEffect(() => {
+    const hasFinished = Boolean(state.steps?.['finish']);
+    if (!hasFinished) return;
+
+    const workflowStep = state.steps?.['workflow-step'];
+    if (!workflowStep) return;
+
+    const workflowStepResult = workflowStep?.['step-result'];
+    if (!workflowStepResult) return;
+
+    const workflowStepResultOutput = workflowStepResult?.output;
+    if (!workflowStepResultOutput) return;
+
+    setMessages(msgs => [
+      ...msgs,
+      {
+        role: 'assistant',
+        content: [{ type: 'text', text: `\`\`\`json\n${workflowStepResult?.output?.result}\`\`\`` }],
+      },
+    ]);
+  }, [state, setMessages]);
+
   const handleStep = (record: Record<string, any>) => {
     if (record.type === 'tool-call-delta') {
       return appendToLastMessage(record.argsTextDelta);
@@ -29,21 +51,6 @@ export const VNextNetworkChatProvider = ({ children, networkId }: { children: Re
 
     const id = record?.type === 'finish' ? 'finish' : record.payload?.id;
     if (id.includes('mapping_')) return;
-
-    if (id === 'finish') {
-      console.log('ARE WE FINISHED', state);
-      const workflowStep = state.steps?.['workflow-step'];
-
-      if (workflowStep) {
-        const workflowStepResult = workflowStep['step-result'];
-
-        if (workflowStepResult) {
-          const workflowStepResultPayload = workflowStepResult.output;
-
-          console.log('plouf', { workflowStepResultPayload });
-        }
-      }
-    }
 
     setState(current => {
       const currentMetadata = current?.steps?.[id]?.metadata;
