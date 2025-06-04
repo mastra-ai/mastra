@@ -711,11 +711,14 @@ export class NewAgentNetwork extends MastraBase {
                 result = c?.payload?.output;
                 stepResults[c?.payload?.id] = c?.payload?.output;
               }
+              await emitter.emit('watch-v2', c);
               break;
             case 'finish':
               streamPromise.resolve(result);
               break;
 
+            case 'start':
+            case 'finish':
             case 'step-start':
             case 'step-finish':
             case 'tool-call':
