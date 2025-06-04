@@ -668,6 +668,17 @@ export class UpstashStore extends MastraStorage {
     const { messages, format = 'v1' } = args;
     if (messages.length === 0) return [];
 
+    const threadId = messages[0]?.threadId;
+    if (!threadId) {
+      throw new Error('Thread ID is required');
+    }
+
+    // Check if thread exists
+    const thread = await this.getThreadById({ threadId });
+    if (!thread) {
+      throw new Error(`Thread ${threadId} not found`);
+    }
+
     // Add an index to each message to maintain order
     const messagesWithIndex = messages.map((message, index) => ({
       ...message,
@@ -863,13 +874,15 @@ export class UpstashStore extends MastraStorage {
 
     // First, get specifically included messages and their context
     if (selectBy?.include?.length) {
+      const includeScope = selectBy?.includeScope;
       for (const item of selectBy.include) {
         messageIds.add(item.id);
 
         if (item.withPreviousMessages || item.withNextMessages) {
-          const threadIdForItem = resourceId
-            ? (await this.redis.get<string>(this.getThreadKeyByResourceAndMessage(resourceId, item.id))) || threadId
-            : threadId;
+          const threadIdForItem =
+            resourceId && includeScope === 'resource'
+              ? (await this.redis.get<string>(this.getThreadKeyByResourceAndMessage(resourceId, item.id))) || threadId
+              : threadId;
           const itemThreadMessagesKey = this.getThreadMessagesKey(threadIdForItem);
           // Get the rank of this message in the sorted set
           const rank = await this.redis.zrank(itemThreadMessagesKey, item.id);

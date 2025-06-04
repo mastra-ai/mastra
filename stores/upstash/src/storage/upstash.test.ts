@@ -16,12 +16,20 @@ import { UpstashStore } from './index';
 // Increase timeout for all tests in this file to 30 seconds
 vi.setConfig({ testTimeout: 200_000, hookTimeout: 200_000 });
 
-const createSampleThread = (date?: Date) => ({
-  id: `thread-${randomUUID()}`,
-  resourceId: `resource-${randomUUID()}`,
+const createSampleThread = ({
+  id = `thread-${randomUUID()}`,
+  resourceId = `resource-${randomUUID()}`,
+  date = new Date(),
+}: {
+  id?: string;
+  resourceId?: string;
+  date?: Date;
+}) => ({
+  id,
+  resourceId,
   title: 'Test Thread',
-  createdAt: date || new Date(),
-  updatedAt: date || new Date(),
+  createdAt: date,
+  updatedAt: date,
   metadata: { key: 'value' },
 });
 
@@ -184,7 +192,7 @@ describe('UpstashStore', () => {
 
     it('should create and retrieve a thread', async () => {
       const now = new Date();
-      const thread = createSampleThread(now);
+      const thread = createSampleThread({ date: now });
 
       const savedThread = await store.saveThread({ thread });
       expect(savedThread).toEqual(thread);
@@ -203,8 +211,8 @@ describe('UpstashStore', () => {
     });
 
     it('should get threads by resource ID', async () => {
-      const thread1 = createSampleThread();
-      const thread2 = { ...createSampleThread(), resourceId: thread1.resourceId };
+      const thread1 = createSampleThread({});
+      const thread2 = createSampleThread({ resourceId: thread1.resourceId });
       const threads = [thread1, thread2];
 
       const resourceId = threads[0].resourceId;
@@ -218,7 +226,7 @@ describe('UpstashStore', () => {
     });
 
     it('should update thread metadata', async () => {
-      const thread = createSampleThread();
+      const thread = createSampleThread({});
 
       await store.saveThread({ thread });
 
@@ -237,7 +245,7 @@ describe('UpstashStore', () => {
     it('should fetch >100000 threads by resource ID', async () => {
       const resourceId = `resource-${randomUUID()}`;
       const total = 100_000;
-      const threads = Array.from({ length: total }, () => ({ ...createSampleThread(), resourceId }));
+      const threads = Array.from({ length: total }, () => createSampleThread({ resourceId }));
 
       await store.batchInsert({ tableName: TABLE_THREADS, records: threads });
 
@@ -253,7 +261,7 @@ describe('UpstashStore', () => {
 
     it('should handle Date objects in thread operations', async () => {
       const now = new Date();
-      const thread = createSampleThread(now);
+      const thread = createSampleThread({ date: now });
 
       await store.saveThread({ thread });
       const retrievedThread = await store.getThreadById({ threadId: thread.id });
@@ -265,7 +273,7 @@ describe('UpstashStore', () => {
 
     it('should handle ISO string dates in thread operations', async () => {
       const now = new Date();
-      const thread = createSampleThread(now);
+      const thread = createSampleThread({ date: now });
 
       await store.saveThread({ thread });
       const retrievedThread = await store.getThreadById({ threadId: thread.id });
@@ -277,7 +285,7 @@ describe('UpstashStore', () => {
 
     it('should handle mixed date formats in thread operations', async () => {
       const now = new Date();
-      const thread = createSampleThread(now);
+      const thread = createSampleThread({ date: now });
 
       await store.saveThread({ thread });
       const retrievedThread = await store.getThreadById({ threadId: thread.id });
@@ -289,8 +297,8 @@ describe('UpstashStore', () => {
 
     it('should handle date serialization in getThreadsByResourceId', async () => {
       const now = new Date();
-      const thread1 = createSampleThread(now);
-      const thread2 = { ...createSampleThread(now), resourceId: thread1.resourceId };
+      const thread1 = createSampleThread({ date: now });
+      const thread2 = createSampleThread({ resourceId: thread1.resourceId, date: now });
       const threads = [thread1, thread2];
 
       await Promise.all(threads.map(thread => store.saveThread({ thread })));
@@ -341,6 +349,15 @@ describe('UpstashStore', () => {
     });
 
     it('should retrieve messages w/ next/prev messages by message id + resource id', async () => {
+      const thread = createSampleThread({ id: 'thread-one' });
+      await store.saveThread({ thread });
+
+      const thread2 = createSampleThread({ id: 'thread-two' });
+      await store.saveThread({ thread: thread2 });
+
+      const thread3 = createSampleThread({ id: 'thread-three' });
+      await store.saveThread({ thread: thread3 });
+
       const messages: MastraMessageV2[] = [
         createSampleMessage({ threadId: 'thread-one', content: 'First', resourceId: 'cross-thread-resource' }),
         createSampleMessage({ threadId: 'thread-one', content: 'Second', resourceId: 'cross-thread-resource' }),
@@ -386,6 +403,7 @@ describe('UpstashStore', () => {
               withNextMessages: 2,
             },
           ],
+          includeScope: 'resource',
         },
       });
 
@@ -403,9 +421,10 @@ describe('UpstashStore', () => {
             {
               id: messages[4].id,
               withPreviousMessages: 1,
-              withNextMessages: 30,
+              withNextMessages: 1,
             },
           ],
+          includeScope: 'resource',
         },
       });
 
@@ -426,6 +445,7 @@ describe('UpstashStore', () => {
               withPreviousMessages: 1,
             },
           ],
+          includeScope: 'resource',
         },
       });
 
@@ -465,7 +485,7 @@ describe('UpstashStore', () => {
 
     describe('getPaginatedMessages', () => {
       it('should return paginated messages with total count', async () => {
-        const thread = createSampleThread();
+        const thread = createSampleThread({});
         await store.saveThread({ thread });
 
         const messages = Array.from({ length: 15 }, (_, i) =>
@@ -508,7 +528,7 @@ describe('UpstashStore', () => {
       });
 
       it('should maintain chronological order in pagination', async () => {
-        const thread = createSampleThread();
+        const thread = createSampleThread({});
         await store.saveThread({ thread });
 
         const messages = Array.from({ length: 10 }, (_, i) => {
@@ -538,7 +558,7 @@ describe('UpstashStore', () => {
       });
 
       it('should maintain backward compatibility when no pagination params provided', async () => {
-        const thread = createSampleThread();
+        const thread = createSampleThread({});
         await store.saveThread({ thread });
 
         const messages = Array.from({ length: 5 }, (_, i) =>
@@ -564,7 +584,7 @@ describe('UpstashStore', () => {
       });
 
       it('should support date filtering with pagination', async () => {
-        const thread = createSampleThread();
+        const thread = createSampleThread({});
         await store.saveThread({ thread });
 
         const now = new Date();
@@ -1263,10 +1283,7 @@ describe('UpstashStore', () => {
     describe('Enhanced existing methods with pagination', () => {
       it('should support pagination in getThreadsByResourceId', async () => {
         const resourceId = 'enhanced-resource';
-        const threads = Array.from({ length: 17 }, () => ({
-          ...createSampleThread(),
-          resourceId,
-        }));
+        const threads = Array.from({ length: 17 }, () => createSampleThread({ resourceId }));
 
         for (const thread of threads) {
           await store.saveThread({ thread });
