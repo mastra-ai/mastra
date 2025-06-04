@@ -379,12 +379,54 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
-  async alterTable(_args: {
+  private getSqlType(type: string): string {
+    switch (type) {
+      case 'text':
+        return 'TEXT';
+      case 'timestamp':
+        return 'TIMESTAMP';
+      case 'integer':
+        return 'INTEGER';
+      case 'bigint':
+        return 'INTEGER'; // SQLite doesn't have a separate BIGINT type
+      case 'jsonb':
+        return 'TEXT'; // Store JSON as TEXT in SQLite
+      default:
+        return 'TEXT';
+    }
+  }
+
+  async alterTable({
+    tableName,
+    schema,
+    ifNotExists,
+  }: {
     tableName: TABLE_NAMES;
     schema: Record<string, StorageColumn>;
     ifNotExists: string[];
   }): Promise<void> {
-    // Nothing to do here, MongoDB is schemaless
+    const fullTableName = this.getTableName(tableName);
+
+    try {
+      for (const columnName of ifNotExists) {
+        if (schema[columnName]) {
+          const columnDef = schema[columnName];
+          const sqlType = this.getSqlType(columnDef.type);
+          const nullable = columnDef.nullable === false ? 'NOT NULL' : '';
+          const defaultValue = columnDef.nullable === false ? 'DEFAULT ""' : '';
+          const alterSql =
+            `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${columnName}" ${sqlType} ${nullable} ${defaultValue}`.trim();
+
+          await this.db.none(alterSql);
+          this.logger?.debug?.(`Ensured column ${columnName} exists in table ${fullTableName}`);
+        }
+      }
+    } catch (error) {
+      this.logger?.error?.(
+        `Error altering table ${tableName}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw new Error(`Failed to alter table ${tableName}: ${error}`);
+    }
   }
 
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {

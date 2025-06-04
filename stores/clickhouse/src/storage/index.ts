@@ -371,12 +371,66 @@ export class ClickhouseStore extends MastraStorage {
     }
   }
 
-  async alterTable(_args: {
+  private getSqlType(type: string): string {
+    switch (type) {
+      case 'text':
+        return 'TEXT';
+      case 'timestamp':
+        return 'TIMESTAMP';
+      case 'integer':
+        return 'INTEGER';
+      case 'bigint':
+        return 'INTEGER'; // SQLite doesn't have a separate BIGINT type
+      case 'jsonb':
+        return 'TEXT'; // Store JSON as TEXT in SQLite
+      default:
+        return 'TEXT';
+    }
+  }
+
+  async alterTable({
+    tableName,
+    schema,
+    ifNotExists,
+  }: {
     tableName: TABLE_NAMES;
     schema: Record<string, StorageColumn>;
     ifNotExists: string[];
   }): Promise<void> {
-    // Nothing to do here, MongoDB is schemaless
+    try {
+      // 1. Get existing columns
+      const describeSql = `DESCRIBE TABLE ${tableName}`;
+      const result = await this.db.query({
+        query: describeSql,
+      });
+      const rows = await result.json();
+      const existingColumnNames = new Set(rows.data.map((row: any) => row.name.toLowerCase()));
+
+      // 2. Add missing columns
+      for (const columnName of ifNotExists) {
+        if (!existingColumnNames.has(columnName.toLowerCase()) && schema[columnName]) {
+          const columnDef = schema[columnName];
+          let sqlType = this.getSqlType(columnDef.type);
+          if (columnDef.nullable !== false) {
+            sqlType = `Nullable(${sqlType})`;
+          }
+          const defaultValue = columnDef.nullable === false ? "DEFAULT '' " : '';
+          // Use backticks or double quotes as needed for identifiers
+          const alterSql =
+            `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS "${columnName}" ${sqlType} ${defaultValue}`.trim();
+
+          await this.db.query({
+            query: alterSql,
+          });
+          this.logger?.debug?.(`Added column ${columnName} to table ${tableName}`);
+        }
+      }
+    } catch (error) {
+      this.logger?.error?.(
+        `Error altering table ${tableName}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw new Error(`Failed to alter table ${tableName}: ${error}`);
+    }
   }
 
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
