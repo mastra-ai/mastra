@@ -9,10 +9,9 @@ import "../globals.css";
 export default function NotFound() {
   const pathname = usePathname();
   const path = pathname.split("/")[2];
-  console.log({ path });
 
   return (
-    <div className="bg-primary relative min-h-screen w-full grid place-items-center text-white">
+    <div className="bg-primary dark:bg-[var(--primary-bg)] relative min-h-screen w-full grid place-items-center text-white">
       <div className="text-center z-20 -mt-60">
         <h2 className="font-serif text-8xl text-[hsl(var(--tag-green))] font-medium">
           404

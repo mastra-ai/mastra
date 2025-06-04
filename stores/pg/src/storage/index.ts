@@ -701,6 +701,9 @@ export class PostgresStore extends MastraStorage {
   > {
     const { threadId, format, page, perPage: perPageInput, fromDate, toDate, selectBy } = args;
 
+    const selectStatement = `SELECT id, content, role, type, "createdAt", thread_id AS "threadId"`;
+    const orderByStatement = `ORDER BY "createdAt" DESC`;
+
     try {
       if (page !== undefined) {
         const perPage = perPageInput !== undefined ? perPageInput : 40;
@@ -734,7 +737,7 @@ export class PostgresStore extends MastraStorage {
           };
         }
 
-        const dataQuery = `SELECT id, content, role, type, "createdAt", thread_id AS "threadId" FROM ${this.getTableName(TABLE_MESSAGES)} ${whereClause} ORDER BY "createdAt" ASC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
+        const dataQuery = `${selectStatement} FROM ${this.getTableName(TABLE_MESSAGES)} ${whereClause} ${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
         const rows = await this.db.manyOrNone(dataQuery, [...queryParams, perPage, currentOffset]);
 
         const fetchedMessages = (rows || []).map(message => {
@@ -768,16 +771,65 @@ export class PostgresStore extends MastraStorage {
           hasMore: currentOffset + fetchedMessages.length < total,
         };
       } else {
-        const limit = typeof selectBy?.last === 'number' ? selectBy.last : undefined;
+        // Non-paginated path: Handle selectBy.include or selectBy.last
+        let rows: any[] = [];
+        const include = selectBy?.include || [];
 
-        let query = `SELECT id, content, role, type, "createdAt", thread_id AS "threadId" FROM ${this.getTableName(TABLE_MESSAGES)} WHERE thread_id = $1 ORDER BY "createdAt" ASC`;
-        const queryParams: any[] = [threadId];
-        if (limit !== undefined) {
-          query += ` LIMIT $2`;
-          queryParams.push(limit);
+        if (include.length) {
+          rows = await this.db.manyOrNone(
+            `
+            WITH ordered_messages AS (
+              SELECT 
+                *,
+                ROW_NUMBER() OVER (${orderByStatement}) as row_num
+              FROM ${this.getTableName(TABLE_MESSAGES)}
+              WHERE thread_id = $1
+            )
+            SELECT
+              m.id, 
+              m.content, 
+              m.role, 
+              m.type,
+              m."createdAt", 
+              m.thread_id AS "threadId"
+            FROM ordered_messages m
+            WHERE m.id = ANY($2)
+            OR EXISTS (
+              SELECT 1 FROM ordered_messages target
+              WHERE target.id = ANY($2)
+              AND (
+                -- Get previous messages based on the max withPreviousMessages
+                (m.row_num <= target.row_num + $3 AND m.row_num > target.row_num)
+                OR
+                -- Get next messages based on the max withNextMessages
+                (m.row_num >= target.row_num - $4 AND m.row_num < target.row_num)
+              )
+            )
+            ORDER BY m."createdAt" ASC 
+            `, // Keep ASC for final sorting after fetching context
+            [
+              threadId,
+              include.map(i => i.id),
+              Math.max(0, ...include.map(i => i.withPreviousMessages || 0)), // Ensure non-negative
+              Math.max(0, ...include.map(i => i.withNextMessages || 0)), // Ensure non-negative
+            ],
+          );
+        } else {
+          const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
+          if (limit === 0 && selectBy?.last !== false) {
+            // if last is explicitly false, we fetch all
+            // Do nothing, rows will be empty, and we return empty array later.
+          } else {
+            let query = `${selectStatement} FROM ${this.getTableName(TABLE_MESSAGES)} WHERE thread_id = $1 ${orderByStatement}`;
+            const queryParams: any[] = [threadId];
+            if (limit !== undefined && selectBy?.last !== false) {
+              query += ` LIMIT $2`;
+              queryParams.push(limit);
+            }
+            rows = await this.db.manyOrNone(query, queryParams);
+          }
         }
 
-        const rows = await this.db.manyOrNone(query, queryParams);
         const fetchedMessages = (rows || []).map(message => {
           if (typeof message.content === 'string') {
             try {
@@ -790,12 +842,17 @@ export class PostgresStore extends MastraStorage {
           return message as MastraMessageV1;
         });
 
+        // Sort all messages by creation date
+        const sortedMessages = fetchedMessages.sort(
+          (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+        );
+
         return format === 'v2'
-          ? fetchedMessages.map(
+          ? sortedMessages.map(
               m =>
                 ({ ...m, content: m.content || { format: 2, parts: [{ type: 'text', text: '' }] } }) as MastraMessageV2,
             )
-          : fetchedMessages;
+          : sortedMessages;
       }
     } catch (error) {
       this.logger.error('Error getting messages:', error);
