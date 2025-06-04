@@ -332,108 +332,108 @@ describe('MongoDBStore', () => {
       });
     });
 
-    it('should retrieve messages w/ next/prev messages by message id + resource id', async () => {
-      const test = new Test(store).build();
-      const messages: MastraMessageV2[] = [
-        test.generateSampleMessageV2({ threadId: 'thread-one', content: 'First', resourceId: 'cross-thread-resource' }),
-        test.generateSampleMessageV2({
-          threadId: 'thread-one',
-          content: 'Second',
-          resourceId: 'cross-thread-resource',
-        }),
-        test.generateSampleMessageV2({ threadId: 'thread-one', content: 'Third', resourceId: 'cross-thread-resource' }),
+    // it('should retrieve messages w/ next/prev messages by message id + resource id', async () => {
+    //   const test = new Test(store).build();
+    //   const messages: MastraMessageV2[] = [
+    //     test.generateSampleMessageV2({ threadId: 'thread-one', content: 'First', resourceId: 'cross-thread-resource' }),
+    //     test.generateSampleMessageV2({
+    //       threadId: 'thread-one',
+    //       content: 'Second',
+    //       resourceId: 'cross-thread-resource',
+    //     }),
+    //     test.generateSampleMessageV2({ threadId: 'thread-one', content: 'Third', resourceId: 'cross-thread-resource' }),
 
-        test.generateSampleMessageV2({
-          threadId: 'thread-two',
-          content: 'Fourth',
-          resourceId: 'cross-thread-resource',
-        }),
-        test.generateSampleMessageV2({ threadId: 'thread-two', content: 'Fifth', resourceId: 'cross-thread-resource' }),
-        test.generateSampleMessageV2({ threadId: 'thread-two', content: 'Sixth', resourceId: 'cross-thread-resource' }),
+    //     test.generateSampleMessageV2({
+    //       threadId: 'thread-two',
+    //       content: 'Fourth',
+    //       resourceId: 'cross-thread-resource',
+    //     }),
+    //     test.generateSampleMessageV2({ threadId: 'thread-two', content: 'Fifth', resourceId: 'cross-thread-resource' }),
+    //     test.generateSampleMessageV2({ threadId: 'thread-two', content: 'Sixth', resourceId: 'cross-thread-resource' }),
 
-        test.generateSampleMessageV2({ threadId: 'thread-three', content: 'Seventh', resourceId: 'other-resource' }),
-        test.generateSampleMessageV2({ threadId: 'thread-three', content: 'Eighth', resourceId: 'other-resource' }),
-      ];
+    //     test.generateSampleMessageV2({ threadId: 'thread-three', content: 'Seventh', resourceId: 'other-resource' }),
+    //     test.generateSampleMessageV2({ threadId: 'thread-three', content: 'Eighth', resourceId: 'other-resource' }),
+    //   ];
 
-      await store.saveMessages({ messages: messages, format: 'v2' });
+    //   await store.saveMessages({ messages: messages, format: 'v2' });
 
-      const retrievedMessages: MastraMessageV2[] = await store.getMessages({ threadId: 'thread-one', format: 'v2' });
-      expect(retrievedMessages).toHaveLength(3);
-      expect(retrievedMessages.map(m => (m.content.parts[0] as any).text)).toEqual(['First', 'Second', 'Third']);
+    //   const retrievedMessages: MastraMessageV2[] = await store.getMessages({ threadId: 'thread-one', format: 'v2' });
+    //   expect(retrievedMessages).toHaveLength(3);
+    //   expect(retrievedMessages.map(m => (m.content.parts[0] as any).text)).toEqual(['First', 'Second', 'Third']);
 
-      const retrievedMessages2: MastraMessageV2[] = await store.getMessages({ threadId: 'thread-two', format: 'v2' });
-      expect(retrievedMessages2).toHaveLength(3);
-      expect(retrievedMessages2.map(m => (m.content.parts[0] as any).text)).toEqual(['Fourth', 'Fifth', 'Sixth']);
+    //   const retrievedMessages2: MastraMessageV2[] = await store.getMessages({ threadId: 'thread-two', format: 'v2' });
+    //   expect(retrievedMessages2).toHaveLength(3);
+    //   expect(retrievedMessages2.map(m => (m.content.parts[0] as any).text)).toEqual(['Fourth', 'Fifth', 'Sixth']);
 
-      const retrievedMessages3: MastraMessageV2[] = await store.getMessages({ threadId: 'thread-three', format: 'v2' });
-      expect(retrievedMessages3).toHaveLength(2);
-      expect(retrievedMessages3.map(m => (m.content.parts[0] as any).text)).toEqual(['Seventh', 'Eighth']);
+    //   const retrievedMessages3: MastraMessageV2[] = await store.getMessages({ threadId: 'thread-three', format: 'v2' });
+    //   expect(retrievedMessages3).toHaveLength(2);
+    //   expect(retrievedMessages3.map(m => (m.content.parts[0] as any).text)).toEqual(['Seventh', 'Eighth']);
 
-      const crossThreadMessages: MastraMessageV2[] = await store.getMessages({
-        threadId: 'thread-doesnt-exist',
-        resourceId: 'cross-thread-resource',
-        format: 'v2',
-        selectBy: {
-          last: 0,
-          include: [
-            {
-              id: messages[1].id,
-              withNextMessages: 2,
-              withPreviousMessages: 2,
-            },
-            {
-              id: messages[4].id,
-              withPreviousMessages: 2,
-              withNextMessages: 2,
-            },
-          ],
-        },
-      });
+    //   const crossThreadMessages: MastraMessageV2[] = await store.getMessages({
+    //     threadId: 'thread-doesnt-exist',
+    //     resourceId: 'cross-thread-resource',
+    //     format: 'v2',
+    //     selectBy: {
+    //       last: 0,
+    //       include: [
+    //         {
+    //           id: messages[1].id,
+    //           withNextMessages: 2,
+    //           withPreviousMessages: 2,
+    //         },
+    //         {
+    //           id: messages[4].id,
+    //           withPreviousMessages: 2,
+    //           withNextMessages: 2,
+    //         },
+    //       ],
+    //     },
+    //   });
 
-      expect(crossThreadMessages).toHaveLength(6);
-      expect(crossThreadMessages.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
-      expect(crossThreadMessages.filter(m => m.threadId === `thread-two`)).toHaveLength(3);
+    //   expect(crossThreadMessages).toHaveLength(6);
+    //   expect(crossThreadMessages.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
+    //   expect(crossThreadMessages.filter(m => m.threadId === `thread-two`)).toHaveLength(3);
 
-      const crossThreadMessages2: MastraMessageV2[] = await store.getMessages({
-        threadId: 'thread-one',
-        resourceId: 'cross-thread-resource',
-        format: 'v2',
-        selectBy: {
-          last: 0,
-          include: [
-            {
-              id: messages[4].id,
-              withPreviousMessages: 1,
-              withNextMessages: 30,
-            },
-          ],
-        },
-      });
+    //   const crossThreadMessages2: MastraMessageV2[] = await store.getMessages({
+    //     threadId: 'thread-one',
+    //     resourceId: 'cross-thread-resource',
+    //     format: 'v2',
+    //     selectBy: {
+    //       last: 0,
+    //       include: [
+    //         {
+    //           id: messages[4].id,
+    //           withPreviousMessages: 1,
+    //           withNextMessages: 30,
+    //         },
+    //       ],
+    //     },
+    //   });
 
-      expect(crossThreadMessages2).toHaveLength(3);
-      expect(crossThreadMessages2.filter(m => m.threadId === `thread-one`)).toHaveLength(0);
-      expect(crossThreadMessages2.filter(m => m.threadId === `thread-two`)).toHaveLength(3);
+    //   expect(crossThreadMessages2).toHaveLength(3);
+    //   expect(crossThreadMessages2.filter(m => m.threadId === `thread-one`)).toHaveLength(0);
+    //   expect(crossThreadMessages2.filter(m => m.threadId === `thread-two`)).toHaveLength(3);
 
-      const crossThreadMessages3: MastraMessageV2[] = await store.getMessages({
-        threadId: 'thread-two',
-        resourceId: 'cross-thread-resource',
-        format: 'v2',
-        selectBy: {
-          last: 0,
-          include: [
-            {
-              id: messages[1].id,
-              withNextMessages: 1,
-              withPreviousMessages: 1,
-            },
-          ],
-        },
-      });
+    //   const crossThreadMessages3: MastraMessageV2[] = await store.getMessages({
+    //     threadId: 'thread-two',
+    //     resourceId: 'cross-thread-resource',
+    //     format: 'v2',
+    //     selectBy: {
+    //       last: 0,
+    //       include: [
+    //         {
+    //           id: messages[1].id,
+    //           withNextMessages: 1,
+    //           withPreviousMessages: 1,
+    //         },
+    //       ],
+    //     },
+    //   });
 
-      expect(crossThreadMessages3).toHaveLength(3);
-      expect(crossThreadMessages3.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
-      expect(crossThreadMessages3.filter(m => m.threadId === `thread-two`)).toHaveLength(0);
-    });
+    //   expect(crossThreadMessages3).toHaveLength(3);
+    //   expect(crossThreadMessages3.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
+    //   expect(crossThreadMessages3.filter(m => m.threadId === `thread-two`)).toHaveLength(0);
+    // });
   });
 
   describe('Edge Cases and Error Handling', () => {

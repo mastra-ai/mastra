@@ -4,7 +4,7 @@ import type { MetricResult } from '@mastra/core/eval';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import type { MastraStorage } from '@mastra/core/storage';
 import { TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS } from '@mastra/core/storage';
-import { MastraMessageV1 } from '@mastra/core';
+import { MastraMessageV1, MastraMessageV2 } from '@mastra/core';
 
 export function createTestSuite(storage: MastraStorage) {
   describe(storage.constructor.name, () => {
@@ -42,6 +42,26 @@ export function createTestSuite(storage: MastraStorage) {
         content: [{ type: 'text', text: 'Hello' }],
         createdAt: new Date(),
       }) satisfies MastraMessageV1;
+
+    const createSampleMessageV2 = ({
+      threadId,
+      content = 'Hello',
+      resourceId = `resource-${randomUUID()}`,
+    }: {
+      threadId: string;
+      content?: string;
+      resourceId?: string;
+    }): MastraMessageV2 => ({
+      id: `msg-${randomUUID()}`,
+      resourceId,
+      role: getRole(),
+      threadId,
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: content }],
+      },
+      createdAt: new Date(),
+    });
 
     const createSampleWorkflowSnapshot = (status: string, createdAt?: Date) => {
       const runId = `run-${randomUUID()}`;
@@ -242,6 +262,100 @@ export function createTestSuite(storage: MastraStorage) {
         // Verify no messages were saved
         const savedMessages = await storage.getMessages({ threadId: thread.id });
         expect(savedMessages).toHaveLength(0);
+      });
+
+      it('should retrieve messages w/ next/prev messages by message id + resource id', async () => {
+        const messages: MastraMessageV2[] = [
+          createSampleMessageV2({ threadId: 'thread-one', content: 'First', resourceId: 'cross-thread-resource' }),
+          createSampleMessageV2({ threadId: 'thread-one', content: 'Second', resourceId: 'cross-thread-resource' }),
+          createSampleMessageV2({ threadId: 'thread-one', content: 'Third', resourceId: 'cross-thread-resource' }),
+
+          createSampleMessageV2({ threadId: 'thread-two', content: 'Fourth', resourceId: 'cross-thread-resource' }),
+          createSampleMessageV2({ threadId: 'thread-two', content: 'Fifth', resourceId: 'cross-thread-resource' }),
+          createSampleMessageV2({ threadId: 'thread-two', content: 'Sixth', resourceId: 'cross-thread-resource' }),
+
+          createSampleMessageV2({ threadId: 'thread-three', content: 'Seventh', resourceId: 'other-resource' }),
+          createSampleMessageV2({ threadId: 'thread-three', content: 'Eighth', resourceId: 'other-resource' }),
+        ];
+
+        await storage.saveMessages({ messages: messages, format: 'v2' });
+
+        const retrievedMessages = await storage.getMessages({ threadId: 'thread-one', format: 'v2' });
+        expect(retrievedMessages).toHaveLength(3);
+        expect(retrievedMessages.map((m: any) => m.content.parts[0].text)).toEqual(['First', 'Second', 'Third']);
+
+        const retrievedMessages2 = await storage.getMessages({ threadId: 'thread-two', format: 'v2' });
+        expect(retrievedMessages2).toHaveLength(3);
+        expect(retrievedMessages2.map((m: any) => m.content.parts[0].text)).toEqual(['Fourth', 'Fifth', 'Sixth']);
+
+        const retrievedMessages3 = await storage.getMessages({ threadId: 'thread-three', format: 'v2' });
+        expect(retrievedMessages3).toHaveLength(2);
+        expect(retrievedMessages3.map((m: any) => m.content.parts[0].text)).toEqual(['Seventh', 'Eighth']);
+
+        const crossThreadMessages: MastraMessageV2[] = await storage.getMessages({
+          threadId: 'thread-doesnt-exist',
+          resourceId: 'cross-thread-resource',
+          format: 'v2',
+          selectBy: {
+            last: 0,
+            include: [
+              {
+                id: messages[1].id,
+                withNextMessages: 2,
+                withPreviousMessages: 2,
+              },
+              {
+                id: messages[4].id,
+                withPreviousMessages: 2,
+                withNextMessages: 2,
+              },
+            ],
+          },
+        });
+
+        expect(crossThreadMessages).toHaveLength(6);
+        expect(crossThreadMessages.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
+        expect(crossThreadMessages.filter(m => m.threadId === `thread-two`)).toHaveLength(3);
+
+        const crossThreadMessages2: MastraMessageV2[] = await storage.getMessages({
+          threadId: 'thread-one',
+          resourceId: 'cross-thread-resource',
+          format: 'v2',
+          selectBy: {
+            last: 0,
+            include: [
+              {
+                id: messages[4].id,
+                withPreviousMessages: 1,
+                withNextMessages: 30,
+              },
+            ],
+          },
+        });
+
+        expect(crossThreadMessages2).toHaveLength(3);
+        expect(crossThreadMessages2.filter(m => m.threadId === `thread-one`)).toHaveLength(0);
+        expect(crossThreadMessages2.filter(m => m.threadId === `thread-two`)).toHaveLength(3);
+
+        const crossThreadMessages3: MastraMessageV2[] = await storage.getMessages({
+          threadId: 'thread-two',
+          resourceId: 'cross-thread-resource',
+          format: 'v2',
+          selectBy: {
+            last: 0,
+            include: [
+              {
+                id: messages[1].id,
+                withNextMessages: 1,
+                withPreviousMessages: 1,
+              },
+            ],
+          },
+        });
+
+        expect(crossThreadMessages3).toHaveLength(3);
+        expect(crossThreadMessages3.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
+        expect(crossThreadMessages3.filter(m => m.threadId === `thread-two`)).toHaveLength(0);
       });
     });
 
