@@ -1,6 +1,6 @@
 {
   "name": "@mastra/agui",
-  "version": "1.0.2-alpha.2",
+  "version": "1.0.2",
   "description": "AGUI protocol helpers for Mastra",
   "type": "module",
   "files": [

@@ -8,7 +8,7 @@ on:
 jobs:
   changeset:
     runs-on: ubuntu-latest
-    if: github.event.pull_request.user.login == 'renovate[bot]' && github.repository == 'mastra-ai/mastra'
+    if: startsWith(github.ref_name, 'renovate/') && github.repository == 'mastra-ai/mastra'
     steps:
       - uses: actions/create-github-app-token@v1
         id: app-token

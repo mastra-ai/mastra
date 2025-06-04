@@ -1,16 +1,29 @@
 {
   "name": "@mastra/dynamodb",
-  "version": "0.10.1-alpha.2",
+  "version": "0.10.1",
   "description": "DynamoDB storage adapter for Mastra",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
   "files": [
     "dist",
     "src"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --clean --treeshake=smallest --splitting",
+    "build": "tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
     "dev": "tsup --watch",
     "clean": "rm -rf dist",
     "lint": "eslint .",
@@ -28,7 +41,7 @@
     "electrodb": "^3.4.1"
   },
   "peerDependencies": {
-    "@mastra/core": "^0.10.0-alpha.0"
+    "@mastra/core": "^0.10.2-alpha.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

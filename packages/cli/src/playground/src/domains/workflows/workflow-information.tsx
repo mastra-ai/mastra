@@ -9,13 +9,15 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { Skeleton } from '@/components/ui/skeleton';
 import { CopyIcon } from 'lucide-react';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import { WorkflowRuns } from '@/pages/workflows/workflow/components/workflow-runs';
+import { WorkflowRuns } from '@mastra/playground-ui';
 import { useNavigate, useParams } from 'react-router';
+import { useWorkflowRuns } from '@/pages/workflows/workflow/hooks/use-workflow-runs';
 
 export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: string; isLegacy?: boolean }) {
   const params = useParams();
   const navigate = useNavigate();
   const { workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId, !isLegacy);
+  const { isLoading: isRunsLoading, data: runs } = useWorkflowRuns({ workflowId });
   const { legacyWorkflow, isLoading: isLegacyWorkflowLoading } = useLegacyWorkflow(workflowId, !!isLegacy);
 
   const [runId, setRunId] = useState<string>('');
@@ -93,7 +95,13 @@ export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: stri
           ) : null}
         </TabsContent>
         <TabsContent value="runs">
-          <WorkflowRuns workflowId={workflowId} runId={params?.runId} />
+          <WorkflowRuns
+            workflowId={workflowId}
+            runId={params?.runId}
+            isLoading={isRunsLoading}
+            runs={runs?.runs || []}
+            onPressRun={({ workflowId, runId }) => navigate(`/workflows/${workflowId}/graph/${runId}`)}
+          />
         </TabsContent>
         <TabsContent value="logs">
           <WorkflowLogs runId={runId} />
