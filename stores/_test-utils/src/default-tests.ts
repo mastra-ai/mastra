@@ -33,14 +33,23 @@ export function createTestSuite(storage: MastraStorage) {
       else role = 'user';
       return role;
     };
-    const createSampleMessage = (threadId: string) =>
+    const createSampleMessageV1 = ({
+      threadId,
+      content = 'Hello',
+      resourceId = `resource-${randomUUID()}`,
+    }: {
+      threadId: string;
+      content?: string;
+      resourceId?: string;
+    }) =>
       ({
         id: `msg-${randomUUID()}`,
         role: getRole(),
         type: 'text',
         threadId,
-        content: [{ type: 'text', text: 'Hello' }],
+        content: [{ type: 'text', text: content }],
         createdAt: new Date(),
+        resourceId,
       }) satisfies MastraMessageV1;
 
     const createSampleMessageV2 = ({
@@ -204,7 +213,10 @@ export function createTestSuite(storage: MastraStorage) {
         const thread = createSampleThread();
         await storage.saveThread({ thread });
 
-        const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
+        const messages = [
+          createSampleMessageV1({ threadId: thread.id }),
+          createSampleMessageV1({ threadId: thread.id }),
+        ];
 
         // Save messages
         const savedMessages = await storage.saveMessages({ messages });
@@ -229,9 +241,9 @@ export function createTestSuite(storage: MastraStorage) {
         await storage.saveThread({ thread });
 
         const messages = [
-          { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'First' }] },
-          { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'Second' }] },
-          { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'Third' }] },
+          createSampleMessageV1({ threadId: thread.id, content: 'First' }),
+          createSampleMessageV1({ threadId: thread.id, content: 'Second' }),
+          createSampleMessageV1({ threadId: thread.id, content: 'Third' }),
         ] satisfies MastraMessageV1[];
 
         await storage.saveMessages({ messages });
@@ -252,9 +264,9 @@ export function createTestSuite(storage: MastraStorage) {
         await storage.saveThread({ thread });
 
         const messages = [
-          createSampleMessage(thread.id),
+          createSampleMessageV1({ threadId: thread.id }),
           // @ts-ignore
-          { ...createSampleMessage(thread.id), id: null }, // This will cause an error
+          { ...createSampleMessageV1({ threadId: thread.id }), id: null }, // This will cause an error
         ] as MastraMessageV1[];
 
         await expect(storage.saveMessages({ messages })).rejects.toThrow();
@@ -282,15 +294,24 @@ export function createTestSuite(storage: MastraStorage) {
 
         const retrievedMessages = await storage.getMessages({ threadId: 'thread-one', format: 'v2' });
         expect(retrievedMessages).toHaveLength(3);
-        expect(retrievedMessages.map((m: any) => m.content.parts[0].text)).toEqual(['First', 'Second', 'Third']);
+        const contentParts = retrievedMessages.map((m: any) =>
+          m.content.parts.filter((p: any) => p.type === 'text').map((p: any) => p.text),
+        );
+        expect(contentParts).toEqual([['First'], ['Second'], ['Third']]);
 
         const retrievedMessages2 = await storage.getMessages({ threadId: 'thread-two', format: 'v2' });
         expect(retrievedMessages2).toHaveLength(3);
-        expect(retrievedMessages2.map((m: any) => m.content.parts[0].text)).toEqual(['Fourth', 'Fifth', 'Sixth']);
+        const contentParts2 = retrievedMessages2.map((m: any) =>
+          m.content.parts.filter((p: any) => p.type === 'text').map((p: any) => p.text),
+        );
+        expect(contentParts2).toEqual([['Fourth'], ['Fifth'], ['Sixth']]);
 
         const retrievedMessages3 = await storage.getMessages({ threadId: 'thread-three', format: 'v2' });
         expect(retrievedMessages3).toHaveLength(2);
-        expect(retrievedMessages3.map((m: any) => m.content.parts[0].text)).toEqual(['Seventh', 'Eighth']);
+        const contentParts3 = retrievedMessages3.map((m: any) =>
+          m.content.parts.filter((p: any) => p.type === 'text').map((p: any) => p.text),
+        );
+        expect(contentParts3).toEqual([['Seventh'], ['Eighth']]);
 
         const crossThreadMessages: MastraMessageV2[] = await storage.getMessages({
           threadId: 'thread-doesnt-exist',
@@ -310,6 +331,7 @@ export function createTestSuite(storage: MastraStorage) {
                 withNextMessages: 2,
               },
             ],
+            includeScope: 'resource',
           },
         });
 
@@ -330,6 +352,7 @@ export function createTestSuite(storage: MastraStorage) {
                 withNextMessages: 30,
               },
             ],
+            includeScope: 'resource',
           },
         });
 
@@ -350,6 +373,7 @@ export function createTestSuite(storage: MastraStorage) {
                 withPreviousMessages: 1,
               },
             ],
+            includeScope: 'resource',
           },
         });
 

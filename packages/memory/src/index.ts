@@ -104,6 +104,8 @@ export class Memory extends MastraMemory {
             messageRange: config?.semanticRecall?.messageRange ?? defaultRange,
           };
 
+    const resourceScope = typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope === `resource`;
+
     if (config?.semanticRecall && selectBy?.vectorSearchString && this.vector) {
       const { embeddings, dimension } = await this.embedMessageContent(selectBy.vectorSearchString!);
       const { indexName } = await this.createEmbeddingIndex(dimension);
@@ -121,14 +123,13 @@ export class Memory extends MastraMemory {
               indexName,
               queryVector: embedding,
               topK: vectorConfig.topK,
-              filter:
-                typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope === `resource`
-                  ? {
-                      resource_id: resourceId,
-                    }
-                  : {
-                      thread_id: threadId,
-                    },
+              filter: resourceScope
+                ? {
+                    resource_id: resourceId,
+                  }
+                : {
+                    thread_id: threadId,
+                  },
             })),
           );
         }),
@@ -138,6 +139,7 @@ export class Memory extends MastraMemory {
     // Get raw messages from storage
     const rawMessages = await this.storage.getMessages({
       threadId,
+      resourceId,
       format: 'v2',
       selectBy: {
         ...selectBy,
@@ -154,6 +156,7 @@ export class Memory extends MastraMemory {
                     ? vectorConfig.messageRange
                     : vectorConfig.messageRange.before,
               })),
+              includeScope: resourceScope ? `resource` : `thread`,
             }
           : {}),
       },
