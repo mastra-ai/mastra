@@ -1,5 +1,11 @@
 # @mastra/dynamodb
 
+## 0.10.2-alpha.0
+
+### Patch Changes
+
+- d980a1b: Fix getMessages to correctly return last n messages when `limit` is passed
+
 ## 0.10.1
 
 ### Patch Changes
