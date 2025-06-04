@@ -25,11 +25,15 @@ const createSampleThread = (date?: Date) => ({
   metadata: { key: 'value' },
 });
 
-const createSampleMessage = (
-  threadId: string,
-  content: string = 'Hello',
+const createSampleMessage = ({
+  threadId,
+  content = 'Hello',
   resourceId = `resource-${randomUUID()}`,
-): MastraMessageV2 => ({
+}: {
+  threadId: string;
+  content?: string;
+  resourceId?: string;
+}): MastraMessageV2 => ({
   id: `msg-${randomUUID()}`,
   role: 'user',
   threadId,
@@ -324,12 +328,12 @@ describe('UpstashStore', () => {
 
     it('should save and retrieve messages in order', async () => {
       const messages: MastraMessageV2[] = [
-        createSampleMessage(threadId, 'First'),
-        createSampleMessage(threadId, 'Second'),
-        createSampleMessage(threadId, 'Third'),
+        createSampleMessage({ threadId, content: 'First' }),
+        createSampleMessage({ threadId, content: 'Second' }),
+        createSampleMessage({ threadId, content: 'Third' }),
       ];
 
-      await store.saveMessages({ messages: messages, format: 'v2' });
+      await store.saveMessages({ messages, format: 'v2' });
 
       const retrievedMessages = await store.getMessages({ threadId, format: 'v2' });
       expect(retrievedMessages).toHaveLength(3);
@@ -338,16 +342,16 @@ describe('UpstashStore', () => {
 
     it('should retrieve messages w/ next/prev messages by message id + resource id', async () => {
       const messages: MastraMessageV2[] = [
-        createSampleMessage('thread-one', 'First', 'cross-thread-resource'),
-        createSampleMessage('thread-one', 'Second', 'cross-thread-resource'),
-        createSampleMessage('thread-one', 'Third', 'cross-thread-resource'),
+        createSampleMessage({ threadId: 'thread-one', content: 'First', resourceId: 'cross-thread-resource' }),
+        createSampleMessage({ threadId: 'thread-one', content: 'Second', resourceId: 'cross-thread-resource' }),
+        createSampleMessage({ threadId: 'thread-one', content: 'Third', resourceId: 'cross-thread-resource' }),
 
-        createSampleMessage('thread-two', 'Fourth', 'cross-thread-resource'),
-        createSampleMessage('thread-two', 'Fifth', 'cross-thread-resource'),
-        createSampleMessage('thread-two', 'Sixth', 'cross-thread-resource'),
+        createSampleMessage({ threadId: 'thread-two', content: 'Fourth', resourceId: 'cross-thread-resource' }),
+        createSampleMessage({ threadId: 'thread-two', content: 'Fifth', resourceId: 'cross-thread-resource' }),
+        createSampleMessage({ threadId: 'thread-two', content: 'Sixth', resourceId: 'cross-thread-resource' }),
 
-        createSampleMessage('thread-three', 'Seventh', 'other-resource'),
-        createSampleMessage('thread-three', 'Eighth', 'other-resource'),
+        createSampleMessage({ threadId: 'thread-three', content: 'Seventh', resourceId: 'other-resource' }),
+        createSampleMessage({ threadId: 'thread-three', content: 'Eighth', resourceId: 'other-resource' }),
       ];
 
       await store.saveMessages({ messages: messages, format: 'v2' });
@@ -464,7 +468,9 @@ describe('UpstashStore', () => {
         const thread = createSampleThread();
         await store.saveThread({ thread });
 
-        const messages = Array.from({ length: 15 }, (_, i) => createSampleMessage(thread.id, `Message ${i + 1}`));
+        const messages = Array.from({ length: 15 }, (_, i) =>
+          createSampleMessage({ threadId: thread.id, content: `Message ${i + 1}` }),
+        );
 
         await store.saveMessages({ messages, format: 'v2' });
 
@@ -506,7 +512,7 @@ describe('UpstashStore', () => {
         await store.saveThread({ thread });
 
         const messages = Array.from({ length: 10 }, (_, i) => {
-          const message = createSampleMessage(thread.id, `Message ${i + 1}`);
+          const message = createSampleMessage({ threadId: thread.id, content: `Message ${i + 1}` });
           // Ensure different timestamps
           message.createdAt = new Date(Date.now() + i * 1000);
           return message;
@@ -535,7 +541,9 @@ describe('UpstashStore', () => {
         const thread = createSampleThread();
         await store.saveThread({ thread });
 
-        const messages = Array.from({ length: 5 }, (_, i) => createSampleMessage(thread.id, `Message ${i + 1}`));
+        const messages = Array.from({ length: 5 }, (_, i) =>
+          createSampleMessage({ threadId: thread.id, content: `Message ${i + 1}` }),
+        );
 
         await store.saveMessages({ messages, format: 'v2' });
 
@@ -564,13 +572,13 @@ describe('UpstashStore', () => {
         const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
         const oldMessages = Array.from({ length: 3 }, (_, i) => {
-          const message = createSampleMessage(thread.id, `Old Message ${i + 1}`);
+          const message = createSampleMessage({ threadId: thread.id, content: `Old Message ${i + 1}` });
           message.createdAt = yesterday;
           return message;
         });
 
         const newMessages = Array.from({ length: 4 }, (_, i) => {
-          const message = createSampleMessage(thread.id, `New Message ${i + 1}`);
+          const message = createSampleMessage({ threadId: thread.id, content: `New Message ${i + 1}` });
           message.createdAt = tomorrow;
           return message;
         });

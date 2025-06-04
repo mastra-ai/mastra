@@ -375,8 +375,8 @@ describe.skip('D1Store REST API', () => {
       await store.saveThread({ thread });
 
       // Add some messages
-      const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
-      await store.saveMessages({ messages });
+      const messages = [createSampleMessage({ threadId: thread.id }), createSampleMessage({ threadId: thread.id })];
+      await store.saveMessages({ messages, format: 'v2' });
 
       await store.deleteThread({ threadId: thread.id });
 
@@ -404,10 +404,10 @@ describe.skip('D1Store REST API', () => {
       const thread = createSampleThread();
       await store.saveThread({ thread });
 
-      const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
+      const messages = [createSampleMessage({ threadId: thread.id }), createSampleMessage({ threadId: thread.id })];
 
       // Save messages
-      const savedMessages = await store.saveMessages({ messages });
+      const savedMessages = await store.saveMessages({ messages, format: 'v2' });
       expect(savedMessages).toEqual(messages);
 
       // Retrieve messages with retry
@@ -436,20 +436,17 @@ describe.skip('D1Store REST API', () => {
 
       const messages = [
         {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'First' }] as MastraMessageV2['content'],
+          ...createSampleMessage({ threadId: thread.id, content: 'First' }),
         },
         {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'Second' }] as MastraMessageV2['content'],
+          ...createSampleMessage({ threadId: thread.id, content: 'Second' }),
         },
         {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'Third' }] as MastraMessageV2['content'],
+          ...createSampleMessage({ threadId: thread.id, content: 'Third' }),
         },
       ];
 
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
       const retrievedMessages = await retryUntil(
         async () => await store.getMessages({ threadId: thread.id }),
@@ -461,6 +458,132 @@ describe.skip('D1Store REST API', () => {
       retrievedMessages.forEach((msg, idx) => {
         expect(msg.content).toEqual(messages[idx].content);
       });
+    });
+
+    it('should retrieve messages w/ next/prev messages by message id + resource id', async () => {
+      const messages: MastraMessageV2[] = [
+        createSampleMessage({
+          threadId: 'thread-one',
+          content: 'First',
+          resourceId: 'cross-thread-resource',
+        }),
+        createSampleMessage({
+          threadId: 'thread-one',
+          content: 'Second',
+          resourceId: 'cross-thread-resource',
+        }),
+        createSampleMessage({
+          threadId: 'thread-one',
+          content: 'Third',
+          resourceId: 'cross-thread-resource',
+        }),
+
+        createSampleMessage({
+          threadId: 'thread-two',
+          content: 'Fourth',
+          resourceId: 'cross-thread-resource',
+        }),
+        createSampleMessage({
+          threadId: 'thread-two',
+          content: 'Fifth',
+          resourceId: 'cross-thread-resource',
+        }),
+        createSampleMessage({
+          threadId: 'thread-two',
+          content: 'Sixth',
+          resourceId: 'cross-thread-resource',
+        }),
+
+        createSampleMessage({
+          threadId: 'thread-three',
+          content: 'Seventh',
+          resourceId: 'other-resource',
+        }),
+        createSampleMessage({
+          threadId: 'thread-three',
+          content: 'Eighth',
+          resourceId: 'other-resource',
+        }),
+      ];
+
+      await store.saveMessages({ messages: messages, format: 'v2' });
+
+      const retrievedMessages = await store.getMessages({ threadId: 'thread-one', format: 'v2' });
+      expect(retrievedMessages).toHaveLength(3);
+      expect(retrievedMessages.map((m: any) => m.content.parts[0].text)).toEqual(['First', 'Second', 'Third']);
+
+      const retrievedMessages2 = await store.getMessages({ threadId: 'thread-two', format: 'v2' });
+      expect(retrievedMessages2).toHaveLength(3);
+      expect(retrievedMessages2.map((m: any) => m.content.parts[0].text)).toEqual(['Fourth', 'Fifth', 'Sixth']);
+
+      const retrievedMessages3 = await store.getMessages({ threadId: 'thread-three', format: 'v2' });
+      expect(retrievedMessages3).toHaveLength(2);
+      expect(retrievedMessages3.map((m: any) => m.content.parts[0].text)).toEqual(['Seventh', 'Eighth']);
+
+      const crossThreadMessages = await store.getMessages({
+        threadId: 'thread-doesnt-exist',
+        resourceId: 'cross-thread-resource',
+        format: 'v2',
+        selectBy: {
+          last: 0,
+          include: [
+            {
+              id: messages[1].id,
+              withNextMessages: 2,
+              withPreviousMessages: 2,
+            },
+            {
+              id: messages[4].id,
+              withPreviousMessages: 2,
+              withNextMessages: 2,
+            },
+          ],
+        },
+      });
+
+      expect(crossThreadMessages).toHaveLength(6);
+      expect(crossThreadMessages.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
+      expect(crossThreadMessages.filter(m => m.threadId === `thread-two`)).toHaveLength(3);
+
+      const crossThreadMessages2 = await store.getMessages({
+        threadId: 'thread-one',
+        resourceId: 'cross-thread-resource',
+        format: 'v2',
+        selectBy: {
+          last: 0,
+          include: [
+            {
+              id: messages[4].id,
+              withPreviousMessages: 1,
+              withNextMessages: 30,
+            },
+          ],
+        },
+      });
+
+      expect(crossThreadMessages2).toHaveLength(3);
+      expect(crossThreadMessages2.filter(m => m.threadId === `thread-one`)).toHaveLength(0);
+      expect(crossThreadMessages2.filter(m => m.threadId === `thread-two`)).toHaveLength(3);
+
+      const crossThreadMessages3 = await store.getMessages({
+        threadId: 'thread-two',
+        resourceId: 'cross-thread-resource',
+        format: 'v2',
+        selectBy: {
+          last: 0,
+          include: [
+            {
+              id: messages[1].id,
+              withNextMessages: 1,
+              withPreviousMessages: 1,
+            },
+          ],
+        },
+      });
+
+      expect(crossThreadMessages3).toHaveLength(3);
+      expect(crossThreadMessages3.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
+      expect(crossThreadMessages3.filter(m => m.threadId === `thread-two`)).toHaveLength(0);
     });
   });
 
@@ -1084,11 +1207,11 @@ describe.skip('D1Store REST API', () => {
       // Create messages with identical timestamps
       const timestamp = new Date();
       const messages = Array.from({ length: 3 }, () => ({
-        ...createSampleMessage(thread.id),
+        ...createSampleMessage({ threadId: thread.id }),
         createdAt: timestamp,
       }));
 
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
       // Verify order is maintained based on insertion order
       const order = await retryUntil(
@@ -1109,14 +1232,14 @@ describe.skip('D1Store REST API', () => {
       // Create messages with different timestamps
       const now = Date.now();
       const messages = Array.from({ length: 3 }, (_, i) => ({
-        ...createSampleMessage(thread.id),
+        ...createSampleMessage({ threadId: thread.id }),
         createdAt: new Date(now - (2 - i) * 1000), // timestamps: oldest -> newest
       }));
 
       // Save messages in reverse order to verify write order is preserved
       const reversedMessages = [...messages].reverse(); // newest -> oldest
       for (const msg of reversedMessages) {
-        await store.saveMessages({ messages: [msg] });
+        await store.saveMessages({ messages: [msg], format: 'v2' });
       }
       // Verify all messages are saved successfully
       const order = await retryUntil(
@@ -1138,17 +1261,17 @@ describe.skip('D1Store REST API', () => {
       const baseTime = new Date('2025-03-14T23:30:20.930Z').getTime();
       const messages = [
         {
-          ...createSampleMessage(thread.id),
+          ...createSampleMessage({ threadId: thread.id }),
           content: [{ type: 'text', text: 'First' }],
           createdAt: new Date(baseTime),
         },
         {
-          ...createSampleMessage(thread.id),
+          ...createSampleMessage({ threadId: thread.id }),
           content: [{ type: 'text', text: 'Second' }],
           createdAt: new Date(baseTime + 1000),
         },
         {
-          ...createSampleMessage(thread.id),
+          ...createSampleMessage({ threadId: thread.id }),
           content: [{ type: 'text', text: 'Third' }],
           createdAt: new Date(baseTime + 2000),
         },
@@ -1188,9 +1311,7 @@ describe.skip('D1Store REST API', () => {
     it('should sanitize and handle special characters', async () => {
       const thread = createSampleThread();
       const message = {
-        ...createSampleMessage(thread.id),
-        content: [{ type: 'text' as const, text: '特殊字符 !@#$%^&*()' }] as MastraMessageV1['content'],
-        threadId: thread.id,
+        ...createSampleMessage({ threadId: thread.id, content: '特殊字符 !@#$%^&*()' }),
       };
 
       await store.saveThread({ thread });
@@ -1214,13 +1335,13 @@ describe.skip('D1Store REST API', () => {
       // Create messages with sequential timestamps (but write order will be preserved)
       const now = Date.now();
       const messages = Array.from({ length: 5 }, (_, i) => ({
-        ...createSampleMessage(thread.id),
+        ...createSampleMessage({ threadId: thread.id }),
         createdAt: new Date(now + i * 1000),
       }));
 
       // Save messages sequentially to avoid race conditions in REST API
       for (const msg of messages) {
-        await store.saveMessages({ messages: [msg] });
+        await store.saveMessages({ messages: [msg], format: 'v2' });
       }
       // Verify all messages are saved
       const order = await retryUntil(
@@ -1238,10 +1359,10 @@ describe.skip('D1Store REST API', () => {
   describe('Resource Management', () => {
     it('should clean up orphaned messages when thread is deleted', async () => {
       const thread = createSampleThread();
-      const messages = Array.from({ length: 3 }, () => createSampleMessage(thread.id));
+      const messages = Array.from({ length: 3 }, () => createSampleMessage({ threadId: thread.id }));
 
       await store.saveThread({ thread });
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
       // Verify messages exist
       const initialOrder = await retryUntil(
@@ -1316,7 +1437,7 @@ describe.skip('D1Store REST API', () => {
 
       // Try to save invalid message
       const invalidMessage = {
-        ...createSampleMessage(thread.id),
+        ...createSampleMessage({ threadId: thread.id }),
         content: undefined,
       };
 
@@ -1328,10 +1449,11 @@ describe.skip('D1Store REST API', () => {
     });
 
     it('should handle missing thread gracefully', async () => {
-      const message = createSampleMessage('non-existent-thread');
+      const message = createSampleMessage({ threadId: 'non-existent-thread' });
       await expect(
         store.saveMessages({
           messages: [message],
+          format: 'v2',
         }),
       ).rejects.toThrow();
     });
@@ -1342,11 +1464,10 @@ describe.skip('D1Store REST API', () => {
 
       // Test with various malformed data
       const malformedMessage = {
-        ...createSampleMessage(thread.id),
-        content: [{ type: 'text' as const, text: ''.padStart(1024 * 1024, 'x') }] as MastraMessageV2['content'], // Very large content
+        ...createSampleMessage({ threadId: thread.id, content: ''.padStart(1024 * 1024, 'x') }),
       };
 
-      await store.saveMessages({ messages: [malformedMessage] });
+      await store.saveMessages({ messages: [malformedMessage], format: 'v2' });
 
       // Should still be able to retrieve and handle the message
       const messages = await retryUntil(
