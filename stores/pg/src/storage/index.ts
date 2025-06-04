@@ -701,6 +701,9 @@ export class PostgresStore extends MastraStorage {
   > {
     const { threadId, format, page, perPage: perPageInput, fromDate, toDate, selectBy } = args;
 
+    const selectStatement = `SELECT id, content, role, type, "createdAt", thread_id AS "threadId"`;
+    const orderByStatement = `ORDER BY "createdAt" DESC`;
+
     try {
       if (page !== undefined) {
         const perPage = perPageInput !== undefined ? perPageInput : 40;
@@ -734,7 +737,7 @@ export class PostgresStore extends MastraStorage {
           };
         }
 
-        const dataQuery = `SELECT id, content, role, type, "createdAt", thread_id AS "threadId" FROM ${this.getTableName(TABLE_MESSAGES)} ${whereClause} ORDER BY "createdAt" DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
+        const dataQuery = `${selectStatement} FROM ${this.getTableName(TABLE_MESSAGES)} ${whereClause} ${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
         const rows = await this.db.manyOrNone(dataQuery, [...queryParams, perPage, currentOffset]);
 
         const fetchedMessages = (rows || []).map(message => {
@@ -778,7 +781,7 @@ export class PostgresStore extends MastraStorage {
             WITH ordered_messages AS (
               SELECT 
                 *,
-                ROW_NUMBER() OVER (ORDER BY "createdAt" DESC) as row_num
+                ROW_NUMBER() OVER (${orderByStatement}) as row_num
               FROM ${this.getTableName(TABLE_MESSAGES)}
               WHERE thread_id = $1
             )
@@ -817,7 +820,7 @@ export class PostgresStore extends MastraStorage {
             // if last is explicitly false, we fetch all
             // Do nothing, rows will be empty, and we return empty array later.
           } else {
-            let query = `SELECT id, content, role, type, "createdAt", thread_id AS "threadId" FROM ${this.getTableName(TABLE_MESSAGES)} WHERE thread_id = $1 ORDER BY "createdAt" DESC`;
+            let query = `${selectStatement} FROM ${this.getTableName(TABLE_MESSAGES)} WHERE thread_id = $1 ${orderByStatement}`;
             const queryParams: any[] = [threadId];
             if (limit !== undefined && selectBy?.last !== false) {
               query += ` LIMIT $2`;
