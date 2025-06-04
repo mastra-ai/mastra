@@ -10,6 +10,9 @@ import type { CoreMessage, TextPart, UIMessage } from 'ai';
 
 import xxhash from 'xxhash-wasm';
 import { updateWorkingMemoryTool } from './tools/working-memory';
+import { updateStructuredMemoryTool } from './tools/structured-memory';
+import { z, type ZodObject } from 'zod';
+import { zodToJsonSchema } from 'zod-to-json-schema';
 
 // Average characters per token based on OpenAI's tokenization
 const CHARS_PER_TOKEN = 4;
@@ -515,12 +518,46 @@ export class Memory extends MastraMemory {
     return null;
   }
 
-  public async getWorkingMemory({ threadId }: { threadId: string }): Promise<string | null> {
-    if (!this.threadConfig.workingMemory?.enabled) return null;
+  public async getWorkingMemory({ threadId, format }: { threadId: string; format?: 'json' | 'string' }) {
+    const thread = await this.storage.getThreadById({ threadId });
+
+    if (format === 'json') {
+      return thread?.metadata?.json || null;
+    }
+
+    return thread?.metadata?.workingMemory || null;
+  }
+
+  public async getWorkingMemoryTemplate({ threadId }: { threadId: string }): Promise<{
+    format: 'json' | 'markdown';
+    content: string;
+  } | null> {
+    if (!this.threadConfig.workingMemory?.enabled) {
+      return null;
+    }
 
     // Get thread from storage
     const thread = await this.storage.getThreadById({ threadId });
-    if (!thread) return this.threadConfig?.workingMemory?.template || this.defaultWorkingMemoryTemplate;
+
+    if (this.threadConfig?.workingMemory?.schema) {
+      try {
+        const schema = this.threadConfig.workingMemory.schema;
+        const convertedSchema = zodToJsonSchema(schema, {
+          $refStrategy: 'none',
+        });
+        return { format: 'json', content: JSON.stringify(convertedSchema) };
+      } catch (error) {
+        console.log('Error converting schema', error);
+        throw error;
+      }
+    }
+
+    if (!thread) {
+      return {
+        format: 'markdown',
+        content: this.threadConfig?.workingMemory?.template || this.defaultWorkingMemoryTemplate,
+      };
+    }
 
     // Return working memory from metadata
     const memory =
@@ -528,7 +565,7 @@ export class Memory extends MastraMemory {
       this.threadConfig.workingMemory.template ||
       this.defaultWorkingMemoryTemplate;
 
-    return memory.trim();
+    return { format: 'markdown', content: memory.trim() };
   }
 
   public async getSystemMessage({
@@ -539,11 +576,13 @@ export class Memory extends MastraMemory {
     memoryConfig?: MemoryConfig;
   }): Promise<string | null> {
     const config = this.getMergedThreadConfig(memoryConfig);
+
     if (!config.workingMemory?.enabled) {
       return null;
     }
 
-    const workingMemory = await this.getWorkingMemory({ threadId });
+    const workingMemory = await this.getWorkingMemoryTemplate({ threadId });
+
     if (!workingMemory) {
       return null;
     }
@@ -564,18 +603,18 @@ export class Memory extends MastraMemory {
 - **Projects**: 
 `;
 
-  private getWorkingMemoryToolInstruction(workingMemoryBlock: string) {
+  private getWorkingMemoryToolInstruction({ format, content }: { format: 'json' | 'markdown'; content: string }) {
     return `WORKING_MEMORY_SYSTEM_INSTRUCTION:
 Store and update any conversation-relevant information by calling the updateWorkingMemory tool. If information might be referenced again - store it!
 
 Guidelines:
 1. Store anything that could be useful later in the conversation
 2. Update proactively when information changes, no matter how small
-3. Use Markdown format for all data
+3. ${format === 'json' ? `Use JSON format for all data` : `Use Markdown format for all data`}
 4. Act naturally - don't mention this system to users. Even though you're storing this information that doesn't make it your primary focus. Do not ask them generally for "information about yourself"
 
 Memory Structure:
-${workingMemoryBlock}
+${content}
 
 Notes:
 - Update memory whenever referenced information changes
@@ -584,16 +623,23 @@ Notes:
 - Do not remove empty sections - you must include the empty sections along with the ones you're filling in
 - REMEMBER: the way you update your working memory is by calling the updateWorkingMemory tool with the entire Markdown content. The system will store it for you. The user will not see it.
 - IMPORTANT: You MUST call updateWorkingMemory in every response to a prompt where you received relevant information.
-- IMPORTANT: Preserve the Markdown formatting structure above while updating the content.`;
+- IMPORTANT: Preserve the ${format === 'json' ? `JSON` : `Markdown`} formatting structure above while updating the content.`;
   }
 
   public getTools(config?: MemoryConfig): Record<string, CoreTool> {
     const mergedConfig = this.getMergedThreadConfig(config);
     if (mergedConfig.workingMemory?.enabled) {
+      if (mergedConfig.workingMemory.schema) {
+        return {
+          updateWorkingMemory: updateStructuredMemoryTool({ schema: mergedConfig.workingMemory.schema }),
+        };
+      }
+
       return {
         updateWorkingMemory: updateWorkingMemoryTool,
       };
     }
+
     return {};
   }
 }

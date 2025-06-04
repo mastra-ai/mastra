@@ -5,6 +5,7 @@ import { Memory } from '@mastra/memory';
 import { Agent } from '@mastra/core/agent';
 import { cookingTool } from '../tools/index.js';
 import { myWorkflow } from '../workflows/index.js';
+import { z } from 'zod';
 
 const memory = new Memory();
 
@@ -94,4 +95,29 @@ export const chefAgentResponses = new Agent({
   tools: {
     web_search_preview: openai.tools.webSearchPreview(),
   },
+});
+
+export const workingMemoryExampleAgent = new Agent({
+  name: 'Mary the memory agent',
+  instructions: 'You are Mary, a helpful assistant who can remember previous conversations.',
+  model: openai('gpt-4o-mini'),
+  memory: new Memory({
+    options: {
+      workingMemory: {
+        enabled: true,
+        schema: z.object({
+          me: z.object({
+            name: z.string(),
+            occupation: z.string(),
+          }),
+          friends: z.array(
+            z.object({
+              name: z.string(),
+              occupation: z.string(),
+            }),
+          ),
+        }),
+      },
+    },
+  }),
 });

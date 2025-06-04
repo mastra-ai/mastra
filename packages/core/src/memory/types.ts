@@ -4,6 +4,7 @@ export type { MastraMessageV2 } from '../agent';
 import type { MastraStorage } from '../storage';
 import type { MastraVector } from '../vector';
 import type { MemoryProcessor } from '.';
+import type { ZodObject } from 'zod';
 
 export type { Message as AiMessageType } from 'ai';
 
@@ -51,6 +52,7 @@ export type MemoryConfig = {
   workingMemory?: {
     enabled: boolean;
     template?: string;
+    schema?: ZodObject<any>;
     /** @deprecated The `use` option has been removed. Working memory always uses tool-call mode. */
     use?: never;
   };
