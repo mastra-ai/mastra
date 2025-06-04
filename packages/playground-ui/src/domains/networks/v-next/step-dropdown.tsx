@@ -63,6 +63,7 @@ const Steps = () => {
 };
 
 const StepEntry = ({ stepId, step }: { stepId: any; step: any }) => {
+  const [expanded, setExpanded] = useState(false);
   const stepResult = step['step-result'];
 
   if (stepId === 'finish') {
@@ -77,7 +78,10 @@ const StepEntry = ({ stepId, step }: { stepId: any; step: any }) => {
 
   return (
     <li>
-      <div className="bg-surface4 py-2 px-3 text-icon6 flex items-center gap-4 justify-between">
+      <button
+        className="bg-surface4 py-2 px-3 text-icon6 flex items-center gap-4 justify-between w-full text-left"
+        onClick={() => setExpanded(s => !s)}
+      >
         <div className="flex items-center gap-2">
           <StatusIcon status={stepResult ? stepResult?.status : 'loading'} />
           <Txt variant="ui-sm" className="text-icon6">
@@ -86,7 +90,31 @@ const StepEntry = ({ stepId, step }: { stepId: any; step: any }) => {
         </div>
 
         {step.metadata?.startTime && <StepClock step={step} />}
-      </div>
+      </button>
+
+      {stepId === 'routing-step' && expanded && (
+        <div className="bg-surface1 p-3 space-y-4">
+          <div>
+            <Txt variant="ui-sm" className="text-icon3 font-medium">
+              Selection reason:
+            </Txt>
+
+            <Txt variant="ui-sm" className="text-icon6">
+              {stepResult?.output?.selectionReason || 'N/A'}
+            </Txt>
+          </div>
+
+          <div>
+            <Txt variant="ui-sm" className="text-icon3 font-medium">
+              Agent ID
+            </Txt>
+
+            <Txt variant="ui-sm" className="text-icon6">
+              {stepResult?.output?.resourceId || 'N/A'}
+            </Txt>
+          </div>
+        </div>
+      )}
     </li>
   );
 };
@@ -116,7 +144,6 @@ const StatusIcon = ({ status }: { status: 'error' | 'success' | 'loading' }) => 
 };
 
 const StepClock = ({ step }: { step: any }) => {
-  console.log('bruh', step);
   return (
     <Badge>
       <Clock startedAt={step.metadata.startTime} endedAt={step.metadata?.endTime} />

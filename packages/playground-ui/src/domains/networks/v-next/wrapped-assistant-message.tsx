@@ -28,7 +28,6 @@ export const NextAssistantMessage: FC<{ ToolFallback?: ToolCallContentPartCompon
     return null;
   }
 
-  console.log('Data===', data);
   const textContent = (content as TextContentPart).text;
 
   if (textContent === 'start') {

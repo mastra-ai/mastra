@@ -58,6 +58,7 @@ export const VNextNetworkChatProvider = ({ children, networkId }: { children: Re
     }
 
     const id = record?.type === 'finish' ? 'finish' : record.payload?.id;
+    if (id.includes('mapping_')) return;
 
     setState(current => {
       const currentMetadata = current?.steps?.[id]?.metadata;
@@ -90,6 +91,8 @@ export const VNextNetworkChatProvider = ({ children, networkId }: { children: Re
       };
     });
   };
+
+  console.log('state==', state);
 
   return (
     <VNextNetworkChatContext.Provider value={{ ...state, handleStep }}>{children}</VNextNetworkChatContext.Provider>
