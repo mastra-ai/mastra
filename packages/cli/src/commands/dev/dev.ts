@@ -11,10 +11,10 @@ import { DevBundler } from './DevBundler';
 
 let currentServerProcess: ChildProcess | undefined;
 let isRestarting = false;
-let errorRestartCount = 0;
 const ON_ERROR_MAX_RESTARTS = 3;
 
-const startServer = async (dotMastraPath: string, port: number, env: Map<string, string>) => {
+const startServer = async (dotMastraPath: string, port: number, env: Map<string, string>, errorRestartCount = 0) => {
+  let serverIsReady = false;
   try {
     // Restart server
     logger.info('[Mastra Dev] - Starting server...');
@@ -36,22 +36,9 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
         PORT: port.toString() || process.env.PORT || '4111',
         MASTRA_DEFAULT_STORAGE_URL: `file:${join(dotMastraPath, '..', 'mastra.db')}`,
       },
-      stdio: 'inherit',
+      stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
       reject: false,
     }) as any as ChildProcess;
-
-    // Handle server process exit
-    currentServerProcess.on('close', code => {
-      if (!code) {
-        logger.info('Server exited, restarting...');
-        setTimeout(() => {
-          if (!isRestarting) {
-            // eslint-disable-next-line @typescript-eslint/no-floating-promises
-            startServer(dotMastraPath, port, env);
-          }
-        }, 1000);
-      }
-    });
 
     if (currentServerProcess?.exitCode && currentServerProcess?.exitCode !== 0) {
       if (!currentServerProcess) {
@@ -62,41 +49,42 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
       );
     }
 
-    // Wait for server to be ready
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    currentServerProcess.on('message', async (message: any) => {
+      if (message?.type === 'server-ready') {
+        serverIsReady = true;
 
-    // Send refresh signal
-    try {
-      await fetch(`http://localhost:${port}/__refresh`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-    } catch {
-      // Retry after another second
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      try {
-        await fetch(`http://localhost:${port}/__refresh`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
-      } catch {
-        // Ignore retry errors
+        // Send refresh signal
+        try {
+          await fetch(`http://localhost:${port}/__refresh`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          });
+        } catch {
+          // Retry after another second
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          try {
+            await fetch(`http://localhost:${port}/__refresh`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            });
+          } catch {
+            // Ignore retry errors
+          }
+        }
       }
-    }
-
-    if (currentServerProcess.exitCode !== null) {
-      throw new Error(
-        `Server failed to start with error: ${currentServerProcess.stderr || currentServerProcess.stdout}`,
-      );
-    }
+    });
   } catch (err) {
     const execaError = err as { stderr?: string; stdout?: string };
     if (execaError.stderr) logger.error('Server error output:', { stderr: execaError.stderr });
     if (execaError.stdout) logger.debug('Server output:', { stdout: execaError.stdout });
+
+    if (!serverIsReady) {
+      throw err;
+    }
 
     // Attempt to restart on error after a delay
     setTimeout(() => {
@@ -110,7 +98,7 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
           `Attempting to restart server after error... (Attempt ${errorRestartCount}/${ON_ERROR_MAX_RESTARTS})`,
         );
         // eslint-disable-next-line @typescript-eslint/no-floating-promises
-        startServer(dotMastraPath, port, env);
+        startServer(dotMastraPath, port, env, errorRestartCount);
       }
     }, 1000);
   }
@@ -171,8 +159,8 @@ export async function dev({
   const serverOptions = await getServerOptions(entryFile, join(dotMastraPath, 'output'));
 
   const startPort = port ?? serverOptions?.port ?? 4111;
-  await startServer(join(dotMastraPath, 'output'), startPort, env);
 
+  await startServer(join(dotMastraPath, 'output'), startPort, env);
   watcher.on('event', (event: { code: string }) => {
     if (event.code === 'BUNDLE_END') {
       logger.info('[Mastra Dev] - Bundling finished, restarting server...');

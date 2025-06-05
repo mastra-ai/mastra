@@ -3182,6 +3182,14 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
       if (options?.playground) {
         logger.info(`👨‍💻 Playground available at http://${host}:${port}/`);
       }
+
+      if (process.send) {
+        process.send({
+          type: 'server-ready',
+          port,
+          host,
+        });
+      }
     },
   );
 
