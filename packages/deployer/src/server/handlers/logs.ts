@@ -12,7 +12,7 @@ import { handleError } from './error';
 export async function getLogsHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
-    const { transportId, fromDate, toDate, logLevel } = c.req.query();
+    const { transportId, fromDate, toDate, logLevel, page, perPage } = c.req.query();
     const filters = c.req.queries('filters');
 
     const logs = await getOriginalLogsHandler({
@@ -23,6 +23,8 @@ export async function getLogsHandler(c: Context) {
         toDate: toDate ? new Date(toDate) : undefined,
         logLevel: logLevel ? (logLevel as LogLevel) : undefined,
         filters,
+        page: page ? Number(page) : undefined,
+        perPage: perPage ? Number(perPage) : undefined,
       },
     });
 
@@ -36,7 +38,7 @@ export async function getLogsByRunIdHandler(c: Context) {
   try {
     const mastra: Mastra = c.get('mastra');
     const runId = c.req.param('runId');
-    const { transportId, fromDate, toDate, logLevel } = c.req.query();
+    const { transportId, fromDate, toDate, logLevel, page, perPage } = c.req.query();
     const filters = c.req.queries('filters');
 
     const logs = await getOriginalLogsByRunIdHandler({
@@ -48,6 +50,8 @@ export async function getLogsByRunIdHandler(c: Context) {
         toDate: toDate ? new Date(toDate) : undefined,
         logLevel: logLevel ? (logLevel as LogLevel) : undefined,
         filters,
+        page: page ? Number(page) : undefined,
+        perPage: perPage ? Number(perPage) : undefined,
       },
     });
 

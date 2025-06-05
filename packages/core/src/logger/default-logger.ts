@@ -55,9 +55,16 @@ export class ConsoleLogger extends MastraLogger {
 
   async getLogs(
     _transportId: string,
-    _params?: { fromDate?: Date; toDate?: Date; logLevel?: LogLevel; filters?: Record<string, any> },
+    _params?: {
+      fromDate?: Date;
+      toDate?: Date;
+      logLevel?: LogLevel;
+      filters?: Record<string, any>;
+      page?: number;
+      perPage?: number;
+    },
   ) {
-    return [];
+    return { logs: [], total: 0, page: 0, perPage: 0, hasMore: false };
   }
 
   async getLogsByRunId(_args: {
@@ -67,7 +74,9 @@ export class ConsoleLogger extends MastraLogger {
     toDate?: Date;
     logLevel?: LogLevel;
     filters?: Record<string, any>;
+    page?: number;
+    perPage?: number;
   }) {
-    return [];
+    return { logs: [], total: 0, page: 0, perPage: 0, hasMore: false };
   }
 }
