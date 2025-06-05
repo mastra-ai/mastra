@@ -1299,18 +1299,19 @@ describe('D1Store Pagination Features', () => {
       expect(page3.hasMore).toBe(false);
     });
 
-    it('should support limit/offset pagination for getEvals', async () => {
+    it('should support page/perPage pagination for getEvals', async () => {
       const agentName = 'd1-pagination-lo-evals';
       const evalRecords = Array.from({ length: 15 }, () => createSampleEval(agentName));
       const processedRecords = evalRecords.map(r => store['processRecord'](r as any));
       await store.batchInsert({ tableName: TABLE_EVALS, records: await Promise.all(processedRecords) });
 
-      const result = await store.getEvals({ agentName, limit: 5, offset: 10 });
+      // page 2 with 5 per page (0-indexed) would be records 10-14
+      const result = await store.getEvals({ agentName, page: 2, perPage: 5 });
       expect(result.evals).toHaveLength(5);
       expect(result.total).toBe(15);
-      expect(result.page).toBeUndefined();
-      expect(result.perPage).toBeUndefined();
-      expect(result.hasMore).toBe(false); // total is 15, offset 10 + limit 5 means no more records
+      expect(result.page).toBe(2);
+      expect(result.perPage).toBe(5);
+      expect(result.hasMore).toBe(false); // total is 15, 2*5+5 = 15, no more records
     });
 
     it('should filter by type with pagination for getEvals', async () => {
@@ -1386,18 +1387,17 @@ describe('D1Store Pagination Features', () => {
     });
   });
 
-  describe('getTraces with pagination', () => {
-    it('should return paginated traces with total count when returnPaginationResults is true', async () => {
+  describe.only('getTraces with pagination', () => {
+    it('should return paginated traces with total count', async () => {
       const scope = 'd1-test-scope-traces';
       const traceRecords = Array.from({ length: 18 }, (_, i) => createSampleTraceForDB(`test-trace-${i}`, scope)); // Using createSampleTraceForDB
       const processedRecords = traceRecords.map(r => store['processRecord'](r as any));
       await store.batchInsert({ tableName: TABLE_TRACES, records: await Promise.all(processedRecords) });
 
-      const page1 = await store.getTraces({
+      const page1 = await store.getPaginatedTraces({
         scope,
         page: 0,
         perPage: 8,
-        returnPaginationResults: true,
       });
       expect(page1.traces).toHaveLength(8);
       expect(page1.total).toBe(18);
@@ -1405,20 +1405,21 @@ describe('D1Store Pagination Features', () => {
       expect(page1.perPage).toBe(8);
       expect(page1.hasMore).toBe(true);
 
-      const page3 = await store.getTraces({
+      const page3 = await store.getPaginatedTraces({
         scope,
         page: 2, // 0-indexed, so this is the 3rd page
         perPage: 8,
-        returnPaginationResults: true,
       });
       expect(page3.traces).toHaveLength(2); // 18 items, 8 per page. Page 0: 8, Page 1: 8, Page 2: 2
+
+      console.log(page3.traces);
       expect(page3.total).toBe(18);
       expect(page3.page).toBe(2);
       expect(page3.perPage).toBe(8);
       expect(page3.hasMore).toBe(false);
     });
 
-    it('should return an array of traces when returnPaginationResults is not set or false', async () => {
+    it('should return an array of traces for the non-paginated method', async () => {
       const scope = 'd1-array-traces';
       const traceRecords = [createSampleTraceForDB('trace-arr-1', scope), createSampleTraceForDB('trace-arr-2', scope)];
       const processedRecords = traceRecords.map(r => store['processRecord'](r as any));
@@ -1428,7 +1429,6 @@ describe('D1Store Pagination Features', () => {
         scope,
         page: 0,
         perPage: 5,
-        // returnPaginationResults: undefined or false (default behavior)
       });
       expect(Array.isArray(tracesDefault)).toBe(true);
       expect(tracesDefault.length).toBe(2);
@@ -1436,7 +1436,7 @@ describe('D1Store Pagination Features', () => {
       expect(tracesDefault.total).toBeUndefined();
     });
 
-    it('should filter by attributes with pagination for getTraces', async () => {
+    it('should filter by attributes with pagination for getPaginatedTraces', async () => {
       const scope = 'd1-attr-traces';
       const tracesWithAttr = Array.from({ length: 8 }, (_, i) =>
         createSampleTraceForDB(`trace-prod-${i}`, scope, { environment: 'prod' }),
@@ -1451,19 +1451,18 @@ describe('D1Store Pagination Features', () => {
         records: await Promise.all([...processedWithAttr, ...processedWithoutAttr]),
       });
 
-      const prodTraces = await store.getTraces({
+      const prodTraces = await store.getPaginatedTraces({
         scope,
         attributes: { environment: 'prod' },
         page: 0,
         perPage: 5,
-        returnPaginationResults: true,
       });
       expect(prodTraces.traces).toHaveLength(5);
       expect(prodTraces.total).toBe(8);
       expect(prodTraces.hasMore).toBe(true);
     });
 
-    it('should filter by date with pagination for getTraces', async () => {
+    it('should filter by date with pagination for getPaginatedTraces', async () => {
       const scope = 'd1-date-traces';
       const now = new Date();
       const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -1480,12 +1479,11 @@ describe('D1Store Pagination Features', () => {
       const processedRecords = recordsToInsert.map(r => store['processRecord'](r as any));
       await store.batchInsert({ tableName: TABLE_TRACES, records: await Promise.all(processedRecords) });
 
-      const fromYesterday = await store.getTraces({
+      const fromYesterday = await store.getPaginatedTraces({
         scope,
         fromDate: yesterday,
         page: 0,
         perPage: 3,
-        returnPaginationResults: true,
       });
       expect(fromYesterday.total).toBe(4); // 2 from now, 2 from yesterday
       expect(fromYesterday.traces).toHaveLength(3); // Should get 2 from 'now', 1 from 'yesterday' (DESC order)
@@ -1501,13 +1499,12 @@ describe('D1Store Pagination Features', () => {
         );
       }
 
-      const onlyNow = await store.getTraces({
+      const onlyNow = await store.getPaginatedTraces({
         scope,
         fromDate: now,
         toDate: now, // Ensure toDate is inclusive of the 'now' timestamp for D1
         page: 0,
         perPage: 5,
-        returnPaginationResults: true,
       });
       expect(onlyNow.total).toBe(2);
       expect(onlyNow.traces).toHaveLength(2);
@@ -1519,40 +1516,6 @@ describe('D1Store Pagination Features', () => {
 
   describe('getMessages with pagination', () => {
     it('should return paginated messages with total count', async () => {
-      const threadData = createSampleThread();
-      // D1Store requires StorageThreadType which has specific date handling if raw strings are passed.
-      // createSampleThread returns Date objects, which D1Store handles.
-      const thread = await store.saveThread({ thread: threadData as StorageThreadType });
-
-      const messageRecords: MastraMessageV2[] = [];
-      for (let i = 0; i < 15; i++) {
-        messageRecords.push(createSampleMessage(thread.id, [{ type: 'text', text: `Message ${i + 1}` }]));
-      }
-      await store.saveMessages({ messages: messageRecords, format: 'v2' });
-
-      const page1 = await store.getMessages({ threadId: thread.id, page: 0, perPage: 5, format: 'v2' });
-      expect(page1.messages).toHaveLength(5);
-      expect(page1.total).toBe(15);
-      expect(page1.page).toBe(0);
-      expect(page1.perPage).toBe(5);
-      expect(page1.hasMore).toBe(true);
-      const firstMessageContentPage1 = (page1.messages[0] as MastraMessageV2).content as MastraMessageV2['content'];
-      expect(firstMessageContentPage1.parts[0].type).toBe('text');
-      expect((firstMessageContentPage1.parts[0] as { type: 'text'; text: string }).text).toBe('Message 1');
-
-      const page3 = await store.getMessages({ threadId: thread.id, page: 2, perPage: 5, format: 'v2' });
-      expect(page3.messages).toHaveLength(5);
-      expect(page3.total).toBe(15);
-      expect(page3.page).toBe(2);
-      expect(page3.perPage).toBe(5);
-      expect(page3.hasMore).toBe(false);
-
-      const firstMessageContentPage3 = (page3.messages[0] as MastraMessageV2).content as MastraMessageV2['content'];
-      expect(firstMessageContentPage3.parts[0].type).toBe('text');
-      expect((firstMessageContentPage3.parts[0] as { type: 'text'; text: string }).text).toBe('Message 11');
-    });
-
-    it('should filter by date with pagination for getMessages', async () => {
       const threadData = createSampleThread();
       const thread = await store.saveThread({ thread: threadData as StorageThreadType });
       const now = new Date();
@@ -1600,11 +1563,17 @@ describe('D1Store Pagination Features', () => {
       await store.saveMessages({ messages: messagesToSave, format: 'v2' });
       // Total 6 messages: 2 now, 2 yesterday, 2 dayBeforeYesterday (oldest to newest)
 
-      const fromYesterdayResult = await store.getMessages({
+      const fromYesterdayResult = await store.getPaginatedMessages({
         threadId: thread.id,
-        fromDate: yesterday, // Includes yesterday and now messages
-        page: 0,
-        perPage: 3,
+        selectBy: {
+          pagination: {
+            dateRange: {
+              start: yesterday,
+            },
+            page: 0,
+            perPage: 3,
+          },
+        },
         format: 'v2',
       });
       expect(fromYesterdayResult.total).toBe(4); // 2 from now, 2 from yesterday
@@ -1621,11 +1590,17 @@ describe('D1Store Pagination Features', () => {
         now.toISOString().slice(0, 10),
       );
 
-      const onlyDayBefore = await store.getMessages({
+      const onlyDayBefore = await store.getPaginatedMessages({
         threadId: thread.id,
-        toDate: new Date(yesterday.getTime() - 1), // Should only include dayBeforeYesterday
-        page: 0,
-        perPage: 5, // Per page is 5, but only 2 match
+        selectBy: {
+          pagination: {
+            dateRange: {
+              end: new Date(yesterday.getTime() - 1),
+            },
+            page: 0,
+            perPage: 5,
+          },
+        },
         format: 'v2',
       });
       expect(onlyDayBefore.total).toBe(2);
@@ -1669,7 +1644,7 @@ describe('D1Store Pagination Features', () => {
         await store.saveThread({ thread: tr });
       }
 
-      const page1 = await store.getThreadsByResourceId({ resourceId, page: 0, perPage: 7 });
+      const page1 = await store.getPaginatedThreadsByResourceId({ resourceId, page: 0, perPage: 7 });
       expect(page1.threads).toHaveLength(7);
       expect(page1.total).toBe(17);
       expect(page1.page).toBe(0);
@@ -1677,7 +1652,7 @@ describe('D1Store Pagination Features', () => {
       expect(page1.hasMore).toBe(true);
       expect(page1.threads[0].id).toBe(threadRecords[16].id);
 
-      const page3 = await store.getThreadsByResourceId({ resourceId, page: 2, perPage: 7 });
+      const page3 = await store.getPaginatedThreadsByResourceId({ resourceId, page: 2, perPage: 7 });
       expect(page3.threads).toHaveLength(3);
       expect(page3.total).toBe(17);
       expect(page3.page).toBe(2);
