@@ -69,6 +69,7 @@ jobs:
       - name: Extract renovate cache
         run: |
           set -x
+          mkdir -p $cache_dir
           # Skip if no cache is set, such as the first time it runs.
           if [ ! -d cache-download ] ; then
             echo "No cache found."
@@ -76,7 +77,7 @@ jobs:
           fi
 
           # Make sure the directory exists, and extract it there. Note that it's nested in the download directory.
-          mkdir -p $cache_dir
+
           tar -xzf cache-download/$cache_archive -C $cache_dir
 
           # Unfortunately, the permissions expected within renovate's docker container
