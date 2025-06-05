@@ -51,7 +51,7 @@ function Agent() {
       defaultGenerateOptions={agent?.defaultGenerateOptions}
       defaultStreamOptions={agent?.defaultStreamOptions}
     >
-      <MainContentContent divided={true} hasLeftServiceColumn={withSidebar}>
+      <MainContentContent isDivided={true} hasLeftServiceColumn={withSidebar}>
         {withSidebar && (
           <AgentSidebar agentId={agentId!} threadId={threadId!} threads={threads} isLoading={isThreadsLoading} />
         )}

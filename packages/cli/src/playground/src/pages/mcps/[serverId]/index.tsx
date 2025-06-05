@@ -55,7 +55,7 @@ export const McpServerPage = () => {
       </Header>
 
       {isLoading ? null : server ? (
-        <MainContentContent divided={true}>
+        <MainContentContent isDivided={true}>
           <div className="px-8 py-20 mx-auto max-w-[604px] w-full">
             <Txt as="h1" variant="header-md" className="text-icon6 font-medium pb-4">
               {server.name}

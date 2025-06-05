@@ -10,7 +10,7 @@ export const WorkflowGraphLayout = ({ children }: WorkflowGraphLayoutProps) => {
   const { workflowId } = useParams();
 
   return (
-    <MainContentContent divided={true}>
+    <MainContentContent isDivided={true}>
       {children}
       <WorkflowInformation workflowId={workflowId!} />
     </MainContentContent>

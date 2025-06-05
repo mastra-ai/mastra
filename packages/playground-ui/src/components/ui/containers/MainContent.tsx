@@ -25,7 +25,7 @@ export function MainContentContent({
   children,
   className,
   isCentered = false,
-  divided = false,
+  isDivided = false,
   hasLeftServiceColumn = false,
   style,
 }: {
@@ -35,7 +35,7 @@ export function MainContentContent({
   // content is centered in the middle of the page e.g. for empty state
   isCentered?: boolean;
   // content is split into two columns equal width columns
-  divided?: boolean;
+  isDivided?: boolean;
   // used when the left column is a service column (e.g. agent history nav)
   hasLeftServiceColumn?: boolean;
 }) {
@@ -47,12 +47,11 @@ export function MainContentContent({
         `grid overflow-y-auto h-full `,
         `overflow-x-auto min-w-[min-content]`,
         {
-          'items-start content-start': !isCentered && !divided && !hasLeftServiceColumn,
-          '': divided || hasLeftServiceColumn,
+          'items-start content-start': !isCentered && !isDivided && !hasLeftServiceColumn,
           'grid place-items-center': isCentered,
-          'grid-cols-[1fr_1fr]': divided && !hasLeftServiceColumn,
-          'grid-cols-[auto_1fr_1fr]': divided && hasLeftServiceColumn,
-          'grid-cols-[auto_1fr]': !divided && hasLeftServiceColumn,
+          'grid-cols-[1fr_1fr]': isDivided && !hasLeftServiceColumn,
+          'grid-cols-[auto_1fr_1fr]': isDivided && hasLeftServiceColumn,
+          'grid-cols-[auto_1fr]': !isDivided && hasLeftServiceColumn,
         },
         className,
       )}

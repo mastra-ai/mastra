@@ -17,7 +17,7 @@ export default function Network() {
 
   if (isNetworkLoading) {
     return (
-      <MainContentContent divided={true}>
+      <MainContentContent isDivided={true}>
         <div />
         <div className="flex flex-col">
           <NetworkInformation networkId={networkId!} />
@@ -28,7 +28,7 @@ export default function Network() {
 
   return (
     <NetworkProvider>
-      <MainContentContent divided={true}>
+      <MainContentContent isDivided={true}>
         <div className="grid overflow-y-auto relative bg-surface1 py-4">
           <NetworkChat
             agentId={networkId!}
