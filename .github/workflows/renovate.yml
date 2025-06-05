@@ -106,6 +106,7 @@ jobs:
           token: ${{ steps.app-token.outputs.token  }}
         env:
           LOG_LEVEL: 'debug'
+          RENOVATE_REPOSITORIES: ${{ github.repository }}
           # This enables the cache -- if this is set, it's not necessary to add it to renovate.json.
           RENOVATE_REPOSITORY_CACHE: ${{ github.event.inputs.repoCache || 'enabled' }}
 
