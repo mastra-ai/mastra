@@ -64,7 +64,12 @@ describe('Logs Handlers', () => {
       });
 
       expect(result).toEqual(mockLogs);
-      expect(mockLogger.getLogs).toHaveBeenCalledWith('test-transport', undefined);
+      expect(mockLogger.getLogs).toHaveBeenCalledWith('test-transport', {
+        filters: undefined,
+        fromDate: undefined,
+        logLevel: undefined,
+        toDate: undefined,
+      });
     });
 
     it('should get logs successfully with params', async () => {
