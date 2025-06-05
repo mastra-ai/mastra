@@ -153,7 +153,7 @@ export class CoreToolBuilder extends MastraBase {
     // dont't add memory or mastra to logging
     const { logger, mastra: _mastra, memory: _memory, runtimeContext, ...rest } = options;
 
-    const { start, error: errorLog } = this.createLogMessageOptions({
+    const { start, error } = this.createLogMessageOptions({
       agentName: options.agentName,
       toolName: options.name,
       type: logType,
@@ -188,11 +188,11 @@ export class CoreToolBuilder extends MastraBase {
         const mastraError = new MastraError(
           {
             id: 'TOOL_EXECUTION_FAILED',
-            text: errorLog,
             domain: ErrorDomain.TOOL,
             category: ErrorCategory.USER,
             details: {
               ...rest,
+              error,
               args,
               model: rest.model?.modelId ?? '',
             },
