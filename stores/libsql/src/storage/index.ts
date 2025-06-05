@@ -403,6 +403,11 @@ export class LibSQLStore extends MastraStorage {
   }
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
+    // Delete messages for this thread (manual step)
+    await this.client.execute({
+      sql: `DELETE FROM ${TABLE_MESSAGES} WHERE thread_id = ?`,
+      args: [threadId],
+    });
     await this.client.execute({
       sql: `DELETE FROM ${TABLE_THREADS} WHERE id = ?`,
       args: [threadId],

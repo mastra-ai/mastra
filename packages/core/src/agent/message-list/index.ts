@@ -315,7 +315,10 @@ ${JSON.stringify(message, null, 2)}`,
     // If the last message is an assistant message and the new message is also an assistant message, merge them together and update tool calls with results
     const latestMessagePartType = latestMessage?.content?.parts?.filter(p => p.type !== `step-start`)?.at?.(-1)?.type;
     const newMessageFirstPartType = messageV2.content.parts.filter(p => p.type !== `step-start`).at(0)?.type;
-    const shouldAppendToLastAssistantMessage = latestMessage?.role === 'assistant' && messageV2.role === 'assistant';
+    const shouldAppendToLastAssistantMessage =
+      latestMessage?.role === 'assistant' &&
+      messageV2.role === 'assistant' &&
+      latestMessage.threadId === messageV2.threadId;
     const shouldAppendToLastAssistantMessageParts =
       shouldAppendToLastAssistantMessage &&
       newMessageFirstPartType &&

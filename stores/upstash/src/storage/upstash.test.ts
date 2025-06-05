@@ -252,6 +252,24 @@ describe('UpstashStore', () => {
       const retrievedThreads = await store.getThreadsByResourceId({ resourceId });
       expect(retrievedThreads).toHaveLength(total);
     });
+
+    it('should delete thread and its messages', async () => {
+      const thread = createSampleThread({});
+      await store.saveThread({ thread });
+
+      // Add some messages
+      const messages = [createSampleMessage({ threadId: thread.id }), createSampleMessage({ threadId: thread.id })];
+      await store.saveMessages({ messages, format: 'v2' });
+
+      await store.deleteThread({ threadId: thread.id });
+
+      const retrievedThread = await store.getThreadById({ threadId: thread.id });
+      expect(retrievedThread).toBeNull();
+
+      // Verify messages were also deleted
+      const retrievedMessages = await store.getMessages({ threadId: thread.id });
+      expect(retrievedMessages).toHaveLength(0);
+    });
   });
 
   describe('Date Handling', () => {

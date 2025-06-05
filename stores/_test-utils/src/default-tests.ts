@@ -206,6 +206,27 @@ export function createTestSuite(storage: MastraStorage) {
         const retrievedThread = await storage.getThreadById({ threadId: thread.id });
         expect(retrievedThread).toBeNull();
       });
+
+      it('should delete thread and its messages', async () => {
+        const thread = createSampleThread();
+        await storage.saveThread({ thread });
+
+        // Add some messages
+        const messages = [
+          createSampleMessageV2({ threadId: thread.id }),
+          createSampleMessageV2({ threadId: thread.id }),
+        ];
+        await storage.saveMessages({ messages, format: 'v2' });
+
+        await storage.deleteThread({ threadId: thread.id });
+
+        const retrievedThread = await storage.getThreadById({ threadId: thread.id });
+        expect(retrievedThread).toBeNull();
+
+        // Verify messages were also deleted
+        const retrievedMessages = await storage.getMessages({ threadId: thread.id });
+        expect(retrievedMessages).toHaveLength(0);
+      });
     });
 
     describe('Message Operations', () => {
