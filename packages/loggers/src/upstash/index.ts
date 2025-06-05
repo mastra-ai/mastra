@@ -1,5 +1,5 @@
 import { LoggerTransport } from '@mastra/core/logger';
-import type { BaseLogMessage } from '@mastra/core/logger';
+import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 
 export class UpstashTransport extends LoggerTransport {
   upstashUrl: string;
@@ -143,31 +143,69 @@ export class UpstashTransport extends LoggerTransport {
     }
   }
 
-  async getLogs(): Promise<BaseLogMessage[]> {
+  async getLogs(params?: {
+    fromDate?: Date;
+    toDate?: Date;
+    logLevel?: LogLevel;
+    filters?: Record<string, any>;
+  }): Promise<BaseLogMessage[]> {
     try {
       // Get all logs from the list
       const command = ['LRANGE', this.listName, 0, -1];
       const response = await this.executeUpstashCommand(command);
 
-      // Parse the logs from JSON strings back to objects
-      return (
+      const logs =
         (response?.[0]?.result?.map((log: string) => {
           try {
+            // Parse the logs from JSON strings back to objects
             return JSON.parse(log);
           } catch {
             return {};
           }
-        }) as BaseLogMessage[]) || []
-      );
+        }) as BaseLogMessage[]) || [];
+
+      let filteredLogs = logs.filter(record => record !== null && typeof record === 'object');
+
+      if (params?.filters) {
+        filteredLogs = filteredLogs.filter(log =>
+          Object.entries(params.filters || {}).every(([key, value]) => log[key as keyof BaseLogMessage] === value),
+        );
+      }
+
+      if (params?.logLevel) {
+        filteredLogs = filteredLogs.filter(log => log.level === params.logLevel);
+      }
+
+      if (params?.fromDate) {
+        filteredLogs = filteredLogs.filter(log => new Date(log.time)?.getTime() >= params.fromDate!.getTime());
+      }
+
+      if (params?.toDate) {
+        filteredLogs = filteredLogs.filter(log => new Date(log.time)?.getTime() <= params.toDate!.getTime());
+      }
+
+      return filteredLogs;
     } catch (error) {
       console.error('Error getting logs from Upstash:', error);
       return [];
     }
   }
 
-  async getLogsByRunId({ runId }: { runId: string }): Promise<BaseLogMessage[]> {
+  async getLogsByRunId({
+    runId,
+    fromDate,
+    toDate,
+    logLevel,
+    filters,
+  }: {
+    runId: string;
+    fromDate?: Date;
+    toDate?: Date;
+    logLevel?: LogLevel;
+    filters?: Record<string, any>;
+  }): Promise<BaseLogMessage[]> {
     try {
-      const allLogs = await this.getLogs();
+      const allLogs = await this.getLogs({ fromDate, toDate, logLevel, filters });
       const logs = (allLogs?.filter((log: any) => log.runId === runId) || []) as BaseLogMessage[];
       return logs;
     } catch (error) {

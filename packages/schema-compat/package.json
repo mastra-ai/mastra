@@ -1,0 +1,56 @@
+{
+  "name": "@mastra/schema-compat",
+  "version": "0.10.2-alpha.1",
+  "description": "Tool schema compatibility layer for Mastra.ai",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --experimental-dts --clean --treeshake=smallest --splitting",
+    "build:watch": "pnpm build --watch",
+    "test": "vitest run",
+    "lint": "eslint ."
+  },
+  "keywords": [
+    "mastra",
+    "schema",
+    "tool",
+    "compatibility",
+    "zod"
+  ],
+  "author": "",
+  "license": "Elastic-2.0",
+  "dependencies": {
+    "zod-from-json-schema": "^0.0.5",
+    "zod-to-json-schema": "^3.24.5",
+    "json-schema": "^0.4.0"
+  },
+  "peerDependencies": {
+    "zod": "^3.0.0",
+    "ai": "^4.0.0"
+  },
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@types/node": "^20.17.27",
+    "@types/json-schema": "^7.0.15",
+    "eslint": "^9.23.0",
+    "tsup": "^8.4.0",
+    "typescript": "^5.8.2",
+    "vitest": "^3.1.2",
+    "zod": "^3.24.3",
+    "ai": "4.3.16"
+  }
+}

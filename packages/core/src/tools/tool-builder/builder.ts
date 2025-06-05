@@ -1,24 +1,20 @@
+import {
+  OpenAIReasoningSchemaCompatLayer,
+  OpenAISchemaCompatLayer,
+  GoogleSchemaCompatLayer,
+  AnthropicSchemaCompatLayer,
+  DeepSeekSchemaCompatLayer,
+  MetaSchemaCompatLayer,
+  applyCompatLayer,
+  convertZodSchemaToAISDKSchema,
+} from '@mastra/schema-compat';
 import type { ToolExecutionOptions } from 'ai';
-import { jsonSchema } from 'ai';
-import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema, ZodType } from 'zod';
 import { z } from 'zod';
-import { convertJsonSchemaToZod } from 'zod-from-json-schema';
-import type { JSONSchema as ZodFromJSONSchema_JSONSchema } from 'zod-from-json-schema';
-import type { Targets } from 'zod-to-json-schema';
-import { zodToJsonSchema } from 'zod-to-json-schema';
 import { MastraBase } from '../../base';
 import { RuntimeContext } from '../../runtime-context';
 import { isVercelTool } from '../../tools/toolchecks';
-import { isZodType } from '../../utils';
 import type { ToolOptions } from '../../utils';
 import type { CoreTool, ToolAction, VercelTool } from '../types';
-import { AnthropicToolCompat } from './provider-compats/anthropic';
-import { DeepSeekToolCompat } from './provider-compats/deepseek';
-import { GoogleToolCompat } from './provider-compats/google';
-import { MetaToolCompat } from './provider-compats/meta';
-import { OpenAIToolCompat } from './provider-compats/openai';
-import { OpenAIReasoningToolCompat } from './provider-compats/openai-reasoning';
 
 export type ToolToConvert = VercelTool | ToolAction<any, any, any>;
 export type LogType = 'tool' | 'toolset' | 'client-tool';
@@ -32,53 +28,6 @@ interface LogOptions {
 interface LogMessageOptions {
   start: string;
   error: string;
-}
-
-// mirrors https://github.com/vercel/ai/blob/main/packages/ui-utils/src/zod-schema.ts#L21 but with a custom target
-export function convertZodSchemaToAISDKSchema(zodSchema: ZodSchema, target: Targets = 'jsonSchema7') {
-  return jsonSchema(
-    zodToJsonSchema(zodSchema, {
-      $refStrategy: 'none',
-      target,
-    }) as JSONSchema7,
-    {
-      validate: value => {
-        const result = zodSchema.safeParse(value);
-        return result.success ? { success: true, value: result.data } : { success: false, error: result.error };
-      },
-    },
-  );
-}
-
-export function convertVercelToolParameters(tool: VercelTool): z.ZodType {
-  const schema = tool.parameters ?? z.object({});
-  if (isZodType(schema)) {
-    return schema;
-  } else {
-    const jsonSchemaToConvert = ('jsonSchema' in schema ? schema.jsonSchema : schema) as ZodFromJSONSchema_JSONSchema;
-    try {
-      return convertJsonSchemaToZod(jsonSchemaToConvert);
-    } catch (e: unknown) {
-      const errorMessage = `[CoreToolBuilder] Failed to convert Vercel tool JSON schema parameters to Zod. Original schema: ${JSON.stringify(jsonSchemaToConvert)}`;
-      console.error(errorMessage, e);
-      throw new Error(errorMessage + (e instanceof Error ? `\n${e.stack}` : '\nUnknown error object'));
-    }
-  }
-}
-
-function convertInputSchema(tool: ToolAction<any, any, any>): z.ZodType {
-  const schema = tool.inputSchema ?? z.object({});
-  if (isZodType(schema)) {
-    return schema;
-  } else {
-    try {
-      return convertJsonSchemaToZod(schema as ZodFromJSONSchema_JSONSchema);
-    } catch (e: unknown) {
-      const errorMessage = `[CoreToolBuilder] Failed to convert tool input JSON schema to Zod. Original schema: ${JSON.stringify(schema)}`;
-      console.error(errorMessage, e);
-      throw new Error(errorMessage + (e instanceof Error ? `\n${e.stack}` : '\nUnknown error object'));
-    }
-  }
 }
 
 export class CoreToolBuilder extends MastraBase {
@@ -96,10 +45,10 @@ export class CoreToolBuilder extends MastraBase {
   // Helper to get parameters based on tool type
   private getParameters = () => {
     if (isVercelTool(this.originalTool)) {
-      return convertVercelToolParameters(this.originalTool);
+      return this.originalTool.parameters ?? z.object({});
     }
 
-    return convertInputSchema(this.originalTool);
+    return this.originalTool.inputSchema ?? z.object({});
   };
 
   // For provider-defined tools, we need to include all required properties
@@ -209,36 +158,30 @@ export class CoreToolBuilder extends MastraBase {
         : undefined,
     };
 
-    const parametersObject: { parameters?: ZodType; inputSchema?: ZodType } = {};
-
-    if (isVercelTool(this.originalTool)) {
-      parametersObject.parameters = this.getParameters();
-    } else {
-      parametersObject.inputSchema = this.getParameters();
-    }
-
     const model = this.options.model;
 
-    const hasParameters = parametersObject.parameters || parametersObject.inputSchema;
+    const schemaCompatLayers = [];
 
-    if (model && hasParameters) {
-      for (const compat of [
-        new OpenAIReasoningToolCompat(model),
-        new OpenAIToolCompat(model),
-        new GoogleToolCompat(model),
-        new AnthropicToolCompat(model),
-        new DeepSeekToolCompat(model),
-        new MetaToolCompat(model),
-      ]) {
-        if (compat.shouldApply()) {
-          return { ...definition, ...compat.process({ ...this.originalTool, ...parametersObject }) };
-        }
-      }
+    if (model) {
+      schemaCompatLayers.push(
+        new OpenAIReasoningSchemaCompatLayer(model),
+        new OpenAISchemaCompatLayer(model),
+        new GoogleSchemaCompatLayer(model),
+        new AnthropicSchemaCompatLayer(model),
+        new DeepSeekSchemaCompatLayer(model),
+        new MetaSchemaCompatLayer(model),
+      );
     }
+
+    const processedSchema = applyCompatLayer({
+      schema: this.getParameters(),
+      compatLayers: schemaCompatLayers,
+      mode: 'aiSdkSchema',
+    });
 
     return {
       ...definition,
-      parameters: convertZodSchemaToAISDKSchema(this.getParameters()),
+      parameters: processedSchema,
     };
   }
 }
