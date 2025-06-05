@@ -101,6 +101,7 @@ jobs:
       - name: Self-hosted Renovate
         uses: renovatebot/github-action@v42.0.3
         with:
+          configurationFile: renovate.json
           docker-user: '${{ steps.id.outputs.user }}:${{ steps.id.outputs.group }}'
           token: ${{ steps.app-token.outputs.token  }}
         env:
