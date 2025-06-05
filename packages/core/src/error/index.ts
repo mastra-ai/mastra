@@ -1,11 +1,4 @@
-export enum Level {
-  ERROR = 'ERROR',
-  WARNING = 'WARNING',
-  INFO = 'INFO',
-  DEBUG = 'DEBUG',
-}
-
-export enum Domain {
+export enum ErrorDomain {
   TOOL = 'TOOL',
   AGENT = 'AGENT',
   MCP = 'MCP',
@@ -105,4 +98,4 @@ export class MastraBaseError<D, C> extends Error {
   }
 }
 
-export class MastraError extends MastraBaseError<Domain, ErrorCategory> {}
+export class MastraError extends MastraBaseError<ErrorDomain, ErrorCategory> {}
