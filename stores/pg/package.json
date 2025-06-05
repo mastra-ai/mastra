@@ -35,15 +35,15 @@
   "license": "MIT",
   "dependencies": {
     "async-mutex": "^0.5.0",
-    "pg": "^8.13.3",
-    "pg-promise": "^11.11.0",
+    "pg": "^8.16.0",
+    "pg-promise": "^11.13.0",
     "xxhash-wasm": "^1.1.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.52.5",
     "@types/node": "^20.17.27",
-    "@types/pg": "^8.11.11",
+    "@types/pg": "^8.15.4",
     "eslint": "^9.23.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
