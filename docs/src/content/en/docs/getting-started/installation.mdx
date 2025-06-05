@@ -3,8 +3,9 @@ title: "Installing Mastra Locally | Getting Started | Mastra Docs"
 description: Guide on installing Mastra and setting up the necessary prerequisites for running it with various LLM providers.
 ---
 
-import { Callout, Steps, Tabs } from "nextra/components";
+import { Callout, Steps } from "nextra/components";
 import YouTube from "@/components/youtube";
+import { Tabs, Tab } from "@/components/tabs";
 
 # Installing Mastra Locally
 
@@ -58,32 +59,31 @@ All commands achieve the same result - creating a new Mastra project with the in
 */}
 
 <Tabs items={["npx", "npm", "yarn", "pnpm", "bun"]}>
-
-  <Tabs.Tab>
+  <Tab>
   ```bash copy
 npx create-mastra@latest
   ```
-  </Tabs.Tab>
-  <Tabs.Tab>
+  </Tab>
+  <Tab>
   ```bash copy
 npm create mastra@latest
    ```
-   </Tabs.Tab>
-  <Tabs.Tab>
+   </Tab>
+  <Tab>
   ```bash copy
 yarn create mastra@latest
    ```
-   </Tabs.Tab>
-  <Tabs.Tab>
+   </Tab>
+  <Tab>
   ```bash copy
 pnpm create mastra@latest
   ```
-  </Tabs.Tab>
-<Tabs.Tab>
+  </Tab>
+<Tab>
   ```bash copy
 bun create mastra@latest
   ```
-  </Tabs.Tab>
+  </Tab>
 </Tabs>
 
 After the prompts, `create-mastra` will:
@@ -144,7 +144,7 @@ This helps users manually set up a Mastra project with their preferred package m
 
 <Tabs items={["npm", "pnpm", "yarn", "bun"]}>
 
-  <Tabs.Tab>
+  <Tab>
     ```bash copy
     npm init -y
 
@@ -153,8 +153,8 @@ This helps users manually set up a Mastra project with their preferred package m
     npm install @mastra/core@latest zod @ai-sdk/openai
     ```
 
-  </Tabs.Tab>
-  <Tabs.Tab>
+  </Tab>
+  <Tab>
     ```bash copy
     pnpm init
 
@@ -163,8 +163,8 @@ This helps users manually set up a Mastra project with their preferred package m
     pnpm add @mastra/core@latest zod @ai-sdk/openai
     ```
 
-  </Tabs.Tab>
-  <Tabs.Tab>
+  </Tab>
+  <Tab>
     ```bash copy
     yarn init -y
 
@@ -173,8 +173,8 @@ This helps users manually set up a Mastra project with their preferred package m
     yarn add @mastra/core@latest zod @ai-sdk/openai
     ```
 
-  </Tabs.Tab>
-  <Tabs.Tab>
+  </Tab>
+  <Tab>
     ```bash copy
     bun init -y
 
@@ -183,7 +183,7 @@ This helps users manually set up a Mastra project with their preferred package m
     bun add @mastra/core@latest zod @ai-sdk/openai
     ```
 
-  </Tabs.Tab>
+  </Tab>
 </Tabs>
 
 Add the `dev` and `build` scripts to `package.json`:
@@ -639,14 +639,14 @@ This command creates REST API endpoints for your agents which are available on t
 You can also test the agent's endpoint using `curl` or `fetch`:
 
 <Tabs items={['curl', 'fetch']}>
-  <Tabs.Tab>
+  <Tab>
 ```bash copy
 curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
 -H "Content-Type: application/json" \
 -d '{"messages": ["What is the weather in London?"]}'
 ```
-  </Tabs.Tab>
-  <Tabs.Tab>
+  </Tab>
+  <Tab>
 ```js copy showLineNumbers
 fetch('http://localhost:4111/api/agents/weatherAgent/generate', {
   method: 'POST',
@@ -665,7 +665,7 @@ fetch('http://localhost:4111/api/agents/weatherAgent/generate', {
     console.error('Error:', error);
   });
 ```
-  </Tabs.Tab>
+  </Tab>
 </Tabs>
 
 ### Run from the command line
@@ -681,10 +681,26 @@ touch src/test-agent.ts
 Install `dotenv` to load environment variables (e.g. your API keys):
 
 <Tabs items={["npm", "pnpm", "yarn", "bun"]}>
-  <Tabs.Tab>```bash copy npm install dotenv --save-dev ```</Tabs.Tab>
-  <Tabs.Tab>```bash copy pnpm add dotenv --save-dev ```</Tabs.Tab>
-  <Tabs.Tab>```bash copy yarn add dotenv --dev ```</Tabs.Tab>
-  <Tabs.Tab>```bash copy bun add dotenv --dev ```</Tabs.Tab>
+  <Tab>
+  ```bash copy 
+  npm install dotenv --save-dev 
+  ```
+  </Tab>
+  <Tab>
+  ```bash copy 
+  pnpm add dotenv --save-dev 
+  ```
+  </Tab>
+  <Tab>
+  ```bash copy 
+  yarn add dotenv --dev 
+  ```
+  </Tab>
+  <Tab>
+  ```bash copy 
+  bun add dotenv --dev 
+  ```
+  </Tab>
 </Tabs>
 
 If you're using a `.env` file, add the following code:
