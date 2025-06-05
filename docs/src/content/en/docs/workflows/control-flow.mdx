@@ -90,10 +90,10 @@ export const testWorkflow = createWorkflow({
     number: z.number()
   })
 })
-  .then(cityCoordinatesStep)
+  .then(step1)
   .branch([
-    [async ({ inputData: { some_value } }) => some_value < 10, lessThanStep],
-    [async ({ inputData: { some_value } }) => some_value > 10, greaterThanStep],
+    [async ({ inputData: { some_value } }) => some_value <= 9, lessThanStep],
+    [async ({ inputData: { some_value } }) => some_value >= 10, greaterThanStep]
   ])
   .commit();
 ```
@@ -119,6 +119,7 @@ import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
 const step1 = createStep({...});
+const counterStep = createStep({...});
 const finalStep = createStep({...});
 
 export const testWorkflow = createWorkflow({
@@ -131,7 +132,7 @@ export const testWorkflow = createWorkflow({
     number: z.number()
   })
 })
-  .then(cityCoordinatesStep)
+  .then(step1)
   .dowhile(counterStep, async ({ inputData: { number } }) => number < 10)
   .then(finalStep)
   .commit();
@@ -146,6 +147,7 @@ import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
 const step1 = createStep({...});
+const counterStep = createStep({...});
 const finalStep = createStep({...});
 
 export const testWorkflow = createWorkflow({
@@ -158,7 +160,7 @@ export const testWorkflow = createWorkflow({
     number: z.number()
   })
 })
-  .then(cityCoordinatesStep)
+  .then(step1)
   .dountil(counterStep, async ({ inputData: { number } }) => number > 10)
   .then(finalStep)
   .commit();
@@ -193,7 +195,7 @@ export const testWorkflow = createWorkflow({
   description: 'Test workflow',
   inputSchema: z.array(z.object({ number: z.number() })),
   outputSchema: z.object({
-    outcome: z.number()
+    number: z.number()
   })
 })
   .foreach(mapStep)
@@ -232,7 +234,7 @@ export const testWorkflow = createWorkflow({
   description: 'Test workflow',
   inputSchema: z.array(z.object({ number: z.number() })),
   outputSchema: z.object({
-    outcome: z.number()
+    number: z.number()
   })
 })
   .foreach(mapStep, { concurrency: 2 })
