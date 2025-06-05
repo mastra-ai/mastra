@@ -8,8 +8,18 @@ export interface IMastraLogger {
   error(message: string, ...args: any[]): void;
 
   getTransports(): Map<string, LoggerTransport>;
-  getLogs(_transportId: string): Promise<any[]>;
-  getLogsByRunId(_args: { transportId: string; runId: string }): Promise<any[]>;
+  getLogs(
+    _transportId: string,
+    _params?: { fromDate?: Date; toDate?: Date; logLevel?: LogLevel; filters?: Record<string, any> },
+  ): Promise<any[]>;
+  getLogsByRunId(_args: {
+    transportId: string;
+    runId: string;
+    fromDate?: Date;
+    toDate?: Date;
+    logLevel?: LogLevel;
+    filters?: Record<string, any>;
+  }): Promise<any[]>;
 }
 
 export abstract class MastraLogger implements IMastraLogger {
@@ -38,19 +48,36 @@ export abstract class MastraLogger implements IMastraLogger {
     return this.transports;
   }
 
-  async getLogs(transportId: string) {
+  async getLogs(
+    transportId: string,
+    params?: { fromDate?: Date; toDate?: Date; logLevel?: LogLevel; filters?: Record<string, any> },
+  ) {
     if (!transportId || !this.transports.has(transportId)) {
       return [];
     }
 
-    return this.transports.get(transportId)!.getLogs() ?? [];
+    return this.transports.get(transportId)!.getLogs(params) ?? [];
   }
 
-  async getLogsByRunId({ transportId, runId }: { transportId: string; runId: string }) {
+  async getLogsByRunId({
+    transportId,
+    runId,
+    fromDate,
+    toDate,
+    logLevel,
+    filters,
+  }: {
+    transportId: string;
+    runId: string;
+    fromDate?: Date;
+    toDate?: Date;
+    logLevel?: LogLevel;
+    filters?: Record<string, any>;
+  }) {
     if (!transportId || !this.transports.has(transportId) || !runId) {
       return [];
     }
 
-    return this.transports.get(transportId)!.getLogsByRunId({ runId }) ?? [];
+    return this.transports.get(transportId)!.getLogsByRunId({ runId, fromDate, toDate, logLevel, filters }) ?? [];
   }
 }

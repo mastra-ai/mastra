@@ -1,9 +1,10 @@
 import { Transform } from 'stream';
+import type { LogLevel } from './constants';
 
 export interface BaseLogMessage {
   runId?: string;
   msg: string;
-  level: number;
+  level: LogLevel;
   time: Date;
   pid: number;
   hostname: string;
@@ -15,10 +16,21 @@ export abstract class LoggerTransport extends Transform {
     super({ ...opts, objectMode: true });
   }
 
-  async getLogsByRunId(_args: { runId: string }): Promise<BaseLogMessage[]> {
+  async getLogsByRunId(_args: {
+    runId: string;
+    fromDate?: Date;
+    toDate?: Date;
+    logLevel?: LogLevel;
+    filters?: Record<string, any>;
+  }): Promise<BaseLogMessage[]> {
     return [];
   }
-  async getLogs(): Promise<BaseLogMessage[]> {
+  async getLogs(_args?: {
+    fromDate?: Date;
+    toDate?: Date;
+    logLevel?: LogLevel;
+    filters?: Record<string, any>;
+  }): Promise<BaseLogMessage[]> {
     return [];
   }
 }
