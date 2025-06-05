@@ -73,7 +73,7 @@ export type Trace = {
   traceId: string;
   scope: string;
   kind: ReadableSpan['kind'];
-  attributes: ReadableSpan['attributes'] | null;
+  attributes: ReadableSpan['attributes'];
   status: ReadableSpan['status'];
   events: ReadableSpan['events'];
   links: ReadableSpan['links'];
