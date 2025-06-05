@@ -29,7 +29,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "cloudflare": "^4.1.0"
+    "cloudflare": "^4.3.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
