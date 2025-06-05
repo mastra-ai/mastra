@@ -900,7 +900,8 @@ export default withGT(
       {
         source: "/:locale/docs/workflows-vnext/overview",
         destination: "/:locale/docs/workflows/overview",
-      }, {
+      },
+      {
         source: "/:locale/reference/rag/vector-search",
         destination: "/:locale/examples/rag/query/hybrid-vector-search",
         permanent: true,
