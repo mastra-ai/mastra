@@ -143,7 +143,7 @@ const ToolsInner = ({ toolsWithAgents }: { toolsWithAgents: ToolWithAgents[] }) 
         <HeaderTitle>Tools</HeaderTitle>
       </Header>
 
-      <MainContentContent className="max-w-5xl mx-auto px-4">
+      <MainContentContent className="max-w-5xl mx-auto px-4 pt-4">
         <div className="px-4 flex items-center gap-2 rounded-lg bg-surface5 focus-within:ring-2 focus-within:ring-accent3">
           <Icon>
             <SearchIcon />
@@ -164,7 +164,7 @@ const ToolsInner = ({ toolsWithAgents }: { toolsWithAgents: ToolWithAgents[] }) 
           </Txt>
         )}
 
-        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4 max-w-5xl mx-auto px-4 py-8">
+        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4 max-w-5xl mx-auto  py-8">
           {filteredTools.map(tool => (
             <ToolEntity key={tool.id} tool={tool} />
           ))}
