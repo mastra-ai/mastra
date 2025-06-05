@@ -6,20 +6,23 @@ import type { MetricResult, TestInfo } from '@mastra/core/eval';
 import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
 import {
   MastraStorage,
+  TABLE_EVALS,
   TABLE_MESSAGES,
   TABLE_THREADS,
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
-  TABLE_EVALS,
 } from '@mastra/core/storage';
 import type {
   EvalRow,
+  PaginationArgs,
+  PaginationInfo,
   StorageColumn,
   StorageGetMessagesArg,
   TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
 } from '@mastra/core/storage';
+import type { Trace } from '@mastra/core/telemetry';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 
@@ -274,25 +277,11 @@ export class LibSQLStore extends MastraStorage {
     };
   }
 
-  public async getThreadsByResourceId(args: { resourceId: string }): Promise<StorageThreadType[]>;
-  public async getThreadsByResourceId(args: { resourceId: string; page: number; perPage?: number }): Promise<{
-    threads: StorageThreadType[];
-    total: number;
-    page: number;
-    perPage: number;
-    hasMore: boolean;
-  }>;
-  public async getThreadsByResourceId(args: { resourceId: string; page?: number; perPage?: number }): Promise<
-    | StorageThreadType[]
-    | {
-        threads: StorageThreadType[];
-        total: number;
-        page: number;
-        perPage: number;
-        hasMore: boolean;
-      }
-  > {
-    const { resourceId, page, perPage: perPageInput } = args;
+  /**
+   * @deprecated use getThreadsByResourceIdPaginated instead for paginated results.
+   */
+  public async getThreadsByResourceId(args: { resourceId: string }): Promise<StorageThreadType[]> {
+    const { resourceId } = args;
 
     try {
       const baseQuery = `FROM ${TABLE_THREADS} WHERE resourceId = ?`;
@@ -307,58 +296,77 @@ export class LibSQLStore extends MastraStorage {
         metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
       });
 
-      if (page !== undefined) {
-        const perPage = perPageInput !== undefined ? perPageInput : 100;
-        const currentOffset = page * perPage;
+      // Non-paginated path
+      const result = await this.client.execute({
+        sql: `SELECT * ${baseQuery} ORDER BY createdAt DESC`,
+        args: queryParams,
+      });
 
-        const countResult = await this.client.execute({
-          sql: `SELECT COUNT(*) as count ${baseQuery}`,
-          args: queryParams,
-        });
-        const total = Number(countResult.rows?.[0]?.count ?? 0);
-
-        if (total === 0) {
-          return {
-            threads: [],
-            total: 0,
-            page,
-            perPage,
-            hasMore: false,
-          };
-        }
-
-        const dataResult = await this.client.execute({
-          sql: `SELECT * ${baseQuery} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
-          args: [...queryParams, perPage, currentOffset],
-        });
-
-        const threads = (dataResult.rows || []).map(mapRowToStorageThreadType);
-
-        return {
-          threads,
-          total,
-          page,
-          perPage,
-          hasMore: currentOffset + threads.length < total,
-        };
-      } else {
-        // Non-paginated path
-        const result = await this.client.execute({
-          sql: `SELECT * ${baseQuery} ORDER BY createdAt DESC`,
-          args: queryParams,
-        });
-
-        if (!result.rows) {
-          return [];
-        }
-        return result.rows.map(mapRowToStorageThreadType);
+      if (!result.rows) {
+        return [];
       }
+      return result.rows.map(mapRowToStorageThreadType);
     } catch (error) {
       this.logger.error(`Error getting threads for resource ${resourceId}:`, error);
-      if (page !== undefined) {
-        return { threads: [], total: 0, page, perPage: perPageInput || 100, hasMore: false };
-      }
       return [];
+    }
+  }
+
+  public async getThreadsByResourceIdPaginated(
+    args: {
+      resourceId: string;
+    } & PaginationArgs,
+  ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+    const { resourceId, page = 0, perPage = 100 } = args;
+
+    try {
+      const baseQuery = `FROM ${TABLE_THREADS} WHERE resourceId = ?`;
+      const queryParams: InValue[] = [resourceId];
+
+      const mapRowToStorageThreadType = (row: any): StorageThreadType => ({
+        id: row.id as string,
+        resourceId: row.resourceId as string,
+        title: row.title as string,
+        createdAt: new Date(row.createdAt as string), // Convert string to Date
+        updatedAt: new Date(row.updatedAt as string), // Convert string to Date
+        metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
+      });
+
+      const currentOffset = page * perPage;
+
+      const countResult = await this.client.execute({
+        sql: `SELECT COUNT(*) as count ${baseQuery}`,
+        args: queryParams,
+      });
+      const total = Number(countResult.rows?.[0]?.count ?? 0);
+
+      if (total === 0) {
+        return {
+          threads: [],
+          total: 0,
+          page,
+          perPage,
+          hasMore: false,
+        };
+      }
+
+      const dataResult = await this.client.execute({
+        sql: `SELECT * ${baseQuery} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
+        args: [...queryParams, perPage, currentOffset],
+      });
+
+      const threads = (dataResult.rows || []).map(mapRowToStorageThreadType);
+
+      return {
+        threads,
+        total,
+        page,
+        perPage,
+        hasMore: currentOffset + threads.length < total,
+      };
+    } catch (error) {
+      this.logger.error(`Error getting threads for resource ${resourceId}:`, error);
+      return { threads: [], total: 0, page, perPage, hasMore: false };
     }
   }
 
@@ -431,162 +439,158 @@ export class LibSQLStore extends MastraStorage {
     return result;
   }
 
+  private async _getIncludedMessages(threadId: string, selectBy: StorageGetMessagesArg['selectBy']) {
+    const include = selectBy?.include;
+    if (!include) return null;
+
+    const includeIds = include.map(i => i.id);
+    const maxPrev = Math.max(...include.map(i => i.withPreviousMessages || 0));
+    const maxNext = Math.max(...include.map(i => i.withNextMessages || 0));
+
+    const includeResult = await this.client.execute({
+      sql: `
+          WITH numbered_messages AS (
+            SELECT 
+              id, content, role, type, "createdAt", thread_id,
+              ROW_NUMBER() OVER (ORDER BY "createdAt" ASC) as row_num
+            FROM "${TABLE_MESSAGES}"
+            WHERE thread_id = ?
+          ),
+          target_positions AS (
+            SELECT row_num as target_pos
+            FROM numbered_messages
+            WHERE id IN (${includeIds.map(() => '?').join(', ')})
+          )
+          SELECT DISTINCT m.*
+          FROM numbered_messages m
+          CROSS JOIN target_positions t
+          WHERE m.row_num BETWEEN (t.target_pos - ?) AND (t.target_pos + ?)
+          ORDER BY m."createdAt" ASC
+        `,
+      args: [threadId, ...includeIds, maxPrev, maxNext],
+    });
+    return includeResult.rows?.map((row: any) => this.parseRow(row));
+  }
+
+  /**
+   * @deprecated use getMessagesPaginated instead for paginated results.
+   */
   public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
   public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
-  public async getMessages(
-    args: StorageGetMessagesArg & {
-      format?: 'v1' | 'v2';
-      page: number;
-      perPage?: number;
-      fromDate?: Date;
-      toDate?: Date;
-    },
-  ): Promise<{
-    messages: MastraMessageV1[] | MastraMessageV2[];
-    total: number;
-    page: number;
-    perPage: number;
-    hasMore: boolean;
-  }>;
   public async getMessages({
     threadId,
     selectBy,
     format,
-    page,
-    perPage: perPageInput,
-    fromDate,
-    toDate,
   }: StorageGetMessagesArg & {
     format?: 'v1' | 'v2';
-    page?: number;
-    perPage?: number;
-    fromDate?: Date;
-    toDate?: Date;
-  }): Promise<
-    | MastraMessageV1[]
-    | MastraMessageV2[]
-    | {
-        messages: MastraMessageV1[] | MastraMessageV2[];
-        total: number;
-        page: number;
-        perPage: number;
-        hasMore: boolean;
-      }
-  > {
+  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     try {
-      if (page !== undefined) {
-        const perPage = perPageInput !== undefined ? perPageInput : 40;
-        const currentOffset = page * perPage;
+      const messages: MastraMessageV2[] = [];
+      const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
 
-        const conditions: string[] = [`thread_id = ?`];
-        const queryParams: InValue[] = [threadId];
-
-        if (fromDate) {
-          conditions.push(`"createdAt" >= ?`);
-          queryParams.push(fromDate.toISOString());
+      if (selectBy?.include?.length) {
+        const includeMessages = await this._getIncludedMessages(threadId, selectBy);
+        if (includeMessages) {
+          messages.push(...includeMessages);
         }
-        if (toDate) {
-          conditions.push(`"createdAt" <= ?`);
-          queryParams.push(toDate.toISOString());
-        }
-        const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+      }
 
-        const countResult = await this.client.execute({
-          sql: `SELECT COUNT(*) as count FROM ${TABLE_MESSAGES} ${whereClause}`,
-          args: queryParams,
-        });
-        const total = Number(countResult.rows?.[0]?.count ?? 0);
-
-        if (total === 0) {
-          return {
-            messages: [],
-            total: 0,
-            page,
-            perPage,
-            hasMore: false,
-          };
-        }
-
-        const dataResult = await this.client.execute({
-          sql: `SELECT id, content, role, type, "createdAt", thread_id FROM ${TABLE_MESSAGES} ${whereClause} ORDER BY "createdAt" ASC LIMIT ? OFFSET ?`,
-          args: [...queryParams, perPage, currentOffset],
-        });
-
-        const fetchedMessages = (dataResult.rows || []).map((row: any) => this.parseRow(row));
-
-        const messagesToReturn =
-          format === 'v1'
-            ? new MessageList().add(fetchedMessages, 'memory').get.all.v1()
-            : new MessageList().add(fetchedMessages, 'memory').get.all.v2();
-
-        return {
-          messages: messagesToReturn,
-          total,
-          page,
-          perPage,
-          hasMore: currentOffset + fetchedMessages.length < total,
-        };
-      } else {
-        // Non-paginated path (existing logic)
-        const messages: MastraMessageV2[] = [];
-        const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
-
-        if (selectBy?.include?.length) {
-          const includeIds = selectBy.include.map(i => i.id);
-          const maxPrev = Math.max(...selectBy.include.map(i => i.withPreviousMessages || 0));
-          const maxNext = Math.max(...selectBy.include.map(i => i.withNextMessages || 0));
-
-          const includeResult = await this.client.execute({
-            sql: `
-              WITH numbered_messages AS (
-                SELECT 
-                  id, content, role, type, "createdAt", thread_id,
-                  ROW_NUMBER() OVER (ORDER BY "createdAt" ASC) as row_num
-                FROM "${TABLE_MESSAGES}"
-                WHERE thread_id = ?
-              ),
-              target_positions AS (
-                SELECT row_num as target_pos
-                FROM numbered_messages
-                WHERE id IN (${includeIds.map(() => '?').join(', ')})
-              )
-              SELECT DISTINCT m.*
-              FROM numbered_messages m
-              CROSS JOIN target_positions t
-              WHERE m.row_num BETWEEN (t.target_pos - ?) AND (t.target_pos + ?)
-              ORDER BY m."createdAt" ASC
-            `,
-            args: [threadId, ...includeIds, maxPrev, maxNext],
-          });
-          if (includeResult.rows) {
-            messages.push(...includeResult.rows.map((row: any) => this.parseRow(row)));
-          }
-        }
-
-        const excludeIds = messages.map(m => m.id);
-        const remainingSql = `
+      const excludeIds = messages.map(m => m.id);
+      const remainingSql = `
           SELECT id, content, role, type, "createdAt", thread_id
           FROM "${TABLE_MESSAGES}"
           WHERE thread_id = ?
           ${excludeIds.length ? `AND id NOT IN (${excludeIds.map(() => '?').join(', ')})` : ''}
           ORDER BY "createdAt" DESC LIMIT ?
         `;
-        const remainingArgs = [threadId, ...(excludeIds.length ? excludeIds : []), limit];
-        const remainingResult = await this.client.execute({ sql: remainingSql, args: remainingArgs });
-        if (remainingResult.rows) {
-          messages.push(...remainingResult.rows.map((row: any) => this.parseRow(row)));
-        }
-        messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-        const list = new MessageList().add(messages, 'memory');
-        if (format === `v2`) return list.get.all.v2();
-        return list.get.all.v1();
+      const remainingArgs = [threadId, ...(excludeIds.length ? excludeIds : []), limit];
+      const remainingResult = await this.client.execute({ sql: remainingSql, args: remainingArgs });
+      if (remainingResult.rows) {
+        messages.push(...remainingResult.rows.map((row: any) => this.parseRow(row)));
       }
+      messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+      const list = new MessageList().add(messages, 'memory');
+      if (format === `v2`) return list.get.all.v2();
+      return list.get.all.v1();
     } catch (error) {
       this.logger.error('Error getting messages:', error as Error);
-      if (page !== undefined) {
-        return { messages: [], total: 0, page, perPage: perPageInput || 40, hasMore: false };
-      }
       throw error;
+    }
+  }
+
+  public async getMessagesPaginated(
+    args: StorageGetMessagesArg & {
+      format?: 'v1' | 'v2';
+    },
+  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
+    const { threadId, format, selectBy } = args;
+    const { page = 0, perPage = 40, dateRange } = selectBy?.pagination || {};
+    const fromDate = dateRange?.start;
+    const toDate = dateRange?.end;
+
+    const messages: MastraMessageV2[] = [];
+
+    if (selectBy?.include?.length) {
+      const includeMessages = await this._getIncludedMessages(threadId, selectBy);
+      if (includeMessages) {
+        messages.push(...includeMessages);
+      }
+    }
+
+    try {
+      const currentOffset = page * perPage;
+
+      const conditions: string[] = [`thread_id = ?`];
+      const queryParams: InValue[] = [threadId];
+
+      if (fromDate) {
+        conditions.push(`"createdAt" >= ?`);
+        queryParams.push(fromDate.toISOString());
+      }
+      if (toDate) {
+        conditions.push(`"createdAt" <= ?`);
+        queryParams.push(toDate.toISOString());
+      }
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+      const countResult = await this.client.execute({
+        sql: `SELECT COUNT(*) as count FROM ${TABLE_MESSAGES} ${whereClause}`,
+        args: queryParams,
+      });
+      const total = Number(countResult.rows?.[0]?.count ?? 0);
+
+      if (total === 0) {
+        return {
+          messages: [],
+          total: 0,
+          page,
+          perPage,
+          hasMore: false,
+        };
+      }
+
+      const dataResult = await this.client.execute({
+        sql: `SELECT id, content, role, type, "createdAt", thread_id FROM ${TABLE_MESSAGES} ${whereClause} ORDER BY "createdAt" DESC LIMIT ? OFFSET ?`,
+        args: [...queryParams, perPage, currentOffset],
+      });
+
+      messages.push(...(dataResult.rows || []).map((row: any) => this.parseRow(row)));
+
+      const messagesToReturn =
+        format === 'v1'
+          ? new MessageList().add(messages, 'memory').get.all.v1()
+          : new MessageList().add(messages, 'memory').get.all.v2();
+
+      return {
+        messages: messagesToReturn,
+        total,
+        page,
+        perPage,
+        hasMore: currentOffset + messages.length < total,
+      };
+    } catch (error) {
+      this.logger.error('Error getting paginated messages:', error as Error);
+      return { messages: [], total: 0, page, perPage, hasMore: false };
     }
   }
 
@@ -690,23 +694,15 @@ export class LibSQLStore extends MastraStorage {
     }
   }
 
-  async getEvals(options?: {
-    agentName?: string;
-    type?: 'test' | 'live';
-    page?: number;
-    perPage?: number;
-    limit?: number;
-    offset?: number;
-    fromDate?: Date;
-    toDate?: Date;
-  }): Promise<{
-    evals: EvalRow[];
-    total: number;
-    page?: number;
-    perPage?: number;
-    hasMore?: boolean;
-  }> {
-    const { agentName, type, page, perPage, limit, offset, fromDate, toDate } = options || {};
+  async getEvals(
+    options: {
+      agentName?: string;
+      type?: 'test' | 'live';
+    } & PaginationArgs = {},
+  ): Promise<PaginationInfo & { evals: EvalRow[] }> {
+    const { agentName, type, page = 0, perPage = 100, dateRange } = options;
+    const fromDate = dateRange?.start;
+    const toDate = dateRange?.end;
 
     const conditions: string[] = [];
     const queryParams: InValue[] = [];
@@ -740,127 +736,75 @@ export class LibSQLStore extends MastraStorage {
     });
     const total = Number(countResult.rows?.[0]?.count ?? 0);
 
-    let currentLimit: number;
-    let currentOffset: number;
-    let currentPage: number | undefined = page;
-    let currentPerPage: number | undefined = perPage;
-    let hasMore = false;
-
-    if (limit !== undefined && offset !== undefined) {
-      currentLimit = limit;
-      currentOffset = offset;
-      currentPage = undefined;
-      currentPerPage = undefined;
-      hasMore = currentOffset + currentLimit < total;
-    } else if (page !== undefined && perPage !== undefined) {
-      currentLimit = perPage;
-      currentOffset = page * perPage;
-      hasMore = currentOffset + currentLimit < total;
-    } else {
-      currentLimit = perPage || 100; // Default perPage
-      currentOffset = (page || 0) * currentLimit;
-      if (page === undefined) currentPage = 0;
-      if (currentPerPage === undefined) currentPerPage = currentLimit;
-      hasMore = currentOffset + currentLimit < total;
-    }
+    const currentOffset = page * perPage;
+    const hasMore = currentOffset + perPage < total;
 
     if (total === 0) {
       return {
         evals: [],
         total: 0,
-        page: currentPage,
-        perPage: currentPerPage,
+        page,
+        perPage,
         hasMore: false,
       };
     }
 
     const dataResult = await this.client.execute({
       sql: `SELECT * FROM ${TABLE_EVALS} ${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
-      args: [...queryParams, currentLimit, currentOffset],
+      args: [...queryParams, perPage, currentOffset],
     });
 
     return {
       evals: dataResult.rows?.map(row => this.transformEvalRow(row)) ?? [],
       total,
-      page: currentPage,
-      perPage: currentPerPage,
+      page,
+      perPage,
       hasMore,
     };
   }
 
+  /**
+   * @deprecated use getTracesPaginated instead.
+   */
   public async getTraces(args: {
     name?: string;
     scope?: string;
-    attributes?: Record<string, string>;
-    filters?: Record<string, any>;
-    page: number;
-    perPage?: number;
-    fromDate?: Date;
-    toDate?: Date;
-  }): Promise<any[]>;
-  public async getTraces(args: {
-    name?: string;
-    scope?: string;
-    page: number;
-    perPage?: number;
-    attributes?: Record<string, string>;
-    filters?: Record<string, any>;
-    fromDate?: Date;
-    toDate?: Date;
-    returnPaginationResults: true;
-  }): Promise<{
-    traces: any[];
-    total: number;
     page: number;
     perPage: number;
-    hasMore: boolean;
-  }>;
-  public async getTraces(
+    attributes?: Record<string, string>;
+    filters?: Record<string, any>;
+    fromDate?: Date;
+    toDate?: Date;
+  }): Promise<Trace[]> {
+    if (args.fromDate || args.toDate) {
+      (args as any).dateRange = {
+        start: args.fromDate,
+        end: args.toDate,
+      };
+    }
+    const result = await this.getTracesPaginated(args);
+    return result.traces;
+  }
+
+  public async getTracesPaginated(
     args: {
       name?: string;
       scope?: string;
-      page: number;
-      perPage?: number;
       attributes?: Record<string, string>;
       filters?: Record<string, any>;
-      fromDate?: Date;
-      toDate?: Date;
-      returnPaginationResults?: boolean;
-    } = {
-      page: 0,
-      // perPage: 100, // Default perPage will be handled inside
-    },
-  ): Promise<
-    | any[]
-    | {
-        traces: any[];
-        total: number;
-        page: number;
-        perPage: number;
-        hasMore: boolean;
-      }
-  > {
-    const {
-      name,
-      scope,
-      page,
-      perPage: perPageInput,
-      attributes,
-      filters,
-      fromDate,
-      toDate,
-      returnPaginationResults,
-    } = args;
-
-    const perPage = perPageInput !== undefined ? perPageInput : 100; // Default perPage
+    } & PaginationArgs,
+  ): Promise<PaginationInfo & { traces: Trace[] }> {
+    const { name, scope, page = 0, perPage = 100, attributes, filters, dateRange } = args;
+    const fromDate = dateRange?.start;
+    const toDate = dateRange?.end;
     const currentOffset = page * perPage;
 
     const queryArgs: InValue[] = [];
     const conditions: string[] = [];
 
     if (name) {
-      conditions.push('name LIKE ?'); // LibSQL uses ? for placeholders, CONCAT is not standard
-      queryArgs.push(`${name}%`); // Wildcard for LIKE
+      conditions.push('name LIKE ?');
+      queryArgs.push(`${name}%`);
     }
     if (scope) {
       conditions.push('scope = ?');
@@ -868,14 +812,12 @@ export class LibSQLStore extends MastraStorage {
     }
     if (attributes) {
       Object.entries(attributes).forEach(([key, value]) => {
-        // For LibSQL/SQLite, JSON functions are used like json_extract
         conditions.push(`json_extract(attributes, '$.${key}') = ?`);
         queryArgs.push(value);
       });
     }
     if (filters) {
       Object.entries(filters).forEach(([key, value]) => {
-        // Assuming filters apply to direct columns
         conditions.push(`${parseSqlIdentifier(key, 'filter key')} = ?`);
         queryArgs.push(value);
       });
@@ -897,7 +839,7 @@ export class LibSQLStore extends MastraStorage {
     });
     const total = Number(countResult.rows?.[0]?.count ?? 0);
 
-    if (total === 0 && returnPaginationResults) {
+    if (total === 0) {
       return {
         traces: [],
         total: 0,
@@ -905,8 +847,6 @@ export class LibSQLStore extends MastraStorage {
         perPage,
         hasMore: false,
       };
-    } else if (total === 0) {
-      return [];
     }
 
     const dataResult = await this.client.execute({
@@ -915,34 +855,33 @@ export class LibSQLStore extends MastraStorage {
     });
 
     const traces =
-      dataResult.rows?.map(row => ({
-        id: row.id,
-        parentSpanId: row.parentSpanId,
-        traceId: row.traceId,
-        name: row.name,
-        scope: row.scope,
-        kind: row.kind,
-        status: safelyParseJSON(row.status as string),
-        events: safelyParseJSON(row.events as string),
-        links: safelyParseJSON(row.links as string),
-        attributes: safelyParseJSON(row.attributes as string),
-        startTime: row.startTime,
-        endTime: row.endTime,
-        other: safelyParseJSON(row.other as string),
-        createdAt: row.createdAt,
-      })) ?? [];
+      dataResult.rows?.map(
+        row =>
+          ({
+            id: row.id,
+            parentSpanId: row.parentSpanId,
+            traceId: row.traceId,
+            name: row.name,
+            scope: row.scope,
+            kind: row.kind,
+            status: safelyParseJSON(row.status as string),
+            events: safelyParseJSON(row.events as string),
+            links: safelyParseJSON(row.links as string),
+            attributes: safelyParseJSON(row.attributes as string),
+            startTime: row.startTime,
+            endTime: row.endTime,
+            other: safelyParseJSON(row.other as string),
+            createdAt: row.createdAt,
+          }) as Trace,
+      ) ?? [];
 
-    if (returnPaginationResults) {
-      return {
-        traces,
-        total,
-        page,
-        perPage,
-        hasMore: currentOffset + traces.length < total,
-      };
-    } else {
-      return traces;
-    }
+    return {
+      traces,
+      total,
+      page,
+      perPage,
+      hasMore: currentOffset + traces.length < total,
+    };
   }
 
   async getWorkflowRuns({

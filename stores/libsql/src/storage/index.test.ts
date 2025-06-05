@@ -63,11 +63,11 @@ describe('LibSQLStore Pagination Features', () => {
       const evalRecords = Array.from({ length: 15 }, () => createSampleEval(agentName));
       await store.batchInsert({ tableName: TABLE_EVALS, records: evalRecords.map(r => r as any) });
 
-      const result = await store.getEvals({ agentName, limit: 5, offset: 10 });
+      const result = await store.getEvals({ agentName, page: 2, perPage: 5 });
       expect(result.evals).toHaveLength(5);
       expect(result.total).toBe(15);
-      expect(result.page).toBeUndefined();
-      expect(result.perPage).toBeUndefined();
+      expect(result.page).toBe(2);
+      expect(result.perPage).toBe(5);
       expect(result.hasMore).toBe(false);
     });
 
@@ -103,7 +103,7 @@ describe('LibSQLStore Pagination Features', () => {
       ];
       await store.batchInsert({ tableName: TABLE_EVALS, records: recordsToInsert.map(r => r as any) });
 
-      const fromYesterday = await store.getEvals({ agentName, fromDate: yesterday, page: 0, perPage: 3 });
+      const fromYesterday = await store.getEvals({ agentName, dateRange: { start: yesterday }, page: 0, perPage: 3 });
       expect(fromYesterday.total).toBe(4);
       expect(fromYesterday.evals).toHaveLength(3); // Should get 2 from 'now', 1 from 'yesterday' due to DESC order and limit 3
       fromYesterday.evals.forEach(e =>
@@ -118,7 +118,7 @@ describe('LibSQLStore Pagination Features', () => {
 
       const onlyDayBefore = await store.getEvals({
         agentName,
-        toDate: new Date(yesterday.getTime() - 1),
+        dateRange: { end: new Date(yesterday.getTime() - 1) },
         page: 0,
         perPage: 5,
       });
@@ -133,11 +133,10 @@ describe('LibSQLStore Pagination Features', () => {
       const traceRecords = Array.from({ length: 18 }, (_, i) => createSampleTraceForDB(`test-trace-${i}`, scope));
       await store.batchInsert({ tableName: TABLE_TRACES, records: traceRecords.map(r => r as any) });
 
-      const page1 = await store.getTraces({
+      const page1 = await store.getTracesPaginated({
         scope,
         page: 0,
         perPage: 8,
-        returnPaginationResults: true,
       });
       expect(page1.traces).toHaveLength(8);
       expect(page1.total).toBe(18);
@@ -145,11 +144,10 @@ describe('LibSQLStore Pagination Features', () => {
       expect(page1.perPage).toBe(8);
       expect(page1.hasMore).toBe(true);
 
-      const page3 = await store.getTraces({
+      const page3 = await store.getTracesPaginated({
         scope,
         page: 2,
         perPage: 8,
-        returnPaginationResults: true,
       });
       expect(page3.traces).toHaveLength(2);
       expect(page3.total).toBe(18);
@@ -185,12 +183,11 @@ describe('LibSQLStore Pagination Features', () => {
         records: [...tracesWithAttr, ...tracesWithoutAttr].map(r => r as any),
       });
 
-      const prodTraces = await store.getTraces({
+      const prodTraces = await store.getTracesPaginated({
         scope,
         attributes: { environment: 'prod' },
         page: 0,
         perPage: 5,
-        returnPaginationResults: true,
       });
       expect(prodTraces.traces).toHaveLength(5);
       expect(prodTraces.total).toBe(8);
@@ -213,12 +210,11 @@ describe('LibSQLStore Pagination Features', () => {
       ];
       await store.batchInsert({ tableName: TABLE_TRACES, records: recordsToInsert.map(r => r as any) });
 
-      const fromYesterday = await store.getTraces({
+      const fromYesterday = await store.getTracesPaginated({
         scope,
-        fromDate: yesterday,
+        dateRange: { start: yesterday },
         page: 0,
         perPage: 3,
-        returnPaginationResults: true,
       });
       expect(fromYesterday.total).toBe(4);
       expect(fromYesterday.traces).toHaveLength(3);
@@ -231,13 +227,11 @@ describe('LibSQLStore Pagination Features', () => {
         );
       }
 
-      const onlyNow = await store.getTraces({
+      const onlyNow = await store.getTracesPaginated({
         scope,
-        fromDate: now,
-        toDate: now,
+        dateRange: { start: now, end: now },
         page: 0,
         perPage: 5,
-        returnPaginationResults: true,
       });
       expect(onlyNow.total).toBe(2);
       expect(onlyNow.traces).toHaveLength(2);
@@ -262,14 +256,22 @@ describe('LibSQLStore Pagination Features', () => {
       }
       await store.saveMessages({ messages: messageRecords });
 
-      const page1 = await store.getMessages({ threadId: thread.id, page: 0, perPage: 5, format: 'v1' });
+      const page1 = await store.getMessagesPaginated({
+        threadId: thread.id,
+        selectBy: { pagination: { page: 0, perPage: 5 } },
+        format: 'v1',
+      });
       expect(page1.messages).toHaveLength(5);
       expect(page1.total).toBe(15);
       expect(page1.page).toBe(0);
       expect(page1.perPage).toBe(5);
       expect(page1.hasMore).toBe(true);
 
-      const page3 = await store.getMessages({ threadId: thread.id, page: 2, perPage: 5, format: 'v1' });
+      const page3 = await store.getMessagesPaginated({
+        threadId: thread.id,
+        selectBy: { pagination: { page: 2, perPage: 5 } },
+        format: 'v1',
+      });
       expect(page3.messages).toHaveLength(5);
       expect(page3.total).toBe(15);
       expect(page3.hasMore).toBe(false);
@@ -277,25 +279,46 @@ describe('LibSQLStore Pagination Features', () => {
 
     it('should filter by date with pagination for getMessages', async () => {
       const threadData = createSampleThread();
-      threadData.resourceId = 'resource-msg-date-pagination';
       const thread = await store.saveThread({ thread: threadData as StorageThreadType });
       const now = new Date();
-      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-      const dayBeforeYesterday = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+      const yesterday = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() - 1,
+        now.getHours(),
+        now.getMinutes(),
+        now.getSeconds(),
+      );
+      const dayBeforeYesterday = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() - 2,
+        now.getHours(),
+        now.getMinutes(),
+        now.getSeconds(),
+      );
 
-      await store.saveMessages({ messages: [createSampleMessage(thread.id, dayBeforeYesterday) as MastraMessageV1] });
-      await store.saveMessages({ messages: [createSampleMessage(thread.id, dayBeforeYesterday) as MastraMessageV1] });
-      await store.saveMessages({ messages: [createSampleMessage(thread.id, yesterday) as MastraMessageV1] });
-      await store.saveMessages({ messages: [createSampleMessage(thread.id, yesterday) as MastraMessageV1] });
-      await store.saveMessages({ messages: [createSampleMessage(thread.id, now) as MastraMessageV1] });
-      await store.saveMessages({ messages: [createSampleMessage(thread.id, now) as MastraMessageV1] });
+      // Ensure timestamps are distinct for reliable sorting by creating them with a slight delay for testing clarity
+      const messagesToSave: MastraMessageV1[] = [];
+      messagesToSave.push(createSampleMessage(thread.id, dayBeforeYesterday));
+      await new Promise(r => setTimeout(r, 5));
+      messagesToSave.push(createSampleMessage(thread.id, dayBeforeYesterday));
+      await new Promise(r => setTimeout(r, 5));
+      messagesToSave.push(createSampleMessage(thread.id, yesterday));
+      await new Promise(r => setTimeout(r, 5));
+      messagesToSave.push(createSampleMessage(thread.id, yesterday));
+      await new Promise(r => setTimeout(r, 5));
+      messagesToSave.push(createSampleMessage(thread.id, now));
+      await new Promise(r => setTimeout(r, 5));
+      messagesToSave.push(createSampleMessage(thread.id, now));
 
-      const fromYesterday = await store.getMessages({
+      await store.saveMessages({ messages: messagesToSave, format: 'v1' });
+      // Total 6 messages: 2 now, 2 yesterday, 2 dayBeforeYesterday (oldest to newest)
+
+      const fromYesterday = await store.getMessagesPaginated({
         threadId: thread.id,
-        fromDate: yesterday,
-        page: 0,
-        perPage: 3,
-        format: 'v1',
+        selectBy: { pagination: { page: 0, perPage: 3, dateRange: { start: yesterday } } },
+        format: 'v2',
       });
       expect(fromYesterday.total).toBe(4);
       expect(fromYesterday.messages).toHaveLength(3);
@@ -306,19 +329,6 @@ describe('LibSQLStore Pagination Features', () => {
           yesterday.toISOString().slice(0, 10),
         );
       }
-    });
-
-    it('should maintain backward compatibility for getMessages (no pagination params)', async () => {
-      const threadData = createSampleThread();
-      threadData.resourceId = 'resource-msg-compat';
-      const thread = await store.saveThread({ thread: threadData as StorageThreadType });
-      await store.saveMessages({ messages: [createSampleMessage(thread.id) as MastraMessageV1] });
-
-      const messages = await store.getMessages({ threadId: thread.id, format: 'v1' });
-      expect(Array.isArray(messages)).toBe(true);
-      expect(messages.length).toBe(1);
-      // @ts-expect-error
-      expect(messages.total).toBeUndefined();
     });
   });
 
@@ -335,36 +345,17 @@ describe('LibSQLStore Pagination Features', () => {
         await store.saveThread({ thread: tr });
       }
 
-      const page1 = await store.getThreadsByResourceId({ resourceId, page: 0, perPage: 7 });
+      const page1 = await store.getThreadsByResourceIdPaginated({ resourceId, page: 0, perPage: 7 });
       expect(page1.threads).toHaveLength(7);
       expect(page1.total).toBe(17);
       expect(page1.page).toBe(0);
       expect(page1.perPage).toBe(7);
       expect(page1.hasMore).toBe(true);
 
-      const page3 = await store.getThreadsByResourceId({ resourceId, page: 2, perPage: 7 });
+      const page3 = await store.getThreadsByResourceIdPaginated({ resourceId, page: 2, perPage: 7 });
       expect(page3.threads).toHaveLength(3);
       expect(page3.total).toBe(17);
       expect(page3.hasMore).toBe(false);
-    });
-
-    it('should return array when no pagination params for getThreadsByResourceId (backward compatibility)', async () => {
-      const resourceId = `libsql-non-paginated-resource-${randomUUID()}`;
-      const threadData = createSampleThread();
-      threadData.resourceId = resourceId;
-      await store.saveThread({ thread: threadData as StorageThreadType });
-
-      const threads = await store.getThreadsByResourceId({ resourceId });
-      expect(Array.isArray(threads)).toBe(true);
-      expect(threads.length).toBe(1);
-      // @ts-expect-error
-      expect(threads.total).toBeUndefined();
-      // @ts-expect-error
-      expect(threads.page).toBeUndefined();
-      // @ts-expect-error
-      expect(threads.perPage).toBeUndefined();
-      // @ts-expect-error
-      expect(threads.hasMore).toBeUndefined();
     });
   });
 });
