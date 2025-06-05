@@ -29,7 +29,7 @@
   },
   "license": "Elastic-2.0",
   "dependencies": {
-    "elevenlabs": "^1.57.0",
+    "elevenlabs": "^1.59.0",
     "zod": "^3.24.3"
   },
   "devDependencies": {
