@@ -213,12 +213,12 @@ export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; 
           })}
       </div>
 
-      {watchResultToUse && (
+      {result && (
         <div className="p-5 border-b-sm border-border1">
           <WorkflowJsonDialog result={restResult} />
         </div>
       )}
-      {watchResultToUse && <WorkflowResultSection result={watchResultToUse} workflow={workflow} />}
+      {result && <WorkflowResultSection result={result} workflow={workflow} />}
     </div>
   );
 }
@@ -232,6 +232,23 @@ const WorkflowResultSection = ({ result, workflow }: WorkflowResultSectionProps)
   const workflowState = result.payload.workflowState as ExtendedWorkflowWatchResult['payload']['workflowState'] & {
     result: unknown | null;
   };
+
+  if (
+    typeof workflowState.result === 'string' ||
+    typeof workflowState.result === 'number' ||
+    typeof workflowState.result === 'boolean'
+  ) {
+    return (
+      <div className="flex flex-col gap-1 p-5">
+        <div className="flex items-center gap-2">
+          <Txt as="label" htmlFor="string-result" variant="ui-sm" className="text-icon3">
+            Workflow Result
+          </Txt>
+        </div>
+        <Input id="string-result" defaultValue={String(workflowState.result)} />
+      </div>
+    );
+  }
 
   const hasResult = Object.keys(workflowState.result || {}).length > 0;
   if (!hasResult) return null;
@@ -268,6 +285,7 @@ const WorkflowResultFinishedStep = ({ stepResult, stepDefinition }: WorkflowResu
 
   try {
     const zodObjectSchema = resolveSerializedZodOutput(jsonSchemaToZod(parse(stepDefinition.outputSchema)));
+
     if (zodObjectSchema?._def?.typeName === 'ZodString') {
       return (
         <div className="flex flex-col gap-1">
