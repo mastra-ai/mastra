@@ -50,7 +50,7 @@ export class MastraBaseError<D, C> extends Error {
   public readonly id: Uppercase<string>;
   public readonly domain: D;
   public readonly category: C;
-  public readonly originalError?: Error;
+  public readonly stack?: string;
   public readonly details?: Record<string, Json<Scalar>> = {};
 
   constructor(errorDefinition: IErrorDefinition<D, C>, originalError?: Error | MastraBaseError<D, C> | unknown) {
@@ -62,11 +62,11 @@ export class MastraBaseError<D, C> extends Error {
       error = new Error(String(originalError));
     }
 
-    super(message, error);
+    super(message, { cause: error });
     this.id = errorDefinition.id;
     this.domain = errorDefinition.domain;
     this.category = errorDefinition.category;
-    this.originalError = error;
+    this.stack = error?.stack;
     this.details = errorDefinition.details ?? {};
 
     Object.setPrototypeOf(this, new.target.prototype);
@@ -80,7 +80,7 @@ export class MastraBaseError<D, C> extends Error {
       message: this.message,
       domain: this.domain,
       category: this.category,
-      stack: this.originalError?.stack,
+      stack: this.stack,
       details: this.details,
     };
   }
