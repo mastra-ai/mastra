@@ -332,6 +332,11 @@ export default withGT(
         permanent: true,
       },
       {
+        source: "/docs/voice",
+        destination: "/docs/voice/overview",
+        permanent: true,
+      },
+      {
         source: "/docs/reference/memory/memory-processors",
         destination: "/docs/memory/memory-processors",
         permanent: false, // we should have a memory-processors reference
