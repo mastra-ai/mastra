@@ -1,4 +1,3 @@
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   AgentCoinIcon,
   AgentIcon,
@@ -29,13 +28,13 @@ function Agents() {
   if (isLoading) return null;
 
   return (
-    <section className="overflow-hidden h-full">
+    <div className="grid grid-rows-[auto_1fr] h-full">
       <Header>
         <HeaderTitle>Agents</HeaderTitle>
       </Header>
 
       {agentListData.length === 0 ? (
-        <div className="flex h-full items-center justify-center">
+        <div className="grid place-items-center">
           <EmptyState
             iconSlot={<AgentCoinIcon />}
             titleSlot="Configure Agents"
@@ -58,15 +57,15 @@ function Agents() {
           />
         </div>
       ) : (
-        <ScrollArea className="overflow-y-auto h-[calc(100vh-4rem)]">
+        <div className="overflow-y-auto">
           <DataTable
             columns={agentsTableColumns}
             data={agentListData}
             onClick={row => navigate(`/agents/${row.id}/chat`)}
           />
-        </ScrollArea>
+        </div>
       )}
-    </section>
+    </div>
   );
 }
 

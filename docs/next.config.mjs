@@ -317,6 +317,11 @@ export default withGT(
         permanent: true,
       },
       {
+        source: "/docs/workflows/flow-control",
+        destination: "/docs/workflows/control-flow",
+        permanent: true,
+      },
+      {
         source: "/docs/workflows/00-overview",
         destination: "/docs/workflows/overview",
         permanent: true,
@@ -890,6 +895,11 @@ export default withGT(
       {
         source: "/reference/observability/create-logger",
         destination: "/reference/observability/logger",
+        permanent: true,
+      },
+      {
+        source: "/:locale/reference/rag/vector-search",
+        destination: "/:locale/examples/rag/query/hybrid-vector-search",
         permanent: true,
       },
     ],

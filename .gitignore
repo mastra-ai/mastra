@@ -33,3 +33,4 @@ voice/**/test-outputs/
 voice/**/test-data/
 
 serviceAccount.json
+tsup.config.bundled_*

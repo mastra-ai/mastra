@@ -43,20 +43,25 @@ function Agent() {
     return null;
   }
 
+  const withSidebar = Boolean(sidebar && memory?.result);
+
   return (
     <AgentProvider
       agentId={agentId!}
       defaultGenerateOptions={agent?.defaultGenerateOptions}
       defaultStreamOptions={agent?.defaultStreamOptions}
     >
-      <section className={cn('relative h-[calc(100%-40px)] flex w-full')}>
-        {sidebar && memory?.result ? (
-          <div className="h-full w-[300px] overflow-y-auto">
-            <AgentSidebar agentId={agentId!} threadId={threadId!} threads={threads} isLoading={isThreadsLoading} />
-          </div>
-        ) : null}
+      <div
+        className={cn(
+          `grid h-full overflow-x-auto min-w-[min-content]`,
+          withSidebar ? `grid-cols-[auto_1fr_1fr]` : `grid-cols-[1fr_1fr]`,
+        )}
+      >
+        {withSidebar && (
+          <AgentSidebar agentId={agentId!} threadId={threadId!} threads={threads} isLoading={isThreadsLoading} />
+        )}
 
-        <div className={cn('relative overflow-y-hidden grow min-w-[325px] h-full')}>
+        <div className="grid overflow-y-auto relative bg-surface1 py-4">
           <Chat
             agentId={agentId!}
             agentName={agent?.name}
@@ -68,15 +73,8 @@ function Agent() {
           />
         </div>
 
-        <MastraResizablePanel
-          defaultWidth={30}
-          minimumWidth={30}
-          maximumWidth={60}
-          className="flex flex-col min-w-[325px] right-0 top-0 h-full z-20 bg-surface2 [&>div:first-child]:-left-[1px] [&>div:first-child]:-right-[1px] [&>div:first-child]:w-[1px] [&>div:first-child]:bg-[#424242] [&>div:first-child]:hover:w-[2px] [&>div:first-child]:active:w-[2px]"
-        >
-          <AgentInformation agentId={agentId!} />
-        </MastraResizablePanel>
-      </section>
+        <AgentInformation agentId={agentId!} />
+      </div>
     </AgentProvider>
   );
 }
