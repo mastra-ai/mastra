@@ -172,30 +172,9 @@ export class LanceStorage extends MastraStorage {
 
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     const table = await this.lanceClient.openTable(tableName);
-    const batchSize = 1000;
-    let hasMoreRecords = true;
 
-    while (hasMoreRecords) {
-      // Fetch a batch of records
-      const records = await table.query().limit(batchSize).toArray();
-
-      if (records.length === 0) {
-        hasMoreRecords = false;
-        break;
-      }
-
-      const ids = records.map(record => record.id);
-
-      if (ids.length > 0) {
-        const idList = ids.map(id => (typeof id === 'string' ? `'${id}'` : id)).join(', ');
-        await table.delete(`id IN (${idList})`);
-      }
-
-      // Check if we got fewer records than the batch size, which means we're done
-      if (records.length < batchSize) {
-        hasMoreRecords = false;
-      }
-    }
+    // delete function always takes a predicate as an argument, so we use '1=1' to delete all records because it is always true.
+    await table.delete('1=1');
   }
 
   /**
