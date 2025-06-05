@@ -1,5 +1,5 @@
-import type { LogLevel } from './constants';
 import type { MastraError } from '../error';
+import type { LogLevel } from './constants';
 import type { IMastraLogger } from './logger';
 import type { LoggerTransport } from './transport';
 
