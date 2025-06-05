@@ -51,7 +51,7 @@ export const ThreadItem = ({ children, isActive }: ThreadItemProps) => {
   return (
     <li
       className={clsx(
-        'border-b-sm border-border1 hover:bg-surface3 group flex h-[54px] items-center justify-between gap-2 px-5 py-2',
+        'border-b-sm border-border1 hover:bg-surface3 group flex h-[54px] items-center justify-between gap-2 pl-5 py-2',
         isActive && 'bg-surface4',
       )}
     >

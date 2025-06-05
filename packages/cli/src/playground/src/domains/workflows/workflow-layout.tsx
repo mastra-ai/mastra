@@ -30,7 +30,7 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <WorkflowRunProvider snapshot={typeof run?.snapshot === 'object' ? run.snapshot : undefined}>
-      <div className="h-full overflow-hidden flex flex-col">
+      <div className="h-full grid grid-rows-[auto_1fr] overflow-hidden">
         <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId!} runId={runId} />
 
         {children}
