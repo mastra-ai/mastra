@@ -16,7 +16,7 @@ Input data mapping allows explicit mapping of values for the inputs of the next 
 
 In this example the `output` from `cityCoordinatesStep` is transformed to match the `inputSchema` required for the `locationDetailsStep`. The values from the `cityCoordinatesStep` are available using the `inputData` parameter of the `.map` function.
 
-```typescript {7-10,31,54,57} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {7-10,31,54,58} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const cityCoordinatesStep = createStep({
   id: "city-step",
   description: "Gets details about a city",
@@ -85,7 +85,7 @@ export const testWorkflow = createWorkflow({
 
 Use `inputData` to access the full output of the previous step:
 
-```typescript {3} showLineNumbers
+```typescript {2} showLineNumbers
   .map(({ inputData }) => {
     const { city_name, country_name, country_timezone } = inputData;
     ...
@@ -157,7 +157,7 @@ The output would be similar to the below:
 
 You can rename workflow outputs by using **referential composition**. This involves passing the workflow instance as the `initData`.
 
-```typescript {11, 14} showLineNumbers
+```typescript {12, 16} showLineNumbers
 export const testWorkflow = createWorkflow({
   id: "test-workflow",
   description: 'Test workflow',

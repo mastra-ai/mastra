@@ -14,7 +14,7 @@ When you build a workflow, you typically break down operations into smaller task
 
 Chain steps to execute in sequence using `.then()`:
 
-```typescript {17,18,19} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {18,19,20} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -43,7 +43,7 @@ export const testWorkflow = createWorkflow({
 Execute steps in parallel using `.parallel()`:
 
 
-```typescript {17} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {18} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -72,7 +72,7 @@ This executes all steps in the array concurrently, then continues to the next st
 
 Create conditional branches using `.branch()`:
 
-```typescript {18} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {19-22} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -114,7 +114,7 @@ To ensure compatibility, the loop’s initial input must either:
 
 Executes a step repeatedly while a condition is true.
 
-```typescript {17} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {19} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -142,7 +142,7 @@ export const testWorkflow = createWorkflow({
 
 Executes a step repeatedly until a condition becomes true.
 
-```typescript {17} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {19} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -171,7 +171,7 @@ export const testWorkflow = createWorkflow({
 
 Sequentially executes the same step for each item in the `inputData` array.
 
-```typescript {26} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {27} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const mapStep = createStep({
   id: "map-step",
   description: "Adds 100 on the input number",
@@ -226,7 +226,7 @@ npx tsx src/test-workflow.ts
 
 Optionally, using `concurrency` allows you to execute steps in parallel with a limit on the number of concurrent executions.
 
-```typescript {10} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {11} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 const mapStep = createStep({...})
 
 export const testWorkflow = createWorkflow({
@@ -245,7 +245,7 @@ export const testWorkflow = createWorkflow({
 
 Workflows themselves can also be executed in parallel.
 
-```typescript {4,5,17} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {4,5,18} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -275,7 +275,8 @@ Parallel steps receive previous step results as input. Their outputs are passed 
 In the example below, `nestedWorkflow` is used as a step within `testWorkflow`. The `testWorkflow` uses `step1` whilst the `nestedWorkflow` composes `step2` and `step3`
 
 
-```typescript {4, 29} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {5,29} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...});
 const step2 = createStep({...});
 const step3 = createStep({...});
 
@@ -291,8 +292,6 @@ export const nestedWorkflow = createWorkflow({
   .then(step2)
   .then(step3)
   .commit();
-
-const step1 = createStep({...});
 
 export const testWorkflow = createWorkflow({
   id: "test-workflow",

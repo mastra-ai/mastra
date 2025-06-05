@@ -119,7 +119,7 @@ This prompt is passed to the `testAgent`, which generates a plain-text response 
 
 The step is composed into the workflow using the sequential `.then()` method, allowing it to receive input from the workflow and return structured output.
 
-```typescript {1,27,46} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {1,26,46} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { testAgent } from "../agents/test-agent";
 
 const cityFactsStep = createStep({
@@ -281,7 +281,7 @@ This prompt is passed to the `testAgent`, which generates a plain-text response 
 
 The step is composed into the workflow using the sequential `.then()` method, allowing it to receive input from the workflow and return structured output.
 
-```typescript {4,33,52} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {4,21,33,52} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { RuntimeContext } from "@mastra/core/di";
 
 import { testAgent } from "../agents/test-agent";
