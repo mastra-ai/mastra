@@ -2999,8 +2999,8 @@ importers:
   voice/azure:
     dependencies:
       microsoft-cognitiveservices-speech-sdk:
-        specifier: ^1.43.0
-        version: 1.43.1(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+        specifier: ^1.44.0
+        version: 1.44.1(bufferutil@4.0.9)(utf-8-validate@5.0.10)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -15636,8 +15636,8 @@ packages:
     resolution: {integrity: sha512-PXwfBhYu0hBCPw8Dn0E+WDYb7af3dSLVWKi3HGv84IdF4TyFoC0ysxFd0Goxw7nSv4T/PzEJQxsYsEiFCKo2BA==}
     engines: {node: '>=8.6'}
 
-  microsoft-cognitiveservices-speech-sdk@1.43.1:
-    resolution: {integrity: sha512-xO/rlhNSodzCNBtlA3edXDO0+8Q2tMG96nNsjE0JiyAR4Ul/qsZtM4iggTSi+Zax3JtYzrH7W+7349vdpJNaTA==}
+  microsoft-cognitiveservices-speech-sdk@1.44.1:
+    resolution: {integrity: sha512-D4U7G1iQ6za9RQoXYc9ed5KrnWe3q4XIcWQ4DMqAl60CvOSXxSEJqTmTcVjeWVLY2XM9bp+2KKKyWceByAec8A==}
 
   mime-db@1.52.0:
     resolution: {integrity: sha512-sPU4uV7dYlvtWJxwwxHD0PuihVNiE7TyAbQ5SWxDCB9mUYvOgroQOwYQQOKPJ8CIbE+1ETVlOoK1UC2nU3gYvg==}
@@ -35016,7 +35016,7 @@ snapshots:
       braces: 3.0.3
       picomatch: 2.3.1
 
-  microsoft-cognitiveservices-speech-sdk@1.43.1(bufferutil@4.0.9)(utf-8-validate@5.0.10):
+  microsoft-cognitiveservices-speech-sdk@1.44.1(bufferutil@4.0.9)(utf-8-validate@5.0.10):
     dependencies:
       '@types/webrtc': 0.0.37
       agent-base: 6.0.2
