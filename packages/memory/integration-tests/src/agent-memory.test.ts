@@ -124,7 +124,41 @@ describe('Agent Memory Tests', () => {
         expect.arrayContaining([expect.stringContaining('2 + 2'), expect.stringContaining('"result"')]),
       );
     });
+
+    it('should not save messages provided in the context option', async () => {
+      const threadId = randomUUID();
+      const resourceId = 'context-option-messages-not-saved';
+
+      const userMessageContent = 'This is a user message.';
+      const contextMessageContent1 = 'This is the first context message.';
+      const contextMessageContent2 = 'This is the second context message.';
+
+      // Send user messages and context messages
+      await agent.generate(userMessageContent, {
+        threadId,
+        resourceId,
+        context: [
+          { role: 'system', content: contextMessageContent1 },
+          { role: 'user', content: contextMessageContent2 },
+        ],
+      });
+
+      // Fetch messages from memory
+      const { messages } = await agent.getMemory()!.query({ threadId });
+
+      // Assert that the context messages are NOT saved
+      const savedContextMessages = messages.filter(
+        (m: any) => m.content === contextMessageContent1 || m.content === contextMessageContent2,
+      );
+      expect(savedContextMessages.length).toBe(0);
+
+      // Assert that the user message IS saved
+      const savedUserMessages = messages.filter((m: any) => m.role === 'user');
+      expect(savedUserMessages.length).toBe(1);
+      expect(savedUserMessages[0].content).toBe(userMessageContent);
+    });
   });
+
   describe('Agent thread metadata with generateTitle', () => {
     // Agent with generateTitle: true
     const memoryWithTitle = new Memory({

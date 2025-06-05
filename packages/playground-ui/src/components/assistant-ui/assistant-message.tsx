@@ -34,7 +34,7 @@ const AssistantActionBar: FC = () => {
       hideWhenRunning
       autohide="always"
       autohideFloat="single-branch"
-      className="flex gap-1 items-center transition-all"
+      className="flex gap-1 items-center transition-all relative"
     >
       {/* <MessagePrimitive.If speaking={false}>
         <ActionBarPrimitive.Speak asChild>

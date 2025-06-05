@@ -53,11 +53,21 @@ export class ConsoleLogger extends MastraLogger {
     }
   }
 
-  async getLogs(_transportId: string) {
+  async getLogs(
+    _transportId: string,
+    _params?: { fromDate?: Date; toDate?: Date; logLevel?: LogLevel; filters?: Record<string, any> },
+  ) {
     return [];
   }
 
-  async getLogsByRunId(_args: { transportId: string; runId: string }) {
+  async getLogsByRunId(_args: {
+    transportId: string;
+    runId: string;
+    fromDate?: Date;
+    toDate?: Date;
+    logLevel?: LogLevel;
+    filters?: Record<string, any>;
+  }) {
     return [];
   }
 }
