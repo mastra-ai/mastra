@@ -1913,7 +1913,7 @@ importers:
         version: 4.3.16(react@19.1.0)(zod@3.24.4)
       js-tiktoken:
         specifier: ^1.0.19
-        version: 1.0.19
+        version: 1.0.20
       pg:
         specifier: ^8.13.3
         version: 8.16.0
@@ -2275,11 +2275,11 @@ importers:
         specifier: ^7.0.1
         version: 7.0.1
       js-tiktoken:
-        specifier: ^1.0.19
-        version: 1.0.19
+        specifier: ^1.0.20
+        version: 1.0.20
       node-html-better-parser:
-        specifier: ^1.4.7
-        version: 1.4.7
+        specifier: ^1.4.11
+        version: 1.4.11
       pathe:
         specifier: ^2.0.3
         version: 2.0.3
@@ -2309,7 +2309,7 @@ importers:
         specifier: ^20.17.32
         version: 20.17.32
       ai:
-        specifier: ^4.2.2
+        specifier: ^4.3.16
         version: 4.3.16(react@19.1.0)(zod@3.24.4)
       dotenv:
         specifier: ^16.4.7
@@ -14793,8 +14793,8 @@ packages:
     resolution: {integrity: sha512-cEiJEAEoIbWfCZYKWhVwFuvPX1gETRYPw6LlaTKoxD3s2AkXzkCjnp6h0V77ozyqj0jakteJ4YqDJT830+lVGw==}
     engines: {node: '>=14'}
 
-  js-tiktoken@1.0.19:
-    resolution: {integrity: sha512-XC63YQeEcS47Y53gg950xiZ4IWmkfMe4p2V9OSaBt26q+p47WHn18izuXzSclCI73B7yGqtfRsT6jcZQI0y08g==}
+  js-tiktoken@1.0.20:
+    resolution: {integrity: sha512-Xlaqhhs8VfCd6Sh7a1cFkZHQbYTLCwVJJWiHVxBYzLPxW0XsoxBy1hitmjkdIjD3Aon5BXLHFwU5O8WUx6HH+A==}
 
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
@@ -16087,8 +16087,8 @@ packages:
     engines: {node: '>= 10.12.0'}
     hasBin: true
 
-  node-html-better-parser@1.4.7:
-    resolution: {integrity: sha512-cJcBhlrn432XtbzPmzxxMLsHeSUnE5qFQtVbVlHXvUGt2ccqc0/wBsB43CFv39BIkLkP5rrPUN5Hg52CnheH+A==}
+  node-html-better-parser@1.4.11:
+    resolution: {integrity: sha512-rXYKBD30q6Iw/Y8o2ueJILB29Z3RrqQQN/U2PDg4Iz2TSZP/KmqdcGp+pl8o5uYZlvIKh+A4UfOK98pKIb3cRw==}
 
   node-ical@0.20.1:
     resolution: {integrity: sha512-NrXgzDJd6XcyX9kDMJVA3xYCZmntY7ghA2BOdBeYr3iu8tydHOAb+68jPQhF9V2CRQ0/386X05XhmLzQUN0+Hw==}
@@ -24042,7 +24042,7 @@ snapshots:
       ansi-styles: 5.2.0
       camelcase: 6.3.0
       decamelize: 1.2.0
-      js-tiktoken: 1.0.19
+      js-tiktoken: 1.0.20
       langsmith: 0.3.28(openai@4.96.0(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.4))
       mustache: 4.2.0
       p-queue: 6.6.2
@@ -24084,7 +24084,7 @@ snapshots:
   '@langchain/openai@0.4.9(@langchain/core@0.3.55(openai@4.96.0(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.4)))(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))':
     dependencies:
       '@langchain/core': 0.3.55(openai@4.96.0(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.4))
-      js-tiktoken: 1.0.19
+      js-tiktoken: 1.0.20
       openai: 4.96.0(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.4)
       zod: 3.24.4
       zod-to-json-schema: 3.24.5(zod@3.24.4)
@@ -24095,7 +24095,7 @@ snapshots:
   '@langchain/textsplitters@0.1.0(@langchain/core@0.3.55(openai@4.96.0(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.4)))':
     dependencies:
       '@langchain/core': 0.3.55(openai@4.96.0(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.4))
-      js-tiktoken: 1.0.19
+      js-tiktoken: 1.0.20
 
   '@lezer/common@1.2.3': {}
 
@@ -33894,7 +33894,7 @@ snapshots:
 
   js-cookie@3.0.5: {}
 
-  js-tiktoken@1.0.19:
+  js-tiktoken@1.0.20:
     dependencies:
       base64-js: 1.5.1
 
@@ -34167,7 +34167,7 @@ snapshots:
       '@langchain/core': 0.3.55(openai@4.96.0(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.4))
       '@langchain/openai': 0.4.9(@langchain/core@0.3.55(openai@4.96.0(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.4)))(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))
       '@langchain/textsplitters': 0.1.0(@langchain/core@0.3.55(openai@4.96.0(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.4)))
-      js-tiktoken: 1.0.19
+      js-tiktoken: 1.0.20
       js-yaml: 4.1.0
       jsonpointer: 5.0.1
       langsmith: 0.3.28(openai@4.96.0(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.24.4))
@@ -35571,7 +35571,7 @@ snapshots:
       - supports-color
     optional: true
 
-  node-html-better-parser@1.4.7:
+  node-html-better-parser@1.4.11:
     dependencies:
       html-entities: 2.5.2
 

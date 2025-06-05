@@ -29,8 +29,8 @@
   "dependencies": {
     "@paralleldrive/cuid2": "^2.2.2",
     "big.js": "^7.0.1",
-    "js-tiktoken": "^1.0.19",
-    "node-html-better-parser": "^1.4.7",
+    "js-tiktoken": "^1.0.20",
+    "node-html-better-parser": "^1.4.11",
     "pathe": "^2.0.3",
     "zod": "^3.24.3"
   },
@@ -45,7 +45,7 @@
     "@microsoft/api-extractor": "^7.52.5",
     "@types/big.js": "^6.2.2",
     "@types/node": "^20.17.27",
-    "ai": "^4.2.2",
+    "ai": "^4.3.16",
     "dotenv": "^16.4.7",
     "eslint": "^9.23.0",
     "tsup": "^8.4.0",
