@@ -1387,7 +1387,7 @@ describe('D1Store Pagination Features', () => {
     });
   });
 
-  describe.only('getTraces with pagination', () => {
+  describe('getTraces with pagination', () => {
     it('should return paginated traces with total count', async () => {
       const scope = 'd1-test-scope-traces';
       const traceRecords = Array.from({ length: 18 }, (_, i) => createSampleTraceForDB(`test-trace-${i}`, scope)); // Using createSampleTraceForDB
