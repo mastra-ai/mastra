@@ -28,11 +28,6 @@ export interface IErrorDefinition<D, C> {
   /** Unique identifier for the error. */
   id: Uppercase<string>;
   /**
-   * The error message template or a function to generate it.
-   * If a function, it receives context to interpolate values.
-   */
-  text: string;
-  /**
    * Functional domain of the error (e.g., CONFIG, BUILD, API).
    */
   domain: D;
@@ -50,11 +45,12 @@ export class MastraBaseError<D, C> extends Error {
   public readonly id: Uppercase<string>;
   public readonly domain: D;
   public readonly category: C;
-  public readonly stack?: string;
   public readonly details?: Record<string, Json<Scalar>> = {};
 
-  constructor(errorDefinition: IErrorDefinition<D, C>, originalError?: Error | MastraBaseError<D, C> | unknown) {
-    const message = errorDefinition.text;
+  constructor(
+    errorDefinition: IErrorDefinition<D, C>,
+    originalError?: string | Error | MastraBaseError<D, C> | unknown,
+  ) {
     let error;
     if (originalError instanceof Error) {
       error = originalError;
@@ -62,11 +58,10 @@ export class MastraBaseError<D, C> extends Error {
       error = new Error(String(originalError));
     }
 
-    super(message, { cause: error });
+    super(error?.message, { cause: error });
     this.id = errorDefinition.id;
     this.domain = errorDefinition.domain;
     this.category = errorDefinition.category;
-    this.stack = error?.stack;
     this.details = errorDefinition.details ?? {};
 
     Object.setPrototypeOf(this, new.target.prototype);
@@ -80,7 +75,6 @@ export class MastraBaseError<D, C> extends Error {
       message: this.message,
       domain: this.domain,
       category: this.category,
-      stack: this.stack,
       details: this.details,
     };
   }
@@ -91,10 +85,6 @@ export class MastraBaseError<D, C> extends Error {
       details: this.toJSONDetails(),
       code: this.id,
     };
-  }
-
-  public toString() {
-    return JSON.stringify(this.toJSON());
   }
 }
 
