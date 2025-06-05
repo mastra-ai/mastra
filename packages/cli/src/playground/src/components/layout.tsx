@@ -7,17 +7,13 @@ import { ThemeProvider } from './ui/theme-provider';
 
 export const Layout = ({ children }: { children: React.ReactNode }) => {
   return (
-    <div className="bg-surface1 overflow-hidden font-sans">
+    <div className="bg-surface1 font-sans h-screen">
       <ThemeProvider defaultTheme="dark" attribute="class">
         <SidebarProvider>
-          <AppSidebar />
-
-          <main className="py-3 pr-3 w-full h-full">
-            <div className="w-full h-full overflow-hidden rounded-lg border-sm border-border1 bg-surface2">
-              {children}
-            </div>
-          </main>
-
+          <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] h-full">
+            <AppSidebar />
+            <div className="bg-surface2 my-3 mr-3 rounded-lg border-sm border-border1 overflow-y-auto">{children}</div>
+          </div>
           <Toaster position="bottom-right" />
         </SidebarProvider>
       </ThemeProvider>

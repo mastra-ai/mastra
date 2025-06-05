@@ -103,22 +103,32 @@ export function MastraRuntimeProvider({
       if (initialMessages && threadId && memory) {
         const convertedMessages: ThreadMessageLike[] = initialMessages
           ?.map((message: any) => {
-            if (message?.toolInvocations?.length > 0) {
-              return {
-                ...message,
-                content: [
-                  ...(typeof message.content === 'string' ? [{ type: 'text', text: message.content }] : []),
-                  ...message.toolInvocations.map((toolInvocation: any) => ({
-                    type: 'tool-call',
-                    toolCallId: toolInvocation?.toolCallId,
-                    toolName: toolInvocation?.toolName,
-                    args: toolInvocation?.args,
-                    result: toolInvocation?.result,
-                  })),
-                ],
-              };
-            }
-            return message;
+            const toolInvocationsAsContentParts = (message.toolInvocations || []).map((toolInvocation: any) => ({
+              type: 'tool-call',
+              toolCallId: toolInvocation?.toolCallId,
+              toolName: toolInvocation?.toolName,
+              args: toolInvocation?.args,
+              result: toolInvocation?.result,
+            }));
+
+            const attachmentsAsContentParts = (message.experimental_attachments || []).map((image: any) => ({
+              type: image.contentType.startsWith(`image/`)
+                ? 'image'
+                : image.contentType.startsWith(`audio/`)
+                  ? 'audio'
+                  : 'file',
+              mimeType: image.contentType,
+              image: image.url,
+            }));
+
+            return {
+              ...message,
+              content: [
+                ...(typeof message.content === 'string' ? [{ type: 'text', text: message.content }] : []),
+                ...toolInvocationsAsContentParts,
+                ...attachmentsAsContentParts,
+              ],
+            };
           })
           .filter(Boolean);
         setMessages(convertedMessages);

@@ -42,7 +42,7 @@ const AgentTool = () => {
   const shouldShowEmpty = !agent || !tool;
 
   return (
-    <div className="h-full w-full bg-mastra-bg-1 overflow-y-hidden">
+    <div className="grid h-full grid-rows-[auto_1fr]">
       <Header>
         <Breadcrumb>
           <Crumb as={Link} to={`/agents`}>
