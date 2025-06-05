@@ -927,7 +927,7 @@ export class Agent<
             role: 'system',
             content: instructions || `${this.instructions}.`,
           })
-          .add(context || [], 'user');
+          .add(context || [], 'context');
 
         if (!memory || (!threadId && !resourceId)) {
           messageList.add(messages, 'user');
@@ -1028,7 +1028,7 @@ export class Agent<
         const processedList = new MessageList({ threadId, resourceId })
           .addSystem(instructions || `${this.instructions}.`)
           .addSystem(memorySystemMessage)
-          .add(context || [], 'user')
+          .add(context || [], 'context')
           .add(processedMemoryMessages, 'memory')
           .add(messageList.get.input.v2(), 'user')
           .get.all.prompt();

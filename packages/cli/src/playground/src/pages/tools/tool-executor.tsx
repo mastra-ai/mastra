@@ -1,6 +1,5 @@
 import { DynamicForm } from '@mastra/playground-ui';
 import { CopyButton } from '@/components/ui/copy-button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { ZodType } from 'zod';
 import { ToolInformation } from '@/domains/tools/ToolInformation';
 import { jsonLanguage } from '@codemirror/lang-json';
@@ -31,35 +30,25 @@ const ToolExecutor = ({
   const code = JSON.stringify(result ?? {}, null, 2);
 
   return (
-    <div className="w-full h-full grid grid-cols-[400px_1fr] bg-surface1">
-      <div className="border-r-sm border-border1 bg-surface2">
+    <div className="grid relative bg-surface1 h-full overflow-y-auto grid-cols-[minmax(14rem,_24rem)_minmax(20rem,_1fr)]">
+      <div className="border-r-sm border-border1 bg-surface2 grid grid-rows-[auto_1fr] overflow-y-auto">
         <ToolInformation toolDescription={toolDescription} toolId={toolId} toolType={toolType} />
-
-        <div className="w-full h-[calc(100vh-144px)] p-5 overflow-y-scroll">
+        <div className="p-5 overflow-y-auto">
           <DynamicForm
             isSubmitLoading={isExecutingTool}
             schema={zodInputSchema}
             onSubmit={data => {
               handleExecuteTool(data);
             }}
+            className="h-auto"
           />
         </div>
       </div>
-
-      <div className="p-5 relative">
-        <div className="absolute top-4 right-4 z-10">
-          <CopyButton content={code} tooltip="Copy JSON result to clipboard" />
-        </div>
-
-        <ScrollArea className="h-[calc(100vh-120px)] w-full">
-          <CodeMirror
-            value={code}
-            editable={true}
-            theme={theme}
-            extensions={[jsonLanguage]}
-            className="overflow-y-scroll"
-          />
-        </ScrollArea>
+      <div className="absolute top-4 right-4 z-10">
+        <CopyButton content={code} tooltip="Copy JSON result to clipboard" />
+      </div>
+      <div className="p-5 h-full relative overflow-x-auto overflow-y-auto">
+        <CodeMirror value={code} editable={true} theme={theme} extensions={[jsonLanguage]} />
       </div>
     </div>
   );

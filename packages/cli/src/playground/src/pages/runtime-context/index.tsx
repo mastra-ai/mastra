@@ -58,7 +58,7 @@ export default function RuntimeContext() {
     setRuntimeContextValue(formatted);
   };
   return (
-    <>
+    <div className="grid grid-rows-[auto_1fr] h-full">
       <Header>
         <HeaderTitle>Runtime Context</HeaderTitle>
       </Header>
@@ -123,6 +123,6 @@ export default function RuntimeContext() {
           <Button onClick={handleSaveRuntimeContext}>Save</Button>
         </div>
       </div>
-    </>
+    </div>
   );
 }

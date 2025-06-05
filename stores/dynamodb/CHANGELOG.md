@@ -1,5 +1,33 @@
 # @mastra/dynamodb
 
+## 0.10.3
+
+### Patch Changes
+
+- 786362a: fix(dynamodb): handle Date objects in createdAt/updatedAt fields
+- Updated dependencies [2b0fc7e]
+  - @mastra/core@0.10.3
+
+## 0.10.3-alpha.0
+
+### Patch Changes
+
+- 786362a: fix(dynamodb): handle Date objects in createdAt/updatedAt fields
+- Updated dependencies [2b0fc7e]
+  - @mastra/core@0.10.3-alpha.0
+
+## 0.10.2
+
+### Patch Changes
+
+- d980a1b: Fix getMessages to correctly return last n messages when `limit` is passed
+
+## 0.10.2-alpha.0
+
+### Patch Changes
+
+- d980a1b: Fix getMessages to correctly return last n messages when `limit` is passed
+
 ## 0.10.1
 
 ### Patch Changes
