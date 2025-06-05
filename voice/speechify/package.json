@@ -29,7 +29,7 @@
   },
   "license": "Elastic-2.0",
   "dependencies": {
-    "@speechify/api-sdk": "^2.4.1",
+    "@speechify/api-sdk": "^2.5.4",
     "zod": "^3.24.3"
   },
   "devDependencies": {
