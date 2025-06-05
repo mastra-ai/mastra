@@ -1,11 +1,8 @@
 {
-  "name": "@mastra/cloudflare-d1",
-  "version": "0.10.1",
-  "description": "D1 provider for Mastra - includes db storage capabilities",
+  "name": "@mastra/schema-compat",
+  "version": "0.10.2-alpha.1",
+  "description": "Tool schema compatibility layer for Mastra.ai",
   "type": "module",
-  "files": [
-    "dist"
-  ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -27,24 +24,33 @@
     "test": "vitest run",
     "lint": "eslint ."
   },
+  "keywords": [
+    "mastra",
+    "schema",
+    "tool",
+    "compatibility",
+    "zod"
+  ],
+  "author": "",
+  "license": "Elastic-2.0",
   "dependencies": {
-    "cloudflare": "^4.1.0"
+    "zod-from-json-schema": "^0.0.5",
+    "zod-to-json-schema": "^3.24.5",
+    "json-schema": "^0.4.0"
+  },
+  "peerDependencies": {
+    "zod": "^3.0.0",
+    "ai": "^4.0.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@internal/storage-test-utils": "workspace:*",
-    "@cloudflare/workers-types": "^4.20250417.0",
-    "@microsoft/api-extractor": "^7.52.5",
     "@types/node": "^20.17.27",
-    "dotenv": "^16.4.7",
+    "@types/json-schema": "^7.0.15",
     "eslint": "^9.23.0",
-    "miniflare": "^4.20250410.1",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
     "vitest": "^3.1.2",
-    "@mastra/core": "workspace:*"
-  },
-  "peerDependencies": {
-    "@mastra/core": "^0.10.2-alpha.0"
+    "zod": "^3.24.3",
+    "ai": "4.3.16"
   }
 }

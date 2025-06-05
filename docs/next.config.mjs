@@ -898,8 +898,11 @@ export default withGT(
         permanent: true,
       },
       {
-        source: "/en/docs/workflows-vnext/overview",
-        destination: "/en/docs/workflows/overview",
+        source: "/:locale/docs/workflows-vnext/overview",
+        destination: "/:locale/docs/workflows/overview",
+      }, {
+        source: "/:locale/reference/rag/vector-search",
+        destination: "/:locale/examples/rag/query/hybrid-vector-search",
         permanent: true,
       },
     ],
