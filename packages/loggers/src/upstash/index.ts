@@ -158,7 +158,7 @@ export class UpstashTransport extends LoggerTransport {
         (response?.[0]?.result?.map((log: string) => {
           try {
             // Parse the logs from JSON strings back to objects
-            return JSON.parse(log) as Record<string, any>[];
+            return JSON.parse(log);
           } catch {
             return {};
           }
