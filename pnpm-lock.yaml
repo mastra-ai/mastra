@@ -3138,8 +3138,8 @@ importers:
         specifier: ^6.7.1
         version: 6.7.1(encoding@0.1.13)
       '@google-cloud/text-to-speech':
-        specifier: ^6.0.1
-        version: 6.0.1
+        specifier: ^6.1.0
+        version: 6.1.0
       zod:
         specifier: ^3.24.3
         version: 3.24.4
@@ -6203,8 +6203,8 @@ packages:
     resolution: {integrity: sha512-7/5LRgykyOfQENcm6hDKP8SX/u9XxE5YOiWOkgkwcoO+cG8xT/cyOvp9wwN3IxfdYgpHs8CE7Nq2PKX2lNaEXw==}
     engines: {node: '>=14'}
 
-  '@google-cloud/text-to-speech@6.0.1':
-    resolution: {integrity: sha512-d9BLvmrAHTc1is38VdFxFLORvkzhDcfBz4h+j6Af21znj5pMlomX8VV7vD0SyRznORAXcwUaBDQ7zvCfChSA1A==}
+  '@google-cloud/text-to-speech@6.1.0':
+    resolution: {integrity: sha512-QP8ESj0/QWyWDVI2wD0azoToxeBJ86IENajTTxgWkSXAki474qwv4hZgt5AHCtMJWHmWG5OnVNHzah5+zfbTlg==}
     engines: {node: '>=18'}
 
   '@google/generative-ai@0.1.3':
@@ -23373,7 +23373,7 @@ snapshots:
       - supports-color
     optional: true
 
-  '@google-cloud/text-to-speech@6.0.1':
+  '@google-cloud/text-to-speech@6.1.0':
     dependencies:
       google-gax: 5.0.1-rc.0
     transitivePeerDependencies:
