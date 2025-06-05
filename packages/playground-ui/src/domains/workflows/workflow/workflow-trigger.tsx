@@ -1,6 +1,6 @@
 import jsonSchemaToZod from 'json-schema-to-zod';
-import { Loader2 } from 'lucide-react';
-import { useState, useEffect, useContext } from 'react';
+import { Braces, Footprints, Loader2 } from 'lucide-react';
+import { useState, useEffect, useContext, useId } from 'react';
 import { parse } from 'superjson';
 import { z } from 'zod';
 
@@ -12,14 +12,25 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 
-import { useExecuteWorkflow, useWatchWorkflow, useResumeWorkflow, useWorkflow } from '@/hooks/use-workflows';
+import {
+  useExecuteWorkflow,
+  useWatchWorkflow,
+  useResumeWorkflow,
+  useWorkflow,
+  ExtendedWorkflowWatchResult,
+} from '@/hooks/use-workflows';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { toast } from 'sonner';
 import { usePlaygroundStore } from '@/store/playground-store';
 import { Icon } from '@/ds/icons';
 import { Txt } from '@/ds/components/Txt';
-import { WorkflowStatus } from './workflow-status';
-import { WorkflowResult } from './workflow-result';
+
+import { GetWorkflowResponse } from '@mastra/client-js';
+import { SyntaxHighlighter } from '@/components/ui/syntax-highlighter';
+import { Input } from '@/components/ui/input';
+import { Dialog, DialogPortal, DialogTitle, DialogContent } from '@/components/ui/dialog';
+import { WorkflowCard } from './workflow-card';
+
 interface SuspendedStep {
   stepId: string;
   runId: string;
@@ -78,8 +89,6 @@ export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; 
 
   const watchResultToUse = result ?? watchResult;
 
-  const workflowActivePaths = watchResultToUse?.payload?.workflowState?.steps ?? {};
-
   useEffect(() => {
     setIsRunning(isWatchingWorkflow);
   }, [isWatchingWorkflow]);
@@ -119,14 +128,11 @@ export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; 
   const isSuspendedSteps = suspendedSteps.length > 0;
 
   const zodInputSchema = triggerSchema ? resolveSerializedZodOutput(jsonSchemaToZod(parse(triggerSchema))) : null;
-
-  const { sanitizedOutput, ...restResult } = result ?? {};
-
-  const hasWorkflowActivePaths = Object.values(workflowActivePaths).length > 0;
+  const { sanitizedOutput, ...restResult } = result || {};
 
   return (
-    <div className="h-full px-5 pt-3 pb-12">
-      <div className="space-y-4">
+    <div className="h-full pt-3 pb-12">
+      <div className="space-y-4 px-5 pb-5 border-b-sm border-border1">
         {isResumingWorkflow && (
           <div className="py-2 px-5 flex items-center gap-2 bg-surface5 -mx-5 -mt-5 border-b-sm border-border1">
             <Icon>
@@ -205,32 +211,121 @@ export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; 
               </div>
             );
           })}
-
-        {hasWorkflowActivePaths && (
-          <>
-            <hr className="border-border1 border-sm my-5" />
-            <div className="flex flex-col gap-2">
-              <Text variant="secondary" className="px-4 text-mastra-el-3" size="xs">
-                Status
-              </Text>
-              <div className="px-4 flex flex-col gap-4">
-                {Object.entries(workflowActivePaths)
-                  ?.filter(([key, _]) => key !== 'input' && !key.endsWith('.input'))
-                  ?.map(([stepId, { status }]) => {
-                    return <WorkflowStatus stepId={stepId} status={status} />;
-                  })}
-              </div>
-            </div>
-          </>
-        )}
-
-        {result && (
-          <>
-            <hr className="border-border1 border-sm my-5" />
-            <WorkflowResult sanitizedJsonResult={sanitizedOutput} jsonResult={JSON.stringify(restResult, null, 2)} />
-          </>
-        )}
       </div>
+
+      {watchResultToUse && (
+        <div className="p-5 border-b-sm border-border1">
+          <WorkflowJsonDialog result={restResult} />
+        </div>
+      )}
+      {watchResultToUse && <WorkflowResultSection result={watchResultToUse} workflow={workflow} />}
     </div>
   );
 }
+
+interface WorkflowResultSectionProps {
+  result: ExtendedWorkflowWatchResult;
+  workflow: GetWorkflowResponse;
+}
+
+const WorkflowResultSection = ({ result, workflow }: WorkflowResultSectionProps) => {
+  const workflowState = result.payload.workflowState as ExtendedWorkflowWatchResult['payload']['workflowState'] & {
+    result: unknown | null;
+  };
+
+  const hasResult = Object.keys(workflowState.result || {}).length > 0;
+  if (!hasResult) return null;
+
+  return (
+    <div className="p-5">
+      <Txt variant="ui-sm" className="text-icon3">
+        Final Output
+      </Txt>
+      <ul className="pt-4">
+        {Object.entries(workflowState.result || {}).map(([stepId, stepResult]) => {
+          const stepDefinition = workflow.steps[stepId];
+          return (
+            <li
+              key={stepId}
+              className="border-b-sm border-dashed border-border1 last:border-b-0 py-4 first:pt-0 last:pb-0"
+            >
+              <WorkflowResultFinishedStep stepResult={stepResult} stepDefinition={stepDefinition} />
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+};
+
+interface WorkflowResultFinishedStepProps {
+  stepResult: unknown;
+  stepDefinition: GetWorkflowResponse['steps'][string];
+}
+
+const WorkflowResultFinishedStep = ({ stepResult, stepDefinition }: WorkflowResultFinishedStepProps) => {
+  const id = useId();
+
+  try {
+    const zodObjectSchema = resolveSerializedZodOutput(jsonSchemaToZod(parse(stepDefinition.outputSchema)));
+    if (zodObjectSchema?._def?.typeName === 'ZodString') {
+      return (
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <Icon>
+              <Footprints className="text-icon3" />
+            </Icon>
+
+            <Txt as="label" htmlFor={id} variant="ui-sm" className="text-icon3">
+              {stepDefinition.description}
+            </Txt>
+          </div>
+          <Input id={id} defaultValue={stepResult as string} />
+        </div>
+      );
+    }
+
+    return (
+      <div>
+        <div className="flex items-center gap-2 pb-2">
+          <Icon>
+            <Footprints className="text-icon3" />
+          </Icon>
+          <Txt variant="ui-sm" className="text-icon3">
+            {stepDefinition.description}
+          </Txt>
+        </div>
+        <DynamicForm schema={zodObjectSchema} defaultValues={stepResult as Record<string, unknown>} />
+      </div>
+    );
+  } catch (err: unknown) {
+    console.error('Error parsing output schema', err);
+    return <Txt>An error occured. Please open an issue on GitHub.</Txt>;
+  }
+};
+
+const WorkflowJsonDialog = ({ result }: { result: Record<string, unknown> }) => {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <Button variant="light" onClick={() => setOpen(true)} className="w-full" size="lg">
+        <Icon>
+          <Braces className="text-icon3" />
+        </Icon>
+        Open Workflow Execution (JSON)
+      </Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogPortal>
+          <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto overflow-x-hidden bg-surface2">
+            <DialogTitle>Workflow Execution (JSON)</DialogTitle>
+            <div className="w-full h-full overflow-x-scroll">
+              <SyntaxHighlighter data={result} className="p-4" />
+            </div>
+          </DialogContent>
+        </DialogPortal>
+      </Dialog>
+    </>
+  );
+};
