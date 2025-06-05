@@ -12,289 +12,175 @@ Input data mapping allows explicit mapping of values for the inputs of the next 
 - A constant value
 - The initial input of the workflow
 
-```typescript
-myWorkflow
-  .then(step1)
-  .map({
-    transformedValue: {
-      step: step1,
-      path: "nestedValue",
-    },
-    runtimeContextValue: {
-      runtimeContextPath: "runtimeContextValue",
-      schema: z.number(),
-    },
-    constantValue: {
-      value: 42,
-      schema: z.number(),
-    },
-    initDataValue: {
-      initData: myWorkflow,
-      path: "startValue",
-    },
-  })
-  .then(step2)
-  .commit();
-```
+## Map
 
-There are many cases where `.map()` can be useful in matching inputs to outputs, whether it's renaming outputs to match inputs or mapping complex data structures or other previous step outputs.
+In this example the `output` from `cityCoordinatesStep` is transformed to match the `inputSchema` required for the `locationDetailsStep`. The values from the `cityCoordinatesStep` are available using the `inputData` parameter of the `.map` function.
 
-## Renaming outputs
-
-One use case for input mappings is renaming outputs to match inputs:
-
-```typescript
-import { Mastra } from "@mastra/core";
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-
-const step1 = createStep({
-  id: "step1",
+```typescript {7-10,31,54,57} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const cityCoordinatesStep = createStep({
+  id: "city-step",
+  description: "Gets details about a city",
   inputSchema: z.object({
-    inputValue: z.string(),
+    city: z.string()
   }),
   outputSchema: z.object({
-    outputValue: z.string(),
+    city_name: z.string(),
+    country_name: z.string(),
+    country_timezone: z.string()
   }),
-  execute: async ({ inputData, mastra }) => {
-    mastra.getLogger()?.debug(`Step 1 received: ${inputData.inputValue}`);
-    return { outputValue: `${inputData.inputValue}` };
-  },
+  execute: async ({ inputData }) => {
+    const { city } = inputData;
+    const geocodingResponse = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${city}`);
+    const geocodingData = await geocodingResponse.json();
+
+    const { name, country, timezone } = geocodingData.results[0];
+
+    return {
+      city_name: name,
+      country_name: country,
+      country_timezone: timezone
+    };
+  }
 });
 
-const step2 = createStep({
-  id: "step2",
+const locationDetailsStep = createStep({
+  id: "location-step",
+  description: "Display location details",
   inputSchema: z.object({
-    unexpectedName: z.string(),
+    details: z.string()
   }),
-  outputSchema: z.string(),
-  execute: async ({ inputData, mastra }) => {
-    mastra.getLogger()?.debug(`Step 2 received: ${inputData.unexpectedName}`);
-    return `${inputData.unexpectedName}`;
-  },
+  outputSchema: z.object({
+    outcome: z.string()
+  }),
+  execute: async ({ inputData }) => {
+    const { details } = inputData;
+    return {
+      outcome: details
+    };
+  }
 });
 
-const myWorkflow = createWorkflow({
-  id: "my-workflow",
+export const testWorkflow = createWorkflow({
+  id: "test-workflow",
+  description: 'Test workflow',
   inputSchema: z.object({
-    inputValue: z.string(),
+    city: z.string()
   }),
-  outputSchema: z.string(),
-  steps: [step1, step2],
+  outputSchema: z.object({
+    outcome: z.string()
+  })
 })
-  .then(step1)
-  // mapping output from step1 "outputValue"
-  // to input for step2 "unexpectedName"
-  .map({
-    unexpectedName: {
-      step: step1,
-      path: "outputValue",
-    },
+  .then(cityCoordinatesStep)
+  .map(({ inputData }) => {
+    const { city_name, country_name, country_timezone } = inputData;
+    return {
+      details: `${city_name}, ${country_name}, ${country_timezone}`
+    };
   })
-  .then(step2)
+  .then(locationDetailsStep)
   .commit();
+```
 
-const mastra = new Mastra({
-  workflows: {
-    myWorkflow,
-  },
-});
+### inputData
 
-const run = mastra.getWorkflow("myWorkflow").createRun();
-const res = await run.start({
-  inputData: { inputValue: "Hello world" },
-});
-if (res.status === "success") {
-  console.log(res.result);
+Use `inputData` to access the full output of the previous step:
+
+```typescript {3} showLineNumbers
+  .map(({ inputData }) => {
+    const { city_name, country_name, country_timezone } = inputData;
+    ...
+  })
+```
+
+### getStepResult
+
+Use `getStepResult` to access the full output of a specific step by referencing the step's instance:
+
+```typescript {3} showLineNumbers
+  .then(cityCoordinatesStep)
+  .map(({ getStepResult }) => {
+    console.log(getStepResult(cityCoordinatesStep));
+    ...
+  })
+```
+
+The above log would produce an output similar to the below:
+
+```typescript showLineNumbers
+{
+  city_name: 'London',
+  country_name: 'United Kingdom',
+  country_timezone: 'Europe/London'
 }
 ```
 
-## Using workflow inputs as later step inputs
+### getInitData
 
-```typescript
-import { Mastra } from "@mastra/core";
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+Use `getInitData` to access the initial input data provided to the workflow:
 
-const step1 = createStep({
-  id: "step1",
-  inputSchema: z.object({
-    inputValue: z.string(),
-  }),
-  outputSchema: z.object({
-    outputValue: z.string(),
-  }),
-  execute: async ({ inputData, mastra }) => {
-    mastra.getLogger()?.debug(`Step 1 received: ${inputData.inputValue}`);
-    return { outputValue: `Processed: ${inputData.inputValue}` };
-  },
-});
-
-const step2 = createStep({
-  id: "step2",
-  inputSchema: z.object({
-    outputValue: z.string(),
-    initialValue: z.string(),
-  }),
-  outputSchema: z.object({
-    result: z.string(),
-  }),
-  execute: async ({ inputData, mastra }) => {
-    mastra
-      .getLogger()
-      ?.debug(
-        `Step 2 received: ${inputData.outputValue} and original: ${inputData.initialValue}`,
-      );
-    return {
-      result: `Combined: ${inputData.outputValue} (original: ${inputData.initialValue})`,
-    };
-  },
-});
-
-const myWorkflow = createWorkflow({
-  id: "my-workflow",
-  inputSchema: z.object({
-    inputValue: z.string(),
-  }),
-  outputSchema: z.object({
-    result: z.string(),
-  }),
-  steps: [step1, step2],
-});
-
-myWorkflow
-  .then(step1)
-  .map({
-    outputValue: {
-      step: step1,
-      path: "outputValue",
-    },
-    initialValue: {
-      initData: myWorkflow,
-      path: "inputValue",
-    },
+```typescript {3} showLineNumbers
+  .then(cityCoordinatesStep)
+  .map(({ getInitData }) => {
+      console.log(getInitData());
+    ...
   })
-  .then(step2)
-  .commit();
-
-// Create Mastra instance with all workflows
-const mastra = new Mastra({
-  workflows: {
-    myWorkflow,
-  },
-});
-
-const run = mastra.getWorkflow("myWorkflow").createRun();
-const res = await run.start({
-  inputData: { inputValue: "Original input" },
-});
-if (res.status === "success") {
-  console.log("Result:", res.result);
-}
 ```
 
-## Using multiple outputs of previous steps
+The above log would produce an output similar to the below:
 
-```typescript
-import { Mastra } from "@mastra/core";
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+```typescript showLineNumbers
+{ city: 'London' }
+```
+## Renaming Outputs
 
-const step1 = createStep({
-  id: "step1",
-  inputSchema: z.object({
-    inputValue: z.string(),
-  }),
-  outputSchema: z.object({
-    intermediateValue: z.string(),
-  }),
-  execute: async ({ inputData, mastra }) => {
-    mastra.getLogger()?.debug(`Step 1 received: ${inputData.inputValue}`);
-    return { intermediateValue: `Step 1: ${inputData.inputValue}` };
-  },
-});
+### Step Outputs
 
-const step2 = createStep({
-  id: "step2",
-  inputSchema: z.object({
-    intermediateValue: z.string(),
-  }),
-  outputSchema: z.object({
-    currentResult: z.string(),
-  }),
-  execute: async ({ inputData, mastra }) => {
-    mastra
-      .getLogger()
-      ?.debug(`Step 2 received: ${inputData.intermediateValue}`);
-    return { currentResult: `Step 2: ${inputData.intermediateValue}` };
-  },
-});
+You can rename step outputs using the object syntax in `.map()`. In the example below, the `city_name` output from `cityCoordinatesStep` is renamed to `details`:
 
-const step3 = createStep({
-  id: "step3",
-  inputSchema: z.object({
-    currentResult: z.string(), // From step2
-    intermediateValue: z.string(), // From step1
-    initialValue: z.string(), // From workflow input
-  }),
-  outputSchema: z.object({
-    result: z.string(),
-  }),
-  execute: async ({ inputData, mastra }) => {
-    mastra.getLogger()?.debug(`Step 3 combining all previous data`);
-    return {
-      result: `Combined result:
-      - Initial input: ${inputData.initialValue}
-      - Step 1 output: ${inputData.intermediateValue}
-      - Step 2 output: ${inputData.currentResult}`,
-    };
-  },
-});
-
-const myWorkflow = createWorkflow({
-  id: "my-workflow",
-  inputSchema: z.object({
-    inputValue: z.string(),
-  }),
-  outputSchema: z.object({
-    result: z.string(),
-  }),
-  steps: [step1, step2, step3],
-});
-
-myWorkflow
-  .then(step1)
-  .then(step2)
+```typescript {3} showLineNumbers
+  .then(cityCoordinatesStep)
   .map({
-    // Map values from different sources to step3's inputs
-    initialValue: {
-      initData: myWorkflow,
-      path: "inputValue",
-    },
-    currentResult: {
-      step: step2,
-      path: "currentResult",
-    },
-    intermediateValue: {
-      step: step1,
-      path: "intermediateValue",
-    },
+    details: {
+      step: cityCoordinatesStep,
+      path: "city_name"
+    }
   })
-  .then(step3)
-  .commit();
+```
 
-// Create Mastra instance with all workflows
-const mastra = new Mastra({
-  workflows: {
-    myWorkflow,
-  },
+The output would be similar to the below:
+
+```typescript showLineNumbers
+{ details: 'London' }
+```
+
+### Workflow Outputs
+
+You can rename workflow outputs by using **referential composition**. This involves passing the workflow instance as the `initData`.
+
+```typescript {11, 14} showLineNumbers
+export const testWorkflow = createWorkflow({
+  id: "test-workflow",
+  description: 'Test workflow',
+  inputSchema: z.object({
+    city: z.string()
+  }),
+  outputSchema: z.object({
+    outcome: z.string()
+  })
 });
 
-const run = mastra.getWorkflow("myWorkflow").createRun();
-const res = await run.start({
-  inputData: { inputValue: "Starting data" },
-});
-if (res.status === "success") {
-  console.log("Result:", res.result);
-}
+testWorkflow
+  .then(cityCoordinatesStep)
+  .map({
+    details: {
+      initData: testWorkflow,
+      path: "city"
+    }
+  })
+```
+
+The output would be similar to the below:
+
+```typescript showLineNumbers
+{ details: 'London' }
 ```

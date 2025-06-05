@@ -3,383 +3,408 @@ title: "Using Workflows with Agents and Tools | Workflows | Mastra Docs"
 description: "Steps in Mastra workflows provide a structured way to manage operations by defining inputs, outputs, and execution logic."
 ---
 
-## Agent as a step
+# Agents and Tools
 
-Workflows can use Mastra agents directly as steps using `createStep(agent)`:
+Workflow steps are composable and typically run logic directly within the `execute` function. However, there are cases where calling an agent or tool is more appropriate. This pattern is especially useful when:
 
-```typescript
-import { Mastra } from "@mastra/core";
+- Generating natural language responses from user input using an LLM.
+- Abstracting complex or reusable logic into a dedicated tool.
+- Interacting with third-party APIs in a structured or reusable way.
+
+
+Workflows can use Mastra agents or tools directly as steps, for example: `createStep(testAgent)` or `createStep(testTool)`.
+
+## Agents
+
+To include an agent in a workflow, define it in the usual way, then either add it directly to the workflow using `createStep(testAgent)` or, invoke it from within a step's `execute` function using `.generate()`.
+
+### Example Agent
+
+This agent uses OpenAI to generate a fact about a city, country, and timezone.
+
+```typescript filename="src/mastra/agents/test-agent.ts" showLineNumbers copy
 import { openai } from "@ai-sdk/openai";
 import { Agent } from "@mastra/core/agent";
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
 
-const myAgent = new Agent({
-  name: "myAgent",
-  instructions: "You are a helpful assistant that answers questions concisely.",
-  model: openai("gpt-4o"),
+export const testAgent = new Agent({
+  name: "test-agent",
+  description: "Create facts for input city, country and timezone",
+  instructions: `
+You are a helpful and factual assistant.
+
+You will be given a city, country, and timezone. Return exactly one interesting fact about each of the three values.
+
+Your response must follow this exact format:
+
+City Fact: <a short paragraph about the city>
+Country Fact: <a short paragraph about the country>
+Timezone Fact: <a short paragraph about the timezone>
+
+Only return the three facts in plain text, with each label clearly marked. No additional commentary or formatting.
+Ensure all facts are accurate and sourced from reputable references.
+`,
+  model: openai("gpt-4o")
 });
+```
 
-// Input preparation step
-const preparationStep = createStep({
-  id: "preparation",
+### Agents As Step
+
+In this example the `cityCoordinatesStep` performs a geocoding lookup using the provided `city`, then returns the resolved `city`, `country`, and `timezone`.
+
+The `.map` function transforms the object output into a `prompt` string that can be used by the `testAgent`.
+
+The step is composed into the workflow using the sequential `.then()` method, allowing it to receive input from the workflow and return structured output.
+
+```typescript {1,29,42,52} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { testAgent } from "../agents/test-agent";
+
+const cityCoordinatesStep = createStep({
+  id: "city-step",
+  description: "Gets details about a city",
   inputSchema: z.object({
-    question: z.string(),
+    city: z.string()
   }),
   outputSchema: z.object({
-    formattedPrompt: z.string(),
+    city_name: z.string(),
+    country_name: z.string(),
+    country_timezone: z.string()
   }),
   execute: async ({ inputData }) => {
+    const { city } = inputData;
+    const geocodingResponse = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${city}`);
+    const geocodingData = await geocodingResponse.json();
+
+    const { name, country, timezone } = geocodingData.results[0];
+
     return {
-      formattedPrompt: `Answer this question briefly: ${inputData.question}`,
+      city_name: name,
+      country_name: country,
+      country_timezone: timezone
     };
-  },
+  }
 });
 
-const agentStep = createStep(myAgent);
+const cityFactsStep = createStep(testAgent);
 
-// Create a simple workflow
-const myWorkflow = createWorkflow({
-  id: "simple-qa-workflow",
+export const testWorkflow = createWorkflow({
+  id: "test-workflow",
+  description: 'Test workflow',
   inputSchema: z.object({
-    question: z.string(),
+    city: z.string()
   }),
-  outputSchema: z.string(),
-  steps: [preparationStep, agentStep],
-});
-
-// Define workflow sequence
-myWorkflow
-  .then(preparationStep)
-  .map({
-    prompt: {
-      step: preparationStep,
-      path: "formattedPrompt",
-    },
+  outputSchema: z.object({
+    outcome: z.string()
   })
-  .then(agentStep)
-  .commit();
-
-// Create Mastra instance
-const mastra = new Mastra({
-  agents: {
-    myAgent,
-  },
-  workflows: {
-    myWorkflow,
-  },
-});
-
-const workflow = mastra.getWorkflow("myWorkflow");
-const run = workflow.createRun();
-
-// Run the workflow with a question
-const res = await run.start({
-  inputData: {
-    question: "What is machine learning?",
-  },
-});
-
-if (res.status === "success") {
-  console.log("Answer:", res.result);
-} else if (res.status === "failed") {
-  console.error("Workflow failed:", res.error);
-}
-```
-
-> **NOTE:** The step created from agent (`createStep(agent)`) takes `prompt` as an input and returns `text` as an output. You will need to map the output of the previous step to the input of the agent step, as done in the example above
-
-## Tools as a step
-
-Workflows can use Mastra tools directly as steps using `createStep(tool)`:
-
-```typescript
-import { createTool, Mastra } from "@mastra/core";
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-
-// Create a weather tool
-const weatherTool = createTool({
-  id: "weather-tool",
-  description: "Get weather information for a location",
-  inputSchema: z.object({
-    location: z.string().describe("The city name"),
-  }),
-  outputSchema: z.object({
-    temperature: z.number(),
-    conditions: z.string(),
-  }),
-  execute: async ({ context: { location } }) => {
-    return {
-      temperature: 22,
-      conditions: "Sunny",
-    };
-  },
-});
-
-// Create a step that formats the input
-const locationStep = createStep({
-  id: "location-formatter",
-  inputSchema: z.object({
-    city: z.string(),
-  }),
-  outputSchema: z.object({
-    location: z.string(),
-  }),
-  execute: async ({ inputData }) => {
-    return {
-      location: inputData.city,
-    };
-  },
-});
-
-// Create a step that formats the output
-const formatResultStep = createStep({
-  id: "format-result",
-  inputSchema: z.object({
-    temperature: z.number(),
-    conditions: z.string(),
-  }),
-  outputSchema: z.object({
-    weatherReport: z.string(),
-  }),
-  execute: async ({ inputData }) => {
-    return {
-      weatherReport: `Current weather: ${inputData.temperature}°C and ${inputData.conditions}`,
-    };
-  },
-});
-
-const weatherToolStep = createStep(weatherTool);
-
-// Create the workflow
-const weatherWorkflow = createWorkflow({
-  id: "weather-workflow",
-  inputSchema: z.object({
-    city: z.string(),
-  }),
-  outputSchema: z.object({
-    weatherReport: z.string(),
-  }),
-  steps: [locationStep, weatherToolStep, formatResultStep],
-});
-
-// Define workflow sequence
-weatherWorkflow
-  .then(locationStep)
-  .then(weatherToolStep)
-  .then(formatResultStep)
-  .commit();
-
-// Create Mastra instance
-const mastra = new Mastra({
-  workflows: {
-    weatherWorkflow,
-  },
-});
-
-const workflow = mastra.getWorkflow("weatherWorkflow");
-const run = workflow.createRun();
-
-// Run the workflow
-const result = await run.start({
-  inputData: {
-    city: "Tokyo",
-  },
-});
-
-if (result.status === "success") {
-  console.log(result.result.weatherReport);
-} else if (result.status === "failed") {
-  console.error("Workflow failed:", result.error);
-}
-```
-
-## Workflow as a tool in an agent
-
-```typescript
-import { openai } from "@ai-sdk/openai";
-import { Mastra } from "@mastra/core";
-import { Agent } from "@mastra/core/agent";
-import { createTool } from "@mastra/core/tools";
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-
-// Define the weather fetching step
-const fetchWeather = createStep({
-  id: "fetch-weather",
-  inputSchema: z.object({
-    city: z.string().describe("The city to get the weather for"),
-  }),
-  outputSchema: z.object({
-    temperature: z.number(),
-    conditions: z.string(),
-    city: z.string(),
-  }),
-  execute: async ({ inputData }) => {
-    return {
-      temperature: 25,
-      conditions: "Sunny",
-      city: inputData.city,
-    };
-  },
-});
-
-// Define the activity planning step
-const planActivities = createStep({
-  id: "plan-activities",
-  inputSchema: z.object({
-    temperature: z.number(),
-    conditions: z.string(),
-    city: z.string(),
-  }),
-  outputSchema: z.object({
-    activities: z.array(z.string()),
-  }),
-  execute: async ({ inputData }) => {
-    mastra
-      .getLogger()
-      ?.debug(`Planning activities for ${inputData.city} based on weather`);
-    const activities = [];
-
-    if (inputData.temperature > 20 && inputData.conditions === "Sunny") {
-      activities.push("Visit the park", "Go hiking", "Have a picnic");
-    } else if (inputData.temperature < 10) {
-      activities.push("Visit a museum", "Go to a cafe", "Indoor shopping");
-    } else {
-      activities.push(
-        "Sightseeing tour",
-        "Visit local attractions",
-        "Try local cuisine",
-      );
-    }
-    return {
-      activities,
-    };
-  },
-});
-
-// Create the weather workflow
-const weatherWorkflow = createWorkflow({
-  id: "weather-workflow",
-  inputSchema: z.object({
-    city: z.string().describe("The city to get the weather for"),
-  }),
-  outputSchema: z.object({
-    activities: z.array(z.string()),
-  }),
-  steps: [fetchWeather, planActivities],
 })
-  .then(fetchWeather)
-  .then(planActivities)
+  .then(cityCoordinatesStep)
+  .map(({ inputData }) => {
+    const { city_name, country_name, country_timezone } = inputData;
+    return {
+      prompt: `
+        Provide facts about the city: ${city_name},
+        country: ${country_name}
+        and timezone: ${country_timezone}
+      `
+    };
+  })
+  .then(cityFactsStep)
   .commit();
+```
 
-// Create a tool that uses the workflow
-const activityPlannerTool = createTool({
-  id: "get-weather-specific-activities",
-  description:
-    "Get weather-specific activities for a city based on current weather conditions",
+### Agent Generate
+
+In this example, the `cityFactsStep` performs a geocoding lookup using the provided `city`, then builds a prompt combining the resolved `city`, `country`, and `timezone`.
+
+This prompt is passed to the `testAgent`, which generates a plain-text response with one fact for each.
+
+The step is composed into the workflow using the sequential `.then()` method, allowing it to receive input from the workflow and return structured output.
+
+```typescript {1,27,46} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { testAgent } from "../agents/test-agent";
+
+const cityFactsStep = createStep({
+  id: "city-facts-step",
+  description: "Returns facts about city, country and timezone from the agent",
   inputSchema: z.object({
-    city: z.string().describe("The city to get activities for"),
+    city: z.string()
   }),
   outputSchema: z.object({
-    activities: z.array(z.string()),
+    outcome: z.string()
   }),
-  execute: async ({ context: { city }, mastra }) => {
-    mastra.getLogger()?.debug(`Tool executing for city: ${city}`);
 
-    const workflow = mastra?.getWorkflow("weatherWorkflow");
-    if (!workflow) {
-      throw new Error("Weather workflow not found");
-    }
+  execute: async ({ inputData }) => {
+    const { city } = inputData;
+    const geocodingResponse = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${city}`);
+    const geocodingData = await geocodingResponse.json();
 
-    const run = workflow.createRun();
-    const result = await run.start({
-      inputData: {
-        city: city,
-      },
+    const { name, country, timezone } = geocodingData.results[0];
+
+    const prompt = `
+      Provide facts about the city: ${city_name},
+      country: ${country_name}
+      and timezone: ${country_timezone}
+    `;
+
+    const { text } = await testAgent.generate([
+      { role: "user", content: prompt }
+    ]);
+
+    return {
+      outcome: text
+    };
+  }
+});
+
+export const testWorkflow = createWorkflow({
+  id: "test-workflow",
+  description: 'Test workflow',
+  inputSchema: z.object({
+    city: z.string()
+  }),
+  outputSchema: z.object({
+    outcome: z.string()
+  })
+})
+  .then(cityFactsStep)
+  .commit();
+```
+
+## Tools
+
+To use a tool within a workflow, define it in the usual way, then either add it directly to the workflow using `createStep(testTool)` or, invoke it from within a step's `execute` function using `.execute()`.
+
+### Example Tool
+
+The example below uses the Open Meteo API to retrieve geolocation details for a city, returning its name, country, and timezone.
+
+```typescript filename="src/mastra/tools/test-tool.ts" showLineNumbers copy
+import { createTool } from "@mastra/core";
+import { z } from "zod";
+
+export const testTool = createTool({
+  id: "city-tool",
+  description: "Gets coordinates for city",
+  inputSchema: z.object({
+    city: z.string()
+  }),
+  outputSchema: z.object({
+    city_name: z.string(),
+    country_name: z.string(),
+    country_timezone: z.string()
+  }),
+  execute: async ({ context }) => {
+    const { city } = context;
+    const geocodingResponse = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${city}`);
+    const geocodingData = await geocodingResponse.json();
+
+    const { name, country, timezone } = geocodingData.results[0];
+
+    return {
+      city_name: name,
+      country_name: country,
+      country_timezone: timezone
+    };
+  }
+});
+```
+
+
+### Tools As Step
+
+In this example, the `cityCoordinatesStep` uses the above example `testTool` which performs a geocoding lookup using the provided `city`, then returns the resolved `city`, `country`, and `timezone`.
+
+
+The `.map` function transforms the object output into a prompt string that can be used by the testAgent.
+
+The step is composed into the workflow using the sequential `.then()` method, allowing it to receive input from the workflow and return structured output.
+
+```typescript {2,4,40,51} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { testAgent } from "../agents/test-agent";
+import { testTool } from "../tools/test-tool";
+
+const cityCoordinatesStep = createStep(testTool);
+
+const cityFactsStep = createStep({
+  id: "city-facts-step",
+  description: "Returns facts about city, country and timezone from the agent",
+  inputSchema: z.object({
+    prompt: z.string()
+  }),
+  outputSchema: z.object({
+    outcome: z.string()
+  }),
+
+  execute: async ({ inputData }) => {
+    const { prompt } = inputData;
+
+    const { text } = await testAgent.generate([
+      { role: "user", content: prompt }
+    ]);
+
+    return {
+      outcome: text
+    };
+  }
+});
+
+export const testWorkflow = createWorkflow({
+  id: "test-workflow",
+  description: "Test workflow",
+  inputSchema: z.object({
+    city: z.string()
+  }),
+  outputSchema: z.object({
+    outcome: z.string()
+  })
+})
+  .then(cityCoordinatesStep)
+  .map(({ inputData }) => {
+    const { city_name, country_name, country_timezone } = inputData;
+
+    return {
+      prompt: `
+        Provide facts about the city: ${city_name},
+        country: ${country_name}
+        and timezone: ${country_timezone}
+      `
+    };
+  })
+  .then(cityFactsStep)
+  .commit();
+```
+
+### Tool Execute
+
+In this example, the `cityFactsStep` uses the above example `testTool` which performs a geocoding lookup using the provided `city`, then builds a prompt combining the resolved `city`, `country`, and `timezone`.
+
+This prompt is passed to the `testAgent`, which generates a plain-text response with one fact for each.
+
+The step is composed into the workflow using the sequential `.then()` method, allowing it to receive input from the workflow and return structured output.
+
+```typescript {4,33,52} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { RuntimeContext } from "@mastra/core/di";
+
+import { testAgent } from "../agents/test-agent";
+import { testTool } from "../tools/test-tool";
+
+const runtimeContext = new RuntimeContext();
+
+const cityFactsStep = createStep({
+  id: "city-facts-step",
+  description: "Returns facts about city, country and timezone from the agent",
+  inputSchema: z.object({
+    city: z.string()
+  }),
+  outputSchema: z.object({
+    outcome: z.string()
+  }),
+
+  execute: async ({ inputData }) => {
+    const { city } = inputData;
+
+    const { city_name, country_name, country_timezone } = await testTool.execute({
+      context: { city },
+      runtimeContext
     });
 
-    if (result.status === "success") {
-      return {
-        activities: result.result.activities,
-      };
-    }
+    const prompt = `
+      Provide facts about the city: ${city_name},
+      country: ${country_name}
+      and timezone: ${country_timezone}
+    `;
 
-    throw new Error(`Workflow execution failed: ${result.status}`);
-  },
+    const { text } = await testAgent.generate([
+      { role: "user", content: prompt }
+    ]);
+
+    return {
+      outcome: text
+    };
+  }
 });
 
-// Create an agent that uses the tool
-const activityPlannerAgent = new Agent({
-  name: "activityPlannerAgent",
-  model: openai("gpt-4o"),
-  instructions: `
-  You are an activity planner. You suggest fun activities based on the weather in a city.
-  Use the weather-specific activities tool to get activity recommendations.
-  Format your response in a friendly, conversational way.
-  `,
-  tools: { activityPlannerTool },
-});
-
-// Create the Mastra instance
-const mastra = new Mastra({
-  workflows: {
-    weatherWorkflow,
-  },
-  agents: {
-    activityPlannerAgent,
-  },
-});
-
-const response = await activityPlannerAgent.generate(
-  "What activities do you recommend for a visit to Tokyo?",
-);
-
-console.log("\nAgent response:");
-console.log(response.text);
+export const testWorkflow = createWorkflow({
+  id: "test-workflow",
+  description: 'Test workflow',
+  inputSchema: z.object({
+    city: z.string()
+  }),
+  outputSchema: z.object({
+    outcome: z.string()
+  })
+})
+  .then(cityFactsStep)
+  .commit();
 ```
 
-## Exposing Workflows as Tools via MCPServer
+## MCP Server
 
-Beyond using workflows within agents, your Mastra `Workflow` instances can themselves be exposed as tools to any MCP-compatible client using Mastra's `MCPServer`.
-This allows other AI models or MCP clients to initiate and run your Mastra Workflows as if they were standard tools.
+You can expose agents, tools, and workflows to an MCP Server, making them accessible to any MCP-compatible client.
 
-When a `Workflow` instance is provided to an `MCPServer` configuration:
+When you provide workflows to the server, each workflow is automatically exposed as a callable tool for example:
 
-- It is automatically converted into a callable tool.
-- The tool is named `run_<workflowKey>`, where `<workflowKey>` is the identifier you used when adding the workflow to the `MCPServer`'s `workflows` configuration (e.g., `workflows: { myWorkflow: myWorkflowInstance }` would create a tool `run_myWorkflow`).
-- The workflow's `description` property **must be a non-empty string** and is used to generate the tool's description. If the description is missing or empty, `MCPServer` will throw an error during initialization.
-- The `workflow.inputSchema` is used as the input schema for the generated tool.
-- Executing the tool triggers `workflow.createRun().start({ inputData: <tool_input> })`, passing the tool's input as `inputData` to the workflow run.
+- `ask_testAgent`
+- `testTool`
+- `run_testWorkflow`.
 
-**Example `MCPServer` Configuration with a Workflow:**
-
-```typescript filename="src/mastra/mcp-server-with-workflow.ts"
+```typescript filename="src/test-mcp-server.ts" showLineNumbers copy
 import { MCPServer } from "@mastra/mcp";
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
-import { weatherWorkflow } from "./workflows";
 
-const server = new MCPServer({
-  name: "MyServerWithWorkflowTool",
-  version: "1.0.0",
-  tools: {
-    // You can still have other defined tools
-  },
-  workflows: {
-    weatherWorkflow, // Exposes 'run_weatherWorkflow' tool
-  },
-});
+import { testAgent } from "./mastra/agents/test-agent";
+import { testTool } from "./mastra/tools/test-tool";
+import { testWorkflow } from "./mastra/workflows/test-workflow";
 
-// To start the server (example using stdio):
-server.startStdio().catch(console.error);
+async function startServer() {
+  const server = new MCPServer({
+    name: "test-mcp-server",
+    version: "1.0.0",
+    agents: {
+      testAgent
+    },
+    tools: {
+      testTool
+    },
+    workflows: {
+      testWorkflow
+    }
+  });
 
-// An MCP client could now connect and see a tool named 'run_weatherWorkflow'.
-// Calling it with { "city": "Paris" } would run the workflow.
+  await server.startStdio();
+  console.log("MCPServer started on stdio");
+}
+
+startServer().catch(console.error);
 ```
 
-This mechanism provides a powerful way to make complex, multi-step processes (encapsulated as Workflows) available as simple, callable tools in the broader MCP ecosystem.
+To verify that your agents, tools, and workflows are available on the server, you can connect with an MCPClient.
 
-For more general details on `MCPServer` and its capabilities, including exposing Agents, refer to the [MCPServer reference documentation](/reference/tools/mcp-server).
-For more general details on connecting to your `MCPServer` using the `MCPClient`, refer to the [MCPClient reference documentation](/reference/tools/mcp-client).
+```typescript filename="src/test-mcp-client.ts" showLineNumbers copy
+import { MCPClient } from "@mastra/mcp";
+
+async function main() {
+  const mcp = new MCPClient({
+    servers: {
+      local: {
+        command: "npx",
+        args: ["tsx", "src/test-mcp-server.ts"]
+      }
+    }
+  });
+
+  const tools = await mcp.getTools();
+  console.log(tools);
+}
+
+main().catch(console.error);
+```
+
+Run the client script to list all available tools.
+
+```bash
+npx tsx src/test-mcp-client.ts
+```
+
+## More Resources
+
+- [MCPServer reference documentation](/reference/tools/mcp-server).
+- [MCPClient reference documentation](/reference/tools/mcp-client).

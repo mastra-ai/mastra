@@ -317,6 +317,11 @@ export default withGT(
         permanent: true,
       },
       {
+        source: "/docs/workflows/flow-control",
+        destination: "/docs/workflows/control-flow",
+        permanent: true,
+      },
+      {
         source: "/docs/workflows/00-overview",
         destination: "/docs/workflows/overview",
         permanent: true,
