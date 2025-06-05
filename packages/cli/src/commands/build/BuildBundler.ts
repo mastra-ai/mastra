@@ -6,12 +6,12 @@ export class BuildBundler extends Bundler {
     super('Build');
   }
 
-  getEnvFiles(): Promise<string[]> {
-    const possibleFiles = ['.env.production', '.env.local', '.env'];
+  async getEnvFiles(): Promise<string[]> {
+    const possibleFiles = ['.env.production', '.env.local', '.env', '.env.*'];
 
     try {
       const fileService = new FileService();
-      const envFile = fileService.getFirstExistingFile(possibleFiles);
+      const envFile = await fileService.getFirstExistingFileAsync(possibleFiles);
 
       return Promise.resolve([envFile]);
     } catch (err) {
