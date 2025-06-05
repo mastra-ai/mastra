@@ -41,7 +41,7 @@ export abstract class MastraLogger implements IMastraLogger {
   }
 
   logException(error: MastraError) {
-    this.error(error.message, error);
+    this.error(error.toString(), error);
   }
 
   async getLogs(transportId: string) {

@@ -87,8 +87,7 @@ export class MastraBaseError<D, C> extends Error {
       message: this.message,
       domain: this.domain,
       category: this.category,
-      stack: this.stack,
-      originalError: this.originalError,
+      stack: this.originalError?.stack,
       details: this.details,
     };
   }
@@ -99,6 +98,10 @@ export class MastraBaseError<D, C> extends Error {
       details: this.toJSONDetails(),
       code: this.id,
     };
+  }
+
+  public toString() {
+    return JSON.stringify(this.toJSON());
   }
 }
 

@@ -8,7 +8,7 @@ import type { JSONSchema as ZodFromJSONSchema_JSONSchema } from 'zod-from-json-s
 import type { Targets } from 'zod-to-json-schema';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { MastraBase } from '../../base';
-import { MastraError } from '../../error';
+import { ErrorCategory, MastraError, Domain } from '../../error';
 import { RuntimeContext } from '../../runtime-context';
 import { isVercelTool } from '../../tools/toolchecks';
 import { isZodType } from '../../utils';
@@ -189,8 +189,8 @@ export class CoreToolBuilder extends MastraBase {
           {
             id: 'TOOL_EXECUTION_FAILED',
             text: 'Failed to execute tool',
-            domain: 'TOOL',
-            category: 'USER',
+            domain: Domain.TOOL,
+            category: ErrorCategory.USER,
             details: {
               ...rest,
               args,
