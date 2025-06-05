@@ -10,7 +10,7 @@ export const WorkflowGraphLayout = ({ children }: WorkflowGraphLayoutProps) => {
   const { workflowId } = useParams();
 
   return (
-    <main className="flex-1 relative divide-x flex w-full h-full">
+    <main className="flex-1 relative divide-x flex w-full h-full overflow-y-auto">
       <div className="min-w-[325px] grow">{children}</div>
       <MastraResizablePanel
         defaultWidth={20}

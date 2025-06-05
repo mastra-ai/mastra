@@ -1,5 +1,3 @@
-import { ScrollArea } from '@/components/ui/scroll-area';
-
 import { useWorkflows } from '@/hooks/use-workflows';
 import {
   Button,
@@ -35,10 +33,11 @@ function Workflows() {
   if (isLoading) return null;
 
   return (
-    <div className="h-full relative overflow-hidden">
+    <div className="grid grid-rows-[auto_1fr] h-full">
       <Header>
         <HeaderTitle>Workflows</HeaderTitle>
       </Header>
+
       <section className="flex-1 relative overflow-hidden h-full">
         {workflowList.length === 0 ? (
           <div className="flex h-full items-center justify-center">
@@ -64,14 +63,14 @@ function Workflows() {
             />
           </div>
         ) : (
-          <ScrollArea className="h-full">
+          <div className="overflow-y-auto h-full">
             <DataTable
               emptyText="Workflows"
               columns={workflowsTableColumns}
               data={[...workflowList, ...legacyWorkflowList]}
               onClick={row => navigate(`/workflows${row.isLegacy ? '/legacy' : ''}/${row.id}/graph`)}
             />
-          </ScrollArea>
+          </div>
         )}
       </section>
     </div>
