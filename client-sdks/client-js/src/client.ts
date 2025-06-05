@@ -189,7 +189,37 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing array of log messages
    */
   public getLogs(params: GetLogsParams): Promise<GetLogsResponse> {
-    return this.request(`/api/logs?transportId=${params.transportId}`);
+    const { transportId, fromDate, toDate, logLevel, filters } = params;
+    const _filters = filters ? Object.entries(filters).map(([key, value]) => `${key}:${value}`) : [];
+
+    const searchParams = new URLSearchParams();
+    if (transportId) {
+      searchParams.set('transportId', transportId);
+    }
+    if (fromDate) {
+      searchParams.set('fromDate', fromDate.toISOString());
+    }
+    if (toDate) {
+      searchParams.set('toDate', toDate.toISOString());
+    }
+    if (logLevel) {
+      searchParams.set('logLevel', logLevel);
+    }
+    if (_filters) {
+      if (Array.isArray(_filters)) {
+        for (const filter of _filters) {
+          searchParams.append('filters', filter);
+        }
+      } else {
+        searchParams.set('filters', _filters);
+      }
+    }
+
+    if (searchParams.size) {
+      return this.request(`/api/logs?${searchParams}`);
+    } else {
+      return this.request(`/api/logs`);
+    }
   }
 
   /**
@@ -198,7 +228,41 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing array of log messages
    */
   public getLogForRun(params: GetLogParams): Promise<GetLogsResponse> {
-    return this.request(`/api/logs/${params.runId}?transportId=${params.transportId}`);
+    const { runId, transportId, fromDate, toDate, logLevel, filters } = params;
+
+    const _filters = filters ? Object.entries(filters).map(([key, value]) => `${key}:${value}`) : [];
+    const searchParams = new URLSearchParams();
+    if (runId) {
+      searchParams.set('runId', runId);
+    }
+    if (transportId) {
+      searchParams.set('transportId', transportId);
+    }
+    if (fromDate) {
+      searchParams.set('fromDate', fromDate.toISOString());
+    }
+    if (toDate) {
+      searchParams.set('toDate', toDate.toISOString());
+    }
+    if (logLevel) {
+      searchParams.set('logLevel', logLevel);
+    }
+
+    if (_filters) {
+      if (Array.isArray(_filters)) {
+        for (const filter of _filters) {
+          searchParams.append('filters', filter);
+        }
+      } else {
+        searchParams.set('filters', _filters);
+      }
+    }
+
+    if (searchParams.size) {
+      return this.request(`/api/logs/${runId}?${searchParams}`);
+    } else {
+      return this.request(`/api/logs/${runId}`);
+    }
   }
 
   /**

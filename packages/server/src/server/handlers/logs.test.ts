@@ -1,3 +1,4 @@
+import { LogLevel } from '@mastra/core/logger';
 import type { BaseLogMessage, IMastraLogger } from '@mastra/core/logger';
 import { Mastra } from '@mastra/core/mastra';
 import type { Mock } from 'vitest';
@@ -63,7 +64,30 @@ describe('Logs Handlers', () => {
       });
 
       expect(result).toEqual(mockLogs);
-      expect(mockLogger.getLogs).toHaveBeenCalledWith('test-transport');
+      expect(mockLogger.getLogs).toHaveBeenCalledWith('test-transport', {
+        filters: undefined,
+        fromDate: undefined,
+        logLevel: undefined,
+        toDate: undefined,
+      });
+    });
+
+    it('should get logs successfully with params', async () => {
+      const mockLogs: BaseLogMessage[] = [createLog({})];
+
+      mockLogger.getLogs.mockResolvedValue(mockLogs);
+      const result = await getLogsHandler({
+        mastra,
+        transportId: 'test-transport',
+        params: {
+          logLevel: LogLevel.INFO,
+        },
+      });
+
+      expect(result).toEqual(mockLogs);
+      expect(mockLogger.getLogs).toHaveBeenCalledWith('test-transport', {
+        logLevel: LogLevel.INFO,
+      });
     });
   });
 
