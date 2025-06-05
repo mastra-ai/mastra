@@ -317,8 +317,8 @@ export default withGT(
         permanent: true,
       },
       {
-        source: "/docs/workflows/flow-control",
-        destination: "/en/docs/workflows/control-flow",
+        source: "/:locale/docs/workflows/flow-control",
+        destination: "/:locale/docs/workflows/control-flow",
         permanent: true,
       },
       {
