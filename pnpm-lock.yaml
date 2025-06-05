@@ -3101,8 +3101,8 @@ importers:
   voice/elevenlabs:
     dependencies:
       elevenlabs:
-        specifier: ^1.57.0
-        version: 1.57.0(encoding@0.1.13)
+        specifier: ^1.59.0
+        version: 1.59.0(encoding@0.1.13)
       zod:
         specifier: ^3.24.3
         version: 3.24.4
@@ -12359,8 +12359,8 @@ packages:
   electron-to-chromium@1.5.119:
     resolution: {integrity: sha512-Ku4NMzUjz3e3Vweh7PhApPrZSS4fyiCIbcIrG9eKrriYVLmbMepETR/v6SU7xPm98QTqMSYiCwfO89QNjXLkbQ==}
 
-  elevenlabs@1.57.0:
-    resolution: {integrity: sha512-MDzlZUqB3oS9Eq8Fnr865i1EkapUFldVUlZnVlnuSpkNi0suzXfiOR/6WwGDi6QRMvQEZhI8pafsVK9kr+jKrw==}
+  elevenlabs@1.59.0:
+    resolution: {integrity: sha512-OVKOd+lxNya8h4Rn5fcjv00Asd+DGWfTT6opGrQ16sTI+1HwdLn/kYtjl8tRMhDXbNmksD/9SBRKjb9neiUuVg==}
     deprecated: This package has moved to @elevenlabs/elevenlabs-js
 
   emittery@0.13.1:
@@ -30682,7 +30682,7 @@ snapshots:
 
   electron-to-chromium@1.5.119: {}
 
-  elevenlabs@1.57.0(encoding@0.1.13):
+  elevenlabs@1.59.0(encoding@0.1.13):
     dependencies:
       command-exists: 1.2.9
       execa: 5.1.1
