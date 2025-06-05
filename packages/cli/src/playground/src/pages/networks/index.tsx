@@ -1,4 +1,3 @@
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { AgentNetworkCoinIcon, Button, DataTable, EmptyState, Header, HeaderTitle, Icon } from '@mastra/playground-ui';
 import { useNetworks } from '@/hooks/use-networks';
 import { networksTableColumns } from '@/domains/networks/table.columns';
@@ -10,13 +9,13 @@ function Networks() {
   if (isLoading) return null;
 
   return (
-    <>
+    <div className="grid grid-rows-[auto_1fr] h-full">
       <Header>
         <HeaderTitle>Networks</HeaderTitle>
       </Header>
 
       {networks.length === 0 ? (
-        <div className="flex h-full items-center justify-center">
+        <div className="grid place-items-center">
           <EmptyState
             iconSlot={<AgentNetworkCoinIcon />}
             titleSlot="Configure Agent Networks"
@@ -39,11 +38,11 @@ function Networks() {
           />
         </div>
       ) : (
-        <ScrollArea className="h-full">
+        <div className="overflow-y-auto">
           <DataTable isLoading={isLoading} data={networks} columns={networksTableColumns} />
-        </ScrollArea>
+        </div>
       )}
-    </>
+    </div>
   );
 }
 
