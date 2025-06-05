@@ -460,7 +460,7 @@ export class D1Store extends MastraStorage {
   }
 
   /**
-   * @deprecated use getPaginatedThreadsByResourceId instead
+   * @deprecated use getThreadsByResourceIdPaginated instead
    */
   async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
     const fullTableName = this.getTableName(TABLE_THREADS);
@@ -488,7 +488,7 @@ export class D1Store extends MastraStorage {
     }
   }
 
-  public async getPaginatedThreadsByResourceId(args: {
+  public async getThreadsByResourceIdPaginated(args: {
     resourceId: string;
     page: number;
     perPage: number;
@@ -744,7 +744,7 @@ export class D1Store extends MastraStorage {
   }
 
   /**
-   * @deprecated use getPaginatedMessages instead
+   * @deprecated use getMessagesPaginated instead
    */
   public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
   public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
@@ -816,7 +816,7 @@ export class D1Store extends MastraStorage {
     }
   }
 
-  public async getPaginatedMessages({
+  public async getMessagesPaginated({
     threadId,
     selectBy,
     format,
@@ -1009,7 +1009,7 @@ export class D1Store extends MastraStorage {
   }
 
   /**
-   * @deprecated use getPaginatedTraces instead
+   * @deprecated use getTracesPaginated instead
    */
   async getTraces({
     name,
@@ -1083,7 +1083,7 @@ export class D1Store extends MastraStorage {
     }
   }
 
-  public async getPaginatedTraces(args: {
+  public async getTracesPaginated(args: {
     name?: string;
     scope?: string;
     attributes?: Record<string, string>;
