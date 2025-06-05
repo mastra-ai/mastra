@@ -897,6 +897,11 @@ export default withGT(
         destination: "/reference/observability/logger",
         permanent: true,
       },
+      {
+        source: "/reference/rag/vector-search",
+        destination: "/examples/rag/query/hybrid-vector-search",
+        permanent: true,
+      },
     ],
     trailingSlash: false,
   }),
