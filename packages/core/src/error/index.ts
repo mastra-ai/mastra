@@ -16,6 +16,7 @@ export enum ErrorCategory {
   UNKNOWN = 'UNKNOWN',
   USER = 'USER',
   SYSTEM = 'SYSTEM',
+  THIRD_PARTY = 'THIRD_PARTY',
 }
 
 type Scalar = null | boolean | number | string;
@@ -32,7 +33,7 @@ type Json<T> = [T] extends [Scalar | undefined]
  */
 export interface IErrorDefinition {
   /** Unique identifier for the error. */
-  id: string | number;
+  id: Uppercase<string>;
   /**
    * The error message template or a function to generate it.
    * If a function, it receives context to interpolate values.
@@ -41,9 +42,9 @@ export interface IErrorDefinition {
   /**
    * Functional domain of the error (e.g., CONFIG, BUILD, API).
    */
-  domain: `${Domain}`;
+  domain: `${Domain | Uppercase<string>}`;
   /** Broad category of the error (e.g., USER, SYSTEM, THIRD_PARTY). */
-  category: `${ErrorCategory}`;
+  category: `${ErrorCategory | Uppercase<string>}`;
 
   details?: Record<string, Json<Scalar>>;
 }
@@ -53,21 +54,26 @@ export interface IErrorDefinition {
  * It standardizes error reporting and can be extended for more specific error types.
  */
 export class MastraError extends Error {
-  public readonly id: string | number;
-  public readonly domain: `${Domain}`;
-  public readonly category: `${ErrorCategory}`;
+  public readonly id: Uppercase<string>;
+  public readonly domain: `${Domain | Uppercase<string>}`;
+  public readonly category: `${ErrorCategory | Uppercase<string>}`;
   public readonly originalError?: Error;
   public readonly details?: Record<string, Json<Scalar>> = {};
 
-  constructor(errorDefinition: IErrorDefinition, originalError?: Error | MastraError) {
+  constructor(errorDefinition: IErrorDefinition, originalError?: Error | MastraError | unknown) {
     const message = errorDefinition.text;
+    let error;
+    if (originalError instanceof Error) {
+      error = originalError;
+    } else if (originalError) {
+      error = new Error(String(originalError));
+    }
 
-    super(message, originalError);
-
+    super(message, error);
     this.id = errorDefinition.id;
     this.domain = errorDefinition.domain;
     this.category = errorDefinition.category;
-    this.originalError = originalError;
+    this.originalError = error;
     this.details = errorDefinition.details ?? {};
 
     Object.setPrototypeOf(this, new.target.prototype);
@@ -95,15 +101,3 @@ export class MastraError extends Error {
     };
   }
 }
-
-const error = new MastraError({
-  id: 'BASE_TEST_001',
-  text: 'This is a base test error',
-  domain: Domain.AGENT,
-  category: ErrorCategory.UNKNOWN,
-  details: {
-    tset: 'lalal',
-  },
-});
-
-console.log(error.toJSON());

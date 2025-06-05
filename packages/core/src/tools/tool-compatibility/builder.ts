@@ -8,6 +8,7 @@ import type { JSONSchema as ZodFromJSONSchema_JSONSchema } from 'zod-from-json-s
 import type { Targets } from 'zod-to-json-schema';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { MastraBase } from '../../base';
+import { MastraError } from '../../error';
 import { RuntimeContext } from '../../runtime-context';
 import { isVercelTool } from '../../tools/toolchecks';
 import { isZodType } from '../../utils';
@@ -152,7 +153,7 @@ export class CoreToolBuilder extends MastraBase {
     // dont't add memory or mastra to logging
     const { logger, mastra: _mastra, memory: _memory, runtimeContext, ...rest } = options;
 
-    const { start, error } = this.createLogMessageOptions({
+    const { start } = this.createLogMessageOptions({
       agentName: options.agentName,
       toolName: options.name,
       type: logType,
@@ -184,8 +185,22 @@ export class CoreToolBuilder extends MastraBase {
         (options.logger || this.logger).debug(start, { ...rest, args });
         return await execFunction(args, execOptions);
       } catch (err) {
-        (options.logger || this.logger).error(error, { ...rest, error: err, args });
-        throw err;
+        const error = new MastraError(
+          {
+            id: 'TOOL_EXECUTION_FAILED',
+            text: 'Failed to execute tool',
+            domain: 'TOOL',
+            category: 'USER',
+            details: {
+              ...rest,
+              args,
+              model: rest.model?.modelId ?? '',
+            },
+          },
+          err,
+        );
+        (options.logger || this.logger).logException(error);
+        throw error;
       }
     };
   }
