@@ -209,12 +209,26 @@ const chromaQueryTool = createVectorQueryTool({
     }
   }
 });
+
+// LanceDB with table specificity
+const lanceQueryTool = createVectorQueryTool({
+  vectorStoreName: "lance",
+  indexName: "documents",
+  model: openai.embedding("text-embedding-3-small"),
+  databaseConfig: {
+    lance: {
+      tableName: "myVectors",     // Specify which table to query
+      includeAllColumns: true     // Include all metadata columns in results
+    }
+  }
+});
 ```
 
 **Key Benefits:**
 - **Pinecone namespaces**: Organize vectors by tenant, environment, or data type
 - **pgVector optimization**: Control search accuracy and speed with ef/probes parameters
 - **Quality filtering**: Set minimum similarity thresholds to improve result relevance
+- **LanceDB tables**: Separate data into tables for better organization and performance
 - **Runtime flexibility**: Override configurations dynamically based on context
 
 **Common Use Cases:**
@@ -222,6 +236,7 @@ const chromaQueryTool = createVectorQueryTool({
 - Performance optimization in high-load scenarios
 - Environment-specific configurations (dev/staging/prod)
 - Quality-gated search results
+- Embedded, file-based vector storage with LanceDB for edge deployment scenarios
 
 You can also override these configurations at runtime using the runtime context:
 
