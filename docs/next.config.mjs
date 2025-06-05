@@ -318,7 +318,7 @@ export default withGT(
       },
       {
         source: "/docs/workflows/flow-control",
-        destination: "/docs/workflows/control-flow",
+        destination: "/en/docs/workflows/control-flow",
         permanent: true,
       },
       {
@@ -895,6 +895,11 @@ export default withGT(
       {
         source: "/reference/observability/create-logger",
         destination: "/reference/observability/logger",
+        permanent: true,
+      },
+      {
+        source: "/en/docs/workflows-vnext/overview",
+        destination: "/en/docs/workflows/overview",
         permanent: true,
       },
     ],
