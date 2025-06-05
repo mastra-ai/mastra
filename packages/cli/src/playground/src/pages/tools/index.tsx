@@ -104,7 +104,7 @@ const ToolsInner = ({ toolsWithAgents }: { toolsWithAgents: ToolWithAgents[] }) 
 
   if (filteredTools.length === 0 && !value) {
     return (
-      <>
+      <div className="grid grid-rows-[auto_1fr] h-full">
         <Header>
           <HeaderTitle>Tools</HeaderTitle>
         </Header>
@@ -131,17 +131,17 @@ const ToolsInner = ({ toolsWithAgents }: { toolsWithAgents: ToolWithAgents[] }) 
             }
           />
         </div>
-      </>
+      </div>
     );
   }
 
   return (
-    <>
+    <div className="grid grid-rows-[auto_1fr] h-full">
       <Header>
         <HeaderTitle>Tools</HeaderTitle>
       </Header>
 
-      <div className="pt-12 overflow-y-scroll h-[calc(100%-32px)]">
+      <div className="pt-12 overflow-y-scroll">
         <div className="max-w-2xl mx-auto px-4">
           <div className="px-4 flex items-center gap-2 rounded-lg bg-surface5 focus-within:ring-2 focus-within:ring-accent3">
             <Icon>
@@ -170,7 +170,7 @@ const ToolsInner = ({ toolsWithAgents }: { toolsWithAgents: ToolWithAgents[] }) 
           ))}
         </div>
       </div>
-    </>
+    </div>
   );
 };
 
