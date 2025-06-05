@@ -155,12 +155,12 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="w-full pl-1 pt-3 pb-0">
-        <div className="flex justify-between gap-2 items-center w-full">
+        <div className="flex justify-between gap-2 items-center">
           <span className="flex shrink-0">
             {state === 'collapsed' ? (
-              <LogoWithoutText className="h-10 w-10 shrink-0" />
+              <LogoWithoutText className="h-10 w-10 shrink-0 ml-1" />
             ) : (
-              <span className="flex items-center gap-0.5">
+              <span className="flex items-center gap-0.5 pl-1">
                 <LogoWithoutText className="h-10 w-10 shrink-0" />
                 <span className="font-serif text-sm">Mastra</span>
               </span>
@@ -183,14 +183,14 @@ export function AppSidebar() {
           <SidebarMenuButton
             onClick={() => toggleSidebar()}
             tooltip="Expand sidebar"
-            className="w-8 text-icon3 ml-1 absolute mt-[52px]"
+            className="w-8 text-icon3 ml-2 absolute mt-[52px] p-1"
           >
             <ArrowLeftFromLine className="rotate-180" />
           </SidebarMenuButton>
         )}
       </SidebarHeader>
 
-      <SidebarContent className={clsx('transition-transform', state === 'collapsed' && 'translate-y-10')}>
+      <SidebarContent className={clsx('p-1 transition-transform', state === 'collapsed' && 'translate-y-10')}>
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
@@ -202,7 +202,7 @@ export function AppSidebar() {
                   <SidebarMenuItem key={`${item.name}-${index}`}>
                     <SidebarMenuButton tooltip={item.name} asChild>
                       <Link
-                        className={`group/icon ${isActive ? 'text-primary bg-muted/50' : 'text-[#939393]'}`}
+                        className={`group/icon pr-4 ${isActive ? 'text-primary bg-muted/50' : 'text-[#939393]'}`}
                         to={item.url}
                       >
                         <Icon>
@@ -218,7 +218,7 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="pl-0">
+      <SidebarFooter className="px-1">
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
