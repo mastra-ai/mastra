@@ -78,6 +78,14 @@ export class LibSQLStore extends MastraStorage {
     }
   }
 
+  public get supports(): {
+    selectByIncludeResourceScope: boolean;
+  } {
+    return {
+      selectByIncludeResourceScope: true,
+    };
+  }
+
   private getCreateTableSQL(tableName: TABLE_NAMES, schema: Record<string, StorageColumn>): string {
     const parsedTableName = parseSqlIdentifier(tableName, 'table name');
     const columns = Object.entries(schema).map(([name, col]) => {
@@ -119,6 +127,63 @@ export class LibSQLStore extends MastraStorage {
     } catch (error) {
       this.logger.error(`Error creating table ${tableName}: ${error}`);
       throw error;
+    }
+  }
+
+  private getSqlType(type: string): string {
+    switch (type) {
+      case 'text':
+        return 'TEXT';
+      case 'timestamp':
+        return 'TIMESTAMP';
+      case 'integer':
+        return 'INTEGER';
+      case 'bigint':
+        return 'INTEGER'; // SQLite doesn't have a separate BIGINT type
+      case 'jsonb':
+        return 'TEXT'; // Store JSON as TEXT in SQLite
+      default:
+        return 'TEXT';
+    }
+  }
+
+  async alterTable({
+    tableName,
+    schema,
+    ifNotExists,
+  }: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void> {
+    const parsedTableName = parseSqlIdentifier(tableName, 'table name');
+
+    try {
+      // 1. Get existing columns using PRAGMA
+      const pragmaQuery = `PRAGMA table_info(${parsedTableName})`;
+      const result = await this.client.execute(pragmaQuery);
+      const existingColumnNames = new Set(result.rows.map((row: any) => row.name.toLowerCase()));
+
+      // 2. Add missing columns
+      for (const columnName of ifNotExists) {
+        if (!existingColumnNames.has(columnName.toLowerCase()) && schema[columnName]) {
+          const columnDef = schema[columnName];
+          const sqlType = this.getSqlType(columnDef.type); // ensure this exists or implement
+          const nullable = columnDef.nullable === false ? 'NOT NULL' : '';
+          // In SQLite, you must provide a DEFAULT if adding a NOT NULL column to a non-empty table
+          const defaultValue = columnDef.nullable === false ? 'DEFAULT ""' : '';
+          const alterSql =
+            `ALTER TABLE ${parsedTableName} ADD COLUMN "${columnName}" ${sqlType} ${nullable} ${defaultValue}`.trim();
+
+          await this.client.execute(alterSql);
+          this.logger?.debug?.(`Added column ${columnName} to table ${parsedTableName}`);
+        }
+      }
+    } catch (error) {
+      this.logger?.error?.(
+        `Error altering table ${tableName}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw new Error(`Failed to alter table ${tableName}: ${error}`);
     }
   }
 
@@ -338,6 +403,11 @@ export class LibSQLStore extends MastraStorage {
   }
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
+    // Delete messages for this thread (manual step)
+    await this.client.execute({
+      sql: `DELETE FROM ${TABLE_MESSAGES} WHERE thread_id = ?`,
+      args: [threadId],
+    });
     await this.client.execute({
       sql: `DELETE FROM ${TABLE_THREADS} WHERE id = ?`,
       args: [threadId],
@@ -358,6 +428,7 @@ export class LibSQLStore extends MastraStorage {
       role: row.role,
       createdAt: new Date(row.createdAt as string),
       threadId: row.thread_id,
+      resourceId: row.resourceId,
     } as MastraMessageV2;
     if (row.type && row.type !== `v2`) result.type = row.type;
     return result;
@@ -367,6 +438,7 @@ export class LibSQLStore extends MastraStorage {
   public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
   public async getMessages({
     threadId,
+    resourceId,
     selectBy,
     format,
   }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
@@ -379,6 +451,8 @@ export class LibSQLStore extends MastraStorage {
         const includeIds = selectBy.include.map(i => i.id);
         const maxPrev = Math.max(...selectBy.include.map(i => i.withPreviousMessages || 0));
         const maxNext = Math.max(...selectBy.include.map(i => i.withNextMessages || 0));
+        const includeScope = selectBy.includeScope;
+        const searchId = resourceId && includeScope === 'resource' ? resourceId : threadId;
 
         // Get messages around all specified IDs in one query using row numbers
         const includeResult = await this.client.execute({
@@ -391,9 +465,10 @@ export class LibSQLStore extends MastraStorage {
                 type,
                 "createdAt",
                 thread_id,
+                "resourceId",
                 ROW_NUMBER() OVER (ORDER BY "createdAt" ASC) as row_num
               FROM "${TABLE_MESSAGES}"
-              WHERE thread_id = ?
+              ${resourceId && includeScope === 'resource' ? 'WHERE "resourceId" = ?' : 'WHERE thread_id = ?'}
             ),
             target_positions AS (
               SELECT row_num as target_pos
@@ -406,7 +481,7 @@ export class LibSQLStore extends MastraStorage {
             WHERE m.row_num BETWEEN (t.target_pos - ?) AND (t.target_pos + ?)
             ORDER BY m."createdAt" ASC
           `,
-          args: [threadId, ...includeIds, maxPrev, maxNext],
+          args: [searchId, ...includeIds, maxPrev, maxNext],
         });
 
         if (includeResult.rows) {
@@ -423,7 +498,8 @@ export class LibSQLStore extends MastraStorage {
           role, 
           type,
           "createdAt", 
-          thread_id
+          thread_id,
+          "resourceId"
         FROM "${TABLE_MESSAGES}"
         WHERE thread_id = ?
         ${excludeIds.length ? `AND id NOT IN (${excludeIds.map(() => '?').join(', ')})` : ''}
@@ -472,16 +548,27 @@ export class LibSQLStore extends MastraStorage {
       // Prepare batch statements for all messages
       const batchStatements = messages.map(message => {
         const time = message.createdAt || new Date();
+        if (!message.threadId) {
+          throw new Error(
+            `Expected to find a threadId for message, but couldn't find one. An unexpected error has occurred.`,
+          );
+        }
+        if (!message.resourceId) {
+          throw new Error(
+            `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
+          );
+        }
         return {
-          sql: `INSERT INTO ${TABLE_MESSAGES} (id, thread_id, content, role, type, createdAt) 
-                VALUES (?, ?, ?, ?, ?, ?)`,
+          sql: `INSERT INTO ${TABLE_MESSAGES} (id, thread_id, content, role, type, createdAt, resourceId) 
+                VALUES (?, ?, ?, ?, ?, ?, ?)`,
           args: [
             message.id,
-            threadId,
+            message.threadId!,
             typeof message.content === 'object' ? JSON.stringify(message.content) : message.content,
             message.role,
             message.type || 'v2',
             time instanceof Date ? time.toISOString() : time,
+            message.resourceId,
           ],
         };
       });

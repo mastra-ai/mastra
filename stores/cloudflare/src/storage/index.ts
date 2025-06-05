@@ -793,6 +793,14 @@ export class CloudflareStore extends MastraStorage {
     }
   }
 
+  async alterTable(_args: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void> {
+    // Nothing to do here, Cloudflare KV is schemaless
+  }
+
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     const keys = await this.listKV(tableName);
     if (keys.length > 0) {

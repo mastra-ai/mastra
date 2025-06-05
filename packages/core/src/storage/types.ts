@@ -52,6 +52,7 @@ export type StorageGetMessagesArg = {
       withPreviousMessages?: number;
       withNextMessages?: number;
     }[];
+    includeScope?: 'thread' | 'resource';
   };
   threadConfig?: MemoryConfig;
   format?: 'v1' | 'v2';

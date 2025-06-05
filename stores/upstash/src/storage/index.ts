@@ -36,6 +36,14 @@ export class UpstashStore extends MastraStorage {
     });
   }
 
+  public get supports(): {
+    selectByIncludeResourceScope: boolean;
+  } {
+    return {
+      selectByIncludeResourceScope: true,
+    };
+  }
+
   private transformEvalRecord(record: Record<string, any>): EvalRow {
     // Parse JSON strings if needed
     let result = record.result;
@@ -147,11 +155,24 @@ export class UpstashStore extends MastraStorage {
   }
 
   private getMessageKey(threadId: string, messageId: string): string {
-    return this.getKey(TABLE_MESSAGES, { threadId, id: messageId });
+    const key = this.getKey(TABLE_MESSAGES, { threadId, id: messageId });
+    return key;
+  }
+  private getThreadKeyByResourceAndMessage(resourceId: string, messageId: string): string {
+    const key = 'to-threadid:' + this.getKey(TABLE_MESSAGES, { resourceId, messageId });
+    return key;
+  }
+
+  private getResourceKeyByThreadAndMessage(threadId: string, messageId: string): string {
+    const key = 'to-resourceid:' + this.getKey(TABLE_MESSAGES, { threadId, messageId });
+    return key;
   }
 
   private getThreadMessagesKey(threadId: string): string {
     return `thread:${threadId}:messages`;
+  }
+  private getResourceMessagesKey(resourceId: string): string {
+    return `resource:${resourceId}:messages`;
   }
 
   private parseWorkflowRun(row: any): WorkflowRun {
@@ -454,6 +475,14 @@ export class UpstashStore extends MastraStorage {
     await this.redis.set(`schema:${tableName}`, schema);
   }
 
+  async alterTable(_args: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void> {
+    // Nothing to do here, Redis is schemaless
+  }
+
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     const pattern = `${tableName}:*`;
     await this.scanAndDelete(pattern);
@@ -632,8 +661,41 @@ export class UpstashStore extends MastraStorage {
   }
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
-    const key = this.getKey(TABLE_THREADS, { id: threadId });
-    await this.redis.del(key);
+    // Delete thread metadata and sorted set
+    const threadKey = this.getKey(TABLE_THREADS, { id: threadId });
+    const threadMessagesKey = this.getThreadMessagesKey(threadId);
+    const messageIds: string[] = await this.redis.zrange(threadMessagesKey, 0, -1);
+
+    // Fetch all resourceIds for these messages in one go
+    const resourceIdKeys = messageIds.map(messageId => this.getResourceKeyByThreadAndMessage(threadId, messageId));
+    const resourceIds: (string | null)[] = resourceIdKeys.length > 0 ? await this.redis.mget(...resourceIdKeys) : [];
+
+    const pipeline = this.redis.pipeline();
+    pipeline.del(threadKey);
+    pipeline.del(threadMessagesKey);
+
+    for (let i = 0; i < messageIds.length; i++) {
+      const messageId = messageIds[i];
+      const messageKey = this.getMessageKey(threadId, messageId as string);
+      pipeline.del(messageKey);
+
+      // Remove resource-to-message mapping if resourceId exists
+      const resourceId = resourceIds[i];
+      if (resourceId) {
+        const resourceKey = this.getResourceMessagesKey(resourceId);
+        pipeline.zrem(resourceKey, messageId);
+        pipeline.del(this.getThreadKeyByResourceAndMessage(resourceId, messageId as string));
+      }
+      // Delete the thread-to-resource mapping itself
+      pipeline.del(resourceIdKeys[i] as string);
+    }
+
+    await pipeline.exec();
+
+    // Bulk delete all message keys for this thread
+    await this.scanAndDelete(this.getMessageKey(threadId, '*'));
+    // Bulk delete all thread-to-resource mapping keys for this thread
+    await this.scanAndDelete(this.getThreadKeyByResourceAndMessage(threadId, '*'));
   }
 
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
@@ -643,6 +705,17 @@ export class UpstashStore extends MastraStorage {
   ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
     const { messages, format = 'v1' } = args;
     if (messages.length === 0) return [];
+
+    const threadId = messages[0]?.threadId;
+    if (!threadId) {
+      throw new Error('Thread ID is required');
+    }
+
+    // Check if thread exists
+    const thread = await this.getThreadById({ threadId });
+    if (!thread) {
+      throw new Error(`Thread ${threadId} not found`);
+    }
 
     // Add an index to each message to maintain order
     const messagesWithIndex = messages.map((message, index) => ({
@@ -654,9 +727,11 @@ export class UpstashStore extends MastraStorage {
     for (let i = 0; i < messagesWithIndex.length; i += batchSize) {
       const batch = messagesWithIndex.slice(i, i + batchSize);
       const pipeline = this.redis.pipeline();
+      const resourceIndexCacheMap: Record<string, number> = {};
       for (const message of batch) {
         const key = this.getMessageKey(message.threadId!, message.id);
-        const score = message._index !== undefined ? message._index : new Date(message.createdAt).getTime();
+        const createdAtScore = new Date(message.createdAt).getTime();
+        const score = message._index !== undefined ? message._index : createdAtScore;
 
         // Store the message data
         pipeline.set(key, message);
@@ -666,6 +741,30 @@ export class UpstashStore extends MastraStorage {
           score,
           member: message.id,
         });
+        if (message.resourceId) {
+          const resourceKey = this.getResourceMessagesKey(message.resourceId);
+          // If we haven't set a batch-local index for this resource, query Redis
+          if (!resourceIndexCacheMap[resourceKey]) {
+            const entries = await this.redis.zrange(resourceKey, 0, 0, { withScores: true, rev: true });
+            let lastIndex = 0;
+            if (entries.length === 2) {
+              lastIndex = Number(entries[1]) + 1;
+            }
+            resourceIndexCacheMap[resourceKey] = lastIndex;
+          }
+
+          // Use and increment the batch-local index for this resource
+          const resourceScore = resourceIndexCacheMap[resourceKey];
+          resourceIndexCacheMap[resourceKey]++;
+          pipeline.zadd(resourceKey, {
+            score: resourceScore,
+            member: message.id,
+          });
+          pipeline.set(this.getThreadKeyByResourceAndMessage(message.resourceId!, message.id), message.threadId);
+          if (message.threadId) {
+            pipeline.set(this.getResourceKeyByThreadAndMessage(message.threadId, message.id), message.resourceId);
+          }
+        }
       }
 
       await pipeline.exec();
@@ -696,6 +795,7 @@ export class UpstashStore extends MastraStorage {
   }>;
   public async getMessages({
     threadId,
+    resourceId,
     selectBy,
     format,
     page,
@@ -831,24 +931,58 @@ export class UpstashStore extends MastraStorage {
 
     // First, get specifically included messages and their context
     if (selectBy?.include?.length) {
+      const includeScope = selectBy?.includeScope;
+      let allIds: string[] = [];
+      let idToIndex: Map<string, number> = new Map();
+
+      if (resourceId && includeScope === 'resource') {
+        // Resource-wide: use the resource's sorted set
+        const resourceMessagesKey = this.getResourceMessagesKey(resourceId);
+        allIds = await this.redis.zrange(resourceMessagesKey, 0, -1);
+        allIds.forEach((id, idx) => idToIndex.set(id as string, idx));
+      }
       for (const item of selectBy.include) {
         messageIds.add(item.id);
 
-        if (item.withPreviousMessages || item.withNextMessages) {
+        // Resource scope: operate on the resource-wide sorted set (already loaded)
+        if (resourceId && includeScope === 'resource') {
+          // Use allIds/idToIndex from above
+          const idx = idToIndex.get(item.id);
+          if (idx === undefined || idx === -1) continue;
+
+          // Previous messages
+          if (item.withPreviousMessages) {
+            const start = Math.max(0, idx - item.withPreviousMessages);
+            for (let i = start; i < idx; ++i) {
+              messageIds.add(allIds[i] as string);
+            }
+          }
+          // Next messages
+          if (item.withNextMessages) {
+            const end = Math.min(allIds.length - 1, idx + item.withNextMessages);
+            for (let i = idx + 1; i <= end; ++i) {
+              messageIds.add(allIds[i] as string);
+            }
+          }
+        } else {
+          // Thread scope: use zrank/zrange for efficiency
+          const itemThreadMessagesKey = this.getThreadMessagesKey(threadId);
+
           // Get the rank of this message in the sorted set
-          const rank = await this.redis.zrank(threadMessagesKey, item.id);
+          const rank = await this.redis.zrank(itemThreadMessagesKey, item.id);
+
           if (rank === null) continue;
 
           // Get previous messages if requested
           if (item.withPreviousMessages) {
             const start = Math.max(0, rank - item.withPreviousMessages);
-            const prevIds = rank === 0 ? [] : await this.redis.zrange(threadMessagesKey, start, rank - 1);
+            const prevIds = rank === 0 ? [] : await this.redis.zrange(itemThreadMessagesKey, start, rank - 1);
             prevIds.forEach(id => messageIds.add(id as string));
           }
 
           // Get next messages if requested
           if (item.withNextMessages) {
-            const nextIds = await this.redis.zrange(threadMessagesKey, rank + 1, rank + item.withNextMessages);
+            const nextIds = await this.redis.zrange(itemThreadMessagesKey, rank + 1, rank + item.withNextMessages);
             nextIds.forEach(id => messageIds.add(id as string));
           }
         }
@@ -869,9 +1003,24 @@ export class UpstashStore extends MastraStorage {
     // Fetch all needed messages in parallel
     const messages = (
       await Promise.all(
-        Array.from(messageIds).map(async id =>
-          this.redis.get<MastraMessageV2 & { _index?: number }>(this.getMessageKey(threadId, id)),
-        ),
+        Array.from(messageIds).map(async id => {
+          const byThreadId = await this.redis.get<MastraMessageV2 & { _index?: number }>(
+            this.getMessageKey(threadId, id),
+          );
+          if (byThreadId) return byThreadId;
+
+          if (!resourceId) return null;
+
+          const threadIdByResource = await this.redis.get<string>(
+            this.getThreadKeyByResourceAndMessage(resourceId, id),
+          );
+
+          if (!threadIdByResource) return null;
+
+          return await this.redis.get<MastraMessageV2 & { _index?: number }>(
+            this.getMessageKey(threadIdByResource, id),
+          );
+        }),
       )
     ).filter(msg => msg !== null) as (MastraMessageV2 & { _index?: number })[];
 

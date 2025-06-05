@@ -29,14 +29,22 @@ export const createSampleThread = () => ({
   metadata: { key: 'value' },
 });
 
-export const createSampleMessage = (threadId: string, parts?: MastraMessageV2['content']['parts']): MastraMessageV2 =>
+export const createSampleMessage = ({
+  threadId,
+  content = 'Hello',
+  resourceId = `resource-${randomUUID()}`,
+}: {
+  threadId: string;
+  content?: string;
+  resourceId?: string;
+}): MastraMessageV2 =>
   ({
     id: `msg-${randomUUID()}`,
     role: 'user',
     threadId,
-    content: { format: 2, parts: parts || [{ type: 'text' as const, text: 'Hello' }] },
+    content: { format: 2, parts: [{ type: 'text' as const, text: content }] },
     createdAt: new Date(),
-    resourceId: `resource-${randomUUID()}`,
+    resourceId,
   }) satisfies MastraMessageV2;
 
 export const createSampleWorkflowSnapshot = (threadId: string, status: string, createdAt?: Date) => {

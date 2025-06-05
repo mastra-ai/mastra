@@ -4,10 +4,19 @@ import { Memory } from '@mastra/memory';
 import dotenv from 'dotenv';
 import { describe } from 'vitest';
 import { getResuableTests, StorageType } from './reusable-tests';
+import fs from 'fs';
 
 dotenv.config({ path: '.env.test' });
 
+const files = ['libsql-test.db', 'libsql-test.db-shm', 'libsql-test.db-wal'];
+
 describe('Memory with LibSQL Integration', () => {
+  for (const file of files) {
+    if (fs.existsSync(file)) {
+      fs.unlinkSync(file);
+    }
+  }
+
   const memoryOptions = {
     lastMessages: 10,
     semanticRecall: {
