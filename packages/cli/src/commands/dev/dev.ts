@@ -4,6 +4,7 @@ import { FileService } from '@mastra/deployer';
 import { getServerOptions } from '@mastra/deployer/build';
 import { isWebContainer } from '@webcontainer/env';
 import { execa } from 'execa';
+import getPort from 'get-port';
 
 import { logger } from '../../utils/logger.js';
 
@@ -26,6 +27,17 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
       commands.push('--import=./instrumentation.mjs', `--import=${instrumentation}`);
     }
 
+    let portToUse = port.toString() || process.env.PORT;
+    if (!portToUse || isNaN(Number(portToUse))) {
+      const portList = Array.from({ length: 21 }, (_, i) => 4111 + i);
+
+      portToUse = String(
+        await getPort({
+          port: portList,
+        }),
+      );
+    }
+
     commands.push('index.mjs');
     currentServerProcess = execa('node', commands, {
       cwd: dotMastraPath,
@@ -33,7 +45,7 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
         NODE_ENV: 'production',
         ...Object.fromEntries(env),
         MASTRA_DEV: 'true',
-        PORT: port.toString() || process.env.PORT || '4111',
+        PORT: portToUse.toString(),
         MASTRA_DEFAULT_STORAGE_URL: `file:${join(dotMastraPath, '..', 'mastra.db')}`,
       },
       stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
