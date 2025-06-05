@@ -31,7 +31,7 @@ export abstract class LoggerTransport extends Transform {
     perPage: number;
     hasMore: boolean;
   }> {
-    return { logs: [], total: 0, page: 0, perPage: 0, hasMore: false };
+    return { logs: [], total: 0, page: _args?.page ?? 1, perPage: _args?.perPage ?? 100, hasMore: false };
   }
   async getLogs(_args?: {
     fromDate?: Date;
@@ -48,6 +48,6 @@ export abstract class LoggerTransport extends Transform {
     perPage: number;
     hasMore: boolean;
   }> {
-    return { logs: [], total: 0, page: 0, perPage: 0, hasMore: false };
+    return { logs: [], total: 0, page: _args?.page ?? 1, perPage: _args?.perPage ?? 100, hasMore: false };
   }
 }

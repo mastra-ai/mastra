@@ -64,7 +64,7 @@ export class ConsoleLogger extends MastraLogger {
       perPage?: number;
     },
   ) {
-    return { logs: [], total: 0, page: 0, perPage: 0, hasMore: false };
+    return { logs: [], total: 0, page: _params?.page ?? 1, perPage: _params?.perPage ?? 100, hasMore: false };
   }
 
   async getLogsByRunId(_args: {
@@ -77,6 +77,6 @@ export class ConsoleLogger extends MastraLogger {
     page?: number;
     perPage?: number;
   }) {
-    return { logs: [], total: 0, page: 0, perPage: 0, hasMore: false };
+    return { logs: [], total: 0, page: _args.page ?? 1, perPage: _args.perPage ?? 100, hasMore: false };
   }
 }

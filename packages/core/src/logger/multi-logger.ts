@@ -50,7 +50,7 @@ export class MultiLogger implements IMastraLogger {
       }
     }
 
-    return { logs: [], total: 0, page: 0, perPage: 0, hasMore: false };
+    return { logs: [], total: 0, page: params?.page ?? 1, perPage: params?.perPage ?? 100, hasMore: false };
   }
 
   async getLogsByRunId(args: {
@@ -70,6 +70,6 @@ export class MultiLogger implements IMastraLogger {
       }
     }
 
-    return { logs: [], total: 0, page: 0, perPage: 0, hasMore: false };
+    return { logs: [], total: 0, page: args.page ?? 1, perPage: args.perPage ?? 100, hasMore: false };
   }
 }

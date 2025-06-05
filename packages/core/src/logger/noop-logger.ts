@@ -7,6 +7,6 @@ export const noopLogger = {
   error: () => {},
   cleanup: async () => {},
   getTransports: () => new Map(),
-  getLogs: async () => ({ logs: [], total: 0, page: 0, perPage: 0, hasMore: false }),
-  getLogsByRunId: async () => ({ logs: [], total: 0, page: 0, perPage: 0, hasMore: false }),
+  getLogs: async () => ({ logs: [], total: 0, page: 1, perPage: 100, hasMore: false }),
+  getLogsByRunId: async () => ({ logs: [], total: 0, page: 1, perPage: 100, hasMore: false }),
 } as IMastraLogger;
