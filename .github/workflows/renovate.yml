@@ -77,7 +77,6 @@ jobs:
           fi
 
           # Make sure the directory exists, and extract it there. Note that it's nested in the download directory.
-
           tar -xzf cache-download/$cache_archive -C $cache_dir
 
           # Unfortunately, the permissions expected within renovate's docker container
@@ -102,6 +101,7 @@ jobs:
       - name: Self-hosted Renovate
         uses: renovatebot/github-action@v42.0.3
         with:
+          docker-user: '${{ steps.id.outputs.user }}:${{ steps.id.outputs.group }}'
           token: ${{ steps.app-token.outputs.token  }}
         env:
           # This enables the cache -- if this is set, it's not necessary to add it to renovate.json.
