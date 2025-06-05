@@ -67,7 +67,7 @@ const cityCoordinatesStep = createStep({
 
 Create a workflow using `createWorkflow`. End a workflow using `.commit()`.
 
-```typescript {6} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {6,17} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
@@ -91,7 +91,7 @@ export const testWorkflow = createWorkflow({
 
 Workflow steps can be composed and executed sequentially using `.then()`.
 
-```typescript {16,17} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {17,18} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
