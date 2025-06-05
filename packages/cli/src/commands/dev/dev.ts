@@ -148,9 +148,6 @@ export async function dev({
   port: number | null;
   tools?: string[];
 }) {
-  // Reset restart counter at the start of dev
-  errorRestartCount = 0;
-
   const rootDir = root || process.cwd();
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');
   const dotMastraPath = join(rootDir, '.mastra');
