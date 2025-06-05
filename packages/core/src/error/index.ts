@@ -31,7 +31,7 @@ type Json<T> = [T] extends [Scalar | undefined]
  * Defines the structure for an error's metadata.
  * This is used to create instances of MastraError.
  */
-export interface IErrorDefinition {
+export interface IErrorDefinition<D, C> {
   /** Unique identifier for the error. */
   id: Uppercase<string>;
   /**
@@ -42,9 +42,9 @@ export interface IErrorDefinition {
   /**
    * Functional domain of the error (e.g., CONFIG, BUILD, API).
    */
-  domain: `${Domain | Uppercase<string>}`;
+  domain: D;
   /** Broad category of the error (e.g., USER, SYSTEM, THIRD_PARTY). */
-  category: `${ErrorCategory | Uppercase<string>}`;
+  category: C;
 
   details?: Record<string, Json<Scalar>>;
 }
@@ -53,14 +53,14 @@ export interface IErrorDefinition {
  * Base error class for the Mastra ecosystem.
  * It standardizes error reporting and can be extended for more specific error types.
  */
-export class MastraError extends Error {
+export class MastraBaseError<D, C> extends Error {
   public readonly id: Uppercase<string>;
-  public readonly domain: `${Domain | Uppercase<string>}`;
-  public readonly category: `${ErrorCategory | Uppercase<string>}`;
+  public readonly domain: D;
+  public readonly category: C;
   public readonly originalError?: Error;
   public readonly details?: Record<string, Json<Scalar>> = {};
 
-  constructor(errorDefinition: IErrorDefinition, originalError?: Error | MastraError | unknown) {
+  constructor(errorDefinition: IErrorDefinition<D, C>, originalError?: Error | MastraBaseError<D, C> | unknown) {
     const message = errorDefinition.text;
     let error;
     if (originalError instanceof Error) {
@@ -101,3 +101,5 @@ export class MastraError extends Error {
     };
   }
 }
+
+export class MastraError extends MastraBaseError<Domain, ErrorCategory> {}
