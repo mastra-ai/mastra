@@ -88,7 +88,7 @@
     "@types/shell-quote": "^1.7.5",
     "@types/tcp-port-used": "^1.0.4",
     "cpy-cli": "^5.0.0",
-    "eslint": "^9.23.0",
+    "eslint": "^9.28.0",
     "memfs": "^4.17.0",
     "npm-run-all2": "^7.0.2",
     "rollup": "^4.40.1",
