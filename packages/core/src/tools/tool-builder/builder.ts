@@ -140,7 +140,6 @@ export class CoreToolBuilder extends MastraBase {
             domain: ErrorDomain.TOOL,
             category: ErrorCategory.USER,
             details: {
-              ...rest,
               error,
               args,
               model: rest.model?.modelId ?? '',
@@ -148,7 +147,7 @@ export class CoreToolBuilder extends MastraBase {
           },
           err,
         );
-        (options.logger || this.logger).logException(mastraError);
+        (options.logger || this.logger).trackException(mastraError);
         throw mastraError;
       }
     };

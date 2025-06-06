@@ -9,5 +9,5 @@ export const noopLogger = {
   getTransports: () => new Map(),
   getLogs: async () => [],
   getLogsByRunId: async () => [],
-  logException: () => {},
+  trackException: () => {},
 } as IMastraLogger;

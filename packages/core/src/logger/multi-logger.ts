@@ -26,8 +26,8 @@ export class MultiLogger implements IMastraLogger {
     this.loggers.forEach(logger => logger.error(message, ...args));
   }
 
-  logException(error: MastraError): void {
-    this.loggers.forEach(logger => logger.logException(error));
+  trackException(error: MastraError): void {
+    this.loggers.forEach(logger => logger.trackException(error));
   }
 
   getTransports(): Map<string, LoggerTransport> {
