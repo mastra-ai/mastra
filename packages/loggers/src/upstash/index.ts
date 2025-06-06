@@ -271,7 +271,6 @@ export class UpstashTransport extends LoggerTransport {
       const perPage = perPageInput ?? 100;
       const allLogs = await this.getLogs({ fromDate, toDate, logLevel, filters, returnPaginationResults: false });
 
-      console.log('[all logs]', allLogs);
       const logs = (allLogs?.logs?.filter((log: any) => log.runId === runId) || []) as BaseLogMessage[];
       const total = logs.length;
       const resolvedPerPage = perPage || 100;

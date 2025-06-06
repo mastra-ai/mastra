@@ -29,7 +29,7 @@ export const useLogsByRunId = (runId: string) => {
     },
     initialPageParam: 0,
     enabled: Boolean(transportId),
-    refetchInterval: 3000,
+    refetchInterval: 1000,
     select: data => data.pages.flatMap(page => page.logs),
   });
 

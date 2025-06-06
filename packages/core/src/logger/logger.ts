@@ -102,7 +102,6 @@ export abstract class MastraLogger implements IMastraLogger {
     page?: number;
     perPage?: number;
   }) {
-    console.log('[CORE] getLogsByRunId', { transportId, runId, fromDate, toDate, logLevel, filters, page, perPage });
     if (!transportId || !this.transports.has(transportId) || !runId) {
       return { logs: [], total: 0, page: page ?? 1, perPage: perPage ?? 100, hasMore: false };
     }

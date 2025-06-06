@@ -95,3 +95,17 @@ export const EntryCell = ({ name, description, icon, meta, ...props }: EntryCell
     </Cell>
   );
 };
+
+export interface UnstructuredDataCellProps extends Omit<CellProps, 'children'> {
+  data: Record<string, any>;
+}
+
+export const UnstructuredDataCell = ({ data, ...props }: UnstructuredDataCellProps) => {
+  const keys = Object.keys(data);
+
+  return (
+    <Cell {...props} className="overflow-hidden">
+      <span className="font-mono text-xs truncate">{JSON.stringify(data, null, 0)}</span>
+    </Cell>
+  );
+};
