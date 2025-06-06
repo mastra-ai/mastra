@@ -57,7 +57,7 @@
     "zod": "^3.0.0"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^1.3.2",
+    "@ai-sdk/openai": "^1.3.22",
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.5",
