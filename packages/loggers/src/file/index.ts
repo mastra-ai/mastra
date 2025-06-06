@@ -59,8 +59,31 @@ export class FileTransport extends LoggerTransport {
     toDate?: Date;
     logLevel?: LogLevel;
     filters?: Record<string, any>;
-  }): Promise<BaseLogMessage[]> {
+    returnPaginationResults?: boolean; // default true
+    page?: number;
+    perPage?: number;
+  }): Promise<{
+    logs: BaseLogMessage[];
+    total: number;
+    page: number;
+    perPage: number;
+    hasMore: boolean;
+  }> {
     try {
+      const {
+        fromDate,
+        toDate,
+        logLevel,
+        filters,
+        returnPaginationResults: returnPaginationResultsInput,
+        page: pageInput,
+        perPage: perPageInput,
+      } = params || {};
+
+      const page = pageInput === 0 ? 1 : (pageInput ?? 1);
+      const perPage = perPageInput ?? 100;
+      const returnPaginationResults = returnPaginationResultsInput ?? true;
+
       const logs = readFileSync(this.path, 'utf8')
         .split('\n')
         .filter(Boolean)
@@ -68,28 +91,57 @@ export class FileTransport extends LoggerTransport {
 
       let filteredLogs = logs.filter(record => record !== null && typeof record === 'object');
 
-      if (params?.filters) {
+      if (filters) {
         filteredLogs = filteredLogs.filter(log =>
-          Object.entries(params.filters || {}).every(([key, value]) => log[key as keyof BaseLogMessage] === value),
+          Object.entries(filters || {}).every(([key, value]) => log[key as keyof BaseLogMessage] === value),
         );
       }
 
-      if (params?.logLevel) {
-        filteredLogs = filteredLogs.filter(log => log.level === params.logLevel);
+      if (logLevel) {
+        filteredLogs = filteredLogs.filter(log => log.level === logLevel);
       }
 
-      if (params?.fromDate) {
-        filteredLogs = filteredLogs.filter(log => new Date(log.time)?.getTime() >= params.fromDate!.getTime());
+      if (fromDate) {
+        filteredLogs = filteredLogs.filter(log => new Date(log.time)?.getTime() >= fromDate!.getTime());
       }
 
-      if (params?.toDate) {
-        filteredLogs = filteredLogs.filter(log => new Date(log.time)?.getTime() <= params.toDate!.getTime());
+      if (toDate) {
+        filteredLogs = filteredLogs.filter(log => new Date(log.time)?.getTime() <= toDate!.getTime());
       }
 
-      return filteredLogs as BaseLogMessage[];
+      if (!returnPaginationResults) {
+        return {
+          logs: filteredLogs,
+          total: filteredLogs.length,
+          page,
+          perPage: filteredLogs.length,
+          hasMore: false,
+        };
+      }
+
+      const total = filteredLogs.length;
+      const resolvedPerPage = perPage || 100;
+      const start = (page - 1) * resolvedPerPage;
+      const end = start + resolvedPerPage;
+      const paginatedLogs = filteredLogs.slice(start, end);
+      const hasMore = end < total;
+
+      return {
+        logs: paginatedLogs,
+        total,
+        page,
+        perPage: resolvedPerPage,
+        hasMore,
+      };
     } catch (error) {
       console.error('Error getting logs from file:', error);
-      return [] as BaseLogMessage[];
+      return {
+        logs: [],
+        total: 0,
+        page: 0,
+        perPage: 0,
+        hasMore: false,
+      };
     }
   }
 
@@ -99,19 +151,51 @@ export class FileTransport extends LoggerTransport {
     toDate,
     logLevel,
     filters,
+    page: pageInput,
+    perPage: perPageInput,
   }: {
     runId: string;
     fromDate?: Date;
     toDate?: Date;
     logLevel?: LogLevel;
     filters?: Record<string, any>;
-  }): Promise<BaseLogMessage[]> {
+    page?: number;
+    perPage?: number;
+  }): Promise<{
+    logs: BaseLogMessage[];
+    total: number;
+    page: number;
+    perPage: number;
+    hasMore: boolean;
+  }> {
     try {
+      const page = pageInput === 0 ? 1 : (pageInput ?? 1);
+      const perPage = perPageInput ?? 100;
       const allLogs = await this.getLogs({ fromDate, toDate, logLevel, filters });
-      return (allLogs.filter(log => log?.runId === runId) || []) as BaseLogMessage[];
+      const logs = (allLogs?.logs?.filter(log => log?.runId === runId) || []) as BaseLogMessage[];
+      const total = logs.length;
+      const resolvedPerPage = perPage || 100;
+      const start = (page - 1) * resolvedPerPage;
+      const end = start + resolvedPerPage;
+      const paginatedLogs = logs.slice(start, end);
+      const hasMore = end < total;
+
+      return {
+        logs: paginatedLogs,
+        total,
+        page,
+        perPage: resolvedPerPage,
+        hasMore,
+      };
     } catch (error) {
       console.error('Error getting logs by runId from file:', error);
-      return [] as BaseLogMessage[];
+      return {
+        logs: [],
+        total: 0,
+        page: 0,
+        perPage: 0,
+        hasMore: false,
+      };
     }
   }
 }

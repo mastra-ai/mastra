@@ -112,7 +112,7 @@ describe('FileTransport', () => {
   describe('getLogs and getLogsByRunId', () => {
     it('should return empty array for getLogs', async () => {
       const logs = await fileLogger.getLogs();
-      expect(logs.length).toBeGreaterThan(0);
+      expect(logs.total).toBeGreaterThan(0);
     });
 
     it('should return empty array for getLogsByRunId', async () => {
@@ -125,7 +125,7 @@ describe('FileTransport', () => {
       });
 
       let logs = await fileLogger.getLogsByRunId({ runId: 'test-run-id' });
-      expect(logs.length).toBe(0);
+      expect(logs.total).toBe(0);
 
       logger.info('test info message', {
         runId: 'test-run-id',
@@ -134,7 +134,7 @@ describe('FileTransport', () => {
       await new Promise(resolve => setTimeout(resolve, 100));
 
       logs = await fileLogger.getLogsByRunId({ runId: 'test-run-id' });
-      expect(logs.length).toBe(1);
+      expect(logs.total).toBe(1);
     });
   });
 });
