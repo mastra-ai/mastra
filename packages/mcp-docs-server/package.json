@@ -49,7 +49,7 @@
     "@types/turndown": "^5.0.5",
     "@wong2/mcp-cli": "^1.6.0",
     "cross-env": "^7.0.3",
-    "eslint": "^9.23.0",
+    "eslint": "^9.28.0",
     "hono": "^4.7.4",
     "tsup": "^8.4.0",
     "tsx": "^4.19.3",

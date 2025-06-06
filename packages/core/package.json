@@ -152,7 +152,7 @@
     "@types/node": "^20.17.27",
     "@types/pino": "^7.0.5",
     "@types/qs": "^6.9.18",
-    "eslint": "^9.23.0",
+    "eslint": "^9.28.0",
     "globby": "^14.1.0",
     "rollup": "^4.40.1",
     "size-limit": "^11.2.0",

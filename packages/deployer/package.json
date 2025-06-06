@@ -128,7 +128,7 @@
     "@types/babel__helper-module-imports": "^7.18.3",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "^20.17.27",
-    "eslint": "^9.23.0",
+    "eslint": "^9.28.0",
     "fetch-to-node": "^2.1.0",
     "hono-openapi": "^0.4.6",
     "rollup-plugin-visualizer": "^5.14.0",
