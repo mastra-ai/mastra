@@ -29,7 +29,7 @@
   },
   "license": "Elastic-2.0",
   "dependencies": {
-    "@deepgram/sdk": "^3.11.2",
+    "@deepgram/sdk": "^3.13.0",
     "zod": "^3.24.3"
   },
   "devDependencies": {

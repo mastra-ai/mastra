@@ -29,7 +29,7 @@
   },
   "license": "Elastic-2.0",
   "dependencies": {
-    "openai": "^4.89.0",
+    "openai": "^4.104.0",
     "zod": "^3.24.3"
   },
   "devDependencies": {

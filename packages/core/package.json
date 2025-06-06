@@ -125,7 +125,7 @@
     "ai": "^4.2.2",
     "cohere-ai": "^7.16.0",
     "date-fns": "^3.6.0",
-    "dotenv": "^16.4.7",
+    "dotenv": "^16.5.0",
     "hono": "^4.5.1",
     "hono-openapi": "^0.4.6",
     "json-schema": "^0.4.0",
