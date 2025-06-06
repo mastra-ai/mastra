@@ -13,6 +13,8 @@ import type {
   ListResourcesResult,
   ReadResourceResult,
   ListResourceTemplatesResult,
+  GetPromptResult,
+  Prompt,
 } from '@modelcontextprotocol/sdk/types.js';
 import { MockLanguageModelV1 } from 'ai/test';
 import { Hono } from 'hono';
@@ -22,7 +24,7 @@ import { weatherTool } from '../__fixtures__/tools';
 import { InternalMastraMCPClient } from '../client/client';
 import { MCPClient } from '../client/configuration';
 import { MCPServer } from './server';
-import type { MCPServerResources, MCPServerResourceContent } from './server';
+import type { MCPServerResources, MCPServerResourceContent } from './types';
 
 const PORT = 9100 + Math.floor(Math.random() * 1000);
 let server: MCPServer;
@@ -604,6 +606,227 @@ describe('MCPServer', () => {
       await notificationTestServer.resources.notifyListChanged();
 
       await expect(listChangedPromise).resolves.toBeUndefined(); // Wait for the notification
+    });
+  });
+
+  describe('Prompts', () => {
+    let promptServer: MCPServer;
+    let promptInternalClient: InternalMastraMCPClient;
+    let promptHttpServer: http.Server;
+    const PROMPT_PORT = 9500 + Math.floor(Math.random() * 1000);
+
+    let currentPrompts: Prompt[] = [
+      {
+        name: 'explain-code',
+        version: 'v1',
+        description: 'Explain code v1',
+        arguments: [{ name: 'code', required: true }],
+        getMessages: async (args: any) => [
+          { role: 'user', content: { type: 'text', text: `Explain this code (v1):\n${args.code}` } },
+        ],
+      },
+      {
+        name: 'explain-code',
+        version: 'v2',
+        description: 'Explain code v2',
+        arguments: [{ name: 'code', required: true }],
+        getMessages: async (args: any) => [
+          { role: 'user', content: { type: 'text', text: `Explain this code (v2):\n${args.code}` } },
+        ],
+      },
+      {
+        name: 'summarize',
+        version: 'v1',
+        description: 'Summarize text',
+        arguments: [{ name: 'text', required: true }],
+        getMessages: async (args: any) => [
+          { role: 'user', content: { type: 'text', text: `Summarize this:\n${args.text}` } },
+        ],
+      },
+    ];
+
+    beforeAll(async () => {
+      // Register multiple versions of the same prompt
+
+      promptServer = new MCPServer({
+        name: 'PromptTestServer',
+        version: '1.0.0',
+        tools: {},
+        prompts: {
+          listPrompts: async () => currentPrompts,
+          getPromptMessages: async (params: { name: string; version?: string; args?: any }) => {
+            let prompt;
+            if (params.version) {
+              prompt = currentPrompts.find(p => p.name === params.name && p.version === params.version);
+            } else {
+              // Select the first matching name if no version is provided.
+              prompt = currentPrompts.find(p => p.name === params.name);
+            }
+            if (!prompt)
+              throw new Error(
+                `Prompt "${params.name}"${params.version ? ` (version ${params.version})` : ''} not found`,
+              );
+            return (prompt as any).getMessages(params.args);
+          },
+        },
+      });
+
+      promptHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+        const url = new URL(req.url || '', `http://localhost:${PROMPT_PORT}`);
+        await promptServer.startSSE({
+          url,
+          ssePath: '/sse',
+          messagePath: '/messages',
+          req,
+          res,
+        });
+      });
+      await new Promise<void>(resolve => promptHttpServer.listen(PROMPT_PORT, () => resolve()));
+      promptInternalClient = new InternalMastraMCPClient({
+        name: 'prompt-test-internal-client',
+        server: { url: new URL(`http://localhost:${PROMPT_PORT}/sse`) },
+      });
+      await promptInternalClient.connect();
+    });
+
+    afterAll(async () => {
+      await promptInternalClient.disconnect();
+      if (promptHttpServer) {
+        promptHttpServer.closeAllConnections?.();
+        await new Promise<void>((resolve, reject) => {
+          promptHttpServer.close(err => {
+            if (err) return reject(err);
+            resolve();
+          });
+        });
+      }
+      if (promptServer) {
+        await promptServer.close();
+      }
+    });
+
+    it('should send prompt list changed notification when prompts change', async () => {
+      const listChangedPromise = new Promise<void>(resolve => {
+        promptInternalClient.setPromptListChangedNotificationHandler(() => {
+          resolve();
+        });
+      });
+      await promptServer.prompts.notifyListChanged();
+
+      await expect(listChangedPromise).resolves.toBeUndefined(); // Wait for the notification
+    });
+
+    it('should list all prompts with version field', async () => {
+      const result = await promptInternalClient.listPrompts();
+      expect(result).toBeDefined();
+      expect(result.prompts).toBeInstanceOf(Array);
+      // Should contain both explain-code v1 and v2 and summarize v1
+      const explainV1 = result.prompts.find((p: Prompt) => p.name === 'explain-code' && p.version === 'v1');
+      const explainV2 = result.prompts.find((p: Prompt) => p.name === 'explain-code' && p.version === 'v2');
+      const summarizeV1 = result.prompts.find((p: Prompt) => p.name === 'summarize' && p.version === 'v1');
+      expect(explainV1).toBeDefined();
+      expect(explainV2).toBeDefined();
+      expect(summarizeV1).toBeDefined();
+    });
+
+    it('should retrieve prompt by name and version', async () => {
+      const result = await promptInternalClient.getPrompt({
+        name: 'explain-code',
+        args: { code: 'let x = 1;' },
+        version: 'v2',
+      });
+      const prompt = result.prompt as GetPromptResult;
+      expect(prompt).toBeDefined();
+      expect(prompt.name).toBe('explain-code');
+      expect(prompt.version).toBe('v2');
+
+      const messages = result.messages;
+      expect(messages).toBeDefined();
+      expect(messages.length).toBeGreaterThan(0);
+      expect(messages[0].content.text).toContain('(v2)');
+    });
+
+    it('should retrieve prompt by name and default to first version if not specified', async () => {
+      const result = await promptInternalClient.getPrompt({ name: 'explain-code', args: { code: 'let y = 2;' } });
+      expect(result.prompt).toBeDefined();
+      const prompt = result.prompt as GetPromptResult;
+      expect(prompt.name).toBe('explain-code');
+      // Should default to first version (v1)
+      expect(prompt.version).toBe('v1');
+
+      const messages = result.messages;
+      expect(messages).toBeDefined();
+      expect(messages.length).toBeGreaterThan(0);
+      expect(messages[0].content.text).toContain('(v1)');
+    });
+
+    it('should return error if prompt name/version does not exist', async () => {
+      await expect(
+        promptInternalClient.getPrompt({ name: 'explain-code', args: { code: 'foo' }, version: 'v999' }),
+      ).rejects.toThrow();
+    });
+    it('should throw error if required argument is missing', async () => {
+      await expect(
+        promptInternalClient.getPrompt({ name: 'explain-code', args: {} }), // missing 'code'
+      ).rejects.toThrow(/Missing required argument/);
+    });
+
+    it('should succeed if all required arguments are provided', async () => {
+      const result = await promptInternalClient.getPrompt({ name: 'explain-code', args: { code: 'let z = 3;' } });
+      expect(result.prompt).toBeDefined();
+      expect(result.messages[0].content.text).toContain('let z = 3;');
+    });
+    it('should allow prompts with optional arguments', async () => {
+      // Register a prompt with an optional argument
+      currentPrompts = [
+        {
+          name: 'optional-arg-prompt',
+          version: 'v1',
+          description: 'Prompt with optional argument',
+          arguments: [{ name: 'foo', required: false }],
+          getMessages: async (args: any) => [
+            { role: 'user', content: { type: 'text', text: `foo is: ${args.foo ?? 'none'}` } },
+          ],
+        },
+      ];
+      await promptServer.prompts.notifyListChanged();
+      const result = await promptInternalClient.getPrompt({ name: 'optional-arg-prompt', args: {} });
+      expect(result.prompt).toBeDefined();
+      expect(result.messages[0].content.text).toContain('foo is: none');
+    });
+    it('should retrieve prompt with no version field by name only', async () => {
+      currentPrompts = [
+        {
+          name: 'no-version',
+          description: 'Prompt without version',
+          arguments: [],
+          getMessages: async () => [{ role: 'user', content: { type: 'text', text: 'no version' } }],
+        },
+      ];
+      await promptServer.prompts.notifyListChanged();
+      const result = await promptInternalClient.getPrompt({ name: 'no-version', args: {} });
+      const prompt = result.prompt as GetPromptResult;
+      expect(prompt).toBeDefined();
+      expect(prompt.version).toBeUndefined();
+      const messages = result.messages;
+      expect(messages).toBeDefined();
+      expect(messages.length).toBeGreaterThan(0);
+      expect(messages[0].content.text).toContain('no version');
+    });
+    it('should list prompts with required fields', async () => {
+      const result = await promptInternalClient.listPrompts();
+      result.prompts.forEach((p: Prompt) => {
+        expect(p.name).toBeDefined();
+        expect(p.description).toBeDefined();
+        expect(p.arguments).toBeDefined();
+      });
+    });
+    it('should return empty list if no prompts are registered', async () => {
+      currentPrompts = [];
+      await promptServer.prompts.notifyListChanged();
+      const result = await promptInternalClient.listPrompts();
+      expect(result.prompts).toBeInstanceOf(Array);
+      expect(result.prompts.length).toBe(0);
     });
   });
 

@@ -1,10 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { createServer } from 'http';
 import { createTool } from '@mastra/core';
-import type { Resource, ResourceTemplate } from '@modelcontextprotocol/sdk/types.js';
+import type { Prompt, PromptMessage, Resource, ResourceTemplate } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { MCPServer } from '../server/server';
-import type { MCPServerResources, MCPServerResourceContent } from '../server/server';
+import type { MCPServerResources, MCPServerResourceContent, MCPServerPrompts } from '../server/types';
 
 const getWeather = async (location: string) => {
   // Return mock data for testing
@@ -119,6 +119,36 @@ const weatherResourceContents: Record<string, MCPServerResourceContent> = {
   },
 };
 
+const weatherPrompts: Prompt[] = [
+  {
+    name: 'current',
+    version: 'v1',
+    description: 'Get current weather for a location',
+    mimeType: 'application/json',
+    content: JSON.stringify({
+      location: 'Current weather for San Francisco',
+    }),
+  },
+  {
+    name: 'forecast',
+    version: 'v1',
+    description: 'Get weather forecast for a location',
+    mimeType: 'application/json',
+    content: JSON.stringify({
+      location: 'Forecast for San Francisco',
+    }),
+  },
+  {
+    name: 'historical',
+    version: 'v1',
+    description: 'Get historical weather data for a location',
+    mimeType: 'application/json',
+    content: JSON.stringify({
+      location: 'Historical weather for San Francisco',
+    }),
+  },
+];
+
 const mcpServerResources: MCPServerResources = {
   listResources: async () => weatherResourceDefinitions,
   getResourceContent: async ({ uri }: { uri: string }) => {
@@ -130,6 +160,25 @@ const mcpServerResources: MCPServerResources = {
   resourceTemplates: async () => weatherResourceTemplatesDefinitions,
 };
 
+const mcpServerPrompts: MCPServerPrompts = {
+  listPrompts: async () => weatherPrompts,
+  getPromptMessages: async ({ name }: { name: string }): Promise<PromptMessage[]> => {
+    const prompt = weatherPrompts.find(p => p.name === name);
+    if (!prompt) {
+      throw new Error(`Mock prompt not found for ${name}`);
+    }
+    return [
+      {
+        role: 'user',
+        content: {
+          type: 'text',
+          text: prompt.content as string,
+        },
+      },
+    ];
+  },
+};
+
 const mcpServer = new MCPServer({
   name: serverId,
   version: '1.0.0',
@@ -137,6 +186,7 @@ const mcpServer = new MCPServer({
     getWeather: weatherToolDefinition,
   },
   resources: mcpServerResources,
+  prompts: mcpServerPrompts,
 });
 
 const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
@@ -193,12 +243,22 @@ const notificationInterval = setInterval(async () => {
     }
   }
 }, NOTIFICATION_INTERVAL_MS);
+
+const promptNotificationInterval = setInterval(async () => {
+  const listChangePrefix = `[${serverId}] IntervalListChange`;
+  try {
+    await mcpServer.prompts.notifyListChanged();
+  } catch (e: any) {
+    console.error(`${listChangePrefix} - Error sending promptListChanged via MCPServer: ${e.message}`);
+  }
+}, NOTIFICATION_INTERVAL_MS);
 // --- End Interval-based Notifications ---
 
 // Handle graceful shutdown
 process.on('SIGINT', async () => {
   console.log('Shutting down weather server...');
   clearInterval(notificationInterval); // Clear the interval
+  clearInterval(promptNotificationInterval); // Clear the interval
   await mcpServer.close();
   httpServer.close(() => {
     console.log('Weather server shut down complete');
