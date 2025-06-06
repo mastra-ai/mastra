@@ -57,7 +57,7 @@
     "@opentelemetry/instrumentation": "^0.57.2",
     "@webcontainer/env": "^1.1.1",
     "commander": "^12.1.0",
-    "dotenv": "^16.4.7",
+    "dotenv": "^16.5.0",
     "execa": "^9.5.2",
     "fs-extra": "^11.3.0",
     "get-port": "^7.1.0",

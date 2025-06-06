@@ -497,7 +497,7 @@ importers:
         version: 7.52.5(@types/node@20.17.32)
       '@rollup/plugin-image':
         specifier: ^3.0.3
-        version: 3.0.3(rollup@3.29.5)
+        version: 3.0.3(rollup@4.40.1)
       '@size-limit/preset-small-lib':
         specifier: ^11.2.0
         version: 11.2.0(size-limit@11.2.0)
@@ -561,7 +561,7 @@ importers:
         version: 7.52.5(@types/node@20.17.32)
       '@rollup/plugin-image':
         specifier: ^3.0.3
-        version: 3.0.3(rollup@4.40.1)
+        version: 3.0.3(rollup@3.29.5)
       '@size-limit/preset-small-lib':
         specifier: ^11.2.0
         version: 11.2.0(size-limit@11.2.0)
@@ -837,7 +837,7 @@ importers:
         specifier: ^12.1.0
         version: 12.1.0
       dotenv:
-        specifier: ^16.4.7
+        specifier: ^16.5.0
         version: 16.5.0
       execa:
         specifier: ^9.5.2
@@ -1242,7 +1242,7 @@ importers:
         specifier: ^3.6.0
         version: 3.6.0
       dotenv:
-        specifier: ^16.4.7
+        specifier: ^16.5.0
         version: 16.5.0
       hono:
         specifier: ^4.5.1
@@ -1439,7 +1439,7 @@ importers:
         specifier: ^2.0.3
         version: 2.0.4
       dotenv:
-        specifier: ^16.4.7
+        specifier: ^16.5.0
         version: 16.5.0
       esbuild:
         specifier: ^0.25.1
@@ -32845,7 +32845,7 @@ snapshots:
       isstream: 0.1.2
       jsonwebtoken: 9.0.2
       mime-types: 2.1.35
-      retry-axios: 2.6.0(axios@1.8.4(debug@4.4.1))
+      retry-axios: 2.6.0(axios@1.8.4)
       tough-cookie: 4.1.4
     transitivePeerDependencies:
       - supports-color
@@ -37065,7 +37065,7 @@ snapshots:
 
   ret@0.4.3: {}
 
-  retry-axios@2.6.0(axios@1.8.4(debug@4.4.1)):
+  retry-axios@2.6.0(axios@1.8.4):
     dependencies:
       axios: 1.8.4(debug@4.4.1)
 
