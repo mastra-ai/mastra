@@ -1336,20 +1336,20 @@ importers:
         specifier: ^12.1.0
         version: 12.1.0
       execa:
-        specifier: ^9.5.2
+        specifier: ^9.6.0
         version: 9.6.0
       fs-extra:
         specifier: ^11.3.0
         version: 11.3.0
       pino:
-        specifier: ^9.6.0
+        specifier: ^9.7.0
         version: 9.7.0
       pino-pretty:
         specifier: ^13.0.0
         version: 13.0.0
       posthog-node:
-        specifier: ^4.10.1
-        version: 4.16.0
+        specifier: ^4.18.0
+        version: 4.18.0
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -1367,7 +1367,7 @@ importers:
         specifier: ^6.1.0
         version: 6.1.0(rollup@4.41.1)
       '@rollup/plugin-node-resolve':
-        specifier: ^16.0.0
+        specifier: ^16.0.1
         version: 16.0.1(rollup@4.41.1)
       '@types/fs-extra':
         specifier: ^11.0.4
@@ -1376,7 +1376,7 @@ importers:
         specifier: ^20.17.57
         version: 20.19.0
       esbuild:
-        specifier: ^0.25.0
+        specifier: ^0.25.5
         version: 0.25.5
       eslint:
         specifier: ^9.28.0
@@ -17511,6 +17511,10 @@ packages:
 
   posthog-node@4.16.0:
     resolution: {integrity: sha512-j7t3h8gC2A2GUE8inqshaUuSrP7zLLtwHpP6sv9vePNRhjEqqd7lPzyjEeDWdcW1COmHtQXH19TYbyjGlutNXA==}
+    engines: {node: '>=15.0.0'}
+
+  posthog-node@4.18.0:
+    resolution: {integrity: sha512-XROs1h+DNatgKh/AlIlCtDxWzwrKdYDb2mOs58n4yN8BkGN9ewqeQwG5ApS4/IzwCb7HPttUkOVulkYatd2PIw==}
     engines: {node: '>=15.0.0'}
 
   preact@10.26.4:
@@ -37651,6 +37655,12 @@ snapshots:
   posthog-node@4.16.0:
     dependencies:
       axios: 1.9.0
+    transitivePeerDependencies:
+      - debug
+
+  posthog-node@4.18.0:
+    dependencies:
+      axios: 1.9.0(debug@4.4.1)
     transitivePeerDependencies:
       - debug
 
