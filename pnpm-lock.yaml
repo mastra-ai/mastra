@@ -3237,7 +3237,7 @@ importers:
         specifier: ^1.0.7
         version: 1.0.7(bufferutil@4.0.9)(utf-8-validate@6.0.5)
       ws:
-        specifier: ^8.18.1
+        specifier: ^8.18.2
         version: 8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5)
       zod-to-json-schema:
         specifier: ^3.24.5
