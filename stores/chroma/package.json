@@ -26,7 +26,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "chromadb": "^2.2.0"
+    "chromadb": "^2.4.6"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
