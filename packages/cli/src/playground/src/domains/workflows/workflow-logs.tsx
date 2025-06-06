@@ -16,11 +16,11 @@ export function WorkflowLogs({ runId }: { runId: string }) {
         <Th>Message</Th>
       </Thead>
       <Tbody>
-        {logs.map(log => {
+        {logs.map((log, idx) => {
           const date = new Date(log.time);
 
           return (
-            <Row key={`${date.toISOString()}-${log.msg}`}>
+            <Row key={`${idx}-${date.toISOString()}-${log.msg}`}>
               <DateTimeCell dateTime={date} />
               <StatusCell level={log.level} />
               <Cell>{log.msg}</Cell>
