@@ -54,6 +54,9 @@
     "eslint": "^9.28.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.2",
-    "vitest": "^3.0.9"
+    "vitest": "^3.0.9",
+    "zod": "^3.25.55",
+    "zod-from-json-schema": "^0.0.5",
+    "zod-to-json-schema": "^3.24.5"
   }
 }
