@@ -26,7 +26,7 @@
   },
   "dependencies": {
     "@inngest/realtime": "^0.3.1",
-    "inngest": "^3.35.1",
+    "inngest": "^3.38.0",
     "zod": "^3.24.2",
     "@opentelemetry/api": "^1.9.0"
   },
@@ -37,11 +37,11 @@
     "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "^20.17.57",
-    "ai": "^4.3.15",
+    "ai": "^4.3.16",
     "eslint": "^9.28.0",
     "execa": "^9.6.0",
     "get-port": "7.1.0",
-    "hono": "^4.7.7",
+    "hono": "^4.7.11",
     "tsup": "^8.5.0",
     "typescript": "^5.8.2",
     "vitest": "^2.1.9",
