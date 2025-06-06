@@ -1,5 +1,22 @@
 # @mastra/client-js
 
+## 0.10.3-alpha.0
+
+### Patch Changes
+
+- f1f1f1b: Add basic filtering capabilities to logs
+- b2810ab: Move @mastra/core to deps
+- 82090c1: Add pagination to logs
+- 67d21b5: Added overloading to the generate method of the Agent class to enhance type definition using ZodSchema.
+- Updated dependencies [d1ed912]
+- Updated dependencies [f1f1f1b]
+- Updated dependencies [f9816ae]
+- Updated dependencies [82090c1]
+- Updated dependencies [1b443fd]
+- Updated dependencies [ce97900]
+- Updated dependencies [14a2566]
+  - @mastra/core@0.10.4-alpha.0
+
 ## 0.10.2
 
 ### Patch Changes
