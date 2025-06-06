@@ -5,13 +5,13 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAgent } from '@/hooks/use-agents';
 
 import { AgentHeader } from './agent-header';
-import { HeaderTitle, Header } from '@mastra/playground-ui';
+import { HeaderTitle, Header, MainContentLayout } from '@mastra/playground-ui';
 
 export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   const { agentId } = useParams();
   const { agent, isLoading: isAgentLoading } = useAgent(agentId!);
   return (
-    <div className="grid grid-rows-[auto_1fr] items-start content-start h-full">
+    <MainContentLayout>
       {isAgentLoading ? (
         <Header>
           <HeaderTitle>
@@ -22,6 +22,6 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
         <AgentHeader agentName={agent?.name!} agentId={agentId!} />
       )}
       {children}
-    </div>
+    </MainContentLayout>
   );
 };

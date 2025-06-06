@@ -1,4 +1,14 @@
-import { AgentNetworkCoinIcon, Button, DataTable, EmptyState, Header, HeaderTitle, Icon } from '@mastra/playground-ui';
+import {
+  AgentNetworkCoinIcon,
+  Button,
+  DataTable,
+  EmptyState,
+  Header,
+  HeaderTitle,
+  Icon,
+  MainContentLayout,
+  MainContentContent,
+} from '@mastra/playground-ui';
 import { useNetworks } from '@/hooks/use-networks';
 import { networksTableColumns } from '@/domains/networks/table.columns';
 import { NetworkIcon } from 'lucide-react';
@@ -9,13 +19,13 @@ function Networks() {
   if (isLoading) return null;
 
   return (
-    <div className="grid grid-rows-[auto_1fr] h-full">
+    <MainContentLayout>
       <Header>
         <HeaderTitle>Networks</HeaderTitle>
       </Header>
 
       {networks.length === 0 ? (
-        <div className="grid place-items-center">
+        <MainContentContent isCentered={true}>
           <EmptyState
             iconSlot={<AgentNetworkCoinIcon />}
             titleSlot="Configure Agent Networks"
@@ -36,13 +46,13 @@ function Networks() {
               </Button>
             }
           />
-        </div>
+        </MainContentContent>
       ) : (
-        <div className="overflow-y-auto">
+        <MainContentContent>
           <DataTable isLoading={isLoading} data={networks} columns={networksTableColumns} />
-        </div>
+        </MainContentContent>
       )}
-    </div>
+    </MainContentLayout>
   );
 }
 
