@@ -2478,7 +2478,7 @@ importers:
   stores/clickhouse:
     dependencies:
       '@clickhouse/client':
-        specifier: ^1.11.0
+        specifier: ^1.11.1
         version: 1.11.1
     devDependencies:
       '@internal/lint':
