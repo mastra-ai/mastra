@@ -28,8 +28,8 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@opentelemetry/otlp-transformer": "^0.201.0",
-    "@opentelemetry/otlp-exporter-base": "^0.201.0",
+    "@opentelemetry/otlp-transformer": "^0.202.0",
+    "@opentelemetry/otlp-exporter-base": "^0.202.0",
     "@opentelemetry/sdk-trace-base": "^2.0.1",
     "@opentelemetry/core": "^2.0.1"
   },
