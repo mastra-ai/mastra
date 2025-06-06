@@ -7,6 +7,7 @@ const meta = {
   copilotkit: "With CopilotKit",
   "assistant-ui": "With Assistant UI",
   openrouter: "With OpenRouter",
+  ollama: "With Ollama",
 };
 
 export default meta;
