@@ -1477,7 +1477,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^1.13.8
-        version: 1.14.1(hono@4.7.7)
+        version: 1.14.3(hono@4.7.7)
       '@hono/swagger-ui':
         specifier: ^0.5.1
         version: 0.5.1(hono@4.7.7)
@@ -1691,7 +1691,7 @@ importers:
         version: 1.3.22(zod@3.24.4)
       '@hono/node-server':
         specifier: ^1.13.8
-        version: 1.14.1(hono@4.7.7)
+        version: 1.14.3(hono@4.7.7)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1767,7 +1767,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^1.13.8
-        version: 1.14.1(hono@4.7.7)
+        version: 1.14.3(hono@4.7.7)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -1825,7 +1825,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^1.13.8
-        version: 1.14.1(hono@4.7.7)
+        version: 1.14.3(hono@4.7.7)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -3392,8 +3392,8 @@ importers:
         specifier: ^1.3.22
         version: 1.3.22(zod@3.24.4)
       '@hono/node-server':
-        specifier: ^1.14.1
-        version: 1.14.1(hono@4.7.7)
+        specifier: ^1.14.3
+        version: 1.14.3(hono@4.7.7)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -6271,8 +6271,8 @@ packages:
   '@hey-api/client-fetch@0.3.4':
     resolution: {integrity: sha512-2iEXxLNf3HQWPJC04XYaZZSqtx+gLg2dxi8oEgrYDhoBGPlaEgpao73rVjdng0YzlB4YkCkZV8p8VkhVnIaKHQ==}
 
-  '@hono/node-server@1.14.1':
-    resolution: {integrity: sha512-vmbuM+HPinjWzPe7FFPWMMQMsbKE9gDPhaH0FFdqbGpkT5lp++tcWDTxwBl5EgS5y6JVgIaCdjeHRfQ4XRBRjQ==}
+  '@hono/node-server@1.14.3':
+    resolution: {integrity: sha512-KuDMwwghtFYSmIpr4WrKs1VpelTrptvJ+6x6mbUcZnFcc213cumTF5BdqfHyW93B19TNI4Vaev14vOI2a0Ie3w==}
     engines: {node: '>=18.14.1'}
     peerDependencies:
       hono: ^4
@@ -23396,7 +23396,7 @@ snapshots:
 
   '@hey-api/client-fetch@0.3.4': {}
 
-  '@hono/node-server@1.14.1(hono@4.7.7)':
+  '@hono/node-server@1.14.3(hono@4.7.7)':
     dependencies:
       hono: 4.7.7
 
