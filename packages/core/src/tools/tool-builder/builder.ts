@@ -130,8 +130,9 @@ export class CoreToolBuilder extends MastraBase {
     };
 
     return async (args: any, execOptions?: any) => {
+      let logger = options.logger || this.logger;
       try {
-        (options.logger || this.logger).debug(start, { ...rest, args });
+        logger.debug(start, { ...rest, args });
         return await execFunction(args, execOptions);
       } catch (err) {
         const mastraError = new MastraError(
@@ -147,7 +148,8 @@ export class CoreToolBuilder extends MastraBase {
           },
           err,
         );
-        (options.logger || this.logger).trackException(mastraError);
+        logger.trackException(mastraError);
+        logger.error(error, { ...rest, error: err, args });
         throw mastraError;
       }
     };
