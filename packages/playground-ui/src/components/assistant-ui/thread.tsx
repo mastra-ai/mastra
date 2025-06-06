@@ -19,7 +19,7 @@ import { useAutoscroll } from '@/hooks/use-autoscroll';
 import { Txt } from '@/ds/components/Txt';
 import { Icon, InfoIcon } from '@/ds/icons';
 import { useSpeechRecognition } from '@/hooks/use-speech-recognition';
-import { ComposerAttachments } from './attachment';
+import { ComposerAttachments } from './attachments/composer-attachments';
 
 export interface ThreadProps {
   ToolFallback?: ToolCallContentPartComponent;
