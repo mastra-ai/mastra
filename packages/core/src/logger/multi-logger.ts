@@ -1,3 +1,4 @@
+import type { MastraError } from '../error';
 import type { LogLevel } from './constants';
 import type { IMastraLogger } from './logger';
 import type { LoggerTransport } from './transport';
@@ -23,6 +24,10 @@ export class MultiLogger implements IMastraLogger {
 
   error(message: string, ...args: any[]): void {
     this.loggers.forEach(logger => logger.error(message, ...args));
+  }
+
+  trackException(error: MastraError): void {
+    this.loggers.forEach(logger => logger.trackException(error));
   }
 
   getTransports(): Map<string, LoggerTransport> {
