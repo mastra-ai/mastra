@@ -23,7 +23,7 @@
     }
   },
   "devDependencies": {
-    "@types/node": "^20.17.24",
+    "@types/node": "^20.17.57",
     "@types/react": "^19.0.10",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
