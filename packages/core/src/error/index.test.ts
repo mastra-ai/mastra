@@ -25,7 +25,7 @@ describe('MastraError (Base Class)', () => {
     expect(error).toBeInstanceOf(Error);
     expect(error.id).toBe('BASE_TEST_001');
     // Since there's no text field in the definition, message will be empty
-    expect(error.message).toBe('');
+    expect(error.message).toBe('Unknown error');
     expect(error.domain).toBe('AGENT');
     expect(error.category).toBe('UNKNOWN');
   });
@@ -66,14 +66,14 @@ describe('MastraError (Base Class)', () => {
       const error = new MastraError(sampleErrorDefinition);
 
       const jsonDetails = error.toJSONDetails();
-      expect(jsonDetails.message).toBe('');
+      expect(jsonDetails.message).toBe('Unknown error');
       expect(jsonDetails.domain).toBe(ErrorDomain.AGENT);
       expect(jsonDetails.category).toBe(ErrorCategory.UNKNOWN);
       expect(jsonDetails.details).toEqual(sampleContext);
 
       const jsonError = error.toJSON();
       expect(jsonError.code).toBe('BASE_TEST_001');
-      expect(jsonError.message).toBe('');
+      expect(jsonError.message).toBe('Unknown error');
       expect(jsonError.details).toEqual(jsonDetails);
     });
   });
