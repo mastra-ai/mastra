@@ -3067,8 +3067,8 @@ importers:
   voice/deepgram:
     dependencies:
       '@deepgram/sdk':
-        specifier: ^3.11.2
-        version: 3.11.2(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.5)
+        specifier: ^3.13.0
+        version: 3.13.0(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.5)
       zod:
         specifier: ^3.24.3
         version: 3.24.4
@@ -4998,8 +4998,8 @@ packages:
     resolution: {integrity: sha512-8B1C/oTxTxyHlSFubAhNRgCbQ2SQ5wwvtlByn8sDYZvdDtdn/VE2yEPZ4BvUnrKWmsbTQY6/ooLV+9Ka2qmDSQ==}
     engines: {node: '>=18.0.0'}
 
-  '@deepgram/sdk@3.11.2':
-    resolution: {integrity: sha512-sx/2B0vG18YJ9c807U6ZojliURZvPS0jFnwyMmzwfK5nELp3vvYrmAcoI2nRjndzYrkFe3YUg5T/dFLtI5l2Wg==}
+  '@deepgram/sdk@3.13.0':
+    resolution: {integrity: sha512-VFN4gbyIDl5Bj0ApERq4QJHzO2AK4YOoL5Lfoy//q9531+UIzaKCNie4NkBM2Kn/UndHH7tIR335SH14e2r+Ag==}
     engines: {node: '>=18.0.0'}
 
   '@dependents/detective-less@4.1.0':
@@ -22506,7 +22506,7 @@ snapshots:
     dependencies:
       dayjs: 1.11.13
 
-  '@deepgram/sdk@3.11.2(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.5)':
+  '@deepgram/sdk@3.13.0(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.5)':
     dependencies:
       '@deepgram/captions': 1.2.0
       '@types/node': 20.17.32
