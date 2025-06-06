@@ -11,6 +11,8 @@ export const useLogsByRunId = (runId: string) => {
 
   const { isLoading, ...data } = useInfiniteQuery({
     queryKey: ['logs', runId],
+    staleTime: 0,
+    gcTime: 0,
     queryFn: async ({ pageParam }) => {
       const res = await client.getLogForRun({
         transportId,

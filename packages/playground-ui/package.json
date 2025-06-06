@@ -79,6 +79,7 @@
     "date-fns": "^4.1.0",
     "json-schema-to-zod": "^2.5.0",
     "motion": "^12.4.2",
+    "prettier": "^3.5.3",
     "prism-react-renderer": "^2.4.0",
     "react-code-block": "1.1.1",
     "react-day-picker": "^8.10.1",

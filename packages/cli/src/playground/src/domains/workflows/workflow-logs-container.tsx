@@ -14,13 +14,11 @@ export const WorkflowLogsContainer = ({ runId }: WorkflowLogsContainerProps) => 
   const { open } = useSidebar();
   const { data: logs = [], isLoading } = useLogsByRunId(runId);
 
-  if (isLoading) return null;
-
   return (
     <div
       className={clsx(
-        'fixed bottom-3 rounded-t-lg right-[342px] overflow-y-auto bg-surface3 border-t-sm border-r-sm border-l-sm border-border1 transition-all duration-300',
-        expanded ? 'h-1/2' : 'h-content',
+        'fixed bottom-3 rounded-t-lg right-[342px] bg-surface3 border-t-sm border-r-sm border-l-sm border-border1 transition-all duration-300 h-1/2',
+        expanded ? 'translate-y-0' : 'translate-y-[calc(100%-32px)]',
         open ? 'left-44' : 'left-16',
         'z-20',
       )}
@@ -33,12 +31,14 @@ export const WorkflowLogsContainer = ({ runId }: WorkflowLogsContainerProps) => 
         >
           Logs
           <Icon>
-            <ChevronDown className={clsx('transition-transform -rotate-90 text-icon3', expanded ? 'rotate-0' : '')} />
+            <ChevronDown className={clsx('transition-transform text-icon3', expanded ? 'rotate-0' : 'rotate-180')} />
           </Icon>
         </button>
       </Header>
 
-      {expanded && <WorkflowLogs logs={logs} />}
+      <div className="overflow-y-auto h-full">
+        <WorkflowLogs logs={logs || []} isLoading={isLoading} />
+      </div>
     </div>
   );
 };
