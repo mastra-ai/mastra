@@ -88,4 +88,4 @@ export class MastraBaseError<D, C> extends Error {
   }
 }
 
-export class MastraError extends MastraBaseError<ErrorDomain, ErrorCategory> {}
+export class MastraError extends MastraBaseError<`${ErrorDomain}`, `${ErrorCategory}`> {}
