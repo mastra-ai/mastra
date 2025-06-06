@@ -53,7 +53,7 @@
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
     "eslint": "^8.57.1",
-    "eslint-config-next": "15.0.3",
+    "eslint-config-next": "15.3.3",
     "jest": "^29.7.0",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",

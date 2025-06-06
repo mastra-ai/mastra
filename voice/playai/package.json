@@ -35,7 +35,7 @@
     "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.52.5",
     "@types/node": "^20.17.27",
-    "eslint": "^9.23.0",
+    "eslint": "^9.28.0",
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
     "vitest": "^2.1.9",
