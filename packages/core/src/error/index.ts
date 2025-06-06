@@ -28,6 +28,11 @@ export interface IErrorDefinition<D, C> {
   /** Unique identifier for the error. */
   id: Uppercase<string>;
   /**
+   * Optional custom error message that overrides the original error message.
+   * If not provided, the original error message will be used, or 'Unknown error' if no error is provided.
+   */
+  text?: string;
+  /**
    * Functional domain of the error (e.g., CONFIG, BUILD, API).
    */
   domain: D;
@@ -46,6 +51,7 @@ export class MastraBaseError<D, C> extends Error {
   public readonly domain: D;
   public readonly category: C;
   public readonly details?: Record<string, Json<Scalar>> = {};
+  public readonly message: string;
 
   constructor(
     errorDefinition: IErrorDefinition<D, C>,
@@ -58,11 +64,13 @@ export class MastraBaseError<D, C> extends Error {
       error = new Error(String(originalError));
     }
 
-    super(error?.message, { cause: error });
+    const message = errorDefinition.text ?? error?.message ?? 'Unknown error';
+    super(message, { cause: error });
     this.id = errorDefinition.id;
     this.domain = errorDefinition.domain;
     this.category = errorDefinition.category;
     this.details = errorDefinition.details ?? {};
+    this.message = message;
 
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -85,6 +93,10 @@ export class MastraBaseError<D, C> extends Error {
       details: this.toJSONDetails(),
       code: this.id,
     };
+  }
+
+  public toString() {
+    return JSON.stringify(this.toJSON());
   }
 }
 
