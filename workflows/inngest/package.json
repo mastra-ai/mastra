@@ -26,7 +26,7 @@
   },
   "dependencies": {
     "@inngest/realtime": "^0.3.1",
-    "inngest": "^3.35.1",
+    "inngest": "^3.38.0",
     "zod": "^3.24.2",
     "@opentelemetry/api": "^1.9.0"
   },
