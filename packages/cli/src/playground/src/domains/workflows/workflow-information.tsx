@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { Badge, Icon, Txt, LegacyWorkflowTrigger, WorkflowIcon, WorkflowTrigger } from '@mastra/playground-ui';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-import { WorkflowLogs } from './workflow-logs';
 import { useLegacyWorkflow, useWorkflow } from '@/hooks/use-workflows';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -13,14 +12,19 @@ import { WorkflowRuns } from '@mastra/playground-ui';
 import { useNavigate, useParams } from 'react-router';
 import { useWorkflowRuns } from '@/pages/workflows/workflow/hooks/use-workflow-runs';
 
-export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: string; isLegacy?: boolean }) {
+export interface WorkflowInformationProps {
+  workflowId: string;
+  isLegacy?: boolean;
+  onTrigger?: (runId: string) => void;
+}
+
+export function WorkflowInformation({ workflowId, isLegacy, onTrigger }: WorkflowInformationProps) {
   const params = useParams();
   const navigate = useNavigate();
   const { workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId, !isLegacy);
   const { isLoading: isRunsLoading, data: runs } = useWorkflowRuns({ workflowId });
   const { legacyWorkflow, isLoading: isLegacyWorkflowLoading } = useLegacyWorkflow(workflowId, !!isLegacy);
 
-  const [runId, setRunId] = useState<string>('');
   const { handleCopy } = useCopyToClipboard({ text: workflowId });
 
   const stepsCount = Object.keys(workflow?.steps ?? {}).length;
@@ -78,20 +82,15 @@ export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: stri
                 Runs
               </p>
             </TabsTrigger>
-            <TabsTrigger value="logs" className="group">
-              <p className="text-xs p-3 text-mastra-el-3 group-data-[state=active]:text-mastra-el-5 group-data-[state=active]:border-b-2 group-data-[state=active]:pb-2.5 border-white">
-                Log Drains
-              </p>
-            </TabsTrigger>
           </TabsList>
           <div className="h-full overflow-y-auto">
             <TabsContent value="run">
               {workflowId ? (
                 <>
                   {isLegacy ? (
-                    <LegacyWorkflowTrigger workflowId={workflowId} setRunId={setRunId} />
+                    <LegacyWorkflowTrigger workflowId={workflowId} setRunId={onTrigger} />
                   ) : (
-                    <WorkflowTrigger workflowId={workflowId} setRunId={setRunId} />
+                    <WorkflowTrigger workflowId={workflowId} onTrigger={onTrigger} />
                   )}
                 </>
               ) : null}
@@ -104,9 +103,6 @@ export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: stri
                 runs={runs?.runs || []}
                 onPressRun={({ workflowId, runId }) => navigate(`/workflows/${workflowId}/graph/${runId}`)}
               />
-            </TabsContent>
-            <TabsContent value="logs">
-              <WorkflowLogs runId={runId} />
             </TabsContent>
           </div>
         </Tabs>
