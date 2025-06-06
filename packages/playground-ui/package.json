@@ -110,7 +110,7 @@
   },
   "devDependencies": {
     "@mastra/core": "workspace:*",
-    "@types/node": "^20.17.27",
+    "@types/node": "^20.17.57",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
     "@vitejs/plugin-react": "^4.3.4",

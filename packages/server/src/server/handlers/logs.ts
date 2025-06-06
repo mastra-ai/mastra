@@ -7,18 +7,31 @@ type LogsContext = {
   mastra: Mastra;
   transportId?: string;
   runId?: string;
-  params?: { fromDate?: Date; toDate?: Date; logLevel?: LogLevel; filters?: string | string[] };
+  params?: {
+    fromDate?: Date;
+    toDate?: Date;
+    logLevel?: LogLevel;
+    filters?: string | string[];
+    page?: number;
+    perPage?: number;
+  };
 };
 
 export async function getLogsHandler({
   mastra,
   transportId,
   params,
-}: Pick<LogsContext, 'mastra' | 'transportId' | 'params'>): Promise<BaseLogMessage[]> {
+}: Pick<LogsContext, 'mastra' | 'transportId' | 'params'>): Promise<{
+  logs: BaseLogMessage[];
+  total: number;
+  page: number;
+  perPage: number;
+  hasMore: boolean;
+}> {
   try {
     validateBody({ transportId });
 
-    const { fromDate, toDate, logLevel, filters: _filters } = params || {};
+    const { fromDate, toDate, logLevel, filters: _filters, page, perPage } = params || {};
 
     // Parse filter query parameter if present
     const filters = _filters
@@ -35,6 +48,8 @@ export async function getLogsHandler({
       toDate,
       logLevel,
       filters,
+      page: page ? Number(page) : undefined,
+      perPage: perPage ? Number(perPage) : undefined,
     });
     return logs;
   } catch (error) {
@@ -51,7 +66,7 @@ export async function getLogsByRunIdHandler({
   try {
     validateBody({ runId, transportId });
 
-    const { fromDate, toDate, logLevel, filters: _filters } = params || {};
+    const { fromDate, toDate, logLevel, filters: _filters, page, perPage } = params || {};
 
     // Parse filter query parameter if present
     const filters = _filters
@@ -70,6 +85,8 @@ export async function getLogsByRunIdHandler({
       toDate,
       logLevel,
       filters,
+      page: page ? Number(page) : undefined,
+      perPage: perPage ? Number(perPage) : undefined,
     });
     return logs;
   } catch (error) {
