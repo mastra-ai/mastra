@@ -34,7 +34,7 @@
     "@ai-sdk/ui-utils": "^1.1.19",
     "@copilotkit/runtime": "^1.8.13",
     "hono": "^4.5.1",
-    "rxjs": "7.8.1"
+    "rxjs": "7.8.2"
   },
   "peerDependencies": {
     "@mastra/core": "^0.10.0-alpha.0",
