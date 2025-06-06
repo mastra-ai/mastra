@@ -3,6 +3,7 @@ import { client } from '@/lib/client';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { BaseLogMessage } from '@mastra/core/logger';
 
 export const useLogsByRunId = (runId: string) => {
   const { transports, isLoading: isLoadingTransports } = useLogTransports();
@@ -12,8 +13,13 @@ export const useLogsByRunId = (runId: string) => {
   const { isLoading, ...data } = useInfiniteQuery({
     queryKey: ['logs', runId],
     queryFn: async ({ pageParam }) => {
-      const res = await client.getLogForRun({ transportId, runId, page: pageParam, perPage: 50 });
-      console.log('REES', res);
+      const res = (await client.getLogForRun({
+        transportId,
+        runId,
+        page: pageParam,
+        perPage: 50,
+      })) as unknown as Array<BaseLogMessage>;
+
       return res;
     },
     getNextPageParam: (lastPage, _, lastPageParam) => {
