@@ -122,6 +122,57 @@ export class LibSQLStore extends MastraStorage {
     }
   }
 
+  protected getSqlType(type: string): string {
+    switch (type) {
+      case 'bigint':
+        return 'INTEGER'; // SQLite uses INTEGER for all integer sizes
+      case 'jsonb':
+        return 'TEXT'; // Store JSON as TEXT in SQLite
+      default:
+        return super.getSqlType(type);
+    }
+  }
+
+  async alterTable({
+    tableName,
+    schema,
+    ifNotExists,
+  }: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void> {
+    const parsedTableName = parseSqlIdentifier(tableName, 'table name');
+
+    try {
+      // 1. Get existing columns using PRAGMA
+      const pragmaQuery = `PRAGMA table_info(${parsedTableName})`;
+      const result = await this.client.execute(pragmaQuery);
+      const existingColumnNames = new Set(result.rows.map((row: any) => row.name.toLowerCase()));
+
+      // 2. Add missing columns
+      for (const columnName of ifNotExists) {
+        if (!existingColumnNames.has(columnName.toLowerCase()) && schema[columnName]) {
+          const columnDef = schema[columnName];
+          const sqlType = this.getSqlType(columnDef.type); // ensure this exists or implement
+          const nullable = columnDef.nullable === false ? 'NOT NULL' : '';
+          // In SQLite, you must provide a DEFAULT if adding a NOT NULL column to a non-empty table
+          const defaultValue = columnDef.nullable === false ? 'DEFAULT ""' : '';
+          const alterSql =
+            `ALTER TABLE ${parsedTableName} ADD COLUMN "${columnName}" ${sqlType} ${nullable} ${defaultValue}`.trim();
+
+          await this.client.execute(alterSql);
+          this.logger?.debug?.(`Added column ${columnName} to table ${parsedTableName}`);
+        }
+      }
+    } catch (error) {
+      this.logger?.error?.(
+        `Error altering table ${tableName}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw new Error(`Failed to alter table ${tableName}: ${error}`);
+    }
+  }
+
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     const parsedTableName = parseSqlIdentifier(tableName, 'table name');
     try {
@@ -338,11 +389,18 @@ export class LibSQLStore extends MastraStorage {
   }
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
+    // Delete messages for this thread (manual step)
+    await this.client.execute({
+      sql: `DELETE FROM ${TABLE_MESSAGES} WHERE thread_id = ?`,
+      args: [threadId],
+    });
+
     await this.client.execute({
       sql: `DELETE FROM ${TABLE_THREADS} WHERE id = ?`,
       args: [threadId],
     });
     // Messages will be automatically deleted due to CASCADE constraint
+    // Need to check if CASCADE is enabled
   }
 
   private parseRow(row: any): MastraMessageV2 {
@@ -358,6 +416,7 @@ export class LibSQLStore extends MastraStorage {
       role: row.role,
       createdAt: new Date(row.createdAt as string),
       threadId: row.thread_id,
+      resourceId: row.resourceId,
     } as MastraMessageV2;
     if (row.type && row.type !== `v2`) result.type = row.type;
     return result;

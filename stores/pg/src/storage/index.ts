@@ -404,6 +404,39 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
+  async alterTable({
+    tableName,
+    schema,
+    ifNotExists,
+  }: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void> {
+    const fullTableName = this.getTableName(tableName);
+
+    try {
+      for (const columnName of ifNotExists) {
+        if (schema[columnName]) {
+          const columnDef = schema[columnName];
+          const sqlType = this.getSqlType(columnDef.type);
+          const nullable = columnDef.nullable === false ? 'NOT NULL' : '';
+          const defaultValue = columnDef.nullable === false ? 'DEFAULT ""' : '';
+          const alterSql =
+            `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${columnName}" ${sqlType} ${nullable} ${defaultValue}`.trim();
+
+          await this.db.none(alterSql);
+          this.logger?.debug?.(`Ensured column ${columnName} exists in table ${fullTableName}`);
+        }
+      }
+    } catch (error) {
+      this.logger?.error?.(
+        `Error altering table ${tableName}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw new Error(`Failed to alter table ${tableName}: ${error}`);
+    }
+  }
+
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     try {
       await this.db.none(`TRUNCATE TABLE ${this.getTableName(tableName)} CASCADE`);

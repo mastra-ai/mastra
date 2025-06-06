@@ -34,23 +34,6 @@ const createSampleThread = () => ({
   metadata: { key: 'value' },
 });
 
-let role = `user`;
-const getRole = () => {
-  if (role === `user`) role = `assistant`;
-  else role = `user`;
-  return role as 'user' | 'assistant';
-};
-
-const createSampleMessage = (threadId: string, createdAt: Date = new Date()): MastraMessageV1 => ({
-  id: `msg-${randomUUID()}`,
-  resourceId: `clickhouse-test`,
-  role: getRole(),
-  type: 'text',
-  threadId,
-  content: 'Hello',
-  createdAt,
-});
-
 const createSampleTrace = () => ({
   id: `trace-${randomUUID()}`,
   name: 'Test Trace',

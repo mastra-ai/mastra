@@ -25,15 +25,6 @@ const createSampleThread = (date?: Date) => ({
   metadata: { key: 'value' },
 });
 
-const createSampleMessage = (threadId: string, content: string = 'Hello'): MastraMessageV2 => ({
-  id: `msg-${randomUUID()}`,
-  role: 'user',
-  threadId,
-  content: { format: 2, parts: [{ type: 'text', text: content }] },
-  createdAt: new Date(),
-  resourceId: `resource-${randomUUID()}`,
-});
-
 const createSampleWorkflowSnapshot = (status: string, createdAt?: Date) => {
   const runId = `run-${randomUUID()}`;
   const stepId = `step-${randomUUID()}`;
@@ -235,6 +226,23 @@ describe('UpstashStore', () => {
 
       const retrievedThreads = await store.getThreadsByResourceId({ resourceId });
       expect(retrievedThreads).toHaveLength(total);
+    });
+    it('should delete thread and its messages', async () => {
+      const thread = createSampleThread({});
+      await store.saveThread({ thread });
+
+      // Add some messages
+      const messages = [createSampleMessage({ threadId: thread.id }), createSampleMessage({ threadId: thread.id })];
+      await store.saveMessages({ messages, format: 'v2' });
+
+      await store.deleteThread({ threadId: thread.id });
+
+      const retrievedThread = await store.getThreadById({ threadId: thread.id });
+      expect(retrievedThread).toBeNull();
+
+      // Verify messages were also deleted
+      const retrievedMessages = await store.getMessages({ threadId: thread.id });
+      expect(retrievedMessages).toHaveLength(0);
     });
   });
 

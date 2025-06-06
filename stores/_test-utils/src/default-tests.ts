@@ -4,7 +4,7 @@ import type { MetricResult } from '@mastra/core/eval';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import type { MastraStorage } from '@mastra/core/storage';
 import { TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS } from '@mastra/core/storage';
-import { MastraMessageV1 } from '@mastra/core';
+import { MastraMessageV1, MastraMessageV2 } from '@mastra/core';
 
 export const createSampleTraceForDB = (
   name: string,
@@ -46,6 +46,56 @@ export const createSampleEval = (agentName: string, isTest = false, createdAt?: 
   };
 };
 
+let role: 'assistant' | 'user' = 'assistant';
+const getRole = () => {
+  if (role === 'user') role = 'assistant';
+  else role = 'user';
+  return role;
+};
+
+export const createSampleMessageV1 = ({
+  threadId,
+  content = 'Hello',
+  resourceId = `resource-${randomUUID()}`,
+  createdAt = new Date(),
+}: {
+  threadId: string;
+  content?: string;
+  resourceId?: string;
+  createdAt?: Date;
+}) =>
+  ({
+    id: `msg-${randomUUID()}`,
+    role: getRole(),
+    type: 'text',
+    threadId,
+    content: [{ type: 'text', text: content }],
+    createdAt,
+    resourceId,
+  }) satisfies MastraMessageV1;
+
+export const createSampleMessageV2 = ({
+  threadId,
+  content = 'Hello',
+  resourceId = `resource-${randomUUID()}`,
+  createdAt = new Date(),
+}: {
+  threadId: string;
+  content?: string;
+  resourceId?: string;
+  createdAt?: Date;
+}): MastraMessageV2 => ({
+  id: `msg-${randomUUID()}`,
+  resourceId,
+  role: getRole(),
+  threadId,
+  content: {
+    format: 2,
+    parts: [{ type: 'text', text: content }],
+  },
+  createdAt,
+});
+
 export function createTestSuite(storage: MastraStorage) {
   describe(storage.constructor.name, () => {
     // Sample test data factory functions to ensure unique records
@@ -66,22 +116,6 @@ export function createTestSuite(storage: MastraStorage) {
       updatedAt,
       metadata: { key: 'value' },
     });
-
-    let role: 'assistant' | 'user' = 'assistant';
-    const getRole = () => {
-      if (role === 'user') role = 'assistant';
-      else role = 'user';
-      return role;
-    };
-    const createSampleMessage = (threadId: string) =>
-      ({
-        id: `msg-${randomUUID()}`,
-        role: getRole(),
-        type: 'text',
-        threadId,
-        content: [{ type: 'text', text: 'Hello' }],
-        createdAt: new Date(),
-      }) satisfies MastraMessageV1;
 
     const createSampleWorkflowSnapshot = (status: string, createdAt?: Date) => {
       const runId = `run-${randomUUID()}`;
@@ -217,6 +251,27 @@ export function createTestSuite(storage: MastraStorage) {
         const retrievedThread = await storage.getThreadById({ threadId: thread.id });
         expect(retrievedThread).toBeNull();
       });
+
+      it('should delete thread and its messages', async () => {
+        const thread = createSampleThread();
+        await storage.saveThread({ thread });
+
+        // Add some messages
+        const messages = [
+          createSampleMessageV2({ threadId: thread.id }),
+          createSampleMessageV2({ threadId: thread.id }),
+        ];
+        await storage.saveMessages({ messages, format: 'v2' });
+
+        await storage.deleteThread({ threadId: thread.id });
+
+        const retrievedThread = await storage.getThreadById({ threadId: thread.id });
+        expect(retrievedThread).toBeNull();
+
+        // Verify messages were also deleted
+        const retrievedMessages = await storage.getMessages({ threadId: thread.id });
+        expect(retrievedMessages).toHaveLength(0);
+      });
     });
 
     describe('Message Operations', () => {
@@ -224,7 +279,10 @@ export function createTestSuite(storage: MastraStorage) {
         const thread = createSampleThread();
         await storage.saveThread({ thread });
 
-        const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
+        const messages = [
+          createSampleMessageV1({ threadId: thread.id }),
+          createSampleMessageV1({ threadId: thread.id }),
+        ];
 
         // Save messages
         const savedMessages = await storage.saveMessages({ messages });
@@ -249,10 +307,10 @@ export function createTestSuite(storage: MastraStorage) {
         await storage.saveThread({ thread });
 
         const messages = [
-          { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'First' }] },
-          { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'Second' }] },
-          { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'Third' }] },
-        ] satisfies MastraMessageV1[];
+          createSampleMessageV1({ threadId: thread.id, content: 'First' }),
+          createSampleMessageV1({ threadId: thread.id, content: 'Second' }),
+          createSampleMessageV1({ threadId: thread.id, content: 'Third' }),
+        ];
 
         await storage.saveMessages({ messages });
 
@@ -272,9 +330,9 @@ export function createTestSuite(storage: MastraStorage) {
         await storage.saveThread({ thread });
 
         const messages = [
-          createSampleMessage(thread.id),
+          createSampleMessageV1({ threadId: thread.id }),
           // @ts-ignore
-          { ...createSampleMessage(thread.id), id: null }, // This will cause an error
+          { ...createSampleMessageV1({ threadId: thread.id }), id: null }, // This will cause an error
         ] as MastraMessageV1[];
 
         await expect(storage.saveMessages({ messages })).rejects.toThrow();
