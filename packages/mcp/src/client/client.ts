@@ -23,8 +23,8 @@ import {
 
 import { asyncExitHook, gracefulExit } from 'exit-hook';
 import { z } from 'zod';
+import type { JSONSchema } from "zod/v4/core";
 import { convertJsonSchemaToZod } from 'zod-from-json-schema';
-import type { JSONSchema } from 'zod-from-json-schema';
 import { ResourceClientActions } from './resourceActions';
 
 // Re-export MCP SDK LoggingLevel for convenience
@@ -380,14 +380,14 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   private convertInputSchema(
-    inputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['inputSchema'] | JSONSchema,
+    inputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['inputSchema'] | JSONSchema.BaseSchema,
   ): z.ZodType {
     if (isZodType(inputSchema)) {
       return inputSchema;
     }
 
     try {
-      return convertJsonSchemaToZod(inputSchema as JSONSchema);
+      return convertJsonSchemaToZod(inputSchema as JSONSchema.BaseSchema) as unknown as z.ZodType;
     } catch (error: unknown) {
       let errorDetails: string | undefined;
       if (error instanceof Error) {
