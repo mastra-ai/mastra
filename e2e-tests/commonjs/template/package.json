@@ -19,7 +19,7 @@
     "zod": "^3.24.3"
   },
   "devDependencies": {
-    "@types/node": "^22.14.1",
+    "@types/node": "^22.15.29",
     "mastra": "commonjs-e2e-test",
     "typescript": "^5.8.3"
   }

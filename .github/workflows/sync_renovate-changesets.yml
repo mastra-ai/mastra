@@ -46,6 +46,9 @@ jobs:
         with:
           run_install: false
 
+      - name: Create pnpm store
+        run: pnpm store path
+
       - name: Setup Node.js 20.x
         uses: actions/setup-node@v4
         with:
