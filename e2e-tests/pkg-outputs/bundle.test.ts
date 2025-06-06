@@ -91,6 +91,7 @@ describe.for(allPackages.map(pkg => [relative(join(__dirname.replaceAll('\\', '/
         pkgJson.name === '@mastra/client-js' ||
         !pkgJson.name.startsWith('@mastra/'),
     )('should have @mastra/core as a peer dependency if used', async () => {
+      console.log(pkgJson.name);
       const hasMastraCoreAsDependency = pkgJson?.dependencies?.['@mastra/core'];
       expect(hasMastraCoreAsDependency).toBe(undefined);
     });
