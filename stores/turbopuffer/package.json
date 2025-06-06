@@ -29,7 +29,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@turbopuffer/turbopuffer": "^0.6.4"
+    "@turbopuffer/turbopuffer": "^0.9.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
