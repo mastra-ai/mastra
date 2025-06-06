@@ -22,7 +22,7 @@
   "license": "MIT",
   "description": "",
   "devDependencies": {
-    "@types/node": "^20.17.27",
+    "@types/node": "^20.17.57",
     "@types/pdf-parse": "^1.1.4",
     "mastra": "workspace:*",
     "tsx": "^4.19.3"

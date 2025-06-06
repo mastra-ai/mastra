@@ -82,7 +82,7 @@
     "@libsql/client": "^0.15.4",
     "@tailwindcss/typography": "^0.5.16",
     "@types/d3-scale": "^4.0.9",
-    "@types/node": "^22",
+    "@types/node": "^22.15.29",
     "@types/pdf-parse": "^1.1.4",
     "@types/react": "^19.1",
     "@types/react-dom": "^19.1",
