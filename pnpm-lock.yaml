@@ -3339,8 +3339,8 @@ importers:
   voice/speechify:
     dependencies:
       '@speechify/api-sdk':
-        specifier: ^2.4.1
-        version: 2.4.1
+        specifier: ^2.5.4
+        version: 2.5.4
       zod:
         specifier: ^3.24.3
         version: 3.24.4
@@ -9401,9 +9401,8 @@ packages:
     resolution: {integrity: sha512-JtaY3FxmD+te+KSI2FJuEcfNC9T/DGGVf551babM7fAaXhjJUt7oSYurH1Devxd2+BOSUACCgt3buinx4UnmEA==}
     engines: {node: '>=18.0.0'}
 
-  '@speechify/api-sdk@2.4.1':
-    resolution: {integrity: sha512-feWF7l9z3w/pHqhSMR8wR7Te+/f4BETx85lyeWeD+xB12g0L/Q0ltoGRGYcoAb2jag9Yu/C3GC3bYk0fiw+mNQ==}
-    deprecated: 'This package is no longer supported. Please use the new official SDK: @speechify/api'
+  '@speechify/api-sdk@2.5.4':
+    resolution: {integrity: sha512-3oe844uNpR/XLy306xMoOkeURvlo5fYKtAtOVJpYq4BrSImLNjvR+Vf5gmahrk3WzZ6wW//bhXRPjxOmjjQdpQ==}
 
   '@standard-schema/spec@1.0.0':
     resolution: {integrity: sha512-m2bOd0f2RT9k8QJx1JN85cZYyH1RqFBdlwtkSlf4tBDYLCiiZnv1fIIwacK6cqwXavOydf0NPToMQgpKq+dVlA==}
@@ -27041,7 +27040,7 @@ snapshots:
       '@smithy/types': 4.2.0
       tslib: 2.8.1
 
-  '@speechify/api-sdk@2.4.1': {}
+  '@speechify/api-sdk@2.5.4': {}
 
   '@standard-schema/spec@1.0.0': {}
 
@@ -32865,7 +32864,7 @@ snapshots:
       isstream: 0.1.2
       jsonwebtoken: 9.0.2
       mime-types: 2.1.35
-      retry-axios: 2.6.0(axios@1.8.4)
+      retry-axios: 2.6.0(axios@1.8.4(debug@4.4.0))
       tough-cookie: 4.1.4
     transitivePeerDependencies:
       - supports-color
@@ -37081,7 +37080,7 @@ snapshots:
 
   ret@0.4.3: {}
 
-  retry-axios@2.6.0(axios@1.8.4):
+  retry-axios@2.6.0(axios@1.8.4(debug@4.4.0)):
     dependencies:
       axios: 1.8.4(debug@4.4.1)
 
