@@ -1,11 +1,11 @@
+import type { LanguageModelV1 } from 'ai';
 import type { z } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
-import { ToolCompatibility, UNSUPPORTED_ZOD_TYPES } from '..';
-import type { ShapeValue } from '..';
-import type { MastraLanguageModel } from '../../../agent';
+import { SchemaCompatLayer, UNSUPPORTED_ZOD_TYPES } from '../schema-compatibility';
+import type { ShapeValue } from '../schema-compatibility';
 
-export class GoogleToolCompat extends ToolCompatibility {
-  constructor(model: MastraLanguageModel) {
+export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
+  constructor(model: LanguageModelV1) {
     super(model);
   }
 

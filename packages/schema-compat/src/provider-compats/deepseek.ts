@@ -1,11 +1,11 @@
+import type { LanguageModelV1 } from 'ai';
 import type { z } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
-import { ToolCompatibility } from '..';
-import type { MastraLanguageModel } from '../../../agent';
-import type { ShapeValue } from '../index';
+import { SchemaCompatLayer } from '../schema-compatibility';
+import type { ShapeValue } from '../schema-compatibility';
 
-export class MetaToolCompat extends ToolCompatibility {
-  constructor(model: MastraLanguageModel) {
+export class DeepSeekSchemaCompatLayer extends SchemaCompatLayer {
+  constructor(model: LanguageModelV1) {
     super(model);
   }
 
@@ -14,7 +14,8 @@ export class MetaToolCompat extends ToolCompatibility {
   }
 
   shouldApply(): boolean {
-    return this.getModel().modelId.includes('meta');
+    // Deepseek R1 performs perfectly without this compat layer
+    return this.getModel().modelId.includes('deepseek') && !this.getModel().modelId.includes('r1');
   }
 
   processZodType<T extends z.AnyZodObject>(value: z.ZodTypeAny): ShapeValue<T> {
@@ -29,9 +30,6 @@ export class MetaToolCompat extends ToolCompatibility {
       }
       case 'ZodUnion': {
         return this.defaultZodUnionHandler(value);
-      }
-      case 'ZodNumber': {
-        return this.defaultZodNumberHandler(value);
       }
       case 'ZodString': {
         return this.defaultZodStringHandler(value);

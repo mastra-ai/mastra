@@ -6,6 +6,46 @@ import type { MastraStorage } from '@mastra/core/storage';
 import { TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS } from '@mastra/core/storage';
 import { MastraMessageV1 } from '@mastra/core';
 
+export const createSampleTraceForDB = (
+  name: string,
+  scope?: string,
+  attributes?: Record<string, string>,
+  createdAt?: Date,
+) => ({
+  id: `trace-${randomUUID()}`,
+  parentSpanId: `span-${randomUUID()}`,
+  traceId: `trace-${randomUUID()}`,
+  name,
+  scope,
+  kind: 0,
+  status: JSON.stringify({ code: 'success' }),
+  events: JSON.stringify([{ name: 'start', timestamp: Date.now() }]),
+  links: JSON.stringify([]),
+  attributes: attributes ? attributes : undefined,
+  startTime: (createdAt || new Date()).getTime(),
+  endTime: (createdAt || new Date()).getTime(),
+  other: JSON.stringify({ custom: 'data' }),
+  createdAt: createdAt || new Date(),
+});
+
+export const createSampleEval = (agentName: string, isTest = false, createdAt?: Date) => {
+  const testInfo = isTest ? { testPath: 'test/path.ts', testName: 'Test Name' } : undefined;
+
+  return {
+    agent_name: agentName,
+    input: 'Sample input',
+    output: 'Sample output',
+    result: { score: 0.8 } as MetricResult,
+    metric_name: 'sample-metric',
+    instructions: 'Sample instructions',
+    test_info: testInfo,
+    global_run_id: `global-${randomUUID()}`,
+    run_id: `run-${randomUUID()}`,
+    created_at: createdAt || new Date().toISOString(),
+    createdAt: createdAt || new Date(),
+  };
+};
+
 export function createTestSuite(storage: MastraStorage) {
   describe(storage.constructor.name, () => {
     // Sample test data factory functions to ensure unique records

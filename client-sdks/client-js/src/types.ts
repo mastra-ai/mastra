@@ -8,7 +8,7 @@ import type {
   LegacyWorkflowRuns,
 } from '@mastra/core';
 import type { AgentGenerateOptions, AgentStreamOptions, ToolsInput } from '@mastra/core/agent';
-import type { BaseLogMessage } from '@mastra/core/logger';
+import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 
 import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
@@ -217,14 +217,32 @@ export interface GetMemoryThreadMessagesResponse {
 
 export interface GetLogsParams {
   transportId: string;
+  fromDate?: Date;
+  toDate?: Date;
+  logLevel?: LogLevel;
+  filters?: Record<string, string>;
+  page?: number;
+  perPage?: number;
 }
 
 export interface GetLogParams {
   runId: string;
   transportId: string;
+  fromDate?: Date;
+  toDate?: Date;
+  logLevel?: LogLevel;
+  filters?: Record<string, string>;
+  page?: number;
+  perPage?: number;
 }
 
-export type GetLogsResponse = BaseLogMessage[];
+export type GetLogsResponse = {
+  logs: BaseLogMessage[];
+  total: number;
+  page: number;
+  perPage: number;
+  hasMore: boolean;
+};
 
 export type RequestFunction = (path: string, options?: RequestOptions) => Promise<any>;
 

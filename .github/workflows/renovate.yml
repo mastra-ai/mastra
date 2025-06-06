@@ -13,6 +13,13 @@ on:
           - enabled
           - disabled
           - reset
+      logLevel:
+        description: 'Set logLevel'
+        type: choice
+        default: INFO
+        options:
+          - INFO
+          - DEBUG
   schedule:
     # The "*" (#42, asterisk) character has special semantics in YAML, so this
     # string has to be quoted.
@@ -37,6 +44,10 @@ jobs:
         with:
           app-id: ${{ vars.DANE_APP_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          permission-pull-requests: write
+          permission-issues: write
+          permission-security-events: write
+          permission-statuses: write
 
       - name: Get GitHub App User ID
         id: get-user-id
@@ -105,6 +116,7 @@ jobs:
           docker-user: '${{ steps.id.outputs.user }}:${{ steps.id.outputs.group }}'
           token: ${{ steps.app-token.outputs.token  }}
         env:
+          LOG_LEVEL: ${{ github.event.inputs.logLevel }}
           RENOVATE_REPOSITORIES: ${{ github.repository }}
           # This enables the cache -- if this is set, it's not necessary to add it to renovate.json.
           RENOVATE_REPOSITORY_CACHE: ${{ github.event.inputs.repoCache || 'enabled' }}
