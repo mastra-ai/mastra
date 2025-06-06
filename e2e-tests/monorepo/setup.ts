@@ -21,12 +21,18 @@ export default async function setup(project: TestProject) {
   console.log('verdaccioPath', verdaccioPath);
   await copyFile(join(__dirname, '../_local-registry-setup/verdaccio.yaml'), join(registryLocation, 'verdaccio.yaml'));
   const registry = await startRegistry(verdaccioPath, port, registryLocation);
+  console.log('registry', registry.toString());
 
   const tag = 'monorepo-test';
   project.provide('tag', tag);
   project.provide('registry', registry.toString());
 
-  await publishPackages(['--filter="mastra^..."', '--filter="mastra"'], tag, rootDir, registry);
+  await publishPackages(['--filter=@matra/core', '--filter="mastra^..."', '--filter="mastra"'], tag, rootDir, registry);
+
+  process.once('SIGINT', () => {
+    console.log('SIGINT');
+    registry.kill();
+  });
 
   return () => {
     teardown();
