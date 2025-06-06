@@ -24,8 +24,8 @@
     "zod": "^3.24.3"
   },
   "devDependencies": {
-    "@types/node": "^20.17.27",
-    "dotenv": "^16.4.7",
+    "@types/node": "^20.17.57",
+    "dotenv": "^16.5.0",
     "mastra": "latest",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2"

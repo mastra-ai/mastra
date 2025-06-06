@@ -49,7 +49,7 @@
     "@jest/globals": "^29.7.0",
     "@libsql/client": "^0.14.0",
     "@types/jest": "^29.5.14",
-    "@types/node": "^20.17.30",
+    "@types/node": "^20.17.57",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
     "eslint": "^8.57.1",

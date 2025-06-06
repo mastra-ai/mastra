@@ -6,7 +6,7 @@ settings:
 
 overrides:
   typescript: ^5.8.3
-  '@types/node': ^20.17.32
+  '@types/node': ^20.17.57
 
 importers:
 
@@ -20,7 +20,7 @@ importers:
         specifier: ^2.29.3
         version: 2.29.4
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       husky:
         specifier: ^9.1.7
@@ -57,13 +57,13 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -88,13 +88,13 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -116,13 +116,13 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -144,13 +144,13 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -175,13 +175,13 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -230,10 +230,10 @@ importers:
         specifier: ^7.0.15
         version: 7.0.15
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -273,16 +273,16 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -319,16 +319,16 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -356,16 +356,16 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -456,7 +456,7 @@ importers:
         version: 3.25.55
     devDependencies:
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       '@types/pdf-parse':
         specifier: ^1.1.4
@@ -493,7 +493,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@rollup/plugin-image':
         specifier: ^3.0.3
@@ -508,7 +508,7 @@ importers:
         specifier: ^4.17.16
         version: 4.17.17
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       dts-cli:
         specifier: ^2.0.5
@@ -529,7 +529,7 @@ importers:
         specifier: ^29.2.6
         version: 29.3.4(@babel/core@7.27.4)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.27.4))(jest@29.7.0(@types/node@20.19.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.11.10(@swc/helpers@0.5.15))(@types/node@20.19.0)(typescript@5.8.3)))(typescript@5.8.3)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -557,7 +557,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@rollup/plugin-image':
         specifier: ^3.0.3
@@ -572,7 +572,7 @@ importers:
         specifier: ^4.17.16
         version: 4.17.17
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       cross-env:
         specifier: ^7.0.3
@@ -596,7 +596,7 @@ importers:
         specifier: ^29.2.6
         version: 29.3.4(@babel/core@7.27.4)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.27.4))(jest@29.7.0(@types/node@20.19.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.11.10(@swc/helpers@0.5.15))(@types/node@20.19.0)(typescript@5.8.3)))(typescript@5.8.3)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -615,16 +615,16 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -658,7 +658,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@rollup/plugin-image':
         specifier: ^3.0.3
@@ -673,7 +673,7 @@ importers:
         specifier: ^4.17.16
         version: 4.17.17
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       dts-cli:
         specifier: ^2.0.5
@@ -691,7 +691,7 @@ importers:
         specifier: ^29.2.6
         version: 29.3.4(@babel/core@7.27.4)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.27.4))(jest@29.7.0(@types/node@20.19.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.11.10(@swc/helpers@0.5.15))(@types/node@20.19.0)(typescript@5.8.3)))(typescript@5.8.3)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -752,10 +752,10 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       eslint:
         specifier: ^9.28.0
@@ -764,7 +764,7 @@ importers:
         specifier: ^2.2.2
         version: 2.2.2
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -792,13 +792,13 @@ importers:
         specifier: ^9.0.9
         version: 9.0.9
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -901,13 +901,13 @@ importers:
         specifier: workspace:*
         version: link:../playground-ui
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/fs-extra':
         specifier: ^11.0.4
         version: 11.0.4
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       '@types/prompt':
         specifier: ^1.1.9
@@ -931,10 +931,10 @@ importers:
         specifier: ^7.0.2
         version: 7.0.2
       rollup:
-        specifier: ^4.40.1
+        specifier: ^4.41.1
         version: 4.41.1
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       type-fest:
         specifier: ^4.37.0
@@ -1103,7 +1103,7 @@ importers:
         version: 10.0.4(react@19.1.0)
     devDependencies:
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/react':
         specifier: ^19.0.10
@@ -1158,16 +1158,16 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -1279,7 +1279,7 @@ importers:
         specifier: workspace:*
         version: link:../_config
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@openrouter/ai-sdk-provider':
         specifier: ^0.4.5
@@ -1297,7 +1297,7 @@ importers:
         specifier: ^4.17.12
         version: 4.17.12
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       '@types/pino':
         specifier: ^7.0.5
@@ -1312,13 +1312,13 @@ importers:
         specifier: ^14.1.0
         version: 14.1.0
       rollup:
-        specifier: ^4.40.1
+        specifier: ^4.41.1
         version: 4.41.1
       size-limit:
         specifier: ^11.2.0
         version: 11.2.0
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -1358,7 +1358,7 @@ importers:
         specifier: workspace:*
         version: link:../_config
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@rollup/plugin-commonjs':
         specifier: ^28.0.3
@@ -1373,7 +1373,7 @@ importers:
         specifier: ^11.0.4
         version: 11.0.4
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       esbuild:
         specifier: ^0.25.0
@@ -1385,7 +1385,7 @@ importers:
         specifier: workspace:^
         version: link:../cli
       rollup:
-        specifier: ^4.40.1
+        specifier: ^4.41.1
         version: 4.41.1
       rollup-plugin-esbuild:
         specifier: ^6.2.1
@@ -1488,7 +1488,7 @@ importers:
         specifier: workspace:^
         version: link:../mcp
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/babel__core':
         specifier: ^7.20.5
@@ -1500,7 +1500,7 @@ importers:
         specifier: ^11.0.4
         version: 11.0.4
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       eslint:
         specifier: ^9.28.0
@@ -1518,7 +1518,7 @@ importers:
         specifier: ^2.2.2
         version: 2.2.2
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       type-fest:
         specifier: ^4.37.0
@@ -1564,7 +1564,7 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/difflib':
         specifier: ^0.2.7
@@ -1582,13 +1582,13 @@ importers:
         specifier: ^4.2.2
         version: 4.3.16(react@19.1.0)(zod@3.25.55)
       dotenv:
-        specifier: ^16.4.7
+        specifier: ^16.5.0
         version: 16.5.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -1610,10 +1610,10 @@ importers:
         specifier: workspace:*
         version: link:../_config
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       tsup:
-        specifier: ^8.0.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -1638,16 +1638,16 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -1699,10 +1699,10 @@ importers:
         specifier: ^1.24.0
         version: 1.25.5
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       ai:
         specifier: 4.3.16
@@ -1714,7 +1714,7 @@ importers:
         specifier: 0.0.6
         version: 0.0.6(@modelcontextprotocol/sdk@1.12.1)(hono@4.7.11)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       tsx:
         specifier: ^4.19.3
@@ -1775,7 +1775,7 @@ importers:
         specifier: ^21.1.7
         version: 21.1.7
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       '@types/turndown':
         specifier: ^5.0.5
@@ -1793,7 +1793,7 @@ importers:
         specifier: ^4.7.4
         version: 4.7.11
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       tsx:
         specifier: ^4.19.3
@@ -1833,7 +1833,7 @@ importers:
         specifier: workspace:^
         version: link:../mcp
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       '@wong2/mcp-cli':
         specifier: ^1.6.0
@@ -1848,7 +1848,7 @@ importers:
         specifier: ^4.7.4
         version: 4.7.11
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       tsx:
         specifier: ^4.19.3
@@ -1888,7 +1888,7 @@ importers:
         specifier: ^16.2.0
         version: 16.3.0(@testing-library/dom@10.4.0)(@types/react-dom@19.1.6(@types/react@19.1.6))(@types/react@19.1.6)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       mastra:
         specifier: workspace:*
@@ -1940,10 +1940,10 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       '@types/pg':
         specifier: ^8.11.11
@@ -1952,7 +1952,7 @@ importers:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -2004,7 +2004,7 @@ importers:
         specifier: ^16.2.0
         version: 16.3.0(@testing-library/dom@10.4.0)(@types/react-dom@19.1.6(@types/react@19.1.6))(@types/react@19.1.6)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       ai:
         specifier: ^4.2.2
@@ -2218,7 +2218,7 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       '@types/react':
         specifier: ^19.0.10
@@ -2297,25 +2297,25 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/big.js':
         specifier: ^6.2.2
         version: 6.2.2
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       ai:
         specifier: ^4.3.16
         version: 4.3.16(react@19.1.0)(zod@3.25.55)
       dotenv:
-        specifier: ^16.4.7
+        specifier: ^16.5.0
         version: 16.5.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -2343,7 +2343,7 @@ importers:
         specifier: ^7.0.15
         version: 7.0.15
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       ai:
         specifier: 4.3.16
@@ -2352,7 +2352,7 @@ importers:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -2376,10 +2376,10 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       eslint:
         specifier: ^9.28.0
@@ -2388,7 +2388,7 @@ importers:
         specifier: ^2.2.2
         version: 2.2.2
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -2426,16 +2426,16 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -2457,16 +2457,16 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -2488,16 +2488,16 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -2522,13 +2522,13 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       dotenv:
-        specifier: ^16.4.7
+        specifier: ^16.5.0
         version: 16.5.0
       eslint:
         specifier: ^9.28.0
@@ -2537,7 +2537,7 @@ importers:
         specifier: ^4.20250525.0
         version: 4.20250525.1(bufferutil@4.0.9)(utf-8-validate@6.0.5)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -2565,13 +2565,13 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       dotenv:
-        specifier: ^16.4.7
+        specifier: ^16.5.0
         version: 16.5.0
       eslint:
         specifier: ^9.28.0
@@ -2580,7 +2580,7 @@ importers:
         specifier: ^4.20250410.1
         version: 4.20250525.1(bufferutil@4.0.9)(utf-8-validate@6.0.5)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -2602,10 +2602,10 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.52.1
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       '@vitest/coverage-v8':
         specifier: 3.0.9
@@ -2620,7 +2620,7 @@ importers:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -2648,10 +2648,10 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.52.1
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       '@vitest/coverage-v8':
         specifier: 3.0.9
@@ -2666,7 +2666,7 @@ importers:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -2691,16 +2691,16 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -2731,16 +2731,16 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -2762,16 +2762,16 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.52.1
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -2802,10 +2802,10 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       '@types/pg':
         specifier: ^8.15.4
@@ -2814,7 +2814,7 @@ importers:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -2836,19 +2836,19 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       dotenv:
-        specifier: ^16.4.7
+        specifier: ^16.5.0
         version: 16.5.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -2870,16 +2870,16 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -2901,19 +2901,19 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       dotenv:
-        specifier: ^16.4.7
+        specifier: ^16.5.0
         version: 16.5.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -2938,19 +2938,19 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       dotenv:
-        specifier: ^16.4.7
+        specifier: ^16.5.0
         version: 16.5.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -2972,19 +2972,19 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       dotenv:
-        specifier: ^16.4.7
+        specifier: ^16.5.0
         version: 16.5.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -3006,16 +3006,16 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -3043,16 +3043,16 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -3077,16 +3077,16 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -3111,16 +3111,16 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -3148,13 +3148,13 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -3179,16 +3179,16 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -3213,16 +3213,16 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -3250,10 +3250,10 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       '@types/ws':
         specifier: ^8.18.1
@@ -3262,7 +3262,7 @@ importers:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -3287,16 +3287,16 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -3318,16 +3318,16 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -3352,16 +3352,16 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.52.5
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       eslint:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -3401,10 +3401,10 @@ importers:
         specifier: workspace:*
         version: link:../../packages/deployer
       '@microsoft/api-extractor':
-        specifier: ^7.52.2
+        specifier: ^7.52.8
         version: 7.52.8(@types/node@20.19.0)
       '@types/node':
-        specifier: ^20.17.32
+        specifier: ^20.17.57
         version: 20.19.0
       ai:
         specifier: ^4.3.15
@@ -3422,7 +3422,7 @@ importers:
         specifier: ^4.7.7
         version: 4.7.11
       tsup:
-        specifier: ^8.4.0
+        specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       typescript:
         specifier: ^5.8.3
@@ -6552,7 +6552,7 @@ packages:
     resolution: {integrity: sha512-d/QAsnwuHX2OPolxvYcgSj7A9DO9H6gVOy2DvBTx+P2LH2iRTo/RSGV3iwCzW024nP9hw98KIuDmdyhZQj1UQg==}
     engines: {node: '>=18'}
     peerDependencies:
-      '@types/node': ^20.17.32
+      '@types/node': ^20.17.57
     peerDependenciesMeta:
       '@types/node':
         optional: true
@@ -6561,7 +6561,7 @@ packages:
     resolution: {integrity: sha512-dpq+ielV9/bqgXRUbNH//KsY6WEw9DrGPmipkpmgC1Y46cwuBTNx7PXFWTjc3MQ+urcc0QxoVHcMI0FW4Ok0hg==}
     engines: {node: '>=18'}
     peerDependencies:
-      '@types/node': ^20.17.32
+      '@types/node': ^20.17.57
     peerDependenciesMeta:
       '@types/node':
         optional: true
@@ -6570,7 +6570,7 @@ packages:
     resolution: {integrity: sha512-1viSxebkYN2nJULlzCxES6G9/stgHSepZ9LqqfdIGPHj5OHhiBUXVS0a6R0bEC2A+VL4D9w6QB66ebCr6HGllA==}
     engines: {node: '>=18'}
     peerDependencies:
-      '@types/node': ^20.17.32
+      '@types/node': ^20.17.57
     peerDependenciesMeta:
       '@types/node':
         optional: true
@@ -6579,7 +6579,7 @@ packages:
     resolution: {integrity: sha512-WbicD9SUQt/K8O5Vyk9iC2ojq5RHoCLK6itpp2fHsWe44VxxcA9z3GTWlvjSTGmMQpZr+lbVmrxdHcumJoLbMA==}
     engines: {node: '>=18'}
     peerDependencies:
-      '@types/node': ^20.17.32
+      '@types/node': ^20.17.57
     peerDependenciesMeta:
       '@types/node':
         optional: true
@@ -6588,7 +6588,7 @@ packages:
     resolution: {integrity: sha512-4Y+pbr/U9Qcvf+N/goHzPEXiHH8680lM3Dr3Y9h9FFw4gHS+zVpbj8LfbKWIb/jayIB4aSO4pWiBTrBYWkvi5A==}
     engines: {node: '>=18'}
     peerDependencies:
-      '@types/node': ^20.17.32
+      '@types/node': ^20.17.57
     peerDependenciesMeta:
       '@types/node':
         optional: true
@@ -6601,7 +6601,7 @@ packages:
     resolution: {integrity: sha512-xJ6PFZpDjC+tC1P8ImGprgcsrzQRsUh9aH3IZixm1lAZFK49UGHxM3ltFfuInN2kPYNfyoPRh+tU4ftsjPLKqQ==}
     engines: {node: '>=18'}
     peerDependencies:
-      '@types/node': ^20.17.32
+      '@types/node': ^20.17.57
     peerDependenciesMeta:
       '@types/node':
         optional: true
@@ -6610,7 +6610,7 @@ packages:
     resolution: {integrity: sha512-xWg+iYfqdhRiM55MvqiTCleHzszpoigUpN5+t1OMcRkJrUrw7va3AzXaxvS+Ak7Gny0j2mFSTv2JJj8sMtbV2g==}
     engines: {node: '>=18'}
     peerDependencies:
-      '@types/node': ^20.17.32
+      '@types/node': ^20.17.57
     peerDependenciesMeta:
       '@types/node':
         optional: true
@@ -6619,7 +6619,7 @@ packages:
     resolution: {integrity: sha512-75CT2p43DGEnfGTaqFpbDC2p2EEMrq0S+IRrf9iJvYreMy5mAWj087+mdKyLHapUEPLjN10mNvABpGbk8Wdraw==}
     engines: {node: '>=18'}
     peerDependencies:
-      '@types/node': ^20.17.32
+      '@types/node': ^20.17.57
     peerDependenciesMeta:
       '@types/node':
         optional: true
@@ -6628,7 +6628,7 @@ packages:
     resolution: {integrity: sha512-8YL0WiV7J86hVAxrh3fE5mDCzcTDe1670unmJRz6ArDgN+DBK1a0+rbnNWp4DUB5rPMwqD5ZP6YHl9KK1mbZRg==}
     engines: {node: '>=18'}
     peerDependencies:
-      '@types/node': ^20.17.32
+      '@types/node': ^20.17.57
     peerDependenciesMeta:
       '@types/node':
         optional: true
@@ -6637,7 +6637,7 @@ packages:
     resolution: {integrity: sha512-7XrV//6kwYumNDSsvJIPeAqa8+p7GJh7H5kRuxirct2cgOcSWwwNGoXDRgpNFbY/MG2vQ4ccIWCi8+IXXyFMZA==}
     engines: {node: '>=18'}
     peerDependencies:
-      '@types/node': ^20.17.32
+      '@types/node': ^20.17.57
     peerDependenciesMeta:
       '@types/node':
         optional: true
@@ -6646,7 +6646,7 @@ packages:
     resolution: {integrity: sha512-YBMwPxYBrADqyvP4nNItpwkBnGGglAvCLVW8u4pRmmvOsHUtCAUIMbUrLX5B3tFL1/WsLGdQ2HNzkqswMs5Uaw==}
     engines: {node: '>=18'}
     peerDependencies:
-      '@types/node': ^20.17.32
+      '@types/node': ^20.17.57
     peerDependenciesMeta:
       '@types/node':
         optional: true
@@ -6655,7 +6655,7 @@ packages:
     resolution: {integrity: sha512-OAGhXU0Cvh0PhLz9xTF/kx6g6x+sP+PcyTiLvCrewI99P3BBeexD+VbuwkNDvqGkk3y2h5ZiWLeRP7BFlhkUDg==}
     engines: {node: '>=18'}
     peerDependencies:
-      '@types/node': ^20.17.32
+      '@types/node': ^20.17.57
     peerDependenciesMeta:
       '@types/node':
         optional: true
@@ -6664,7 +6664,7 @@ packages:
     resolution: {integrity: sha512-PfunHQcjwnju84L+ycmcMKB/pTPIngjUJvfnRhKY6FKPuYXlM4aQCb/nIdTFR6BEhMjFvngzvng/vBAJMZpLSA==}
     engines: {node: '>=18'}
     peerDependencies:
-      '@types/node': ^20.17.32
+      '@types/node': ^20.17.57
     peerDependenciesMeta:
       '@types/node':
         optional: true
@@ -9601,7 +9601,7 @@ packages:
   '@rushstack/node-core-library@4.0.2':
     resolution: {integrity: sha512-hyES82QVpkfQMeBMteQUnrhASL/KHPhd7iJ8euduwNJG4mu2GSOKybf0rOEjOm1Wz7CwJEUm9y0yD7jg2C1bfg==}
     peerDependencies:
-      '@types/node': ^20.17.32
+      '@types/node': ^20.17.57
     peerDependenciesMeta:
       '@types/node':
         optional: true
@@ -9609,7 +9609,7 @@ packages:
   '@rushstack/node-core-library@5.13.1':
     resolution: {integrity: sha512-5yXhzPFGEkVc9Fu92wsNJ9jlvdwz4RNb2bMso+/+TH0nMm1jDDDsOIf4l8GAkPxGuwPw5DH24RliWVfSPhlW/Q==}
     peerDependencies:
-      '@types/node': ^20.17.32
+      '@types/node': ^20.17.57
     peerDependenciesMeta:
       '@types/node':
         optional: true
@@ -9623,7 +9623,7 @@ packages:
   '@rushstack/terminal@0.10.0':
     resolution: {integrity: sha512-UbELbXnUdc7EKwfH2sb8ChqNgapUOdqcCIdQP4NGxBpTZV2sQyeekuK3zmfQSa/MN+/7b4kBogl2wq0vpkpYGw==}
     peerDependencies:
-      '@types/node': ^20.17.32
+      '@types/node': ^20.17.57
     peerDependenciesMeta:
       '@types/node':
         optional: true
@@ -9631,7 +9631,7 @@ packages:
   '@rushstack/terminal@0.15.3':
     resolution: {integrity: sha512-DGJ0B2Vm69468kZCJkPj3AH5nN+nR9SPmC0rFHtzsS4lBQ7/dgOwtwVxYP7W9JPDMuRBkJ4KHmWKr036eJsj9g==}
     peerDependencies:
-      '@types/node': ^20.17.32
+      '@types/node': ^20.17.57
     peerDependenciesMeta:
       '@types/node':
         optional: true
@@ -15187,7 +15187,7 @@ packages:
     resolution: {integrity: sha512-uXbpfeQ7R6TZBqI3/TxCU4q4ttk3u0PJeC+E0zbfSoSjq6bJ7buBPxzQPL0ifrkY4DNu4JUdk0ImlBUYi840eQ==}
     engines: {node: ^14.15.0 || ^16.10.0 || >=18.0.0}
     peerDependencies:
-      '@types/node': ^20.17.32
+      '@types/node': ^20.17.57
       ts-node: '>=9.0.0'
     peerDependenciesMeta:
       '@types/node':
@@ -19233,6 +19233,30 @@ packages:
   ts-interface-checker@0.1.13:
     resolution: {integrity: sha512-Y/arvbn+rrz3JCKl9C4kVNfTfSm2/mEp5FSz5EsZSANGPSlQrpRI5M4PKF+mJnE52jOO90PnPSc3Ur3bTQw0gA==}
 
+  ts-jest@29.2.6:
+    resolution: {integrity: sha512-yTNZVZqc8lSixm+QGVFcPe6+yj7+TWZwIesuOWvfcn4B9bz5x4NDzVCQQjOs7Hfouu36aEqfEbo9Qpo+gq8dDg==}
+    engines: {node: ^14.15.0 || ^16.10.0 || ^18.0.0 || >=20.0.0}
+    hasBin: true
+    peerDependencies:
+      '@babel/core': '>=7.0.0-beta.0 <8'
+      '@jest/transform': ^29.0.0
+      '@jest/types': ^29.0.0
+      babel-jest: ^29.0.0
+      esbuild: '*'
+      jest: ^29.0.0
+      typescript: ^5.8.3
+    peerDependenciesMeta:
+      '@babel/core':
+        optional: true
+      '@jest/transform':
+        optional: true
+      '@jest/types':
+        optional: true
+      babel-jest:
+        optional: true
+      esbuild:
+        optional: true
+
   ts-jest@29.3.4:
     resolution: {integrity: sha512-Iqbrm8IXOmV+ggWHOTEbjwyCf2xZlUMv5npExksXohL+tk8va4Fjhb+X2+Rt9NBmgO7bJ8WpnMLOwih/DnMlFA==}
     engines: {node: ^14.15.0 || ^16.10.0 || ^18.0.0 || >=20.0.0}
@@ -19266,7 +19290,7 @@ packages:
     peerDependencies:
       '@swc/core': '>=1.2.50'
       '@swc/wasm': '>=1.2.50'
-      '@types/node': ^20.17.32
+      '@types/node': ^20.17.57
       typescript: ^5.8.3
     peerDependenciesMeta:
       '@swc/core':
@@ -19280,7 +19304,7 @@ packages:
     peerDependencies:
       '@swc/core': '>=1.2.50'
       '@swc/wasm': '>=1.2.50'
-      '@types/node': ^20.17.32
+      '@types/node': ^20.17.57
       typescript: ^5.8.3
     peerDependenciesMeta:
       '@swc/core':
@@ -19871,7 +19895,7 @@ packages:
     engines: {node: ^18.0.0 || >=20.0.0}
     hasBin: true
     peerDependencies:
-      '@types/node': ^20.17.32
+      '@types/node': ^20.17.57
       less: '*'
       lightningcss: ^1.21.0
       sass: '*'
@@ -19902,7 +19926,7 @@ packages:
     engines: {node: ^18.0.0 || ^20.0.0 || >=22.0.0}
     hasBin: true
     peerDependencies:
-      '@types/node': ^20.17.32
+      '@types/node': ^20.17.57
       jiti: '>=1.21.0'
       less: '*'
       lightningcss: ^1.21.0
@@ -19943,7 +19967,7 @@ packages:
     hasBin: true
     peerDependencies:
       '@edge-runtime/vm': '*'
-      '@types/node': ^20.17.32
+      '@types/node': ^20.17.57
       '@vitest/browser': 1.6.1
       '@vitest/ui': 1.6.1
       happy-dom: '*'
@@ -19968,7 +19992,7 @@ packages:
     hasBin: true
     peerDependencies:
       '@edge-runtime/vm': '*'
-      '@types/node': ^20.17.32
+      '@types/node': ^20.17.57
       '@vitest/browser': 2.1.9
       '@vitest/ui': 2.1.9
       happy-dom: '*'
@@ -19994,7 +20018,7 @@ packages:
     peerDependencies:
       '@edge-runtime/vm': '*'
       '@types/debug': ^4.1.12
-      '@types/node': ^20.17.32
+      '@types/node': ^20.17.57
       '@vitest/browser': 3.2.2
       '@vitest/ui': 3.2.2
       happy-dom: '*'
@@ -31966,7 +31990,7 @@ snapshots:
       shelljs: 0.8.5
       sort-package-json: 1.57.0
       tiny-glob: 0.2.9
-      ts-jest: 29.3.4(@babel/core@7.27.4)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.27.4))(jest@29.7.0(@types/node@20.19.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.11.10(@swc/helpers@0.5.15))(@types/node@20.19.0)(typescript@5.8.3)))(typescript@5.8.3)
+      ts-jest: 29.2.6(@babel/core@7.27.4)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.27.4))(jest@29.7.0(@types/node@20.19.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.11.10(@swc/helpers@0.5.15))(@types/node@20.19.0)(typescript@5.8.3)))(typescript@5.8.3)
       ts-node: 10.9.2(@swc/core@1.11.10(@swc/helpers@0.5.15))(@types/node@20.19.0)(typescript@5.8.3)
       tslib: 2.8.1
       type-fest: 2.19.0
@@ -39856,6 +39880,25 @@ snapshots:
       typescript: 5.8.3
 
   ts-interface-checker@0.1.13: {}
+
+  ts-jest@29.2.6(@babel/core@7.27.4)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.27.4))(jest@29.7.0(@types/node@20.19.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.11.10(@swc/helpers@0.5.15))(@types/node@20.19.0)(typescript@5.8.3)))(typescript@5.8.3):
+    dependencies:
+      bs-logger: 0.2.6
+      ejs: 3.1.10
+      fast-json-stable-stringify: 2.1.0
+      jest: 29.7.0(@types/node@20.19.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.11.10(@swc/helpers@0.5.15))(@types/node@20.19.0)(typescript@5.8.3))
+      jest-util: 29.7.0
+      json5: 2.2.3
+      lodash.memoize: 4.1.2
+      make-error: 1.3.6
+      semver: 7.7.2
+      typescript: 5.8.3
+      yargs-parser: 21.1.1
+    optionalDependencies:
+      '@babel/core': 7.27.4
+      '@jest/transform': 29.7.0
+      '@jest/types': 29.6.3
+      babel-jest: 29.7.0(@babel/core@7.27.4)
 
   ts-jest@29.3.4(@babel/core@7.27.4)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.27.4))(jest@29.7.0(@types/node@20.19.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.11.10(@swc/helpers@0.5.15))(@types/node@20.19.0)(typescript@5.8.3)))(typescript@5.8.3):
     dependencies:

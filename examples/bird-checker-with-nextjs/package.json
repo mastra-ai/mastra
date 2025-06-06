@@ -33,7 +33,7 @@
   },
   "devDependencies": {
     "@libsql/client": "^0.15.4",
-    "@types/node": "^20.17.24",
+    "@types/node": "^20.17.57",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
     "eslint": "^8.57.1",

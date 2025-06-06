@@ -32,13 +32,13 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@microsoft/api-extractor": "^7.52.1",
-    "@types/node": "^20.17.27",
+    "@microsoft/api-extractor": "^7.52.8",
+    "@types/node": "^20.17.57",
     "@vitest/coverage-v8": "3.0.9",
     "@vitest/ui": "3.0.9",
     "axios": "^1.8.4",
     "eslint": "^9.28.0",
-    "tsup": "^8.4.0",
+    "tsup": "^8.5.0",
     "typescript": "^5.8.2",
     "vitest": "^3.0.9",
     "@mastra/core": "workspace:*"

@@ -34,7 +34,7 @@
     "@mastra/core": "workspace:*",
     "@types/node": "^22.13.1",
     "eslint": "^9.28.0",
-    "tsup": "^8.4.0",
+    "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^2.1.9"
   }
