@@ -15,7 +15,7 @@
     "zod": "^3.24.3"
   },
   "devDependencies": {
-    "@testing-library/react": "^16.2.0",
+    "@testing-library/react": "^16.3.0",
     "@types/node": "^20.17.57",
     "mastra": "workspace:*",
     "typescript": "^5.8.2",
