@@ -30,7 +30,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@opensearch-project/opensearch": "^3.4.0"
+    "@opensearch-project/opensearch": "^3.5.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
