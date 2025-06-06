@@ -14,10 +14,10 @@ export const useLogsByRunId = (runId: string) => {
     queryFn: async ({ pageParam }) => {
       const res = await client.getLogForRun({ transportId, runId, page: pageParam, perPage: 50 });
       console.log('REES', res);
-      return res.logs;
+      return res;
     },
     getNextPageParam: (lastPage, _, lastPageParam) => {
-      if (lastPage.length === 0) {
+      if (lastPage?.length === 0) {
         return undefined;
       }
       return lastPageParam + 1;
@@ -25,11 +25,7 @@ export const useLogsByRunId = (runId: string) => {
     initialPageParam: 0,
     enabled: Boolean(transportId),
     refetchInterval: 3000,
-    select: data => data.pages.flat(),
-    initialData: {
-      pages: [],
-      pageParams: [0],
-    },
+    select: data => data.pages.flatMap(page => page),
   });
 
   return { ...data, isLoading: isLoading || isLoadingTransports };

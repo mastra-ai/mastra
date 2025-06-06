@@ -7,8 +7,6 @@ export function WorkflowLogs({ runId }: { runId: string }) {
 
   if (isLoading) return null;
 
-  console.log(logs);
-
   return (
     <div className="h-full px-4 pb-4 text-xs w-full overflow-y-auto">
       <div className="space-y-4 h-full overflow-y-auto">
