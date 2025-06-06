@@ -12,10 +12,10 @@ describe('MastraError (Base Class)', () => {
     fileName: 'test.ts',
     lineNumber: 42,
   };
-  const sampleErrorDefinition: IErrorDefinition<ErrorDomain, ErrorCategory> = {
+  const sampleErrorDefinition: IErrorDefinition<`${ErrorDomain}`, `${ErrorCategory}`> = {
     id: 'BASE_TEST_001',
-    domain: ErrorDomain.AGENT,
-    category: ErrorCategory.UNKNOWN,
+    domain: 'AGENT',
+    category: 'UNKNOWN',
     details: sampleContext,
   };
 
@@ -26,8 +26,8 @@ describe('MastraError (Base Class)', () => {
     expect(error.id).toBe('BASE_TEST_001');
     // Since there's no text field in the definition, message will be empty
     expect(error.message).toBe('');
-    expect(error.domain).toBe(ErrorDomain.AGENT);
-    expect(error.category).toBe(ErrorCategory.UNKNOWN);
+    expect(error.domain).toBe('AGENT');
+    expect(error.category).toBe('UNKNOWN');
   });
 
   it('should use error message from provided cause', () => {
