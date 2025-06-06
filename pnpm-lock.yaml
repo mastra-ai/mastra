@@ -2860,7 +2860,7 @@ importers:
   stores/qdrant:
     dependencies:
       '@qdrant/js-client-rest':
-        specifier: ^1.13.0
+        specifier: ^1.14.1
         version: 1.14.1(typescript@5.8.3)
     devDependencies:
       '@internal/lint':
