@@ -149,7 +149,7 @@ export class CoreToolBuilder extends MastraBase {
           err,
         );
         logger.trackException(mastraError);
-        logger.error(error, { ...rest, error: err, args });
+        logger.error(error, { ...rest, error: mastraError, args });
         throw mastraError;
       }
     };
