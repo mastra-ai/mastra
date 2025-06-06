@@ -2447,7 +2447,7 @@ importers:
   stores/chroma:
     dependencies:
       chromadb:
-        specifier: ^2.2.0
+        specifier: ^2.4.6
         version: 2.4.6(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.25.55)
     devDependencies:
       '@internal/lint':
