@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  weaviate:
+    image: semitechnologies/weaviate:1.31.0
+    ports:
+      - '8080:8080' # http/1.1 (rest) port
+      - '50051:50051' # http/2 (grpc) port
+    volumes:
+      - weaviate_data:/var/lib
+    restart: always
+
+volumes:
+  weaviate_data:
+    driver: local
