@@ -1808,7 +1808,7 @@ importers:
   packages/mcp-registry-registry:
     dependencies:
       '@modelcontextprotocol/sdk':
-        specifier: ^1.9.0
+        specifier: ^1.12.1
         version: 1.12.1
       uuid:
         specifier: ^11.1.0
@@ -1821,7 +1821,7 @@ importers:
         version: 3.24.5(zod@3.25.55)
     devDependencies:
       '@hono/node-server':
-        specifier: ^1.13.8
+        specifier: ^1.14.3
         version: 1.14.3(hono@4.7.11)
       '@internal/lint':
         specifier: workspace:*
@@ -1836,7 +1836,7 @@ importers:
         specifier: ^20.17.57
         version: 20.19.0
       '@wong2/mcp-cli':
-        specifier: ^1.6.0
+        specifier: ^1.10.0
         version: 1.10.0
       cross-env:
         specifier: ^7.0.3
@@ -1845,13 +1845,13 @@ importers:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       hono:
-        specifier: ^4.7.4
+        specifier: ^4.7.11
         version: 4.7.11
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.15))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
       tsx:
-        specifier: ^4.19.3
+        specifier: ^4.19.4
         version: 4.19.4
       typescript:
         specifier: ^5.8.3
