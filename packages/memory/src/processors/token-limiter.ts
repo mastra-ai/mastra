@@ -26,8 +26,7 @@ export class TokenLimiter extends MemoryProcessor {
   // See: https://cookbook.openai.com/examples/how_to_count_tokens_with_tiktoken#6-counting-tokens-for-chat-completions-api-calls
   // Every message follows <|start|>{role/name}\n{content}<|end|>
   public TOKENS_PER_MESSAGE = 3.8; // tokens added for each message (start & end tokens)
-  public TOKENS_PER_TOOL = 2.2; // empirical adjustment for tool calls
-  public TOKENS_PER_CONVERSATION = 25; // fixed overhead for the conversation
+  public TOKENS_PER_CONVERSATION = 24; // fixed overhead for the conversation
 
   /**
    * Create a token limiter for messages.
@@ -107,24 +106,35 @@ export class TokenLimiter extends MemoryProcessor {
     }
 
     let tokenString = message.role;
+    let overhead = 0;
 
-    if (typeof message.content === 'string') {
+    if (typeof message.content === 'string' && message.content) {
       tokenString += message.content;
     } else if (Array.isArray(message.content)) {
       // Calculate tokens for each content part
       for (const part of message.content) {
-        tokenString += part.type;
         if (part.type === 'text') {
           tokenString += part.text;
-        } else if (part.type === 'tool-call') {
-          tokenString += part.toolName as any;
-          if (part.args) {
-            tokenString += typeof part.args === 'string' ? part.args : JSON.stringify(part.args);
+        } else if (part.type === 'tool-call' || part.type === `tool-result`) {
+          if (`args` in part && part.args && part.type === `tool-call`) {
+            tokenString += part.toolName as any;
+            if (typeof part.args === 'string') {
+              tokenString += part.args;
+            } else {
+              tokenString += JSON.stringify(part.args);
+              // minus some tokens for JSON
+              overhead -= 12;
+            }
           }
-        } else if (part.type === 'tool-result') {
           // Token cost for result if present
-          if (part.result !== undefined) {
-            tokenString += typeof part.result === 'string' ? part.result : JSON.stringify(part.result);
+          if (`result` in part && part.result !== undefined && part.type === `tool-result`) {
+            if (typeof part.result === 'string') {
+              tokenString += part.result;
+            } else {
+              tokenString += JSON.stringify(part.result);
+              // minus some tokens for JSON
+              overhead -= 12;
+            }
           }
         } else {
           tokenString += JSON.stringify(part);
@@ -132,22 +142,16 @@ export class TokenLimiter extends MemoryProcessor {
       }
     }
 
-    // Ensure we account for message formatting tokens
-    // See: https://cookbook.openai.com/examples/how_to_count_tokens_with_tiktoken#6-counting-tokens-for-chat-completions-api-calls
-    const messageOverhead = this.TOKENS_PER_MESSAGE;
-
-    // Count tool calls for additional overhead
-    let toolOverhead = 0;
-    if (Array.isArray(message.content)) {
-      for (const part of message.content) {
-        if (part.type === 'tool-call' || part.type === 'tool-result') {
-          toolOverhead += this.TOKENS_PER_TOOL;
-        }
-      }
+    if (
+      typeof message.content === `string` ||
+      // if the message included non-tool parts, add our message overhead
+      message.content.some(p => p.type !== `tool-call` && p.type !== `tool-result`)
+    ) {
+      // Ensure we account for message formatting tokens
+      // See: https://cookbook.openai.com/examples/how_to_count_tokens_with_tiktoken#6-counting-tokens-for-chat-completions-api-calls
+      overhead += this.TOKENS_PER_MESSAGE;
     }
 
-    const totalMessageOverhead = messageOverhead + toolOverhead;
-
-    return this.encoder.encode(tokenString).length + totalMessageOverhead;
+    return this.encoder.encode(tokenString).length + overhead;
   }
 }
