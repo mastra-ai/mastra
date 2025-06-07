@@ -25,16 +25,10 @@ const createMcpConfig = (editor: Editor) => {
   }
   return {
     mcpServers: {
-      mastra:
-        process.platform === `win32`
-          ? {
-              command: 'cmd',
-              args: ['/c', 'npx', ...args],
-            }
-          : {
-              command: 'npx',
-              args,
-            },
+      mastra: {
+        command: 'npx',
+        args,
+      },
     },
   };
 };
