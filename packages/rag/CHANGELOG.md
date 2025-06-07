@@ -1,5 +1,21 @@
 # @mastra/rag
 
+## 0.10.3-alpha.0
+
+### Patch Changes
+
+- 71999e9: dependencies updates:
+  - Updated dependency [`js-tiktoken@^1.0.20` ↗︎](https://www.npmjs.com/package/js-tiktoken/v/1.0.20) (from `^1.0.19`, in `dependencies`)
+  - Updated dependency [`node-html-better-parser@^1.4.11` ↗︎](https://www.npmjs.com/package/node-html-better-parser/v/1.4.11) (from `^1.4.7`, in `dependencies`)
+- Updated dependencies [d1ed912]
+- Updated dependencies [f1f1f1b]
+- Updated dependencies [f9816ae]
+- Updated dependencies [82090c1]
+- Updated dependencies [1b443fd]
+- Updated dependencies [ce97900]
+- Updated dependencies [14a2566]
+  - @mastra/core@0.10.4-alpha.0
+
 ## 0.10.2
 
 ### Patch Changes
