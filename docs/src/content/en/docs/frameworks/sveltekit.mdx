@@ -99,8 +99,10 @@ Modify the `tsconfig.json` file in your project root:
 
 ## Set Up API Key
 
+The `VITE_` prefix is required for environment variables to be accessible in the Vite environment, that SvelteKit uses.
+
 ```bash filename=".env" copy
-OPENAI_API_KEY=<your-api-key>
+VITE_OPENAI_API_KEY=<your-api-key>
 ```
 
 ## Update .gitignore
@@ -118,10 +120,9 @@ SvelteKit uses the `$env` alias to access environment variables.  As a result, t
 ```diff filename="src/mastra/agents/weather-agent.ts"
 - import { openai } from "@ai-sdk/openai";
 + import { createOpenAI } from "@ai-sdk/openai";
-+ import { OPENAI_API_KEY } from '$env/static/private';
 
 + const openai = createOpenAI({
-+   apiKey: OPENAI_API_KEY,
++   apiKey: import.meta.env?.VITE_OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY,
 +   compatibility: "strict"
 + });
 ```
@@ -310,7 +311,7 @@ Modify the `tsconfig.json` file in your project root:
 ## Set Up API Key
 
 ```bash filename=".env" copy
-OPENAI_API_KEY=<your-api-key>
+VITE_OPENAI_API_KEY=<your-api-key>
 ```
 
 ## Update .gitignore
@@ -328,10 +329,9 @@ SvelteKit uses the `$env` alias to access environment variables.  As a result, t
 ```diff filename="src/mastra/agents/weather-agent.ts"
 - import { openai } from "@ai-sdk/openai";
 + import { createOpenAI } from "@ai-sdk/openai";
-+ import { OPENAI_API_KEY } from '$env/static/private';
 
 + const openai = createOpenAI({
-+   apiKey: OPENAI_API_KEY,
++   apiKey: import.meta.env?.VITE_OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY,
 +   compatibility: "strict"
 + });
 ```
