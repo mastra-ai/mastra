@@ -36,8 +36,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.0.0",
-    "@aws-sdk/lib-dynamodb": "^3.0.0",
+    "@aws-sdk/client-dynamodb": "^3.823.0",
+    "@aws-sdk/lib-dynamodb": "^3.823.0",
     "electrodb": "^3.4.1"
   },
   "peerDependencies": {
@@ -50,7 +50,7 @@
     "@types/node": "^20.17.57",
     "@vitest/coverage-v8": "3.0.9",
     "@vitest/ui": "3.0.9",
-    "axios": "^1.8.4",
+    "axios": "^1.9.0",
     "eslint": "^9.28.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.2",
