@@ -99,7 +99,8 @@ Modify the `tsconfig.json` file in your project root:
 
 ## Set Up API Key
 
-The `VITE_` prefix is required for environment variables to be accessible in the Vite environment, that SvelteKit uses.
+The `VITE_` prefix is required for environment variables to be accessible in the Vite environment, that SvelteKit uses.  
+[Read more about Vite environment variables](https://vite.dev/guide/env-and-mode.html#env-variables).
 
 ```bash filename=".env" copy
 VITE_OPENAI_API_KEY=<your-api-key>
@@ -115,8 +116,6 @@ Add `.mastra` to your `.gitignore` file:
 
 ## Update the Mastra Agent
 
-SvelteKit uses the `$env` alias to access environment variables.  As a result, the model constructor must explicitly receive the `apiKey` from the SvelteKit environment like this:
-
 ```diff filename="src/mastra/agents/weather-agent.ts"
 - import { openai } from "@ai-sdk/openai";
 + import { createOpenAI } from "@ai-sdk/openai";
@@ -126,6 +125,8 @@ SvelteKit uses the `$env` alias to access environment variables.  As a result, t
 +   compatibility: "strict"
 + });
 ```
+
+By reading env vars from both `import.meta.env` and `process.env`, we ensure that the API key is available in both the SvelteKit dev server and the Mastra Dev Server.
 
 > More configuration details are available in the AI SDK docs. See [Provider Instance](https://ai-sdk.dev/providers/ai-sdk-providers/openai#provider-instance) for more information.
 
@@ -310,6 +311,9 @@ Modify the `tsconfig.json` file in your project root:
 
 ## Set Up API Key
 
+The `VITE_` prefix is required for environment variables to be accessible in the Vite environment, that SvelteKit uses.  
+[Read more about Vite environment variables](https://vite.dev/guide/env-and-mode.html#env-variables).
+
 ```bash filename=".env" copy
 VITE_OPENAI_API_KEY=<your-api-key>
 ```
@@ -324,8 +328,6 @@ Add `.mastra` to your `.gitignore` file:
 
 ## Update the Mastra Agent
 
-SvelteKit uses the `$env` alias to access environment variables.  As a result, the model constructor must explicitly receive the `apiKey` from the SvelteKit environment like this:
-
 ```diff filename="src/mastra/agents/weather-agent.ts"
 - import { openai } from "@ai-sdk/openai";
 + import { createOpenAI } from "@ai-sdk/openai";
@@ -335,6 +337,8 @@ SvelteKit uses the `$env` alias to access environment variables.  As a result, t
 +   compatibility: "strict"
 + });
 ```
+
+By reading env vars from both `import.meta.env` and `process.env`, we ensure that the API key is available in both the SvelteKit dev server and the Mastra Dev Server.
 
 > More configuration details are available in the AI SDK docs. See [Provider Instance](https://ai-sdk.dev/providers/ai-sdk-providers/openai#provider-instance) for more information.
 
