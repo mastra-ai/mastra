@@ -2752,7 +2752,7 @@ importers:
   stores/opensearch:
     dependencies:
       '@opensearch-project/opensearch':
-        specifier: ^3.4.0
+        specifier: ^3.5.1
         version: 3.5.1
     devDependencies:
       '@internal/lint':
