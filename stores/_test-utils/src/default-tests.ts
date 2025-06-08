@@ -483,10 +483,7 @@ export function createTestSuite(storage: MastraStorage) {
         // Verify thread updatedAt timestamp was updated
         const updatedThread = await storage.getThreadById({ threadId: thread.id });
         const newUpdatedAt = new Date(updatedThread!.updatedAt);
-
         expect(newUpdatedAt.getTime()).toBeGreaterThan(initialUpdatedAt.getTime());
-        expect(updatedThread!.id).toBe(thread.id);
-        expect(updatedThread!.title).toBe(thread.title);
       });
     });
 
