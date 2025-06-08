@@ -2789,7 +2789,7 @@ importers:
         specifier: ^8.16.0
         version: 8.16.0
       pg-promise:
-        specifier: ^11.13.0
+        specifier: ^11.14.0
         version: 11.14.0(pg-query-stream@4.8.0(pg@8.16.0))
       xxhash-wasm:
         specifier: ^1.1.0
