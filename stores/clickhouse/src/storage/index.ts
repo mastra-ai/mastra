@@ -861,24 +861,44 @@ export class ClickhouseStore extends MastraStorage {
         throw new Error(`Thread ${threadId} not found`);
       }
 
-      await this.db.insert({
-        table: TABLE_MESSAGES,
-        format: 'JSONEachRow',
-        values: messages.map(message => ({
-          id: message.id,
-          thread_id: threadId,
-          content: typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
-          createdAt: message.createdAt.toISOString(),
-          role: message.role,
-          type: message.type || 'v2',
-        })),
-        clickhouse_settings: {
-          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
-          date_time_input_format: 'best_effort',
-          use_client_time_zone: 1,
-          output_format_json_quote_64bit_integers: 0,
-        },
-      });
+      // Execute message inserts and thread update in parallel for better performance
+      await Promise.all([
+        // Insert messages
+        this.db.insert({
+          table: TABLE_MESSAGES,
+          format: 'JSONEachRow',
+          values: messages.map(message => ({
+            id: message.id,
+            thread_id: threadId,
+            content: typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
+            createdAt: message.createdAt.toISOString(),
+            role: message.role,
+            type: message.type || 'v2',
+          })),
+          clickhouse_settings: {
+            // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
+            date_time_input_format: 'best_effort',
+            use_client_time_zone: 1,
+            output_format_json_quote_64bit_integers: 0,
+          },
+        }),
+        // Update thread's updatedAt timestamp
+        this.db.insert({
+          table: TABLE_THREADS,
+          format: 'JSONEachRow',
+          values: [
+            {
+              ...thread,
+              updatedAt: new Date().toISOString(),
+            },
+          ],
+          clickhouse_settings: {
+            date_time_input_format: 'best_effort',
+            use_client_time_zone: 1,
+            output_format_json_quote_64bit_integers: 0,
+          },
+        }),
+      ]);
 
       const list = new MessageList({ threadId, resourceId }).add(messages, 'memory');
       if (format === `v2`) return list.get.all.v2();

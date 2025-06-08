@@ -704,6 +704,7 @@ export class D1Store extends MastraStorage {
 
     try {
       const now = new Date();
+      const threadId = messages[0]?.threadId;
 
       // Validate all messages before insert
       for (const [i, message] of messages.entries()) {
@@ -731,10 +732,18 @@ export class D1Store extends MastraStorage {
         };
       });
 
-      await this.batchInsert({
-        tableName: TABLE_MESSAGES,
-        records: messagesToInsert,
-      });
+      // Insert messages and update thread's updatedAt in parallel
+      await Promise.all([
+        this.batchInsert({
+          tableName: TABLE_MESSAGES,
+          records: messagesToInsert,
+        }),
+        // Update thread's updatedAt timestamp
+        this.executeQuery({
+          sql: `UPDATE ${this.getTableName(TABLE_THREADS)} SET updatedAt = ? WHERE id = ?`,
+          params: [now.toISOString(), threadId],
+        }),
+      ]);
 
       this.logger.debug(`Saved ${messages.length} messages`);
       const list = new MessageList().add(messages, 'memory');

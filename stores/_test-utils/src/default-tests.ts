@@ -463,6 +463,31 @@ export function createTestSuite(storage: MastraStorage) {
         expect(crossThreadMessages3.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
         expect(crossThreadMessages3.filter(m => m.threadId === `thread-two`)).toHaveLength(0);
       });
+
+      it('should update thread timestamp when saving messages', async () => {
+        const thread = createSampleThread();
+        await storage.saveThread({ thread });
+
+        const initialThread = await storage.getThreadById({ threadId: thread.id });
+        const initialUpdatedAt = new Date(initialThread!.updatedAt);
+
+        // Wait a bit to ensure timestamp difference
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        const messages = [
+          createSampleMessageV1({ threadId: thread.id }),
+          createSampleMessageV1({ threadId: thread.id }),
+        ];
+        await storage.saveMessages({ messages });
+
+        // Verify thread updatedAt timestamp was updated
+        const updatedThread = await storage.getThreadById({ threadId: thread.id });
+        const newUpdatedAt = new Date(updatedThread!.updatedAt);
+
+        expect(newUpdatedAt.getTime()).toBeGreaterThan(initialUpdatedAt.getTime());
+        expect(updatedThread!.id).toBe(thread.id);
+        expect(updatedThread!.title).toBe(thread.title);
+      });
     });
 
     describe('Edge Cases and Error Handling', () => {
