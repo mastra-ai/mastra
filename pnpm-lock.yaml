@@ -75,7 +75,7 @@ importers:
   auth/clerk:
     dependencies:
       '@clerk/backend':
-        specifier: ^1.32.3
+        specifier: ^1.34.0
         version: 1.34.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@mastra/auth':
         specifier: workspace:*
