@@ -2999,7 +2999,7 @@ importers:
   voice/azure:
     dependencies:
       microsoft-cognitiveservices-speech-sdk:
-        specifier: ^1.44.0
+        specifier: ^1.44.1
         version: 1.44.1(bufferutil@4.0.9)(utf-8-validate@5.0.10)
     devDependencies:
       '@internal/lint':
@@ -34347,7 +34347,7 @@ snapshots:
       isstream: 0.1.2
       jsonwebtoken: 9.0.2
       mime-types: 2.1.35
-      retry-axios: 2.6.0(axios@1.9.0)
+      retry-axios: 2.6.0(axios@1.9.0(debug@4.4.1))
       tough-cookie: 4.1.4
     transitivePeerDependencies:
       - supports-color
@@ -38542,7 +38542,7 @@ snapshots:
 
   ret@0.4.3: {}
 
-  retry-axios@2.6.0(axios@1.9.0):
+  retry-axios@2.6.0(axios@1.9.0(debug@4.4.1)):
     dependencies:
       axios: 1.9.0(debug@4.4.1)
 
