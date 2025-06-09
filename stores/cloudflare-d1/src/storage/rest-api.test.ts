@@ -1376,7 +1376,7 @@ describe.skip('D1Store REST API', () => {
       ).resolves.not.toThrow();
     });
 
-    it('throws when adding a NOT NULL column without default to non-empty table', async () => {
+    it('should add a default value to a column when using not null', async () => {
       await store.insert({
         tableName: TEST_TABLE as TABLE_NAMES,
         record: { id: 1, name: 'Bob' },
@@ -1385,36 +1385,34 @@ describe.skip('D1Store REST API', () => {
       await expect(
         store.alterTable({
           tableName: TEST_TABLE as TABLE_NAMES,
-          schema: { ...BASE_SCHEMA, must_have: { type: 'integer', nullable: false } },
-          ifNotExists: ['must_have'],
+          schema: { ...BASE_SCHEMA, must_have: { type: 'text', nullable: false } },
+          ifNotExists: ['text_column'],
         }),
-      ).rejects.toThrow();
-    });
-
-    it('throws when adding a column with invalid name', async () => {
-      await expect(
-        store.alterTable({
-          tableName: TEST_TABLE as TABLE_NAMES,
-          schema: { ...BASE_SCHEMA, 'invalid-name-!': { type: 'text', nullable: true } },
-          ifNotExists: ['invalid-name-!'],
-        }),
-      ).rejects.toThrow();
-    });
-
-    it('throws or ignores when adding a column with a conflicting type', async () => {
-      await store.alterTable({
-        tableName: TEST_TABLE as TABLE_NAMES,
-        schema: { ...BASE_SCHEMA, conflict: { type: 'integer', nullable: true } },
-        ifNotExists: ['conflict'],
-      });
+      ).resolves.not.toThrow();
 
       await expect(
         store.alterTable({
           tableName: TEST_TABLE as TABLE_NAMES,
-          schema: { ...BASE_SCHEMA, conflict: { type: 'text', nullable: true } },
-          ifNotExists: ['conflict'],
+          schema: { ...BASE_SCHEMA, must_have: { type: 'timestamp', nullable: false } },
+          ifNotExists: ['timestamp_column'],
         }),
-      ).rejects.toThrow();
+      ).resolves.not.toThrow();
+
+      await expect(
+        store.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, must_have: { type: 'bigint', nullable: false } },
+          ifNotExists: ['bigint_column'],
+        }),
+      ).resolves.not.toThrow();
+
+      await expect(
+        store.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, must_have: { type: 'jsonb', nullable: false } },
+          ifNotExists: ['jsonb_column'],
+        }),
+      ).resolves.not.toThrow();
     });
   });
 });

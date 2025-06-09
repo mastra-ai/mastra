@@ -136,6 +136,22 @@ export class LibSQLStore extends MastraStorage {
     }
   }
 
+  protected getDefaultValue(type: string): string {
+    switch (type) {
+      case 'text':
+        return "DEFAULT ''";
+      case 'timestamp':
+        return 'DEFAULT CURRENT_TIMESTAMP';
+      case 'integer':
+      case 'bigint':
+        return 'DEFAULT 0';
+      case 'jsonb':
+        return "DEFAULT '{}'";
+      default:
+        return super.getDefaultValue(type);
+    }
+  }
+
   async alterTable({
     tableName,
     schema,
@@ -160,7 +176,7 @@ export class LibSQLStore extends MastraStorage {
           const sqlType = this.getSqlType(columnDef.type); // ensure this exists or implement
           const nullable = columnDef.nullable === false ? 'NOT NULL' : '';
           // In SQLite, you must provide a DEFAULT if adding a NOT NULL column to a non-empty table
-          const defaultValue = columnDef.nullable === false ? 'DEFAULT ""' : '';
+          const defaultValue = columnDef.nullable === false ? this.getDefaultValue(columnDef.type) : '';
           const alterSql =
             `ALTER TABLE ${parsedTableName} ADD COLUMN "${columnName}" ${sqlType} ${nullable} ${defaultValue}`.trim();
 

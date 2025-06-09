@@ -399,7 +399,7 @@ export class PostgresStore extends MastraStorage {
           const columnDef = schema[columnName];
           const sqlType = this.getSqlType(columnDef.type);
           const nullable = columnDef.nullable === false ? 'NOT NULL' : '';
-          const defaultValue = columnDef.nullable === false ? 'DEFAULT ""' : '';
+          const defaultValue = columnDef.nullable === false ? this.getDefaultValue(columnDef.type) : '';
           const alterSql =
             `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${columnName}" ${sqlType} ${nullable} ${defaultValue}`.trim();
 

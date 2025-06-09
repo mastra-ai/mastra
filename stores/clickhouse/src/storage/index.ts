@@ -387,6 +387,22 @@ export class ClickhouseStore extends MastraStorage {
     }
   }
 
+  protected getDefaultValue(type: string): string {
+    switch (type) {
+      case 'text':
+        return "DEFAULT ''";
+      case 'timestamp':
+        return 'DEFAULT CURRENT_TIMESTAMP';
+      case 'integer':
+      case 'bigint':
+        return 'DEFAULT 0';
+      case 'jsonb':
+        return "DEFAULT '{}'";
+      default:
+        return super.getDefaultValue(type);
+    }
+  }
+
   async alterTable({
     tableName,
     schema,
@@ -413,7 +429,7 @@ export class ClickhouseStore extends MastraStorage {
           if (columnDef.nullable !== false) {
             sqlType = `Nullable(${sqlType})`;
           }
-          const defaultValue = columnDef.nullable === false ? "DEFAULT '' " : '';
+          const defaultValue = columnDef.nullable === false ? this.getDefaultValue(columnDef.type) : '';
           // Use backticks or double quotes as needed for identifiers
           const alterSql =
             `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS "${columnName}" ${sqlType} ${defaultValue}`.trim();

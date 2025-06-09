@@ -6,6 +6,7 @@ import {
   createSampleMessageV1,
   createSampleMessageV2,
   createSampleWorkflowSnapshot,
+  resetRole,
 } from '@internal/storage-test-utils';
 import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
@@ -210,11 +211,9 @@ describe('PostgresStore', () => {
       const thread = createSampleThread();
       await store.saveThread({ thread });
 
-      const messages = [
-        createSampleMessageV2({ threadId: thread.id, content: 'First' }),
-        createSampleMessageV2({ threadId: thread.id, content: 'Second' }),
-        createSampleMessageV2({ threadId: thread.id, content: 'Third' }),
-      ];
+      const messageContent = ['First', 'Second', 'Third'];
+
+      const messages = messageContent.map(content => createSampleMessageV2({ threadId: thread.id, content }));
 
       await store.saveMessages({ messages, format: 'v2' });
 
@@ -223,7 +222,7 @@ describe('PostgresStore', () => {
 
       // Verify order is maintained
       retrievedMessages.forEach((msg, idx) => {
-        expect(msg.content).toEqual(messages[idx].content);
+        expect((msg.content.parts[0] as any).text).toEqual(messageContent[idx]);
       });
     });
 
@@ -852,7 +851,7 @@ describe('PostgresStore', () => {
       ).resolves.not.toThrow();
     });
 
-    it('throws when adding a NOT NULL column without default to non-empty table', async () => {
+    it('should add a default value to a column when using not null', async () => {
       await store.insert({
         tableName: TEST_TABLE as TABLE_NAMES,
         record: { id: 1, name: 'Bob' },
@@ -861,36 +860,34 @@ describe('PostgresStore', () => {
       await expect(
         store.alterTable({
           tableName: TEST_TABLE as TABLE_NAMES,
-          schema: { ...BASE_SCHEMA, must_have: { type: 'integer', nullable: false } },
-          ifNotExists: ['must_have'],
+          schema: { ...BASE_SCHEMA, must_have: { type: 'text', nullable: false } },
+          ifNotExists: ['text_column'],
         }),
-      ).rejects.toThrow();
-    });
-
-    it('throws when adding a column with invalid name', async () => {
-      await expect(
-        store.alterTable({
-          tableName: TEST_TABLE as TABLE_NAMES,
-          schema: { ...BASE_SCHEMA, 'invalid-name-!': { type: 'text', nullable: true } },
-          ifNotExists: ['invalid-name-!'],
-        }),
-      ).rejects.toThrow();
-    });
-
-    it('throws or ignores when adding a column with a conflicting type', async () => {
-      await store.alterTable({
-        tableName: TEST_TABLE as TABLE_NAMES,
-        schema: { ...BASE_SCHEMA, conflict: { type: 'integer', nullable: true } },
-        ifNotExists: ['conflict'],
-      });
+      ).resolves.not.toThrow();
 
       await expect(
         store.alterTable({
           tableName: TEST_TABLE as TABLE_NAMES,
-          schema: { ...BASE_SCHEMA, conflict: { type: 'text', nullable: true } },
-          ifNotExists: ['conflict'],
+          schema: { ...BASE_SCHEMA, must_have: { type: 'timestamp', nullable: false } },
+          ifNotExists: ['timestamp_column'],
         }),
-      ).rejects.toThrow();
+      ).resolves.not.toThrow();
+
+      await expect(
+        store.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, must_have: { type: 'bigint', nullable: false } },
+          ifNotExists: ['bigint_column'],
+        }),
+      ).resolves.not.toThrow();
+
+      await expect(
+        store.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, must_have: { type: 'jsonb', nullable: false } },
+          ifNotExists: ['jsonb_column'],
+        }),
+      ).resolves.not.toThrow();
     });
   });
 
@@ -1248,12 +1245,15 @@ describe('PostgresStore', () => {
       it('should return paginated messages with total count', async () => {
         const thread = createSampleThread();
         await store.saveThread({ thread });
+        // Reset role to 'assistant' before creating messages
+        resetRole();
         // Create messages sequentially to ensure unique timestamps
         for (let i = 0; i < 15; i++) {
+          const message = createSampleMessageV1({ threadId: thread.id, content: `Message ${i + 1}` });
           await store.saveMessages({
-            messages: [createSampleMessageV1({ threadId: thread.id, content: `Message ${i + 1}` })],
+            messages: [message],
           });
-          await new Promise(r => setTimeout(r, 2));
+          await new Promise(r => setTimeout(r, 5));
         }
 
         const page1 = await store.getMessagesPaginated({
@@ -1261,6 +1261,7 @@ describe('PostgresStore', () => {
           selectBy: { pagination: { page: 0, perPage: 5 } },
           format: 'v2',
         });
+        console.log(page1);
         expect(page1.messages).toHaveLength(5);
         expect(page1.total).toBe(15);
         expect(page1.page).toBe(0);

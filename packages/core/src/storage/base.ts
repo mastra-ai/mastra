@@ -64,6 +64,22 @@ export abstract class MastraStorage extends MastraBase {
     }
   }
 
+  protected getDefaultValue(type: string): string {
+    switch (type) {
+      case 'text':
+        return "DEFAULT ''";
+      case 'timestamp':
+        return 'DEFAULT NOW()';
+      case 'integer':
+      case 'bigint':
+        return 'DEFAULT 0';
+      case 'jsonb':
+        return "DEFAULT '{}'::jsonb";
+      default:
+        return "DEFAULT ''";
+    }
+  }
+
   abstract createTable({ tableName }: { tableName: TABLE_NAMES; schema: Record<string, StorageColumn> }): Promise<void>;
 
   abstract clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void>;

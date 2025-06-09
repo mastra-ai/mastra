@@ -310,6 +310,22 @@ export class D1Store extends MastraStorage {
     }
   }
 
+  protected getDefaultValue(type: string): string {
+    switch (type) {
+      case 'text':
+        return "DEFAULT ''";
+      case 'timestamp':
+        return 'DEFAULT CURRENT_TIMESTAMP';
+      case 'integer':
+      case 'bigint':
+        return 'DEFAULT 0';
+      case 'jsonb':
+        return "DEFAULT '{}'";
+      default:
+        return super.getDefaultValue(type);
+    }
+  }
+
   async createTable({
     tableName,
     schema,
@@ -370,7 +386,7 @@ export class D1Store extends MastraStorage {
           const columnDef = schema[columnName];
           const sqlType = this.getSqlType(columnDef.type);
           const nullable = columnDef.nullable === false ? 'NOT NULL' : '';
-          const defaultValue = columnDef.nullable === false ? 'DEFAULT ""' : '';
+          const defaultValue = columnDef.nullable === false ? this.getDefaultValue(columnDef.type) : '';
 
           const alterSql =
             `ALTER TABLE ${fullTableName} ADD COLUMN ${columnName} ${sqlType} ${nullable} ${defaultValue}`.trim();
