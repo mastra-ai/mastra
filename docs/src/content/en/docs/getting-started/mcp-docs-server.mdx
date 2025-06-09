@@ -110,6 +110,7 @@ LLM CONTEXT: This Tabs component shows MCP server configuration for different ID
 Each tab displays the Windows-specific JSON configuration needed to set up the Mastra MCP docs server.
 The tabs help Windows users find the correct configuration format for their IDE, using cmd instead of direct npx.
 Each tab shows the Windows-specific command structure needed for that IDE's MCP configuration.
+On latest Windsurf and Cursor the direct npx command works, while it's still unconfirmed if this has been fixed for VSCode.
 */}
 
 <Tabs items={["cursor", "windsurf", "vscode"]}>
@@ -118,8 +119,8 @@ Each tab shows the Windows-specific command structure needed for that IDE's MCP 
 {
   "mcpServers": {
     "mastra": {
-      "command": "cmd",
-      "args": ["/c", "npx", "-y", "@mastra/mcp-docs-server"]
+      "command": "npx",
+      "args": ["-y", "@mastra/mcp-docs-server"]
     }
   }
 }
@@ -130,8 +131,8 @@ Each tab shows the Windows-specific command structure needed for that IDE's MCP 
 {
   "mcpServers": {
     "mastra": {
-      "command": "cmd",
-      "args": ["/c", "npx", "-y", "@mastra/mcp-docs-server"]
+      "command": "npx",
+      "args": ["-y", "@mastra/mcp-docs-server"]
     }
   }
 }

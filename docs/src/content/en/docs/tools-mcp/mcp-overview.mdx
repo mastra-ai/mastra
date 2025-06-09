@@ -198,10 +198,8 @@ Each tab shows the specific URL patterns and configuration needed for that regis
     const mcp = new MCPClient({
       servers: {
         sequentialThinking: {
-          command: "cmd",
+          command: "npx",
           args: [
-            "/c",
-            "npx",
             "-y",
             "@smithery/cli@latest",
             "run",
