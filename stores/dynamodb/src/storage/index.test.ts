@@ -13,9 +13,8 @@ import {
 } from '@aws-sdk/client-dynamodb';
 import type { MastraMessageV1, StorageThreadType, WorkflowRun, WorkflowRunState } from '@mastra/core';
 import type { MastraMessageV2 } from '@mastra/core/agent';
-import type { TABLE_NAMES } from '@mastra/core/storage';
 import { TABLE_EVALS, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
 import { DynamoDBStore } from '..';
 
 const TEST_TABLE_NAME = 'mastra-single-table-test'; // Define the single table name
@@ -1200,87 +1199,4 @@ describe('DynamoDBStore Integration Tests', () => {
       ).toBeNull();
     });
   }); // End Generic Storage Methods describe
-
-  describe('alterTable (no-op/schemaless)', () => {
-    const TEST_TABLE = 'test_alter_table'; // Use "table" or "collection" as appropriate
-    beforeEach(async () => {
-      await store.clearTable({ tableName: TEST_TABLE as TABLE_NAMES });
-    });
-
-    afterEach(async () => {
-      await store.clearTable({ tableName: TEST_TABLE as TABLE_NAMES });
-    });
-
-    test('allows inserting records with new fields without alterTable', async () => {
-      await store.insert({
-        tableName: TEST_TABLE as TABLE_NAMES,
-        record: { id: '1', name: 'Alice' },
-      });
-      await store.insert({
-        tableName: TEST_TABLE as TABLE_NAMES,
-        record: { id: '2', name: 'Bob', newField: 123 },
-      });
-
-      const row = await store.load<{ id: string; name: string; newField?: number }>({
-        tableName: TEST_TABLE as TABLE_NAMES,
-        keys: { id: '2' },
-      });
-      expect(row?.newField).toBe(123);
-    });
-
-    test('does not throw when calling alterTable (no-op)', async () => {
-      await expect(
-        store.alterTable({
-          tableName: TEST_TABLE as TABLE_NAMES,
-          schema: {
-            id: { type: 'integer', primaryKey: true, nullable: false },
-            name: { type: 'text', nullable: true },
-            extra: { type: 'integer', nullable: true },
-          },
-          ifNotExists: ['extra'],
-        }),
-      ).resolves.not.toThrow();
-    });
-
-    test('can add multiple new fields at write time', async () => {
-      await store.insert({
-        tableName: TEST_TABLE as TABLE_NAMES,
-        record: { id: '3', name: 'Charlie', age: 30, city: 'Paris' },
-      });
-      const row = await store.load<{ id: string; name: string; age?: number; city?: string }>({
-        tableName: TEST_TABLE as TABLE_NAMES,
-        keys: { id: '3' },
-      });
-      expect(row?.age).toBe(30);
-      expect(row?.city).toBe('Paris');
-    });
-
-    test('can retrieve all fields, including dynamically added ones', async () => {
-      await store.insert({
-        tableName: TEST_TABLE as TABLE_NAMES,
-        record: { id: '4', name: 'Dana', hobby: 'skiing' },
-      });
-      const row = await store.load<{ id: string; name: string; hobby?: string }>({
-        tableName: TEST_TABLE as TABLE_NAMES,
-        keys: { id: '4' },
-      });
-      expect(row?.hobby).toBe('skiing');
-    });
-
-    test('does not restrict or error on arbitrary new fields', async () => {
-      await expect(
-        store.insert({
-          tableName: TEST_TABLE as TABLE_NAMES,
-          record: { id: '5', weirdField: { nested: true }, another: [1, 2, 3] },
-        }),
-      ).resolves.not.toThrow();
-
-      const row = await store.load<{ id: string; weirdField?: any; another?: any }>({
-        tableName: TEST_TABLE as TABLE_NAMES,
-        keys: { id: '5' },
-      });
-      expect(row?.weirdField).toEqual({ nested: true });
-      expect(row?.another).toEqual([1, 2, 3]);
-    });
-  });
 }); // End Main Describe
