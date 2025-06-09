@@ -22,15 +22,32 @@ export abstract class LoggerTransport extends Transform {
     toDate?: Date;
     logLevel?: LogLevel;
     filters?: Record<string, any>;
-  }): Promise<BaseLogMessage[]> {
-    return [];
+    page?: number;
+    perPage?: number;
+  }): Promise<{
+    logs: BaseLogMessage[];
+    total: number;
+    page: number;
+    perPage: number;
+    hasMore: boolean;
+  }> {
+    return { logs: [], total: 0, page: _args?.page ?? 1, perPage: _args?.perPage ?? 100, hasMore: false };
   }
   async getLogs(_args?: {
     fromDate?: Date;
     toDate?: Date;
     logLevel?: LogLevel;
     filters?: Record<string, any>;
-  }): Promise<BaseLogMessage[]> {
-    return [];
+    returnPaginationResults?: boolean;
+    page?: number;
+    perPage?: number;
+  }): Promise<{
+    logs: BaseLogMessage[];
+    total: number;
+    page: number;
+    perPage: number;
+    hasMore: boolean;
+  }> {
+    return { logs: [], total: 0, page: _args?.page ?? 1, perPage: _args?.perPage ?? 100, hasMore: false };
   }
 }
