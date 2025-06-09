@@ -337,6 +337,60 @@ export const testWorkflow = createWorkflow({
   .commit();
 ```
 
+## Workflow As Tool
+
+In this example the `cityStringWorkflow` workflow has been added to the main Mastra instance.
+
+
+```typescript {7} filename="src/mastra/index.ts" showLineNumbers copy
+import { Mastra } from "@mastra/core/mastra";
+
+import { testWorkflow, cityStringWorkflow } from "./workflows/test-workflow";
+
+export const mastra = new Mastra({
+  ...
+  workflows: { testWorkflow, cityStringWorkflow },
+});
+```
+
+Once a workflow has been registered it can be referenced using `getWorkflow` from withing a tool.
+
+```typescript {10,17-27} filename="src/mastra/tools/test-tool.ts" showLineNumbers copy
+export const cityCoordinatesTool = createTool({
+  id: "city-tool",
+  description: "Convert city details",
+  inputSchema: z.object({
+    city: z.string()
+  }),
+  outputSchema: z.object({
+    outcome: z.string()
+  }),
+  execute: async ({ context, mastra }) => {
+    const { city } = context;
+    const geocodingResponse = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${city}`);
+    const geocodingData = await geocodingResponse.json();
+
+    const { name, country, timezone } = geocodingData.results[0];
+
+    const workflow = mastra?.getWorkflow("cityStringWorkflow");
+
+    const run = workflow?.createRun();
+
+    const { result } = await run?.start({
+      inputData: {
+        city_name: name,
+        country_name: country,
+        country_timezone: timezone
+      }
+    });
+
+    return {
+      outcome: result.outcome
+    };
+  }
+});
+```
+
 ## MCP Server
 
 You can convert your workflows into tools by passing them into an instance of a Mastra `MCPServer`. This allows any MCP-compatible client to access your workflow.
