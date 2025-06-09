@@ -6,6 +6,46 @@ import type { MastraStorage } from '@mastra/core/storage';
 import { TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS } from '@mastra/core/storage';
 import { MastraMessageV1 } from '@mastra/core';
 
+// Sample test data factory functions to ensure unique records
+export const createSampleThread = () => ({
+  id: `thread-${randomUUID()}`,
+  resourceId: `resource-${randomUUID()}`,
+  title: 'Test Thread',
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  metadata: { key: 'value' },
+});
+
+export const createSampleThreadWithParams = (
+  threadId: string,
+  resourceId: string,
+  createdAt: Date,
+  updatedAt: Date,
+) => ({
+  id: threadId,
+  resourceId,
+  title: 'Test Thread with given ThreadId and ResourceId',
+  createdAt,
+  updatedAt,
+  metadata: { key: 'value' },
+});
+
+let role: 'assistant' | 'user' = 'assistant';
+export const getRole = () => {
+  if (role === 'user') role = 'assistant';
+  else role = 'user';
+  return role;
+};
+export const createSampleMessage = (threadId: string, createdAt?: Date) =>
+  ({
+    id: `msg-${randomUUID()}`,
+    role: getRole(),
+    type: 'text',
+    threadId,
+    content: [{ type: 'text', text: 'Hello' }],
+    createdAt: createdAt || new Date(),
+  }) satisfies MastraMessageV1;
+
 export const createSampleTraceForDB = (
   name: string,
   scope?: string,
@@ -46,69 +86,33 @@ export const createSampleEval = (agentName: string, isTest = false, createdAt?: 
   };
 };
 
+export const createSampleWorkflowSnapshot = (status: string, createdAt?: Date) => {
+  const runId = `run-${randomUUID()}`;
+  const stepId = `step-${randomUUID()}`;
+  const timestamp = createdAt || new Date();
+  const snapshot = {
+    result: { success: true },
+    value: {},
+    context: {
+      [stepId]: {
+        status,
+        payload: {},
+        error: undefined,
+        startedAt: timestamp.getTime(),
+        endedAt: new Date(timestamp.getTime() + 15000).getTime(),
+      },
+      input: {},
+    },
+    serializedStepGraph: [],
+    activePaths: [],
+    suspendedPaths: {},
+    runId,
+    timestamp: timestamp.getTime(),
+  } as WorkflowRunState;
+  return { snapshot, runId, stepId };
+};
 export function createTestSuite(storage: MastraStorage) {
   describe(storage.constructor.name, () => {
-    // Sample test data factory functions to ensure unique records
-    const createSampleThread = () => ({
-      id: `thread-${randomUUID()}`,
-      resourceId: `resource-${randomUUID()}`,
-      title: 'Test Thread',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      metadata: { key: 'value' },
-    });
-
-    const createSampleThreadWithParams = (threadId: string, resourceId: string, createdAt: Date, updatedAt: Date) => ({
-      id: threadId,
-      resourceId,
-      title: 'Test Thread with given ThreadId and ResourceId',
-      createdAt,
-      updatedAt,
-      metadata: { key: 'value' },
-    });
-
-    let role: 'assistant' | 'user' = 'assistant';
-    const getRole = () => {
-      if (role === 'user') role = 'assistant';
-      else role = 'user';
-      return role;
-    };
-    const createSampleMessage = (threadId: string) =>
-      ({
-        id: `msg-${randomUUID()}`,
-        role: getRole(),
-        type: 'text',
-        threadId,
-        content: [{ type: 'text', text: 'Hello' }],
-        createdAt: new Date(),
-      }) satisfies MastraMessageV1;
-
-    const createSampleWorkflowSnapshot = (status: string, createdAt?: Date) => {
-      const runId = `run-${randomUUID()}`;
-      const stepId = `step-${randomUUID()}`;
-      const timestamp = createdAt || new Date();
-      const snapshot = {
-        result: { success: true },
-        value: {},
-        context: {
-          [stepId]: {
-            status,
-            payload: {},
-            error: undefined,
-            startedAt: timestamp.getTime(),
-            endedAt: new Date(timestamp.getTime() + 15000).getTime(),
-          },
-          input: {},
-        },
-        serializedStepGraph: [],
-        activePaths: [],
-        suspendedPaths: {},
-        runId,
-        timestamp: timestamp.getTime(),
-      } as WorkflowRunState;
-      return { snapshot, runId, stepId };
-    };
-
     const checkWorkflowSnapshot = (snapshot: WorkflowRunState | string, stepId: string, status: string) => {
       if (typeof snapshot === 'string') {
         throw new Error('Expected WorkflowRunState, got string');

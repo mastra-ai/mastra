@@ -82,7 +82,7 @@
     "@types/fs-extra": "^11.0.4",
     "@types/sentiment": "^5.0.4",
     "@types/string-similarity": "^4.0.2",
-    "ai": "^4.2.2",
+    "ai": "^4.3.16",
     "dotenv": "^16.5.0",
     "eslint": "^9.28.0",
     "tsup": "^8.5.0",

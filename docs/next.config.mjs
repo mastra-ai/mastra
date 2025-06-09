@@ -905,6 +905,7 @@ export default withGT(
       {
         source: "/:locale/docs/workflows-vnext/overview",
         destination: "/:locale/docs/workflows/overview",
+        permanent: true,
       },
       {
         source: "/:locale/reference/rag/vector-search",

@@ -1,3 +1,4 @@
+import type { MastraError } from '../error';
 import { LogLevel } from './constants';
 import type { BaseLogMessage, LoggerTransport } from './transport';
 
@@ -6,6 +7,7 @@ export interface IMastraLogger {
   info(message: string, ...args: any[]): void;
   warn(message: string, ...args: any[]): void;
   error(message: string, ...args: any[]): void;
+  trackException(error: MastraError): void;
 
   getTransports(): Map<string, LoggerTransport>;
   getLogs(
@@ -56,6 +58,8 @@ export abstract class MastraLogger implements IMastraLogger {
   getTransports() {
     return this.transports;
   }
+
+  trackException(_error: MastraError) {}
 
   async getLogs(
     transportId: string,
