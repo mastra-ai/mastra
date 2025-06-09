@@ -155,19 +155,19 @@ export class MastraLLM extends MastraLLMBase {
 
     let schema: z.ZodType<Z> | Schema<Z> | undefined;
 
-    // if (experimental_output) {
-    //   this.logger.debug('[LLM] - Using experimental output', {
-    //     runId,
-    //   });
-    //   if (typeof (experimental_output as any).parse === 'function') {
-    //     schema = experimental_output as z.ZodType<Z>;
-    //     if (schema instanceof z.ZodArray) {
-    //       schema = schema._def.type as z.ZodType<Z>;
-    //     }
-    //   } else {
-    //     schema = jsonSchema(experimental_output as JSONSchema7) as Schema<Z>;
-    //   }
-    // }
+    if (experimental_output) {
+      this.logger.debug('[LLM] - Using experimental output', {
+        runId,
+      });
+      if (typeof (experimental_output as any).parse === 'function') {
+        schema = experimental_output as z.ZodType<Z>;
+        if (schema instanceof z.ZodArray) {
+          schema = schema._def.type as z.ZodType<Z>;
+        }
+      } else {
+        schema = jsonSchema(experimental_output as JSONSchema7) as Schema<Z>;
+      }
+    }
 
     return await generateText({
       messages,
@@ -176,9 +176,9 @@ export class MastraLLM extends MastraLLMBase {
         ...this.experimental_telemetry,
         ...telemetry,
       },
-      experimental_output: experimental_output
+      experimental_output: schema
         ? Output.object({
-            schema: this._applySchemaCompat(experimental_output),
+            schema: schema,
           })
         : undefined,
     });
@@ -432,24 +432,19 @@ export class MastraLLM extends MastraLLMBase {
       ...rest,
     };
 
-    let schema: z.ZodType<T> | Schema<T>;
-    let output = 'object';
+    let output: any = 'object';
 
-    if (typeof (structuredOutput as any).parse === 'function') {
-      schema = structuredOutput as z.ZodType<T>;
-      if (schema instanceof z.ZodArray) {
-        output = 'array';
-        schema = schema._def.type as z.ZodType<T>;
-      }
-    } else {
-      schema = jsonSchema(structuredOutput as JSONSchema7) as Schema<T>;
+    if (structuredOutput instanceof z.ZodArray) {
+      output = 'array';
     }
+
+    const processedSchema = this._applySchemaCompat(structuredOutput);
 
     return streamObject({
       messages,
       ...argsForExecute,
       output: output as any,
-      schema,
+      schema: processedSchema as Schema<T>,
       experimental_telemetry: {
         ...this.experimental_telemetry,
         ...telemetry,
