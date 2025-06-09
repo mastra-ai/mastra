@@ -346,6 +346,38 @@ if (resources.weather) {
 
 The `getResources()` method handles errors gracefully - if a server fails or doesn't support resources, it will be omitted from the results without causing the entire operation to fail.
 
+## Prompts
+
+MCP servers can also expose prompts, which represent structured message templates or conversational context for agents.
+
+### Listing Prompts
+
+```typescript
+const prompts = await mcp.prompts.list();
+console.log(prompts.weather); // [ { name: 'current', ... }, ... ]
+```
+
+### Getting a Prompt and Messages
+
+```typescript
+const { prompt, messages } = await mcp.prompts.get({ serverName: 'weather', name: 'current' });
+console.log(prompt); // { name: 'current', version: 'v1', ... }
+console.log(messages); // [ { role: 'assistant', content: { type: 'text', text: '...' } }, ... ]
+```
+
+### Handling Prompt List Change Notifications
+
+```typescript
+mcp.prompts.onListChanged({
+  serverName: 'weather',
+  handler: () => {
+    // Refresh prompt list or update UI
+  },
+});
+```
+
+Prompt notifications are delivered via SSE or compatible transports. Register handlers before expecting notifications.
+
 ## SSE Authentication and Headers (Legacy Fallback)
 
 When the client falls back to using the legacy SSE (Server-Sent Events) transport and you need to include authentication or custom headers, you need to configure headers in a specific way. The standard `requestInit` headers won't work alone because SSE connections using the browser's `EventSource` API don't support custom headers directly.

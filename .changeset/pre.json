@@ -65,7 +65,41 @@
     "@mastra/voice-playai": "0.10.1",
     "@mastra/voice-sarvam": "0.10.1",
     "@mastra/voice-speechify": "0.10.1",
-    "@mastra/inngest": "0.10.2"
+    "@mastra/inngest": "0.10.2",
+    "@mastra/schema-compat": "0.10.2-alpha.1"
   },
-  "changesets": []
+  "changesets": [
+    "@mastra_cloudflare-4727-dependencies",
+    "@mastra_core-4686-dependencies",
+    "@mastra_deployer-4686-dependencies",
+    "@mastra_deployer-4721-dependencies",
+    "@mastra_deployer-cloudflare-4721-dependencies",
+    "@mastra_libsql-4697-dependencies",
+    "@mastra_mem0-4735-dependencies",
+    "@mastra_pg-4737-dependencies",
+    "@mastra_rag-4705-dependencies",
+    "@mastra_upstash-4742-dependencies",
+    "@mastra_vectorize-4743-dependencies",
+    "@mastra_voice-azure-4744-dependencies",
+    "@mastra_voice-deepgram-4746-dependencies",
+    "@mastra_voice-elevenlabs-4747-dependencies",
+    "@mastra_voice-google-4748-dependencies",
+    "@mastra_voice-openai-4749-dependencies",
+    "@mastra_voice-speechify-4750-dependencies",
+    "brave-seas-wash",
+    "early-mice-sing",
+    "fresh-places-show",
+    "good-falcons-dance",
+    "honest-items-dream",
+    "lucky-regions-argue",
+    "mastra-4686-dependencies",
+    "orange-garlics-lose",
+    "petite-peas-cry",
+    "quick-tables-sell",
+    "quiet-zebras-invent",
+    "soft-worlds-boil",
+    "tangy-yaks-flow",
+    "tasty-pens-walk",
+    "warm-foxes-camp"
+  ]
 }

@@ -148,6 +148,13 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
       description:
         "An object defining how the server should handle MCP resources. See Resource Handling section for details.",
     },
+    {
+      name: "prompts",
+      type: "MCPServerPrompts",
+      isOptional: true,
+      description:
+        "An object defining how the server should handle MCP prompts. See Prompt Handling section for details.",
+    },
   ]}
 />
 
@@ -667,6 +674,121 @@ Example:
 // After adding a new resource to the list managed by 'myResourceHandlers.listResources'
 await serverWithResources.resources.notifyListChanged();
 ```
+
+## Prompt Handling
+
+### What are MCP Prompts?
+
+Prompts are reusable templates or workflows that MCP servers expose to clients. They can accept arguments, include resource context, support versioning, and be used to standardize LLM interactions.
+
+Prompts are identified by a unique name (and optional version) and can be dynamic or static.
+
+### `MCPServerPrompts` Type
+
+The `prompts` option takes an object of type `MCPServerPrompts`. This type defines the callbacks your server will use to handle prompt requests:
+
+```typescript
+export type MCPServerPrompts = {
+  // Callback to list available prompts
+  listPrompts: () => Promise<Prompt[]>;
+
+  // Callback to get the messages/content for a specific prompt
+  getPromptMessages?: ({
+    name,
+    version,
+    args,
+  }: {
+    name: string;
+    version?: string;
+    args?: any;
+  }) => Promise<{ prompt: Prompt; messages: PromptMessage[] }>;
+};
+```
+
+Example:
+
+```typescript
+import { MCPServer } from "@mastra/mcp";
+import type { Prompt, PromptMessage, MCPServerPrompts } from "@mastra/mcp";
+
+const prompts: Prompt[] = [
+  {
+    name: "analyze-code",
+    description: "Analyze code for improvements",
+    version: "v1"
+  },
+  {
+    name: "analyze-code",
+    description: "Analyze code for improvements (new logic)",
+    version: "v2"
+  }
+];
+
+const myPromptHandlers: MCPServerPrompts = {
+  listPrompts: async () => prompts,
+  getPromptMessages: async ({ name, version, args }) => {
+    if (name === "analyze-code") {
+      if (version === "v2") {
+        const prompt = prompts.find(p => p.name === name && p.version === "v2");
+        if (!prompt) throw new Error("Prompt version not found");
+        return {
+          prompt,
+          messages: [
+            {
+              role: "user",
+              content: { type: "text", text: `Analyze this code with the new logic: ${args.code}` }
+            }
+          ]
+        };
+      }
+      // Default or v1
+      const prompt = prompts.find(p => p.name === name && p.version === "v1");
+      if (!prompt) throw new Error("Prompt version not found");
+      return {
+        prompt,
+        messages: [
+          {
+            role: "user",
+            content: { type: "text", text: `Analyze this code: ${args.code}` }
+          }
+        ]
+      };
+    }
+    throw new Error("Prompt not found");
+  }
+};
+
+const serverWithPrompts = new MCPServer({
+  name: "Promptful Server",
+  version: "1.0.0",
+  tools: { /* ... */ },
+  prompts: myPromptHandlers,
+});
+```
+
+### Notifying Clients of Prompt Changes
+
+If the available prompts change, your server can notify connected clients:
+
+#### `server.prompts.notifyListChanged()`
+
+Call this method when the overall list of available prompts has changed (e.g., a prompt was added or removed). This will send a `notifications/prompts/list_changed` message to clients, prompting them to re-fetch the list of prompts.
+
+```typescript
+await serverWithPrompts.prompts.notifyListChanged();
+```
+
+### Best Practices for Prompt Handling
+
+- Use clear, descriptive prompt names and descriptions.
+- Validate all required arguments in `getPromptMessages`.
+- Include a `version` field if you expect to make breaking changes.
+- Use the `version` parameter to select the correct prompt logic.
+- Notify clients when prompt lists change.
+- Handle errors with informative messages.
+- Document argument expectations and available versions.
+
+---
 
 ## Examples
 
