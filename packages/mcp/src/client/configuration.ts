@@ -1,6 +1,6 @@
 import { MastraBase } from '@mastra/core/base';
 import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
-import type { Resource, ResourceTemplate } from '@modelcontextprotocol/sdk/types.js';
+import type { Prompt, Resource, ResourceTemplate } from '@modelcontextprotocol/sdk/types.js';
 import equal from 'fast-deep-equal';
 import { v5 as uuidv5 } from 'uuid';
 import { InternalMastraMCPClient } from './client';
@@ -110,6 +110,32 @@ To fix this you have three different options:
       onListChanged: async (serverName: string, handler: () => void) => {
         const internalClient = await this.getConnectedClientForServer(serverName);
         return internalClient.resources.onListChanged(handler);
+      },
+    };
+  }
+
+  public get prompts() {
+    this.addToInstanceCache();
+    return {
+      list: async (): Promise<Record<string, Prompt[]>> => {
+        const allPrompts: Record<string, Prompt[]> = {};
+        for (const serverName of Object.keys(this.serverConfigs)) {
+          try {
+            const internalClient = await this.getConnectedClientForServer(serverName);
+            allPrompts[serverName] = await internalClient.prompts.list();
+          } catch (error) {
+            this.logger.error(`Failed to list prompts from server ${serverName}`, { error });
+          }
+        }
+        return allPrompts;
+      },
+      get: async ({serverName, name, args, version}: {serverName: string, name: string, args?: Record<string, any>, version?: string}) => {
+        const internalClient = await this.getConnectedClientForServer(serverName);
+        return internalClient.prompts.get({name, args, version});
+      },
+      onListChanged: async (serverName: string, handler: () => void) => {
+        const internalClient = await this.getConnectedClientForServer(serverName);
+        return internalClient.prompts.onListChanged(handler);
       },
     };
   }

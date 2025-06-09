@@ -1,3 +1,4 @@
+import type { MastraError } from '../error';
 import type { LogLevel } from './constants';
 import type { IMastraLogger } from './logger';
 import type { LoggerTransport } from './transport';
@@ -25,6 +26,10 @@ export class MultiLogger implements IMastraLogger {
     this.loggers.forEach(logger => logger.error(message, ...args));
   }
 
+  trackException(error: MastraError): void {
+    this.loggers.forEach(logger => logger.trackException(error));
+  }
+
   getTransports(): Map<string, LoggerTransport> {
     const transports: [string, LoggerTransport][] = [];
     this.loggers.forEach(logger => transports.push(...logger.getTransports().entries()));
@@ -33,16 +38,24 @@ export class MultiLogger implements IMastraLogger {
 
   async getLogs(
     transportId: string,
-    params?: { fromDate?: Date; toDate?: Date; logLevel?: LogLevel; filters?: Record<string, any> },
+    params?: {
+      fromDate?: Date;
+      toDate?: Date;
+      logLevel?: LogLevel;
+      filters?: Record<string, any>;
+      returnPaginationResults?: boolean;
+      page?: number;
+      perPage?: number;
+    },
   ) {
     for (const logger of this.loggers) {
       const logs = await logger.getLogs(transportId, params);
-      if (logs.length > 0) {
+      if (logs.total > 0) {
         return logs;
       }
     }
 
-    return [];
+    return { logs: [], total: 0, page: params?.page ?? 1, perPage: params?.perPage ?? 100, hasMore: false };
   }
 
   async getLogsByRunId(args: {
@@ -52,14 +65,16 @@ export class MultiLogger implements IMastraLogger {
     toDate?: Date;
     logLevel?: LogLevel;
     filters?: Record<string, any>;
+    page?: number;
+    perPage?: number;
   }) {
     for (const logger of this.loggers) {
       const logs = await logger.getLogsByRunId(args);
-      if (logs.length > 0) {
+      if (logs.total > 0) {
         return logs;
       }
     }
 
-    return [];
+    return { logs: [], total: 0, page: args.page ?? 1, perPage: args.perPage ?? 100, hasMore: false };
   }
 }
