@@ -83,11 +83,6 @@ export class LanceStorage extends MastraStorage {
     }
   }
 
-  private ensureDate(date: Date | string | undefined): Date | undefined {
-    if (!date) return undefined;
-    return date instanceof Date ? date : new Date(date);
-  }
-
   private translateSchema(schema: Record<string, StorageColumn>): Schema {
     const fields = Object.entries(schema).map(([name, column]) => {
       // Convert string type to Arrow DataType
@@ -168,6 +163,16 @@ export class LanceStorage extends MastraStorage {
     } catch (error: any) {
       throw new Error(`Failed to get table schema: ${error}`);
     }
+  }
+
+  async alterTable(_args: {
+    tableName: string;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void> {
+    // No-op: LanceDB Node.js does not support explicit ALTER TABLE.
+    // Schema will be updated automatically when inserting data with new fields.
+    this.logger?.info?.('LanceDB Node.js does not support explicit ALTER TABLE; schema will evolve on write.');
   }
 
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
