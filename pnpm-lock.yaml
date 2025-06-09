@@ -2680,9 +2680,6 @@ importers:
       '@lancedb/lancedb':
         specifier: ^0.18.1
         version: 0.18.2(apache-arrow@18.1.0)
-      '@mastra/core':
-        specifier: workspace:^
-        version: link:../../packages/core
       apache-arrow:
         specifier: ^18.1.0
         version: 18.1.0
@@ -2690,6 +2687,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
+      '@mastra/core':
+        specifier: workspace:^
+        version: link:../../packages/core
       '@microsoft/api-extractor':
         specifier: ^7.52.1
         version: 7.52.8(@types/node@20.19.0)
@@ -6891,7 +6891,6 @@ packages:
   '@lancedb/lancedb@0.18.2':
     resolution: {integrity: sha512-mWrijjkUVmf7HseX2SnZVh5M1tYAnO+pB1f81AVMKiSMfR4OqpA/6lQ2hk6qeQqJ6NNc/8pIgjkvwfGyp1QOag==}
     engines: {node: '>= 18'}
-    cpu: [x64, arm64]
     os: [darwin, linux, win32]
     peerDependencies:
       apache-arrow: '>=15.0.0 <=18.1.0'
