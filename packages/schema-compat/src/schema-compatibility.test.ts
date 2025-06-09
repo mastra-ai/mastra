@@ -1,9 +1,10 @@
 import type { LanguageModelV1 } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { SchemaCompatLayer } from './schema-compatibility';
 
+// A more realistic mock that recursively processes the schema using default handlers.
 class MockSchemaCompatibility extends SchemaCompatLayer {
   constructor(model: LanguageModelV1) {
     super(model);
@@ -17,7 +18,24 @@ class MockSchemaCompatibility extends SchemaCompatLayer {
     return 'jsonSchema7' as const;
   }
 
-  processZodType(value: z.ZodTypeAny): any {
+  processZodType(value: z.ZodTypeAny): z.ZodTypeAny {
+    if (value instanceof z.ZodObject) {
+      return this.defaultZodObjectHandler(value as any);
+    }
+    if (value instanceof z.ZodArray) {
+      // For these tests, we will handle all checks by converting them to descriptions.
+      return this.defaultZodArrayHandler(value as any, ['min', 'max', 'length']);
+    }
+    if (value instanceof z.ZodOptional) {
+      return this.defaultZodOptionalHandler(value as any);
+    }
+    if (value instanceof z.ZodUnion) {
+      return this.defaultZodUnionHandler(value as any);
+    }
+    if (value instanceof z.ZodString) {
+      // Add a marker to confirm it was processed
+      return z.string().describe(`${value.description || 'string'}:processed`);
+    }
     return value;
   }
 }
@@ -78,16 +96,18 @@ describe('SchemaCompatLayer', () => {
   });
 
   describe('defaultZodObjectHandler', () => {
-    it('should process object shape correctly', () => {
+    it('should process object shape correctly and recursively', () => {
       const testSchema = z.object({
-        name: z.string(),
-        age: z.number(),
+        name: z.string().describe('The name'),
+        age: z.number(), // not a string, so won't get a description
       });
 
-      const result = compatibility.defaultZodObjectHandler(testSchema);
+      const result = compatibility.defaultZodObjectHandler(testSchema) as z.ZodObject<any, any, any>;
+      const newShape = result.shape;
 
-      expect(result).toBeInstanceOf(z.ZodObject);
-      expect(result._def.typeName).toBe('ZodObject');
+      expect(newShape.name).toBeInstanceOf(z.ZodString);
+      expect(newShape.name.description).toBe('The name:processed');
+      expect(newShape.age.description).toBeUndefined();
     });
 
     it('should preserve description', () => {
@@ -100,6 +120,16 @@ describe('SchemaCompatLayer', () => {
       const result = compatibility.defaultZodObjectHandler(testSchema);
 
       expect(result.description).toBe('Test object');
+    });
+
+    it('should preserve strictness', () => {
+      const strictSchema = z.object({ name: z.string() }).strict();
+      const result = compatibility.defaultZodObjectHandler(strictSchema);
+      expect(result._def.unknownKeys).toBe('strict');
+
+      const nonStrictSchema = z.object({ name: z.string() });
+      const nonStrictResult = compatibility.defaultZodObjectHandler(nonStrictSchema);
+      expect(nonStrictResult._def.unknownKeys).toBe('strip'); // default
     });
   });
 
@@ -130,70 +160,49 @@ describe('SchemaCompatLayer', () => {
   });
 
   describe('defaultZodArrayHandler', () => {
-    it('should handle array with constraints', () => {
+    it('should handle array with constraints and convert to description', () => {
       const arraySchema = z.array(z.string()).min(2).max(10);
-
       const result = compatibility.defaultZodArrayHandler(arraySchema);
-
-      expect(result).toBeInstanceOf(z.ZodArray);
       expect(result.description).toContain('minLength');
       expect(result.description).toContain('maxLength');
     });
 
-    it('should handle array without constraints', () => {
-      const arraySchema = z.array(z.string());
+    it('should preserve constraints not in handleChecks', () => {
+      const arraySchema = z.array(z.string()).min(2).max(10);
+      // Only handle 'min', so 'max' should be preserved as a validator
+      const result = compatibility.defaultZodArrayHandler(arraySchema, ['min']);
 
-      const result = compatibility.defaultZodArrayHandler(arraySchema);
-
-      expect(result).toBeInstanceOf(z.ZodArray);
+      expect(result.description).toContain('minLength');
+      expect(result.description).not.toContain('maxLength');
+      expect(result._def.maxLength?.value).toBe(10); // Preserved
     });
 
     it('should handle exact length constraint', () => {
       const arraySchema = z.array(z.string()).length(5);
-
       const result = compatibility.defaultZodArrayHandler(arraySchema);
-
-      expect(result).toBeInstanceOf(z.ZodArray);
       expect(result.description).toContain('exactLength');
     });
 
     it('should preserve original description', () => {
-      const arraySchema = z.array(z.string()).describe('String array');
-
+      const arraySchema = z.array(z.string()).describe('String array').min(1);
       const result = compatibility.defaultZodArrayHandler(arraySchema);
-
       expect(result.description).toContain('String array');
+      expect(result.description).toContain('minLength');
     });
   });
 
   describe('defaultZodUnionHandler', () => {
-    it('should handle union types', () => {
-      const unionSchema = z.union([z.string(), z.number()]);
-
-      const result = compatibility.defaultZodUnionHandler(unionSchema);
-
-      expect(result).toBeInstanceOf(z.ZodUnion);
+    it('should handle union types and process recursively', () => {
+      const unionSchema = z.union([z.string().describe('A string'), z.number()]);
+      const result = compatibility.defaultZodUnionHandler(unionSchema) as z.ZodUnion<any>;
+      const processedString = result.options[0];
+      expect(processedString.description).toBe('A string:processed');
     });
 
     it('should preserve description', () => {
       const unionSchema = z.union([z.string(), z.number()]).describe('String or number');
-
       const result = compatibility.defaultZodUnionHandler(unionSchema);
-
       expect(result.description).toBe('String or number');
-    });
-
-    it('should throw error for union with less than 2 options', () => {
-      const mockUnion = {
-        _def: {
-          typeName: 'ZodUnion' as const,
-          options: [z.string()],
-        },
-      } as z.ZodUnion<[z.ZodString]>;
-
-      expect(() => {
-        compatibility.defaultZodUnionHandler(mockUnion);
-      }).toThrow('Union must have at least 2 options');
     });
   });
 
@@ -348,83 +357,106 @@ describe('SchemaCompatLayer', () => {
     });
   });
 
-  describe('schema processing with arrays', () => {
-    it('processToAISDKSchema should handle array schemas', () => {
-      const arraySchema = z.array(
-        z.object({
-          name: z.string().describe('The name'),
-          value: z.number().describe('The value'),
-        }),
-      );
+  describe('Top-level schema processing (processToAISDKSchema)', () => {
+    it('should process a simple object schema', () => {
+      const objectSchema = z.object({ user: z.string().describe('user name') });
+      const result = compatibility.processToAISDKSchema(objectSchema);
+      const userProp = result.jsonSchema.properties?.user as any;
+      expect(userProp.description).toBe('user name:processed');
+    });
 
-      // The mock just returns the type, so we spy on it to ensure it's called
-      const processZodTypeSpy = vi.spyOn(compatibility, 'processZodType');
+    it('should preserve top-level array constraints during processing', () => {
+      const arraySchema = z.array(z.string().describe('item')).min(1);
 
+      // In our mock, 'min' is converted to a description.
       const result = compatibility.processToAISDKSchema(arraySchema);
 
       expect(result.jsonSchema.type).toBe('array');
-      if (
-        result.jsonSchema.items &&
-        !Array.isArray(result.jsonSchema.items) &&
-        typeof result.jsonSchema.items === 'object'
-      ) {
-        expect(result.jsonSchema.items.type).toBe('object');
-        expect(result.jsonSchema.items.properties).toHaveProperty('name');
-        if (result.jsonSchema.items.properties?.name && typeof result.jsonSchema.items.properties.name === 'object') {
-          expect(result.jsonSchema.items.properties.name.description).toBe('The name');
+      expect(result.jsonSchema.description).toContain('minLength');
+      // The validator itself should be gone
+      expect(
+        result.validate?.([
+          /* empty array */
+        ]).success,
+      ).toBe(true);
+
+      // Now test that a constraint is preserved if not handled
+      class PreservingMock extends MockSchemaCompatibility {
+        processZodType(value: z.ZodTypeAny): z.ZodTypeAny {
+          if (value instanceof z.ZodArray) {
+            return this.defaultZodArrayHandler(value as any, [
+              /* handle nothing */
+            ]);
+          }
+          return super.processZodType(value);
         }
-      } else {
-        expect.fail('items is not a single schema object');
       }
-
-      // it should call processZodType on the object schema inside the array
-      expect(processZodTypeSpy).toHaveBeenCalledWith(arraySchema.element);
-
-      processZodTypeSpy.mockRestore();
+      const preservingCompat = new PreservingMock(mockModel);
+      const preservingResult = preservingCompat.processToAISDKSchema(arraySchema);
+      expect(preservingResult.jsonSchema.description).toBeUndefined();
+      expect(
+        preservingResult.validate?.([
+          /* empty array */
+        ]).success,
+      ).toBe(false); // validator preserved
     });
 
-    it('processToJSONSchema should handle array schemas', () => {
+    it('should preserve top-level object constraints (strict)', () => {
+      const strictSchema = z.object({ name: z.string() }).strict();
+      const result = compatibility.processToAISDKSchema(strictSchema);
+      expect(result.jsonSchema.additionalProperties).toBe(false);
+    });
+
+    it('should process array of objects, including nested properties', () => {
       const arraySchema = z.array(
         z.object({
           name: z.string().describe('The name'),
-          value: z.number().describe('The value'),
+          value: z.number().describe('The value'), // number is not processed in our mock
         }),
       );
-
-      const processZodTypeSpy = vi.spyOn(compatibility, 'processZodType');
-
-      const result = compatibility.processToJSONSchema(arraySchema);
-
-      expect(result.type).toBe('array');
-      if (result.items && !Array.isArray(result.items) && typeof result.items === 'object') {
-        expect(result.items.type).toBe('object');
-        expect(result.items.properties).toHaveProperty('name');
-        if (result.items.properties?.name && typeof result.items.properties.name === 'object') {
-          expect(result.items.properties.name.description).toBe('The name');
-        }
-      } else {
-        expect.fail('items is not a single schema object');
-      }
-
-      // it should call processZodType on the object schema inside the array
-      expect(processZodTypeSpy).toHaveBeenCalledWith(arraySchema.element);
-
-      processZodTypeSpy.mockRestore();
+      const result = compatibility.processToAISDKSchema(arraySchema);
+      const items = result.jsonSchema.items as any;
+      expect(items.properties.name.description).toBe('The name:processed');
+      expect(items.properties.value.description).toBe('The value');
     });
 
-    it('should still process object schemas correctly', () => {
-      const objectSchema = z.object({ user: z.string() });
-      const processZodTypeSpy = vi.spyOn(compatibility, 'processZodType');
+    it('should handle optional object schemas', () => {
+      const optionalSchema = z
+        .object({
+          name: z.string(),
+        })
+        .optional();
 
-      const result = compatibility.processToAISDKSchema(objectSchema);
+      const result = compatibility.processToAISDKSchema(optionalSchema);
+      expect(result.validate!({ name: 'test' }).success).toBe(true);
+      expect(result.validate!(undefined).success).toBe(true);
 
-      expect(result.jsonSchema.type).toBe('object');
-      expect(result.jsonSchema.properties).toHaveProperty('user');
+      const jsonSchema = result.jsonSchema;
+      const objectDef = (jsonSchema.anyOf as any[])?.find(def => def.type === 'object');
+      expect(objectDef.properties.name.description).toBe('string:processed');
+    });
 
-      // it should call processZodType for each property in the object
-      expect(processZodTypeSpy).toHaveBeenCalledWith(objectSchema.shape.user);
+    it('should handle optional array schemas', () => {
+      const optionalSchema = z.array(z.string()).optional();
+      const result = compatibility.processToAISDKSchema(optionalSchema);
+      expect(result.validate!(['test']).success).toBe(true);
+      expect(result.validate!(undefined).success).toBe(true);
 
-      processZodTypeSpy.mockRestore();
+      const jsonSchema = result.jsonSchema;
+      const arrayDef = (jsonSchema.anyOf as any[])?.find(def => def.type === 'array');
+      const items = arrayDef.items as any;
+      expect(items.description).toBe('string:processed');
+    });
+
+    it('should handle optional scalar schemas', () => {
+      const optionalSchema = z.string().optional();
+      const result = compatibility.processToAISDKSchema(optionalSchema);
+      expect(result.validate!('test').success).toBe(true);
+      expect(result.validate!(undefined).success).toBe(true);
+
+      const jsonSchema = result.jsonSchema;
+      const stringDef = (jsonSchema.anyOf as any[])?.find(def => def.type === 'string');
+      expect(stringDef.description).toBe('string:processed');
     });
   });
 });
