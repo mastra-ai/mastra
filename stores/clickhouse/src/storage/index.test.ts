@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { createSampleMessageV1, createSampleThread, createSampleWorkflowSnapshot } from '@internal/storage-test-utils';
-import type { MastraMessageV1, WorkflowRunState } from '@mastra/core';
+import type { MastraMessageV1, StorageColumn, WorkflowRunState } from '@mastra/core';
+import type { TABLE_NAMES } from '@mastra/core/storage';
 import { TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi, afterEach } from 'vitest';
 
@@ -796,6 +797,98 @@ describe('ClickhouseStore', () => {
       } catch {
         /* ignore */
       }
+    });
+  });
+
+  describe('alterTable', () => {
+    const TEST_TABLE = 'test_alter_table';
+    const BASE_SCHEMA = {
+      id: { type: 'integer', primaryKey: true, nullable: false },
+      name: { type: 'text', nullable: true },
+    } as Record<string, StorageColumn>;
+
+    beforeEach(async () => {
+      await store.createTable({ tableName: TEST_TABLE as TABLE_NAMES, schema: BASE_SCHEMA });
+    });
+
+    afterEach(async () => {
+      await store.clearTable({ tableName: TEST_TABLE as TABLE_NAMES });
+    });
+
+    it('adds a new column to an existing table', async () => {
+      await store.alterTable({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        schema: { ...BASE_SCHEMA, age: { type: 'integer', nullable: true } },
+        ifNotExists: ['age'],
+      });
+
+      await store.insert({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        record: { id: '1', name: 'Alice', age: 42 },
+      });
+
+      const row = await store.load<{ id: string; name: string; age?: number }>({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        keys: { id: '1' },
+      });
+      expect(row?.age).toBe(42);
+    });
+
+    it('is idempotent when adding an existing column', async () => {
+      await store.alterTable({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        schema: { ...BASE_SCHEMA, foo: { type: 'text', nullable: true } },
+        ifNotExists: ['foo'],
+      });
+      // Add the column again (should not throw)
+      await expect(
+        store.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, foo: { type: 'text', nullable: true } },
+          ifNotExists: ['foo'],
+        }),
+      ).resolves.not.toThrow();
+    });
+
+    it('throws when adding a NOT NULL column without default to non-empty table', async () => {
+      await store.insert({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        record: { id: 1, name: 'Bob' },
+      });
+
+      await expect(
+        store.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, must_have: { type: 'integer', nullable: false } },
+          ifNotExists: ['must_have'],
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('throws when adding a column with invalid name', async () => {
+      await expect(
+        store.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, 'invalid-name-!': { type: 'text', nullable: true } },
+          ifNotExists: ['invalid-name-!'],
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('throws or ignores when adding a column with a conflicting type', async () => {
+      await store.alterTable({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        schema: { ...BASE_SCHEMA, conflict: { type: 'integer', nullable: true } },
+        ifNotExists: ['conflict'],
+      });
+
+      await expect(
+        store.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, conflict: { type: 'text', nullable: true } },
+          ifNotExists: ['conflict'],
+        }),
+      ).rejects.toThrow();
     });
   });
 
