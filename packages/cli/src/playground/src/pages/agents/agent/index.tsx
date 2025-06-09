@@ -1,4 +1,4 @@
-import { AgentProvider, AgentChat as Chat, MastraResizablePanel } from '@mastra/playground-ui';
+import { AgentProvider, AgentChat as Chat, MainContentContent } from '@mastra/playground-ui';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { v4 as uuid } from '@lukeed/uuid';
@@ -51,12 +51,7 @@ function Agent() {
       defaultGenerateOptions={agent?.defaultGenerateOptions}
       defaultStreamOptions={agent?.defaultStreamOptions}
     >
-      <div
-        className={cn(
-          `grid h-full overflow-x-auto min-w-[min-content]`,
-          withSidebar ? `grid-cols-[auto_1fr_1fr]` : `grid-cols-[1fr_1fr]`,
-        )}
-      >
+      <MainContentContent isDivided={true} hasLeftServiceColumn={withSidebar}>
         {withSidebar && (
           <AgentSidebar agentId={agentId!} threadId={threadId!} threads={threads} isLoading={isThreadsLoading} />
         )}
@@ -74,7 +69,7 @@ function Agent() {
         </div>
 
         <AgentInformation agentId={agentId!} />
-      </div>
+      </MainContentContent>
     </AgentProvider>
   );
 }
