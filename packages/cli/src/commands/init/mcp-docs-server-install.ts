@@ -3,7 +3,7 @@ import os from 'os';
 import path from 'path';
 import { ensureFile, readJSON, writeJSON } from 'fs-extra/esm';
 
-const args = ['-y', '@mastra/mcp-docs-server@latest'];
+const args = ['-y', '@mastra/mcp-docs-server'];
 const createMcpConfig = (editor: Editor) => {
   if (editor === 'vscode') {
     return {
@@ -25,16 +25,10 @@ const createMcpConfig = (editor: Editor) => {
   }
   return {
     mcpServers: {
-      mastra:
-        process.platform === `win32`
-          ? {
-              command: 'cmd',
-              args: ['/c', 'npx', ...args],
-            }
-          : {
-              command: 'npx',
-              args,
-            },
+      mastra: {
+        command: 'npx',
+        args,
+      },
     },
   };
 };
