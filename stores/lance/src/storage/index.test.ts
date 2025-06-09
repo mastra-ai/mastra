@@ -8,7 +8,7 @@ import {
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
 } from '@mastra/core/storage';
-import type { StorageColumn } from '@mastra/core/storage';
+import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { LanceStorage } from './index';
 
@@ -1164,6 +1164,89 @@ describe('LanceStorage tests', async () => {
         workflowName,
       });
       expect(notFound).toBeNull();
+    });
+  });
+
+  describe('alterTable (no-op/schemaless)', () => {
+    const TEST_TABLE = 'test_alter_table'; // Use "table" or "collection" as appropriate
+    beforeEach(async () => {
+      await storage.clearTable({ tableName: TEST_TABLE as TABLE_NAMES });
+    });
+
+    afterEach(async () => {
+      await storage.clearTable({ tableName: TEST_TABLE as TABLE_NAMES });
+    });
+
+    it('allows inserting records with new fields without alterTable', async () => {
+      await storage.insert({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        record: { id: '1', name: 'Alice' },
+      });
+      await storage.insert({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        record: { id: '2', name: 'Bob', newField: 123 },
+      });
+
+      const row = await storage.load({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        keys: { id: '2' },
+      });
+      expect(row?.newField).toBe(123);
+    });
+
+    it('does not throw when calling alterTable (no-op)', async () => {
+      await expect(
+        storage.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: {
+            id: { type: 'integer', primaryKey: true, nullable: false },
+            name: { type: 'text', nullable: true },
+            extra: { type: 'integer', nullable: true },
+          },
+          ifNotExists: ['extra'],
+        }),
+      ).resolves.not.toThrow();
+    });
+
+    it('can add multiple new fields at write time', async () => {
+      await storage.insert({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        record: { id: '3', name: 'Charlie', age: 30, city: 'Paris' },
+      });
+      const row = await storage.load({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        keys: { id: '3' },
+      });
+      expect(row?.age).toBe(30);
+      expect(row?.city).toBe('Paris');
+    });
+
+    it('can retrieve all fields, including dynamically added ones', async () => {
+      await storage.insert({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        record: { id: '4', name: 'Dana', hobby: 'skiing' },
+      });
+      const row = await storage.load({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        keys: { id: '4' },
+      });
+      expect(row?.hobby).toBe('skiing');
+    });
+
+    it('does not restrict or error on arbitrary new fields', async () => {
+      await expect(
+        storage.insert({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          record: { id: '5', weirdField: { nested: true }, another: [1, 2, 3] },
+        }),
+      ).resolves.not.toThrow();
+
+      const row = await storage.load({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        keys: { id: '5' },
+      });
+      expect(row?.weirdField).toEqual({ nested: true });
+      expect(row?.another).toEqual([1, 2, 3]);
     });
   });
 });
