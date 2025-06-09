@@ -339,12 +339,12 @@ export const testWorkflow = createWorkflow({
 
 ## MCP Server
 
-You can expose agents, tools, and workflows to an MCP Server, making them accessible to any MCP-compatible client.
+You can convert your workflows into tools by passing them into an instance of a Mastra `MCPServer`. This allows any MCP-compatible client to access your workflow.
+
+The workflow description becomes the tool description and the input schema becomes the tool's input schema.
 
 When you provide workflows to the server, each workflow is automatically exposed as a callable tool for example:
 
-- `ask_testAgent`
-- `testTool`
 - `run_testWorkflow`.
 
 ```typescript filename="src/test-mcp-server.ts" showLineNumbers copy
@@ -358,12 +358,6 @@ async function startServer() {
   const server = new MCPServer({
     name: "test-mcp-server",
     version: "1.0.0",
-    agents: {
-      testAgent
-    },
-    tools: {
-      testTool
-    },
     workflows: {
       testWorkflow
     }
@@ -376,7 +370,7 @@ async function startServer() {
 startServer().catch(console.error);
 ```
 
-To verify that your agents, tools, and workflows are available on the server, you can connect with an MCPClient.
+To verify that your workflow is available on the server, you can connect with an MCPClient.
 
 ```typescript filename="src/test-mcp-client.ts" showLineNumbers copy
 import { MCPClient } from "@mastra/mcp";
@@ -398,7 +392,7 @@ async function main() {
 main().catch(console.error);
 ```
 
-Run the client script to list all available tools.
+Run the client script to see your workflow tool.
 
 ```bash
 npx tsx src/test-mcp-client.ts

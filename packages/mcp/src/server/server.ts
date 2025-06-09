@@ -29,32 +29,30 @@ import {
   ListResourceTemplatesRequestSchema,
   SubscribeRequestSchema,
   UnsubscribeRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
+  PromptSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import type {
   ResourceContents,
   Resource,
   ResourceTemplate,
   ServerCapabilities,
+  Prompt,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { SSEStreamingApi } from 'hono/streaming';
 import { streamSSE } from 'hono/streaming';
 import { SSETransport } from 'hono-mcp-server-sse-transport';
 import { z } from 'zod';
+import { ServerPromptActions } from './promptActions';
 import { ServerResourceActions } from './resourceActions';
+import type {
+  MCPServerPromptMessagesCallback,
+  MCPServerPrompts,
+  MCPServerResourceContentCallback,
+  MCPServerResources,
+} from './types';
 
-export type MCPServerResourceContentCallback = ({
-  uri,
-}: {
-  uri: string;
-}) => Promise<MCPServerResourceContent | MCPServerResourceContent[]>;
-export type MCPServerResourceContent = { text?: string } | { blob?: string };
-export type MCPServerResources = {
-  listResources: () => Promise<Resource[]>;
-  getResourceContent: MCPServerResourceContentCallback;
-  resourceTemplates?: () => Promise<ResourceTemplate[]>;
-};
-
-export type { Resource, ResourceTemplate };
 export class MCPServer extends MCPServerBase {
   private server: Server;
   private stdioTransport?: StdioServerTransport;
@@ -69,11 +67,17 @@ export class MCPServer extends MCPServerBase {
   private subscribeResourceHandlerIsRegistered: boolean = false;
   private unsubscribeResourceHandlerIsRegistered: boolean = false;
 
+  private listPromptsHandlerIsRegistered: boolean = false;
+  private getPromptHandlerIsRegistered: boolean = false;
+
   private definedResources?: Resource[];
   private definedResourceTemplates?: ResourceTemplate[];
   private resourceOptions?: MCPServerResources;
+  private definedPrompts?: Prompt[];
+  private promptOptions?: MCPServerPrompts;
   private subscriptions: Set<string> = new Set();
   public readonly resources: ServerResourceActions;
+  public readonly prompts: ServerPromptActions;
 
   /**
    * Get the current stdio transport.
@@ -114,9 +118,10 @@ export class MCPServer extends MCPServerBase {
    * Construct a new MCPServer instance.
    * @param opts - Configuration options for the server, including registry metadata.
    */
-  constructor(opts: MCPServerConfig & { resources?: MCPServerResources }) {
+  constructor(opts: MCPServerConfig & { resources?: MCPServerResources; prompts?: MCPServerPrompts }) {
     super(opts);
     this.resourceOptions = opts.resources;
+    this.promptOptions = opts.prompts;
 
     const capabilities: ServerCapabilities = {
       tools: {},
@@ -125,6 +130,10 @@ export class MCPServer extends MCPServerBase {
 
     if (opts.resources) {
       capabilities.resources = { subscribe: true, listChanged: true };
+    }
+
+    if (opts.prompts) {
+      capabilities.prompts = { listChanged: true };
     }
 
     this.server = new Server({ name: this.name, version: this.version }, { capabilities });
@@ -146,6 +155,13 @@ export class MCPServer extends MCPServerBase {
         this.registerListResourceTemplatesHandler();
       }
     }
+    if (opts.prompts) {
+      this.registerListPromptsHandler();
+      this.registerGetPromptHandler({
+        getPromptMessagesCallback: opts.prompts.getPromptMessages,
+      });
+    }
+
     this.resources = new ServerResourceActions({
       getSubscriptions: () => this.subscriptions,
       getLogger: () => this.logger,
@@ -155,6 +171,14 @@ export class MCPServer extends MCPServerBase {
       },
       clearDefinedResourceTemplates: () => {
         this.definedResourceTemplates = undefined;
+      },
+    });
+
+    this.prompts = new ServerPromptActions({
+      getLogger: () => this.logger,
+      getSdkServer: () => this.server,
+      clearDefinedPrompts: () => {
+        this.definedPrompts = undefined;
       },
     });
   }
@@ -652,6 +676,107 @@ export class MCPServer extends MCPServerBase {
       this.subscriptions.delete(uri);
       return {};
     });
+  }
+
+  /**
+   * Register the ListPrompts handler.
+   */
+  private registerListPromptsHandler() {
+    if (this.listPromptsHandlerIsRegistered) {
+      return;
+    }
+    this.listPromptsHandlerIsRegistered = true;
+    const capturedPromptOptions = this.promptOptions;
+
+    if (!capturedPromptOptions?.listPrompts) {
+      this.logger.warn('ListPrompts capability not supported by server configuration.');
+      return;
+    }
+
+    this.server.setRequestHandler(ListPromptsRequestSchema, async () => {
+      this.logger.debug('Handling ListPrompts request');
+      if (this.definedPrompts) {
+        return {
+          prompts: this.definedPrompts?.map(p => ({ ...p, version: p.version ?? undefined })),
+        };
+      } else {
+        try {
+          const prompts = await capturedPromptOptions.listPrompts();
+          // Parse and cache the prompts
+          for (const prompt of prompts) {
+            PromptSchema.parse(prompt);
+          }
+          this.definedPrompts = prompts;
+          this.logger.debug(`Fetched and cached ${this.definedPrompts.length} prompts.`);
+          return {
+            prompts: this.definedPrompts?.map(p => ({ ...p, version: p.version ?? undefined })),
+          };
+        } catch (error) {
+          this.logger.error('Error fetching prompts via listPrompts():', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+          // Re-throw to let the MCP Server SDK handle formatting the error response
+          throw error;
+        }
+      }
+    });
+  }
+
+  /**
+   * Register the GetPrompt handler.
+   */
+  private registerGetPromptHandler({
+    getPromptMessagesCallback,
+  }: {
+    getPromptMessagesCallback?: MCPServerPromptMessagesCallback;
+  }) {
+    if (this.getPromptHandlerIsRegistered) return;
+    this.getPromptHandlerIsRegistered = true;
+    // Accept optional version parameter in prompts/get
+    this.server.setRequestHandler(
+      GetPromptRequestSchema,
+      async (request: { params: { name: string; version?: string; arguments?: any } }) => {
+        const startTime = Date.now();
+        const { name, version, arguments: args } = request.params;
+        if (!this.definedPrompts) {
+          const prompts = await this.promptOptions?.listPrompts?.();
+          if (!prompts) throw new Error('Failed to load prompts');
+          this.definedPrompts = prompts;
+        }
+        // Select prompt by name and version (if provided)
+        let prompt;
+        if (version) {
+          prompt = this.definedPrompts?.find(p => p.name === name && p.version === version);
+        } else {
+          // Select the first matching name if no version is provided.
+          prompt = this.definedPrompts?.find(p => p.name === name);
+        }
+        if (!prompt) throw new Error(`Prompt "${name}"${version ? ` (version ${version})` : ''} not found`);
+        // Validate required arguments
+        if (prompt.arguments) {
+          for (const arg of prompt.arguments) {
+            if (arg.required && (args?.[arg.name] === undefined || args?.[arg.name] === null)) {
+              throw new Error(`Missing required argument: ${arg.name}`);
+            }
+          }
+        }
+        try {
+          let messages: any[] = [];
+          if (getPromptMessagesCallback) {
+            messages = await getPromptMessagesCallback({ name, version, args });
+          }
+          const duration = Date.now() - startTime;
+          this.logger.info(
+            `Prompt '${name}'${version ? ` (version ${version})` : ''} retrieved successfully in ${duration}ms.`,
+          );
+          return { prompt, messages };
+        } catch (error) {
+          const duration = Date.now() - startTime;
+          this.logger.error(`Failed to get content for prompt '${name}' in ${duration}ms`, { error });
+          throw error;
+        }
+      },
+    );
   }
 
   /**

@@ -2700,10 +2700,22 @@ ${err.stack.split('\n').slice(1).join('\n')}
           required: false,
           schema: { type: 'string' },
         },
+        {
+          name: 'page',
+          in: 'query',
+          required: false,
+          schema: { type: 'number' },
+        },
+        {
+          name: 'perPage',
+          in: 'query',
+          required: false,
+          schema: { type: 'number' },
+        },
       ],
       responses: {
         200: {
-          description: 'List of all logs',
+          description: 'Paginated list of all logs',
         },
       },
     }),
@@ -2766,10 +2778,22 @@ ${err.stack.split('\n').slice(1).join('\n')}
           required: false,
           schema: { type: 'string' },
         },
+        {
+          name: 'page',
+          in: 'query',
+          required: false,
+          schema: { type: 'number' },
+        },
+        {
+          name: 'perPage',
+          in: 'query',
+          required: false,
+          schema: { type: 'number' },
+        },
       ],
       responses: {
         200: {
-          description: 'List of logs for run ID',
+          description: 'Paginated list of logs for run ID',
         },
       },
     }),

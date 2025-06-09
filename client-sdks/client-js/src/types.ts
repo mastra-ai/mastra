@@ -221,6 +221,8 @@ export interface GetLogsParams {
   toDate?: Date;
   logLevel?: LogLevel;
   filters?: Record<string, string>;
+  page?: number;
+  perPage?: number;
 }
 
 export interface GetLogParams {
@@ -230,9 +232,17 @@ export interface GetLogParams {
   toDate?: Date;
   logLevel?: LogLevel;
   filters?: Record<string, string>;
+  page?: number;
+  perPage?: number;
 }
 
-export type GetLogsResponse = BaseLogMessage[];
+export type GetLogsResponse = {
+  logs: BaseLogMessage[];
+  total: number;
+  page: number;
+  perPage: number;
+  hasMore: boolean;
+};
 
 export type RequestFunction = (path: string, options?: RequestOptions) => Promise<any>;
 

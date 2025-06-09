@@ -1,11 +1,4 @@
-export enum Level {
-  ERROR = 'ERROR',
-  WARNING = 'WARNING',
-  INFO = 'INFO',
-  DEBUG = 'DEBUG',
-}
-
-export enum Domain {
+export enum ErrorDomain {
   TOOL = 'TOOL',
   AGENT = 'AGENT',
   MCP = 'MCP',
@@ -16,6 +9,7 @@ export enum ErrorCategory {
   UNKNOWN = 'UNKNOWN',
   USER = 'USER',
   SYSTEM = 'SYSTEM',
+  THIRD_PARTY = 'THIRD_PARTY',
 }
 
 type Scalar = null | boolean | number | string;
@@ -30,20 +24,20 @@ type Json<T> = [T] extends [Scalar | undefined]
  * Defines the structure for an error's metadata.
  * This is used to create instances of MastraError.
  */
-export interface IErrorDefinition {
+export interface IErrorDefinition<D, C> {
   /** Unique identifier for the error. */
-  id: string | number;
+  id: Uppercase<string>;
   /**
-   * The error message template or a function to generate it.
-   * If a function, it receives context to interpolate values.
+   * Optional custom error message that overrides the original error message.
+   * If not provided, the original error message will be used, or 'Unknown error' if no error is provided.
    */
-  text: string;
+  text?: string;
   /**
    * Functional domain of the error (e.g., CONFIG, BUILD, API).
    */
-  domain: `${Domain}`;
+  domain: D;
   /** Broad category of the error (e.g., USER, SYSTEM, THIRD_PARTY). */
-  category: `${ErrorCategory}`;
+  category: C;
 
   details?: Record<string, Json<Scalar>>;
 }
@@ -52,23 +46,31 @@ export interface IErrorDefinition {
  * Base error class for the Mastra ecosystem.
  * It standardizes error reporting and can be extended for more specific error types.
  */
-export class MastraError extends Error {
-  public readonly id: string | number;
-  public readonly domain: `${Domain}`;
-  public readonly category: `${ErrorCategory}`;
-  public readonly originalError?: Error;
+export class MastraBaseError<D, C> extends Error {
+  public readonly id: Uppercase<string>;
+  public readonly domain: D;
+  public readonly category: C;
   public readonly details?: Record<string, Json<Scalar>> = {};
+  public readonly message: string;
 
-  constructor(errorDefinition: IErrorDefinition, originalError?: Error | MastraError) {
-    const message = errorDefinition.text;
+  constructor(
+    errorDefinition: IErrorDefinition<D, C>,
+    originalError?: string | Error | MastraBaseError<D, C> | unknown,
+  ) {
+    let error;
+    if (originalError instanceof Error) {
+      error = originalError;
+    } else if (originalError) {
+      error = new Error(String(originalError));
+    }
 
-    super(message, originalError);
-
+    const message = errorDefinition.text ?? error?.message ?? 'Unknown error';
+    super(message, { cause: error });
     this.id = errorDefinition.id;
     this.domain = errorDefinition.domain;
     this.category = errorDefinition.category;
-    this.originalError = originalError;
     this.details = errorDefinition.details ?? {};
+    this.message = message;
 
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -81,8 +83,6 @@ export class MastraError extends Error {
       message: this.message,
       domain: this.domain,
       category: this.category,
-      stack: this.stack,
-      originalError: this.originalError,
       details: this.details,
     };
   }
@@ -94,16 +94,10 @@ export class MastraError extends Error {
       code: this.id,
     };
   }
+
+  public toString() {
+    return JSON.stringify(this.toJSON());
+  }
 }
 
-const error = new MastraError({
-  id: 'BASE_TEST_001',
-  text: 'This is a base test error',
-  domain: Domain.AGENT,
-  category: ErrorCategory.UNKNOWN,
-  details: {
-    tset: 'lalal',
-  },
-});
-
-console.log(error.toJSON());
+export class MastraError extends MastraBaseError<`${ErrorDomain}`, `${ErrorCategory}`> {}
