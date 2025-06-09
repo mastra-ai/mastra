@@ -1,6 +1,7 @@
 import type { Schema, LanguageModelV1 } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
-import { z } from 'zod';
+import { z, ZodOptional, ZodObject, ZodArray, ZodUnion, ZodString, ZodNumber, ZodDate, ZodDefault } from 'zod';
+import type { ZodTypeAny } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
 import { convertZodSchemaToAISDKSchema } from './utils';
 
@@ -25,6 +26,15 @@ export const ALL_NUMBER_CHECKS = [
  * @constant
  */
 export const ALL_ARRAY_CHECKS = ['min', 'max', 'length'] as const;
+
+export const isOptional = (v: ZodTypeAny): v is ZodOptional<any> => v instanceof ZodOptional;
+export const isObj = (v: ZodTypeAny): v is ZodObject<any, any, any> => v instanceof ZodObject;
+export const isArr = (v: ZodTypeAny): v is ZodArray<any, any> => v instanceof ZodArray;
+export const isUnion = (v: ZodTypeAny): v is ZodUnion<[ZodTypeAny, ...ZodTypeAny[]]> => v instanceof ZodUnion;
+export const isString = (v: ZodTypeAny): v is ZodString => v instanceof ZodString;
+export const isNumber = (v: ZodTypeAny): v is ZodNumber => v instanceof ZodNumber;
+export const isDate = (v: ZodTypeAny): v is ZodDate => v instanceof ZodDate;
+export const isDefault = (v: ZodTypeAny): v is ZodDefault<any> => v instanceof ZodDefault;
 
 /**
  * Zod types that are not supported by most AI model providers and should be avoided.
@@ -214,7 +224,7 @@ export abstract class SchemaCompatLayer {
    * @returns The processed Zod type
    * @abstract
    */
-  abstract processZodType(value: z.ZodTypeAny): z.ZodTypeAny;
+  abstract processZodType(value: ZodTypeAny): ZodTypeAny;
 
   /**
    * Default handler for Zod object types. Recursively processes all properties in the object.
@@ -222,13 +232,13 @@ export abstract class SchemaCompatLayer {
    * @param value - The Zod object to process
    * @returns The processed Zod object
    */
-  public defaultZodObjectHandler(value: z.ZodObject<any, any, any>): z.ZodObject<any, any, any> {
-    const processedShape = Object.entries(value.shape).reduce<Record<string, z.ZodTypeAny>>((acc, [key, propValue]) => {
-      acc[key] = this.processZodType(propValue as z.ZodTypeAny);
+  public defaultZodObjectHandler(value: ZodObject<any, any, any>): ZodObject<any, any, any> {
+    const processedShape = Object.entries(value.shape).reduce<Record<string, ZodTypeAny>>((acc, [key, propValue]) => {
+      acc[key] = this.processZodType(propValue as ZodTypeAny);
       return acc;
     }, {});
 
-    let result: z.ZodObject<any, any, any> = z.object(processedShape);
+    let result: ZodObject<any, any, any> = z.object(processedShape);
 
     if (value._def.unknownKeys === 'strict') {
       result = result.strict();
@@ -295,9 +305,9 @@ export abstract class SchemaCompatLayer {
    * @returns The processed Zod array
    */
   public defaultZodArrayHandler(
-    value: z.ZodArray<any, any>,
+    value: ZodArray<any, any>,
     handleChecks: readonly ArrayCheckType[] = ALL_ARRAY_CHECKS,
-  ): z.ZodArray<any, any> {
+  ): ZodArray<any, any> {
     const zodArrayDef = value._def;
     const processedType = this.processZodType(zodArrayDef.type);
 
@@ -343,10 +353,10 @@ export abstract class SchemaCompatLayer {
    * @returns The processed Zod union
    * @throws Error if union has fewer than 2 options
    */
-  public defaultZodUnionHandler(value: z.ZodUnion<[z.ZodTypeAny, ...z.ZodTypeAny[]]>): z.ZodTypeAny {
-    const processedOptions = value._def.options.map((option: z.ZodTypeAny) => this.processZodType(option));
+  public defaultZodUnionHandler(value: ZodUnion<[ZodTypeAny, ...ZodTypeAny[]]>): ZodTypeAny {
+    const processedOptions = value._def.options.map((option: ZodTypeAny) => this.processZodType(option));
     if (processedOptions.length < 2) throw new Error('Union must have at least 2 options');
-    let result = z.union(processedOptions as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]]);
+    let result = z.union(processedOptions as [ZodTypeAny, ZodTypeAny, ...ZodTypeAny[]]);
     if (value.description) {
       result = result.describe(value.description);
     }
@@ -361,9 +371,9 @@ export abstract class SchemaCompatLayer {
    * @returns The processed Zod string
    */
   public defaultZodStringHandler(
-    value: z.ZodString,
+    value: ZodString,
     handleChecks: readonly StringCheckType[] = ALL_STRING_CHECKS,
-  ): z.ZodString {
+  ): ZodString {
     const constraints: StringConstraints = {};
     const checks = value._def.checks || [];
     type ZodStringCheck = (typeof checks)[number];
@@ -432,9 +442,9 @@ export abstract class SchemaCompatLayer {
    * @returns The processed Zod number
    */
   public defaultZodNumberHandler(
-    value: z.ZodNumber,
+    value: ZodNumber,
     handleChecks: readonly NumberCheckType[] = ALL_NUMBER_CHECKS,
-  ): z.ZodNumber {
+  ): ZodNumber {
     const constraints: NumberConstraints = {};
     const checks = value._def.checks || [];
     type ZodNumberCheck = (typeof checks)[number];
@@ -493,7 +503,7 @@ export abstract class SchemaCompatLayer {
    * @param value - The Zod date to process
    * @returns A Zod string schema representing the date in ISO format
    */
-  public defaultZodDateHandler(value: z.ZodDate): z.ZodString {
+  public defaultZodDateHandler(value: ZodDate): ZodString {
     const constraints: DateConstraints = {};
     const checks = value._def.checks || [];
     type ZodDateCheck = (typeof checks)[number];
@@ -535,9 +545,9 @@ export abstract class SchemaCompatLayer {
    * @returns The processed Zod optional
    */
   public defaultZodOptionalHandler(
-    value: z.ZodOptional<any>,
+    value: ZodOptional<any>,
     handleTypes: readonly AllZodType[] = SUPPORTED_ZOD_TYPES,
-  ): z.ZodTypeAny {
+  ): ZodTypeAny {
     if (handleTypes.includes(value._def.innerType._def.typeName as AllZodType)) {
       return this.processZodType(value._def.innerType).optional();
     } else {

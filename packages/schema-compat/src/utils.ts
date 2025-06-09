@@ -1,7 +1,7 @@
 import { jsonSchema } from 'ai';
 import type { Schema } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
-import { ZodOptional, type z, type ZodSchema } from 'zod';
+import type { z, ZodSchema } from 'zod';
 import { convertJsonSchemaToZod } from 'zod-from-json-schema';
 import type { JSONSchema as ZodFromJSONSchema_JSONSchema } from 'zod-from-json-schema';
 import type { Targets } from 'zod-to-json-schema';
