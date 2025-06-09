@@ -1647,28 +1647,27 @@ describe('CloudflareStore Workers Binding', () => {
   });
 
   describe('alterTable (no-op/schemaless)', () => {
-    const TEST_TABLE = 'test_alter_table'; // Use "table" or "collection" as appropriate
     beforeEach(async () => {
-      await store.clearTable({ tableName: TEST_TABLE as TABLE_NAMES });
+      await clearTableExceptSchema(store, TABLE_MESSAGES);
     });
 
     afterEach(async () => {
-      await store.clearTable({ tableName: TEST_TABLE as TABLE_NAMES });
+      await clearTableExceptSchema(store, TABLE_MESSAGES);
     });
 
     it('allows inserting records with new fields without alterTable', async () => {
       await store.insert({
-        tableName: TEST_TABLE as TABLE_NAMES,
-        record: { id: '1', name: 'Alice' },
+        tableName: TABLE_MESSAGES,
+        record: { id: '1', name: 'Alice', threadId: '1' },
       });
       await store.insert({
-        tableName: TEST_TABLE as TABLE_NAMES,
-        record: { id: '2', name: 'Bob', newField: 123 },
+        tableName: TABLE_MESSAGES,
+        record: { id: '2', name: 'Bob', threadId: '1', newField: 123 },
       });
 
       const row = await store.load<{ id: string; name: string; newField?: number }>({
-        tableName: TEST_TABLE as TABLE_NAMES,
-        keys: { id: '2' },
+        tableName: TABLE_MESSAGES,
+        keys: { id: '2', threadId: '1' },
       });
       expect(row?.newField).toBe(123);
     });
@@ -1676,7 +1675,7 @@ describe('CloudflareStore Workers Binding', () => {
     it('does not throw when calling alterTable (no-op)', async () => {
       await expect(
         store.alterTable({
-          tableName: TEST_TABLE as TABLE_NAMES,
+          tableName: TABLE_MESSAGES,
           schema: {
             id: { type: 'integer', primaryKey: true, nullable: false },
             name: { type: 'text', nullable: true },
@@ -1689,12 +1688,12 @@ describe('CloudflareStore Workers Binding', () => {
 
     it('can add multiple new fields at write time', async () => {
       await store.insert({
-        tableName: TEST_TABLE as TABLE_NAMES,
-        record: { id: '3', name: 'Charlie', age: 30, city: 'Paris' },
+        tableName: TABLE_MESSAGES,
+        record: { id: '3', name: 'Charlie', threadId: '1', age: 30, city: 'Paris' },
       });
       const row = await store.load<{ id: string; name: string; age?: number; city?: string }>({
-        tableName: TEST_TABLE as TABLE_NAMES,
-        keys: { id: '3' },
+        tableName: TABLE_MESSAGES,
+        keys: { id: '3', threadId: '1' },
       });
       expect(row?.age).toBe(30);
       expect(row?.city).toBe('Paris');
@@ -1702,12 +1701,12 @@ describe('CloudflareStore Workers Binding', () => {
 
     it('can retrieve all fields, including dynamically added ones', async () => {
       await store.insert({
-        tableName: TEST_TABLE as TABLE_NAMES,
-        record: { id: '4', name: 'Dana', hobby: 'skiing' },
+        tableName: TABLE_MESSAGES,
+        record: { id: '4', name: 'Dana', threadId: '1', hobby: 'skiing' },
       });
       const row = await store.load<{ id: string; name: string; hobby?: string }>({
-        tableName: TEST_TABLE as TABLE_NAMES,
-        keys: { id: '4' },
+        tableName: TABLE_MESSAGES,
+        keys: { id: '4', threadId: '1' },
       });
       expect(row?.hobby).toBe('skiing');
     });
@@ -1715,14 +1714,14 @@ describe('CloudflareStore Workers Binding', () => {
     it('does not restrict or error on arbitrary new fields', async () => {
       await expect(
         store.insert({
-          tableName: TEST_TABLE as TABLE_NAMES,
-          record: { id: '5', weirdField: { nested: true }, another: [1, 2, 3] },
+          tableName: TABLE_MESSAGES,
+          record: { id: '5', threadId: '1', weirdField: { nested: true }, another: [1, 2, 3] },
         }),
       ).resolves.not.toThrow();
 
       const row = await store.load<{ id: string; weirdField?: any; another?: any }>({
-        tableName: TEST_TABLE as TABLE_NAMES,
-        keys: { id: '5' },
+        tableName: TABLE_MESSAGES,
+        keys: { id: '5', threadId: '1' },
       });
       expect(row?.weirdField).toEqual({ nested: true });
       expect(row?.another).toEqual([1, 2, 3]);

@@ -165,14 +165,60 @@ export class LanceStorage extends MastraStorage {
     }
   }
 
-  async alterTable(_args: {
+  protected getDefaultValue(type: string): string {
+    switch (type) {
+      case 'text':
+        return "''";
+      case 'timestamp':
+        return 'CURRENT_TIMESTAMP';
+      case 'integer':
+      case 'bigint':
+        return '0';
+      case 'jsonb':
+        return '{}';
+      default:
+        return super.getDefaultValue(type);
+    }
+  }
+
+  async alterTable({
+    tableName,
+    schema,
+    ifNotExists,
+  }: {
     tableName: string;
     schema: Record<string, StorageColumn>;
     ifNotExists: string[];
   }): Promise<void> {
-    // No-op: LanceDB Node.js does not support explicit ALTER TABLE.
-    // Schema will be updated automatically when inserting data with new fields.
-    this.logger?.info?.('LanceDB Node.js does not support explicit ALTER TABLE; schema will evolve on write.');
+    const table = await this.lanceClient.openTable(tableName);
+    const currentSchema = await table.schema();
+    const existingFields = new Set(currentSchema.fields.map((f: any) => f.name));
+
+    const typeMap: Record<string, string> = {
+      text: 'string',
+      integer: 'int',
+      bigint: 'bigint',
+      timestamp: 'timestamp',
+      jsonb: 'string',
+    };
+
+    // Find columns to add
+    const columnsToAdd = ifNotExists
+      .filter(col => schema[col] && !existingFields.has(col))
+      .map(col => {
+        const colDef = schema[col];
+        return {
+          name: col,
+          valueSql: colDef?.nullable
+            ? `cast(NULL as ${typeMap[colDef.type]})`
+            : `cast(${this.getDefaultValue(colDef?.type ?? 'text')} as ${typeMap[colDef?.type ?? 'text']})`,
+        };
+      });
+
+    if (columnsToAdd.length > 0) {
+      await table.addColumns(columnsToAdd);
+      this.logger?.info?.(`Added columns [${columnsToAdd.map(c => c.name).join(', ')}] to table ${tableName}`);
+    }
   }
 
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {

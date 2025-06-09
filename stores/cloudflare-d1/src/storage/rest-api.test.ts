@@ -1350,7 +1350,7 @@ describe.skip('D1Store REST API', () => {
 
       await store.insert({
         tableName: TEST_TABLE as TABLE_NAMES,
-        record: { id: '1', name: 'Alice', age: 42 },
+        record: { id: 1, name: 'Alice', age: 42 },
       });
 
       const row = await store.load<{ id: string; name: string; age?: number }>({

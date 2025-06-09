@@ -801,11 +801,11 @@ describe('MongoDBStore', () => {
         record: { id: '2', name: 'Bob', newField: 123 },
       });
 
-      const row = await store.load<{ id: string; name: string; newField?: number }>({
+      const row = await store.load<{ id: string; name: string; newField?: number }[]>({
         tableName: TEST_TABLE as TABLE_NAMES,
         keys: { id: '2' },
       });
-      expect(row?.newField).toBe(123);
+      expect(row?.[0]?.newField).toBe(123);
     });
 
     it('does not throw when calling alterTable (no-op)', async () => {
@@ -827,12 +827,12 @@ describe('MongoDBStore', () => {
         tableName: TEST_TABLE as TABLE_NAMES,
         record: { id: '3', name: 'Charlie', age: 30, city: 'Paris' },
       });
-      const row = await store.load<{ id: string; name: string; age?: number; city?: string }>({
+      const row = await store.load<{ id: string; name: string; age?: number; city?: string }[]>({
         tableName: TEST_TABLE as TABLE_NAMES,
         keys: { id: '3' },
       });
-      expect(row?.age).toBe(30);
-      expect(row?.city).toBe('Paris');
+      expect(row?.[0]?.age).toBe(30);
+      expect(row?.[0]?.city).toBe('Paris');
     });
 
     it('can retrieve all fields, including dynamically added ones', async () => {
@@ -840,11 +840,11 @@ describe('MongoDBStore', () => {
         tableName: TEST_TABLE as TABLE_NAMES,
         record: { id: '4', name: 'Dana', hobby: 'skiing' },
       });
-      const row = await store.load<{ id: string; name: string; hobby?: string }>({
+      const row = await store.load<{ id: string; name: string; hobby?: string }[]>({
         tableName: TEST_TABLE as TABLE_NAMES,
         keys: { id: '4' },
       });
-      expect(row?.hobby).toBe('skiing');
+      expect(row?.[0]?.hobby).toBe('skiing');
     });
 
     it('does not restrict or error on arbitrary new fields', async () => {
@@ -855,12 +855,12 @@ describe('MongoDBStore', () => {
         }),
       ).resolves.not.toThrow();
 
-      const row = await store.load<{ id: string; weirdField?: any; another?: any }>({
+      const row = await store.load<{ id: string; weirdField?: any; another?: any }[]>({
         tableName: TEST_TABLE as TABLE_NAMES,
         keys: { id: '5' },
       });
-      expect(row?.weirdField).toEqual({ nested: true });
-      expect(row?.another).toEqual([1, 2, 3]);
+      expect(row?.[0]?.weirdField).toEqual({ nested: true });
+      expect(row?.[0]?.another).toEqual([1, 2, 3]);
     });
   });
 

@@ -292,8 +292,8 @@ export function createTestSuite(storage: MastraStorage) {
         await storage.saveThread({ thread });
 
         const messages = [
-          createSampleMessageV1({ threadId: thread.id }),
-          createSampleMessageV1({ threadId: thread.id }),
+          { ...createSampleMessageV1({ threadId: thread.id }), resourceId: undefined },
+          { ...createSampleMessageV1({ threadId: thread.id, resourceId: undefined }), resourceId: undefined },
         ];
 
         // Save messages
@@ -1001,6 +1001,7 @@ export function createTestSuite(storage: MastraStorage) {
     const BASE_SCHEMA = {
       id: { type: 'integer', primaryKey: true, nullable: false },
       name: { type: 'text', nullable: true },
+      createdAt: { type: 'timestamp', nullable: false },
     } as Record<string, StorageColumn>;
 
     beforeEach(async () => {
@@ -1020,7 +1021,7 @@ export function createTestSuite(storage: MastraStorage) {
 
       await storage.insert({
         tableName: TEST_TABLE as TABLE_NAMES,
-        record: { id: '1', name: 'Alice', age: 42 },
+        record: { id: 1, name: 'Alice', age: 42, createdAt: new Date() },
       });
 
       const row = await storage.load<{ id: string; name: string; age?: number }>({
@@ -1049,7 +1050,7 @@ export function createTestSuite(storage: MastraStorage) {
     it('should add a default value to a column when using not null', async () => {
       await storage.insert({
         tableName: TEST_TABLE as TABLE_NAMES,
-        record: { id: 1, name: 'Bob' },
+        record: { id: 1, name: 'Bob', createdAt: new Date() },
       });
 
       await expect(

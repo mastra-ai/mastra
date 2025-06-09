@@ -1167,86 +1167,95 @@ describe('LanceStorage tests', async () => {
     });
   });
 
-  describe('alterTable (no-op/schemaless)', () => {
-    const TEST_TABLE = 'test_alter_table'; // Use "table" or "collection" as appropriate
+  describe('alterTable', () => {
+    const TEST_TABLE = 'test_alter_table';
+    const BASE_SCHEMA = {
+      id: { type: 'integer', primaryKey: true, nullable: false },
+      name: { type: 'text', nullable: true },
+      createdAt: { type: 'timestamp', nullable: false },
+    } as Record<string, StorageColumn>;
+
     beforeEach(async () => {
-      await storage.clearTable({ tableName: TEST_TABLE as TABLE_NAMES });
+      await storage.dropTable(TEST_TABLE as TABLE_NAMES);
+      await storage.createTable({ tableName: TEST_TABLE as TABLE_NAMES, schema: BASE_SCHEMA });
     });
 
     afterEach(async () => {
       await storage.clearTable({ tableName: TEST_TABLE as TABLE_NAMES });
     });
 
-    it('allows inserting records with new fields without alterTable', async () => {
-      await storage.insert({
+    it('adds a new column to an existing table', async () => {
+      await storage.alterTable({
         tableName: TEST_TABLE as TABLE_NAMES,
-        record: { id: '1', name: 'Alice' },
+        schema: { ...BASE_SCHEMA, age: { type: 'integer', nullable: true } },
+        ifNotExists: ['age'],
       });
+
       await storage.insert({
         tableName: TEST_TABLE as TABLE_NAMES,
-        record: { id: '2', name: 'Bob', newField: 123 },
+        record: { id: 1, name: 'Alice', age: 42, createdAt: new Date() },
       });
 
       const row = await storage.load({
         tableName: TEST_TABLE as TABLE_NAMES,
-        keys: { id: '2' },
+        keys: { id: 1 },
       });
-      expect(row?.newField).toBe(123);
+      expect(row?.age).toBe(42);
     });
 
-    it('does not throw when calling alterTable (no-op)', async () => {
+    it('is idempotent when adding an existing column', async () => {
+      await storage.alterTable({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        schema: { ...BASE_SCHEMA, foo: { type: 'text', nullable: true } },
+        ifNotExists: ['foo'],
+      });
+      // Add the column again (should not throw)
       await expect(
         storage.alterTable({
           tableName: TEST_TABLE as TABLE_NAMES,
-          schema: {
-            id: { type: 'integer', primaryKey: true, nullable: false },
-            name: { type: 'text', nullable: true },
-            extra: { type: 'integer', nullable: true },
-          },
-          ifNotExists: ['extra'],
+          schema: { ...BASE_SCHEMA, foo: { type: 'text', nullable: true } },
+          ifNotExists: ['foo'],
         }),
       ).resolves.not.toThrow();
     });
 
-    it('can add multiple new fields at write time', async () => {
+    it('should add a default value to a column when using not null', async () => {
       await storage.insert({
         tableName: TEST_TABLE as TABLE_NAMES,
-        record: { id: '3', name: 'Charlie', age: 30, city: 'Paris' },
+        record: { id: 1, name: 'Bob', createdAt: new Date() },
       });
-      const row = await storage.load({
-        tableName: TEST_TABLE as TABLE_NAMES,
-        keys: { id: '3' },
-      });
-      expect(row?.age).toBe(30);
-      expect(row?.city).toBe('Paris');
-    });
 
-    it('can retrieve all fields, including dynamically added ones', async () => {
-      await storage.insert({
-        tableName: TEST_TABLE as TABLE_NAMES,
-        record: { id: '4', name: 'Dana', hobby: 'skiing' },
-      });
-      const row = await storage.load({
-        tableName: TEST_TABLE as TABLE_NAMES,
-        keys: { id: '4' },
-      });
-      expect(row?.hobby).toBe('skiing');
-    });
-
-    it('does not restrict or error on arbitrary new fields', async () => {
       await expect(
-        storage.insert({
+        storage.alterTable({
           tableName: TEST_TABLE as TABLE_NAMES,
-          record: { id: '5', weirdField: { nested: true }, another: [1, 2, 3] },
+          schema: { ...BASE_SCHEMA, must_have: { type: 'text', nullable: false } },
+          ifNotExists: ['text_column'],
         }),
       ).resolves.not.toThrow();
 
-      const row = await storage.load({
-        tableName: TEST_TABLE as TABLE_NAMES,
-        keys: { id: '5' },
-      });
-      expect(row?.weirdField).toEqual({ nested: true });
-      expect(row?.another).toEqual([1, 2, 3]);
+      await expect(
+        storage.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, must_have: { type: 'timestamp', nullable: false } },
+          ifNotExists: ['timestamp_column'],
+        }),
+      ).resolves.not.toThrow();
+
+      await expect(
+        storage.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, must_have: { type: 'bigint', nullable: false } },
+          ifNotExists: ['bigint_column'],
+        }),
+      ).resolves.not.toThrow();
+
+      await expect(
+        storage.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, must_have: { type: 'jsonb', nullable: false } },
+          ifNotExists: ['jsonb_column'],
+        }),
+      ).resolves.not.toThrow();
     });
   });
 });

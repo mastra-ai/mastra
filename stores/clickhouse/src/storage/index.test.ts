@@ -5,7 +5,7 @@ import type { TABLE_NAMES } from '@mastra/core/storage';
 import { TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi, afterEach } from 'vitest';
 
-import { ClickhouseStore } from '.';
+import { ClickhouseStore, TABLE_ENGINES } from '.';
 import type { ClickhouseConfig } from '.';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
@@ -120,7 +120,10 @@ describe('ClickhouseStore', () => {
       await store.saveThread({ thread });
 
       // Add some messages
-      const messages = [createSampleMessageV1({ threadId: thread.id }), createSampleMessageV1({ threadId: thread.id })];
+      const messages = [
+        createSampleMessageV1({ threadId: thread.id, resourceId: 'clickhouse-test' }),
+        createSampleMessageV1({ threadId: thread.id, resourceId: 'clickhouse-test' }),
+      ];
       await store.saveMessages({ messages });
 
       await store.deleteThread({ threadId: thread.id });
@@ -140,8 +143,12 @@ describe('ClickhouseStore', () => {
       await store.saveThread({ thread });
 
       const messages = [
-        createSampleMessageV1({ threadId: thread.id, createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24) }),
-        createSampleMessageV1({ threadId: thread.id }),
+        createSampleMessageV1({
+          threadId: thread.id,
+          createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24),
+          resourceId: 'clickhouse-test',
+        }),
+        createSampleMessageV1({ threadId: thread.id, resourceId: 'clickhouse-test' }),
       ];
 
       // Save messages
@@ -173,6 +180,7 @@ describe('ClickhouseStore', () => {
             threadId: thread.id,
             createdAt: new Date(Date.now() - 1000 * 3),
             content: 'First',
+            resourceId: 'clickhouse-test',
           }),
           role: 'user',
         },
@@ -181,6 +189,7 @@ describe('ClickhouseStore', () => {
             threadId: thread.id,
             createdAt: new Date(Date.now() - 1000 * 2),
             content: 'Second',
+            resourceId: 'clickhouse-test',
           }),
           role: 'assistant',
         },
@@ -189,6 +198,7 @@ describe('ClickhouseStore', () => {
             threadId: thread.id,
             createdAt: new Date(Date.now() - 1000 * 1),
             content: 'Third',
+            resourceId: 'clickhouse-test',
           }),
           role: 'user',
         },
@@ -805,7 +815,11 @@ describe('ClickhouseStore', () => {
     const BASE_SCHEMA = {
       id: { type: 'integer', primaryKey: true, nullable: false },
       name: { type: 'text', nullable: true },
+      createdAt: { type: 'timestamp', nullable: false },
+      updatedAt: { type: 'timestamp', nullable: false },
     } as Record<string, StorageColumn>;
+
+    TABLE_ENGINES[TEST_TABLE] = 'MergeTree()';
 
     beforeEach(async () => {
       await store.createTable({ tableName: TEST_TABLE as TABLE_NAMES, schema: BASE_SCHEMA });
@@ -824,7 +838,7 @@ describe('ClickhouseStore', () => {
 
       await store.insert({
         tableName: TEST_TABLE as TABLE_NAMES,
-        record: { id: '1', name: 'Alice', age: 42 },
+        record: { id: 1, name: 'Alice', age: 42, createdAt: new Date(), updatedAt: new Date() },
       });
 
       const row = await store.load<{ id: string; name: string; age?: number }>({
@@ -853,7 +867,7 @@ describe('ClickhouseStore', () => {
     it('should add a default value to a column when using not null', async () => {
       await store.insert({
         tableName: TEST_TABLE as TABLE_NAMES,
-        record: { id: 1, name: 'Bob' },
+        record: { id: 1, name: 'Bob', createdAt: new Date(), updatedAt: new Date() },
       });
 
       await expect(

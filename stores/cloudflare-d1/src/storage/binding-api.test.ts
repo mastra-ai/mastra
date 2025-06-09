@@ -1235,7 +1235,7 @@ describe('D1Store', () => {
 
       await store.insert({
         tableName: TEST_TABLE as TABLE_NAMES,
-        record: { id: '1', name: 'Alice', age: 42 },
+        record: { id: 1, name: 'Alice', age: 42 },
       });
 
       const row = await store.load<{ id: string; name: string; age?: number }>({
@@ -1588,33 +1588,43 @@ describe('D1Store Pagination Features', () => {
 
       // Ensure timestamps are distinct for reliable sorting by creating them with a slight delay for testing clarity
       const messagesToSave: MastraMessageV2[] = [];
-      messagesToSave.push(
-        createSampleMessageV2({ threadId: thread.id, content: 'dayBefore1', createdAt: dayBeforeYesterday }),
-      );
+      messagesToSave.push({
+        ...createSampleMessageV2({ threadId: thread.id, content: 'dayBefore1', createdAt: dayBeforeYesterday }),
+        role: 'user',
+      });
       await new Promise(r => setTimeout(r, 5));
-      messagesToSave.push(
-        createSampleMessageV2({
+      messagesToSave.push({
+        ...createSampleMessageV2({
           threadId: thread.id,
           content: 'dayBefore2',
           createdAt: new Date(dayBeforeYesterday.getTime() + 1),
         }),
-      );
+        role: 'user',
+      });
       await new Promise(r => setTimeout(r, 5));
-      messagesToSave.push(createSampleMessageV2({ threadId: thread.id, content: 'yesterday1', createdAt: yesterday }));
+      messagesToSave.push({
+        ...createSampleMessageV2({ threadId: thread.id, content: 'yesterday1', createdAt: yesterday }),
+        role: 'user',
+      });
       await new Promise(r => setTimeout(r, 5));
-      messagesToSave.push(
-        createSampleMessageV2({
+      messagesToSave.push({
+        ...createSampleMessageV2({
           threadId: thread.id,
           content: 'yesterday2',
           createdAt: new Date(yesterday.getTime() + 1),
         }),
-      );
+        role: 'user',
+      });
       await new Promise(r => setTimeout(r, 5));
-      messagesToSave.push(createSampleMessageV2({ threadId: thread.id, content: 'now1', createdAt: now }));
+      messagesToSave.push({
+        ...createSampleMessageV2({ threadId: thread.id, content: 'now1', createdAt: now }),
+        role: 'user',
+      });
       await new Promise(r => setTimeout(r, 5));
-      messagesToSave.push(
-        createSampleMessageV2({ threadId: thread.id, content: 'now2', createdAt: new Date(now.getTime() + 1) }),
-      );
+      messagesToSave.push({
+        ...createSampleMessageV2({ threadId: thread.id, content: 'now2', createdAt: new Date(now.getTime() + 1) }),
+        role: 'user',
+      });
 
       await store.saveMessages({ messages: messagesToSave, format: 'v2' });
       // Total 6 messages: 2 now, 2 yesterday, 2 dayBeforeYesterday (oldest to newest)
@@ -1669,11 +1679,8 @@ describe('D1Store Pagination Features', () => {
     it('should maintain backward compatibility for getMessages (no pagination params)', async () => {
       const threadData = createSampleThread();
       const thread = await store.saveThread({ thread: threadData as StorageThreadType });
-      const msg1 = {
-        ...createSampleMessageV2({ threadId: thread.id, createdAt: new Date(Date.now() - 1000) }),
-        content: undefined,
-      };
-      const msg2 = { ...createSampleMessageV2({ threadId: thread.id, createdAt: new Date() }), content: undefined };
+      const msg1 = createSampleMessageV2({ threadId: thread.id, createdAt: new Date(Date.now() - 1000) });
+      const msg2 = createSampleMessageV2({ threadId: thread.id, createdAt: new Date() });
       await store.saveMessages({ messages: [msg1, msg2] as any as MastraMessageV2[], format: 'v2' });
 
       const messages = await store.getMessages({ threadId: thread.id, format: 'v2' });
