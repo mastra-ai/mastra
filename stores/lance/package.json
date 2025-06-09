@@ -38,5 +38,8 @@
     "tsup": "^8.4.0",
     "typescript": "^5.8.2",
     "vitest": "^3.0.8"
+  },
+  "peerDependencies": {
+    "@mastra/core": "^0.10.2-alpha.0"
   }
 }
