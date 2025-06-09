@@ -1,6 +1,6 @@
 import type { LanguageModelV1 } from 'ai';
 import { MockLanguageModelV1 } from 'ai/test';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
 import { SchemaCompatLayer } from './schema-compatibility';
 
@@ -345,6 +345,86 @@ describe('SchemaCompatLayer', () => {
       const result = compatibility.defaultZodOptionalHandler(optionalNever, ['ZodString']);
 
       expect(result).toBe(optionalNever);
+    });
+  });
+
+  describe('schema processing with arrays', () => {
+    it('processToAISDKSchema should handle array schemas', () => {
+      const arraySchema = z.array(
+        z.object({
+          name: z.string().describe('The name'),
+          value: z.number().describe('The value'),
+        }),
+      );
+
+      // The mock just returns the type, so we spy on it to ensure it's called
+      const processZodTypeSpy = vi.spyOn(compatibility, 'processZodType');
+
+      const result = compatibility.processToAISDKSchema(arraySchema);
+
+      expect(result.jsonSchema.type).toBe('array');
+      if (
+        result.jsonSchema.items &&
+        !Array.isArray(result.jsonSchema.items) &&
+        typeof result.jsonSchema.items === 'object'
+      ) {
+        expect(result.jsonSchema.items.type).toBe('object');
+        expect(result.jsonSchema.items.properties).toHaveProperty('name');
+        if (result.jsonSchema.items.properties?.name && typeof result.jsonSchema.items.properties.name === 'object') {
+          expect(result.jsonSchema.items.properties.name.description).toBe('The name');
+        }
+      } else {
+        expect.fail('items is not a single schema object');
+      }
+
+      // it should call processZodType on the object schema inside the array
+      expect(processZodTypeSpy).toHaveBeenCalledWith(arraySchema.element);
+
+      processZodTypeSpy.mockRestore();
+    });
+
+    it('processToJSONSchema should handle array schemas', () => {
+      const arraySchema = z.array(
+        z.object({
+          name: z.string().describe('The name'),
+          value: z.number().describe('The value'),
+        }),
+      );
+
+      const processZodTypeSpy = vi.spyOn(compatibility, 'processZodType');
+
+      const result = compatibility.processToJSONSchema(arraySchema);
+
+      expect(result.type).toBe('array');
+      if (result.items && !Array.isArray(result.items) && typeof result.items === 'object') {
+        expect(result.items.type).toBe('object');
+        expect(result.items.properties).toHaveProperty('name');
+        if (result.items.properties?.name && typeof result.items.properties.name === 'object') {
+          expect(result.items.properties.name.description).toBe('The name');
+        }
+      } else {
+        expect.fail('items is not a single schema object');
+      }
+
+      // it should call processZodType on the object schema inside the array
+      expect(processZodTypeSpy).toHaveBeenCalledWith(arraySchema.element);
+
+      processZodTypeSpy.mockRestore();
+    });
+
+    it('should still process object schemas correctly', () => {
+      const objectSchema = z.object({ user: z.string() });
+      const processZodTypeSpy = vi.spyOn(compatibility, 'processZodType');
+
+      const result = compatibility.processToAISDKSchema(objectSchema);
+
+      expect(result.jsonSchema.type).toBe('object');
+      expect(result.jsonSchema.properties).toHaveProperty('user');
+
+      // it should call processZodType for each property in the object
+      expect(processZodTypeSpy).toHaveBeenCalledWith(objectSchema.shape.user);
+
+      processZodTypeSpy.mockRestore();
     });
   });
 });

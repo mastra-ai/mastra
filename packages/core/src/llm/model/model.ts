@@ -236,17 +236,17 @@ export class MastraLLM extends MastraLLMBase {
     };
 
     let output: any = 'object';
-
     if (structuredOutput instanceof z.ZodArray) {
       output = 'array';
+      structuredOutput = structuredOutput._def.type;
     }
 
-    const processedSchema = this._applySchemaCompat(structuredOutput);
+    const processedSchema = this._applySchemaCompat(structuredOutput!);
 
     return await generateObject({
       messages,
       ...argsForExecute,
-      output: output as any,
+      output,
       schema: processedSchema as Schema<T>,
       experimental_telemetry: {
         ...this.experimental_telemetry,
@@ -433,17 +433,17 @@ export class MastraLLM extends MastraLLMBase {
     };
 
     let output: any = 'object';
-
     if (structuredOutput instanceof z.ZodArray) {
       output = 'array';
+      structuredOutput = structuredOutput._def.type;
     }
 
-    const processedSchema = this._applySchemaCompat(structuredOutput);
+    const processedSchema = this._applySchemaCompat(structuredOutput!);
 
     return streamObject({
       messages,
       ...argsForExecute,
-      output: output as any,
+      output,
       schema: processedSchema as Schema<T>,
       experimental_telemetry: {
         ...this.experimental_telemetry,

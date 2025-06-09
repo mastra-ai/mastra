@@ -217,26 +217,37 @@ export abstract class SchemaCompatLayer {
   abstract processZodType<T extends z.AnyZodObject>(value: z.ZodTypeAny): ShapeValue<T>;
 
   /**
-   * Applies compatibility transformations to a Zod object schema.
+   * Applies compatibility transformations to a Zod schema.
    *
-   * @param zodSchema - The Zod object schema to transform
+   * @param zodSchema - The Zod schema to transform
    * @returns Object containing the transformed schema
    * @private
    */
-  private applyZodSchemaCompatibility(zodSchema: z.AnyZodObject): {
-    schema: z.AnyZodObject;
+  private applyZodSchemaCompatibility(zodSchema: z.ZodSchema): {
+    schema: z.ZodSchema;
   } {
-    const newSchema = z.object(
-      Object.entries<z.ZodTypeAny>(zodSchema.shape || {}).reduce(
-        (acc, [key, value]) => ({
-          ...acc,
-          [key]: this.processZodType<any>(value),
-        }),
-        {},
-      ),
-    );
+    if (zodSchema instanceof z.ZodArray) {
+      const processedElementType = this.processZodType(zodSchema.element);
+      const newSchema = z.array(processedElementType);
+      return { schema: newSchema };
+    }
 
-    return { schema: newSchema };
+    if (zodSchema instanceof z.ZodObject) {
+      const newSchema = z.object(
+        Object.entries<z.ZodTypeAny>(zodSchema.shape || {}).reduce(
+          (acc, [key, value]) => ({
+            ...acc,
+            [key]: this.processZodType<any>(value),
+          }),
+          {},
+        ),
+      );
+
+      return { schema: newSchema };
+    }
+
+    // For scalars and other types
+    return { schema: this.processZodType(zodSchema) };
   }
 
   /**
@@ -569,7 +580,7 @@ export abstract class SchemaCompatLayer {
    * @param zodSchema - The Zod object schema to process
    * @returns An AI SDK Schema with provider-specific compatibility applied
    */
-  public processToAISDKSchema(zodSchema: z.AnyZodObject): Schema {
+  public processToAISDKSchema(zodSchema: z.ZodSchema): Schema {
     const { schema } = this.applyZodSchemaCompatibility(zodSchema);
 
     return convertZodSchemaToAISDKSchema(schema, this.getSchemaTarget());
@@ -581,7 +592,7 @@ export abstract class SchemaCompatLayer {
    * @param zodSchema - The Zod object schema to process
    * @returns A JSONSchema7 object with provider-specific compatibility applied
    */
-  public processToJSONSchema(zodSchema: z.AnyZodObject): JSONSchema7 {
+  public processToJSONSchema(zodSchema: z.ZodSchema): JSONSchema7 {
     return this.processToAISDKSchema(zodSchema).jsonSchema;
   }
 }
