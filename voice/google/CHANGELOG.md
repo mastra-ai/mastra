@@ -1,5 +1,20 @@
 # @mastra/voice-google
 
+## 0.10.2-alpha.0
+
+### Patch Changes
+
+- 166a101: dependencies updates:
+  - Updated dependency [`@google-cloud/text-to-speech@^6.1.0` ↗︎](https://www.npmjs.com/package/@google-cloud/text-to-speech/v/6.1.0) (from `^6.0.1`, in `dependencies`)
+- Updated dependencies [d1ed912]
+- Updated dependencies [f1f1f1b]
+- Updated dependencies [f9816ae]
+- Updated dependencies [82090c1]
+- Updated dependencies [1b443fd]
+- Updated dependencies [ce97900]
+- Updated dependencies [14a2566]
+  - @mastra/core@0.10.4-alpha.0
+
 ## 0.10.1
 
 ### Patch Changes

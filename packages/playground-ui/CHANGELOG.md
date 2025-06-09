@@ -1,5 +1,23 @@
 # @mastra/playground-ui
 
+## 5.1.4-alpha.0
+
+### Patch Changes
+
+- 5c68759: Update vite to fix CVE-2025-31125
+- 8f60de4: fix workflow output when the schema is a primitive
+- Updated dependencies [d1ed912]
+- Updated dependencies [f1f1f1b]
+- Updated dependencies [b2810ab]
+- Updated dependencies [f9816ae]
+- Updated dependencies [82090c1]
+- Updated dependencies [1b443fd]
+- Updated dependencies [ce97900]
+- Updated dependencies [14a2566]
+- Updated dependencies [67d21b5]
+  - @mastra/core@0.10.4-alpha.0
+  - @mastra/client-js@0.10.3-alpha.0
+
 ## 5.1.3
 
 ### Patch Changes

@@ -116,6 +116,34 @@ export const testWorkflow = createWorkflow({
 > Steps can be composed using a number of different methods. See [Control Flow](/docs/workflows/control-flow)  for more information.
 
 
+#### Cloning Steps
+
+Workflow steps can be cloned using `cloneStep()`, and used with any workflow method.
+
+```typescript {5,19} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const cityCoordinatesStep = createStep({...});
+const clonedStep = cloneStep(cityCoordinatesStep, { id: "cloned-step" });
+const cityWeatherStep = createStep({...});
+
+export const testWorkflow = createWorkflow({
+  id: "test-workflow",
+  description: 'Test workflow',
+  inputSchema: z.object({
+    city: z.string()
+  }),
+  outputSchema: z.object({
+    outcome: z.string()
+  })
+})
+  .then(cityCoordinatesStep)
+  .then(clonedStep)
+  .then(cityWeatherStep)
+  .commit();
+```
+
 ### Register Workflow
 
 Register a workflow using `workflows` in the main Mastra instance:
