@@ -4,7 +4,6 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { SchemaCompatLayer } from './schema-compatibility';
 
-// A more realistic mock that recursively processes the schema using default handlers.
 class MockSchemaCompatibility extends SchemaCompatLayer {
   constructor(model: LanguageModelV1) {
     super(model);
@@ -192,6 +191,19 @@ describe('SchemaCompatLayer', () => {
   });
 
   describe('defaultZodUnionHandler', () => {
+    it('should throw error for union with less than 2 options', () => {
+      const mockUnion = {
+        _def: {
+          typeName: 'ZodUnion' as const,
+          options: [z.string()],
+        },
+      } as z.ZodUnion<[z.ZodString]>;
+
+      expect(() => {
+        compatibility.defaultZodUnionHandler(mockUnion);
+      }).toThrow('Union must have at least 2 options');
+    });
+
     it('should handle union types and process recursively', () => {
       const unionSchema = z.union([z.string().describe('A string'), z.number()]);
       const result = compatibility.defaultZodUnionHandler(unionSchema) as z.ZodUnion<any>;
