@@ -189,7 +189,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing array of log messages
    */
   public getLogs(params: GetLogsParams): Promise<GetLogsResponse> {
-    const { transportId, fromDate, toDate, logLevel, filters } = params;
+    const { transportId, fromDate, toDate, logLevel, filters, page, perPage } = params;
     const _filters = filters ? Object.entries(filters).map(([key, value]) => `${key}:${value}`) : [];
 
     const searchParams = new URLSearchParams();
@@ -204,6 +204,12 @@ export class MastraClient extends BaseResource {
     }
     if (logLevel) {
       searchParams.set('logLevel', logLevel);
+    }
+    if (page) {
+      searchParams.set('page', String(page));
+    }
+    if (perPage) {
+      searchParams.set('perPage', String(perPage));
     }
     if (_filters) {
       if (Array.isArray(_filters)) {
@@ -228,7 +234,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing array of log messages
    */
   public getLogForRun(params: GetLogParams): Promise<GetLogsResponse> {
-    const { runId, transportId, fromDate, toDate, logLevel, filters } = params;
+    const { runId, transportId, fromDate, toDate, logLevel, filters, page, perPage } = params;
 
     const _filters = filters ? Object.entries(filters).map(([key, value]) => `${key}:${value}`) : [];
     const searchParams = new URLSearchParams();
@@ -246,6 +252,12 @@ export class MastraClient extends BaseResource {
     }
     if (logLevel) {
       searchParams.set('logLevel', logLevel);
+    }
+    if (page) {
+      searchParams.set('page', String(page));
+    }
+    if (perPage) {
+      searchParams.set('perPage', String(perPage));
     }
 
     if (_filters) {

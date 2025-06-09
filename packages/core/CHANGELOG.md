@@ -1,5 +1,21 @@
 # @mastra/core
 
+## 0.10.4-alpha.0
+
+### Patch Changes
+
+- d1ed912: dependencies updates:
+  - Updated dependency [`dotenv@^16.5.0` ↗︎](https://www.npmjs.com/package/dotenv/v/16.5.0) (from `^16.4.7`, in `dependencies`)
+- f1f1f1b: Add basic filtering capabilities to logs
+- f9816ae: Create @mastra/schema-compat package to extract the schema compatibility layer to be used outside of mastra
+- 82090c1: Add pagination to logs
+- 1b443fd: - add trackException to loggers to allow mastra cloud to track exceptions at runtime
+  - Added generic MastraBaseError<D, C> in packages/core/src/error/index.ts to improve type safety and flexibility of error handling
+- ce97900: Add paginated APIs to cloudflare-d1 storage class
+- 14a2566: Add pagination to libsql storage APIs
+- Updated dependencies [f9816ae]
+  - @mastra/schema-compat@0.10.2-alpha.2
+
 ## 0.10.3
 
 ### Patch Changes

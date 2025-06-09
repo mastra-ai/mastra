@@ -1,11 +1,11 @@
+import type { LanguageModelV1 } from 'ai';
 import { z } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
-import { ToolCompatibility } from '..';
-import type { ShapeValue } from '..';
-import type { MastraLanguageModel } from '../../../agent';
+import { SchemaCompatLayer } from '../schema-compatibility';
+import type { ShapeValue } from '../schema-compatibility';
 
-export class OpenAIReasoningToolCompat extends ToolCompatibility {
-  constructor(model: MastraLanguageModel) {
+export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
+  constructor(model: LanguageModelV1) {
     super(model);
   }
 

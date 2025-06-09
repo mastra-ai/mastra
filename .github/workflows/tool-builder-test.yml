@@ -1,11 +1,12 @@
-name: Tool Compatibility Tests
+name: Tool Builder Tests
 
 on:
   pull_request:
     branches: [main]
     paths:
-      - 'packages/core/src/tools/tool-compatibility/**'
-      - '.github/workflows/tool-compatibility-test.yml'
+      - 'packages/core/src/tools/tool-builder/**'
+      - 'packages/schema-compat/**'
+      - '.github/workflows/tool-builder-test.yml'
 
 jobs:
   test:
@@ -35,8 +36,8 @@ jobs:
       - name: Build core
         run: pnpm build:core && pnpm build:deployer
 
-      - name: Run tool-compatibility test
-        run: pnpm test:tool-compatibility
+      - name: Run tool-builder test
+        run: pnpm test:tool-builder
         env:
           NODE_OPTIONS: '--max_old_space_size=8096'
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
