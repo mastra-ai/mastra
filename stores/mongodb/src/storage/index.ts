@@ -662,6 +662,7 @@ export class MongoDBStore extends MastraStorage {
       type: row.type,
       createdAt: new Date(row.createdAt as string),
       threadId: row.thread_id,
+      resourceId: row.resourceId,
     } as MastraMessageV2;
   }
 
