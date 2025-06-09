@@ -201,7 +201,13 @@ describe('MongoDBStore', () => {
       await store.saveThread({ thread });
 
       // Add some messages
-      const messages = [test.generateSampleMessage(thread.id), test.generateSampleMessage(thread.id)];
+      const messages = [
+        test.generateSampleMessage(thread.id),
+        {
+          ...test.generateSampleMessage(thread.id),
+          role: 'assistant' as const,
+        },
+      ];
       await store.saveMessages({ messages });
 
       await store.deleteThread({ threadId: thread.id });
@@ -278,21 +284,22 @@ describe('MongoDBStore', () => {
       const messages = [
         {
           ...test.generateSampleMessage(thread.id),
-          content: [{ type: 'text', text: 'First' }] as MastraMessageV1['content'],
+          content: [{ type: 'text', text: 'First' }] satisfies MastraMessageV1['content'],
         },
         {
           ...test.generateSampleMessage(thread.id),
-          content: [{ type: 'text', text: 'Second' }] as MastraMessageV1['content'],
+          role: 'assistant' as const,
+          content: [{ type: 'text', text: 'Second' }] satisfies MastraMessageV1['content'],
         },
         {
           ...test.generateSampleMessage(thread.id),
-          content: [{ type: 'text', text: 'Third' }] as MastraMessageV1['content'],
+          content: [{ type: 'text', text: 'Third' }] satisfies MastraMessageV1['content'],
         },
       ];
 
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v1' });
 
-      const retrievedMessages = await store.getMessages({ threadId: thread.id });
+      const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v1' });
       expect(retrievedMessages).toHaveLength(3);
 
       // Verify order is maintained
