@@ -1,5 +1,4 @@
 import { randomUUID } from 'crypto';
-import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type {
   CoreMessage,
   GenerateObjectResult,
@@ -12,6 +11,7 @@ import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
+import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { Metric } from '../eval';
 import { AvailableHooks, executeHook } from '../hooks';
 import type { GenerateReturn, StreamReturn } from '../llm';
