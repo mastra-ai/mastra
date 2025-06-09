@@ -178,7 +178,7 @@ export class MastraLLM extends MastraLLMBase {
       },
       experimental_output: schema
         ? Output.object({
-            schema: schema,
+            schema,
           })
         : undefined,
     });
