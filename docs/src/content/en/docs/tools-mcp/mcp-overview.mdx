@@ -215,16 +215,16 @@ Each tab shows the specific URL patterns and configuration needed for that regis
   </Tabs.Tab>
     <Tabs.Tab>
 
-    [Ampersand](https://withampersand.com?utm_source=mastra-docs) offers a single multi-tenant [MCP Server](https://www.npmjs.com/package/@amp-labs/mcp-server) that allows you to connect your agent to 150+ B2B Integrations. 
+    [Ampersand](https://withampersand.com?utm_source=mastra-docs) offers an [MCP Server](https://docs.withampersand.com/mcp) that allows you to connect your agent to 150+ integrations with SaaS products like Salesforce, Hubspot, and Zendesk.
     
 
     ```typescript
 
-    // MCPClient with Ampersand MCP Server with SSE
+    // MCPClient with Ampersand MCP Server using SSE
     export const mcp = new MCPClient({
         servers: {
         "@amp-labs/mcp-server": {
-          "url": `https://mcp.withampersand.com/sse?${new URLSearchParams({
+          "url": `https://mcp.withampersand.com/v1/sse?${new URLSearchParams({
             apiKey: process.env.AMPERSAND_API_KEY,
             project: process.env.AMPERSAND_PROJECT_ID,
             integrationName: process.env.AMPERSAND_INTEGRATION_NAME,
@@ -265,6 +265,8 @@ Each tab shows the specific URL patterns and configuration needed for that regis
         },
     });
     ```
+
+    As an alternative to MCP, Ampersand's AI SDK also has an adapter for Mastra, so you can [directly import Ampersand tools](https://docs.withampersand.com/ai-sdk#use-with-mastra) for your agent to access.
 
   </Tabs.Tab>
 </Tabs>
