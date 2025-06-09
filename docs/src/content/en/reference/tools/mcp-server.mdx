@@ -383,7 +383,7 @@ import http from "http";
 
 const httpServer = http.createServer(async (req, res) => {
   await server.startHTTP({
-    url: new URL(req.url || "http://localhost:1234"),
+    url: new URL(req.url || '', 'http://localhost:1234'),
     httpPath: `/mcp`,
     req,
     res,
