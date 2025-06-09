@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { createSampleMessageV1, createSampleThread, createSampleWorkflowSnapshot } from '@internal/storage-test-utils';
 import type { MastraMessageV1, WorkflowRunState } from '@mastra/core';
 import { TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi, afterEach } from 'vitest';
@@ -24,16 +25,6 @@ const TEST_CONFIG: ClickhouseConfig = {
   },
 };
 
-// Sample test data factory functions
-const createSampleThread = () => ({
-  id: `thread-${randomUUID()}`,
-  resourceId: `clickhouse-test`,
-  title: 'Test Thread',
-  createdAt: new Date(),
-  updatedAt: new Date(),
-  metadata: { key: 'value' },
-});
-
 const createSampleTrace = () => ({
   id: `trace-${randomUUID()}`,
   name: 'Test Trace',
@@ -48,32 +39,6 @@ const createSampleEval = () => ({
   result: '{ "score": 1 }',
   createdAt: new Date(),
 });
-
-const createSampleWorkflowSnapshot = (status: WorkflowRunState['context']['steps']['status'], createdAt?: Date) => {
-  const runId = `run-${randomUUID()}`;
-  const stepId = `step-${randomUUID()}`;
-  const timestamp = createdAt || new Date();
-  const snapshot = {
-    result: { success: true },
-    value: {},
-    context: {
-      [stepId]: {
-        status,
-        payload: {},
-        error: undefined,
-        startedAt: timestamp.getTime(),
-        endedAt: new Date(timestamp.getTime() + 15000).getTime(),
-      },
-      input: {},
-    },
-    serializedStepGraph: [],
-    activePaths: [],
-    suspendedPaths: {},
-    runId,
-    timestamp: timestamp.getTime(),
-  } as unknown as WorkflowRunState;
-  return { snapshot, runId, stepId };
-};
 
 const checkWorkflowSnapshot = (snapshot: WorkflowRunState | string, stepId: string, status: string) => {
   if (typeof snapshot === 'string') {
@@ -154,7 +119,7 @@ describe('ClickhouseStore', () => {
       await store.saveThread({ thread });
 
       // Add some messages
-      const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
+      const messages = [createSampleMessageV1({ threadId: thread.id }), createSampleMessageV1({ threadId: thread.id })];
       await store.saveMessages({ messages });
 
       await store.deleteThread({ threadId: thread.id });
@@ -174,8 +139,8 @@ describe('ClickhouseStore', () => {
       await store.saveThread({ thread });
 
       const messages = [
-        createSampleMessage(thread.id, new Date(Date.now() - 1000 * 60 * 60 * 24)),
-        createSampleMessage(thread.id),
+        createSampleMessageV1({ threadId: thread.id, createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24) }),
+        createSampleMessageV1({ threadId: thread.id }),
       ];
 
       // Save messages
@@ -203,18 +168,27 @@ describe('ClickhouseStore', () => {
 
       const messages: MastraMessageV1[] = [
         {
-          ...createSampleMessage(thread.id, new Date(Date.now() - 1000 * 3)),
-          content: [{ type: 'text', text: 'First' }],
+          ...createSampleMessageV1({
+            threadId: thread.id,
+            createdAt: new Date(Date.now() - 1000 * 3),
+            content: 'First',
+          }),
           role: 'user',
         },
         {
-          ...createSampleMessage(thread.id, new Date(Date.now() - 1000 * 2)),
-          content: [{ type: 'text', text: 'Second' }],
+          ...createSampleMessageV1({
+            threadId: thread.id,
+            createdAt: new Date(Date.now() - 1000 * 2),
+            content: 'Second',
+          }),
           role: 'assistant',
         },
         {
-          ...createSampleMessage(thread.id, new Date(Date.now() - 1000 * 1)),
-          content: [{ type: 'text', text: 'Third' }],
+          ...createSampleMessageV1({
+            threadId: thread.id,
+            createdAt: new Date(Date.now() - 1000 * 1),
+            content: 'Third',
+          }),
           role: 'user',
         },
       ];
@@ -236,8 +210,8 @@ describe('ClickhouseStore', () => {
     //   await store.saveThread({ thread });
 
     //   const messages = [
-    //     createSampleMessage(thread.id),
-    //     { ...createSampleMessage(thread.id), id: null }, // This will cause an error
+    //     createSampleMessageV1({ threadId: thread.id }),
+    //     { ...createSampleMessageV1({ threadId: thread.id }), id: null }, // This will cause an error
     //   ];
 
     //   await expect(store.saveMessages({ messages })).rejects.toThrow();

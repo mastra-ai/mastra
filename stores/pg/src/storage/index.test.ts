@@ -2,10 +2,12 @@ import { randomUUID } from 'crypto';
 import {
   createSampleEval,
   createSampleTraceForDB,
-  createSampleMessage,
   createSampleThread,
+  createSampleMessageV1,
+  createSampleMessageV2,
+  createSampleWorkflowSnapshot,
 } from '@internal/storage-test-utils';
-import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
+import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
 import {
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_MESSAGES,
@@ -31,42 +33,6 @@ const TEST_CONFIG: PostgresConfig = {
 const connectionString = `postgresql://${TEST_CONFIG.user}:${TEST_CONFIG.password}@${TEST_CONFIG.host}:${TEST_CONFIG.port}/${TEST_CONFIG.database}`;
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
-
-// Sample test data factory functions
-const createSampleThread = () => ({
-  id: `thread-${randomUUID()}`,
-  resourceId: `resource-${randomUUID()}`,
-  title: 'Test Thread',
-  createdAt: new Date(),
-  updatedAt: new Date(),
-  metadata: { key: 'value' },
-});
-
-const createSampleWorkflowSnapshot = (status: WorkflowRunState['context'][string]['status'], createdAt?: Date) => {
-  const runId = `run-${randomUUID()}`;
-  const stepId = `step-${randomUUID()}`;
-  const timestamp = createdAt || new Date();
-  const snapshot = {
-    result: { success: true },
-    value: {},
-    context: {
-      [stepId]: {
-        status,
-        payload: {},
-        error: undefined,
-        startedAt: timestamp.getTime(),
-        endedAt: new Date(timestamp.getTime() + 15000).getTime(),
-      },
-      input: {},
-    },
-    serializedStepGraph: [],
-    activePaths: [],
-    suspendedPaths: {},
-    runId,
-    timestamp: timestamp.getTime(),
-  } as unknown as WorkflowRunState;
-  return { snapshot, runId, stepId };
-};
 
 const checkWorkflowSnapshot = (snapshot: WorkflowRunState | string, stepId: string, status: string) => {
   if (typeof snapshot === 'string') {
@@ -199,7 +165,7 @@ describe('PostgresStore', () => {
       await store.saveThread({ thread });
 
       // Add some messages
-      const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
+      const messages = [createSampleMessageV1({ threadId: thread.id }), createSampleMessageV1({ threadId: thread.id })];
       await store.saveMessages({ messages });
 
       await store.deleteThread({ threadId: thread.id });
@@ -218,7 +184,7 @@ describe('PostgresStore', () => {
       const thread = createSampleThread();
       await store.saveThread({ thread });
 
-      const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
+      const messages = [createSampleMessageV1({ threadId: thread.id }), createSampleMessageV1({ threadId: thread.id })];
 
       // Save messages
       const savedMessages = await store.saveMessages({ messages });
@@ -240,33 +206,13 @@ describe('PostgresStore', () => {
     });
 
     it('should maintain message order', async () => {
-      const createSampleMessage = (
-        threadId: string,
-        parts?: MastraMessageV2['content']['parts'],
-        createdAt?: Date,
-      ): MastraMessageV2 =>
-        ({
-          id: `msg-${randomUUID()}`,
-          role: 'user',
-          threadId,
-          content: { format: 2, parts: parts || [{ type: 'text' as const, text: 'Hello' }] },
-          createdAt: createdAt || new Date(),
-          resourceId: `resource-${randomUUID()}`,
-        }) satisfies MastraMessageV2;
-
       const thread = createSampleThread();
       await store.saveThread({ thread });
 
       const messages = [
-        {
-          ...createSampleMessage(thread.id, [{ type: 'text' as const, text: 'First' }]),
-        },
-        {
-          ...createSampleMessage(thread.id, [{ type: 'text' as const, text: 'Second' }]),
-        },
-        {
-          ...createSampleMessage(thread.id, [{ type: 'text' as const, text: 'Third' }]),
-        },
+        createSampleMessageV2({ threadId: thread.id, content: 'First' }),
+        createSampleMessageV2({ threadId: thread.id, content: 'Second' }),
+        createSampleMessageV2({ threadId: thread.id, content: 'Third' }),
       ];
 
       await store.saveMessages({ messages, format: 'v2' });
@@ -285,8 +231,8 @@ describe('PostgresStore', () => {
       await store.saveThread({ thread });
 
       const messages = [
-        createSampleMessage(thread.id),
-        { ...createSampleMessage(thread.id), id: null } as any, // This will cause an error
+        createSampleMessageV1({ threadId: thread.id }),
+        { ...createSampleMessageV1({ threadId: thread.id }), id: null } as any, // This will cause an error
       ];
 
       await expect(store.saveMessages({ messages })).rejects.toThrow();
@@ -1212,7 +1158,7 @@ describe('PostgresStore', () => {
         // Create messages sequentially to ensure unique timestamps
         for (let i = 0; i < 15; i++) {
           await store.saveMessages({
-            messages: [{ ...createSampleMessage(thread.id), content: [{ type: 'text', text: `Message ${i + 1}` }] }],
+            messages: [createSampleMessageV1({ threadId: thread.id, content: `Message ${i + 1}` })],
           });
           await new Promise(r => setTimeout(r, 2));
         }
@@ -1261,17 +1207,17 @@ describe('PostgresStore', () => {
 
         // Ensure timestamps are distinct for reliable sorting by creating them with a slight delay for testing clarity
         const messagesToSave: MastraMessageV1[] = [];
-        messagesToSave.push(createSampleMessage(thread.id, dayBeforeYesterday));
+        messagesToSave.push(createSampleMessageV1({ threadId: thread.id, createdAt: dayBeforeYesterday }));
         await new Promise(r => setTimeout(r, 5));
-        messagesToSave.push(createSampleMessage(thread.id, dayBeforeYesterday));
+        messagesToSave.push(createSampleMessageV1({ threadId: thread.id, createdAt: dayBeforeYesterday }));
         await new Promise(r => setTimeout(r, 5));
-        messagesToSave.push(createSampleMessage(thread.id, yesterday));
+        messagesToSave.push(createSampleMessageV1({ threadId: thread.id, createdAt: yesterday }));
         await new Promise(r => setTimeout(r, 5));
-        messagesToSave.push(createSampleMessage(thread.id, yesterday));
+        messagesToSave.push(createSampleMessageV1({ threadId: thread.id, createdAt: yesterday }));
         await new Promise(r => setTimeout(r, 5));
-        messagesToSave.push(createSampleMessage(thread.id, now));
+        messagesToSave.push(createSampleMessageV1({ threadId: thread.id, createdAt: now }));
         await new Promise(r => setTimeout(r, 5));
-        messagesToSave.push(createSampleMessage(thread.id, now));
+        messagesToSave.push(createSampleMessageV1({ threadId: thread.id, createdAt: now }));
 
         await store.saveMessages({ messages: messagesToSave, format: 'v1' });
         // Total 6 messages: 2 now, 2 yesterday, 2 dayBeforeYesterday (oldest to newest)

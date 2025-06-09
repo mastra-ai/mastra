@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { createSampleMessageV2, createSampleThread, createSampleWorkflowSnapshot } from '@internal/storage-test-utils';
 import type { MastraMessageV2 } from '@mastra/core';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 import {
@@ -15,40 +16,6 @@ import { UpstashStore } from './index';
 
 // Increase timeout for all tests in this file to 30 seconds
 vi.setConfig({ testTimeout: 200_000, hookTimeout: 200_000 });
-
-const createSampleThread = (date?: Date) => ({
-  id: `thread-${randomUUID()}`,
-  resourceId: `resource-${randomUUID()}`,
-  title: 'Test Thread',
-  createdAt: date || new Date(),
-  updatedAt: date || new Date(),
-  metadata: { key: 'value' },
-});
-
-const createSampleWorkflowSnapshot = (status: string, createdAt?: Date) => {
-  const runId = `run-${randomUUID()}`;
-  const stepId = `step-${randomUUID()}`;
-  const timestamp = createdAt || new Date();
-  const snapshot: WorkflowRunState = {
-    value: {},
-    context: {
-      [stepId]: {
-        status: status,
-        payload: {},
-        error: undefined,
-        startedAt: timestamp.getTime(),
-        endedAt: new Date(timestamp.getTime() + 15000).getTime(),
-      },
-      input: {},
-    } as WorkflowRunState['context'],
-    serializedStepGraph: [],
-    activePaths: [],
-    suspendedPaths: {},
-    runId,
-    timestamp: timestamp.getTime(),
-  };
-  return { snapshot, runId, stepId };
-};
 
 const createSampleTrace = (name: string, scope?: string, attributes?: Record<string, string>) => ({
   id: `trace-${randomUUID()}`,
@@ -167,7 +134,7 @@ describe('UpstashStore', () => {
 
     it('should create and retrieve a thread', async () => {
       const now = new Date();
-      const thread = createSampleThread(now);
+      const thread = createSampleThread({ date: now });
 
       const savedThread = await store.saveThread({ thread });
       expect(savedThread).toEqual(thread);
@@ -228,11 +195,11 @@ describe('UpstashStore', () => {
       expect(retrievedThreads).toHaveLength(total);
     });
     it('should delete thread and its messages', async () => {
-      const thread = createSampleThread({});
+      const thread = createSampleThread();
       await store.saveThread({ thread });
 
       // Add some messages
-      const messages = [createSampleMessage({ threadId: thread.id }), createSampleMessage({ threadId: thread.id })];
+      const messages = [createSampleMessageV2({ threadId: thread.id }), createSampleMessageV2({ threadId: thread.id })];
       await store.saveMessages({ messages, format: 'v2' });
 
       await store.deleteThread({ threadId: thread.id });
@@ -253,7 +220,7 @@ describe('UpstashStore', () => {
 
     it('should handle Date objects in thread operations', async () => {
       const now = new Date();
-      const thread = createSampleThread(now);
+      const thread = createSampleThread({ date: now });
 
       await store.saveThread({ thread });
       const retrievedThread = await store.getThreadById({ threadId: thread.id });
@@ -265,7 +232,7 @@ describe('UpstashStore', () => {
 
     it('should handle ISO string dates in thread operations', async () => {
       const now = new Date();
-      const thread = createSampleThread(now);
+      const thread = createSampleThread({ date: now });
 
       await store.saveThread({ thread });
       const retrievedThread = await store.getThreadById({ threadId: thread.id });
@@ -277,7 +244,7 @@ describe('UpstashStore', () => {
 
     it('should handle mixed date formats in thread operations', async () => {
       const now = new Date();
-      const thread = createSampleThread(now);
+      const thread = createSampleThread({ date: now });
 
       await store.saveThread({ thread });
       const retrievedThread = await store.getThreadById({ threadId: thread.id });
@@ -289,8 +256,8 @@ describe('UpstashStore', () => {
 
     it('should handle date serialization in getThreadsByResourceId', async () => {
       const now = new Date();
-      const thread1 = createSampleThread(now);
-      const thread2 = { ...createSampleThread(now), resourceId: thread1.resourceId };
+      const thread1 = createSampleThread({ date: now });
+      const thread2 = { ...createSampleThread({ date: now }), resourceId: thread1.resourceId };
       const threads = [thread1, thread2];
 
       await Promise.all(threads.map(thread => store.saveThread({ thread })));
@@ -328,9 +295,9 @@ describe('UpstashStore', () => {
 
     it('should save and retrieve messages in order', async () => {
       const messages: MastraMessageV2[] = [
-        createSampleMessage(threadId, 'First'),
-        createSampleMessage(threadId, 'Second'),
-        createSampleMessage(threadId, 'Third'),
+        createSampleMessageV2({ threadId, content: 'First' }),
+        createSampleMessageV2({ threadId, content: 'Second' }),
+        createSampleMessageV2({ threadId, content: 'Third' }),
       ];
 
       await store.saveMessages({ messages: messages, format: 'v2' });
@@ -374,7 +341,9 @@ describe('UpstashStore', () => {
         const thread = createSampleThread();
         await store.saveThread({ thread });
 
-        const messages = Array.from({ length: 15 }, (_, i) => createSampleMessage(thread.id, `Message ${i + 1}`));
+        const messages = Array.from({ length: 15 }, (_, i) =>
+          createSampleMessageV2({ threadId: thread.id, content: `Message ${i + 1}` }),
+        );
 
         await store.saveMessages({ messages, format: 'v2' });
 
@@ -416,7 +385,7 @@ describe('UpstashStore', () => {
         await store.saveThread({ thread });
 
         const messages = Array.from({ length: 10 }, (_, i) => {
-          const message = createSampleMessage(thread.id, `Message ${i + 1}`);
+          const message = createSampleMessageV2({ threadId: thread.id, content: `Message ${i + 1}` });
           // Ensure different timestamps
           message.createdAt = new Date(Date.now() + i * 1000);
           return message;
@@ -445,7 +414,9 @@ describe('UpstashStore', () => {
         const thread = createSampleThread();
         await store.saveThread({ thread });
 
-        const messages = Array.from({ length: 5 }, (_, i) => createSampleMessage(thread.id, `Message ${i + 1}`));
+        const messages = Array.from({ length: 5 }, (_, i) =>
+          createSampleMessageV2({ threadId: thread.id, content: `Message ${i + 1}` }),
+        );
 
         await store.saveMessages({ messages, format: 'v2' });
 
@@ -474,13 +445,13 @@ describe('UpstashStore', () => {
         const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
         const oldMessages = Array.from({ length: 3 }, (_, i) => {
-          const message = createSampleMessage(thread.id, `Old Message ${i + 1}`);
+          const message = createSampleMessageV2({ threadId: thread.id, content: `Old Message ${i + 1}` });
           message.createdAt = yesterday;
           return message;
         });
 
         const newMessages = Array.from({ length: 4 }, (_, i) => {
-          const message = createSampleMessage(thread.id, `New Message ${i + 1}`);
+          const message = createSampleMessageV2({ threadId: thread.id, content: `New Message ${i + 1}` });
           message.createdAt = tomorrow;
           return message;
         });

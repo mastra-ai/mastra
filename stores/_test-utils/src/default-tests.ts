@@ -7,12 +7,16 @@ import { TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS } f
 import { MastraMessageV1, MastraMessageV2 } from '@mastra/core';
 
 // Sample test data factory functions to ensure unique records
-export const createSampleThread = () => ({
+export const createSampleThread = ({
+  date = new Date(),
+}: {
+  date?: Date;
+} = {}) => ({
   id: `thread-${randomUUID()}`,
   resourceId: `resource-${randomUUID()}`,
   title: 'Test Thread',
-  createdAt: new Date(),
-  updatedAt: new Date(),
+  createdAt: date,
+  updatedAt: date,
   metadata: { key: 'value' },
 });
 
@@ -36,15 +40,6 @@ export const getRole = () => {
   else role = 'user';
   return role;
 };
-export const createSampleMessage = (threadId: string, createdAt?: Date) =>
-  ({
-    id: `msg-${randomUUID()}`,
-    role: getRole(),
-    type: 'text',
-    threadId,
-    content: [{ type: 'text', text: 'Hello' }],
-    createdAt: createdAt || new Date(),
-  }) satisfies MastraMessageV1;
 
 export const createSampleTraceForDB = (
   name: string,
