@@ -593,6 +593,8 @@ do:
     toDate,
     logLevel,
     filters,
+    page,
+    perPage,
   }: {
     runId: string;
     transportId: string;
@@ -600,6 +602,8 @@ do:
     toDate?: Date;
     logLevel?: LogLevel;
     filters?: Record<string, any>;
+    page?: number;
+    perPage?: number;
   }) {
     if (!transportId) {
       throw new Error('Transport ID is required');
@@ -609,12 +613,28 @@ do:
       throw new Error('Logger is not set');
     }
 
-    return await this.#logger.getLogsByRunId({ runId, transportId, fromDate, toDate, logLevel, filters });
+    return await this.#logger.getLogsByRunId({
+      runId,
+      transportId,
+      fromDate,
+      toDate,
+      logLevel,
+      filters,
+      page,
+      perPage,
+    });
   }
 
   public async getLogs(
     transportId: string,
-    params?: { fromDate?: Date; toDate?: Date; logLevel?: LogLevel; filters?: Record<string, any> },
+    params?: {
+      fromDate?: Date;
+      toDate?: Date;
+      logLevel?: LogLevel;
+      filters?: Record<string, any>;
+      page?: number;
+      perPage?: number;
+    },
   ) {
     if (!transportId) {
       throw new Error('Transport ID is required');

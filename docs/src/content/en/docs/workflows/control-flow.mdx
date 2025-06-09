@@ -309,3 +309,34 @@ export const testWorkflow = createWorkflow({
 ```
 
 When using `.branch()` or `.parallel()` to build more complex control flows, executing more than one step requires wrapping those steps in a nested workflow, along with a clear definition of how they should be executed.
+
+
+## Cloned Workflows
+
+In the example below, `clonedWorkflow` is a clone of `workflow1` and is used as a step within `testWorkflow`. The `clonedWorkflow` is run sequentially after `step1`.
+
+```typescript {6,20} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
+const step1 = createStep({...});
+const workflow1 = createWorkflow({...});
+const clonedWorkflow = cloneWorkflow(workflow1, { id: "cloned-workflow" });
+const finalStep = createStep({...});
+
+export const testWorkflow = createWorkflow({
+  id: "test-workflow",
+  description: 'Test workflow',
+  inputSchema: z.object({
+    number: z.number()
+  }),
+  outputSchema: z.object({
+    number: z.number()
+  })
+})
+  .then(step1)
+  .then(clonedWorkflow)
+  .then(finalStep)
+  .commit();
+```
+

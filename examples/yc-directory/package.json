@@ -20,7 +20,7 @@
   },
   "devDependencies": {
     "@ai-sdk/openai": "latest",
-    "@types/node": "^20.17.27",
+    "@types/node": "^20.17.57",
     "mastra": "latest",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2"
