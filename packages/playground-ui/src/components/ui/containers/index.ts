@@ -1,1 +1,2 @@
-export * from './MainContent';
+export * from './main-content';
+export * from './app-layout';
