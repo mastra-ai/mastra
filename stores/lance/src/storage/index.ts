@@ -1,18 +1,7 @@
 import { connect } from '@lancedb/lancedb';
 import type { Connection, ConnectionOptions, SchemaLike, FieldLike } from '@lancedb/lancedb';
-import type {
-  EvalRow,
-  MastraMessageV1,
-  MastraMessageV2,
-  StorageColumn,
-  StorageGetMessagesArg,
-  StorageThreadType,
-  TraceType,
-  WorkflowRun,
-  WorkflowRuns,
-  WorkflowRunState,
-} from '@mastra/core';
 import { MessageList } from '@mastra/core/agent';
+import type { MastraMessageV1, MastraMessageV2, StorageThreadType, TraceType } from '@mastra/core/memory';
 import {
   MastraStorage,
   TABLE_EVALS,
@@ -21,7 +10,18 @@ import {
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
 } from '@mastra/core/storage';
-import type { TABLE_NAMES } from '@mastra/core/storage';
+import type {
+  TABLE_NAMES,
+  PaginationInfo,
+  StorageGetMessagesArg,
+  StorageGetTracesArg,
+  StorageColumn,
+  EvalRow,
+  WorkflowRun,
+  WorkflowRuns,
+} from '@mastra/core/storage';
+import type { Trace } from '@mastra/core/telemetry';
+import type { WorkflowRunState } from '@mastra/core/workflows';
 import type { DataType } from 'apache-arrow';
 import { Utf8, Int32, Float32, Binary, Schema, Field, Float64 } from 'apache-arrow';
 
@@ -995,5 +995,23 @@ export class LanceStorage extends MastraStorage {
     } catch (error: any) {
       throw new Error(`Failed to load workflow snapshot: ${error}`);
     }
+  }
+
+  async getTracesPaginated(_args: StorageGetTracesArg): Promise<PaginationInfo & { traces: Trace[] }> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getThreadsByResourceIdPaginated(_args: {
+    resourceId: string;
+    page?: number;
+    perPage?: number;
+  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getMessagesPaginated(
+    _args: StorageGetMessagesArg,
+  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
+    throw new Error('Method not implemented.');
   }
 }

@@ -1,5 +1,21 @@
 # @mastra/pg
 
+## 0.10.2-alpha.3
+
+### Patch Changes
+
+- e0f9201: change how dedupe works for libsql and pg
+- Updated dependencies [925ab94]
+  - @mastra/core@0.10.4-alpha.3
+
+## 0.10.2-alpha.2
+
+### Patch Changes
+
+- 48eddb9: update filter logic in Memory class to support semantic recall search scope
+- Updated dependencies [48eddb9]
+  - @mastra/core@0.10.4-alpha.2
+
 ## 0.10.2-alpha.1
 
 ### Patch Changes

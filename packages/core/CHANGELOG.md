@@ -1,5 +1,17 @@
 # @mastra/core
 
+## 0.10.4-alpha.3
+
+### Patch Changes
+
+- 925ab94: added paginated functions to base class and added boilerplate and updated imports
+
+## 0.10.4-alpha.2
+
+### Patch Changes
+
+- 48eddb9: update filter logic in Memory class to support semantic recall search scope
+
 ## 0.10.4-alpha.1
 
 ### Patch Changes

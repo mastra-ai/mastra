@@ -1,5 +1,10 @@
 import { randomUUID } from 'crypto';
-import { createSampleMessageV1, createSampleThread, createSampleWorkflowSnapshot } from '@internal/storage-test-utils';
+import {
+  createSampleMessageV1,
+  createSampleThread,
+  createSampleWorkflowSnapshot,
+  checkWorkflowSnapshot,
+} from '@internal/storage-test-utils';
 import type { MastraMessageV1, StorageColumn, WorkflowRunState } from '@mastra/core';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 import { TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
@@ -40,13 +45,6 @@ const createSampleEval = () => ({
   result: '{ "score": 1 }',
   createdAt: new Date(),
 });
-
-const checkWorkflowSnapshot = (snapshot: WorkflowRunState | string, stepId: string, status: string) => {
-  if (typeof snapshot === 'string') {
-    throw new Error('Expected WorkflowRunState, got string');
-  }
-  expect(snapshot.context?.[stepId]?.status).toBe(status);
-};
 
 describe('ClickhouseStore', () => {
   let store: ClickhouseStore;
@@ -174,7 +172,7 @@ describe('ClickhouseStore', () => {
       const thread = createSampleThread();
       await store.saveThread({ thread });
 
-      const messages: MastraMessageV1[] = [
+      const messages = [
         {
           ...createSampleMessageV1({
             threadId: thread.id,
@@ -202,7 +200,7 @@ describe('ClickhouseStore', () => {
           }),
           role: 'user',
         },
-      ];
+      ] as MastraMessageV1[];
 
       await store.saveMessages({ messages });
 
@@ -215,6 +213,100 @@ describe('ClickhouseStore', () => {
         expect(msg.content[0].text).toBe(messages[idx].content[0].text);
       });
     }, 10e3);
+
+    // it('should retrieve messages w/ next/prev messages by message id + resource id', async () => {
+    //   const messages: MastraMessageV2[] = [
+    //     createSampleMessageV2({ threadId: 'thread-one', content: 'First', resourceId: 'cross-thread-resource' }),
+    //     createSampleMessageV2({ threadId: 'thread-one', content: 'Second', resourceId: 'cross-thread-resource' }),
+    //     createSampleMessageV2({ threadId: 'thread-one', content: 'Third', resourceId: 'cross-thread-resource' }),
+
+    //     createSampleMessageV2({ threadId: 'thread-two', content: 'Fourth', resourceId: 'cross-thread-resource' }),
+    //     createSampleMessageV2({ threadId: 'thread-two', content: 'Fifth', resourceId: 'cross-thread-resource' }),
+    //     createSampleMessageV2({ threadId: 'thread-two', content: 'Sixth', resourceId: 'cross-thread-resource' }),
+
+    //     createSampleMessageV2({ threadId: 'thread-three', content: 'Seventh', resourceId: 'other-resource' }),
+    //     createSampleMessageV2({ threadId: 'thread-three', content: 'Eighth', resourceId: 'other-resource' }),
+    //   ];
+
+    //   await store.saveMessages({ messages: messages, format: 'v2' });
+
+    //   const retrievedMessages = await store.getMessages({ threadId: 'thread-one', format: 'v2' });
+    //   expect(retrievedMessages).toHaveLength(3);
+    //   expect(retrievedMessages.map((m: any) => m.content.parts[0].text)).toEqual(['First', 'Second', 'Third']);
+
+    //   const retrievedMessages2 = await store.getMessages({ threadId: 'thread-two', format: 'v2' });
+    //   expect(retrievedMessages2).toHaveLength(3);
+    //   expect(retrievedMessages2.map((m: any) => m.content.parts[0].text)).toEqual(['Fourth', 'Fifth', 'Sixth']);
+
+    //   const retrievedMessages3 = await store.getMessages({ threadId: 'thread-three', format: 'v2' });
+    //   expect(retrievedMessages3).toHaveLength(2);
+    //   expect(retrievedMessages3.map((m: any) => m.content.parts[0].text)).toEqual(['Seventh', 'Eighth']);
+
+    //   const crossThreadMessages = await store.getMessages({
+    //     threadId: 'thread-doesnt-exist',
+    //     resourceId: 'cross-thread-resource',
+    //     format: 'v2',
+    //     selectBy: {
+    //       last: 0,
+    //       include: [
+    //         {
+    //           id: messages[1].id,
+    //           withNextMessages: 2,
+    //           withPreviousMessages: 2,
+    //         },
+    //         {
+    //           id: messages[4].id,
+    //           withPreviousMessages: 2,
+    //           withNextMessages: 2,
+    //         },
+    //       ],
+    //     },
+    //   });
+
+    //   expect(crossThreadMessages).toHaveLength(6);
+    //   expect(crossThreadMessages.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
+    //   expect(crossThreadMessages.filter(m => m.threadId === `thread-two`)).toHaveLength(3);
+
+    //   const crossThreadMessages2 = await store.getMessages({
+    //     threadId: 'thread-one',
+    //     resourceId: 'cross-thread-resource',
+    //     format: 'v2',
+    //     selectBy: {
+    //       last: 0,
+    //       include: [
+    //         {
+    //           id: messages[4].id,
+    //           withPreviousMessages: 1,
+    //           withNextMessages: 30,
+    //         },
+    //       ],
+    //     },
+    //   });
+
+    //   expect(crossThreadMessages2).toHaveLength(3);
+    //   expect(crossThreadMessages2.filter(m => m.threadId === `thread-one`)).toHaveLength(0);
+    //   expect(crossThreadMessages2.filter(m => m.threadId === `thread-two`)).toHaveLength(3);
+
+    //   const crossThreadMessages3 = await store.getMessages({
+    //     threadId: 'thread-two',
+    //     resourceId: 'cross-thread-resource',
+    //     format: 'v2',
+    //     selectBy: {
+    //       last: 0,
+    //       include: [
+    //         {
+    //           id: messages[1].id,
+    //           withNextMessages: 1,
+    //           withPreviousMessages: 1,
+    //         },
+    //       ],
+    //     },
+    //   });
+
+    //   expect(crossThreadMessages3).toHaveLength(3);
+    //   expect(crossThreadMessages3.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
+    //   expect(crossThreadMessages3.filter(m => m.threadId === `thread-two`)).toHaveLength(0);
+    // });
 
     // it('should rollback on error during message save', async () => {
     //   const thread = createSampleThread();

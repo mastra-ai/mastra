@@ -65,6 +65,7 @@ export type StorageGetMessagesArg = {
     last?: number | false;
     include?: {
       id: string;
+      threadId?: string;
       withPreviousMessages?: number;
       withNextMessages?: number;
     }[];
@@ -85,4 +86,15 @@ export type EvalRow = {
   runId: string;
   globalRunId: string;
   testInfo?: TestInfo;
+};
+
+export type StorageGetTracesArg = {
+  name?: string;
+  scope?: string;
+  page: number;
+  perPage: number;
+  attributes?: Record<string, string>;
+  filters?: Record<string, any>;
+  fromDate?: Date;
+  toDate?: Date;
 };
