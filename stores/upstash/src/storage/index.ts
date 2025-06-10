@@ -642,6 +642,43 @@ export class UpstashStore extends MastraStorage {
     return list.get.all.v1();
   }
 
+  private async _getIncludedMessages(
+    threadId: string,
+    selectBy: StorageGetMessagesArg['selectBy'],
+  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
+    const threadMessagesKey = this.getThreadMessagesKey(threadId);
+    if (selectBy?.include?.length) {
+      const messageIds = new Set<string>();
+
+      for (const item of selectBy.include) {
+        messageIds.add(item.id);
+
+        if (item.withPreviousMessages || item.withNextMessages) {
+          const rank = await this.redis.zrank(threadMessagesKey, item.id);
+          if (rank === null) continue;
+
+          if (item.withPreviousMessages) {
+            const start = Math.max(0, rank - item.withPreviousMessages);
+            const prevIds = rank === 0 ? [] : await this.redis.zrange(threadMessagesKey, start, rank - 1);
+            prevIds.forEach(id => messageIds.add(id as string));
+          }
+
+          if (item.withNextMessages) {
+            const nextIds = await this.redis.zrange(threadMessagesKey, rank + 1, rank + item.withNextMessages);
+            nextIds.forEach(id => messageIds.add(id as string));
+          }
+        }
+      }
+
+      const pipeline = this.redis.pipeline();
+      messageIds.forEach(id => pipeline.get(this.getMessageKey(threadId, id as string)));
+      const results = await pipeline.exec();
+      return results.filter(result => result !== null) as MastraMessageV2[] | MastraMessageV1[];
+    }
+
+    return [];
+  }
+
   /**
    * @deprecated use getMessagesPaginated instead
    */
@@ -708,14 +745,19 @@ export class UpstashStore extends MastraStorage {
       latestIds.forEach(id => messageIds.add(id as string));
     }
 
+    const includedMessages = await this._getIncludedMessages(threadId, selectBy);
+
     // Fetch all needed messages in parallel
-    const messages = (
-      await Promise.all(
-        Array.from(messageIds).map(async id =>
-          this.redis.get<MastraMessageV2 & { _index?: number }>(this.getMessageKey(threadId, id)),
-        ),
-      )
-    ).filter(msg => msg !== null) as (MastraMessageV2 & { _index?: number })[];
+    const messages = [
+      ...includedMessages,
+      ...((
+        await Promise.all(
+          Array.from(messageIds).map(async id =>
+            this.redis.get<MastraMessageV2 & { _index?: number }>(this.getMessageKey(threadId, id)),
+          ),
+        )
+      ).filter(msg => msg !== null) as (MastraMessageV2 & { _index?: number })[]),
+    ];
 
     // Sort messages by their position in the sorted set
     messages.sort((a, b) => allMessageIds.indexOf(a!.id) - allMessageIds.indexOf(b!.id));
@@ -751,36 +793,11 @@ export class UpstashStore extends MastraStorage {
     const fromDate = dateRange?.start;
     const toDate = dateRange?.end;
     const threadMessagesKey = this.getThreadMessagesKey(threadId);
-    const messages: MastraMessageV2[] = [];
+    const messages: (MastraMessageV2 | MastraMessageV1)[] = [];
 
-    if (selectBy?.include?.length) {
-      const messageIds = new Set<string>();
+    const includedMessages = await this._getIncludedMessages(threadId, selectBy);
+    messages.push(...includedMessages);
 
-      for (const item of selectBy.include) {
-        messageIds.add(item.id);
-
-        if (item.withPreviousMessages || item.withNextMessages) {
-          const rank = await this.redis.zrank(threadMessagesKey, item.id);
-          if (rank === null) continue;
-
-          if (item.withPreviousMessages) {
-            const start = Math.max(0, rank - item.withPreviousMessages);
-            const prevIds = rank === 0 ? [] : await this.redis.zrange(threadMessagesKey, start, rank - 1);
-            prevIds.forEach(id => messageIds.add(id as string));
-          }
-
-          if (item.withNextMessages) {
-            const nextIds = await this.redis.zrange(threadMessagesKey, rank + 1, rank + item.withNextMessages);
-            nextIds.forEach(id => messageIds.add(id as string));
-          }
-        }
-      }
-
-      const pipeline = this.redis.pipeline();
-      messageIds.forEach(id => pipeline.get(this.getMessageKey(threadId, id as string)));
-      const results = await pipeline.exec();
-      messages.push(...(results.filter(result => result !== null) as MastraMessageV2[]));
-    }
     try {
       const allMessageIds = await this.redis.zrange(threadMessagesKey, 0, -1);
       if (allMessageIds.length === 0) {
@@ -799,9 +816,10 @@ export class UpstashStore extends MastraStorage {
       const results = await pipeline.exec();
 
       // Process messages and apply filters - handle undefined results from pipeline
-      let messagesData = results
-        .map((result: any) => result as MastraMessageV2 | null)
-        .filter((msg): msg is MastraMessageV2 => msg !== null) as (MastraMessageV2 & { _index?: number })[];
+      let messagesData = results.filter((msg): msg is MastraMessageV2 | MastraMessageV1 => msg !== null) as (
+        | MastraMessageV2
+        | MastraMessageV1
+      )[];
 
       // Apply date filters if provided
       if (fromDate) {
