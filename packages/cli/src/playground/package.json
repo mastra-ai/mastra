@@ -64,7 +64,7 @@
     "use-debounce": "^10.0.4"
   },
   "devDependencies": {
-    "@microsoft/api-extractor": "^7.52.5",
+    "@microsoft/api-extractor": "^7.52.8",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
     "@vitejs/plugin-react": "^4.3.4",

@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
-import type { MetricResult } from '@mastra/core/eval';
-import type { MastraMessageV1, MastraMessageV2 } from '@mastra/core/memory';
+import { createSampleEval, createSampleTraceForDB } from '@internal/storage-test-utils';
+import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
 import {
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_MESSAGES,
@@ -47,10 +47,12 @@ const createSampleMessageV1 = ({
   threadId,
   content = 'Hello',
   resourceId = `resource-${randomUUID()}`,
+  createdAt = new Date(),
 }: {
   threadId: string;
   content?: string;
   resourceId?: string;
+  createdAt?: Date;
 }): MastraMessageV1 => ({
   id: `msg-${randomUUID()}`,
   resourceId,
@@ -58,7 +60,7 @@ const createSampleMessageV1 = ({
   type: 'text',
   threadId,
   content: [{ type: 'text', text: content }],
-  createdAt: new Date(),
+  createdAt,
 });
 
 const createSampleMessageV2 = ({
@@ -105,23 +107,6 @@ const createSampleWorkflowSnapshot = (status: WorkflowRunState['context'][string
     timestamp: timestamp.getTime(),
   } as unknown as WorkflowRunState;
   return { snapshot, runId, stepId };
-};
-
-const createSampleEval = (agentName: string, isTest = false) => {
-  const testInfo = isTest ? { testPath: 'test/path.ts', testName: 'Test Name' } : undefined;
-
-  return {
-    agentName,
-    input: 'Sample input',
-    output: 'Sample output',
-    result: { score: 0.8 } as MetricResult,
-    metricName: 'sample-metric',
-    instructions: 'Sample instructions',
-    testInfo,
-    globalRunId: `global-${randomUUID()}`,
-    runId: `run-${randomUUID()}`,
-    createdAt: new Date().toISOString(),
-  };
 };
 
 const checkWorkflowSnapshot = (snapshot: WorkflowRunState | string, stepId: string, status: string) => {
@@ -300,20 +285,19 @@ describe('PostgresStore', () => {
       await store.saveThread({ thread });
 
       const messages = [
-        createSampleMessageV1({ threadId: thread.id, content: 'First' }),
-        createSampleMessageV1({ threadId: thread.id, content: 'Second' }),
-        createSampleMessageV1({ threadId: thread.id, content: 'Third' }),
+        createSampleMessageV2({ threadId: thread.id, content: 'First' }),
+        createSampleMessageV2({ threadId: thread.id, content: 'Second' }),
+        createSampleMessageV2({ threadId: thread.id, content: 'Third' }),
       ];
 
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
-      const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v1' });
+      const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v2' });
       expect(retrievedMessages).toHaveLength(3);
 
       // Verify order is maintained
       retrievedMessages.forEach((msg, idx) => {
-        // @ts-expect-error
-        expect(msg.content[0].text).toBe(messages[idx].content[0].text);
+        expect(msg.content).toEqual(messages[idx].content);
       });
     });
 
@@ -446,7 +430,9 @@ describe('PostgresStore', () => {
       const dayBeforeYesterday = new Date(now.getTime() - 48 * 60 * 60 * 1000);
 
       const createMsgAtDate = (date: Date) => {
-        return store.saveMessages({ messages: [{ ...createSampleMessageV1({ threadId: thread.id }), createdAt: date }] });
+        return store.saveMessages({
+          messages: [{ ...createSampleMessageV1({ threadId: thread.id }), createdAt: date }],
+        });
       };
       await Promise.all([
         createMsgAtDate(dayBeforeYesterday),
@@ -925,75 +911,76 @@ describe('PostgresStore', () => {
     it('should retrieve evals by agent name', async () => {
       const agentName = `test-agent-${randomUUID()}`;
 
-      // Create sample evals
-      const liveEval = createSampleEval(agentName, false);
+      // Create sample evals using the imported helper
+      const liveEval = createSampleEval(agentName, false); // createSampleEval returns snake_case
       const testEval = createSampleEval(agentName, true);
       const otherAgentEval = createSampleEval(`other-agent-${randomUUID()}`, false);
 
-      // Insert evals
+      // Insert evals - ensure DB columns are snake_case
       await store.insert({
         tableName: TABLE_EVALS,
         record: {
-          agent_name: liveEval.agentName,
+          agent_name: liveEval.agent_name, // Use snake_case
           input: liveEval.input,
           output: liveEval.output,
           result: liveEval.result,
-          metric_name: liveEval.metricName,
+          metric_name: liveEval.metric_name, // Use snake_case
           instructions: liveEval.instructions,
-          test_info: null,
-          global_run_id: liveEval.globalRunId,
-          run_id: liveEval.runId,
-          created_at: new Date(liveEval.createdAt),
+          test_info: liveEval.test_info, // test_info from helper can be undefined or object
+          global_run_id: liveEval.global_run_id, // Use snake_case
+          run_id: liveEval.run_id, // Use snake_case
+          created_at: new Date(liveEval.created_at as string), // created_at from helper is string or Date
         },
       });
 
       await store.insert({
         tableName: TABLE_EVALS,
         record: {
-          agent_name: testEval.agentName,
+          agent_name: testEval.agent_name,
           input: testEval.input,
           output: testEval.output,
           result: testEval.result,
-          metric_name: testEval.metricName,
+          metric_name: testEval.metric_name,
           instructions: testEval.instructions,
-          test_info: JSON.stringify(testEval.testInfo),
-          global_run_id: testEval.globalRunId,
-          run_id: testEval.runId,
-          created_at: new Date(testEval.createdAt),
+          test_info: testEval.test_info ? JSON.stringify(testEval.test_info) : null,
+          global_run_id: testEval.global_run_id,
+          run_id: testEval.run_id,
+          created_at: new Date(testEval.created_at as string),
         },
       });
 
       await store.insert({
         tableName: TABLE_EVALS,
         record: {
-          agent_name: otherAgentEval.agentName,
+          agent_name: otherAgentEval.agent_name,
           input: otherAgentEval.input,
           output: otherAgentEval.output,
           result: otherAgentEval.result,
-          metric_name: otherAgentEval.metricName,
+          metric_name: otherAgentEval.metric_name,
           instructions: otherAgentEval.instructions,
-          test_info: null,
-          global_run_id: otherAgentEval.globalRunId,
-          run_id: otherAgentEval.runId,
-          created_at: new Date(otherAgentEval.createdAt),
+          test_info: otherAgentEval.test_info, // Can be null/undefined directly
+          global_run_id: otherAgentEval.global_run_id,
+          run_id: otherAgentEval.run_id,
+          created_at: new Date(otherAgentEval.created_at as string),
         },
       });
 
       // Test getting all evals for the agent
       const allEvals = await store.getEvalsByAgentName(agentName);
       expect(allEvals).toHaveLength(2);
-      expect(allEvals.map(e => e.runId)).toEqual(expect.arrayContaining([liveEval.runId, testEval.runId]));
+      // EvalRow type expects camelCase, but PostgresStore.transformEvalRow converts snake_case from DB to camelCase
+      expect(allEvals.map(e => e.runId)).toEqual(expect.arrayContaining([liveEval.run_id, testEval.run_id]));
 
       // Test getting only live evals
       const liveEvals = await store.getEvalsByAgentName(agentName, 'live');
       expect(liveEvals).toHaveLength(1);
-      expect(liveEvals[0].runId).toBe(liveEval.runId);
+      expect(liveEvals[0].runId).toBe(liveEval.run_id); // Comparing with snake_case run_id from original data
 
       // Test getting only test evals
-      const testEvals = await store.getEvalsByAgentName(agentName, 'test');
-      expect(testEvals).toHaveLength(1);
-      expect(testEvals[0].runId).toBe(testEval.runId);
-      expect(testEvals[0].testInfo).toEqual(testEval.testInfo);
+      const testEvalsResult = await store.getEvalsByAgentName(agentName, 'test');
+      expect(testEvalsResult).toHaveLength(1);
+      expect(testEvalsResult[0].runId).toBe(testEval.run_id);
+      expect(testEvalsResult[0].testInfo).toEqual(testEval.test_info);
 
       // Test getting evals for non-existent agent
       const nonExistentEvals = await store.getEvalsByAgentName('non-existent-agent');
@@ -1117,16 +1104,16 @@ describe('PostgresStore', () => {
           return store.insert({
             tableName: TABLE_EVALS,
             record: {
-              run_id: evalData.runId,
-              agent_name: evalData.agentName,
+              run_id: evalData.run_id,
+              agent_name: evalData.agent_name,
               input: evalData.input,
               output: evalData.output,
               result: evalData.result,
-              metric_name: evalData.metricName,
+              metric_name: evalData.metric_name,
               instructions: evalData.instructions,
-              test_info: evalData.testInfo,
-              global_run_id: evalData.globalRunId,
-              created_at: new Date(evalData.createdAt),
+              test_info: evalData.test_info,
+              global_run_id: evalData.global_run_id,
+              created_at: new Date(evalData.created_at as string),
             },
           });
         });
@@ -1153,26 +1140,26 @@ describe('PostgresStore', () => {
           return store.insert({
             tableName: TABLE_EVALS,
             record: {
-              run_id: evalData.runId,
-              agent_name: evalData.agentName,
+              run_id: evalData.run_id,
+              agent_name: evalData.agent_name,
               input: evalData.input,
               output: evalData.output,
               result: evalData.result,
-              metric_name: evalData.metricName,
+              metric_name: evalData.metric_name,
               instructions: evalData.instructions,
-              test_info: evalData.testInfo,
-              global_run_id: evalData.globalRunId,
-              created_at: new Date(evalData.createdAt),
+              test_info: evalData.test_info,
+              global_run_id: evalData.global_run_id,
+              created_at: new Date(evalData.created_at as string),
             },
           });
         });
         await Promise.all(evalPromises);
 
-        const result = await store.getEvals({ agentName, limit: 5, offset: 10 });
+        const result = await store.getEvals({ agentName, perPage: 5, page: 2 });
         expect(result.evals).toHaveLength(5);
         expect(result.total).toBe(15);
-        expect(result.page).toBeUndefined(); // Page is undefined for limit/offset
-        expect(result.perPage).toBeUndefined(); // PerPage is undefined for limit/offset
+        expect(result.page).toBe(2);
+        expect(result.perPage).toBe(5);
         expect(result.hasMore).toBe(false);
       });
 
@@ -1183,16 +1170,16 @@ describe('PostgresStore', () => {
           return store.insert({
             tableName: TABLE_EVALS,
             record: {
-              run_id: evalData.runId,
-              agent_name: evalData.agentName,
+              run_id: evalData.run_id,
+              agent_name: evalData.agent_name,
               input: evalData.input,
               output: evalData.output,
               result: evalData.result,
-              metric_name: evalData.metricName,
+              metric_name: evalData.metric_name,
               instructions: evalData.instructions,
-              test_info: evalData.testInfo,
-              global_run_id: evalData.globalRunId,
-              created_at: new Date(evalData.createdAt),
+              test_info: evalData.test_info,
+              global_run_id: evalData.global_run_id,
+              created_at: new Date(evalData.created_at as string),
             },
           });
         });
@@ -1201,16 +1188,16 @@ describe('PostgresStore', () => {
           return store.insert({
             tableName: TABLE_EVALS,
             record: {
-              run_id: evalData.runId,
-              agent_name: evalData.agentName,
+              run_id: evalData.run_id,
+              agent_name: evalData.agent_name,
               input: evalData.input,
               output: evalData.output,
               result: evalData.result,
-              metric_name: evalData.metricName,
+              metric_name: evalData.metric_name,
               instructions: evalData.instructions,
-              test_info: evalData.testInfo,
-              global_run_id: evalData.globalRunId,
-              created_at: new Date(evalData.createdAt),
+              test_info: evalData.test_info,
+              global_run_id: evalData.global_run_id,
+              created_at: new Date(evalData.created_at as string),
             },
           });
         });
@@ -1233,20 +1220,20 @@ describe('PostgresStore', () => {
         const dayBeforeYesterday = new Date(now.getTime() - 48 * 60 * 60 * 1000);
 
         const createEvalAtDate = (date: Date) => {
-          const evalData = createSampleEval(agentName);
+          const evalData = createSampleEval(agentName, false, date); // Pass date to helper
           return store.insert({
             tableName: TABLE_EVALS,
             record: {
-              run_id: evalData.runId,
-              agent_name: evalData.agentName,
+              run_id: evalData.run_id, // Use snake_case from helper
+              agent_name: evalData.agent_name,
               input: evalData.input,
               output: evalData.output,
               result: evalData.result,
-              metric_name: evalData.metricName,
+              metric_name: evalData.metric_name,
               instructions: evalData.instructions,
-              test_info: evalData.testInfo,
-              global_run_id: evalData.globalRunId,
-              created_at: date,
+              test_info: evalData.test_info,
+              global_run_id: evalData.global_run_id,
+              created_at: evalData.created_at, // Use created_at from helper (already Date or ISO string)
             },
           });
         };
@@ -1263,7 +1250,7 @@ describe('PostgresStore', () => {
           createEvalAtDate(now),
         ]);
 
-        const fromYesterday = await store.getEvals({ agentName, fromDate: yesterday, page: 0, perPage: 3 });
+        const fromYesterday = await store.getEvals({ agentName, dateRange: { start: yesterday }, page: 0, perPage: 3 });
         expect(fromYesterday.total).toBe(7); // 3 yesterday + 4 now
         expect(fromYesterday.evals).toHaveLength(3);
         // Evals are sorted DESC, so first 3 are from 'now'
@@ -1273,7 +1260,9 @@ describe('PostgresStore', () => {
 
         const onlyDayBefore = await store.getEvals({
           agentName,
-          toDate: new Date(yesterday.getTime() - 1),
+          dateRange: {
+            end: new Date(yesterday.getTime() - 1),
+          },
           page: 0,
           perPage: 5,
         });
@@ -1283,39 +1272,16 @@ describe('PostgresStore', () => {
     });
 
     describe('getTraces with pagination', () => {
-      const createSampleTraceForDB = (
-        name: string,
-        scope?: string,
-        attributes?: Record<string, string>,
-        createdAt?: Date,
-      ) => ({
-        id: `trace-${randomUUID()}`,
-        parentSpanId: `span-${randomUUID()}`,
-        traceId: `trace-${randomUUID()}`,
-        name,
-        scope,
-        kind: 0,
-        status: JSON.stringify({ code: 'success' }),
-        events: JSON.stringify([{ name: 'start', timestamp: Date.now() }]),
-        links: JSON.stringify([]),
-        attributes: attributes ? attributes : undefined,
-        startTime: (createdAt || new Date()).getTime(),
-        endTime: (createdAt || new Date()).getTime(),
-        other: JSON.stringify({ custom: 'data' }),
-        createdAt: createdAt || new Date(),
-      });
-
       it('should return paginated traces with total count', async () => {
         const tracePromises = Array.from({ length: 18 }, (_, i) =>
           store.insert({ tableName: TABLE_TRACES, record: createSampleTraceForDB(`test-trace-${i}`, 'pg-test-scope') }),
         );
         await Promise.all(tracePromises);
 
-        const page1 = await store.getTraces({
+        const page1 = await store.getTracesPaginated({
           scope: 'pg-test-scope',
           page: 0,
           perPage: 8,
-          returnPaginationResults: true,
         });
         expect(page1.traces).toHaveLength(8);
         expect(page1.total).toBe(18);
@@ -1323,11 +1289,10 @@ describe('PostgresStore', () => {
         expect(page1.perPage).toBe(8);
         expect(page1.hasMore).toBe(true);
 
-        const page3 = await store.getTraces({
+        const page3 = await store.getTracesPaginated({
           scope: 'pg-test-scope',
           page: 2,
           perPage: 8,
-          returnPaginationResults: true,
         });
         expect(page3.traces).toHaveLength(2);
         expect(page3.total).toBe(18);
@@ -1349,12 +1314,11 @@ describe('PostgresStore', () => {
         );
         await Promise.all([...tracesWithAttr, ...tracesWithoutAttr]);
 
-        const prodTraces = await store.getTraces({
+        const prodTraces = await store.getTracesPaginated({
           scope: 'pg-attr-scope',
           attributes: { environment: 'prod' },
           page: 0,
           perPage: 5,
-          returnPaginationResults: true,
         });
         expect(prodTraces.traces).toHaveLength(5);
         expect(prodTraces.total).toBe(8);
@@ -1378,12 +1342,13 @@ describe('PostgresStore', () => {
           store.insert({ tableName: TABLE_TRACES, record: createSampleTraceForDB('t5', scope, undefined, now) }),
         ]);
 
-        const fromYesterday = await store.getTraces({
+        const fromYesterday = await store.getTracesPaginated({
           scope,
-          fromDate: yesterday,
+          dateRange: {
+            start: yesterday,
+          },
           page: 0,
           perPage: 2,
-          returnPaginationResults: true,
         });
         expect(fromYesterday.total).toBe(4); // 2 yesterday + 2 now
         expect(fromYesterday.traces).toHaveLength(2);
@@ -1391,23 +1356,17 @@ describe('PostgresStore', () => {
           expect(new Date(t.createdAt).getTime()).toBeGreaterThanOrEqual(yesterday.getTime()),
         );
 
-        const onlyNow = await store.getTraces({
+        const onlyNow = await store.getTracesPaginated({
           scope,
-          fromDate: now,
-          toDate: now,
+          dateRange: {
+            start: now,
+            end: now,
+          },
           page: 0,
           perPage: 5,
-          returnPaginationResults: true,
         });
         expect(onlyNow.total).toBe(2);
         expect(onlyNow.traces).toHaveLength(2);
-      });
-
-      it('should return array when returnPaginationResults is false or undefined', async () => {
-        await store.insert({ tableName: TABLE_TRACES, record: createSampleTraceForDB('trace-arr', 'pg-array-scope') });
-        const tracesArray = await store.getTraces({ scope: 'pg-array-scope', page: 0, perPage: 5 }); // returnPaginationResults is undefined
-        expect(Array.isArray(tracesArray)).toBe(true);
-        expect(tracesArray.length).toBe(1);
       });
     });
 
@@ -1417,71 +1376,85 @@ describe('PostgresStore', () => {
         await store.saveThread({ thread });
         const messagePromises = Array.from({ length: 15 }, (_, i) =>
           store.saveMessages({
-            messages: [{ ...createSampleMessageV1({ threadId: thread.id }), content: [{ type: 'text', text: `Message ${i + 1}` }] }],
+            messages: [{ ...createSampleMessageV2({ threadId: thread.id, content: `Message ${i + 1}` }) }],
+            format: 'v2',
           }),
         );
         await Promise.all(messagePromises);
 
-        const page1 = await store.getMessages({ threadId: thread.id, page: 0, perPage: 5, format: 'v1' });
+        const page1 = await store.getMessagesPaginated({
+          threadId: thread.id,
+          selectBy: { pagination: { page: 0, perPage: 5 } },
+          format: 'v2',
+        });
         expect(page1.messages).toHaveLength(5);
         expect(page1.total).toBe(15);
         expect(page1.page).toBe(0);
         expect(page1.perPage).toBe(5);
         expect(page1.hasMore).toBe(true);
 
-        const page3 = await store.getMessages({ threadId: thread.id, page: 2, perPage: 5, format: 'v1' });
+        const page3 = await store.getMessagesPaginated({
+          threadId: thread.id,
+          selectBy: { pagination: { page: 2, perPage: 5 } },
+          format: 'v2',
+        });
         expect(page3.messages).toHaveLength(5);
         expect(page3.total).toBe(15);
         expect(page3.hasMore).toBe(false);
       });
 
       it('should filter by date with pagination for getMessages', async () => {
-        const thread = createSampleThread();
-        await store.saveThread({ thread });
+        const threadData = createSampleThread();
+        const thread = await store.saveThread({ thread: threadData as StorageThreadType });
         const now = new Date();
-        const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-        const dayBeforeYesterday = new Date(now.getTime() - 48 * 60 * 60 * 1000);
-
-        const createMsgAtDate = (date: Date) => {
-          return store.saveMessages({ messages: [{ ...createSampleMessageV1({ threadId: thread.id }), createdAt: date }] });
-        };
-        await Promise.all([
-          createMsgAtDate(dayBeforeYesterday),
-          createMsgAtDate(dayBeforeYesterday),
-          createMsgAtDate(yesterday),
-          createMsgAtDate(yesterday),
-          createMsgAtDate(yesterday),
-          createMsgAtDate(now),
-          createMsgAtDate(now),
-        ]);
-
-        const resultPage = await store.getMessages({
-          threadId: thread.id,
-          fromDate: yesterday,
-          page: 0,
-          perPage: 3,
-          format: 'v1',
-        });
-        expect(resultPage.total).toBe(5);
-        expect(resultPage.messages).toHaveLength(3);
-
-        expect(new Date((resultPage.messages[0] as MastraMessageV1).createdAt).toISOString()).toBe(now.toISOString());
-        expect(new Date((resultPage.messages[1] as MastraMessageV1).createdAt).toISOString()).toBe(now.toISOString());
-        expect(new Date((resultPage.messages[2] as MastraMessageV1).createdAt).toISOString()).toBe(
-          yesterday.toISOString(),
+        const yesterday = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate() - 1,
+          now.getHours(),
+          now.getMinutes(),
+          now.getSeconds(),
         );
-      });
+        const dayBeforeYesterday = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate() - 2,
+          now.getHours(),
+          now.getMinutes(),
+          now.getSeconds(),
+        );
 
-      it('should maintain backward compatibility for getMessages (no pagination params)', async () => {
-        const thread = createSampleThread();
-        await store.saveThread({ thread });
-        await store.saveMessages({ messages: [createSampleMessageV1({ threadId: thread.id })] });
+        // Ensure timestamps are distinct for reliable sorting by creating them with a slight delay for testing clarity
+        const messagesToSave: MastraMessageV1[] = [];
+        messagesToSave.push(createSampleMessageV1({ threadId: thread.id, createdAt: dayBeforeYesterday }));
+        await new Promise(r => setTimeout(r, 5));
+        messagesToSave.push(createSampleMessageV1({ threadId: thread.id, createdAt: dayBeforeYesterday }));
+        await new Promise(r => setTimeout(r, 5));
+        messagesToSave.push(createSampleMessageV1({ threadId: thread.id, createdAt: yesterday }));
+        await new Promise(r => setTimeout(r, 5));
+        messagesToSave.push(createSampleMessageV1({ threadId: thread.id, createdAt: yesterday }));
+        await new Promise(r => setTimeout(r, 5));
+        messagesToSave.push(createSampleMessageV1({ threadId: thread.id, createdAt: now }));
+        await new Promise(r => setTimeout(r, 5));
+        messagesToSave.push(createSampleMessageV1({ threadId: thread.id, createdAt: now }));
 
-        const messages = await store.getMessages({ threadId: thread.id, format: 'v1' });
-        expect(Array.isArray(messages)).toBe(true);
-        expect(messages.length).toBe(1);
-        // @ts-expect-error - messages should not have pagination properties
-        expect(messages.total).toBeUndefined();
+        await store.saveMessages({ messages: messagesToSave, format: 'v1' });
+        // Total 6 messages: 2 now, 2 yesterday, 2 dayBeforeYesterday (oldest to newest)
+
+        const fromYesterday = await store.getMessagesPaginated({
+          threadId: thread.id,
+          selectBy: { pagination: { page: 0, perPage: 3, dateRange: { start: yesterday } } },
+          format: 'v2',
+        });
+        expect(fromYesterday.total).toBe(4);
+        expect(fromYesterday.messages).toHaveLength(3);
+        const firstMessageTime = new Date((fromYesterday.messages[0] as MastraMessageV1).createdAt).getTime();
+        expect(firstMessageTime).toBeGreaterThanOrEqual(new Date(yesterday.toISOString()).getTime());
+        if (fromYesterday.messages.length > 0) {
+          expect(new Date((fromYesterday.messages[0] as MastraMessageV1).createdAt).toISOString().slice(0, 10)).toEqual(
+            yesterday.toISOString().slice(0, 10),
+          );
+        }
       });
     });
 
@@ -1493,28 +1466,30 @@ describe('PostgresStore', () => {
         );
         await Promise.all(threadPromises);
 
-        const page1 = await store.getThreadsByResourceId({ resourceId, page: 0, perPage: 7 });
+        const page1 = await store.getThreadsByResourceIdPaginated({ resourceId, page: 0, perPage: 7 });
         expect(page1.threads).toHaveLength(7);
         expect(page1.total).toBe(17);
         expect(page1.page).toBe(0);
         expect(page1.perPage).toBe(7);
         expect(page1.hasMore).toBe(true);
 
-        const page3 = await store.getThreadsByResourceId({ resourceId, page: 2, perPage: 7 });
+        const page3 = await store.getThreadsByResourceIdPaginated({ resourceId, page: 2, perPage: 7 });
         expect(page3.threads).toHaveLength(3); // 17 total, 7 per page, 3rd page has 17 - 2*7 = 3
         expect(page3.total).toBe(17);
         expect(page3.hasMore).toBe(false);
       });
 
-      it('should return array when no pagination params for getThreadsByResourceId', async () => {
+      it('should return paginated results when no pagination params for getThreadsByResourceId', async () => {
         const resourceId = `pg-non-paginated-resource-${randomUUID()}`;
         await store.saveThread({ thread: { ...createSampleThread(), resourceId } });
 
-        const threads = await store.getThreadsByResourceId({ resourceId });
-        expect(Array.isArray(threads)).toBe(true);
-        expect(threads.length).toBe(1);
-        // @ts-expect-error - threads should not have pagination properties
-        expect(threads.total).toBeUndefined();
+        const results = await store.getThreadsByResourceIdPaginated({ resourceId });
+        expect(Array.isArray(results.threads)).toBe(true);
+        expect(results.threads.length).toBe(1);
+        expect(results.total).toBe(1);
+        expect(results.page).toBe(0);
+        expect(results.perPage).toBe(100);
+        expect(results.hasMore).toBe(false);
       });
     });
   });

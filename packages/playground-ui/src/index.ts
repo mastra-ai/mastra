@@ -7,6 +7,7 @@ export * from './domains/workflows/index';
 export * from './domains/resizable-panel';
 export * from './components/dynamic-form/index';
 export * from './components/ui/data-table';
+export * from './components/ui/containers';
 export * from './components/threads';
 export * from './types';
 export * from './ds/components/Badge/index';

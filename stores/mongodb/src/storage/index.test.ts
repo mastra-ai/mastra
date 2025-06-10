@@ -321,9 +321,9 @@ describe('MongoDBStore', () => {
         },
       ];
 
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v1' });
 
-      const retrievedMessages = await store.getMessages({ threadId: thread.id });
+      const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v1' });
       expect(retrievedMessages).toHaveLength(3);
 
       // Verify order is maintained
