@@ -147,10 +147,6 @@ export class UpstashStore extends MastraStorage {
     const key = this.getKey(TABLE_MESSAGES, { threadId, id: messageId });
     return key;
   }
-  private getResourceKeyByThreadAndMessage(threadId: string, messageId: string): string {
-    const key = 'to-resourceid:' + this.getKey(TABLE_MESSAGES, { threadId, messageId });
-    return key;
-  }
 
   private getThreadMessagesKey(threadId: string): string {
     return `thread:${threadId}:messages`;
@@ -665,10 +661,8 @@ export class UpstashStore extends MastraStorage {
 
     await pipeline.exec();
 
-    // Bulk delete all message keys for this thread
+    // Bulk delete all message keys for this thread if any remain
     await this.scanAndDelete(this.getMessageKey(threadId, '*'));
-    // Bulk delete all thread-to-resource mapping keys for this thread
-    await this.scanAndDelete(this.getResourceKeyByThreadAndMessage(threadId, '*'));
   }
 
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
@@ -713,9 +707,6 @@ export class UpstashStore extends MastraStorage {
           score,
           member: message.id,
         });
-        if (message.resourceId && message.threadId) {
-          pipeline.set(this.getResourceKeyByThreadAndMessage(message.threadId, message.id), message.resourceId);
-        }
       }
 
       await pipeline.exec();
