@@ -11,6 +11,7 @@ import { dev } from './commands/dev/dev';
 import { init } from './commands/init/init';
 import { checkAndInstallCoreDeps, checkPkgJson, interactivePrompt } from './commands/init/utils';
 import { lint } from './commands/lint';
+import { start } from './commands/start';
 import { DepsService } from './services/service.deps';
 import { logger } from './utils/logger';
 
@@ -45,7 +46,7 @@ program
 program
   .command('create [project-name]')
   .description('Create a new Mastra project')
-  .option('--default', 'Quick start with defaults(src, OpenAI, no examples)')
+  .option('--default', 'Quick start with defaults(src, OpenAI, examples)')
   .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows)')
   .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, groq, google, or cerebras))')
   .option('-k, --llm-api-key <api-key>', 'API key for the model provider')
@@ -94,7 +95,7 @@ program
 program
   .command('init')
   .description('Initialize Mastra in your project')
-  .option('--default', 'Quick start with defaults(src, OpenAI, no examples)')
+  .option('--default', 'Quick start with defaults(src, OpenAI, examples)')
   .option('-d, --dir <directory>', 'Directory for Mastra files to (defaults to src/)')
   .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows)')
   .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, groq, google or cerebras))')
@@ -225,6 +226,25 @@ program
           Then deploy .mastra/output to your target platform.
           `);
         await deploy({ dir: args.dir });
+      },
+      origin,
+    });
+  });
+
+program
+  .command('start')
+  .description('Start your built Mastra application')
+  .option('-d, --dir <path>', 'Path to your built Mastra output directory (default: .mastra/output)')
+  .option('-nt, --no-telemetry', 'Disable telemetry on start')
+  .action(async args => {
+    await analytics.trackCommandExecution({
+      command: 'start',
+      args,
+      execution: async () => {
+        await start({
+          dir: args.dir,
+          telemetry: !args.noTelemetry,
+        });
       },
       origin,
     });

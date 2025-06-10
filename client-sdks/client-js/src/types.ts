@@ -1,5 +1,5 @@
 import type {
-  MessageType,
+  MastraMessageV1,
   AiMessageType,
   CoreMessage,
   QueryResult,
@@ -7,8 +7,8 @@ import type {
   WorkflowRuns,
   LegacyWorkflowRuns,
 } from '@mastra/core';
-import type { AgentGenerateOptions, AgentStreamOptions } from '@mastra/core/agent';
-import type { BaseLogMessage } from '@mastra/core/logger';
+import type { AgentGenerateOptions, AgentStreamOptions, ToolsInput } from '@mastra/core/agent';
+import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 
 import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
@@ -69,14 +69,16 @@ export type GenerateParams<T extends JSONSchema7 | ZodSchema | undefined = undef
   output?: T;
   experimental_output?: T;
   runtimeContext?: RuntimeContext | Record<string, any>;
-} & WithoutMethods<Omit<AgentGenerateOptions<T>, 'output' | 'experimental_output' | 'runtimeContext'>>;
+  clientTools?: ToolsInput;
+} & WithoutMethods<Omit<AgentGenerateOptions<T>, 'output' | 'experimental_output' | 'runtimeContext' | 'clientTools'>>;
 
 export type StreamParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[];
   output?: T;
   experimental_output?: T;
   runtimeContext?: RuntimeContext | Record<string, any>;
-} & WithoutMethods<Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'runtimeContext'>>;
+  clientTools?: ToolsInput;
+} & WithoutMethods<Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'runtimeContext' | 'clientTools'>>;
 
 export interface GetEvalsByAgentIdResponse extends GetAgentResponse {
   evals: any[];
@@ -172,11 +174,11 @@ export interface GetVectorIndexResponse {
 }
 
 export interface SaveMessageToMemoryParams {
-  messages: MessageType[];
+  messages: MastraMessageV1[];
   agentId: string;
 }
 
-export type SaveMessageToMemoryResponse = MessageType[];
+export type SaveMessageToMemoryResponse = MastraMessageV1[];
 
 export interface CreateMemoryThreadParams {
   title?: string;
@@ -215,14 +217,32 @@ export interface GetMemoryThreadMessagesResponse {
 
 export interface GetLogsParams {
   transportId: string;
+  fromDate?: Date;
+  toDate?: Date;
+  logLevel?: LogLevel;
+  filters?: Record<string, string>;
+  page?: number;
+  perPage?: number;
 }
 
 export interface GetLogParams {
   runId: string;
   transportId: string;
+  fromDate?: Date;
+  toDate?: Date;
+  logLevel?: LogLevel;
+  filters?: Record<string, string>;
+  page?: number;
+  perPage?: number;
 }
 
-export type GetLogsResponse = BaseLogMessage[];
+export type GetLogsResponse = {
+  logs: BaseLogMessage[];
+  total: number;
+  page: number;
+  perPage: number;
+  hasMore: boolean;
+};
 
 export type RequestFunction = (path: string, options?: RequestOptions) => Promise<any>;
 

@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import type { D1Database } from '@cloudflare/workers-types';
-import type { WorkflowRunState } from '@mastra/core';
-import type { MessageType } from '@mastra/core/memory';
+import { createSampleEval, createSampleTraceForDB } from '@internal/storage-test-utils';
+import type { MastraMessageV2, WorkflowRunState, StorageThreadType } from '@mastra/core';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 import {
   TABLE_MESSAGES,
@@ -13,7 +13,6 @@ import {
 import dotenv from 'dotenv';
 import { Miniflare } from 'miniflare';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi, afterEach } from 'vitest';
-
 import {
   checkWorkflowSnapshot,
   createSampleMessage,
@@ -362,7 +361,7 @@ describe('D1Store', () => {
 
       // Add some messages
       const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
       await store.deleteThread({ threadId: thread.id });
 
@@ -375,7 +374,7 @@ describe('D1Store', () => {
       expect(threads).toHaveLength(0);
 
       // Verify messages were also deleted
-      const retrievedMessages = await store.getMessages({ threadId: thread.id });
+      const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v2' });
       expect(retrievedMessages).toHaveLength(0);
     });
   });
@@ -392,17 +391,14 @@ describe('D1Store', () => {
       const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
 
       // Save messages
-      const savedMessages = await store.saveMessages({ messages });
+      const savedMessages = await store.saveMessages({ messages, format: 'v2' });
       expect(savedMessages).toEqual(messages);
 
       // Retrieve messages
-      const retrievedMessages = await store.getMessages({ threadId: thread.id });
+      const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v2' });
       const checkMessages = messages.map(m => {
         const { resourceId, ...rest } = m;
-        return {
-          ...rest,
-          createdAt: m.createdAt.toISOString(),
-        };
+        return rest;
       });
       expect(retrievedMessages).toEqual(expect.arrayContaining(checkMessages));
     });
@@ -417,23 +413,14 @@ describe('D1Store', () => {
       await store.saveThread({ thread });
 
       const messages = [
-        {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'First' }] as MessageType['content'],
-        },
-        {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'Second' }] as MessageType['content'],
-        },
-        {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'Third' }] as MessageType['content'],
-        },
-      ];
+        createSampleMessage(thread.id, [{ type: 'text' as const, text: 'First' }]),
+        createSampleMessage(thread.id, [{ type: 'text' as const, text: 'Second' }]),
+        createSampleMessage(thread.id, [{ type: 'text' as const, text: 'Third' }]),
+      ] satisfies MastraMessageV2[];
 
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
-      const retrievedMessages = await store.getMessages({ threadId: thread.id });
+      const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v2' });
       expect(retrievedMessages).toHaveLength(3);
 
       // Verify order is maintained
@@ -449,12 +436,12 @@ describe('D1Store', () => {
       const messages = [
         createSampleMessage(thread.id),
         { ...createSampleMessage(thread.id), id: null }, // This will cause an error
-      ] as MessageType[];
+      ] as any as MastraMessageV2[];
 
-      await expect(store.saveMessages({ messages })).rejects.toThrow();
+      await expect(store.saveMessages({ messages, format: 'v2' })).rejects.toThrow();
 
       // Verify no messages were saved
-      const savedMessages = await store.getMessages({ threadId: thread.id });
+      const savedMessages = await store.getMessages({ threadId: thread.id, format: 'v2' });
       expect(savedMessages).toHaveLength(0);
     });
   });
@@ -582,10 +569,10 @@ describe('D1Store', () => {
         createdAt: timestamp,
       }));
 
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
       // Verify order is maintained based on insertion order
-      const order = await store.getMessages({ threadId: thread.id });
+      const order = await store.getMessages({ threadId: thread.id, format: 'v2' });
       const orderIds = order.map(m => m.id);
       const messageIds = messages.map(m => m.id);
 
@@ -606,10 +593,10 @@ describe('D1Store', () => {
 
       // Save messages in reverse order to verify write order is preserved
       const reversedMessages = [...messages].reverse(); // newest -> oldest
-      await Promise.all(reversedMessages.map(msg => store.saveMessages({ messages: [msg] })));
+      await Promise.all(reversedMessages.map(msg => store.saveMessages({ messages: [msg], format: 'v2' })));
 
       // Verify messages are saved and maintain write order (not timestamp order)
-      const order = await store.getMessages({ threadId: thread.id });
+      const order = await store.getMessages({ threadId: thread.id, format: 'v2' });
       const orderIds = order.map(m => m.id);
       const messageIds = messages.map(m => m.id);
 
@@ -625,28 +612,25 @@ describe('D1Store', () => {
       const baseTime = new Date('2025-03-14T23:30:20.930Z').getTime();
       const messages = [
         {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text', text: 'First' }],
+          ...createSampleMessage(thread.id, [{ type: 'text', text: 'First' }]),
           createdAt: new Date(baseTime),
         },
         {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text', text: 'Second' }],
+          ...createSampleMessage(thread.id, [{ type: 'text', text: 'Second' }]),
           createdAt: new Date(baseTime + 1000),
         },
         {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text', text: 'Third' }],
+          ...createSampleMessage(thread.id, [{ type: 'text', text: 'Third' }]),
           createdAt: new Date(baseTime + 2000),
         },
-      ] as MessageType[];
+      ] as MastraMessageV2[];
 
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
       await new Promise(resolve => setTimeout(resolve, 5000));
 
       // Get messages and verify order
-      const order = await store.getMessages({ threadId: thread.id });
+      const order = await store.getMessages({ threadId: thread.id, format: 'v2' });
       expect(order.length).toBe(3);
     });
   });
@@ -1085,16 +1069,13 @@ describe('D1Store', () => {
 
     it('should sanitize and handle special characters', async () => {
       const thread = createSampleThread();
-      const message = {
-        ...createSampleMessage(thread.id),
-        content: [{ type: 'text' as const, text: '特殊字符 !@#$%^&*()' }] as MessageType['content'],
-      };
+      const message = createSampleMessage(thread.id, [{ type: 'text' as const, text: '特殊字符 !@#$%^&*()' }]);
 
       await store.saveThread({ thread });
-      await store.saveMessages({ messages: [message] });
+      await store.saveMessages({ messages: [message], format: 'v2' });
 
       // Should retrieve correctly
-      const messages = await store.getMessages({ threadId: thread.id });
+      const messages = await store.getMessages({ threadId: thread.id, format: 'v2' });
       expect(messages).toHaveLength(1);
       expect(messages[0].content).toEqual(message.content);
     });
@@ -1113,10 +1094,10 @@ describe('D1Store', () => {
       }));
 
       // Save messages in parallel - write order should be preserved
-      await Promise.all(messages.map(msg => store.saveMessages({ messages: [msg] })));
+      await Promise.all(messages.map(msg => store.saveMessages({ messages: [msg], format: 'v2' })));
 
       // Order should reflect write order, not timestamp order
-      const order = await store.getMessages({ threadId: thread.id });
+      const order = await store.getMessages({ threadId: thread.id, format: 'v2' });
 
       // Verify messages exist in write order
       const orderIds = order.map(m => m.id);
@@ -1135,10 +1116,10 @@ describe('D1Store', () => {
       const messages = Array.from({ length: 3 }, () => createSampleMessage(thread.id));
 
       await store.saveThread({ thread });
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v2' });
 
       // Verify messages exist
-      const initialOrder = await store.getMessages({ threadId: thread.id });
+      const initialOrder = await store.getMessages({ threadId: thread.id, format: 'v2' });
       expect(initialOrder).toHaveLength(messages.length);
 
       // Delete thread
@@ -1147,7 +1128,7 @@ describe('D1Store', () => {
       await new Promise(resolve => setTimeout(resolve, 5000));
 
       // Verify messages are cleaned up
-      const finalOrder = await store.getMessages({ threadId: thread.id });
+      const finalOrder = await store.getMessages({ threadId: thread.id, format: 'v2' });
       expect(finalOrder).toHaveLength(0);
 
       // Verify thread is gone
@@ -1217,6 +1198,7 @@ describe('D1Store', () => {
       await expect(
         store.saveMessages({
           messages: [message],
+          format: 'v2',
         }),
       ).rejects.toThrow();
     });
@@ -1226,15 +1208,14 @@ describe('D1Store', () => {
       await store.saveThread({ thread });
 
       // Test with various malformed data
-      const malformedMessage = {
-        ...createSampleMessage(thread.id),
-        content: [{ type: 'text' as const, text: ''.padStart(1024 * 1024, 'x') }] as MessageType['content'], // Very large content
-      };
+      const malformedMessage = createSampleMessage(thread.id, [
+        { type: 'text' as const, text: ''.padStart(1024 * 1024, 'x') },
+      ]);
 
-      await store.saveMessages({ messages: [malformedMessage] });
+      await store.saveMessages({ messages: [malformedMessage], format: 'v2' });
 
       // Should still be able to retrieve and handle the message
-      const messages = await store.getMessages({ threadId: thread.id });
+      const messages = await store.getMessages({ threadId: thread.id, format: 'v2' });
       expect(messages).toHaveLength(1);
       expect(messages[0].id).toBe(malformedMessage.id);
     });
@@ -1267,6 +1248,436 @@ describe('D1Store', () => {
       const retrieved = await store.getThreadById({ threadId: thread.id });
 
       expect(retrieved?.title).toBe(thread.title);
+    });
+  });
+});
+
+describe('D1Store Pagination Features', () => {
+  let store: D1Store;
+
+  beforeAll(async () => {
+    const mf = new Miniflare({
+      modules: true,
+      script: 'export default {};',
+      d1Databases: { PAGINATION_TEST_DB: ':memory:' },
+    });
+    const d1PaginationDb = await mf.getD1Database('PAGINATION_TEST_DB');
+    store = new D1Store({
+      binding: d1PaginationDb,
+      tablePrefix: 'pgtest_',
+    });
+    await store.init();
+  });
+
+  beforeEach(async () => {
+    await store.clearTable({ tableName: TABLE_EVALS });
+    await store.clearTable({ tableName: TABLE_TRACES });
+    await store.clearTable({ tableName: TABLE_MESSAGES });
+    await store.clearTable({ tableName: TABLE_THREADS });
+  });
+
+  describe('getEvals with pagination', () => {
+    it('should return paginated evals with total count (page/perPage)', async () => {
+      const agentName = 'd1-pagination-agent-evals';
+      const evalRecords = Array.from({ length: 25 }, (_, i) => createSampleEval(agentName, i % 2 === 0));
+      // D1Store's batchInsert expects records to be processed (dates to ISO strings, objects to JSON strings)
+      const processedRecords = evalRecords.map(r => store['processRecord'](r as any));
+      await store.batchInsert({ tableName: TABLE_EVALS, records: await Promise.all(processedRecords) });
+
+      const page1 = await store.getEvals({ agentName, page: 0, perPage: 10 });
+      expect(page1.evals).toHaveLength(10);
+      expect(page1.total).toBe(25);
+      expect(page1.page).toBe(0);
+      expect(page1.perPage).toBe(10);
+      expect(page1.hasMore).toBe(true);
+
+      const page3 = await store.getEvals({ agentName, page: 2, perPage: 10 });
+      expect(page3.evals).toHaveLength(5);
+      expect(page3.total).toBe(25);
+      expect(page3.page).toBe(2);
+      expect(page3.perPage).toBe(10);
+      expect(page3.hasMore).toBe(false);
+    });
+
+    it('should support page/perPage pagination for getEvals', async () => {
+      const agentName = 'd1-pagination-lo-evals';
+      const evalRecords = Array.from({ length: 15 }, () => createSampleEval(agentName));
+      const processedRecords = evalRecords.map(r => store['processRecord'](r as any));
+      await store.batchInsert({ tableName: TABLE_EVALS, records: await Promise.all(processedRecords) });
+
+      // page 2 with 5 per page (0-indexed) would be records 10-14
+      const result = await store.getEvals({ agentName, page: 2, perPage: 5 });
+      expect(result.evals).toHaveLength(5);
+      expect(result.total).toBe(15);
+      expect(result.page).toBe(2);
+      expect(result.perPage).toBe(5);
+      expect(result.hasMore).toBe(false); // total is 15, 2*5+5 = 15, no more records
+    });
+
+    it('should filter by type with pagination for getEvals', async () => {
+      const agentName = 'd1-pagination-type-evals';
+      const testEvals = Array.from({ length: 10 }, () => createSampleEval(agentName, true));
+      const liveEvals = Array.from({ length: 8 }, () => createSampleEval(agentName, false));
+      const processedTestEvals = testEvals.map(r => store['processRecord'](r as any));
+      const processedLiveEvals = liveEvals.map(r => store['processRecord'](r as any));
+      await store.batchInsert({
+        tableName: TABLE_EVALS,
+        records: await Promise.all([...processedTestEvals, ...processedLiveEvals]),
+      });
+
+      const testResults = await store.getEvals({ agentName, type: 'test', page: 0, perPage: 5 });
+      expect(testResults.evals).toHaveLength(5);
+      expect(testResults.total).toBe(10);
+      expect(testResults.hasMore).toBe(true);
+
+      const liveResults = await store.getEvals({ agentName, type: 'live', page: 1, perPage: 3 });
+      expect(liveResults.evals).toHaveLength(3); // 8 total, page 0 gets 3, page 1 gets 3, page 2 gets 2
+      expect(liveResults.total).toBe(8);
+      expect(liveResults.hasMore).toBe(true); // 3*1 + 3 < 8
+
+      const liveResultsPage2 = await store.getEvals({ agentName, type: 'live', page: 2, perPage: 3 });
+      expect(liveResultsPage2.evals).toHaveLength(2);
+      expect(liveResultsPage2.total).toBe(8);
+      expect(liveResultsPage2.hasMore).toBe(false);
+    });
+
+    it('should filter by date with pagination for getEvals', async () => {
+      const agentName = 'd1-pagination-date-evals';
+      const now = new Date();
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const dayBeforeYesterday = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+
+      const recordsToInsert = [
+        createSampleEval(agentName, false, dayBeforeYesterday),
+        createSampleEval(agentName, false, dayBeforeYesterday),
+        createSampleEval(agentName, false, yesterday),
+        createSampleEval(agentName, false, yesterday),
+        createSampleEval(agentName, false, now),
+        createSampleEval(agentName, false, now),
+      ];
+      const processedRecords = recordsToInsert.map(r => store['processRecord'](r as any));
+      await store.batchInsert({ tableName: TABLE_EVALS, records: await Promise.all(processedRecords) });
+
+      const fromYesterday = await store.getEvals({ agentName, fromDate: yesterday, page: 0, perPage: 3 });
+      expect(fromYesterday.total).toBe(4); // 2 from now, 2 from yesterday
+      expect(fromYesterday.evals).toHaveLength(3);
+      fromYesterday.evals.forEach(
+        e =>
+          expect(new Date(e.createdAt).getTime()).toBeGreaterThanOrEqual(
+            new Date(yesterday.toISOString().split('T')[0]).getTime(),
+          ), // Compare date part only for safety with TZ
+      );
+      if (fromYesterday.evals.length > 0) {
+        expect(new Date(fromYesterday.evals[0].createdAt).toISOString().slice(0, 10)).toEqual(
+          now.toISOString().slice(0, 10),
+        );
+      }
+
+      const onlyDayBefore = await store.getEvals({
+        agentName,
+        toDate: new Date(yesterday.getTime() - 1), //  Should only include dayBeforeYesterday
+        page: 0,
+        perPage: 5,
+      });
+      expect(onlyDayBefore.total).toBe(2);
+      expect(onlyDayBefore.evals).toHaveLength(2);
+      onlyDayBefore.evals.forEach(e =>
+        expect(new Date(e.createdAt).toISOString().slice(0, 10)).toEqual(dayBeforeYesterday.toISOString().slice(0, 10)),
+      );
+    });
+  });
+
+  describe('getTraces with pagination', () => {
+    it('should return paginated traces with total count', async () => {
+      const scope = 'd1-test-scope-traces';
+      const traceRecords = Array.from({ length: 18 }, (_, i) => createSampleTraceForDB(`test-trace-${i}`, scope)); // Using createSampleTraceForDB
+      const processedRecords = traceRecords.map(r => store['processRecord'](r as any));
+      await store.batchInsert({ tableName: TABLE_TRACES, records: await Promise.all(processedRecords) });
+
+      const page1 = await store.getTracesPaginated({
+        scope,
+        page: 0,
+        perPage: 8,
+      });
+      expect(page1.traces).toHaveLength(8);
+      expect(page1.total).toBe(18);
+      expect(page1.page).toBe(0);
+      expect(page1.perPage).toBe(8);
+      expect(page1.hasMore).toBe(true);
+
+      const page3 = await store.getTracesPaginated({
+        scope,
+        page: 2, // 0-indexed, so this is the 3rd page
+        perPage: 8,
+      });
+      expect(page3.traces).toHaveLength(2); // 18 items, 8 per page. Page 0: 8, Page 1: 8, Page 2: 2
+
+      console.log(page3.traces);
+      expect(page3.total).toBe(18);
+      expect(page3.page).toBe(2);
+      expect(page3.perPage).toBe(8);
+      expect(page3.hasMore).toBe(false);
+    });
+
+    it('should return an array of traces for the non-paginated method', async () => {
+      const scope = 'd1-array-traces';
+      const traceRecords = [createSampleTraceForDB('trace-arr-1', scope), createSampleTraceForDB('trace-arr-2', scope)];
+      const processedRecords = traceRecords.map(r => store['processRecord'](r as any));
+      await store.batchInsert({ tableName: TABLE_TRACES, records: await Promise.all(processedRecords) });
+
+      const tracesDefault = await store.getTraces({
+        scope,
+        page: 0,
+        perPage: 5,
+      });
+      expect(Array.isArray(tracesDefault)).toBe(true);
+      expect(tracesDefault.length).toBe(2);
+      // @ts-expect-error Ensure no pagination properties on the array
+      expect(tracesDefault.total).toBeUndefined();
+    });
+
+    it('should filter by attributes with pagination for getTracesPaginated', async () => {
+      const scope = 'd1-attr-traces';
+      const tracesWithAttr = Array.from({ length: 8 }, (_, i) =>
+        createSampleTraceForDB(`trace-prod-${i}`, scope, { environment: 'prod' }),
+      );
+      const tracesWithoutAttr = Array.from({ length: 5 }, (_, i) =>
+        createSampleTraceForDB(`trace-dev-${i}`, scope, { environment: 'dev' }),
+      );
+      const processedWithAttr = tracesWithAttr.map(r => store['processRecord'](r as any));
+      const processedWithoutAttr = tracesWithoutAttr.map(r => store['processRecord'](r as any));
+      await store.batchInsert({
+        tableName: TABLE_TRACES,
+        records: await Promise.all([...processedWithAttr, ...processedWithoutAttr]),
+      });
+
+      const prodTraces = await store.getTracesPaginated({
+        scope,
+        attributes: { environment: 'prod' },
+        page: 0,
+        perPage: 5,
+      });
+      expect(prodTraces.traces).toHaveLength(5);
+      expect(prodTraces.total).toBe(8);
+      expect(prodTraces.hasMore).toBe(true);
+    });
+
+    it('should filter by date with pagination for getTracesPaginated', async () => {
+      const scope = 'd1-date-traces';
+      const now = new Date();
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const dayBeforeYesterday = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+
+      const recordsToInsert = [
+        createSampleTraceForDB('t_dbf1', scope, undefined, dayBeforeYesterday),
+        createSampleTraceForDB('t_dbf2', scope, undefined, dayBeforeYesterday),
+        createSampleTraceForDB('t_y1', scope, undefined, yesterday),
+        createSampleTraceForDB('t_y3', scope, undefined, yesterday),
+        createSampleTraceForDB('t_n1', scope, undefined, now),
+        createSampleTraceForDB('t_n2', scope, undefined, now),
+      ];
+      const processedRecords = recordsToInsert.map(r => store['processRecord'](r as any));
+      await store.batchInsert({ tableName: TABLE_TRACES, records: await Promise.all(processedRecords) });
+
+      const fromYesterday = await store.getTracesPaginated({
+        scope,
+        fromDate: yesterday,
+        page: 0,
+        perPage: 3,
+      });
+      expect(fromYesterday.total).toBe(4); // 2 from now, 2 from yesterday
+      expect(fromYesterday.traces).toHaveLength(3); // Should get 2 from 'now', 1 from 'yesterday' (DESC order)
+      fromYesterday.traces.forEach(t =>
+        expect(new Date(t.createdAt).getTime()).toBeGreaterThanOrEqual(
+          new Date(yesterday.toISOString().split('T')[0]).getTime(),
+        ),
+      );
+      if (fromYesterday.traces.length > 0) {
+        // startTime is used for ordering, createdAt for filtering generally
+        expect(new Date(fromYesterday.traces[0].createdAt).toISOString().slice(0, 10)).toEqual(
+          now.toISOString().slice(0, 10),
+        );
+      }
+
+      const onlyNow = await store.getTracesPaginated({
+        scope,
+        fromDate: now,
+        toDate: now, // Ensure toDate is inclusive of the 'now' timestamp for D1
+        page: 0,
+        perPage: 5,
+      });
+      expect(onlyNow.total).toBe(2);
+      expect(onlyNow.traces).toHaveLength(2);
+      onlyNow.traces.forEach(t =>
+        expect(new Date(t.createdAt).toISOString().slice(0, 10)).toEqual(now.toISOString().slice(0, 10)),
+      );
+    });
+  });
+
+  describe('getMessages with pagination', () => {
+    it('should return paginated messages with total count', async () => {
+      const threadData = createSampleThread();
+      const thread = await store.saveThread({ thread: threadData as StorageThreadType });
+      const now = new Date();
+      const yesterday = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() - 1,
+        now.getHours(),
+        now.getMinutes(),
+        now.getSeconds(),
+      );
+      const dayBeforeYesterday = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() - 2,
+        now.getHours(),
+        now.getMinutes(),
+        now.getSeconds(),
+      );
+
+      // Ensure timestamps are distinct for reliable sorting by creating them with a slight delay for testing clarity
+      const messagesToSave: MastraMessageV2[] = [];
+      messagesToSave.push(createSampleMessage(thread.id, [{ type: 'text', text: 'dayBefore1' }], dayBeforeYesterday));
+      await new Promise(r => setTimeout(r, 5));
+      messagesToSave.push(
+        createSampleMessage(
+          thread.id,
+          [{ type: 'text', text: 'dayBefore2' }],
+          new Date(dayBeforeYesterday.getTime() + 1),
+        ),
+      );
+      await new Promise(r => setTimeout(r, 5));
+      messagesToSave.push(createSampleMessage(thread.id, [{ type: 'text', text: 'yesterday1' }], yesterday));
+      await new Promise(r => setTimeout(r, 5));
+      messagesToSave.push(
+        createSampleMessage(thread.id, [{ type: 'text', text: 'yesterday2' }], new Date(yesterday.getTime() + 1)),
+      );
+      await new Promise(r => setTimeout(r, 5));
+      messagesToSave.push(createSampleMessage(thread.id, [{ type: 'text', text: 'now1' }], now));
+      await new Promise(r => setTimeout(r, 5));
+      messagesToSave.push(
+        createSampleMessage(thread.id, [{ type: 'text', text: 'now2' }], new Date(now.getTime() + 1)),
+      );
+
+      await store.saveMessages({ messages: messagesToSave, format: 'v2' });
+      // Total 6 messages: 2 now, 2 yesterday, 2 dayBeforeYesterday (oldest to newest)
+
+      const fromYesterdayResult = await store.getMessagesPaginated({
+        threadId: thread.id,
+        selectBy: {
+          pagination: {
+            dateRange: {
+              start: yesterday,
+            },
+            page: 0,
+            perPage: 3,
+          },
+        },
+        format: 'v2',
+      });
+      expect(fromYesterdayResult.total).toBe(4); // 2 from now, 2 from yesterday
+      expect(fromYesterdayResult.messages).toHaveLength(3);
+      // DB (DESC): now2, now1, yesterday2. (yesterday1 is next page if limit 3)
+      // MessageList sorts ASC: yesterday2, now1, now2.
+      expect(new Date(fromYesterdayResult.messages[0].createdAt).toISOString().slice(0, 10)).toEqual(
+        yesterday.toISOString().slice(0, 10),
+      );
+      expect(new Date(fromYesterdayResult.messages[1].createdAt).toISOString().slice(0, 10)).toEqual(
+        now.toISOString().slice(0, 10),
+      );
+      expect(new Date(fromYesterdayResult.messages[2].createdAt).toISOString().slice(0, 10)).toEqual(
+        now.toISOString().slice(0, 10),
+      );
+
+      const onlyDayBefore = await store.getMessagesPaginated({
+        threadId: thread.id,
+        selectBy: {
+          pagination: {
+            dateRange: {
+              end: new Date(yesterday.getTime() - 1),
+            },
+            page: 0,
+            perPage: 5,
+          },
+        },
+        format: 'v2',
+      });
+      expect(onlyDayBefore.total).toBe(2);
+      expect(onlyDayBefore.messages).toHaveLength(2);
+      onlyDayBefore.messages.forEach(m =>
+        expect(new Date(m.createdAt).toISOString().slice(0, 10)).toEqual(dayBeforeYesterday.toISOString().slice(0, 10)),
+      );
+    });
+
+    it('should maintain backward compatibility for getMessages (no pagination params)', async () => {
+      const threadData = createSampleThread();
+      const thread = await store.saveThread({ thread: threadData as StorageThreadType });
+      const msg1 = createSampleMessage(thread.id, undefined, new Date(Date.now() - 1000));
+      const msg2 = createSampleMessage(thread.id, undefined, new Date());
+      await store.saveMessages({ messages: [msg1, msg2], format: 'v2' });
+
+      const messages = await store.getMessages({ threadId: thread.id, format: 'v2' });
+      expect(Array.isArray(messages)).toBe(true);
+      expect(messages.length).toBe(2);
+      // Non-paginated path sorts ASC by createdAt
+      expect(messages[0].id).toBe(msg1.id);
+      expect(messages[1].id).toBe(msg2.id);
+      // @ts-expect-error
+      expect(messages.total).toBeUndefined();
+    });
+  });
+
+  describe('getThreadsByResourceId with pagination', () => {
+    it('should return paginated threads with total count', async () => {
+      const resourceId = `d1-paginated-resource-${randomUUID()}`;
+      const threadRecords: StorageThreadType[] = [];
+      for (let i = 0; i < 17; i++) {
+        // Introduce a small delay to ensure createdAt timestamps are distinct
+        await new Promise(resolve => setTimeout(resolve, 5));
+        const threadData = createSampleThread();
+        threadData.resourceId = resourceId;
+        threadRecords.push(threadData as StorageThreadType);
+      }
+      // Save threads one by one, which should also help with timestamp distinctness
+      for (const tr of threadRecords) {
+        await store.saveThread({ thread: tr });
+      }
+
+      const page1 = await store.getThreadsByResourceIdPaginated({ resourceId, page: 0, perPage: 7 });
+      expect(page1.threads).toHaveLength(7);
+      expect(page1.total).toBe(17);
+      expect(page1.page).toBe(0);
+      expect(page1.perPage).toBe(7);
+      expect(page1.hasMore).toBe(true);
+      expect(page1.threads[0].id).toBe(threadRecords[16].id);
+
+      const page3 = await store.getThreadsByResourceIdPaginated({ resourceId, page: 2, perPage: 7 });
+      expect(page3.threads).toHaveLength(3);
+      expect(page3.total).toBe(17);
+      expect(page3.page).toBe(2);
+      expect(page3.perPage).toBe(7);
+      expect(page3.hasMore).toBe(false);
+      expect(page3.threads[0].id).toBe(threadRecords[2].id);
+    });
+
+    it('should return array when no pagination params for getThreadsByResourceId (backward compatibility)', async () => {
+      const resourceId = `d1-non-paginated-resource-${randomUUID()}`;
+      const threadData = createSampleThread();
+      threadData.resourceId = resourceId;
+      await store.saveThread({ thread: threadData as StorageThreadType });
+
+      const threads = await store.getThreadsByResourceId({ resourceId });
+      expect(Array.isArray(threads)).toBe(true);
+      expect(threads.length).toBe(1);
+      // @ts-expect-error
+      expect(threads.total).toBeUndefined();
+      // @ts-expect-error
+      expect(threads.page).toBeUndefined();
+      // @ts-expect-error
+      expect(threads.perPage).toBeUndefined();
+      // @ts-expect-error
+      expect(threads.hasMore).toBeUndefined();
     });
   });
 });

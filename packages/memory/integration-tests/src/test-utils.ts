@@ -1,4 +1,5 @@
-import type { CoreMessage } from '@mastra/core';
+import type { CoreMessage, MastraMessageV1 } from '@mastra/core';
+import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageV2 } from '@mastra/core/agent';
 
 const toolArgs = {
@@ -30,7 +31,12 @@ export function generateConversationHistory({
   messageCount?: number;
   toolFrequency?: number;
   toolNames?: (keyof typeof toolArgs)[];
-}): { messages: MastraMessageV2[]; counts: { messages: number; toolCalls: number; toolResults: number } } {
+}): {
+  messages: MastraMessageV1[];
+  messagesV2: MastraMessageV2[];
+  fakeCore: CoreMessage[];
+  counts: { messages: number; toolCalls: number; toolResults: number };
+} {
   const counts = { messages: 0, toolCalls: 0, toolResults: 0 };
   // Create some words that will each be about one token
   const words = ['apple', 'banana', 'orange', 'grape'];
@@ -113,7 +119,13 @@ export function generateConversationHistory({
     counts.messages++;
   }
 
-  return { messages, counts };
+  const list = new MessageList().add(messages, 'memory');
+  return {
+    fakeCore: list.get.all.v1() as CoreMessage[],
+    messages: list.get.all.v1(),
+    messagesV2: list.get.all.v2(),
+    counts,
+  };
 }
 
 export function filterToolCallsByName(messages: CoreMessage[], name: string) {

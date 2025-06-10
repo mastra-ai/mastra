@@ -58,7 +58,7 @@ npm run dev
 
 The Mastra docs use [MDX](https://mdxjs.com/).
 
-Adding new conent requires:
+Adding new content requires:
 
 - YAML frontmatter
 - A navigation entry in a `meta.ts` file

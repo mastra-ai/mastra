@@ -247,13 +247,21 @@ export abstract class MastraMemory extends MastraBase {
    * @param messages - Array of messages to save
    * @returns Promise resolving to the saved messages
    */
-  abstract saveMessages({
-    messages,
-    memoryConfig,
-  }: {
-    messages: (MastraMessageV1 | MastraMessageV2)[];
-    memoryConfig: MemoryConfig | undefined;
+  abstract saveMessages(args: {
+    messages: (MastraMessageV1 | MastraMessageV2)[] | MastraMessageV1[] | MastraMessageV2[];
+    memoryConfig?: MemoryConfig | undefined;
+    format?: 'v1';
+  }): Promise<MastraMessageV1[]>;
+  abstract saveMessages(args: {
+    messages: (MastraMessageV1 | MastraMessageV2)[] | MastraMessageV1[] | MastraMessageV2[];
+    memoryConfig?: MemoryConfig | undefined;
+    format: 'v2';
   }): Promise<MastraMessageV2[]>;
+  abstract saveMessages(args: {
+    messages: (MastraMessageV1 | MastraMessageV2)[] | MastraMessageV1[] | MastraMessageV2[];
+    memoryConfig?: MemoryConfig | undefined;
+    format?: 'v1' | 'v2';
+  }): Promise<MastraMessageV2[] | MastraMessageV1[]>;
 
   /**
    * Retrieves all messages for a specific thread
@@ -264,7 +272,7 @@ export abstract class MastraMemory extends MastraBase {
     threadId,
     resourceId,
     selectBy,
-  }: StorageGetMessagesArg): Promise<{ messages: MastraMessageV1[]; uiMessages: UIMessage[] }>;
+  }: StorageGetMessagesArg): Promise<{ messages: CoreMessage[]; uiMessages: UIMessage[] }>;
 
   /**
    * Helper method to create a new thread

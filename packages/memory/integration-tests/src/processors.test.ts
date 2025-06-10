@@ -66,14 +66,14 @@ describe('Memory with Processors', () => {
     });
 
     // Generate conversation with 10 turn pairs (20 messages total)
-    const { messages } = generateConversationHistory({
+    const { messagesV2 } = generateConversationHistory({
       threadId: thread.id,
       messageCount: 10,
       toolFrequency: 3,
     });
 
     // Save messages
-    await memory.saveMessages({ messages });
+    await memory.saveMessages({ messages: messagesV2, format: 'v2' });
 
     // Get messages with a token limit of 250 (should get ~2.5 messages)
     const queryResult = await memory.query({
@@ -117,9 +117,7 @@ describe('Memory with Processors', () => {
       processors: [new TokenLimiter(3000)], // High limit that should exceed total tokens
     });
 
-    const listed = new MessageList({ threadId: thread.id, resourceId })
-      .add(allMessagesResult, 'memory')
-      .get.all.mastra();
+    const listed = new MessageList({ threadId: thread.id, resourceId }).add(allMessagesResult, 'memory').get.all.v2();
 
     // We should get all 20 messages
     expect(listed.length).toBe(20);
@@ -135,7 +133,7 @@ describe('Memory with Processors', () => {
     });
 
     // Generate conversation with tool calls
-    const { messages } = generateConversationHistory({
+    const { messagesV2 } = generateConversationHistory({
       threadId: thread.id,
       messageCount: 5,
       toolFrequency: 2, // Every other assistant response is a tool call
@@ -143,7 +141,7 @@ describe('Memory with Processors', () => {
     });
 
     // Save messages
-    await memory.saveMessages({ messages });
+    await memory.saveMessages({ messages: messagesV2, format: 'v2' });
 
     // filter weather tool calls
     const queryResult = await memory.query({
@@ -154,7 +152,7 @@ describe('Memory with Processors', () => {
       messages: v2ToCoreMessages(queryResult.uiMessages),
       processors: [new ToolCallFilter({ exclude: ['weather'] })],
     });
-    expect(new MessageList().add(result, 'memory').get.all.mastra().length).toBeLessThan(messages.length);
+    expect(new MessageList().add(result, 'memory').get.all.v2().length).toBeLessThan(messagesV2.length);
     expect(filterToolCallsByName(result, 'weather')).toHaveLength(0);
     expect(filterToolResultsByName(result, 'weather')).toHaveLength(0);
     expect(filterToolCallsByName(result, 'calculator')).toHaveLength(1);
@@ -166,7 +164,7 @@ describe('Memory with Processors', () => {
       selectBy: { last: 20 },
     });
     const result2 = memory.processMessages({ messages: v2ToCoreMessages(queryResult2.uiMessages), processors: [] });
-    expect(new MessageList().add(result2, 'memory').get.all.mastra()).toHaveLength(messages.length);
+    expect(new MessageList().add(result2, 'memory').get.all.v2()).toHaveLength(messagesV2.length);
     expect(filterToolCallsByName(result2, 'weather')).toHaveLength(1);
     expect(filterToolResultsByName(result2, 'weather')).toHaveLength(1);
     expect(filterToolCallsByName(result2, 'calculator')).toHaveLength(1);
@@ -181,7 +179,7 @@ describe('Memory with Processors', () => {
       messages: v2ToCoreMessages(queryResult3.uiMessages),
       processors: [new ToolCallFilter({ exclude: ['weather', 'calculator'] })],
     });
-    expect(result3.length).toBeLessThan(messages.length);
+    expect(result3.length).toBeLessThan(messagesV2.length);
     expect(filterToolCallsByName(result3, 'weather')).toHaveLength(0);
     expect(filterToolResultsByName(result3, 'weather')).toHaveLength(0);
     expect(filterToolCallsByName(result3, 'calculator')).toHaveLength(0);
@@ -196,7 +194,7 @@ describe('Memory with Processors', () => {
       messages: v2ToCoreMessages(queryResult4.uiMessages),
       processors: [new ToolCallFilter()],
     });
-    expect(result4.length).toBeLessThan(messages.length);
+    expect(result4.length).toBeLessThan(messagesV2.length);
     expect(filterToolCallsByName(result4, 'weather')).toHaveLength(0);
     expect(filterToolResultsByName(result4, 'weather')).toHaveLength(0);
     expect(filterToolCallsByName(result4, 'calculator')).toHaveLength(0);

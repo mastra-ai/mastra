@@ -7,33 +7,61 @@ import {
   AssistantRuntimeProvider,
   SimpleImageAttachmentAdapter,
   CompositeAttachmentAdapter,
+  SimpleTextAttachmentAdapter,
 } from '@assistant-ui/react';
 import { useState, ReactNode, useEffect } from 'react';
 import { RuntimeContext } from '@mastra/core/di';
 
 import { ChatProps } from '@/types';
-import { createMastraClient } from '@/lib/mastra-client';
 
-import { CoreMessage } from '@mastra/core';
+import { CoreUserMessage } from '@mastra/core';
 import { fileToBase64 } from '@/lib/file';
+import { useMastraClient } from '@/contexts/mastra-client-context';
+import { PDFAttachmentAdapter } from '@/components/assistant-ui/attachment-adapters/pdfs-adapter';
 
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
 };
 
-const convertToAIAttachments = async (attachments: AppendMessage['attachments']): Promise<Array<CoreMessage>> => {
+const convertToAIAttachments = async (attachments: AppendMessage['attachments']): Promise<Array<CoreUserMessage>> => {
   const promises = attachments
-    .filter(attachment => attachment.file)
-    .map(async attachment => ({
-      role: 'user' as const,
-      content: [
-        {
-          type: 'image' as const,
-          image: await fileToBase64(attachment.file!),
-          mimeType: attachment.file!.type,
-        },
-      ],
-    }));
+    .filter(attachment => attachment.type === 'image' || attachment.type === 'document')
+    .map(async attachment => {
+      if (attachment.type === 'document') {
+        if (attachment.contentType === 'application/pdf') {
+          return {
+            role: 'user' as const,
+            content: [
+              {
+                type: 'file' as const,
+                // @ts-expect-error - TODO: fix this type issue somehow
+                data: attachment.content?.[0]?.text || '',
+                mimeType: attachment.contentType,
+                filename: attachment.name,
+              },
+            ],
+          };
+        }
+
+        return {
+          role: 'user' as const,
+          // @ts-expect-error - TODO: fix this type issue somehow
+          content: attachment.content[0]?.text || '',
+        };
+      }
+
+      return {
+        role: 'user' as const,
+
+        content: [
+          {
+            type: 'image' as const,
+            image: await fileToBase64(attachment.file!),
+            mimeType: attachment.file!.type,
+          },
+        ],
+      };
+    });
 
   return Promise.all(promises);
 };
@@ -45,7 +73,6 @@ export function MastraRuntimeProvider({
   agentName,
   memory,
   threadId,
-  baseUrl,
   refreshThreadList,
   modelSettings = {},
   chatWithGenerate,
@@ -76,22 +103,32 @@ export function MastraRuntimeProvider({
       if (initialMessages && threadId && memory) {
         const convertedMessages: ThreadMessageLike[] = initialMessages
           ?.map((message: any) => {
-            if (message?.toolInvocations?.length > 0) {
-              return {
-                ...message,
-                content: [
-                  ...(typeof message.content === 'string' ? [{ type: 'text', text: message.content }] : []),
-                  ...message.toolInvocations.map((toolInvocation: any) => ({
-                    type: 'tool-call',
-                    toolCallId: toolInvocation?.toolCallId,
-                    toolName: toolInvocation?.toolName,
-                    args: toolInvocation?.args,
-                    result: toolInvocation?.result,
-                  })),
-                ],
-              };
-            }
-            return message;
+            const toolInvocationsAsContentParts = (message.toolInvocations || []).map((toolInvocation: any) => ({
+              type: 'tool-call',
+              toolCallId: toolInvocation?.toolCallId,
+              toolName: toolInvocation?.toolName,
+              args: toolInvocation?.args,
+              result: toolInvocation?.result,
+            }));
+
+            const attachmentsAsContentParts = (message.experimental_attachments || []).map((image: any) => ({
+              type: image.contentType.startsWith(`image/`)
+                ? 'image'
+                : image.contentType.startsWith(`audio/`)
+                  ? 'audio'
+                  : 'file',
+              mimeType: image.contentType,
+              image: image.url,
+            }));
+
+            return {
+              ...message,
+              content: [
+                ...(typeof message.content === 'string' ? [{ type: 'text', text: message.content }] : []),
+                ...toolInvocationsAsContentParts,
+                ...attachmentsAsContentParts,
+              ],
+            };
           })
           .filter(Boolean);
         setMessages(convertedMessages);
@@ -100,7 +137,8 @@ export function MastraRuntimeProvider({
     }
   }, [initialMessages, threadId, memory]);
 
-  const mastra = createMastraClient(baseUrl);
+  const mastra = useMastraClient();
+
   const agent = mastra.getAgent(agentId);
 
   const onNew = async (message: AppendMessage) => {
@@ -404,7 +442,11 @@ export function MastraRuntimeProvider({
     convertMessage,
     onNew,
     adapters: {
-      attachments: new CompositeAttachmentAdapter([new SimpleImageAttachmentAdapter()]),
+      attachments: new CompositeAttachmentAdapter([
+        new SimpleImageAttachmentAdapter(),
+        new SimpleTextAttachmentAdapter(),
+        new PDFAttachmentAdapter(),
+      ]),
     },
   });
 

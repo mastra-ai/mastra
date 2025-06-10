@@ -9,7 +9,7 @@ import { createTool, Mastra, Telemetry } from '..';
 import { Agent } from '../agent';
 import { RuntimeContext } from '../di';
 import { MockStore } from '../storage/mock';
-import type { WatchEvent } from './types';
+import type { StreamEvent, WatchEvent } from './types';
 import { cloneStep, cloneWorkflow, createStep, createWorkflow } from './workflow';
 
 const testStorage = new MockStore();
@@ -57,7 +57,7 @@ describe('Workflow', () => {
       workflow.then(step1).then(step2).commit();
 
       const runId = 'test-run-id';
-      let watchData: WatchEvent[] = [];
+      let watchData: StreamEvent[] = [];
       const run = workflow.createRun({
         runId,
       });
@@ -65,7 +65,7 @@ describe('Workflow', () => {
       const { stream, getWorkflowState } = run.stream({ inputData: {} });
 
       // Start watching the workflow
-      const collectedStreamData: WatchEvent[] = [];
+      const collectedStreamData: StreamEvent[] = [];
       for await (const data of stream) {
         collectedStreamData.push(JSON.parse(JSON.stringify(data)));
       }
@@ -399,7 +399,7 @@ describe('Workflow', () => {
         },
       });
 
-      const values: WatchEvent[] = [];
+      const values: StreamEvent[] = [];
       for await (const value of stream.values()) {
         values.push(value);
       }
@@ -742,16 +742,9 @@ describe('Workflow', () => {
       });
     });
 
-    it('should execute steps sequentially', async () => {
-      const executionOrder: string[] = [];
-
-      const step1Action = vi.fn().mockImplementation(() => {
-        executionOrder.push('step1');
-        return { value: 'step1' };
-      });
-      const step2Action = vi.fn().mockImplementation(() => {
-        executionOrder.push('step2');
-        return { value: 'step2' };
+    it('should have runId in the step execute function - bug #4260', async () => {
+      const step1Action = vi.fn().mockImplementation(({ runId }) => {
+        return { value: runId };
       });
 
       const step1 = createStep({
@@ -760,42 +753,25 @@ describe('Workflow', () => {
         inputSchema: z.object({}),
         outputSchema: z.object({ value: z.string() }),
       });
-      const step2 = createStep({
-        id: 'step2',
-        execute: step2Action,
-        inputSchema: z.object({ value: z.string() }),
-        outputSchema: z.object({ value: z.string() }),
-      });
 
       const workflow = createWorkflow({
         id: 'test-workflow',
         inputSchema: z.object({}),
         outputSchema: z.object({ value: z.string() }),
-        steps: [step1, step2],
+        steps: [step1],
       });
 
-      workflow.then(step1).then(step2).commit();
+      workflow.then(step1).commit();
 
       const run = workflow.createRun();
       const result = await run.start({ inputData: {} });
 
-      expect(executionOrder).toEqual(['step1', 'step2']);
       expect(result.steps).toEqual({
         input: {},
         step1: {
           status: 'success',
-          output: { value: 'step1' },
+          output: { value: run.runId },
           payload: {},
-
-          startedAt: expect.any(Number),
-          endedAt: expect.any(Number),
-        },
-        step2: {
-          status: 'success',
-          output: { value: 'step2' },
-          payload: {
-            value: 'step1',
-          },
 
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
@@ -3336,7 +3312,7 @@ describe('Workflow', () => {
 
       const { stream, getWorkflowState } = await workflow.createRun().stream({ inputData: {} });
 
-      const values: WatchEvent[] = [];
+      const values: StreamEvent[] = [];
       for await (const value of stream.values()) {
         values.push(value);
       }
@@ -4187,6 +4163,146 @@ describe('Workflow', () => {
       });
 
       expect(promptAgentAction).toHaveBeenCalledTimes(2);
+    });
+
+    it('should work with runtimeContext - bug #4442', async () => {
+      const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
+      const promptAgentAction = vi.fn().mockImplementation(async ({ suspend, runtimeContext, resumeData }) => {
+        if (!resumeData) {
+          runtimeContext.set('responses', [...(runtimeContext.get('responses') ?? []), 'first message']);
+          await suspend({ testPayload: 'hello' });
+          return;
+        }
+
+        runtimeContext.set('responses', [...(runtimeContext.get('responses') ?? []), 'promptAgentAction']);
+
+        return undefined;
+      });
+      const runtimeContextAction = vi.fn().mockImplementation(async ({ runtimeContext }) => {
+        return runtimeContext.get('responses');
+      });
+
+      const getUserInput = createStep({
+        id: 'getUserInput',
+        execute: getUserInputAction,
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ userInput: z.string() }),
+      });
+      const promptAgent = createStep({
+        id: 'promptAgent',
+        execute: promptAgentAction,
+        inputSchema: z.object({ userInput: z.string() }),
+        outputSchema: z.object({ modelOutput: z.string() }),
+        suspendSchema: z.object({ testPayload: z.string() }),
+        resumeSchema: z.object({ userInput: z.string() }),
+      });
+      const runtimeContextStep = createStep({
+        id: 'runtimeContextAction',
+        execute: runtimeContextAction,
+        inputSchema: z.object({ modelOutput: z.string() }),
+        outputSchema: z.array(z.string()),
+      });
+
+      const promptEvalWorkflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({}),
+      });
+
+      promptEvalWorkflow.then(getUserInput).then(promptAgent).then(runtimeContextStep).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'test-workflow': promptEvalWorkflow },
+      });
+
+      const run = promptEvalWorkflow.createRun();
+
+      const initialResult = await run.start({ inputData: { input: 'test' } });
+      expect(initialResult.steps.promptAgent.status).toBe('suspended');
+      expect(promptAgentAction).toHaveBeenCalledTimes(1);
+
+      const newCtx = {
+        userInput: 'test input for resumption',
+      };
+
+      const firstResumeResult = await run.resume({ step: 'promptAgent', resumeData: newCtx });
+      expect(promptAgentAction).toHaveBeenCalledTimes(2);
+      expect(firstResumeResult.steps.runtimeContextAction.status).toBe('success');
+      // @ts-ignore
+      expect(firstResumeResult.steps.runtimeContextAction.output).toEqual(['promptAgentAction']);
+    });
+
+    it('should work with custom runtimeContext - bug #4442', async () => {
+      const getUserInputAction = vi.fn().mockResolvedValue({ userInput: 'test input' });
+      const promptAgentAction = vi.fn().mockImplementation(async ({ suspend, runtimeContext, resumeData }) => {
+        if (!resumeData) {
+          runtimeContext.set('responses', [...(runtimeContext.get('responses') ?? []), 'first message']);
+          await suspend({ testPayload: 'hello' });
+          return;
+        }
+
+        runtimeContext.set('responses', [...(runtimeContext.get('responses') ?? []), 'promptAgentAction']);
+
+        return undefined;
+      });
+      const runtimeContextAction = vi.fn().mockImplementation(async ({ runtimeContext }) => {
+        return runtimeContext.get('responses');
+      });
+
+      const getUserInput = createStep({
+        id: 'getUserInput',
+        execute: getUserInputAction,
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ userInput: z.string() }),
+      });
+      const promptAgent = createStep({
+        id: 'promptAgent',
+        execute: promptAgentAction,
+        inputSchema: z.object({ userInput: z.string() }),
+        outputSchema: z.object({ modelOutput: z.string() }),
+        suspendSchema: z.object({ testPayload: z.string() }),
+        resumeSchema: z.object({ userInput: z.string() }),
+      });
+      const runtimeContextStep = createStep({
+        id: 'runtimeContextAction',
+        execute: runtimeContextAction,
+        inputSchema: z.object({ modelOutput: z.string() }),
+        outputSchema: z.array(z.string()),
+      });
+
+      const promptEvalWorkflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({}),
+      });
+
+      promptEvalWorkflow.then(getUserInput).then(promptAgent).then(runtimeContextStep).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'test-workflow': promptEvalWorkflow },
+      });
+
+      const run = promptEvalWorkflow.createRun();
+
+      const runtimeContext = new RuntimeContext();
+      const initialResult = await run.start({ inputData: { input: 'test' }, runtimeContext });
+      expect(initialResult.steps.promptAgent.status).toBe('suspended');
+      expect(promptAgentAction).toHaveBeenCalledTimes(1);
+      expect(runtimeContext.get('responses')).toEqual(['first message']);
+
+      const newCtx = {
+        userInput: 'test input for resumption',
+      };
+
+      const firstResumeResult = await run.resume({ step: 'promptAgent', resumeData: newCtx, runtimeContext });
+      expect(promptAgentAction).toHaveBeenCalledTimes(2);
+      expect(firstResumeResult.steps.runtimeContextAction.status).toBe('success');
+      // @ts-ignore
+      expect(firstResumeResult.steps.runtimeContextAction.output).toEqual(['first message', 'promptAgentAction']);
     });
   });
 

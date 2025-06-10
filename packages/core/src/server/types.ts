@@ -3,6 +3,7 @@ import type { cors } from 'hono/cors';
 import type { DescribeRouteOptions } from 'hono-openapi';
 import type { Mastra } from '../mastra';
 import type { RuntimeContext } from '../runtime-context';
+import type { MastraAuthProvider } from './auth';
 
 export type Methods = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'ALL';
 
@@ -22,7 +23,7 @@ export type ApiRoute =
       openapi?: DescribeRouteOptions;
     };
 
-type Middleware = MiddlewareHandler | { path: string; handler: MiddlewareHandler };
+export type Middleware = MiddlewareHandler | { path: string; handler: MiddlewareHandler };
 
 export type ContextWithMastra = Context<{
   Variables: {
@@ -32,6 +33,11 @@ export type ContextWithMastra = Context<{
 }>;
 
 export type MastraAuthConfig<TUser = unknown> = {
+  /**
+   * Protected paths for the server
+   */
+  protected?: (RegExp | string | [string, Methods | Methods[]])[];
+
   /**
    * Public paths for the server
    */
@@ -127,5 +133,5 @@ export type ServerConfig = {
   /**
    * Authentication configuration for the server
    */
-  experimental_auth?: MastraAuthConfig<any>;
+  experimental_auth?: MastraAuthConfig<any> | MastraAuthProvider<any>;
 };

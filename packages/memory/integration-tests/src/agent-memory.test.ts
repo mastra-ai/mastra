@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { openai } from '@ai-sdk/openai';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
+import { RuntimeContext } from '@mastra/core/runtime-context';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
@@ -123,7 +124,41 @@ describe('Agent Memory Tests', () => {
         expect.arrayContaining([expect.stringContaining('2 + 2'), expect.stringContaining('"result"')]),
       );
     });
+
+    it('should not save messages provided in the context option', async () => {
+      const threadId = randomUUID();
+      const resourceId = 'context-option-messages-not-saved';
+
+      const userMessageContent = 'This is a user message.';
+      const contextMessageContent1 = 'This is the first context message.';
+      const contextMessageContent2 = 'This is the second context message.';
+
+      // Send user messages and context messages
+      await agent.generate(userMessageContent, {
+        threadId,
+        resourceId,
+        context: [
+          { role: 'system', content: contextMessageContent1 },
+          { role: 'user', content: contextMessageContent2 },
+        ],
+      });
+
+      // Fetch messages from memory
+      const { messages } = await agent.getMemory()!.query({ threadId });
+
+      // Assert that the context messages are NOT saved
+      const savedContextMessages = messages.filter(
+        (m: any) => m.content === contextMessageContent1 || m.content === contextMessageContent2,
+      );
+      expect(savedContextMessages.length).toBe(0);
+
+      // Assert that the user message IS saved
+      const savedUserMessages = messages.filter((m: any) => m.role === 'user');
+      expect(savedUserMessages.length).toBe(1);
+      expect(savedUserMessages[0].content).toBe(userMessageContent);
+    });
   });
+
   describe('Agent thread metadata with generateTitle', () => {
     // Agent with generateTitle: true
     const memoryWithTitle = new Memory({
@@ -140,6 +175,14 @@ describe('Agent Memory Tests', () => {
       name: 'title-on',
       instructions: 'Test agent with generateTitle on.',
       model: openai('gpt-4o'),
+      memory: memoryWithTitle,
+      tools: { get_weather: weatherTool },
+    });
+
+    const agentWithDynamicModelTitle = new Agent({
+      name: 'title-on',
+      instructions: 'Test agent with generateTitle on.',
+      model: ({ runtimeContext }) => openai(runtimeContext.get('model') as string),
       memory: memoryWithTitle,
       tools: { get_weather: weatherTool },
     });
@@ -179,6 +222,33 @@ describe('Agent Memory Tests', () => {
 
       await agentWithTitle.generate([{ role: 'user', content: 'Hello, world!' }], { threadId, resourceId });
       await agentWithTitle.generate([{ role: 'user', content: 'Hello, world!' }], { threadId, resourceId });
+
+      const existingThread = await memoryWithTitle.getThreadById({ threadId });
+      expect(existingThread).toBeDefined();
+      expect(existingThread?.metadata).toMatchObject(metadata);
+    });
+
+    it('should use generateTitle with runtime context', async () => {
+      const threadId = randomUUID();
+      const resourceId = 'gen-title-metadata';
+      const metadata = { foo: 'bar', custom: 123 };
+
+      const thread = await memoryWithTitle.createThread({
+        threadId,
+        resourceId,
+        metadata,
+      });
+
+      expect(thread).toBeDefined();
+      expect(thread?.metadata).toMatchObject(metadata);
+
+      const runtimeContext = new RuntimeContext();
+      runtimeContext.set('model', 'gpt-4o-mini');
+      await agentWithDynamicModelTitle.generate([{ role: 'user', content: 'Hello, world!' }], {
+        threadId,
+        resourceId,
+        runtimeContext,
+      });
 
       const existingThread = await memoryWithTitle.getThreadById({ threadId });
       expect(existingThread).toBeDefined();

@@ -1,5 +1,119 @@
 # @mastra/core
 
+## 0.10.4-alpha.0
+
+### Patch Changes
+
+- d1ed912: dependencies updates:
+  - Updated dependency [`dotenv@^16.5.0` ↗︎](https://www.npmjs.com/package/dotenv/v/16.5.0) (from `^16.4.7`, in `dependencies`)
+- f1f1f1b: Add basic filtering capabilities to logs
+- f9816ae: Create @mastra/schema-compat package to extract the schema compatibility layer to be used outside of mastra
+- 82090c1: Add pagination to logs
+- 1b443fd: - add trackException to loggers to allow mastra cloud to track exceptions at runtime
+  - Added generic MastraBaseError<D, C> in packages/core/src/error/index.ts to improve type safety and flexibility of error handling
+- ce97900: Add paginated APIs to cloudflare-d1 storage class
+- 14a2566: Add pagination to libsql storage APIs
+- Updated dependencies [f9816ae]
+  - @mastra/schema-compat@0.10.2-alpha.2
+
+## 0.10.3
+
+### Patch Changes
+
+- 2b0fc7e: Ensure context messages aren't saved to the storage db
+
+## 0.10.3-alpha.0
+
+### Patch Changes
+
+- 2b0fc7e: Ensure context messages aren't saved to the storage db
+
+## 0.10.2
+
+### Patch Changes
+
+- ee77e78: Type fixes for dynamodb and MessageList
+- 592a2db: Added different icons for agents and workflows in mcp tools list
+- e5dc18d: Added a backwards compatible layer to begin storing/retrieving UIMessages in storage instead of CoreMessages
+- ab5adbe: Add support for runtimeContext to generateTitle
+- 1e8bb40: Add runtimeContext to tools and agents in a workflow step.
+
+  Also updated start/resume docs for runtime context.
+
+- 1b5fc55: Fixed an issue where the playground wouldn't display images saved in memory. Fixed memory to always store images as strings. Removed duplicate storage of reasoning and file/image parts in storage dbs
+- 195c428: Add runId to step execute fn
+- f73e11b: fix telemetry disabled not working on playground
+- 37643b8: Fix tool access
+- 99fd6cf: Fix workflow stream chunk type
+- c5bf1ce: Add backwards compat code for new MessageList in storage
+- add596e: Mastra protected auth
+- 8dc94d8: Enhance workflow DI runtimeContext get method type safety
+- ecebbeb: Mastra core auth abstract definition
+- 79d5145: Fixes passing telemetry configuration when Agent.stream is used with experimental_output
+- 12b7002: Add serializedStepGraph to workflow run snapshot in storage
+- 2901125: feat: set mastra server middleware after Mastra has been initialized
+
+## 0.10.2-alpha.8
+
+### Patch Changes
+
+- 37643b8: Fix tool access
+- 79d5145: Fixes passing telemetry configuration when Agent.stream is used with experimental_output
+
+## 0.10.2-alpha.7
+
+## 0.10.2-alpha.6
+
+### Patch Changes
+
+- 99fd6cf: Fix workflow stream chunk type
+- 8dc94d8: Enhance workflow DI runtimeContext get method type safety
+
+## 0.10.2-alpha.5
+
+### Patch Changes
+
+- 1b5fc55: Fixed an issue where the playground wouldn't display images saved in memory. Fixed memory to always store images as strings. Removed duplicate storage of reasoning and file/image parts in storage dbs
+- add596e: Mastra protected auth
+- ecebbeb: Mastra core auth abstract definition
+
+## 0.10.2-alpha.4
+
+### Patch Changes
+
+- c5bf1ce: Add backwards compat code for new MessageList in storage
+- 12b7002: Add serializedStepGraph to workflow run snapshot in storage
+
+## 0.10.2-alpha.3
+
+### Patch Changes
+
+- ab5adbe: Add support for runtimeContext to generateTitle
+- 195c428: Add runId to step execute fn
+- f73e11b: fix telemetry disabled not working on playground
+
+## 0.10.2-alpha.2
+
+### Patch Changes
+
+- 1e8bb40: Add runtimeContext to tools and agents in a workflow step.
+
+  Also updated start/resume docs for runtime context.
+
+## 0.10.2-alpha.1
+
+### Patch Changes
+
+- ee77e78: Type fixes for dynamodb and MessageList
+- 2901125: feat: set mastra server middleware after Mastra has been initialized
+
+## 0.10.2-alpha.0
+
+### Patch Changes
+
+- 592a2db: Added different icons for agents and workflows in mcp tools list
+- e5dc18d: Added a backwards compatible layer to begin storing/retrieving UIMessages in storage instead of CoreMessages
+
 ## 0.10.1
 
 ### Patch Changes

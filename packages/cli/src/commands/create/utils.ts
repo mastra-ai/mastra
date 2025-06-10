@@ -73,7 +73,7 @@ export const createMastraProject = async ({
   createVersionTag?: string;
   timeout?: number;
 }) => {
-  p.intro(color.inverse('Mastra Create'));
+  p.intro(color.inverse(' Mastra Create '));
 
   const projectName =
     name ??
@@ -115,6 +115,7 @@ export const createMastraProject = async ({
   await depsService.addScriptsToPackageJson({
     dev: 'mastra dev',
     build: 'mastra build',
+    start: 'mastra start',
   });
 
   s.stop('Project created');

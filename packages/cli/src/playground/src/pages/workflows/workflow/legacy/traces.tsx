@@ -1,19 +1,20 @@
 import { useParams } from 'react-router';
-import { TraceProvider, useTraces, WorkflowTraces } from '@mastra/playground-ui';
+import { WorkflowTraces } from '@mastra/playground-ui';
 
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { WorkflowInformation } from '@/domains/workflows/workflow-information';
 import { useLegacyWorkflow } from '@/hooks/use-workflows';
+import { useTraces } from '@/domains/traces/hooks/use-traces';
 
-function WorkflowTracesContent() {
+function WorkflowTracesPage() {
   const { workflowId } = useParams();
   const { legacyWorkflow, isLoading: isWorkflowLoading } = useLegacyWorkflow(workflowId!);
 
   // This hook will now be called within a TraceProvider context
-  const { traces, error, firstCallLoading } = useTraces(legacyWorkflow?.name || '', '', true);
+  const { traces, error, firstCallLoading } = useTraces(legacyWorkflow?.name || '', true);
 
-  if (isWorkflowLoading) {
+  if (isWorkflowLoading || firstCallLoading) {
     return (
       <main className="flex-1 relative grid grid-cols-[1fr_325px] divide-x h-full">
         <div className="p-4">
@@ -26,15 +27,7 @@ function WorkflowTracesContent() {
     );
   }
 
-  return <WorkflowTraces traces={traces} isLoading={firstCallLoading} error={error} />;
-}
-
-function WorkflowTracesPage() {
-  return (
-    <TraceProvider>
-      <WorkflowTracesContent />
-    </TraceProvider>
-  );
+  return <WorkflowTraces traces={traces} error={error} />;
 }
 
 export default WorkflowTracesPage;

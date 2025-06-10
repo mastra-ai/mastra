@@ -16,13 +16,13 @@
   },
   "devDependencies": {
     "@testing-library/react": "^16.2.0",
-    "@types/node": "^20.17.27",
+    "@types/node": "^20.17.57",
     "mastra": "workspace:*",
     "typescript": "^5.8.2",
     "vitest": "^1.6.1",
     "@mastra/core": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": "^0.10.0"
+    "@mastra/core": "^0.10.0-alpha.0"
   }
 }

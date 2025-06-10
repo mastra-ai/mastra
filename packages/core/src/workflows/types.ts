@@ -1,5 +1,7 @@
+import type { TextStreamPart } from 'ai';
 import type { z } from 'zod';
 import type { ExecuteFunction, Step } from './step';
+import type { SerializedStepFlowEntry } from './workflow';
 
 export type StepSuccess<P, R, S, T> = {
   status: 'success';
@@ -90,6 +92,12 @@ export type VariableReference<
     }
   | { value: any; schema: z.ZodTypeAny };
 
+export type StreamEvent = TextStreamPart<any> & {
+  type: 'step-suspended';
+  payload: any;
+  id: string;
+};
+
 export type WatchEvent = {
   type: 'watch';
   payload: {
@@ -144,6 +152,7 @@ export interface WorkflowRunState {
   runId: string;
   value: Record<string, string>;
   context: { input?: Record<string, any> } & Record<string, StepResult<any, any, any, any>>;
+  serializedStepGraph: SerializedStepFlowEntry[];
   activePaths: Array<unknown>;
   suspendedPaths: Record<string, number[]>;
   timestamp: number;

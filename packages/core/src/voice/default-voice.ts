@@ -16,4 +16,8 @@ export class DefaultVoice extends MastraVoice {
   async getSpeakers(): Promise<{ voiceId: string }[]> {
     throw new Error('No voice provider configured');
   }
+
+  async getListener(): Promise<{ enabled: boolean }> {
+    throw new Error('No voice provider configured');
+  }
 }

@@ -1,5 +1,151 @@
 # @mastra/playground-ui
 
+## 5.1.4-alpha.0
+
+### Patch Changes
+
+- 5c68759: Update vite to fix CVE-2025-31125
+- 8f60de4: fix workflow output when the schema is a primitive
+- Updated dependencies [d1ed912]
+- Updated dependencies [f1f1f1b]
+- Updated dependencies [b2810ab]
+- Updated dependencies [f9816ae]
+- Updated dependencies [82090c1]
+- Updated dependencies [1b443fd]
+- Updated dependencies [ce97900]
+- Updated dependencies [14a2566]
+- Updated dependencies [67d21b5]
+  - @mastra/core@0.10.4-alpha.0
+  - @mastra/client-js@0.10.3-alpha.0
+
+## 5.1.3
+
+### Patch Changes
+
+- 6303367: Fixed an issue where a recent memory images in playground fix broke playground tool calls
+
+## 5.1.3-alpha.0
+
+### Patch Changes
+
+- 6303367: Fixed an issue where a recent memory images in playground fix broke playground tool calls
+
+## 5.1.2
+
+### Patch Changes
+
+- 401bbae: Show workflow graph from stepGraph of previous runs when viewing a previous run
+- 9666468: move the fetch traces call to the playground instead of playground-ui
+- 89a69d0: add a way to go to the given trace of a workflow step
+- 6fd77b5: add docs and txt support for multi modal
+- 9faee5b: small fixes in the workflows graph
+- 4b23936: fix: typos
+- 631683f: move workflow runs list in playground-ui instead of playground
+- 068b850: fix: able to pass headers to playground components which are using the mastra client
+- f0d559f: Fix peerdeps for alpha channel
+- f6ddf55: fix traces not showing and reduce API surface from playground ui
+- 9a31c09: Highlight steps in nested workflows on workflow graph
+- Updated dependencies [ee77e78]
+- Updated dependencies [592a2db]
+- Updated dependencies [e5dc18d]
+- Updated dependencies [ab5adbe]
+- Updated dependencies [1e8bb40]
+- Updated dependencies [1b5fc55]
+- Updated dependencies [195c428]
+- Updated dependencies [f73e11b]
+- Updated dependencies [37643b8]
+- Updated dependencies [99fd6cf]
+- Updated dependencies [c5bf1ce]
+- Updated dependencies [add596e]
+- Updated dependencies [8dc94d8]
+- Updated dependencies [b72c768]
+- Updated dependencies [ecebbeb]
+- Updated dependencies [79d5145]
+- Updated dependencies [12b7002]
+- Updated dependencies [f0d559f]
+- Updated dependencies [2901125]
+  - @mastra/core@0.10.2
+  - @mastra/client-js@0.10.2
+
+## 5.1.2-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [37643b8]
+- Updated dependencies [b72c768]
+- Updated dependencies [79d5145]
+  - @mastra/core@0.10.2-alpha.8
+  - @mastra/client-js@0.10.2-alpha.3
+
+## 5.1.2-alpha.6
+
+### Patch Changes
+
+- 6fd77b5: add docs and txt support for multi modal
+- 631683f: move workflow runs list in playground-ui instead of playground
+- Updated dependencies [99fd6cf]
+- Updated dependencies [8dc94d8]
+  - @mastra/core@0.10.2-alpha.6
+
+## 5.1.2-alpha.5
+
+### Patch Changes
+
+- 9666468: move the fetch traces call to the playground instead of playground-ui
+- Updated dependencies [1b5fc55]
+- Updated dependencies [add596e]
+- Updated dependencies [ecebbeb]
+  - @mastra/core@0.10.2-alpha.5
+
+## 5.1.2-alpha.4
+
+### Patch Changes
+
+- 401bbae: Show workflow graph from stepGraph of previous runs when viewing a previous run
+- 4b23936: fix: typos
+
+## 5.1.2-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [c5bf1ce]
+- Updated dependencies [12b7002]
+  - @mastra/client-js@0.10.2-alpha.2
+  - @mastra/core@0.10.2-alpha.4
+
+## 5.1.2-alpha.2
+
+### Patch Changes
+
+- 068b850: fix: able to pass headers to playground components which are using the mastra client
+- Updated dependencies [ab5adbe]
+- Updated dependencies [195c428]
+- Updated dependencies [f73e11b]
+  - @mastra/core@0.10.2-alpha.3
+
+## 5.1.2-alpha.1
+
+### Patch Changes
+
+- f0d559f: Fix peerdeps for alpha channel
+- f6ddf55: fix traces not showing and reduce API surface from playground ui
+- Updated dependencies [1e8bb40]
+- Updated dependencies [f0d559f]
+  - @mastra/core@0.10.2-alpha.2
+  - @mastra/client-js@0.10.2-alpha.1
+
+## 5.1.2-alpha.0
+
+### Patch Changes
+
+- 89a69d0: add a way to go to the given trace of a workflow step
+- 9faee5b: small fixes in the workflows graph
+- 9a31c09: Highlight steps in nested workflows on workflow graph
+- Updated dependencies [592a2db]
+- Updated dependencies [e5dc18d]
+  - @mastra/client-js@0.10.2-alpha.0
+  - @mastra/core@0.10.2-alpha.0
+
 ## 5.1.1
 
 ### Patch Changes

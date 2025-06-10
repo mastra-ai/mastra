@@ -22,6 +22,7 @@ import type {
   PathsToStringProps,
   ZodPathType,
   DynamicMapping,
+  StreamEvent,
 } from './types';
 
 export type StepFlowEntry =
@@ -173,7 +174,7 @@ export function createStep<
       outputSchema: z.object({
         text: z.string(),
       }),
-      execute: async ({ inputData, [EMITTER_SYMBOL]: emitter }) => {
+      execute: async ({ inputData, [EMITTER_SYMBOL]: emitter, runtimeContext }) => {
         let streamPromise = {} as {
           promise: Promise<string>;
           resolve: (value: string) => void;
@@ -195,6 +196,7 @@ export function createStep<
         const { fullStream } = await params.stream(inputData.prompt, {
           // resourceId: inputData.resourceId,
           // threadId: inputData.threadId,
+          runtimeContext,
           onFinish: result => {
             streamPromise.resolve(result.text);
           },
@@ -245,10 +247,11 @@ export function createStep<
       id: params.id,
       inputSchema: params.inputSchema,
       outputSchema: params.outputSchema,
-      execute: async ({ inputData, mastra }) => {
+      execute: async ({ inputData, mastra, runtimeContext }) => {
         return params.execute({
           context: inputData,
           mastra,
+          runtimeContext,
         });
       },
     };
@@ -854,6 +857,7 @@ export class Workflow<
         executionGraph: this.executionGraph,
         mastra: this.#mastra,
         retryConfig: this.retryConfig,
+        serializedStepGraph: this.serializedStepGraph,
         cleanup: () => this.#runs.delete(runIdToUse),
       });
 
@@ -988,6 +992,11 @@ export class Run<
   public executionGraph: ExecutionGraph;
 
   /**
+   * The serialized step graph for this run
+   */
+  public serializedStepGraph: SerializedStepFlowEntry[];
+
+  /**
    * The storage for this run
    */
   #mastra?: Mastra;
@@ -1013,9 +1022,11 @@ export class Run<
       delay?: number;
     };
     cleanup?: () => void;
+    serializedStepGraph: SerializedStepFlowEntry[];
   }) {
     this.workflowId = params.workflowId;
     this.runId = params.runId;
+    this.serializedStepGraph = params.serializedStepGraph;
     this.executionEngine = params.executionEngine;
     this.executionGraph = params.executionGraph;
     this.#mastra = params.mastra;
@@ -1040,6 +1051,7 @@ export class Run<
       workflowId: this.workflowId,
       runId: this.runId,
       graph: this.executionGraph,
+      serializedStepGraph: this.serializedStepGraph,
       input: inputData,
       emitter: {
         emit: async (event: string, data: any) => {
@@ -1061,15 +1073,16 @@ export class Run<
    * @returns A promise that resolves to the workflow output
    */
   stream({ inputData, runtimeContext }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}): {
-    stream: ReadableStream<WatchEvent>;
+    stream: ReadableStream<StreamEvent>;
     getWorkflowState: () => Promise<WorkflowResult<TOutput, TSteps>>;
   } {
-    const { readable, writable } = new TransformStream<WatchEvent, WatchEvent>();
+    const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
 
     const writer = writable.getWriter();
     const unwatch = this.watch(async event => {
       try {
-        await writer.write(event);
+        // watch-v2 events are data stream events, so we need to cast them to the correct type
+        await writer.write(event as any);
       } catch {}
     }, 'watch-v2');
 
@@ -1179,6 +1192,7 @@ export class Run<
         workflowId: this.workflowId,
         runId: this.runId,
         graph: this.executionGraph,
+        serializedStepGraph: this.serializedStepGraph,
         input: params.resumeData,
         resume: {
           steps,

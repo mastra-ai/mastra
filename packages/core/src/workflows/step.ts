@@ -6,6 +6,7 @@ import type { Workflow } from './workflow';
 
 // Define a type for the execute function
 export type ExecuteFunction<TStepInput, TStepOutput, TResumeSchema, TSuspendSchema> = (params: {
+  runId: string;
   mastra: Mastra;
   runtimeContext: RuntimeContext;
   inputData: TStepInput;

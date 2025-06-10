@@ -69,7 +69,7 @@ import { rootHandler } from './handlers/root';
 import { getTelemetryHandler, storeTelemetryHandler } from './handlers/telemetry';
 import { executeAgentToolHandler, executeToolHandler, getToolByIdHandler, getToolsHandler } from './handlers/tools';
 import { createIndex, deleteIndex, describeIndex, listIndexes, queryVectors, upsertVectors } from './handlers/vector';
-import { getSpeakersHandler, listenHandler, speakHandler } from './handlers/voice';
+import { getSpeakersHandler, getListenerHandler, listenHandler, speakHandler } from './handlers/voice';
 import {
   createWorkflowRunHandler,
   getWorkflowByIdHandler,
@@ -120,8 +120,14 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
       });
       return acc;
     }, {});
-  } catch {
-    console.error('Failed to import tools');
+  } catch (err: any) {
+    console.error(
+      `Failed to import tools
+reason: ${err.message}
+${err.stack.split('\n').slice(1).join('\n')}
+    `,
+      err,
+    );
   }
 
   // Middleware
@@ -1107,6 +1113,46 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
     speakHandler,
   );
 
+  app.get(
+    '/api/agents/:agentId/voice/listener',
+    describeRoute({
+      description: 'Get available listener for an agent',
+      tags: ['agents'],
+      parameters: [
+        {
+          name: 'agentId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Checks if listener is available for the agent',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                description: 'Listener information depending on the voice provider',
+                properties: {
+                  enabled: { type: 'boolean' },
+                },
+                additionalProperties: true,
+              },
+            },
+          },
+        },
+        400: {
+          description: 'Agent does not have voice capabilities',
+        },
+        404: {
+          description: 'Agent not found',
+        },
+      },
+    }),
+    getListenerHandler,
+  );
+
   app.post(
     '/api/agents/:agentId/listen',
     bodyLimit({
@@ -1412,7 +1458,43 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
               schema: {
                 type: 'object',
                 properties: {
-                  servers: { type: 'array', items: { $ref: '#/components/schemas/ServerInfo' } },
+                  servers: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        id: { type: 'string' },
+                        name: { type: 'string' },
+                        description: { type: 'string' },
+                        repository: {
+                          type: 'object',
+                          properties: {
+                            url: { type: 'string', description: 'The URL of the repository (e.g., a GitHub URL)' },
+                            source: {
+                              type: 'string',
+                              description: "The source control platform (e.g., 'github', 'gitlab')",
+                              enum: ['github', 'gitlab'],
+                            },
+                            id: { type: 'string', description: 'A unique identifier for the repository at the source' },
+                          },
+                        },
+                        version_detail: {
+                          type: 'object',
+                          properties: {
+                            version: { type: 'string', description: 'The semantic version string (e.g., "1.0.2")' },
+                            release_date: {
+                              type: 'string',
+                              description: 'The ISO 8601 date-time string when this version was released or registered',
+                            },
+                            is_latest: {
+                              type: 'boolean',
+                              description: 'Indicates if this version is the latest available',
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
                   next: { type: 'string', format: 'uri', nullable: true },
                   total_count: { type: 'integer' },
                 },
@@ -1450,12 +1532,117 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
         200: {
           description: 'Detailed information about the MCP server instance.',
           content: {
-            'application/json': { schema: { $ref: '#/components/schemas/ServerDetailInfo' } },
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  name: { type: 'string' },
+                  description: { type: 'string' },
+                  repository: {
+                    type: 'object',
+                    properties: {
+                      url: { type: 'string' },
+                      source: { type: 'string' },
+                      id: { type: 'string' },
+                    },
+                  },
+                  version_detail: {
+                    type: 'object',
+                    properties: {
+                      version: { type: 'string' },
+                      release_date: { type: 'string' },
+                      is_latest: { type: 'boolean' },
+                    },
+                  },
+                  package_canonical: { type: 'string' },
+                  packages: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        registry_name: { type: 'string' },
+                        name: { type: 'string' },
+                        version: { type: 'string' },
+                        command: {
+                          type: 'object',
+                          properties: {
+                            name: { type: 'string' },
+                            subcommands: {
+                              type: 'array',
+                              items: {
+                                type: 'object',
+                                properties: {
+                                  name: { type: 'string' },
+                                  description: { type: 'string' },
+                                  is_required: { type: 'boolean' },
+                                  subcommands: {
+                                    type: 'array',
+                                    items: { type: 'object' },
+                                  },
+                                  positional_arguments: {
+                                    type: 'array',
+                                    items: { type: 'object' },
+                                  },
+                                  named_arguments: {
+                                    type: 'array',
+                                    items: { type: 'object' },
+                                  },
+                                },
+                              },
+                            },
+                            positional_arguments: {
+                              type: 'array',
+                              items: { type: 'object' },
+                            },
+                            named_arguments: {
+                              type: 'array',
+                              items: { type: 'object' },
+                            },
+                          },
+                        },
+                        environment_variables: {
+                          type: 'array',
+                          items: {
+                            type: 'object',
+                            properties: {
+                              name: { type: 'string' },
+                              description: { type: 'string' },
+                              required: { type: 'boolean' },
+                              default_value: { type: 'string' },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                  remotes: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        transport_type: { type: 'string' },
+                        url: { type: 'string' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
           },
         },
         404: {
           description: 'MCP server instance not found.',
-          content: { 'application/json': { schema: { type: 'object', properties: { error: { type: 'string' } } } } },
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  error: { type: 'string' },
+                },
+              },
+            },
+          },
         },
       },
     }),
@@ -2489,10 +2676,46 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
           required: true,
           schema: { type: 'string' },
         },
+        {
+          name: 'fromDate',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'toDate',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'logLevel',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'filters',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'page',
+          in: 'query',
+          required: false,
+          schema: { type: 'number' },
+        },
+        {
+          name: 'perPage',
+          in: 'query',
+          required: false,
+          schema: { type: 'number' },
+        },
       ],
       responses: {
         200: {
-          description: 'List of all logs',
+          description: 'Paginated list of all logs',
         },
       },
     }),
@@ -2531,10 +2754,46 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
           required: true,
           schema: { type: 'string' },
         },
+        {
+          name: 'fromDate',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'toDate',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'logLevel',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'filters',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'page',
+          in: 'query',
+          required: false,
+          schema: { type: 'number' },
+        },
+        {
+          name: 'perPage',
+          in: 'query',
+          required: false,
+          schema: { type: 'number' },
+        },
       ],
       responses: {
         200: {
-          description: 'List of logs for run ID',
+          description: 'Paginated list of logs for run ID',
         },
       },
     }),
@@ -2908,7 +3167,11 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
 
     if (options?.playground) {
       // For all other routes, serve index.html
-      const indexHtml = await readFile(join(process.cwd(), './playground/index.html'), 'utf-8');
+      let indexHtml = await readFile(join(process.cwd(), './playground/index.html'), 'utf-8');
+      indexHtml = indexHtml.replace(
+        `'%%MASTRA_TELEMETRY_DISABLED%%'`,
+        `${Boolean(process.env.MASTRA_TELEMETRY_DISABLED)}`,
+      );
       return c.newResponse(indexHtml, 200, { 'Content-Type': 'text/html' });
     }
 
@@ -2942,6 +3205,14 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
       }
       if (options?.playground) {
         logger.info(`👨‍💻 Playground available at http://${host}:${port}/`);
+      }
+
+      if (process.send) {
+        process.send({
+          type: 'server-ready',
+          port,
+          host,
+        });
       }
     },
   );

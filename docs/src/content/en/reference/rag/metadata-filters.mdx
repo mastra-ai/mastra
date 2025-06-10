@@ -35,37 +35,37 @@ const results = await store.query({
       name: "$eq",
       description: "Matches values equal to specified value",
       example: "{ age: { $eq: 25 } }",
-      supportedBy: ["All"],
+      supportedBy: ["All except Couchbase"],
     },
     {
       name: "$ne",
       description: "Matches values not equal",
       example: "{ status: { $ne: 'inactive' } }",
-      supportedBy: ["All"],
+      supportedBy: ["All except Couchbase"],
     },
     {
       name: "$gt",
       description: "Greater than",
       example: "{ price: { $gt: 100 } }",
-      supportedBy: ["All"],
+      supportedBy: ["All except Couchbase"],
     },
     {
       name: "$gte",
       description: "Greater than or equal",
       example: "{ rating: { $gte: 4.5 } }",
-      supportedBy: ["All"],
+      supportedBy: ["All except Couchbase"],
     },
     {
       name: "$lt",
       description: "Less than",
       example: "{ stock: { $lt: 20 } }",
-      supportedBy: ["All"],
+      supportedBy: ["All except Couchbase"],
     },
     {
       name: "$lte",
       description: "Less than or equal",
       example: "{ priority: { $lte: 3 } }",
-      supportedBy: ["All"],
+      supportedBy: ["All except Couchbase"],
     },
   ]}
 />
@@ -77,13 +77,13 @@ const results = await store.query({
       name: "$in",
       description: "Matches any value in array",
       example: '{ category: { $in: ["A", "B"] } }',
-      supportedBy: ["All"],
+      supportedBy: ["All except Couchbase"],
     },
     {
       name: "$nin",
       description: "Matches none of the values",
       example: '{ status: { $nin: ["deleted", "archived"] } }',
-      supportedBy: ["All"],
+      supportedBy: ["All except Couchbase"],
     },
     {
       name: "$all",
@@ -107,13 +107,13 @@ const results = await store.query({
       name: "$and",
       description: "Logical AND",
       example: "{ $and: [{ price: { $gt: 100 } }, { stock: { $gt: 0 } }] }",
-      supportedBy: ["All except Vectorize"],
+      supportedBy: ["All except Vectorize, Couchbase"],
     },
     {
       name: "$or",
       description: "Logical OR",
       example: '{ $or: [{ status: "active" }, { priority: "high" }] }',
-      supportedBy: ["All except Vectorize"],
+      supportedBy: ["All except Vectorize, Couchbase"],
     },
     {
       name: "$not",
@@ -144,7 +144,7 @@ const results = await store.query({
       name: "$exists",
       description: "Matches documents with field",
       example: "{ rating: { $exists: true } }",
-      supportedBy: ["All except Vectorize, Chroma"],
+      supportedBy: ["All except Vectorize, Chroma, Couchbase"],
     },
   ]}
 />
@@ -315,6 +315,9 @@ const results = await store.query({
 - `filter` applies to the metadata object; `documentFilter` applies to the original document fields
 - No artificial limits on filter size or complexity (subject to MongoDB query limits)
 - Indexing metadata fields is recommended for optimal performance
+
+### Couchbase
+- Currently does not have support for metadata filters. Filtering must be done client-side after retrieving results or by using the Couchbase SDK's Search capabilities directly for more complex queries.
 
 ## Related
 

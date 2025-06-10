@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import type { MessageType, MetricResult, WorkflowRunState } from '@mastra/core';
+import type { MastraMessageV1, MetricResult, WorkflowRunState } from '@mastra/core';
 import { TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { MongoDBConfig } from './index';
@@ -40,7 +40,7 @@ class Test {
     };
   }
 
-  generateSampleMessage(threadId: string): MessageType {
+  generateSampleMessage(threadId: string): MastraMessageV1 {
     return {
       id: `msg-${randomUUID()}`,
       role: 'user',
@@ -88,6 +88,7 @@ class Test {
         },
         input: {},
       },
+      serializedStepGraph: [],
       activePaths: [],
       suspendedPaths: {},
       runId,
@@ -200,7 +201,13 @@ describe('MongoDBStore', () => {
       await store.saveThread({ thread });
 
       // Add some messages
-      const messages = [test.generateSampleMessage(thread.id), test.generateSampleMessage(thread.id)];
+      const messages = [
+        test.generateSampleMessage(thread.id),
+        {
+          ...test.generateSampleMessage(thread.id),
+          role: 'assistant' as const,
+        },
+      ];
       await store.saveMessages({ messages });
 
       await store.deleteThread({ threadId: thread.id });
@@ -244,7 +251,10 @@ describe('MongoDBStore', () => {
       const thread = test.generateSampleThread();
       await store.saveThread({ thread });
 
-      const messages = [test.generateSampleMessage(thread.id), test.generateSampleMessage(thread.id)];
+      const messages = [
+        test.generateSampleMessage(thread.id),
+        { ...test.generateSampleMessage(thread.id), role: 'assistant' as const },
+      ];
 
       // Save messages
       const savedMessages = await store.saveMessages({ messages });
@@ -274,21 +284,22 @@ describe('MongoDBStore', () => {
       const messages = [
         {
           ...test.generateSampleMessage(thread.id),
-          content: [{ type: 'text', text: 'First' }] as MessageType['content'],
+          content: [{ type: 'text', text: 'First' }] satisfies MastraMessageV1['content'],
         },
         {
           ...test.generateSampleMessage(thread.id),
-          content: [{ type: 'text', text: 'Second' }] as MessageType['content'],
+          role: 'assistant' as const,
+          content: [{ type: 'text', text: 'Second' }] satisfies MastraMessageV1['content'],
         },
         {
           ...test.generateSampleMessage(thread.id),
-          content: [{ type: 'text', text: 'Third' }] as MessageType['content'],
+          content: [{ type: 'text', text: 'Third' }] satisfies MastraMessageV1['content'],
         },
       ];
 
-      await store.saveMessages({ messages });
+      await store.saveMessages({ messages, format: 'v1' });
 
-      const retrievedMessages = await store.getMessages({ threadId: thread.id });
+      const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v1' });
       expect(retrievedMessages).toHaveLength(3);
 
       // Verify order is maintained
@@ -479,6 +490,7 @@ describe('MongoDBStore', () => {
             status: 'waiting',
           },
         ],
+        serializedStepGraph: [],
         runId: runId,
         timestamp: Date.now(),
       };
