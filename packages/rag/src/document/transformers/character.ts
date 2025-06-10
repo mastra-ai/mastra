@@ -274,6 +274,8 @@ export class RecursiveCharacterTransformer extends TextTransformer {
         ];
       case Language.LATEX:
         return [
+          '\\\\part\\*?\\{',
+          '\\\\chapter\\*?\\{',
           '\\\\section\\*?\\{',
           '\\\\subsection\\*?\\{',
           '\\\\subsubsection\\*?\\{',
