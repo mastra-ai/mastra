@@ -3,6 +3,7 @@ import type { Tracer, SpanOptions, Context, Span, BaggageEntry } from '@opentele
 
 import type { OtelConfig } from './types';
 import { getBaggageValues, hasActiveTelemetry } from './utility';
+import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 
 // Add type declaration for global namespace
 declare global {
@@ -37,8 +38,16 @@ export class Telemetry {
 
       return global.__TELEMETRY__;
     } catch (error) {
-      console.error('Failed to initialize telemetry:', error);
-      throw error;
+      const wrappedError = new MastraError(
+        {
+          id: 'TELEMETRY_INIT_FAILED',
+          text: 'Failed to initialize telemetry',
+          domain: ErrorDomain.MASTRA_TELEMETRY,
+          category: ErrorCategory.SYSTEM,
+        },
+        error,
+      );
+      throw wrappedError;
     }
   }
 
@@ -54,7 +63,12 @@ export class Telemetry {
    */
   static get(): Telemetry {
     if (!global.__TELEMETRY__) {
-      throw new Error('Telemetry not initialized');
+      throw new MastraError({
+        id: 'TELEMETRY_GETTER_FAILED_GLOBAL_TELEMETRY_NOT_INITIALIZED',
+        text: 'Telemetry not initialized',
+        domain: ErrorDomain.MASTRA_TELEMETRY,
+        category: ErrorCategory.USER,
+      });
     }
     return global.__TELEMETRY__;
   }
