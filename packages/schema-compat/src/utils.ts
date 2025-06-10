@@ -1,8 +1,7 @@
 import { jsonSchema } from 'ai';
 import type { Schema } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod';
-import { z } from 'zod';
+import type { z, ZodSchema } from 'zod';
 import { convertJsonSchemaToZod } from 'zod-from-json-schema';
 import type { JSONSchema as ZodFromJSONSchema_JSONSchema } from 'zod-from-json-schema';
 import type { Targets } from 'zod-to-json-schema';
@@ -118,7 +117,7 @@ export function convertSchemaToZod(schema: Schema | z.ZodSchema): z.ZodType {
  * @returns Processed schema as an AI SDK Schema
  */
 export function applyCompatLayer(options: {
-  schema: Schema | z.AnyZodObject;
+  schema: Schema | z.ZodSchema;
   compatLayers: SchemaCompatLayer[];
   mode: 'aiSdkSchema';
 }): Schema;
@@ -133,7 +132,7 @@ export function applyCompatLayer(options: {
  * @returns Processed schema as a JSONSchema7
  */
 export function applyCompatLayer(options: {
-  schema: Schema | z.AnyZodObject;
+  schema: Schema | z.ZodSchema;
   compatLayers: SchemaCompatLayer[];
   mode: 'jsonSchema';
 }): JSONSchema7;
@@ -178,29 +177,17 @@ export function applyCompatLayer({
   compatLayers,
   mode,
 }: {
-  schema: Schema | z.AnyZodObject;
+  schema: Schema | z.ZodSchema;
   compatLayers: SchemaCompatLayer[];
   mode: 'jsonSchema' | 'aiSdkSchema';
 }): JSONSchema7 | Schema {
-  let zodSchema: z.AnyZodObject;
+  let zodSchema: z.ZodSchema;
 
   if (!isZodType(schema)) {
-    // Convert Schema to ZodObject
-    const convertedSchema = convertSchemaToZod(schema);
-    if (convertedSchema instanceof z.ZodObject) {
-      zodSchema = convertedSchema;
-    } else {
-      // If it's not an object schema, wrap it in an object
-      zodSchema = z.object({ value: convertedSchema });
-    }
+    // Convert non-zod schema to Zod
+    zodSchema = convertSchemaToZod(schema);
   } else {
-    // Ensure it's a ZodObject
-    if (schema instanceof z.ZodObject) {
-      zodSchema = schema;
-    } else {
-      // Wrap non-object schemas in an object
-      zodSchema = z.object({ value: schema });
-    }
+    zodSchema = schema;
   }
 
   for (const compat of compatLayers) {
