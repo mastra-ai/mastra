@@ -37,7 +37,12 @@ interface SuspendedStep {
   suspendPayload: any;
 }
 
-export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; setRunId?: (runId: string) => void }) {
+export interface WorkflowTriggerProps {
+  workflowId: string;
+  onTrigger?: (runId: string) => void;
+}
+
+export function WorkflowTrigger({ workflowId, onTrigger }: WorkflowTriggerProps) {
   const { runtimeContext } = usePlaygroundStore();
   const { result, setResult, payload, setPayload } = useContext(WorkflowRunContext);
   const { isLoading, workflow } = useWorkflow(workflowId);
@@ -58,7 +63,7 @@ export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; 
 
       const { runId } = await createWorkflowRun({ workflowId });
 
-      setRunId?.(runId);
+      onTrigger?.(runId);
 
       watchWorkflow({ workflowId, runId });
 

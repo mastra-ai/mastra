@@ -2144,6 +2144,9 @@ importers:
       motion:
         specifier: ^12.4.2
         version: 12.16.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
       prism-react-renderer:
         specifier: ^2.4.0
         version: 2.4.1(react@19.1.0)

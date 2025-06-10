@@ -1,53 +1,41 @@
 import { client } from '@/lib/client';
-import type { BaseLogMessage } from '@mastra/core/logger';
+
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 export const useLogsByRunId = (runId: string) => {
-  const [logs, setLogs] = useState<BaseLogMessage[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const { transports, isLoading: isLoadingTransports } = useLogTransports();
 
-  // TODO: support multiple transports in dev playground
   const transportId = transports[0];
 
-  const fetchLogs = async (_runId?: string) => {
-    const runIdToUse = _runId ?? runId;
-    if (!runIdToUse) {
-      setIsLoading(false);
-      return;
-    }
-    setIsLoading(true);
-    try {
-      const res = await client.getLogForRun({ transportId, runId: runIdToUse });
-      setLogs(
-        res.logs.map(log => ({
-          level: log.level,
-          time: log.time,
-          pid: log.pid,
-          hostname: log.hostname,
-          name: log.name,
-          runId: log.runId,
-          msg: log.msg,
-        })),
-      );
-    } catch (error) {
-      setLogs([]);
-      console.error('Error fetching logs', error);
-      toast.error('Error fetching logs');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const { isLoading, ...data } = useInfiniteQuery({
+    queryKey: ['logs', runId],
+    staleTime: 0,
+    gcTime: 0,
+    queryFn: async ({ pageParam }) => {
+      const res = await client.getLogForRun({
+        transportId,
+        runId,
+        page: pageParam,
+        perPage: 50,
+      });
 
-  useEffect(() => {
-    if (isLoadingTransports || !transportId) {
-      return;
-    }
-    fetchLogs(runId);
-  }, [runId, transportId]);
+      return res;
+    },
+    getNextPageParam: (lastPage, _, lastPageParam) => {
+      if (!lastPage?.hasMore) {
+        return undefined;
+      }
+      return lastPageParam + 1;
+    },
+    initialPageParam: 0,
+    enabled: Boolean(transportId),
+    refetchInterval: 1000,
+    select: data => data.pages.flatMap(page => page.logs),
+  });
 
-  return { logs, isLoading, refetchLogs: fetchLogs };
+  return { ...data, isLoading: isLoading || isLoadingTransports };
 };
 
 export const useLogTransports = () => {

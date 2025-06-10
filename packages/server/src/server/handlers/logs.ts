@@ -88,6 +88,7 @@ export async function getLogsByRunIdHandler({
       page: page ? Number(page) : undefined,
       perPage: perPage ? Number(perPage) : undefined,
     });
+
     return logs;
   } catch (error) {
     return handleError(error, 'Error getting logs by run ID');
