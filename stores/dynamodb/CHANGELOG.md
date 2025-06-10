@@ -1,5 +1,11 @@
 # @mastra/dynamodb
 
+## 0.10.4-alpha.2
+
+### Patch Changes
+
+- 66f4424: Update peerdeps
+
 ## 0.10.4-alpha.1
 
 ### Patch Changes
