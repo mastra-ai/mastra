@@ -120,8 +120,14 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
       });
       return acc;
     }, {});
-  } catch {
-    console.error('Failed to import tools');
+  } catch (err: any) {
+    console.error(
+      `Failed to import tools
+reason: ${err.message}
+${err.stack.split('\n').slice(1).join('\n')}
+    `,
+      err,
+    );
   }
 
   // Middleware
@@ -2670,10 +2676,46 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
           required: true,
           schema: { type: 'string' },
         },
+        {
+          name: 'fromDate',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'toDate',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'logLevel',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'filters',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'page',
+          in: 'query',
+          required: false,
+          schema: { type: 'number' },
+        },
+        {
+          name: 'perPage',
+          in: 'query',
+          required: false,
+          schema: { type: 'number' },
+        },
       ],
       responses: {
         200: {
-          description: 'List of all logs',
+          description: 'Paginated list of all logs',
         },
       },
     }),
@@ -2712,10 +2754,46 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
           required: true,
           schema: { type: 'string' },
         },
+        {
+          name: 'fromDate',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'toDate',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'logLevel',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'filters',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'page',
+          in: 'query',
+          required: false,
+          schema: { type: 'number' },
+        },
+        {
+          name: 'perPage',
+          in: 'query',
+          required: false,
+          schema: { type: 'number' },
+        },
       ],
       responses: {
         200: {
-          description: 'List of logs for run ID',
+          description: 'Paginated list of logs for run ID',
         },
       },
     }),
@@ -3089,7 +3167,11 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
 
     if (options?.playground) {
       // For all other routes, serve index.html
-      const indexHtml = await readFile(join(process.cwd(), './playground/index.html'), 'utf-8');
+      let indexHtml = await readFile(join(process.cwd(), './playground/index.html'), 'utf-8');
+      indexHtml = indexHtml.replace(
+        `'%%MASTRA_TELEMETRY_DISABLED%%'`,
+        `${Boolean(process.env.MASTRA_TELEMETRY_DISABLED)}`,
+      );
       return c.newResponse(indexHtml, 200, { 'Content-Type': 'text/html' });
     }
 
@@ -3123,6 +3205,14 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
       }
       if (options?.playground) {
         logger.info(`👨‍💻 Playground available at http://${host}:${port}/`);
+      }
+
+      if (process.send) {
+        process.send({
+          type: 'server-ready',
+          port,
+          host,
+        });
       }
     },
   );

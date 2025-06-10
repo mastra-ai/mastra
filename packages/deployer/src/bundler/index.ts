@@ -250,14 +250,6 @@ export abstract class Bundler extends MastraBundler {
       }
     }
 
-    // temporary fix for mastra-memory and fastembed
-    if (
-      analyzedBundleInfo.externalDependencies.has('@mastra/memory') ||
-      analyzedBundleInfo.dependencies.has('@mastra/memory')
-    ) {
-      dependenciesToInstall.set('fastembed', 'latest');
-    }
-
     await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall, resolutions);
     await this.writeInstrumentationFile(join(outputDirectory, this.outputDir));
 
@@ -289,6 +281,7 @@ export abstract class Bundler extends MastraBundler {
 
     this.logger.info('Installing dependencies');
     await this.installDependencies(outputDirectory);
+
     this.logger.info('Done installing dependencies');
   }
 

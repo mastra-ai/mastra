@@ -2,7 +2,7 @@
 
 import { AttachmentPrimitive, ComposerPrimitive, MessagePrimitive, useAttachment } from '@assistant-ui/react';
 import { TooltipProvider } from '@radix-ui/react-tooltip';
-import { CircleXIcon, FileIcon, PaperclipIcon } from 'lucide-react';
+import { CircleXIcon, FileIcon, FileText, PaperclipIcon } from 'lucide-react';
 import { PropsWithChildren, useEffect, useState, type FC } from 'react';
 
 import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button';
@@ -83,6 +83,7 @@ const AttachmentPreviewDialog: FC<PropsWithChildren> = ({ children }) => {
 
 const AttachmentThumbnail: FC = () => {
   const isImage = useAttachment(a => a.type === 'image');
+  const document = useAttachment(a => (a.type === 'document' ? a : undefined));
   const src = useAttachmentSrc();
   const canRemove = useAttachment(a => a.source !== 'message');
 
@@ -96,6 +97,10 @@ const AttachmentThumbnail: FC = () => {
                 {isImage ? (
                   <div className="rounded-lg border-sm border-border1 overflow-hidden">
                     <img src={src} className="object-cover aspect-ratio size-16" alt="Preview" height={64} width={64} />
+                  </div>
+                ) : document?.contentType === 'application/pdf' ? (
+                  <div className="rounded-lg border-sm border-border1 flex items-center justify-center">
+                    <FileText className="text-accent2" />
                   </div>
                 ) : (
                   <div className="rounded-lg border-sm border-border1 flex items-center justify-center">
@@ -137,7 +142,9 @@ export const UserMessageAttachments: FC = () => {
 
 const InMessageAttachment = () => {
   const isImage = useAttachment(a => a.type === 'image');
+  const document = useAttachment(a => (a.type === 'document' ? a : undefined));
   const src = useAttachmentSrc();
+
   return (
     <TooltipProvider>
       <Tooltip>
@@ -149,8 +156,12 @@ const InMessageAttachment = () => {
                   <div className="rounded-lg border-sm border-border1 overflow-hidden">
                     <img src={src} className="object-cover aspect-ratio max-h-[140px] max-w-[320px]" alt="Preview" />
                   </div>
+                ) : document?.contentType === 'application/pdf' ? (
+                  <div className="rounded-lg border-sm border-border1 flex items-center justify-center p-4">
+                    <FileText className="text-accent2" />
+                  </div>
                 ) : (
-                  <div className="rounded-lg border-sm border-border1 flex items-center justify-center">
+                  <div className="rounded-lg border-sm border-border1 flex items-center justify-center p-4">
                     <FileIcon className="text-icon3" />
                   </div>
                 )}

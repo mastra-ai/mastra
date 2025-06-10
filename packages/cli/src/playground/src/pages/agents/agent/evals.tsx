@@ -6,7 +6,7 @@ function AgentEvalsPage() {
 
   return (
     <main className="h-full overflow-hidden">
-      <AgentEvals agentId={agentId!} baseUrl="" />
+      <AgentEvals agentId={agentId!} />
     </main>
   );
 }

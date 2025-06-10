@@ -1,11 +1,13 @@
 import './index.css';
 
+export * from './contexts/mastra-client-context';
 export * from './domains/agents/index';
 export * from './domains/networks/index';
 export * from './domains/workflows/index';
 export * from './domains/resizable-panel';
 export * from './components/dynamic-form/index';
 export * from './components/ui/data-table';
+export * from './components/ui/containers';
 export * from './components/threads';
 export * from './types';
 export * from './ds/components/Badge/index';
@@ -20,9 +22,7 @@ export * from './ds/components/EmptyState/index';
 export * from './ds/icons/index';
 export * from './lib/polls';
 export * from './hooks/use-speech-recognition';
-export { useTraces } from './hooks/index';
 
 export type { TraceContextType } from './domains/traces/context/trace-context';
-export { refineTraces } from './domains/traces/utils';
 
 export * from './store/playground-store';

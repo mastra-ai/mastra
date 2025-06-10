@@ -28,7 +28,7 @@ export type MastraMessageV2 = {
 };
 
 type MessageInput = UIMessage | Message | MastraMessageV1 | CoreMessage | MastraMessageV2;
-type MessageSource = 'memory' | 'response' | 'user' | 'system';
+type MessageSource = 'memory' | 'response' | 'user' | 'system' | 'context';
 type MemoryInfo = { threadId: string; resourceId?: string };
 
 export class MessageList {
@@ -43,8 +43,9 @@ export class MessageList {
 
   // used to filter this.messages by how it was added: input/response/memory
   private memoryMessages = new Set<MastraMessageV2>();
-  private newMessages = new Set<MastraMessageV2>();
-  private responseMessages = new Set<MastraMessageV2>();
+  private newUserMessages = new Set<MastraMessageV2>();
+  private newResponseMessages = new Set<MastraMessageV2>();
+  private userContextMessages = new Set<MastraMessageV2>();
 
   private generateMessageId?: IDGenerator;
 
@@ -88,7 +89,7 @@ export class MessageList {
     };
   }
   private all = {
-    mastra: () => this.messages,
+    v2: () => this.messages,
     v1: () => convertToV1Messages(this.messages),
     ui: () => this.messages.map(MessageList.toUIMessage),
     core: () => this.convertToCoreMessages(this.all.ui()),
@@ -97,24 +98,24 @@ export class MessageList {
     },
   };
   private remembered = {
-    mastra: () => this.messages.filter(m => this.memoryMessages.has(m)),
-    v1: () => convertToV1Messages(this.remembered.mastra()),
-    ui: () => this.remembered.mastra().map(MessageList.toUIMessage),
+    v2: () => this.messages.filter(m => this.memoryMessages.has(m)),
+    v1: () => convertToV1Messages(this.remembered.v2()),
+    ui: () => this.remembered.v2().map(MessageList.toUIMessage),
     core: () => this.convertToCoreMessages(this.remembered.ui()),
   };
   private input = {
-    mastra: () => this.messages.filter(m => this.newMessages.has(m)),
-    v1: () => convertToV1Messages(this.input.mastra()),
-    ui: () => this.input.mastra().map(MessageList.toUIMessage),
+    v2: () => this.messages.filter(m => this.newUserMessages.has(m)),
+    v1: () => convertToV1Messages(this.input.v2()),
+    ui: () => this.input.v2().map(MessageList.toUIMessage),
     core: () => this.convertToCoreMessages(this.input.ui()),
   };
   private response = {
-    mastra: () => this.messages.filter(m => this.responseMessages.has(m)),
+    v2: () => this.messages.filter(m => this.newResponseMessages.has(m)),
   };
   public drainUnsavedMessages(): MastraMessageV2[] {
-    const messages = this.messages.filter(m => this.newMessages.has(m) || this.responseMessages.has(m));
-    this.newMessages.clear();
-    this.responseMessages.clear();
+    const messages = this.messages.filter(m => this.newUserMessages.has(m) || this.newResponseMessages.has(m));
+    this.newUserMessages.clear();
+    this.newResponseMessages.clear();
     return messages;
   }
   public getSystemMessages(tag?: string): CoreMessage[] {
@@ -185,6 +186,9 @@ export class MessageList {
     );
   }
   private static toUIMessage(m: MastraMessageV2): UIMessage {
+    const experimentalAttachments: UIMessage['experimental_attachments'] = m.content.experimental_attachments
+      ? [...m.content.experimental_attachments]
+      : [];
     const contentString =
       typeof m.content.content === `string` && m.content.content !== ''
         ? m.content.content
@@ -196,14 +200,33 @@ export class MessageList {
             return prev;
           }, '');
 
+    const parts: MastraMessageContentV2['parts'] = [];
+    if (m.content.parts.length) {
+      for (const part of m.content.parts) {
+        if (part.type === `file`) {
+          experimentalAttachments.push({
+            contentType: part.mimeType,
+            url: part.data,
+          });
+        } else {
+          parts.push(part);
+        }
+      }
+    }
+
+    if (parts.length === 0 && experimentalAttachments.length > 0) {
+      // make sure we have atleast one part so this message doesn't get removed when converting to core message
+      parts.push({ type: 'text', text: '' });
+    }
+
     if (m.role === `user`) {
       return {
         id: m.id,
         role: m.role,
         content: m.content.content || contentString,
         createdAt: m.createdAt,
-        parts: m.content.parts,
-        experimental_attachments: m.content.experimental_attachments || [],
+        parts,
+        experimental_attachments: experimentalAttachments,
       };
     } else if (m.role === `assistant`) {
       return {
@@ -211,7 +234,7 @@ export class MessageList {
         role: m.role,
         content: m.content.content || contentString,
         createdAt: m.createdAt,
-        parts: m.content.parts,
+        parts,
         reasoning: undefined,
         toolInvocations: `toolInvocations` in m.content ? m.content.toolInvocations : undefined,
       };
@@ -222,7 +245,8 @@ export class MessageList {
       role: m.role,
       content: m.content.content || contentString,
       createdAt: m.createdAt,
-      parts: m.content.parts,
+      parts,
+      experimental_attachments: experimentalAttachments,
     };
   }
   private getMessageById(id: string) {
@@ -363,6 +387,14 @@ ${JSON.stringify(message, null, 2)}`,
         // Match what AI SDK does - content string is always the latest text part.
         latestMessage.content.content = messageV2.content.content;
       }
+      // This code would combine attachment only messages onto the prev message,
+      // but for anyone using CoreMessage or MastraMessageV1 still they would lose the ordering in multi-step interactions
+      // } else if (couldMoveAttachmentsToPreviousMessage && messageV2.content.experimental_attachments?.length) {
+      //   latestMessage.content.experimental_attachments ||= [];
+      //   latestMessage.content.experimental_attachments.push(...messageV2.content.experimental_attachments);
+      //   if (latestMessage.createdAt.getTime() < messageV2.createdAt.getTime()) {
+      //     latestMessage.createdAt = messageV2.createdAt;
+      //   }
     }
     // Else the last message and this message are not both assistant messages OR an existing message has been updated and should be replaced. add a new message to the array or update an existing one.
     else {
@@ -383,9 +415,11 @@ ${JSON.stringify(message, null, 2)}`,
       if (messageSource === `memory`) {
         this.memoryMessages.add(messageV2);
       } else if (messageSource === `response`) {
-        this.responseMessages.add(messageV2);
+        this.newResponseMessages.add(messageV2);
       } else if (messageSource === `user`) {
-        this.newMessages.add(messageV2);
+        this.newUserMessages.add(messageV2);
+      } else if (messageSource === `context`) {
+        this.userContextMessages.add(messageV2);
       } else {
         throw new Error(`Missing message source for message ${messageV2}`);
       }
@@ -567,48 +601,30 @@ ${JSON.stringify(message, null, 2)}`,
             break;
 
           case 'reasoning':
-            // CoreMessage reasoning parts have text and signature
             parts.push({
               type: 'reasoning',
-              reasoning: part.text, // Assuming text is the main reasoning content
+              reasoning: '', // leave this blank so we aren't double storing it in the db along with details
               details: [{ type: 'text', text: part.text, signature: part.signature }],
             });
             break;
           case 'redacted-reasoning':
-            // CoreMessage redacted-reasoning parts have data
             parts.push({
               type: 'reasoning',
               reasoning: '', // No text reasoning for redacted parts
               details: [{ type: 'redacted', data: part.data }],
             });
             break;
+          case 'image':
+            parts.push({ type: 'file', data: part.image.toString(), mimeType: part.mimeType! });
+            break;
           case 'file':
             // CoreMessage file parts can have mimeType and data (binary/data URL) or just a URL
             if (part.data instanceof URL) {
-              // If it's a non-data URL, add to experimental_attachments
-              if (part.data.protocol !== 'data:') {
-                experimentalAttachments.push({
-                  name: part.filename,
-                  url: part.data.toString(),
-                  contentType: part.mimeType,
-                });
-              } else {
-                // If it\'s a data URL, extract the base64 data and add to parts
-                try {
-                  const base64Match = part.data.toString().match(/^data:[^;]+;base64,(.+)$/);
-                  if (base64Match && base64Match[1]) {
-                    parts.push({
-                      type: 'file',
-                      mimeType: part.mimeType,
-                      data: base64Match[1],
-                    });
-                  } else {
-                    console.error(`Invalid data URL format: ${part.data}`);
-                  }
-                } catch (error) {
-                  console.error(`Failed to process data URL in CoreMessage file part: ${error}`, error);
-                }
-              }
+              parts.push({
+                type: 'file',
+                data: part.data.toString(),
+                mimeType: part.mimeType,
+              });
             } else {
               // If it's binary data, convert to base64 and add to parts
               try {
@@ -622,8 +638,6 @@ ${JSON.stringify(message, null, 2)}`,
               }
             }
             break;
-          default:
-            throw new Error(`Found unknown CoreMessage content part type: ${part.type}`);
         }
       }
     }
@@ -682,6 +696,8 @@ ${JSON.stringify(message, null, 2)}`,
     for (const part of parts) {
       key += part.type;
       if (part.type === `text`) {
+        // TODO: we may need to hash this with something like xxhash instead of using length
+        // for 99.999% of cases this will be fine though because we're comparing messages that have the same ID already.
         key += part.text.length;
       }
       if (part.type === `tool-invocation`) {
@@ -689,9 +705,19 @@ ${JSON.stringify(message, null, 2)}`,
         key += part.toolInvocation.state;
       }
       if (part.type === `reasoning`) {
+        // TODO: we may need to hash this with something like xxhash instead of using length
+        // for 99.999% of cases this will be fine though because we're comparing messages that have the same ID already.
         key += part.reasoning.length;
+        key += part.details.reduce((prev, current) => {
+          if (current.type === `text`) {
+            return prev + current.text.length + (current.signature?.length || 0);
+          }
+          return prev;
+        }, 0);
       }
       if (part.type === `file`) {
+        // TODO: we may need to hash this with something like xxhash instead of using length
+        // for 99.999% of cases this will be fine though because we're comparing messages that have the same ID already.
         key += part.data.length;
         key += part.mimeType;
       }

@@ -307,6 +307,46 @@ export default withGT(
         permanent: true,
       },
       {
+        source: "/docs/frameworks/express",
+        destination: "/docs/frameworks/servers/express",
+        permanent: true,
+      },
+      {
+        source: "/docs/frameworks/vite-react",
+        destination: "/docs/frameworks/web-frameworks/vite-react",
+        permanent: true,
+      },
+      {
+        source: "/docs/frameworks/next-js",
+        destination: "/docs/frameworks/web-frameworks/next-js",
+        permanent: true,
+      },
+      {
+        source: "/docs/frameworks/astro",
+        destination: "/docs/frameworks/web-frameworks/astro",
+        permanent: true,
+      },
+      {
+        source: "/docs/frameworks/ai-sdk",
+        destination: "/docs/frameworks/agentic-uis/ai-sdk",
+        permanent: true,
+      },
+      {
+        source: "/docs/frameworks/copilotkit",
+        destination: "/docs/frameworks/agentic-uis/copilotkit",
+        permanent: true,
+      },
+      {
+        source: "/docs/frameworks/assistant-ui",
+        destination: "/docs/frameworks/agentic-uis/assistant-ui",
+        permanent: true,
+      },
+      {
+        source: "/docs/frameworks/openrouter",
+        destination: "/docs/frameworks/agentic-uis/openrouter",
+        permanent: true,
+      },
+      {
         source: "/docs/frameworks/01-next-js",
         destination: "/docs/frameworks/next-js",
         permanent: true,
@@ -317,6 +357,11 @@ export default withGT(
         permanent: true,
       },
       {
+        source: "/:locale/docs/workflows/flow-control",
+        destination: "/:locale/docs/workflows/control-flow",
+        permanent: true,
+      },
+      {
         source: "/docs/workflows/00-overview",
         destination: "/docs/workflows/overview",
         permanent: true,
@@ -324,6 +369,11 @@ export default withGT(
       {
         source: "/docs/workflows/index",
         destination: "/docs/workflows/overview",
+        permanent: true,
+      },
+      {
+        source: "/docs/voice",
+        destination: "/docs/voice/overview",
         permanent: true,
       },
       {
@@ -890,6 +940,16 @@ export default withGT(
       {
         source: "/reference/observability/create-logger",
         destination: "/reference/observability/logger",
+        permanent: true,
+      },
+      {
+        source: "/:locale/docs/workflows-vnext/overview",
+        destination: "/:locale/docs/workflows/overview",
+        permanent: true,
+      },
+      {
+        source: "/:locale/reference/rag/vector-search",
+        destination: "/:locale/examples/rag/query/hybrid-vector-search",
         permanent: true,
       },
     ],

@@ -109,7 +109,7 @@ describe('changesTool', () => {
       const result = await callTool(tools.mastra_mastraChanges, { package: '@mastra/core' });
 
       // Split into version sections
-      const sections = result.split(/##\s+v?\d+\.\d+\.\d+/);
+      const sections = result.split(/##\s+v?\d+\.\d+\.\d+\n/);
       sections.slice(1).forEach(section => {
         if (!section.includes('more lines hidden')) {
           // Each section should have at least one category and entry

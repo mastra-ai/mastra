@@ -1,7 +1,6 @@
 import { DynamoDBClient, DescribeTableCommand } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import type { StorageThreadType, WorkflowRunState, MastraMessageV1 } from '@mastra/core';
-import type { MastraMessageV2 } from '@mastra/core/agent';
+import type { StorageThreadType, WorkflowRunState, MastraMessageV1, MastraMessageV2 } from '@mastra/core';
 import { MessageList } from '@mastra/core/agent';
 import {
   MastraStorage,
@@ -182,6 +181,29 @@ export class DynamoDBStore extends MastraStorage {
   }
 
   /**
+   * Pre-processes a record to ensure Date objects are converted to ISO strings
+   * This is necessary because ElectroDB validation happens before setters are applied
+   */
+  private preprocessRecord(record: Record<string, any>): Record<string, any> {
+    const processed = { ...record };
+
+    // Convert Date objects to ISO strings for date fields
+    // This prevents ElectroDB validation errors that occur when Date objects are passed
+    // to string-typed attributes, even when the attribute has a setter that converts dates
+    if (processed.createdAt instanceof Date) {
+      processed.createdAt = processed.createdAt.toISOString();
+    }
+    if (processed.updatedAt instanceof Date) {
+      processed.updatedAt = processed.updatedAt.toISOString();
+    }
+    if (processed.created_at instanceof Date) {
+      processed.created_at = processed.created_at.toISOString();
+    }
+
+    return processed;
+  }
+
+  /**
    * Clear all items from a logical "table" (entity type)
    */
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
@@ -276,8 +298,8 @@ export class DynamoDBStore extends MastraStorage {
     }
 
     try {
-      // Add the entity type to the record before creating
-      const dataToSave = { entity: entityName, ...record };
+      // Add the entity type to the record and preprocess before creating
+      const dataToSave = { entity: entityName, ...this.preprocessRecord(record) };
       await this.service.entities[entityName].create(dataToSave).go();
     } catch (error) {
       this.logger.error('Failed to insert record', { tableName, error });
@@ -296,8 +318,8 @@ export class DynamoDBStore extends MastraStorage {
       throw new Error(`No entity defined for ${tableName}`);
     }
 
-    // Add entity type to each record
-    const recordsToSave = records.map(rec => ({ entity: entityName, ...rec }));
+    // Add entity type and preprocess each record
+    const recordsToSave = records.map(rec => ({ entity: entityName, ...this.preprocessRecord(rec) }));
 
     // ElectroDB has batch limits of 25 items, so we need to chunk
     const batchSize = 25;
@@ -533,16 +555,16 @@ export class DynamoDBStore extends MastraStorage {
 
       // Apply the 'last' limit if provided
       if (selectBy?.last && typeof selectBy.last === 'number') {
-        // Use ElectroDB's limit parameter (descending sort assumed on GSI SK)
-        // Ensure GSI sk (createdAt) is sorted descending for 'last' to work correctly
-        // Assuming default sort is ascending on SK, use reverse: true for descending
-        const results = await query.go({ limit: selectBy.last, reverse: true });
+        // Use ElectroDB's limit parameter
+        // DDB GSIs are sorted in ascending order
+        // Use ElectroDB's order parameter to sort in descending order to retrieve 'latest' messages
+        const results = await query.go({ limit: selectBy.last, order: 'desc' });
         // Use arrow function in map to preserve 'this' context for parseMessageData
         const list = new MessageList({ threadId, resourceId }).add(
           results.data.map((data: any) => this.parseMessageData(data)),
           'memory',
         );
-        if (format === `v2`) return list.get.all.mastra();
+        if (format === `v2`) return list.get.all.v2();
         return list.get.all.v1();
       }
 
@@ -553,7 +575,7 @@ export class DynamoDBStore extends MastraStorage {
         results.data.map((data: any) => this.parseMessageData(data)),
         'memory',
       );
-      if (format === `v2`) return list.get.all.mastra();
+      if (format === `v2`) return list.get.all.v2();
       return list.get.all.v1();
     } catch (error) {
       this.logger.error('Failed to get messages', { threadId, error });
@@ -618,7 +640,7 @@ export class DynamoDBStore extends MastraStorage {
 
       const list = new MessageList().add(messages, 'memory');
       if (format === `v1`) return list.get.all.v1();
-      return list.get.all.mastra();
+      return list.get.all.v2();
     } catch (error) {
       this.logger.error('Failed to save messages', { error });
       throw error;

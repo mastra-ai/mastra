@@ -1,5 +1,144 @@
 # @mastra/deployer
 
+## 0.10.4-alpha.0
+
+### Patch Changes
+
+- d1ed912: dependencies updates:
+  - Updated dependency [`dotenv@^16.5.0` ↗︎](https://www.npmjs.com/package/dotenv/v/16.5.0) (from `^16.4.7`, in `dependencies`)
+- f595975: dependencies updates:
+  - Updated dependency [`rollup@^4.41.1` ↗︎](https://www.npmjs.com/package/rollup/v/4.41.1) (from `^4.35.0`, in `dependencies`)
+- afd9fda: Reset retry-count on code change and only retry if server actually is running
+
+  Fixes #4563
+
+- f1f1f1b: Add basic filtering capabilities to logs
+- 82090c1: Add pagination to logs
+- 69f6101: Add reason to tools import error on server start
+- Updated dependencies [d1ed912]
+- Updated dependencies [f1f1f1b]
+- Updated dependencies [f9816ae]
+- Updated dependencies [82090c1]
+- Updated dependencies [1b443fd]
+- Updated dependencies [ce97900]
+- Updated dependencies [14a2566]
+  - @mastra/core@0.10.4-alpha.0
+  - @mastra/server@0.10.4-alpha.0
+
+## 0.10.3
+
+### Patch Changes
+
+- Updated dependencies [2b0fc7e]
+  - @mastra/core@0.10.3
+  - @mastra/server@0.10.3
+
+## 0.10.3-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [2b0fc7e]
+  - @mastra/core@0.10.3-alpha.0
+  - @mastra/server@0.10.3-alpha.0
+
+## 0.10.2
+
+### Patch Changes
+
+- e8d2aff: Fix non-scoped packages in mastra build
+- f73e11b: fix telemetry disabled not working on playground
+- 1fcc048: chore: generate sourcemaps in dev build
+- f946acf: Filter out dynamic imports by node builtins
+- add596e: Mastra protected auth
+- ecebbeb: Mastra core auth abstract definition
+- 4187ed4: Fix mcp server api openapijson
+- f0d559f: Fix peerdeps for alpha channel
+- Updated dependencies [ee77e78]
+- Updated dependencies [592a2db]
+- Updated dependencies [e5dc18d]
+- Updated dependencies [ab5adbe]
+- Updated dependencies [1e8bb40]
+- Updated dependencies [1b5fc55]
+- Updated dependencies [195c428]
+- Updated dependencies [f73e11b]
+- Updated dependencies [37643b8]
+- Updated dependencies [e2228f6]
+- Updated dependencies [99fd6cf]
+- Updated dependencies [a399086]
+- Updated dependencies [c5bf1ce]
+- Updated dependencies [add596e]
+- Updated dependencies [8dc94d8]
+- Updated dependencies [ecebbeb]
+- Updated dependencies [79d5145]
+- Updated dependencies [422ee9e]
+- Updated dependencies [12b7002]
+- Updated dependencies [f0d559f]
+- Updated dependencies [2901125]
+- Updated dependencies [a0ebc3f]
+  - @mastra/core@0.10.2
+  - @mastra/server@0.10.2
+
+## 0.10.2-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [37643b8]
+- Updated dependencies [79d5145]
+  - @mastra/core@0.10.2-alpha.8
+  - @mastra/server@0.10.2-alpha.8
+
+## 0.10.2-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [a399086]
+  - @mastra/server@0.10.2-alpha.7
+  - @mastra/core@0.10.2-alpha.7
+
+## 0.10.2-alpha.6
+
+### Patch Changes
+
+- 1fcc048: chore: generate sourcemaps in dev build
+- Updated dependencies [99fd6cf]
+- Updated dependencies [8dc94d8]
+  - @mastra/core@0.10.2-alpha.6
+  - @mastra/server@0.10.2-alpha.6
+
+## 0.10.2-alpha.5
+
+### Patch Changes
+
+- add596e: Mastra protected auth
+- ecebbeb: Mastra core auth abstract definition
+- Updated dependencies [1b5fc55]
+- Updated dependencies [add596e]
+- Updated dependencies [ecebbeb]
+  - @mastra/server@0.10.2-alpha.5
+  - @mastra/core@0.10.2-alpha.5
+
+## 0.10.2-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [c5bf1ce]
+- Updated dependencies [12b7002]
+  - @mastra/server@0.10.2-alpha.4
+  - @mastra/core@0.10.2-alpha.4
+
+## 0.10.2-alpha.3
+
+### Patch Changes
+
+- f73e11b: fix telemetry disabled not working on playground
+- f946acf: Filter out dynamic imports by node builtins
+- Updated dependencies [ab5adbe]
+- Updated dependencies [195c428]
+- Updated dependencies [f73e11b]
+- Updated dependencies [422ee9e]
+  - @mastra/core@0.10.2-alpha.3
+  - @mastra/server@0.10.2-alpha.3
+
 ## 0.10.2-alpha.2
 
 ### Patch Changes

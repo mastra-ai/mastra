@@ -5,6 +5,7 @@ import type {
   GenerateTextResult,
   StreamObjectResult,
   StreamTextResult,
+  TextPart,
   UIMessage,
 } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
@@ -398,6 +399,23 @@ export class Agent<
     // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
     const llm = await this.getLLM({ runtimeContext });
 
+    const partsToGen: TextPart[] = [];
+    for (const part of message.parts) {
+      if (part.type === `text`) {
+        partsToGen.push(part);
+      } else if (part.type === `source`) {
+        partsToGen.push({
+          type: 'text',
+          text: `User added URL: ${part.source.url.substring(0, 100)}`,
+        });
+      } else if (part.type === `file`) {
+        partsToGen.push({
+          type: 'text',
+          text: `User added ${part.mimeType} file: ${part.data.substring(0, 100)}`,
+        });
+      }
+    }
+
     const { text } = await llm.__text<{ title: string }>({
       runtimeContext,
       messages: [
@@ -412,7 +430,7 @@ export class Agent<
         },
         {
           role: 'user',
-          content: JSON.stringify(message),
+          content: JSON.stringify(partsToGen),
         },
       ],
     });
@@ -486,7 +504,7 @@ export class Agent<
                   config: memoryConfig,
                   vectorMessageSearch: lastUserMessageContent,
                 })
-                .then(r => r.messages),
+                .then(r => r.messagesV2),
               memory.getSystemMessage({ threadId, memoryConfig }),
             ])
           : [[], null];
@@ -935,7 +953,7 @@ export class Agent<
             role: 'system',
             content: instructions || `${this.instructions}.`,
           })
-          .add(context || [], 'user');
+          .add(context || [], 'context');
 
         if (!memory || (!threadId && !resourceId)) {
           messageList.add(messages, 'user');
@@ -1018,9 +1036,9 @@ export class Agent<
         const processedList = new MessageList({ threadId, resourceId })
           .addSystem(instructions || `${this.instructions}.`)
           .addSystem(memorySystemMessage)
-          .add(context || [], 'user')
+          .add(context || [], 'context')
           .add(processedMemoryMessages, 'memory')
-          .add(messageList.get.input.mastra(), 'user')
+          .add(messageList.get.input.v2(), 'user')
           .get.all.prompt();
 
         return {
@@ -1428,6 +1446,7 @@ export class Agent<
         runId,
         toolChoice,
         experimental_output,
+        telemetry,
         memory: this.getMemory(),
         runtimeContext,
         ...args,

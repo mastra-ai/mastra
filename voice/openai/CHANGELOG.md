@@ -1,5 +1,44 @@
 # @mastra/voice-openai
 
+## 0.10.2-alpha.0
+
+### Patch Changes
+
+- 4f27840: dependencies updates:
+  - Updated dependency [`openai@^4.104.0` ↗︎](https://www.npmjs.com/package/openai/v/4.104.0) (from `^4.89.0`, in `dependencies`)
+- Updated dependencies [d1ed912]
+- Updated dependencies [f1f1f1b]
+- Updated dependencies [f9816ae]
+- Updated dependencies [82090c1]
+- Updated dependencies [1b443fd]
+- Updated dependencies [ce97900]
+- Updated dependencies [14a2566]
+  - @mastra/core@0.10.4-alpha.0
+
+## 0.10.1
+
+### Patch Changes
+
+- f0d559f: Fix peerdeps for alpha channel
+- Updated dependencies [ee77e78]
+- Updated dependencies [592a2db]
+- Updated dependencies [e5dc18d]
+- Updated dependencies [ab5adbe]
+- Updated dependencies [1e8bb40]
+- Updated dependencies [1b5fc55]
+- Updated dependencies [195c428]
+- Updated dependencies [f73e11b]
+- Updated dependencies [37643b8]
+- Updated dependencies [99fd6cf]
+- Updated dependencies [c5bf1ce]
+- Updated dependencies [add596e]
+- Updated dependencies [8dc94d8]
+- Updated dependencies [ecebbeb]
+- Updated dependencies [79d5145]
+- Updated dependencies [12b7002]
+- Updated dependencies [2901125]
+  - @mastra/core@0.10.2
+
 ## 0.10.1-alpha.0
 
 ### Patch Changes

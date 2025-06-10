@@ -1,6 +1,6 @@
 import type { AssistantContent, CoreMessage, EmbeddingModel, ToolContent, UserContent } from 'ai';
 
-import type { MastraMessageV2 } from '../agent';
+export type { MastraMessageV2 } from '../agent';
 import type { MastraStorage } from '../storage';
 import type { MastraVector } from '../vector';
 import type { MemoryProcessor } from '.';
@@ -13,15 +13,18 @@ export type MastraMessageV1 = {
   content: string | UserContent | AssistantContent | ToolContent;
   role: 'system' | 'user' | 'assistant' | 'tool';
   createdAt: Date;
-  threadId: string;
-  resourceId: string;
+  threadId?: string;
+  resourceId?: string;
   toolCallIds?: string[];
   toolCallArgs?: Record<string, unknown>[];
   toolNames?: string[];
   type: 'text' | 'tool-call' | 'tool-result';
 };
 
-export type MessageType = MastraMessageV2 & { threadId: string };
+/**
+ * @deprecated use MastraMessageV1 or MastraMessageV2
+ */
+export type MessageType = MastraMessageV1;
 
 export type StorageThreadType = {
   id: string;
@@ -66,4 +69,21 @@ export type SharedMemoryConfig = {
   embedder?: EmbeddingModel<string>;
 
   processors?: MemoryProcessor[];
+};
+
+export type TraceType = {
+  id: string;
+  parentSpanId: string | null;
+  name: string;
+  traceId: string;
+  scope: string;
+  kind: number;
+  attributes: Record<string, unknown> | null;
+  status: Record<string, unknown> | null;
+  events: Record<string, unknown> | null;
+  links: Record<string, unknown> | null;
+  other: Record<string, unknown> | null;
+  startTime: number;
+  endTime: number;
+  createdAt: Date;
 };
