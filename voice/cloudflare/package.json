@@ -31,7 +31,7 @@
   "license": "Elastic-2.0",
   "dependencies": {
     "cloudflare": "^4.3.0",
-    "zod": "^3.24.3"
+    "zod": "^3.25.56"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250607.0",

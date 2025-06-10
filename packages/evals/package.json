@@ -68,7 +68,7 @@
     "keyword-extractor": "^0.0.28",
     "sentiment": "^5.0.2",
     "string-similarity": "^4.0.4",
-    "zod": "^3.24.3"
+    "zod": "^3.25.56"
   },
   "peerDependencies": {
     "ai": "^4.0.0",
@@ -87,7 +87,7 @@
     "eslint": "^9.28.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.2",
-    "vitest": "^3.1.2",
+    "vitest": "^3.2.2",
     "@mastra/core": "workspace:*"
   }
 }

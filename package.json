@@ -3,15 +3,15 @@
   "version": "0.1.11",
   "type": "module",
   "devDependencies": {
-    "@changesets/cli": "^2.29.3",
+    "@changesets/cli": "^2.29.4",
     "@types/node": "^20.17.57",
     "husky": "^9.1.7",
-    "lint-staged": "^15.5.0",
+    "lint-staged": "^15.5.2",
     "npm-run-all2": "^7.0.2",
     "prettier": "^3.5.3",
     "turbo": "^2.5.4",
     "typescript": "^5.8.2",
-    "vitest": "^3.1.2"
+    "vitest": "^3.2.2"
   },
   "scripts": {
     "ci:publish": "pnpm publish -r",
