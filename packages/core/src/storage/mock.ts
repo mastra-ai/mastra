@@ -1,9 +1,10 @@
 import { MessageList } from '../agent';
 import type { MastraMessageV2 } from '../agent';
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
+import type { Trace } from '../telemetry';
 import { MastraStorage } from './base';
 import type { TABLE_NAMES } from './constants';
-import type { EvalRow, StorageColumn, StorageGetMessagesArg, WorkflowRun, WorkflowRuns } from './types';
+import type { EvalRow, PaginationInfo, StorageColumn, StorageGetMessagesArg, WorkflowRun, WorkflowRuns } from './types';
 
 export class MockStore extends MastraStorage {
   private data: Record<TABLE_NAMES, Record<string, any>> = {
@@ -275,5 +276,98 @@ export class MockStore extends MastraStorage {
     };
 
     return parsedRun as WorkflowRun;
+  }
+
+  async getTracesPaginated({
+    name,
+    scope,
+    attributes,
+    page,
+    perPage,
+    fromDate,
+    toDate,
+  }: {
+    name?: string;
+    scope?: string;
+    attributes?: Record<string, string>;
+    page: number;
+    perPage: number;
+    fromDate?: Date;
+    toDate?: Date;
+  }): Promise<PaginationInfo & { traces: Trace[] }> {
+    this.logger.debug(`MockStore: getTracesPaginated called`);
+    // Mock implementation - basic filtering
+    let traces = Object.values(this.data.mastra_traces);
+
+    if (name) traces = traces.filter((t: any) => t.name?.startsWith(name));
+    if (scope) traces = traces.filter((t: any) => t.scope === scope);
+    if (attributes) {
+      traces = traces.filter((t: any) =>
+        Object.entries(attributes).every(([key, value]) => t.attributes?.[key] === value),
+      );
+    }
+    if (fromDate) traces = traces.filter((t: any) => new Date(t.createdAt) >= fromDate);
+    if (toDate) traces = traces.filter((t: any) => new Date(t.createdAt) <= toDate);
+
+    // Apply pagination and sort
+    traces.sort((a: any, b: any) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
+    const start = page * perPage;
+    const end = start + perPage;
+    return {
+      traces: traces.slice(start, end),
+      total: traces.length,
+      page,
+      perPage,
+      hasMore: traces.length > end,
+    };
+  }
+
+  async getThreadsByResourceIdPaginated(args: {
+    resourceId: string;
+    page: number;
+    perPage: number;
+  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+    this.logger.debug(`MockStore: getThreadsByResourceIdPaginated called for ${args.resourceId}`);
+    // Mock implementation - find threads by resourceId
+    const threads = Object.values(this.data.mastra_threads).filter((t: any) => t.resourceId === args.resourceId);
+    return {
+      threads: threads.slice(args.page * args.perPage, (args.page + 1) * args.perPage),
+      total: threads.length,
+      page: args.page,
+      perPage: args.perPage,
+      hasMore: threads.length > (args.page + 1) * args.perPage,
+    };
+  }
+
+  async getMessagesPaginated({
+    threadId,
+    selectBy,
+  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<
+    PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }
+  > {
+    this.logger.debug(`MockStore: getMessagesPaginated called for thread ${threadId}`);
+
+    const { page = 0, perPage = 40 } = selectBy?.pagination || {};
+
+    // Mock implementation - filter messages by threadId
+    let messages = Object.values(this.data.mastra_messages).filter((msg: any) => msg.threadId === threadId);
+
+    // Apply selectBy logic (simplified)
+    if (selectBy?.last) {
+      messages = messages.slice(-selectBy.last);
+    }
+
+    // Sort by createdAt
+    messages.sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+    const start = page * perPage;
+    const end = start + perPage;
+    return {
+      messages: messages.slice(start, end),
+      total: messages.length,
+      page,
+      perPage,
+      hasMore: messages.length > end,
+    };
   }
 }

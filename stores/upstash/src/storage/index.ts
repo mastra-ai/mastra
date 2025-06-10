@@ -17,6 +17,7 @@ import type {
   WorkflowRun,
   PaginationInfo,
   PaginationArgs,
+  StorageGetTracesArg,
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { Redis } from '@upstash/redis';
@@ -277,16 +278,7 @@ export class UpstashStore extends MastraStorage {
   /**
    * @deprecated use getTracesPaginated instead
    */
-  public async getTraces(args: {
-    name?: string;
-    scope?: string;
-    page: number;
-    perPage: number;
-    attributes?: Record<string, string>;
-    filters?: Record<string, any>;
-    fromDate?: Date;
-    toDate?: Date;
-  }): Promise<any[]> {
+  public async getTraces(args: StorageGetTracesArg): Promise<any[]> {
     if (args.fromDate || args.toDate) {
       (args as any).dateRange = {
         start: args.fromDate,
