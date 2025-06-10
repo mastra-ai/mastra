@@ -1,6 +1,12 @@
 import { DynamoDBClient, DescribeTableCommand } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import type { StorageThreadType, WorkflowRunState, MastraMessageV1, MastraMessageV2 } from '@mastra/core';
+import type {
+  StorageThreadType,
+  WorkflowRunState,
+  MastraMessageV1,
+  MastraMessageV2,
+  StorageColumn,
+} from '@mastra/core';
 import { MessageList } from '@mastra/core/agent';
 import {
   MastraStorage,
@@ -102,6 +108,14 @@ export class DynamoDBStore extends MastraStorage {
       this.logger.error('Error validating table access', { tableName: this.tableName, error });
       throw error;
     }
+  }
+
+  async alterTable(_args: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void> {
+    // Nothing to do here, DynamoDB has a flexible schema and handles new attributes automatically upon insertion/update.
   }
 
   /**

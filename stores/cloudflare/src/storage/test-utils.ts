@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import type { MastraMessageV2, WorkflowRunState } from '@mastra/core';
+import type { MastraMessageV1, MastraMessageV2, WorkflowRunState } from '@mastra/core';
 import { expect } from 'vitest';
 
 export const createSampleTrace = (name: string, scope?: string, attributes?: Record<string, string>) => ({
@@ -35,14 +35,46 @@ const getRole = () => {
   else role = 'user';
   return role;
 };
-export const createSampleMessage = (threadId: string, parts?: MastraMessageV2['content']['parts']): MastraMessageV2 =>
+
+export const createSampleMessageV1 = ({
+  threadId,
+  content = 'Hello',
+  resourceId,
+  createdAt = new Date(),
+}: {
+  threadId: string;
+  content?: string;
+  resourceId?: string;
+  createdAt?: Date;
+}): MastraMessageV1 =>
   ({
     id: `msg-${randomUUID()}`,
     role: getRole(),
     threadId,
-    content: { format: 2, parts: parts || [{ type: 'text' as const, text: 'Hello' }] },
-    createdAt: new Date(),
-    resourceId: `resource-${randomUUID()}`,
+    type: 'text',
+    content: [{ type: 'text', text: content }],
+    createdAt,
+    resourceId: resourceId || `resource-${randomUUID()}`,
+  }) satisfies MastraMessageV1;
+
+export const createSampleMessageV2 = ({
+  threadId,
+  content = 'Hello',
+  resourceId,
+  createdAt = new Date(),
+}: {
+  threadId: string;
+  content?: string;
+  resourceId?: string;
+  createdAt?: Date;
+}): MastraMessageV2 =>
+  ({
+    id: `msg-${randomUUID()}`,
+    role: getRole(),
+    threadId,
+    content: { format: 2, parts: [{ type: 'text' as const, text: content }] },
+    createdAt,
+    resourceId: resourceId || `resource-${randomUUID()}`,
   }) satisfies MastraMessageV2;
 
 export const createSampleWorkflowSnapshot = (threadId: string, status: string, createdAt?: Date) => {

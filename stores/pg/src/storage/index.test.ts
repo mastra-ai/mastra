@@ -1,10 +1,5 @@
 import { randomUUID } from 'crypto';
-import {
-  createSampleEval,
-  createSampleTraceForDB,
-  createSampleMessage,
-  createSampleThread,
-} from '@internal/storage-test-utils';
+import { createSampleEval, createSampleTraceForDB } from '@internal/storage-test-utils';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
 import {
   TABLE_WORKFLOW_SNAPSHOT,
@@ -31,6 +26,62 @@ const TEST_CONFIG: PostgresConfig = {
 const connectionString = `postgresql://${TEST_CONFIG.user}:${TEST_CONFIG.password}@${TEST_CONFIG.host}:${TEST_CONFIG.port}/${TEST_CONFIG.database}`;
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
+
+// Sample test data factory functions
+const createSampleThread = (id?: string) => ({
+  id: id || `thread-${randomUUID()}`,
+  resourceId: `resource-${randomUUID()}`,
+  title: 'Test Thread',
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  metadata: { key: 'value' },
+});
+
+let role: 'user' | 'assistant' = 'assistant';
+const getRole = () => {
+  if (role === `user`) role = `assistant`;
+  else role = `user`;
+  return role;
+};
+const createSampleMessageV1 = ({
+  threadId,
+  content = 'Hello',
+  resourceId = `resource-${randomUUID()}`,
+  createdAt = new Date(),
+}: {
+  threadId: string;
+  content?: string;
+  resourceId?: string;
+  createdAt?: Date;
+}): MastraMessageV1 => ({
+  id: `msg-${randomUUID()}`,
+  resourceId,
+  role: getRole(),
+  type: 'text',
+  threadId,
+  content: [{ type: 'text', text: content }],
+  createdAt,
+});
+
+const createSampleMessageV2 = ({
+  threadId,
+  content = 'Hello',
+  resourceId = `resource-${randomUUID()}`,
+}: {
+  threadId: string;
+  content?: string;
+  resourceId?: string;
+}): MastraMessageV2 => ({
+  id: `msg-${randomUUID()}`,
+  resourceId,
+  role: getRole(),
+  threadId,
+  content: {
+    format: 2,
+    parts: [{ type: 'text', text: content }],
+  },
+  createdAt: new Date(),
+});
 
 const createSampleWorkflowSnapshot = (status: WorkflowRunState['context'][string]['status'], createdAt?: Date) => {
   const runId = `run-${randomUUID()}`;
@@ -189,7 +240,7 @@ describe('PostgresStore', () => {
       await store.saveThread({ thread });
 
       // Add some messages
-      const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
+      const messages = [createSampleMessageV1({ threadId: thread.id }), createSampleMessageV1({ threadId: thread.id })];
       await store.saveMessages({ messages });
 
       await store.deleteThread({ threadId: thread.id });
@@ -208,7 +259,7 @@ describe('PostgresStore', () => {
       const thread = createSampleThread();
       await store.saveThread({ thread });
 
-      const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
+      const messages = [createSampleMessageV1({ threadId: thread.id }), createSampleMessageV1({ threadId: thread.id })];
 
       // Save messages
       const savedMessages = await store.saveMessages({ messages });
@@ -230,33 +281,13 @@ describe('PostgresStore', () => {
     });
 
     it('should maintain message order', async () => {
-      const createSampleMessage = (
-        threadId: string,
-        parts?: MastraMessageV2['content']['parts'],
-        createdAt?: Date,
-      ): MastraMessageV2 =>
-        ({
-          id: `msg-${randomUUID()}`,
-          role: 'user',
-          threadId,
-          content: { format: 2, parts: parts || [{ type: 'text' as const, text: 'Hello' }] },
-          createdAt: createdAt || new Date(),
-          resourceId: `resource-${randomUUID()}`,
-        }) satisfies MastraMessageV2;
-
       const thread = createSampleThread();
       await store.saveThread({ thread });
 
       const messages = [
-        {
-          ...createSampleMessage(thread.id, [{ type: 'text' as const, text: 'First' }]),
-        },
-        {
-          ...createSampleMessage(thread.id, [{ type: 'text' as const, text: 'Second' }]),
-        },
-        {
-          ...createSampleMessage(thread.id, [{ type: 'text' as const, text: 'Third' }]),
-        },
+        createSampleMessageV2({ threadId: thread.id, content: 'First' }),
+        createSampleMessageV2({ threadId: thread.id, content: 'Second' }),
+        createSampleMessageV2({ threadId: thread.id, content: 'Third' }),
       ];
 
       await store.saveMessages({ messages, format: 'v2' });
@@ -275,8 +306,8 @@ describe('PostgresStore', () => {
       await store.saveThread({ thread });
 
       const messages = [
-        createSampleMessage(thread.id),
-        { ...createSampleMessage(thread.id), id: null } as any, // This will cause an error
+        createSampleMessageV1({ threadId: thread.id }),
+        { ...createSampleMessageV1({ threadId: thread.id }), id: null } as any, // This will cause an error
       ];
 
       await expect(store.saveMessages({ messages })).rejects.toThrow();
@@ -284,6 +315,150 @@ describe('PostgresStore', () => {
       // Verify no messages were saved
       const savedMessages = await store.getMessages({ threadId: thread.id });
       expect(savedMessages).toHaveLength(0);
+    });
+
+    it('should retrieve messages w/ next/prev messages by message id + resource id', async () => {
+      const thread = createSampleThread('thread-one');
+      await store.saveThread({ thread });
+
+      const thread2 = createSampleThread('thread-two');
+      await store.saveThread({ thread: thread2 });
+
+      const thread3 = createSampleThread('thread-three');
+      await store.saveThread({ thread: thread3 });
+
+      const messages: MastraMessageV2[] = [
+        createSampleMessageV2({ threadId: 'thread-one', content: 'First', resourceId: 'cross-thread-resource' }),
+        createSampleMessageV2({ threadId: 'thread-one', content: 'Second', resourceId: 'cross-thread-resource' }),
+        createSampleMessageV2({ threadId: 'thread-one', content: 'Third', resourceId: 'cross-thread-resource' }),
+
+        createSampleMessageV2({ threadId: 'thread-two', content: 'Fourth', resourceId: 'cross-thread-resource' }),
+        createSampleMessageV2({ threadId: 'thread-two', content: 'Fifth', resourceId: 'cross-thread-resource' }),
+        createSampleMessageV2({ threadId: 'thread-two', content: 'Sixth', resourceId: 'cross-thread-resource' }),
+
+        createSampleMessageV2({ threadId: 'thread-three', content: 'Seventh', resourceId: 'other-resource' }),
+        createSampleMessageV2({ threadId: 'thread-three', content: 'Eighth', resourceId: 'other-resource' }),
+      ];
+
+      await store.saveMessages({ messages: messages, format: 'v2' });
+
+      const retrievedMessages = await store.getMessages({ threadId: 'thread-one', format: 'v2' });
+      expect(retrievedMessages).toHaveLength(3);
+      expect(retrievedMessages.map((m: any) => m.content.parts[0].text)).toEqual(['First', 'Second', 'Third']);
+
+      const retrievedMessages2 = await store.getMessages({ threadId: 'thread-two', format: 'v2' });
+      expect(retrievedMessages2).toHaveLength(3);
+      expect(retrievedMessages2.map((m: any) => m.content.parts[0].text)).toEqual(['Fourth', 'Fifth', 'Sixth']);
+
+      const retrievedMessages3 = await store.getMessages({ threadId: 'thread-three', format: 'v2' });
+      expect(retrievedMessages3).toHaveLength(2);
+      expect(retrievedMessages3.map((m: any) => m.content.parts[0].text)).toEqual(['Seventh', 'Eighth']);
+
+      const crossThreadMessages: MastraMessageV2[] = await store.getMessages({
+        threadId: 'thread-doesnt-exist',
+        resourceId: 'cross-thread-resource',
+        format: 'v2',
+        selectBy: {
+          last: 0,
+          include: [
+            {
+              id: messages[1].id,
+              withNextMessages: 2,
+              withPreviousMessages: 2,
+            },
+            {
+              id: messages[4].id,
+              withPreviousMessages: 2,
+              withNextMessages: 2,
+            },
+          ],
+          includeScope: 'resource',
+        },
+      });
+
+      expect(crossThreadMessages).toHaveLength(6);
+      expect(crossThreadMessages.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
+      expect(crossThreadMessages.filter(m => m.threadId === `thread-two`)).toHaveLength(3);
+
+      const crossThreadMessages2: MastraMessageV2[] = await store.getMessages({
+        threadId: 'thread-one',
+        resourceId: 'cross-thread-resource',
+        format: 'v2',
+        selectBy: {
+          last: 0,
+          include: [
+            {
+              id: messages[4].id,
+              withPreviousMessages: 1,
+              withNextMessages: 1,
+            },
+          ],
+          includeScope: 'resource',
+        },
+      });
+
+      expect(crossThreadMessages2).toHaveLength(3);
+      expect(crossThreadMessages2.filter(m => m.threadId === `thread-one`)).toHaveLength(0);
+      expect(crossThreadMessages2.filter(m => m.threadId === `thread-two`)).toHaveLength(3);
+
+      const crossThreadMessages3: MastraMessageV2[] = await store.getMessages({
+        threadId: 'thread-two',
+        resourceId: 'cross-thread-resource',
+        format: 'v2',
+        selectBy: {
+          last: 0,
+          include: [
+            {
+              id: messages[1].id,
+              withNextMessages: 1,
+              withPreviousMessages: 1,
+            },
+          ],
+          includeScope: 'resource',
+        },
+      });
+
+      expect(crossThreadMessages3).toHaveLength(3);
+      expect(crossThreadMessages3.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
+      expect(crossThreadMessages3.filter(m => m.threadId === `thread-two`)).toHaveLength(0);
+    });
+    it('should filter by date with pagination for getMessages', async () => {
+      const thread = createSampleThread();
+      await store.saveThread({ thread });
+      const now = new Date();
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const dayBeforeYesterday = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+
+      const createMsgAtDate = (date: Date) => {
+        return store.saveMessages({
+          messages: [{ ...createSampleMessageV1({ threadId: thread.id }), createdAt: date }],
+        });
+      };
+      await Promise.all([
+        createMsgAtDate(dayBeforeYesterday),
+        createMsgAtDate(dayBeforeYesterday),
+        createMsgAtDate(yesterday),
+        createMsgAtDate(yesterday),
+        createMsgAtDate(yesterday),
+        createMsgAtDate(now),
+        createMsgAtDate(now),
+      ]);
+
+      const resultPage = await store.getMessages({
+        threadId: thread.id,
+        fromDate: yesterday,
+        page: 0,
+        perPage: 3,
+        format: 'v1',
+      });
+      expect(resultPage.total).toBe(5);
+      expect(resultPage.messages).toHaveLength(3);
+
+      expect(new Date((resultPage.messages[0] as MastraMessageV1).createdAt).toISOString()).toBe(now.toISOString());
+      expect(new Date((resultPage.messages[1] as MastraMessageV1).createdAt).toISOString()).toBe(now.toISOString());
+      expect(new Date((resultPage.messages[2] as MastraMessageV1).createdAt).toISOString()).toBe(
+        yesterday.toISOString(),
+      );
     });
   });
 
@@ -1199,13 +1374,13 @@ describe('PostgresStore', () => {
       it('should return paginated messages with total count', async () => {
         const thread = createSampleThread();
         await store.saveThread({ thread });
-        // Create messages sequentially to ensure unique timestamps
-        for (let i = 0; i < 15; i++) {
-          await store.saveMessages({
-            messages: [{ ...createSampleMessage(thread.id), content: [{ type: 'text', text: `Message ${i + 1}` }] }],
-          });
-          await new Promise(r => setTimeout(r, 2));
-        }
+        const messagePromises = Array.from({ length: 15 }, (_, i) =>
+          store.saveMessages({
+            messages: [{ ...createSampleMessageV2({ threadId: thread.id, content: `Message ${i + 1}` }) }],
+            format: 'v2',
+          }),
+        );
+        await Promise.all(messagePromises);
 
         const page1 = await store.getMessagesPaginated({
           threadId: thread.id,
@@ -1251,17 +1426,17 @@ describe('PostgresStore', () => {
 
         // Ensure timestamps are distinct for reliable sorting by creating them with a slight delay for testing clarity
         const messagesToSave: MastraMessageV1[] = [];
-        messagesToSave.push(createSampleMessage(thread.id, dayBeforeYesterday));
+        messagesToSave.push(createSampleMessageV1({ threadId: thread.id, createdAt: dayBeforeYesterday }));
         await new Promise(r => setTimeout(r, 5));
-        messagesToSave.push(createSampleMessage(thread.id, dayBeforeYesterday));
+        messagesToSave.push(createSampleMessageV1({ threadId: thread.id, createdAt: dayBeforeYesterday }));
         await new Promise(r => setTimeout(r, 5));
-        messagesToSave.push(createSampleMessage(thread.id, yesterday));
+        messagesToSave.push(createSampleMessageV1({ threadId: thread.id, createdAt: yesterday }));
         await new Promise(r => setTimeout(r, 5));
-        messagesToSave.push(createSampleMessage(thread.id, yesterday));
+        messagesToSave.push(createSampleMessageV1({ threadId: thread.id, createdAt: yesterday }));
         await new Promise(r => setTimeout(r, 5));
-        messagesToSave.push(createSampleMessage(thread.id, now));
+        messagesToSave.push(createSampleMessageV1({ threadId: thread.id, createdAt: now }));
         await new Promise(r => setTimeout(r, 5));
-        messagesToSave.push(createSampleMessage(thread.id, now));
+        messagesToSave.push(createSampleMessageV1({ threadId: thread.id, createdAt: now }));
 
         await store.saveMessages({ messages: messagesToSave, format: 'v1' });
         // Total 6 messages: 2 now, 2 yesterday, 2 dayBeforeYesterday (oldest to newest)

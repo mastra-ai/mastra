@@ -235,6 +235,28 @@ export class D1Store extends MastraStorage {
     }
   }
 
+  // Helper to get existing table columns
+  private async getTableColumns(tableName: string): Promise<{ name: string; type: string }[]> {
+    try {
+      const sql = `PRAGMA table_info(${tableName})`;
+      const result = await this.executeQuery({ sql, params: [] });
+
+      if (!result || !Array.isArray(result)) {
+        return [];
+      }
+
+      return result.map((row: any) => ({
+        name: row.name,
+        type: row.type,
+      }));
+    } catch (error) {
+      this.logger.error(`Error getting table columns for ${tableName}:`, {
+        message: error instanceof Error ? error.message : String(error),
+      });
+      return [];
+    }
+  }
+
   // Helper to convert storage type to SQL type
   private getSqlType(type: string): string {
     switch (type) {
@@ -341,6 +363,45 @@ export class D1Store extends MastraStorage {
         message: error instanceof Error ? error.message : String(error),
       });
       throw new Error(`Failed to create table ${fullTableName}: ${error}`);
+    }
+  }
+
+  async alterTable({
+    tableName,
+    schema,
+    ifNotExists,
+  }: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void> {
+    const fullTableName = this.getTableName(tableName);
+
+    try {
+      // Check which columns already exist
+      const existingColumns = await this.getTableColumns(fullTableName);
+      const existingColumnNames = new Set(existingColumns.map(col => col.name.toLowerCase()));
+
+      // Add missing columns from ifNotExists list
+      for (const columnName of ifNotExists) {
+        if (!existingColumnNames.has(columnName.toLowerCase()) && schema[columnName]) {
+          const columnDef = schema[columnName];
+          const sqlType = this.getSqlType(columnDef.type);
+          const nullable = columnDef.nullable === false ? 'NOT NULL' : '';
+          const defaultValue = columnDef.nullable === false ? 'DEFAULT ""' : '';
+
+          const alterSql =
+            `ALTER TABLE ${fullTableName} ADD COLUMN ${columnName} ${sqlType} ${nullable} ${defaultValue}`.trim();
+
+          await this.executeQuery({ sql: alterSql, params: [] });
+          this.logger.debug(`Added column ${columnName} to table ${fullTableName}`);
+        }
+      }
+    } catch (error) {
+      this.logger.error(`Error altering table ${fullTableName}:`, {
+        message: error instanceof Error ? error.message : String(error),
+      });
+      throw new Error(`Failed to alter table ${fullTableName}: ${error}`);
     }
   }
 
@@ -677,6 +738,7 @@ export class D1Store extends MastraStorage {
           createdAt: createdAt.toISOString(),
           role: message.role,
           type: message.type || 'v2',
+          resourceId: message.resourceId,
         };
       });
 

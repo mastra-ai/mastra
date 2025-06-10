@@ -87,6 +87,14 @@ export class PostgresStore extends MastraStorage {
     );
   }
 
+  public get supports(): {
+    selectByIncludeResourceScope: boolean;
+  } {
+    return {
+      selectByIncludeResourceScope: true,
+    };
+  }
+
   private getTableName(indexName: string) {
     const parsedIndexName = parseSqlIdentifier(indexName, 'table name');
     const parsedSchemaName = this.schema ? parseSqlIdentifier(this.schema, 'schema name') : undefined;
@@ -382,6 +390,56 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
+  private getSqlType(type: string): string {
+    switch (type) {
+      case 'text':
+        return 'TEXT';
+      case 'timestamp':
+        return 'TIMESTAMP';
+      case 'integer':
+        return 'INTEGER';
+      case 'bigint':
+        return 'INTEGER'; // SQLite doesn't have a separate BIGINT type
+      case 'jsonb':
+        return 'TEXT'; // Store JSON as TEXT in SQLite
+      default:
+        return 'TEXT';
+    }
+  }
+
+  async alterTable({
+    tableName,
+    schema,
+    ifNotExists,
+  }: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void> {
+    const fullTableName = this.getTableName(tableName);
+
+    try {
+      for (const columnName of ifNotExists) {
+        if (schema[columnName]) {
+          const columnDef = schema[columnName];
+          const sqlType = this.getSqlType(columnDef.type);
+          const nullable = columnDef.nullable === false ? 'NOT NULL' : '';
+          const defaultValue = columnDef.nullable === false ? 'DEFAULT ""' : '';
+          const alterSql =
+            `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${columnName}" ${sqlType} ${nullable} ${defaultValue}`.trim();
+
+          await this.db.none(alterSql);
+          this.logger?.debug?.(`Ensured column ${columnName} exists in table ${fullTableName}`);
+        }
+      }
+    } catch (error) {
+      this.logger?.error?.(
+        `Error altering table ${tableName}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw new Error(`Failed to alter table ${tableName}: ${error}`);
+    }
+  }
+
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     try {
       await this.db.none(`TRUNCATE TABLE ${this.getTableName(tableName)} CASCADE`);
@@ -645,7 +703,7 @@ export class PostgresStore extends MastraStorage {
       format?: 'v1' | 'v2';
     },
   ): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    const { threadId, format, selectBy } = args;
+    const { threadId, format, selectBy, resourceId } = args;
 
     const selectStatement = `SELECT id, content, role, type, "createdAt", thread_id AS "threadId"`;
     const orderByStatement = `ORDER BY "createdAt" DESC`;
@@ -655,6 +713,9 @@ export class PostgresStore extends MastraStorage {
       const include = selectBy?.include || [];
 
       if (include.length) {
+        const includeScope = selectBy?.includeScope;
+        const searchId = resourceId && includeScope === 'resource' ? resourceId : threadId;
+
         rows = await this.db.manyOrNone(
           `
             WITH ordered_messages AS (
@@ -687,7 +748,7 @@ export class PostgresStore extends MastraStorage {
             ORDER BY m."createdAt" ASC 
             `, // Keep ASC for final sorting after fetching context
           [
-            threadId,
+            searchId,
             include.map(i => i.id),
             Math.max(0, ...include.map(i => i.withPreviousMessages || 0)), // Ensure non-negative
             Math.max(0, ...include.map(i => i.withNextMessages || 0)), // Ensure non-negative
@@ -830,16 +891,27 @@ export class PostgresStore extends MastraStorage {
 
       await this.db.tx(async t => {
         for (const message of messages) {
+          if (!message.threadId) {
+            throw new Error(
+              `Expected to find a threadId for message, but couldn't find one. An unexpected error has occurred.`,
+            );
+          }
+          if (!message.resourceId) {
+            throw new Error(
+              `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
+            );
+          }
           await t.none(
-            `INSERT INTO ${this.getTableName(TABLE_MESSAGES)} (id, thread_id, content, "createdAt", role, type) 
-             VALUES ($1, $2, $3, $4, $5, $6)`,
+            `INSERT INTO ${this.getTableName(TABLE_MESSAGES)} (id, thread_id, content, "createdAt", role, type, "resourceId") 
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
             [
               message.id,
-              threadId,
+              message.threadId,
               typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
               message.createdAt || new Date().toISOString(),
               message.role,
               message.type || 'v2',
+              message.resourceId,
             ],
           );
         }

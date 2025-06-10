@@ -69,6 +69,7 @@ export type StorageGetMessagesArg = {
       withNextMessages?: number;
     }[];
     pagination?: PaginationArgs;
+    includeScope?: 'thread' | 'resource';
   };
   threadConfig?: MemoryConfig;
   format?: 'v1' | 'v2';

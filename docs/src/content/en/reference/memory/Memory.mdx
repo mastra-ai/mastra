@@ -198,6 +198,14 @@ Mastra supports many embedding models through the [Vercel AI SDK](https://sdk.ve
       defaultValue: "2",
     },
     {
+      name: "scope",
+      type: "'thread' | 'resource'",
+      description:
+        "Scope for semantic search. 'thread' searches within the current thread only (default). 'resource' searches across all threads for a given resourceId, allowing agents to recall information from any of the user's past conversations. The 'resource' scope is currently supported by LibSQL, Postgres, and Upstash storage adapters.",
+      isOptional: true,
+      defaultValue: "'thread'",
+    },
+    {
       name: "workingMemory",
       type: "{ enabled: boolean; template?: string }",
       description:
