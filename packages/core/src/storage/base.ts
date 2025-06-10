@@ -36,6 +36,14 @@ export abstract class MastraStorage extends MastraBase {
     });
   }
 
+  public get supports(): {
+    selectByIncludeResourceScope: boolean;
+  } {
+    return {
+      selectByIncludeResourceScope: false,
+    };
+  }
+
   protected ensureDate(date: Date | string | undefined): Date | undefined {
     if (!date) return undefined;
     return date instanceof Date ? date : new Date(date);

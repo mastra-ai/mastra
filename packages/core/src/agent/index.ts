@@ -474,8 +474,7 @@ export class Agent<
     thread?: StorageThreadType;
     memoryConfig?: MemoryConfig;
     runId?: string;
-    messageList: MessageList; // Added messageList type
-    // Removed userMessages, systemMessage, time, keyword
+    messageList: MessageList;
   }) {
     const memory = this.getMemory();
     if (memory) {
@@ -487,13 +486,6 @@ export class Agent<
         return { threadId: threadId || '' };
       }
 
-      // Get current user messages from the list for vector search and processMessages
-      // Assuming user messages are the last ones added after system/context.
-      // This might need refinement based on how messageList is populated before this call.
-      const allUIMessages = messageList.get.all.ui();
-      const currentUserMessages = allUIMessages.filter(m => m.role === 'user');
-      const lastUserMessageContent = currentUserMessages.at(-1)?.content ?? '';
-
       const [memoryMessages, memorySystemMessage] =
         threadId && memory
           ? await Promise.all([
@@ -502,7 +494,7 @@ export class Agent<
                   threadId,
                   resourceId,
                   config: memoryConfig,
-                  vectorMessageSearch: lastUserMessageContent,
+                  vectorMessageSearch: messageList.getLatestUserContent() || '',
                 })
                 .then(r => r.messagesV2),
               memory.getSystemMessage({ threadId, memoryConfig }),
@@ -987,7 +979,7 @@ export class Agent<
             memoryConfig,
           }));
 
-        const [memoryMessages, memorySystemMessage] =
+        let [memoryMessages, memorySystemMessage] =
           threadId && memory
             ? await Promise.all([
                 memory
@@ -995,9 +987,10 @@ export class Agent<
                     threadId,
                     resourceId,
                     config: memoryConfig,
-                    vectorMessageSearch: messageList.getLatestUserContent() || '',
+                    // The new user messages aren't in the list yet cause we add memory messages first to try to make sure ordering is correct (memory comes before new user messages)
+                    vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
                   })
-                  .then(r => r.messages),
+                  .then(r => r.messagesV2),
                 memory.getSystemMessage({ threadId, memoryConfig }),
               ])
             : [[], null];
@@ -1008,12 +1001,29 @@ export class Agent<
           fetchedCount: memoryMessages.length,
         });
 
+        // So the agent doesn't get confused and start replying directly to messages
+        // that were added via semanticRecall from a different conversation,
+        // we need to pull those out and add to the system message.
+        const resultsFromOtherThreads = memoryMessages.filter(m => m.threadId !== threadId);
+        if (resultsFromOtherThreads.length && !memorySystemMessage) {
+          memorySystemMessage = ``;
+        }
+        if (resultsFromOtherThreads.length) {
+          memorySystemMessage += `\nThe following messages were remembered from a different conversation:\n<remembered_from_other_conversation>\n${JSON.stringify(
+            // get v1 since they're closer to CoreMessages (which get sent to the LLM) but also include timestamps
+            new MessageList().add(resultsFromOtherThreads, 'memory').get.all.v1(),
+          )}\n<end_remembered_from_other_conversation>`;
+        }
+
         if (memorySystemMessage) {
           messageList.addSystem(memorySystemMessage, 'memory');
         }
 
         messageList
-          .add(memoryMessages, 'memory')
+          .add(
+            memoryMessages.filter(m => m.threadId === threadId), // filter out messages from other threads. those are added to system message above
+            'memory',
+          )
           // add new user messages to the list AFTER remembered messages to make ordering more reliable
           .add(messages, 'user');
 

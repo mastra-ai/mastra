@@ -81,6 +81,14 @@ export class LibSQLStore extends MastraStorage {
     }
   }
 
+  public get supports(): {
+    selectByIncludeResourceScope: boolean;
+  } {
+    return {
+      selectByIncludeResourceScope: true,
+    };
+  }
+
   private getCreateTableSQL(tableName: TABLE_NAMES, schema: Record<string, StorageColumn>): string {
     const parsedTableName = parseSqlIdentifier(tableName, 'table name');
     const columns = Object.entries(schema).map(([name, col]) => {
@@ -476,7 +484,6 @@ export class LibSQLStore extends MastraStorage {
       sql: `DELETE FROM ${TABLE_MESSAGES} WHERE thread_id = ?`,
       args: [threadId],
     });
-
     await this.client.execute({
       sql: `DELETE FROM ${TABLE_THREADS} WHERE id = ?`,
       args: [threadId],
@@ -503,37 +510,60 @@ export class LibSQLStore extends MastraStorage {
     return result;
   }
 
-  private async _getIncludedMessages(threadId: string, selectBy: StorageGetMessagesArg['selectBy']) {
+  private async _getIncludedMessages({
+    threadId,
+    selectBy,
+  }: {
+    threadId: string;
+    selectBy: StorageGetMessagesArg['selectBy'];
+  }) {
     const include = selectBy?.include;
     if (!include) return null;
 
-    const includeIds = include.map(i => i.id);
-    const maxPrev = Math.max(...include.map(i => i.withPreviousMessages || 0));
-    const maxNext = Math.max(...include.map(i => i.withNextMessages || 0));
+    const unionQueries: string[] = [];
+    const params: any[] = [];
 
-    const includeResult = await this.client.execute({
-      sql: `
-          WITH numbered_messages AS (
-            SELECT 
-              id, content, role, type, "createdAt", thread_id,
-              ROW_NUMBER() OVER (ORDER BY "createdAt" ASC) as row_num
-            FROM "${TABLE_MESSAGES}"
-            WHERE thread_id = ?
-          ),
-          target_positions AS (
-            SELECT row_num as target_pos
-            FROM numbered_messages
-            WHERE id IN (${includeIds.map(() => '?').join(', ')})
-          )
-          SELECT DISTINCT m.*
-          FROM numbered_messages m
-          CROSS JOIN target_positions t
-          WHERE m.row_num BETWEEN (t.target_pos - ?) AND (t.target_pos + ?)
-          ORDER BY m."createdAt" ASC
-        `,
-      args: [threadId, ...includeIds, maxPrev, maxNext],
-    });
-    return includeResult.rows?.map((row: any) => this.parseRow(row));
+    for (const inc of include) {
+      const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
+      // if threadId is provided, use it, otherwise use threadId from args
+      const searchId = inc.threadId || threadId;
+      unionQueries.push(
+        `
+            SELECT * FROM (
+              WITH numbered_messages AS (
+                SELECT
+                  id, content, role, type, "createdAt", thread_id, "resourceId",
+                  ROW_NUMBER() OVER (ORDER BY "createdAt" ASC) as row_num
+                FROM "${TABLE_MESSAGES}"
+                WHERE thread_id = ?
+              ),
+              target_positions AS (
+                SELECT row_num as target_pos
+                FROM numbered_messages
+                WHERE id = ?
+              )
+              SELECT DISTINCT m.*
+              FROM numbered_messages m
+              CROSS JOIN target_positions t
+              WHERE m.row_num BETWEEN (t.target_pos - ?) AND (t.target_pos + ?)
+            ) 
+            `, // Keep ASC for final sorting after fetching context
+      );
+      params.push(searchId, id, withPreviousMessages, withNextMessages);
+    }
+    const finalQuery = unionQueries.join(' UNION ALL ') + ' ORDER BY "createdAt" ASC';
+    const includedResult = await this.client.execute({ sql: finalQuery, args: params });
+    const includedRows = includedResult.rows?.map(row => this.parseRow(row));
+    const dedupedRows = Object.values(
+      includedRows.reduce(
+        (acc, row) => {
+          acc[row.id] = row;
+          return acc;
+        },
+        {} as Record<string, MastraMessageV2>,
+      ),
+    );
+    return dedupedRows;
   }
 
   /**
@@ -553,7 +583,7 @@ export class LibSQLStore extends MastraStorage {
       const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
 
       if (selectBy?.include?.length) {
-        const includeMessages = await this._getIncludedMessages(threadId, selectBy);
+        const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
         if (includeMessages) {
           messages.push(...includeMessages);
         }
@@ -561,12 +591,20 @@ export class LibSQLStore extends MastraStorage {
 
       const excludeIds = messages.map(m => m.id);
       const remainingSql = `
-          SELECT id, content, role, type, "createdAt", thread_id
-          FROM "${TABLE_MESSAGES}"
-          WHERE thread_id = ?
-          ${excludeIds.length ? `AND id NOT IN (${excludeIds.map(() => '?').join(', ')})` : ''}
-          ORDER BY "createdAt" DESC LIMIT ?
-        `;
+        SELECT 
+          id, 
+          content, 
+          role, 
+          type,
+          "createdAt", 
+          thread_id,
+          "resourceId"
+        FROM "${TABLE_MESSAGES}"
+        WHERE thread_id = ?
+        ${excludeIds.length ? `AND id NOT IN (${excludeIds.map(() => '?').join(', ')})` : ''}
+        ORDER BY "createdAt" DESC
+        LIMIT ?
+      `;
       const remainingArgs = [threadId, ...(excludeIds.length ? excludeIds : []), limit];
       const remainingResult = await this.client.execute({ sql: remainingSql, args: remainingArgs });
       if (remainingResult.rows) {
@@ -595,7 +633,7 @@ export class LibSQLStore extends MastraStorage {
     const messages: MastraMessageV2[] = [];
 
     if (selectBy?.include?.length) {
-      const includeMessages = await this._getIncludedMessages(threadId, selectBy);
+      const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
       if (includeMessages) {
         messages.push(...includeMessages);
       }
@@ -677,16 +715,27 @@ export class LibSQLStore extends MastraStorage {
       // Prepare batch statements for all messages
       const batchStatements = messages.map(message => {
         const time = message.createdAt || new Date();
+        if (!message.threadId) {
+          throw new Error(
+            `Expected to find a threadId for message, but couldn't find one. An unexpected error has occurred.`,
+          );
+        }
+        if (!message.resourceId) {
+          throw new Error(
+            `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
+          );
+        }
         return {
-          sql: `INSERT INTO ${TABLE_MESSAGES} (id, thread_id, content, role, type, createdAt) 
-                VALUES (?, ?, ?, ?, ?, ?)`,
+          sql: `INSERT INTO ${TABLE_MESSAGES} (id, thread_id, content, role, type, createdAt, resourceId) 
+                VALUES (?, ?, ?, ?, ?, ?, ?)`,
           args: [
             message.id,
-            threadId,
+            message.threadId!,
             typeof message.content === 'object' ? JSON.stringify(message.content) : message.content,
             message.role,
             message.type || 'v2',
             time instanceof Date ? time.toISOString() : time,
+            message.resourceId,
           ],
         };
       });

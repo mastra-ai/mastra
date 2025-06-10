@@ -65,6 +65,7 @@ export type StorageGetMessagesArg = {
     last?: number | false;
     include?: {
       id: string;
+      threadId?: string;
       withPreviousMessages?: number;
       withNextMessages?: number;
     }[];

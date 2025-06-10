@@ -87,6 +87,14 @@ export class PostgresStore extends MastraStorage {
     );
   }
 
+  public get supports(): {
+    selectByIncludeResourceScope: boolean;
+  } {
+    return {
+      selectByIncludeResourceScope: true,
+    };
+  }
+
   private getTableName(indexName: string) {
     const parsedIndexName = parseSqlIdentifier(indexName, 'table name');
     const parsedSchemaName = this.schema ? parseSqlIdentifier(this.schema, 'schema name') : undefined;
@@ -706,44 +714,63 @@ export class PostgresStore extends MastraStorage {
       const include = selectBy?.include || [];
 
       if (include.length) {
-        rows = await this.db.manyOrNone(
-          `
-            WITH ordered_messages AS (
-              SELECT 
-                *,
-                ROW_NUMBER() OVER (${orderByStatement}) as row_num
-              FROM ${this.getTableName(TABLE_MESSAGES)}
-              WHERE thread_id = $1
-            )
-            SELECT
-              m.id, 
-              m.content, 
-              m.role, 
-              m.type,
-              m."createdAt", 
-              m.thread_id AS "threadId"
-            FROM ordered_messages m
-            WHERE m.id = ANY($2)
-            OR EXISTS (
-              SELECT 1 FROM ordered_messages target
-              WHERE target.id = ANY($2)
-              AND (
-                -- Get previous messages based on the max withPreviousMessages
-                (m.row_num <= target.row_num + $3 AND m.row_num > target.row_num)
-                OR
-                -- Get next messages based on the max withNextMessages
-                (m.row_num >= target.row_num - $4 AND m.row_num < target.row_num)
+        const unionQueries: string[] = [];
+        const params: any[] = [];
+        let paramIdx = 1;
+
+        for (const inc of include) {
+          const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
+          // if threadId is provided, use it, otherwise use threadId from args
+          const searchId = inc.threadId || threadId;
+          unionQueries.push(
+            `
+            SELECT * FROM (
+              WITH ordered_messages AS (
+                SELECT 
+                  *,
+                  ROW_NUMBER() OVER (${orderByStatement}) as row_num
+                FROM ${this.getTableName(TABLE_MESSAGES)}
+                WHERE thread_id = $${paramIdx}
               )
-            )
-            ORDER BY m."createdAt" ASC 
+              SELECT
+                m.id, 
+                m.content, 
+                m.role, 
+                m.type,
+                m."createdAt", 
+                m.thread_id AS "threadId",
+                m."resourceId"
+              FROM ordered_messages m
+              WHERE m.id = $${paramIdx + 1}
+              OR EXISTS (
+                SELECT 1 FROM ordered_messages target
+                WHERE target.id = $${paramIdx + 1}
+                AND (
+                  -- Get previous messages based on the max withPreviousMessages
+                  (m.row_num <= target.row_num + $${paramIdx + 2} AND m.row_num > target.row_num)
+                  OR
+                  -- Get next messages based on the max withNextMessages
+                  (m.row_num >= target.row_num - $${paramIdx + 3} AND m.row_num < target.row_num)
+                )
+              )
+            ) 
             `, // Keep ASC for final sorting after fetching context
-          [
-            threadId,
-            include.map(i => i.id),
-            Math.max(0, ...include.map(i => i.withPreviousMessages || 0)), // Ensure non-negative
-            Math.max(0, ...include.map(i => i.withNextMessages || 0)), // Ensure non-negative
-          ],
+          );
+          params.push(searchId, id, withPreviousMessages, withNextMessages);
+          paramIdx += 4;
+        }
+        const finalQuery = unionQueries.join(' UNION ALL ') + ' ORDER BY "createdAt" ASC';
+        const includedRows = await this.db.manyOrNone(finalQuery, params);
+        const dedupedRows = Object.values(
+          includedRows.reduce(
+            (acc, row) => {
+              acc[row.id] = row;
+              return acc;
+            },
+            {} as Record<string, (typeof includedRows)[0]>,
+          ),
         );
+        rows = dedupedRows;
       } else {
         const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
         if (limit === 0 && selectBy?.last !== false) {
@@ -881,16 +908,27 @@ export class PostgresStore extends MastraStorage {
 
       await this.db.tx(async t => {
         for (const message of messages) {
+          if (!message.threadId) {
+            throw new Error(
+              `Expected to find a threadId for message, but couldn't find one. An unexpected error has occurred.`,
+            );
+          }
+          if (!message.resourceId) {
+            throw new Error(
+              `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
+            );
+          }
           await t.none(
-            `INSERT INTO ${this.getTableName(TABLE_MESSAGES)} (id, thread_id, content, "createdAt", role, type) 
-             VALUES ($1, $2, $3, $4, $5, $6)`,
+            `INSERT INTO ${this.getTableName(TABLE_MESSAGES)} (id, thread_id, content, "createdAt", role, type, "resourceId") 
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
             [
               message.id,
-              threadId,
+              message.threadId,
               typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
               message.createdAt || new Date().toISOString(),
               message.role,
               message.type || 'v2',
+              message.resourceId,
             ],
           );
         }

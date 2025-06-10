@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import type { MastraMessageV1, MetricResult, WorkflowRunState } from '@mastra/core';
+import type { MastraMessageV1, MastraMessageV2, MetricResult, WorkflowRunState } from '@mastra/core';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 import { TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -41,15 +41,46 @@ class Test {
     };
   }
 
-  generateSampleMessage(threadId: string): MastraMessageV1 {
+  generateSampleMessageV1({
+    threadId,
+    resourceId = randomUUID(),
+    content = 'Hello',
+  }: {
+    threadId: string;
+    resourceId?: string;
+    content?: string;
+  }): MastraMessageV1 {
     return {
       id: `msg-${randomUUID()}`,
       role: 'user',
       type: 'text',
       threadId,
-      content: [{ type: 'text', text: 'Hello' }],
+      content: [{ type: 'text', text: content }],
       createdAt: new Date(),
-      resourceId: randomUUID(),
+      resourceId,
+    };
+  }
+
+  generateSampleMessageV2({
+    threadId,
+    resourceId = randomUUID(),
+    content = 'Hello',
+  }: {
+    threadId: string;
+    resourceId?: string;
+    content?: string;
+  }): MastraMessageV2 {
+    return {
+      id: `msg-${randomUUID()}`,
+      role: 'user',
+      type: 'text',
+      threadId,
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: content }],
+      },
+      createdAt: new Date(),
+      resourceId,
     };
   }
 
@@ -203,11 +234,8 @@ describe('MongoDBStore', () => {
 
       // Add some messages
       const messages = [
-        test.generateSampleMessage(thread.id),
-        {
-          ...test.generateSampleMessage(thread.id),
-          role: 'assistant' as const,
-        },
+        test.generateSampleMessageV1({ threadId: thread.id }),
+        test.generateSampleMessageV1({ threadId: thread.id }),
       ];
       await store.saveMessages({ messages });
 
@@ -253,8 +281,8 @@ describe('MongoDBStore', () => {
       await store.saveThread({ thread });
 
       const messages = [
-        test.generateSampleMessage(thread.id),
-        { ...test.generateSampleMessage(thread.id), role: 'assistant' as const },
+        test.generateSampleMessageV1({ threadId: thread.id }),
+        { ...test.generateSampleMessageV1({ threadId: thread.id }), role: 'assistant' as const },
       ];
 
       // Save messages
@@ -284,30 +312,129 @@ describe('MongoDBStore', () => {
 
       const messages = [
         {
-          ...test.generateSampleMessage(thread.id),
-          content: [{ type: 'text', text: 'First' }] satisfies MastraMessageV1['content'],
+          ...test.generateSampleMessageV2({ threadId: thread.id, content: 'First' }),
         },
         {
-          ...test.generateSampleMessage(thread.id),
-          role: 'assistant' as const,
-          content: [{ type: 'text', text: 'Second' }] satisfies MastraMessageV1['content'],
+          ...test.generateSampleMessageV2({ threadId: thread.id, content: 'Second' }),
         },
         {
-          ...test.generateSampleMessage(thread.id),
-          content: [{ type: 'text', text: 'Third' }] satisfies MastraMessageV1['content'],
+          ...test.generateSampleMessageV2({ threadId: thread.id, content: 'Third' }),
         },
       ];
 
-      await store.saveMessages({ messages, format: 'v1' });
+      await store.saveMessages({ messages, format: 'v2' });
 
-      const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v1' });
+      const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v2' });
       expect(retrievedMessages).toHaveLength(3);
 
       // Verify order is maintained
       retrievedMessages.forEach((msg, idx) => {
-        expect(((msg as any).content[0] as any).text).toBe((messages[idx]!.content[0] as any).text);
+        expect((msg as any).content.parts).toEqual(messages[idx]!.content.parts);
       });
     });
+
+    // it('should retrieve messages w/ next/prev messages by message id + resource id', async () => {
+    //   const test = new Test(store).build();
+    //   const messages: MastraMessageV2[] = [
+    //     test.generateSampleMessageV2({ threadId: 'thread-one', content: 'First', resourceId: 'cross-thread-resource' }),
+    //     test.generateSampleMessageV2({
+    //       threadId: 'thread-one',
+    //       content: 'Second',
+    //       resourceId: 'cross-thread-resource',
+    //     }),
+    //     test.generateSampleMessageV2({ threadId: 'thread-one', content: 'Third', resourceId: 'cross-thread-resource' }),
+
+    //     test.generateSampleMessageV2({
+    //       threadId: 'thread-two',
+    //       content: 'Fourth',
+    //       resourceId: 'cross-thread-resource',
+    //     }),
+    //     test.generateSampleMessageV2({ threadId: 'thread-two', content: 'Fifth', resourceId: 'cross-thread-resource' }),
+    //     test.generateSampleMessageV2({ threadId: 'thread-two', content: 'Sixth', resourceId: 'cross-thread-resource' }),
+
+    //     test.generateSampleMessageV2({ threadId: 'thread-three', content: 'Seventh', resourceId: 'other-resource' }),
+    //     test.generateSampleMessageV2({ threadId: 'thread-three', content: 'Eighth', resourceId: 'other-resource' }),
+    //   ];
+
+    //   await store.saveMessages({ messages: messages, format: 'v2' });
+
+    //   const retrievedMessages: MastraMessageV2[] = await store.getMessages({ threadId: 'thread-one', format: 'v2' });
+    //   expect(retrievedMessages).toHaveLength(3);
+    //   expect(retrievedMessages.map(m => (m.content.parts[0] as any).text)).toEqual(['First', 'Second', 'Third']);
+
+    //   const retrievedMessages2: MastraMessageV2[] = await store.getMessages({ threadId: 'thread-two', format: 'v2' });
+    //   expect(retrievedMessages2).toHaveLength(3);
+    //   expect(retrievedMessages2.map(m => (m.content.parts[0] as any).text)).toEqual(['Fourth', 'Fifth', 'Sixth']);
+
+    //   const retrievedMessages3: MastraMessageV2[] = await store.getMessages({ threadId: 'thread-three', format: 'v2' });
+    //   expect(retrievedMessages3).toHaveLength(2);
+    //   expect(retrievedMessages3.map(m => (m.content.parts[0] as any).text)).toEqual(['Seventh', 'Eighth']);
+
+    //   const crossThreadMessages: MastraMessageV2[] = await store.getMessages({
+    //     threadId: 'thread-doesnt-exist',
+    //     resourceId: 'cross-thread-resource',
+    //     format: 'v2',
+    //     selectBy: {
+    //       last: 0,
+    //       include: [
+    //         {
+    //           id: messages[1].id,
+    //           withNextMessages: 2,
+    //           withPreviousMessages: 2,
+    //         },
+    //         {
+    //           id: messages[4].id,
+    //           withPreviousMessages: 2,
+    //           withNextMessages: 2,
+    //         },
+    //       ],
+    //     },
+    //   });
+
+    //   expect(crossThreadMessages).toHaveLength(6);
+    //   expect(crossThreadMessages.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
+    //   expect(crossThreadMessages.filter(m => m.threadId === `thread-two`)).toHaveLength(3);
+
+    //   const crossThreadMessages2: MastraMessageV2[] = await store.getMessages({
+    //     threadId: 'thread-one',
+    //     resourceId: 'cross-thread-resource',
+    //     format: 'v2',
+    //     selectBy: {
+    //       last: 0,
+    //       include: [
+    //         {
+    //           id: messages[4].id,
+    //           withPreviousMessages: 1,
+    //           withNextMessages: 30,
+    //         },
+    //       ],
+    //     },
+    //   });
+
+    //   expect(crossThreadMessages2).toHaveLength(3);
+    //   expect(crossThreadMessages2.filter(m => m.threadId === `thread-one`)).toHaveLength(0);
+    //   expect(crossThreadMessages2.filter(m => m.threadId === `thread-two`)).toHaveLength(3);
+
+    //   const crossThreadMessages3: MastraMessageV2[] = await store.getMessages({
+    //     threadId: 'thread-two',
+    //     resourceId: 'cross-thread-resource',
+    //     format: 'v2',
+    //     selectBy: {
+    //       last: 0,
+    //       include: [
+    //         {
+    //           id: messages[1].id,
+    //           withNextMessages: 1,
+    //           withPreviousMessages: 1,
+    //         },
+    //       ],
+    //     },
+    //   });
+
+    //   expect(crossThreadMessages3).toHaveLength(3);
+    //   expect(crossThreadMessages3.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
+    //   expect(crossThreadMessages3.filter(m => m.threadId === `thread-two`)).toHaveLength(0);
+    // });
   });
 
   describe('Edge Cases and Error Handling', () => {
