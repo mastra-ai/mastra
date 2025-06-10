@@ -84,7 +84,6 @@ async function analyze(
   }
 
   const normalizedMastraEntry = mastraEntry.replaceAll('\\', '/');
-
   const optimizerBundler = await rollup({
     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
     input: isVirtualFile ? '#entry' : entry,

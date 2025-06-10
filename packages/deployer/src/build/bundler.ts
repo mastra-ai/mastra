@@ -1,4 +1,3 @@
-// import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import alias from '@rollup/plugin-alias';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';

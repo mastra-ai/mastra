@@ -1,10 +1,10 @@
 import { join } from 'node:path';
-import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
 import slugify from '@sindresorhus/slugify';
 import { findWorkspaces, findWorkspacesRoot } from 'find-workspaces';
 import { ensureDir } from 'fs-extra';
 import { DepsService } from '../services';
+import { ErrorCategory } from '@mastra/core/error';
 
 type WorkspacePackageInfo = {
   location: string;
@@ -67,14 +67,7 @@ export const collectTransitiveWorkspaceDependencies = ({
 
       const root = findWorkspacesRoot();
       if (!root) {
-        const error = new MastraError({
-          id: 'BUNDLER_COLLECT_TRANSITIVE_WORKSPACE_DEPS_FAILED_TO_FIND_ROOT',
-          text: 'Could not find workspace root',
-          domain: ErrorDomain.DEPLOYER,
-          category: ErrorCategory.SYSTEM,
-        });
-        logger.trackException(error);
-        throw error;
+        throw new Error('Could not find workspace root');
       }
 
       const depsService = new DepsService(root.location);

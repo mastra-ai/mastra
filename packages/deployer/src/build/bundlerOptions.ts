@@ -1,5 +1,4 @@
 import * as babel from '@babel/core';
-import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { rollup } from 'rollup';
 import esbuild from 'rollup-plugin-esbuild';
 import commonjs from '@rollup/plugin-commonjs';
@@ -94,29 +93,16 @@ export async function getBundlerOptions(entryFile: string, outputDir: string): P
   const result = {
     hasCustomConfig: false,
   } as const;
-  try {
-    const bundle = await getBundlerOptionsBundler(entryFile, result);
+  const bundle = await getBundlerOptionsBundler(entryFile, result);
 
-    await bundle.write({
-      dir: outputDir,
-      format: 'es',
-      entryFileNames: '[name].mjs',
-    });
+  await bundle.write({
+    dir: outputDir,
+    format: 'es',
+    entryFileNames: '[name].mjs',
+  });
 
-    if (result.hasCustomConfig) {
-      return (await import(`file:${outputDir}/bundler-config.mjs`)).bundler as unknown as Config['bundler'];
-    }
-  } catch (error: unknown) {
-    const mastraError = new MastraError(
-      {
-        id: 'DEPLOYER_BUNDLER_GET_BUNDLER_OPTIONS_FAILED',
-        text: `Failed to get bundler options when bundling Mastra application`,
-        domain: ErrorDomain.DEPLOYER,
-        category: ErrorCategory.SYSTEM,
-      },
-      error,
-    );
-    throw mastraError;
+  if (result.hasCustomConfig) {
+    return (await import(`file:${outputDir}/bundler-config.mjs`)).bundler as unknown as Config['bundler'];
   }
 
   return null;
