@@ -1,4 +1,4 @@
-import type { Logger } from '@mastra/core';
+import type { IMastraLogger } from '@mastra/core/logger';
 import type { WorkspacesRoot } from 'find-workspaces';
 import { findWorkspacesRoot } from 'find-workspaces';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -27,7 +27,7 @@ describe('workspaceDependencies', () => {
     error: vi.fn(),
     debug: vi.fn(),
     warning: vi.fn(),
-  } as unknown as Logger;
+  } as unknown as IMastraLogger;
 
   beforeEach(() => {
     vi.clearAllMocks();
