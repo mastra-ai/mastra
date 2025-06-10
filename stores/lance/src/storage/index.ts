@@ -175,7 +175,9 @@ export class LanceStorage extends MastraStorage {
       case 'bigint':
         return '0';
       case 'jsonb':
-        return '{}';
+        return "'{}'";
+      case 'uuid':
+        return "''";
       default:
         return super.getDefaultValue(type);
     }

@@ -5,6 +5,7 @@ import {
   createSampleThread,
   createTestSuite,
   createSampleMessageV1,
+  resetRole,
 } from '@internal/storage-test-utils';
 import type { MastraMessageV1, StorageThreadType } from '@mastra/core';
 import { Mastra } from '@mastra/core/mastra';
@@ -243,6 +244,7 @@ describe('LibSQLStore Pagination Features', () => {
 
   describe('getMessages with pagination', () => {
     it('should return paginated messages with total count', async () => {
+      resetRole();
       const threadData = createSampleThread();
       threadData.resourceId = 'resource-msg-pagination';
       const thread = await store.saveThread({ thread: threadData as StorageThreadType });

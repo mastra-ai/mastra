@@ -67,6 +67,7 @@ export abstract class MastraStorage extends MastraBase {
   protected getDefaultValue(type: string): string {
     switch (type) {
       case 'text':
+      case 'uuid':
         return "DEFAULT ''";
       case 'timestamp':
         return "DEFAULT '1970-01-01 00:00:00'";
