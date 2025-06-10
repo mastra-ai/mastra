@@ -15,7 +15,7 @@ export async function build({
   dir?: string;
   tools?: string[];
   root?: string;
-  env?: string[];
+  env?: string;
 }) {
   const rootDir = root || process.cwd();
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(rootDir, dir)) : join(rootDir, 'src', 'mastra');
@@ -30,7 +30,7 @@ export async function build({
 
     const platformDeployer = await getDeployer(mastraEntryFile, outputDirectory);
     if (!platformDeployer) {
-      const deployer = new BuildBundler({ customEnv: env || [] });
+      const deployer = new BuildBundler(env);
       await deployer.prepare(outputDirectory);
       await deployer.bundle(mastraEntryFile, outputDirectory, discoveredTools);
       logger.info(`Build successful, you can now deploy the .mastra/output directory to your target platform.`);

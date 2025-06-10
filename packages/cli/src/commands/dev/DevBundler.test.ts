@@ -41,7 +41,7 @@ describe('DevBundler', () => {
     it('should use NODE_ENV from environment when available', async () => {
       // Arrange
       process.env.NODE_ENV = 'test-env';
-      const devBundler = new DevBundler({ customEnv: [] });
+      const devBundler = new DevBundler();
       const { getWatcherInputOptions } = await import('@mastra/deployer/build');
 
       // Act
@@ -56,7 +56,7 @@ describe('DevBundler', () => {
     it('should default to development when NODE_ENV is not set', async () => {
       // Arrange
       delete process.env.NODE_ENV;
-      const devBundler = new DevBundler({ customEnv: [] });
+      const devBundler = new DevBundler();
       const { getWatcherInputOptions } = await import('@mastra/deployer/build');
 
       // Act

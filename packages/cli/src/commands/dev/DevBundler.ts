@@ -8,15 +8,18 @@ import * as fsExtra from 'fs-extra';
 import type { RollupWatcherEvent } from 'rollup';
 
 export class DevBundler extends Bundler {
-  private customEnv: string[];
+  private customEnvFile?: string;
 
-  constructor({ customEnv }: { customEnv: string[] }) {
+  constructor(customEnvFile?: string) {
     super('Dev');
-    this.customEnv = customEnv;
+    this.customEnvFile = customEnvFile;
   }
 
   getEnvFiles(): Promise<string[]> {
-    const possibleFiles = [...this.customEnv, '.env.development', '.env.local', '.env'];
+    const possibleFiles = ['.env.development', '.env.local', '.env'];
+    if (this.customEnvFile) {
+      possibleFiles.unshift(this.customEnvFile);
+    }
 
     try {
       const fileService = new FileService();

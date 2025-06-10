@@ -148,7 +148,7 @@ export async function dev({
   root?: string;
   port: number | null;
   tools?: string[];
-  env?: string[];
+  env?: string;
 }) {
   const rootDir = root || process.cwd();
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');
@@ -160,7 +160,7 @@ export async function dev({
   const fileService = new FileService();
   const entryFile = fileService.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
 
-  const bundler = new DevBundler({ customEnv: env || [] });
+  const bundler = new DevBundler(env);
   await bundler.prepare(dotMastraPath);
 
   const watcher = await bundler.watch(entryFile, dotMastraPath, discoveredTools);

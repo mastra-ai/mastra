@@ -86,7 +86,7 @@ export async function lint({ dir, root, tools }: { dir?: string; root?: string; 
       ]);
       const platformDeployer = await getDeployer(mastraEntryFile, outputDirectory);
       if (!platformDeployer) {
-        const deployer = new BuildBundler({ customEnv: [] });
+        const deployer = new BuildBundler();
         await deployer.lint(mastraEntryFile, outputDirectory, discoveredTools);
       } else {
         await platformDeployer.lint(mastraEntryFile, outputDirectory, discoveredTools);
