@@ -7,10 +7,10 @@ import { useRouter } from "next/navigation";
 import type { FC, SyntheticEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import {
-  PagefindResult,
-  PagefindSearchOptions,
-  useDebounceSearch,
-} from "../hooks/use-debounced-search";
+  AlgoliaResult,
+  AlgoliaSearchOptions,
+  useAlgoliaSearch,
+} from "../hooks/use-algolia-search";
 import { BookIcon, BurgerIcon, JarvisIcon } from "./svgs/Icons";
 import { SpinnerIcon } from "./svgs/spinner";
 import { Button } from "./ui/button";
@@ -42,7 +42,7 @@ type SearchProps = {
   placeholder?: string;
   /** CSS class name. */
   className?: string;
-  searchOptions?: PagefindSearchOptions;
+  searchOptions?: AlgoliaSearchOptions;
   onUseAgent: ({ searchQuery }: { searchQuery: string }) => void;
   closeModal: () => void;
 };
@@ -56,16 +56,14 @@ type FlattenedResult = {
 };
 
 // Union type for search results
-type SearchResult = PagefindResult | FlattenedResult | { url: "use-ai" };
+type SearchResult = AlgoliaResult | FlattenedResult | { url: "use-ai" };
 
 /**
  * A built-in search component provides a seamless and fast search
- * experience out of the box. Under the hood, it leverages the
- * [Pagefind package](https://pagefind.app) — a fully client-side search engine optimized for static
- * sites. Pagefind indexes your content at build time and enables highly performant,
- * zero-JavaScript-dependency searches at runtime.
+ * experience out of the box. Under the hood, it leverages Algolia
+ * for powerful, fast search capabilities with highlighting and filtering.
  *
- * @see [Nextra search setup guide](https://nextra.site/docs/guide/search)
+ * @see [Algolia documentation](https://www.algolia.com/doc/)
  */
 export const CustomSearch: FC<SearchProps> = ({
   className,
@@ -74,7 +72,7 @@ export const CustomSearch: FC<SearchProps> = ({
   onUseAgent,
   closeModal,
 }) => {
-  const { isSearchLoading, results, search, setSearch } = useDebounceSearch(
+  const { isSearchLoading, results, search, setSearch } = useAlgoliaSearch(
     300,
     searchOptions,
   );

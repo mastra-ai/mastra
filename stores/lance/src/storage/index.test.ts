@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { checkWorkflowSnapshot } from '@internal/storage-test-utils';
 import type { EvalRow, MastraMessageV2, StorageThreadType, TraceType, WorkflowRunState } from '@mastra/core';
 import {
   TABLE_EVALS,
@@ -114,13 +115,6 @@ const generateWorkflowSnapshot = (status: WorkflowRunState['context']['steps']['
     timestamp: timestamp.getTime(),
   } as unknown as WorkflowRunState;
   return { snapshot, runId, stepId };
-};
-
-const checkWorkflowSnapshot = (snapshot: WorkflowRunState | string, stepId: string, status: string) => {
-  if (typeof snapshot === 'string') {
-    throw new Error('Expected WorkflowRunState, got string');
-  }
-  expect(snapshot.context?.[stepId]?.status).toBe(status);
 };
 
 describe('LanceStorage tests', async () => {

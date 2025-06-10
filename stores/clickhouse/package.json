@@ -1,6 +1,6 @@
 {
   "name": "@mastra/clickhouse",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "description": "Clickhouse provider for Mastra - includes db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -41,10 +41,10 @@
     "eslint": "^9.28.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.2",
-    "vitest": "^3.1.2",
+    "vitest": "^3.2.2",
     "@mastra/core": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": "^0.10.2-alpha.0"
+    "@mastra/core": ">=0.10.4-0 <0.11.0"
   }
 }

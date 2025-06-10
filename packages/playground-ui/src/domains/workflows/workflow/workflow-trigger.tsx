@@ -29,7 +29,6 @@ import { GetWorkflowResponse } from '@mastra/client-js';
 import { SyntaxHighlighter } from '@/components/ui/syntax-highlighter';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogPortal, DialogTitle, DialogContent } from '@/components/ui/dialog';
-import { WorkflowCard } from './workflow-card';
 
 interface SuspendedStep {
   stepId: string;
@@ -218,7 +217,8 @@ export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; 
           <WorkflowJsonDialog result={restResult} />
         </div>
       )}
-      {result && <WorkflowResultSection result={result} workflow={workflow} />}
+
+      {/* TODO: bring this back and make sure to get steps from the snapshot {result && <WorkflowResultSection result={result} workflow={workflow} />} */}
     </div>
   );
 }
