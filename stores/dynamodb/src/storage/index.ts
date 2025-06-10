@@ -1,13 +1,8 @@
 import { DynamoDBClient, DescribeTableCommand } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import type {
-  StorageThreadType,
-  WorkflowRunState,
-  MastraMessageV1,
-  MastraMessageV2,
-  StorageColumn,
-} from '@mastra/core';
 import { MessageList } from '@mastra/core/agent';
+import type { StorageThreadType, MastraMessageV2, MastraMessageV1 } from '@mastra/core/memory';
+
 import {
   MastraStorage,
   TABLE_THREADS,
@@ -16,7 +11,18 @@ import {
   TABLE_EVALS,
   TABLE_TRACES,
 } from '@mastra/core/storage';
-import type { EvalRow, StorageGetMessagesArg, WorkflowRun, WorkflowRuns, TABLE_NAMES } from '@mastra/core/storage';
+import type {
+  EvalRow,
+  StorageGetMessagesArg,
+  WorkflowRun,
+  WorkflowRuns,
+  TABLE_NAMES,
+  StorageGetTracesArg,
+  PaginationInfo,
+  StorageColumn,
+} from '@mastra/core/storage';
+import type { Trace } from '@mastra/core/telemetry';
+import type { WorkflowRunState } from '@mastra/core/workflows';
 import type { Service } from 'electrodb';
 import { getElectroDbService } from '../entities';
 
@@ -1075,6 +1081,24 @@ export class DynamoDBStore extends MastraStorage {
       this.logger.error('Failed to get evals by agent name', { agentName, type, error });
       throw error;
     }
+  }
+
+  async getTracesPaginated(_args: StorageGetTracesArg): Promise<PaginationInfo & { traces: Trace[] }> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getThreadsByResourceIdPaginated(_args: {
+    resourceId: string;
+    page?: number;
+    perPage?: number;
+  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getMessagesPaginated(
+    _args: StorageGetMessagesArg,
+  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
+    throw new Error('Method not implemented.');
   }
 
   /**
