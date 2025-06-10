@@ -36,3 +36,13 @@ const searchOptions: AlgoliaSearchOptions = {
   highlightPostTag: "</mark>",
 };
 ```
+
+## Indexing Your Content
+
+You'll need to set up a process to index your documentation content. This can be done using:
+
+1. **Algolia Crawler**: Automated web crawling
+2. **DocSearch**: Algolia's documentation-specific solution
+3. **Custom indexing script**: Using the Algolia API
+
+We currently have a web crawler that indexes the content of the website daily.

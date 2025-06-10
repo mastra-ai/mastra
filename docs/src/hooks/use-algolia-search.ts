@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { algoliasearch, type SearchClient } from "algoliasearch";
+import { algoliasearch, SearchResult, type SearchClient } from "algoliasearch";
 
 /**
  * Options that can be passed to Algolia search.
@@ -80,8 +80,6 @@ export function useAlgoliaSearch(
   const [search, setSearch] = useState("");
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
-
-  console.log({ searchOptions, search, results });
 
   // Initialize Algolia client
   const algoliaClient = useRef<SearchClient | null>(null);
