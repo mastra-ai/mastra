@@ -1,7 +1,8 @@
 import { randomUUID } from 'crypto';
 import type { MastraMessageV1, MetricResult, WorkflowRunState } from '@mastra/core';
+import type { TABLE_NAMES } from '@mastra/core/storage';
 import { TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { MongoDBConfig } from './index';
 import { MongoDBStore } from './index';
 
@@ -777,6 +778,89 @@ describe('MongoDBStore', () => {
       // Test getting evals for non-existent agent
       const nonExistentEvals = await store.getEvalsByAgentName('non-existent-agent');
       expect(nonExistentEvals).toHaveLength(0);
+    });
+  });
+
+  describe('alterTable (no-op/schemaless)', () => {
+    const TEST_TABLE = 'test_alter_table'; // Use "table" or "collection" as appropriate
+    beforeEach(async () => {
+      await store.clearTable({ tableName: TEST_TABLE as TABLE_NAMES });
+    });
+
+    afterEach(async () => {
+      await store.clearTable({ tableName: TEST_TABLE as TABLE_NAMES });
+    });
+
+    it('allows inserting records with new fields without alterTable', async () => {
+      await store.insert({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        record: { id: '1', name: 'Alice' },
+      });
+      await store.insert({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        record: { id: '2', name: 'Bob', newField: 123 },
+      });
+
+      const row = await store.load<{ id: string; name: string; newField?: number }[]>({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        keys: { id: '2' },
+      });
+      expect(row?.[0]?.newField).toBe(123);
+    });
+
+    it('does not throw when calling alterTable (no-op)', async () => {
+      await expect(
+        store.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: {
+            id: { type: 'text', primaryKey: true, nullable: false },
+            name: { type: 'text', nullable: true },
+            extra: { type: 'integer', nullable: true },
+          },
+          ifNotExists: ['extra'],
+        }),
+      ).resolves.not.toThrow();
+    });
+
+    it('can add multiple new fields at write time', async () => {
+      await store.insert({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        record: { id: '3', name: 'Charlie', age: 30, city: 'Paris' },
+      });
+      const row = await store.load<{ id: string; name: string; age?: number; city?: string }[]>({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        keys: { id: '3' },
+      });
+      expect(row?.[0]?.age).toBe(30);
+      expect(row?.[0]?.city).toBe('Paris');
+    });
+
+    it('can retrieve all fields, including dynamically added ones', async () => {
+      await store.insert({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        record: { id: '4', name: 'Dana', hobby: 'skiing' },
+      });
+      const row = await store.load<{ id: string; name: string; hobby?: string }[]>({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        keys: { id: '4' },
+      });
+      expect(row?.[0]?.hobby).toBe('skiing');
+    });
+
+    it('does not restrict or error on arbitrary new fields', async () => {
+      await expect(
+        store.insert({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          record: { id: '5', weirdField: { nested: true }, another: [1, 2, 3] },
+        }),
+      ).resolves.not.toThrow();
+
+      const row = await store.load<{ id: string; weirdField?: any; another?: any }[]>({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        keys: { id: '5' },
+      });
+      expect(row?.[0]?.weirdField).toEqual({ nested: true });
+      expect(row?.[0]?.another).toEqual([1, 2, 3]);
     });
   });
 
