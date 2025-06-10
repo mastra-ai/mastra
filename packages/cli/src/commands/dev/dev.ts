@@ -27,17 +27,6 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
       commands.push('--import=./instrumentation.mjs', `--import=${instrumentation}`);
     }
 
-    let portToUse = port.toString() || process.env.PORT;
-    if (!portToUse || isNaN(Number(portToUse))) {
-      const portList = Array.from({ length: 21 }, (_, i) => 4111 + i);
-
-      portToUse = String(
-        await getPort({
-          port: portList,
-        }),
-      );
-    }
-
     commands.push('index.mjs');
     currentServerProcess = execa('node', commands, {
       cwd: dotMastraPath,
@@ -45,7 +34,7 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
         NODE_ENV: 'production',
         ...Object.fromEntries(env),
         MASTRA_DEV: 'true',
-        PORT: portToUse.toString(),
+        PORT: port.toString(),
         MASTRA_DEFAULT_STORAGE_URL: `file:${join(dotMastraPath, '..', 'mastra.db')}`,
       },
       stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
@@ -167,14 +156,23 @@ export async function dev({
 
   const serverOptions = await getServerOptions(entryFile, join(dotMastraPath, 'output'));
 
-  const startPort = port ?? serverOptions?.port ?? 4111;
+  let portToUse = port ?? serverOptions?.port ?? process.env.PORT;
+  if (!portToUse || isNaN(Number(portToUse))) {
+    const portList = Array.from({ length: 21 }, (_, i) => 4111 + i);
 
-  await startServer(join(dotMastraPath, 'output'), startPort, env);
+    portToUse = String(
+      await getPort({
+        port: portList,
+      }),
+    );
+  }
+
+  await startServer(join(dotMastraPath, 'output'), Number(portToUse), env);
   watcher.on('event', (event: { code: string }) => {
     if (event.code === 'BUNDLE_END') {
       logger.info('[Mastra Dev] - Bundling finished, restarting server...');
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      rebundleAndRestart(dotMastraPath, startPort, bundler);
+      rebundleAndRestart(dotMastraPath, Number(portToUse), bundler);
     }
   });
 
