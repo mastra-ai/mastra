@@ -1,6 +1,5 @@
 import { randomUUID } from 'crypto';
 import type { WorkflowRunState } from '@mastra/core';
-import { expect } from 'vitest';
 
 export const createSampleTrace = (name: string, scope?: string, attributes?: Record<string, string>) => ({
   id: `trace-${randomUUID()}`,
