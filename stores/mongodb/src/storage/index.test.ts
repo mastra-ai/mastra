@@ -813,10 +813,9 @@ describe('MongoDBStore', () => {
         store.alterTable({
           tableName: TEST_TABLE as TABLE_NAMES,
           schema: {
-            id: { type: 'integer', primaryKey: true, nullable: false },
+            id: { type: 'text', primaryKey: true, nullable: false },
             name: { type: 'text', nullable: true },
             extra: { type: 'integer', nullable: true },
-          },
           ifNotExists: ['extra'],
         }),
       ).resolves.not.toThrow();

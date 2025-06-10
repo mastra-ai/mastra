@@ -1677,7 +1677,7 @@ describe('CloudflareStore Workers Binding', () => {
         store.alterTable({
           tableName: TABLE_MESSAGES,
           schema: {
-            id: { type: 'integer', primaryKey: true, nullable: false },
+            id: { type: 'text', primaryKey: true, nullable: false },
             name: { type: 'text', nullable: true },
             extra: { type: 'integer', nullable: true },
           },
