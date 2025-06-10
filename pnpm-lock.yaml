@@ -26,7 +26,7 @@ importers:
         specifier: ^9.1.7
         version: 9.1.7
       lint-staged:
-        specifier: ^15.5.0
+        specifier: ^15.5.2
         version: 15.5.2
       npm-run-all2:
         specifier: ^7.0.2
@@ -15759,6 +15759,7 @@ packages:
 
   libsql@0.5.12:
     resolution: {integrity: sha512-TikiQZ1j4TwFEqVdJdTM9ZTti28is/ytGEvn0S2MocOj69UKQetWACe/qd8KAD5VeNnQSVd6Nlm2AJx0DFW9Ag==}
+    cpu: [x64, arm64, wasm32, arm]
     os: [darwin, linux, win32]
 
   light-my-request@5.14.0:
@@ -34431,7 +34432,7 @@ snapshots:
       isstream: 0.1.2
       jsonwebtoken: 9.0.2
       mime-types: 2.1.35
-      retry-axios: 2.6.0(axios@1.9.0)
+      retry-axios: 2.6.0(axios@1.9.0(debug@4.4.1))
       tough-cookie: 4.1.4
     transitivePeerDependencies:
       - supports-color
@@ -38613,7 +38614,7 @@ snapshots:
 
   ret@0.4.3: {}
 
-  retry-axios@2.6.0(axios@1.9.0):
+  retry-axios@2.6.0(axios@1.9.0(debug@4.4.1)):
     dependencies:
       axios: 1.9.0(debug@4.4.1)
 
