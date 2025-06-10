@@ -554,15 +554,12 @@ export class LibSQLStore extends MastraStorage {
     const finalQuery = unionQueries.join(' UNION ALL ') + ' ORDER BY "createdAt" ASC';
     const includedResult = await this.client.execute({ sql: finalQuery, args: params });
     const includedRows = includedResult.rows?.map(row => this.parseRow(row));
-    const dedupedRows = Object.values(
-      includedRows.reduce(
-        (acc, row) => {
-          acc[row.id] = row;
-          return acc;
-        },
-        {} as Record<string, MastraMessageV2>,
-      ),
-    );
+    const seen = new Set<string>();
+    const dedupedRows = includedRows.filter(row => {
+      if (seen.has(row.id)) return false;
+      seen.add(row.id);
+      return true;
+    });
     return dedupedRows;
   }
 
