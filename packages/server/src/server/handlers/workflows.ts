@@ -156,11 +156,9 @@ export async function startAsyncWorkflowHandler({
   workflowId,
   runId,
   inputData,
-  runtimeContextFromRequest,
 }: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
   inputData?: unknown;
   runtimeContext?: RuntimeContext;
-  runtimeContextFromRequest?: Record<string, unknown>;
 }) {
   try {
     if (!workflowId) {
@@ -190,11 +188,9 @@ export async function startWorkflowRunHandler({
   workflowId,
   runId,
   inputData,
-  runtimeContextFromRequest,
 }: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
   inputData?: unknown;
   runtimeContext?: RuntimeContext;
-  runtimeContextFromRequest?: Record<string, unknown>;
 }) {
   try {
     if (!workflowId) {
