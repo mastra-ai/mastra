@@ -109,6 +109,13 @@ export class OTLPTraceExporter implements SpanExporter {
             text: 'Failed to export telemetry spans',
             domain: ErrorDomain.MASTRA_TELEMETRY,
             category: ErrorCategory.SYSTEM,
+            details: {
+              attemptedSpanCount: allSpans.length,
+              targetTable: TABLE_TRACES,
+              firstSpanName: allSpans.length > 0 ? allSpans[0].name : '',
+              firstSpanKind: allSpans.length > 0 ? allSpans[0].kind : '',
+              firstSpanScope: allSpans.length > 0 ? allSpans[0].scope : '',
+            },
           },
           e,
         );

@@ -2,6 +2,7 @@ import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
 import type { RuntimeContext } from '../di';
 import { EMITTER_SYMBOL } from './constants';
+import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
 import type { ExecuteFunction, Step } from './step';
@@ -184,7 +185,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                   id: 'WORKFLOW_ENGINE_STEP_EXECUTION_FAILED',
                   domain: ErrorDomain.MASTRA_WORKFLOW,
                   category: ErrorCategory.USER,
-                  details: { workflowId, runId, stepId: entry.id },
+                  details: { workflowId, runId },
                 },
                 e,
               );
@@ -582,7 +583,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                       id: 'WORKFLOW_CONDITION_EVALUATION_FAILED',
                       domain: ErrorDomain.MASTRA_WORKFLOW,
                       category: ErrorCategory.USER,
-                      details: { workflowId, runId, stepId: entry.id },
+                      details: { workflowId, runId },
                     },
                     e,
                   );
