@@ -6,7 +6,17 @@ import { BuildBundler } from './BuildBundler';
 import { getDeployer } from '@mastra/deployer';
 import { logger } from '../../utils/logger';
 
-export async function build({ dir, tools, root, env }: { dir?: string; tools?: string[]; root?: string; env?: string[]  }) {
+export async function build({
+  dir,
+  tools,
+  root,
+  env,
+}: {
+  dir?: string;
+  tools?: string[];
+  root?: string;
+  env?: string[];
+}) {
   const rootDir = root || process.cwd();
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(rootDir, dir)) : join(rootDir, 'src', 'mastra');
   const outputDirectory = join(rootDir, '.mastra');
@@ -19,7 +29,6 @@ export async function build({ dir, tools, root, env }: { dir?: string; tools?: s
     const mastraEntryFile = fs.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
 
     const platformDeployer = await getDeployer(mastraEntryFile, outputDirectory);
- 
     if (!platformDeployer) {
       const deployer = new BuildBundler({ customEnv: env || [] });
       await deployer.prepare(outputDirectory);
