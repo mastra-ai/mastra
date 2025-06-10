@@ -6,12 +6,13 @@ By default, the `Memory` instance includes the last 40 messages from the current
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { openai } from "@ai-sdk/openai";
+import { LibSQLStore } from "@mastra/libsql";
 
 // Create a memory instance with custom conversation history settings
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
-import { LibSQLStore } from "@mastra/libsql";
-import { openai } from "@ai-sdk/openai";
+const memory = new Memory({
+  storage: new LibSQLStore({
+    url: "../../memory.db",
+  }),
   options: {
     lastMessages: 20, // Include the last 20 messages in the context
   },

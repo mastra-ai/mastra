@@ -10,4 +10,4 @@ The `@mastra/memory` package provides a simple yet powerful memory system for yo
 
 The `@mastra/libsql` package is one of many storage adapters that persists the memory data to an `SQLite` database.
 
-This packages are separate from the core Mastra package to keep the framework modular and allow you to only include the features you need in your project.
+These packages are separate from the core Mastra package to keep the framework modular and allow you to only include the features you need in your project.
