@@ -316,7 +316,10 @@ ${JSON.stringify(message, null, 2)}`,
     // If the last message is an assistant message and the new message is also an assistant message, merge them together and update tool calls with results
     const latestMessagePartType = latestMessage?.content?.parts?.filter(p => p.type !== `step-start`)?.at?.(-1)?.type;
     const newMessageFirstPartType = messageV2.content.parts.filter(p => p.type !== `step-start`).at(0)?.type;
-    const shouldAppendToLastAssistantMessage = latestMessage?.role === 'assistant' && messageV2.role === 'assistant';
+    const shouldAppendToLastAssistantMessage =
+      latestMessage?.role === 'assistant' &&
+      messageV2.role === 'assistant' &&
+      latestMessage.threadId === messageV2.threadId;
     const shouldAppendToLastAssistantMessageParts =
       shouldAppendToLastAssistantMessage &&
       newMessageFirstPartType &&
@@ -432,7 +435,15 @@ ${JSON.stringify(message, null, 2)}`,
   }
 
   private inputToMastraMessageV2(message: MessageInput, messageSource: MessageSource): MastraMessageV2 {
-    if (`threadId` in message && message.threadId && this.memoryInfo && message.threadId !== this.memoryInfo.threadId) {
+    if (
+      // we can't throw if the threadId doesn't match and this message came from memory
+      // this is because per-user semantic recall can retrieve messages from other threads
+      messageSource !== `memory` &&
+      `threadId` in message &&
+      message.threadId &&
+      this.memoryInfo &&
+      message.threadId !== this.memoryInfo.threadId
+    ) {
       throw new Error(
         `Received input message with wrong threadId. Input ${message.threadId}, expected ${this.memoryInfo.threadId}`,
       );

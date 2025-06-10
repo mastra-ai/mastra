@@ -1,7 +1,6 @@
 import type { KVNamespace } from '@cloudflare/workers-types';
 import { MessageList } from '@mastra/core/agent';
-import type { MastraMessageV2 } from '@mastra/core/agent';
-import type { StorageThreadType, MastraMessageV1 } from '@mastra/core/memory';
+import type { StorageThreadType, MastraMessageV1, MastraMessageV2 } from '@mastra/core/memory';
 import {
   MastraStorage,
   TABLE_MESSAGES,
@@ -17,7 +16,10 @@ import type {
   EvalRow,
   WorkflowRuns,
   WorkflowRun,
+  StorageGetTracesArg,
+  PaginationInfo,
 } from '@mastra/core/storage';
+import type { Trace } from '@mastra/core/telemetry';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import Cloudflare from 'cloudflare';
 import { isWorkersConfig } from './types';
@@ -756,17 +758,6 @@ export class CloudflareStore extends MastraStorage {
     }
   }
 
-  private ensureDate(date: Date | string | undefined): Date | undefined {
-    if (!date) return undefined;
-    return date instanceof Date ? date : new Date(date);
-  }
-
-  private serializeDate(date: Date | string | undefined): string | undefined {
-    if (!date) return undefined;
-    const dateObj = this.ensureDate(date);
-    return dateObj?.toISOString();
-  }
-
   private ensureMetadata(metadata: Record<string, unknown> | string | undefined): Record<string, unknown> | undefined {
     if (!metadata) return {};
     return typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
@@ -791,6 +782,20 @@ export class CloudflareStore extends MastraStorage {
       this.logger.error(`Failed to store schema for ${tableName}:`, error);
       throw new Error(`Failed to store schema: ${error.message}`);
     }
+  }
+
+  /**
+   * No-op: This backend is schemaless and does not require schema changes.
+   * @param tableName Name of the table
+   * @param schema Schema of the table
+   * @param ifNotExists Array of column names to add if they don't exist
+   */
+  async alterTable(_args: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void> {
+    // Nothing to do here, Cloudflare KV is schemaless
   }
 
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
@@ -1568,6 +1573,24 @@ export class CloudflareStore extends MastraStorage {
       this.logger.error('Error in getWorkflowRunById:', { message });
       return null;
     }
+  }
+
+  async getTracesPaginated(_args: StorageGetTracesArg): Promise<PaginationInfo & { traces: Trace[] }> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getThreadsByResourceIdPaginated(_args: {
+    resourceId: string;
+    page?: number;
+    perPage?: number;
+  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getMessagesPaginated(
+    _args: StorageGetMessagesArg,
+  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
+    throw new Error('Method not implemented.');
   }
 
   async close(): Promise<void> {
