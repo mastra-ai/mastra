@@ -28,7 +28,7 @@
     "posttest": "node scripts/stop-docker.js"
   },
   "dependencies": {
-    "couchbase": "^4.4.5"
+    "couchbase": "^4.5.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -36,7 +36,7 @@
     "@types/node": "^20.17.57",
     "@vitest/coverage-v8": "3.2.2",
     "@vitest/ui": "3.2.2",
-    "axios": "^1.8.4",
+    "axios": "^1.9.0",
     "eslint": "^9.28.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.2",
