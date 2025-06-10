@@ -1256,6 +1256,14 @@ describe('LanceStorage tests', async () => {
           ifNotExists: ['jsonb_column'],
         }),
       ).resolves.not.toThrow();
+
+      await expect(
+        storage.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, uuid_column: { type: 'uuid', nullable: false } },
+          ifNotExists: ['uuid_column'],
+        }),
+      ).resolves.not.toThrow();
     });
   });
 });

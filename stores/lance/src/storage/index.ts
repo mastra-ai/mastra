@@ -200,6 +200,7 @@ export class LanceStorage extends MastraStorage {
       bigint: 'bigint',
       timestamp: 'timestamp',
       jsonb: 'string',
+      uuid: 'string',
     };
 
     // Find columns to add
@@ -210,7 +211,7 @@ export class LanceStorage extends MastraStorage {
         return {
           name: col,
           valueSql: colDef?.nullable
-            ? `cast(NULL as ${typeMap[colDef.type]})`
+            ? `cast(NULL as ${typeMap[colDef.type ?? 'text']})`
             : `cast(${this.getDefaultValue(colDef?.type ?? 'text')} as ${typeMap[colDef?.type ?? 'text']})`,
         };
       });
