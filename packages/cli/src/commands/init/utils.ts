@@ -520,7 +520,7 @@ export const writeCodeSample = async (
 };
 
 export const interactivePrompt = async () => {
-  p.intro(color.inverse('Mastra Init'));
+  p.intro(color.inverse(' Mastra Init '));
   const mastraProject = await p.group(
     {
       directory: () =>
