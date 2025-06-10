@@ -5,13 +5,13 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useNetwork } from '@/hooks/use-networks';
 
 import { NetworkHeader } from './network-header';
-import { Header, HeaderTitle } from '@mastra/playground-ui';
+import { Header, HeaderTitle, MainContentLayout } from '@mastra/playground-ui';
 
 export const NetworkLayout = ({ children }: { children: React.ReactNode }) => {
   const { networkId } = useParams();
   const { network, isLoading: isNetworkLoading } = useNetwork(networkId!);
   return (
-    <div className="grid grid-rows-[auto_1fr] items-start content-start h-full">
+    <MainContentLayout>
       {isNetworkLoading ? (
         <Header>
           <HeaderTitle>
@@ -22,6 +22,6 @@ export const NetworkLayout = ({ children }: { children: React.ReactNode }) => {
         <NetworkHeader networkName={network?.name!} networkId={networkId!} />
       )}
       {children}
-    </div>
+    </MainContentLayout>
   );
 };

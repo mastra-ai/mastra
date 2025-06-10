@@ -1,5 +1,5 @@
 import { ReadableStream } from 'node:stream/web';
-import { RuntimeContext } from '@mastra/core/di';
+import type { RuntimeContext } from '@mastra/core/di';
 import type { WorkflowRuns } from '@mastra/core/storage';
 import type { Workflow, SerializedStepFlowEntry } from '@mastra/core/workflows';
 import { stringify } from 'superjson';
@@ -156,11 +156,9 @@ export async function startAsyncWorkflowHandler({
   workflowId,
   runId,
   inputData,
-  runtimeContextFromRequest,
 }: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
   inputData?: unknown;
   runtimeContext?: RuntimeContext;
-  runtimeContextFromRequest?: Record<string, unknown>;
 }) {
   try {
     if (!workflowId) {
@@ -173,15 +171,10 @@ export async function startAsyncWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow not found' });
     }
 
-    const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
-      ...Array.from(runtimeContext?.entries() ?? []),
-      ...Array.from(Object.entries(runtimeContextFromRequest ?? {})),
-    ]);
-
     const _run = workflow.createRun({ runId });
     const result = await _run.start({
       inputData,
-      runtimeContext: finalRuntimeContext,
+      runtimeContext,
     });
     return result;
   } catch (error) {
@@ -195,11 +188,9 @@ export async function startWorkflowRunHandler({
   workflowId,
   runId,
   inputData,
-  runtimeContextFromRequest,
 }: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
   inputData?: unknown;
   runtimeContext?: RuntimeContext;
-  runtimeContextFromRequest?: Record<string, unknown>;
 }) {
   try {
     if (!workflowId) {
@@ -217,15 +208,10 @@ export async function startWorkflowRunHandler({
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
-      ...Array.from(runtimeContext?.entries() ?? []),
-      ...Array.from(Object.entries(runtimeContextFromRequest ?? {})),
-    ]);
-
     const _run = workflow.createRun({ runId });
     void _run.start({
       inputData,
-      runtimeContext: finalRuntimeContext,
+      runtimeContext,
     });
 
     return { message: 'Workflow run started' };
@@ -295,11 +281,9 @@ export function streamWorkflowHandler({
   workflowId,
   runId,
   inputData,
-  runtimeContextFromRequest,
 }: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
   inputData?: unknown;
   runtimeContext?: RuntimeContext;
-  runtimeContextFromRequest?: Record<string, unknown>;
 }) {
   try {
     if (!workflowId) {
@@ -316,15 +300,10 @@ export function streamWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow not found' });
     }
 
-    const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
-      ...Array.from(runtimeContext?.entries() ?? []),
-      ...Array.from(Object.entries(runtimeContextFromRequest ?? {})),
-    ]);
-
     const run = workflow.createRun({ runId });
     const result = run.stream({
       inputData,
-      runtimeContext: finalRuntimeContext,
+      runtimeContext,
     });
     return result;
   } catch (error) {
@@ -338,11 +317,9 @@ export async function resumeAsyncWorkflowHandler({
   runId,
   body,
   runtimeContext,
-  runtimeContextFromRequest,
 }: WorkflowContext & {
   body: { step: string | string[]; resumeData?: unknown };
   runtimeContext?: RuntimeContext;
-  runtimeContextFromRequest?: Record<string, unknown>;
 }) {
   try {
     if (!workflowId) {
@@ -364,16 +341,11 @@ export async function resumeAsyncWorkflowHandler({
       throw new HTTPException(404, { message: 'Workflow run not found' });
     }
 
-    const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
-      ...Array.from(runtimeContext?.entries() ?? []),
-      ...Array.from(Object.entries(runtimeContextFromRequest ?? {})),
-    ]);
-
     const _run = workflow.createRun({ runId });
     const result = await _run.resume({
       step: body.step,
       resumeData: body.resumeData,
-      runtimeContext: finalRuntimeContext,
+      runtimeContext,
     });
 
     return result;

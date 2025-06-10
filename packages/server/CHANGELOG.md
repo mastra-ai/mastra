@@ -1,5 +1,39 @@
 # @mastra/deployer
 
+## 0.10.4-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [48eddb9]
+  - @mastra/core@0.10.4-alpha.2
+
+## 0.10.4-alpha.1
+
+### Patch Changes
+
+- 9597ee5: Hoist runtimeContext from POST request into middleware
+- bebd27c: Only apply <placeholder> text inside instructions in the playground ui
+- Updated dependencies [f6fd25f]
+- Updated dependencies [dffb67b]
+- Updated dependencies [f1309d3]
+- Updated dependencies [f7f8293]
+  - @mastra/core@0.10.4-alpha.1
+
+## 0.10.4-alpha.0
+
+### Patch Changes
+
+- f1f1f1b: Add basic filtering capabilities to logs
+- 82090c1: Add pagination to logs
+- Updated dependencies [d1ed912]
+- Updated dependencies [f1f1f1b]
+- Updated dependencies [f9816ae]
+- Updated dependencies [82090c1]
+- Updated dependencies [1b443fd]
+- Updated dependencies [ce97900]
+- Updated dependencies [14a2566]
+  - @mastra/core@0.10.4-alpha.0
+
 ## 0.10.3
 
 ### Patch Changes

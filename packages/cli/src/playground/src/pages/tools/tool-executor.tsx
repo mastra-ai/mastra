@@ -1,4 +1,4 @@
-import { DynamicForm } from '@mastra/playground-ui';
+import { DynamicForm, MainContentContent } from '@mastra/playground-ui';
 import { CopyButton } from '@/components/ui/copy-button';
 import { ZodType } from 'zod';
 import { ToolInformation } from '@/domains/tools/ToolInformation';
@@ -30,8 +30,8 @@ const ToolExecutor = ({
   const code = JSON.stringify(result ?? {}, null, 2);
 
   return (
-    <div className="grid relative bg-surface1 h-full overflow-y-auto grid-cols-[minmax(14rem,_24rem)_minmax(20rem,_1fr)]">
-      <div className="border-r-sm border-border1 bg-surface2 grid grid-rows-[auto_1fr] overflow-y-auto">
+    <MainContentContent hasLeftServiceColumn={true} className="relative">
+      <div className="bg-surface2 border-r-sm border-border1 w-[20rem]">
         <ToolInformation toolDescription={toolDescription} toolId={toolId} toolType={toolType} />
         <div className="p-5 overflow-y-auto">
           <DynamicForm
@@ -50,7 +50,7 @@ const ToolExecutor = ({
       <div className="p-5 h-full relative overflow-x-auto overflow-y-auto">
         <CodeMirror value={code} editable={true} theme={theme} extensions={[jsonLanguage]} />
       </div>
-    </div>
+    </MainContentContent>
   );
 };
 

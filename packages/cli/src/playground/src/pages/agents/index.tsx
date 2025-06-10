@@ -7,6 +7,8 @@ import {
   Header,
   HeaderTitle,
   Icon,
+  MainContentLayout,
+  MainContentContent,
 } from '@mastra/playground-ui';
 
 import { useAgents } from '@/hooks/use-agents';
@@ -28,13 +30,13 @@ function Agents() {
   if (isLoading) return null;
 
   return (
-    <div className="grid grid-rows-[auto_1fr] h-full">
+    <MainContentLayout>
       <Header>
         <HeaderTitle>Agents</HeaderTitle>
       </Header>
 
       {agentListData.length === 0 ? (
-        <div className="grid place-items-center">
+        <MainContentContent isCentered={true}>
           <EmptyState
             iconSlot={<AgentCoinIcon />}
             titleSlot="Configure Agents"
@@ -55,17 +57,17 @@ function Agents() {
               </Button>
             }
           />
-        </div>
+        </MainContentContent>
       ) : (
-        <div className="overflow-y-auto">
+        <MainContentContent>
           <DataTable
             columns={agentsTableColumns}
             data={agentListData}
             onClick={row => navigate(`/agents/${row.id}/chat`)}
           />
-        </div>
+        </MainContentContent>
       )}
-    </div>
+    </MainContentLayout>
   );
 }
 

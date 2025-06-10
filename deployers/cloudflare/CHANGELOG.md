@@ -1,5 +1,58 @@
 # @mastra/deployer-cloudflare
 
+## 0.10.4-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [48eddb9]
+  - @mastra/core@0.10.4-alpha.2
+  - @mastra/deployer@0.10.4-alpha.2
+
+## 0.10.4-alpha.1
+
+### Patch Changes
+
+- d90c49f: dependencies updates:
+  - Updated dependency [`@babel/core@^7.27.4` ↗︎](https://www.npmjs.com/package/@babel/core/v/7.27.4) (from `^7.26.10`, in `dependencies`)
+  - Updated dependency [`cloudflare@^4.3.0` ↗︎](https://www.npmjs.com/package/cloudflare/v/4.3.0) (from `^4.1.0`, in `dependencies`)
+  - Updated dependency [`wrangler@^4.19.1` ↗︎](https://www.npmjs.com/package/wrangler/v/4.19.1) (from `^4.4.0`, in `dependencies`)
+- 1ccccff: dependencies updates:
+  - Updated dependency [`zod@^3.25.56` ↗︎](https://www.npmjs.com/package/zod/v/3.25.56) (from `^3.24.3`, in `dependencies`)
+- 1ccccff: dependencies updates:
+  - Updated dependency [`zod@^3.25.56` ↗︎](https://www.npmjs.com/package/zod/v/3.25.56) (from `^3.24.3`, in `dependencies`)
+- Updated dependencies [d90c49f]
+- Updated dependencies [1ccccff]
+- Updated dependencies [1ccccff]
+- Updated dependencies [f6fd25f]
+- Updated dependencies [dffb67b]
+- Updated dependencies [9597ee5]
+- Updated dependencies [514fdde]
+- Updated dependencies [f1309d3]
+- Updated dependencies [bebd27c]
+- Updated dependencies [f7f8293]
+  - @mastra/deployer@0.10.4-alpha.1
+  - @mastra/core@0.10.4-alpha.1
+
+## 0.10.4-alpha.0
+
+### Patch Changes
+
+- f595975: dependencies updates:
+  - Updated dependency [`rollup@^4.41.1` ↗︎](https://www.npmjs.com/package/rollup/v/4.41.1) (from `^4.35.0`, in `dependencies`)
+- Updated dependencies [d1ed912]
+- Updated dependencies [d1ed912]
+- Updated dependencies [f595975]
+- Updated dependencies [afd9fda]
+- Updated dependencies [f1f1f1b]
+- Updated dependencies [f9816ae]
+- Updated dependencies [82090c1]
+- Updated dependencies [69f6101]
+- Updated dependencies [1b443fd]
+- Updated dependencies [ce97900]
+- Updated dependencies [14a2566]
+  - @mastra/core@0.10.4-alpha.0
+  - @mastra/deployer@0.10.4-alpha.0
+
 ## 0.10.3
 
 ### Patch Changes

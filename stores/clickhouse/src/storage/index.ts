@@ -1,9 +1,8 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { createClient } from '@clickhouse/client';
 import { MessageList } from '@mastra/core/agent';
-import type { MastraMessageV2 } from '@mastra/core/agent';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
-import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
+import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
 import {
   MastraStorage,
   TABLE_EVALS,
@@ -15,12 +14,15 @@ import {
 } from '@mastra/core/storage';
 import type {
   EvalRow,
+  PaginationInfo,
   StorageColumn,
   StorageGetMessagesArg,
   TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
+  StorageGetTracesArg,
 } from '@mastra/core/storage';
+import type { Trace } from '@mastra/core/telemetry';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 
 function safelyParseJSON(jsonString: string): any {
@@ -368,6 +370,73 @@ export class ClickhouseStore extends MastraStorage {
     } catch (error) {
       console.error(`Error creating table ${tableName}:`, error);
       throw error;
+    }
+  }
+
+  protected getSqlType(type: StorageColumn['type']): string {
+    switch (type) {
+      case 'text':
+        return 'String';
+      case 'timestamp':
+        return 'DateTime64(3)';
+      case 'integer':
+      case 'bigint':
+        return 'Int64';
+      case 'jsonb':
+        return 'String';
+      default:
+        return super.getSqlType(type); // fallback to base implementation
+    }
+  }
+
+  /**
+   * Alters table schema to add columns if they don't exist
+   * @param tableName Name of the table
+   * @param schema Schema of the table
+   * @param ifNotExists Array of column names to add if they don't exist
+   */
+  async alterTable({
+    tableName,
+    schema,
+    ifNotExists,
+  }: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void> {
+    try {
+      // 1. Get existing columns
+      const describeSql = `DESCRIBE TABLE ${tableName}`;
+      const result = await this.db.query({
+        query: describeSql,
+      });
+      const rows = await result.json();
+      const existingColumnNames = new Set(rows.data.map((row: any) => row.name.toLowerCase()));
+
+      // 2. Add missing columns
+      for (const columnName of ifNotExists) {
+        if (!existingColumnNames.has(columnName.toLowerCase()) && schema[columnName]) {
+          const columnDef = schema[columnName];
+          let sqlType = this.getSqlType(columnDef.type);
+          if (columnDef.nullable !== false) {
+            sqlType = `Nullable(${sqlType})`;
+          }
+          const defaultValue = columnDef.nullable === false ? this.getDefaultValue(columnDef.type) : '';
+          // Use backticks or double quotes as needed for identifiers
+          const alterSql =
+            `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS "${columnName}" ${sqlType} ${defaultValue}`.trim();
+
+          await this.db.query({
+            query: alterSql,
+          });
+          this.logger?.debug?.(`Added column ${columnName} to table ${tableName}`);
+        }
+      }
+    } catch (error) {
+      this.logger?.error?.(
+        `Error altering table ${tableName}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw new Error(`Failed to alter table ${tableName}: ${error}`);
     }
   }
 
@@ -1067,6 +1136,24 @@ export class ClickhouseStore extends MastraStorage {
     });
     const columns = (await result.json()) as { name: string }[];
     return columns.some(c => c.name === column);
+  }
+
+  async getTracesPaginated(_args: StorageGetTracesArg): Promise<PaginationInfo & { traces: Trace[] }> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getThreadsByResourceIdPaginated(_args: {
+    resourceId: string;
+    page?: number;
+    perPage?: number;
+  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getMessagesPaginated(
+    _args: StorageGetMessagesArg,
+  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
+    throw new Error('Method not implemented.');
   }
 
   async close(): Promise<void> {

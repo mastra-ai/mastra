@@ -15,7 +15,10 @@ import type {
   EvalRow,
   WorkflowRuns,
   WorkflowRun,
+  PaginationInfo,
+  StorageGetTracesArg,
 } from '@mastra/core/storage';
+import type { Trace } from '@mastra/core/telemetry';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { Redis } from '@upstash/redis';
 import { MessageList } from '../../../../packages/core/dist/agent/index.cjs';
@@ -34,6 +37,14 @@ export class UpstashStore extends MastraStorage {
       url: config.url,
       token: config.token,
     });
+  }
+
+  public get supports(): {
+    selectByIncludeResourceScope: boolean;
+  } {
+    return {
+      selectByIncludeResourceScope: true,
+    };
   }
 
   private transformEvalRecord(record: Record<string, any>): EvalRow {
@@ -93,17 +104,6 @@ export class UpstashStore extends MastraStorage {
     return `${tableName}:${keyParts.join(':')}`;
   }
 
-  private ensureDate(date: Date | string | undefined): Date | undefined {
-    if (!date) return undefined;
-    return date instanceof Date ? date : new Date(date);
-  }
-
-  private serializeDate(date: Date | string | undefined): string | undefined {
-    if (!date) return undefined;
-    const dateObj = this.ensureDate(date);
-    return dateObj?.toISOString();
-  }
-
   /**
    * Scans for keys matching the given pattern using SCAN and returns them as an array.
    * @param pattern Redis key pattern, e.g. "table:*"
@@ -147,7 +147,8 @@ export class UpstashStore extends MastraStorage {
   }
 
   private getMessageKey(threadId: string, messageId: string): string {
-    return this.getKey(TABLE_MESSAGES, { threadId, id: messageId });
+    const key = this.getKey(TABLE_MESSAGES, { threadId, id: messageId });
+    return key;
   }
 
   private getThreadMessagesKey(threadId: string): string {
@@ -454,6 +455,20 @@ export class UpstashStore extends MastraStorage {
     await this.redis.set(`schema:${tableName}`, schema);
   }
 
+  /**
+   * No-op: This backend is schemaless and does not require schema changes.
+   * @param tableName Name of the table
+   * @param schema Schema of the table
+   * @param ifNotExists Array of column names to add if they don't exist
+   */
+  async alterTable(_args: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void> {
+    // Nothing to do here, Redis is schemaless
+  }
+
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     const pattern = `${tableName}:*`;
     await this.scanAndDelete(pattern);
@@ -632,8 +647,25 @@ export class UpstashStore extends MastraStorage {
   }
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
-    const key = this.getKey(TABLE_THREADS, { id: threadId });
-    await this.redis.del(key);
+    // Delete thread metadata and sorted set
+    const threadKey = this.getKey(TABLE_THREADS, { id: threadId });
+    const threadMessagesKey = this.getThreadMessagesKey(threadId);
+    const messageIds: string[] = await this.redis.zrange(threadMessagesKey, 0, -1);
+
+    const pipeline = this.redis.pipeline();
+    pipeline.del(threadKey);
+    pipeline.del(threadMessagesKey);
+
+    for (let i = 0; i < messageIds.length; i++) {
+      const messageId = messageIds[i];
+      const messageKey = this.getMessageKey(threadId, messageId as string);
+      pipeline.del(messageKey);
+    }
+
+    await pipeline.exec();
+
+    // Bulk delete all message keys for this thread if any remain
+    await this.scanAndDelete(this.getMessageKey(threadId, '*'));
   }
 
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
@@ -643,6 +675,17 @@ export class UpstashStore extends MastraStorage {
   ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
     const { messages, format = 'v1' } = args;
     if (messages.length === 0) return [];
+
+    const threadId = messages[0]?.threadId;
+    if (!threadId) {
+      throw new Error('Thread ID is required');
+    }
+
+    // Check if thread exists
+    const thread = await this.getThreadById({ threadId });
+    if (!thread) {
+      throw new Error(`Thread ${threadId} not found`);
+    }
 
     // Add an index to each message to maintain order
     const messagesWithIndex = messages.map((message, index) => ({
@@ -656,7 +699,8 @@ export class UpstashStore extends MastraStorage {
       const pipeline = this.redis.pipeline();
       for (const message of batch) {
         const key = this.getMessageKey(message.threadId!, message.id);
-        const score = message._index !== undefined ? message._index : new Date(message.createdAt).getTime();
+        const createdAtScore = new Date(message.createdAt).getTime();
+        const score = message._index !== undefined ? message._index : createdAtScore;
 
         // Store the message data
         pipeline.set(key, message);
@@ -824,6 +868,7 @@ export class UpstashStore extends MastraStorage {
     }
 
     const messageIds = new Set<string>();
+    const messageIdToThreadIds: Record<string, string> = {};
 
     if (limit === 0 && !selectBy?.include) {
       return [];
@@ -834,23 +879,32 @@ export class UpstashStore extends MastraStorage {
       for (const item of selectBy.include) {
         messageIds.add(item.id);
 
-        if (item.withPreviousMessages || item.withNextMessages) {
-          // Get the rank of this message in the sorted set
-          const rank = await this.redis.zrank(threadMessagesKey, item.id);
-          if (rank === null) continue;
+        // Use per-include threadId if present, else fallback to main threadId
+        const itemThreadId = item.threadId || threadId;
+        messageIdToThreadIds[item.id] = itemThreadId;
+        const itemThreadMessagesKey = this.getThreadMessagesKey(itemThreadId);
 
-          // Get previous messages if requested
-          if (item.withPreviousMessages) {
-            const start = Math.max(0, rank - item.withPreviousMessages);
-            const prevIds = rank === 0 ? [] : await this.redis.zrange(threadMessagesKey, start, rank - 1);
-            prevIds.forEach(id => messageIds.add(id as string));
-          }
+        // Get the rank of this message in the sorted set
+        const rank = await this.redis.zrank(itemThreadMessagesKey, item.id);
+        if (rank === null) continue;
 
-          // Get next messages if requested
-          if (item.withNextMessages) {
-            const nextIds = await this.redis.zrange(threadMessagesKey, rank + 1, rank + item.withNextMessages);
-            nextIds.forEach(id => messageIds.add(id as string));
-          }
+        // Get previous messages if requested
+        if (item.withPreviousMessages) {
+          const start = Math.max(0, rank - item.withPreviousMessages);
+          const prevIds = rank === 0 ? [] : await this.redis.zrange(itemThreadMessagesKey, start, rank - 1);
+          prevIds.forEach(id => {
+            messageIds.add(id as string);
+            messageIdToThreadIds[id as string] = itemThreadId;
+          });
+        }
+
+        // Get next messages if requested
+        if (item.withNextMessages) {
+          const nextIds = await this.redis.zrange(itemThreadMessagesKey, rank + 1, rank + item.withNextMessages);
+          nextIds.forEach(id => {
+            messageIds.add(id as string);
+            messageIdToThreadIds[id as string] = itemThreadId;
+          });
         }
       }
     }
@@ -859,19 +913,29 @@ export class UpstashStore extends MastraStorage {
     if (limit === Number.MAX_SAFE_INTEGER) {
       // Get all messages
       const allIds = await this.redis.zrange(threadMessagesKey, 0, -1);
-      allIds.forEach(id => messageIds.add(id as string));
+      allIds.forEach(id => {
+        messageIds.add(id as string);
+        messageIdToThreadIds[id as string] = threadId;
+      });
     } else if (limit > 0) {
       // Get limited number of recent messages
       const latestIds = await this.redis.zrange(threadMessagesKey, -limit, -1);
-      latestIds.forEach(id => messageIds.add(id as string));
+      latestIds.forEach(id => {
+        messageIds.add(id as string);
+        messageIdToThreadIds[id as string] = threadId;
+      });
     }
 
     // Fetch all needed messages in parallel
     const messages = (
       await Promise.all(
-        Array.from(messageIds).map(async id =>
-          this.redis.get<MastraMessageV2 & { _index?: number }>(this.getMessageKey(threadId, id)),
-        ),
+        Array.from(messageIds).map(async id => {
+          const tId = messageIdToThreadIds[id] || threadId;
+          const byThreadId = await this.redis.get<MastraMessageV2 & { _index?: number }>(this.getMessageKey(tId, id));
+          if (byThreadId) return byThreadId;
+
+          return null;
+        }),
       )
     ).filter(msg => msg !== null) as (MastraMessageV2 & { _index?: number })[];
 
@@ -1200,6 +1264,24 @@ export class UpstashStore extends MastraStorage {
       console.error('Error getting workflow run by ID:', error);
       throw error;
     }
+  }
+
+  async getTracesPaginated(_args: StorageGetTracesArg): Promise<PaginationInfo & { traces: Trace[] }> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getThreadsByResourceIdPaginated(_args: {
+    resourceId: string;
+    page?: number;
+    perPage?: number;
+  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getMessagesPaginated(
+    _args: StorageGetMessagesArg,
+  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
+    throw new Error('Method not implemented.');
   }
 
   async close(): Promise<void> {
