@@ -703,7 +703,7 @@ importers:
         specifier: ^1.2.1
         version: 1.2.1(eslint@9.28.0(jiti@2.4.2))(typescript@5.8.3)(vitest@3.2.2(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0))
       eslint-plugin-import-x:
-        specifier: ^4.15.0
+        specifier: ^4.15.1
         version: 4.15.1(@typescript-eslint/utils@8.33.1(eslint@9.28.0(jiti@2.4.2))(typescript@5.8.3))(eslint-import-resolver-node@0.3.9)(eslint@9.28.0(jiti@2.4.2))
       eslint-plugin-react:
         specifier: ^7.37.5
@@ -712,7 +712,7 @@ importers:
         specifier: ^5.2.0
         version: 5.2.0(eslint@9.28.0(jiti@2.4.2))
       eslint-plugin-testing-library:
-        specifier: ^7.3.0
+        specifier: ^7.4.0
         version: 7.4.0(eslint@9.28.0(jiti@2.4.2))(typescript@5.8.3)
       globals:
         specifier: ^15.15.0
@@ -34579,7 +34579,7 @@ snapshots:
       isstream: 0.1.2
       jsonwebtoken: 9.0.2
       mime-types: 2.1.35
-      retry-axios: 2.6.0(axios@1.9.0)
+      retry-axios: 2.6.0(axios@1.9.0(debug@4.4.1))
       tough-cookie: 4.1.4
     transitivePeerDependencies:
       - supports-color
@@ -38776,7 +38776,7 @@ snapshots:
 
   ret@0.4.3: {}
 
-  retry-axios@2.6.0(axios@1.9.0):
+  retry-axios@2.6.0(axios@1.9.0(debug@4.4.1)):
     dependencies:
       axios: 1.9.0(debug@4.4.1)
 
