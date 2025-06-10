@@ -1,5 +1,12 @@
 # mastra
 
+## 0.10.4-alpha.2
+
+### Patch Changes
+
+- e719504: don't start posthog when the browser is Brave
+- b4ee346: Reintroduce --env flag for mastra dev, build
+
 ## 0.10.4-alpha.1
 
 ### Patch Changes

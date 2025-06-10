@@ -1,5 +1,11 @@
 # @mastra/playground-ui
 
+## 5.1.4-alpha.2
+
+### Patch Changes
+
+- e719504: don't start posthog when the browser is Brave
+
 ## 5.1.4-alpha.1
 
 ### Patch Changes
