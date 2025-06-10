@@ -1,4 +1,3 @@
-import * as child_process from 'child_process';
 import { readFileSync, writeFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import process from 'process';
