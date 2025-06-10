@@ -1,5 +1,0 @@
----
-"@mastra/mcp": patch
----
-dependencies updates:
-  - Updated dependency [`zod-from-json-schema@^0.4.1` ↗︎](https://www.npmjs.com/package/zod-from-json-schema/v/0.4.1) (from `^0.0.5`, in `dependencies`)
