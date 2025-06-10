@@ -32,7 +32,7 @@
     "js-tiktoken": "^1.0.20",
     "node-html-better-parser": "^1.4.11",
     "pathe": "^2.0.3",
-    "zod": "^3.24.3"
+    "zod": "^3.25.56"
   },
   "peerDependencies": {
     "ai": "^4.0.0",
