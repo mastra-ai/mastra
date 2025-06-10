@@ -154,6 +154,7 @@ export const createSampleWorkflowSnapshot = (status: string, createdAt?: Date) =
     suspendedPaths: {},
     runId,
     timestamp: timestamp.getTime(),
+    status: status as WorkflowRunState['status'],
   } as WorkflowRunState;
   return { snapshot, runId, stepId };
 };
@@ -926,6 +927,7 @@ export function createTestSuite(storage: MastraStorage) {
         suspendedPaths: {},
         serializedStepGraph: [],
         timestamp: Date.now(),
+        status: 'success' as WorkflowRunState['status'],
       };
       await storage.persistWorkflowSnapshot({
         workflowName,
@@ -954,6 +956,7 @@ export function createTestSuite(storage: MastraStorage) {
         suspendedPaths: {},
         serializedStepGraph: [],
         timestamp: Date.now(),
+        status: 'success' as WorkflowRunState['status'],
       };
       await storage.persistWorkflowSnapshot({
         workflowName,
