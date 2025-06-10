@@ -22,7 +22,12 @@ import { UpstashStore } from './index';
 // Increase timeout for all tests in this file to 30 seconds
 vi.setConfig({ testTimeout: 200_000, hookTimeout: 200_000 });
 
-const createSampleTrace = (name: string, scope?: string, attributes?: Record<string, string>) => ({
+const createSampleTrace = (
+  name: string,
+  scope?: string,
+  attributes?: Record<string, string>,
+  createdAt: Date = new Date(),
+) => ({
   id: `trace-${randomUUID()}`,
   parentSpanId: `span-${randomUUID()}`,
   traceId: `trace-${randomUUID()}`,
@@ -30,16 +35,16 @@ const createSampleTrace = (name: string, scope?: string, attributes?: Record<str
   scope,
   kind: 'internal',
   status: JSON.stringify({ code: 'success' }),
-  events: JSON.stringify([{ name: 'start', timestamp: Date.now() }]),
+  events: JSON.stringify([{ name: 'start', timestamp: createdAt.getTime() }]),
   links: JSON.stringify([]),
   attributes: attributes ? JSON.stringify(attributes) : undefined,
-  startTime: new Date().toISOString(),
-  endTime: new Date().toISOString(),
+  startTime: createdAt.toISOString(),
+  endTime: new Date(createdAt.getTime() + 1000).toISOString(),
   other: JSON.stringify({ custom: 'data' }),
-  createdAt: new Date().toISOString(),
+  createdAt: createdAt.toISOString(),
 });
 
-const createSampleEval = (agentName: string, isTest = false) => {
+const createSampleEval = (agentName: string, isTest = false, createdAt: Date = new Date()) => {
   const testInfo = isTest ? { testPath: 'test/path.ts', testName: 'Test Name' } : undefined;
 
   return {
@@ -52,7 +57,7 @@ const createSampleEval = (agentName: string, isTest = false) => {
     test_info: testInfo ? JSON.stringify(testInfo) : undefined,
     global_run_id: `global-${randomUUID()}`,
     run_id: `run-${randomUUID()}`,
-    created_at: new Date().toISOString(),
+    created_at: createdAt.toISOString(),
   };
 };
 
@@ -438,7 +443,7 @@ describe('UpstashStore', () => {
       expect(retrievedMessages[0].content).toEqual(messages[0].content);
     });
 
-    describe('getPaginatedMessages', () => {
+    describe('getMessagesPaginated', () => {
       it('should return paginated messages with total count', async () => {
         const thread = createSampleThread();
         await store.saveThread({ thread });
@@ -449,10 +454,9 @@ describe('UpstashStore', () => {
 
         await store.saveMessages({ messages, format: 'v2' });
 
-        const page1 = await store.getMessages({
+        const page1 = await store.getMessagesPaginated({
           threadId: thread.id,
-          page: 0,
-          perPage: 5,
+          selectBy: { pagination: { page: 0, perPage: 5 } },
           format: 'v2',
         });
         expect(page1.messages).toHaveLength(5);
@@ -461,20 +465,18 @@ describe('UpstashStore', () => {
         expect(page1.perPage).toBe(5);
         expect(page1.hasMore).toBe(true);
 
-        const page3 = await store.getMessages({
+        const page3 = await store.getMessagesPaginated({
           threadId: thread.id,
-          page: 2,
-          perPage: 5,
+          selectBy: { pagination: { page: 2, perPage: 5 } },
           format: 'v2',
         });
         expect(page3.messages).toHaveLength(5);
         expect(page3.total).toBe(15);
         expect(page3.hasMore).toBe(false);
 
-        const page4 = await store.getMessages({
+        const page4 = await store.getMessagesPaginated({
           threadId: thread.id,
-          page: 3,
-          perPage: 5,
+          selectBy: { pagination: { page: 3, perPage: 5 } },
           format: 'v2',
         });
         expect(page4.messages).toHaveLength(0);
@@ -495,10 +497,9 @@ describe('UpstashStore', () => {
 
         await store.saveMessages({ messages, format: 'v2' });
 
-        const page1 = await store.getMessages({
+        const page1 = await store.getMessagesPaginated({
           threadId: thread.id,
-          page: 0,
-          perPage: 3,
+          selectBy: { pagination: { page: 0, perPage: 3 } },
           format: 'v2',
         });
 
@@ -510,32 +511,6 @@ describe('UpstashStore', () => {
             new Date(currentMessage.createdAt).getTime(),
           );
         }
-      });
-
-      it('should maintain backward compatibility when no pagination params provided', async () => {
-        const thread = createSampleThread();
-        await store.saveThread({ thread });
-
-        const messages = Array.from({ length: 5 }, (_, i) =>
-          createSampleMessageV2({ threadId: thread.id, content: `Message ${i + 1}` }),
-        );
-
-        await store.saveMessages({ messages, format: 'v2' });
-
-        // Test original format without pagination - should return array
-        const messagesV1 = await store.getMessages({
-          threadId: thread.id,
-          format: 'v1',
-        });
-        expect(Array.isArray(messagesV1)).toBe(true);
-        expect(messagesV1).toHaveLength(5);
-
-        const messagesV2 = await store.getMessages({
-          threadId: thread.id,
-          format: 'v2',
-        });
-        expect(Array.isArray(messagesV2)).toBe(true);
-        expect(messagesV2).toHaveLength(5);
       });
 
       it('should support date filtering with pagination', async () => {
@@ -560,11 +535,15 @@ describe('UpstashStore', () => {
 
         await store.saveMessages({ messages: [...oldMessages, ...newMessages], format: 'v2' });
 
-        const recentMessages = await store.getMessages({
+        const recentMessages = await store.getMessagesPaginated({
           threadId: thread.id,
-          page: 0,
-          perPage: 10,
-          fromDate: now,
+          selectBy: {
+            pagination: {
+              page: 0,
+              perPage: 10,
+              dateRange: { start: now },
+            },
+          },
           format: 'v2',
         });
         expect(recentMessages.messages).toHaveLength(4);
@@ -1200,7 +1179,7 @@ describe('UpstashStore', () => {
         expect(page3.hasMore).toBe(false);
       });
 
-      it('should support limit/offset pagination', async () => {
+      it('should support page/perPage pagination', async () => {
         const agentName = 'test-agent-2';
         const evals = Array.from({ length: 15 }, () => createSampleEval(agentName));
 
@@ -1212,12 +1191,12 @@ describe('UpstashStore', () => {
         }
 
         // Test offset-based pagination
-        const result1 = await store.getEvals({ agentName, limit: 5, offset: 0 });
+        const result1 = await store.getEvals({ agentName, page: 0, perPage: 5 });
         expect(result1.evals).toHaveLength(5);
         expect(result1.total).toBe(15);
         expect(result1.hasMore).toBe(true);
 
-        const result2 = await store.getEvals({ agentName, limit: 5, offset: 10 });
+        const result2 = await store.getEvals({ agentName, page: 2, perPage: 5 });
         expect(result2.evals).toHaveLength(5);
         expect(result2.total).toBe(15);
         expect(result2.hasMore).toBe(false);
@@ -1243,9 +1222,30 @@ describe('UpstashStore', () => {
         expect(liveResults.evals).toHaveLength(5);
         expect(liveResults.total).toBe(8);
       });
+
+      it('should filter by date with pagination', async () => {
+        const agentName = 'test-agent-date';
+        const now = new Date();
+        const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        const evals = [createSampleEval(agentName, false, now), createSampleEval(agentName, false, yesterday)];
+        for (const evalRecord of evals) {
+          await store.insert({
+            tableName: TABLE_EVALS,
+            record: evalRecord,
+          });
+        }
+        const result = await store.getEvals({
+          agentName,
+          page: 0,
+          perPage: 10,
+          dateRange: { start: now },
+        });
+        expect(result.evals).toHaveLength(1);
+        expect(result.total).toBe(1);
+      });
     });
 
-    describe('getTracesPaginated', () => {
+    describe('getTraces with pagination', () => {
       it('should return paginated traces with total count', async () => {
         const traces = Array.from({ length: 18 }, (_, i) => createSampleTrace(`test-trace-${i}`, 'test-scope'));
 
@@ -1256,11 +1256,10 @@ describe('UpstashStore', () => {
           });
         }
 
-        const page1 = await store.getTraces({
+        const page1 = await store.getTracesPaginated({
           scope: 'test-scope',
           page: 0,
           perPage: 8,
-          returnPaginationResults: true,
         });
         expect(page1.traces).toHaveLength(8);
         expect(page1.total).toBe(18);
@@ -1268,53 +1267,43 @@ describe('UpstashStore', () => {
         expect(page1.perPage).toBe(8);
         expect(page1.hasMore).toBe(true);
 
-        const page3 = await store.getTraces({
+        const page3 = await store.getTracesPaginated({
           scope: 'test-scope',
           page: 2,
           perPage: 8,
-          returnPaginationResults: true,
         });
         expect(page3.traces).toHaveLength(2);
         expect(page3.total).toBe(18);
         expect(page3.hasMore).toBe(false);
       });
 
-      it('should filter by attributes with pagination', async () => {
-        const tracesWithAttr = Array.from({ length: 8 }, (_, i) =>
-          createSampleTrace(`trace-${i}`, 'test-scope', { environment: 'prod' }),
-        );
-        const tracesWithoutAttr = Array.from({ length: 5 }, (_, i) =>
-          createSampleTrace(`trace-other-${i}`, 'test-scope', { environment: 'dev' }),
-        );
+      it('should filter by date with pagination', async () => {
+        const scope = 'test-scope-date';
+        const now = new Date();
+        const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-        for (const trace of [...tracesWithAttr, ...tracesWithoutAttr]) {
+        const traces = [
+          createSampleTrace(`test-trace-now`, scope, undefined, now),
+          createSampleTrace(`test-trace-yesterday`, scope, undefined, yesterday),
+        ];
+
+        for (const trace of traces) {
           await store.insert({
             tableName: TABLE_TRACES,
             record: trace,
           });
         }
 
-        const prodTraces = await store.getTraces({
-          scope: 'test-scope',
-          attributes: { environment: 'prod' },
-          page: 0,
-          perPage: 5,
-          returnPaginationResults: true,
-        });
-        expect(prodTraces.traces).toHaveLength(5);
-        expect(prodTraces.total).toBe(8);
-        expect(prodTraces.hasMore).toBe(true);
-
-        const devTraces = await store.getTraces({
-          scope: 'test-scope',
-          attributes: { environment: 'dev' },
+        const result = await store.getTracesPaginated({
+          scope,
           page: 0,
           perPage: 10,
-          returnPaginationResults: true,
+          dateRange: { start: now },
         });
-        expect(devTraces.traces).toHaveLength(5);
-        expect(devTraces.total).toBe(5);
-        expect(devTraces.hasMore).toBe(false);
+
+        expect(result.traces).toHaveLength(1);
+        expect(result.traces[0].name).toBe('test-trace-now');
+        expect(result.total).toBe(1);
       });
     });
 
@@ -1327,13 +1316,13 @@ describe('UpstashStore', () => {
           await store.saveThread({ thread });
         }
 
-        const page1 = await store.getThreadsByResourceId({ resourceId, page: 0, perPage: 7 });
+        const page1 = await store.getThreadsByResourceIdPaginated({ resourceId, page: 0, perPage: 7 });
         expect(page1.threads).toHaveLength(7);
 
-        const page3 = await store.getThreadsByResourceId({ resourceId, page: 2, perPage: 7 });
+        const page3 = await store.getThreadsByResourceIdPaginated({ resourceId, page: 2, perPage: 7 });
         expect(page3.threads).toHaveLength(3);
 
-        const limited = await store.getThreadsByResourceId({ resourceId, page: 1, perPage: 5 });
+        const limited = await store.getThreadsByResourceIdPaginated({ resourceId, page: 1, perPage: 5 });
         expect(limited.threads).toHaveLength(5);
       });
     });
