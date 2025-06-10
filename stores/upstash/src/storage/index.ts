@@ -653,9 +653,6 @@ export class UpstashStore extends MastraStorage {
     const threadMessagesKey = this.getThreadMessagesKey(threadId);
     const messageIds: string[] = await this.redis.zrange(threadMessagesKey, 0, -1);
 
-    // Fetch all resourceIds for these messages in one go
-    const resourceIdKeys = messageIds.map(messageId => this.getResourceKeyByThreadAndMessage(threadId, messageId));
-
     const pipeline = this.redis.pipeline();
     pipeline.del(threadKey);
     pipeline.del(threadMessagesKey);
@@ -664,9 +661,6 @@ export class UpstashStore extends MastraStorage {
       const messageId = messageIds[i];
       const messageKey = this.getMessageKey(threadId, messageId as string);
       pipeline.del(messageKey);
-
-      // Delete the thread-to-resource mapping itself
-      pipeline.del(resourceIdKeys[i] as string);
     }
 
     await pipeline.exec();
