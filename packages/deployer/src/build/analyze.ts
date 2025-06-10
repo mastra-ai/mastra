@@ -1,3 +1,4 @@
+import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
@@ -84,55 +85,72 @@ async function analyze(
   }
 
   const normalizedMastraEntry = mastraEntry.replaceAll('\\', '/');
-  const optimizerBundler = await rollup({
-    logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
-    input: isVirtualFile ? '#entry' : entry,
-    treeshake: 'smallest',
-    preserveSymlinks: true,
-    plugins: [
-      virtualPlugin,
-      tsConfigPaths(),
+  let optimizerBundler;
+  let output;
+  try {
+    optimizerBundler = await rollup({
+      logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
+      input: isVirtualFile ? '#entry' : entry,
+      treeshake: 'smallest',
+      preserveSymlinks: true,
+      plugins: [
+        virtualPlugin,
+        tsConfigPaths(),
+        {
+          name: 'custom-alias-resolver',
+          resolveId(id: string) {
+            if (id === '#server') {
+              return fileURLToPath(import.meta.resolve('@mastra/deployer/server')).replaceAll('\\', '/');
+            }
+            if (id === '#mastra') {
+              return normalizedMastraEntry;
+            }
+            if (id.startsWith('@mastra/server')) {
+              return fileURLToPath(import.meta.resolve(id));
+            }
+          },
+        } satisfies Plugin,
+        json(),
+        esbuild({
+          target: 'node20',
+          platform,
+          minify: false,
+        }),
+        commonjs({
+          strictRequires: 'debug',
+          ignoreTryCatch: false,
+          transformMixedEsModules: true,
+          extensions: ['.js', '.ts'],
+        }),
+        removeDeployer(normalizedMastraEntry),
+        esbuild({
+          target: 'node20',
+          platform,
+          minify: false,
+        }),
+      ].filter(Boolean),
+    });
+
+    const { output: bundleOutput } = await optimizerBundler.generate({
+      format: 'esm',
+      inlineDynamicImports: true,
+    });
+
+    output = bundleOutput;
+    await optimizerBundler.close();
+  } catch (error) {
+    const mastraError = new MastraError(
       {
-        name: 'custom-alias-resolver',
-        resolveId(id: string) {
-          if (id === '#server') {
-            return fileURLToPath(import.meta.resolve('@mastra/deployer/server')).replaceAll('\\', '/');
-          }
-          if (id === '#mastra') {
-            return normalizedMastraEntry;
-          }
-          if (id.startsWith('@mastra/server')) {
-            return fileURLToPath(import.meta.resolve(id));
-          }
-        },
-      } satisfies Plugin,
-      json(),
-      esbuild({
-        target: 'node20',
-        platform,
-        minify: false,
-      }),
-      commonjs({
-        strictRequires: 'debug',
-        ignoreTryCatch: false,
-        transformMixedEsModules: true,
-        extensions: ['.js', '.ts'],
-      }),
-      removeDeployer(normalizedMastraEntry),
-      esbuild({
-        target: 'node20',
-        platform,
-        minify: false,
-      }),
-    ].filter(Boolean),
-  });
-
-  const { output } = await optimizerBundler.generate({
-    format: 'esm',
-    inlineDynamicImports: true,
-  });
-
-  await optimizerBundler.close();
+        id: 'DEPLOYER_BUNDLER_ANALYZE_BUNDLE_FAILED',
+        text: `Failed to analyze dependencies when bundling Mastra application`,
+        domain: ErrorDomain.DEPLOYER,
+        category: ErrorCategory.SYSTEM,
+      },
+      error,
+    );
+    logger.trackException(mastraError);
+    throw mastraError;
+  }
 
   const depsToOptimize = new Map(Object.entries(output[0].importedBindings));
   for (const dep of depsToOptimize.keys()) {

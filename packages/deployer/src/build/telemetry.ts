@@ -4,6 +4,7 @@ import esbuild from 'rollup-plugin-esbuild';
 import commonjs from '@rollup/plugin-commonjs';
 import { removeAllOptionsExceptTelemetry } from './babel/remove-all-options-telemetry';
 import { recursiveRemoveNonReferencedNodes } from './plugins/remove-unused-references';
+import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 
 export function getTelemetryBundler(
   entryFile: string,
@@ -11,79 +12,92 @@ export function getTelemetryBundler(
     hasCustomConfig: false;
   },
 ) {
-  return rollup({
-    logLevel: 'silent',
-    input: {
-      'telemetry-config': entryFile,
-    },
-    treeshake: 'smallest',
-    plugins: [
-      // transpile typescript to something we understand
-      esbuild({
-        target: 'node20',
-        platform: 'node',
-        minify: false,
-      }),
-      commonjs({
-        extensions: ['.js', '.ts'],
-        strictRequires: 'strict',
-        transformMixedEsModules: true,
-        ignoreTryCatch: false,
-      }),
-      {
-        name: 'get-telemetry-config',
-        transform(code, id) {
-          if (id !== entryFile) {
-            return;
-          }
-
-          return new Promise((resolve, reject) => {
-            babel.transform(
-              code,
-              {
-                babelrc: false,
-                configFile: false,
-                filename: id,
-                plugins: [removeAllOptionsExceptTelemetry(result)],
-              },
-              (err, result) => {
-                if (err) {
-                  return reject(err);
-                }
-
-                resolve({
-                  code: result!.code!,
-                  map: result!.map!,
-                });
-              },
-            );
-          });
-        },
+  try {
+    return rollup({
+      logLevel: 'silent',
+      input: {
+        'telemetry-config': entryFile,
       },
-      // let esbuild remove all unused imports
-      esbuild({
-        target: 'node20',
-        platform: 'node',
-        minify: false,
-      }),
-      {
-        name: 'cleanup',
-        transform(code, id) {
-          if (id !== entryFile) {
-            return;
-          }
+      treeshake: 'smallest',
+      plugins: [
+        // transpile typescript to something we understand
+        esbuild({
+          target: 'node20',
+          platform: 'node',
+          minify: false,
+        }),
+        commonjs({
+          extensions: ['.js', '.ts'],
+          strictRequires: 'strict',
+          transformMixedEsModules: true,
+          ignoreTryCatch: false,
+        }),
+        {
+          name: 'get-telemetry-config',
+          transform(code, id) {
+            if (id !== entryFile) {
+              return;
+            }
 
-          return recursiveRemoveNonReferencedNodes(code);
+            return new Promise((resolve, reject) => {
+              babel.transform(
+                code,
+                {
+                  babelrc: false,
+                  configFile: false,
+                  filename: id,
+                  plugins: [removeAllOptionsExceptTelemetry(result)],
+                },
+                (err, result) => {
+                  if (err) {
+                    return reject(err);
+                  }
+
+                  resolve({
+                    code: result!.code!,
+                    map: result!.map!,
+                  });
+                },
+              );
+            });
+          },
         },
+        // let esbuild remove all unused imports
+        esbuild({
+          target: 'node20',
+          platform: 'node',
+          minify: false,
+        }),
+        {
+          name: 'cleanup',
+          transform(code, id) {
+            if (id !== entryFile) {
+              return;
+            }
+
+            return recursiveRemoveNonReferencedNodes(code);
+          },
+        },
+        // let esbuild remove all unused imports
+        esbuild({
+          target: 'node20',
+          platform: 'node',
+          minify: false,
+        }),
+      ],
+    });
+  } catch (error) {
+    const mastraError = new MastraError(
+      {
+        id: 'DEPLOYER_BUNDLER_TELEMETRY_BUNDLE_FAILED',
+        text: `Failed to build telemetry config`,
+        domain: ErrorDomain.DEPLOYER,
+        category: ErrorCategory.SYSTEM,
       },
-      // let esbuild remove all unused imports
-      esbuild({
-        target: 'node20',
-        platform: 'node',
-        minify: false,
-      }),
-    ],
-  });
+      error,
+    );
+    throw mastraError;
+  }
 }
 
 export async function writeTelemetryConfig(
@@ -99,12 +113,26 @@ export async function writeTelemetryConfig(
 
   const bundle = await getTelemetryBundler(entryFile, result);
 
-  const { output } = await bundle.write({
-    dir: outputDir,
-    format: 'es',
-    entryFileNames: '[name].mjs',
-  });
+  let externals: string[] = [];
+  try {
+    const { output } = await bundle.write({
+      dir: outputDir,
+      format: 'es',
+      entryFileNames: '[name].mjs',
+    });
+    externals = output[0].imports.filter(x => !x.startsWith('./'));
+  } catch (error) {
+    const mastraError = new MastraError(
+      {
+        id: 'DEPLOYER_BUNDLER_TELEMETRY_WRITE_OUTPUT_FAILED',
+        text: `Failed to write bundled telemetry config output`,
+        domain: ErrorDomain.DEPLOYER,
+        category: ErrorCategory.SYSTEM,
+      },
+      error,
+    );
+    throw mastraError;
+  }
 
-  const externals = output[0].imports.filter(x => !x.startsWith('./'));
   return { ...result, externalDependencies: externals };
 }

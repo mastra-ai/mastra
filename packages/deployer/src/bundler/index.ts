@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { MastraBundler } from '@mastra/core/bundler';
 import virtual from '@rollup/plugin-virtual';
 import fsExtra, { copy, ensureDir, readJSON, emptyDir } from 'fs-extra/esm';
@@ -40,7 +41,22 @@ export abstract class Bundler extends MastraBundler {
     const instrumentationFile = join(outputDirectory, 'instrumentation.mjs');
     const __dirname = dirname(fileURLToPath(import.meta.url));
 
-    await copy(join(__dirname, 'templates', 'instrumentation-template.js'), instrumentationFile);
+    try {
+      await copy(join(__dirname, 'templates', 'instrumentation-template.js'), instrumentationFile);
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'DEPLOYER_BUNDLER_WRITE_INSTRUMENTATION_FILE_FAILED',
+          text: `Failed to write instrumentation file when bundling Mastra application`,
+          domain: ErrorDomain.DEPLOYER,
+          category: ErrorCategory.SYSTEM,
+        },
+        error,
+      );
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
+    }
   }
 
   async writePackageJson(
@@ -49,57 +65,71 @@ export abstract class Bundler extends MastraBundler {
     resolutions?: Record<string, string>,
   ) {
     this.logger.debug(`Writing project's package.json`);
-    await ensureDir(outputDirectory);
-    const pkgPath = join(outputDirectory, 'package.json');
+    try {
+      await ensureDir(outputDirectory);
+      const pkgPath = join(outputDirectory, 'package.json');
 
-    const dependenciesMap = new Map();
-    for (const [key, value] of dependencies.entries()) {
-      if (key.startsWith('@')) {
-        // Handle scoped packages (e.g. @org/package)
-        const pkgChunks = key.split('/');
-        dependenciesMap.set(`${pkgChunks[0]}/${pkgChunks[1]}`, value);
-      } else {
-        // For non-scoped packages, take only the first part before any slash
-        const pkgName = key.split('/')[0] || key;
-        dependenciesMap.set(pkgName, value);
+      const dependenciesMap = new Map();
+      for (const [key, value] of dependencies.entries()) {
+        if (key.startsWith('@')) {
+          // Handle scoped packages (e.g. @org/package)
+          const pkgChunks = key.split('/');
+          dependenciesMap.set(`${pkgChunks[0]}/${pkgChunks[1]}`, value);
+        } else {
+          // For non-scoped packages, take only the first part before any slash
+          const pkgName = key.split('/')[0] || key;
+          dependenciesMap.set(pkgName, value);
+        }
       }
-    }
 
-    // add telemetry dependencies
-    dependenciesMap.set('@opentelemetry/core', '^2.0.1');
-    dependenciesMap.set('@opentelemetry/auto-instrumentations-node', '^0.59.0');
-    dependenciesMap.set('@opentelemetry/exporter-trace-otlp-grpc', '^0.201.0');
-    dependenciesMap.set('@opentelemetry/exporter-trace-otlp-http', '^0.201.0');
-    dependenciesMap.set('@opentelemetry/resources', '^2.0.1');
-    dependenciesMap.set('@opentelemetry/sdk-node', '^0.201.0');
-    dependenciesMap.set('@opentelemetry/sdk-trace-base', '^2.0.1');
-    dependenciesMap.set('@opentelemetry/semantic-conventions', '^1.33.0');
-    dependenciesMap.set('@opentelemetry/instrumentation', '^0.202.0');
+      // add telemetry dependencies
+      dependenciesMap.set('@opentelemetry/core', '^2.0.1');
+      dependenciesMap.set('@opentelemetry/auto-instrumentations-node', '^0.59.0');
+      dependenciesMap.set('@opentelemetry/exporter-trace-otlp-grpc', '^0.201.0');
+      dependenciesMap.set('@opentelemetry/exporter-trace-otlp-http', '^0.201.0');
+      dependenciesMap.set('@opentelemetry/resources', '^2.0.1');
+      dependenciesMap.set('@opentelemetry/sdk-node', '^0.201.0');
+      dependenciesMap.set('@opentelemetry/sdk-trace-base', '^2.0.1');
+      dependenciesMap.set('@opentelemetry/semantic-conventions', '^1.33.0');
+      dependenciesMap.set('@opentelemetry/instrumentation', '^0.202.0');
 
-    await writeFile(
-      pkgPath,
-      JSON.stringify(
+      await writeFile(
+        pkgPath,
+        JSON.stringify(
+          {
+            name: 'server',
+            version: '1.0.0',
+            description: '',
+            type: 'module',
+            main: 'index.mjs',
+            scripts: {
+              start: 'node --import=./instrumentation.mjs --import=@opentelemetry/instrumentation/hook.mjs ./index.mjs',
+            },
+            author: 'Mastra',
+            license: 'ISC',
+            dependencies: Object.fromEntries(dependenciesMap.entries()),
+            ...(Object.keys(resolutions ?? {}).length > 0 && { resolutions }),
+            pnpm: {
+              neverBuiltDependencies: [],
+            },
+          },
+          null,
+          2,
+        ),
+      );
+    } catch (error) {
+      const mastraError = new MastraError(
         {
-          name: 'server',
-          version: '1.0.0',
-          description: '',
-          type: 'module',
-          main: 'index.mjs',
-          scripts: {
-            start: 'node --import=./instrumentation.mjs --import=@opentelemetry/instrumentation/hook.mjs ./index.mjs',
-          },
-          author: 'Mastra',
-          license: 'ISC',
-          dependencies: Object.fromEntries(dependenciesMap.entries()),
-          ...(Object.keys(resolutions ?? {}).length > 0 && { resolutions }),
-          pnpm: {
-            neverBuiltDependencies: [],
-          },
+          id: 'DEPLOYER_BUNDLER_WRITE_PACKAGE_JSON_FAILED',
+          text: `Failed to write package.json when bundling Mastra application`,
+          domain: ErrorDomain.DEPLOYER,
+          category: ErrorCategory.SYSTEM,
         },
-        null,
-        2,
-      ),
-    );
+        error,
+      );
+      this.logger.trackException(mastraError);
+      throw mastraError;
+    }
   }
 
   protected createBundler(inputOptions: InputOptions, outputOptions: Partial<OutputOptions> & { dir: string }) {
@@ -254,8 +284,21 @@ export abstract class Bundler extends MastraBundler {
           logger: this.logger,
         });
       } catch (error) {
-        this.logger.error(`Failed to collect workspace dependencies: ${error}`);
-        return;
+        if (error instanceof MastraError) {
+          throw error;
+        }
+
+        const mastraError = new MastraError(
+          {
+            id: 'DEPLOYER_BUNDLER_WORKSPACE_DEPS_FAILED',
+            text: `Failed to collect and pack workspace dependencies.`,
+            domain: ErrorDomain.DEPLOYER,
+            category: ErrorCategory.UNKNOWN,
+          },
+          error,
+        );
+        this.logger.trackException(mastraError);
+        throw mastraError;
       }
     }
 

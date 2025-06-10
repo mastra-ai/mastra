@@ -1,3 +1,4 @@
+import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import alias from '@rollup/plugin-alias';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
@@ -141,19 +142,32 @@ export async function createBundler(
   inputOptions: InputOptions,
   outputOptions: Partial<OutputOptions> & { dir: string },
 ) {
-  const bundler = await rollup(inputOptions);
+  try {
+    const bundler = await rollup(inputOptions);
 
-  return {
-    write: () => {
-      return bundler.write({
-        ...outputOptions,
-        format: 'esm',
-        entryFileNames: '[name].mjs',
-        chunkFileNames: '[name].mjs',
-      });
-    },
-    close: () => {
-      return bundler.close();
-    },
-  };
+    return {
+      write: () => {
+        return bundler.write({
+          ...outputOptions,
+          format: 'esm',
+          entryFileNames: '[name].mjs',
+          chunkFileNames: '[name].mjs',
+        });
+      },
+      close: () => {
+        return bundler.close();
+      },
+    };
+  } catch (error) {
+    const mastraError = new MastraError(
+      {
+        id: 'DEPLOYER_BUNDLER_CREATE_BUNDLER_FAILED',
+        text: `Failed to create bundler`,
+        domain: ErrorDomain.DEPLOYER,
+        category: ErrorCategory.SYSTEM,
+      },
+      error,
+    );
+    throw mastraError;
+  }
 }
