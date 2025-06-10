@@ -115,14 +115,7 @@ export const packWorkspaceDependencies = async ({
 }): Promise<void> => {
   const root = findWorkspacesRoot();
   if (!root) {
-    const error = new MastraError({
-      id: 'BUNDLER_PACK_WORKSPACE_DEPS_FAILED_TO_FIND_ROOT',
-      text: 'Could not find workspace root',
-      domain: ErrorDomain.DEPLOYER,
-      category: ErrorCategory.SYSTEM,
-    });
-    logger.trackException(error);
-    throw error;
+    throw new Error('Could not find workspace root');
   }
 
   const depsService = new DepsService(root.location);
@@ -148,24 +141,7 @@ export const packWorkspaceDependencies = async ({
           const dep = workspaceMap.get(pkgName);
           if (!dep) return;
 
-          try {
-            await depsService.pack({ dir: dep.location, destination: workspaceDirPath });
-          } catch (error) {
-            const mastraError = new MastraError(
-              {
-                id: 'BUNDLER_PACK_WORKSPACE_DEPS_FAILED_TO_PACKAGE',
-                text: `Failed to pack workspace dependency ${pkgName}`,
-                domain: ErrorDomain.DEPLOYER,
-                category: ErrorCategory.SYSTEM,
-                details: {
-                  pkgName,
-                },
-              },
-              error,
-            );
-            logger.trackException(mastraError);
-            logger.error(mastraError.toString());
-          }
+          await depsService.pack({ dir: dep.location, destination: workspaceDirPath });
         }),
       );
     }
