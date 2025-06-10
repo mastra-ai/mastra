@@ -1,6 +1,13 @@
 import { randomUUID } from 'crypto';
-import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
-import type { TABLE_NAMES } from '@mastra/core/storage';
+import {
+  createSampleMessageV1,
+  createSampleMessageV2,
+  createSampleThread,
+  createSampleThreadWithParams,
+  createSampleWorkflowSnapshot,
+} from '@internal/storage-test-utils';
+import type { StorageThreadType } from '@mastra/core/memory';
+import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import {
   TABLE_MESSAGES,
   TABLE_THREADS,
@@ -12,15 +19,7 @@ import type { WorkflowRunState } from '@mastra/core/workflows';
 import dotenv from 'dotenv';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi, afterEach } from 'vitest';
 
-import {
-  checkWorkflowSnapshot,
-  createSampleMessage,
-  createSampleThread,
-  createSampleThreadWithParams,
-  createSampleTrace,
-  createSampleWorkflowSnapshot,
-  retryUntil,
-} from './test-utils';
+import { checkWorkflowSnapshot, createSampleTrace, retryUntil } from './test-utils';
 import type { D1StoreConfig } from '.';
 import { D1Store } from '.';
 
@@ -375,7 +374,7 @@ describe.skip('D1Store REST API', () => {
       await store.saveThread({ thread });
 
       // Add some messages
-      const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
+      const messages = [createSampleMessageV1({ threadId: thread.id }), createSampleMessageV1({ threadId: thread.id })];
       await store.saveMessages({ messages });
 
       await store.deleteThread({ threadId: thread.id });
@@ -404,7 +403,7 @@ describe.skip('D1Store REST API', () => {
       const thread = createSampleThread();
       await store.saveThread({ thread });
 
-      const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
+      const messages = [createSampleMessageV1({ threadId: thread.id }), createSampleMessageV1({ threadId: thread.id })];
 
       // Save messages
       const savedMessages = await store.saveMessages({ messages });
@@ -435,18 +434,9 @@ describe.skip('D1Store REST API', () => {
       await store.saveThread({ thread });
 
       const messages = [
-        {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'First' }] as MastraMessageV2['content'],
-        },
-        {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'Second' }] as MastraMessageV2['content'],
-        },
-        {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'Third' }] as MastraMessageV2['content'],
-        },
+        createSampleMessageV1({ threadId: thread.id, content: 'First' }),
+        createSampleMessageV1({ threadId: thread.id, content: 'Second' }),
+        createSampleMessageV1({ threadId: thread.id, content: 'Third' }),
       ];
 
       await store.saveMessages({ messages });
@@ -479,8 +469,7 @@ describe.skip('D1Store REST API', () => {
       });
     });
     it('should save and retrieve workflow snapshots', async () => {
-      const thread = createSampleThread();
-      const { snapshot, runId } = createSampleWorkflowSnapshot(thread.id, 'running');
+      const { snapshot, runId } = createSampleWorkflowSnapshot('running');
 
       await store.persistWorkflowSnapshot({
         workflowName: 'test-workflow',
@@ -509,8 +498,7 @@ describe.skip('D1Store REST API', () => {
     });
 
     it('should update workflow snapshot status', async () => {
-      const thread = createSampleThread();
-      const { snapshot, runId } = createSampleWorkflowSnapshot(thread.id, 'running');
+      const { snapshot, runId } = createSampleWorkflowSnapshot('running');
 
       await store.persistWorkflowSnapshot({
         workflowName: 'test-workflow',
@@ -600,8 +588,7 @@ describe.skip('D1Store REST API', () => {
     });
 
     it('should persist and load workflow snapshots', async () => {
-      const thread = createSampleThread();
-      const { snapshot, runId } = createSampleWorkflowSnapshot(thread.id, 'running');
+      const { snapshot, runId } = createSampleWorkflowSnapshot('running');
 
       await store.persistWorkflowSnapshot({
         workflowName: 'test-workflow',
@@ -632,8 +619,7 @@ describe.skip('D1Store REST API', () => {
     });
 
     it('should update existing workflow snapshot', async () => {
-      const thread = createSampleThread();
-      const { snapshot, runId } = createSampleWorkflowSnapshot(thread.id, 'running');
+      const { snapshot, runId } = createSampleWorkflowSnapshot('running');
 
       await store.persistWorkflowSnapshot({
         workflowName: 'test-workflow',
@@ -740,14 +726,9 @@ describe.skip('D1Store REST API', () => {
     it('returns all workflows by default', async () => {
       const workflowName1 = 'default_test_1';
       const workflowName2 = 'default_test_2';
-      const thread = createSampleThread();
 
-      const {
-        snapshot: workflow1,
-        runId: runId1,
-        stepId: stepId1,
-      } = createSampleWorkflowSnapshot(thread.id, 'success');
-      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot(thread.id, 'failed');
+      const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = createSampleWorkflowSnapshot('success');
+      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot('failed');
 
       await store.persistWorkflowSnapshot({ workflowName: workflowName1, runId: runId1, snapshot: workflow1 });
       await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
@@ -767,14 +748,9 @@ describe.skip('D1Store REST API', () => {
     it('filters by workflow name', async () => {
       const workflowName1 = 'filter_test_1';
       const workflowName2 = 'filter_test_2';
-      const thread = createSampleThread();
 
-      const {
-        snapshot: workflow1,
-        runId: runId1,
-        stepId: stepId1,
-      } = createSampleWorkflowSnapshot(thread.id, 'success');
-      const { snapshot: workflow2, runId: runId2 } = createSampleWorkflowSnapshot(thread.id, 'failed');
+      const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = createSampleWorkflowSnapshot('success');
+      const { snapshot: workflow2, runId: runId2 } = createSampleWorkflowSnapshot('failed');
 
       await store.persistWorkflowSnapshot({ workflowName: workflowName1, runId: runId1, snapshot: workflow1 });
       await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
@@ -795,15 +771,10 @@ describe.skip('D1Store REST API', () => {
       const workflowName1 = 'date_test_1';
       const workflowName2 = 'date_test_2';
       const workflowName3 = 'date_test_3';
-      const thread = createSampleThread();
 
-      const { snapshot: workflow1, runId: runId1 } = createSampleWorkflowSnapshot(thread.id, 'success');
-      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot(thread.id, 'failed');
-      const {
-        snapshot: workflow3,
-        runId: runId3,
-        stepId: stepId3,
-      } = createSampleWorkflowSnapshot(thread.id, 'suspended');
+      const { snapshot: workflow1, runId: runId1 } = createSampleWorkflowSnapshot('success');
+      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot('failed');
+      const { snapshot: workflow3, runId: runId3, stepId: stepId3 } = createSampleWorkflowSnapshot('suspended');
 
       await store.insert({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
@@ -854,19 +825,10 @@ describe.skip('D1Store REST API', () => {
       const workflowName1 = 'page_test_1';
       const workflowName2 = 'page_test_2';
       const workflowName3 = 'page_test_3';
-      const thread = createSampleThread();
 
-      const {
-        snapshot: workflow1,
-        runId: runId1,
-        stepId: stepId1,
-      } = createSampleWorkflowSnapshot(thread.id, 'success');
-      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot(thread.id, 'failed');
-      const {
-        snapshot: workflow3,
-        runId: runId3,
-        stepId: stepId3,
-      } = createSampleWorkflowSnapshot(thread.id, 'suspended');
+      const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = createSampleWorkflowSnapshot('success');
+      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot('failed');
+      const { snapshot: workflow3, runId: runId3, stepId: stepId3 } = createSampleWorkflowSnapshot('suspended');
 
       await store.persistWorkflowSnapshot({ workflowName: workflowName1, runId: runId1, snapshot: workflow1 });
       await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
@@ -902,8 +864,7 @@ describe.skip('D1Store REST API', () => {
 
     beforeEach(async () => {
       // Insert a workflow run for positive test
-      const thread = createSampleThread();
-      const sample = createSampleWorkflowSnapshot(thread.id, 'success');
+      const sample = createSampleWorkflowSnapshot('success');
       runId = sample.runId;
       stepId = sample.stepId;
       await store.insert({
@@ -943,11 +904,10 @@ describe.skip('D1Store REST API', () => {
     let runIds: string[] = [];
 
     beforeEach(async () => {
-      const thread = createSampleThread();
       // Insert multiple workflow runs for the same resourceId
       resourceId = 'resource-shared';
       for (const status of ['success', 'failed']) {
-        const sample = createSampleWorkflowSnapshot(thread.id, status);
+        const sample = createSampleWorkflowSnapshot(status);
         runIds.push(sample.runId);
         await store.insert({
           tableName: TABLE_WORKFLOW_SNAPSHOT,
@@ -962,7 +922,7 @@ describe.skip('D1Store REST API', () => {
         });
       }
       // Insert a run with a different resourceId
-      const other = createSampleWorkflowSnapshot(thread.id, 'waiting');
+      const other = createSampleWorkflowSnapshot('waiting');
       await store.insert({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         record: {
@@ -1083,10 +1043,9 @@ describe.skip('D1Store REST API', () => {
 
       // Create messages with identical timestamps
       const timestamp = new Date();
-      const messages = Array.from({ length: 3 }, () => ({
-        ...createSampleMessage(thread.id),
-        createdAt: timestamp,
-      }));
+      const messages = Array.from({ length: 3 }, () =>
+        createSampleMessageV1({ threadId: thread.id, createdAt: timestamp }),
+      );
 
       await store.saveMessages({ messages });
 
@@ -1108,10 +1067,9 @@ describe.skip('D1Store REST API', () => {
 
       // Create messages with different timestamps
       const now = Date.now();
-      const messages = Array.from({ length: 3 }, (_, i) => ({
-        ...createSampleMessage(thread.id),
-        createdAt: new Date(now - (2 - i) * 1000), // timestamps: oldest -> newest
-      }));
+      const messages = Array.from({ length: 3 }, (_, i) =>
+        createSampleMessageV1({ threadId: thread.id, createdAt: new Date(now - (2 - i) * 1000) }),
+      );
 
       // Save messages in reverse order to verify write order is preserved
       const reversedMessages = [...messages].reverse(); // newest -> oldest
@@ -1137,22 +1095,10 @@ describe.skip('D1Store REST API', () => {
       // Create messages with explicit timestamps to test chronological ordering
       const baseTime = new Date('2025-03-14T23:30:20.930Z').getTime();
       const messages = [
-        {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text', text: 'First' }],
-          createdAt: new Date(baseTime),
-        },
-        {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text', text: 'Second' }],
-          createdAt: new Date(baseTime + 1000),
-        },
-        {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text', text: 'Third' }],
-          createdAt: new Date(baseTime + 2000),
-        },
-      ] as MastraMessageV1[];
+        createSampleMessageV1({ threadId: thread.id, content: 'First', createdAt: new Date(baseTime) }),
+        createSampleMessageV1({ threadId: thread.id, content: 'Second', createdAt: new Date(baseTime + 1000) }),
+        createSampleMessageV1({ threadId: thread.id, content: 'Third', createdAt: new Date(baseTime + 2000) }),
+      ];
 
       await store.saveMessages({ messages });
 
@@ -1187,11 +1133,7 @@ describe.skip('D1Store REST API', () => {
 
     it('should sanitize and handle special characters', async () => {
       const thread = createSampleThread();
-      const message = {
-        ...createSampleMessage(thread.id),
-        content: [{ type: 'text' as const, text: '特殊字符 !@#$%^&*()' }] as MastraMessageV1['content'],
-        threadId: thread.id,
-      };
+      const message = createSampleMessageV2({ threadId: thread.id, content: '特殊字符 !@#$%^&*()' });
 
       await store.saveThread({ thread });
       await store.saveMessages({ messages: [message], format: 'v2' });
@@ -1213,10 +1155,9 @@ describe.skip('D1Store REST API', () => {
 
       // Create messages with sequential timestamps (but write order will be preserved)
       const now = Date.now();
-      const messages = Array.from({ length: 5 }, (_, i) => ({
-        ...createSampleMessage(thread.id),
-        createdAt: new Date(now + i * 1000),
-      }));
+      const messages = Array.from({ length: 5 }, (_, i) =>
+        createSampleMessageV1({ threadId: thread.id, createdAt: new Date(now + i * 1000) }),
+      );
 
       // Save messages sequentially to avoid race conditions in REST API
       for (const msg of messages) {
@@ -1238,7 +1179,7 @@ describe.skip('D1Store REST API', () => {
   describe('Resource Management', () => {
     it('should clean up orphaned messages when thread is deleted', async () => {
       const thread = createSampleThread();
-      const messages = Array.from({ length: 3 }, () => createSampleMessage(thread.id));
+      const messages = Array.from({ length: 3 }, () => createSampleMessageV1({ threadId: thread.id }));
 
       await store.saveThread({ thread });
       await store.saveMessages({ messages });
@@ -1316,7 +1257,7 @@ describe.skip('D1Store REST API', () => {
 
       // Try to save invalid message
       const invalidMessage = {
-        ...createSampleMessage(thread.id),
+        ...createSampleMessageV1({ threadId: thread.id }),
         content: undefined,
       };
 
@@ -1328,7 +1269,7 @@ describe.skip('D1Store REST API', () => {
     });
 
     it('should handle missing thread gracefully', async () => {
-      const message = createSampleMessage('non-existent-thread');
+      const message = createSampleMessageV1({ threadId: 'non-existent-thread' });
       await expect(
         store.saveMessages({
           messages: [message],
@@ -1341,10 +1282,7 @@ describe.skip('D1Store REST API', () => {
       await store.saveThread({ thread });
 
       // Test with various malformed data
-      const malformedMessage = {
-        ...createSampleMessage(thread.id),
-        content: [{ type: 'text' as const, text: ''.padStart(1024 * 1024, 'x') }] as MastraMessageV2['content'], // Very large content
-      };
+      const malformedMessage = createSampleMessageV1({ threadId: thread.id, content: ''.padStart(1024 * 1024, 'x') });
 
       await store.saveMessages({ messages: [malformedMessage] });
 
@@ -1385,6 +1323,96 @@ describe.skip('D1Store REST API', () => {
       const retrieved = await store.getThreadById({ threadId: thread.id });
 
       expect(retrieved?.title).toBe(thread.title);
+    });
+  });
+
+  describe('alterTable', () => {
+    const TEST_TABLE = 'test_alter_table';
+    const BASE_SCHEMA = {
+      id: { type: 'integer', primaryKey: true, nullable: false },
+      name: { type: 'text', nullable: true },
+    } as Record<string, StorageColumn>;
+
+    beforeEach(async () => {
+      await store.createTable({ tableName: TEST_TABLE as TABLE_NAMES, schema: BASE_SCHEMA });
+    });
+
+    afterEach(async () => {
+      await store.clearTable({ tableName: TEST_TABLE as TABLE_NAMES });
+    });
+
+    it('adds a new column to an existing table', async () => {
+      await store.alterTable({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        schema: { ...BASE_SCHEMA, age: { type: 'integer', nullable: true } },
+        ifNotExists: ['age'],
+      });
+
+      await store.insert({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        record: { id: 1, name: 'Alice', age: 42 },
+      });
+
+      const row = await store.load<{ id: string; name: string; age?: number }>({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        keys: { id: '1' },
+      });
+      expect(row?.age).toBe(42);
+    });
+
+    it('is idempotent when adding an existing column', async () => {
+      await store.alterTable({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        schema: { ...BASE_SCHEMA, foo: { type: 'text', nullable: true } },
+        ifNotExists: ['foo'],
+      });
+      // Add the column again (should not throw)
+      await expect(
+        store.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, foo: { type: 'text', nullable: true } },
+          ifNotExists: ['foo'],
+        }),
+      ).resolves.not.toThrow();
+    });
+
+    it('should add a default value to a column when using not null', async () => {
+      await store.insert({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        record: { id: 1, name: 'Bob' },
+      });
+
+      await expect(
+        store.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, text_column: { type: 'text', nullable: false } },
+          ifNotExists: ['text_column'],
+        }),
+      ).resolves.not.toThrow();
+
+      await expect(
+        store.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, timestamp_column: { type: 'timestamp', nullable: false } },
+          ifNotExists: ['timestamp_column'],
+        }),
+      ).resolves.not.toThrow();
+
+      await expect(
+        store.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, bigint_column: { type: 'bigint', nullable: false } },
+          ifNotExists: ['bigint_column'],
+        }),
+      ).resolves.not.toThrow();
+
+      await expect(
+        store.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, jsonb_column: { type: 'jsonb', nullable: false } },
+          ifNotExists: ['jsonb_column'],
+        }),
+      ).resolves.not.toThrow();
     });
   });
 });

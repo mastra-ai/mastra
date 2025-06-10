@@ -3,8 +3,9 @@ import {
   createSampleEval,
   createSampleTraceForDB,
   createSampleThread,
-  createSampleMessage,
   createTestSuite,
+  createSampleMessageV1,
+  resetRole,
 } from '@internal/storage-test-utils';
 import type { MastraMessageV1, StorageThreadType } from '@mastra/core';
 import { Mastra } from '@mastra/core/mastra';
@@ -243,16 +244,14 @@ describe('LibSQLStore Pagination Features', () => {
 
   describe('getMessages with pagination', () => {
     it('should return paginated messages with total count', async () => {
+      resetRole();
       const threadData = createSampleThread();
       threadData.resourceId = 'resource-msg-pagination';
       const thread = await store.saveThread({ thread: threadData as StorageThreadType });
 
       const messageRecords: MastraMessageV1[] = [];
       for (let i = 0; i < 15; i++) {
-        messageRecords.push({
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text', text: `Message ${i + 1}` }],
-        } as MastraMessageV1);
+        messageRecords.push(createSampleMessageV1({ threadId: thread.id, content: `Message ${i + 1}` }));
       }
       await store.saveMessages({ messages: messageRecords });
 
@@ -300,17 +299,21 @@ describe('LibSQLStore Pagination Features', () => {
 
       // Ensure timestamps are distinct for reliable sorting by creating them with a slight delay for testing clarity
       const messagesToSave: MastraMessageV1[] = [];
-      messagesToSave.push(createSampleMessage(thread.id, dayBeforeYesterday));
+      messagesToSave.push(
+        createSampleMessageV1({ threadId: thread.id, content: 'Message 1', createdAt: dayBeforeYesterday }),
+      );
       await new Promise(r => setTimeout(r, 5));
-      messagesToSave.push(createSampleMessage(thread.id, dayBeforeYesterday));
+      messagesToSave.push(
+        createSampleMessageV1({ threadId: thread.id, content: 'Message 2', createdAt: dayBeforeYesterday }),
+      );
       await new Promise(r => setTimeout(r, 5));
-      messagesToSave.push(createSampleMessage(thread.id, yesterday));
+      messagesToSave.push(createSampleMessageV1({ threadId: thread.id, content: 'Message 3', createdAt: yesterday }));
       await new Promise(r => setTimeout(r, 5));
-      messagesToSave.push(createSampleMessage(thread.id, yesterday));
+      messagesToSave.push(createSampleMessageV1({ threadId: thread.id, content: 'Message 4', createdAt: yesterday }));
       await new Promise(r => setTimeout(r, 5));
-      messagesToSave.push(createSampleMessage(thread.id, now));
+      messagesToSave.push(createSampleMessageV1({ threadId: thread.id, content: 'Message 5', createdAt: now }));
       await new Promise(r => setTimeout(r, 5));
-      messagesToSave.push(createSampleMessage(thread.id, now));
+      messagesToSave.push(createSampleMessageV1({ threadId: thread.id, content: 'Message 6', createdAt: now }));
 
       await store.saveMessages({ messages: messagesToSave, format: 'v1' });
       // Total 6 messages: 2 now, 2 yesterday, 2 dayBeforeYesterday (oldest to newest)

@@ -1,7 +1,7 @@
 import { MessageList } from '@mastra/core/agent';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
-import type { EvalRow, StorageGetMessagesArg, TABLE_NAMES, WorkflowRun } from '@mastra/core/storage';
+import type { EvalRow, StorageColumn, StorageGetMessagesArg, TABLE_NAMES, WorkflowRun } from '@mastra/core/storage';
 import {
   MastraStorage,
   TABLE_EVALS,
@@ -71,6 +71,20 @@ export class MongoDBStore extends MastraStorage {
   }
 
   async createTable(): Promise<void> {
+    // Nothing to do here, MongoDB is schemaless
+  }
+
+  /**
+   * No-op: This backend is schemaless and does not require schema changes.
+   * @param tableName Name of the table
+   * @param schema Schema of the table
+   * @param ifNotExists Array of column names to add if they don't exist
+   */
+  async alterTable(_args: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void> {
     // Nothing to do here, MongoDB is schemaless
   }
 

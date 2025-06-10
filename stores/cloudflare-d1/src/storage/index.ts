@@ -235,33 +235,26 @@ export class D1Store extends MastraStorage {
     }
   }
 
-  // Helper to convert storage type to SQL type
-  private getSqlType(type: string): string {
-    switch (type) {
-      case 'text':
-        return 'TEXT';
-      case 'timestamp':
-        return 'TIMESTAMP';
-      case 'integer':
-        return 'INTEGER';
-      case 'bigint':
-        return 'INTEGER'; // SQLite doesn't have a separate BIGINT type
-      case 'jsonb':
-        return 'TEXT'; // Store JSON as TEXT in SQLite
-      default:
-        return 'TEXT';
+  // Helper to get existing table columns
+  private async getTableColumns(tableName: string): Promise<{ name: string; type: string }[]> {
+    try {
+      const sql = `PRAGMA table_info(${tableName})`;
+      const result = await this.executeQuery({ sql, params: [] });
+
+      if (!result || !Array.isArray(result)) {
+        return [];
+      }
+
+      return result.map((row: any) => ({
+        name: row.name,
+        type: row.type,
+      }));
+    } catch (error) {
+      this.logger.error(`Error getting table columns for ${tableName}:`, {
+        message: error instanceof Error ? error.message : String(error),
+      });
+      return [];
     }
-  }
-
-  private ensureDate(date: Date | string | undefined): Date | undefined {
-    if (!date) return undefined;
-    return date instanceof Date ? date : new Date(date);
-  }
-
-  private serializeDate(date: Date | string | undefined): string | undefined {
-    if (!date) return undefined;
-    const dateObj = this.ensureDate(date);
-    return dateObj?.toISOString();
   }
 
   // Helper to serialize objects to JSON strings
@@ -306,6 +299,17 @@ export class D1Store extends MastraStorage {
     return value;
   }
 
+  protected getSqlType(type: StorageColumn['type']): string {
+    switch (type) {
+      case 'bigint':
+        return 'INTEGER'; // SQLite uses INTEGER for all integer sizes
+      case 'jsonb':
+        return 'TEXT'; // Store JSON as TEXT in SQLite
+      default:
+        return super.getSqlType(type);
+    }
+  }
+
   async createTable({
     tableName,
     schema,
@@ -341,6 +345,51 @@ export class D1Store extends MastraStorage {
         message: error instanceof Error ? error.message : String(error),
       });
       throw new Error(`Failed to create table ${fullTableName}: ${error}`);
+    }
+  }
+
+  /**
+   * Alters table schema to add columns if they don't exist
+   * @param tableName Name of the table
+   * @param schema Schema of the table
+   * @param ifNotExists Array of column names to add if they don't exist
+   */
+  async alterTable({
+    tableName,
+    schema,
+    ifNotExists,
+  }: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void> {
+    const fullTableName = this.getTableName(tableName);
+
+    try {
+      // Check which columns already exist
+      const existingColumns = await this.getTableColumns(fullTableName);
+      const existingColumnNames = new Set(existingColumns.map(col => col.name.toLowerCase()));
+
+      // Add missing columns from ifNotExists list
+      for (const columnName of ifNotExists) {
+        if (!existingColumnNames.has(columnName.toLowerCase()) && schema[columnName]) {
+          const columnDef = schema[columnName];
+          const sqlType = this.getSqlType(columnDef.type);
+          const nullable = columnDef.nullable === false ? 'NOT NULL' : '';
+          const defaultValue = columnDef.nullable === false ? this.getDefaultValue(columnDef.type) : '';
+
+          const alterSql =
+            `ALTER TABLE ${fullTableName} ADD COLUMN ${columnName} ${sqlType} ${nullable} ${defaultValue}`.trim();
+
+          await this.executeQuery({ sql: alterSql, params: [] });
+          this.logger.debug(`Added column ${columnName} to table ${fullTableName}`);
+        }
+      }
+    } catch (error) {
+      this.logger.error(`Error altering table ${fullTableName}:`, {
+        message: error instanceof Error ? error.message : String(error),
+      });
+      throw new Error(`Failed to alter table ${fullTableName}: ${error}`);
     }
   }
 
@@ -677,6 +726,7 @@ export class D1Store extends MastraStorage {
           createdAt: createdAt.toISOString(),
           role: message.role,
           type: message.type || 'v2',
+          resourceId: message.resourceId,
         };
       });
 

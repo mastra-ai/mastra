@@ -36,9 +36,60 @@ export abstract class MastraStorage extends MastraBase {
     });
   }
 
+  protected ensureDate(date: Date | string | undefined): Date | undefined {
+    if (!date) return undefined;
+    return date instanceof Date ? date : new Date(date);
+  }
+
+  protected serializeDate(date: Date | string | undefined): string | undefined {
+    if (!date) return undefined;
+    const dateObj = this.ensureDate(date);
+    return dateObj?.toISOString();
+  }
+
+  protected getSqlType(type: StorageColumn['type']): string {
+    switch (type) {
+      case 'text':
+        return 'TEXT';
+      case 'timestamp':
+        return 'TIMESTAMP';
+      case 'integer':
+        return 'INTEGER';
+      case 'bigint':
+        return 'BIGINT';
+      case 'jsonb':
+        return 'JSONB';
+      default:
+        return 'TEXT';
+    }
+  }
+
+  protected getDefaultValue(type: StorageColumn['type']): string {
+    switch (type) {
+      case 'text':
+      case 'uuid':
+        return "DEFAULT ''";
+      case 'timestamp':
+        return "DEFAULT '1970-01-01 00:00:00'";
+      case 'integer':
+      case 'bigint':
+        return 'DEFAULT 0';
+      case 'jsonb':
+        return "DEFAULT '{}'";
+      default:
+        return "DEFAULT ''";
+    }
+  }
+
   abstract createTable({ tableName }: { tableName: TABLE_NAMES; schema: Record<string, StorageColumn> }): Promise<void>;
 
   abstract clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void>;
+
+  abstract alterTable(args: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void>;
 
   abstract insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void>;
 
@@ -141,6 +192,12 @@ export abstract class MastraStorage extends MastraBase {
     ]).then(() => true);
 
     await this.hasInitialized;
+
+    await this?.alterTable?.({
+      tableName: TABLE_MESSAGES,
+      schema: TABLE_SCHEMAS[TABLE_MESSAGES],
+      ifNotExists: ['resourceId'],
+    });
   }
 
   async persistWorkflowSnapshot({
