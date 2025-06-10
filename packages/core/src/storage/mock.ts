@@ -25,6 +25,17 @@ export class MockStore extends MastraStorage {
     // In-memory mock, no actual table creation needed
   }
 
+  async alterTable({
+    tableName,
+  }: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void> {
+    this.logger.debug(`MockStore: alterTable called for ${tableName}`);
+    // In-memory mock, no actual table alteration needed
+  }
+
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     this.logger.debug(`MockStore: clearTable called for ${tableName}`);
     this.data[tableName] = {};

@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { createSampleMessageV2, createSampleThread, createSampleWorkflowSnapshot } from '@internal/storage-test-utils';
 import type { MastraMessageV2 } from '@mastra/core';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 import {
@@ -9,55 +10,12 @@ import {
   TABLE_TRACES,
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll, vi, afterEach } from 'vitest';
 
 import { UpstashStore } from './index';
 
 // Increase timeout for all tests in this file to 30 seconds
 vi.setConfig({ testTimeout: 200_000, hookTimeout: 200_000 });
-
-const createSampleThread = (date?: Date) => ({
-  id: `thread-${randomUUID()}`,
-  resourceId: `resource-${randomUUID()}`,
-  title: 'Test Thread',
-  createdAt: date || new Date(),
-  updatedAt: date || new Date(),
-  metadata: { key: 'value' },
-});
-
-const createSampleMessage = (threadId: string, content: string = 'Hello'): MastraMessageV2 => ({
-  id: `msg-${randomUUID()}`,
-  role: 'user',
-  threadId,
-  content: { format: 2, parts: [{ type: 'text', text: content }] },
-  createdAt: new Date(),
-  resourceId: `resource-${randomUUID()}`,
-});
-
-const createSampleWorkflowSnapshot = (status: string, createdAt?: Date) => {
-  const runId = `run-${randomUUID()}`;
-  const stepId = `step-${randomUUID()}`;
-  const timestamp = createdAt || new Date();
-  const snapshot: WorkflowRunState = {
-    value: {},
-    context: {
-      [stepId]: {
-        status: status,
-        payload: {},
-        error: undefined,
-        startedAt: timestamp.getTime(),
-        endedAt: new Date(timestamp.getTime() + 15000).getTime(),
-      },
-      input: {},
-    } as WorkflowRunState['context'],
-    serializedStepGraph: [],
-    activePaths: [],
-    suspendedPaths: {},
-    runId,
-    timestamp: timestamp.getTime(),
-  };
-  return { snapshot, runId, stepId };
-};
 
 const createSampleTrace = (name: string, scope?: string, attributes?: Record<string, string>) => ({
   id: `trace-${randomUUID()}`,
@@ -176,7 +134,7 @@ describe('UpstashStore', () => {
 
     it('should create and retrieve a thread', async () => {
       const now = new Date();
-      const thread = createSampleThread(now);
+      const thread = createSampleThread({ date: now });
 
       const savedThread = await store.saveThread({ thread });
       expect(savedThread).toEqual(thread);
@@ -236,6 +194,23 @@ describe('UpstashStore', () => {
       const retrievedThreads = await store.getThreadsByResourceId({ resourceId });
       expect(retrievedThreads).toHaveLength(total);
     });
+    it('should delete thread and its messages', async () => {
+      const thread = createSampleThread();
+      await store.saveThread({ thread });
+
+      // Add some messages
+      const messages = [createSampleMessageV2({ threadId: thread.id }), createSampleMessageV2({ threadId: thread.id })];
+      await store.saveMessages({ messages, format: 'v2' });
+
+      await store.deleteThread({ threadId: thread.id });
+
+      const retrievedThread = await store.getThreadById({ threadId: thread.id });
+      expect(retrievedThread).toBeNull();
+
+      // Verify messages were also deleted
+      const retrievedMessages = await store.getMessages({ threadId: thread.id });
+      expect(retrievedMessages).toHaveLength(0);
+    });
   });
 
   describe('Date Handling', () => {
@@ -245,7 +220,7 @@ describe('UpstashStore', () => {
 
     it('should handle Date objects in thread operations', async () => {
       const now = new Date();
-      const thread = createSampleThread(now);
+      const thread = createSampleThread({ date: now });
 
       await store.saveThread({ thread });
       const retrievedThread = await store.getThreadById({ threadId: thread.id });
@@ -257,7 +232,7 @@ describe('UpstashStore', () => {
 
     it('should handle ISO string dates in thread operations', async () => {
       const now = new Date();
-      const thread = createSampleThread(now);
+      const thread = createSampleThread({ date: now });
 
       await store.saveThread({ thread });
       const retrievedThread = await store.getThreadById({ threadId: thread.id });
@@ -269,7 +244,7 @@ describe('UpstashStore', () => {
 
     it('should handle mixed date formats in thread operations', async () => {
       const now = new Date();
-      const thread = createSampleThread(now);
+      const thread = createSampleThread({ date: now });
 
       await store.saveThread({ thread });
       const retrievedThread = await store.getThreadById({ threadId: thread.id });
@@ -281,8 +256,8 @@ describe('UpstashStore', () => {
 
     it('should handle date serialization in getThreadsByResourceId', async () => {
       const now = new Date();
-      const thread1 = createSampleThread(now);
-      const thread2 = { ...createSampleThread(now), resourceId: thread1.resourceId };
+      const thread1 = createSampleThread({ date: now });
+      const thread2 = { ...createSampleThread({ date: now }), resourceId: thread1.resourceId };
       const threads = [thread1, thread2];
 
       await Promise.all(threads.map(thread => store.saveThread({ thread })));
@@ -320,9 +295,9 @@ describe('UpstashStore', () => {
 
     it('should save and retrieve messages in order', async () => {
       const messages: MastraMessageV2[] = [
-        createSampleMessage(threadId, 'First'),
-        createSampleMessage(threadId, 'Second'),
-        createSampleMessage(threadId, 'Third'),
+        createSampleMessageV2({ threadId, content: 'First' }),
+        createSampleMessageV2({ threadId, content: 'Second' }),
+        createSampleMessageV2({ threadId, content: 'Third' }),
       ];
 
       await store.saveMessages({ messages: messages, format: 'v2' });
@@ -366,7 +341,9 @@ describe('UpstashStore', () => {
         const thread = createSampleThread();
         await store.saveThread({ thread });
 
-        const messages = Array.from({ length: 15 }, (_, i) => createSampleMessage(thread.id, `Message ${i + 1}`));
+        const messages = Array.from({ length: 15 }, (_, i) =>
+          createSampleMessageV2({ threadId: thread.id, content: `Message ${i + 1}` }),
+        );
 
         await store.saveMessages({ messages, format: 'v2' });
 
@@ -408,7 +385,7 @@ describe('UpstashStore', () => {
         await store.saveThread({ thread });
 
         const messages = Array.from({ length: 10 }, (_, i) => {
-          const message = createSampleMessage(thread.id, `Message ${i + 1}`);
+          const message = createSampleMessageV2({ threadId: thread.id, content: `Message ${i + 1}` });
           // Ensure different timestamps
           message.createdAt = new Date(Date.now() + i * 1000);
           return message;
@@ -437,7 +414,9 @@ describe('UpstashStore', () => {
         const thread = createSampleThread();
         await store.saveThread({ thread });
 
-        const messages = Array.from({ length: 5 }, (_, i) => createSampleMessage(thread.id, `Message ${i + 1}`));
+        const messages = Array.from({ length: 5 }, (_, i) =>
+          createSampleMessageV2({ threadId: thread.id, content: `Message ${i + 1}` }),
+        );
 
         await store.saveMessages({ messages, format: 'v2' });
 
@@ -466,13 +445,13 @@ describe('UpstashStore', () => {
         const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
         const oldMessages = Array.from({ length: 3 }, (_, i) => {
-          const message = createSampleMessage(thread.id, `Old Message ${i + 1}`);
+          const message = createSampleMessageV2({ threadId: thread.id, content: `Old Message ${i + 1}` });
           message.createdAt = yesterday;
           return message;
         });
 
         const newMessages = Array.from({ length: 4 }, (_, i) => {
-          const message = createSampleMessage(thread.id, `New Message ${i + 1}`);
+          const message = createSampleMessageV2({ threadId: thread.id, content: `New Message ${i + 1}` });
           message.createdAt = tomorrow;
           return message;
         });
@@ -992,6 +971,89 @@ describe('UpstashStore', () => {
       });
       expect(Array.isArray(runs)).toBe(true);
       expect(runs.length).toBe(0);
+    });
+  });
+
+  describe('alterTable (no-op/schemaless)', () => {
+    const TEST_TABLE = 'test_alter_table'; // Use "table" or "collection" as appropriate
+    beforeEach(async () => {
+      await store.clearTable({ tableName: TEST_TABLE as TABLE_NAMES });
+    });
+
+    afterEach(async () => {
+      await store.clearTable({ tableName: TEST_TABLE as TABLE_NAMES });
+    });
+
+    it('allows inserting records with new fields without alterTable', async () => {
+      await store.insert({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        record: { id: '1', name: 'Alice' },
+      });
+      await store.insert({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        record: { id: '2', name: 'Bob', newField: 123 },
+      });
+
+      const row = await store.load<{ id: string; name: string; newField?: number }>({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        keys: { id: '2' },
+      });
+      expect(row?.newField).toBe(123);
+    });
+
+    it('does not throw when calling alterTable (no-op)', async () => {
+      await expect(
+        store.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: {
+            id: { type: 'text', primaryKey: true, nullable: false },
+            name: { type: 'text', nullable: true },
+            extra: { type: 'integer', nullable: true },
+          },
+          ifNotExists: [],
+        }),
+      ).resolves.not.toThrow();
+    });
+
+    it('can add multiple new fields at write time', async () => {
+      await store.insert({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        record: { id: '3', name: 'Charlie', age: 30, city: 'Paris' },
+      });
+      const row = await store.load<{ id: string; name: string; age?: number; city?: string }>({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        keys: { id: '3' },
+      });
+      expect(row?.age).toBe(30);
+      expect(row?.city).toBe('Paris');
+    });
+
+    it('can retrieve all fields, including dynamically added ones', async () => {
+      await store.insert({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        record: { id: '4', name: 'Dana', hobby: 'skiing' },
+      });
+      const row = await store.load<{ id: string; name: string; hobby?: string }>({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        keys: { id: '4' },
+      });
+      expect(row?.hobby).toBe('skiing');
+    });
+
+    it('does not restrict or error on arbitrary new fields', async () => {
+      await expect(
+        store.insert({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          record: { id: '5', weirdField: { nested: true }, another: [1, 2, 3] },
+        }),
+      ).resolves.not.toThrow();
+
+      const row = await store.load<{ id: string; weirdField?: any; another?: any }>({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        keys: { id: '5' },
+      });
+      expect(row?.weirdField).toEqual({ nested: true });
+      expect(row?.another).toEqual([1, 2, 3]);
     });
   });
 

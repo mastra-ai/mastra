@@ -158,19 +158,8 @@ ${err.stack.split('\n').slice(1).join('\n')}
   // Add Mastra to context
   app.use('*', function setContext(c, next) {
     const runtimeContext = new RuntimeContext();
-    const proxyRuntimeContext = new Proxy(runtimeContext, {
-      get(target, prop) {
-        if (prop === 'get') {
-          return function (key: string) {
-            const value = target.get(key);
-            return value ?? `<${key}>`;
-          };
-        }
-        return Reflect.get(target, prop);
-      },
-    });
 
-    c.set('runtimeContext', proxyRuntimeContext);
+    c.set('runtimeContext', runtimeContext);
     c.set('mastra', mastra);
     c.set('tools', tools);
     c.set('playground', options.playground === true);
