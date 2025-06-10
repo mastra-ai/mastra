@@ -7,8 +7,9 @@ import {
   createSampleMessageV2,
   createSampleWorkflowSnapshot,
   resetRole,
+  checkWorkflowSnapshot,
 } from '@internal/storage-test-utils';
-import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
+import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import {
   TABLE_WORKFLOW_SNAPSHOT,
@@ -35,13 +36,6 @@ const TEST_CONFIG: PostgresConfig = {
 const connectionString = `postgresql://${TEST_CONFIG.user}:${TEST_CONFIG.password}@${TEST_CONFIG.host}:${TEST_CONFIG.port}/${TEST_CONFIG.database}`;
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
-
-const checkWorkflowSnapshot = (snapshot: WorkflowRunState | string, stepId: string, status: string) => {
-  if (typeof snapshot === 'string') {
-    throw new Error('Expected WorkflowRunState, got string');
-  }
-  expect(snapshot.context?.[stepId]?.status).toBe(status);
-};
 
 describe('PostgresStore', () => {
   let store: PostgresStore;

@@ -1,5 +1,10 @@
 import type { KVNamespace } from '@cloudflare/workers-types';
-import { createSampleMessageV1, createSampleMessageV2, createSampleThread } from '@internal/storage-test-utils';
+import {
+  createSampleMessageV1,
+  createSampleMessageV2,
+  createSampleThread,
+  checkWorkflowSnapshot,
+} from '@internal/storage-test-utils';
 import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 import {
@@ -13,7 +18,7 @@ import type { WorkflowRunState } from '@mastra/core/workflows';
 import dotenv from 'dotenv';
 import { Miniflare } from 'miniflare';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi, afterEach } from 'vitest';
-import { checkWorkflowSnapshot, createSampleTrace, createSampleWorkflowSnapshot, retryUntil } from './test-utils';
+import { createSampleTrace, createSampleWorkflowSnapshot, retryUntil } from './test-utils';
 import type { CloudflareStoreConfig } from './types';
 import { CloudflareStore } from '.';
 

@@ -1,5 +1,10 @@
 import { randomUUID } from 'crypto';
-import { createSampleMessageV2, createSampleThread, createSampleWorkflowSnapshot } from '@internal/storage-test-utils';
+import {
+  checkWorkflowSnapshot,
+  createSampleMessageV2,
+  createSampleThread,
+  createSampleWorkflowSnapshot,
+} from '@internal/storage-test-utils';
 import type { MastraMessageV2 } from '@mastra/core';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 import {
@@ -49,13 +54,6 @@ const createSampleEval = (agentName: string, isTest = false) => {
     run_id: `run-${randomUUID()}`,
     created_at: new Date().toISOString(),
   };
-};
-
-const checkWorkflowSnapshot = (snapshot: WorkflowRunState | string, stepId: string, status: string) => {
-  if (typeof snapshot === 'string') {
-    throw new Error('Expected WorkflowRunState, got string');
-  }
-  expect(snapshot.context?.[stepId]?.status).toBe(status);
 };
 
 describe('UpstashStore', () => {

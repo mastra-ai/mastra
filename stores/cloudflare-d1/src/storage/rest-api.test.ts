@@ -5,6 +5,7 @@ import {
   createSampleThread,
   createSampleThreadWithParams,
   createSampleWorkflowSnapshot,
+  checkWorkflowSnapshot,
 } from '@internal/storage-test-utils';
 import type { StorageThreadType } from '@mastra/core/memory';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
@@ -19,7 +20,7 @@ import type { WorkflowRunState } from '@mastra/core/workflows';
 import dotenv from 'dotenv';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi, afterEach } from 'vitest';
 
-import { checkWorkflowSnapshot, createSampleTrace, retryUntil } from './test-utils';
+import { createSampleTrace, retryUntil } from './test-utils';
 import type { D1StoreConfig } from '.';
 import { D1Store } from '.';
 

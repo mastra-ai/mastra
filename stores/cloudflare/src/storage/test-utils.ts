@@ -63,10 +63,3 @@ export const retryUntil = async <T>(
   }
   throw new Error('Timeout waiting for condition');
 };
-
-export const checkWorkflowSnapshot = (snapshot: WorkflowRunState | string, stepId: string, status: string) => {
-  if (typeof snapshot === 'string') {
-    throw new Error('Expected WorkflowRunState, got string');
-  }
-  expect(snapshot.context?.[stepId]?.status).toBe(status);
-};

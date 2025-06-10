@@ -7,6 +7,7 @@ import {
   createSampleThread,
   createSampleThreadWithParams,
   createSampleWorkflowSnapshot,
+  checkWorkflowSnapshot,
 } from '@internal/storage-test-utils';
 import type { MastraMessageV2, WorkflowRunState, StorageThreadType } from '@mastra/core';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
@@ -20,7 +21,7 @@ import {
 import dotenv from 'dotenv';
 import { Miniflare } from 'miniflare';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi, afterEach } from 'vitest';
-import { checkWorkflowSnapshot, createSampleTrace } from './test-utils';
+import { createSampleTrace } from './test-utils';
 import { D1Store } from '.';
 
 dotenv.config();

@@ -1,5 +1,10 @@
 import { randomUUID } from 'crypto';
-import { createSampleMessageV1, createSampleThread, createSampleWorkflowSnapshot } from '@internal/storage-test-utils';
+import {
+  createSampleMessageV1,
+  createSampleThread,
+  createSampleWorkflowSnapshot,
+  checkWorkflowSnapshot,
+} from '@internal/storage-test-utils';
 import type { MastraMessageV1, StorageColumn, WorkflowRunState } from '@mastra/core';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 import { TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
@@ -41,13 +46,6 @@ const createSampleEval = () => ({
   result: '{ "score": 1 }',
   createdAt: new Date(),
 });
-
-const checkWorkflowSnapshot = (snapshot: WorkflowRunState | string, stepId: string, status: string) => {
-  if (typeof snapshot === 'string') {
-    throw new Error('Expected WorkflowRunState, got string');
-  }
-  expect(snapshot.context?.[stepId]?.status).toBe(status);
-};
 
 describe('ClickhouseStore', () => {
   let store: ClickhouseStore;
