@@ -751,6 +751,7 @@ export class UpstashStore extends MastraStorage {
     const fromDate = dateRange?.start;
     const toDate = dateRange?.end;
     const threadMessagesKey = this.getThreadMessagesKey(threadId);
+    const messages: MastraMessageV2[] = [];
 
     if (selectBy?.include?.length) {
       const messageIds = new Set<string>();
@@ -775,37 +776,10 @@ export class UpstashStore extends MastraStorage {
         }
       }
 
-      const messagesData = (
-        await Promise.all(
-          Array.from(messageIds).map(async id =>
-            this.redis.get<MastraMessageV2 & { _index?: number }>(this.getMessageKey(threadId, id)),
-          ),
-        )
-      ).filter(msg => msg !== null) as (MastraMessageV2 & { _index?: number })[];
-
-      const allMessageIds = await this.redis.zrange(threadMessagesKey, 0, -1);
-      messagesData.sort((a, b) => allMessageIds.indexOf(a!.id) - allMessageIds.indexOf(b!.id));
-
-      const prepared = messagesData.map(message => {
-        const { _index, ...messageWithoutIndex } = message;
-        return messageWithoutIndex as unknown as MastraMessageV1;
-      });
-
-      let finalMessages: MastraMessageV1[] | MastraMessageV2[] = prepared;
-      if (format === 'v2') {
-        finalMessages = prepared.map(msg => ({
-          ...msg,
-          content: msg.content || { format: 2, parts: [{ type: 'text', text: '' }] },
-        })) as MastraMessageV2[];
-      }
-
-      return {
-        messages: finalMessages,
-        total: finalMessages.length,
-        page: 0,
-        perPage: finalMessages.length,
-        hasMore: false,
-      };
+      const pipeline = this.redis.pipeline();
+      messageIds.forEach(id => pipeline.get(this.getMessageKey(threadId, id as string)));
+      const results = await pipeline.exec();
+      messages.push(...(results.filter(result => result !== null) as MastraMessageV2[]));
     }
     try {
       const allMessageIds = await this.redis.zrange(threadMessagesKey, 0, -1);
@@ -826,57 +800,36 @@ export class UpstashStore extends MastraStorage {
       const results = await pipeline.exec();
 
       // Process messages and apply filters - handle undefined results from pipeline
-      let messages = results
+      let messagesData = results
         .map((result: any) => result as MastraMessageV2 | null)
         .filter((msg): msg is MastraMessageV2 => msg !== null) as (MastraMessageV2 & { _index?: number })[];
 
       // Apply date filters if provided
       if (fromDate) {
-        messages = messages.filter(msg => msg && new Date(msg.createdAt).getTime() >= fromDate.getTime());
+        messagesData = messagesData.filter(msg => msg && new Date(msg.createdAt).getTime() >= fromDate.getTime());
       }
 
       if (toDate) {
-        messages = messages.filter(msg => msg && new Date(msg.createdAt).getTime() <= toDate.getTime());
+        messagesData = messagesData.filter(msg => msg && new Date(msg.createdAt).getTime() <= toDate.getTime());
       }
 
-      // Sort messages by their position in the sorted set
-      messages.sort((a, b) => allMessageIds.indexOf(a!.id) - allMessageIds.indexOf(b!.id));
-
-      const total = messages.length;
+      const total = messagesData.length;
 
       // Apply pagination
       const start = page * perPage;
       const end = start + perPage;
       const hasMore = end < total;
-      const paginatedMessages = messages.slice(start, end);
+      const paginatedMessages = messagesData.slice(start, end);
 
-      // Remove _index before returning and handle format conversion properly
-      const prepared = paginatedMessages
-        .filter(message => message !== null && message !== undefined)
-        .map(message => {
-          const { _index, ...messageWithoutIndex } = message as MastraMessageV2 & { _index?: number };
-          return messageWithoutIndex as unknown as MastraMessageV1;
-        });
+      messages.push(...paginatedMessages);
 
-      // Return pagination object with correct format
-      if (format === 'v2') {
-        // Convert V1 format back to V2 format
-        const v2Messages = prepared.map(msg => ({
-          ...msg,
-          content: msg.content || { format: 2, parts: [{ type: 'text', text: '' }] },
-        })) as MastraMessageV2[];
-
-        return {
-          messages: v2Messages,
-          total,
-          page,
-          perPage,
-          hasMore,
-        };
-      }
+      const list = new MessageList().add(messages, 'memory');
+      const finalMessages = (format === `v2` ? list.get.all.v2() : list.get.all.v1()) as
+        | MastraMessageV1[]
+        | MastraMessageV2[];
 
       return {
-        messages: prepared,
+        messages: finalMessages,
         total,
         page,
         perPage,
