@@ -1,5 +1,7 @@
+import { exec } from 'child_process';
 import { randomUUID } from 'crypto';
-import { readFile } from 'fs/promises';
+import { existsSync } from 'fs';
+import { readFile, writeFile } from 'fs/promises';
 import { join } from 'path/posix';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
@@ -24,7 +26,7 @@ import {
   setAgentInstructionsHandler,
   streamGenerateHandler,
 } from './handlers/agents';
-import { authorizationMiddleware, authenticationMiddleware } from './handlers/auth';
+import { authenticationMiddleware, authorizationMiddleware } from './handlers/auth';
 import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import {
@@ -40,13 +42,13 @@ import {
 } from './handlers/legacyWorkflows.js';
 import { getLogsByRunIdHandler, getLogsHandler, getLogTransports } from './handlers/logs';
 import {
+  executeMcpServerToolHandler,
+  getMcpRegistryServerDetailHandler,
   getMcpServerMessageHandler,
   getMcpServerSseHandler,
-  listMcpRegistryServersHandler,
-  getMcpRegistryServerDetailHandler,
-  listMcpServerToolsHandler,
   getMcpServerToolDetailHandler,
-  executeMcpServerToolHandler,
+  listMcpRegistryServersHandler,
+  listMcpServerToolsHandler,
 } from './handlers/mcp';
 import {
   createThreadHandler,
@@ -69,21 +71,60 @@ import { rootHandler } from './handlers/root';
 import { getTelemetryHandler, storeTelemetryHandler } from './handlers/telemetry';
 import { executeAgentToolHandler, executeToolHandler, getToolByIdHandler, getToolsHandler } from './handlers/tools';
 import { createIndex, deleteIndex, describeIndex, listIndexes, queryVectors, upsertVectors } from './handlers/vector';
-import { getSpeakersHandler, getListenerHandler, listenHandler, speakHandler } from './handlers/voice';
+import { getListenerHandler, getSpeakersHandler, listenHandler, speakHandler } from './handlers/voice';
 import {
   createWorkflowRunHandler,
   getWorkflowByIdHandler,
   getWorkflowRunsHandler,
   getWorkflowsHandler,
-  streamWorkflowHandler,
   resumeAsyncWorkflowHandler,
   resumeWorkflowHandler,
   startAsyncWorkflowHandler,
   startWorkflowRunHandler,
+  streamWorkflowHandler,
   watchWorkflowHandler,
 } from './handlers/workflows.js';
 import type { ServerBundleOptions } from './types';
 import { html } from './welcome.js';
+
+/**
+ * Opens a URL in the user's default browser
+ * Uses a temporary file to track if browser was already opened across process restarts
+ */
+function openInBrowser(url: string) {
+  const browserFlagFile = join(process.cwd(), 'playground', 'browser-opened.json');
+
+  if (existsSync(browserFlagFile)) {
+    return;
+  }
+
+  const platform = process.platform;
+  let command: string;
+
+  switch (platform) {
+    case 'darwin': // macOS
+      command = `open "${url}"`;
+      break;
+    case 'win32': // Windows
+      command = `start "" "${url}"`;
+      break;
+    default: // Linux and other Unix-like systems
+      command = `xdg-open "${url}"`;
+      break;
+  }
+
+  exec(command, async error => {
+    if (error) {
+      console.warn(`Failed to open browser: ${error.message}`);
+    } else {
+      try {
+        await writeFile(browserFlagFile, JSON.stringify({ timestamp: Date.now() }));
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  });
+}
 
 type Bindings = {};
 
@@ -3197,14 +3238,10 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
       const logger = mastra.getLogger();
       const host = serverOptions?.host ?? 'localhost';
       logger.info(` Mastra API running on port http://${host}:${port}/api`);
-      if (options?.isDev) {
-        logger.info(`🔗 Open API documentation available at http://${host}:${port}/openapi.json`);
-      }
-      if (options?.isDev) {
-        logger.info(`🧪 Swagger UI available at http://${host}:${port}/swagger-ui`);
-      }
       if (options?.playground) {
-        logger.info(`👨‍💻 Playground available at http://${host}:${port}/`);
+        const playgroundUrl = `http://${host}:${port}`;
+        logger.info(`👨‍💻 Playground available at ${playgroundUrl}`);
+        void openInBrowser(playgroundUrl);
       }
 
       if (process.send) {
