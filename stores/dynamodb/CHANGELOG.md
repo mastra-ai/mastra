@@ -1,5 +1,19 @@
 # @mastra/dynamodb
 
+## 0.10.4-alpha.0
+
+### Patch Changes
+
+- 35c2bac: dependencies updates:
+  - Updated dependency [`@aws-sdk/client-dynamodb@^3.823.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/client-dynamodb/v/3.823.0) (from `^3.0.0`, in `dependencies`)
+  - Updated dependency [`@aws-sdk/lib-dynamodb@^3.823.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/lib-dynamodb/v/3.823.0) (from `^3.0.0`, in `dependencies`)
+- dffb67b: updated stores to add alter table and change tests
+- Updated dependencies [f6fd25f]
+- Updated dependencies [dffb67b]
+- Updated dependencies [f1309d3]
+- Updated dependencies [f7f8293]
+  - @mastra/core@0.10.4-alpha.1
+
 ## 0.10.3
 
 ### Patch Changes

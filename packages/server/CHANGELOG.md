@@ -1,5 +1,17 @@
 # @mastra/deployer
 
+## 0.10.4-alpha.1
+
+### Patch Changes
+
+- 9597ee5: Hoist runtimeContext from POST request into middleware
+- bebd27c: Only apply <placeholder> text inside instructions in the playground ui
+- Updated dependencies [f6fd25f]
+- Updated dependencies [dffb67b]
+- Updated dependencies [f1309d3]
+- Updated dependencies [f7f8293]
+  - @mastra/core@0.10.4-alpha.1
+
 ## 0.10.4-alpha.0
 
 ### Patch Changes

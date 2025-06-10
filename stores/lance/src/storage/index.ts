@@ -83,11 +83,6 @@ export class LanceStorage extends MastraStorage {
     }
   }
 
-  private ensureDate(date: Date | string | undefined): Date | undefined {
-    if (!date) return undefined;
-    return date instanceof Date ? date : new Date(date);
-  }
-
   private translateSchema(schema: Record<string, StorageColumn>): Schema {
     const fields = Object.entries(schema).map(([name, column]) => {
       // Convert string type to Arrow DataType
@@ -167,6 +162,71 @@ export class LanceStorage extends MastraStorage {
       };
     } catch (error: any) {
       throw new Error(`Failed to get table schema: ${error}`);
+    }
+  }
+
+  protected getDefaultValue(type: StorageColumn['type']): string {
+    switch (type) {
+      case 'text':
+        return "''";
+      case 'timestamp':
+        return 'CURRENT_TIMESTAMP';
+      case 'integer':
+      case 'bigint':
+        return '0';
+      case 'jsonb':
+        return "'{}'";
+      case 'uuid':
+        return "''";
+      default:
+        return super.getDefaultValue(type);
+    }
+  }
+
+  /**
+   * Alters table schema to add columns if they don't exist
+   * @param tableName Name of the table
+   * @param schema Schema of the table
+   * @param ifNotExists Array of column names to add if they don't exist
+   */
+  async alterTable({
+    tableName,
+    schema,
+    ifNotExists,
+  }: {
+    tableName: string;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void> {
+    const table = await this.lanceClient.openTable(tableName);
+    const currentSchema = await table.schema();
+    const existingFields = new Set(currentSchema.fields.map((f: any) => f.name));
+
+    const typeMap: Record<string, string> = {
+      text: 'string',
+      integer: 'int',
+      bigint: 'bigint',
+      timestamp: 'timestamp',
+      jsonb: 'string',
+      uuid: 'string',
+    };
+
+    // Find columns to add
+    const columnsToAdd = ifNotExists
+      .filter(col => schema[col] && !existingFields.has(col))
+      .map(col => {
+        const colDef = schema[col];
+        return {
+          name: col,
+          valueSql: colDef?.nullable
+            ? `cast(NULL as ${typeMap[colDef.type ?? 'text']})`
+            : `cast(${this.getDefaultValue(colDef?.type ?? 'text')} as ${typeMap[colDef?.type ?? 'text']})`,
+        };
+      });
+
+    if (columnsToAdd.length > 0) {
+      await table.addColumns(columnsToAdd);
+      this.logger?.info?.(`Added columns [${columnsToAdd.map(c => c.name).join(', ')}] to table ${tableName}`);
     }
   }
 

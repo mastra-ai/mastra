@@ -93,17 +93,6 @@ export class UpstashStore extends MastraStorage {
     return `${tableName}:${keyParts.join(':')}`;
   }
 
-  private ensureDate(date: Date | string | undefined): Date | undefined {
-    if (!date) return undefined;
-    return date instanceof Date ? date : new Date(date);
-  }
-
-  private serializeDate(date: Date | string | undefined): string | undefined {
-    if (!date) return undefined;
-    const dateObj = this.ensureDate(date);
-    return dateObj?.toISOString();
-  }
-
   /**
    * Scans for keys matching the given pattern using SCAN and returns them as an array.
    * @param pattern Redis key pattern, e.g. "table:*"
@@ -454,6 +443,20 @@ export class UpstashStore extends MastraStorage {
     await this.redis.set(`schema:${tableName}`, schema);
   }
 
+  /**
+   * No-op: This backend is schemaless and does not require schema changes.
+   * @param tableName Name of the table
+   * @param schema Schema of the table
+   * @param ifNotExists Array of column names to add if they don't exist
+   */
+  async alterTable(_args: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void> {
+    // Nothing to do here, Redis is schemaless
+  }
+
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     const pattern = `${tableName}:*`;
     await this.scanAndDelete(pattern);
@@ -632,8 +635,25 @@ export class UpstashStore extends MastraStorage {
   }
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
-    const key = this.getKey(TABLE_THREADS, { id: threadId });
-    await this.redis.del(key);
+    // Delete thread metadata and sorted set
+    const threadKey = this.getKey(TABLE_THREADS, { id: threadId });
+    const threadMessagesKey = this.getThreadMessagesKey(threadId);
+    const messageIds: string[] = await this.redis.zrange(threadMessagesKey, 0, -1);
+
+    const pipeline = this.redis.pipeline();
+    pipeline.del(threadKey);
+    pipeline.del(threadMessagesKey);
+
+    for (let i = 0; i < messageIds.length; i++) {
+      const messageId = messageIds[i];
+      const messageKey = this.getMessageKey(threadId, messageId as string);
+      pipeline.del(messageKey);
+    }
+
+    await pipeline.exec();
+
+    // Bulk delete all message keys for this thread if any remain
+    await this.scanAndDelete(this.getMessageKey(threadId, '*'));
   }
 
   async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;

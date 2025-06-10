@@ -71,13 +71,12 @@ export async function startAsyncWorkflowHandler(c: Context) {
     const mastra: Mastra = c.get('mastra');
     const workflowId = c.req.param('workflowId');
     const runtimeContext: RuntimeContext = c.get('runtimeContext');
-    const { inputData, runtimeContext: runtimeContextFromRequest } = await c.req.json();
+    const { inputData } = await c.req.json();
     const runId = c.req.query('runId');
 
     const result = await getOriginalStartAsyncWorkflowHandler({
       mastra,
       runtimeContext,
-      runtimeContextFromRequest,
       workflowId,
       runId,
       inputData,
@@ -94,13 +93,12 @@ export async function startWorkflowRunHandler(c: Context) {
     const mastra: Mastra = c.get('mastra');
     const workflowId = c.req.param('workflowId');
     const runtimeContext: RuntimeContext = c.get('runtimeContext');
-    const { inputData, runtimeContext: runtimeContextFromRequest } = await c.req.json();
+    const { inputData } = await c.req.json();
     const runId = c.req.query('runId');
 
     await getOriginalStartWorkflowRunHandler({
       mastra,
       runtimeContext,
-      runtimeContextFromRequest,
       workflowId,
       runId,
       inputData,
@@ -162,7 +160,7 @@ export async function streamWorkflowHandler(c: Context) {
     const logger = mastra.getLogger();
     const workflowId = c.req.param('workflowId');
     const runtimeContext: RuntimeContext = c.get('runtimeContext');
-    const { inputData, runtimeContext: runtimeContextFromRequest } = await c.req.json();
+    const { inputData } = await c.req.json();
     const runId = c.req.query('runId');
 
     return stream(
@@ -175,7 +173,6 @@ export async function streamWorkflowHandler(c: Context) {
             runId,
             inputData,
             runtimeContext,
-            runtimeContextFromRequest,
           });
 
           const reader = result.stream.getReader();
@@ -207,7 +204,7 @@ export async function resumeAsyncWorkflowHandler(c: Context) {
     const workflowId = c.req.param('workflowId');
     const runId = c.req.query('runId');
     const runtimeContext: RuntimeContext = c.get('runtimeContext');
-    const { step, resumeData, runtimeContext: runtimeContextFromRequest } = await c.req.json();
+    const { step, resumeData } = await c.req.json();
 
     if (!runId) {
       throw new HTTPException(400, { message: 'runId required to resume workflow' });
@@ -216,7 +213,6 @@ export async function resumeAsyncWorkflowHandler(c: Context) {
     const result = await getOriginalResumeAsyncWorkflowHandler({
       mastra,
       runtimeContext,
-      runtimeContextFromRequest,
       workflowId,
       runId,
       body: { step, resumeData },

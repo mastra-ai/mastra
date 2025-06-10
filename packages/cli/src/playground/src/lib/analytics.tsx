@@ -4,6 +4,11 @@ import { useEffect } from 'react';
 
 export function PostHogProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
+    if ('brave' in navigator) {
+      console.info('[Analytics]: Telemetry is disabled for browser constraints.');
+      return;
+    }
+
     // @ts-ignore - window is always defined in the browser and we don't want to type this out.
     if (window.MASTRA_TELEMETRY_DISABLED) {
       console.info('[Analytics]: Telemetry is disabled.');
