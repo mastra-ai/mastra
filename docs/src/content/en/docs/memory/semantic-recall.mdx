@@ -38,23 +38,27 @@ const agent = new Agent({
 
 ## Recall configuration
 
-The two main parameters that control semantic recall behavior are:
+The three main parameters that control semantic recall behavior are:
 
 1. **topK**: How many semantically similar messages to retrieve
 2. **messageRange**: How much surrounding context to include with each match
+3. **scope**: Whether to search within the current thread or across all threads owned by a resource. Using `scope: 'resource'` allows the agent to recall information from any of the user's past conversations.
 
-```typescript {5-6}
+```typescript {5-7}
 const agent = new Agent({
   memory: new Memory({
     options: {
       semanticRecall: {
         topK: 3, // Retrieve 3 most similar messages
         messageRange: 2, // Include 2 messages before and after each match
+        scope: 'resource', // Search across all threads for this user
       },
     },
   }),
 });
 ```
+
+Note: currently, `scope: 'resource'` for semantic recall is supported by the following storage adapters: LibSQL, Postgres, and Upstash.
 
 ### Storage configuration
 

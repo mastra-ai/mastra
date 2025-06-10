@@ -1,18 +1,7 @@
 import { connect } from '@lancedb/lancedb';
 import type { Connection, ConnectionOptions, SchemaLike, FieldLike } from '@lancedb/lancedb';
-import type {
-  EvalRow,
-  MastraMessageV1,
-  MastraMessageV2,
-  StorageColumn,
-  StorageGetMessagesArg,
-  StorageThreadType,
-  TraceType,
-  WorkflowRun,
-  WorkflowRuns,
-  WorkflowRunState,
-} from '@mastra/core';
 import { MessageList } from '@mastra/core/agent';
+import type { MastraMessageV1, MastraMessageV2, StorageThreadType, TraceType } from '@mastra/core/memory';
 import {
   MastraStorage,
   TABLE_EVALS,
@@ -21,7 +10,18 @@ import {
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
 } from '@mastra/core/storage';
-import type { TABLE_NAMES } from '@mastra/core/storage';
+import type {
+  TABLE_NAMES,
+  PaginationInfo,
+  StorageGetMessagesArg,
+  StorageGetTracesArg,
+  StorageColumn,
+  EvalRow,
+  WorkflowRun,
+  WorkflowRuns,
+} from '@mastra/core/storage';
+import type { Trace } from '@mastra/core/telemetry';
+import type { WorkflowRunState } from '@mastra/core/workflows';
 import type { DataType } from 'apache-arrow';
 import { Utf8, Int32, Float32, Binary, Schema, Field, Float64 } from 'apache-arrow';
 
@@ -81,11 +81,6 @@ export class LanceStorage extends MastraStorage {
     } catch (error: any) {
       throw new Error(`Failed to create table: ${error}`);
     }
-  }
-
-  private ensureDate(date: Date | string | undefined): Date | undefined {
-    if (!date) return undefined;
-    return date instanceof Date ? date : new Date(date);
   }
 
   private translateSchema(schema: Record<string, StorageColumn>): Schema {
@@ -167,6 +162,71 @@ export class LanceStorage extends MastraStorage {
       };
     } catch (error: any) {
       throw new Error(`Failed to get table schema: ${error}`);
+    }
+  }
+
+  protected getDefaultValue(type: StorageColumn['type']): string {
+    switch (type) {
+      case 'text':
+        return "''";
+      case 'timestamp':
+        return 'CURRENT_TIMESTAMP';
+      case 'integer':
+      case 'bigint':
+        return '0';
+      case 'jsonb':
+        return "'{}'";
+      case 'uuid':
+        return "''";
+      default:
+        return super.getDefaultValue(type);
+    }
+  }
+
+  /**
+   * Alters table schema to add columns if they don't exist
+   * @param tableName Name of the table
+   * @param schema Schema of the table
+   * @param ifNotExists Array of column names to add if they don't exist
+   */
+  async alterTable({
+    tableName,
+    schema,
+    ifNotExists,
+  }: {
+    tableName: string;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void> {
+    const table = await this.lanceClient.openTable(tableName);
+    const currentSchema = await table.schema();
+    const existingFields = new Set(currentSchema.fields.map((f: any) => f.name));
+
+    const typeMap: Record<string, string> = {
+      text: 'string',
+      integer: 'int',
+      bigint: 'bigint',
+      timestamp: 'timestamp',
+      jsonb: 'string',
+      uuid: 'string',
+    };
+
+    // Find columns to add
+    const columnsToAdd = ifNotExists
+      .filter(col => schema[col] && !existingFields.has(col))
+      .map(col => {
+        const colDef = schema[col];
+        return {
+          name: col,
+          valueSql: colDef?.nullable
+            ? `cast(NULL as ${typeMap[colDef.type ?? 'text']})`
+            : `cast(${this.getDefaultValue(colDef?.type ?? 'text')} as ${typeMap[colDef?.type ?? 'text']})`,
+        };
+      });
+
+    if (columnsToAdd.length > 0) {
+      await table.addColumns(columnsToAdd);
+      this.logger?.info?.(`Added columns [${columnsToAdd.map(c => c.name).join(', ')}] to table ${tableName}`);
     }
   }
 
@@ -935,5 +995,23 @@ export class LanceStorage extends MastraStorage {
     } catch (error: any) {
       throw new Error(`Failed to load workflow snapshot: ${error}`);
     }
+  }
+
+  async getTracesPaginated(_args: StorageGetTracesArg): Promise<PaginationInfo & { traces: Trace[] }> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getThreadsByResourceIdPaginated(_args: {
+    resourceId: string;
+    page?: number;
+    perPage?: number;
+  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getMessagesPaginated(
+    _args: StorageGetMessagesArg,
+  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
+    throw new Error('Method not implemented.');
   }
 }
