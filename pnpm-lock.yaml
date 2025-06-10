@@ -2025,7 +2025,7 @@ importers:
   packages/playground-ui:
     dependencies:
       '@ai-sdk/ui-utils':
-        specifier: ^1.1.19
+        specifier: ^1.2.11
         version: 1.2.11(zod@3.25.57)
       '@assistant-ui/react':
         specifier: ^0.7.91
@@ -2037,13 +2037,13 @@ importers:
         specifier: ^0.7.10
         version: 0.7.10(@assistant-ui/react-markdown@0.7.21(@assistant-ui/react@0.7.91(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(use-sync-external-store@1.5.0(react@19.1.0)))(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(@assistant-ui/react@0.7.91(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(use-sync-external-store@1.5.0(react@19.1.0)))(@types/react-syntax-highlighter@15.5.13)(@types/react@19.1.7)(react-syntax-highlighter@15.6.1(react@19.1.0))(react@19.1.0)
       '@autoform/core':
-        specifier: ^2.1.0
+        specifier: ^2.2.0
         version: 2.2.0
       '@autoform/react':
-        specifier: ^3.0.0
+        specifier: ^3.1.0
         version: 3.1.0(react-hook-form@7.57.0(react@19.1.0))(react@19.1.0)(yup@1.6.1)(zod@3.25.57)
       '@autoform/zod':
-        specifier: ^2.1.0
+        specifier: ^2.2.0
         version: 2.2.0(zod@3.25.57)
       '@codemirror/lang-json':
         specifier: ^6.0.1
@@ -2064,79 +2064,79 @@ importers:
         specifier: workspace:^
         version: link:../../client-sdks/client-js
       '@radix-ui/react-avatar':
-        specifier: ^1.1.3
+        specifier: ^1.1.10
         version: 1.1.10(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@radix-ui/react-checkbox':
-        specifier: ^1.1.4
+        specifier: ^1.3.2
         version: 1.3.2(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@radix-ui/react-collapsible':
-        specifier: ^1.1.3
+        specifier: ^1.1.11
         version: 1.1.11(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@radix-ui/react-dialog':
-        specifier: ^1.1.6
+        specifier: ^1.1.14
         version: 1.1.14(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@radix-ui/react-label':
-        specifier: ^2.1.2
+        specifier: ^2.1.7
         version: 2.1.7(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@radix-ui/react-popover':
-        specifier: ^1.1.6
+        specifier: ^1.1.14
         version: 1.1.14(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@radix-ui/react-scroll-area':
-        specifier: ^1.2.3
+        specifier: ^1.2.9
         version: 1.2.9(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@radix-ui/react-select':
-        specifier: ^2.1.6
+        specifier: ^2.2.5
         version: 2.2.5(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@radix-ui/react-slider':
-        specifier: ^1.2.3
+        specifier: ^1.3.5
         version: 1.3.5(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@radix-ui/react-slot':
-        specifier: ^1.1.2
+        specifier: ^1.2.3
         version: 1.2.3(@types/react@19.1.7)(react@19.1.0)
       '@radix-ui/react-switch':
-        specifier: ^1.1.3
+        specifier: ^1.2.5
         version: 1.2.5(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@radix-ui/react-tabs':
-        specifier: ^1.1.2
+        specifier: ^1.1.12
         version: 1.1.12(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@radix-ui/react-toggle':
-        specifier: ^1.1.2
+        specifier: ^1.1.9
         version: 1.1.9(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@radix-ui/react-tooltip':
-        specifier: ^1.1.8
+        specifier: ^1.2.7
         version: 1.2.7(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@tanstack/react-table':
-        specifier: ^8.21.2
+        specifier: ^8.21.3
         version: 8.21.3(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@types/react-syntax-highlighter':
         specifier: ^15.5.13
         version: 15.5.13
       '@uiw/codemirror-theme-dracula':
-        specifier: ^4.23.10
+        specifier: ^4.23.13
         version: 4.23.13(@codemirror/language@6.11.1)(@codemirror/state@6.5.2)(@codemirror/view@6.37.1)
       '@uiw/react-codemirror':
-        specifier: ^4.23.8
+        specifier: ^4.23.13
         version: 4.23.13(@babel/runtime@7.27.6)(@codemirror/autocomplete@6.18.6)(@codemirror/language@6.11.1)(@codemirror/lint@6.8.4)(@codemirror/search@6.5.10)(@codemirror/state@6.5.2)(@codemirror/theme-one-dark@6.1.2)(@codemirror/view@6.37.1)(codemirror@6.0.1)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@xyflow/react':
-        specifier: ^12.3.6
+        specifier: ^12.6.4
         version: 12.6.4(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       cmdk:
-        specifier: ^1.0.0
+        specifier: ^1.1.1
         version: 1.1.1(@types/react-dom@19.1.6(@types/react@19.1.7))(@types/react@19.1.7)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       date-fns:
         specifier: ^4.1.0
         version: 4.1.0
       json-schema-to-zod:
-        specifier: ^2.5.0
+        specifier: ^2.6.1
         version: 2.6.1
       lucide-react:
         specifier: ^0.474.0
         version: 0.474.0(react@19.1.0)
       motion:
-        specifier: ^12.4.2
+        specifier: ^12.16.0
         version: 12.16.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       prism-react-renderer:
-        specifier: ^2.4.0
+        specifier: ^2.4.1
         version: 2.4.1(react@19.1.0)
       react:
         specifier: '>=19.0.0'
@@ -2151,13 +2151,13 @@ importers:
         specifier: '>=19.0.0'
         version: 19.1.0(react@19.1.0)
       react-hook-form:
-        specifier: ^7.54.2
+        specifier: ^7.57.0
         version: 7.57.0(react@19.1.0)
       react-markdown:
         specifier: ^9.1.0
         version: 9.1.0(@types/react@19.1.7)(react@19.1.0)
       react-resizable-panels:
-        specifier: ^2.1.7
+        specifier: ^2.1.9
         version: 2.1.9(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       react-syntax-highlighter:
         specifier: ^15.6.1
@@ -2172,16 +2172,16 @@ importers:
         specifier: ^11.0.0
         version: 11.0.0
       remark-rehype:
-        specifier: ^11.1.1
+        specifier: ^11.1.2
         version: 11.1.2
       remeda:
-        specifier: ^2.21.1
+        specifier: ^2.23.0
         version: 2.23.0
       shiki:
         specifier: ^1.29.2
         version: 1.29.2
       sonner:
-        specifier: ^2.0.1
+        specifier: ^2.0.5
         version: 2.0.5(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       superjson:
         specifier: ^2.2.2
@@ -2196,13 +2196,13 @@ importers:
         specifier: ^11.0.5
         version: 11.0.5
       use-debounce:
-        specifier: ^10.0.4
+        specifier: ^10.0.5
         version: 10.0.5(react@19.1.0)
       zod:
-        specifier: ^3.25.56
+        specifier: ^3.25.57
         version: 3.25.57
       zustand:
-        specifier: ^5.0.3
+        specifier: ^5.0.5
         version: 5.0.5(@types/react@19.1.7)(react@19.1.0)(use-sync-external-store@1.5.0(react@19.1.0))
     devDependencies:
       '@mastra/core':
@@ -2212,13 +2212,13 @@ importers:
         specifier: ^20.17.57
         version: 20.19.0
       '@types/react':
-        specifier: ^19.0.10
+        specifier: ^19.1.7
         version: 19.1.7
       '@types/react-dom':
-        specifier: ^19.0.4
+        specifier: ^19.1.6
         version: 19.1.6(@types/react@19.1.7)
       '@vitejs/plugin-react':
-        specifier: ^4.3.4
+        specifier: ^4.5.2
         version: 4.5.2(vite@6.3.5(@types/node@20.19.0)(jiti@2.4.2)(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0))
       autoprefixer:
         specifier: ^10.4.21
@@ -2230,13 +2230,13 @@ importers:
         specifier: ^2.1.1
         version: 2.1.1
       postcss:
-        specifier: ^8.5.3
+        specifier: ^8.5.4
         version: 8.5.4
       rollup-plugin-node-externals:
         specifier: ^8.0.0
         version: 8.0.0(rollup@4.42.0)
       tailwind-merge:
-        specifier: ^3.0.2
+        specifier: ^3.3.1
         version: 3.3.1
       tailwindcss:
         specifier: ^3.4.17
@@ -2245,13 +2245,13 @@ importers:
         specifier: ^5.8.3
         version: 5.8.3
       vite:
-        specifier: ^6.0.0
+        specifier: ^6.3.5
         version: 6.3.5(@types/node@20.19.0)(jiti@2.4.2)(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
       vite-plugin-dts:
         specifier: ^3.9.1
         version: 3.9.1(@types/node@20.19.0)(rollup@4.42.0)(typescript@5.8.3)(vite@6.3.5(@types/node@20.19.0)(jiti@2.4.2)(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0))
       vite-plugin-lib-inject-css:
-        specifier: ^2.2.1
+        specifier: ^2.2.2
         version: 2.2.2(vite@6.3.5(@types/node@20.19.0)(jiti@2.4.2)(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0))
 
   packages/rag:
