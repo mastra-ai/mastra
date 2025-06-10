@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from "react";
-import { algoliasearch, SearchResult, type SearchClient } from "algoliasearch";
+import { algoliasearch, type SearchClient } from "algoliasearch";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * Options that can be passed to Algolia search.
@@ -174,6 +174,7 @@ export function useAlgoliaSearch(
         const firstResult = results[0];
         if ("hits" in firstResult) {
           const transformedResults: AlgoliaResult[] = firstResult.hits.map(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (hit: any) => {
               // Extract highlighted content for excerpt
               const excerpt =
