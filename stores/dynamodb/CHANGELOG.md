@@ -1,5 +1,14 @@
 # @mastra/dynamodb
 
+## 0.10.4-alpha.1
+
+### Patch Changes
+
+- 925ab94: added paginated functions to base class and added boilerplate and updated imports
+- c218b1c: fix(dynamodb): use upsert instead of create for persistWorkflowSnapshot
+- Updated dependencies [925ab94]
+  - @mastra/core@0.10.4-alpha.3
+
 ## 0.10.4-alpha.0
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.10.4-alpha.3
+
+### Patch Changes
+
+- 925ab94: added paginated functions to base class and added boilerplate and updated imports
+
 ## 0.10.4-alpha.2
 
 ### Patch Changes
