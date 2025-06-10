@@ -215,7 +215,7 @@ do:
   new Agent({ memory: new Memory() })
 `,
       });
-      this.#logger.trackException(error);
+      this.#logger?.trackException(error);
       throw error;
     }
 
@@ -247,7 +247,7 @@ do:
             category: ErrorCategory.USER,
             text: `Agent with ID '${key}' already exists`,
           });
-          this.#logger.trackException(error);
+          this.#logger?.trackException(error);
           throw error;
         }
         agent.__registerMastra(this);
@@ -345,7 +345,7 @@ do:
         category: ErrorCategory.USER,
         text: `Agent with name '${String(name)}' not found`,
       });
-      this.#logger.trackException(error);
+      this.#logger?.trackException(error);
       throw error;
     }
     return this.#agents[name];
@@ -364,7 +364,7 @@ do:
         category: ErrorCategory.USER,
         text: `Vector with name '${String(name)}' not found`,
       });
-      this.#logger.trackException(error);
+      this.#logger?.trackException(error);
       throw error;
     }
     return vector;
@@ -393,7 +393,7 @@ do:
           workflowId: String(id),
         },
       });
-      this.#logger.trackException(error);
+      this.#logger?.trackException(error);
       throw error;
     }
 
@@ -416,7 +416,7 @@ do:
         category: ErrorCategory.USER,
         text: `Workflow with ID '${String(id)}' not found`,
       });
-      this.#logger.trackException(error);
+      this.#logger?.trackException(error);
       throw error;
     }
 
@@ -596,7 +596,7 @@ do:
         category: ErrorCategory.USER,
         text: `Invalid middleware: expected a function or array, received ${typeof serverMiddleware}`,
       });
-      this.#logger.trackException(error);
+      this.#logger?.trackException(error);
       throw error;
     }
 
@@ -665,7 +665,7 @@ do:
         category: ErrorCategory.USER,
         text: 'Transport ID is required for retrieving logs by run ID',
       });
-      this.#logger.trackException(error);
+      this.#logger?.trackException(error);
       throw error;
     }
 
@@ -710,7 +710,7 @@ do:
         category: ErrorCategory.USER,
         text: 'Transport ID is required for retrieving logs',
       });
-      this.#logger.trackException(error);
+      this.#logger?.trackException(error);
       throw error;
     }
 
@@ -721,7 +721,6 @@ do:
         category: ErrorCategory.SYSTEM,
         text: 'Logger is not configured for retrieving logs',
       });
-      this.#logger.trackException(error);
       throw error;
     }
 

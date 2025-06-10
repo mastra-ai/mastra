@@ -29,18 +29,20 @@ export async function evaluate<T extends Agent>({
   let metricName = metric.constructor.name;
   try {
     metricResult = await metric.measure(input.toString(), output);
-  } catch (e) {
-    throw new MastraError({
-      id: 'EVAL_METRIC_MEASURE_EXECUTION_FAILED',
-      domain: ErrorDomain.EVAL,
-      category: ErrorCategory.USER,
-      details: {
-        agentName,
-        metricName,
-        globalRunId,
+  } catch (e: unknown) {
+    throw new MastraError(
+      {
+        id: 'EVAL_METRIC_MEASURE_EXECUTION_FAILED',
+        domain: ErrorDomain.EVAL,
+        category: ErrorCategory.USER,
+        details: {
+          agentName,
+          metricName,
+          globalRunId,
+        },
       },
       e,
-    });
+    );
   }
   const traceObject = {
     input: input.toString(),
@@ -57,17 +59,19 @@ export async function evaluate<T extends Agent>({
   try {
     executeHook(AvailableHooks.ON_EVALUATION, traceObject);
   } catch (e: unknown) {
-    throw new MastraError({
-      id: 'EVAL_HOOK_EXECUTION_FAILED',
-      domain: ErrorDomain.EVAL,
-      category: ErrorCategory.USER,
-      details: {
-        agentName,
-        metricName,
-        globalRunId,
+    throw new MastraError(
+      {
+        id: 'EVAL_HOOK_EXECUTION_FAILED',
+        domain: ErrorDomain.EVAL,
+        category: ErrorCategory.USER,
+        details: {
+          agentName,
+          metricName,
+          globalRunId,
+        },
       },
       e,
-    });
+    );
   }
 
   return { ...metricResult, output };
