@@ -816,6 +816,7 @@ describe('MongoDBStore', () => {
             id: { type: 'text', primaryKey: true, nullable: false },
             name: { type: 'text', nullable: true },
             extra: { type: 'integer', nullable: true },
+          },
           ifNotExists: ['extra'],
         }),
       ).resolves.not.toThrow();

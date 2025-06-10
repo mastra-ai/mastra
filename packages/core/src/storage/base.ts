@@ -69,7 +69,7 @@ export abstract class MastraStorage extends MastraBase {
       case 'text':
         return "DEFAULT ''";
       case 'timestamp':
-        return 'DEFAULT CURRENT_TIMESTAMP';
+        return "DEFAULT '1970-01-01 00:00:00'";
       case 'integer':
       case 'bigint':
         return 'DEFAULT 0';

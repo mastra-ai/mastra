@@ -310,22 +310,6 @@ export class D1Store extends MastraStorage {
     }
   }
 
-  protected getDefaultValue(type: string): string {
-    switch (type) {
-      case 'text':
-        return "DEFAULT ''";
-      case 'timestamp':
-        return 'DEFAULT CURRENT_TIMESTAMP';
-      case 'integer':
-      case 'bigint':
-        return 'DEFAULT 0';
-      case 'jsonb':
-        return "DEFAULT '{}'";
-      default:
-        return super.getDefaultValue(type);
-    }
-  }
-
   async createTable({
     tableName,
     schema,
