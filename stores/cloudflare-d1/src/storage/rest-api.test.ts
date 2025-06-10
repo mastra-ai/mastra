@@ -407,7 +407,7 @@ describe.skip('D1Store REST API', () => {
       const messages = [createSampleMessageV1({ threadId: thread.id }), createSampleMessageV1({ threadId: thread.id })];
 
       // Save messages
-      const savedMessages = await store.saveMessages({ messages, format: 'v2' });
+      const savedMessages = await store.saveMessages({ messages });
       expect(savedMessages).toEqual(messages);
 
       // Retrieve messages with retry
@@ -440,7 +440,7 @@ describe.skip('D1Store REST API', () => {
         createSampleMessageV1({ threadId: thread.id, content: 'Third' }),
       ];
 
-      await store.saveMessages({ messages, format: 'v2' });
+      await store.saveMessages({ messages });
 
       const retrievedMessages = await retryUntil(
         async () => await store.getMessages({ threadId: thread.id }),
@@ -1174,7 +1174,7 @@ describe.skip('D1Store REST API', () => {
         createSampleMessageV1({ threadId: thread.id, createdAt: timestamp }),
       );
 
-      await store.saveMessages({ messages, format: 'v2' });
+      await store.saveMessages({ messages });
 
       // Verify order is maintained based on insertion order
       const order = await retryUntil(
@@ -1201,7 +1201,7 @@ describe.skip('D1Store REST API', () => {
       // Save messages in reverse order to verify write order is preserved
       const reversedMessages = [...messages].reverse(); // newest -> oldest
       for (const msg of reversedMessages) {
-        await store.saveMessages({ messages: [msg], format: 'v2' });
+        await store.saveMessages({ messages: [msg] });
       }
       // Verify all messages are saved successfully
       const order = await retryUntil(
@@ -1288,7 +1288,7 @@ describe.skip('D1Store REST API', () => {
 
       // Save messages sequentially to avoid race conditions in REST API
       for (const msg of messages) {
-        await store.saveMessages({ messages: [msg], format: 'v2' });
+        await store.saveMessages({ messages: [msg] });
       }
       // Verify all messages are saved
       const order = await retryUntil(
@@ -1309,7 +1309,7 @@ describe.skip('D1Store REST API', () => {
       const messages = Array.from({ length: 3 }, () => createSampleMessageV1({ threadId: thread.id }));
 
       await store.saveThread({ thread });
-      await store.saveMessages({ messages, format: 'v2' });
+      await store.saveMessages({ messages });
 
       // Verify messages exist
       const initialOrder = await retryUntil(
@@ -1400,7 +1400,6 @@ describe.skip('D1Store REST API', () => {
       await expect(
         store.saveMessages({
           messages: [message],
-          format: 'v2',
         }),
       ).rejects.toThrow();
     });
@@ -1412,7 +1411,7 @@ describe.skip('D1Store REST API', () => {
       // Test with various malformed data
       const malformedMessage = createSampleMessageV1({ threadId: thread.id, content: ''.padStart(1024 * 1024, 'x') });
 
-      await store.saveMessages({ messages: [malformedMessage], format: 'v2' });
+      await store.saveMessages({ messages: [malformedMessage] });
 
       // Should still be able to retrieve and handle the message
       const messages = await retryUntil(

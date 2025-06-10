@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import {
   createSampleMessageV1,
+  createSampleMessageV2,
   createSampleThread,
   createSampleWorkflowSnapshot,
   checkWorkflowSnapshot,
@@ -10,7 +11,6 @@ import type { TABLE_NAMES } from '@mastra/core/storage';
 import { TABLE_THREADS, TABLE_MESSAGES, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi, afterEach } from 'vitest';
 
-import { createSampleMessageV2 } from '../../../_test-utils/src/default-tests';
 import { ClickhouseStore, TABLE_ENGINES } from '.';
 import type { ClickhouseConfig } from '.';
 

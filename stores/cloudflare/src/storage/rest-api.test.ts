@@ -1465,7 +1465,7 @@ describe.skip('CloudflareStore REST API', () => {
 
       // Save messages sequentially to avoid race conditions in REST API
       for (const msg of messages) {
-        await store.saveMessages({ messages: [msg], format: 'v2' });
+        await store.saveMessages({ messages: [msg] });
       }
       // Verify all messages are saved
       const orderKey = store['getThreadMessagesKey'](thread.id);
@@ -1527,7 +1527,7 @@ describe.skip('CloudflareStore REST API', () => {
       const messages = Array.from({ length: 3 }, () => createSampleMessageV1({ threadId: thread.id }));
 
       await store.saveThread({ thread });
-      await store.saveMessages({ messages, format: 'v2' });
+      await store.saveMessages({ messages });
 
       // Verify messages exist
       const orderKey = store['getThreadMessagesKey'](thread.id);
@@ -1675,7 +1675,7 @@ describe.skip('CloudflareStore REST API', () => {
 
       // Save messages sequentially to avoid race conditions in REST API
       for (const msg of messages) {
-        await store.saveMessages({ messages: [msg], format: 'v2' });
+        await store.saveMessages({ messages: [msg] });
       }
       // For REST API, just verify all messages are eventually saved
       const orderKey = store['getThreadMessagesKey'](thread.id);
@@ -1716,7 +1716,6 @@ describe.skip('CloudflareStore REST API', () => {
       await expect(
         store.saveMessages({
           messages: [message],
-          format: 'v2',
         }),
       ).rejects.toThrow();
     });

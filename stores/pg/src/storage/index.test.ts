@@ -237,13 +237,13 @@ describe('PostgresStore', () => {
     });
 
     it('should retrieve messages w/ next/prev messages by message id + resource id', async () => {
-      const thread = createSampleThread('thread-one');
+      const thread = createSampleThread({ id: 'thread-one' });
       await store.saveThread({ thread });
 
-      const thread2 = createSampleThread('thread-two');
+      const thread2 = createSampleThread({ id: 'thread-two' });
       await store.saveThread({ thread: thread2 });
 
-      const thread3 = createSampleThread('thread-three');
+      const thread3 = createSampleThread({ id: 'thread-three' });
       await store.saveThread({ thread: thread3 });
 
       const messages: MastraMessageV2[] = [
