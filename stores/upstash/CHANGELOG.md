@@ -1,5 +1,14 @@
 # @mastra/upstash
 
+## 0.10.3-alpha.3
+
+### Patch Changes
+
+- 925ab94: added paginated functions to base class and added boilerplate and updated imports
+- a914da2: Fix upstash paginated APIs
+- Updated dependencies [925ab94]
+  - @mastra/core@0.10.4-alpha.3
+
 ## 0.10.3-alpha.2
 
 ### Patch Changes

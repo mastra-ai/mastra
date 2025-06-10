@@ -1,5 +1,13 @@
 # @mastra/lance
 
+## 0.1.1-alpha.1
+
+### Patch Changes
+
+- 925ab94: added paginated functions to base class and added boilerplate and updated imports
+- Updated dependencies [925ab94]
+  - @mastra/core@0.10.4-alpha.3
+
 ## 0.1.1-alpha.0
 
 ### Patch Changes
