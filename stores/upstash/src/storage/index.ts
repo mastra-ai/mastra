@@ -16,6 +16,7 @@ import type {
   WorkflowRuns,
   WorkflowRun,
   PaginationInfo,
+  PaginationArgs,
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { Redis } from '@upstash/redis';
@@ -277,21 +278,27 @@ export class UpstashStore extends MastraStorage {
     fromDate?: Date;
     toDate?: Date;
   }): Promise<any[]> {
+    if (args.fromDate || args.toDate) {
+      (args as any).dateRange = {
+        start: args.fromDate,
+        end: args.toDate,
+      };
+    }
     const { traces } = await this.getTracesPaginated(args);
     return traces;
   }
 
-  public async getTracesPaginated(args: {
-    name?: string;
-    scope?: string;
-    page: number;
-    perPage: number;
-    attributes?: Record<string, string>;
-    filters?: Record<string, any>;
-    fromDate?: Date;
-    toDate?: Date;
-  }): Promise<PaginationInfo & { traces: any[] }> {
-    const { name, scope, page, perPage, attributes, filters, fromDate, toDate } = args;
+  public async getTracesPaginated(
+    args: {
+      name?: string;
+      scope?: string;
+      attributes?: Record<string, string>;
+      filters?: Record<string, any>;
+    } & PaginationArgs,
+  ): Promise<PaginationInfo & { traces: any[] }> {
+    const { name, scope, page = 0, perPage = 100, attributes, filters, dateRange } = args;
+    const fromDate = dateRange?.start;
+    const toDate = dateRange?.end;
 
     try {
       const pattern = `${TABLE_TRACES}:*`;
@@ -503,12 +510,12 @@ export class UpstashStore extends MastraStorage {
     }
   }
 
-  public async getThreadsByResourceIdPaginated(args: {
-    resourceId: string;
-    page: number;
-    perPage: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    const { resourceId, page, perPage } = args;
+  public async getThreadsByResourceIdPaginated(
+    args: {
+      resourceId: string;
+    } & PaginationArgs,
+  ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+    const { resourceId, page = 0, perPage = 100 } = args;
 
     try {
       const allThreads = await this.getThreadsByResourceId({ resourceId });
@@ -737,18 +744,17 @@ export class UpstashStore extends MastraStorage {
   public async getMessagesPaginated(
     args: StorageGetMessagesArg & {
       format?: 'v1' | 'v2';
-      page: number;
-      perPage?: number;
-      fromDate?: Date;
-      toDate?: Date;
     },
   ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    const { threadId, selectBy, format, page, perPage = 40, fromDate, toDate } = args;
+    const { threadId, selectBy, format } = args;
+    const { page = 0, perPage = 40, dateRange } = selectBy?.pagination || {};
+    const fromDate = dateRange?.start;
+    const toDate = dateRange?.end;
     const threadMessagesKey = this.getThreadMessagesKey(threadId);
-    const messages: MastraMessageV2[] = [];
 
     if (selectBy?.include?.length) {
       const messageIds = new Set<string>();
+
       for (const item of selectBy.include) {
         messageIds.add(item.id);
 
@@ -768,11 +774,38 @@ export class UpstashStore extends MastraStorage {
           }
         }
       }
-      // Use pipeline to fetch all messages efficiently
-      const pipeline = this.redis.pipeline();
-      messageIds.forEach(id => pipeline.get(this.getMessageKey(threadId, id as string)));
-      const results = await pipeline.exec();
-      messages.push(...(results.filter(result => result !== null) as MastraMessageV2[]));
+
+      const messagesData = (
+        await Promise.all(
+          Array.from(messageIds).map(async id =>
+            this.redis.get<MastraMessageV2 & { _index?: number }>(this.getMessageKey(threadId, id)),
+          ),
+        )
+      ).filter(msg => msg !== null) as (MastraMessageV2 & { _index?: number })[];
+
+      const allMessageIds = await this.redis.zrange(threadMessagesKey, 0, -1);
+      messagesData.sort((a, b) => allMessageIds.indexOf(a!.id) - allMessageIds.indexOf(b!.id));
+
+      const prepared = messagesData.map(message => {
+        const { _index, ...messageWithoutIndex } = message;
+        return messageWithoutIndex as unknown as MastraMessageV1;
+      });
+
+      let finalMessages: MastraMessageV1[] | MastraMessageV2[] = prepared;
+      if (format === 'v2') {
+        finalMessages = prepared.map(msg => ({
+          ...msg,
+          content: msg.content || { format: 2, parts: [{ type: 'text', text: '' }] },
+        })) as MastraMessageV2[];
+      }
+
+      return {
+        messages: finalMessages,
+        total: finalMessages.length,
+        page: 0,
+        perPage: finalMessages.length,
+        hasMore: false,
+      };
     }
     try {
       const allMessageIds = await this.redis.zrange(threadMessagesKey, 0, -1);
@@ -793,39 +826,57 @@ export class UpstashStore extends MastraStorage {
       const results = await pipeline.exec();
 
       // Process messages and apply filters - handle undefined results from pipeline
-      let messagesData = results
+      let messages = results
         .map((result: any) => result as MastraMessageV2 | null)
         .filter((msg): msg is MastraMessageV2 => msg !== null) as (MastraMessageV2 & { _index?: number })[];
 
       // Apply date filters if provided
       if (fromDate) {
-        messagesData = messagesData.filter(msg => msg && new Date(msg.createdAt).getTime() >= fromDate.getTime());
+        messages = messages.filter(msg => msg && new Date(msg.createdAt).getTime() >= fromDate.getTime());
       }
 
       if (toDate) {
-        messagesData = messagesData.filter(msg => msg && new Date(msg.createdAt).getTime() <= toDate.getTime());
+        messages = messages.filter(msg => msg && new Date(msg.createdAt).getTime() <= toDate.getTime());
       }
 
       // Sort messages by their position in the sorted set
-      messagesData.sort((a, b) => allMessageIds.indexOf(a!.id) - allMessageIds.indexOf(b!.id));
+      messages.sort((a, b) => allMessageIds.indexOf(a!.id) - allMessageIds.indexOf(b!.id));
 
-      const total = messagesData.length;
+      const total = messages.length;
 
       // Apply pagination
       const start = page * perPage;
       const end = start + perPage;
       const hasMore = end < total;
-      const paginatedMessages = messagesData.slice(start, end);
+      const paginatedMessages = messages.slice(start, end);
 
-      messages.push(...paginatedMessages);
+      // Remove _index before returning and handle format conversion properly
+      const prepared = paginatedMessages
+        .filter(message => message !== null && message !== undefined)
+        .map(message => {
+          const { _index, ...messageWithoutIndex } = message as MastraMessageV2 & { _index?: number };
+          return messageWithoutIndex as unknown as MastraMessageV1;
+        });
 
-      const list = new MessageList().add(messages, 'memory');
-      const finalMessages = (format === `v2` ? list.get.all.v2() : list.get.all.v1()) as
-        | MastraMessageV1[]
-        | MastraMessageV2[];
+      // Return pagination object with correct format
+      if (format === 'v2') {
+        // Convert V1 format back to V2 format
+        const v2Messages = prepared.map(msg => ({
+          ...msg,
+          content: msg.content || { format: 2, parts: [{ type: 'text', text: '' }] },
+        })) as MastraMessageV2[];
+
+        return {
+          messages: v2Messages,
+          total,
+          page,
+          perPage,
+          hasMore,
+        };
+      }
 
       return {
-        messages: finalMessages,
+        messages: prepared,
         total,
         page,
         perPage,
@@ -889,18 +940,17 @@ export class UpstashStore extends MastraStorage {
    * @param options Pagination and filtering options
    * @returns Object with evals array and total count
    */
-  async getEvals(options?: {
-    agentName?: string;
-    type?: 'test' | 'live';
-    page?: number;
-    perPage?: number;
-    fromDate?: Date;
-    toDate?: Date;
-  }): Promise<PaginationInfo & { evals: EvalRow[] }> {
+  async getEvals(
+    options?: {
+      agentName?: string;
+      type?: 'test' | 'live';
+    } & PaginationArgs,
+  ): Promise<PaginationInfo & { evals: EvalRow[] }> {
     try {
       // Default pagination parameters
-      const page = options?.page ?? 0;
-      const perPage = options?.perPage ?? 100;
+      const { agentName, type, page = 0, perPage = 100, dateRange } = options || {};
+      const fromDate = dateRange?.start;
+      const toDate = dateRange?.end;
 
       // Get all keys that match the evals table pattern using cursor-based scanning
       const pattern = `${TABLE_EVALS}:*`;
@@ -928,12 +978,12 @@ export class UpstashStore extends MastraStorage {
         .filter((record): record is Record<string, any> => record !== null && typeof record === 'object');
 
       // Apply agent name filter if provided
-      if (options?.agentName) {
-        filteredEvals = filteredEvals.filter(record => record.agent_name === options.agentName);
+      if (agentName) {
+        filteredEvals = filteredEvals.filter(record => record.agent_name === agentName);
       }
 
       // Apply type filter if provided
-      if (options?.type === 'test') {
+      if (type === 'test') {
         filteredEvals = filteredEvals.filter(record => {
           if (!record.test_info) return false;
 
@@ -947,7 +997,7 @@ export class UpstashStore extends MastraStorage {
             return false;
           }
         });
-      } else if (options?.type === 'live') {
+      } else if (type === 'live') {
         filteredEvals = filteredEvals.filter(record => {
           if (!record.test_info) return true;
 
@@ -964,17 +1014,17 @@ export class UpstashStore extends MastraStorage {
       }
 
       // Apply date filters if provided
-      if (options?.fromDate) {
+      if (fromDate) {
         filteredEvals = filteredEvals.filter(record => {
           const createdAt = new Date(record.created_at || record.createdAt || 0);
-          return createdAt.getTime() >= options.fromDate!.getTime();
+          return createdAt.getTime() >= fromDate.getTime();
         });
       }
 
-      if (options?.toDate) {
+      if (toDate) {
         filteredEvals = filteredEvals.filter(record => {
           const createdAt = new Date(record.created_at || record.createdAt || 0);
-          return createdAt.getTime() <= options.toDate!.getTime();
+          return createdAt.getTime() <= toDate.getTime();
         });
       }
 
@@ -1004,12 +1054,13 @@ export class UpstashStore extends MastraStorage {
         hasMore,
       };
     } catch (error) {
+      const { page = 0, perPage = 100 } = options || {};
       console.error('Failed to get evals:', error);
       return {
         evals: [],
         total: 0,
-        page: options?.page ?? 0,
-        perPage: options?.perPage ?? 100,
+        page,
+        perPage,
         hasMore: false,
       };
     }
