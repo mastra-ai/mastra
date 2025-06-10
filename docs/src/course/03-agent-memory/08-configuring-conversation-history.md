@@ -9,6 +9,9 @@ import { openai } from "@ai-sdk/openai";
 
 // Create a memory instance with custom conversation history settings
 const memory = new Memory({
+  storage: new LibSQLStore({
+    url: "../../memory.db",
+  }),
   options: {
     lastMessages: 20, // Include the last 20 messages in the context
   },
