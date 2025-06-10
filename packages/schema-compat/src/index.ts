@@ -18,6 +18,13 @@ export {
   type ZodShape,
   type ShapeKey,
   type ShapeValue,
+  // Re-usable type predicates
+  isOptional,
+  isObj,
+  isArr,
+  isUnion,
+  isString,
+  isNumber,
 } from './schema-compatibility';
 
 // Utility functions

@@ -1,5 +1,33 @@
 # @mastra/dane
 
+## 0.0.25-alpha.1
+
+### Patch Changes
+
+- 1ccccff: dependencies updates:
+  - Updated dependency [`zod@^3.25.56` ↗︎](https://www.npmjs.com/package/zod/v/3.25.56) (from `^3.24.3`, in `dependencies`)
+- 1ccccff: dependencies updates:
+  - Updated dependency [`zod@^3.25.56` ↗︎](https://www.npmjs.com/package/zod/v/3.25.56) (from `^3.24.3`, in `dependencies`)
+- Updated dependencies [1ccccff]
+- Updated dependencies [1ccccff]
+- Updated dependencies [1ccccff]
+- Updated dependencies [1ccccff]
+- Updated dependencies [1ccccff]
+- Updated dependencies [1ccccff]
+- Updated dependencies [f6fd25f]
+- Updated dependencies [dffb67b]
+- Updated dependencies [fc579cd]
+- Updated dependencies [f1309d3]
+- Updated dependencies [f7f8293]
+- Updated dependencies [a382d3b]
+  - @mastra/github@1.2.2-alpha.0
+  - @mastra/memory@0.10.3-alpha.0
+  - @mastra/rag@0.10.3-alpha.1
+  - @mastra/core@0.10.4-alpha.1
+  - @mastra/libsql@0.10.2-alpha.1
+  - @mastra/upstash@0.10.3-alpha.1
+  - @mastra/mcp@0.10.3-alpha.0
+
 ## 0.0.25-alpha.0
 
 ### Patch Changes

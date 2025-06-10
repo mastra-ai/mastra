@@ -83,7 +83,8 @@ export async function getAgentByIdHandler({
   mastra,
   runtimeContext,
   agentId,
-}: Context & { runtimeContext: RuntimeContext; agentId: string }) {
+  isPlayground = false,
+}: Context & { isPlayground?: boolean; runtimeContext: RuntimeContext; agentId: string }) {
   try {
     const agent = mastra.getAgent(agentId);
 
@@ -123,7 +124,22 @@ export async function getAgentByIdHandler({
       }
     }
 
-    const instructions = await agent.getInstructions({ runtimeContext });
+    let proxyRuntimeContext = runtimeContext;
+    if (isPlayground) {
+      proxyRuntimeContext = new Proxy(runtimeContext, {
+        get(target, prop) {
+          if (prop === 'get') {
+            return function (key: string) {
+              const value = target.get(key);
+              return value ?? `<${key}>`;
+            };
+          }
+          return Reflect.get(target, prop);
+        },
+      });
+    }
+
+    const instructions = await agent.getInstructions({ runtimeContext: proxyRuntimeContext });
     const llm = await agent.getLLM({ runtimeContext });
 
     return {
