@@ -873,7 +873,7 @@ describe('ClickhouseStore', () => {
       await expect(
         store.alterTable({
           tableName: TEST_TABLE as TABLE_NAMES,
-          schema: { ...BASE_SCHEMA, must_have: { type: 'text', nullable: false } },
+          schema: { ...BASE_SCHEMA, text_column: { type: 'text', nullable: false } },
           ifNotExists: ['text_column'],
         }),
       ).resolves.not.toThrow();
@@ -881,7 +881,7 @@ describe('ClickhouseStore', () => {
       await expect(
         store.alterTable({
           tableName: TEST_TABLE as TABLE_NAMES,
-          schema: { ...BASE_SCHEMA, must_have: { type: 'timestamp', nullable: false } },
+          schema: { ...BASE_SCHEMA, timestamp_column: { type: 'timestamp', nullable: false } },
           ifNotExists: ['timestamp_column'],
         }),
       ).resolves.not.toThrow();
@@ -889,7 +889,7 @@ describe('ClickhouseStore', () => {
       await expect(
         store.alterTable({
           tableName: TEST_TABLE as TABLE_NAMES,
-          schema: { ...BASE_SCHEMA, must_have: { type: 'bigint', nullable: false } },
+          schema: { ...BASE_SCHEMA, bigint_column: { type: 'bigint', nullable: false } },
           ifNotExists: ['bigint_column'],
         }),
       ).resolves.not.toThrow();
@@ -897,7 +897,7 @@ describe('ClickhouseStore', () => {
       await expect(
         store.alterTable({
           tableName: TEST_TABLE as TABLE_NAMES,
-          schema: { ...BASE_SCHEMA, must_have: { type: 'jsonb', nullable: false } },
+          schema: { ...BASE_SCHEMA, jsonb_column: { type: 'jsonb', nullable: false } },
           ifNotExists: ['jsonb_column'],
         }),
       ).resolves.not.toThrow();

@@ -1004,11 +1004,13 @@ describe('UpstashStore', () => {
     it('does not throw when calling alterTable (no-op)', async () => {
       await expect(
         store.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
           schema: {
             id: { type: 'text', primaryKey: true, nullable: false },
             name: { type: 'text', nullable: true },
             extra: { type: 'integer', nullable: true },
           },
+          ifNotExists: [],
         }),
       ).resolves.not.toThrow();
     });
