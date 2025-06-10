@@ -1,4 +1,4 @@
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { randomUUID } from 'crypto';
 import { existsSync } from 'fs';
 import { readFile, writeFile } from 'fs/promises';
@@ -113,7 +113,13 @@ function openInBrowser(url: string) {
       break;
   }
 
-  exec(command, async error => {
+  const [cmd, ...args] = platform === 'win32'
+    ? ['cmd.exe', '/c', 'start', '', url]
+    : platform === 'darwin'
+    ? ['open', url]
+    : ['xdg-open', url];
+
+  execFile(cmd, args, async error => {
     if (error) {
       console.warn(`Failed to open browser: ${error.message}`);
     } else {
