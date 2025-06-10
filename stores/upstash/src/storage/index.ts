@@ -776,15 +776,12 @@ export class UpstashStore extends MastraStorage {
     // Sort messages by their position in the sorted set
     messages.sort((a, b) => allMessageIds.indexOf(a!.id) - allMessageIds.indexOf(b!.id));
 
-    const dedupedMessages = Object.values(
-      messages.reduce(
-        (acc, row) => {
-          acc[row.id] = row;
-          return acc;
-        },
-        {} as Record<string, (typeof messages)[number]>,
-      ),
-    );
+    const seen = new Set<string>();
+    const dedupedMessages = messages.filter(row => {
+      if (seen.has(row.id)) return false;
+      seen.add(row.id);
+      return true;
+    });
 
     // Remove _index before returning and handle format conversion properly
     const prepared = dedupedMessages
