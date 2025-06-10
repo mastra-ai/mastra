@@ -245,7 +245,7 @@ importers:
   deployers/cloudflare:
     dependencies:
       '@babel/core':
-        specifier: ^7.26.10
+        specifier: ^7.27.4
         version: 7.27.4
       '@mastra/deployer':
         specifier: workspace:^
@@ -254,13 +254,13 @@ importers:
         specifier: ^3.0.2
         version: 3.0.2(rollup@4.41.1)
       cloudflare:
-        specifier: ^4.1.0
+        specifier: ^4.3.0
         version: 4.3.0(encoding@0.1.13)
       rollup:
         specifier: ^4.41.1
         version: 4.41.1
       wrangler:
-        specifier: ^4.4.0
+        specifier: ^4.19.1
         version: 4.19.1(@cloudflare/workers-types@4.20250610.0)(bufferutil@4.0.9)(utf-8-validate@6.0.5)
       zod:
         specifier: ^3.24.3
