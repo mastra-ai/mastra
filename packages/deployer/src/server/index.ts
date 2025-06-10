@@ -166,7 +166,7 @@ ${err.stack.split('\n').slice(1).join('\n')}
           if (body.runtimeContext) {
             runtimeContext = new RuntimeContext(Object.entries(body.runtimeContext));
           }
-        } catch (e) {
+        } catch {
           // Body parsing failed, continue without body
         }
       }
