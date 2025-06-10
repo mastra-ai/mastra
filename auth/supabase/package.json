@@ -26,7 +26,7 @@
   },
   "license": "Elastic-2.0",
   "dependencies": {
-    "@supabase/supabase-js": "^2.49.7"
+    "@supabase/supabase-js": "^2.50.0"
   },
   "devDependencies": {
     "@mastra/core": "workspace:*",
