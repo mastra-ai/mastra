@@ -245,7 +245,11 @@ do:
             id: 'MASTRA_AGENT_REGISTRATION_DUPLICATE_ID',
             domain: ErrorDomain.MASTRA,
             category: ErrorCategory.USER,
-            text: `Agent with ID '${key}' already exists`,
+            text: `Agent with name ID:${key} already exists`,
+            details: {
+              agentId: key,
+              agents: Object.keys(config?.agents).join(', '),
+            },
           });
           this.#logger?.trackException(error);
           throw error;
@@ -343,7 +347,11 @@ do:
         id: 'MASTRA_GET_AGENT_BY_NAME_NOT_FOUND',
         domain: ErrorDomain.MASTRA,
         category: ErrorCategory.USER,
-        text: `Agent with name '${String(name)}' not found`,
+        text: `Agent with name ${String(name)} not found`,
+        details: {
+          agentName: name,
+          agents: Object.keys(this.#agents ?? {}).join(', '),
+        },
       });
       this.#logger?.trackException(error);
       throw error;
@@ -362,7 +370,11 @@ do:
         id: 'MASTRA_GET_VECTOR_BY_NAME_NOT_FOUND',
         domain: ErrorDomain.MASTRA,
         category: ErrorCategory.USER,
-        text: `Vector with name '${String(name)}' not found`,
+        text: `Vector with name ${String(name)} not found`,
+        details: {
+          vectorName: name,
+          vectors: Object.keys(this.#vectors ?? {}).join(', '),
+        },
       });
       this.#logger?.trackException(error);
       throw error;
@@ -388,9 +400,10 @@ do:
         id: 'MASTRA_GET_LEGACY_WORKFLOW_BY_ID_NOT_FOUND',
         domain: ErrorDomain.MASTRA,
         category: ErrorCategory.USER,
-        text: `Legacy workflow with ID '${String(id)}' not found`,
+        text: `Workflow with ID ${String(id)} not found`,
         details: {
           workflowId: String(id),
+          workflows: Object.keys(this.#legacy_workflows ?? {}).join(', '),
         },
       });
       this.#logger?.trackException(error);
@@ -414,7 +427,11 @@ do:
         id: 'MASTRA_GET_WORKFLOW_BY_ID_NOT_FOUND',
         domain: ErrorDomain.MASTRA,
         category: ErrorCategory.USER,
-        text: `Workflow with ID '${String(id)}' not found`,
+        text: `Workflow with ID ${String(id)} not found`,
+        details: {
+          workflowId: String(id),
+          workflows: Object.keys(this.#workflows ?? {}).join(', '),
+        },
       });
       this.#logger?.trackException(error);
       throw error;
@@ -663,7 +680,11 @@ do:
         id: 'MASTRA_GET_LOGS_BY_RUN_ID_MISSING_TRANSPORT',
         domain: ErrorDomain.MASTRA,
         category: ErrorCategory.USER,
-        text: 'Transport ID is required for retrieving logs by run ID',
+        text: 'Transport ID is required',
+        details: {
+          runId,
+          transportId,
+        },
       });
       this.#logger?.trackException(error);
       throw error;
@@ -675,8 +696,12 @@ do:
         domain: ErrorDomain.MASTRA,
         category: ErrorCategory.SYSTEM,
         text: 'Logger is not configured or does not support getLogsByRunId operation',
+        details: {
+          runId,
+          transportId,
+        },
       });
-      this.#logger.trackException(error);
+      this.#logger?.trackException(error);
       throw error;
     }
 
@@ -708,7 +733,10 @@ do:
         id: 'MASTRA_GET_LOGS_MISSING_TRANSPORT',
         domain: ErrorDomain.MASTRA,
         category: ErrorCategory.USER,
-        text: 'Transport ID is required for retrieving logs',
+        text: 'Transport ID is required',
+        details: {
+          transportId,
+        },
       });
       this.#logger?.trackException(error);
       throw error;
@@ -719,7 +747,10 @@ do:
         id: 'MASTRA_GET_LOGS_LOGGER_NOT_CONFIGURED',
         domain: ErrorDomain.MASTRA,
         category: ErrorCategory.SYSTEM,
-        text: 'Logger is not configured for retrieving logs',
+        text: 'Logger is not set',
+        details: {
+          transportId,
+        },
       });
       throw error;
     }
