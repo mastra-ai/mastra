@@ -1,17 +1,61 @@
+import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
+import { ExportResultCode } from '@opentelemetry/core';
+import { OTLPTraceExporter as OTLPGrpcExporter } from '@opentelemetry/exporter-trace-otlp-grpc';
+import { OTLPTraceExporter as OTLPHttpExporter } from '@opentelemetry/exporter-trace-otlp-http';
+import { resourceFromAttributes } from '@opentelemetry/resources';
+import { NodeSDK } from '@opentelemetry/sdk-node';
 import {
-  NodeSDK,
-  getNodeAutoInstrumentations,
-  ATTR_SERVICE_NAME,
   ParentBasedSampler,
   TraceIdRatioBasedSampler,
   AlwaysOnSampler,
   AlwaysOffSampler,
-  OTLPHttpExporter,
-  OTLPGrpcExporter,
-  CompositeExporter,
-  resourceFromAttributes,
-} from '@mastra/core/telemetry/otel-vendor';
+} from '@opentelemetry/sdk-trace-base';
+import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
 import { telemetry } from './telemetry-config.mjs';
+class CompositeExporter {
+  constructor(exporters) {
+    this.exporters = exporters;
+  }
+  export(spans, resultCallback) {
+    const telemetryTraceIds = new Set(
+      spans.filter((span) => {
+        const attrs = span.attributes || {};
+        const httpTarget = attrs["http.target"];
+        return httpTarget === "/api/telemetry";
+      }).map((span) => span.spanContext().traceId)
+    );
+    const filteredSpans = spans.filter((span) => !telemetryTraceIds.has(span.spanContext().traceId));
+    if (filteredSpans.length === 0) {
+      resultCallback({ code: ExportResultCode.SUCCESS });
+      return;
+    }
+    void Promise.all(
+      this.exporters.map(
+        (exporter) => new Promise((resolve) => {
+          if (exporter.export) {
+            exporter.export(filteredSpans, resolve);
+          } else {
+            resolve({ code: ExportResultCode.FAILED });
+          }
+        })
+      )
+    ).then((results) => {
+      const hasError = results.some((r) => r.code === ExportResultCode.FAILED);
+      resultCallback({
+        code: hasError ? ExportResultCode.FAILED : ExportResultCode.SUCCESS
+      });
+    }).catch((error) => {
+      console.error("[CompositeExporter] Export error:", error);
+      resultCallback({ code: ExportResultCode.FAILED, error });
+    });
+  }
+  shutdown() {
+    return Promise.all(this.exporters.map((e) => e.shutdown?.() ?? Promise.resolve())).then(() => void 0);
+  }
+  forceFlush() {
+    return Promise.all(this.exporters.map((e) => e.forceFlush?.() ?? Promise.resolve())).then(() => void 0);
+  }
+};
 
 function getSampler(config) {
   if (!config.sampling) {

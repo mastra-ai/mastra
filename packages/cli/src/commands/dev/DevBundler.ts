@@ -27,8 +27,6 @@ export class DevBundler extends Bundler {
     return Promise.resolve([]);
   }
 
-  async writePackageJson() {}
-
   async prepare(outputDirectory: string): Promise<void> {
     await super.prepare(outputDirectory);
 
@@ -51,10 +49,15 @@ export class DevBundler extends Bundler {
     });
     const toolsInputOptions = await this.getToolsInputOptions(toolsPaths);
 
-    await writeTelemetryConfig(entryFile, join(outputDirectory, this.outputDir));
-    await this.writeInstrumentationFile(join(outputDirectory, this.outputDir));
-
     const outputDir = join(outputDirectory, this.outputDir);
+    await writeTelemetryConfig(entryFile, outputDir);
+    await this.writeInstrumentationFile(outputDir);
+    await this.writePackageJson(outputDir, new Map(), {});
+
+    this.logger.info('Installing dependencies');
+    await this.installDependencies(outputDirectory);
+    this.logger.info('Done installing dependencies');
+
     const copyPublic = this.copyPublic.bind(this);
     const watcher = await createWatcher(
       {
