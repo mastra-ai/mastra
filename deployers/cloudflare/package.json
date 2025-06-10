@@ -45,19 +45,18 @@
     "@mastra/deployer": "workspace:^",
     "@rollup/plugin-virtual": "^3.0.2",
     "cloudflare": "^4.3.0",
-    "rollup": "^4.41.1",
-    "wrangler": "^4.19.1",
-    "zod": "^3.25.56"
+    "rollup": "^4.42.0",
+    "zod": "^3.25.57"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
-    "@types/node": "^20.17.57",
+    "@types/node": "^20.19.0",
     "eslint": "^9.28.0",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.2",
-    "vitest": "^3.2.2",
-    "@mastra/core": "workspace:*"
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.3"
   },
   "peerDependencies": {
     "@mastra/core": "^0.10.1-alpha.0"
