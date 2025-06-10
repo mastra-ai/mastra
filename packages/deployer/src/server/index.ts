@@ -1,7 +1,5 @@
-import { execFile } from 'child_process';
 import { randomUUID } from 'crypto';
-import { existsSync } from 'fs';
-import { readFile, writeFile } from 'fs/promises';
+import { readFile } from 'fs/promises';
 import { join } from 'path/posix';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
@@ -84,53 +82,9 @@ import {
   streamWorkflowHandler,
   watchWorkflowHandler,
 } from './handlers/workflows.js';
+import { openBrowser } from './open-browser';
 import type { ServerBundleOptions } from './types';
 import { html } from './welcome.js';
-
-/**
- * Opens a URL in the user's default browser
- * Uses a temporary file to track if browser was already opened across process restarts
- */
-function openInBrowser(url: string) {
-  const browserFlagFile = join(process.cwd(), 'playground', 'browser-opened.json');
-
-  if (existsSync(browserFlagFile)) {
-    return;
-  }
-
-  const platform = process.platform;
-  let command: string;
-
-  switch (platform) {
-    case 'darwin': // macOS
-      command = `open "${url}"`;
-      break;
-    case 'win32': // Windows
-      command = `start "" "${url}"`;
-      break;
-    default: // Linux and other Unix-like systems
-      command = `xdg-open "${url}"`;
-      break;
-  }
-
-  const [cmd, ...args] = platform === 'win32'
-    ? ['cmd.exe', '/c', 'start', '', url]
-    : platform === 'darwin'
-    ? ['open', url]
-    : ['xdg-open', url];
-
-  execFile(cmd, args, async error => {
-    if (error) {
-      console.warn(`Failed to open browser: ${error.message}`);
-    } else {
-      try {
-        await writeFile(browserFlagFile, JSON.stringify({ timestamp: Date.now() }));
-      } catch (err) {
-        console.error(err);
-      }
-    }
-  });
-}
 
 type Bindings = {};
 
@@ -3247,7 +3201,7 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
       if (options?.playground) {
         const playgroundUrl = `http://${host}:${port}`;
         logger.info(`👨‍💻 Playground available at ${playgroundUrl}`);
-        void openInBrowser(playgroundUrl);
+        void openBrowser(playgroundUrl, true);
       }
 
       if (process.send) {
