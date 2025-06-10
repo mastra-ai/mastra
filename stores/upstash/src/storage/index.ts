@@ -697,7 +697,10 @@ export class UpstashStore extends MastraStorage {
       }
 
       const pipeline = this.redis.pipeline();
-      messageIds.forEach(id => pipeline.get(this.getMessageKey(threadId, id as string)));
+      Array.from(messageIds).forEach(id => {
+        const tId = messageIdToThreadIds[id] || threadId;
+        pipeline.get(this.getMessageKey(tId, id as string));
+      });
       const results = await pipeline.exec();
       return results.filter(result => result !== null) as MastraMessageV2[] | MastraMessageV1[];
     }
@@ -773,8 +776,18 @@ export class UpstashStore extends MastraStorage {
     // Sort messages by their position in the sorted set
     messages.sort((a, b) => allMessageIds.indexOf(a!.id) - allMessageIds.indexOf(b!.id));
 
+    const dedupedMessages = Object.values(
+      messages.reduce(
+        (acc, row) => {
+          acc[row.id] = row;
+          return acc;
+        },
+        {} as Record<string, (typeof messages)[number]>,
+      ),
+    );
+
     // Remove _index before returning and handle format conversion properly
-    const prepared = messages
+    const prepared = dedupedMessages
       .filter(message => message !== null && message !== undefined)
       .map(message => {
         const { _index, ...messageWithoutIndex } = message as MastraMessageV2 & { _index?: number };
