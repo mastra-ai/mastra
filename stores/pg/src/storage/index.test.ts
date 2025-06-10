@@ -341,44 +341,6 @@ describe('PostgresStore', () => {
       expect(crossThreadMessages3.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
       expect(crossThreadMessages3.filter(m => m.threadId === `thread-two`)).toHaveLength(0);
     });
-    it('should filter by date with pagination for getMessages', async () => {
-      const thread = createSampleThread();
-      await store.saveThread({ thread });
-      const now = new Date();
-      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-      const dayBeforeYesterday = new Date(now.getTime() - 48 * 60 * 60 * 1000);
-
-      const createMsgAtDate = (date: Date) => {
-        return store.saveMessages({
-          messages: [{ ...createSampleMessageV1({ threadId: thread.id }), createdAt: date }],
-        });
-      };
-      await Promise.all([
-        createMsgAtDate(dayBeforeYesterday),
-        createMsgAtDate(dayBeforeYesterday),
-        createMsgAtDate(yesterday),
-        createMsgAtDate(yesterday),
-        createMsgAtDate(yesterday),
-        createMsgAtDate(now),
-        createMsgAtDate(now),
-      ]);
-
-      const resultPage = await store.getMessages({
-        threadId: thread.id,
-        fromDate: yesterday,
-        page: 0,
-        perPage: 3,
-        format: 'v1',
-      });
-      expect(resultPage.total).toBe(5);
-      expect(resultPage.messages).toHaveLength(3);
-
-      expect(new Date((resultPage.messages[0] as MastraMessageV1).createdAt).toISOString()).toBe(now.toISOString());
-      expect(new Date((resultPage.messages[1] as MastraMessageV1).createdAt).toISOString()).toBe(now.toISOString());
-      expect(new Date((resultPage.messages[2] as MastraMessageV1).createdAt).toISOString()).toBe(
-        yesterday.toISOString(),
-      );
-    });
   });
 
   describe('Edge Cases and Error Handling', () => {
@@ -1417,6 +1379,7 @@ describe('PostgresStore', () => {
       });
 
       it('should filter by date with pagination for getMessages', async () => {
+        resetRole();
         const threadData = createSampleThread();
         const thread = await store.saveThread({ thread: threadData as StorageThreadType });
         const now = new Date();

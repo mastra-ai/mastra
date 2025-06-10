@@ -724,7 +724,7 @@ export class PostgresStore extends MastraStorage {
                 *,
                 ROW_NUMBER() OVER (${orderByStatement}) as row_num
               FROM ${this.getTableName(TABLE_MESSAGES)}
-              WHERE thread_id = $1
+              ${resourceId && includeScope === 'resource' ? 'WHERE "resourceId" = $1' : 'WHERE thread_id = $1'}
             )
             SELECT
               m.id, 
@@ -732,7 +732,8 @@ export class PostgresStore extends MastraStorage {
               m.role, 
               m.type,
               m."createdAt", 
-              m.thread_id AS "threadId"
+              m.thread_id AS "threadId",
+              m."resourceId"
             FROM ordered_messages m
             WHERE m.id = ANY($2)
             OR EXISTS (
