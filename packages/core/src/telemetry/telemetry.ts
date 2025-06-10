@@ -1,9 +1,9 @@
 import { context as otlpContext, SpanStatusCode, trace, propagation, context } from '@opentelemetry/api';
 import type { Tracer, SpanOptions, Context, Span, BaggageEntry } from '@opentelemetry/api';
 
+import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { OtelConfig } from './types';
 import { getBaggageValues, hasActiveTelemetry } from './utility';
-import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 
 // Add type declaration for global namespace
 declare global {

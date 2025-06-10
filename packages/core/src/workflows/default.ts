@@ -1,8 +1,8 @@
 import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
 import type { RuntimeContext } from '../di';
-import { EMITTER_SYMBOL } from './constants';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
+import { EMITTER_SYMBOL } from './constants';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
 import type { ExecuteFunction, Step } from './step';
