@@ -1,9 +1,4 @@
-import {
-  createSampleMessageV1,
-  createSampleMessageV2,
-  createSampleThread,
-  checkWorkflowSnapshot,
-} from '@internal/storage-test-utils';
+import { createSampleMessageV1, createSampleThread, checkWorkflowSnapshot } from '@internal/storage-test-utils';
 import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 import {
@@ -362,8 +357,8 @@ describe.skip('CloudflareStore REST API', () => {
       await store.saveThread({ thread });
 
       // Add some messages
-      const messages = [createSampleMessageV2({ threadId: thread.id }), createSampleMessageV2({ threadId: thread.id })];
-      await store.saveMessages({ messages, format: 'v2' });
+      const messages = [createSampleMessageV1({ threadId: thread.id }), createSampleMessageV1({ threadId: thread.id })];
+      await store.saveMessages({ messages });
 
       await store.deleteThread({ threadId: thread.id });
 
@@ -391,10 +386,10 @@ describe.skip('CloudflareStore REST API', () => {
       const thread = createSampleThread();
       await store.saveThread({ thread });
 
-      const messages = [createSampleMessageV2({ threadId: thread.id }), createSampleMessageV2({ threadId: thread.id })];
+      const messages = [createSampleMessageV1({ threadId: thread.id }), createSampleMessageV1({ threadId: thread.id })];
 
       // Save messages
-      const savedMessages = await store.saveMessages({ messages, format: 'v2' });
+      const savedMessages = await store.saveMessages({ messages });
       expect(savedMessages).toEqual(messages);
 
       // Retrieve messages with retry
@@ -693,10 +688,10 @@ describe.skip('CloudflareStore REST API', () => {
       // Create messages with identical timestamps
       const timestamp = new Date();
       const messages = Array.from({ length: 3 }, () =>
-        createSampleMessageV2({ threadId: thread.id, createdAt: timestamp }),
+        createSampleMessageV1({ threadId: thread.id, createdAt: timestamp }),
       );
 
-      await store.saveMessages({ messages, format: 'v2' });
+      await store.saveMessages({ messages });
 
       // Verify order is maintained based on insertion order
       const orderKey = store['getThreadMessagesKey'](thread.id);
@@ -716,13 +711,13 @@ describe.skip('CloudflareStore REST API', () => {
       // Create messages with different timestamps
       const now = Date.now();
       const messages = Array.from({ length: 3 }, (_, i) =>
-        createSampleMessageV2({ threadId: thread.id, createdAt: new Date(now - (2 - i) * 1000) }),
+        createSampleMessageV1({ threadId: thread.id, createdAt: new Date(now - (2 - i) * 1000) }),
       );
 
       // Save messages in reverse order to verify write order is preserved
       const reversedMessages = [...messages].reverse(); // newest -> oldest
       for (const msg of reversedMessages) {
-        await store.saveMessages({ messages: [msg], format: 'v2' });
+        await store.saveMessages({ messages: [msg] });
       }
       // Verify all messages are saved successfully
       const orderKey = store['getThreadMessagesKey'](thread.id);
@@ -747,8 +742,8 @@ describe.skip('CloudflareStore REST API', () => {
       await store.saveThread({ thread });
 
       // Create initial messages
-      const messages = Array.from({ length: 3 }, () => createSampleMessageV2({ threadId: thread.id }));
-      await store.saveMessages({ messages, format: 'v2' });
+      const messages = Array.from({ length: 3 }, () => createSampleMessageV1({ threadId: thread.id }));
+      await store.saveMessages({ messages });
 
       // Update scores to reverse order
       const orderKey = store['getThreadMessagesKey'](thread.id);
@@ -1422,11 +1417,11 @@ describe.skip('CloudflareStore REST API', () => {
 
     it('should maintain consistent key format across operations', async () => {
       const thread = createSampleThread();
-      const message = createSampleMessageV2({ threadId: thread.id });
+      const message = createSampleMessageV1({ threadId: thread.id });
 
       // Save thread and message
       await store.saveThread({ thread });
-      await store.saveMessages({ messages: [message], format: 'v2' });
+      await store.saveMessages({ messages: [message] });
 
       // Verify message key format
       const msgKey = store['getKey'](TABLE_MESSAGES, { threadId: thread.id, id: message.id });

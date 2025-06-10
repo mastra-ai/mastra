@@ -151,7 +151,7 @@ describe('UpstashStore', () => {
     });
 
     it('should get threads by resource ID', async () => {
-      const thread1 = createSampleThread({});
+      const thread1 = createSampleThread();
       const thread2 = createSampleThread({ resourceId: thread1.resourceId });
       const threads = [thread1, thread2];
 
@@ -166,7 +166,7 @@ describe('UpstashStore', () => {
     });
 
     it('should update thread metadata', async () => {
-      const thread = createSampleThread({});
+      const thread = createSampleThread();
 
       await store.saveThread({ thread });
 
@@ -442,7 +442,7 @@ describe('UpstashStore', () => {
 
     describe('getPaginatedMessages', () => {
       it('should return paginated messages with total count', async () => {
-        const thread = createSampleThread({});
+        const thread = createSampleThread();
         await store.saveThread({ thread });
 
         const messages = Array.from({ length: 15 }, (_, i) =>
@@ -485,7 +485,7 @@ describe('UpstashStore', () => {
       });
 
       it('should maintain chronological order in pagination', async () => {
-        const thread = createSampleThread({});
+        const thread = createSampleThread();
         await store.saveThread({ thread });
 
         const messages = Array.from({ length: 10 }, (_, i) => {
@@ -515,7 +515,7 @@ describe('UpstashStore', () => {
       });
 
       it('should maintain backward compatibility when no pagination params provided', async () => {
-        const thread = createSampleThread({});
+        const thread = createSampleThread();
         await store.saveThread({ thread });
 
         const messages = Array.from({ length: 5 }, (_, i) =>
@@ -541,7 +541,7 @@ describe('UpstashStore', () => {
       });
 
       it('should support date filtering with pagination', async () => {
-        const thread = createSampleThread({});
+        const thread = createSampleThread();
         await store.saveThread({ thread });
 
         const now = new Date();

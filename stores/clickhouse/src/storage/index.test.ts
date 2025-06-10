@@ -1,7 +1,6 @@
 import { randomUUID } from 'crypto';
 import {
   createSampleMessageV1,
-  createSampleMessageV2,
   createSampleThread,
   createSampleWorkflowSnapshot,
   checkWorkflowSnapshot,
@@ -120,10 +119,10 @@ describe('ClickhouseStore', () => {
 
       // Add some messages
       const messages = [
-        createSampleMessageV2({ threadId: thread.id, resourceId: 'clickhouse-test' }),
-        createSampleMessageV2({ threadId: thread.id, resourceId: 'clickhouse-test' }),
+        createSampleMessageV1({ threadId: thread.id, resourceId: 'clickhouse-test' }),
+        createSampleMessageV1({ threadId: thread.id, resourceId: 'clickhouse-test' }),
       ];
-      await store.saveMessages({ messages, format: 'v2' });
+      await store.saveMessages({ messages });
 
       await store.deleteThread({ threadId: thread.id });
 
@@ -142,16 +141,16 @@ describe('ClickhouseStore', () => {
       await store.saveThread({ thread });
 
       const messages = [
-        createSampleMessageV2({
+        createSampleMessageV1({
           threadId: thread.id,
           createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24),
           resourceId: 'clickhouse-test',
         }),
-        createSampleMessageV2({ threadId: thread.id, resourceId: 'clickhouse-test' }),
+        createSampleMessageV1({ threadId: thread.id, resourceId: 'clickhouse-test' }),
       ];
 
       // Save messages
-      const savedMessages = await store.saveMessages({ messages, format: 'v2' });
+      const savedMessages = await store.saveMessages({ messages });
       expect(savedMessages).toEqual(messages);
 
       // Retrieve messages
