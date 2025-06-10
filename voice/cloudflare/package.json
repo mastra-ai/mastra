@@ -34,7 +34,7 @@
     "zod": "^3.25.56"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250607.0",
+    "@cloudflare/workers-types": "^4.20250610.0",
     "@internal/lint": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "^20.17.57",
