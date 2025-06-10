@@ -3,6 +3,8 @@ export enum ErrorDomain {
   AGENT = 'AGENT',
   MCP = 'MCP',
   UNKNOWN = 'UNKNOWN',
+  EVAL = 'EVAL',
+  MASTRA = 'MASTRA',
 }
 
 export enum ErrorCategory {
