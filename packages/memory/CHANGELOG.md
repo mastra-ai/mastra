@@ -1,5 +1,13 @@
 # @mastra/memory
 
+## 0.10.3-alpha.1
+
+### Patch Changes
+
+- 48eddb9: update filter logic in Memory class to support semantic recall search scope
+- Updated dependencies [48eddb9]
+  - @mastra/core@0.10.4-alpha.2
+
 ## 0.10.3-alpha.0
 
 ### Patch Changes
