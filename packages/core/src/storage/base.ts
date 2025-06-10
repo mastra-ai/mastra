@@ -1,6 +1,7 @@
 import type { MastraMessageV2 } from '../agent';
 import { MastraBase } from '../base';
 import type { MastraMessageV1, StorageThreadType } from '../memory/types';
+import type { Trace } from '../telemetry';
 import type { WorkflowRunState } from '../workflows';
 
 import {
@@ -12,7 +13,15 @@ import {
   TABLE_SCHEMAS,
 } from './constants';
 import type { TABLE_NAMES } from './constants';
-import type { EvalRow, StorageColumn, StorageGetMessagesArg, WorkflowRun, WorkflowRuns } from './types';
+import type {
+  EvalRow,
+  PaginationInfo,
+  StorageColumn,
+  StorageGetMessagesArg,
+  StorageGetTracesArg,
+  WorkflowRun,
+  WorkflowRuns,
+} from './types';
 
 export abstract class MastraStorage extends MastraBase {
   /** @deprecated import from { TABLE_WORKFLOW_SNAPSHOT } '@mastra/core/storage' instead */
@@ -148,23 +157,7 @@ export abstract class MastraStorage extends MastraBase {
     args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
   ): Promise<MastraMessageV2[] | MastraMessageV1[]>;
 
-  abstract getTraces({
-    name,
-    scope,
-    page,
-    perPage,
-    attributes,
-    filters,
-  }: {
-    name?: string;
-    scope?: string;
-    page: number;
-    perPage: number;
-    attributes?: Record<string, string>;
-    filters?: Record<string, any>;
-    fromDate?: Date;
-    toDate?: Date;
-  }): Promise<any[]>;
+  abstract getTraces(args: StorageGetTracesArg): Promise<any[]>;
 
   async init(): Promise<void> {
     // to prevent race conditions, await any current init
@@ -264,4 +257,16 @@ export abstract class MastraStorage extends MastraBase {
   }): Promise<WorkflowRuns>;
 
   abstract getWorkflowRunById(args: { runId: string; workflowName?: string }): Promise<WorkflowRun | null>;
+
+  abstract getTracesPaginated(args: StorageGetTracesArg): Promise<PaginationInfo & { traces: Trace[] }>;
+
+  abstract getThreadsByResourceIdPaginated(args: {
+    resourceId: string;
+    page: number;
+    perPage: number;
+  }): Promise<PaginationInfo & { threads: StorageThreadType[] }>;
+
+  abstract getMessagesPaginated(
+    args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
+  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }>;
 }

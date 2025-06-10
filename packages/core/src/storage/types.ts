@@ -87,3 +87,14 @@ export type EvalRow = {
   globalRunId: string;
   testInfo?: TestInfo;
 };
+
+export type StorageGetTracesArg = {
+  name?: string;
+  scope?: string;
+  page: number;
+  perPage: number;
+  attributes?: Record<string, string>;
+  filters?: Record<string, any>;
+  fromDate?: Date;
+  toDate?: Date;
+};

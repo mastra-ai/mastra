@@ -1,7 +1,6 @@
 import type { KVNamespace } from '@cloudflare/workers-types';
 import { MessageList } from '@mastra/core/agent';
-import type { MastraMessageV2 } from '@mastra/core/agent';
-import type { StorageThreadType, MastraMessageV1 } from '@mastra/core/memory';
+import type { StorageThreadType, MastraMessageV1, MastraMessageV2 } from '@mastra/core/memory';
 import {
   MastraStorage,
   TABLE_MESSAGES,
@@ -17,7 +16,10 @@ import type {
   EvalRow,
   WorkflowRuns,
   WorkflowRun,
+  StorageGetTracesArg,
+  PaginationInfo,
 } from '@mastra/core/storage';
+import type { Trace } from '@mastra/core/telemetry';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import Cloudflare from 'cloudflare';
 import { isWorkersConfig } from './types';
@@ -1571,6 +1573,24 @@ export class CloudflareStore extends MastraStorage {
       this.logger.error('Error in getWorkflowRunById:', { message });
       return null;
     }
+  }
+
+  async getTracesPaginated(_args: StorageGetTracesArg): Promise<PaginationInfo & { traces: Trace[] }> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getThreadsByResourceIdPaginated(_args: {
+    resourceId: string;
+    page?: number;
+    perPage?: number;
+  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getMessagesPaginated(
+    _args: StorageGetMessagesArg,
+  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
+    throw new Error('Method not implemented.');
   }
 
   async close(): Promise<void> {

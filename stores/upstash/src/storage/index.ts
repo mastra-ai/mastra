@@ -15,7 +15,10 @@ import type {
   EvalRow,
   WorkflowRuns,
   WorkflowRun,
+  PaginationInfo,
+  StorageGetTracesArg,
 } from '@mastra/core/storage';
+import type { Trace } from '@mastra/core/telemetry';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { Redis } from '@upstash/redis';
 import { MessageList } from '../../../../packages/core/dist/agent/index.cjs';
@@ -1261,6 +1264,24 @@ export class UpstashStore extends MastraStorage {
       console.error('Error getting workflow run by ID:', error);
       throw error;
     }
+  }
+
+  async getTracesPaginated(_args: StorageGetTracesArg): Promise<PaginationInfo & { traces: Trace[] }> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getThreadsByResourceIdPaginated(_args: {
+    resourceId: string;
+    page?: number;
+    perPage?: number;
+  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getMessagesPaginated(
+    _args: StorageGetMessagesArg,
+  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
+    throw new Error('Method not implemented.');
   }
 
   async close(): Promise<void> {
