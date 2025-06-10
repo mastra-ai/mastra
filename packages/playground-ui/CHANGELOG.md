@@ -1,5 +1,11 @@
 # @mastra/playground-ui
 
+## 5.1.4-alpha.5
+
+### Patch Changes
+
+- 29f1c91: revert: final step of workflow not working as expected
+
 ## 5.1.4-alpha.4
 
 ### Patch Changes

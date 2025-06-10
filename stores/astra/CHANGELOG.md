@@ -1,5 +1,11 @@
 # @mastra/astra
 
+## 0.10.2-alpha.0
+
+### Patch Changes
+
+- 66f4424: Update peerdeps
+
 ## 0.10.1
 
 ### Patch Changes
