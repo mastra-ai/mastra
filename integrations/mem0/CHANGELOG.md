@@ -1,5 +1,29 @@
 # @mastra/mem0
 
+## 0.1.2
+
+### Patch Changes
+
+- 1ec7a17: dependencies updates:
+  - Updated dependency [`mem0ai@^2.1.29` ↗︎](https://www.npmjs.com/package/mem0ai/v/2.1.29) (from `^2.1.2`, in `dependencies`)
+  - Removed dependency [`zod@^3.24.3` ↗︎](https://www.npmjs.com/package/zod/v/3.24.3) (from `dependencies`)
+  - Added dependency [`zod@^3.0.0` ↗︎](https://www.npmjs.com/package/zod/v/3.0.0) (to `peerDependencies`)
+  - Added dependency [`zod@^3.0.0` ↗︎](https://www.npmjs.com/package/zod/v/3.0.0) (to `devDependencies`)
+- Updated dependencies [d1ed912]
+- Updated dependencies [f6fd25f]
+- Updated dependencies [dffb67b]
+- Updated dependencies [f1f1f1b]
+- Updated dependencies [925ab94]
+- Updated dependencies [f9816ae]
+- Updated dependencies [82090c1]
+- Updated dependencies [1b443fd]
+- Updated dependencies [ce97900]
+- Updated dependencies [f1309d3]
+- Updated dependencies [14a2566]
+- Updated dependencies [f7f8293]
+- Updated dependencies [48eddb9]
+  - @mastra/core@0.10.4
+
 ## 0.1.2-alpha.0
 
 ### Patch Changes

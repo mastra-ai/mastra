@@ -1,5 +1,30 @@
 # @mastra/voice-speechify
 
+## 0.10.2
+
+### Patch Changes
+
+- 658c295: dependencies updates:
+  - Updated dependency [`@speechify/api-sdk@^2.5.4` ↗︎](https://www.npmjs.com/package/@speechify/api-sdk/v/2.5.4) (from `^2.4.1`, in `dependencies`)
+- 1ccccff: dependencies updates:
+  - Updated dependency [`zod@^3.25.56` ↗︎](https://www.npmjs.com/package/zod/v/3.25.56) (from `^3.24.3`, in `dependencies`)
+- 1ccccff: dependencies updates:
+  - Updated dependency [`zod@^3.25.56` ↗︎](https://www.npmjs.com/package/zod/v/3.25.56) (from `^3.24.3`, in `dependencies`)
+- Updated dependencies [d1ed912]
+- Updated dependencies [f6fd25f]
+- Updated dependencies [dffb67b]
+- Updated dependencies [f1f1f1b]
+- Updated dependencies [925ab94]
+- Updated dependencies [f9816ae]
+- Updated dependencies [82090c1]
+- Updated dependencies [1b443fd]
+- Updated dependencies [ce97900]
+- Updated dependencies [f1309d3]
+- Updated dependencies [14a2566]
+- Updated dependencies [f7f8293]
+- Updated dependencies [48eddb9]
+  - @mastra/core@0.10.4
+
 ## 0.10.2-alpha.1
 
 ### Patch Changes

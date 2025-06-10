@@ -1,5 +1,31 @@
 # @mastra/upstash
 
+## 0.10.3
+
+### Patch Changes
+
+- 1a35518: dependencies updates:
+  - Updated dependency [`@upstash/redis@^1.35.0` ↗︎](https://www.npmjs.com/package/@upstash/redis/v/1.35.0) (from `^1.34.5`, in `dependencies`)
+- dffb67b: updated stores to add alter table and change tests
+- 925ab94: added paginated functions to base class and added boilerplate and updated imports
+- 48eddb9: update filter logic in Memory class to support semantic recall search scope
+- 66f4424: Update peerdeps
+- a914da2: Fix upstash paginated APIs
+- Updated dependencies [d1ed912]
+- Updated dependencies [f6fd25f]
+- Updated dependencies [dffb67b]
+- Updated dependencies [f1f1f1b]
+- Updated dependencies [925ab94]
+- Updated dependencies [f9816ae]
+- Updated dependencies [82090c1]
+- Updated dependencies [1b443fd]
+- Updated dependencies [ce97900]
+- Updated dependencies [f1309d3]
+- Updated dependencies [14a2566]
+- Updated dependencies [f7f8293]
+- Updated dependencies [48eddb9]
+  - @mastra/core@0.10.4
+
 ## 0.10.3-alpha.4
 
 ### Patch Changes

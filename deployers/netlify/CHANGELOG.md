@@ -1,5 +1,42 @@
 # @mastra/deployer-netlify
 
+## 0.10.4
+
+### Patch Changes
+
+- d90c49f: dependencies updates:
+  - Updated dependency [`execa@^9.6.0` ↗︎](https://www.npmjs.com/package/execa/v/9.6.0) (from `^9.5.2`, in `dependencies`)
+  - Updated dependency [`netlify-cli@^19.1.7` ↗︎](https://www.npmjs.com/package/netlify-cli/v/19.1.7) (from `^19.0.3`, in `dependencies`)
+- 1ccccff: dependencies updates:
+  - Updated dependency [`zod@^3.25.56` ↗︎](https://www.npmjs.com/package/zod/v/3.25.56) (from `^3.24.3`, in `dependencies`)
+- 1ccccff: dependencies updates:
+  - Updated dependency [`zod@^3.25.56` ↗︎](https://www.npmjs.com/package/zod/v/3.25.56) (from `^3.24.3`, in `dependencies`)
+- Updated dependencies [d1ed912]
+- Updated dependencies [d1ed912]
+- Updated dependencies [f595975]
+- Updated dependencies [d90c49f]
+- Updated dependencies [1ccccff]
+- Updated dependencies [1ccccff]
+- Updated dependencies [afd9fda]
+- Updated dependencies [f6fd25f]
+- Updated dependencies [dffb67b]
+- Updated dependencies [f1f1f1b]
+- Updated dependencies [925ab94]
+- Updated dependencies [9597ee5]
+- Updated dependencies [f9816ae]
+- Updated dependencies [82090c1]
+- Updated dependencies [69f6101]
+- Updated dependencies [1b443fd]
+- Updated dependencies [ce97900]
+- Updated dependencies [514fdde]
+- Updated dependencies [f1309d3]
+- Updated dependencies [bebd27c]
+- Updated dependencies [14a2566]
+- Updated dependencies [f7f8293]
+- Updated dependencies [48eddb9]
+  - @mastra/core@0.10.4
+  - @mastra/deployer@0.10.4
+
 ## 0.10.4-alpha.3
 
 ### Patch Changes

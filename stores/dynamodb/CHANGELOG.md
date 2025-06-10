@@ -1,5 +1,31 @@
 # @mastra/dynamodb
 
+## 0.10.4
+
+### Patch Changes
+
+- 35c2bac: dependencies updates:
+  - Updated dependency [`@aws-sdk/client-dynamodb@^3.823.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/client-dynamodb/v/3.823.0) (from `^3.0.0`, in `dependencies`)
+  - Updated dependency [`@aws-sdk/lib-dynamodb@^3.823.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/lib-dynamodb/v/3.823.0) (from `^3.0.0`, in `dependencies`)
+- dffb67b: updated stores to add alter table and change tests
+- 925ab94: added paginated functions to base class and added boilerplate and updated imports
+- 66f4424: Update peerdeps
+- c218b1c: fix(dynamodb): use upsert instead of create for persistWorkflowSnapshot
+- Updated dependencies [d1ed912]
+- Updated dependencies [f6fd25f]
+- Updated dependencies [dffb67b]
+- Updated dependencies [f1f1f1b]
+- Updated dependencies [925ab94]
+- Updated dependencies [f9816ae]
+- Updated dependencies [82090c1]
+- Updated dependencies [1b443fd]
+- Updated dependencies [ce97900]
+- Updated dependencies [f1309d3]
+- Updated dependencies [14a2566]
+- Updated dependencies [f7f8293]
+- Updated dependencies [48eddb9]
+  - @mastra/core@0.10.4
+
 ## 0.10.4-alpha.2
 
 ### Patch Changes

@@ -1,5 +1,35 @@
 # @mastra/mcp-docs-server
 
+## 0.12.0
+
+### Minor Changes
+
+- 3bb8b36: include storage instance to memory config
+
+### Patch Changes
+
+- 1ccccff: dependencies updates:
+  - Updated dependency [`zod@^3.25.56` ↗︎](https://www.npmjs.com/package/zod/v/3.25.56) (from `^3.24.3`, in `dependencies`)
+- 1ccccff: dependencies updates:
+  - Updated dependency [`zod@^3.25.56` ↗︎](https://www.npmjs.com/package/zod/v/3.25.56) (from `^3.24.3`, in `dependencies`)
+- 26f0031: Removed @latest from @mastra/mcp-docs-server scaffolded configuration for Windsurf/Cursor/VSCode. There is an npx caching issue that causes @latest to break the MCP server for many users, and for now removing @latest makes it work. We will debug this more but for now having a working docs server is more important than it updating every time users start their IDE.
+- Updated dependencies [d1ed912]
+- Updated dependencies [f6fd25f]
+- Updated dependencies [dffb67b]
+- Updated dependencies [f1f1f1b]
+- Updated dependencies [925ab94]
+- Updated dependencies [f9816ae]
+- Updated dependencies [82090c1]
+- Updated dependencies [1b443fd]
+- Updated dependencies [ce97900]
+- Updated dependencies [fc579cd]
+- Updated dependencies [f1309d3]
+- Updated dependencies [14a2566]
+- Updated dependencies [f7f8293]
+- Updated dependencies [48eddb9]
+  - @mastra/core@0.10.4
+  - @mastra/mcp@0.10.3
+
 ## 0.12.0-alpha.1
 
 ### Minor Changes
