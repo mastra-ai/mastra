@@ -1,5 +1,11 @@
 # @mastra/clickhouse
 
+## 0.10.2-alpha.2
+
+### Patch Changes
+
+- 66f4424: Update peerdeps
+
 ## 0.10.2-alpha.1
 
 ### Patch Changes

@@ -1,5 +1,13 @@
 # mastra
 
+## 0.10.4-alpha.5
+
+### Patch Changes
+
+- 4c4ee43: [fix] recreate resizable sidebar on workflow
+- Updated dependencies [66f4424]
+  - @mastra/loggers@0.10.2-alpha.1
+
 ## 0.10.4-alpha.4
 
 ### Patch Changes

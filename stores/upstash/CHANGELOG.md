@@ -1,5 +1,11 @@
 # @mastra/upstash
 
+## 0.10.3-alpha.4
+
+### Patch Changes
+
+- 66f4424: Update peerdeps
+
 ## 0.10.3-alpha.3
 
 ### Patch Changes
