@@ -761,15 +761,12 @@ export class PostgresStore extends MastraStorage {
         }
         const finalQuery = unionQueries.join(' UNION ALL ') + ' ORDER BY "createdAt" ASC';
         const includedRows = await this.db.manyOrNone(finalQuery, params);
-        const dedupedRows = Object.values(
-          includedRows.reduce(
-            (acc, row) => {
-              acc[row.id] = row;
-              return acc;
-            },
-            {} as Record<string, (typeof includedRows)[0]>,
-          ),
-        );
+        const seen = new Set<string>();
+        const dedupedRows = includedRows.filter(row => {
+          if (seen.has(row.id)) return false;
+          seen.add(row.id);
+          return true;
+        });
         rows = dedupedRows;
       } else {
         const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
