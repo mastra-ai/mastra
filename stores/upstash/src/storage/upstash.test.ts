@@ -669,13 +669,14 @@ describe('UpstashStore', () => {
         activePaths: [],
         suspendedPaths: {},
         timestamp: Date.now(),
+        status: 'success',
       };
 
       await store.persistWorkflowSnapshot({
         namespace: testNamespace,
         workflowName: testWorkflow,
         runId: testRunId,
-        snapshot: mockSnapshot,
+        snapshot: mockSnapshot as WorkflowRunState,
       });
 
       const loadedSnapshot = await store.loadWorkflowSnapshot({

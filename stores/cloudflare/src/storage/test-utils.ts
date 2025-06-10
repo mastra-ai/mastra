@@ -38,6 +38,7 @@ export const createSampleWorkflowSnapshot = (threadId: string, status: string, c
     activePaths: [],
     suspendedPaths: {},
     runId,
+    status: status as WorkflowRunState['status'],
     timestamp: timestamp.getTime(),
   };
   return { snapshot, runId, stepId };

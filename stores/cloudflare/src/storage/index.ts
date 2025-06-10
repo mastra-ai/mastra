@@ -1217,6 +1217,9 @@ export class CloudflareStore extends MastraStorage {
       suspendedPaths: data.suspendedPaths || {},
       activePaths: data.activePaths || [],
       timestamp: data.timestamp || Date.now(),
+      status: data.status,
+      result: data.result,
+      error: data.error,
     };
   }
 
