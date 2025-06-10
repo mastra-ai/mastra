@@ -529,22 +529,6 @@ export const interactivePrompt = async () => {
           placeholder: 'src/',
           defaultValue: 'src/',
         }),
-      components: () =>
-        p.multiselect({
-          message: 'Choose components to install:',
-          options: [
-            { value: 'agents', label: 'Agents', hint: 'recommended' },
-            {
-              value: 'workflows',
-              label: 'Workflows',
-            },
-          ],
-        }),
-      shouldAddTools: () =>
-        p.confirm({
-          message: 'Add tools?',
-          initialValue: false,
-        }),
       llmProvider: () =>
         p.select({
           message: 'Select default provider:',
@@ -574,11 +558,6 @@ export const interactivePrompt = async () => {
         }
         return undefined;
       },
-      addExample: () =>
-        p.confirm({
-          message: 'Add example',
-          initialValue: false,
-        }),
       configureEditorWithDocsMCP: async () => {
         const windsurfIsAlreadyInstalled = await globalMCPIsAlreadyInstalled(`windsurf`);
         const cursorIsAlreadyInstalled = await globalMCPIsAlreadyInstalled(`cursor`);
@@ -664,10 +643,7 @@ export const interactivePrompt = async () => {
     },
   );
 
-  const { shouldAddTools, components, ...rest } = mastraProject;
-  const mastraComponents = shouldAddTools ? [...components, 'tools'] : components;
-
-  return { ...rest, components: mastraComponents };
+  return mastraProject;
 };
 
 export const checkPkgJson = async () => {
