@@ -8,10 +8,10 @@ import { Memory } from "@mastra/memory";
 import { openai } from "@ai-sdk/openai";
 
 // Create a memory instance with custom conversation history settings
-const memory = new Memory({
-  storage: new LibSQLStore({
-    url: "../../memory.db",
-  }),
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
+import { openai } from "@ai-sdk/openai";
   options: {
     lastMessages: 20, // Include the last 20 messages in the context
   },
