@@ -1,5 +1,12 @@
 # create-mastra
 
+## 0.10.3
+
+### Patch Changes
+
+- e719504: don't start posthog when the browser is Brave
+- 8f60de4: fix workflow output when the schema is a primitive
+
 ## 0.10.3-alpha.1
 
 ### Patch Changes

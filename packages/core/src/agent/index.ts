@@ -12,6 +12,7 @@ import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
+import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { Metric } from '../eval';
 import { AvailableHooks, executeHook } from '../hooks';
 import type { GenerateReturn, StreamReturn } from '../llm';
@@ -106,7 +107,18 @@ export class Agent<
     this.#description = config.description;
 
     if (!config.model) {
-      throw new Error(`LanguageModel is required to create an Agent. Please provide the 'model'.`);
+      const mastraError = new MastraError({
+        id: 'AGENT_CONSTRUCTOR_MODEL_REQUIRED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: config.name,
+        },
+        text: `LanguageModel is required to create an Agent. Please provide the 'model'.`,
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
     }
 
     this.model = config.model;
@@ -178,7 +190,18 @@ export class Agent<
 
   get voice() {
     if (typeof this.#instructions === 'function') {
-      throw new Error('Voice is not compatible when instructions are a function. Please use getVoice() instead.');
+      const mastraError = new MastraError({
+        id: 'AGENT_VOICE_INCOMPATIBLE_WITH_FUNCTION_INSTRUCTIONS',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+        },
+        text: 'Voice is not compatible when instructions are a function. Please use getVoice() instead.',
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
     }
 
     return this.#voice;
@@ -218,9 +241,18 @@ export class Agent<
     this.logger.warn('The instructions property is deprecated. Please use getInstructions() instead.');
 
     if (typeof this.#instructions === 'function') {
-      throw new Error(
-        'Instructions are not compatible when instructions are a function. Please use getInstructions() instead.',
-      );
+      const mastraError = new MastraError({
+        id: 'AGENT_INSTRUCTIONS_INCOMPATIBLE_WITH_FUNCTION_INSTRUCTIONS',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+        },
+        text: 'Instructions are not compatible when instructions are a function. Please use getInstructions() instead.',
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
     }
 
     return this.#instructions;
@@ -236,10 +268,18 @@ export class Agent<
     const result = this.#instructions({ runtimeContext });
     return resolveMaybePromise(result, instructions => {
       if (!instructions) {
-        this.logger.error(`[Agent:${this.name}] - Function-based instructions returned empty value`);
-        throw new Error(
-          'Instructions are required to use an Agent. The function-based instructions returned an empty value.',
-        );
+        const mastraError = new MastraError({
+          id: 'AGENT_GET_INSTRUCTIONS_FUNCTION_EMPTY_RETURN',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: this.name,
+          },
+          text: 'Instructions are required to use an Agent. The function-based instructions returned an empty value.',
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
       }
 
       return instructions;
@@ -262,7 +302,18 @@ export class Agent<
     this.logger.warn('The tools property is deprecated. Please use getTools() instead.');
 
     if (typeof this.#tools === 'function') {
-      throw new Error('Tools are not compatible when tools are a function. Please use getTools() instead.');
+      const mastraError = new MastraError({
+        id: 'AGENT_GET_TOOLS_FUNCTION_INCOMPATIBLE_WITH_TOOL_FUNCTION_TYPE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+        },
+        text: 'Tools are not compatible when tools are a function. Please use getTools() instead.',
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
     }
 
     return ensureToolProperties(this.#tools) as TTools;
@@ -279,10 +330,18 @@ export class Agent<
 
     return resolveMaybePromise(result, tools => {
       if (!tools) {
-        this.logger.error(`[Agent:${this.name}] - Function-based tools returned empty value`);
-        throw new Error(
-          'Tools are required when using a function to provide them. The function returned an empty value.',
-        );
+        const mastraError = new MastraError({
+          id: 'AGENT_GET_TOOLS_FUNCTION_EMPTY_RETURN',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: this.name,
+          },
+          text: `[Agent:${this.name}] - Function-based tools returned empty value`,
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
       }
 
       return ensureToolProperties(tools) as TTools;
@@ -293,7 +352,18 @@ export class Agent<
     this.logger.warn('The llm property is deprecated. Please use getLLM() instead.');
 
     if (typeof this.model === 'function') {
-      throw new Error('LLM is not compatible when model is a function. Please use getLLM() instead.');
+      const mastraError = new MastraError({
+        id: 'AGENT_LLM_GETTER_INCOMPATIBLE_WITH_FUNCTION_MODEL',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+        },
+        text: 'LLM is not compatible when model is a function. Please use getLLM() instead.',
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
     }
 
     return this.getLLM();
@@ -335,8 +405,18 @@ export class Agent<
     | Promise<MastraLanguageModel> {
     if (typeof this.model !== 'function') {
       if (!this.model) {
-        this.logger.error(`[Agent:${this.name}] - No model provided`);
-        throw new Error('Model is required to use an Agent.');
+        const mastraError = new MastraError({
+          id: 'AGENT_GET_MODEL_MISSING_MODEL_INSTANCE',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: this.name,
+          },
+          text: `[Agent:${this.name}] - No model provided`,
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
       }
 
       return this.model;
@@ -345,8 +425,18 @@ export class Agent<
     const result = this.model({ runtimeContext });
     return resolveMaybePromise(result, model => {
       if (!model) {
-        this.logger.error(`[Agent:${this.name}] - Function-based model returned empty value`);
-        throw new Error('Model is required to use an Agent. The function-based model returned an empty value.');
+        const mastraError = new MastraError({
+          id: 'AGENT_GET_MODEL_FUNCTION_EMPTY_RETURN',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: this.name,
+          },
+          text: `[Agent:${this.name}] - Function-based model returned empty value`,
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
       }
 
       return model;
@@ -576,13 +666,24 @@ export class Agent<
                           ) ?? undefined
                         );
                       } catch (err) {
-                        this.logger.error(`[Agent:${this.name}] - Failed memory tool execution`, {
-                          error: err,
-                          runId,
-                          threadId,
-                          resourceId,
-                        });
-                        throw err;
+                        const mastraError = new MastraError(
+                          {
+                            id: 'AGENT_MEMORY_TOOL_EXECUTION_FAILED',
+                            domain: ErrorDomain.AGENT,
+                            category: ErrorCategory.USER,
+                            details: {
+                              agentName: this.name,
+                              runId: runId || '',
+                              threadId: threadId || '',
+                              resourceId: resourceId || '',
+                            },
+                            text: `[Agent:${this.name}] - Failed memory tool execution`,
+                          },
+                          err,
+                        );
+                        this.logger.trackException(mastraError);
+                        this.logger.error(mastraError.toString());
+                        throw mastraError;
                       }
                     }
                   : undefined,
@@ -788,13 +889,24 @@ export class Agent<
                 });
                 return result;
               } catch (err) {
-                this.logger.error(`[Agent:${this.name}] - Failed workflow tool execution`, {
-                  error: err,
-                  runId,
-                  threadId,
-                  resourceId,
-                });
-                throw err;
+                const mastraError = new MastraError(
+                  {
+                    id: 'AGENT_WORKFLOW_TOOL_EXECUTION_FAILED',
+                    domain: ErrorDomain.AGENT,
+                    category: ErrorCategory.USER,
+                    details: {
+                      agentName: this.name,
+                      runId: runId || '',
+                      threadId: threadId || '',
+                      resourceId: resourceId || '',
+                    },
+                    text: `[Agent:${this.name}] - Failed workflow tool execution`,
+                  },
+                  err,
+                );
+                this.logger.trackException(mastraError);
+                this.logger.error(mastraError.toString());
+                throw mastraError;
               }
             },
           };
@@ -956,9 +1068,20 @@ export class Agent<
           };
         }
         if (!threadId || !resourceId) {
-          throw new Error(
-            `A resourceId must be provided when passing a threadId and using Memory. Saw threadId ${threadId} but resourceId is ${resourceId}`,
-          );
+          const mastraError = new MastraError({
+            id: 'AGENT_MEMORY_MISSING_RESOURCE_ID',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            details: {
+              agentName: this.name,
+              threadId: threadId || '',
+              resourceId: resourceId || '',
+            },
+            text: `A resourceId must be provided when passing a threadId and using Memory. Saw threadId ${threadId} but resourceId is ${resourceId}`,
+          });
+          this.logger.trackException(mastraError);
+          this.logger.error(mastraError.toString());
+          throw mastraError;
         }
         const store = memory.constructor.name;
         this.logger.debug(
@@ -1153,14 +1276,26 @@ export class Agent<
               memoryConfig,
             });
           } catch (e) {
-            const message = e instanceof Error ? e.message : JSON.stringify(e);
-            this.logger.error('Error saving response', {
-              error: message,
-              runId,
-              result: resToLog,
-              threadId,
-            });
-            throw e;
+            if (e instanceof MastraError) {
+              throw e;
+            }
+            const mastraError = new MastraError(
+              {
+                id: 'AGENT_MEMORY_PERSIST_RESPONSE_MESSAGES_FAILED',
+                domain: ErrorDomain.AGENT,
+                category: ErrorCategory.SYSTEM,
+                details: {
+                  agentName: this.name,
+                  runId: runId || '',
+                  threadId: threadId || '',
+                  result: JSON.stringify(resToLog),
+                },
+              },
+              e,
+            );
+            this.logger.trackException(mastraError);
+            this.logger.error(mastraError.toString());
+            throw mastraError;
           }
         }
 
@@ -1562,18 +1697,45 @@ export class Agent<
     },
   ): Promise<NodeJS.ReadableStream | void> {
     if (!this.voice) {
-      throw new Error('No voice provider configured');
+      const mastraError = new MastraError({
+        id: 'AGENT_SPEAK_METHOD_VOICE_NOT_CONFIGURED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+        },
+        text: 'No voice provider configured',
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
     }
 
     this.logger.warn('Warning: agent.speak() is deprecated. Please use agent.voice.speak() instead.');
 
     try {
       return this.voice.speak(input, options);
-    } catch (e) {
-      this.logger.error('Error during agent speak', {
-        error: e,
-      });
-      throw e;
+    } catch (e: unknown) {
+      let err;
+      if (e instanceof MastraError) {
+        err = e;
+      } else {
+        err = new MastraError(
+          {
+            id: 'AGENT_SPEAK_METHOD_ERROR',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.UNKNOWN,
+            details: {
+              agentName: this.name,
+            },
+            text: 'Error during agent speak',
+          },
+          e,
+        );
+      }
+      this.logger.trackException(err);
+      this.logger.error(err.toString());
+      throw err;
     }
   }
 
@@ -1591,18 +1753,45 @@ export class Agent<
     },
   ): Promise<string | NodeJS.ReadableStream | void> {
     if (!this.voice) {
-      throw new Error('No voice provider configured');
+      const mastraError = new MastraError({
+        id: 'AGENT_LISTEN_METHOD_VOICE_NOT_CONFIGURED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+        },
+        text: 'No voice provider configured',
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
     }
 
     this.logger.warn('Warning: agent.listen() is deprecated. Please use agent.voice.listen() instead');
 
     try {
       return this.voice.listen(audioStream, options);
-    } catch (e) {
-      this.logger.error('Error during agent listen', {
-        error: e,
-      });
-      throw e;
+    } catch (e: unknown) {
+      let err;
+      if (e instanceof MastraError) {
+        err = e;
+      } else {
+        err = new MastraError(
+          {
+            id: 'AGENT_LISTEN_METHOD_ERROR',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.UNKNOWN,
+            details: {
+              agentName: this.name,
+            },
+            text: 'Error during agent listen',
+          },
+          e,
+        );
+      }
+      this.logger.trackException(err);
+      this.logger.error(err.toString());
+      throw err;
     }
   }
 
@@ -1614,18 +1803,45 @@ export class Agent<
    */
   async getSpeakers() {
     if (!this.voice) {
-      throw new Error('No voice provider configured');
+      const mastraError = new MastraError({
+        id: 'AGENT_SPEAKERS_METHOD_VOICE_NOT_CONFIGURED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+        },
+        text: 'No voice provider configured',
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
     }
 
     this.logger.warn('Warning: agent.getSpeakers() is deprecated. Please use agent.voice.getSpeakers() instead.');
 
     try {
       return await this.voice.getSpeakers();
-    } catch (e) {
-      this.logger.error('Error during agent getSpeakers', {
-        error: e,
-      });
-      throw e;
+    } catch (e: unknown) {
+      let err;
+      if (e instanceof MastraError) {
+        err = e;
+      } else {
+        err = new MastraError(
+          {
+            id: 'AGENT_GET_SPEAKERS_METHOD_ERROR',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.UNKNOWN,
+            details: {
+              agentName: this.name,
+            },
+            text: 'Error during agent getSpeakers',
+          },
+          e,
+        );
+      }
+      this.logger.trackException(err);
+      this.logger.error(err.toString());
+      throw err;
     }
   }
 

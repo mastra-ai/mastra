@@ -1,5 +1,28 @@
 # @mastra/core
 
+## 0.10.4
+
+### Patch Changes
+
+- d1ed912: dependencies updates:
+  - Updated dependency [`dotenv@^16.5.0` ↗︎](https://www.npmjs.com/package/dotenv/v/16.5.0) (from `^16.4.7`, in `dependencies`)
+- f6fd25f: Updates @mastra/schema-compat to allow all zod schemas. Uses @mastra/schema-compat to apply schema transformations to agent output schema.
+- dffb67b: updated stores to add alter table and change tests
+- f1f1f1b: Add basic filtering capabilities to logs
+- 925ab94: added paginated functions to base class and added boilerplate and updated imports
+- f9816ae: Create @mastra/schema-compat package to extract the schema compatibility layer to be used outside of mastra
+- 82090c1: Add pagination to logs
+- 1b443fd: - add trackException to loggers to allow mastra cloud to track exceptions at runtime
+  - Added generic MastraBaseError<D, C> in packages/core/src/error/index.ts to improve type safety and flexibility of error handling
+- ce97900: Add paginated APIs to cloudflare-d1 storage class
+- f1309d3: Now that UIMessages are stored, we added a check to make sure large text files or source urls are not sent to the LLM for thread title generation.
+- 14a2566: Add pagination to libsql storage APIs
+- f7f8293: Added LanceDB implementations for MastraVector and MastraStorage
+- 48eddb9: update filter logic in Memory class to support semantic recall search scope
+- Updated dependencies [f6fd25f]
+- Updated dependencies [f9816ae]
+  - @mastra/schema-compat@0.10.2
+
 ## 0.10.4-alpha.3
 
 ### Patch Changes

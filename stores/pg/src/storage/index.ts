@@ -20,7 +20,7 @@ import type {
   WorkflowRuns,
   PaginationArgs,
 } from '@mastra/core/storage';
-import { parseSqlIdentifier } from '@mastra/core/utils';
+import { parseSqlIdentifier, parseFieldKey } from '@mastra/core/utils';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import pgPromise from 'pg-promise';
 import type { ISSLConfig } from 'pg-promise/typescript/pg-subset';
@@ -220,14 +220,14 @@ export class PostgresStore extends MastraStorage {
     }
     if (attributes) {
       Object.entries(attributes).forEach(([key, value]) => {
-        const parsedKey = parseSqlIdentifier(key, 'attribute key');
+        const parsedKey = parseFieldKey(key);
         conditions.push(`attributes->>'${parsedKey}' = $${paramIndex++}`);
         queryParams.push(value);
       });
     }
     if (filters) {
       Object.entries(filters).forEach(([key, value]) => {
-        const parsedKey = parseSqlIdentifier(key, 'filter key');
+        const parsedKey = parseFieldKey(key);
         conditions.push(`"${parsedKey}" = $${paramIndex++}`); // Ensure filter keys are quoted if they are column names
         queryParams.push(value);
       });

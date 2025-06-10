@@ -1,5 +1,50 @@
 # @mastra/deployer
 
+## 0.10.4
+
+### Patch Changes
+
+- d1ed912: dependencies updates:
+  - Updated dependency [`dotenv@^16.5.0` ↗︎](https://www.npmjs.com/package/dotenv/v/16.5.0) (from `^16.4.7`, in `dependencies`)
+- f595975: dependencies updates:
+  - Updated dependency [`rollup@^4.41.1` ↗︎](https://www.npmjs.com/package/rollup/v/4.41.1) (from `^4.35.0`, in `dependencies`)
+- d90c49f: dependencies updates:
+  - Updated dependency [`@babel/core@^7.27.4` ↗︎](https://www.npmjs.com/package/@babel/core/v/7.27.4) (from `^7.26.10`, in `dependencies`)
+  - Updated dependency [`@babel/helper-module-imports@^7.27.1` ↗︎](https://www.npmjs.com/package/@babel/helper-module-imports/v/7.27.1) (from `^7.25.9`, in `dependencies`)
+  - Updated dependency [`@rollup/plugin-node-resolve@^16.0.1` ↗︎](https://www.npmjs.com/package/@rollup/plugin-node-resolve/v/16.0.1) (from `^16.0.0`, in `dependencies`)
+  - Updated dependency [`hono@^4.7.11` ↗︎](https://www.npmjs.com/package/hono/v/4.7.11) (from `^4.7.4`, in `dependencies`)
+- 1ccccff: dependencies updates:
+  - Updated dependency [`zod@^3.25.56` ↗︎](https://www.npmjs.com/package/zod/v/3.25.56) (from `^3.24.3`, in `dependencies`)
+- 1ccccff: dependencies updates:
+  - Updated dependency [`zod@^3.25.56` ↗︎](https://www.npmjs.com/package/zod/v/3.25.56) (from `^3.24.3`, in `dependencies`)
+- afd9fda: Reset retry-count on code change and only retry if server actually is running
+
+  Fixes #4563
+
+- f1f1f1b: Add basic filtering capabilities to logs
+- 9597ee5: Hoist runtimeContext from POST request into middleware
+- 82090c1: Add pagination to logs
+- 69f6101: Add reason to tools import error on server start
+- 514fdde: Move opentelemetry deps to mastra output to remove @mastra/core dependency
+- bebd27c: Only apply <placeholder> text inside instructions in the playground ui
+- Updated dependencies [d1ed912]
+- Updated dependencies [f6fd25f]
+- Updated dependencies [dffb67b]
+- Updated dependencies [f1f1f1b]
+- Updated dependencies [925ab94]
+- Updated dependencies [9597ee5]
+- Updated dependencies [f9816ae]
+- Updated dependencies [82090c1]
+- Updated dependencies [1b443fd]
+- Updated dependencies [ce97900]
+- Updated dependencies [f1309d3]
+- Updated dependencies [bebd27c]
+- Updated dependencies [14a2566]
+- Updated dependencies [f7f8293]
+- Updated dependencies [48eddb9]
+  - @mastra/core@0.10.4
+  - @mastra/server@0.10.4
+
 ## 0.10.4-alpha.3
 
 ### Patch Changes
