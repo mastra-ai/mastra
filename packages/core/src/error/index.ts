@@ -2,6 +2,7 @@ export enum ErrorDomain {
   TOOL = 'TOOL',
   AGENT = 'AGENT',
   MCP = 'MCP',
+  LLM = 'LLM',
   UNKNOWN = 'UNKNOWN',
 }
 
