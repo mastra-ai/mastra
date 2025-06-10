@@ -1,5 +1,19 @@
 # @mastra/voice-openai
 
+## 0.10.2-alpha.1
+
+### Patch Changes
+
+- 1ccccff: dependencies updates:
+  - Updated dependency [`zod@^3.25.56` ↗︎](https://www.npmjs.com/package/zod/v/3.25.56) (from `^3.24.3`, in `dependencies`)
+- 1ccccff: dependencies updates:
+  - Updated dependency [`zod@^3.25.56` ↗︎](https://www.npmjs.com/package/zod/v/3.25.56) (from `^3.24.3`, in `dependencies`)
+- Updated dependencies [f6fd25f]
+- Updated dependencies [dffb67b]
+- Updated dependencies [f1309d3]
+- Updated dependencies [f7f8293]
+  - @mastra/core@0.10.4-alpha.1
+
 ## 0.10.2-alpha.0
 
 ### Patch Changes

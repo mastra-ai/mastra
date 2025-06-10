@@ -1,5 +1,18 @@
 # @mastra/cloudflare-d1
 
+## 0.10.2-alpha.1
+
+### Patch Changes
+
+- d90c49f: dependencies updates:
+  - Updated dependency [`cloudflare@^4.3.0` ↗︎](https://www.npmjs.com/package/cloudflare/v/4.3.0) (from `^4.1.0`, in `dependencies`)
+- dffb67b: updated stores to add alter table and change tests
+- Updated dependencies [f6fd25f]
+- Updated dependencies [dffb67b]
+- Updated dependencies [f1309d3]
+- Updated dependencies [f7f8293]
+  - @mastra/core@0.10.4-alpha.1
+
 ## 0.10.2-alpha.0
 
 ### Patch Changes
