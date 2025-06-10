@@ -1,10 +1,10 @@
+import fs from 'fs';
 import { fastembed } from '@mastra/fastembed';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import dotenv from 'dotenv';
 import { describe } from 'vitest';
 import { getResuableTests, StorageType } from './reusable-tests';
-import fs from 'fs';
 
 dotenv.config({ path: '.env.test' });
 

@@ -312,24 +312,24 @@ describe('MongoDBStore', () => {
 
       const messages = [
         {
-          ...test.generateSampleMessageV1({ threadId: thread.id, content: 'First' }),
+          ...test.generateSampleMessageV2({ threadId: thread.id, content: 'First' }),
         },
         {
-          ...test.generateSampleMessageV1({ threadId: thread.id, content: 'Second' }),
+          ...test.generateSampleMessageV2({ threadId: thread.id, content: 'Second' }),
         },
         {
-          ...test.generateSampleMessageV1({ threadId: thread.id, content: 'Third' }),
+          ...test.generateSampleMessageV2({ threadId: thread.id, content: 'Third' }),
         },
       ];
 
-      await store.saveMessages({ messages, format: 'v1' });
+      await store.saveMessages({ messages, format: 'v2' });
 
-      const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v1' });
+      const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v2' });
       expect(retrievedMessages).toHaveLength(3);
 
       // Verify order is maintained
       retrievedMessages.forEach((msg, idx) => {
-        expect(((msg as any).content[0] as any).text).toBe((messages[idx]!.content[0] as any).text);
+        expect((msg as any).content.parts).toEqual(messages[idx]!.content.parts);
       });
     });
 
