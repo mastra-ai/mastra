@@ -777,8 +777,8 @@ export class DynamoDBStore extends MastraStorage {
         updatedAt: now,
         resourceId,
       };
-      // Pass the data including 'entity'
-      await this.service.entities.workflowSnapshot.create(data).go();
+      // Use upsert instead of create to handle both create and update cases
+      await this.service.entities.workflowSnapshot.upsert(data).go();
     } catch (error) {
       this.logger.error('Failed to persist workflow snapshot', { workflowName, runId, error });
       throw error;
