@@ -116,6 +116,8 @@ program
           await init({
             ...result,
             llmApiKey: result?.llmApiKey as string,
+            components: ['agents', 'tools', 'workflows'],
+            addExample: true,
           });
           return;
         }
