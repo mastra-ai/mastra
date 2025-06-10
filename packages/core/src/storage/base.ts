@@ -47,7 +47,7 @@ export abstract class MastraStorage extends MastraBase {
     return dateObj?.toISOString();
   }
 
-  protected getSqlType(type: string): string {
+  protected getSqlType(type: StorageColumn['type']): string {
     switch (type) {
       case 'text':
         return 'TEXT';
@@ -64,7 +64,7 @@ export abstract class MastraStorage extends MastraBase {
     }
   }
 
-  protected getDefaultValue(type: string): string {
+  protected getDefaultValue(type: StorageColumn['type']): string {
     switch (type) {
       case 'text':
       case 'uuid':

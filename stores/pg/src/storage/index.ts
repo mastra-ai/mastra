@@ -382,7 +382,7 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
-  protected getDefaultValue(type: string): string {
+  protected getDefaultValue(type: StorageColumn['type']): string {
     switch (type) {
       case 'timestamp':
         return 'DEFAULT NOW()';

@@ -371,7 +371,7 @@ export class ClickhouseStore extends MastraStorage {
     }
   }
 
-  protected getSqlType(type: string): string {
+  protected getSqlType(type: StorageColumn['type']): string {
     switch (type) {
       case 'text':
         return 'String';

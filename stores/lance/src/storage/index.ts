@@ -165,7 +165,7 @@ export class LanceStorage extends MastraStorage {
     }
   }
 
-  protected getDefaultValue(type: string): string {
+  protected getDefaultValue(type: StorageColumn['type']): string {
     switch (type) {
       case 'text':
         return "''";

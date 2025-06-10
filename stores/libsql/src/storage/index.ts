@@ -125,7 +125,7 @@ export class LibSQLStore extends MastraStorage {
     }
   }
 
-  protected getSqlType(type: string): string {
+  protected getSqlType(type: StorageColumn['type']): string {
     switch (type) {
       case 'bigint':
         return 'INTEGER'; // SQLite uses INTEGER for all integer sizes
