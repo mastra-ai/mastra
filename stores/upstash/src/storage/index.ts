@@ -783,7 +783,6 @@ export class UpstashStore extends MastraStorage {
     }
     try {
       const allMessageIds = await this.redis.zrange(threadMessagesKey, 0, -1);
-      // If pagination is requested, use the new pagination logic
       if (allMessageIds.length === 0) {
         return {
           messages: [],
@@ -813,9 +812,11 @@ export class UpstashStore extends MastraStorage {
         messagesData = messagesData.filter(msg => msg && new Date(msg.createdAt).getTime() <= toDate.getTime());
       }
 
+      // Sort messages by their position in the sorted set
+      messagesData.sort((a, b) => allMessageIds.indexOf(a!.id) - allMessageIds.indexOf(b!.id));
+
       const total = messagesData.length;
 
-      // Apply pagination
       const start = page * perPage;
       const end = start + perPage;
       const hasMore = end < total;
