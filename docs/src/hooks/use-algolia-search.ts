@@ -8,13 +8,13 @@ export type AlgoliaSearchOptions = {
   /**
    * The index to search in
    */
-  indexName?: string;
+  indexName: string;
   /**
    * Maximum number of hits to return
    */
   hitsPerPage?: number;
   /**
-   * Filters to apply to the search
+   * Filters to apply to the search (e.g., "locale:en" to filter by locale)
    */
   filters?: string;
   /**
@@ -141,9 +141,8 @@ export function useAlgoliaSearch(
           return;
         }
 
-        const indexName = searchOptions?.indexName || "docs"; // Default index name
+        const indexName = searchOptions?.indexName || "crawler_mastra crawler"; // Default index name
 
-        // Correct Algolia v5 API structure
         const searchRequest = {
           indexName: indexName,
           query: search,

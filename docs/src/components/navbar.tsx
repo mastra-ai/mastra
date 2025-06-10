@@ -113,10 +113,11 @@ export const SearchWrapperMobile = ({ locale }: { locale: string }) => {
 
   // Configure Algolia search options
   const searchOptions = {
-    indexName: "docs", // Change this to your existing index name if different
-    hitsPerPage: 10,
+    indexName: "crawler_mastra crawler",
+    hitsPerPage: 20,
     attributesToRetrieve: ["title", "content", "url", "hierarchy"],
     attributesToHighlight: ["title", "content"],
+    filters: `locale:${locale}`,
   };
 
   return (
