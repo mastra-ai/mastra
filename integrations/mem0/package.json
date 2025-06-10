@@ -40,12 +40,12 @@
     "eslint": "^9.28.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.2",
-    "typescript-eslint": "^8.26.1",
+    "typescript-eslint": "^8.33.1",
     "vitest": "^3.2.2",
     "zod": "^3.25.56"
   },
   "dependencies": {
-    "mem0ai": "^2.1.29"
+    "mem0ai": "^2.1.30"
   },
   "peerDependencies": {
     "@mastra/core": "^0.10.0-alpha.0",
