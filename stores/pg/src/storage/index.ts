@@ -382,6 +382,57 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
+  protected getDefaultValue(type: StorageColumn['type']): string {
+    switch (type) {
+      case 'timestamp':
+        return 'DEFAULT NOW()';
+      case 'jsonb':
+        return "DEFAULT '{}'::jsonb";
+      default:
+        return super.getDefaultValue(type);
+    }
+  }
+
+  /**
+   * Alters table schema to add columns if they don't exist
+   * @param tableName Name of the table
+   * @param schema Schema of the table
+   * @param ifNotExists Array of column names to add if they don't exist
+   */
+  async alterTable({
+    tableName,
+    schema,
+    ifNotExists,
+  }: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void> {
+    const fullTableName = this.getTableName(tableName);
+
+    try {
+      for (const columnName of ifNotExists) {
+        if (schema[columnName]) {
+          const columnDef = schema[columnName];
+          const sqlType = this.getSqlType(columnDef.type);
+          const nullable = columnDef.nullable === false ? 'NOT NULL' : '';
+          const defaultValue = columnDef.nullable === false ? this.getDefaultValue(columnDef.type) : '';
+          const parsedColumnName = parseSqlIdentifier(columnName, 'column name');
+          const alterSql =
+            `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${parsedColumnName}" ${sqlType} ${nullable} ${defaultValue}`.trim();
+
+          await this.db.none(alterSql);
+          this.logger?.debug?.(`Ensured column ${parsedColumnName} exists in table ${fullTableName}`);
+        }
+      }
+    } catch (error) {
+      this.logger?.error?.(
+        `Error altering table ${tableName}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw new Error(`Failed to alter table ${tableName}: ${error}`);
+    }
+  }
+
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     try {
       await this.db.none(`TRUNCATE TABLE ${this.getTableName(tableName)} CASCADE`);

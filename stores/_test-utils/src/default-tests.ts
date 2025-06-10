@@ -2,17 +2,21 @@ import { randomUUID } from 'crypto';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach } from 'vitest';
 import type { MetricResult } from '@mastra/core/eval';
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import type { MastraStorage } from '@mastra/core/storage';
+import type { MastraStorage, StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { TABLE_WORKFLOW_SNAPSHOT, TABLE_EVALS, TABLE_MESSAGES, TABLE_THREADS } from '@mastra/core/storage';
-import { MastraMessageV1 } from '@mastra/core';
+import { MastraMessageV1, MastraMessageV2 } from '@mastra/core';
 
 // Sample test data factory functions to ensure unique records
-export const createSampleThread = () => ({
+export const createSampleThread = ({
+  date = new Date(),
+}: {
+  date?: Date;
+} = {}) => ({
   id: `thread-${randomUUID()}`,
   resourceId: `resource-${randomUUID()}`,
   title: 'Test Thread',
-  createdAt: new Date(),
-  updatedAt: new Date(),
+  createdAt: date,
+  updatedAt: date,
   metadata: { key: 'value' },
 });
 
@@ -36,15 +40,10 @@ export const getRole = () => {
   else role = 'user';
   return role;
 };
-export const createSampleMessage = (threadId: string, createdAt?: Date) =>
-  ({
-    id: `msg-${randomUUID()}`,
-    role: getRole(),
-    type: 'text',
-    threadId,
-    content: [{ type: 'text', text: 'Hello' }],
-    createdAt: createdAt || new Date(),
-  }) satisfies MastraMessageV1;
+
+export const resetRole = () => {
+  role = 'assistant';
+};
 
 export const createSampleTraceForDB = (
   name: string,
@@ -85,6 +84,49 @@ export const createSampleEval = (agentName: string, isTest = false, createdAt?: 
     createdAt: createdAt || new Date(),
   };
 };
+
+export const createSampleMessageV1 = ({
+  threadId,
+  content = 'Hello',
+  resourceId = `resource-${randomUUID()}`,
+  createdAt = new Date(),
+}: {
+  threadId: string;
+  content?: string;
+  resourceId?: string;
+  createdAt?: Date;
+}) =>
+  ({
+    id: `msg-${randomUUID()}`,
+    role: getRole(),
+    type: 'text',
+    threadId,
+    content: [{ type: 'text', text: content }],
+    createdAt,
+    resourceId,
+  }) satisfies MastraMessageV1;
+
+export const createSampleMessageV2 = ({
+  threadId,
+  content = 'Hello',
+  resourceId = `resource-${randomUUID()}`,
+  createdAt = new Date(),
+}: {
+  threadId: string;
+  content?: string;
+  resourceId?: string;
+  createdAt?: Date;
+}): MastraMessageV2 => ({
+  id: `msg-${randomUUID()}`,
+  resourceId,
+  role: getRole(),
+  threadId,
+  content: {
+    format: 2,
+    parts: [{ type: 'text', text: content }],
+  },
+  createdAt,
+});
 
 export const createSampleWorkflowSnapshot = (status: string, createdAt?: Date) => {
   const runId = `run-${randomUUID()}`;
@@ -221,6 +263,27 @@ export function createTestSuite(storage: MastraStorage) {
         const retrievedThread = await storage.getThreadById({ threadId: thread.id });
         expect(retrievedThread).toBeNull();
       });
+
+      it('should delete thread and its messages', async () => {
+        const thread = createSampleThread();
+        await storage.saveThread({ thread });
+
+        // Add some messages
+        const messages = [
+          createSampleMessageV2({ threadId: thread.id }),
+          createSampleMessageV2({ threadId: thread.id }),
+        ];
+        await storage.saveMessages({ messages, format: 'v2' });
+
+        await storage.deleteThread({ threadId: thread.id });
+
+        const retrievedThread = await storage.getThreadById({ threadId: thread.id });
+        expect(retrievedThread).toBeNull();
+
+        // Verify messages were also deleted
+        const retrievedMessages = await storage.getMessages({ threadId: thread.id });
+        expect(retrievedMessages).toHaveLength(0);
+      });
     });
 
     describe('Message Operations', () => {
@@ -228,7 +291,10 @@ export function createTestSuite(storage: MastraStorage) {
         const thread = createSampleThread();
         await storage.saveThread({ thread });
 
-        const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
+        const messages = [
+          { ...createSampleMessageV1({ threadId: thread.id }), resourceId: undefined },
+          { ...createSampleMessageV1({ threadId: thread.id, resourceId: undefined }), resourceId: undefined },
+        ];
 
         // Save messages
         const savedMessages = await storage.saveMessages({ messages });
@@ -253,10 +319,10 @@ export function createTestSuite(storage: MastraStorage) {
         await storage.saveThread({ thread });
 
         const messages = [
-          { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'First' }] },
-          { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'Second' }] },
-          { ...createSampleMessage(thread.id), content: [{ type: 'text', text: 'Third' }] },
-        ] satisfies MastraMessageV1[];
+          createSampleMessageV1({ threadId: thread.id, content: 'First' }),
+          createSampleMessageV1({ threadId: thread.id, content: 'Second' }),
+          createSampleMessageV1({ threadId: thread.id, content: 'Third' }),
+        ];
 
         await storage.saveMessages({ messages });
 
@@ -276,9 +342,9 @@ export function createTestSuite(storage: MastraStorage) {
         await storage.saveThread({ thread });
 
         const messages = [
-          createSampleMessage(thread.id),
+          createSampleMessageV1({ threadId: thread.id }),
           // @ts-ignore
-          { ...createSampleMessage(thread.id), id: null }, // This will cause an error
+          { ...createSampleMessageV1({ threadId: thread.id }), id: null }, // This will cause an error
         ] as MastraMessageV1[];
 
         await expect(storage.saveMessages({ messages })).rejects.toThrow();
@@ -927,6 +993,97 @@ export function createTestSuite(storage: MastraStorage) {
       // Test getting evals for non-existent agent
       const nonExistentEvals = await storage.getEvalsByAgentName('non-existent-agent');
       expect(nonExistentEvals).toHaveLength(0);
+    });
+  });
+
+  describe('alterTable', () => {
+    const TEST_TABLE = 'test_alter_table';
+    const BASE_SCHEMA = {
+      id: { type: 'integer', primaryKey: true, nullable: false },
+      name: { type: 'text', nullable: true },
+      createdAt: { type: 'timestamp', nullable: false },
+    } as Record<string, StorageColumn>;
+
+    beforeEach(async () => {
+      await storage.createTable({ tableName: TEST_TABLE as TABLE_NAMES, schema: BASE_SCHEMA });
+    });
+
+    afterEach(async () => {
+      await storage.clearTable({ tableName: TEST_TABLE as TABLE_NAMES });
+    });
+
+    it('adds a new column to an existing table', async () => {
+      await storage.alterTable({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        schema: { ...BASE_SCHEMA, age: { type: 'integer', nullable: true } },
+        ifNotExists: ['age'],
+      });
+
+      await storage.insert({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        record: { id: 1, name: 'Alice', age: 42, createdAt: new Date() },
+      });
+
+      const row = await storage.load<{ id: string; name: string; age?: number }>({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        keys: { id: '1' },
+      });
+      expect(row?.age).toBe(42);
+    });
+
+    it('is idempotent when adding an existing column', async () => {
+      await storage.alterTable({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        schema: { ...BASE_SCHEMA, foo: { type: 'text', nullable: true } },
+        ifNotExists: ['foo'],
+      });
+      // Add the column again (should not throw)
+      await expect(
+        storage.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, foo: { type: 'text', nullable: true } },
+          ifNotExists: ['foo'],
+        }),
+      ).resolves.not.toThrow();
+    });
+
+    it('should add a default value to a column when using not null', async () => {
+      await storage.insert({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        record: { id: 1, name: 'Bob', createdAt: new Date() },
+      });
+
+      await expect(
+        storage.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, text_column: { type: 'text', nullable: false } },
+          ifNotExists: ['text_column'],
+        }),
+      ).resolves.not.toThrow();
+
+      await expect(
+        storage.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, timestamp_column: { type: 'timestamp', nullable: false } },
+          ifNotExists: ['timestamp_column'],
+        }),
+      ).resolves.not.toThrow();
+
+      await expect(
+        storage.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, bigint_column: { type: 'bigint', nullable: false } },
+          ifNotExists: ['bigint_column'],
+        }),
+      ).resolves.not.toThrow();
+
+      await expect(
+        storage.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, jsonb_column: { type: 'jsonb', nullable: false } },
+          ifNotExists: ['jsonb_column'],
+        }),
+      ).resolves.not.toThrow();
     });
   });
 }

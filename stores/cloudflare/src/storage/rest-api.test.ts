@@ -1,3 +1,4 @@
+import { createSampleMessageV1, createSampleThread } from '@internal/storage-test-utils';
 import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 import {
@@ -9,16 +10,9 @@ import {
 } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import dotenv from 'dotenv';
-import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll, vi, afterEach } from 'vitest';
 
-import {
-  checkWorkflowSnapshot,
-  createSampleMessage,
-  createSampleThread,
-  createSampleTrace,
-  createSampleWorkflowSnapshot,
-  retryUntil,
-} from './test-utils';
+import { checkWorkflowSnapshot, createSampleTrace, createSampleWorkflowSnapshot, retryUntil } from './test-utils';
 import type { CloudflareStoreConfig } from './types';
 import { CloudflareStore } from '.';
 
@@ -363,7 +357,7 @@ describe.skip('CloudflareStore REST API', () => {
       await store.saveThread({ thread });
 
       // Add some messages
-      const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
+      const messages = [createSampleMessageV1({ threadId: thread.id }), createSampleMessageV1({ threadId: thread.id })];
       await store.saveMessages({ messages });
 
       await store.deleteThread({ threadId: thread.id });
@@ -392,7 +386,7 @@ describe.skip('CloudflareStore REST API', () => {
       const thread = createSampleThread();
       await store.saveThread({ thread });
 
-      const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
+      const messages = [createSampleMessageV1({ threadId: thread.id }), createSampleMessageV1({ threadId: thread.id })];
 
       // Save messages
       const savedMessages = await store.saveMessages({ messages });
@@ -420,18 +414,9 @@ describe.skip('CloudflareStore REST API', () => {
       await store.saveThread({ thread });
 
       const messages = [
-        {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'First' }] as MastraMessageV1['content'],
-        },
-        {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'Second' }] as MastraMessageV1['content'],
-        },
-        {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text' as const, text: 'Third' }] as MastraMessageV1['content'],
-        },
+        createSampleMessageV1({ threadId: thread.id, content: 'First' }),
+        createSampleMessageV1({ threadId: thread.id, content: 'Second' }),
+        createSampleMessageV1({ threadId: thread.id, content: 'Third' }),
       ];
 
       await store.saveMessages({ messages });
@@ -576,10 +561,9 @@ describe.skip('CloudflareStore REST API', () => {
 
       // Create messages with identical timestamps
       const timestamp = new Date();
-      const messages = Array.from({ length: 3 }, () => ({
-        ...createSampleMessage(thread.id),
-        createdAt: timestamp,
-      }));
+      const messages = Array.from({ length: 3 }, () =>
+        createSampleMessageV1({ threadId: thread.id, createdAt: timestamp }),
+      );
 
       await store.saveMessages({ messages });
 
@@ -600,10 +584,9 @@ describe.skip('CloudflareStore REST API', () => {
 
       // Create messages with different timestamps
       const now = Date.now();
-      const messages = Array.from({ length: 3 }, (_, i) => ({
-        ...createSampleMessage(thread.id),
-        createdAt: new Date(now - (2 - i) * 1000), // timestamps: oldest -> newest
-      }));
+      const messages = Array.from({ length: 3 }, (_, i) =>
+        createSampleMessageV1({ threadId: thread.id, createdAt: new Date(now - (2 - i) * 1000) }),
+      );
 
       // Save messages in reverse order to verify write order is preserved
       const reversedMessages = [...messages].reverse(); // newest -> oldest
@@ -633,7 +616,7 @@ describe.skip('CloudflareStore REST API', () => {
       await store.saveThread({ thread });
 
       // Create initial messages
-      const messages = Array.from({ length: 3 }, () => createSampleMessage(thread.id));
+      const messages = Array.from({ length: 3 }, () => createSampleMessageV1({ threadId: thread.id }));
       await store.saveMessages({ messages });
 
       // Update scores to reverse order
@@ -661,21 +644,9 @@ describe.skip('CloudflareStore REST API', () => {
       // Create messages with explicit timestamps to test chronological ordering
       const baseTime = new Date('2025-03-14T23:30:20.930Z').getTime();
       const messages = [
-        {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text', text: 'First' }],
-          createdAt: new Date(baseTime),
-        },
-        {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text', text: 'Second' }],
-          createdAt: new Date(baseTime + 1000),
-        },
-        {
-          ...createSampleMessage(thread.id),
-          content: [{ type: 'text', text: 'Third' }],
-          createdAt: new Date(baseTime + 2000),
-        },
+        createSampleMessageV1({ threadId: thread.id, content: 'First', createdAt: new Date(baseTime) }),
+        createSampleMessageV1({ threadId: thread.id, content: 'Second', createdAt: new Date(baseTime + 1000) }),
+        createSampleMessageV1({ threadId: thread.id, content: 'Third', createdAt: new Date(baseTime + 2000) }),
       ] as MastraMessageV1[];
 
       await store.saveMessages({ messages });
@@ -736,6 +707,7 @@ describe.skip('CloudflareStore REST API', () => {
         } as unknown as WorkflowRunState['context'],
         activePaths: [],
         suspendedPaths: {},
+        serializedStepGraph: [],
       };
 
       await store.persistWorkflowSnapshot({
@@ -782,6 +754,7 @@ describe.skip('CloudflareStore REST API', () => {
         } as unknown as WorkflowRunState['context'],
         activePaths: [],
         suspendedPaths: {},
+        serializedStepGraph: [],
       };
 
       await store.persistWorkflowSnapshot({
@@ -844,6 +817,7 @@ describe.skip('CloudflareStore REST API', () => {
         } as unknown as WorkflowRunState['context'],
         activePaths: [],
         suspendedPaths: {},
+        serializedStepGraph: [],
       };
 
       await store.persistWorkflowSnapshot({
@@ -1254,10 +1228,7 @@ describe.skip('CloudflareStore REST API', () => {
 
     it('should sanitize and handle special characters', async () => {
       const thread = createSampleThread();
-      const message = {
-        ...createSampleMessage(thread.id),
-        content: [{ type: 'text' as const, text: '特殊字符 !@#$%^&*()' }] as MastraMessageV1['content'],
-      };
+      const message = createSampleMessageV1({ threadId: thread.id, content: '特殊字符 !@#$%^&*()' });
 
       await store.saveThread({ thread });
       await store.saveMessages({ messages: [message] });
@@ -1320,7 +1291,7 @@ describe.skip('CloudflareStore REST API', () => {
 
     it('should maintain consistent key format across operations', async () => {
       const thread = createSampleThread();
-      const message = createSampleMessage(thread.id);
+      const message = createSampleMessageV1({ threadId: thread.id });
 
       // Save thread and message
       await store.saveThread({ thread });
@@ -1357,10 +1328,9 @@ describe.skip('CloudflareStore REST API', () => {
 
       // Create messages with sequential timestamps (but write order will be preserved)
       const now = Date.now();
-      const messages = Array.from({ length: 5 }, (_, i) => ({
-        ...createSampleMessage(thread.id),
-        createdAt: new Date(now + i * 1000),
-      }));
+      const messages = Array.from({ length: 5 }, (_, i) =>
+        createSampleMessageV1({ threadId: thread.id, createdAt: new Date(now + i * 1000) }),
+      );
 
       // Save messages sequentially to avoid race conditions in REST API
       for (const msg of messages) {
@@ -1387,7 +1357,7 @@ describe.skip('CloudflareStore REST API', () => {
       await store.saveThread({ thread });
 
       // Create initial messages
-      const messages = Array.from({ length: 3 }, () => createSampleMessage(thread.id));
+      const messages = Array.from({ length: 3 }, () => createSampleMessageV1({ threadId: thread.id }));
       await store.saveMessages({ messages });
 
       const orderKey = store['getThreadMessagesKey'](thread.id);
@@ -1423,7 +1393,7 @@ describe.skip('CloudflareStore REST API', () => {
   describe('Resource Management', () => {
     it('should clean up orphaned messages when thread is deleted', async () => {
       const thread = createSampleThread();
-      const messages = Array.from({ length: 3 }, () => createSampleMessage(thread.id));
+      const messages = Array.from({ length: 3 }, () => createSampleMessageV1({ threadId: thread.id }));
 
       await store.saveThread({ thread });
       await store.saveMessages({ messages });
@@ -1459,10 +1429,9 @@ describe.skip('CloudflareStore REST API', () => {
       await store.saveThread({ thread });
 
       // Create test messages with unique timestamps
-      const testMessages = Array.from({ length: 10 }, (_, i) => ({
-        ...createSampleMessage(thread.id),
-        createdAt: new Date(Date.now() + i * 1000),
-      }));
+      const testMessages = Array.from({ length: 10 }, (_, i) =>
+        createSampleMessageV1({ threadId: thread.id, createdAt: new Date(Date.now() + i * 1000) }),
+      );
       await store.saveMessages({ messages: testMessages });
 
       // Verify messages are saved
@@ -1569,10 +1538,9 @@ describe.skip('CloudflareStore REST API', () => {
 
       // Create messages with sequential timestamps
       const now = Date.now();
-      const messages = Array.from({ length: 5 }, (_, i) => ({
-        ...createSampleMessage(thread.id),
-        createdAt: new Date(now + i * 1000), // Ensure deterministic order
-      }));
+      const messages = Array.from({ length: 5 }, (_, i) =>
+        createSampleMessageV1({ threadId: thread.id, createdAt: new Date(now + i * 1000) }),
+      );
 
       // Save messages sequentially to avoid race conditions in REST API
       for (const msg of messages) {
@@ -1601,7 +1569,7 @@ describe.skip('CloudflareStore REST API', () => {
 
       // Try to save invalid message
       const invalidMessage = {
-        ...createSampleMessage(thread.id),
+        ...createSampleMessageV1({ threadId: thread.id }),
         content: undefined,
       };
 
@@ -1613,7 +1581,7 @@ describe.skip('CloudflareStore REST API', () => {
     });
 
     it('should handle missing thread gracefully', async () => {
-      const message = createSampleMessage('non-existent-thread');
+      const message = createSampleMessageV1({ threadId: 'non-existent-thread' });
       await expect(
         store.saveMessages({
           messages: [message],
@@ -1626,10 +1594,10 @@ describe.skip('CloudflareStore REST API', () => {
       await store.saveThread({ thread });
 
       // Test with various malformed data
-      const malformedMessage = {
-        ...createSampleMessage(thread.id),
-        content: [{ type: 'text' as const, text: ''.padStart(1024 * 1024, 'x') }] as MastraMessageV1['content'], // Very large content
-      };
+      const malformedMessage = createSampleMessageV1({
+        threadId: thread.id,
+        content: ''.padStart(1024 * 1024, 'x'),
+      });
 
       await store.saveMessages({ messages: [malformedMessage] });
 
@@ -1647,7 +1615,7 @@ describe.skip('CloudflareStore REST API', () => {
       await store.saveThread({ thread });
 
       // Create initial messages
-      const messages = Array.from({ length: 3 }, () => createSampleMessage(thread.id));
+      const messages = Array.from({ length: 3 }, () => createSampleMessageV1({ threadId: thread.id }));
       await store.saveMessages({ messages });
 
       // Perform multiple concurrent updates
@@ -1691,6 +1659,89 @@ describe.skip('CloudflareStore REST API', () => {
       });
 
       await expect(invalidStore['getOrCreateNamespaceId']('test-namespace')).rejects.toThrow();
+    });
+  });
+
+  describe('alterTable (no-op/schemaless)', () => {
+    const TEST_TABLE = 'test_alter_table'; // Use "table" or "collection" as appropriate
+    beforeEach(async () => {
+      await store.clearTable({ tableName: TEST_TABLE as TABLE_NAMES });
+    });
+
+    afterEach(async () => {
+      await store.clearTable({ tableName: TEST_TABLE as TABLE_NAMES });
+    });
+
+    it('allows inserting records with new fields without alterTable', async () => {
+      await store.insert({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        record: { id: '1', name: 'Alice' },
+      });
+      await store.insert({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        record: { id: '2', name: 'Bob', newField: 123 },
+      });
+
+      const row = await store.load<{ id: string; name: string; newField?: number }>({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        keys: { id: '2' },
+      });
+      expect(row?.newField).toBe(123);
+    });
+
+    it('does not throw when calling alterTable (no-op)', async () => {
+      await expect(
+        store.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: {
+            id: { type: 'integer', primaryKey: true, nullable: false },
+            name: { type: 'text', nullable: true },
+            extra: { type: 'integer', nullable: true },
+          },
+          ifNotExists: ['extra'],
+        }),
+      ).resolves.not.toThrow();
+    });
+
+    it('can add multiple new fields at write time', async () => {
+      await store.insert({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        record: { id: '3', name: 'Charlie', age: 30, city: 'Paris' },
+      });
+      const row = await store.load<{ id: string; name: string; age?: number; city?: string }>({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        keys: { id: '3' },
+      });
+      expect(row?.age).toBe(30);
+      expect(row?.city).toBe('Paris');
+    });
+
+    it('can retrieve all fields, including dynamically added ones', async () => {
+      await store.insert({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        record: { id: '4', name: 'Dana', hobby: 'skiing' },
+      });
+      const row = await store.load<{ id: string; name: string; hobby?: string }>({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        keys: { id: '4' },
+      });
+      expect(row?.hobby).toBe('skiing');
+    });
+
+    it('does not restrict or error on arbitrary new fields', async () => {
+      await expect(
+        store.insert({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          record: { id: '5', weirdField: { nested: true }, another: [1, 2, 3] },
+        }),
+      ).resolves.not.toThrow();
+
+      const row = await store.load<{ id: string; weirdField?: any; another?: any }>({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        keys: { id: '5' },
+      });
+      expect(row?.weirdField).toEqual({ nested: true });
+      expect(row?.another).toEqual([1, 2, 3]);
     });
   });
 });
