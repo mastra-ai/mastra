@@ -782,6 +782,12 @@ export class CloudflareStore extends MastraStorage {
     }
   }
 
+  /**
+   * No-op: This backend is schemaless and does not require schema changes.
+   * @param tableName Name of the table
+   * @param schema Schema of the table
+   * @param ifNotExists Array of column names to add if they don't exist
+   */
   async alterTable(_args: {
     tableName: TABLE_NAMES;
     schema: Record<string, StorageColumn>;
