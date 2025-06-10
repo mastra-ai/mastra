@@ -31,7 +31,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@clickhouse/client": "^1.11.0"
+    "@clickhouse/client": "^1.11.2"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
