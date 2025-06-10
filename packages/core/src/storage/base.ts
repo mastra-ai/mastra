@@ -69,12 +69,12 @@ export abstract class MastraStorage extends MastraBase {
       case 'text':
         return "DEFAULT ''";
       case 'timestamp':
-        return 'DEFAULT NOW()';
+        return 'DEFAULT CURRENT_TIMESTAMP';
       case 'integer':
       case 'bigint':
         return 'DEFAULT 0';
       case 'jsonb':
-        return "DEFAULT '{}'::jsonb";
+        return "DEFAULT '{}'";
       default:
         return "DEFAULT ''";
     }

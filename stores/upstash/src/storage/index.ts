@@ -631,8 +631,6 @@ export class UpstashStore extends MastraStorage {
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
     // Delete thread metadata and sorted set
     const threadKey = this.getKey(TABLE_THREADS, { id: threadId });
-    // Delete thread metadata and sorted set
-    const threadKey = this.getKey(TABLE_THREADS, { id: threadId });
     const threadMessagesKey = this.getThreadMessagesKey(threadId);
     const messageIds: string[] = await this.redis.zrange(threadMessagesKey, 0, -1);
 

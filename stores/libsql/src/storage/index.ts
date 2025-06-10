@@ -491,8 +491,7 @@ export class LibSQLStore extends MastraStorage {
       sql: `DELETE FROM ${TABLE_THREADS} WHERE id = ?`,
       args: [threadId],
     });
-    // Messages will be automatically deleted due to CASCADE constraint
-    // Need to check if CASCADE is enabled
+    // TODO: Need to check if CASCADE is enabled so that messages will be automatically deleted due to CASCADE constraint
   }
 
   private parseRow(row: any): MastraMessageV2 {

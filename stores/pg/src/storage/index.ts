@@ -382,6 +382,17 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
+  protected getDefaultValue(type: string): string {
+    switch (type) {
+      case 'timestamp':
+        return 'DEFAULT NOW()';
+      case 'jsonb':
+        return "DEFAULT '{}'::jsonb";
+      default:
+        return super.getDefaultValue(type);
+    }
+  }
+
   async alterTable({
     tableName,
     schema,
@@ -400,11 +411,12 @@ export class PostgresStore extends MastraStorage {
           const sqlType = this.getSqlType(columnDef.type);
           const nullable = columnDef.nullable === false ? 'NOT NULL' : '';
           const defaultValue = columnDef.nullable === false ? this.getDefaultValue(columnDef.type) : '';
+          const parsedColumnName = parseSqlIdentifier(columnName, 'column name');
           const alterSql =
-            `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${columnName}" ${sqlType} ${nullable} ${defaultValue}`.trim();
+            `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${parsedColumnName}" ${sqlType} ${nullable} ${defaultValue}`.trim();
 
           await this.db.none(alterSql);
-          this.logger?.debug?.(`Ensured column ${columnName} exists in table ${fullTableName}`);
+          this.logger?.debug?.(`Ensured column ${parsedColumnName} exists in table ${fullTableName}`);
         }
       }
     } catch (error) {
