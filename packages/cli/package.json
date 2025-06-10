@@ -73,7 +73,7 @@
     "swr": "^2.3.3",
     "tcp-port-used": "^1.0.2",
     "yocto-spinner": "^0.1.2",
-    "zod": "^3.24.3",
+    "zod": "^3.25.56",
     "zod-to-json-schema": "^3.24.5"
   },
   "devDependencies": {
@@ -95,7 +95,7 @@
     "tsup": "^8.5.0",
     "type-fest": "^4.37.0",
     "typescript": "^5.8.2",
-    "vitest": "^3.1.2"
+    "vitest": "^3.2.2"
   },
   "peerDependencies": {
     "@mastra/core": "^0.10.2-alpha.0"
