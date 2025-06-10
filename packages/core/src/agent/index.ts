@@ -656,18 +656,21 @@ export class Agent<
                           ) ?? undefined
                         );
                       } catch (err) {
-                        const mastraError = new MastraError({
-                          id: 'AGENT_MEMORY_TOOL_EXECUTION_FAILED',
-                          domain: ErrorDomain.AGENT,
-                          category: ErrorCategory.USER,
-                          details: {
-                            agentName: this.name,
-                            runId: runId || '',
-                            threadId: threadId || '',
-                            resourceId: resourceId || '',
+                        const mastraError = new MastraError(
+                          {
+                            id: 'AGENT_MEMORY_TOOL_EXECUTION_FAILED',
+                            domain: ErrorDomain.AGENT,
+                            category: ErrorCategory.USER,
+                            details: {
+                              agentName: this.name,
+                              runId: runId || '',
+                              threadId: threadId || '',
+                              resourceId: resourceId || '',
+                            },
+                            text: `[Agent:${this.name}] - Failed memory tool execution`,
                           },
-                          text: `[Agent:${this.name}] - Failed memory tool execution`,
-                        });
+                          err,
+                        );
                         this.logger.trackException(mastraError);
                         this.logger.error(mastraError.toString());
                         throw mastraError;
@@ -876,18 +879,21 @@ export class Agent<
                 });
                 return result;
               } catch (err) {
-                const mastraError = new MastraError({
-                  id: 'AGENT_WORKFLOW_TOOL_EXECUTION_FAILED',
-                  domain: ErrorDomain.AGENT,
-                  category: ErrorCategory.USER,
-                  details: {
-                    agentName: this.name,
-                    runId: runId || '',
-                    threadId: threadId || '',
-                    resourceId: resourceId || '',
+                const mastraError = new MastraError(
+                  {
+                    id: 'AGENT_WORKFLOW_TOOL_EXECUTION_FAILED',
+                    domain: ErrorDomain.AGENT,
+                    category: ErrorCategory.USER,
+                    details: {
+                      agentName: this.name,
+                      runId: runId || '',
+                      threadId: threadId || '',
+                      resourceId: resourceId || '',
+                    },
+                    text: `[Agent:${this.name}] - Failed workflow tool execution`,
                   },
-                  text: `[Agent:${this.name}] - Failed workflow tool execution`,
-                });
+                  err,
+                );
                 this.logger.trackException(mastraError);
                 this.logger.error(mastraError.toString());
                 throw mastraError;
