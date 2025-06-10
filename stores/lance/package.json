@@ -31,6 +31,7 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@internal/storage-test-utils": "workspace:*",
     "@mastra/core": "workspace:^",
     "@microsoft/api-extractor": "^7.52.1",
     "@types/node": "^22.13.10",

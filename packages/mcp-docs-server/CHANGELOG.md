@@ -1,5 +1,11 @@
 # @mastra/mcp-docs-server
 
+## 0.12.0-alpha.1
+
+### Minor Changes
+
+- 3bb8b36: include storage instance to memory config
+
 ## 0.11.2-alpha.0
 
 ### Patch Changes
