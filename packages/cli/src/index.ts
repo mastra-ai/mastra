@@ -170,6 +170,7 @@ program
   .option('-r, --root <root>', 'Path to your root folder')
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
   .option('-p, --port <port>', 'deprecated: Port number for the development server (defaults to 4111)')
+  .option('-e, --env <env>', 'Environment variables to pass to the server')
   .action(args => {
     analytics.trackCommand({
       command: 'dev',
@@ -185,6 +186,7 @@ program
       dir: args?.dir,
       root: args?.root,
       tools: args?.tools ? args.tools.split(',') : [],
+      env: args?.env ? args.env.split(',') : [],
     }).catch(err => {
       logger.error(err.message);
     });
@@ -196,6 +198,7 @@ program
   .option('-d, --dir <path>', 'Path to your Mastra Folder')
   .option('-r, --root <path>', 'Path to your root folder')
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
+  .option('-e, --env <env>', 'Environment variables to build project with')
   .action(async args => {
     await analytics.trackCommandExecution({
       command: 'mastra build',
@@ -205,6 +208,7 @@ program
           dir: args?.dir,
           root: args?.root,
           tools: args?.tools ? args.tools.split(',') : [],
+          env: args?.env ? args.env.split(',') : [],
         });
       },
       origin,
