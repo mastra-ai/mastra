@@ -32,30 +32,30 @@
   "license": "Elastic-2.0",
   "dependencies": {
     "@mastra/mcp": "workspace:^",
-    "@modelcontextprotocol/sdk": "^1.9.0",
+    "@modelcontextprotocol/sdk": "^1.12.1",
     "date-fns": "^4.1.0",
     "exit-hook": "^4.0.0",
-    "jsdom": "^26.0.0",
-    "turndown": "^7.1.2",
+    "jsdom": "^26.1.0",
+    "turndown": "^7.2.0",
     "uuid": "^11.1.0",
-    "zod": "^3.25.56",
+    "zod": "^3.25.57",
     "zod-to-json-schema": "^3.24.5"
   },
   "devDependencies": {
-    "@hono/node-server": "^1.13.8",
+    "@hono/node-server": "^1.14.4",
     "@internal/lint": "workspace:*",
+    "@mastra/core": "workspace:*",
     "@types/jsdom": "^21.1.7",
-    "@types/node": "^20.17.57",
+    "@types/node": "^20.19.0",
     "@types/turndown": "^5.0.5",
-    "@wong2/mcp-cli": "^1.6.0",
+    "@wong2/mcp-cli": "^1.10.0",
     "cross-env": "^7.0.3",
     "eslint": "^9.28.0",
-    "hono": "^4.7.4",
+    "hono": "^4.7.11",
     "tsup": "^8.5.0",
-    "tsx": "^4.19.3",
-    "typescript": "^5.3.3",
-    "vitest": "^3.2.2",
-    "@mastra/core": "workspace:*"
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.3"
   },
   "peerDependencies": {
     "@mastra/core": "^0.10.0-alpha.0"
