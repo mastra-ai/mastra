@@ -371,23 +371,28 @@ export class ClickhouseStore extends MastraStorage {
     }
   }
 
-  private getSqlType(type: string): string {
+  protected getSqlType(type: StorageColumn['type']): string {
     switch (type) {
       case 'text':
-        return 'TEXT';
+        return 'String';
       case 'timestamp':
-        return 'TIMESTAMP';
+        return 'DateTime64(3)';
       case 'integer':
-        return 'INTEGER';
       case 'bigint':
-        return 'INTEGER'; // SQLite doesn't have a separate BIGINT type
+        return 'Int64';
       case 'jsonb':
-        return 'TEXT'; // Store JSON as TEXT in SQLite
+        return 'String';
       default:
-        return 'TEXT';
+        return super.getSqlType(type); // fallback to base implementation
     }
   }
 
+  /**
+   * Alters table schema to add columns if they don't exist
+   * @param tableName Name of the table
+   * @param schema Schema of the table
+   * @param ifNotExists Array of column names to add if they don't exist
+   */
   async alterTable({
     tableName,
     schema,
@@ -414,7 +419,7 @@ export class ClickhouseStore extends MastraStorage {
           if (columnDef.nullable !== false) {
             sqlType = `Nullable(${sqlType})`;
           }
-          const defaultValue = columnDef.nullable === false ? "DEFAULT '' " : '';
+          const defaultValue = columnDef.nullable === false ? this.getDefaultValue(columnDef.type) : '';
           // Use backticks or double quotes as needed for identifiers
           const alterSql =
             `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS "${columnName}" ${sqlType} ${defaultValue}`.trim();

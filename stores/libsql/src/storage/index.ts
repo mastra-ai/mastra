@@ -133,23 +133,23 @@ export class LibSQLStore extends MastraStorage {
     }
   }
 
-  private getSqlType(type: string): string {
+  protected getSqlType(type: StorageColumn['type']): string {
     switch (type) {
-      case 'text':
-        return 'TEXT';
-      case 'timestamp':
-        return 'TIMESTAMP';
-      case 'integer':
-        return 'INTEGER';
       case 'bigint':
-        return 'INTEGER'; // SQLite doesn't have a separate BIGINT type
+        return 'INTEGER'; // SQLite uses INTEGER for all integer sizes
       case 'jsonb':
         return 'TEXT'; // Store JSON as TEXT in SQLite
       default:
-        return 'TEXT';
+        return super.getSqlType(type);
     }
   }
 
+  /**
+   * Alters table schema to add columns if they don't exist
+   * @param tableName Name of the table
+   * @param schema Schema of the table
+   * @param ifNotExists Array of column names to add if they don't exist
+   */
   async alterTable({
     tableName,
     schema,
@@ -174,7 +174,7 @@ export class LibSQLStore extends MastraStorage {
           const sqlType = this.getSqlType(columnDef.type); // ensure this exists or implement
           const nullable = columnDef.nullable === false ? 'NOT NULL' : '';
           // In SQLite, you must provide a DEFAULT if adding a NOT NULL column to a non-empty table
-          const defaultValue = columnDef.nullable === false ? 'DEFAULT ""' : '';
+          const defaultValue = columnDef.nullable === false ? this.getDefaultValue(columnDef.type) : '';
           const alterSql =
             `ALTER TABLE ${parsedTableName} ADD COLUMN "${columnName}" ${sqlType} ${nullable} ${defaultValue}`.trim();
 
@@ -488,7 +488,7 @@ export class LibSQLStore extends MastraStorage {
       sql: `DELETE FROM ${TABLE_THREADS} WHERE id = ?`,
       args: [threadId],
     });
-    // Messages will be automatically deleted due to CASCADE constraint
+    // TODO: Need to check if CASCADE is enabled so that messages will be automatically deleted due to CASCADE constraint
   }
 
   private parseRow(row: any): MastraMessageV2 {

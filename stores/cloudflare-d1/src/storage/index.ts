@@ -257,35 +257,6 @@ export class D1Store extends MastraStorage {
     }
   }
 
-  // Helper to convert storage type to SQL type
-  private getSqlType(type: string): string {
-    switch (type) {
-      case 'text':
-        return 'TEXT';
-      case 'timestamp':
-        return 'TIMESTAMP';
-      case 'integer':
-        return 'INTEGER';
-      case 'bigint':
-        return 'INTEGER'; // SQLite doesn't have a separate BIGINT type
-      case 'jsonb':
-        return 'TEXT'; // Store JSON as TEXT in SQLite
-      default:
-        return 'TEXT';
-    }
-  }
-
-  private ensureDate(date: Date | string | undefined): Date | undefined {
-    if (!date) return undefined;
-    return date instanceof Date ? date : new Date(date);
-  }
-
-  private serializeDate(date: Date | string | undefined): string | undefined {
-    if (!date) return undefined;
-    const dateObj = this.ensureDate(date);
-    return dateObj?.toISOString();
-  }
-
   // Helper to serialize objects to JSON strings
   private serializeValue(value: any): any {
     if (value === null || value === undefined) return null;
@@ -328,6 +299,17 @@ export class D1Store extends MastraStorage {
     return value;
   }
 
+  protected getSqlType(type: StorageColumn['type']): string {
+    switch (type) {
+      case 'bigint':
+        return 'INTEGER'; // SQLite uses INTEGER for all integer sizes
+      case 'jsonb':
+        return 'TEXT'; // Store JSON as TEXT in SQLite
+      default:
+        return super.getSqlType(type);
+    }
+  }
+
   async createTable({
     tableName,
     schema,
@@ -366,6 +348,12 @@ export class D1Store extends MastraStorage {
     }
   }
 
+  /**
+   * Alters table schema to add columns if they don't exist
+   * @param tableName Name of the table
+   * @param schema Schema of the table
+   * @param ifNotExists Array of column names to add if they don't exist
+   */
   async alterTable({
     tableName,
     schema,
@@ -388,7 +376,7 @@ export class D1Store extends MastraStorage {
           const columnDef = schema[columnName];
           const sqlType = this.getSqlType(columnDef.type);
           const nullable = columnDef.nullable === false ? 'NOT NULL' : '';
-          const defaultValue = columnDef.nullable === false ? 'DEFAULT ""' : '';
+          const defaultValue = columnDef.nullable === false ? this.getDefaultValue(columnDef.type) : '';
 
           const alterSql =
             `ALTER TABLE ${fullTableName} ADD COLUMN ${columnName} ${sqlType} ${nullable} ${defaultValue}`.trim();

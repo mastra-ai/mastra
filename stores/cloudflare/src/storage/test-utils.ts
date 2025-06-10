@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import type { MastraMessageV1, MastraMessageV2, WorkflowRunState } from '@mastra/core';
+import type { WorkflowRunState } from '@mastra/core';
 import { expect } from 'vitest';
 
 export const createSampleTrace = (name: string, scope?: string, attributes?: Record<string, string>) => ({
@@ -18,64 +18,6 @@ export const createSampleTrace = (name: string, scope?: string, attributes?: Rec
   other: JSON.stringify({ custom: 'data' }),
   createdAt: new Date().toISOString(),
 });
-
-// Sample test data factory functions
-export const createSampleThread = () => ({
-  id: `thread-${randomUUID()}`,
-  resourceId: `resource-${randomUUID()}`,
-  title: 'Test Thread',
-  createdAt: new Date(),
-  updatedAt: new Date(),
-  metadata: { key: 'value' },
-});
-
-let role: 'assistant' | 'user' = 'assistant';
-const getRole = () => {
-  if (role === 'user') role = 'assistant';
-  else role = 'user';
-  return role;
-};
-
-export const createSampleMessageV1 = ({
-  threadId,
-  content = 'Hello',
-  resourceId,
-  createdAt = new Date(),
-}: {
-  threadId: string;
-  content?: string;
-  resourceId?: string;
-  createdAt?: Date;
-}): MastraMessageV1 =>
-  ({
-    id: `msg-${randomUUID()}`,
-    role: getRole(),
-    threadId,
-    type: 'text',
-    content: [{ type: 'text', text: content }],
-    createdAt,
-    resourceId: resourceId || `resource-${randomUUID()}`,
-  }) satisfies MastraMessageV1;
-
-export const createSampleMessageV2 = ({
-  threadId,
-  content = 'Hello',
-  resourceId,
-  createdAt = new Date(),
-}: {
-  threadId: string;
-  content?: string;
-  resourceId?: string;
-  createdAt?: Date;
-}): MastraMessageV2 =>
-  ({
-    id: `msg-${randomUUID()}`,
-    role: getRole(),
-    threadId,
-    content: { format: 2, parts: [{ type: 'text' as const, text: content }] },
-    createdAt,
-    resourceId: resourceId || `resource-${randomUUID()}`,
-  }) satisfies MastraMessageV2;
 
 export const createSampleWorkflowSnapshot = (threadId: string, status: string, createdAt?: Date) => {
   const runId = `run-${randomUUID()}`;

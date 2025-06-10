@@ -1,6 +1,15 @@
 import { randomUUID } from 'crypto';
-import { createSampleEval, createSampleTraceForDB } from '@internal/storage-test-utils';
-import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
+import {
+  createSampleEval,
+  createSampleTraceForDB,
+  createSampleThread,
+  createSampleMessageV1,
+  createSampleMessageV2,
+  createSampleWorkflowSnapshot,
+  resetRole,
+} from '@internal/storage-test-utils';
+import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
+import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import {
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_MESSAGES,
@@ -26,88 +35,6 @@ const TEST_CONFIG: PostgresConfig = {
 const connectionString = `postgresql://${TEST_CONFIG.user}:${TEST_CONFIG.password}@${TEST_CONFIG.host}:${TEST_CONFIG.port}/${TEST_CONFIG.database}`;
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
-
-// Sample test data factory functions
-const createSampleThread = (id?: string) => ({
-  id: id || `thread-${randomUUID()}`,
-  resourceId: `resource-${randomUUID()}`,
-  title: 'Test Thread',
-  createdAt: new Date(),
-  updatedAt: new Date(),
-  metadata: { key: 'value' },
-});
-
-let role: 'user' | 'assistant' = 'assistant';
-const getRole = () => {
-  if (role === `user`) role = `assistant`;
-  else role = `user`;
-  return role;
-};
-const createSampleMessageV1 = ({
-  threadId,
-  content = 'Hello',
-  resourceId = `resource-${randomUUID()}`,
-  createdAt = new Date(),
-}: {
-  threadId: string;
-  content?: string;
-  resourceId?: string;
-  createdAt?: Date;
-}): MastraMessageV1 => ({
-  id: `msg-${randomUUID()}`,
-  resourceId,
-  role: getRole(),
-  type: 'text',
-  threadId,
-  content: [{ type: 'text', text: content }],
-  createdAt,
-});
-
-const createSampleMessageV2 = ({
-  threadId,
-  content = 'Hello',
-  resourceId = `resource-${randomUUID()}`,
-}: {
-  threadId: string;
-  content?: string;
-  resourceId?: string;
-}): MastraMessageV2 => ({
-  id: `msg-${randomUUID()}`,
-  resourceId,
-  role: getRole(),
-  threadId,
-  content: {
-    format: 2,
-    parts: [{ type: 'text', text: content }],
-  },
-  createdAt: new Date(),
-});
-
-const createSampleWorkflowSnapshot = (status: WorkflowRunState['context'][string]['status'], createdAt?: Date) => {
-  const runId = `run-${randomUUID()}`;
-  const stepId = `step-${randomUUID()}`;
-  const timestamp = createdAt || new Date();
-  const snapshot = {
-    result: { success: true },
-    value: {},
-    context: {
-      [stepId]: {
-        status,
-        payload: {},
-        error: undefined,
-        startedAt: timestamp.getTime(),
-        endedAt: new Date(timestamp.getTime() + 15000).getTime(),
-      },
-      input: {},
-    },
-    serializedStepGraph: [],
-    activePaths: [],
-    suspendedPaths: {},
-    runId,
-    timestamp: timestamp.getTime(),
-  } as unknown as WorkflowRunState;
-  return { snapshot, runId, stepId };
-};
 
 const checkWorkflowSnapshot = (snapshot: WorkflowRunState | string, stepId: string, status: string) => {
   if (typeof snapshot === 'string') {
@@ -284,11 +211,9 @@ describe('PostgresStore', () => {
       const thread = createSampleThread();
       await store.saveThread({ thread });
 
-      const messages = [
-        createSampleMessageV2({ threadId: thread.id, content: 'First' }),
-        createSampleMessageV2({ threadId: thread.id, content: 'Second' }),
-        createSampleMessageV2({ threadId: thread.id, content: 'Third' }),
-      ];
+      const messageContent = ['First', 'Second', 'Third'];
+
+      const messages = messageContent.map(content => createSampleMessageV2({ threadId: thread.id, content }));
 
       await store.saveMessages({ messages, format: 'v2' });
 
@@ -297,7 +222,7 @@ describe('PostgresStore', () => {
 
       // Verify order is maintained
       retrievedMessages.forEach((msg, idx) => {
-        expect(msg.content).toEqual(messages[idx].content);
+        expect((msg.content.parts[0] as any).text).toEqual(messageContent[idx]);
       });
     });
 
@@ -1020,6 +945,96 @@ describe('PostgresStore', () => {
     });
   });
 
+  describe('alterTable', () => {
+    const TEST_TABLE = 'test_alter_table';
+    const BASE_SCHEMA = {
+      id: { type: 'integer', primaryKey: true, nullable: false },
+      name: { type: 'text', nullable: true },
+    } as Record<string, StorageColumn>;
+
+    beforeEach(async () => {
+      await store.createTable({ tableName: TEST_TABLE as TABLE_NAMES, schema: BASE_SCHEMA });
+    });
+
+    afterEach(async () => {
+      await store.clearTable({ tableName: TEST_TABLE as TABLE_NAMES });
+    });
+
+    it('adds a new column to an existing table', async () => {
+      await store.alterTable({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        schema: { ...BASE_SCHEMA, age: { type: 'integer', nullable: true } },
+        ifNotExists: ['age'],
+      });
+
+      await store.insert({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        record: { id: 1, name: 'Alice', age: 42 },
+      });
+
+      const row = await store.load<{ id: string; name: string; age?: number }>({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        keys: { id: '1' },
+      });
+      expect(row?.age).toBe(42);
+    });
+
+    it('is idempotent when adding an existing column', async () => {
+      await store.alterTable({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        schema: { ...BASE_SCHEMA, foo: { type: 'text', nullable: true } },
+        ifNotExists: ['foo'],
+      });
+      // Add the column again (should not throw)
+      await expect(
+        store.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, foo: { type: 'text', nullable: true } },
+          ifNotExists: ['foo'],
+        }),
+      ).resolves.not.toThrow();
+    });
+
+    it('should add a default value to a column when using not null', async () => {
+      await store.insert({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        record: { id: 1, name: 'Bob' },
+      });
+
+      await expect(
+        store.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, text_column: { type: 'text', nullable: false } },
+          ifNotExists: ['text_column'],
+        }),
+      ).resolves.not.toThrow();
+
+      await expect(
+        store.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, timestamp_column: { type: 'timestamp', nullable: false } },
+          ifNotExists: ['timestamp_column'],
+        }),
+      ).resolves.not.toThrow();
+
+      await expect(
+        store.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, bigint_column: { type: 'bigint', nullable: false } },
+          ifNotExists: ['bigint_column'],
+        }),
+      ).resolves.not.toThrow();
+
+      await expect(
+        store.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, jsonb_column: { type: 'jsonb', nullable: false } },
+          ifNotExists: ['jsonb_column'],
+        }),
+      ).resolves.not.toThrow();
+    });
+  });
+
   describe('Schema Support', () => {
     const customSchema = 'mastra_test';
     let customSchemaStore: PostgresStore;
@@ -1374,19 +1389,23 @@ describe('PostgresStore', () => {
       it('should return paginated messages with total count', async () => {
         const thread = createSampleThread();
         await store.saveThread({ thread });
-        const messagePromises = Array.from({ length: 15 }, (_, i) =>
-          store.saveMessages({
-            messages: [{ ...createSampleMessageV2({ threadId: thread.id, content: `Message ${i + 1}` }) }],
-            format: 'v2',
-          }),
-        );
-        await Promise.all(messagePromises);
+        // Reset role to 'assistant' before creating messages
+        resetRole();
+        // Create messages sequentially to ensure unique timestamps
+        for (let i = 0; i < 15; i++) {
+          const message = createSampleMessageV1({ threadId: thread.id, content: `Message ${i + 1}` });
+          await store.saveMessages({
+            messages: [message],
+          });
+          await new Promise(r => setTimeout(r, 5));
+        }
 
         const page1 = await store.getMessagesPaginated({
           threadId: thread.id,
           selectBy: { pagination: { page: 0, perPage: 5 } },
           format: 'v2',
         });
+        console.log(page1);
         expect(page1.messages).toHaveLength(5);
         expect(page1.total).toBe(15);
         expect(page1.page).toBe(0);

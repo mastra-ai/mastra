@@ -756,17 +756,6 @@ export class CloudflareStore extends MastraStorage {
     }
   }
 
-  private ensureDate(date: Date | string | undefined): Date | undefined {
-    if (!date) return undefined;
-    return date instanceof Date ? date : new Date(date);
-  }
-
-  private serializeDate(date: Date | string | undefined): string | undefined {
-    if (!date) return undefined;
-    const dateObj = this.ensureDate(date);
-    return dateObj?.toISOString();
-  }
-
   private ensureMetadata(metadata: Record<string, unknown> | string | undefined): Record<string, unknown> | undefined {
     if (!metadata) return {};
     return typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
@@ -793,6 +782,12 @@ export class CloudflareStore extends MastraStorage {
     }
   }
 
+  /**
+   * No-op: This backend is schemaless and does not require schema changes.
+   * @param tableName Name of the table
+   * @param schema Schema of the table
+   * @param ifNotExists Array of column names to add if they don't exist
+   */
   async alterTable(_args: {
     tableName: TABLE_NAMES;
     schema: Record<string, StorageColumn>;

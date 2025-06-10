@@ -110,14 +110,6 @@ export class DynamoDBStore extends MastraStorage {
     }
   }
 
-  async alterTable(_args: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-    ifNotExists: string[];
-  }): Promise<void> {
-    // Nothing to do here, DynamoDB has a flexible schema and handles new attributes automatically upon insertion/update.
-  }
-
   /**
    * Validates that the required DynamoDB table exists and is accessible.
    * This does not check the table structure - it assumes the table
@@ -215,6 +207,14 @@ export class DynamoDBStore extends MastraStorage {
     }
 
     return processed;
+  }
+
+  async alterTable(_args: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void> {
+    // Nothing to do here, DynamoDB has a flexible schema and handles new attributes automatically upon insertion/update.
   }
 
   /**

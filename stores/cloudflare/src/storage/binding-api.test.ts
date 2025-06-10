@@ -1,4 +1,5 @@
 import type { KVNamespace } from '@cloudflare/workers-types';
+import { createSampleMessageV1, createSampleMessageV2, createSampleThread } from '@internal/storage-test-utils';
 import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 import {
@@ -11,16 +12,8 @@ import {
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import dotenv from 'dotenv';
 import { Miniflare } from 'miniflare';
-import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
-import {
-  checkWorkflowSnapshot,
-  createSampleMessageV1,
-  createSampleMessageV2,
-  createSampleThread,
-  createSampleTrace,
-  createSampleWorkflowSnapshot,
-  retryUntil,
-} from './test-utils';
+import { describe, it, expect, beforeAll, beforeEach, afterAll, vi, afterEach } from 'vitest';
+import { checkWorkflowSnapshot, createSampleTrace, createSampleWorkflowSnapshot, retryUntil } from './test-utils';
 import type { CloudflareStoreConfig } from './types';
 import { CloudflareStore } from '.';
 
@@ -421,15 +414,9 @@ describe('CloudflareStore Workers Binding', () => {
       await store.saveThread({ thread });
 
       const messages = [
-        {
-          ...createSampleMessageV2({ threadId: thread.id, content: 'First' }),
-        },
-        {
-          ...createSampleMessageV2({ threadId: thread.id, content: 'Second' }),
-        },
-        {
-          ...createSampleMessageV2({ threadId: thread.id, content: 'Third' }),
-        },
+        createSampleMessageV2({ threadId: thread.id, content: 'First', resourceId: thread.resourceId }),
+        createSampleMessageV2({ threadId: thread.id, content: 'Second', resourceId: thread.resourceId }),
+        createSampleMessageV2({ threadId: thread.id, content: 'Third', resourceId: thread.resourceId }),
       ];
 
       await store.saveMessages({ messages, format: 'v2' });
@@ -700,9 +687,9 @@ describe('CloudflareStore Workers Binding', () => {
 
       // Create messages with identical timestamps
       const timestamp = new Date();
-      const messages = Array.from({ length: 3 }, () => ({
-        ...createSampleMessageV2({ threadId: thread.id, createdAt: timestamp }),
-      }));
+      const messages = Array.from({ length: 3 }, () =>
+        createSampleMessageV2({ threadId: thread.id, createdAt: timestamp }),
+      );
 
       await store.saveMessages({ messages, format: 'v2' });
 
@@ -723,9 +710,9 @@ describe('CloudflareStore Workers Binding', () => {
 
       // Create messages with different timestamps
       const now = Date.now();
-      const messages = Array.from({ length: 3 }, (_, i) => ({
-        ...createSampleMessageV2({ threadId: thread.id, createdAt: new Date(now - (2 - i) * 1000) }),
-      }));
+      const messages = Array.from({ length: 3 }, (_, i) =>
+        createSampleMessageV2({ threadId: thread.id, createdAt: new Date(now - (2 - i) * 1000) }),
+      );
 
       // Save messages in reverse order to verify write order is preserved
       const reversedMessages = [...messages].reverse(); // newest -> oldest
@@ -1362,10 +1349,7 @@ describe('CloudflareStore Workers Binding', () => {
 
     it('should sanitize and handle special characters', async () => {
       const thread = createSampleThread();
-      const message = createSampleMessageV2({
-        threadId: thread.id,
-        content: '特殊字符 !@#$%^&*()',
-      });
+      const message = createSampleMessageV2({ threadId: thread.id, content: '特殊字符 !@#$%^&*()' });
 
       await store.saveThread({ thread });
       await store.saveMessages({ messages: [message], format: 'v2' });
@@ -1465,10 +1449,9 @@ describe('CloudflareStore Workers Binding', () => {
 
       // Create messages with sequential timestamps (but write order will be preserved)
       const now = Date.now();
-      const messages = Array.from({ length: 5 }, (_, i) => ({
-        ...createSampleMessageV2({ threadId: thread.id }),
-        createdAt: new Date(now + i * 1000),
-      }));
+      const messages = Array.from({ length: 5 }, (_, i) =>
+        createSampleMessageV2({ threadId: thread.id, createdAt: new Date(now + i * 1000) }),
+      );
 
       // Save messages in parallel - write order should be preserved
       await Promise.all(messages.map(msg => store.saveMessages({ messages: [msg], format: 'v2' })));
@@ -1734,10 +1717,7 @@ describe('CloudflareStore Workers Binding', () => {
       await store.saveThread({ thread });
 
       // Test with various malformed data
-      const malformedMessage = createSampleMessageV2({
-        threadId: thread.id,
-        content: ''.padStart(1024 * 1024, 'x'),
-      });
+      const malformedMessage = createSampleMessageV2({ threadId: thread.id, content: ''.padStart(1024 * 1024, 'x') });
 
       await store.saveMessages({ messages: [malformedMessage], format: 'v2' });
 
@@ -1790,6 +1770,88 @@ describe('CloudflareStore Workers Binding', () => {
 
       const result = await store['getKV'](TABLE_THREADS, 'invalid-key');
       expect(result).toBe('invalid-json');
+    });
+  });
+
+  describe('alterTable (no-op/schemaless)', () => {
+    beforeEach(async () => {
+      await clearTableExceptSchema(store, TABLE_MESSAGES);
+    });
+
+    afterEach(async () => {
+      await clearTableExceptSchema(store, TABLE_MESSAGES);
+    });
+
+    it('allows inserting records with new fields without alterTable', async () => {
+      await store.insert({
+        tableName: TABLE_MESSAGES,
+        record: { id: '1', name: 'Alice', threadId: '1' },
+      });
+      await store.insert({
+        tableName: TABLE_MESSAGES,
+        record: { id: '2', name: 'Bob', threadId: '1', newField: 123 },
+      });
+
+      const row = await store.load<{ id: string; name: string; newField?: number }>({
+        tableName: TABLE_MESSAGES,
+        keys: { id: '2', threadId: '1' },
+      });
+      expect(row?.newField).toBe(123);
+    });
+
+    it('does not throw when calling alterTable (no-op)', async () => {
+      await expect(
+        store.alterTable({
+          tableName: TABLE_MESSAGES,
+          schema: {
+            id: { type: 'text', primaryKey: true, nullable: false },
+            name: { type: 'text', nullable: true },
+            extra: { type: 'integer', nullable: true },
+          },
+          ifNotExists: ['extra'],
+        }),
+      ).resolves.not.toThrow();
+    });
+
+    it('can add multiple new fields at write time', async () => {
+      await store.insert({
+        tableName: TABLE_MESSAGES,
+        record: { id: '3', name: 'Charlie', threadId: '1', age: 30, city: 'Paris' },
+      });
+      const row = await store.load<{ id: string; name: string; age?: number; city?: string }>({
+        tableName: TABLE_MESSAGES,
+        keys: { id: '3', threadId: '1' },
+      });
+      expect(row?.age).toBe(30);
+      expect(row?.city).toBe('Paris');
+    });
+
+    it('can retrieve all fields, including dynamically added ones', async () => {
+      await store.insert({
+        tableName: TABLE_MESSAGES,
+        record: { id: '4', name: 'Dana', threadId: '1', hobby: 'skiing' },
+      });
+      const row = await store.load<{ id: string; name: string; hobby?: string }>({
+        tableName: TABLE_MESSAGES,
+        keys: { id: '4', threadId: '1' },
+      });
+      expect(row?.hobby).toBe('skiing');
+    });
+
+    it('does not restrict or error on arbitrary new fields', async () => {
+      await expect(
+        store.insert({
+          tableName: TABLE_MESSAGES,
+          record: { id: '5', threadId: '1', weirdField: { nested: true }, another: [1, 2, 3] },
+        }),
+      ).resolves.not.toThrow();
+
+      const row = await store.load<{ id: string; weirdField?: any; another?: any }>({
+        tableName: TABLE_MESSAGES,
+        keys: { id: '5', threadId: '1' },
+      });
+      expect(row?.weirdField).toEqual({ nested: true });
+      expect(row?.another).toEqual([1, 2, 3]);
     });
   });
 });

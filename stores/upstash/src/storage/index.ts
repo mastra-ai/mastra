@@ -101,17 +101,6 @@ export class UpstashStore extends MastraStorage {
     return `${tableName}:${keyParts.join(':')}`;
   }
 
-  private ensureDate(date: Date | string | undefined): Date | undefined {
-    if (!date) return undefined;
-    return date instanceof Date ? date : new Date(date);
-  }
-
-  private serializeDate(date: Date | string | undefined): string | undefined {
-    if (!date) return undefined;
-    const dateObj = this.ensureDate(date);
-    return dateObj?.toISOString();
-  }
-
   /**
    * Scans for keys matching the given pattern using SCAN and returns them as an array.
    * @param pattern Redis key pattern, e.g. "table:*"
@@ -475,6 +464,12 @@ export class UpstashStore extends MastraStorage {
     await this.redis.set(`schema:${tableName}`, schema);
   }
 
+  /**
+   * No-op: This backend is schemaless and does not require schema changes.
+   * @param tableName Name of the table
+   * @param schema Schema of the table
+   * @param ifNotExists Array of column names to add if they don't exist
+   */
   async alterTable(_args: {
     tableName: TABLE_NAMES;
     schema: Record<string, StorageColumn>;

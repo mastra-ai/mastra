@@ -35,6 +35,7 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@internal/storage-test-utils": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/node": "^20.17.57",
     "eslint": "^9.28.0",

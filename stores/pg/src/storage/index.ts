@@ -390,23 +390,23 @@ export class PostgresStore extends MastraStorage {
     }
   }
 
-  private getSqlType(type: string): string {
+  protected getDefaultValue(type: StorageColumn['type']): string {
     switch (type) {
-      case 'text':
-        return 'TEXT';
       case 'timestamp':
-        return 'TIMESTAMP';
-      case 'integer':
-        return 'INTEGER';
-      case 'bigint':
-        return 'INTEGER'; // SQLite doesn't have a separate BIGINT type
+        return 'DEFAULT NOW()';
       case 'jsonb':
-        return 'TEXT'; // Store JSON as TEXT in SQLite
+        return "DEFAULT '{}'::jsonb";
       default:
-        return 'TEXT';
+        return super.getDefaultValue(type);
     }
   }
 
+  /**
+   * Alters table schema to add columns if they don't exist
+   * @param tableName Name of the table
+   * @param schema Schema of the table
+   * @param ifNotExists Array of column names to add if they don't exist
+   */
   async alterTable({
     tableName,
     schema,
@@ -424,12 +424,13 @@ export class PostgresStore extends MastraStorage {
           const columnDef = schema[columnName];
           const sqlType = this.getSqlType(columnDef.type);
           const nullable = columnDef.nullable === false ? 'NOT NULL' : '';
-          const defaultValue = columnDef.nullable === false ? 'DEFAULT ""' : '';
+          const defaultValue = columnDef.nullable === false ? this.getDefaultValue(columnDef.type) : '';
+          const parsedColumnName = parseSqlIdentifier(columnName, 'column name');
           const alterSql =
-            `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${columnName}" ${sqlType} ${nullable} ${defaultValue}`.trim();
+            `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${parsedColumnName}" ${sqlType} ${nullable} ${defaultValue}`.trim();
 
           await this.db.none(alterSql);
-          this.logger?.debug?.(`Ensured column ${columnName} exists in table ${fullTableName}`);
+          this.logger?.debug?.(`Ensured column ${parsedColumnName} exists in table ${fullTableName}`);
         }
       }
     } catch (error) {
