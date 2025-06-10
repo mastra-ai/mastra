@@ -147,6 +147,7 @@ export class Memory extends MastraMemory {
           ? {
               include: vectorResults.map(r => ({
                 id: r.metadata?.message_id,
+                threadId: r.metadata?.thread_id,
                 withNextMessages:
                   typeof vectorConfig.messageRange === 'number'
                     ? vectorConfig.messageRange
@@ -156,7 +157,6 @@ export class Memory extends MastraMemory {
                     ? vectorConfig.messageRange
                     : vectorConfig.messageRange.before,
               })),
-              includeScope: resourceScope ? `resource` : `thread`,
             }
           : {}),
       },

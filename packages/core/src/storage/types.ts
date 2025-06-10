@@ -65,11 +65,11 @@ export type StorageGetMessagesArg = {
     last?: number | false;
     include?: {
       id: string;
+      threadId?: string;
       withPreviousMessages?: number;
       withNextMessages?: number;
     }[];
     pagination?: PaginationArgs;
-    includeScope?: 'thread' | 'resource';
   };
   threadConfig?: MemoryConfig;
   format?: 'v1' | 'v2';

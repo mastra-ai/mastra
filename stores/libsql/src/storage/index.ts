@@ -512,46 +512,58 @@ export class LibSQLStore extends MastraStorage {
 
   private async _getIncludedMessages({
     threadId,
-    resourceId,
     selectBy,
   }: {
     threadId: string;
-    resourceId?: string;
     selectBy: StorageGetMessagesArg['selectBy'];
   }) {
     const include = selectBy?.include;
     if (!include) return null;
 
-    const includeIds = include.map(i => i.id);
-    const maxPrev = Math.max(...include.map(i => i.withPreviousMessages || 0));
-    const maxNext = Math.max(...include.map(i => i.withNextMessages || 0));
+    const unionQueries: string[] = [];
+    const params: any[] = [];
 
-    const includeScope = selectBy.includeScope;
-    const searchId = resourceId && includeScope === 'resource' ? resourceId : threadId;
-
-    const includeResult = await this.client.execute({
-      sql: `
-          WITH numbered_messages AS (
-            SELECT 
-              id, content, role, type, "createdAt", thread_id, "resourceId",
-              ROW_NUMBER() OVER (ORDER BY "createdAt" ASC) as row_num
-            FROM "${TABLE_MESSAGES}"
-            ${resourceId && includeScope === 'resource' ? 'WHERE "resourceId" = ?' : 'WHERE thread_id = ?'}
-          ),
-          target_positions AS (
-            SELECT row_num as target_pos
-            FROM numbered_messages
-            WHERE id IN (${includeIds.map(() => '?').join(', ')})
-          )
-          SELECT DISTINCT m.*
-          FROM numbered_messages m
-          CROSS JOIN target_positions t
-          WHERE m.row_num BETWEEN (t.target_pos - ?) AND (t.target_pos + ?)
-          ORDER BY m."createdAt" ASC
-        `,
-      args: [searchId, ...includeIds, maxPrev, maxNext],
-    });
-    return includeResult.rows?.map((row: any) => this.parseRow(row));
+    for (const inc of include) {
+      const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
+      // if threadId is provided, use it, otherwise use threadId from args
+      const searchId = inc.threadId || threadId;
+      unionQueries.push(
+        `
+            SELECT * FROM (
+              WITH numbered_messages AS (
+                SELECT
+                  id, content, role, type, "createdAt", thread_id, "resourceId",
+                  ROW_NUMBER() OVER (ORDER BY "createdAt" ASC) as row_num
+                FROM "${TABLE_MESSAGES}"
+                WHERE thread_id = ?
+              ),
+              target_positions AS (
+                SELECT row_num as target_pos
+                FROM numbered_messages
+                WHERE id = ?
+              )
+              SELECT DISTINCT m.*
+              FROM numbered_messages m
+              CROSS JOIN target_positions t
+              WHERE m.row_num BETWEEN (t.target_pos - ?) AND (t.target_pos + ?)
+            ) 
+            `, // Keep ASC for final sorting after fetching context
+      );
+      params.push(searchId, id, withPreviousMessages, withNextMessages);
+    }
+    const finalQuery = unionQueries.join(' UNION ALL ') + ' ORDER BY "createdAt" ASC';
+    const includedResult = await this.client.execute({ sql: finalQuery, args: params });
+    const includedRows = includedResult.rows?.map(row => this.parseRow(row));
+    const dedupedRows = Object.values(
+      includedRows.reduce(
+        (acc, row) => {
+          acc[row.id] = row;
+          return acc;
+        },
+        {} as Record<string, MastraMessageV2>,
+      ),
+    );
+    return dedupedRows;
   }
 
   /**
@@ -561,7 +573,6 @@ export class LibSQLStore extends MastraStorage {
   public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
   public async getMessages({
     threadId,
-    resourceId,
     selectBy,
     format,
   }: StorageGetMessagesArg & {
@@ -572,7 +583,7 @@ export class LibSQLStore extends MastraStorage {
       const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
 
       if (selectBy?.include?.length) {
-        const includeMessages = await this._getIncludedMessages({ threadId, resourceId, selectBy });
+        const includeMessages = await this._getIncludedMessages({ threadId, selectBy });
         if (includeMessages) {
           messages.push(...includeMessages);
         }

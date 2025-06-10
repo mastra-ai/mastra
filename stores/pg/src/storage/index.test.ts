@@ -275,23 +275,23 @@ describe('PostgresStore', () => {
 
       const crossThreadMessages: MastraMessageV2[] = await store.getMessages({
         threadId: 'thread-doesnt-exist',
-        resourceId: 'cross-thread-resource',
         format: 'v2',
         selectBy: {
           last: 0,
           include: [
             {
               id: messages[1].id,
+              threadId: 'thread-one',
               withNextMessages: 2,
               withPreviousMessages: 2,
             },
             {
               id: messages[4].id,
+              threadId: 'thread-two',
               withPreviousMessages: 2,
               withNextMessages: 2,
             },
           ],
-          includeScope: 'resource',
         },
       });
 
@@ -301,18 +301,17 @@ describe('PostgresStore', () => {
 
       const crossThreadMessages2: MastraMessageV2[] = await store.getMessages({
         threadId: 'thread-one',
-        resourceId: 'cross-thread-resource',
         format: 'v2',
         selectBy: {
           last: 0,
           include: [
             {
               id: messages[4].id,
+              threadId: 'thread-two',
               withPreviousMessages: 1,
               withNextMessages: 1,
             },
           ],
-          includeScope: 'resource',
         },
       });
 
@@ -322,18 +321,17 @@ describe('PostgresStore', () => {
 
       const crossThreadMessages3: MastraMessageV2[] = await store.getMessages({
         threadId: 'thread-two',
-        resourceId: 'cross-thread-resource',
         format: 'v2',
         selectBy: {
           last: 0,
           include: [
             {
               id: messages[1].id,
+              threadId: 'thread-one',
               withNextMessages: 1,
               withPreviousMessages: 1,
             },
           ],
-          includeScope: 'resource',
         },
       });
 
