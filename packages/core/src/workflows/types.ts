@@ -126,6 +126,7 @@ export type WatchEvent = {
         }
       >;
       result?: Record<string, any>;
+      payload?: Record<string, any>;
       error?: string | Error;
     };
   };
