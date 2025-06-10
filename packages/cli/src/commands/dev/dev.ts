@@ -131,11 +131,13 @@ export async function dev({
   dir,
   root,
   tools,
+  env,
 }: {
   dir?: string;
   root?: string;
   port: number | null;
   tools?: string[];
+  env?: string;
 }) {
   const rootDir = root || process.cwd();
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');
@@ -147,12 +149,12 @@ export async function dev({
   const fileService = new FileService();
   const entryFile = fileService.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
 
-  const bundler = new DevBundler();
+  const bundler = new DevBundler(env);
   await bundler.prepare(dotMastraPath);
 
   const watcher = await bundler.watch(entryFile, dotMastraPath, discoveredTools);
 
-  const env = await bundler.loadEnvVars();
+  const loadedEnv = await bundler.loadEnvVars();
 
   const serverOptions = await getServerOptions(entryFile, join(dotMastraPath, 'output'));
 
@@ -167,7 +169,7 @@ export async function dev({
     );
   }
 
-  await startServer(join(dotMastraPath, 'output'), Number(portToUse), env);
+  await startServer(join(dotMastraPath, 'output'), Number(portToUse), loadedEnv);
   watcher.on('event', (event: { code: string }) => {
     if (event.code === 'BUNDLE_END') {
       logger.info('[Mastra Dev] - Bundling finished, restarting server...');

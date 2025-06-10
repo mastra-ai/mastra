@@ -1,5 +1,16 @@
 # @mastra/core
 
+## 0.10.4-alpha.1
+
+### Patch Changes
+
+- f6fd25f: Updates @mastra/schema-compat to allow all zod schemas. Uses @mastra/schema-compat to apply schema transformations to agent output schema.
+- dffb67b: updated stores to add alter table and change tests
+- f1309d3: Now that UIMessages are stored, we added a check to make sure large text files or source urls are not sent to the LLM for thread title generation.
+- f7f8293: Added LanceDB implementations for MastraVector and MastraStorage
+- Updated dependencies [f6fd25f]
+  - @mastra/schema-compat@0.10.2-alpha.3
+
 ## 0.10.4-alpha.0
 
 ### Patch Changes
