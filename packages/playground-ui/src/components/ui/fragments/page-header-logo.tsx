@@ -1,13 +1,25 @@
 import { cn } from '@/lib/utils';
 
-export function AppHeaderLogo({ className, style }: { className?: string; style?: React.CSSProperties }) {
+export function PageHeaderLogo({
+  variant = 'default',
+  className,
+  style,
+}: {
+  variant?: 'default' | 'playground' | 'cloud';
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  const isPlayground = variant === 'playground';
+
   return (
     <div className={cn(`flex items-center gap-0.5`, className)} style={style}>
       <LogoWithoutText className="h-10 w-10 shrink-0" />
-      <div className="flex items-baseline gap-3">
-        <span className="font-serif text-sm">Mastra</span>
-        <span className="text-sm text-muted-foreground">Playground</span>
-      </div>
+      {isPlayground && (
+        <div className="flex items-baseline gap-3">
+          <span className="font-serif text-sm">Mastra</span>
+          <span className="text-sm text-muted-foreground">Playground</span>
+        </div>
+      )}
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { cn } from '@/lib/utils';
 import { GithubIcon } from '../../../ds/icons';
 import { useEffect, useState } from 'react';
 
-export function AppHeaderStars({ className, style }: { className?: string; style?: React.CSSProperties }) {
+export function PageHeaderStars({ className, style }: { className?: string; style?: React.CSSProperties }) {
   const [githubStarCount, setGithubStarCount] = useState<number | undefined>();
   const [fetching, setFetching] = useState<boolean>(false);
 

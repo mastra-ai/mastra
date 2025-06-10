@@ -1,3 +1,2 @@
-export * from './app-header-logo';
-export * from './app-header';
-export * from './app-header-stars';
+export * from './page-header-logo';
+export * from './page-header-stars';

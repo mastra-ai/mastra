@@ -1,16 +1,17 @@
 import { cn } from '@/lib/utils';
-import { AppHeaderLogo } from './app-header-logo';
-import { AppHeaderStars } from './app-header-stars';
 
-export function AppHeader({
+export function PageHeader({
   children,
   className,
   style,
+  variant = 'playground',
 }: {
   children?: React.ReactNode;
   className?: string;
   style?: React.CSSProperties;
+  variant?: 'playground' | 'cloud';
 }) {
+  const isPlayground = variant === 'playground';
   const devStyleRequested = devUIStyleRequested('AppLayout');
 
   return (
@@ -18,7 +19,7 @@ export function AppHeader({
       className={cn(`px-2 py-1 col-span-2 border-border1 border-b-sm flex justify-between items-center`, className)}
       style={{ ...style, ...(devStyleRequested ? { border: '3px dotted pink' } : {}) }}
     >
-      <AppHeaderLogo /> {children} <AppHeaderStars />
+      {children}
     </header>
   );
 }

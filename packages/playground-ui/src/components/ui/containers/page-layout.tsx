@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 
-export function AppLayout({
+export function PageLayout({
   children,
   className,
   style,

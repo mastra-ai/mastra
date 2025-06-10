@@ -13,7 +13,7 @@ export function MainContentLayout({
 
   return (
     <main
-      className={cn(`grid grid-rows-[auto_1fr] h-full items-start content-start`, className)}
+      className={cn(`grid grid-rows-[auto_1fr] h-full items-start content-start bg-surface2`, className)}
       style={{ ...style, ...(devStyleRequested ? { border: '3px dotted red' } : {}) }}
     >
       {children}
