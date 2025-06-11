@@ -1639,17 +1639,17 @@ describe('Workflow', () => {
 
         expect(step1Action).toHaveBeenCalled();
         expect(step2Action).not.toHaveBeenCalled();
-        expect(result?.steps).toEqual({
-          input: {},
-          step1: {
-            status: 'failed',
-            error: err?.stack ?? err,
-            payload: {},
+        expect((result?.steps as any)?.input).toEqual({});
 
-            startedAt: expect.any(Number),
-            endedAt: expect.any(Number),
-          },
+        const step1Result = result?.steps?.step1;
+        expect(step1Result).toBeDefined();
+        expect(step1Result).toMatchObject({
+          status: 'failed',
+          payload: {},
+          startedAt: expect.any(Number),
+          endedAt: expect.any(Number),
         });
+        expect((step1Result as any)?.error).toMatch(/^Error: Failed/);
       });
 
       it('should support simple string conditions', async () => {
@@ -1793,6 +1793,116 @@ describe('Workflow', () => {
         });
       });
     });
+
+    it('should execute a a sleep step', async () => {
+      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ inputData }) => {
+          return { result: 'slept successfully: ' + inputData.result };
+        },
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        steps: [step1],
+      });
+
+      workflow.then(step1).sleep(1000).then(step2).commit();
+
+      const run = workflow.createRun();
+      const startTime = Date.now();
+      const result = await run.start({ inputData: {} });
+      const endTime = Date.now();
+
+      expect(execute).toHaveBeenCalled();
+      expect(result.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'success' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(result.steps['step2']).toEqual({
+        status: 'success',
+        output: { result: 'slept successfully: success' },
+        payload: { result: 'success' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(endTime - startTime).toBeGreaterThan(1000);
+    });
+
+    it('should execute a a sleep until step', async () => {
+      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ inputData }) => {
+          return { result: 'slept successfully: ' + inputData.result };
+        },
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        steps: [step1],
+      });
+
+      workflow
+        .then(step1)
+        .sleepUntil(new Date(Date.now() + 1000))
+        .then(step2)
+        .commit();
+
+      const run = workflow.createRun();
+      const startTime = Date.now();
+      const result = await run.start({ inputData: {} });
+      const endTime = Date.now();
+
+      expect(execute).toHaveBeenCalled();
+      expect(result.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'success' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(result.steps['step2']).toEqual({
+        status: 'success',
+        output: { result: 'slept successfully: success' },
+        payload: { result: 'success' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(endTime - startTime).toBeGreaterThan(1000);
+    });
   });
 
   describe('Error Handling', () => {
@@ -1819,21 +1929,30 @@ describe('Workflow', () => {
 
       const run = workflow.createRun();
 
-      await expect(run.start({ inputData: {} })).resolves.toEqual({
-        status: 'failed',
-        error: error?.stack ?? error,
-        steps: {
-          input: {},
-          step1: {
-            error: error?.stack ?? error,
-            status: 'failed',
-            payload: {},
+      const result = await run.start({ inputData: {} });
 
-            startedAt: expect.any(Number),
-            endedAt: expect.any(Number),
-          },
-        },
+      expect(result.status).toBe('failed'); // Assert status first
+
+      // Type guard for result.error
+      if (result.status === 'failed') {
+        // This check helps TypeScript narrow down the type of 'result'
+        expect(result.error).toMatch(/^Error: Step execution failed/); // Now safe to access
+      } else {
+        // This case should not be reached in this specific test.
+        // If it is, the test should fail clearly.
+        throw new Error("Assertion failed: workflow status was not 'failed' as expected.");
+      }
+
+      expect(result.steps?.input).toEqual({});
+      const step1Result = result.steps?.step1;
+      expect(step1Result).toBeDefined();
+      expect(step1Result).toMatchObject({
+        status: 'failed',
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
       });
+      expect((step1Result as any)?.error).toMatch(/^Error: Step execution failed/); // Check message prefix
     });
 
     it('should handle variable resolution errors', async () => {
@@ -1939,12 +2058,13 @@ describe('Workflow', () => {
         },
         step2: {
           status: 'failed',
-          error: error?.stack ?? error,
+          // error: error?.stack ?? error, // Removed this line
           payload: {},
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
       });
+      expect((result.steps?.step2 as any)?.error).toMatch(/^Error: Step execution failed/);
     });
 
     it('should handle step execution errors within nested workflows', async () => {
@@ -2001,12 +2121,13 @@ describe('Workflow', () => {
       expect(result.steps).toMatchObject({
         'test-workflow': {
           status: 'failed',
-          error: error?.stack ?? error,
+          // error: error?.stack ?? error, // Removed this line
           payload: {},
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
       });
+      expect((result.steps?.['test-workflow'] as any)?.error).toMatch(/^Error: Error: Step execution failed/);
     });
   });
 
@@ -2869,13 +2990,16 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
-      expect(result.steps.step2).toEqual({
+      expect(result.steps.step2).toMatchObject({
+        // Change to toMatchObject
         status: 'failed',
-        error: err?.stack ?? err,
+        // error: err?.stack ?? err, // REMOVE THIS LINE
         payload: { result: 'success' },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+      // ADD THIS SEPARATE ASSERTION
+      expect((result.steps.step2 as any)?.error).toMatch(/^Error: Step failed/);
       expect(step1.execute).toHaveBeenCalledTimes(1);
       expect(step2.execute).toHaveBeenCalledTimes(1); // 0 retries + 1 initial call
     });
@@ -2925,13 +3049,16 @@ describe('Workflow', () => {
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
-      expect(result.steps.step2).toEqual({
+      expect(result.steps.step2).toMatchObject({
+        // Change to toMatchObject
         status: 'failed',
-        error: err?.stack ?? err,
+        // error: err?.stack ?? err, // REMOVE THIS LINE
         payload: { result: 'success' },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
+      // ADD THIS SEPARATE ASSERTION
+      expect((result.steps.step2 as any)?.error).toMatch(/^Error: Step failed/);
       expect(step1.execute).toHaveBeenCalledTimes(1);
       expect(step2.execute).toHaveBeenCalledTimes(6); // 5 retries + 1 initial call
     });

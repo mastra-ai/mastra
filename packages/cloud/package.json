@@ -28,19 +28,19 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@opentelemetry/otlp-transformer": "^0.201.0",
-    "@opentelemetry/otlp-exporter-base": "^0.201.0",
-    "@opentelemetry/sdk-trace-base": "^2.0.1",
-    "@opentelemetry/core": "^2.0.1"
+    "@opentelemetry/core": "^2.0.1",
+    "@opentelemetry/otlp-exporter-base": "^0.201.1",
+    "@opentelemetry/otlp-transformer": "^0.201.1",
+    "@opentelemetry/sdk-trace-base": "^2.0.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
-    "@types/node": "^20.17.57",
+    "@types/node": "^20.19.0",
     "eslint": "^9.28.0",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.2",
-    "@mastra/core": "workspace:*"
+    "typescript": "^5.8.3"
   },
   "peerDependencies": {
     "@mastra/core": "^0.10.0-alpha.0"

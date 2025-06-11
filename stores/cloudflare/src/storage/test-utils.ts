@@ -1,6 +1,5 @@
 import { randomUUID } from 'crypto';
 import type { WorkflowRunState } from '@mastra/core';
-import { expect } from 'vitest';
 
 export const createSampleTrace = (name: string, scope?: string, attributes?: Record<string, string>) => ({
   id: `trace-${randomUUID()}`,
@@ -39,6 +38,7 @@ export const createSampleWorkflowSnapshot = (threadId: string, status: string, c
     activePaths: [],
     suspendedPaths: {},
     runId,
+    status: status as WorkflowRunState['status'],
     timestamp: timestamp.getTime(),
   };
   return { snapshot, runId, stepId };
@@ -62,11 +62,4 @@ export const retryUntil = async <T>(
     await new Promise(resolve => setTimeout(resolve, interval));
   }
   throw new Error('Timeout waiting for condition');
-};
-
-export const checkWorkflowSnapshot = (snapshot: WorkflowRunState | string, stepId: string, status: string) => {
-  if (typeof snapshot === 'string') {
-    throw new Error('Expected WorkflowRunState, got string');
-  }
-  expect(snapshot.context?.[stepId]?.status).toBe(status);
 };

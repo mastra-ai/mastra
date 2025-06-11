@@ -325,6 +325,7 @@ describe('DynamoDBStore Integration Tests', () => {
           suspendedPaths: { test: [1] },
           runId: 'test-run-large', // Use unique runId
           timestamp: now,
+          status: 'success',
         };
 
         await expect(
@@ -547,6 +548,7 @@ describe('DynamoDBStore Integration Tests', () => {
           suspendedPaths: { test: [1] },
           runId: 'mixed-run',
           timestamp: Date.now(),
+          status: 'success',
         };
         await store.persistWorkflowSnapshot({ workflowName, runId: 'mixed-run', snapshot: workflowSnapshot });
 
@@ -861,6 +863,7 @@ describe('DynamoDBStore Integration Tests', () => {
         suspendedPaths: {},
         runId: runId,
         timestamp: createdAt.getTime(),
+        status: 'success',
         ...(resourceId && { resourceId: resourceId }), // Conditionally add resourceId to snapshot
       };
       return {
@@ -899,6 +902,53 @@ describe('DynamoDBStore Integration Tests', () => {
       expect(loadedSnapshot?.runId).toEqual(snapshot.runId);
       expect(loadedSnapshot?.value).toEqual(snapshot.value);
       expect(loadedSnapshot?.context).toEqual(snapshot.context);
+    });
+
+    test('should allow updating an existing workflow snapshot', async () => {
+      const wfName = 'update-test-wf';
+      const runId = `run-${randomUUID()}`;
+
+      // Create initial snapshot
+      const { snapshot: initialSnapshot } = sampleWorkflowSnapshot(wfName, runId);
+
+      await expect(
+        store.persistWorkflowSnapshot({
+          workflowName: wfName,
+          runId: runId,
+          snapshot: initialSnapshot,
+        }),
+      ).resolves.not.toThrow();
+
+      // Create updated snapshot with different data
+      const updatedSnapshot: WorkflowRunState = {
+        ...initialSnapshot,
+        value: { currentState: 'completed' },
+        context: {
+          step1: { status: 'success', output: { data: 'updated-test' } },
+          step2: { status: 'success', output: { data: 'new-step' } },
+          input: { source: 'updated-test' },
+        } as unknown as WorkflowRunState['context'],
+        timestamp: Date.now(),
+      };
+
+      // This should succeed (update existing snapshot)
+      await expect(
+        store.persistWorkflowSnapshot({
+          workflowName: wfName,
+          runId: runId,
+          snapshot: updatedSnapshot,
+        }),
+      ).resolves.not.toThrow();
+
+      // Verify the snapshot was updated
+      const loadedSnapshot = await store.loadWorkflowSnapshot({
+        workflowName: wfName,
+        runId: runId,
+      });
+
+      expect(loadedSnapshot?.runId).toEqual(updatedSnapshot.runId);
+      expect(loadedSnapshot?.value).toEqual(updatedSnapshot.value);
+      expect(loadedSnapshot?.context).toEqual(updatedSnapshot.context);
     });
 
     test('getWorkflowRunById should retrieve correct run', async () => {
