@@ -1,22 +1,24 @@
 import { client } from '@/lib/client';
+import { GetLogParams } from '@mastra/client-js';
 
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
-export const useLogsByRunId = (runId: string) => {
+export const useLogsByRunId = (runId: string, opts?: Pick<GetLogParams, 'logLevel' | 'fromDate' | 'toDate'>) => {
   const { transports, isLoading: isLoadingTransports } = useLogTransports();
 
   const transportId = transports[0];
 
-  const { isLoading, ...data } = useInfiniteQuery({
-    queryKey: ['logs', runId],
-    staleTime: 0,
-    gcTime: 0,
+  const { isLoading, error, ...data } = useInfiniteQuery({
+    queryKey: ['logs', { runId, opts }],
     queryFn: async ({ pageParam }) => {
       const res = await client.getLogForRun({
         transportId,
         runId,
+        logLevel: opts?.logLevel,
+        fromDate: opts?.fromDate,
+        toDate: opts?.toDate,
         page: pageParam,
         perPage: 50,
       });
