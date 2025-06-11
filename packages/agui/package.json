@@ -31,9 +31,9 @@
   "license": "Elastic-2.0",
   "dependencies": {
     "@ag-ui/client": "^0.0.28",
-    "@ai-sdk/ui-utils": "^1.1.19",
-    "@copilotkit/runtime": "^1.8.13",
-    "hono": "^4.5.1",
+    "@ai-sdk/ui-utils": "^1.2.11",
+    "@copilotkit/runtime": "^1.8.14",
+    "hono": "^4.7.11",
     "rxjs": "7.8.1"
   },
   "peerDependencies": {
@@ -45,11 +45,11 @@
     "@mastra/client-js": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
-    "@types/node": "^20.17.57",
+    "@types/node": "^20.19.0",
     "eslint": "^9.28.0",
     "superjson": "^2.2.2",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.2",
+    "typescript": "^5.8.3",
     "vitest": "^2.1.9"
   }
 }

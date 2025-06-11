@@ -27,20 +27,20 @@
   "license": "Elastic-2.0",
   "dependencies": {
     "openai-realtime-api": "^1.0.7",
-    "ws": "^8.18.1",
+    "ws": "^8.18.2",
     "zod-to-json-schema": "^3.24.5"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
-    "@types/node": "^22.13.1",
+    "@types/node": "^20.19.0",
     "@types/ws": "^8.18.1",
     "eslint": "^9.28.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^2.1.9",
-    "@mastra/core": "workspace:*",
-    "zod": "^3.25.56"
+    "zod": "^3.25.57"
   },
   "peerDependencies": {
     "@mastra/core": "^0.10.0-alpha.0",

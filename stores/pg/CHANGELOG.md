@@ -1,5 +1,13 @@
 # @mastra/pg
 
+## 0.10.3
+
+### Patch Changes
+
+- 3c77c0a: fix(pg): allow dotted attribute keys in `getTraces` by using `parseFieldKey` instead of `parseSqlIdentifier`
+- Updated dependencies [13c97f9]
+  - @mastra/core@0.10.5
+
 ## 0.10.2
 
 ### Patch Changes
