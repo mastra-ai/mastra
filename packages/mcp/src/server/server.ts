@@ -93,12 +93,23 @@ export class MCPServer extends MCPServerBase {
     return this.sseTransport;
   }
 
+  // public getHttpTransport(sessionId: string): StreamableHTTPServerTransport | undefined {
+  //   return this.streamableHTTPTransport.get(sessionId);
+  // }
+
   /**
    * Get the current SSE Hono transport.
    */
   public getSseHonoTransport(sessionId: string): SSETransport | undefined {
     return this.sseHonoTransports.get(sessionId);
   }
+
+  // /**
+  //  * Get the current HTTP transport.
+  //  */
+  // public getHttpTransport(): StreamableHTTPServerTransport | undefined {
+  //   return this.streamableHTTPTransport.get(session);
+  // }
 
   /**
    * Get the current streamable HTTP transport.
@@ -880,15 +891,18 @@ export class MCPServer extends MCPServerBase {
     res: http.ServerResponse<http.IncomingMessage>;
     options?: StreamableHTTPServerTransportOptions;
   }) {
+
     if (url.pathname === httpPath) {
-      this.streamableHTTPTransport = new StreamableHTTPServerTransport(options);
-      try {
-        await this.server.connect(this.streamableHTTPTransport);
-      } catch (error) {
-        this.logger.error('Error connecting to MCP server', { error });
-        res.writeHead(500);
-        res.end('Error connecting to MCP server');
-        return;
+      if (!this.streamableHTTPTransport) {
+        this.streamableHTTPTransport = new StreamableHTTPServerTransport(options);
+        try {
+          await this.server.connect(this.streamableHTTPTransport);
+        } catch (error) {
+          this.logger.error('Error connecting to MCP server', { error });
+          res.writeHead(500);
+          res.end('Error connecting to MCP server');
+          return;
+        }
       }
 
       try {

@@ -21,13 +21,14 @@ export const getMcpServerMessageHandler = async (c: Context) => {
   }
 
   try {
+    mastra.getLogger().debug('Starting HTTP transport with sessionId: notes-frontend');
     await server.startHTTP({
       url: new URL(c.req.url),
       httpPath: `/api/mcp/${serverId}/mcp`,
       req,
       res,
       options: {
-        sessionIdGenerator: undefined,
+        sessionIdGenerator: () => 'notes-frontend',
       },
     });
 

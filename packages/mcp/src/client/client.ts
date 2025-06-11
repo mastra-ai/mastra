@@ -242,6 +242,8 @@ export class InternalMastraMCPClient extends MastraBase {
             3000,
         });
         this.transport = streamableTransport;
+        this.log('debug', 'streamableTransport.sessionId ' + streamableTransport.sessionId);
+        this.serverConfig.sessionId = streamableTransport.sessionId;
         this.log('debug', 'Successfully connected using Streamable HTTP transport.');
       } catch (error) {
         this.log('debug', `Streamable HTTP transport failed: ${error}`);
@@ -267,26 +269,44 @@ export class InternalMastraMCPClient extends MastraBase {
     }
   }
 
-  private isConnected = false;
+  private isConnected: Promise<boolean> | null = null;
 
   async connect() {
-    if (this.isConnected) return;
+    let res: (value: boolean) => void = () => {};
+    let rej: (reason?: any) => void = () => {};
+    
+    if (this.isConnected === null) {
+      this.log('debug', `Creating new isConnected promise`);
+      this.isConnected = new Promise<boolean>((resolve, reject) => {
+        res = resolve;
+        rej = reject;
+      });
+    } else if (await this.isConnected) {
+      this.log('debug', `MCP server already connected`);
+      return;
+    }
 
     const { command, url } = this.serverConfig;
 
+
     if (command) {
-      await this.connectStdio(command);
+      await this.connectStdio(command).catch(e => {
+        rej(e);
+      });
     } else if (url) {
-      await this.connectHttp(url);
+      await this.connectHttp(url).catch(e => {
+        rej(e);
+      });
     } else {
+      rej(false);
       throw new Error('Server configuration must include either a command or a url.');
     }
 
-    this.isConnected = true;
+    res(true);
     const originalOnClose = this.client.onclose;
     this.client.onclose = () => {
       this.log('debug', `MCP server connection closed`);
-      this.isConnected = false;
+      rej(false)
       if (typeof originalOnClose === `function`) {
         originalOnClose();
       }
@@ -330,7 +350,7 @@ export class InternalMastraMCPClient extends MastraBase {
       throw e;
     } finally {
       this.transport = undefined;
-      this.isConnected = false;
+      this.isConnected = Promise.resolve(false);
     }
   }
 
