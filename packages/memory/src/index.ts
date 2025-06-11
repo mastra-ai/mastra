@@ -249,10 +249,16 @@ export class Memory extends MastraMemory {
 
     if (config.workingMemory?.enabled && !thread?.metadata?.workingMemory) {
       // if working memory is enabled but the thread doesn't have it, we need to set it
+      let workingMemory = config.workingMemory.template || this.defaultWorkingMemoryTemplate;
+
+      if (config.workingMemory.schema) {
+        workingMemory = JSON.stringify({});
+      }
+
       return this.storage.saveThread({
         thread: deepMerge(thread, {
           metadata: {
-            workingMemory: config.workingMemory.template || this.defaultWorkingMemoryTemplate,
+            workingMemory,
           },
         }),
       });
@@ -574,7 +580,12 @@ export class Memory extends MastraMemory {
         const convertedSchema = zodToJsonSchema(schema, {
           $refStrategy: 'none',
         });
-        return { format: 'json', content: JSON.stringify(convertedSchema) };
+
+        if (!thread) {
+          return { format: 'json', content: JSON.stringify(convertedSchema) };
+        }
+
+        return { format: 'json', content: thread.metadata?.workingMemory as string };
       } catch (error) {
         this.logger.error('Error converting schema', error);
         throw error;

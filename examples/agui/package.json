@@ -19,6 +19,7 @@
     "@mastra/agui": "latest",
     "@mastra/core": "latest",
     "@mastra/libsql": "latest",
+    "@mastra/loggers": "latest",
     "@mastra/memory": "latest",
     "mastra": "latest",
     "react": "^19.1.0",
@@ -30,6 +31,7 @@
       "@mastra/agui": "link:../../packages/agui",
       "@mastra/libsql": "link:../../stores/libsql",
       "@mastra/memory": "link:../../packages/memory",
+      "@mastra/loggers": "link:../../packages/loggers",
       "mastra": "link:../../packages/cli"
     }
   },

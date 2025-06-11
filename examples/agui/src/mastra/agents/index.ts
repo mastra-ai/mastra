@@ -2,6 +2,7 @@ import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { LibSQLStore } from '@mastra/libsql';
+import { z } from 'zod';
 
 export const weatherAgent = new Agent({
   name: 'Weather Agent',
@@ -26,6 +27,12 @@ export const weatherAgent = new Agent({
       semanticRecall: false,
       threads: {
         generateTitle: false,
+      },
+      workingMemory: {
+        enabled: true,
+        schema: z.object({
+          city: z.string(),
+        }),
       },
     },
   }),

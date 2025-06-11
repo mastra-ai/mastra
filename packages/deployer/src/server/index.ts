@@ -158,19 +158,19 @@ ${err.stack.split('\n').slice(1).join('\n')}
   // Add Mastra to context
   app.use('*', async function setContext(c, next) {
     let runtimeContext = new RuntimeContext();
-    if (c.req.method === 'POST' || c.req.method === 'PUT') {
-      const contentType = c.req.header('content-type');
-      if (contentType?.includes('application/json')) {
-        try {
-          const body = await c.req.json();
-          if (body.runtimeContext) {
-            runtimeContext = new RuntimeContext(Object.entries(body.runtimeContext));
-          }
-        } catch {
-          // Body parsing failed, continue without body
-        }
-      }
-    }
+    // if (c.req.method === 'POST' || c.req.method === 'PUT') {
+    //   const contentType = c.req.header('content-type');
+    //   if (contentType?.includes('application/json')) {
+    //     try {
+    //       const body = await c.req.json();
+    //       if (body.runtimeContext) {
+    //         runtimeContext = new RuntimeContext(Object.entries(body.runtimeContext));
+    //       }
+    //     } catch {
+    //       // Body parsing failed, continue without body
+    //     }
+    //   }
+    // }
 
     c.set('runtimeContext', runtimeContext);
     c.set('mastra', mastra);

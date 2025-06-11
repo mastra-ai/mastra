@@ -7,6 +7,7 @@ import type {
   RunAgentInput,
   RunFinishedEvent,
   RunStartedEvent,
+  StateSnapshotEvent,
   TextMessageChunkEvent,
   ToolCall,
   ToolCallArgsEvent,
@@ -55,119 +56,137 @@ export class AGUIAdapter extends AbstractAgent {
     const finalMessages: Message[] = [...input.messages];
 
     return new Observable<BaseEvent>(subscriber => {
-      const convertedMessages = convertMessagesToMastraMessages(input.messages);
-      subscriber.next({
-        type: EventType.RUN_STARTED,
-        threadId: input.threadId,
-        runId: input.runId,
-      } as RunStartedEvent);
+      const run = async () => {
+        const convertedMessages = convertMessagesToMastraMessages(input.messages);
 
-      this.agent
-        .stream(convertedMessages, {
+        subscriber.next({
+          type: EventType.RUN_STARTED,
           threadId: input.threadId,
-          resourceId: this.resourceId ?? '',
           runId: input.runId,
-          clientTools: input.tools.reduce(
-            (acc, tool) => {
-              acc[tool.name as string] = {
-                id: tool.name,
-                description: tool.description,
-                inputSchema: tool.parameters,
-              };
-              return acc;
-            },
-            {} as Record<string, any>,
-          ),
-          runtimeContext: this.runtimeContext,
-        })
-        .then(response => {
-          let messageId = randomUUID();
-          let assistantMessage: AssistantMessage = {
-            id: messageId,
-            role: 'assistant',
-            content: '',
-            toolCalls: [],
-          };
-          finalMessages.push(assistantMessage);
+        } as RunStartedEvent);
 
-          return processDataStream({
-            stream: response.toDataStreamResponse().body!,
-            onTextPart: text => {
-              assistantMessage.content += text;
-              const event: TextMessageChunkEvent = {
-                type: EventType.TEXT_MESSAGE_CHUNK,
-                role: 'assistant',
-                messageId,
-                delta: text,
-              };
-              subscriber.next(event);
-            },
-            onFinishMessagePart: () => {
-              // Emit message snapshot
-              const event: MessagesSnapshotEvent = {
-                type: EventType.MESSAGES_SNAPSHOT,
-                messages: finalMessages,
-              };
-              subscriber.next(event);
+        const memory = this.agent.getMemory();
 
-              // Emit run finished event
-              subscriber.next({
-                type: EventType.RUN_FINISHED,
-                threadId: input.threadId,
-                runId: input.runId,
-              } as RunFinishedEvent);
+        this.agent
+          .stream(convertedMessages, {
+            threadId: input.threadId,
+            resourceId: this.resourceId ?? '',
+            runId: input.runId,
+            clientTools: input.tools.reduce(
+              (acc, tool) => {
+                acc[tool.name as string] = {
+                  id: tool.name,
+                  description: tool.description,
+                  inputSchema: tool.parameters,
+                };
+                return acc;
+              },
+              {} as Record<string, any>,
+            ),
+            runtimeContext: this.runtimeContext,
+          })
+          .then(response => {
+            let messageId = randomUUID();
+            let assistantMessage: AssistantMessage = {
+              id: messageId,
+              role: 'assistant',
+              content: '',
+              toolCalls: [],
+            };
+            finalMessages.push(assistantMessage);
 
-              // Complete the observable
-              subscriber.complete();
-            },
-            onToolCallPart(streamPart) {
-              let toolCall: ToolCall = {
-                id: streamPart.toolCallId,
-                type: 'function',
-                function: {
-                  name: streamPart.toolName,
-                  arguments: JSON.stringify(streamPart.args),
-                },
-              };
-              assistantMessage.toolCalls!.push(toolCall);
+            return processDataStream({
+              stream: response.toDataStreamResponse().body!,
+              onTextPart: text => {
+                assistantMessage.content += text;
+                const event: TextMessageChunkEvent = {
+                  type: EventType.TEXT_MESSAGE_CHUNK,
+                  role: 'assistant',
+                  messageId,
+                  delta: text,
+                };
+                subscriber.next(event);
+              },
+              onFinishMessagePart: async () => {
+                // Emit message snapshot
+                const event: MessagesSnapshotEvent = {
+                  type: EventType.MESSAGES_SNAPSHOT,
+                  messages: finalMessages,
+                };
+                subscriber.next(event);
 
-              const startEvent: ToolCallStartEvent = {
-                type: EventType.TOOL_CALL_START,
-                parentMessageId: messageId,
-                toolCallId: streamPart.toolCallId,
-                toolCallName: streamPart.toolName,
-              };
-              subscriber.next(startEvent);
+                if (memory) {
+                  const workingMemory = await memory.getWorkingMemory({ threadId: input.threadId, format: 'json' });
 
-              const argsEvent: ToolCallArgsEvent = {
-                type: EventType.TOOL_CALL_ARGS,
-                toolCallId: streamPart.toolCallId,
-                delta: JSON.stringify(streamPart.args),
-              };
-              subscriber.next(argsEvent);
+                  const stateEvent: StateSnapshotEvent = {
+                    type: EventType.STATE_SNAPSHOT,
+                    snapshot: workingMemory,
+                  };
 
-              const endEvent: ToolCallEndEvent = {
-                type: EventType.TOOL_CALL_END,
-                toolCallId: streamPart.toolCallId,
-              };
-              subscriber.next(endEvent);
-            },
-            onToolResultPart(streamPart) {
-              const toolMessage: ToolMessage = {
-                role: 'tool',
-                id: randomUUID(),
-                toolCallId: streamPart.toolCallId,
-                content: JSON.stringify(streamPart.result),
-              };
-              finalMessages.push(toolMessage);
-            },
+                  subscriber.next(stateEvent);
+                }
+
+                // Emit run finished event
+                subscriber.next({
+                  type: EventType.RUN_FINISHED,
+                  threadId: input.threadId,
+                  runId: input.runId,
+                } as RunFinishedEvent);
+
+                // Complete the observable
+                subscriber.complete();
+              },
+              onToolCallPart(streamPart) {
+                let toolCall: ToolCall = {
+                  id: streamPart.toolCallId,
+                  type: 'function',
+                  function: {
+                    name: streamPart.toolName,
+                    arguments: JSON.stringify(streamPart.args),
+                  },
+                };
+                assistantMessage.toolCalls!.push(toolCall);
+
+                const startEvent: ToolCallStartEvent = {
+                  type: EventType.TOOL_CALL_START,
+                  parentMessageId: messageId,
+                  toolCallId: streamPart.toolCallId,
+                  toolCallName: streamPart.toolName,
+                };
+                subscriber.next(startEvent);
+
+                const argsEvent: ToolCallArgsEvent = {
+                  type: EventType.TOOL_CALL_ARGS,
+                  toolCallId: streamPart.toolCallId,
+                  delta: JSON.stringify(streamPart.args),
+                };
+                subscriber.next(argsEvent);
+
+                const endEvent: ToolCallEndEvent = {
+                  type: EventType.TOOL_CALL_END,
+                  toolCallId: streamPart.toolCallId,
+                };
+                subscriber.next(endEvent);
+              },
+              onToolResultPart(streamPart) {
+                const toolMessage: ToolMessage = {
+                  role: 'tool',
+                  id: randomUUID(),
+                  toolCallId: streamPart.toolCallId,
+                  content: JSON.stringify(streamPart.result),
+                };
+                finalMessages.push(toolMessage);
+              },
+            });
+          })
+          .catch(error => {
+            console.error('error', error);
+            // Handle error
+            subscriber.error(error);
           });
-        })
-        .catch(error => {
-          console.error('error', error);
-          // Handle error
-          subscriber.error(error);
-        });
+      };
+
+      run();
 
       return () => {};
     });
