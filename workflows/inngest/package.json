@@ -45,7 +45,8 @@
     "tsup": "^8.5.0",
     "typescript": "^5.8.2",
     "vitest": "^2.1.9",
-    "@mastra/core": "workspace:*"
+    "@mastra/core": "workspace:*",
+    "@mastra/libsql": "workspace:*"
   },
   "peerDependencies": {
     "@mastra/core": "^0.10.2-alpha.0"

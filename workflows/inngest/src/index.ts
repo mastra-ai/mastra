@@ -22,6 +22,10 @@ import type { Inngest, BaseContext } from 'inngest';
 import { serve as inngestServe } from 'inngest/hono';
 import type { z } from 'zod';
 
+export type InngestEngineType = {
+  step: any;
+};
+
 export function serve({ mastra, inngest }: { mastra: Mastra; inngest: Inngest }): ReturnType<typeof inngestServe> {
   const wfs = mastra.getWorkflows();
   const functions = Object.values(wfs).flatMap(wf => {
@@ -208,7 +212,7 @@ export class InngestWorkflow<
   TInput extends z.ZodType<any> = z.ZodType<any>,
   TOutput extends z.ZodType<any> = z.ZodType<any>,
   TPrevSchema extends z.ZodType<any> = TInput,
-> extends Workflow<TSteps, TWorkflowId, TInput, TOutput, TPrevSchema> {
+> extends Workflow<TSteps, TWorkflowId, TInput, TOutput, InngestEngineType, TPrevSchema> {
   #mastra: Mastra;
   public inngest: Inngest;
 
@@ -406,7 +410,28 @@ export function init(inngest: Inngest) {
     >(params: WorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>) {
       return new InngestWorkflow(params, inngest);
     },
-    createStep,
+    createStep<
+      TStepId extends string,
+      TStepInput extends z.ZodType<any>,
+      TStepOutput extends z.ZodType<any>,
+      TResumeSchema extends z.ZodType<any>,
+      TSuspendSchema extends z.ZodType<any>,
+    >(params: {
+      id: TStepId;
+      inputSchema: TStepInput;
+      outputSchema: TStepOutput;
+      resumeSchema?: TResumeSchema;
+      suspendSchema?: TSuspendSchema;
+      execute: ExecuteFunction<
+        z.infer<TStepInput>,
+        z.infer<TStepOutput>,
+        z.infer<TResumeSchema>,
+        z.infer<TSuspendSchema>,
+        InngestEngineType
+      >;
+    }) {
+      return createStep<TStepId, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType>(params);
+    },
     cloneStep,
     cloneWorkflow,
   };
@@ -773,7 +798,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             // @ts-ignore
             runId: stepResults[step.id]?.payload?.__workflow_meta?.runId,
           },
-          emitter,
+          [EMITTER_SYMBOL]: emitter,
+          engine: {
+            step: this.inngestStep,
+          },
         });
 
         execResults = { status: 'success', output: result };
@@ -879,7 +907,11 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   }: {
     workflowId: string;
     runId: string;
-    entry: { type: 'conditional'; steps: StepFlowEntry[]; conditions: ExecuteFunction<any, any, any, any>[] };
+    entry: {
+      type: 'conditional';
+      steps: StepFlowEntry[];
+      conditions: ExecuteFunction<any, any, any, any, InngestEngineType>[];
+    };
     prevStep: StepFlowEntry;
     serializedStepGraph: SerializedStepFlowEntry[];
     prevOutput: any;
@@ -922,6 +954,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                 // TODO: this function shouldn't have suspend probably?
                 suspend: async (_suspendPayload: any) => {},
                 [EMITTER_SYMBOL]: emitter,
+                engine: {
+                  step: this.inngestStep,
+                },
               });
               return result ? index : null;
               // eslint-disable-next-line @typescript-eslint/no-unused-vars
