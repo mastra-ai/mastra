@@ -149,6 +149,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       resume.resumePath.shift();
     }
 
+    const snapshot = await this.mastra?.getStorage()?.loadWorkflowSnapshot({
+      workflowName: workflowId,
+      runId,
+    });
+
+    const { suspendedPaths, context } = snapshot || {};
+
     const stepResults: Record<string, any> = resume?.stepResults || { input };
     let lastOutput: any;
     for (let i = startIdx; i < steps.length; i++) {
@@ -174,7 +181,22 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           runtimeContext: params.runtimeContext,
         });
         if (lastOutput.status !== 'success') {
-          return this.fmtReturnValue(executionSpan, params.emitter, stepResults, lastOutput);
+          const result = (await this.fmtReturnValue(executionSpan, params.emitter, stepResults, lastOutput)) as any;
+          if (snapshot) {
+            await this.persistStepUpdate({
+              workflowId,
+              runId,
+              stepResults: context as any,
+              serializedStepGraph: params.serializedStepGraph,
+              executionContext: {
+                suspendedPaths: suspendedPaths || {},
+              } as ExecutionContext,
+              workflowStatus: result.status,
+              result: result.result,
+              error: result.error,
+            });
+          }
+          return result;
         }
       } catch (e) {
         const error =
@@ -192,11 +214,47 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
         this.logger?.trackException(error);
         this.logger?.error(`Error executing step: ${error?.stack}`);
-        return this.fmtReturnValue(executionSpan, params.emitter, stepResults, lastOutput, error);
+        const result = (await this.fmtReturnValue(
+          executionSpan,
+          params.emitter,
+          stepResults,
+          lastOutput,
+          e as Error,
+        )) as any;
+        if (snapshot) {
+          await this.persistStepUpdate({
+            workflowId,
+            runId,
+            stepResults: context as any,
+            serializedStepGraph: params.serializedStepGraph,
+            executionContext: {
+              suspendedPaths: suspendedPaths || {},
+            } as ExecutionContext,
+            workflowStatus: result.status,
+            result: result.result,
+            error: result.error,
+          });
+        }
+        return result;
       }
     }
 
-    return this.fmtReturnValue(executionSpan, params.emitter, stepResults, lastOutput);
+    const result = (await this.fmtReturnValue(executionSpan, params.emitter, stepResults, lastOutput)) as any;
+    if (snapshot) {
+      await this.persistStepUpdate({
+        workflowId,
+        runId,
+        stepResults: context as any,
+        serializedStepGraph: params.serializedStepGraph,
+        executionContext: {
+          suspendedPaths: suspendedPaths || {},
+        } as ExecutionContext,
+        workflowStatus: result.status,
+        result: result.result,
+        error: result.error,
+      });
+    }
+    return result;
   }
 
   getStepOutput(stepResults: Record<string, any>, step?: StepFlowEntry): any {
@@ -802,23 +860,32 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     stepResults,
     serializedStepGraph,
     executionContext,
+    workflowStatus,
+    result,
+    error,
   }: {
     workflowId: string;
     runId: string;
     stepResults: Record<string, StepResult<any, any, any, any>>;
     serializedStepGraph: SerializedStepFlowEntry[];
     executionContext: ExecutionContext;
+    workflowStatus: 'success' | 'failed' | 'suspended' | 'running';
+    result?: Record<string, any>;
+    error?: string | Error;
   }) {
     await this.mastra?.getStorage()?.persistWorkflowSnapshot({
       workflowName: workflowId,
       runId,
       snapshot: {
         runId,
+        status: workflowStatus,
         value: {},
         context: stepResults as any,
         activePaths: [],
         serializedStepGraph,
         suspendedPaths: executionContext.suspendedPaths,
+        result,
+        error,
         // @ts-ignore
         timestamp: Date.now(),
       },
@@ -955,6 +1022,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       serializedStepGraph,
       stepResults,
       executionContext,
+      workflowStatus: 'running',
     });
 
     return execResults;

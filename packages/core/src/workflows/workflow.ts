@@ -1182,7 +1182,7 @@ export class Run<
     const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
       typeof step === 'string' ? step : step?.id,
     );
-    const snapshot = await this.#mastra?.storage?.loadWorkflowSnapshot({
+    const snapshot = await this.#mastra?.getStorage()?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
     });
