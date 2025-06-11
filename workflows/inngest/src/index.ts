@@ -797,7 +797,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             // @ts-ignore
             runId: stepResults[step.id]?.payload?.__workflow_meta?.runId,
           },
-          emitter,
+          [EMITTER_SYMBOL]: emitter,
         });
 
         execResults = { status: 'success', output: result };
