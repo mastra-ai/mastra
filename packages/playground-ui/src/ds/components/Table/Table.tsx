@@ -38,7 +38,7 @@ export const Th = ({ className, children, ...props }: ThProps) => {
   return (
     <th
       className={clsx(
-        'text-icon3 text-ui-sm h-full text-left font-normal uppercase first:pl-5 last:pr-5 whitespace-nowrap',
+        'text-icon3 text-ui-sm h-full text-left uppercase font-normal first:pl-3 last:pr-3 whitespace-nowrap',
         className,
       )}
       {...props}

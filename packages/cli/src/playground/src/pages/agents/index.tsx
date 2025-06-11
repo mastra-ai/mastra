@@ -18,6 +18,8 @@ function Agents() {
   const navigate = useNavigate();
   const { agents, isLoading } = useAgents();
 
+  console.log('Agents:', agentsTableColumns);
+
   const agentListData = Object.entries(agents).map(([key, agent]) => ({
     id: key,
     name: agent.name,

@@ -83,13 +83,13 @@ export const EntryCell = ({ name, description, icon, meta, ...props }: EntryCell
         <div className="flex flex-col gap-0">
           <Txt
             as="span"
-            variant="ui-md"
+            variant="ui-lg"
             // className="text-icon6 font-medium !leading-tight"
           >
             {name}
           </Txt>
           {description && (
-            <Txt as="span" variant="ui-xs" className="text-icon3 w-full max-w-[300px] truncate !leading-tight">
+            <Txt as="span" variant="ui-md" className="text-icon3 w-full max-w-[300px] truncate !leading-tight">
               {description}
             </Txt>
           )}

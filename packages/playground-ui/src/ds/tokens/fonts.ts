@@ -1,8 +1,8 @@
 export const FontSizes = {
   'header-md': '1rem', // 16px
-  'ui-lg': '0.813rem', // 13px
+  'ui-lg': '0.9375rem', // 13px
   'ui-md': '0.875rem', // 12px
-  'ui-sm': '0.688rem', // 11px
+  'ui-sm': '0.75rem', // 11px
   'ui-xs': '0.625rem', // 10px
 };
 
