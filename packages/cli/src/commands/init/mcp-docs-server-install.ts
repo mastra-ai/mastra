@@ -120,8 +120,10 @@ export async function globalMCPIsAlreadyInstalled(editor: Editor) {
   try {
     const configContents = await readJSON(configPath);
 
+    if (!configContents) return false;
+
     if (editor === 'vscode') {
-      if (!configContents?.servers) return false;
+      if (!configContents.servers) return false;
       const hasMastraMCP = Object.values(configContents.servers).some((server?: any) =>
         server?.args?.find((arg?: string) => arg?.includes(`@mastra/mcp-docs-server`)),
       );
@@ -134,8 +136,7 @@ export async function globalMCPIsAlreadyInstalled(editor: Editor) {
     );
 
     return hasMastraMCP;
-  } catch (e) {
-    console.error(e);
+  } catch {
     return false;
   }
 }

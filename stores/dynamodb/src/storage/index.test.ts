@@ -325,6 +325,7 @@ describe('DynamoDBStore Integration Tests', () => {
           suspendedPaths: { test: [1] },
           runId: 'test-run-large', // Use unique runId
           timestamp: now,
+          status: 'success',
         };
 
         await expect(
@@ -547,6 +548,7 @@ describe('DynamoDBStore Integration Tests', () => {
           suspendedPaths: { test: [1] },
           runId: 'mixed-run',
           timestamp: Date.now(),
+          status: 'success',
         };
         await store.persistWorkflowSnapshot({ workflowName, runId: 'mixed-run', snapshot: workflowSnapshot });
 
@@ -861,6 +863,7 @@ describe('DynamoDBStore Integration Tests', () => {
         suspendedPaths: {},
         runId: runId,
         timestamp: createdAt.getTime(),
+        status: 'success',
         ...(resourceId && { resourceId: resourceId }), // Conditionally add resourceId to snapshot
       };
       return {

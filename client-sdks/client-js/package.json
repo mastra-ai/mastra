@@ -19,7 +19,12 @@
     },
     "./package.json": "./package.json"
   },
-  "repository": "github:mastra-ai/client-js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mastra-ai/mastra.git",
+    "directory": "client-sdks/client-js"
+  },
+  "homepage": "https://github.com/mastra-ai/mastra/tree/main/client-sdks/client-js#readme",
   "license": "Elastic-2.0",
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts --clean --treeshake=smallest --splitting",

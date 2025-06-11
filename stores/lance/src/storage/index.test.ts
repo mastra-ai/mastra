@@ -113,6 +113,7 @@ const generateWorkflowSnapshot = (status: WorkflowRunState['context']['steps']['
     suspendedPaths: {},
     runId,
     timestamp: timestamp.getTime(),
+    status,
   } as unknown as WorkflowRunState;
   return { snapshot, runId, stepId };
 };
@@ -940,6 +941,8 @@ describe('LanceStorage tests', async () => {
         },
         activePaths: [],
         suspendedPaths: {},
+        status: 'suspended',
+        serializedStepGraph: [],
       } as unknown as WorkflowRunState;
 
       await storage.persistWorkflowSnapshot({
