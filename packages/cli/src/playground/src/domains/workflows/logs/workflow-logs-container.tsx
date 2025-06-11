@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { useSidebar } from '@/components/ui/sidebar';
 import { useLogsFilterForm } from './useLogsFilterForm';
 import { FiltersForm } from './LogsForm';
+import { addDays } from 'date-fns';
 
 export interface WorkflowLogsContainerProps {
   runId: string;
@@ -23,10 +24,14 @@ export const WorkflowLogsContainer = ({ runId }: WorkflowLogsContainerProps) => 
 
   const [logLevel, fromDate, toDate] = watch(['logLevel', 'fromDate', 'toDate']);
 
+  const transformedFromDate = fromDate ? new Date(fromDate) : undefined;
+  // this needs to be end-inclusive, so we add 1 day
+  const transformedToDate = toDate ? addDays(new Date(toDate), 1) : undefined;
+
   const { data: logs = [], isLoading } = useLogsByRunId(runId, {
     logLevel: logLevel === 'all' ? undefined : logLevel,
-    fromDate: fromDate ? new Date(fromDate) : undefined,
-    toDate: toDate ? new Date(toDate) : undefined,
+    fromDate: transformedFromDate,
+    toDate: transformedToDate,
   });
 
   const hasAnyFilters = logLevel !== 'all' || fromDate !== null || toDate !== null;

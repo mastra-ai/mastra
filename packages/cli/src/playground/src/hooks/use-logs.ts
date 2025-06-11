@@ -16,11 +16,9 @@ export const useLogsByRunId = (runId: string, opts?: Pick<GetLogParams, 'logLeve
       const res = await client.getLogForRun({
         transportId,
         runId,
-        logLevel: opts?.logLevel,
-        fromDate: opts?.fromDate,
-        toDate: opts?.toDate,
         page: pageParam,
         perPage: 50,
+        ...opts,
       });
 
       return res;
