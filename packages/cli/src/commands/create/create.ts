@@ -30,6 +30,7 @@ export const create = async (args: {
   // check because the user might have passed args that are explicitly set
   // to false (in this case, no example code) and we need to distinguish
   // between those and the case where the args were not passed at all.
+  console.log('args', args);
   if (args.components === undefined || args.llmProvider === undefined || args.addExample === undefined) {
     console.log('got to interactive prompt');
     const result = await interactivePrompt();
