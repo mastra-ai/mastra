@@ -1,6 +1,7 @@
 import { context as otlpContext, trace } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
 import type { RuntimeContext } from '../di';
+import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import { EMITTER_SYMBOL } from './constants';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
@@ -130,7 +131,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     const steps = graph.steps;
 
     if (steps.length === 0) {
-      throw new Error('Workflow must have at least one step');
+      throw new MastraError({
+        id: 'WORKFLOW_EXECUTE_EMPTY_GRAPH',
+        text: 'Workflow must have at least one step',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+      });
     }
 
     const executionSpan = this.mastra?.getTelemetry()?.tracer.startSpan(`workflow.${workflowId}.execute`, {
@@ -171,8 +177,22 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           return this.fmtReturnValue(executionSpan, params.emitter, stepResults, lastOutput);
         }
       } catch (e) {
-        this.logger.error('Error executing step: ' + ((e as Error)?.stack ?? e));
-        return this.fmtReturnValue(executionSpan, params.emitter, stepResults, lastOutput, e as Error);
+        const error =
+          e instanceof MastraError
+            ? e
+            : new MastraError(
+                {
+                  id: 'WORKFLOW_ENGINE_STEP_EXECUTION_FAILED',
+                  domain: ErrorDomain.MASTRA_WORKFLOW,
+                  category: ErrorCategory.USER,
+                  details: { workflowId, runId },
+                },
+                e,
+              );
+
+        this.logger?.trackException(error);
+        this.logger?.error(`Error executing step: ${error?.stack}`);
+        return this.fmtReturnValue(executionSpan, params.emitter, stepResults, lastOutput, error);
       }
     }
 
@@ -343,15 +363,23 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
         break;
       } catch (e) {
-        this.logger.error('Error executing step: ' + ((e as Error)?.stack ?? e));
+        const error =
+          e instanceof MastraError
+            ? e
+            : new MastraError(
+                {
+                  id: 'WORKFLOW_STEP_INVOKE_FAILED',
+                  domain: ErrorDomain.MASTRA_WORKFLOW,
+                  category: ErrorCategory.USER,
+                  details: { workflowId, runId, stepId: step.id },
+                },
+                e,
+              );
+        this.logger.trackException(error);
+        this.logger.error('Error executing step: ' + error?.stack);
         execResults = {
           status: 'failed',
-          error:
-            e instanceof Error
-              ? (e?.stack ?? e)
-              : typeof e === 'string'
-                ? e
-                : (new Error('Unknown error: ' + e)?.stack ?? new Error('Unknown error: ' + e)),
+          error: error?.stack,
           endedAt: Date.now(),
         };
       }
@@ -547,7 +575,20 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             });
             return result ? index : null;
           } catch (e: unknown) {
-            this.logger.error('Error evaluating condition: ' + ((e as Error)?.stack ?? e));
+            const error =
+              e instanceof MastraError
+                ? e
+                : new MastraError(
+                    {
+                      id: 'WORKFLOW_CONDITION_EVALUATION_FAILED',
+                      domain: ErrorDomain.MASTRA_WORKFLOW,
+                      category: ErrorCategory.USER,
+                      details: { workflowId, runId },
+                    },
+                    e,
+                  );
+            this.logger.trackException(error);
+            this.logger.error('Error evaluating condition: ' + error?.stack);
             return null;
           }
         }),

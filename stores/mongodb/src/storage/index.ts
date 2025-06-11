@@ -1,7 +1,15 @@
 import { MessageList } from '@mastra/core/agent';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
-import type { EvalRow, StorageColumn, StorageGetMessagesArg, TABLE_NAMES, WorkflowRun } from '@mastra/core/storage';
+import type {
+  EvalRow,
+  PaginationInfo,
+  StorageColumn,
+  StorageGetMessagesArg,
+  StorageGetTracesArg,
+  TABLE_NAMES,
+  WorkflowRun,
+} from '@mastra/core/storage';
 import {
   MastraStorage,
   TABLE_EVALS,
@@ -10,6 +18,7 @@ import {
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
 } from '@mastra/core/storage';
+import type { Trace } from '@mastra/core/telemetry';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import type { Db, MongoClientOptions } from 'mongodb';
 import { MongoClient } from 'mongodb';
@@ -702,6 +711,24 @@ export class MongoDBStore extends MastraStorage {
       runId: row.run_id as string,
       createdAt: row.created_at as string,
     };
+  }
+
+  async getTracesPaginated(_args: StorageGetTracesArg): Promise<PaginationInfo & { traces: Trace[] }> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getThreadsByResourceIdPaginated(_args: {
+    resourceId: string;
+    page?: number;
+    perPage?: number;
+  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getMessagesPaginated(
+    _args: StorageGetMessagesArg,
+  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
+    throw new Error('Method not implemented.');
   }
 
   async close(): Promise<void> {
