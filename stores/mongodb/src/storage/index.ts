@@ -20,8 +20,9 @@ import {
 } from '@mastra/core/storage';
 import type { Trace } from '@mastra/core/telemetry';
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import type { Db, MongoClientOptions } from 'mongodb';
-import { MongoClient } from 'mongodb';
+import type { Collection } from 'mongodb';
+import { MongoDBConnector } from './MongoDBConnector';
+import type { MongoDBConfig } from './types';
 
 function safelyParseJSON(jsonString: string): any {
   try {
@@ -31,52 +32,26 @@ function safelyParseJSON(jsonString: string): any {
   }
 }
 
-export interface MongoDBConfig {
-  url: string;
-  dbName: string;
-  options?: MongoClientOptions;
-}
-
 export class MongoDBStore extends MastraStorage {
-  #isConnected = false;
-  #client: MongoClient;
-  #db: Db | undefined;
-  readonly #dbName: string;
+  #connector: MongoDBConnector;
 
   constructor(config: MongoDBConfig) {
     super({ name: 'MongoDBStore' });
-    this.#isConnected = false;
 
-    if (!config.url?.trim().length) {
-      throw new Error(
-        'MongoDBStore: url must be provided and cannot be empty. Passing an empty string may cause fallback to local MongoDB defaults.',
-      );
+    if ('connectorHandler' in config) {
+      this.#connector = MongoDBConnector.fromConnectionHandler(config.connectorHandler);
+      return;
     }
 
-    if (!config.dbName?.trim().length) {
-      throw new Error(
-        'MongoDBStore: dbName must be provided and cannot be empty. Passing an empty string may cause fallback to local MongoDB defaults.',
-      );
-    }
-
-    this.#dbName = config.dbName;
-    this.#client = new MongoClient(config.url, config.options);
+    this.#connector = MongoDBConnector.fromDatabaseConfig({
+      options: config.options,
+      url: config.url,
+      dbName: config.dbName,
+    });
   }
 
-  private async getConnection(): Promise<Db> {
-    if (this.#isConnected) {
-      return this.#db!;
-    }
-
-    await this.#client.connect();
-    this.#db = this.#client.db(this.#dbName);
-    this.#isConnected = true;
-    return this.#db;
-  }
-
-  private async getCollection(collectionName: string) {
-    const db = await this.getConnection();
-    return db.collection(collectionName);
+  private getCollection(collectionName: string): Promise<Collection> {
+    return this.#connector.getCollection(collectionName);
   }
 
   async createTable(): Promise<void> {
@@ -85,9 +60,7 @@ export class MongoDBStore extends MastraStorage {
 
   /**
    * No-op: This backend is schemaless and does not require schema changes.
-   * @param tableName Name of the table
-   * @param schema Schema of the table
-   * @param ifNotExists Array of column names to add if they don't exist
+   * @param _args
    */
   async alterTable(_args: {
     tableName: TABLE_NAMES;
@@ -732,6 +705,6 @@ export class MongoDBStore extends MastraStorage {
   }
 
   async close(): Promise<void> {
-    await this.#client.close();
+    await this.#connector.close();
   }
 }
