@@ -23,6 +23,7 @@ import type {
   ZodPathType,
   DynamicMapping,
   StreamEvent,
+  WorkflowRunState,
 } from './types';
 
 export type DefaultEngineType = {};
@@ -992,20 +993,28 @@ export class Workflow<
 
     const run = await storage.getWorkflowRunById({ runId, workflowName: this.id });
 
-    if (!run?.snapshot) {
+    let snapshot: WorkflowRunState | string = run?.snapshot!;
+
+    if (!snapshot) {
       return null;
     }
 
-    if (typeof run.snapshot === 'string') {
-      return null;
+    if (typeof snapshot === 'string') {
+      // this occurs whenever the parsing of snapshot fails in storage
+      try {
+        snapshot = JSON.parse(snapshot);
+      } catch (e) {
+        this.logger.debug('Cannot get workflow run execution result. Snapshot is not a valid JSON string', e);
+        return null;
+      }
     }
 
     return {
-      status: run.snapshot.status,
-      result: run.snapshot.result,
-      error: run.snapshot.error,
-      payload: run.snapshot.context?.input,
-      steps: run.snapshot.context as any,
+      status: (snapshot as WorkflowRunState).status,
+      result: (snapshot as WorkflowRunState).result,
+      error: (snapshot as WorkflowRunState).error,
+      payload: (snapshot as WorkflowRunState).context?.input,
+      steps: (snapshot as WorkflowRunState).context as any,
     };
   }
 }
