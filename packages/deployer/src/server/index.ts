@@ -163,7 +163,7 @@ ${err.stack.split('\n').slice(1).join('\n')}
       if (contentType?.includes('application/json')) {
         try {
           const clonedReq = c.req.raw.clone();
-          const body = await clonedReq.json();
+          const body = (await clonedReq.json()) as { runtimeContext?: Record<string, any> };
 
           if (body.runtimeContext) {
             runtimeContext = new RuntimeContext(Object.entries(body.runtimeContext));
