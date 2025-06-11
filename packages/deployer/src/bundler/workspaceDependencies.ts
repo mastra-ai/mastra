@@ -4,7 +4,6 @@ import slugify from '@sindresorhus/slugify';
 import { findWorkspaces, findWorkspacesRoot } from 'find-workspaces';
 import { ensureDir } from 'fs-extra';
 import { DepsService } from '../services';
-import { ErrorCategory } from '@mastra/core/error';
 
 type WorkspacePackageInfo = {
   location: string;

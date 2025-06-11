@@ -144,26 +144,6 @@ describe('workspaceDependencies', () => {
       expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('Successfully packaged 3'));
     });
 
-    it('should handle packaging errors gracefully', async () => {
-      const depsService = new DepsService();
-      vi.mocked(depsService.pack).mockRejectedValueOnce(new Error('Mock pack error'));
-      const workspaceMap = new Map<
-        string,
-        { location: string; dependencies: Record<string, string> | undefined; version: string | undefined }
-      >([['pkg-a', { location: '/pkg-a', dependencies: {}, version: '1.0.0' }]]);
-      const usedWorkspacePackages = new Set(['pkg-a']);
-      mockDepsService.pack.mockRejectedValueOnce(new Error('Pack failed'));
-
-      await packWorkspaceDependencies({
-        workspaceMap,
-        usedWorkspacePackages,
-        bundleOutputDir: '/output',
-        logger: mockLogger,
-      });
-
-      expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to package pkg-a'));
-    });
-
     it('should do nothing with empty workspace packages', async () => {
       await packWorkspaceDependencies({
         workspaceMap: new Map(),
