@@ -162,7 +162,9 @@ ${err.stack.split('\n').slice(1).join('\n')}
       const contentType = c.req.header('content-type');
       if (contentType?.includes('application/json')) {
         try {
-          const body = await c.req.json();
+          const clonedReq = c.req.raw.clone();
+          const body = (await clonedReq.json()) as { runtimeContext?: Record<string, any> };
+
           if (body.runtimeContext) {
             runtimeContext = new RuntimeContext(Object.entries(body.runtimeContext));
           }
