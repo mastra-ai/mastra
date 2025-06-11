@@ -558,6 +558,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     });
   }
 
+  async executeSleep({ id, duration }: { id: string; duration: number }): Promise<void> {
+    await this.inngestStep.sleep(id, duration);
+  }
+
   async executeStep({
     step,
     stepResults,

@@ -29,6 +29,8 @@ export type DefaultEngineType = {};
 
 export type StepFlowEntry<TEngineType = DefaultEngineType> =
   | { type: 'step'; step: Step }
+  | { type: 'sleep'; id: string; duration: number }
+  | { type: 'sleepUntil'; id: string; date: Date }
   | {
       type: 'parallel';
       steps: StepFlowEntry[];
@@ -67,6 +69,16 @@ export type SerializedStepFlowEntry =
   | {
       type: 'step';
       step: SerializedStep;
+    }
+  | {
+      type: 'sleep';
+      id: string;
+      duration: number;
+    }
+  | {
+      type: 'sleepUntil';
+      id: string;
+      date: Date;
     }
   | {
       type: 'parallel';
@@ -509,6 +521,54 @@ export class Workflow<
     });
     this.steps[step.id] = step;
     return this as unknown as Workflow<TSteps, TWorkflowId, TInput, TOutput, TEngineType, TSchemaOut>;
+  }
+
+  /**
+   * Adds a sleep step to the workflow
+   * @param duration The duration to sleep for
+   * @returns The workflow instance for chaining
+   */
+  sleep(duration: number) {
+    const id = `sleep_${randomUUID()}`;
+    this.stepFlow.push({ type: 'sleep', id, duration });
+    this.serializedStepFlow.push({
+      type: 'sleep',
+      id,
+      duration,
+    });
+    this.steps[id] = createStep({
+      id,
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      execute: async () => {
+        return {};
+      },
+    });
+    return this as unknown as Workflow<TSteps, TWorkflowId, TInput, TOutput, TEngineType, TPrevSchema>;
+  }
+
+  /**
+   * Adds a sleep until step to the workflow
+   * @param date The date to sleep until
+   * @returns The workflow instance for chaining
+   */
+  sleepUntil(date: Date) {
+    const id = `sleep_${randomUUID()}`;
+    this.stepFlow.push({ type: 'sleepUntil', id, date });
+    this.serializedStepFlow.push({
+      type: 'sleepUntil',
+      id,
+      date,
+    });
+    this.steps[id] = createStep({
+      id,
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      execute: async () => {
+        return {};
+      },
+    });
+    return this as unknown as Workflow<TSteps, TWorkflowId, TInput, TOutput, TEngineType, TPrevSchema>;
   }
 
   map<

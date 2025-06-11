@@ -248,6 +248,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       return stepResults.input;
     } else if (step.type === 'step') {
       return stepResults[step.step.id]?.output;
+    } else if (step.type === 'sleep' || step.type === 'sleepUntil') {
+      return stepResults[step.id]?.output;
     } else if (step.type === 'parallel' || step.type === 'conditional') {
       return step.steps.reduce(
         (acc, entry) => {
@@ -260,6 +262,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             acc[entry.step.id] = stepResults[entry.step.id]?.output;
           } else if (entry.type === 'foreach') {
             acc[entry.step.id] = stepResults[entry.step.id]?.output;
+          } else if (entry.type === 'sleep' || entry.type === 'sleepUntil') {
+            acc[entry.id] = stepResults[entry.id]?.output;
           }
           return acc;
         },
@@ -270,6 +274,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     } else if (step.type === 'foreach') {
       return stepResults[step.step.id]?.output;
     }
+  }
+
+  async executeSleep({ duration }: { id: string; duration: number }): Promise<void> {
+    await new Promise(resolve => setTimeout(resolve, duration));
   }
 
   async executeStep({
@@ -397,6 +405,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             runId: stepResults[step.id]?.suspendPayload?.__workflow_meta?.runId,
           },
           [EMITTER_SYMBOL]: emitter,
+          engine: {},
         });
 
         if (suspended) {
@@ -1010,6 +1019,30 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         emitter,
         runtimeContext,
       });
+    } else if (entry.type === 'sleep') {
+      const startedAt = Date.now();
+      await this.executeSleep({ id: entry.id, duration: entry.duration });
+      const endedAt = Date.now();
+      const stepInfo = {
+        payload: prevOutput,
+        startedAt,
+        endedAt,
+      };
+
+      execResults = { ...stepInfo, status: 'success', output: prevOutput };
+      stepResults[entry.id] = { ...stepInfo, status: 'success', output: prevOutput };
+    } else if (entry.type === 'sleepUntil') {
+      const startedAt = Date.now();
+      await this.executeSleep({ id: entry.id, duration: entry.date.getTime() - Date.now() });
+      const endedAt = Date.now();
+      const stepInfo = {
+        payload: prevOutput,
+        startedAt,
+        endedAt,
+      };
+
+      execResults = { ...stepInfo, status: 'success', output: prevOutput };
+      stepResults[entry.id] = { ...stepInfo, status: 'success', output: prevOutput };
     }
 
     if (entry.type === 'step' || entry.type === 'loop' || entry.type === 'foreach') {
