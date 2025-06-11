@@ -836,6 +836,7 @@ describe('CloudflareStore Workers Binding', () => {
         } as unknown as WorkflowRunState['context'],
         activePaths: [],
         suspendedPaths: {},
+        status: 'success',
         serializedStepGraph: [],
       };
 
@@ -883,6 +884,7 @@ describe('CloudflareStore Workers Binding', () => {
         } as unknown as WorkflowRunState['context'],
         activePaths: [],
         suspendedPaths: {},
+        status: 'success',
         serializedStepGraph: [],
       };
 
@@ -946,6 +948,7 @@ describe('CloudflareStore Workers Binding', () => {
         } as unknown as WorkflowRunState['context'],
         activePaths: [],
         suspendedPaths: {},
+        status: 'success',
         serializedStepGraph: [],
       };
 

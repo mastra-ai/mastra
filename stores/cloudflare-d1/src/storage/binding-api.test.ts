@@ -812,6 +812,8 @@ describe('D1Store', () => {
         },
         activePaths: [],
         suspendedPaths: {},
+        status: 'success',
+        serializedStepGraph: [],
       } as unknown as WorkflowRunState;
 
       await store.persistWorkflowSnapshot({

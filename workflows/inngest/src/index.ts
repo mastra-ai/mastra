@@ -14,6 +14,7 @@ import type {
   StepResult,
   WorkflowResult,
   SerializedStepFlowEntry,
+  StepFailure,
 } from '@mastra/core/workflows';
 import { EMITTER_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Span } from '@opentelemetry/api';
@@ -106,6 +107,7 @@ export class InngestRun<
         activePaths: [],
         suspendedPaths: {},
         timestamp: Date.now(),
+        status: 'running',
       },
     });
 
@@ -825,12 +827,18 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     stepResults,
     executionContext,
     serializedStepGraph,
+    workflowStatus,
+    result,
+    error,
   }: {
     workflowId: string;
     runId: string;
     stepResults: Record<string, StepResult<any, any, any, any>>;
     serializedStepGraph: SerializedStepFlowEntry[];
     executionContext: ExecutionContext;
+    workflowStatus: 'success' | 'failed' | 'suspended' | 'running';
+    result?: Record<string, any>;
+    error?: string | Error;
   }) {
     await this.inngestStep.run(
       `workflow.${workflowId}.run.${runId}.path.${JSON.stringify(executionContext.executionPath)}.stepUpdate`,
@@ -845,6 +853,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             activePaths: [],
             suspendedPaths: executionContext.suspendedPaths,
             serializedStepGraph,
+            status: workflowStatus,
+            result,
+            error,
             // @ts-ignore
             timestamp: Date.now(),
           },
@@ -923,7 +934,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     ).filter((index: any): index is number => index !== null);
 
     const stepsToRun = entry.steps.filter((_, index) => truthyIndexes.includes(index));
-    const results: StepResult<any, any, any, any>[] = await Promise.all(
+    const results: { result: StepResult<any, any, any, any> }[] = await Promise.all(
       stepsToRun.map((step, index) =>
         this.executeEntry({
           workflowId,
@@ -946,17 +957,19 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         }),
       ),
     );
-    const hasFailed = results.find(result => result.status === 'failed');
-    const hasSuspended = results.find(result => result.status === 'suspended');
+    const hasFailed = results.find(result => result.result.status === 'failed') as {
+      result: StepFailure<any, any, any>;
+    };
+    const hasSuspended = results.find(result => result.result.status === 'suspended');
     if (hasFailed) {
-      execResults = { status: 'failed', error: hasFailed.error };
+      execResults = { status: 'failed', error: hasFailed.result.error };
     } else if (hasSuspended) {
-      execResults = { status: 'suspended', payload: hasSuspended.payload };
+      execResults = { status: 'suspended', payload: hasSuspended.result.payload };
     } else {
       execResults = {
         status: 'success',
         output: results.reduce((acc: Record<string, any>, result, index) => {
-          if (result.status === 'success') {
+          if (result.result.status === 'success') {
             // @ts-ignore
             acc[stepsToRun[index]!.step.id] = result.output;
           }

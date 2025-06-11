@@ -125,7 +125,7 @@ export type WatchEvent = {
           resumedAt?: number;
         }
       >;
-      output?: Record<string, any>;
+      result?: Record<string, any>;
       payload?: Record<string, any>;
       error?: string | Error;
     };
@@ -150,6 +150,9 @@ export type ZodPathType<T extends z.ZodTypeAny, P extends string> =
 export interface WorkflowRunState {
   // Core state info
   runId: string;
+  status: 'success' | 'failed' | 'suspended' | 'running';
+  result?: Record<string, any>;
+  error?: string | Error;
   value: Record<string, string>;
   context: { input?: Record<string, any> } & Record<string, StepResult<any, any, any, any>>;
   serializedStepGraph: SerializedStepFlowEntry[];
