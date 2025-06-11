@@ -1,5 +1,82 @@
 # @mastra/playground-ui
 
+## 5.1.4
+
+### Patch Changes
+
+- 1ccccff: dependencies updates:
+  - Updated dependency [`zod@^3.25.56` ↗︎](https://www.npmjs.com/package/zod/v/3.25.56) (from `^3.24.3`, in `dependencies`)
+- 1ccccff: dependencies updates:
+  - Updated dependency [`zod@^3.25.56` ↗︎](https://www.npmjs.com/package/zod/v/3.25.56) (from `^3.24.3`, in `dependencies`)
+- e719504: don't start posthog when the browser is Brave
+- 5c68759: Update vite to fix CVE-2025-31125
+- 29f1c91: revert: final step of workflow not working as expected
+- 8f60de4: fix workflow output when the schema is a primitive
+- Updated dependencies [1ccccff]
+- Updated dependencies [1ccccff]
+- Updated dependencies [d1ed912]
+- Updated dependencies [f6fd25f]
+- Updated dependencies [dffb67b]
+- Updated dependencies [f1f1f1b]
+- Updated dependencies [925ab94]
+- Updated dependencies [b2810ab]
+- Updated dependencies [f9816ae]
+- Updated dependencies [82090c1]
+- Updated dependencies [1b443fd]
+- Updated dependencies [ce97900]
+- Updated dependencies [f1309d3]
+- Updated dependencies [14a2566]
+- Updated dependencies [67d21b5]
+- Updated dependencies [f7f8293]
+- Updated dependencies [48eddb9]
+  - @mastra/client-js@0.10.3
+  - @mastra/core@0.10.4
+
+## 5.1.4-alpha.5
+
+### Patch Changes
+
+- 29f1c91: revert: final step of workflow not working as expected
+
+## 5.1.4-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [925ab94]
+  - @mastra/core@0.10.4-alpha.3
+  - @mastra/client-js@0.10.3-alpha.3
+
+## 5.1.4-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [48eddb9]
+  - @mastra/core@0.10.4-alpha.2
+  - @mastra/client-js@0.10.3-alpha.2
+
+## 5.1.4-alpha.2
+
+### Patch Changes
+
+- e719504: don't start posthog when the browser is Brave
+
+## 5.1.4-alpha.1
+
+### Patch Changes
+
+- 1ccccff: dependencies updates:
+  - Updated dependency [`zod@^3.25.56` ↗︎](https://www.npmjs.com/package/zod/v/3.25.56) (from `^3.24.3`, in `dependencies`)
+- 1ccccff: dependencies updates:
+  - Updated dependency [`zod@^3.25.56` ↗︎](https://www.npmjs.com/package/zod/v/3.25.56) (from `^3.24.3`, in `dependencies`)
+- Updated dependencies [1ccccff]
+- Updated dependencies [1ccccff]
+- Updated dependencies [f6fd25f]
+- Updated dependencies [dffb67b]
+- Updated dependencies [f1309d3]
+- Updated dependencies [f7f8293]
+  - @mastra/client-js@0.10.3-alpha.1
+  - @mastra/core@0.10.4-alpha.1
+
 ## 5.1.4-alpha.0
 
 ### Patch Changes

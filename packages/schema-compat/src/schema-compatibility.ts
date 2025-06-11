@@ -1,6 +1,7 @@
 import type { Schema, LanguageModelV1 } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
-import { z } from 'zod';
+import { z, ZodOptional, ZodObject, ZodArray, ZodUnion, ZodString, ZodNumber, ZodDate, ZodDefault } from 'zod';
+import type { ZodTypeAny } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
 import { convertZodSchemaToAISDKSchema } from './utils';
 
@@ -25,6 +26,15 @@ export const ALL_NUMBER_CHECKS = [
  * @constant
  */
 export const ALL_ARRAY_CHECKS = ['min', 'max', 'length'] as const;
+
+export const isOptional = (v: ZodTypeAny): v is ZodOptional<any> => v instanceof ZodOptional;
+export const isObj = (v: ZodTypeAny): v is ZodObject<any, any, any> => v instanceof ZodObject;
+export const isArr = (v: ZodTypeAny): v is ZodArray<any, any> => v instanceof ZodArray;
+export const isUnion = (v: ZodTypeAny): v is ZodUnion<[ZodTypeAny, ...ZodTypeAny[]]> => v instanceof ZodUnion;
+export const isString = (v: ZodTypeAny): v is ZodString => v instanceof ZodString;
+export const isNumber = (v: ZodTypeAny): v is ZodNumber => v instanceof ZodNumber;
+export const isDate = (v: ZodTypeAny): v is ZodDate => v instanceof ZodDate;
+export const isDefault = (v: ZodTypeAny): v is ZodDefault<any> => v instanceof ZodDefault;
 
 /**
  * Zod types that are not supported by most AI model providers and should be avoided.
@@ -214,30 +224,7 @@ export abstract class SchemaCompatLayer {
    * @returns The processed Zod type
    * @abstract
    */
-  abstract processZodType<T extends z.AnyZodObject>(value: z.ZodTypeAny): ShapeValue<T>;
-
-  /**
-   * Applies compatibility transformations to a Zod object schema.
-   *
-   * @param zodSchema - The Zod object schema to transform
-   * @returns Object containing the transformed schema
-   * @private
-   */
-  private applyZodSchemaCompatibility(zodSchema: z.AnyZodObject): {
-    schema: z.AnyZodObject;
-  } {
-    const newSchema = z.object(
-      Object.entries<z.ZodTypeAny>(zodSchema.shape || {}).reduce(
-        (acc, [key, value]) => ({
-          ...acc,
-          [key]: this.processZodType<any>(value),
-        }),
-        {},
-      ),
-    );
-
-    return { schema: newSchema };
-  }
+  abstract processZodType(value: ZodTypeAny): ZodTypeAny;
 
   /**
    * Default handler for Zod object types. Recursively processes all properties in the object.
@@ -245,22 +232,25 @@ export abstract class SchemaCompatLayer {
    * @param value - The Zod object to process
    * @returns The processed Zod object
    */
-  public defaultZodObjectHandler<T extends z.AnyZodObject>(value: z.ZodTypeAny): ShapeValue<T> {
-    const zodObject = value as z.ZodObject<any, any, any>;
-    const processedShape = Object.entries(zodObject.shape || {}).reduce<Record<string, z.ZodTypeAny>>(
-      (acc, [key, propValue]) => {
-        const typedPropValue = propValue as z.ZodTypeAny;
-        const processedValue = this.processZodType<T>(typedPropValue);
-        acc[key] = processedValue;
-        return acc;
-      },
-      {},
-    );
-    let result = z.object(processedShape);
+  public defaultZodObjectHandler(value: ZodObject<any, any, any>): ZodObject<any, any, any> {
+    const processedShape = Object.entries(value.shape).reduce<Record<string, ZodTypeAny>>((acc, [key, propValue]) => {
+      acc[key] = this.processZodType(propValue as ZodTypeAny);
+      return acc;
+    }, {});
+
+    let result: ZodObject<any, any, any> = z.object(processedShape);
+
+    if (value._def.unknownKeys === 'strict') {
+      result = result.strict();
+    }
+    if (value._def.catchall && !(value._def.catchall instanceof z.ZodNever)) {
+      result = result.catchall(value._def.catchall);
+    }
+
     if (value.description) {
       result = result.describe(value.description);
     }
-    return result as ShapeValue<T>;
+    return result;
   }
 
   /**
@@ -314,40 +304,46 @@ export abstract class SchemaCompatLayer {
    * @param handleChecks - Array constraints to convert to descriptions vs keep as validation
    * @returns The processed Zod array
    */
-  public defaultZodArrayHandler<T extends z.AnyZodObject>(
-    value: z.ZodTypeAny,
+  public defaultZodArrayHandler(
+    value: ZodArray<any, any>,
     handleChecks: readonly ArrayCheckType[] = ALL_ARRAY_CHECKS,
-  ): ShapeValue<T> {
-    const zodArray = (value as z.ZodArray<any>)._def;
-    const arrayType = zodArray.type;
-    const constraints: ArrayConstraints = {};
-    if (zodArray.minLength?.value !== undefined && handleChecks.includes('min')) {
-      constraints.minLength = zodArray.minLength.value;
-    }
-    if (zodArray.maxLength?.value !== undefined && handleChecks.includes('max')) {
-      constraints.maxLength = zodArray.maxLength.value;
-    }
-    if (zodArray.exactLength?.value !== undefined && handleChecks.includes('length')) {
-      constraints.exactLength = zodArray.exactLength.value;
-    }
-    const processedType =
-      arrayType._def.typeName === 'ZodObject' ? this.processZodType<T>(arrayType as z.ZodTypeAny) : arrayType;
+  ): ZodArray<any, any> {
+    const zodArrayDef = value._def;
+    const processedType = this.processZodType(zodArrayDef.type);
+
     let result = z.array(processedType);
-    if (zodArray.minLength?.value !== undefined && !handleChecks.includes('min')) {
-      result = result.min(zodArray.minLength.value);
+
+    const constraints: ArrayConstraints = {};
+
+    if (zodArrayDef.minLength?.value !== undefined) {
+      if (handleChecks.includes('min')) {
+        constraints.minLength = zodArrayDef.minLength.value;
+      } else {
+        result = result.min(zodArrayDef.minLength.value);
+      }
     }
-    if (zodArray.maxLength?.value !== undefined && !handleChecks.includes('max')) {
-      result = result.max(zodArray.maxLength.value);
+
+    if (zodArrayDef.maxLength?.value !== undefined) {
+      if (handleChecks.includes('max')) {
+        constraints.maxLength = zodArrayDef.maxLength.value;
+      } else {
+        result = result.max(zodArrayDef.maxLength.value);
+      }
     }
-    if (zodArray.exactLength?.value !== undefined && !handleChecks.includes('length')) {
-      result = result.length(zodArray.exactLength.value);
+
+    if (zodArrayDef.exactLength?.value !== undefined) {
+      if (handleChecks.includes('length')) {
+        constraints.exactLength = zodArrayDef.exactLength.value;
+      } else {
+        result = result.length(zodArrayDef.exactLength.value);
+      }
     }
 
     const description = this.mergeParameterDescription(value.description, constraints);
     if (description) {
       result = result.describe(description);
     }
-    return result as ShapeValue<T>;
+    return result;
   }
 
   /**
@@ -357,15 +353,14 @@ export abstract class SchemaCompatLayer {
    * @returns The processed Zod union
    * @throws Error if union has fewer than 2 options
    */
-  public defaultZodUnionHandler<T extends z.AnyZodObject>(value: z.ZodTypeAny): ShapeValue<T> {
-    const zodUnion = value as z.ZodUnion<[z.ZodTypeAny, ...z.ZodTypeAny[]]>;
-    const processedOptions = zodUnion._def.options.map((option: z.ZodTypeAny) => this.processZodType<T>(option));
+  public defaultZodUnionHandler(value: ZodUnion<[ZodTypeAny, ...ZodTypeAny[]]>): ZodTypeAny {
+    const processedOptions = value._def.options.map((option: ZodTypeAny) => this.processZodType(option));
     if (processedOptions.length < 2) throw new Error('Union must have at least 2 options');
-    let result = z.union(processedOptions as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]]);
+    let result = z.union(processedOptions as [ZodTypeAny, ZodTypeAny, ...ZodTypeAny[]]);
     if (value.description) {
       result = result.describe(value.description);
     }
-    return result as ShapeValue<T>;
+    return result;
   }
 
   /**
@@ -375,13 +370,12 @@ export abstract class SchemaCompatLayer {
    * @param handleChecks - String constraints to convert to descriptions vs keep as validation
    * @returns The processed Zod string
    */
-  public defaultZodStringHandler<T extends z.AnyZodObject>(
-    value: z.ZodTypeAny,
+  public defaultZodStringHandler(
+    value: ZodString,
     handleChecks: readonly StringCheckType[] = ALL_STRING_CHECKS,
-  ): ShapeValue<T> {
-    const zodString = value as z.ZodString;
+  ): ZodString {
     const constraints: StringConstraints = {};
-    const checks = zodString._def.checks || [];
+    const checks = value._def.checks || [];
     type ZodStringCheck = (typeof checks)[number];
     const newChecks: ZodStringCheck[] = [];
     for (const check of checks) {
@@ -437,7 +431,7 @@ export abstract class SchemaCompatLayer {
     if (description) {
       result = result.describe(description);
     }
-    return result as ShapeValue<T>;
+    return result;
   }
 
   /**
@@ -447,13 +441,12 @@ export abstract class SchemaCompatLayer {
    * @param handleChecks - Number constraints to convert to descriptions vs keep as validation
    * @returns The processed Zod number
    */
-  public defaultZodNumberHandler<T extends z.AnyZodObject>(
-    value: z.ZodTypeAny,
+  public defaultZodNumberHandler(
+    value: ZodNumber,
     handleChecks: readonly NumberCheckType[] = ALL_NUMBER_CHECKS,
-  ): ShapeValue<T> {
-    const zodNumber = value as z.ZodNumber;
+  ): ZodNumber {
     const constraints: NumberConstraints = {};
-    const checks = zodNumber._def.checks || [];
+    const checks = value._def.checks || [];
     type ZodNumberCheck = (typeof checks)[number];
     const newChecks: ZodNumberCheck[] = [];
     for (const check of checks) {
@@ -501,7 +494,7 @@ export abstract class SchemaCompatLayer {
     if (description) {
       result = result.describe(description);
     }
-    return result as ShapeValue<T>;
+    return result;
   }
 
   /**
@@ -510,10 +503,9 @@ export abstract class SchemaCompatLayer {
    * @param value - The Zod date to process
    * @returns A Zod string schema representing the date in ISO format
    */
-  public defaultZodDateHandler<T extends z.AnyZodObject>(value: z.ZodTypeAny): ShapeValue<T> {
-    const zodDate = value as z.ZodDate;
+  public defaultZodDateHandler(value: ZodDate): ZodString {
     const constraints: DateConstraints = {};
-    const checks = zodDate._def.checks || [];
+    const checks = value._def.checks || [];
     type ZodDateCheck = (typeof checks)[number];
     const newChecks: ZodDateCheck[] = [];
     for (const check of checks) {
@@ -542,7 +534,7 @@ export abstract class SchemaCompatLayer {
     if (description) {
       result = result.describe(description);
     }
-    return result as ShapeValue<T>;
+    return result;
   }
 
   /**
@@ -552,14 +544,14 @@ export abstract class SchemaCompatLayer {
    * @param handleTypes - Types that should be processed vs passed through
    * @returns The processed Zod optional
    */
-  public defaultZodOptionalHandler<T extends z.AnyZodObject>(
-    value: z.ZodTypeAny,
+  public defaultZodOptionalHandler(
+    value: ZodOptional<any>,
     handleTypes: readonly AllZodType[] = SUPPORTED_ZOD_TYPES,
-  ): ShapeValue<T> {
+  ): ZodTypeAny {
     if (handleTypes.includes(value._def.innerType._def.typeName as AllZodType)) {
       return this.processZodType(value._def.innerType).optional();
     } else {
-      return value as ShapeValue<T>;
+      return value;
     }
   }
 
@@ -569,10 +561,10 @@ export abstract class SchemaCompatLayer {
    * @param zodSchema - The Zod object schema to process
    * @returns An AI SDK Schema with provider-specific compatibility applied
    */
-  public processToAISDKSchema(zodSchema: z.AnyZodObject): Schema {
-    const { schema } = this.applyZodSchemaCompatibility(zodSchema);
+  public processToAISDKSchema(zodSchema: z.ZodSchema): Schema {
+    const processedSchema = this.processZodType(zodSchema);
 
-    return convertZodSchemaToAISDKSchema(schema, this.getSchemaTarget());
+    return convertZodSchemaToAISDKSchema(processedSchema, this.getSchemaTarget());
   }
 
   /**
@@ -581,7 +573,7 @@ export abstract class SchemaCompatLayer {
    * @param zodSchema - The Zod object schema to process
    * @returns A JSONSchema7 object with provider-specific compatibility applied
    */
-  public processToJSONSchema(zodSchema: z.AnyZodObject): JSONSchema7 {
+  public processToJSONSchema(zodSchema: z.ZodSchema): JSONSchema7 {
     return this.processToAISDKSchema(zodSchema).jsonSchema;
   }
 }

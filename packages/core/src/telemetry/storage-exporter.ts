@@ -3,6 +3,7 @@ import type { ExportResult } from '@opentelemetry/core';
 import { JsonTraceSerializer } from '@opentelemetry/otlp-transformer';
 import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
 
+import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { IMastraLogger } from '../logger';
 import type { MastraStorage } from '../storage/base';
 import { TABLE_TRACES } from '../storage/constants';
@@ -102,7 +103,24 @@ export class OTLPTraceExporter implements SpanExporter {
         });
       })
       .catch(e => {
-        this.logger.error('span err:' + e?.message);
+        const mastraError = new MastraError(
+          {
+            id: 'OTLP_TRACE_EXPORT_FAILURE',
+            text: 'Failed to export telemetry spans',
+            domain: ErrorDomain.MASTRA_TELEMETRY,
+            category: ErrorCategory.SYSTEM,
+            details: {
+              attemptedSpanCount: allSpans.length,
+              targetTable: TABLE_TRACES,
+              firstSpanName: allSpans.length > 0 ? allSpans[0].name : '',
+              firstSpanKind: allSpans.length > 0 ? allSpans[0].kind : '',
+              firstSpanScope: allSpans.length > 0 ? allSpans[0].scope : '',
+            },
+          },
+          e,
+        );
+        this.logger.trackException(mastraError);
+        this.logger.error('span err:' + mastraError.toString());
         items.resultCallback({
           code: ExportResultCode.FAILED,
           error: e,

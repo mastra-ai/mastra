@@ -1,6 +1,5 @@
 import { randomUUID } from 'crypto';
-import type { MastraMessageV2, WorkflowRunState } from '@mastra/core';
-import { expect } from 'vitest';
+import type { WorkflowRunState } from '@mastra/core';
 
 export const createSampleTrace = (name: string, scope?: string, attributes?: Record<string, string>) => ({
   id: `trace-${randomUUID()}`,
@@ -18,32 +17,6 @@ export const createSampleTrace = (name: string, scope?: string, attributes?: Rec
   other: JSON.stringify({ custom: 'data' }),
   createdAt: new Date().toISOString(),
 });
-
-// Sample test data factory functions
-export const createSampleThread = () => ({
-  id: `thread-${randomUUID()}`,
-  resourceId: `resource-${randomUUID()}`,
-  title: 'Test Thread',
-  createdAt: new Date(),
-  updatedAt: new Date(),
-  metadata: { key: 'value' },
-});
-
-let role: 'assistant' | 'user' = 'assistant';
-const getRole = () => {
-  if (role === 'user') role = 'assistant';
-  else role = 'user';
-  return role;
-};
-export const createSampleMessage = (threadId: string, parts?: MastraMessageV2['content']['parts']): MastraMessageV2 =>
-  ({
-    id: `msg-${randomUUID()}`,
-    role: getRole(),
-    threadId,
-    content: { format: 2, parts: parts || [{ type: 'text' as const, text: 'Hello' }] },
-    createdAt: new Date(),
-    resourceId: `resource-${randomUUID()}`,
-  }) satisfies MastraMessageV2;
 
 export const createSampleWorkflowSnapshot = (threadId: string, status: string, createdAt?: Date) => {
   const runId = `run-${randomUUID()}`;
@@ -88,11 +61,4 @@ export const retryUntil = async <T>(
     await new Promise(resolve => setTimeout(resolve, interval));
   }
   throw new Error('Timeout waiting for condition');
-};
-
-export const checkWorkflowSnapshot = (snapshot: WorkflowRunState | string, stepId: string, status: string) => {
-  if (typeof snapshot === 'string') {
-    throw new Error('Expected WorkflowRunState, got string');
-  }
-  expect(snapshot.context?.[stepId]?.status).toBe(status);
 };
