@@ -14,6 +14,7 @@ import { ChatProps } from '@/types';
 import { useMastraClient } from '@/contexts/mastra-client-context';
 import { useVNextNetworkChat } from '@/services/vnext-network-chat-provider';
 import { useMessages } from './vnext-message-provider';
+import { formatJSON } from '@/lib/formatting';
 
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
@@ -37,7 +38,34 @@ export function VNextMastraNetworkRuntimeProvider({
   const { messages, setMessages, appendToLastMessage } = useMessages();
   const [currentThreadId, setCurrentThreadId] = useState<string | undefined>(threadId);
 
-  const { handleStep } = useVNextNetworkChat();
+  const { handleStep, steps } = useVNextNetworkChat();
+
+  useEffect(() => {
+    const id = runIdRef.current;
+    if (!id) return;
+    const hasFinished = Boolean(steps?.['finish']);
+    if (!hasFinished) return;
+
+    const workflowStep = steps?.['workflow-step'];
+    if (!workflowStep) return;
+
+    const workflowStepResult = workflowStep?.['step-result'];
+    if (!workflowStepResult) return;
+
+    const workflowStepResultOutput = workflowStepResult?.output;
+    if (!workflowStepResultOutput) return;
+
+    const run = async () => {
+      const formatted = await formatJSON(workflowStepResult?.output?.result);
+
+      setMessages(msgs => [
+        ...msgs,
+        { role: 'assistant', content: [{ type: 'text', text: `\`\`\`json\n${formatted}\`\`\`` }] },
+      ]);
+    };
+
+    run();
+  }, [steps]);
 
   // const { frequencyPenalty, presencePenalty, maxRetries, maxSteps, maxTokens, temperature, topK, topP, instructions } =
   //   modelSettings;

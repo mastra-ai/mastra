@@ -1,6 +1,4 @@
 import { createContext, useContext, ReactNode, useState, useEffect } from 'react';
-import { useMessages } from './vnext-message-provider';
-import { formatJSON } from '@/lib/formatting';
 
 //the whole workflow execution state.
 
@@ -14,37 +12,11 @@ type VNextNetworkChatContextType = {
 const VNextNetworkChatContext = createContext<VNextNetworkChatContextType | undefined>(undefined);
 
 export const VNextNetworkChatProvider = ({ children, networkId }: { children: ReactNode; networkId: string }) => {
-  const { setMessages } = useMessages();
   const [state, setState] = useState<Omit<VNextNetworkChatContextType, 'handleStep'>>({
     executionSteps: [],
     steps: {},
     runId: undefined,
   });
-
-  useEffect(() => {
-    const hasFinished = Boolean(state.steps?.['finish']);
-    if (!hasFinished) return;
-
-    const workflowStep = state.steps?.['workflow-step'];
-    if (!workflowStep) return;
-
-    const workflowStepResult = workflowStep?.['step-result'];
-    if (!workflowStepResult) return;
-
-    const workflowStepResultOutput = workflowStepResult?.output;
-    if (!workflowStepResultOutput) return;
-
-    const run = async () => {
-      const formatted = await formatJSON(workflowStepResult?.output?.result);
-
-      setMessages(msgs => [
-        ...msgs,
-        { role: 'assistant', content: [{ type: 'text', text: `\`\`\`json\n${formatted}\`\`\`` }] },
-      ]);
-    };
-
-    run();
-  }, [state, setMessages]);
 
   const handleStep = (uuid: string, record: Record<string, any>) => {
     const id = record?.type === 'finish' ? 'finish' : record.type === 'start' ? 'start' : record.payload?.id;
