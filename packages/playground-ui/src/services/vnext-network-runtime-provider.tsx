@@ -34,7 +34,7 @@ export function VNextMastraNetworkRuntimeProvider({
   VNextMastraNetworkRuntimeProviderProps) {
   const runIdRef = useRef<string | undefined>(undefined);
   const [isRunning, setIsRunning] = useState(false);
-  const { messages, setMessages } = useMessages();
+  const { messages, setMessages, appendToLastMessage } = useMessages();
   const [currentThreadId, setCurrentThreadId] = useState<string | undefined>(threadId);
 
   const { handleStep } = useVNextNetworkChat();
@@ -115,7 +115,13 @@ export function VNextMastraNetworkRuntimeProvider({
           // });
 
           if (runIdRef.current) {
-            handleStep(runIdRef.current, record);
+            if ((record as any).type === 'tool-call-delta') {
+              appendToLastMessage((record as any).argsTextDelta);
+            } else if ((record as any).type === 'tool-call-streaming-start') {
+              return setMessages(msgs => [...msgs, { role: 'assistant', content: [{ type: 'text', text: '' }] }]);
+            } else {
+              handleStep(runIdRef.current, record);
+            }
           } else if ((record as any).type === 'start') {
             const id = uuid();
             runIdRef.current = id;

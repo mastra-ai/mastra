@@ -14,7 +14,7 @@ type VNextNetworkChatContextType = {
 const VNextNetworkChatContext = createContext<VNextNetworkChatContextType | undefined>(undefined);
 
 export const VNextNetworkChatProvider = ({ children, networkId }: { children: ReactNode; networkId: string }) => {
-  const { appendToLastMessage, setMessages } = useMessages();
+  const { setMessages } = useMessages();
   const [state, setState] = useState<Omit<VNextNetworkChatContextType, 'handleStep'>>({
     executionSteps: [],
     steps: {},
@@ -47,14 +47,6 @@ export const VNextNetworkChatProvider = ({ children, networkId }: { children: Re
   }, [state, setMessages]);
 
   const handleStep = (uuid: string, record: Record<string, any>) => {
-    if (record.type === 'tool-call-delta') {
-      return appendToLastMessage(record.argsTextDelta);
-    }
-
-    if (record.type === 'tool-call-streaming-start') {
-      return setMessages(msgs => [...msgs, { role: 'assistant', content: [{ type: 'text', text: '' }] }]);
-    }
-
     const id = record?.type === 'finish' ? 'finish' : record.type === 'start' ? 'start' : record.payload?.id;
     if (id.includes('mapping_')) return;
 
