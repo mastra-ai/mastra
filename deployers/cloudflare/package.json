@@ -45,7 +45,7 @@
     "@mastra/deployer": "workspace:^",
     "@rollup/plugin-virtual": "^3.0.2",
     "cloudflare": "^4.3.0",
-    "rollup": "^4.42.0",
+    "rollup": "^4.43.0",
     "zod": "^3.25.57"
   },
   "devDependencies": {
