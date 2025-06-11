@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 
-function Spinner({ color = '#fff', className }: { color?: string; className?: string }) {
+export function Spinner({ color = '#fff', className }: { color?: string; className?: string }) {
   return (
     <svg
       className={cn('animate-spin duration-700', className)}

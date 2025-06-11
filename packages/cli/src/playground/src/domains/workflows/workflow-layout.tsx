@@ -11,7 +11,7 @@ import { useWorkflowRuns } from '@/pages/workflows/workflow/hooks/use-workflow-r
 
 export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
   const { workflowId, runId } = useParams();
-  const { workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId!);
+  const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId!);
   const { data: runs } = useWorkflowRuns({ workflowId: workflowId! });
 
   if (isWorkflowLoading) {

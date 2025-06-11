@@ -28,11 +28,13 @@ export const useAgents = () => {
   return { agents, isLoading };
 };
 
-export const useAgent = (agentId: string) => {
+export const useAgent = (agentId: string, enabled = true) => {
   const [agent, setAgent] = useState<GetAgentResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    if (!enabled) return;
+
     const fetchAgent = async () => {
       setIsLoading(true);
       try {
@@ -54,7 +56,7 @@ export const useAgent = (agentId: string) => {
     };
 
     fetchAgent();
-  }, [agentId]);
+  }, [agentId, enabled]);
 
   return { agent, isLoading };
 };

@@ -12,11 +12,20 @@ import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { WorkflowRuns } from '@mastra/playground-ui';
 import { useNavigate, useParams } from 'react-router';
 import { useWorkflowRuns } from '@/pages/workflows/workflow/hooks/use-workflow-runs';
+import { useAgentWorkflowById } from '@/hooks/use-agent-workflow-by-id';
 
-export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: string; isLegacy?: boolean }) {
+export function WorkflowInformation({
+  workflowId,
+  isLegacy,
+  agentId,
+}: {
+  workflowId: string;
+  isLegacy?: boolean;
+  agentId?: string;
+}) {
   const params = useParams();
   const navigate = useNavigate();
-  const { workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId, !isLegacy);
+  const { workflow, isLoading: isWorkflowLoading } = useAgentWorkflowById({ agentId, workflowId, enabled: !isLegacy });
   const { isLoading: isRunsLoading, data: runs } = useWorkflowRuns({ workflowId });
   const { legacyWorkflow, isLoading: isLegacyWorkflowLoading } = useLegacyWorkflow(workflowId, !!isLegacy);
 
@@ -27,6 +36,8 @@ export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: stri
 
   const isLoading = isLegacy ? isLegacyWorkflowLoading : isWorkflowLoading;
   const workflowToUse = isLegacy ? legacyWorkflow : workflow;
+
+  console.log('TODO', workflow);
 
   return (
     <div className="grid grid-rows-[auto_1fr] h-full overflow-y-auto">
@@ -91,7 +102,12 @@ export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: stri
                   {isLegacy ? (
                     <LegacyWorkflowTrigger workflowId={workflowId} setRunId={setRunId} />
                   ) : (
-                    <WorkflowTrigger workflowId={workflowId} setRunId={setRunId} />
+                    <WorkflowTrigger
+                      workflowId={workflowId}
+                      workflow={workflow}
+                      setRunId={setRunId}
+                      isLoading={isWorkflowLoading}
+                    />
                   )}
                 </>
               ) : null}

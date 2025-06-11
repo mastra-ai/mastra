@@ -49,7 +49,7 @@ export const EntityName = ({ children, className }: EntityProps) => {
 
 export const EntityDescription = ({ children, className }: EntityProps) => {
   return (
-    <Txt as="p" variant="ui-sm" className={clsx('text-icon3', className)}>
+    <Txt as="span" variant="ui-sm" className={clsx('text-icon3 block', className)}>
       {children}
     </Txt>
   );

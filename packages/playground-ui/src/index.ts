@@ -22,6 +22,7 @@ export * from './ds/components/EmptyState/index';
 export * from './ds/icons/index';
 export * from './lib/polls';
 export * from './hooks/use-speech-recognition';
+export * from './components/ui/spinner';
 
 export type { TraceContextType } from './domains/traces/context/trace-context';
 

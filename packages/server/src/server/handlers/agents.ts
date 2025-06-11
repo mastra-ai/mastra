@@ -1,5 +1,6 @@
 import type { Agent } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/runtime-context';
+import type { Workflow } from '@mastra/core/workflows';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
 import { HTTPException } from '../http-exception';
@@ -13,6 +14,24 @@ type GetBody<
 > = {
   messages: Parameters<Agent[T]>[0];
 } & Parameters<Agent[T]>[1];
+
+type GetWorkflowResponse = {
+  name: string;
+  description?: string;
+  steps: {
+    [key: string]: {
+      id: string;
+      description: string;
+      inputSchema: string;
+      outputSchema: string;
+      resumeSchema: string;
+      suspendSchema: string;
+    };
+  };
+  stepGraph: Workflow['serializedStepGraph'];
+  inputSchema: string;
+  outputSchema: string;
+};
 
 // Agent handlers
 export async function getAgentsHandler({ mastra, runtimeContext }: Context & { runtimeContext: RuntimeContext }) {
@@ -104,7 +123,7 @@ export async function getAgentByIdHandler({
       return acc;
     }, {});
 
-    let serializedAgentWorkflows = {};
+    let serializedAgentWorkflows: Record<string, GetWorkflowResponse> = {};
 
     if ('getWorkflows' in agent) {
       const logger = mastra.getLogger();
@@ -116,12 +135,20 @@ export async function getAgentByIdHandler({
             ...acc,
             [key]: {
               name: workflow.name,
+              description: workflow.description,
+              inputSchema: workflow.inputSchema,
+              outputSchema: workflow.outputSchema,
+              stepGraph: workflow.stepGraph,
               steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
                 return {
                   ...acc,
                   [key]: {
                     id: step.id,
                     description: step.description,
+                    inputSchema: step.inputSchema,
+                    outputSchema: step.outputSchema,
+                    resumeSchema: step.resumeSchema,
+                    suspendSchema: step.suspendSchema,
                   },
                 };
               }, {}),
