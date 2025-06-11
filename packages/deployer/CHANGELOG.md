@@ -1,5 +1,16 @@
 # @mastra/deployer
 
+## 0.10.5
+
+### Patch Changes
+
+- 8725d02: Remove swaggerUI and openAPI url when server starts
+- 105f872: Fix body already in use for POST requests
+- Updated dependencies [1ba421d]
+- Updated dependencies [13c97f9]
+  - @mastra/server@0.10.5
+  - @mastra/core@0.10.5
+
 ## 0.10.4
 
 ### Patch Changes

@@ -1,5 +1,13 @@
 # create-mastra
 
+## 0.10.4
+
+### Patch Changes
+
+- 1ba421d: fix the tools not showing on workflows attached to agents
+- 8725d02: Improve cli by reducing the amount of setups during interactive prompt
+- 13c97f9: Save run status, result and error in storage snapshot
+
 ## 0.10.3
 
 ### Patch Changes

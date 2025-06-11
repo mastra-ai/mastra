@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 0.10.5
+
+### Patch Changes
+
+- 13c97f9: Save run status, result and error in storage snapshot
+
 ## 0.10.4
 
 ### Patch Changes
