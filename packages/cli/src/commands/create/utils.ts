@@ -142,7 +142,7 @@ export const createMastraProject = async ({
 
   s.stop(`${pm} dependencies installed`);
   s.start('Installing mastra');
-  const versionTag = createVersionTag ? `@${createVersionTag}` : '@latest';
+  const versionTag = createVersionTag ? `@latest` : '@latest';
   await installMastraDependency(pm, 'mastra', versionTag, true, timeout);
   s.stop('mastra installed');
 
