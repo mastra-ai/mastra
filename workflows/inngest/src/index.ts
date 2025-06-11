@@ -416,11 +416,12 @@ export function init(inngest: Inngest) {
       TStepOutput extends z.ZodType<any>,
       TResumeSchema extends z.ZodType<any>,
       TSuspendSchema extends z.ZodType<any>,
-      InngestEngineType,
     >(params: {
       id: TStepId;
       inputSchema: TStepInput;
       outputSchema: TStepOutput;
+      resumeSchema?: TResumeSchema;
+      suspendSchema?: TSuspendSchema;
       execute: ExecuteFunction<
         z.infer<TStepInput>,
         z.infer<TStepOutput>,
@@ -798,6 +799,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             runId: stepResults[step.id]?.payload?.__workflow_meta?.runId,
           },
           [EMITTER_SYMBOL]: emitter,
+          engine: {
+            step: this.inngestStep,
+          },
         });
 
         execResults = { status: 'success', output: result };

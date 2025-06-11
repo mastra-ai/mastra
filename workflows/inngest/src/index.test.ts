@@ -5337,4 +5337,76 @@ describe('MastraInngestWorkflow', () => {
       expect(result?.steps.step1.output.injectedValue).toBe(testValue + '2');
     });
   });
+
+  describe('Access to inngest step primitives', () => {
+    it.only('should be able to sleep using inngest engine step', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+      const step1 = createStep({
+        id: 'step1',
+        execute: async ({ engine }) => {
+          await engine.step.sleep('3s');
+          return { result: 'success' };
+        },
+        inputSchema: z.object({ hello: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({ hello: z.string() }),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        steps: [step1],
+      });
+      workflow.then(step1).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      });
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      const run = workflow.createRun();
+      const startTime = Date.now();
+      const result = await run.start({ inputData: { hello: 'world' } });
+      const endTime = Date.now();
+
+      console.log(result);
+
+      expect(result.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'success' },
+      });
+
+      expect(endTime - startTime).toBeGreaterThan(3000);
+
+      srv.close();
+    });
+  });
 }, 40e3);
