@@ -82,7 +82,6 @@ import {
   streamWorkflowHandler,
   watchWorkflowHandler,
 } from './handlers/workflows.js';
-import { openBrowser } from './open-browser';
 import type { ServerBundleOptions } from './types';
 import { html } from './welcome.js';
 
@@ -3203,7 +3202,6 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
       if (options?.playground) {
         const playgroundUrl = `http://${host}:${port}`;
         logger.info(`👨‍💻 Playground available at ${playgroundUrl}`);
-        void openBrowser(playgroundUrl, true);
       }
 
       if (process.send) {

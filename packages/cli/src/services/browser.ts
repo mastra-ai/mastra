@@ -9,12 +9,10 @@
 
 import { exec } from 'node:child_process';
 import type { ExecOptions } from 'node:child_process';
-import { join, resolve } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import open from 'open';
 import type { Options } from 'open';
-
-const DEPLOYER_PACKAGE_DIR = resolve(fileURLToPath(import.meta.url), '../../');
 
 /**
  * Reads the BROWSER environment variable and decides what to do with it.
@@ -58,9 +56,11 @@ async function startBrowserProcess(browser: string | undefined, browserArgs: str
           ? preferredOSXBrowser
           : supportedChromiumBrowsers.find(b => ps.includes(b));
       if (openedBrowser) {
+        const packageDir = dirname(fileURLToPath(import.meta.resolve('mastra/package.json')));
+
         // Try our best to reuse existing tab with AppleScript
         await execAsync(`osascript openChrome.applescript "${url}" "${openedBrowser}"`, {
-          cwd: join(DEPLOYER_PACKAGE_DIR, 'bin'),
+          cwd: join(packageDir, 'bin'),
         });
         return true;
       }
