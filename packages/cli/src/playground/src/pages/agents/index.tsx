@@ -28,19 +28,10 @@ function Agents() {
     modelId: agent?.modelId,
   }));
 
-  const extendedAgentListData = Array.from({ length: 7 }, (_, i) =>
-    agentListData.map(item => ({
-      ...item,
-      name: `${item.name} Copy ${i + 1}`,
-    })),
-  ).flat();
-
   if (isLoading) return null;
 
   return (
     <MainLayout>
-      {/* <div style={{ border: '1px solid red' }}>asdfads</div>
-      <div style={{ border: '1px solid red' }}>asdfasdfas</div> */}
       <MainHeader>
         <AgentIcon /> Agents
       </MainHeader>
@@ -72,7 +63,7 @@ function Agents() {
         <MainContent>
           <DataTable
             columns={agentsTableColumns}
-            data={extendedAgentListData}
+            data={agentListData}
             onClick={row => navigate(`/agents/${row.id}/chat`)}
           />
         </MainContent>
