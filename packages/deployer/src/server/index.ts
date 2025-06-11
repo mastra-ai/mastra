@@ -99,19 +99,6 @@ function openInBrowser(url: string) {
   }
 
   const platform = process.platform;
-  let command: string;
-
-  switch (platform) {
-    case 'darwin': // macOS
-      command = `open "${url}"`;
-      break;
-    case 'win32': // Windows
-      command = `start "" "${url}"`;
-      break;
-    default: // Linux and other Unix-like systems
-      command = `xdg-open "${url}"`;
-      break;
-  }
 
   const [cmd, ...args] = platform === 'win32'
     ? ['cmd.exe', '/c', 'start', '', url]
