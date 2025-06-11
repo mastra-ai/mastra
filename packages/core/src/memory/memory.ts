@@ -263,6 +263,13 @@ export abstract class MastraMemory extends MastraBase {
     format?: 'v1' | 'v2';
   }): Promise<MastraMessageV2[] | MastraMessageV1[]>;
 
+  abstract getWorkingMemory({
+    threadId,
+  }: {
+    threadId: string;
+    format?: 'json' | 'markdown';
+  }): Promise<Record<string, any> | string | null>;
+
   /**
    * Retrieves all messages for a specific thread
    * @param threadId - The unique identifier of the thread

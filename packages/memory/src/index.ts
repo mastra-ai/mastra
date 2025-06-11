@@ -9,7 +9,15 @@ import { embedMany } from 'ai';
 import type { CoreMessage, TextPart, UIMessage } from 'ai';
 
 import xxhash from 'xxhash-wasm';
+import zodToJsonSchema from 'zod-to-json-schema';
 import { updateWorkingMemoryTool } from './tools/working-memory';
+
+export type WorkingMemoryFormat = 'json' | 'markdown';
+
+export type WorkingMemoryTemplate = {
+  format: WorkingMemoryFormat;
+  content: string;
+};
 
 // Average characters per token based on OpenAI's tokenization
 const CHARS_PER_TOKEN = 4;
@@ -540,12 +548,51 @@ export class Memory extends MastraMemory {
     return null;
   }
 
-  public async getWorkingMemory({ threadId }: { threadId: string }): Promise<string | null> {
-    if (!this.threadConfig.workingMemory?.enabled) return null;
+  public async getWorkingMemory({ threadId, format }: { threadId: string; format?: WorkingMemoryFormat }) {
+    if (!this.threadConfig.workingMemory?.enabled) {
+      return null;
+    }
+
+    const thread = await this.storage.getThreadById({ threadId });
+
+    if (format === 'json') {
+      try {
+        return JSON.parse(thread?.metadata?.workingMemory as string) || null;
+      } catch (e) {
+        this.logger.error('Unable to parse working memory as JSON. Returning string.', e);
+      }
+    }
+
+    return thread?.metadata?.workingMemory || null;
+  }
+
+  public async getWorkingMemoryTemplate({ threadId }: { threadId: string }): Promise<WorkingMemoryTemplate | null> {
+    if (!this.threadConfig.workingMemory?.enabled) {
+      return null;
+    }
 
     // Get thread from storage
     const thread = await this.storage.getThreadById({ threadId });
-    if (!thread) return this.threadConfig?.workingMemory?.template || this.defaultWorkingMemoryTemplate;
+
+    if (this.threadConfig?.workingMemory?.schema) {
+      try {
+        const schema = this.threadConfig.workingMemory.schema;
+        const convertedSchema = zodToJsonSchema(schema, {
+          $refStrategy: 'none',
+        });
+        return { format: 'json', content: JSON.stringify(convertedSchema) };
+      } catch (error) {
+        this.logger.error('Error converting schema', error);
+        throw error;
+      }
+    }
+
+    if (!thread) {
+      return {
+        format: 'markdown',
+        content: this.threadConfig?.workingMemory?.template || this.defaultWorkingMemoryTemplate,
+      };
+    }
 
     // Return working memory from metadata
     const memory =
@@ -553,7 +600,7 @@ export class Memory extends MastraMemory {
       this.threadConfig.workingMemory.template ||
       this.defaultWorkingMemoryTemplate;
 
-    return memory.trim();
+    return { format: 'markdown', content: memory.trim() };
   }
 
   public async getSystemMessage({
@@ -568,7 +615,7 @@ export class Memory extends MastraMemory {
       return null;
     }
 
-    const workingMemory = await this.getWorkingMemory({ threadId });
+    const workingMemory = await this.getWorkingMemoryTemplate({ threadId });
     if (!workingMemory) {
       return null;
     }
@@ -589,7 +636,7 @@ export class Memory extends MastraMemory {
 - **Projects**: 
 `;
 
-  private getWorkingMemoryToolInstruction(workingMemoryBlock: string) {
+  private getWorkingMemoryToolInstruction(workingMemoryBlock: WorkingMemoryTemplate) {
     return `WORKING_MEMORY_SYSTEM_INSTRUCTION:
 Store and update any conversation-relevant information by calling the updateWorkingMemory tool. If information might be referenced again - store it!
 

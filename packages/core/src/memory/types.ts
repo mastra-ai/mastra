@@ -4,6 +4,7 @@ export type { MastraMessageV2 } from '../agent';
 import type { MastraStorage } from '../storage';
 import type { MastraVector } from '../vector';
 import type { MemoryProcessor } from '.';
+import type { ZodObject } from 'zod';
 
 export type { Message as AiMessageType } from 'ai';
 
@@ -40,6 +41,29 @@ export type MessageResponse<T extends 'raw' | 'core_message'> = {
   core_message: CoreMessage[];
 }[T];
 
+type WorkingMemoryBase = {
+  enabled: boolean;
+  /** @deprecated The `use` option has been removed. Working memory always uses tool-call mode. */
+  use?: never;
+};
+
+type WorkingMemoryTemplate = WorkingMemoryBase & {
+  template: string;
+  schema?: never;
+};
+
+type WorkingMemorySchema = WorkingMemoryBase & {
+  schema: ZodObject<any>;
+  template?: never;
+};
+
+type WorkingMemoryNone = WorkingMemoryBase & {
+  template?: never;
+  schema?: never;
+};
+
+export type WorkingMemory = WorkingMemoryTemplate | WorkingMemorySchema | WorkingMemoryNone;
+
 export type MemoryConfig = {
   lastMessages?: number | false;
   semanticRecall?:
@@ -49,12 +73,7 @@ export type MemoryConfig = {
         messageRange: number | { before: number; after: number };
         scope?: 'thread' | 'resource';
       };
-  workingMemory?: {
-    enabled: boolean;
-    template?: string;
-    /** @deprecated The `use` option has been removed. Working memory always uses tool-call mode. */
-    use?: never;
-  };
+  workingMemory?: WorkingMemory;
   threads?: {
     generateTitle?: boolean;
   };
