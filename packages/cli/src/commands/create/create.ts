@@ -31,12 +31,14 @@ export const create = async (args: {
   // to false (in this case, no example code) and we need to distinguish
   // between those and the case where the args were not passed at all.
   if (args.components === undefined || args.llmProvider === undefined || args.addExample === undefined) {
+    console.log('got to interactive prompt');
     const result = await interactivePrompt();
     await init({
       ...result,
       llmApiKey: result?.llmApiKey as string,
     });
     postCreate({ projectName });
+    console.log('done with interactive prompt');
     return;
   }
 
