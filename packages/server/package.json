@@ -51,7 +51,6 @@
   "keywords": [],
   "author": "",
   "license": "Elastic-2.0",
-  "dependencies": {},
   "peerDependencies": {
     "@mastra/core": "^0.10.2-alpha.0",
     "zod": "^3.0.0"
@@ -61,13 +60,13 @@
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
-    "@types/node": "^20.17.57",
+    "@types/node": "^20.19.0",
     "eslint": "^9.28.0",
     "superjson": "^2.2.2",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.2",
+    "typescript": "^5.8.3",
     "vitest": "^2.1.9",
-    "zod": "^3.25.56",
+    "zod": "^3.25.57",
     "zod-to-json-schema": "^3.24.5"
   }
 }

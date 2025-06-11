@@ -1,23 +1,11 @@
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import path from 'path';
 import { MCPClient } from '@mastra/mcp';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { ServerInfo } from '@mastra/core/mcp';
+import { getPort } from 'get-port';
 
 vi.setConfig({ testTimeout: 20000, hookTimeout: 20000 });
-
-// Helper to find an available port
-async function getAvailablePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const server = createServer();
-    server.listen(0, () => {
-      const { port } = server.address() as { port: number };
-      server.close(() => resolve(port));
-    });
-    server.on('error', reject);
-  });
-}
 
 describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
   let mastraServer: ReturnType<typeof spawn>;
@@ -27,21 +15,12 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
   let client: MCPClient;
 
   beforeAll(async () => {
-    port = await getAvailablePort();
+    port = await getPort();
 
-    mastraServer = spawn(
-      'pnpm',
-      [
-        path.resolve(import.meta.dirname, `..`, `..`, `..`, `cli`, `dist`, `index.js`),
-        'dev',
-        '--port',
-        port.toString(),
-      ],
-      {
-        stdio: 'pipe',
-        detached: true, // Run in a new process group so we can kill it and children
-      },
-    );
+    mastraServer = spawn('pnpm', ['mastra', 'dev', '--port', port.toString()], {
+      stdio: 'pipe',
+      detached: true, // Run in a new process group so we can kill it and children
+    });
 
     // Wait for server to be ready
     await new Promise<void>((resolve, reject) => {
