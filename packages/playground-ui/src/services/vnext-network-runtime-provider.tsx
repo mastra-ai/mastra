@@ -1,4 +1,5 @@
 'use client';
+import { v4 as uuid } from '@lukeed/uuid';
 
 import {
   useExternalStoreRuntime,
@@ -31,7 +32,7 @@ export function VNextMastraNetworkRuntimeProvider({
   children: ReactNode;
 }> &
   VNextMastraNetworkRuntimeProviderProps) {
-  const hasStartedRef = useRef(false);
+  const runIdRef = useRef<string | undefined>(undefined);
   const [isRunning, setIsRunning] = useState(false);
   const { messages, setMessages } = useMessages();
   const [currentThreadId, setCurrentThreadId] = useState<string | undefined>(threadId);
@@ -55,6 +56,8 @@ export function VNextMastraNetworkRuntimeProvider({
   const network = mastra.getVNextNetwork(networkId);
 
   const onNew = async (message: AppendMessage) => {
+    runIdRef.current = undefined;
+
     if (message.content[0]?.type !== 'text') throw new Error('Only text messages are supported');
 
     const input = message.content[0].text;
@@ -111,16 +114,22 @@ export function VNextMastraNetworkRuntimeProvider({
           //   ];
           // });
 
-          if (hasStartedRef.current) {
-            handleStep(record);
+          if (runIdRef.current) {
+            handleStep(runIdRef.current, record);
           } else if ((record as any).type === 'start') {
-            hasStartedRef.current = true;
+            const id = uuid();
+            runIdRef.current = id;
 
             setMessages(currentConversation => {
               return [
                 ...currentConversation,
                 {
                   role: 'assistant',
+                  metadata: {
+                    custom: {
+                      id,
+                    },
+                  },
                   content: [
                     {
                       type: 'text',
@@ -130,8 +139,6 @@ export function VNextMastraNetworkRuntimeProvider({
                 },
               ];
             });
-          } else {
-            handleStep(record);
           }
         },
       );

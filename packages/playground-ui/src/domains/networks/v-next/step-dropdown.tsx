@@ -12,6 +12,7 @@ import { WorkflowGraph } from '@/domains/workflows/workflow/workflow-graph';
 import { Dialog, DialogContent, DialogPortal, DialogTitle } from '@/components/ui/dialog';
 import { WorkflowRunProvider } from '@/domains/workflows/context/workflow-run-context';
 import { useWorkflowRuns } from '@/hooks/use-workflow-runs';
+import { useMessage } from '@assistant-ui/react';
 
 const LabelMappings = {
   'routing-step': 'Decision making process',
@@ -22,6 +23,9 @@ const LabelMappings = {
 export const StepDropdown = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const { executionSteps } = useVNextNetworkChat();
+  const message = useMessage();
+
+  console.log('SUUP', { message });
 
   const latestStepId = executionSteps[executionSteps.length - 1];
   const hasFinished = latestStepId === 'finish';

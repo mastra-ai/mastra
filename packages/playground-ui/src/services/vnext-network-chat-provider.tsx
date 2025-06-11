@@ -7,7 +7,7 @@ import { formatJSON } from '@/lib/formatting';
 type VNextNetworkChatContextType = {
   executionSteps: Array<string>;
   steps: Record<string, any>;
-  handleStep: (record: Record<string, any>) => void;
+  handleStep: (id: string, record: Record<string, any>) => void;
   runId?: string;
 };
 
@@ -46,7 +46,7 @@ export const VNextNetworkChatProvider = ({ children, networkId }: { children: Re
     run();
   }, [state, setMessages]);
 
-  const handleStep = (record: Record<string, any>) => {
+  const handleStep = (uuid: string, record: Record<string, any>) => {
     if (record.type === 'tool-call-delta') {
       return appendToLastMessage(record.argsTextDelta);
     }
