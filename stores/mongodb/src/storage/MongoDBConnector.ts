@@ -58,8 +58,8 @@ export class MongoDBConnector {
 
   private async getConnection(): Promise<Db> {
     if (this.#client) {
-      if (this.#isConnected) {
-        return this.#db!;
+      if (this.#isConnected && this.#db) {
+        return this.#db;
       }
       await this.#client.connect();
       this.#db = this.#client.db(this.#dbName);
@@ -81,6 +81,12 @@ export class MongoDBConnector {
   async close() {
     if (this.#client) {
       await this.#client.close();
+      this.#isConnected = false;
+      return;
+    }
+
+    if (this.#handler) {
+      await this.#handler.close();
     }
   }
 }
