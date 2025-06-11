@@ -1,28 +1,31 @@
-import { createContext, useContext, ReactNode, useState, useEffect } from 'react';
+import { createContext, useContext, ReactNode, useState } from 'react';
 
 //the whole workflow execution state.
 
-type VNextNetworkChatContextType = {
+type StateValue = {
   executionSteps: Array<string>;
   steps: Record<string, any>;
-  handleStep: (id: string, record: Record<string, any>) => void;
   runId?: string;
+};
+
+type State = Record<string, StateValue>;
+
+type VNextNetworkChatContextType = {
+  state: State;
+  handleStep: (uuid: string, record: Record<string, any>) => void;
 };
 
 const VNextNetworkChatContext = createContext<VNextNetworkChatContextType | undefined>(undefined);
 
 export const VNextNetworkChatProvider = ({ children, networkId }: { children: ReactNode; networkId: string }) => {
-  const [state, setState] = useState<Omit<VNextNetworkChatContextType, 'handleStep'>>({
-    executionSteps: [],
-    steps: {},
-    runId: undefined,
-  });
+  const [state, setState] = useState<State>({});
 
   const handleStep = (uuid: string, record: Record<string, any>) => {
     const id = record?.type === 'finish' ? 'finish' : record.type === 'start' ? 'start' : record.payload?.id;
     if (id.includes('mapping_')) return;
 
-    setState(current => {
+    setState(prevState => {
+      const current = prevState[uuid];
       const currentMetadata = current?.steps?.[id]?.metadata;
 
       let startTime = currentMetadata?.startTime;
@@ -36,18 +39,23 @@ export const VNextNetworkChatProvider = ({ children, networkId }: { children: Re
         endTime = Date.now();
       }
 
+      console.log('REC', { prevState, current, id });
+
       return {
-        ...current,
-        runId: current?.runId || record?.payload?.runId,
-        executionSteps: current.steps[id] ? current.executionSteps : [...current.executionSteps, id],
-        steps: {
-          ...current.steps,
-          [id]: {
-            ...(current.steps[id] || {}),
-            [record.type]: record.payload,
-            metadata: {
-              startTime,
-              endTime,
+        ...prevState,
+        [uuid]: {
+          ...current,
+          runId: current?.runId || record?.payload?.runId,
+          executionSteps: current?.steps?.[id] ? current?.executionSteps : [...(current?.executionSteps || []), id],
+          steps: {
+            ...current?.steps,
+            [id]: {
+              ...(current?.steps?.[id] || {}),
+              [record.type]: record.payload,
+              metadata: {
+                startTime,
+                endTime,
+              },
             },
           },
         },
@@ -57,9 +65,7 @@ export const VNextNetworkChatProvider = ({ children, networkId }: { children: Re
 
   console.log('state==', state);
 
-  return (
-    <VNextNetworkChatContext.Provider value={{ ...state, handleStep }}>{children}</VNextNetworkChatContext.Provider>
-  );
+  return <VNextNetworkChatContext.Provider value={{ state, handleStep }}>{children}</VNextNetworkChatContext.Provider>;
 };
 
 export const useVNextNetworkChat = () => {

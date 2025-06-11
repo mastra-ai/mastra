@@ -22,12 +22,15 @@ const LabelMappings = {
 
 export const StepDropdown = () => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const { executionSteps } = useVNextNetworkChat();
+  const { state } = useVNextNetworkChat();
   const message = useMessage();
 
-  console.log('SUUP', { message });
+  const id = message?.metadata?.custom?.id as string | undefined;
 
-  const latestStepId = executionSteps[executionSteps.length - 1];
+  if (!id) return <div>Something is wrong</div>;
+  const currentState = state[id];
+
+  const latestStepId = currentState.executionSteps[currentState.executionSteps.length - 1];
   const hasFinished = latestStepId === 'finish';
 
   return (
@@ -54,20 +57,21 @@ export const StepDropdown = () => {
         </Icon>
       </Button>
 
-      {isExpanded ? <Steps /> : null}
+      {isExpanded ? <Steps id={id} /> : null}
     </div>
   );
 };
 
-const Steps = () => {
-  const { executionSteps, steps, runId } = useVNextNetworkChat();
+const Steps = ({ id }: { id: string }) => {
+  const { state } = useVNextNetworkChat();
+  const currentState = state[id];
 
   return (
     <ol className="flex flex-col gap-px rounded-lg overflow-hidden">
-      {executionSteps
+      {currentState.executionSteps
         .filter(stepId => stepId !== 'start')
         .map((stepId: any, index: number) => (
-          <StepEntry key={index} stepId={stepId} step={steps[stepId]} runId={runId} />
+          <StepEntry key={index} stepId={stepId} step={currentState.steps[stepId]} runId={currentState.runId} />
         ))}
     </ol>
   );

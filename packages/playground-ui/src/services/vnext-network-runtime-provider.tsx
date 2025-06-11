@@ -38,15 +38,16 @@ export function VNextMastraNetworkRuntimeProvider({
   const { messages, setMessages, appendToLastMessage } = useMessages();
   const [currentThreadId, setCurrentThreadId] = useState<string | undefined>(threadId);
 
-  const { handleStep, steps } = useVNextNetworkChat();
+  const { handleStep, state } = useVNextNetworkChat();
+  const id = runIdRef.current;
+  const currentState = id ? state[id] : undefined;
 
   useEffect(() => {
-    const id = runIdRef.current;
-    if (!id) return;
-    const hasFinished = Boolean(steps?.['finish']);
+    if (!currentState) return;
+    const hasFinished = Boolean(currentState?.steps?.['finish']);
     if (!hasFinished) return;
 
-    const workflowStep = steps?.['workflow-step'];
+    const workflowStep = currentState?.steps?.['workflow-step'];
     if (!workflowStep) return;
 
     const workflowStepResult = workflowStep?.['step-result'];
@@ -65,7 +66,7 @@ export function VNextMastraNetworkRuntimeProvider({
     };
 
     run();
-  }, [steps]);
+  }, [currentState]);
 
   // const { frequencyPenalty, presencePenalty, maxRetries, maxSteps, maxTokens, temperature, topK, topP, instructions } =
   //   modelSettings;
