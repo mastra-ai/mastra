@@ -1,33 +1,13 @@
 import { cn } from '@/lib/utils';
 
-export function MainContentLayout({
-  children,
-  className,
-  style,
-}: {
-  children: React.ReactNode;
-  className?: string;
-  style?: React.CSSProperties;
-}) {
-  const devStyleRequested = devUIStyleRequested('MainContentLayout');
-
-  return (
-    <main
-      className={cn(`grid grid-rows-[auto_1fr] h-full items-start content-start bg-surface2`, className)}
-      style={{ ...style, ...(devStyleRequested ? { border: '3px dotted red' } : {}) }}
-    >
-      {children}
-    </main>
-  );
-}
-
-export function MainContentContent({
+export function MainContent({
   children,
   className,
   isCentered = false,
   isDivided = false,
   hasLeftServiceColumn = false,
   style,
+  width = 'narrow',
 }: {
   children: React.ReactNode;
   className?: string;
@@ -38,13 +18,34 @@ export function MainContentContent({
   isDivided?: boolean;
   // used when the left column is a service column (e.g. agent history nav)
   hasLeftServiceColumn?: boolean;
+  width?: 'narrow' | 'full';
 }) {
-  const devStyleRequested = devUIStyleRequested('MainContentContent');
+  const isNarrow = width === 'narrow';
+  const devStyleRequested = devUIStyleRequested('MainContent');
+
+  if (isNarrow) {
+    return (
+      <div
+        className={cn(`grid overflow-y-scroll h-full pb-[5rem]`, className)}
+        style={{ ...style, ...(devStyleRequested ? { border: '3px dotted orange' } : {}) }}
+      >
+        <div
+          className="h-auto w-full max-w-[60rem] mx-auto px-7"
+          style={{
+            ...style,
+            ...(devStyleRequested ? { border: '3px dashed orange' } : {}),
+          }}
+        >
+          {children}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
       className={cn(
-        `grid overflow-y-auto h-full `,
+        `grid overflow-y-auto h-full`,
         `overflow-x-auto min-w-[min-content]`,
         {
           'items-start content-start': !isCentered && !isDivided && !hasLeftServiceColumn,
@@ -52,6 +53,7 @@ export function MainContentContent({
           'grid-cols-[1fr_1fr]': isDivided && !hasLeftServiceColumn,
           'grid-cols-[auto_1fr_1fr]': isDivided && hasLeftServiceColumn,
           'grid-cols-[auto_1fr]': !isDivided && hasLeftServiceColumn,
+          'h-auto w-full max-w-[60rem] mx-auto px-7 pb-[5rem]': width === 'narrow',
         },
         className,
       )}

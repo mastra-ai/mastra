@@ -13,8 +13,9 @@ import {
   EmptyState,
   AgentIcon,
   WorkflowIcon,
-  MainContentLayout,
-  MainContentContent,
+  MainLayout,
+  MainHeader,
+  MainContent,
 } from '@mastra/playground-ui';
 
 import { useMCPServers } from '@/hooks/use-mcp-servers';
@@ -106,13 +107,13 @@ const MCPs = () => {
   if (isLoading) return null;
 
   return (
-    <MainContentLayout>
-      <Header>
-        <HeaderTitle>MCP Servers</HeaderTitle>
-      </Header>
+    <MainLayout>
+      <MainHeader>
+        <McpServerIcon /> MCP Servers
+      </MainHeader>
 
       {mcpServers.length === 0 ? (
-        <MainContentContent isCentered={true}>
+        <MainContent isCentered={true}>
           <EmptyState
             iconSlot={<McpCoinIcon />}
             titleSlot="Configure MCP servers"
@@ -133,9 +134,9 @@ const MCPs = () => {
               </Button>
             }
           />
-        </MainContentContent>
+        </MainContent>
       ) : (
-        <MainContentContent>
+        <MainContent>
           <ul>
             {(mcpServers || []).map(server => (
               <li key={server.id}>
@@ -143,9 +144,9 @@ const MCPs = () => {
               </li>
             ))}
           </ul>
-        </MainContentContent>
+        </MainContent>
       )}
-    </MainContentLayout>
+    </MainLayout>
   );
 };
 

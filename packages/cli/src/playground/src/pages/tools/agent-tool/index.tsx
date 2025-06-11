@@ -10,15 +10,7 @@ import { useAgent } from '@/hooks/use-agents';
 import { useExecuteTool } from '@/hooks/use-execute-agent-tool';
 
 import ToolExecutor from '../tool-executor';
-import {
-  Header,
-  Crumb,
-  Breadcrumb,
-  usePlaygroundStore,
-  Txt,
-  MainContentLayout,
-  MainContentContent,
-} from '@mastra/playground-ui';
+import { Header, Crumb, Breadcrumb, usePlaygroundStore, Txt, MainLayout } from '@mastra/playground-ui';
 
 const AgentTool = () => {
   const { toolId, agentId } = useParams();
@@ -50,7 +42,7 @@ const AgentTool = () => {
   const shouldShowEmpty = !agent || !tool;
 
   return (
-    <MainContentLayout>
+    <MainLayout>
       <Header>
         <Breadcrumb>
           <Crumb as={Link} to={`/agents`}>
@@ -81,7 +73,7 @@ const AgentTool = () => {
           toolId={tool.id}
         />
       )}
-    </MainContentLayout>
+    </MainLayout>
   );
 };
 

@@ -68,7 +68,7 @@ export const Row = ({ className, children, selected = false, onClick }: RowProps
   return (
     <tr
       className={clsx(
-        'border-b-sm border-border1 hover:bg-surface3',
+        'border-b-sm last:border-0 border-border1 hover:bg-surface3',
         selected && 'bg-surface4',
         onClick && 'cursor-pointer',
         className,

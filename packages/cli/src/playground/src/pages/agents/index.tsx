@@ -4,11 +4,10 @@ import {
   Button,
   DataTable,
   EmptyState,
-  Header,
-  HeaderTitle,
   Icon,
-  MainContentLayout,
-  MainContentContent,
+  MainLayout,
+  MainContent,
+  MainHeader,
 } from '@mastra/playground-ui';
 
 import { useAgents } from '@/hooks/use-agents';
@@ -27,16 +26,25 @@ function Agents() {
     modelId: agent?.modelId,
   }));
 
+  const extendedAgentListData = Array.from({ length: 7 }, (_, i) =>
+    agentListData.map(item => ({
+      ...item,
+      name: `${item.name} Copy ${i + 1}`,
+    })),
+  ).flat();
+
   if (isLoading) return null;
 
   return (
-    <MainContentLayout>
-      <Header>
-        <HeaderTitle>Agents</HeaderTitle>
-      </Header>
+    <MainLayout>
+      {/* <div style={{ border: '1px solid red' }}>asdfads</div>
+      <div style={{ border: '1px solid red' }}>asdfasdfas</div> */}
+      <MainHeader>
+        <AgentIcon /> Agents
+      </MainHeader>
 
       {agentListData.length === 0 ? (
-        <MainContentContent isCentered={true}>
+        <MainContent isCentered={true}>
           <EmptyState
             iconSlot={<AgentCoinIcon />}
             titleSlot="Configure Agents"
@@ -57,17 +65,17 @@ function Agents() {
               </Button>
             }
           />
-        </MainContentContent>
+        </MainContent>
       ) : (
-        <MainContentContent>
+        <MainContent>
           <DataTable
             columns={agentsTableColumns}
-            data={agentListData}
+            data={extendedAgentListData}
             onClick={row => navigate(`/agents/${row.id}/chat`)}
           />
-        </MainContentContent>
+        </MainContent>
       )}
-    </MainContentLayout>
+    </MainLayout>
   );
 }
 

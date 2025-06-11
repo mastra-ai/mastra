@@ -16,8 +16,9 @@ import {
   ToolCoinIcon,
   EmptyState,
   Button,
-  MainContentLayout,
-  MainContentContent,
+  MainLayout,
+  MainHeader,
+  MainContent,
 } from '@mastra/playground-ui';
 import { Link } from 'react-router';
 import { startTransition, useMemo, useRef, useState } from 'react';
@@ -106,12 +107,12 @@ const ToolsInner = ({ toolsWithAgents }: { toolsWithAgents: ToolWithAgents[] }) 
 
   if (filteredTools.length === 0 && !value) {
     return (
-      <MainContentLayout>
-        <Header>
-          <HeaderTitle>Tools</HeaderTitle>
-        </Header>
+      <MainLayout>
+        <MainHeader>
+          <ToolsIcon /> Tools
+        </MainHeader>
 
-        <MainContentContent isCentered={true}>
+        <MainContent isCentered={true}>
           <EmptyState
             iconSlot={<ToolCoinIcon />}
             titleSlot="Configure Tools"
@@ -132,18 +133,18 @@ const ToolsInner = ({ toolsWithAgents }: { toolsWithAgents: ToolWithAgents[] }) 
               </Button>
             }
           />
-        </MainContentContent>
-      </MainContentLayout>
+        </MainContent>
+      </MainLayout>
     );
   }
 
   return (
-    <MainContentLayout>
-      <Header>
-        <HeaderTitle>Tools</HeaderTitle>
-      </Header>
+    <MainLayout>
+      <MainHeader>
+        <ToolsIcon /> Tools
+      </MainHeader>
 
-      <MainContentContent className="max-w-5xl mx-auto px-4 pt-4">
+      <MainContent>
         <div className="px-4 flex items-center gap-2 rounded-lg bg-surface5 focus-within:ring-2 focus-within:ring-accent3">
           <Icon>
             <SearchIcon />
@@ -164,13 +165,13 @@ const ToolsInner = ({ toolsWithAgents }: { toolsWithAgents: ToolWithAgents[] }) 
           </Txt>
         )}
 
-        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4 max-w-5xl mx-auto  py-8">
+        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4  py-8">
           {filteredTools.map(tool => (
             <ToolEntity key={tool.id} tool={tool} />
           ))}
         </div>
-      </MainContentContent>
-    </MainContentLayout>
+      </MainContent>
+    </MainLayout>
   );
 };
 

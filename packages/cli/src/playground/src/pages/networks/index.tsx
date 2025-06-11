@@ -6,8 +6,9 @@ import {
   Header,
   HeaderTitle,
   Icon,
-  MainContentLayout,
-  MainContentContent,
+  MainLayout,
+  MainContent,
+  MainHeader,
 } from '@mastra/playground-ui';
 import { useNetworks } from '@/hooks/use-networks';
 import { networksTableColumns } from '@/domains/networks/table.columns';
@@ -19,13 +20,13 @@ function Networks() {
   if (isLoading) return null;
 
   return (
-    <MainContentLayout>
-      <Header>
-        <HeaderTitle>Networks</HeaderTitle>
-      </Header>
+    <MainLayout>
+      <MainHeader>
+        <NetworkIcon /> Networks
+      </MainHeader>
 
       {networks.length === 0 ? (
-        <MainContentContent isCentered={true}>
+        <MainContent isCentered={true}>
           <EmptyState
             iconSlot={<AgentNetworkCoinIcon />}
             titleSlot="Configure Agent Networks"
@@ -46,13 +47,13 @@ function Networks() {
               </Button>
             }
           />
-        </MainContentContent>
+        </MainContent>
       ) : (
-        <MainContentContent>
+        <MainContent>
           <DataTable isLoading={isLoading} data={networks} columns={networksTableColumns} />
-        </MainContentContent>
+        </MainContent>
       )}
-    </MainContentLayout>
+    </MainLayout>
   );
 }
 

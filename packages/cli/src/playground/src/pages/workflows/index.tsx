@@ -3,13 +3,12 @@ import {
   Button,
   DataTable,
   EmptyState,
-  Header,
-  HeaderTitle,
   Icon,
   WorkflowCoinIcon,
   WorkflowIcon,
-  MainContentLayout,
-  MainContentContent,
+  MainLayout,
+  MainHeader,
+  MainContent,
 } from '@mastra/playground-ui';
 import { workflowsTableColumns } from '@/domains/workflows/table.columns';
 import { useNavigate } from 'react-router';
@@ -35,13 +34,13 @@ function Workflows() {
   if (isLoading) return null;
 
   return (
-    <MainContentLayout>
-      <Header>
-        <HeaderTitle>Workflows</HeaderTitle>
-      </Header>
+    <MainLayout>
+      <MainHeader>
+        <WorkflowIcon /> Workflows
+      </MainHeader>
 
       {workflowList.length === 0 ? (
-        <MainContentContent isCentered={true}>
+        <MainContent isCentered={true}>
           <EmptyState
             iconSlot={<WorkflowCoinIcon />}
             titleSlot="Configure Workflows"
@@ -62,18 +61,18 @@ function Workflows() {
               </Button>
             }
           />
-        </MainContentContent>
+        </MainContent>
       ) : (
-        <MainContentContent>
+        <MainContent>
           <DataTable
             emptyText="Workflows"
             columns={workflowsTableColumns}
             data={[...workflowList, ...legacyWorkflowList]}
             onClick={row => navigate(`/workflows${row.isLegacy ? '/legacy' : ''}/${row.id}/graph`)}
           />
-        </MainContentContent>
+        </MainContent>
       )}
-    </MainContentLayout>
+    </MainLayout>
   );
 }
 

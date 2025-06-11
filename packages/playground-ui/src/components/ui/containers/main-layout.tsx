@@ -1,24 +1,23 @@
 import { cn } from '@/lib/utils';
 
-export function PageHeader({
+export function MainLayout({
   children,
   className,
   style,
 }: {
-  children?: React.ReactNode;
+  children: React.ReactNode;
   className?: string;
   style?: React.CSSProperties;
-  variant?: 'playground' | 'cloud';
 }) {
-  const devStyleRequested = devUIStyleRequested('AppLayout');
+  const devStyleRequested = devUIStyleRequested('MainLayout');
 
   return (
-    <header
-      className={cn(`px-4 py-3 col-span-2 border-border1 border-b-sm flex justify-between items-center`, className)}
-      style={{ ...style, ...(devStyleRequested ? { border: '3px dotted pink' } : {}) }}
+    <main
+      className={cn(`grid grid-rows-[auto_1fr] overflow-y-auto h-full`, className)}
+      style={{ ...style, ...(devStyleRequested ? { border: '3px dotted red' } : {}) }}
     >
       {children}
-    </header>
+    </main>
   );
 }
 

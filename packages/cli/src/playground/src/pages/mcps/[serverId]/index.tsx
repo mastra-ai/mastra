@@ -23,8 +23,8 @@ import {
   Entity,
   EntityName,
   EntityIcon,
-  MainContentLayout,
-  MainContentContent,
+  MainLayout,
+  MainContent,
 } from '@mastra/playground-ui';
 import clsx from 'clsx';
 import { useRef, useState } from 'react';
@@ -41,7 +41,7 @@ export const McpServerPage = () => {
   const httpStreamUrl = `${effectiveBaseUrl}/api/mcp/${serverId}/mcp`;
 
   return (
-    <MainContentLayout>
+    <MainLayout>
       <Header>
         <Breadcrumb>
           <Crumb as={Link} to={`/mcps`}>
@@ -55,7 +55,7 @@ export const McpServerPage = () => {
       </Header>
 
       {isLoading ? null : server ? (
-        <MainContentContent isDivided={true}>
+        <MainContent isDivided={true}>
           <div className="px-8 py-20 mx-auto max-w-[604px] w-full">
             <Txt as="h1" variant="header-md" className="text-icon6 font-medium pb-4">
               {server.name}
@@ -97,15 +97,15 @@ export const McpServerPage = () => {
           <div className="h-full overflow-y-scroll border-l-sm border-border1">
             <McpToolList server={server} />
           </div>
-        </MainContentContent>
+        </MainContent>
       ) : (
-        <MainContentContent>
+        <MainContent>
           <Txt as="h1" variant="header-md" className="text-icon3 font-medium py-20 text-center">
             Server not found
           </Txt>
-        </MainContentContent>
+        </MainContent>
       )}
-    </MainContentLayout>
+    </MainLayout>
   );
 };
 

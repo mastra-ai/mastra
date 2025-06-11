@@ -1,9 +1,7 @@
-import { AgentProvider, AgentChat as Chat, MainContentContent } from '@mastra/playground-ui';
+import { AgentProvider, AgentChat as Chat, MainContent } from '@mastra/playground-ui';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { v4 as uuid } from '@lukeed/uuid';
-
-import { cn } from '@/lib/utils';
 
 import { AgentInformation } from '@/domains/agents/agent-information';
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
@@ -51,7 +49,7 @@ function Agent() {
       defaultGenerateOptions={agent?.defaultGenerateOptions}
       defaultStreamOptions={agent?.defaultStreamOptions}
     >
-      <MainContentContent isDivided={true} hasLeftServiceColumn={withSidebar}>
+      <MainContent isDivided={true} hasLeftServiceColumn={withSidebar} width="full">
         {withSidebar && (
           <AgentSidebar agentId={agentId!} threadId={threadId!} threads={threads} isLoading={isThreadsLoading} />
         )}
@@ -69,7 +67,7 @@ function Agent() {
         </div>
 
         <AgentInformation agentId={agentId!} />
-      </MainContentContent>
+      </MainContent>
     </AgentProvider>
   );
 }
