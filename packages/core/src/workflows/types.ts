@@ -56,7 +56,7 @@ export type StepsRecord<T extends readonly Step<any, any, any>[]> = {
 };
 
 export type DynamicMapping<TPrevSchema extends z.ZodTypeAny, TSchemaOut extends z.ZodTypeAny> = {
-  fn: ExecuteFunction<z.infer<TPrevSchema>, z.infer<TSchemaOut>, any, any>;
+  fn: ExecuteFunction<z.infer<TPrevSchema>, z.infer<TSchemaOut>, any, any, any>;
   schema: TSchemaOut;
 };
 

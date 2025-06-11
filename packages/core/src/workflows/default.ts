@@ -7,7 +7,7 @@ import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
 import type { ExecuteFunction, Step } from './step';
 import type { StepFailure, StepResult, StepSuccess } from './types';
-import type { SerializedStepFlowEntry, StepFlowEntry } from './workflow';
+import type { DefaultEngineType, SerializedStepFlowEntry, StepFlowEntry } from './workflow';
 
 export type ExecutionContext = {
   workflowId: string;
@@ -577,7 +577,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     workflowId: string;
     runId: string;
     serializedStepGraph: SerializedStepFlowEntry[];
-    entry: { type: 'conditional'; steps: StepFlowEntry[]; conditions: ExecuteFunction<any, any, any, any>[] };
+    entry: {
+      type: 'conditional';
+      steps: StepFlowEntry[];
+      conditions: ExecuteFunction<any, any, any, any, DefaultEngineType>[];
+    };
     prevStep: StepFlowEntry;
     prevOutput: any;
     stepResults: Record<string, StepResult<any, any, any, any>>;
@@ -618,6 +622,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
               // TODO: this function shouldn't have suspend probably?
               suspend: async (_suspendPayload: any) => {},
               [EMITTER_SYMBOL]: emitter,
+              engine: {},
             });
             return result ? index : null;
           } catch (e: unknown) {
@@ -706,7 +711,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     entry: {
       type: 'loop';
       step: Step;
-      condition: ExecuteFunction<any, any, any, any>;
+      condition: ExecuteFunction<any, any, any, any, DefaultEngineType>;
       loopType: 'dowhile' | 'dountil';
     };
     prevStep: StepFlowEntry;
@@ -759,6 +764,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         },
         suspend: async (_suspendPayload: any) => {},
         [EMITTER_SYMBOL]: emitter,
+        engine: {},
       });
     } while (entry.loopType === 'dowhile' ? isTrue : !isTrue);
 
