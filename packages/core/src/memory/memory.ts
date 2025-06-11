@@ -161,7 +161,16 @@ export abstract class MastraMemory extends MastraBase {
     if (config?.workingMemory && 'use' in config.workingMemory) {
       throw new Error('The workingMemory.use option has been removed. Working memory always uses tool-call mode.');
     }
-    return deepMerge(this.threadConfig, config || {});
+
+    const mergedConfig = deepMerge(this.threadConfig, config || {});
+
+    if (config?.workingMemory?.schema) {
+      if (mergedConfig.workingMemory) {
+        mergedConfig.workingMemory.schema = config.workingMemory.schema;
+      }
+    }
+
+    return mergedConfig;
   }
 
   /**

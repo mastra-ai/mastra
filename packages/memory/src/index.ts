@@ -11,13 +11,7 @@ import type { CoreMessage, TextPart, UIMessage } from 'ai';
 import xxhash from 'xxhash-wasm';
 import zodToJsonSchema from 'zod-to-json-schema';
 import { updateWorkingMemoryTool } from './tools/working-memory';
-
-export type WorkingMemoryFormat = 'json' | 'markdown';
-
-export type WorkingMemoryTemplate = {
-  format: WorkingMemoryFormat;
-  content: string;
-};
+import type { WorkingMemoryFormat, WorkingMemoryTemplate } from './types';
 
 // Average characters per token based on OpenAI's tokenization
 const CHARS_PER_TOKEN = 4;
@@ -663,8 +657,14 @@ Notes:
   public getTools(config?: MemoryConfig): Record<string, CoreTool> {
     const mergedConfig = this.getMergedThreadConfig(config);
     if (mergedConfig.workingMemory?.enabled) {
+      if (mergedConfig.workingMemory.schema) {
+        return {
+          updateWorkingMemory: updateWorkingMemoryTool({ format: 'json' }),
+        };
+      }
+
       return {
-        updateWorkingMemory: updateWorkingMemoryTool,
+        updateWorkingMemory: updateWorkingMemoryTool({ format: 'markdown' }),
       };
     }
     return {};

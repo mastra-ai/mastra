@@ -16,6 +16,7 @@ const memory = new Memory({
 
 export const workingMemoryAgent = new Agent({
   name: 'Working Memory Agent',
+  description: 'Working Memory agent',
   instructions:
     'You are a working memory agent. When the user provides an ingredient, you should store it in your working memory.',
   model: openai('gpt-4o-mini'),

@@ -1,10 +1,13 @@
 import type { CoreTool } from '@mastra/core';
 import { z } from 'zod';
+import type { WorkingMemoryFormat } from '../types';
 
-export const updateWorkingMemoryTool: CoreTool = {
+export const updateWorkingMemoryTool = ({ format }: { format: WorkingMemoryFormat }): CoreTool => ({
   description: 'Update the working memory with new information',
   parameters: z.object({
-    memory: z.string().describe('The Markdown-formatted working memory content to store'),
+    memory: z
+      .string()
+      .describe(`The ${format === 'json' ? 'JSON' : 'Markdown'} formatted working memory content to store`),
   }),
   execute: async (params: any) => {
     const { context, threadId, memory } = params;
@@ -30,4 +33,4 @@ export const updateWorkingMemoryTool: CoreTool = {
 
     return { success: true };
   },
-};
+});
