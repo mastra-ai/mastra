@@ -1,7 +1,5 @@
-import { execFile } from 'child_process';
 import { randomUUID } from 'crypto';
-import { existsSync } from 'fs';
-import { readFile, writeFile } from 'fs/promises';
+import { readFile } from 'fs/promises';
 import { join } from 'path/posix';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
@@ -86,38 +84,6 @@ import {
 } from './handlers/workflows.js';
 import type { ServerBundleOptions } from './types';
 import { html } from './welcome.js';
-
-/**
- * Opens a URL in the user's default browser
- * Uses a temporary file to track if browser was already opened across process restarts
- */
-function openInBrowser(url: string) {
-  const browserFlagFile = join(process.cwd(), 'playground', 'browser-opened.json');
-
-  if (existsSync(browserFlagFile)) {
-    return;
-  }
-
-  const platform = process.platform;
-
-  const [cmd, ...args] = platform === 'win32'
-    ? ['cmd.exe', '/c', 'start', '', url]
-    : platform === 'darwin'
-    ? ['open', url]
-    : ['xdg-open', url];
-
-  execFile(cmd, args, async error => {
-    if (error) {
-      console.warn(`Failed to open browser: ${error.message}`);
-    } else {
-      try {
-        await writeFile(browserFlagFile, JSON.stringify({ timestamp: Date.now() }));
-      } catch (err) {
-        console.error(err);
-      }
-    }
-  });
-}
 
 type Bindings = {};
 
@@ -3236,7 +3202,6 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
       if (options?.playground) {
         const playgroundUrl = `http://${host}:${port}`;
         logger.info(`👨‍💻 Playground available at ${playgroundUrl}`);
-        void openInBrowser(playgroundUrl);
       }
 
       if (process.send) {
