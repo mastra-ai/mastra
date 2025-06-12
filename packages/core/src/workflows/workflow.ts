@@ -602,7 +602,7 @@ export class Workflow<
       timeout: opts?.timeout,
     });
     this.steps[step.id] = step;
-    return this as unknown as Workflow<TSteps, TWorkflowId, TInput, TOutput, TEngineType, TSchemaOut>;
+    return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, TSchemaOut>;
   }
 
   map<
