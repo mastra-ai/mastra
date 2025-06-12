@@ -1,5 +1,14 @@
 # @mastra/playground-ui
 
+## 5.1.5
+
+### Patch Changes
+
+- 13c97f9: Save run status, result and error in storage snapshot
+- Updated dependencies [13c97f9]
+  - @mastra/core@0.10.5
+  - @mastra/client-js@0.10.4
+
 ## 5.1.4
 
 ### Patch Changes

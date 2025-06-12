@@ -691,6 +691,8 @@ describe.skip('D1Store REST API', () => {
         },
         activePaths: [],
         suspendedPaths: {},
+        status: 'suspended',
+        serializedStepGraph: [],
       } as unknown as WorkflowRunState;
 
       await store.persistWorkflowSnapshot({
@@ -797,6 +799,8 @@ describe.skip('D1Store REST API', () => {
         },
         activePaths: [],
         suspendedPaths: {},
+        status: 'success',
+        serializedStepGraph: [],
       } as unknown as WorkflowRunState;
 
       await store.persistWorkflowSnapshot({
