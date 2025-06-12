@@ -1,5 +1,18 @@
 # @mastra/mongodb
 
+## 0.10.4-alpha.0
+
+### Patch Changes
+
+- 63f6b7d: dependencies updates:
+  - Updated dependency [`cloudflare@^4.3.0` ↗︎](https://www.npmjs.com/package/cloudflare/v/4.3.0) (from `^4.1.0`, in `dependencies`)
+  - Updated dependency [`mongodb@^6.17.0` ↗︎](https://www.npmjs.com/package/mongodb/v/6.17.0) (from `^6.15.0`, in `dependencies`)
+- Updated dependencies [63f6b7d]
+- Updated dependencies [36f1c36]
+- Updated dependencies [10d352e]
+- Updated dependencies [53d3c37]
+  - @mastra/core@0.10.6-alpha.0
+
 ## 0.10.3
 
 ### Patch Changes
