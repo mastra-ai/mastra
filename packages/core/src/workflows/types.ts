@@ -52,11 +52,18 @@ export type StepRunning<P, R, S> = {
   resumedAt?: number;
 };
 
+export type StepWaiting<P> = {
+  status: 'waiting';
+  payload: P;
+  startedAt: number;
+};
+
 export type StepResult<P, R, S, T> =
   | StepSuccess<P, R, S, T>
   | StepFailure<P, R, S>
   | StepSuspended<P, S>
-  | StepRunning<P, R, S>;
+  | StepRunning<P, R, S>
+  | StepWaiting<P>;
 
 export type StepsRecord<T extends readonly Step<any, any, any>[]> = {
   [K in T[number]['id']]: Extract<T[number], { id: K }>;

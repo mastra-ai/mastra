@@ -1044,8 +1044,34 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         runtimeContext,
       });
     } else if (entry.type === 'sleep') {
-      // TODO: mark state as 'waiting'
       const startedAt = Date.now();
+      await emitter.emit('watch', {
+        type: 'watch',
+        payload: {
+          currentStep: {
+            id: entry.id,
+            status: 'waiting',
+            payload: prevOutput,
+            startedAt,
+          },
+          workflowState: {
+            status: 'running',
+            steps: {
+              ...stepResults,
+              [entry.id]: {
+                status: 'waiting',
+                payload: prevOutput,
+                startedAt,
+              },
+            },
+            result: null,
+            error: null,
+          },
+        },
+        eventTimestamp: Date.now(),
+      });
+      // TODO: watch-v2 event?
+
       await this.executeSleep({ id: entry.id, duration: entry.duration });
       const endedAt = Date.now();
       const stepInfo = {
@@ -1057,8 +1083,34 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       execResults = { ...stepInfo, status: 'success', output: prevOutput };
       stepResults[entry.id] = { ...stepInfo, status: 'success', output: prevOutput };
     } else if (entry.type === 'sleepUntil') {
-      // TODO: mark state as 'waiting'
       const startedAt = Date.now();
+      await emitter.emit('watch', {
+        type: 'watch',
+        payload: {
+          currentStep: {
+            id: entry.id,
+            status: 'waiting',
+            payload: prevOutput,
+            startedAt,
+          },
+          workflowState: {
+            status: 'running',
+            steps: {
+              ...stepResults,
+              [entry.id]: {
+                status: 'waiting',
+                payload: prevOutput,
+                startedAt,
+              },
+            },
+            result: null,
+            error: null,
+          },
+        },
+        eventTimestamp: Date.now(),
+      });
+      // TODO: watch-v2 event?
+
       await this.executeSleep({ id: entry.id, duration: entry.date.getTime() - Date.now() });
       const endedAt = Date.now();
       const stepInfo = {
@@ -1070,10 +1122,36 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       execResults = { ...stepInfo, status: 'success', output: prevOutput };
       stepResults[entry.id] = { ...stepInfo, status: 'success', output: prevOutput };
     } else if (entry.type === 'waitForEvent') {
-      // TODO: mark state as 'waiting'
       const startedAt = Date.now();
       let eventData: any;
       try {
+        await emitter.emit('watch', {
+          type: 'watch',
+          payload: {
+            currentStep: {
+              id: entry.step.id,
+              status: 'waiting',
+              payload: prevOutput,
+              startedAt,
+            },
+            workflowState: {
+              status: 'running',
+              steps: {
+                ...stepResults,
+                [entry.step.id]: {
+                  status: 'waiting',
+                  payload: prevOutput,
+                  startedAt,
+                },
+              },
+              result: null,
+              error: null,
+            },
+          },
+          eventTimestamp: Date.now(),
+        });
+        // TODO: watch-v2 event?
+
         eventData = await this.executeWaitForEvent({ event: entry.event, emitter, timeout: entry.timeout });
         const { step } = entry;
         execResults = await this.executeStep({
