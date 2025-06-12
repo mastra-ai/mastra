@@ -1,5 +1,13 @@
 # @mastra/deployer
 
+## 0.10.5
+
+### Patch Changes
+
+- 1ba421d: fix the tools not showing on workflows attached to agents
+- Updated dependencies [13c97f9]
+  - @mastra/core@0.10.5
+
 ## 0.10.4
 
 ### Patch Changes

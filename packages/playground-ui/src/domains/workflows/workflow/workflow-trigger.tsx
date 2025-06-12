@@ -16,7 +16,6 @@ import {
   useExecuteWorkflow,
   useWatchWorkflow,
   useResumeWorkflow,
-  useWorkflow,
   ExtendedWorkflowWatchResult,
 } from '@/hooks/use-workflows';
 import { WorkflowRunContext } from '../context/workflow-run-context';
@@ -34,12 +33,23 @@ interface SuspendedStep {
   stepId: string;
   runId: string;
   suspendPayload: any;
+  workflow?: GetWorkflowResponse;
+  isLoading: boolean;
 }
 
-export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; setRunId?: (runId: string) => void }) {
+export function WorkflowTrigger({
+  workflowId,
+  setRunId,
+  workflow,
+  isLoading,
+}: {
+  workflowId: string;
+  setRunId?: (runId: string) => void;
+  workflow?: GetWorkflowResponse;
+  isLoading?: boolean;
+}) {
   const { runtimeContext } = usePlaygroundStore();
   const { result, setResult, payload, setPayload } = useContext(WorkflowRunContext);
-  const { isLoading, workflow } = useWorkflow(workflowId);
 
   const { createWorkflowRun, startWorkflowRun } = useExecuteWorkflow();
   const { watchWorkflow, watchResult, isWatchingWorkflow } = useWatchWorkflow();
@@ -101,6 +111,7 @@ export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; 
         stepId,
         runId: result.runId,
         suspendPayload: payload,
+        isLoading: false,
       }));
     setSuspendedSteps(suspended);
   }, [watchResultToUse, result]);
@@ -204,6 +215,7 @@ export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; 
                       runId: step.runId,
                       suspendPayload: step.suspendPayload,
                       resumeData: data,
+                      isLoading: false,
                     });
                   }}
                 />

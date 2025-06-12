@@ -125,6 +125,7 @@ class Test {
       suspendedPaths: {},
       runId,
       timestamp: timestamp.getTime(),
+      status: options.status,
     } as WorkflowRunState;
     return { snapshot, runId, stepId };
   }
@@ -620,6 +621,7 @@ describe('MongoDBStore', () => {
         ],
         serializedStepGraph: [],
         runId: runId,
+        status: 'running',
         timestamp: Date.now(),
       };
 

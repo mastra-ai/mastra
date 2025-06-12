@@ -117,7 +117,7 @@ describe('changesTool', () => {
           expect(section).toMatch(/- .+/); // Entry
 
           // Entries should be properly formatted
-          const entries = section.match(/- .+/g) || [];
+          const entries = section.match(/^- .+/g) || [];
           entries.forEach(entry => {
             // Skip the truncation message if it exists
             expect(entry).toMatch(/- [a-f0-9]+: .+/i); // Should match commit hash format

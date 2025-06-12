@@ -7,8 +7,8 @@ import { realtimeMiddleware } from '@inngest/realtime';
 import { createTool, Mastra, Telemetry } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/runtime-context';
-import { DefaultStorage } from '@mastra/core/storage/libsql';
 import { createHonoServer } from '@mastra/deployer/server';
+import { DefaultStorage } from '@mastra/libsql';
 import { $ } from 'execa';
 import getPort from 'get-port';
 import { Inngest } from 'inngest';
@@ -67,9 +67,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': workflow,
@@ -144,9 +142,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': workflow,
@@ -227,9 +223,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': workflow,
@@ -262,6 +256,186 @@ describe('MastraInngestWorkflow', () => {
         step1: { status: 'success', output: { value: 'step1' } },
         step2: { status: 'success', output: { value: 'step2' } },
       });
+
+      srv.close();
+    });
+
+    it('should execute a a sleep step', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ inputData }) => {
+          return { result: 'slept successfully: ' + inputData.result };
+        },
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        steps: [step1],
+      });
+
+      workflow.then(step1).sleep(1000).then(step2).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      });
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      const run = workflow.createRun();
+      const startTime = Date.now();
+      const result = await run.start({ inputData: {} });
+      const endTime = Date.now();
+
+      expect(execute).toHaveBeenCalled();
+      expect(result.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'success' },
+        // payload: {},
+        // startedAt: expect.any(Number),
+        // endedAt: expect.any(Number),
+      });
+
+      expect(result.steps['step2']).toEqual({
+        status: 'success',
+        output: { result: 'slept successfully: success' },
+        // payload: { result: 'success' },
+        // startedAt: expect.any(Number),
+        // endedAt: expect.any(Number),
+      });
+
+      expect(endTime - startTime).toBeGreaterThan(1000);
+
+      srv.close();
+    });
+
+    it('should execute a a sleep until step', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ inputData }) => {
+          return { result: 'slept successfully: ' + inputData.result };
+        },
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        steps: [step1],
+      });
+
+      workflow
+        .then(step1)
+        .sleepUntil(new Date(Date.now() + 1000))
+        .then(step2)
+        .commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      });
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      const run = workflow.createRun();
+      const startTime = Date.now();
+      const result = await run.start({ inputData: {} });
+      const endTime = Date.now();
+
+      expect(execute).toHaveBeenCalled();
+      expect(result.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'success' },
+        // payload: {},
+        // startedAt: expect.any(Number),
+        // endedAt: expect.any(Number),
+      });
+
+      expect(result.steps['step2']).toEqual({
+        status: 'success',
+        output: { result: 'slept successfully: success' },
+        // payload: { result: 'success' },
+        // startedAt: expect.any(Number),
+        // endedAt: expect.any(Number),
+      });
+
+      expect(endTime - startTime).toBeGreaterThan(1000);
 
       srv.close();
     });
@@ -301,9 +475,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': workflow,
@@ -390,9 +562,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': workflow,
@@ -459,9 +629,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': workflow,
@@ -536,9 +704,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': workflow,
@@ -620,9 +786,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': workflow,
@@ -725,9 +889,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': workflow,
@@ -803,9 +965,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': workflow,
@@ -910,9 +1070,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': workflow,
@@ -995,9 +1153,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': workflow,
@@ -1065,9 +1221,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': workflow,
@@ -1151,9 +1305,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': workflow,
@@ -1247,9 +1399,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'main-workflow': mainWorkflow,
@@ -1377,9 +1527,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': workflow,
@@ -1481,9 +1629,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': counterWorkflow,
@@ -1586,9 +1732,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': counterWorkflow,
@@ -1677,9 +1821,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': counterWorkflow,
@@ -1832,9 +1974,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': counterWorkflow,
@@ -1983,9 +2123,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': counterWorkflow,
@@ -2157,9 +2295,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': workflow,
@@ -2225,9 +2361,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': workflow,
@@ -2359,9 +2493,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': workflow,
@@ -2432,9 +2564,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': workflow,
@@ -2620,9 +2750,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': workflow,
@@ -2792,9 +2920,7 @@ describe('MastraInngestWorkflow', () => {
 
       // Create a new storage instance for initial run
       const initialStorage = new DefaultStorage({
-        config: {
-          url: 'file::memory:',
-        },
+        url: 'file::memory:',
       });
       const mastra = new Mastra({
         storage: initialStorage,
@@ -2946,9 +3072,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': workflow,
@@ -3150,9 +3274,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': workflow,
@@ -3346,9 +3468,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': promptEvalWorkflow,
@@ -3472,9 +3592,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': workflow,
@@ -3577,9 +3695,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': workflow,
@@ -3715,9 +3831,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': workflow,
@@ -3860,9 +3974,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': counterWorkflow,
@@ -4014,9 +4126,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': counterWorkflow,
@@ -4173,9 +4283,7 @@ describe('MastraInngestWorkflow', () => {
 
         const mastra = new Mastra({
           storage: new DefaultStorage({
-            config: {
-              url: ':memory:',
-            },
+            url: ':memory:',
           }),
           workflows: {
             'test-workflow': counterWorkflow,
@@ -4334,9 +4442,7 @@ describe('MastraInngestWorkflow', () => {
 
         const mastra = new Mastra({
           storage: new DefaultStorage({
-            config: {
-              url: ':memory:',
-            },
+            url: ':memory:',
           }),
           workflows: {
             'test-workflow': counterWorkflow,
@@ -4533,9 +4639,7 @@ describe('MastraInngestWorkflow', () => {
 
         const mastra = new Mastra({
           storage: new DefaultStorage({
-            config: {
-              url: ':memory:',
-            },
+            url: ':memory:',
           }),
           workflows: {
             'test-workflow': counterWorkflow,
@@ -4691,9 +4795,7 @@ describe('MastraInngestWorkflow', () => {
 
         const mastra = new Mastra({
           storage: new DefaultStorage({
-            config: {
-              url: ':memory:',
-            },
+            url: ':memory:',
           }),
           workflows: {
             'test-workflow': counterWorkflow,
@@ -4841,9 +4943,7 @@ describe('MastraInngestWorkflow', () => {
 
         const mastra = new Mastra({
           storage: new DefaultStorage({
-            config: {
-              url: ':memory:',
-            },
+            url: ':memory:',
           }),
           workflows: {
             'test-workflow': counterWorkflow,
@@ -5028,9 +5128,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': counterWorkflow,
@@ -5187,9 +5285,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': counterWorkflow,
@@ -5264,9 +5360,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': workflow,
@@ -5329,9 +5423,7 @@ describe('MastraInngestWorkflow', () => {
 
       const mastra = new Mastra({
         storage: new DefaultStorage({
-          config: {
-            url: ':memory:',
-          },
+          url: ':memory:',
         }),
         workflows: {
           'test-workflow': workflow,
@@ -5372,9 +5464,7 @@ describe('MastraInngestWorkflow', () => {
       const { createWorkflow, createStep } = init(inngest);
 
       const initialStorage = new DefaultStorage({
-        config: {
-          url: 'file::memory:',
-        },
+        url: 'file::memory:',
       });
 
       const runtimeContext = new RuntimeContext();
@@ -5427,4 +5517,6 @@ describe('MastraInngestWorkflow', () => {
       expect(result?.steps.step1.output.injectedValue).toBe(testValue + '2');
     });
   });
+
+  describe('Access to inngest step primitives', () => {});
 }, 40e3);

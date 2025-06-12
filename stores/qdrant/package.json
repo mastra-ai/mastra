@@ -26,17 +26,17 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@qdrant/js-client-rest": "^1.13.0"
+    "@qdrant/js-client-rest": "^1.14.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
-    "@types/node": "^20.17.57",
+    "@types/node": "^20.19.0",
     "eslint": "^9.28.0",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.2",
-    "vitest": "^3.2.2",
-    "@mastra/core": "workspace:*"
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.3"
   },
   "peerDependencies": {
     "@mastra/core": ">=0.10.4-0 <0.11.0"

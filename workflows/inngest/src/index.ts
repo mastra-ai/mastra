@@ -14,12 +14,17 @@ import type {
   StepResult,
   WorkflowResult,
   SerializedStepFlowEntry,
+  StepFailure,
 } from '@mastra/core/workflows';
 import { EMITTER_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Span } from '@opentelemetry/api';
 import type { Inngest, BaseContext } from 'inngest';
 import { serve as inngestServe } from 'inngest/hono';
 import type { z } from 'zod';
+
+export type InngestEngineType = {
+  step: any;
+};
 
 export function serve({ mastra, inngest }: { mastra: Mastra; inngest: Inngest }): ReturnType<typeof inngestServe> {
   const wfs = mastra.getWorkflows();
@@ -106,6 +111,7 @@ export class InngestRun<
         activePaths: [],
         suspendedPaths: {},
         timestamp: Date.now(),
+        status: 'running',
       },
     });
 
@@ -206,7 +212,7 @@ export class InngestWorkflow<
   TInput extends z.ZodType<any> = z.ZodType<any>,
   TOutput extends z.ZodType<any> = z.ZodType<any>,
   TPrevSchema extends z.ZodType<any> = TInput,
-> extends Workflow<TSteps, TWorkflowId, TInput, TOutput, TPrevSchema> {
+> extends Workflow<TSteps, TWorkflowId, TInput, TOutput, InngestEngineType, TPrevSchema> {
   #mastra: Mastra;
   public inngest: Inngest;
 
@@ -404,7 +410,28 @@ export function init(inngest: Inngest) {
     >(params: WorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>) {
       return new InngestWorkflow(params, inngest);
     },
-    createStep,
+    createStep<
+      TStepId extends string,
+      TStepInput extends z.ZodType<any>,
+      TStepOutput extends z.ZodType<any>,
+      TResumeSchema extends z.ZodType<any>,
+      TSuspendSchema extends z.ZodType<any>,
+    >(params: {
+      id: TStepId;
+      inputSchema: TStepInput;
+      outputSchema: TStepOutput;
+      resumeSchema?: TResumeSchema;
+      suspendSchema?: TSuspendSchema;
+      execute: ExecuteFunction<
+        z.infer<TStepInput>,
+        z.infer<TStepOutput>,
+        z.infer<TResumeSchema>,
+        z.infer<TSuspendSchema>,
+        InngestEngineType
+      >;
+    }) {
+      return createStep<TStepId, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType>(params);
+    },
     cloneStep,
     cloneWorkflow,
   };
@@ -529,6 +556,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       emitter,
       runtimeContext,
     });
+  }
+
+  async executeSleep({ id, duration }: { id: string; duration: number }): Promise<void> {
+    await this.inngestStep.sleep(id, duration);
   }
 
   async executeStep({
@@ -771,7 +802,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             // @ts-ignore
             runId: stepResults[step.id]?.payload?.__workflow_meta?.runId,
           },
-          emitter,
+          [EMITTER_SYMBOL]: emitter,
+          engine: {
+            step: this.inngestStep,
+          },
         });
 
         execResults = { status: 'success', output: result };
@@ -825,12 +859,18 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     stepResults,
     executionContext,
     serializedStepGraph,
+    workflowStatus,
+    result,
+    error,
   }: {
     workflowId: string;
     runId: string;
     stepResults: Record<string, StepResult<any, any, any, any>>;
     serializedStepGraph: SerializedStepFlowEntry[];
     executionContext: ExecutionContext;
+    workflowStatus: 'success' | 'failed' | 'suspended' | 'running';
+    result?: Record<string, any>;
+    error?: string | Error;
   }) {
     await this.inngestStep.run(
       `workflow.${workflowId}.run.${runId}.path.${JSON.stringify(executionContext.executionPath)}.stepUpdate`,
@@ -845,6 +885,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             activePaths: [],
             suspendedPaths: executionContext.suspendedPaths,
             serializedStepGraph,
+            status: workflowStatus,
+            result,
+            error,
             // @ts-ignore
             timestamp: Date.now(),
           },
@@ -868,7 +911,11 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   }: {
     workflowId: string;
     runId: string;
-    entry: { type: 'conditional'; steps: StepFlowEntry[]; conditions: ExecuteFunction<any, any, any, any>[] };
+    entry: {
+      type: 'conditional';
+      steps: StepFlowEntry[];
+      conditions: ExecuteFunction<any, any, any, any, InngestEngineType>[];
+    };
     prevStep: StepFlowEntry;
     serializedStepGraph: SerializedStepFlowEntry[];
     prevOutput: any;
@@ -911,6 +958,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                 // TODO: this function shouldn't have suspend probably?
                 suspend: async (_suspendPayload: any) => {},
                 [EMITTER_SYMBOL]: emitter,
+                engine: {
+                  step: this.inngestStep,
+                },
               });
               return result ? index : null;
               // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -923,7 +973,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     ).filter((index: any): index is number => index !== null);
 
     const stepsToRun = entry.steps.filter((_, index) => truthyIndexes.includes(index));
-    const results: StepResult<any, any, any, any>[] = await Promise.all(
+    const results: { result: StepResult<any, any, any, any> }[] = await Promise.all(
       stepsToRun.map((step, index) =>
         this.executeEntry({
           workflowId,
@@ -946,17 +996,19 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         }),
       ),
     );
-    const hasFailed = results.find(result => result.status === 'failed');
-    const hasSuspended = results.find(result => result.status === 'suspended');
+    const hasFailed = results.find(result => result.result.status === 'failed') as {
+      result: StepFailure<any, any, any>;
+    };
+    const hasSuspended = results.find(result => result.result.status === 'suspended');
     if (hasFailed) {
-      execResults = { status: 'failed', error: hasFailed.error };
+      execResults = { status: 'failed', error: hasFailed.result.error };
     } else if (hasSuspended) {
-      execResults = { status: 'suspended', payload: hasSuspended.payload };
+      execResults = { status: 'suspended', payload: hasSuspended.result.payload };
     } else {
       execResults = {
         status: 'success',
         output: results.reduce((acc: Record<string, any>, result, index) => {
-          if (result.status === 'success') {
+          if (result.result.status === 'success') {
             // @ts-ignore
             acc[stepsToRun[index]!.step.id] = result.output;
           }

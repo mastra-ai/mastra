@@ -1793,6 +1793,116 @@ describe('Workflow', () => {
         });
       });
     });
+
+    it('should execute a a sleep step', async () => {
+      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ inputData }) => {
+          return { result: 'slept successfully: ' + inputData.result };
+        },
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        steps: [step1],
+      });
+
+      workflow.then(step1).sleep(1000).then(step2).commit();
+
+      const run = workflow.createRun();
+      const startTime = Date.now();
+      const result = await run.start({ inputData: {} });
+      const endTime = Date.now();
+
+      expect(execute).toHaveBeenCalled();
+      expect(result.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'success' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(result.steps['step2']).toEqual({
+        status: 'success',
+        output: { result: 'slept successfully: success' },
+        payload: { result: 'success' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(endTime - startTime).toBeGreaterThan(1000);
+    });
+
+    it('should execute a a sleep until step', async () => {
+      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ inputData }) => {
+          return { result: 'slept successfully: ' + inputData.result };
+        },
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+        }),
+        steps: [step1],
+      });
+
+      workflow
+        .then(step1)
+        .sleepUntil(new Date(Date.now() + 1000))
+        .then(step2)
+        .commit();
+
+      const run = workflow.createRun();
+      const startTime = Date.now();
+      const result = await run.start({ inputData: {} });
+      const endTime = Date.now();
+
+      expect(execute).toHaveBeenCalled();
+      expect(result.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'success' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(result.steps['step2']).toEqual({
+        status: 'success',
+        output: { result: 'slept successfully: success' },
+        payload: { result: 'success' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(endTime - startTime).toBeGreaterThan(1000);
+    });
   });
 
   describe('Error Handling', () => {
@@ -6275,6 +6385,159 @@ describe('Workflow', () => {
 
       // @ts-ignore
       expect(result?.steps.step1.output.injectedValue).toBe(testValue + '2');
+    });
+  });
+
+  describe('consecutive parallel executions', () => {
+    it('should support consecutive parallel calls with proper type inference', async () => {
+      // First parallel stage steps
+      const step1 = createStep({
+        id: 'step1',
+        inputSchema: z.object({
+          input: z.string(),
+        }),
+        outputSchema: z.object({
+          result1: z.string(),
+        }),
+        execute: vi.fn<any>().mockImplementation(async ({ inputData }) => ({
+          result1: `processed-${inputData.input}`,
+        })),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        inputSchema: z.object({
+          input: z.string(),
+        }),
+        outputSchema: z.object({
+          result2: z.string(),
+        }),
+        execute: vi.fn<any>().mockImplementation(async ({ inputData }) => ({
+          result2: `transformed-${inputData.input}`,
+        })),
+      });
+
+      // Second parallel stage steps
+      const step3 = createStep({
+        id: 'step3',
+        inputSchema: z.object({
+          step1: z.object({
+            result1: z.string(),
+          }),
+          step2: z.object({
+            result2: z.string(),
+          }),
+        }),
+        outputSchema: z.object({
+          result3: z.string(),
+        }),
+        execute: vi.fn<any>().mockImplementation(async ({ inputData }) => ({
+          result3: `combined-${inputData.step1.result1}-${inputData.step2.result2}`,
+        })),
+      });
+
+      const step4 = createStep({
+        id: 'step4',
+        inputSchema: z.object({
+          step1: z.object({
+            result1: z.string(),
+          }),
+          step2: z.object({
+            result2: z.string(),
+          }),
+        }),
+        outputSchema: z.object({
+          result4: z.string(),
+        }),
+        execute: vi.fn<any>().mockImplementation(async ({ inputData }) => ({
+          result4: `final-${inputData.step1.result1}-${inputData.step2.result2}`,
+        })),
+      });
+
+      const workflow = createWorkflow({
+        id: 'consecutive-parallel-workflow',
+        inputSchema: z.object({
+          input: z.string(),
+        }),
+        outputSchema: z.object({
+          result3: z.string(),
+          result4: z.string(),
+        }),
+        steps: [step1, step2, step3, step4],
+      });
+
+      // This tests the fix: consecutive parallel calls should work with proper type inference
+      workflow.parallel([step1, step2]).parallel([step3, step4]).commit();
+
+      const run = workflow.createRun();
+      const result = await run.start({ inputData: { input: 'test-data' } });
+
+      // Verify the first parallel stage executed correctly
+      expect(step1.execute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          inputData: { input: 'test-data' },
+        }),
+      );
+      expect(step2.execute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          inputData: { input: 'test-data' },
+        }),
+      );
+
+      // Verify the second parallel stage received the correct input
+      expect(step3.execute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          inputData: {
+            step1: { result1: 'processed-test-data' },
+            step2: { result2: 'transformed-test-data' },
+          },
+        }),
+      );
+      expect(step4.execute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          inputData: {
+            step1: { result1: 'processed-test-data' },
+            step2: { result2: 'transformed-test-data' },
+          },
+        }),
+      );
+
+      // Verify the final results
+      expect(result.status).toBe('success');
+      expect(result.steps.step1).toEqual({
+        status: 'success',
+        output: { result1: 'processed-test-data' },
+        payload: { input: 'test-data' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(result.steps.step2).toEqual({
+        status: 'success',
+        output: { result2: 'transformed-test-data' },
+        payload: { input: 'test-data' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(result.steps.step3).toEqual({
+        status: 'success',
+        output: { result3: 'combined-processed-test-data-transformed-test-data' },
+        payload: {
+          step1: { result1: 'processed-test-data' },
+          step2: { result2: 'transformed-test-data' },
+        },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(result.steps.step4).toEqual({
+        status: 'success',
+        output: { result4: 'final-processed-test-data-transformed-test-data' },
+        payload: {
+          step1: { result1: 'processed-test-data' },
+          step2: { result2: 'transformed-test-data' },
+        },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
     });
   });
 });
