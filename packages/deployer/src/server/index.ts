@@ -1368,6 +1368,31 @@ ${err.stack.split('\n').slice(1).join('\n')}
     getMcpServerMessageHandler,
   );
 
+  app.get(
+    '/api/mcp/:serverId/mcp',
+    describeRoute({
+      description: 'Send a message to an MCP server using Streamable HTTP',
+      tags: ['mcp'],
+      parameters: [
+        {
+          name: 'serverId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Streamable HTTP connection processed',
+        },
+        404: {
+          description: 'MCP server not found',
+        },
+      },
+    }),
+    getMcpServerMessageHandler,
+  );
+
   // New MCP server routes for SSE
   const mcpSseBasePath = '/api/mcp/:serverId/sse';
   const mcpSseMessagePath = '/api/mcp/:serverId/messages';

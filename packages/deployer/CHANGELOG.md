@@ -1,5 +1,25 @@
 # @mastra/deployer
 
+## 0.10.6-alpha.0
+
+### Patch Changes
+
+- 2d12edd: dependencies updates:
+  - Updated dependency [`rollup@^4.43.0` ↗︎](https://www.npmjs.com/package/rollup/v/4.43.0) (from `^4.42.0`, in `dependencies`)
+- 63f6b7d: dependencies updates:
+  - Updated dependency [`detect-libc@^2.0.4` ↗︎](https://www.npmjs.com/package/detect-libc/v/2.0.4) (from `^2.0.3`, in `dependencies`)
+  - Updated dependency [`esbuild@^0.25.5` ↗︎](https://www.npmjs.com/package/esbuild/v/0.25.5) (from `^0.25.1`, in `dependencies`)
+  - Updated dependency [`rollup@^4.42.0` ↗︎](https://www.npmjs.com/package/rollup/v/4.42.0) (from `^4.41.1`, in `dependencies`)
+  - Updated dependency [`zod@^3.25.57` ↗︎](https://www.npmjs.com/package/zod/v/3.25.57) (from `^3.25.56`, in `dependencies`)
+- 36f1c36: MCP Client and Server streamable http fixes
+- 53d3c37: Get workflows from an agent if not found from Mastra instance #5083
+- Updated dependencies [63f6b7d]
+- Updated dependencies [36f1c36]
+- Updated dependencies [10d352e]
+- Updated dependencies [53d3c37]
+  - @mastra/core@0.10.6-alpha.0
+  - @mastra/server@0.10.6-alpha.0
+
 ## 0.10.5
 
 ### Patch Changes
