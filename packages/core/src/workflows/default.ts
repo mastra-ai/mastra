@@ -1070,7 +1070,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         },
         eventTimestamp: Date.now(),
       });
-      // TODO: watch-v2 event?
+      await emitter.emit('watch-v2', {
+        type: 'step-waiting',
+        payload: {
+          id: entry.id,
+          payload: prevOutput,
+        },
+      });
 
       await this.executeSleep({ id: entry.id, duration: entry.duration });
       const endedAt = Date.now();
@@ -1109,7 +1115,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         },
         eventTimestamp: Date.now(),
       });
-      // TODO: watch-v2 event?
+      await emitter.emit('watch-v2', {
+        type: 'step-waiting',
+        payload: {
+          id: entry.id,
+          payload: prevOutput,
+        },
+      });
 
       await this.executeSleep({ id: entry.id, duration: entry.date.getTime() - Date.now() });
       const endedAt = Date.now();
@@ -1150,7 +1162,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           },
           eventTimestamp: Date.now(),
         });
-        // TODO: watch-v2 event?
+        await emitter.emit('watch-v2', {
+          type: 'step-waiting',
+          payload: {
+            id: entry.step.id,
+            payload: prevOutput,
+          },
+        });
 
         eventData = await this.executeWaitForEvent({ event: entry.event, emitter, timeout: entry.timeout });
         const { step } = entry;

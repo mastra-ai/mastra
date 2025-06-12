@@ -52,9 +52,11 @@ export type StepRunning<P, R, S> = {
   resumedAt?: number;
 };
 
-export type StepWaiting<P> = {
+export type StepWaiting<P, R, S> = {
   status: 'waiting';
   payload: P;
+  suspendPayload?: S;
+  resumePayload?: R;
   startedAt: number;
 };
 
@@ -63,7 +65,7 @@ export type StepResult<P, R, S, T> =
   | StepFailure<P, R, S>
   | StepSuspended<P, S>
   | StepRunning<P, R, S>
-  | StepWaiting<P>;
+  | StepWaiting<P, R, S>;
 
 export type StepsRecord<T extends readonly Step<any, any, any>[]> = {
   [K in T[number]['id']]: Extract<T[number], { id: K }>;
@@ -108,6 +110,10 @@ export type VariableReference<
 
 export type StreamEvent = TextStreamPart<any> & {
   type: 'step-suspended';
+  payload: any;
+  id: string;
+} & {
+  type: 'step-waiting';
   payload: any;
   id: string;
 };
