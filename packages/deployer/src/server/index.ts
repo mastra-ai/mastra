@@ -1370,7 +1370,6 @@ ${err.stack.split('\n').slice(1).join('\n')}
 
   app.get(
     '/api/mcp/:serverId/mcp',
-    bodyLimit(bodyLimitOptions),
     describeRoute({
       description: 'Send a message to an MCP server using Streamable HTTP',
       tags: ['mcp'],
@@ -1382,9 +1381,6 @@ ${err.stack.split('\n').slice(1).join('\n')}
           schema: { type: 'string' },
         },
       ],
-      requestBody: {
-        content: { 'application/json': { schema: { type: 'object' } } },
-      },
       responses: {
         200: {
           description: 'Streamable HTTP connection processed',

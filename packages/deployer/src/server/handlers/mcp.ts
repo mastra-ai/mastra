@@ -33,7 +33,6 @@ export const getMcpServerMessageHandler = async (c: Context) => {
     });
     return await toFetchResponse(res);
   } catch (error: any) {
-    // mastra.getLogger().error({ err: error, serverId }, 'Error handling Streamable HTTP request in handler');
     // If headers haven't been sent, send an error response
     if (!res.headersSent) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
