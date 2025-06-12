@@ -4,15 +4,39 @@ import '@copilotkit/react-ui/styles.css';
 import { CopilotKit, useCoAgent } from '@copilotkit/react-core';
 
 function WeatherAgentChat() {
-  const { state } = useCoAgent({
+  const { state, setState } = useCoAgent({
     name: 'weatherAgent',
   });
 
-  console.log(state);
+  const cities = [
+    'New York',
+    'Los Angeles',
+    'Chicago',
+    'Houston',
+    'Phoenix',
+    'Philadelphia',
+    'San Antonio',
+    'San Diego',
+    'Dallas',
+    'San Jose',
+    'New Orleans',
+    'Seattle',
+    'Miami',
+    'Boston',
+    'Denver',
+  ];
+
+  // Randomly pick a city different from the current state
+  function randomizeCity() {
+    const otherCities = cities.filter(city => city !== state?.city);
+    const randomCity = otherCities[Math.floor(Math.random() * otherCities.length)];
+    setState({ city: randomCity });
+  }
 
   return (
     <>
-      <p>{state?.ingredient}</p>
+      <p>{state?.city}</p>
+      <button onClick={randomizeCity}>Change</button>
       <CopilotChat
         className="container"
         instructions={

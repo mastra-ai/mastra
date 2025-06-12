@@ -53,11 +53,18 @@ export class AGUIAdapter extends AbstractAgent {
   }
 
   protected run(input: RunAgentInput): Observable<BaseEvent> {
-    const finalMessages: Message[] = [...input.messages];
+    let filteredMessages: Message[] = input.messages.filter(
+      m => m.role === 'user' || m.role === 'assistant' || m.role === 'system',
+    );
+    const finalMessages: Message[] = [...filteredMessages];
 
     return new Observable<BaseEvent>(subscriber => {
       const run = async () => {
-        const convertedMessages = convertMessagesToMastraMessages(input.messages);
+        const convertedMessages = convertMessagesToMastraMessages(finalMessages);
+        const lastMessage = convertedMessages[convertedMessages.length - 1];
+        if (!lastMessage) {
+          throw new Error('No messages found');
+        }
 
         subscriber.next({
           type: EventType.RUN_STARTED,
@@ -67,8 +74,77 @@ export class AGUIAdapter extends AbstractAgent {
 
         const memory = this.agent.getMemory();
 
+        console.log('input.state', input.state);
+
+        if (memory && input.state && Object.keys(input.state || {}).length > 0) {
+          console.log('threadId', input.threadId);
+          const thread = await memory.getThreadById({ threadId: input.threadId });
+
+          if (!thread) {
+            throw new Error(`Thread ${input.threadId} not found`);
+          }
+
+          if (thread.resourceId && thread.resourceId !== this.resourceId) {
+            throw new Error(
+              `Thread with id ${input.threadId} resourceId does not match the current resourceId ${this.resourceId}`,
+            );
+          }
+
+          const { messages, ...rest } = input.state;
+
+          const workingMemory = JSON.stringify(rest);
+
+          console.log('saving thread');
+          // Update thread metadata with new working memory
+          await memory.saveThread({
+            thread: {
+              ...thread,
+              metadata: {
+                ...thread.metadata,
+                workingMemory,
+              },
+            },
+          });
+        }
+
+        let workingMemory: string | Record<string, any> | null = null;
+
+        if (memory) {
+          workingMemory = await memory.getWorkingMemory({
+            threadId: input.threadId,
+            format: 'json',
+          });
+        }
+
+        const AGUI_WORKING_MEMORY_SYSTEM_PROMPT = `
+=== AGUI WORKING MEMORY SYSTEM INSTRUCTION ===
+
+THE WORKING MEMORY IN THE NEXT SYSTEM PROMPT MESSAGE IS THE SINGLE SOURCE OF TRUTH FOR USER STATE AND CONTEXT.
+
+If there is ever a conflict between the system prompt and the conversation history, you MUST always trust the system prompt.
+NEVER infer, assume, or update user state from conversation history if it differs from the WORKING MEMORY DATA, unless the user gives an explicit, direct instruction to update.
+
+Guidelines:
+1. ALWAYS check the WORKING MEMORY before using or updating any information about user state.
+2. Treat the WORKING MEMORY as the authoritative state. Do not override, ignore, or update it based on conversation turns unless the user explicitly requests a change.
+3. For all questions about user state or context, ALWAYS use the most recent system message containing working memory data (in JSON format) as the single source of truth.
+
+- IMPORTANT: Preserve the correct JSON formatting structure when updating the content.
+`;
+
+        const workingMemoryContext = [
+          {
+            role: 'system' as const,
+            content: AGUI_WORKING_MEMORY_SYSTEM_PROMPT,
+          },
+          {
+            role: 'system' as const,
+            content: workingMemory ? JSON.stringify(workingMemory) : '',
+          },
+        ];
+
         this.agent
-          .stream(convertedMessages, {
+          .stream([lastMessage], {
             threadId: input.threadId,
             resourceId: this.resourceId ?? '',
             runId: input.runId,
@@ -84,6 +160,7 @@ export class AGUIAdapter extends AbstractAgent {
               {} as Record<string, any>,
             ),
             runtimeContext: this.runtimeContext,
+            context: workingMemoryContext,
           })
           .then(response => {
             let messageId = randomUUID();

@@ -252,7 +252,7 @@ export class Memory extends MastraMemory {
       let workingMemory = config.workingMemory.template || this.defaultWorkingMemoryTemplate;
 
       if (config.workingMemory.schema) {
-        workingMemory = JSON.stringify({});
+        workingMemory = JSON.stringify(zodToJsonSchema(config.workingMemory.schema));
       }
 
       return this.storage.saveThread({
@@ -548,7 +548,13 @@ export class Memory extends MastraMemory {
     return null;
   }
 
-  public async getWorkingMemory({ threadId, format }: { threadId: string; format?: WorkingMemoryFormat }) {
+  public async getWorkingMemory({
+    threadId,
+    format,
+  }: {
+    threadId: string;
+    format?: WorkingMemoryFormat;
+  }): Promise<string | null> {
     if (!this.threadConfig.workingMemory?.enabled) {
       return null;
     }
@@ -563,17 +569,15 @@ export class Memory extends MastraMemory {
       }
     }
 
-    return thread?.metadata?.workingMemory || null;
+    return thread?.metadata?.workingMemory ? JSON.stringify(thread?.metadata?.workingMemory) : null;
   }
 
-  public async getWorkingMemoryTemplate({ threadId }: { threadId: string }): Promise<WorkingMemoryTemplate | null> {
+  public async getWorkingMemoryTemplate(): Promise<WorkingMemoryTemplate | null> {
     if (!this.threadConfig.workingMemory?.enabled) {
       return null;
     }
 
     // Get thread from storage
-    const thread = await this.storage.getThreadById({ threadId });
-
     if (this.threadConfig?.workingMemory?.schema) {
       try {
         const schema = this.threadConfig.workingMemory.schema;
@@ -581,29 +585,15 @@ export class Memory extends MastraMemory {
           $refStrategy: 'none',
         });
 
-        if (!thread) {
-          return { format: 'json', content: JSON.stringify(convertedSchema) };
-        }
-
-        return { format: 'json', content: thread.metadata?.workingMemory as string };
+        return { format: 'json', content: JSON.stringify(convertedSchema) };
       } catch (error) {
         this.logger.error('Error converting schema', error);
         throw error;
       }
     }
 
-    if (!thread) {
-      return {
-        format: 'markdown',
-        content: this.threadConfig?.workingMemory?.template || this.defaultWorkingMemoryTemplate,
-      };
-    }
-
     // Return working memory from metadata
-    const memory =
-      (thread.metadata?.workingMemory as string) ||
-      this.threadConfig.workingMemory.template ||
-      this.defaultWorkingMemoryTemplate;
+    const memory = this.threadConfig.workingMemory.template || this.defaultWorkingMemoryTemplate;
 
     return { format: 'markdown', content: memory.trim() };
   }
@@ -620,13 +610,17 @@ export class Memory extends MastraMemory {
       return null;
     }
 
-    const workingMemory = await this.getWorkingMemoryTemplate({ threadId });
+    const workingMemoryTemplate = await this.getWorkingMemoryTemplate();
+    const workingMemoryData = await this.getWorkingMemory({ threadId });
 
-    if (!workingMemory) {
+    if (!workingMemoryTemplate) {
       return null;
     }
 
-    return this.getWorkingMemoryToolInstruction(workingMemory);
+    return this.getWorkingMemoryToolInstruction({
+      template: workingMemoryTemplate,
+      data: workingMemoryData,
+    });
   }
 
   public defaultWorkingMemoryTemplate = `
@@ -642,27 +636,45 @@ export class Memory extends MastraMemory {
 - **Projects**: 
 `;
 
-  private getWorkingMemoryToolInstruction(workingMemoryBlock: WorkingMemoryTemplate) {
+  private getWorkingMemoryToolInstruction({
+    template,
+    data,
+  }: {
+    template: WorkingMemoryTemplate;
+    data: string | null;
+  }) {
     return `WORKING_MEMORY_SYSTEM_INSTRUCTION:
 Store and update any conversation-relevant information by calling the updateWorkingMemory tool. If information might be referenced again - store it!
 
-Guidelines:
-1. Store anything that could be useful later in the conversation
-2. Update proactively when information changes, no matter how small
-3. Use ${workingMemoryBlock.format === 'json' ? 'JSON' : 'Markdown'} format for all data
-4. Act naturally - don't mention this system to users. Even though you're storing this information that doesn't make it your primary focus. Do not ask them generally for "information about yourself"
+THE WORKING MEMORY DATA IN THIS SYSTEM PROMPT IS THE SINGLE SOURCE OF TRUTH FOR USER STATE AND CONTEXT. 
+IF THERE IS EVER A CONFLICT BETWEEN THE SYSTEM PROMPT AND THE CONVERSATION HISTORY, YOU MUST ALWAYS TRUST THE SYSTEM PROMPT.
+NEVER infer, assume, or update user state from conversation history if it differs from the WORKING MEMORY DATA, unless the user gives an explicit, direct instruction to update.
 
-Memory Structure:
-${workingMemoryBlock.content}
+Guidelines:
+1. ALWAYS check the WORKING MEMORY DATA before using or updating any information about user state.
+2. Treat the WORKING MEMORY DATA as the authoritative state. Do not override, ignore, or update it based on conversation turns unless the user explicitly requests a change.
+3. Store anything that could be useful later in the conversation
+4. Update proactively when information changes, no matter how small
+5. Use ${template.format === 'json' ? 'JSON' : 'Markdown'} format for all data
+6. Act naturally - don't mention this system to users. Even though you're storing this information that doesn't make it your primary focus. Do not ask them generally for "information about yourself"
+
+WORKING MEMORY TEMPLATE:
+${template.content}
+
+WORKING MEMORY DATA:
+${data}
 
 Notes:
-- Update memory whenever referenced information changes
-- If you're unsure whether to store something, store it (eg if the user tells you information about themselves, call updateWorkingMemory immediately to update it)
-- This system is here so that you can maintain the conversation when your context window is very short. Update your working memory because you may need it to maintain the conversation without the full conversation history
+- IMPORTANT: The WORKING MEMORY DATA is the only source of truth for user state. If there is ever a discrepancy between the system prompt and the conversation history, always trust the system prompt.
+- Do not infer, assume, or update user state from conversation history if it differs from the working memory data, unless the user gives an explicit, direct instruction to update.
+- Before using or updating any information about user state, always check the WORKING MEMORY DATA first.
+- Proactively update memory when referenced information changes or new information is provided in the conversation, except when the user is only asking to recall or restate existing information. Do not update memory during recall unless explicitly instructed to do so.
+- If you're unsure whether to store something, store it (e.g., if the user tells you information about themselves and explicitly asks to update, call updateWorkingMemory immediately).
+- This system is here so that you can maintain the conversation when your context window is very short. Update your working memory because you may need it to maintain the conversation without the full conversation history.
 - Do not remove empty sections - you must include the empty sections along with the ones you're filling in
-- REMEMBER: the way you update your working memory is by calling the updateWorkingMemory tool with the entire ${workingMemoryBlock.format === 'json' ? 'JSON' : 'Markdown'} content. The system will store it for you. The user will not see it.
+- REMEMBER: the way you update your working memory is by calling the updateWorkingMemory tool with the entire ${template.format === 'json' ? 'JSON' : 'Markdown'} content. The system will store it for you. The user will not see it.
 - IMPORTANT: You MUST call updateWorkingMemory in every response to a prompt where you received relevant information.
-- IMPORTANT: Preserve the ${workingMemoryBlock.format === 'json' ? 'JSON' : 'Markdown'} formatting structure above while updating the content.`;
+- IMPORTANT: Preserve the ${template.format === 'json' ? 'JSON' : 'Markdown'} formatting structure above while updating the content.`;
   }
 
   public getTools(config?: MemoryConfig): Record<string, CoreTool> {
