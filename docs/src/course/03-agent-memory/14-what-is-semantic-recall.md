@@ -1,6 +1,6 @@
 # Implementing Semantic Recall
 
-One of the quickest way to take advantage of the configured vector store is to use semantic recall.
+One of the quickest ways to take advantage of the configured vector store is to use semantic recall.
 
 ## What is Semantic Recall?
 
