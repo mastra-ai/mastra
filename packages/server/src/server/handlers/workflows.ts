@@ -52,7 +52,7 @@ type SerializedStep = {
   suspendSchema: string | undefined;
 };
 
-async function getWorkflowFromAgents({ mastra, workflowId }: WorkflowContext) {
+async function getWorkflowsFromSystem({ mastra, workflowId }: WorkflowContext) {
   const logger = mastra.getLogger();
 
   if (!workflowId) {
@@ -68,6 +68,7 @@ async function getWorkflowFromAgents({ mastra, workflowId }: WorkflowContext) {
   }
 
   if (!workflow) {
+    logger.debug('Workflow not found, searching agents for workflow', { workflowId });
     const agents = mastra.getAgents();
 
     if (Object.keys(agents || {}).length) {
@@ -107,7 +108,7 @@ export async function getWorkflowByIdHandler({ mastra, workflowId }: WorkflowCon
       throw new HTTPException(400, { message: 'Workflow ID is required' });
     }
 
-    const { workflow } = await getWorkflowFromAgents({ mastra, workflowId });
+    const { workflow } = await getWorkflowsFromSystem({ mastra, workflowId });
 
     if (!workflow) {
       throw new HTTPException(404, { message: 'Workflow not found' });
@@ -150,7 +151,7 @@ export async function getWorkflowRunByIdHandler({
       throw new HTTPException(400, { message: 'Run ID is required' });
     }
 
-    const { workflow } = await getWorkflowFromAgents({ mastra, workflowId });
+    const { workflow } = await getWorkflowsFromSystem({ mastra, workflowId });
 
     if (!workflow) {
       throw new HTTPException(404, { message: 'Workflow not found' });
@@ -178,7 +179,7 @@ export async function createWorkflowRunHandler({
       throw new HTTPException(400, { message: 'Workflow ID is required' });
     }
 
-    const { workflow } = await getWorkflowFromAgents({ mastra, workflowId });
+    const { workflow } = await getWorkflowsFromSystem({ mastra, workflowId });
 
     if (!workflow) {
       throw new HTTPException(404, { message: 'Workflow not found' });
@@ -207,7 +208,7 @@ export async function startAsyncWorkflowHandler({
       throw new HTTPException(400, { message: 'Workflow ID is required' });
     }
 
-    const { workflow } = await getWorkflowFromAgents({ mastra, workflowId });
+    const { workflow } = await getWorkflowsFromSystem({ mastra, workflowId });
 
     if (!workflow) {
       throw new HTTPException(404, { message: 'Workflow not found' });
@@ -243,7 +244,7 @@ export async function startWorkflowRunHandler({
       throw new HTTPException(400, { message: 'runId required to start run' });
     }
 
-    const { workflow } = await getWorkflowFromAgents({ mastra, workflowId });
+    const { workflow } = await getWorkflowsFromSystem({ mastra, workflowId });
 
     if (!workflow) {
       throw new HTTPException(404, { message: 'Workflow not found' });
@@ -281,7 +282,7 @@ export async function watchWorkflowHandler({
       throw new HTTPException(400, { message: 'runId required to watch workflow' });
     }
 
-    const { workflow } = await getWorkflowFromAgents({ mastra, workflowId });
+    const { workflow } = await getWorkflowsFromSystem({ mastra, workflowId });
 
     if (!workflow) {
       throw new HTTPException(404, { message: 'Workflow not found' });
@@ -346,7 +347,7 @@ export async function streamWorkflowHandler({
       throw new HTTPException(400, { message: 'runId required to resume workflow' });
     }
 
-    const { workflow } = await getWorkflowFromAgents({ mastra, workflowId });
+    const { workflow } = await getWorkflowsFromSystem({ mastra, workflowId });
 
     if (!workflow) {
       throw new HTTPException(404, { message: 'Workflow not found' });
@@ -386,7 +387,7 @@ export async function resumeAsyncWorkflowHandler({
       throw new HTTPException(400, { message: 'step required to resume workflow' });
     }
 
-    const { workflow } = await getWorkflowFromAgents({ mastra, workflowId });
+    const { workflow } = await getWorkflowsFromSystem({ mastra, workflowId });
 
     if (!workflow) {
       throw new HTTPException(404, { message: 'Workflow not found' });
@@ -434,7 +435,7 @@ export async function resumeWorkflowHandler({
       throw new HTTPException(400, { message: 'step required to resume workflow' });
     }
 
-    const { workflow } = await getWorkflowFromAgents({ mastra, workflowId });
+    const { workflow } = await getWorkflowsFromSystem({ mastra, workflowId });
 
     if (!workflow) {
       throw new HTTPException(404, { message: 'Workflow not found' });
@@ -480,7 +481,7 @@ export async function getWorkflowRunsHandler({
       throw new HTTPException(400, { message: 'Workflow ID is required' });
     }
 
-    const { workflow } = await getWorkflowFromAgents({ mastra, workflowId });
+    const { workflow } = await getWorkflowsFromSystem({ mastra, workflowId });
 
     if (!workflow) {
       throw new HTTPException(404, { message: 'Workflow not found' });
