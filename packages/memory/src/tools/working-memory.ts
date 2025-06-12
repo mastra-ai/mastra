@@ -1,6 +1,6 @@
 import type { CoreTool } from '@mastra/core';
+import type { WorkingMemoryFormat } from '@mastra/core/memory';
 import { z } from 'zod';
-import type { WorkingMemoryFormat } from '../types';
 
 export const updateWorkingMemoryTool = ({ format }: { format: WorkingMemoryFormat }): CoreTool => ({
   description: 'Update the working memory with new information',

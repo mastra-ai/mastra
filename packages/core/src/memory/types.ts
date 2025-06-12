@@ -107,3 +107,10 @@ export type TraceType = {
   endTime: number;
   createdAt: Date;
 };
+
+export type WorkingMemoryFormat = 'json' | 'markdown';
+
+export type WorkingMemoryTemplate = {
+  format: WorkingMemoryFormat;
+  content: string;
+};

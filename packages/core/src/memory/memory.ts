@@ -9,7 +9,13 @@ import type { CoreTool } from '../tools';
 import { deepMerge } from '../utils';
 import type { MastraVector } from '../vector';
 
-import type { SharedMemoryConfig, StorageThreadType, MemoryConfig, MastraMessageV1 } from './types';
+import type {
+  SharedMemoryConfig,
+  StorageThreadType,
+  MemoryConfig,
+  MastraMessageV1,
+  WorkingMemoryTemplate,
+} from './types';
 
 export type MemoryProcessorOpts = {
   systemMessage?: string;
@@ -405,5 +411,5 @@ export abstract class MastraMemory extends MastraBase {
    * @param threadId - The unique identifier of the thread
    * @returns Promise resolving to working memory template or null if not found
    */
-  abstract getWorkingMemoryTemplate(): Promise<string>;
+  abstract getWorkingMemoryTemplate(): Promise<WorkingMemoryTemplate | null>;
 }
