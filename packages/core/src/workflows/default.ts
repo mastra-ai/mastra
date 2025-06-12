@@ -293,10 +293,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       const cb = (eventData: any) => {
         resolve(eventData);
       };
-      setTimeout(() => {
-        emitter.off(`user-event-${event}`, cb);
-        reject(new Error('Timeout waiting for event'));
-      }, timeout);
+      if (timeout) {
+        setTimeout(() => {
+          emitter.off(`user-event-${event}`, cb);
+          reject(new Error('Timeout waiting for event'));
+        }, timeout);
+      }
 
       emitter.once(`user-event-${event}`, cb);
     });
