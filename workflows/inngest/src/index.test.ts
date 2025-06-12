@@ -5145,7 +5145,6 @@ describe('MastraInngestWorkflow', () => {
 
         const app = await createHonoServer(mastra);
         app.use('*', async (ctx, next) => {
-          'middleware', ctx.req.method, ctx.req.url;
           await next();
         });
 

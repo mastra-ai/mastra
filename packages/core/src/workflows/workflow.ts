@@ -45,7 +45,7 @@ export type StepFlowEntry<TEngineType = DefaultEngineType> =
   | {
       type: 'loop';
       step: Step;
-      condition: ExecuteFunction<any, any, any, any, any>;
+      condition: ExecuteFunction<any, any, any, any, TEngineType>;
       serializedCondition: { id: string; fn: string };
       loopType: 'dowhile' | 'dountil';
     }
@@ -126,7 +126,6 @@ export function createStep<
   TStepOutput extends z.ZodType<any>,
   TResumeSchema extends z.ZodType<any>,
   TSuspendSchema extends z.ZodType<any>,
-  TEngineType = DefaultEngineType,
 >(params: {
   id: TStepId;
   description?: string;
@@ -139,9 +138,9 @@ export function createStep<
     z.infer<TStepOutput>,
     z.infer<TResumeSchema>,
     z.infer<TSuspendSchema>,
-    TEngineType
+    DefaultEngineType
   >;
-}): Step<TStepId, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, TEngineType>;
+}): Step<TStepId, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, DefaultEngineType>;
 
 export function createStep<
   TStepId extends string,
@@ -171,7 +170,6 @@ export function createStep<
   TStepOutput extends z.ZodType<any>,
   TResumeSchema extends z.ZodType<any>,
   TSuspendSchema extends z.ZodType<any>,
-  TEngineType = DefaultEngineType,
 >(
   params:
     | {
@@ -186,7 +184,7 @@ export function createStep<
           z.infer<TStepOutput>,
           z.infer<TResumeSchema>,
           z.infer<TSuspendSchema>,
-          TEngineType
+          DefaultEngineType
         >;
       }
     | Agent<any, any, any>
@@ -195,7 +193,7 @@ export function createStep<
         outputSchema: TStepOutput;
         execute: (context: ToolExecutionContext<TStepInput>) => Promise<any>;
       }),
-): Step<TStepId, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, TEngineType> {
+): Step<TStepId, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, DefaultEngineType> {
   if (params instanceof Agent) {
     return {
       id: params.name,
@@ -304,9 +302,9 @@ export function createStep<
 }
 
 export function cloneStep<TStepId extends string>(
-  step: Step<string, any, any>,
+  step: Step<string, any, any, any, any, DefaultEngineType>,
   opts: { id: TStepId },
-): Step<TStepId, any, any> {
+): Step<TStepId, any, any, any, any, DefaultEngineType> {
   return {
     id: opts.id,
     description: step.description,
@@ -320,10 +318,16 @@ export function createWorkflow<
   TWorkflowId extends string = string,
   TInput extends z.ZodType<any> = z.ZodType<any>,
   TOutput extends z.ZodType<any> = z.ZodType<any>,
-  TEngineType = DefaultEngineType,
-  TSteps extends Step<string, any, any, any, any, TEngineType>[] = Step<string, any, any, any, any, TEngineType>[],
+  TSteps extends Step<string, any, any, any, any, DefaultEngineType>[] = Step<
+    string,
+    any,
+    any,
+    any,
+    any,
+    DefaultEngineType
+  >[],
 >(params: WorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>) {
-  return new Workflow(params);
+  return new Workflow<DefaultEngineType, TSteps, TWorkflowId, TInput, TOutput, TInput>(params);
 }
 
 export function cloneWorkflow<
@@ -339,9 +343,9 @@ export function cloneWorkflow<
     DefaultEngineType
   >[],
 >(
-  workflow: Workflow<TSteps, string, TInput, TOutput, DefaultEngineType>,
+  workflow: Workflow<DefaultEngineType, TSteps, string, TInput, TOutput, TInput>,
   opts: { id: TWorkflowId },
-): Workflow<TSteps, TWorkflowId, TInput, TOutput, DefaultEngineType> {
+): Workflow<DefaultEngineType, TSteps, TWorkflowId, TInput, TOutput, TInput> {
   const wf = new Workflow({
     id: opts.id,
     inputSchema: workflow.inputSchema,
@@ -403,7 +407,7 @@ export type WorkflowConfig<
   TWorkflowId extends string = string,
   TInput extends z.ZodType<any> = z.ZodType<any>,
   TOutput extends z.ZodType<any> = z.ZodType<any>,
-  TSteps extends Step<string, any, any, any, any>[] = Step<string, any, any, any, any>[],
+  TSteps extends Step<string, any, any, any, any, any>[] = Step<string, any, any, any, any, any>[],
 > = {
   mastra?: Mastra;
   id: TWorkflowId;
@@ -419,15 +423,15 @@ export type WorkflowConfig<
 };
 
 export class Workflow<
-    TSteps extends Step<string, any, any, any, any>[] = Step<string, any, any, any, any>[],
+    TEngineType = any,
+    TSteps extends Step<string, any, any, any, any, TEngineType>[] = Step<string, any, any, any, any, TEngineType>[],
     TWorkflowId extends string = string,
     TInput extends z.ZodType<any> = z.ZodType<any>,
     TOutput extends z.ZodType<any> = z.ZodType<any>,
-    TEngineType = DefaultEngineType,
     TPrevSchema extends z.ZodType<any> = TInput,
   >
   extends MastraBase
-  implements Step<TWorkflowId, TInput, TOutput, any, any, TEngineType>
+  implements Step<TWorkflowId, TInput, TOutput, any, any, DefaultEngineType>
 {
   public id: TWorkflowId;
   public description?: string | undefined;
@@ -446,7 +450,7 @@ export class Workflow<
 
   #mastra?: Mastra;
 
-  #runs: Map<string, Run<TSteps, TInput, TOutput>> = new Map();
+  #runs: Map<string, Run<TEngineType, TSteps, TInput, TOutput>> = new Map();
 
   constructor({
     mastra,
@@ -527,7 +531,7 @@ export class Workflow<
       },
     });
     this.steps[step.id] = step;
-    return this as unknown as Workflow<TSteps, TWorkflowId, TInput, TOutput, TEngineType, TSchemaOut>;
+    return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, TSchemaOut>;
   }
 
   /**
@@ -551,7 +555,7 @@ export class Workflow<
         return {};
       },
     });
-    return this as unknown as Workflow<TSteps, TWorkflowId, TInput, TOutput, TEngineType, TPrevSchema>;
+    return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, TPrevSchema>;
   }
 
   /**
@@ -575,7 +579,7 @@ export class Workflow<
         return {};
       },
     });
-    return this as unknown as Workflow<TSteps, TWorkflowId, TInput, TOutput, TEngineType, TPrevSchema>;
+    return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, TPrevSchema>;
   }
 
   waitForEvent<TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut extends z.ZodType<any>>(
@@ -602,7 +606,7 @@ export class Workflow<
   }
 
   map<
-    TSteps extends Step<string, any, any>[],
+    TSteps extends Step<string, any, any, any, any, TEngineType>[],
     TMapping extends {
       [K in keyof TMapping]:
         | {
@@ -628,7 +632,7 @@ export class Workflow<
         id: `mapping_${randomUUID()}`,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
-        execute: mappingConfig,
+        execute: mappingConfig as any,
       });
 
       this.stepFlow.push({ type: 'step', step: mappingStep as any });
@@ -639,7 +643,7 @@ export class Workflow<
           mapConfig: mappingConfig.toString(),
         },
       });
-      return this as unknown as Workflow<TSteps, TWorkflowId, TInput, TOutput, TEngineType>;
+      return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, any>;
     }
 
     const newMappingConfig: Record<string, any> = Object.entries(mappingConfig).reduce(
@@ -750,7 +754,7 @@ export class Workflow<
         mapConfig: JSON.stringify(newMappingConfig, null, 2),
       },
     });
-    return this as unknown as Workflow<TSteps, TWorkflowId, TInput, TOutput, MappedOutputSchema>;
+    return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, MappedOutputSchema>;
   }
 
   // TODO: make typing better here
@@ -772,6 +776,7 @@ export class Workflow<
       this.steps[step.id] = step;
     });
     return this as unknown as Workflow<
+      TEngineType,
       TSteps,
       TWorkflowId,
       TInput,
@@ -789,12 +794,16 @@ export class Workflow<
   // TODO: make typing better here
   branch<
     TBranchSteps extends Array<
-      [ExecuteFunction<z.infer<TPrevSchema>, any, any, any, any>, Step<string, TPrevSchema, any, any, any, TEngineType>]
+      [
+        ExecuteFunction<z.infer<TPrevSchema>, any, any, any, TEngineType>,
+        Step<string, TPrevSchema, any, any, any, TEngineType>,
+      ]
     >,
   >(steps: TBranchSteps) {
     this.stepFlow.push({
       type: 'conditional',
       steps: steps.map(([_cond, step]) => ({ type: 'step', step: step as any })),
+      // @ts-ignore
       conditions: steps.map(([cond]) => cond),
       serializedConditions: steps.map(([cond, _step]) => ({ id: `${_step.id}-condition`, fn: cond.toString() })),
     });
@@ -823,6 +832,7 @@ export class Workflow<
 
     // Now we can use this type as an array, similar to TParallelSteps
     return this as unknown as Workflow<
+      TEngineType,
       TSteps,
       TWorkflowId,
       TInput,
@@ -832,8 +842,7 @@ export class Workflow<
           [K in keyof StepsRecord<ExtractedSteps[]>]: StepsRecord<ExtractedSteps[]>[K]['outputSchema'];
         },
         any,
-        z.ZodTypeAny,
-        TEngineType
+        z.ZodTypeAny
       >
     >;
   }
@@ -845,6 +854,7 @@ export class Workflow<
     this.stepFlow.push({
       type: 'loop',
       step: step as any,
+      // @ts-ignore
       condition,
       loopType: 'dowhile',
       serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
@@ -861,7 +871,7 @@ export class Workflow<
       loopType: 'dowhile',
     });
     this.steps[step.id] = step;
-    return this as unknown as Workflow<TSteps, TWorkflowId, TInput, TOutput, TSchemaOut>;
+    return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, TSchemaOut>;
   }
 
   dountil<TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut extends z.ZodType<any>>(
@@ -871,6 +881,7 @@ export class Workflow<
     this.stepFlow.push({
       type: 'loop',
       step: step as any,
+      // @ts-ignore
       condition,
       loopType: 'dountil',
       serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
@@ -887,7 +898,7 @@ export class Workflow<
       loopType: 'dountil',
     });
     this.steps[step.id] = step;
-    return this as unknown as Workflow<TSteps, TWorkflowId, TInput, TOutput, TSchemaOut>;
+    return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, TSchemaOut>;
   }
 
   foreach<
@@ -915,7 +926,7 @@ export class Workflow<
       opts: opts ?? { concurrency: 1 },
     });
     this.steps[(step as any).id] = step as any;
-    return this as unknown as Workflow<TSteps, TWorkflowId, TInput, TOutput, TEngineType, z.ZodArray<TSchemaOut>>;
+    return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, z.ZodArray<TSchemaOut>>;
   }
 
   /**
@@ -936,7 +947,7 @@ export class Workflow<
    */
   commit() {
     this.executionGraph = this.buildExecutionGraph();
-    return this as unknown as Workflow<TSteps, TWorkflowId, TInput, TOutput, TOutput>;
+    return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, TOutput>;
   }
 
   get stepGraph() {
@@ -952,7 +963,7 @@ export class Workflow<
    * @param options Optional configuration for the run
    * @returns A Run instance that can be used to execute the workflow
    */
-  createRun(options?: { runId?: string }): Run<TSteps, TInput, TOutput> {
+  createRun(options?: { runId?: string }): Run<TEngineType, TSteps, TInput, TOutput> {
     if (this.stepFlow.length === 0) {
       throw new Error(
         'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
@@ -993,7 +1004,7 @@ export class Workflow<
   }: {
     inputData: z.infer<TInput>;
     resumeData?: any;
-    getStepResult<T extends Step<any, any, any>>(
+    getStepResult<T extends Step<any, any, any, any, any, TEngineType>>(
       stepId: T,
     ): T['outputSchema'] extends undefined ? unknown : z.infer<NonNullable<T['outputSchema']>>;
     suspend: (suspendPayload: any) => Promise<void>;
@@ -1005,7 +1016,7 @@ export class Workflow<
     [EMITTER_SYMBOL]: { emit: (event: string, data: any) => void };
     mastra: Mastra;
     runtimeContext?: RuntimeContext;
-    engine: TEngineType;
+    engine: DefaultEngineType;
   }): Promise<z.infer<TOutput>> {
     this.__registerMastra(mastra);
 
@@ -1078,7 +1089,8 @@ export class Workflow<
  * Represents a workflow run that can be executed
  */
 export class Run<
-  TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
+  TEngineType = any,
+  TSteps extends Step<string, any, any, any, any, TEngineType>[] = Step<string, any, any, any, any, TEngineType>[],
   TInput extends z.ZodType<any> = z.ZodType<any>,
   TOutput extends z.ZodType<any> = z.ZodType<any>,
 > {
@@ -1303,8 +1315,8 @@ export class Run<
   async resume<TResumeSchema extends z.ZodType<any>>(params: {
     resumeData?: z.infer<TResumeSchema>;
     step:
-      | Step<string, any, any, TResumeSchema, any>
-      | [...Step<string, any, any, any, any>[], Step<string, any, any, TResumeSchema, any>]
+      | Step<string, any, any, TResumeSchema, any, TEngineType>
+      | [...Step<string, any, any, any, any, TEngineType>[], Step<string, any, any, TResumeSchema, any, TEngineType>]
       | string
       | string[];
     runtimeContext?: RuntimeContext;
