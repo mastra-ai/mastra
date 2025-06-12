@@ -14,7 +14,6 @@ import { cn } from '@/lib/utils';
 
 import { AnimatePresence } from 'motion/react';
 import { Evals, SortConfig, GroupedEvals } from '@/domains/evals/types';
-import { AgentEvalsContext, useAgentEvalsContext } from '@/domains/evals/context/agent-evals-context';
 
 const scrollableContentClass = cn(
   'relative overflow-y-auto overflow-x-hidden invisible hover:visible focus:visible',
@@ -37,6 +36,7 @@ const tabContentClass = cn('data-[state=inactive]:mt-0 min-h-0 h-full grid grid-
 export interface AgentEvalsProps {
   liveEvals: Array<Evals>;
   ciEvals: Array<Evals>;
+
   onRefetchLiveEvals: () => void;
   onRefetchCiEvals: () => void;
 }
@@ -51,35 +51,38 @@ export function AgentEvals({ liveEvals, ciEvals, onRefetchLiveEvals, onRefetchCi
   }
 
   return (
-    <AgentEvalsContext.Provider value={{ onRefresh: handleRefresh }}>
-      <Tabs
-        value={activeTab}
-        onValueChange={value => setActiveTab(value as 'live' | 'ci')}
-        className="grid grid-rows-[auto_1fr] h-full min-h-0 pb-2"
-      >
-        <div className="border-b border-mastra-border/10">
-          <TabsList className="bg-transparent border-0 h-auto mx-4">
-            <TabsTrigger value="live" className={tabIndicatorClass}>
-              Live
-            </TabsTrigger>
-            <TabsTrigger value="ci" className={tabIndicatorClass}>
-              CI
-            </TabsTrigger>
-          </TabsList>
-        </div>
-        <TabsContent value="live" className={tabContentClass}>
-          <EvalTable evals={liveEvals} isCIMode={false} />
-        </TabsContent>
-        <TabsContent value="ci" className={tabContentClass}>
-          <EvalTable evals={ciEvals} isCIMode={true} />
-        </TabsContent>
-      </Tabs>
-    </AgentEvalsContext.Provider>
+    <Tabs
+      value={activeTab}
+      onValueChange={value => setActiveTab(value as 'live' | 'ci')}
+      className="grid grid-rows-[auto_1fr] h-full min-h-0 pb-2"
+    >
+      <div className="border-b border-mastra-border/10">
+        <TabsList className="bg-transparent border-0 h-auto mx-4">
+          <TabsTrigger value="live" className={tabIndicatorClass}>
+            Live
+          </TabsTrigger>
+          <TabsTrigger value="ci" className={tabIndicatorClass}>
+            CI
+          </TabsTrigger>
+        </TabsList>
+      </div>
+      <TabsContent value="live" className={tabContentClass}>
+        <EvalTable evals={liveEvals} isCIMode={false} onRefresh={handleRefresh} />
+      </TabsContent>
+      <TabsContent value="ci" className={tabContentClass}>
+        <EvalTable evals={ciEvals} isCIMode={true} onRefresh={handleRefresh} />
+      </TabsContent>
+    </Tabs>
   );
 }
 
-function EvalTable({ evals, isCIMode = false }: { evals: Evals[]; isCIMode?: boolean }) {
-  const { onRefresh } = useAgentEvalsContext();
+interface EvalTableProps {
+  evals: Evals[];
+  isCIMode?: boolean;
+  onRefresh: () => void;
+}
+
+function EvalTable({ evals, isCIMode = false, onRefresh }: EvalTableProps) {
   const [expandedMetrics, setExpandedMetrics] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'metricName', direction: 'asc' });

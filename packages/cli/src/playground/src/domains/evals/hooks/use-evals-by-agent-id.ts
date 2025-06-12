@@ -1,7 +1,7 @@
 import type { TestInfo, MetricResult } from '@mastra/core/eval';
-import { useEffect, useState } from 'react';
-import { toast } from 'sonner';
+
 import { client } from '@/lib/client';
+import { useQuery } from '@tanstack/react-query';
 
 export type Evals = {
   input: string;
@@ -17,31 +17,10 @@ export type Evals = {
 };
 
 export const useEvalsByAgentId = (agentId: string, type: 'ci' | 'live') => {
-  const [evals, setEvals] = useState<Evals[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const fetchEvals = async (_agentId?: string) => {
-    setIsLoading(true);
-    const activeAgentId = _agentId ?? agentId;
-    try {
-      const res =
-        type === 'live'
-          ? await client.getAgent(activeAgentId).liveEvals()
-          : await client.getAgent(activeAgentId).evals();
-
-      setEvals(res.evals);
-    } catch (error) {
-      setEvals([]);
-      console.error('Error fetching evals', error);
-      toast.error('Error fetching evals');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchEvals(agentId);
-  }, [agentId]);
-
-  return { evals, isLoading, refetchEvals: fetchEvals };
+  return useQuery({
+    staleTime: 0,
+    gcTime: 0,
+    queryKey: ['evals', agentId, type],
+    queryFn: () => (type === 'live' ? client.getAgent(agentId).liveEvals() : client.getAgent(agentId).evals()),
+  });
 };
