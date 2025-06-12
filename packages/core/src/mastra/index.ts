@@ -196,6 +196,7 @@ export class Mastra<
         }
 
         server.__registerMastra(this);
+        server.__setLogger(this.getLogger());
       });
     }
 
