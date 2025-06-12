@@ -369,7 +369,7 @@ describe('D1Store', () => {
       await new Promise(resolve => setTimeout(resolve, 100));
 
       // Create and save a message to the thread
-      const message = createSampleMessage(thread.id);
+      const message = createSampleMessageV2({ threadId: thread.id });
       await store.saveMessages({ messages: [message], format: 'v2' });
 
       // Retrieve the thread again and check that updatedAt was updated
