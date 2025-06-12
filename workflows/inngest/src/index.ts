@@ -28,18 +28,31 @@ export type InngestEngineType = {
 };
 
 export function serve({ mastra, inngest }: { mastra: Mastra; inngest: Inngest }): ReturnType<typeof inngestServe> {
-  const wfs = mastra.getWorkflows();
-  const functions = Object.values(wfs).flatMap(wf => {
+  return inngestServe(
+    buildInngestConfig({
+      client: inngest,
+      mastra
+    })
+  );
+}
+
+export const buildInngestConfig = (
+  options: Parameters<typeof inngestServe>[0] & { mastra: Mastra },
+): Parameters<typeof inngestServe>[0] => {
+  const { mastra, ...inngestOptions } = options
+  const wfs = mastra.getWorkflows()
+  const functions = Object.values(wfs).flatMap((wf) => {
     if (wf instanceof InngestWorkflow) {
-      wf.__registerMastra(mastra);
-      return wf.getFunctions();
+      wf.__registerMastra(mastra)
+      return wf.getFunctions()
     }
-    return [];
-  });
-  return inngestServe({
-    client: inngest,
-    functions,
-  });
+    return []
+  })
+
+  return {
+    ...inngestOptions,
+    functions: [...functions, ...(inngestOptions.functions || [])],
+  }
 }
 
 export class InngestRun<
