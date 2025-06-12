@@ -1102,7 +1102,7 @@ export class Agent<
             memoryConfig,
           }));
 
-        let [memoryMessages, memorySystemMessage] =
+        let [memoryMessages, memorySystemMessage, userContextMessage] =
           threadId && memory
             ? await Promise.all([
                 memory
@@ -1115,8 +1115,9 @@ export class Agent<
                   })
                   .then(r => r.messagesV2),
                 memory.getSystemMessage({ threadId, memoryConfig }),
+                memory.getUserContextMessage({ threadId }),
               ])
-            : [[], null];
+            : [[], null, null];
 
         this.logger.debug('Fetched messages from memory', {
           threadId,
@@ -1140,6 +1141,10 @@ export class Agent<
 
         if (memorySystemMessage) {
           messageList.addSystem(memorySystemMessage, 'memory');
+        }
+
+        if (userContextMessage) {
+          messageList.add(userContextMessage, 'context');
         }
 
         messageList
@@ -1170,6 +1175,7 @@ export class Agent<
           .addSystem(instructions || `${this.instructions}.`)
           .addSystem(memorySystemMessage)
           .add(context || [], 'context')
+          .add(userContextMessage || [], 'context')
           .add(processedMemoryMessages, 'memory')
           .add(messageList.get.input.v2(), 'user')
           .get.all.prompt();
