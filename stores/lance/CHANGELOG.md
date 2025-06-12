@@ -1,5 +1,17 @@
 # @mastra/lance
 
+## 0.1.2-alpha.0
+
+### Patch Changes
+
+- 63f6b7d: dependencies updates:
+  - Updated dependency [`@lancedb/lancedb@^0.18.2` ↗︎](https://www.npmjs.com/package/@lancedb/lancedb/v/0.18.2) (from `^0.18.1`, in `dependencies`)
+- Updated dependencies [63f6b7d]
+- Updated dependencies [36f1c36]
+- Updated dependencies [10d352e]
+- Updated dependencies [53d3c37]
+  - @mastra/core@0.10.6-alpha.0
+
 ## 0.1.1
 
 ### Patch Changes

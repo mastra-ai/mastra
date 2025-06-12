@@ -904,7 +904,8 @@ export class PostgresStore extends MastraStorage {
       }
 
       await this.db.tx(async t => {
-        for (const message of messages) {
+        // Execute message inserts and thread update in parallel for better performance
+        const messageInserts = messages.map(message => {
           if (!message.threadId) {
             throw new Error(
               `Expected to find a threadId for message, but couldn't find one. An unexpected error has occurred.`,
@@ -915,7 +916,7 @@ export class PostgresStore extends MastraStorage {
               `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
             );
           }
-          await t.none(
+          return t.none(
             `INSERT INTO ${this.getTableName(TABLE_MESSAGES)} (id, thread_id, content, "createdAt", role, type, "resourceId") 
              VALUES ($1, $2, $3, $4, $5, $6, $7)`,
             [
@@ -928,7 +929,16 @@ export class PostgresStore extends MastraStorage {
               message.resourceId,
             ],
           );
-        }
+        });
+
+        const threadUpdate = t.none(
+          `UPDATE ${this.getTableName(TABLE_THREADS)} 
+           SET "updatedAt" = $1 
+           WHERE id = $2`,
+          [new Date().toISOString(), threadId],
+        );
+
+        await Promise.all([...messageInserts, threadUpdate]);
       });
 
       const list = new MessageList().add(messages, 'memory');

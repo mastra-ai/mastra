@@ -344,6 +344,7 @@ export class MongoDBStore extends MastraStorage {
       this.logger.error('Thread ID is required to save messages');
       throw new Error('Thread ID is required');
     }
+
     try {
       // Prepare batch statements for all messages
       const messagesToInsert = messages.map(message => {
@@ -359,9 +360,15 @@ export class MongoDBStore extends MastraStorage {
         };
       });
 
-      // Execute all inserts in a single batch
+      // Execute message inserts and thread update in parallel for better performance
       const collection = await this.getCollection(TABLE_MESSAGES);
-      await collection.insertMany(messagesToInsert);
+      const threadsCollection = await this.getCollection(TABLE_THREADS);
+
+      await Promise.all([
+        collection.insertMany(messagesToInsert),
+        threadsCollection.updateOne({ id: threadId }, { $set: { updatedAt: new Date() } }),
+      ]);
+
       const list = new MessageList().add(messages, 'memory');
       if (format === `v2`) return list.get.all.v2();
       return list.get.all.v1();
