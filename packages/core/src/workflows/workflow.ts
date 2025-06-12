@@ -748,7 +748,7 @@ export class Workflow<
       TOutput,
       z.ZodObject<
         {
-          [K in keyof StepsRecord<TParallelSteps>]: StepsRecord<TParallelSteps>[K]['outputSchema']['path'];
+          [K in keyof StepsRecord<TParallelSteps>]: StepsRecord<TParallelSteps>[K]['outputSchema'];
         },
         any,
         z.ZodTypeAny
