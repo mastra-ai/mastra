@@ -3,7 +3,7 @@ import { MainContentContent } from '@mastra/playground-ui';
 import { useParams } from 'react-router';
 
 import { useState } from 'react';
-import { WorkflowLogsContainer } from '@/domains/workflows/logs/workflow-logs-container';
+import { WorkflowLogsContainer } from '@/domains/workflows/workflow-logs-container';
 
 export interface WorkflowGraphLayoutProps {
   children: React.ReactNode;

@@ -33,6 +33,8 @@ export const useLogsByRunId = (runId: string, opts?: Pick<GetLogParams, 'logLeve
     enabled: Boolean(transportId),
     refetchInterval: 1000,
     select: data => data.pages.flatMap(page => page.logs),
+    staleTime: 0,
+    gcTime: 0,
   });
 
   return { ...data, isLoading: isLoading || isLoadingTransports };

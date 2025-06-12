@@ -1,12 +1,19 @@
 import { useLogsByRunId, useLogTransports } from '@/hooks/use-logs';
-import { Button, EmptyState, FiltersIcon, Header, Icon, LogsIcon, WorkflowLogs } from '@mastra/playground-ui';
+import {
+  Button,
+  EmptyState,
+  Header,
+  Icon,
+  LogsIcon,
+  WorkflowLogs,
+  LogsFiltersForm,
+  LogsFiltersFormInputs,
+  generateFromToDate,
+} from '@mastra/playground-ui';
 import clsx from 'clsx';
 import { ChevronDown } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useSidebar } from '@/components/ui/sidebar';
-import { useLogsFilterForm } from './useLogsFilterForm';
-import { FiltersForm } from './LogsForm';
-import { addDays } from 'date-fns';
 
 export interface WorkflowLogsContainerProps {
   runId: string;
@@ -18,23 +25,18 @@ export const WorkflowLogsContainer = ({ runId }: WorkflowLogsContainerProps) => 
   const { transports, isLoading: isLoadingTransports } = useLogTransports();
   const hasTransport = transports.length > 0;
 
-  const [filtersOpen, setFiltersOpen] = useState(false);
-
-  const { watch, control } = useLogsFilterForm();
-
-  const [logLevel, fromDate, toDate] = watch(['logLevel', 'fromDate', 'toDate']);
-
-  const transformedFromDate = fromDate ? new Date(fromDate) : undefined;
-  // this needs to be end-inclusive, so we add 1 day
-  const transformedToDate = toDate ? addDays(new Date(toDate), 1) : undefined;
-
-  const { data: logs = [], isLoading } = useLogsByRunId(runId, {
-    logLevel: logLevel === 'all' ? undefined : logLevel,
-    fromDate: transformedFromDate,
-    toDate: transformedToDate,
+  const [filters, setFilters] = useState<LogsFiltersFormInputs>({
+    logLevel: 'all',
+    dateRange: { type: 'none' },
   });
 
-  const hasAnyFilters = logLevel !== 'all' || fromDate !== null || toDate !== null;
+  const { fromDate, toDate } = useMemo(() => generateFromToDate(filters.dateRange), [filters.dateRange]);
+
+  const { data: logs = [], isLoading } = useLogsByRunId(runId, {
+    logLevel: filters.logLevel === 'all' ? undefined : filters.logLevel,
+    fromDate,
+    toDate,
+  });
 
   return (
     <div
@@ -46,29 +48,20 @@ export const WorkflowLogsContainer = ({ runId }: WorkflowLogsContainerProps) => 
     >
       <Header>
         <LogsIcon />
-        <div className="flex items-center justify-between w-full">
-          <div className="flex items-center gap-4">
-            <span>Logs</span>
-            <Button variant="light" onClick={() => setFiltersOpen(s => !s)}>
-              <FiltersIcon className="size-4" />
-              Filters
-              {hasAnyFilters ? <div className="size-2 bg-blue-500 rounded-full" /> : null}
-            </Button>
-          </div>
-          <button
-            className="text-left flex items-center justify-end px-4 py-2 -mx-4"
-            onClick={() => setExpanded(s => !s)}
-          >
-            <Icon>
-              <ChevronDown className={clsx('transition-transform text-icon3', expanded ? 'rotate-0' : 'rotate-180')} />
-            </Icon>
-          </button>
-        </div>
+        <button
+          className="text-left w-full h-full flex items-center justify-between"
+          onClick={() => setExpanded(s => !s)}
+        >
+          Logs
+          <Icon>
+            <ChevronDown className={clsx('transition-transform text-icon3', expanded ? 'rotate-0' : 'rotate-180')} />
+          </Icon>
+        </button>
       </Header>
 
       {expanded ? (
         <div className="flex items-stretch h-full">
-          {filtersOpen ? <FiltersForm control={control} /> : null}
+          <LogsFiltersForm value={filters} onChange={setFilters} />
 
           {hasTransport ? (
             <div className={'overflow-y-auto h-full'}>
