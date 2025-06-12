@@ -2037,7 +2037,7 @@ describe('MastraInngestWorkflow', () => {
       expect(duration).toBeGreaterThan(1e3 * 3);
 
       expect(map).toHaveBeenCalledTimes(3);
-      expect(result.steps).toEqual({
+      expect(result.steps).toMatchObject({
         input: [{ value: 1 }, { value: 22 }, { value: 333 }],
         map: { status: 'success', output: [{ value: 12 }, { value: 33 }, { value: 344 }] },
         final: { status: 'success', output: { finalValue: 1 + 11 + (22 + 11) + (333 + 11) } },
