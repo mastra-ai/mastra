@@ -5,7 +5,7 @@ Before we begin building our agent, let's make sure you have Mastra properly ins
 If you haven't installed Mastra yet, you can do so by running:
 
 ```bash
-npm create mastra@latest
+npm -y create mastra@latest
 ```
 
 If you do need to install mastra, follow the on-screen prompts and make sure to:
