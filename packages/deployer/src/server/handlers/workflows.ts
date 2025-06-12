@@ -167,7 +167,7 @@ export async function streamWorkflowHandler(c: Context) {
       c,
       async stream => {
         try {
-          const result = getOriginalStreamWorkflowHandler({
+          const result = await getOriginalStreamWorkflowHandler({
             mastra,
             workflowId,
             runId,
