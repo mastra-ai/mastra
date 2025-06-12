@@ -21,7 +21,7 @@
     "get-port": "^7.1.0",
     "mastra": "workspace:*",
     "typescript": "^5.8.2",
-    "vitest": "^3.2.2"
+    "vitest": "^3.2.3"
   },
   "peerDependencies": {
     "@mastra/core": "^0.10.0-alpha.0"
