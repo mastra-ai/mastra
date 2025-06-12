@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "devDependencies": {
-    "execa": "^9.5.2",
+    "execa": "^9.6.0",
     "get-port": "^7.1.0",
     "globby": "^14.1.0",
     "npm-cli-login": "^1.0.0",
