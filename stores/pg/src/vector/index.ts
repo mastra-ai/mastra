@@ -19,6 +19,7 @@ import xxhash from 'xxhash-wasm';
 import { PGFilterTranslator } from './filter';
 import { buildFilterQuery } from './sql-builder';
 import type { IndexConfig, IndexType } from './types';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 
 export interface PGIndexStats extends IndexStats {
   type: IndexType;
@@ -75,47 +76,61 @@ export class PgVector extends MastraVector {
     schemaName?: string;
     pgPoolOptions?: Omit<pg.PoolConfig, 'connectionString'>;
   }) {
-    if (!connectionString || connectionString.trim() === '') {
-      throw new Error(
-        'PgVector: connectionString must be provided and cannot be empty. Passing an empty string may cause fallback to local Postgres defaults.',
+    try {
+      if (!connectionString || connectionString.trim() === '') {
+        throw new Error(
+          'PgVector: connectionString must be provided and cannot be empty. Passing an empty string may cause fallback to local Postgres defaults.',
+        );
+      }
+      super();
+
+      this.schema = schemaName;
+
+      const basePool = new pg.Pool({
+        connectionString,
+        max: 20, // Maximum number of clients in the pool
+        idleTimeoutMillis: 30000, // Close idle connections after 30 seconds
+        connectionTimeoutMillis: 2000, // Fail fast if can't connect
+        ...pgPoolOptions,
+      });
+
+      const telemetry = this.__getTelemetry();
+
+      this.pool =
+        telemetry?.traceClass(basePool, {
+          spanNamePrefix: 'pg-vector',
+          attributes: {
+            'vector.type': 'postgres',
+          },
+        }) ?? basePool;
+
+      void (async () => {
+        // warm the created indexes cache so we don't need to check if indexes exist every time
+        const existingIndexes = await this.listIndexes();
+        void existingIndexes.map(async indexName => {
+          const info = await this.getIndexInfo({ indexName });
+          const key = await this.getIndexCacheKey({
+            indexName,
+            metric: info.metric,
+            dimension: info.dimension,
+            type: info.type,
+          });
+          this.createdIndexes.set(indexName, key);
+        });
+      })();
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_VECTOR_INITIALIZATION_FAILED',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            schemaName: schemaName ?? '',
+          },
+        },
+        error,
       );
     }
-    super();
-
-    this.schema = schemaName;
-
-    const basePool = new pg.Pool({
-      connectionString,
-      max: 20, // Maximum number of clients in the pool
-      idleTimeoutMillis: 30000, // Close idle connections after 30 seconds
-      connectionTimeoutMillis: 2000, // Fail fast if can't connect
-      ...pgPoolOptions,
-    });
-
-    const telemetry = this.__getTelemetry();
-
-    this.pool =
-      telemetry?.traceClass(basePool, {
-        spanNamePrefix: 'pg-vector',
-        attributes: {
-          'vector.type': 'postgres',
-        },
-      }) ?? basePool;
-
-    void (async () => {
-      // warm the created indexes cache so we don't need to check if indexes exist every time
-      const existingIndexes = await this.listIndexes();
-      void existingIndexes.map(async indexName => {
-        const info = await this.getIndexInfo({ indexName });
-        const key = await this.getIndexCacheKey({
-          indexName,
-          metric: info.metric,
-          dimension: info.dimension,
-          type: info.type,
-        });
-        this.createdIndexes.set(indexName, key);
-      });
-    })();
   }
 
   private getMutexByName(indexName: string) {
@@ -151,11 +166,27 @@ export class PgVector extends MastraVector {
     ef,
     probes,
   }: PgQueryVectorParams): Promise<QueryResult[]> {
-    if (!Number.isInteger(topK) || topK <= 0) {
-      throw new Error('topK must be a positive integer');
-    }
-    if (!Array.isArray(queryVector) || !queryVector.every(x => typeof x === 'number' && Number.isFinite(x))) {
-      throw new Error('queryVector must be an array of finite numbers');
+    try {
+      if (!Number.isInteger(topK) || topK <= 0) {
+        throw new Error('topK must be a positive integer');
+      }
+      if (!Array.isArray(queryVector) || !queryVector.every(x => typeof x === 'number' && Number.isFinite(x))) {
+        throw new Error('queryVector must be an array of finite numbers');
+      }
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_VECTOR_QUERY_INVALID_INPUT',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.USER,
+          details: {
+            indexName,
+          },
+        },
+        error,
+      );
+      this.logger.trackException(mastraError);
+      throw mastraError;
     }
 
     const client = await this.pool.connect();
@@ -204,6 +235,20 @@ export class PgVector extends MastraVector {
         metadata,
         ...(includeVector && embedding && { vector: JSON.parse(embedding) }),
       }));
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_VECTOR_QUERY_FAILED',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+          },
+        },
+        error,
+      );
+      this.logger.trackException(mastraError);
+      throw mastraError;
     } finally {
       client.release();
     }
@@ -240,13 +285,40 @@ export class PgVector extends MastraVector {
         const match = error.message.match(/expected (\d+) dimensions, not (\d+)/);
         if (match) {
           const [, expected, actual] = match;
-          throw new Error(
-            `Vector dimension mismatch: Index "${indexName}" expects ${expected} dimensions but got ${actual} dimensions. ` +
-              `Either use a matching embedding model or delete and recreate the index with the new dimension.`,
+          const mastraError = new MastraError(
+            {
+              id: 'MASTRA_STORAGE_PG_VECTOR_UPSERT_INVALID_INPUT',
+              domain: ErrorDomain.MASTRA_VECTOR,
+              category: ErrorCategory.USER,
+              text:
+                `Vector dimension mismatch: Index "${indexName}" expects ${expected} dimensions but got ${actual} dimensions. ` +
+                `Either use a matching embedding model or delete and recreate the index with the new dimension.`,
+              details: {
+                indexName,
+                expected: expected ?? '',
+                actual: actual ?? '',
+              },
+            },
+            error,
           );
+          this.logger.trackException(mastraError);
+          throw mastraError;
         }
       }
-      throw error;
+
+      const mastraError = new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_VECTOR_UPSERT_FAILED',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+          },
+        },
+        error,
+      );
+      this.logger.trackException(mastraError);
+      throw mastraError;
     } finally {
       client.release();
     }
@@ -327,11 +399,27 @@ export class PgVector extends MastraVector {
     const tableName = this.getTableName(indexName);
 
     // Validate inputs
-    if (!indexName.match(/^[a-zA-Z_][a-zA-Z0-9_]*$/)) {
-      throw new Error('Invalid index name format');
-    }
-    if (!Number.isInteger(dimension) || dimension <= 0) {
-      throw new Error('Dimension must be a positive integer');
+    try {
+      if (!indexName.match(/^[a-zA-Z_][a-zA-Z0-9_]*$/)) {
+        throw new Error('Invalid index name format');
+      }
+      if (!Number.isInteger(dimension) || dimension <= 0) {
+        throw new Error('Dimension must be a positive integer');
+      }
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_VECTOR_CREATE_INDEX_INVALID_INPUT',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.USER,
+          details: {
+            indexName,
+          },
+        },
+        error,
+      );
+      this.logger.trackException(mastraError);
+      throw mastraError;
     }
 
     const indexCacheKey = await this.getIndexCacheKey({ indexName, dimension, type: indexConfig.type, metric });
@@ -342,21 +430,22 @@ export class PgVector extends MastraVector {
 
     const mutex = this.getMutexByName(`create-${indexName}`);
     // Use async-mutex instead of advisory lock for perf (over 2x as fast)
-    await mutex.runExclusive(async () => {
-      if (this.cachedIndexExists(indexName, indexCacheKey)) {
-        // this may have been created while we were waiting to acquire a lock
-        return;
-      }
+    await mutex
+      .runExclusive(async () => {
+        if (this.cachedIndexExists(indexName, indexCacheKey)) {
+          // this may have been created while we were waiting to acquire a lock
+          return;
+        }
 
-      const client = await this.pool.connect();
+        const client = await this.pool.connect();
 
-      try {
-        // Setup schema if needed
-        await this.setupSchema(client);
+        try {
+          // Setup schema if needed
+          await this.setupSchema(client);
 
-        // Install vector extension first (needs to be in public schema)
-        await this.installVectorExtension(client);
-        await client.query(`
+          // Install vector extension first (needs to be in public schema)
+          await this.installVectorExtension(client);
+          await client.query(`
           CREATE TABLE IF NOT EXISTS ${tableName} (
             id SERIAL PRIMARY KEY,
             vector_id TEXT UNIQUE NOT NULL,
@@ -364,24 +453,53 @@ export class PgVector extends MastraVector {
             metadata JSONB DEFAULT '{}'::jsonb
           );
         `);
-        this.createdIndexes.set(indexName, indexCacheKey);
+          this.createdIndexes.set(indexName, indexCacheKey);
 
-        if (buildIndex) {
-          await this.setupIndex({ indexName, metric, indexConfig }, client);
+          if (buildIndex) {
+            await this.setupIndex({ indexName, metric, indexConfig }, client);
+          }
+        } catch (error: any) {
+          this.createdIndexes.delete(indexName);
+          throw error;
+        } finally {
+          client.release();
         }
-      } catch (error: any) {
-        this.createdIndexes.delete(indexName);
-        throw error;
-      } finally {
-        client.release();
-      }
-    });
+      })
+      .catch(error => {
+        const mastraError = new MastraError(
+          {
+            id: 'MASTRA_STORAGE_PG_VECTOR_CREATE_INDEX_FAILED',
+            domain: ErrorDomain.MASTRA_VECTOR,
+            category: ErrorCategory.THIRD_PARTY,
+            details: {
+              indexName,
+            },
+          },
+          error,
+        );
+        this.logger.trackException(mastraError);
+        throw mastraError;
+      });
   }
 
   async buildIndex({ indexName, metric = 'cosine', indexConfig }: PgDefineIndexParams): Promise<void> {
     const client = await this.pool.connect();
     try {
       await this.setupIndex({ indexName, metric, indexConfig }, client);
+    } catch (error: any) {
+      const mastraError = new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_VECTOR_BUILD_INDEX_FAILED',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+          },
+        },
+        error,
+      );
+      this.logger.trackException(mastraError);
+      throw mastraError;
     } finally {
       client.release();
     }
@@ -503,6 +621,17 @@ export class PgVector extends MastraVector {
         `;
       const vectorTables = await client.query(vectorTablesQuery, [this.schema || 'public']);
       return vectorTables.rows.map(row => row.table_name);
+    } catch (e) {
+      const mastraError = new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_VECTOR_LIST_INDEXES_FAILED',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        e,
+      );
+      this.logger.trackException(mastraError);
+      throw mastraError;
     } finally {
       client.release();
     }
@@ -604,7 +733,19 @@ export class PgVector extends MastraVector {
       };
     } catch (e: any) {
       await client.query('ROLLBACK');
-      throw new Error(`Failed to describe vector table: ${e.message}`);
+      const mastraError = new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_VECTOR_DESCRIBE_INDEX_FAILED',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+          },
+        },
+        e,
+      );
+      this.logger.trackException(mastraError);
+      throw mastraError;
     } finally {
       client.release();
     }
@@ -619,7 +760,19 @@ export class PgVector extends MastraVector {
       this.createdIndexes.delete(indexName);
     } catch (error: any) {
       await client.query('ROLLBACK');
-      throw new Error(`Failed to delete vector table: ${error.message}`);
+      const mastraError = new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_VECTOR_DELETE_INDEX_FAILED',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+          },
+        },
+        error,
+      );
+      this.logger.trackException(mastraError);
+      throw mastraError;
     } finally {
       client.release();
     }
@@ -632,7 +785,19 @@ export class PgVector extends MastraVector {
       await client.query(`TRUNCATE ${tableName}`);
     } catch (e: any) {
       await client.query('ROLLBACK');
-      throw new Error(`Failed to truncate vector table: ${e.message}`);
+      const mastraError = new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_VECTOR_TRUNCATE_INDEX_FAILED',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+          },
+        },
+        e,
+      );
+      this.logger.trackException(mastraError);
+      throw mastraError;
     } finally {
       client.release();
     }
@@ -653,12 +818,13 @@ export class PgVector extends MastraVector {
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
   async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
-    if (!update.vector && !update.metadata) {
-      throw new Error('No updates provided');
-    }
-
-    const client = await this.pool.connect();
+    let client;
     try {
+      if (!update.vector && !update.metadata) {
+        throw new Error('No updates provided');
+      }
+
+      client = await this.pool.connect();
       let updateParts = [];
       let values = [id];
       let valueIndex = 2;
@@ -690,9 +856,22 @@ export class PgVector extends MastraVector {
 
       await client.query(query, values);
     } catch (error: any) {
-      throw new Error(`Failed to update vector by id: ${id} for index: ${indexName}: ${error.message}`);
+      const mastraError = new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_VECTOR_UPDATE_VECTOR_FAILED',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+            id,
+          },
+        },
+        error,
+      );
+      this.logger.trackException(mastraError);
+      throw mastraError;
     } finally {
-      client.release();
+      client?.release();
     }
   }
 
@@ -704,8 +883,9 @@ export class PgVector extends MastraVector {
    * @throws Will throw an error if the deletion operation fails.
    */
   async deleteVector({ indexName, id }: DeleteVectorParams): Promise<void> {
-    const client = await this.pool.connect();
+    let client;
     try {
+      client = await this.pool.connect();
       const tableName = this.getTableName(indexName);
       const query = `
         DELETE FROM ${tableName}
@@ -713,9 +893,22 @@ export class PgVector extends MastraVector {
       `;
       await client.query(query, [id]);
     } catch (error: any) {
-      throw new Error(`Failed to delete vector by id: ${id} for index: ${indexName}: ${error.message}`);
+      const mastraError = new MastraError(
+        {
+          id: 'MASTRA_STORAGE_PG_VECTOR_DELETE_VECTOR_FAILED',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+            id,
+          },
+        },
+        error,
+      );
+      this.logger.trackException(mastraError);
+      throw mastraError;
     } finally {
-      client.release();
+      client?.release();
     }
   }
 }
