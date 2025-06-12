@@ -1072,29 +1072,36 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     } else if (entry.type === 'waitForEvent') {
       // TODO: mark state as 'waiting'
       const startedAt = Date.now();
-      const eventData = await this.executeWaitForEvent({ event: entry.event, emitter, timeout: entry.timeout });
+      let eventData: any;
+      try {
+        eventData = await this.executeWaitForEvent({ event: entry.event, emitter, timeout: entry.timeout });
+        const { step } = entry;
+        execResults = await this.executeStep({
+          workflowId,
+          runId,
+          step,
+          stepResults,
+          executionContext,
+          resume: {
+            resumePayload: eventData,
+            steps: [entry.step.id],
+          },
+          prevOutput,
+          emitter,
+          runtimeContext,
+        });
+      } catch (error) {
+        execResults = {
+          status: 'failed',
+          error: error as Error,
+        };
+      }
       const endedAt = Date.now();
       const stepInfo = {
         payload: prevOutput,
         startedAt,
         endedAt,
       };
-
-      const { step } = entry;
-      execResults = await this.executeStep({
-        workflowId,
-        runId,
-        step,
-        stepResults,
-        executionContext,
-        resume: {
-          resumePayload: eventData,
-          steps: [entry.step.id],
-        },
-        prevOutput,
-        emitter,
-        runtimeContext,
-      });
 
       execResults = { ...execResults, ...stepInfo };
     }

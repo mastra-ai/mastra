@@ -576,6 +576,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       timeout: timeout ?? 5e3,
     });
 
+    if (!eventData) {
+      throw 'Timeout waiting for event';
+    }
+
     return eventData?.data;
   }
 
