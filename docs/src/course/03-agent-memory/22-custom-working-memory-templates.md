@@ -11,18 +11,11 @@ import { openai } from "@ai-sdk/openai";
 
 // Create a memory instance with a custom working memory template
 const memory = new Memory({
+  // ... other memory options
   options: {
-    lastMessages: 20,
-    semanticRecall: {
-      topK: 3,
-      messageRange: {
-        before: 2,
-        after: 1,
-      },
-    },
+    // ... other options
     workingMemory: {
       enabled: true,
-      use: "tool-call",
       template: `
 # User Profile
 

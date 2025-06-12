@@ -9,18 +9,11 @@ import { openai } from "@ai-sdk/openai";
 
 // Create a memory instance with working memory configuration
 const memory = new Memory({
+  // ... other memory options
   options: {
-    lastMessages: 20,
-    semanticRecall: {
-      topK: 3,
-      messageRange: {
-        before: 2,
-        after: 1,
-      },
-    },
+    // ... other options
     workingMemory: {
       enabled: true,
-      use: "tool-call", // Recommended setting
     },
   },
 });
@@ -52,12 +45,6 @@ export const memoryAgent = new Agent({
 The `workingMemory` configuration has several important options:
 
 - `enabled`: Whether working memory is enabled
-- `use`: How the agent interacts with working memory (recommended setting is "tool-call")
-
-The `use` option can be set to:
-
-- `"tool-call"`: The agent updates working memory via tool calls (recommended)
-- `"direct"`: The agent directly edits the working memory text
-- `"read-only"`: The agent can read but not update working memory
+- `template`: A template for the working memory content
 
 The instructions for the agent are also important. They guide the agent on what information to store in working memory and how to use that information when responding to the user.
