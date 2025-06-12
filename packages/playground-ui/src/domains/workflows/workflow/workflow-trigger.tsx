@@ -215,6 +215,7 @@ export function WorkflowTrigger({
                       runId: step.runId,
                       suspendPayload: step.suspendPayload,
                       resumeData: data,
+                      isLoading: false,
                     });
                   }}
                 />
