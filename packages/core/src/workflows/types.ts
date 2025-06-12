@@ -3,6 +3,13 @@ import type { z } from 'zod';
 import type { ExecuteFunction, Step } from './step';
 import type { SerializedStepFlowEntry } from './workflow';
 
+export type Emitter = {
+  emit: (event: string, data: any) => Promise<void>;
+  on: (event: string, callback: (data: any) => void) => void;
+  off: (event: string, callback: (data: any) => void) => void;
+  once: (event: string, callback: (data: any) => void) => void;
+};
+
 export type StepSuccess<P, R, S, T> = {
   status: 'success';
   output: T;

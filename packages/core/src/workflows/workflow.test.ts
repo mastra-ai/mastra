@@ -1903,6 +1903,67 @@ describe('Workflow', () => {
 
       expect(endTime - startTime).toBeGreaterThan(1000);
     });
+
+    it('should execute a waitForEvent step', async () => {
+      const execute = vi.fn<any>().mockResolvedValue({ result: 'success' });
+      const step1 = createStep({
+        id: 'step1',
+        execute,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+      const step2 = createStep({
+        id: 'step2',
+        execute: async ({ inputData, resumeData }) => {
+          return { result: inputData.result, resumed: resumeData };
+        },
+        inputSchema: z.object({ result: z.string() }),
+        outputSchema: z.object({ result: z.string(), resumed: z.any() }),
+        resumeSchema: z.any(),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          result: z.string(),
+          resumed: z.any(),
+        }),
+        steps: [step1],
+      });
+
+      workflow.then(step1).waitForEvent('hello-event', step2).commit();
+
+      const run = workflow.createRun();
+      const startTime = Date.now();
+      setTimeout(() => {
+        run.sendEvent('hello-event', { data: 'hello' });
+      }, 1000);
+      const result = await run.start({ inputData: {} });
+      console.dir({ result }, { depth: null });
+      const endTime = Date.now();
+
+      expect(execute).toHaveBeenCalled();
+      expect(result.steps['step1']).toEqual({
+        status: 'success',
+        output: { result: 'success' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(result.steps['step2']).toEqual({
+        status: 'success',
+        output: { result: 'success', resumed: { data: 'hello' } },
+        payload: { result: 'success' },
+        resumePayload: { data: 'hello' },
+        resumedAt: expect.any(Number),
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+
+      expect(endTime - startTime).toBeGreaterThan(1000);
+    });
   });
 
   describe('Error Handling', () => {
