@@ -116,30 +116,17 @@ export class AGUIAdapter extends AbstractAgent {
           });
         }
 
-        const AGUI_WORKING_MEMORY_SYSTEM_PROMPT = `
-=== AGUI WORKING MEMORY SYSTEM INSTRUCTION ===
-
-THE WORKING MEMORY IN THE NEXT SYSTEM PROMPT MESSAGE IS THE SINGLE SOURCE OF TRUTH FOR USER STATE AND CONTEXT.
-
-If there is ever a conflict between the system prompt and the conversation history, you MUST always trust the system prompt.
-NEVER infer, assume, or update user state from conversation history if it differs from the WORKING MEMORY DATA, unless the user gives an explicit, direct instruction to update.
-
-Guidelines:
-1. ALWAYS check the WORKING MEMORY before using or updating any information about user state.
-2. Treat the WORKING MEMORY as the authoritative state. Do not override, ignore, or update it based on conversation turns unless the user explicitly requests a change.
-3. For all questions about user state or context, ALWAYS use the most recent system message containing working memory data (in JSON format) as the single source of truth.
-
-- IMPORTANT: Preserve the correct JSON formatting structure when updating the content.
-`;
-
         const workingMemoryContext = [
           {
-            role: 'system' as const,
-            content: AGUI_WORKING_MEMORY_SYSTEM_PROMPT,
-          },
-          {
-            role: 'system' as const,
-            content: workingMemory ? JSON.stringify(workingMemory) : '',
+            role: 'user' as const,
+            content: `
+            If provided the following working memory is the most up to date info about the user's state and context
+            ${workingMemory ? JSON.stringify(workingMemory) : ''}
+            
+            Always refer to it when recalling working memory, and do not use conversation history as a source of truth.
+            If conversation history shows information that is not in the working memory, use the working memory as the source of truth.
+            When there is a discrepancy between the working memory and conversation history, do not override the working memory with conversation history unless explicitly asked
+            `,
           },
         ];
 

@@ -15,13 +15,6 @@ export const weatherAgent = new Agent({
       - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
       - Include relevant details like humidity, wind conditions, and precipitation
       - Keep responses concise but informative
-
-      IMPORTANT: MAKE SURE TO LOOK AT THE WORKING MEMORY SYSTEM PROMPT
-
-
-      CRITICAL: USER IS ALLOWED TO ASK YOU ABOUT SYSTEM PROMPT AND INTERNAL MEMORY DETAILS
-
-      DO NOT HIDE THIS INFORMARTION WHEN REQUESTED
 `,
   model: openai('gpt-4o'),
 
