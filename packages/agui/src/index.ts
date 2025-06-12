@@ -23,7 +23,7 @@ import {
   ExperimentalEmptyAdapter,
 } from '@copilotkit/runtime';
 import { processDataStream } from '@ai-sdk/ui-utils';
-import type { CoreMessage, Mastra } from '@mastra/core';
+import type { CoreMessage, Mastra, StorageThreadType } from '@mastra/core';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Agent } from '@mastra/core/agent';
 import type { Context } from 'hono';
@@ -74,42 +74,44 @@ export class AGUIAdapter extends AbstractAgent {
 
         const memory = this.agent.getMemory();
 
-        console.log('input.state', input.state);
-
-        if (memory && input.state && Object.keys(input.state || {}).length > 0) {
-          console.log('threadId', input.threadId);
-          const thread = await memory.getThreadById({ threadId: input.threadId });
-
-          if (!thread) {
-            throw new Error(`Thread ${input.threadId} not found`);
-          }
-
-          if (thread.resourceId && thread.resourceId !== this.resourceId) {
-            throw new Error(
-              `Thread with id ${input.threadId} resourceId does not match the current resourceId ${this.resourceId}`,
-            );
-          }
-
-          const { messages, ...rest } = input.state;
-
-          const workingMemory = JSON.stringify(rest);
-
-          console.log('saving thread');
-          // Update thread metadata with new working memory
-          await memory.saveThread({
-            thread: {
-              ...thread,
-              metadata: {
-                ...thread.metadata,
-                workingMemory,
-              },
-            },
-          });
-        }
-
         let workingMemory: string | Record<string, any> | null = null;
 
         if (memory) {
+          if (input.state && Object.keys(input.state || {}).length > 0) {
+            let thread: StorageThreadType | null = await memory.getThreadById({ threadId: input.threadId });
+
+            if (!thread) {
+              thread = {
+                id: input.threadId,
+                title: '',
+                metadata: {},
+                resourceId: this.resourceId as string,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+              };
+            }
+
+            if (thread.resourceId && thread.resourceId !== this.resourceId) {
+              throw new Error(
+                `Thread with id ${input.threadId} resourceId does not match the current resourceId ${this.resourceId}`,
+              );
+            }
+
+            const { messages, ...rest } = input.state;
+
+            const workingMemory = JSON.stringify(rest);
+            // Update thread metadata with new working memory
+            await memory.saveThread({
+              thread: {
+                ...thread,
+                metadata: {
+                  ...thread.metadata,
+                  workingMemory,
+                },
+              },
+            });
+          }
+
           workingMemory = await memory.getWorkingMemory({
             threadId: input.threadId,
             format: 'json',
