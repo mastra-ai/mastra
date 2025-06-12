@@ -74,63 +74,40 @@ export class AGUIAdapter extends AbstractAgent {
 
         const memory = this.agent.getMemory();
 
-        let workingMemory: string | Record<string, any> | null = null;
+        if (memory && input.state && Object.keys(input.state || {}).length > 0) {
+          let thread: StorageThreadType | null = await memory.getThreadById({ threadId: input.threadId });
 
-        if (memory) {
-          if (input.state && Object.keys(input.state || {}).length > 0) {
-            let thread: StorageThreadType | null = await memory.getThreadById({ threadId: input.threadId });
-
-            if (!thread) {
-              thread = {
-                id: input.threadId,
-                title: '',
-                metadata: {},
-                resourceId: this.resourceId as string,
-                createdAt: new Date(),
-                updatedAt: new Date(),
-              };
-            }
-
-            if (thread.resourceId && thread.resourceId !== this.resourceId) {
-              throw new Error(
-                `Thread with id ${input.threadId} resourceId does not match the current resourceId ${this.resourceId}`,
-              );
-            }
-
-            const { messages, ...rest } = input.state;
-
-            const workingMemory = JSON.stringify(rest);
-            // Update thread metadata with new working memory
-            await memory.saveThread({
-              thread: {
-                ...thread,
-                metadata: {
-                  ...thread.metadata,
-                  workingMemory,
-                },
-              },
-            });
+          if (!thread) {
+            thread = {
+              id: input.threadId,
+              title: '',
+              metadata: {},
+              resourceId: this.resourceId as string,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            };
           }
 
-          workingMemory = await memory.getWorkingMemory({
-            threadId: input.threadId,
-            format: 'json',
+          if (thread.resourceId && thread.resourceId !== this.resourceId) {
+            throw new Error(
+              `Thread with id ${input.threadId} resourceId does not match the current resourceId ${this.resourceId}`,
+            );
+          }
+
+          const { messages, ...rest } = input.state;
+
+          const workingMemory = JSON.stringify(rest);
+          // Update thread metadata with new working memory
+          await memory.saveThread({
+            thread: {
+              ...thread,
+              metadata: {
+                ...thread.metadata,
+                workingMemory,
+              },
+            },
           });
         }
-
-        const workingMemoryContext = [
-          {
-            role: 'user' as const,
-            content: `
-            If provided the following working memory is the most up to date info about the user's state and context
-            ${workingMemory ? JSON.stringify(workingMemory) : ''}
-            
-            Always refer to it when recalling working memory, and do not use conversation history as a source of truth.
-            If conversation history shows information that is not in the working memory, use the working memory as the source of truth.
-            When there is a discrepancy between the working memory and conversation history, do not override the working memory with conversation history unless explicitly asked
-            `,
-          },
-        ];
 
         this.agent
           .stream([lastMessage], {
@@ -149,7 +126,6 @@ export class AGUIAdapter extends AbstractAgent {
               {} as Record<string, any>,
             ),
             runtimeContext: this.runtimeContext,
-            context: workingMemoryContext,
           })
           .then(response => {
             let messageId = randomUUID();

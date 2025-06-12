@@ -623,6 +623,23 @@ export class Memory extends MastraMemory {
     });
   }
 
+  public async getUserContextMessage({ threadId }: { threadId: string }) {
+    const workingMemory = await this.getWorkingMemory({ threadId });
+
+    if (!workingMemory) {
+      return null;
+    }
+
+    return `
+      If provided the following working memory is the most up to date info about the user's state and context
+      ${JSON.stringify(workingMemory)}
+      
+      Always refer to it when recalling working memory, and do not use conversation history as a source of truth.
+      If conversation history shows information that is not in the working memory, use the working memory as the source of truth.
+      When there is a discrepancy between the working memory and conversation history, do not override the working memory with conversation history unless explicitly asked
+      `;
+  }
+
   public defaultWorkingMemoryTemplate = `
 # User Information
 - **First Name**: 

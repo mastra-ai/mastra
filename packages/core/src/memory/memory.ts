@@ -129,6 +129,10 @@ export abstract class MastraMemory extends MastraBase {
     return null;
   }
 
+  public async getUserContextMessage(_input: { threadId: string }): Promise<string | null> {
+    return null;
+  }
+
   /**
    * Get tools that should be available to the agent.
    * This will be called when converting tools for the agent.
