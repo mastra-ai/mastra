@@ -47,7 +47,7 @@ export async function build({
     logger.info('You can now deploy the .mastra/output directory to your target platform.');
   } catch (error) {
     if (error instanceof Error) {
-      logger.error(`Mastra Build failed`);
+      logger.error(`Mastra Build failed`, { error });
     }
     process.exit(1);
   }

@@ -21,7 +21,7 @@ const mcp = new MCPConfiguration({
       command: "pnpx",
       args: [
         `@modelcontextprotocol/server-filesystem`,
-        path.join(process.cwd(), "notes"),
+        path.join(process.cwd(), "..", "..", "notes"), // relative to output directory
       ],
     },
   },

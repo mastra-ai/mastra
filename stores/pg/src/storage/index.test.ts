@@ -408,6 +408,7 @@ describe('PostgresStore', () => {
         suspendedPaths: {},
         runId,
         timestamp: new Date().getTime(),
+        serializedStepGraph: [],
       } as unknown as WorkflowRunState;
 
       await store.persistWorkflowSnapshot({
@@ -446,6 +447,7 @@ describe('PostgresStore', () => {
         suspendedPaths: {},
         runId,
         timestamp: new Date().getTime(),
+        serializedStepGraph: [],
       };
 
       await store.persistWorkflowSnapshot({
@@ -524,6 +526,8 @@ describe('PostgresStore', () => {
         suspendedPaths: {},
         runId: runId,
         timestamp: Date.now(),
+        serializedStepGraph: [],
+        status: 'running',
       };
 
       await store.persistWorkflowSnapshot({

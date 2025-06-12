@@ -31,18 +31,18 @@
     "cloudflare": "^4.3.0"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250610.0",
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
-    "@cloudflare/workers-types": "^4.20250607.0",
+    "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
-    "@types/node": "^20.17.57",
+    "@types/node": "^20.19.0",
     "dotenv": "^16.5.0",
     "eslint": "^9.28.0",
     "miniflare": "^4.20250525.1",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.2",
-    "vitest": "^3.2.2",
-    "@mastra/core": "workspace:*"
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.3"
   },
   "peerDependencies": {
     "@mastra/core": ">=0.10.4-0 <0.11.0"

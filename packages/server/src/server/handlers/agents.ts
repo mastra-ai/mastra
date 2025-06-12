@@ -116,6 +116,15 @@ export async function getAgentByIdHandler({
             ...acc,
             [key]: {
               name: workflow.name,
+              steps: Object.entries(workflow.steps).reduce<any>((acc, [key, step]) => {
+                return {
+                  ...acc,
+                  [key]: {
+                    id: step.id,
+                    description: step.description,
+                  },
+                };
+              }, {}),
             },
           };
         }, {});

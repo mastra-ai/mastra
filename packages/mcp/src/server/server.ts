@@ -58,7 +58,7 @@ export class MCPServer extends MCPServerBase {
   private stdioTransport?: StdioServerTransport;
   private sseTransport?: SSEServerTransport;
   private sseHonoTransports: Map<string, SSETransport>;
-  private streamableHTTPTransport?: StreamableHTTPServerTransport;
+  private streamableHTTPTransports: Map<string, StreamableHTTPServerTransport> = new Map();
   private listToolsHandlerIsRegistered: boolean = false;
   private callToolHandlerIsRegistered: boolean = false;
   private listResourcesHandlerIsRegistered: boolean = false;
@@ -98,13 +98,6 @@ export class MCPServer extends MCPServerBase {
    */
   public getSseHonoTransport(sessionId: string): SSETransport | undefined {
     return this.sseHonoTransports.get(sessionId);
-  }
-
-  /**
-   * Get the current streamable HTTP transport.
-   */
-  public getStreamableHTTPTransport(): StreamableHTTPServerTransport | undefined {
-    return this.streamableHTTPTransport;
   }
 
   /**
@@ -880,37 +873,163 @@ export class MCPServer extends MCPServerBase {
     res: http.ServerResponse<http.IncomingMessage>;
     options?: StreamableHTTPServerTransportOptions;
   }) {
-    if (url.pathname === httpPath) {
-      this.streamableHTTPTransport = new StreamableHTTPServerTransport(options);
-      try {
-        await this.server.connect(this.streamableHTTPTransport);
-      } catch (error) {
-        this.logger.error('Error connecting to MCP server', { error });
-        res.writeHead(500);
-        res.end('Error connecting to MCP server');
-        return;
-      }
+    this.logger.debug(`startHTTP: Received ${req.method} request to ${url.pathname}`);
 
-      try {
-        await this.streamableHTTPTransport.handleRequest(req, res);
-      } catch (error) {
-        this.logger.error('Error handling MCP connection', { error });
-        res.writeHead(500);
-        res.end('Error handling MCP connection');
-        return;
-      }
-
-      this.server.onclose = async () => {
-        this.streamableHTTPTransport = undefined;
-        await this.server.close();
-      };
-
-      res.on('close', () => {
-        this.streamableHTTPTransport = undefined;
-      });
-    } else {
+    if (url.pathname !== httpPath) {
+      this.logger.debug(`startHTTP: Pathname ${url.pathname} does not match httpPath ${httpPath}. Returning 404.`);
       res.writeHead(404);
       res.end();
+      return;
+    }
+
+    const sessionId = req.headers['mcp-session-id'] as string | undefined;
+    let transport: StreamableHTTPServerTransport | undefined;
+
+    this.logger.debug(
+      `startHTTP: Session ID from headers: ${sessionId}. Active transports: ${Array.from(this.streamableHTTPTransports.keys()).join(', ')}`,
+    );
+
+    try {
+      if (sessionId && this.streamableHTTPTransports.has(sessionId)) {
+        // Found existing session
+        transport = this.streamableHTTPTransports.get(sessionId)!;
+        this.logger.debug(`startHTTP: Using existing Streamable HTTP transport for session ID: ${sessionId}`);
+
+        if (req.method === 'GET') {
+          this.logger.debug(
+            `startHTTP: Handling GET request for existing session ${sessionId}. Calling transport.handleRequest.`,
+          );
+        }
+
+        // Handle the request using the existing transport
+        // Need to parse body for POST requests before passing to handleRequest
+        const body =
+          req.method === 'POST'
+            ? await new Promise((resolve, reject) => {
+                let data = '';
+                req.on('data', chunk => (data += chunk));
+                req.on('end', () => {
+                  try {
+                    resolve(JSON.parse(data));
+                  } catch (e) {
+                    reject(e);
+                  }
+                });
+                req.on('error', reject);
+              })
+            : undefined;
+
+        await transport.handleRequest(req, res, body);
+      } else {
+        // No session ID or session ID not found
+        this.logger.debug(`startHTTP: No existing Streamable HTTP session ID found. ${req.method}`);
+
+        // Only allow new sessions via POST initialize request
+        if (req.method === 'POST') {
+          const body = await new Promise((resolve, reject) => {
+            let data = '';
+            req.on('data', chunk => (data += chunk));
+            req.on('end', () => {
+              try {
+                resolve(JSON.parse(data));
+              } catch (e) {
+                reject(e);
+              }
+            });
+            req.on('error', reject);
+          });
+
+          // Import isInitializeRequest from the correct path
+          const { isInitializeRequest } = await import('@modelcontextprotocol/sdk/types.js');
+
+          if (isInitializeRequest(body)) {
+            this.logger.debug('startHTTP: Received Streamable HTTP initialize request, creating new transport.');
+
+            // Create a new transport for the new session
+            transport = new StreamableHTTPServerTransport({
+              ...options,
+              sessionIdGenerator: () => randomUUID(),
+              onsessioninitialized: id => {
+                this.streamableHTTPTransports.set(id, transport!);
+              },
+            });
+
+            // Set up onclose handler to clean up transport when closed
+            transport.onclose = () => {
+              const closedSessionId = transport?.sessionId;
+              if (closedSessionId && this.streamableHTTPTransports.has(closedSessionId)) {
+                this.logger.debug(
+                  `startHTTP: Streamable HTTP transport closed for session ${closedSessionId}, removing from map.`,
+                );
+                this.streamableHTTPTransports.delete(closedSessionId);
+              }
+            };
+
+            // Connect the MCP server instance to the new transport
+            await this.server.connect(transport);
+
+            // Store the transport when the session is initialized
+            if (transport.sessionId) {
+              this.streamableHTTPTransports.set(transport.sessionId, transport);
+              this.logger.debug(
+                `startHTTP: Streamable HTTP session initialized and stored with ID: ${transport.sessionId}`,
+              );
+            } else {
+              this.logger.warn('startHTTP: Streamable HTTP transport initialized without a session ID.');
+            }
+
+            // Handle the initialize request
+            return await transport.handleRequest(req, res, body);
+          } else {
+            // POST request but not initialize, and no session ID
+            this.logger.warn('startHTTP: Received non-initialize POST request without a session ID.');
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(
+              JSON.stringify({
+                jsonrpc: '2.0',
+                error: {
+                  code: -32000,
+                  message: 'Bad Request: No valid session ID provided for non-initialize request',
+                },
+                id: (body as any)?.id ?? null, // Include original request ID if available
+              }),
+            );
+          }
+        } else {
+          // Non-POST request (GET/DELETE) without a session ID
+          this.logger.warn(`startHTTP: Received ${req.method} request without a session ID.`);
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              error: {
+                code: -32000,
+                message: `Bad Request: ${req.method} request requires a valid session ID`,
+              },
+              id: null,
+            }),
+          );
+        }
+      }
+    } catch (error) {
+      this.logger.error('startHTTP: Error handling Streamable HTTP request:', { error });
+      // If headers haven't been sent, send an error response
+      if (!res.headersSent) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            error: {
+              code: -32603,
+              message: 'Internal server error',
+            },
+            id: null, // Cannot determine original request ID in catch
+          }),
+        );
+      } else {
+        // If headers were already sent (e.g., during SSE stream), just log the error
+        this.logger.error('startHTTP: Error after headers sent:', error);
+      }
     }
   }
 
@@ -991,9 +1110,12 @@ export class MCPServer extends MCPServerBase {
         }
         this.sseHonoTransports.clear();
       }
-      if (this.streamableHTTPTransport) {
-        await this.streamableHTTPTransport.close?.();
-        this.streamableHTTPTransport = undefined;
+      // Close all active Streamable HTTP transports
+      if (this.streamableHTTPTransports) {
+        for (const transport of this.streamableHTTPTransports.values()) {
+          await transport.close?.();
+        }
+        this.streamableHTTPTransports.clear();
       }
       await this.server.close();
       this.logger.info('MCP server closed.');

@@ -26,13 +26,13 @@
   },
   "license": "Elastic-2.0",
   "dependencies": {
-    "@workos-inc/node": "^7.50.1",
-    "@mastra/auth": "workspace:*"
+    "@mastra/auth": "workspace:*",
+    "@workos-inc/node": "^7.54.0"
   },
   "devDependencies": {
-    "@mastra/core": "workspace:*",
     "@internal/lint": "workspace:*",
-    "@types/node": "^22.13.1",
+    "@mastra/core": "workspace:*",
+    "@types/node": "^20.19.0",
     "eslint": "^9.28.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",

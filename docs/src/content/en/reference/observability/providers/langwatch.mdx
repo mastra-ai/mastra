@@ -26,7 +26,7 @@ import { LangWatchExporter } from "langwatch";
 export const mastra = new Mastra({
   // ... other config
   telemetry: {
-    serviceName: "your-service-name",
+    serviceName: "ai", // this must be set to "ai" so that the LangWatchExporter thinks it's an AI SDK trace
     enabled: true,
     export: {
       type: "custom",

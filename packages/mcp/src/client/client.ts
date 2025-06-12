@@ -11,7 +11,12 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import type { StreamableHTTPClientTransportOptions } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
-import type { ClientCapabilities, GetPromptResult, ListPromptsResult, LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
+import type {
+  ClientCapabilities,
+  GetPromptResult,
+  ListPromptsResult,
+  LoggingLevel,
+} from '@modelcontextprotocol/sdk/types.js';
 import {
   CallToolResultSchema,
   ListResourcesResultSchema,
@@ -151,7 +156,7 @@ export class InternalMastraMCPClient extends MastraBase {
 
     // Set up log message capturing
     this.setupLogging();
-    
+
     this.resources = new ResourceClientActions({ client: this, logger: this.logger });
     this.prompts = new PromptClientActions({ client: this, logger: this.logger });
   }
@@ -234,7 +239,6 @@ export class InternalMastraMCPClient extends MastraBase {
         const streamableTransport = new StreamableHTTPClientTransport(url, {
           requestInit,
           reconnectionOptions: this.serverConfig.reconnectionOptions,
-          sessionId: this.serverConfig.sessionId,
         });
         await this.client.connect(streamableTransport, {
           timeout:
@@ -267,26 +271,43 @@ export class InternalMastraMCPClient extends MastraBase {
     }
   }
 
-  private isConnected = false;
+  private isConnected: Promise<boolean> | null = null;
 
   async connect() {
-    if (this.isConnected) return;
+    let res: (value: boolean) => void = () => {};
+    let rej: (reason?: any) => void = () => {};
+
+    if (this.isConnected === null) {
+      this.log('debug', `Creating new isConnected promise`);
+      this.isConnected = new Promise<boolean>((resolve, reject) => {
+        res = resolve;
+        rej = reject;
+      });
+    } else if (await this.isConnected) {
+      this.log('debug', `MCP server already connected`);
+      return;
+    }
 
     const { command, url } = this.serverConfig;
 
     if (command) {
-      await this.connectStdio(command);
+      await this.connectStdio(command).catch(e => {
+        rej(e);
+      });
     } else if (url) {
-      await this.connectHttp(url);
+      await this.connectHttp(url).catch(e => {
+        rej(e);
+      });
     } else {
+      rej(false);
       throw new Error('Server configuration must include either a command or a url.');
     }
 
-    this.isConnected = true;
+    res(true);
     const originalOnClose = this.client.onclose;
     this.client.onclose = () => {
       this.log('debug', `MCP server connection closed`);
-      this.isConnected = false;
+      rej(false);
       if (typeof originalOnClose === `function`) {
         originalOnClose();
       }
@@ -330,7 +351,7 @@ export class InternalMastraMCPClient extends MastraBase {
       throw e;
     } finally {
       this.transport = undefined;
-      this.isConnected = false;
+      this.isConnected = Promise.resolve(false);
     }
   }
 
@@ -385,12 +406,20 @@ export class InternalMastraMCPClient extends MastraBase {
    * @param args Arguments for the prompt
    * @param version (optional) The prompt version to retrieve
    */
-  async getPrompt({ name, args, version }: { name: string; args?: Record<string, any>; version?: string }): Promise<GetPromptResult> {
+  async getPrompt({
+    name,
+    args,
+    version,
+  }: {
+    name: string;
+    args?: Record<string, any>;
+    version?: string;
+  }): Promise<GetPromptResult> {
     this.log('debug', `Requesting prompt from MCP server: ${name}`);
     return await this.client.request(
       { method: 'prompts/get', params: { name, arguments: args, version } },
       GetPromptResultSchema,
-      { timeout: this.timeout }
+      { timeout: this.timeout },
     );
   }
 
