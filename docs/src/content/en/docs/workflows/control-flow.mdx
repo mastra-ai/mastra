@@ -45,6 +45,8 @@ export const testWorkflow = createWorkflow({...})
 
 This executes all steps in the array concurrently, then continues to the next step after all parallel steps complete.
 
+> See [Parallel Execution with Steps](/examples/workflows/parallel-steps) for more information.
+
 ## Branch
 
 Create conditional branches using `.branch()`:
@@ -65,6 +67,8 @@ export const testWorkflow = createWorkflow({...})
 ```
 
 Branch conditions are evaluated sequentially, but steps with matching conditions are executed in parallel.
+
+> See [Workflow with Conditional Branching](/examples/workflows/conditional-branching) for more information.
 
 ## Loops
 
