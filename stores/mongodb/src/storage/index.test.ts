@@ -286,7 +286,7 @@ describe('MongoDBStore', () => {
 
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      const message = test.generateSampleMessage(thread.id);
+      const message = test.generateSampleMessageV1({ threadId: thread.id });
       await store.saveMessages({ messages: [message] });
 
       const updatedThread = await store.getThreadById({ threadId: thread.id });
