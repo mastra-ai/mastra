@@ -3,6 +3,13 @@ import type { z } from 'zod';
 import type { ExecuteFunction, Step } from './step';
 import type { SerializedStepFlowEntry } from './workflow';
 
+export type Emitter = {
+  emit: (event: string, data: any) => Promise<void>;
+  on: (event: string, callback: (data: any) => void) => void;
+  off: (event: string, callback: (data: any) => void) => void;
+  once: (event: string, callback: (data: any) => void) => void;
+};
+
 export type StepSuccess<P, R, S, T> = {
   status: 'success';
   output: T;
@@ -45,11 +52,20 @@ export type StepRunning<P, R, S> = {
   resumedAt?: number;
 };
 
+export type StepWaiting<P, R, S> = {
+  status: 'waiting';
+  payload: P;
+  suspendPayload?: S;
+  resumePayload?: R;
+  startedAt: number;
+};
+
 export type StepResult<P, R, S, T> =
   | StepSuccess<P, R, S, T>
   | StepFailure<P, R, S>
   | StepSuspended<P, S>
-  | StepRunning<P, R, S>;
+  | StepRunning<P, R, S>
+  | StepWaiting<P, R, S>;
 
 export type StepsRecord<T extends readonly Step<any, any, any>[]> = {
   [K in T[number]['id']]: Extract<T[number], { id: K }>;
@@ -94,6 +110,10 @@ export type VariableReference<
 
 export type StreamEvent = TextStreamPart<any> & {
   type: 'step-suspended';
+  payload: any;
+  id: string;
+} & {
+  type: 'step-waiting';
   payload: any;
   id: string;
 };

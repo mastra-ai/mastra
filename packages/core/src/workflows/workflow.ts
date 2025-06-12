@@ -31,6 +31,7 @@ export type StepFlowEntry<TEngineType = DefaultEngineType> =
   | { type: 'step'; step: Step }
   | { type: 'sleep'; id: string; duration: number }
   | { type: 'sleepUntil'; id: string; date: Date }
+  | { type: 'waitForEvent'; event: string; step: Step; timeout?: number }
   | {
       type: 'parallel';
       steps: StepFlowEntry[];
@@ -79,6 +80,12 @@ export type SerializedStepFlowEntry =
       type: 'sleepUntil';
       id: string;
       date: Date;
+    }
+  | {
+      type: 'waitForEvent';
+      event: string;
+      step: SerializedStep;
+      timeout?: number;
     }
   | {
       type: 'parallel';
@@ -573,6 +580,29 @@ export class Workflow<
       },
     });
     return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, TPrevSchema>;
+  }
+
+  waitForEvent<TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut extends z.ZodType<any>>(
+    event: string,
+    step: Step<TStepId, TStepInputSchema, TSchemaOut, any, any, TEngineType>,
+    opts?: {
+      timeout?: number;
+    },
+  ) {
+    this.stepFlow.push({ type: 'waitForEvent', event, step: step as any, timeout: opts?.timeout });
+    this.serializedStepFlow.push({
+      type: 'waitForEvent',
+      event,
+      step: {
+        id: step.id,
+        description: step.description,
+        component: (step as SerializedStep).component,
+        serializedStepFlow: (step as SerializedStep).serializedStepFlow,
+      },
+      timeout: opts?.timeout,
+    });
+    this.steps[step.id] = step;
+    return this as unknown as Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, TSchemaOut>;
   }
 
   map<
@@ -1134,6 +1164,10 @@ export class Run<
     this.cleanup = params.cleanup;
   }
 
+  sendEvent(event: string, data: any) {
+    this.emitter.emit(`user-event-${event}`, data);
+  }
+
   /**
    * Starts the workflow execution with the provided input
    * @param input The input data for the workflow
@@ -1155,6 +1189,15 @@ export class Run<
       emitter: {
         emit: async (event: string, data: any) => {
           this.emitter.emit(event, data);
+        },
+        on: (event: string, callback: (data: any) => void) => {
+          this.emitter.on(event, callback);
+        },
+        off: (event: string, callback: (data: any) => void) => {
+          this.emitter.off(event, callback);
+        },
+        once: (event: string, callback: (data: any) => void) => {
+          this.emitter.once(event, callback);
         },
       },
       retryConfig: this.retryConfig,
@@ -1304,6 +1347,15 @@ export class Run<
           emit: (event: string, data: any) => {
             this.emitter.emit(event, data);
             return Promise.resolve();
+          },
+          on: (event: string, callback: (data: any) => void) => {
+            this.emitter.on(event, callback);
+          },
+          off: (event: string, callback: (data: any) => void) => {
+            this.emitter.off(event, callback);
+          },
+          once: (event: string, callback: (data: any) => void) => {
+            this.emitter.once(event, callback);
           },
         },
         runtimeContext: params.runtimeContext ?? new RuntimeContext(),

@@ -16,6 +16,7 @@ import type {
   WorkflowResult,
   SerializedStepFlowEntry,
   StepFailure,
+  Emitter,
 } from '@mastra/core/workflows';
 import { EMITTER_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Span } from '@opentelemetry/api';
@@ -94,6 +95,13 @@ export class InngestRun<
       }
     }
     return runs?.[0];
+  }
+
+  async sendEvent(event: string, data: any) {
+    await this.inngest.send({
+      name: `user-event-${event}`,
+      data,
+    });
   }
 
   async start({
@@ -632,7 +640,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
   protected async fmtReturnValue<TOutput>(
     executionSpan: Span | undefined,
-    emitter: { emit: (event: string, data: any) => Promise<void> },
+    emitter: Emitter,
     stepResults: Record<string, StepResult<any, any, any, any>>,
     lastOutput: StepResult<any, any, any, any>,
     error?: Error | string,
@@ -725,7 +733,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       resumePayload: any;
     };
     prevOutput: any;
-    emitter: { emit: (event: string, data: any) => Promise<void> };
+    emitter: Emitter;
     runtimeContext: RuntimeContext;
   }): Promise<StepResult<any, any, any, any>> {
     return super.executeStep({
@@ -743,6 +751,19 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
   async executeSleep({ id, duration }: { id: string; duration: number }): Promise<void> {
     await this.inngestStep.sleep(id, duration);
+  }
+
+  async executeWaitForEvent({ event, timeout }: { event: string; timeout?: number }): Promise<any> {
+    const eventData = await this.inngestStep.waitForEvent(`user-event-${event}`, {
+      event: `user-event-${event}`,
+      timeout: timeout ?? 5e3,
+    });
+
+    if (eventData === null) {
+      throw 'Timeout waiting for event';
+    }
+
+    return eventData?.data;
   }
 
   async executeStep({
@@ -769,7 +790,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       runId?: string;
     };
     prevOutput: any;
-    emitter: { emit: (event: string, data: any) => Promise<void> };
+    emitter: Emitter;
     runtimeContext: RuntimeContext;
   }): Promise<StepResult<any, any, any, any>> {
     await this.inngestStep.run(
@@ -1110,7 +1131,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       resumePath: number[];
     };
     executionContext: ExecutionContext;
-    emitter: { emit: (event: string, data: any) => Promise<void> };
+    emitter: Emitter;
     runtimeContext: RuntimeContext;
   }): Promise<StepResult<any, any, any, any>> {
     let execResults: any;
