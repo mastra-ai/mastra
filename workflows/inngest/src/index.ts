@@ -378,31 +378,6 @@ export class InngestWorkflow<
   }
 }
 
-function cloneWorkflow<
-  TWorkflowId extends string = string,
-  TInput extends z.ZodType<any> = z.ZodType<any>,
-  TOutput extends z.ZodType<any> = z.ZodType<any>,
-  TSteps extends Step<string, any, any, any, any>[] = Step<string, any, any, any, any>[],
->(
-  workflow: InngestWorkflow<InngestEngineType, TSteps, string, TInput, TOutput>,
-  opts: { id: TWorkflowId },
-): InngestWorkflow<InngestEngineType, TSteps, TWorkflowId, TInput, TOutput> {
-  const wf = new InngestWorkflow(
-    {
-      id: opts.id,
-      inputSchema: workflow.inputSchema,
-      outputSchema: workflow.outputSchema,
-      steps: workflow.stepDefs,
-      mastra: workflow.mastra,
-    },
-    workflow.inngest,
-  );
-
-  wf.setStepFlow(workflow.stepGraph);
-  wf.commit();
-  return wf;
-}
-
 export function createStep<
   TStepId extends string,
   TStepInput extends z.ZodType<any>,
