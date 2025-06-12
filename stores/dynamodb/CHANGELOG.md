@@ -1,5 +1,19 @@
 # @mastra/dynamodb
 
+## 0.10.5-alpha.0
+
+### Patch Changes
+
+- 63f6b7d: dependencies updates:
+  - Updated dependency [`@aws-sdk/client-dynamodb@^3.826.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/client-dynamodb/v/3.826.0) (from `^3.823.0`, in `dependencies`)
+  - Updated dependency [`@aws-sdk/lib-dynamodb@^3.826.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/lib-dynamodb/v/3.826.0) (from `^3.823.0`, in `dependencies`)
+  - Updated dependency [`electrodb@^3.4.3` ↗︎](https://www.npmjs.com/package/electrodb/v/3.4.3) (from `^3.4.1`, in `dependencies`)
+- Updated dependencies [63f6b7d]
+- Updated dependencies [36f1c36]
+- Updated dependencies [10d352e]
+- Updated dependencies [53d3c37]
+  - @mastra/core@0.10.6-alpha.0
+
 ## 0.10.4
 
 ### Patch Changes
