@@ -422,6 +422,9 @@ export class DynamoDBStore extends MastraStorage {
       const data = result.data;
       return {
         ...data,
+        // Convert date strings back to Date objects for consistency
+        createdAt: typeof data.createdAt === 'string' ? new Date(data.createdAt) : data.createdAt,
+        updatedAt: typeof data.updatedAt === 'string' ? new Date(data.updatedAt) : data.updatedAt,
         // metadata: data.metadata ? JSON.parse(data.metadata) : undefined, // REMOVED by AI
         // metadata is already transformed by the entity's getter
       } as StorageThreadType;
@@ -443,6 +446,9 @@ export class DynamoDBStore extends MastraStorage {
       // ElectroDB handles the transformation with attribute getters
       return result.data.map((data: any) => ({
         ...data,
+        // Convert date strings back to Date objects for consistency
+        createdAt: typeof data.createdAt === 'string' ? new Date(data.createdAt) : data.createdAt,
+        updatedAt: typeof data.updatedAt === 'string' ? new Date(data.updatedAt) : data.updatedAt,
         // metadata: data.metadata ? JSON.parse(data.metadata) : undefined, // REMOVED by AI
         // metadata is already transformed by the entity's getter
       })) as StorageThreadType[];
@@ -614,6 +620,11 @@ export class DynamoDBStore extends MastraStorage {
       return [];
     }
 
+    const threadId = messages[0]?.threadId;
+    if (!threadId) {
+      throw new Error('Thread ID is required');
+    }
+
     // Ensure 'entity' is added and complex fields are handled
     const messagesToSave = messages.map(msg => {
       const now = new Date().toISOString();
@@ -644,19 +655,27 @@ export class DynamoDBStore extends MastraStorage {
         batches.push(batch);
       }
 
-      // Process each batch
-      for (const batch of batches) {
-        // Try creating each item individually instead of passing the whole batch
-        for (const messageData of batch) {
-          // Ensure each item has the entity property before sending
-          if (!messageData.entity) {
-            this.logger.error('Missing entity property in message data for create', { messageData });
-            throw new Error('Internal error: Missing entity property during saveMessages');
+      // Process each batch and update thread's updatedAt in parallel for better performance
+      await Promise.all([
+        // Process message batches
+        ...batches.map(async batch => {
+          for (const messageData of batch) {
+            // Ensure each item has the entity property before sending
+            if (!messageData.entity) {
+              this.logger.error('Missing entity property in message data for create', { messageData });
+              throw new Error('Internal error: Missing entity property during saveMessages');
+            }
+            await this.service.entities.message.create(messageData).go();
           }
-          await this.service.entities.message.create(messageData).go();
-        }
-        // Original batch call: await this.service.entities.message.create(batch).go();
-      }
+        }),
+        // Update thread's updatedAt timestamp
+        this.service.entities.thread
+          .update({ entity: 'thread', id: threadId })
+          .set({
+            updatedAt: new Date().toISOString(),
+          })
+          .go(),
+      ]);
 
       const list = new MessageList().add(messages, 'memory');
       if (format === `v1`) return list.get.all.v1();
