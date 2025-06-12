@@ -148,6 +148,44 @@ export const mastra = new Mastra({
 });
 ```
 
+### Advanced Configuration with buildInngestConfig
+
+For more advanced use cases where you need to integrate Mastra workflows with an existing Inngest setup (especially in Next.js applications), you can use the `buildInngestConfig` function. This allows you to combine Mastra workflows with your existing Inngest functions and configurations.
+
+Here's how to use it in a Next.js API route:
+
+```ts showLineNumbers copy filename="src/app/api/inngest/route.ts"
+import functions from '@/inngest/functions'
+import { client } from '@/inngest/index'
+import { mastra } from '@/mastra'
+import { buildInngestConfig } from '@mastra/inngest'
+import { getEnv } from '@/utilities/environment'
+import { serve } from 'inngest/next'
+
+export const maxDuration = 300 // 5 minutes
+export const runtime = 'nodejs'
+
+// This serves as the entry point for Inngest API requests
+export const { GET, POST, PUT } = serve(
+  buildInngestConfig({
+    streaming: 'allow',
+    client,
+    signingKey: getEnv('INNGEST_SIGNING_KEY', ''),
+    functions, // Your existing Inngest functions
+    mastra, // Your Mastra instance with workflows
+  }),
+)
+```
+
+The `buildInngestConfig` function:
+- Takes your Mastra instance and existing Inngest configuration options
+- Automatically registers all Mastra workflows as Inngest functions
+- Merges them with any existing functions you specify
+- Returns a configuration object that can be passed to Inngest's `serve` function
+- Supports all standard Inngest configuration options like `streaming`, `signingKey`, etc.
+
+This approach allows you to seamlessly integrate Mastra workflows into your existing Inngest setup without disrupting your current functions.
+
 ### Running the Workflow locally
 
 > **Prerequisites:**
