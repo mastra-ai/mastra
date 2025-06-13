@@ -6,11 +6,18 @@ Let's update our agent with working memory capabilities:
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { openai } from "@ai-sdk/openai";
+import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 
 // Create a memory instance with working memory configuration
 const memory = new Memory({
+  storage: new LibSQLStore({
+    url: "file:../../memory.db", // relative path from the `.mastra/output` directory
+  }), // Storage for message history
+  vector: new LibSQLVector({
+    connectionUrl: "file:../../vector.db", // relative path from the `.mastra/output` directory
+  }), // Vector database for semantic search
+  embedder: openai.embedding("text-embedding-3-small"), // Embedder for message embeddings
   options: {
-    lastMessages: 20,
     semanticRecall: {
       topK: 3,
       messageRange: {
@@ -20,7 +27,6 @@ const memory = new Memory({
     },
     workingMemory: {
       enabled: true,
-      use: "tool-call", // Recommended setting
     },
   },
 });
@@ -52,12 +58,6 @@ export const memoryAgent = new Agent({
 The `workingMemory` configuration has several important options:
 
 - `enabled`: Whether working memory is enabled
-- `use`: How the agent interacts with working memory (recommended setting is "tool-call")
-
-The `use` option can be set to:
-
-- `"tool-call"`: The agent updates working memory via tool calls (recommended)
-- `"direct"`: The agent directly edits the working memory text
-- `"read-only"`: The agent can read but not update working memory
+- `template`: A template for the working memory content
 
 The instructions for the agent are also important. They guide the agent on what information to store in working memory and how to use that information when responding to the user.
