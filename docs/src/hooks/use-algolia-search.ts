@@ -244,7 +244,7 @@ export function useAlgoliaSearch(
 
                 // Extract snippet around the found term
                 const start = Math.max(0, bestIndex - 50);
-                const end = Math.min(content.length, bestIndex + maxLength - 50);
+                const end = Math.min(content.length, start + maxLength);
 
                 let snippet = content.substring(start, end);
 
