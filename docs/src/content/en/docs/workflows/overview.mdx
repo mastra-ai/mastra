@@ -33,59 +33,37 @@ import { z } from "zod";
 
 Steps are the building blocks of workflows. Create a step using `createStep`:
 
-```typescript {1} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-const cityCoordinatesStep = createStep({
-  id: "city-step",
-  description: "Gets coordinates for city",
-  inputSchema: z.object({
-    city: z.string()
-  }),
-  outputSchema: z.object({
-    city_name: z.string(),
-    city_latitude: z.number(),
-    city_longitude: z.number()
-  }),
-  execute: async ({ inputData }) => {
-    const { city } = inputData;
-    const geocodingResponse = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${city}`);
-    const geocodingData = await geocodingResponse.json();
-
-    const { name, latitude, longitude } = geocodingData.results[0];
-
-    return {
-      city_name: name,
-      city_latitude: latitude,
-      city_longitude: longitude
-    };
-  }
-});
+```typescript filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...});
 ```
 
 > See [createStep](/reference/workflows/step) for more information.
 
 ### Create Workflow
 
-Create a workflow using `createWorkflow`. End a workflow using `.commit()`.
+Create a workflow using `createWorkflow` and complete it with `.commit()`.
 
 ```typescript {6,17} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
-const cityCoordinatesStep = createStep({...});
+const step1 = createStep({...});
 
 export const testWorkflow = createWorkflow({
   id: "test-workflow",
   description: 'Test workflow',
   inputSchema: z.object({
-    city: z.string()
+    input: z.string()
   }),
   outputSchema: z.object({
-    outcome: z.string()
+    output: z.string()
   })
 })
-  .then(cityCoordinatesStep)
+  .then(step1)
   .commit();
 ```
+
+> See [workflow](/reference/workflows/workflow) for more information.
 
 #### Composing Steps
 
@@ -95,21 +73,21 @@ Workflow steps can be composed and executed sequentially using `.then()`.
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
-const cityCoordinatesStep = createStep({...});
-const cityWeatherStep = createStep({...});
+const step1 = createStep({...});
+const step2 = createStep({...});
 
 export const testWorkflow = createWorkflow({
   id: "test-workflow",
   description: 'Test workflow',
   inputSchema: z.object({
-    city: z.string()
+    input: z.string()
   }),
   outputSchema: z.object({
-    outcome: z.string()
+    output: z.string()
   })
 })
-  .then(cityCoordinatesStep)
-  .then(cityWeatherStep)
+  .then(step1)
+  .then(step2)
   .commit();
 ```
 
@@ -121,26 +99,26 @@ export const testWorkflow = createWorkflow({
 Workflow steps can be cloned using `cloneStep()`, and used with any workflow method.
 
 ```typescript {5,19} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { createWorkflow, createStep, cloneStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
-const cityCoordinatesStep = createStep({...});
-const clonedStep = cloneStep(cityCoordinatesStep, { id: "cloned-step" });
-const cityWeatherStep = createStep({...});
+const step1 = createStep({...});
+const clonedStep = cloneStep(step1, { id: "cloned-step" });
+const step2 = createStep({...});
 
 export const testWorkflow = createWorkflow({
   id: "test-workflow",
   description: 'Test workflow',
   inputSchema: z.object({
-    city: z.string()
+    input: z.string()
   }),
   outputSchema: z.object({
-    outcome: z.string()
+    output: z.string()
   })
 })
-  .then(cityCoordinatesStep)
+  .then(step1)
   .then(clonedStep)
-  .then(cityWeatherStep)
+  .then(step2)
   .commit();
 ```
 
@@ -255,7 +233,6 @@ const result = await run.start({
 - [Conditional Branching workflow example](../../examples/workflows/conditional-branching.mdx)
 - [Inngest workflow example](../../examples/workflows/inngest-workflow.mdx)
 - [Suspend and Resume workflow example](../../examples/workflows/human-in-the-loop.mdx)
-
 
 
 

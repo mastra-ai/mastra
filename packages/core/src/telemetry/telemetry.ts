@@ -32,11 +32,11 @@ export class Telemetry {
    */
   static init(config: OtelConfig = {}): Telemetry {
     try {
-      if (!global.__TELEMETRY__) {
-        global.__TELEMETRY__ = new Telemetry(config);
+      if (!globalThis.__TELEMETRY__) {
+        globalThis.__TELEMETRY__ = new Telemetry(config);
       }
 
-      return global.__TELEMETRY__;
+      return globalThis.__TELEMETRY__;
     } catch (error) {
       const wrappedError = new MastraError(
         {
@@ -62,7 +62,7 @@ export class Telemetry {
    * @returns {Telemetry} The global telemetry instance
    */
   static get(): Telemetry {
-    if (!global.__TELEMETRY__) {
+    if (!globalThis.__TELEMETRY__) {
       throw new MastraError({
         id: 'TELEMETRY_GETTER_FAILED_GLOBAL_TELEMETRY_NOT_INITIALIZED',
         text: 'Telemetry not initialized',
@@ -70,7 +70,7 @@ export class Telemetry {
         category: ErrorCategory.USER,
       });
     }
-    return global.__TELEMETRY__;
+    return globalThis.__TELEMETRY__;
   }
 
   /**

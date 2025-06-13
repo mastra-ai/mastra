@@ -6,6 +6,8 @@ import type {
   GetWorkflowRunsParams,
   WorkflowRunResult,
   WorkflowWatchResult,
+  GetWorkflowRunByIdResponse,
+  GetWorkflowRunExecutionResultResponse,
 } from '../types';
 
 import { parseClientRuntimeContext } from '../utils';
@@ -128,6 +130,24 @@ export class Workflow extends BaseResource {
     } else {
       return this.request(`/api/workflows/${this.workflowId}/runs`);
     }
+  }
+
+  /**
+   * Retrieves a specific workflow run by its ID
+   * @param runId - The ID of the workflow run to retrieve
+   * @returns Promise containing the workflow run details
+   */
+  runById(runId: string): Promise<GetWorkflowRunByIdResponse> {
+    return this.request(`/api/workflows/${this.workflowId}/runs/${runId}`);
+  }
+
+  /**
+   * Retrieves the execution result for a specific workflow run by its ID
+   * @param runId - The ID of the workflow run to retrieve the execution result for
+   * @returns Promise containing the workflow run execution result
+   */
+  runExecutionResult(runId: string): Promise<GetWorkflowRunExecutionResultResponse> {
+    return this.request(`/api/workflows/${this.workflowId}/runs/${runId}/execution-result`);
   }
 
   /**

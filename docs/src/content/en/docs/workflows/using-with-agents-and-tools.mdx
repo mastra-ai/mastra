@@ -28,144 +28,82 @@ import { Agent } from "@mastra/core/agent";
 
 export const testAgent = new Agent({
   name: "test-agent",
-  description: "Create facts for input city, country and timezone",
-  instructions: `
-You are a helpful and factual assistant.
-
-You will be given a city, country, and timezone. Return exactly one interesting fact about each of the three values.
-
-Your response must follow this exact format:
-
-City Fact: <a short paragraph about the city>
-Country Fact: <a short paragraph about the country>
-Timezone Fact: <a short paragraph about the timezone>
-
-Only return the three facts in plain text, with each label clearly marked. No additional commentary or formatting.
-Ensure all facts are accurate and sourced from reputable references.
-`,
+  description: "Create facts for a country based on the city",
+  instructions: `Return an interesting fact about the country based on the city provided`,
   model: openai("gpt-4o")
 });
 ```
 
 ### Agents As Step
 
-In this example the `cityCoordinatesStep` performs a geocoding lookup using the provided `city`, then returns the resolved `city`, `country`, and `timezone`.
+In this example, `step1` uses the `testAgent` to generate an interesting fact about the country based on a given city.
 
-The `.map` function transforms the object output into a `prompt` string that can be used by the `testAgent`.
+The `.map` method transforms the workflow input into a `prompt` string compatible with the `testAgent`.
 
-The step is composed into the workflow using the sequential `.then()` method, allowing it to receive input from the workflow and return structured output.
+The step is composed into the workflow using `.then()`, allowing it to receive the mapped input and return the agent's structured output. The workflow is finalized with `.commit()`.
 
-```typescript {1,29,42,52} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+
+```typescript {3} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { testAgent } from "../agents/test-agent";
 
-const cityCoordinatesStep = createStep({
-  id: "city-step",
-  description: "Gets details about a city",
-  inputSchema: z.object({
-    city: z.string()
-  }),
-  outputSchema: z.object({
-    city_name: z.string(),
-    country_name: z.string(),
-    country_timezone: z.string()
-  }),
-  execute: async ({ inputData }) => {
-    const { city } = inputData;
-    const geocodingResponse = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${city}`);
-    const geocodingData = await geocodingResponse.json();
-
-    const { name, country, timezone } = geocodingData.results[0];
-
-    return {
-      city_name: name,
-      country_name: country,
-      country_timezone: timezone
-    };
-  }
-});
-
-const cityFactsStep = createStep(testAgent);
+const step1 = createStep(testAgent);
 
 export const testWorkflow = createWorkflow({
   id: "test-workflow",
   description: 'Test workflow',
   inputSchema: z.object({
-    city: z.string()
+    input: z.string()
   }),
   outputSchema: z.object({
-    outcome: z.string()
+    output: z.string()
   })
 })
-  .then(cityCoordinatesStep)
   .map(({ inputData }) => {
-    const { city_name, country_name, country_timezone } = inputData;
+    const { input } = inputData;
     return {
-      prompt: `
-        Provide facts about the city: ${city_name},
-        country: ${country_name}
-        and timezone: ${country_timezone}
-      `
+      prompt: `Provide facts about the city: ${input}`
     };
   })
-  .then(cityFactsStep)
+  .then(step1)
   .commit();
 ```
 
 ### Agent Generate
 
-In this example, the `cityFactsStep` performs a geocoding lookup using the provided `city`, then builds a prompt combining the resolved `city`, `country`, and `timezone`.
+In this example, the `step1` builds a prompt using the provided `input` and passes it to the `testAgent`, which returns a plain-text response containing facts about the city and its country.
 
-This prompt is passed to the `testAgent`, which generates a plain-text response with one fact for each.
+The step is added to the workflow using the sequential `.then()` method, allowing it to receive input from the workflow and return structured output. The workflow is finalized with `.commit()`.
 
-The step is composed into the workflow using the sequential `.then()` method, allowing it to receive input from the workflow and return structured output.
-
-```typescript {1,26,46} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {1,18, 29} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { testAgent } from "../agents/test-agent";
 
-const cityFactsStep = createStep({
-  id: "city-facts-step",
-  description: "Returns facts about city, country and timezone from the agent",
+const step1 = createStep({
+  id: "step-1",
+  description: "Create facts for a country based on the city",
   inputSchema: z.object({
-    city: z.string()
+    input: z.string()
   }),
   outputSchema: z.object({
-    outcome: z.string()
+    output: z.string()
   }),
 
   execute: async ({ inputData }) => {
-    const { city } = inputData;
-    const geocodingResponse = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${city}`);
-    const geocodingData = await geocodingResponse.json();
+    const { input } = inputData;
 
-    const { name, country, timezone } = geocodingData.results[0];
-
-    const prompt = `
-      Provide facts about the city: ${city_name},
-      country: ${country_name}
-      and timezone: ${country_timezone}
-    `;
+    const  prompt = `Provide facts about the city: ${input}`
 
     const { text } = await testAgent.generate([
       { role: "user", content: prompt }
     ]);
 
     return {
-      outcome: text
+      output: text
     };
   }
 });
 
-export const testWorkflow = createWorkflow({
-  id: "test-workflow",
-  description: 'Test workflow',
-  inputSchema: z.object({
-    city: z.string()
-  }),
-  outputSchema: z.object({
-    outcome: z.string()
-  })
-})
-  .then(cityFactsStep)
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
   .commit();
 ```
 
@@ -182,158 +120,84 @@ import { createTool } from "@mastra/core";
 import { z } from "zod";
 
 export const testTool = createTool({
-  id: "city-tool",
-  description: "Gets coordinates for city",
+  id: "test-tool",
+  description: "Gets country for a city",
   inputSchema: z.object({
-    city: z.string()
+    input: z.string()
   }),
   outputSchema: z.object({
-    city_name: z.string(),
-    country_name: z.string(),
-    country_timezone: z.string()
+    country_name: z.string()
   }),
   execute: async ({ context }) => {
-    const { city } = context;
-    const geocodingResponse = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${city}`);
+    const { input } = context;
+    const geocodingResponse = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${input}`);
     const geocodingData = await geocodingResponse.json();
 
-    const { name, country, timezone } = geocodingData.results[0];
+    const { country } = geocodingData.results[0];
 
     return {
-      city_name: name,
-      country_name: country,
-      country_timezone: timezone
+      country_name: country
     };
   }
 });
 ```
 
 
-### Tools As Step
+### Tools as Step
 
-In this example, the `cityCoordinatesStep` uses the above example `testTool` which performs a geocoding lookup using the provided `city`, then returns the resolved `city`, `country`, and `timezone`.
+In this example, `step1` uses the `testTool`, which performs a geocoding lookup using the provided `city` and returns the resolved `country`.
 
+The step is added to the workflow using the sequential `.then()` method, allowing it to receive input from the workflow and return structured output. The workflow is finalized with `.commit()`.
 
-The `.map` function transforms the object output into a prompt string that can be used by the testAgent.
-
-The step is composed into the workflow using the sequential `.then()` method, allowing it to receive input from the workflow and return structured output.
-
-```typescript {2,4,40,51} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { testAgent } from "../agents/test-agent";
+```typescript {1,3,6} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { testTool } from "../tools/test-tool";
 
-const cityCoordinatesStep = createStep(testTool);
+const step1 = createStep(testTool);
 
-const cityFactsStep = createStep({
-  id: "city-facts-step",
-  description: "Returns facts about city, country and timezone from the agent",
-  inputSchema: z.object({
-    prompt: z.string()
-  }),
-  outputSchema: z.object({
-    outcome: z.string()
-  }),
-
-  execute: async ({ inputData }) => {
-    const { prompt } = inputData;
-
-    const { text } = await testAgent.generate([
-      { role: "user", content: prompt }
-    ]);
-
-    return {
-      outcome: text
-    };
-  }
-});
-
-export const testWorkflow = createWorkflow({
-  id: "test-workflow",
-  description: "Test workflow",
-  inputSchema: z.object({
-    city: z.string()
-  }),
-  outputSchema: z.object({
-    outcome: z.string()
-  })
-})
-  .then(cityCoordinatesStep)
-  .map(({ inputData }) => {
-    const { city_name, country_name, country_timezone } = inputData;
-
-    return {
-      prompt: `
-        Provide facts about the city: ${city_name},
-        country: ${country_name}
-        and timezone: ${country_timezone}
-      `
-    };
-  })
-  .then(cityFactsStep)
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
   .commit();
 ```
 
 ### Tool Execute
 
-In this example, the `cityFactsStep` uses the above example `testTool` which performs a geocoding lookup using the provided `city`, then builds a prompt combining the resolved `city`, `country`, and `timezone`.
+In this example, `step1` directly invokes `testTool` using its `.execute()` method. The tool performs a geocoding lookup with the provided `city` and returns the corresponding `country`.
 
-This prompt is passed to the `testAgent`, which generates a plain-text response with one fact for each.
+The result is returned as structured output from the step. The step is composed into the workflow using `.then()`, enabling it to process workflow input and produce typed output. The workflow is finalized with `.commit()`
 
-The step is composed into the workflow using the sequential `.then()` method, allowing it to receive input from the workflow and return structured output.
-
-```typescript {4,21,33,52} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {3,20,32} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { RuntimeContext } from "@mastra/core/di";
 
-import { testAgent } from "../agents/test-agent";
 import { testTool } from "../tools/test-tool";
 
 const runtimeContext = new RuntimeContext();
 
-const cityFactsStep = createStep({
-  id: "city-facts-step",
-  description: "Returns facts about city, country and timezone from the agent",
+const step1 = createStep({
+  id: "step-1",
+  description: "Gets country for a city",
   inputSchema: z.object({
-    city: z.string()
+    input: z.string()
   }),
   outputSchema: z.object({
-    outcome: z.string()
+    output: z.string()
   }),
 
   execute: async ({ inputData }) => {
-    const { city } = inputData;
+    const { input } = inputData;
 
-    const { city_name, country_name, country_timezone } = await testTool.execute({
-      context: { city },
+    const { country_name } = await testTool.execute({
+      context: { input },
       runtimeContext
     });
 
-    const prompt = `
-      Provide facts about the city: ${city_name},
-      country: ${country_name}
-      and timezone: ${country_timezone}
-    `;
-
-    const { text } = await testAgent.generate([
-      { role: "user", content: prompt }
-    ]);
-
     return {
-      outcome: text
+      output: country_name
     };
   }
 });
 
-export const testWorkflow = createWorkflow({
-  id: "test-workflow",
-  description: 'Test workflow',
-  inputSchema: z.object({
-    city: z.string()
-  }),
-  outputSchema: z.object({
-    outcome: z.string()
-  })
-})
-  .then(cityFactsStep)
+export const testWorkflow = createWorkflow({...})
+  .then(step1)
   .commit();
 ```
 

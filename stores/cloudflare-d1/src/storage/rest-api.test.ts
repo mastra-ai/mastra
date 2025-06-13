@@ -370,6 +370,31 @@ describe.skip('D1Store REST API', () => {
       expect(retrieved?.metadata).toEqual(expect.objectContaining(updatedMetadata));
     });
 
+    it('should update thread updatedAt when a message is saved to it', async () => {
+      const thread = createSampleThread();
+      await store.saveThread({ thread });
+
+      // Get the initial thread to capture the original updatedAt
+      const initialThread = await store.getThreadById({ threadId: thread.id });
+      expect(initialThread).toBeDefined();
+      const originalUpdatedAt = initialThread!.updatedAt;
+
+      // Wait a small amount to ensure different timestamp
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Create and save a message to the thread
+      const message = createSampleMessageV2({ threadId: thread.id });
+      await store.saveMessages({ messages: [message], format: 'v2' });
+
+      // Retrieve the thread again and check that updatedAt was updated
+      const updatedThread = await retryUntil(
+        async () => await store.getThreadById({ threadId: thread.id }),
+        thread => thread !== null && thread.updatedAt.getTime() > originalUpdatedAt.getTime(),
+      );
+      expect(updatedThread).toBeDefined();
+      expect(updatedThread!.updatedAt.getTime()).toBeGreaterThan(originalUpdatedAt.getTime());
+    });
+
     it('should delete thread and its messages', async () => {
       const thread = createSampleThread();
       await store.saveThread({ thread });
