@@ -10,12 +10,12 @@ import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 
 // Create a memory instance with semantic recall configuration
 const memory = new Memory({
-  vector: new LibSQLVector({
-    connectionUrl: "file:../../vector.db", // relative path from the `.mastra/output` directory
-  }), // Vector database for semantic search
   storage: new LibSQLStore({
     url: "file:../../memory.db", // relative path from the `.mastra/output` directory
   }), // Storage for message history
+  vector: new LibSQLVector({
+    connectionUrl: "file:../../vector.db", // relative path from the `.mastra/output` directory
+  }), // Vector database for semantic search
   embedder: openai.embedding("text-embedding-3-small"), // Embedder for message embeddings
   options: {
     lastMessages: 20, // Include the last 20 messages in the context

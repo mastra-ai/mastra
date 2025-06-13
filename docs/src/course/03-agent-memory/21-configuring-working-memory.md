@@ -6,12 +6,25 @@ Let's update our agent with working memory capabilities:
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { openai } from "@ai-sdk/openai";
+import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 
 // Create a memory instance with working memory configuration
 const memory = new Memory({
-  // ... other memory options
+  storage: new LibSQLStore({
+    url: "file:../../memory.db", // relative path from the `.mastra/output` directory
+  }), // Storage for message history
+  vector: new LibSQLVector({
+    connectionUrl: "file:../../vector.db", // relative path from the `.mastra/output` directory
+  }), // Vector database for semantic search
+  embedder: openai.embedding("text-embedding-3-small"), // Embedder for message embeddings
   options: {
-    // ... other options
+    semanticRecall: {
+      topK: 3,
+      messageRange: {
+        before: 2,
+        after: 1,
+      },
+    },
     workingMemory: {
       enabled: true,
     },

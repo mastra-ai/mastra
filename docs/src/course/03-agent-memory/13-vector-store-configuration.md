@@ -4,10 +4,12 @@ In addition to the memory storage adapters, Mastra also provides vector store ad
 
 ```typescript
 import { Memory } from "@mastra/memory";
-import { LibSQLVector } from "@mastra/libsql";
+import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 
 const memory = new Memory({
-  // existing memory options...
+  storage: new LibSQLStore({
+    url: "file:../../memory.db", // relative path from the `.mastra/output` directory
+  }),
   vector: new LibSQLVector({
     connectionUrl: "file:../../vector.db", // relative path from the `.mastra/output` directory
   }),

@@ -4,7 +4,13 @@ We can configure semantic recall in more detail by setting options for the `sema
 
 ```typescript
 const memory = new Memory({
-  // ... other memory options
+  storage: new LibSQLStore({
+    url: "file:../../memory.db", // relative path from the `.mastra/output` directory
+  }),
+  vector: new LibSQLVector({
+    connectionUrl: "file:../../vector.db", // relative path from the `.mastra/output` directory
+  }),
+  embedder: openai.embedding("text-embedding-3-small"),
   options: {
     semanticRecall: {
       topK: 3,
