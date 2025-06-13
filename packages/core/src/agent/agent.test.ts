@@ -9,6 +9,8 @@ import { z } from 'zod';
 
 import { TestIntegration } from '../integration/openapi-toolset.mock';
 import { Mastra } from '../mastra';
+import { MastraMemory } from '../memory';
+import type { StorageThreadType, MemoryConfig } from '../memory';
 import { RuntimeContext } from '../runtime-context';
 import { createTool } from '../tools';
 import { CompositeVoice, MastraVoice } from '../voice';
@@ -839,5 +841,218 @@ describe('agent', () => {
       expect(toolCall?.result?.runtimeContextValue).toBe('runtimeContext-value');
       expect(capturedValue).toBe('runtimeContext-value');
     }, 500000);
+  });
+});
+
+describe('agent memory with metadata', () => {
+  class MockMemory extends MastraMemory {
+    threads: Record<string, StorageThreadType> = {};
+
+    constructor() {
+      super({ name: 'mock' });
+      Object.defineProperty(this, 'storage', {
+        get: () => ({
+          init: async () => {},
+          getThreadById: this.getThreadById.bind(this),
+          saveThread: async ({ thread }: { thread: StorageThreadType }) => {
+            return this.saveThread({ thread });
+          },
+        }),
+      });
+      this._hasOwnStorage = true;
+    }
+
+    async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
+      return this.threads[threadId] || null;
+    }
+
+    async saveThread({
+      thread,
+    }: {
+      thread: StorageThreadType;
+      memoryConfig?: MemoryConfig;
+    }): Promise<StorageThreadType> {
+      const newThread = { ...thread, updatedAt: new Date() };
+      if (!newThread.createdAt) {
+        newThread.createdAt = new Date();
+      }
+      this.threads[thread.id] = newThread;
+      return this.threads[thread.id];
+    }
+
+    async rememberMessages() {
+      return { messages: [], messagesV2: [] };
+    }
+    async getThreadsByResourceId() {
+      return [];
+    }
+    async saveMessages() {
+      return [];
+    }
+    async query() {
+      return { messages: [], uiMessages: [] };
+    }
+    async deleteThread(threadId: string) {
+      delete this.threads[threadId];
+    }
+  }
+
+  let dummyModel;
+  beforeEach(() => {
+    dummyModel = new MockLanguageModelV1({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { promptTokens: 10, completionTokens: 20 },
+        text: `Dummy response`,
+      }),
+      doStream: async () => ({
+        stream: simulateReadableStream({
+          chunks: [{ type: 'text-delta', textDelta: 'dummy' }],
+        }),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      }),
+    });
+  });
+
+  it('should create a new thread with metadata using generate', async () => {
+    const mockMemory = new MockMemory();
+    const agent = new Agent({
+      name: 'test-agent',
+      instructions: 'test',
+      model: dummyModel,
+      memory: mockMemory,
+    });
+
+    await agent.generate('hello', {
+      memory: {
+        resource: 'user-1',
+        thread: {
+          id: 'thread-1',
+          metadata: { client: 'test' },
+        },
+      },
+    });
+
+    const thread = await mockMemory.getThreadById({ threadId: 'thread-1' });
+    expect(thread).toBeDefined();
+    expect(thread?.metadata).toEqual({ client: 'test' });
+    expect(thread?.resourceId).toBe('user-1');
+  });
+
+  it('should update metadata for an existing thread using generate', async () => {
+    const mockMemory = new MockMemory();
+    const initialThread: StorageThreadType = {
+      id: 'thread-1',
+      resourceId: 'user-1',
+      metadata: { client: 'initial' },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    await mockMemory.saveThread({ thread: initialThread });
+
+    const saveThreadSpy = vi.spyOn(mockMemory, 'saveThread');
+
+    const agent = new Agent({
+      name: 'test-agent',
+      instructions: 'test',
+      model: dummyModel,
+      memory: mockMemory,
+    });
+
+    await agent.generate('hello', {
+      memory: {
+        resource: 'user-1',
+        thread: {
+          id: 'thread-1',
+          metadata: { client: 'updated' },
+        },
+      },
+    });
+
+    expect(saveThreadSpy).toHaveBeenCalledTimes(1);
+    const thread = await mockMemory.getThreadById({ threadId: 'thread-1' });
+    expect(thread?.metadata).toEqual({ client: 'updated' });
+  });
+
+  it('should not update metadata if it is the same using generate', async () => {
+    const mockMemory = new MockMemory();
+    const initialThread: StorageThreadType = {
+      id: 'thread-1',
+      resourceId: 'user-1',
+      metadata: { client: 'same' },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    await mockMemory.saveThread({ thread: initialThread });
+
+    const saveThreadSpy = vi.spyOn(mockMemory, 'saveThread');
+
+    const agent = new Agent({
+      name: 'test-agent',
+      instructions: 'test',
+      model: dummyModel,
+      memory: mockMemory,
+    });
+
+    await agent.generate('hello', {
+      memory: {
+        resource: 'user-1',
+        thread: {
+          id: 'thread-1',
+          metadata: { client: 'same' },
+        },
+      },
+    });
+
+    expect(saveThreadSpy).not.toHaveBeenCalled();
+  });
+
+  it('should create a new thread with metadata using stream', async () => {
+    const mockMemory = new MockMemory();
+    const agent = new Agent({
+      name: 'test-agent',
+      instructions: 'test',
+      model: dummyModel,
+      memory: mockMemory,
+    });
+
+    const res = await agent.stream('hello', {
+      memory: {
+        resource: 'user-1',
+        thread: {
+          id: 'thread-1',
+          metadata: { client: 'test-stream' },
+        },
+      },
+    });
+
+    for await (const _ of res.fullStream) {
+    }
+
+    const thread = await mockMemory.getThreadById({ threadId: 'thread-1' });
+    expect(thread).toBeDefined();
+    expect(thread?.metadata).toEqual({ client: 'test-stream' });
+    expect(thread?.resourceId).toBe('user-1');
+  });
+
+  it('should still work with deprecated threadId and resourceId', async () => {
+    const mockMemory = new MockMemory();
+    const agent = new Agent({
+      name: 'test-agent',
+      instructions: 'test',
+      model: dummyModel,
+      memory: mockMemory,
+    });
+
+    await agent.generate('hello', {
+      resourceId: 'user-1',
+      threadId: 'thread-1',
+    });
+
+    const thread = await mockMemory.getThreadById({ threadId: 'thread-1' });
+    expect(thread).toBeDefined();
+    expect(thread?.id).toBe('thread-1');
+    expect(thread?.resourceId).toBe('user-1');
   });
 });
