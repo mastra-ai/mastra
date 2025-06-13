@@ -211,7 +211,7 @@ export abstract class Bundler extends MastraBundler {
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      const mastraError = new MastraError(
+      throw new MastraError(
         {
           id: 'DEPLOYER_BUNDLER_ANALYZE_FAILED',
           text: `Failed to analyze Mastra application: ${message}`,
@@ -220,8 +220,6 @@ export abstract class Bundler extends MastraBundler {
         },
         error,
       );
-      this.logger.trackException(mastraError);
-      throw mastraError;
     }
 
     let externalDependencies: string[];
@@ -230,7 +228,7 @@ export abstract class Bundler extends MastraBundler {
       externalDependencies = result.externalDependencies;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      const mastraError = new MastraError(
+      throw new MastraError(
         {
           id: 'DEPLOYER_BUNDLER_TELEMETRY_FAILED',
           text: `Failed to write telemetry config: ${message}`,
@@ -239,8 +237,6 @@ export abstract class Bundler extends MastraBundler {
         },
         error,
       );
-      this.logger.trackException(mastraError);
-      throw mastraError;
     }
 
     const dependenciesToInstall = new Map<string, string>();
@@ -289,7 +285,7 @@ export abstract class Bundler extends MastraBundler {
           logger: this.logger,
         });
       } catch (error) {
-        const mastraError = new MastraError(
+        throw new MastraError(
           {
             id: 'DEPLOYER_BUNDLER_WORKSPACE_DEPS_FAILED',
             text: `Failed to collect and pack workspace dependencies.`,
@@ -298,8 +294,6 @@ export abstract class Bundler extends MastraBundler {
           },
           error,
         );
-        this.logger.trackException(mastraError);
-        throw mastraError;
       }
     }
 
@@ -339,7 +333,7 @@ export abstract class Bundler extends MastraBundler {
       this.logger.info('Done installing dependencies');
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      const mastraError = new MastraError(
+      throw new MastraError(
         {
           id: 'DEPLOYER_BUNDLER_BUNDLE_STAGE_FAILED',
           text: `Failed during bundler bundle stage: ${message}`,
@@ -348,8 +342,6 @@ export abstract class Bundler extends MastraBundler {
         },
         error,
       );
-      this.logger.trackException(mastraError);
-      throw mastraError;
     }
   }
 
