@@ -1,5 +1,16 @@
 # @mastra/playground-ui
 
+## 5.1.6-alpha.1
+
+### Patch Changes
+
+- fc677d7: For final result for a workflow
+- Updated dependencies [ee9af57]
+- Updated dependencies [577ce3a]
+- Updated dependencies [9260b3a]
+  - @mastra/client-js@0.10.5-alpha.1
+  - @mastra/core@0.10.6-alpha.1
+
 ## 5.1.6-alpha.0
 
 ### Patch Changes
