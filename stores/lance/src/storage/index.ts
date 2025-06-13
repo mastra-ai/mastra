@@ -95,16 +95,15 @@ export class LanceStorage extends MastraStorage {
       if (!schema) {
         throw new Error('schema is required for createTable.');
       }
-    } catch (validationError: any) {
+    } catch (error) {
       throw new MastraError(
         {
           id: 'STORAGE_LANCE_STORAGE_CREATE_TABLE_INVALID_ARGS',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          text: validationError.message,
           details: { tableName },
         },
-        validationError,
+        error,
       );
     }
 
