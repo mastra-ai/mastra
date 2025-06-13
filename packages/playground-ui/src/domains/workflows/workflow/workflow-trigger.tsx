@@ -223,14 +223,12 @@ export function WorkflowTrigger({
             );
           })}
       </div>
-
       {result && (
         <div className="p-5 border-b-sm border-border1">
           <WorkflowJsonDialog result={restResult} />
         </div>
       )}
-
-      {/* TODO: bring this back and make sure to get steps from the snapshot {result && <WorkflowResultSection result={result} workflow={workflow} />} */}
+      {result && <WorkflowResultSection result={result} workflow={workflow} />}
     </div>
   );
 }
@@ -245,24 +243,7 @@ const WorkflowResultSection = ({ result, workflow }: WorkflowResultSectionProps)
     result: unknown | null;
   };
 
-  if (
-    typeof workflowState.result === 'string' ||
-    typeof workflowState.result === 'number' ||
-    typeof workflowState.result === 'boolean'
-  ) {
-    return (
-      <div className="flex flex-col gap-1 p-5">
-        <div className="flex items-center gap-2">
-          <Txt as="label" htmlFor="string-result" variant="ui-sm" className="text-icon3">
-            Workflow Result
-          </Txt>
-        </div>
-        <Input id="string-result" defaultValue={String(workflowState.result)} />
-      </div>
-    );
-  }
-
-  const hasResult = Object.keys(workflowState.result || {}).length > 0;
+  const hasResult = Object.keys(workflowState.steps || {}).length > 0;
   if (!hasResult) return null;
 
   return (
@@ -271,14 +252,16 @@ const WorkflowResultSection = ({ result, workflow }: WorkflowResultSectionProps)
         Final Output
       </Txt>
       <ul className="pt-4">
-        {Object.entries(workflowState.result || {}).map(([stepId, stepResult]) => {
+        {Object.entries(workflowState.steps || {}).map(([stepId, stepResult]) => {
           const stepDefinition = workflow.steps[stepId];
+          if (!stepDefinition) return null;
+
           return (
             <li
               key={stepId}
               className="border-b-sm border-dashed border-border1 last:border-b-0 py-4 first:pt-0 last:pb-0"
             >
-              <WorkflowResultFinishedStep stepResult={stepResult} stepDefinition={stepDefinition} />
+              <WorkflowResultFinishedStep stepResult={stepResult.output} stepDefinition={stepDefinition} />
             </li>
           );
         })}
@@ -307,10 +290,10 @@ const WorkflowResultFinishedStep = ({ stepResult, stepDefinition }: WorkflowResu
             </Icon>
 
             <Txt as="label" htmlFor={id} variant="ui-sm" className="text-icon3">
-              {stepDefinition.description}
+              {stepDefinition.description || stepDefinition.id}
             </Txt>
           </div>
-          <Input id={id} defaultValue={stepResult as string} />
+          <Input id={id} defaultValue={stepResult as string} readOnly />
         </div>
       );
     }
@@ -322,10 +305,10 @@ const WorkflowResultFinishedStep = ({ stepResult, stepDefinition }: WorkflowResu
             <Footprints className="text-icon3" />
           </Icon>
           <Txt variant="ui-sm" className="text-icon3">
-            {stepDefinition.description}
+            {stepDefinition.description || stepDefinition.id}
           </Txt>
         </div>
-        <DynamicForm schema={zodObjectSchema} defaultValues={stepResult as Record<string, unknown>} />
+        <DynamicForm schema={zodObjectSchema} defaultValues={stepResult as Record<string, unknown>} readOnly />
       </div>
     );
   } catch (err: unknown) {

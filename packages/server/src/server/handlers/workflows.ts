@@ -1,7 +1,7 @@
 import { ReadableStream } from 'node:stream/web';
 import type { RuntimeContext } from '@mastra/core/di';
 import type { WorkflowRuns } from '@mastra/core/storage';
-import type { Workflow, SerializedStepFlowEntry } from '@mastra/core/workflows';
+import type { Workflow, SerializedStepFlowEntry, WatchEvent } from '@mastra/core/workflows';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
 import { HTTPException } from '../http-exception';
@@ -166,6 +166,40 @@ export async function getWorkflowRunByIdHandler({
     return run;
   } catch (error) {
     throw new HTTPException(500, { message: (error as Error)?.message || 'Error getting workflow run' });
+  }
+}
+
+export async function getWorkflowRunExecutionResultHandler({
+  mastra,
+  workflowId,
+  runId,
+}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'>): Promise<WatchEvent['payload']['workflowState']> {
+  try {
+    if (!workflowId) {
+      throw new HTTPException(400, { message: 'Workflow ID is required' });
+    }
+
+    if (!runId) {
+      throw new HTTPException(400, { message: 'Run ID is required' });
+    }
+
+    const workflow = mastra.getWorkflow(workflowId);
+
+    if (!workflow) {
+      throw new HTTPException(404, { message: 'Workflow not found' });
+    }
+
+    const executionResult = await workflow.getWorkflowRunExecutionResult(runId);
+
+    if (!executionResult) {
+      throw new HTTPException(404, { message: 'Workflow run execution result not found' });
+    }
+
+    return executionResult;
+  } catch (error) {
+    throw new HTTPException(500, {
+      message: (error as Error)?.message || 'Error getting workflow run execution result',
+    });
   }
 }
 
