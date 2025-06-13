@@ -597,7 +597,7 @@ importers:
     dependencies:
       mem0ai:
         specifier: ^2.1.30
-        version: 2.1.30(@anthropic-ai/sdk@0.32.1(encoding@0.1.13))(@cloudflare/workers-types@4.20250610.0)(@google/genai@1.4.0(@modelcontextprotocol/sdk@1.12.1)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.5))(@langchain/core@0.3.57(openai@4.104.0(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.25.57)))(@mistralai/mistralai@1.7.1(zod@3.25.57))(@qdrant/js-client-rest@1.14.1(typescript@5.8.3))(@supabase/supabase-js@2.50.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(@types/jest@29.5.14)(@types/pg@8.15.4)(@types/sqlite3@3.1.11)(cloudflare@4.3.0(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.8.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.0)(redis@4.7.1)(sqlite3@5.1.7)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))
+        version: 2.1.30(@anthropic-ai/sdk@0.32.1(encoding@0.1.13))(@cloudflare/workers-types@4.20250612.0)(@google/genai@1.4.0(@modelcontextprotocol/sdk@1.12.1)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.5))(@langchain/core@0.3.57(openai@4.104.0(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.25.57)))(@mistralai/mistralai@1.7.1(zod@3.25.57))(@qdrant/js-client-rest@1.14.1(typescript@5.8.3))(@supabase/supabase-js@2.50.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(@types/jest@29.5.14)(@types/pg@8.15.4)(@types/sqlite3@3.1.11)(cloudflare@4.3.0(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.8.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.0)(redis@4.7.1)(sqlite3@5.1.7)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -722,7 +722,7 @@ importers:
         version: 1.2.11(zod@3.25.57)
       '@copilotkit/runtime':
         specifier: ^1.8.14
-        version: 1.8.14(3d51c4c64e7c7cec6502fe60049e7f62)
+        version: 1.8.14(70f891b1dc9b3376c8d1d9eb3616435b)
       hono:
         specifier: ^4.7.11
         version: 4.7.11
@@ -2510,8 +2510,8 @@ importers:
         version: 4.3.0(encoding@0.1.13)
     devDependencies:
       '@cloudflare/workers-types':
-        specifier: ^4.20250610.0
-        version: 4.20250610.0
+        specifier: ^4.20250612.0
+        version: 4.20250612.0
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -2534,8 +2534,8 @@ importers:
         specifier: ^9.28.0
         version: 9.28.0(jiti@2.4.2)
       miniflare:
-        specifier: ^4.20250525.1
-        version: 4.20250525.1(bufferutil@4.0.9)(utf-8-validate@6.0.5)
+        specifier: ^4.20250604.0
+        version: 4.20250604.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.17))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
@@ -2554,7 +2554,7 @@ importers:
     devDependencies:
       '@cloudflare/workers-types':
         specifier: ^4.20250610.0
-        version: 4.20250610.0
+        version: 4.20250612.0
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -2578,7 +2578,7 @@ importers:
         version: 9.28.0(jiti@2.4.2)
       miniflare:
         specifier: ^4.20250525.1
-        version: 4.20250525.1(bufferutil@4.0.9)(utf-8-validate@6.0.5)
+        version: 4.20250604.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)
       tsup:
         specifier: ^8.5.0
         version: 8.5.0(@microsoft/api-extractor@7.52.8(@types/node@20.19.0))(@swc/core@1.11.10(@swc/helpers@0.5.17))(jiti@2.4.2)(postcss@8.5.4)(tsx@4.19.4)(typescript@5.8.3)(yaml@2.8.0)
@@ -3084,7 +3084,7 @@ importers:
     devDependencies:
       '@cloudflare/workers-types':
         specifier: ^4.20250610.0
-        version: 4.20250610.0
+        version: 4.20250612.0
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -4680,38 +4680,38 @@ packages:
     resolution: {integrity: sha512-ZE7Q1qxsDNXCkGPf1zqmhpZpwAKxKT+1s4Z432J1Mb2Gm26Y4tG/sJoug81AfAJTt6s7taO2vzNBAKfSR3SStg==}
     engines: {node: '>=16'}
 
-  '@cloudflare/workerd-darwin-64@1.20250525.0':
-    resolution: {integrity: sha512-L5l+7sSJJT2+riR5rS3Q3PKNNySPjWfRIeaNGMVRi1dPO6QPi4lwuxfRUFNoeUdilZJUVPfSZvTtj9RedsKznQ==}
+  '@cloudflare/workerd-darwin-64@1.20250604.0':
+    resolution: {integrity: sha512-PI6AWAzhHg75KVhYkSWFBf3HKCHstpaKg4nrx6LYZaEvz0TaTz+JQpYU2fNAgGFmVsK5xEzwFTGh3DAVAKONPw==}
     engines: {node: '>=16'}
     cpu: [x64]
     os: [darwin]
 
-  '@cloudflare/workerd-darwin-arm64@1.20250525.0':
-    resolution: {integrity: sha512-Y3IbIdrF/vJWh/WBvshwcSyUh175VAiLRW7963S1dXChrZ1N5wuKGQm9xY69cIGVtitpMJWWW3jLq7J/Xxwm0Q==}
+  '@cloudflare/workerd-darwin-arm64@1.20250604.0':
+    resolution: {integrity: sha512-hOiZZSop7QRQgGERtTIy9eU5GvPpIsgE2/BDsUdHMl7OBZ7QLniqvgDzLNDzj0aTkCldm9Yl/Z+C7aUgRdOccw==}
     engines: {node: '>=16'}
     cpu: [arm64]
     os: [darwin]
 
-  '@cloudflare/workerd-linux-64@1.20250525.0':
-    resolution: {integrity: sha512-KSyQPAby+c6cpENoO0ayCQlY6QIh28l/+QID7VC1SLXfiNHy+hPNsH1vVBTST6CilHVAQSsy9tCZ9O9XECB8yg==}
+  '@cloudflare/workerd-linux-64@1.20250604.0':
+    resolution: {integrity: sha512-S0R9r7U4nv9qejYygQj01hArC4KUbQQ4u29rvegR0MGoXZY8AHIEuJxon0kE7r7aWFJxvl4W3tOH+5hwW51LYw==}
     engines: {node: '>=16'}
     cpu: [x64]
     os: [linux]
 
-  '@cloudflare/workerd-linux-arm64@1.20250525.0':
-    resolution: {integrity: sha512-Nt0FUxS2kQhJUea4hMCNPaetkrAFDhPnNX/ntwcqVlGgnGt75iaAhupWJbU0GB+gIWlKeuClUUnDZqKbicoKyg==}
+  '@cloudflare/workerd-linux-arm64@1.20250604.0':
+    resolution: {integrity: sha512-BTFU/rXpNy03wpeueI2P7q1vVjbg2V6mCyyFGqDqMn2gSVYXH1G0zFNolV13PQXa0HgaqM6oYnqtAxluqbA+kQ==}
     engines: {node: '>=16'}
     cpu: [arm64]
     os: [linux]
 
-  '@cloudflare/workerd-windows-64@1.20250525.0':
-    resolution: {integrity: sha512-mwTj+9f3uIa4NEXR1cOa82PjLa6dbrb3J+KCVJFYIaq7e63VxEzOchCXS4tublT2pmOhmFqkgBMXrxozxNkR2Q==}
+  '@cloudflare/workerd-windows-64@1.20250604.0':
+    resolution: {integrity: sha512-tW/U9/qDmDZBeoEVcK5skb2uouVAMXMzt7o/uGvaIFLeZsQkOp4NBmvoQQd+nbOc7nVCJIwFoSMokd89AhzCkA==}
     engines: {node: '>=16'}
     cpu: [x64]
     os: [win32]
 
-  '@cloudflare/workers-types@4.20250610.0':
-    resolution: {integrity: sha512-HxnUoey3QxCEfy07pUm7J42jBi9YPHq/hA3fw6JmOqYLHdviHI28OA8lup+2RUaHwDzh6q1DSfrBvvDqde645A==}
+  '@cloudflare/workers-types@4.20250612.0':
+    resolution: {integrity: sha512-3VsbEh0nqOWWH+jsJ2W41Ty6qlN1jQ+4R3lBA3gPor0U6LB3e4OA04jg7wyCyJmikBN6KsBcPRp3kj0es/9q2w==}
 
   '@codemirror/autocomplete@6.18.6':
     resolution: {integrity: sha512-PHHBXFomUs5DF+9tCOM/UoW6XQ4R44lLNNhRaW9PKPTU0D7lIjRg3ElxaJnTwsl/oHiR93WSXDBrekhoUGCPtg==}
@@ -14571,8 +14571,8 @@ packages:
     resolution: {integrity: sha512-r9deDe9p5FJUPZAk3A59wGH7Ii9YrjjWw0jmw/liSbHl2CHiyXj6FcDXDu2K3TjVAXqiJdaw3xxwlZZr9E6nHg==}
     hasBin: true
 
-  miniflare@4.20250525.1:
-    resolution: {integrity: sha512-4PJlT5WA+hfclFU5Q7xnpG1G1VGYTXaf/3iu6iKQ8IsbSi9QvPTA2bSZ5goCFxmJXDjV4cxttVxB0Wl1CLuQ0w==}
+  miniflare@4.20250604.0:
+    resolution: {integrity: sha512-Vd6zRiuCOTGs5EFBFXOdDHLQce9bp/Ktyp+Y3PGeDdL3qbwToyiMxObiBYmcdB51yLXdby/dgy58HyDMPLCIdA==}
     engines: {node: '>=18.0.0'}
     hasBin: true
 
@@ -17862,8 +17862,8 @@ packages:
     resolution: {integrity: sha512-JNjcULU2e4KJwUNv6CHgI46UvDGitb6dGryHajXTDiLgg1/RiGoPSDw4kZfYnwGtEXf2ZMeIewDQgFGzkCB2Sg==}
     engines: {node: '>=12.17'}
 
-  workerd@1.20250525.0:
-    resolution: {integrity: sha512-SXJgLREy/Aqw2J71Oah0Pbu+SShbqbTExjVQyRBTM1r7MG7fS5NUlknhnt6sikjA/t4cO09Bi8OJqHdTkrcnYQ==}
+  workerd@1.20250604.0:
+    resolution: {integrity: sha512-sHz9R1sxPpnyq3ptrI/5I96sYTMA2+Ljm75oJDbmEcZQwNyezpu9Emerzt3kzzjCJQqtdscGOidWv4RKGZXzAA==}
     engines: {node: '>=16'}
     hasBin: true
 
@@ -19965,22 +19965,22 @@ snapshots:
     dependencies:
       '@clickhouse/client-common': 1.11.2
 
-  '@cloudflare/workerd-darwin-64@1.20250525.0':
+  '@cloudflare/workerd-darwin-64@1.20250604.0':
     optional: true
 
-  '@cloudflare/workerd-darwin-arm64@1.20250525.0':
+  '@cloudflare/workerd-darwin-arm64@1.20250604.0':
     optional: true
 
-  '@cloudflare/workerd-linux-64@1.20250525.0':
+  '@cloudflare/workerd-linux-64@1.20250604.0':
     optional: true
 
-  '@cloudflare/workerd-linux-arm64@1.20250525.0':
+  '@cloudflare/workerd-linux-arm64@1.20250604.0':
     optional: true
 
-  '@cloudflare/workerd-windows-64@1.20250525.0':
+  '@cloudflare/workerd-windows-64@1.20250604.0':
     optional: true
 
-  '@cloudflare/workers-types@4.20250610.0': {}
+  '@cloudflare/workers-types@4.20250612.0': {}
 
   '@codemirror/autocomplete@6.18.6':
     dependencies:
@@ -20042,7 +20042,7 @@ snapshots:
 
   '@colors/colors@1.5.0': {}
 
-  '@copilotkit/runtime@1.8.14(3d51c4c64e7c7cec6502fe60049e7f62)':
+  '@copilotkit/runtime@1.8.14(70f891b1dc9b3376c8d1d9eb3616435b)':
     dependencies:
       '@ag-ui/client': 0.0.28
       '@ag-ui/core': 0.0.28
@@ -20051,7 +20051,7 @@ snapshots:
       '@anthropic-ai/sdk': 0.27.3(encoding@0.1.13)
       '@copilotkit/shared': 1.8.14(encoding@0.1.13)
       '@graphql-yoga/plugin-defer-stream': 3.13.5(graphql-yoga@5.13.5(graphql@16.11.0))(graphql@16.11.0)
-      '@langchain/community': 0.3.45(4a517c6538073e0fae65f69fab66ebd4)
+      '@langchain/community': 0.3.45(6ab7d46c01b143455015f7aec8fa7dfc)
       '@langchain/core': 0.3.57(openai@4.104.0(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.25.57))
       '@langchain/google-gauth': 0.1.8(@langchain/core@0.3.57(openai@4.104.0(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.25.57)))(encoding@0.1.13)(zod@3.25.57)
       '@langchain/langgraph-sdk': 0.0.70(@langchain/core@0.3.57(openai@4.104.0(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.25.57)))(react@19.1.0)
@@ -21584,7 +21584,7 @@ snapshots:
       '@lancedb/lancedb-win32-arm64-msvc': 0.18.2
       '@lancedb/lancedb-win32-x64-msvc': 0.18.2
 
-  '@langchain/community@0.3.45(4a517c6538073e0fae65f69fab66ebd4)':
+  '@langchain/community@0.3.45(6ab7d46c01b143455015f7aec8fa7dfc)':
     dependencies:
       '@browserbasehq/stagehand': 1.14.0(@playwright/test@1.52.0)(bufferutil@4.0.9)(deepmerge@4.3.1)(dotenv@16.5.0)(encoding@0.1.13)(openai@4.104.0(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.25.57))(utf-8-validate@6.0.5)(zod@3.25.57)
       '@ibm-cloud/watsonx-ai': 1.6.5
@@ -21627,7 +21627,7 @@ snapshots:
       jsdom: 26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)
       jsonwebtoken: 9.0.2
       lodash: 4.17.21
-      mem0ai: 2.1.30(@anthropic-ai/sdk@0.32.1(encoding@0.1.13))(@cloudflare/workers-types@4.20250610.0)(@google/genai@1.4.0(@modelcontextprotocol/sdk@1.12.1)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.5))(@langchain/core@0.3.57(openai@4.104.0(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.25.57)))(@mistralai/mistralai@1.7.1(zod@3.25.57))(@qdrant/js-client-rest@1.14.1(typescript@5.8.3))(@supabase/supabase-js@2.50.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(@types/jest@29.5.14)(@types/pg@8.15.4)(@types/sqlite3@3.1.11)(cloudflare@4.3.0(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.8.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.0)(redis@4.7.1)(sqlite3@5.1.7)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))
+      mem0ai: 2.1.30(@anthropic-ai/sdk@0.32.1(encoding@0.1.13))(@cloudflare/workers-types@4.20250612.0)(@google/genai@1.4.0(@modelcontextprotocol/sdk@1.12.1)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.5))(@langchain/core@0.3.57(openai@4.104.0(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.25.57)))(@mistralai/mistralai@1.7.1(zod@3.25.57))(@qdrant/js-client-rest@1.14.1(typescript@5.8.3))(@supabase/supabase-js@2.50.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(@types/jest@29.5.14)(@types/pg@8.15.4)(@types/sqlite3@3.1.11)(cloudflare@4.3.0(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.8.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.0)(redis@4.7.1)(sqlite3@5.1.7)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))
       mongodb: 6.17.0(@aws-sdk/credential-providers@3.826.0)(gcp-metadata@5.3.0(encoding@0.1.13))(socks@2.8.4)
       neo4j-driver: 5.28.1
       pdf-parse: 1.1.1
@@ -31375,10 +31375,10 @@ snapshots:
 
   media-typer@1.1.0: {}
 
-  mem0ai@2.1.30(@anthropic-ai/sdk@0.32.1(encoding@0.1.13))(@cloudflare/workers-types@4.20250610.0)(@google/genai@1.4.0(@modelcontextprotocol/sdk@1.12.1)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.5))(@langchain/core@0.3.57(openai@4.104.0(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.25.57)))(@mistralai/mistralai@1.7.1(zod@3.25.57))(@qdrant/js-client-rest@1.14.1(typescript@5.8.3))(@supabase/supabase-js@2.50.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(@types/jest@29.5.14)(@types/pg@8.15.4)(@types/sqlite3@3.1.11)(cloudflare@4.3.0(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.8.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.0)(redis@4.7.1)(sqlite3@5.1.7)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5)):
+  mem0ai@2.1.30(@anthropic-ai/sdk@0.32.1(encoding@0.1.13))(@cloudflare/workers-types@4.20250612.0)(@google/genai@1.4.0(@modelcontextprotocol/sdk@1.12.1)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.5))(@langchain/core@0.3.57(openai@4.104.0(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.25.57)))(@mistralai/mistralai@1.7.1(zod@3.25.57))(@qdrant/js-client-rest@1.14.1(typescript@5.8.3))(@supabase/supabase-js@2.50.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(@types/jest@29.5.14)(@types/pg@8.15.4)(@types/sqlite3@3.1.11)(cloudflare@4.3.0(encoding@0.1.13))(encoding@0.1.13)(groq-sdk@0.8.0(encoding@0.1.13))(neo4j-driver@5.28.1)(ollama@0.5.16)(pg@8.16.0)(redis@4.7.1)(sqlite3@5.1.7)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5)):
     dependencies:
       '@anthropic-ai/sdk': 0.32.1(encoding@0.1.13)
-      '@cloudflare/workers-types': 4.20250610.0
+      '@cloudflare/workers-types': 4.20250612.0
       '@google/genai': 1.4.0(@modelcontextprotocol/sdk@1.12.1)(bufferutil@4.0.9)(encoding@0.1.13)(utf-8-validate@6.0.5)
       '@langchain/core': 0.3.57(openai@4.104.0(encoding@0.1.13)(ws@8.18.2(bufferutil@4.0.9)(utf-8-validate@6.0.5))(zod@3.25.57))
       '@mistralai/mistralai': 1.7.1(zod@3.25.57)
@@ -31673,7 +31673,7 @@ snapshots:
 
   mini-svg-data-uri@1.4.4: {}
 
-  miniflare@4.20250525.1(bufferutil@4.0.9)(utf-8-validate@6.0.5):
+  miniflare@4.20250604.0(bufferutil@4.0.9)(utf-8-validate@6.0.5):
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       acorn: 8.14.0
@@ -31683,7 +31683,7 @@ snapshots:
       sharp: 0.33.5
       stoppable: 1.1.0
       undici: 5.29.0
-      workerd: 1.20250525.0
+      workerd: 1.20250604.0
       ws: 8.18.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)
       youch: 3.3.4
       zod: 3.22.3
@@ -35443,13 +35443,13 @@ snapshots:
 
   wordwrapjs@5.1.0: {}
 
-  workerd@1.20250525.0:
+  workerd@1.20250604.0:
     optionalDependencies:
-      '@cloudflare/workerd-darwin-64': 1.20250525.0
-      '@cloudflare/workerd-darwin-arm64': 1.20250525.0
-      '@cloudflare/workerd-linux-64': 1.20250525.0
-      '@cloudflare/workerd-linux-arm64': 1.20250525.0
-      '@cloudflare/workerd-windows-64': 1.20250525.0
+      '@cloudflare/workerd-darwin-64': 1.20250604.0
+      '@cloudflare/workerd-darwin-arm64': 1.20250604.0
+      '@cloudflare/workerd-linux-64': 1.20250604.0
+      '@cloudflare/workerd-linux-arm64': 1.20250604.0
+      '@cloudflare/workerd-windows-64': 1.20250604.0
 
   wrap-ansi@3.0.1:
     dependencies:

@@ -1,5 +1,17 @@
 # @mastra/pg
 
+## 0.10.4-alpha.0
+
+### Patch Changes
+
+- 63f6b7d: dependencies updates:
+  - Updated dependency [`pg-promise@^11.14.0` ↗︎](https://www.npmjs.com/package/pg-promise/v/11.14.0) (from `^11.13.0`, in `dependencies`)
+- Updated dependencies [63f6b7d]
+- Updated dependencies [36f1c36]
+- Updated dependencies [10d352e]
+- Updated dependencies [53d3c37]
+  - @mastra/core@0.10.6-alpha.0
+
 ## 0.10.3
 
 ### Patch Changes

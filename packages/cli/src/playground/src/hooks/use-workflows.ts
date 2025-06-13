@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { GetWorkflowResponse, GetLegacyWorkflowResponse } from '@mastra/client-js';
 import { client } from '@/lib/client';
+import { useQuery } from '@tanstack/react-query';
 
 export const useWorkflows = () => {
   const [legacyWorkflows, setLegacyWorkflows] = useState<Record<string, GetLegacyWorkflowResponse>>({});
@@ -62,33 +63,11 @@ export const useLegacyWorkflow = (workflowId: string, enabled = true) => {
 };
 
 export const useWorkflow = (workflowId: string, enabled = true) => {
-  const [workflow, setWorkflow] = useState<GetWorkflowResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchWorkflow = async () => {
-      setIsLoading(true);
-      try {
-        if (!workflowId) {
-          setWorkflow(null);
-          setIsLoading(false);
-          return;
-        }
-        const res = await client.getWorkflow(workflowId).details();
-        setWorkflow(res);
-      } catch (error) {
-        setWorkflow(null);
-        console.error('Error fetching workflow', error);
-        toast.error('Error fetching workflow');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    if (enabled) {
-      fetchWorkflow();
-    }
-  }, [workflowId, enabled]);
-
-  return { workflow, isLoading };
+  return useQuery({
+    gcTime: 0,
+    staleTime: 0,
+    queryKey: ['workflow', workflowId],
+    queryFn: () => client.getWorkflow(workflowId).details(),
+    enabled,
+  });
 };
