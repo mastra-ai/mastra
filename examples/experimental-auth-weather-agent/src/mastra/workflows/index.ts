@@ -1,4 +1,4 @@
-import { env } from 'node:process';
+import { stdout } from 'node:process';
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { Step, Workflow } from '@mastra/core/workflows';
