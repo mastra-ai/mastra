@@ -15,6 +15,8 @@ external.forEach(pkg => {
     throw new Error(`${pkg} is not in the dependencies of create-mastra`);
   }
 });
+const mastraIgnoreBuild = pkgJson.mastraIgnoreBuild || [];
+const externalWithIgnore = [...external, ...mastraIgnoreBuild];
 
 export default defineConfig({
   input: 'src/index.ts',
@@ -61,7 +63,7 @@ export default defineConfig({
     warn(warning);
   },
   external: [
-    ...external,
+    ...externalWithIgnore,
     // External dependencies that don't need bundling
     /^@opentelemetry\/.*$/,
   ],
