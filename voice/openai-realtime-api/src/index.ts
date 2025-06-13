@@ -1,4 +1,5 @@
 import { EventEmitter } from 'events';
+import { env } from 'node:process';
 import { PassThrough } from 'stream';
 import type { ToolsInput } from '@mastra/core/agent';
 import type { RuntimeContext } from '@mastra/core/runtime-context';
@@ -92,7 +93,7 @@ type RealtimeClientServerEventMap = {
  * @example
  * ```typescript
  * const voice = new OpenAIRealtimeVoice({
- *   apiKey: process.env.OPENAI_API_KEY,
+ *   apiKey: env.OPENAI_API_KEY,
  *   model: 'gpt-4o-mini-realtime'
  * });
  *
@@ -121,7 +122,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
    * @param options - Configuration options for the voice instance
    * @param options.url - The base URL for the OpenAI Realtime API
    * @param options.model - The model ID to use (defaults to GPT-4 Mini Realtime)
-   * @param options.apiKey - OpenAI API key. Falls back to process.env.OPENAI_API_KEY
+   * @param options.apiKey - OpenAI API key. Falls back to env.OPENAI_API_KEY
    * @param options.speaker - Voice ID to use (defaults to 'alloy')
    * @param options.debug - Enable debug mode
    *
@@ -375,7 +376,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
    */
   async connect({ runtimeContext }: { runtimeContext?: RuntimeContext } = {}) {
     const url = `${this.options.url || DEFAULT_URL}?model=${this.options.model || DEFAULT_MODEL}`;
-    const apiKey = this.options.apiKey || process.env.OPENAI_API_KEY;
+    const apiKey = this.options.apiKey || env.OPENAI_API_KEY;
     this.runtimeContext = runtimeContext;
 
     this.ws = new WebSocket(url, undefined, {

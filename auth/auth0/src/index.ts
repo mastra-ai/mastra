@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import { MastraAuthProvider } from '@mastra/core/server';
 import type { MastraAuthProviderOptions } from '@mastra/core/server';
 
@@ -17,8 +18,8 @@ export class MastraAuthAuth0 extends MastraAuthProvider<Auth0User> {
   constructor(options?: MastraAuthAuth0Options) {
     super({ name: options?.name ?? 'auth0' });
 
-    const domain = options?.domain ?? process.env.AUTH0_DOMAIN;
-    const audience = options?.audience ?? process.env.AUTH0_AUDIENCE;
+    const domain = options?.domain ?? env.AUTH0_DOMAIN;
+    const audience = options?.audience ?? env.AUTH0_AUDIENCE;
 
     if (!domain || !audience) {
       throw new Error(

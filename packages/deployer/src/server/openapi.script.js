@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { env } from 'node:process';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -15,7 +16,7 @@ async function pullOpenApiSpec() {
     console.log('Successfully pulled and saved OpenAPI spec');
   } catch (error) {
     console.error('Failed to pull OpenAPI spec:', error);
-    process.exit(1);
+    env.exit(1);
   }
 }
 

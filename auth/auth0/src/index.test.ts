@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import { jwtVerify, createRemoteJWKSet } from 'jose';
 import { beforeEach, afterEach, describe, expect, test, vi } from 'vitest';
 import { MastraAuthAuth0 } from './index';
@@ -10,14 +11,14 @@ vi.mock('jose', () => ({
 
 describe('MastraAuthAuth0', () => {
   beforeEach(() => {
-    process.env.AUTH0_DOMAIN = 'test-domain.auth0.com';
-    process.env.AUTH0_AUDIENCE = 'test-audience';
+    env.AUTH0_DOMAIN = 'test-domain.auth0.com';
+    env.AUTH0_AUDIENCE = 'test-audience';
     vi.clearAllMocks();
   });
 
   afterEach(() => {
-    delete process.env.AUTH0_DOMAIN;
-    delete process.env.AUTH0_AUDIENCE;
+    delete env.AUTH0_DOMAIN;
+    delete env.AUTH0_AUDIENCE;
   });
 
   describe('constructor', () => {
@@ -37,12 +38,12 @@ describe('MastraAuthAuth0', () => {
     });
 
     test('throws error when domain is missing', () => {
-      delete process.env.AUTH0_DOMAIN;
+      delete env.AUTH0_DOMAIN;
       expect(() => new MastraAuthAuth0()).toThrow();
     });
 
     test('throws error when audience is missing', () => {
-      delete process.env.AUTH0_AUDIENCE;
+      delete env.AUTH0_AUDIENCE;
       expect(() => new MastraAuthAuth0()).toThrow();
     });
   });

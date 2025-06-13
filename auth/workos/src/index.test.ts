@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import type { JwtPayload } from '@mastra/auth';
 import { verifyJwks } from '@mastra/auth';
 import { WorkOS } from '@workos-inc/node';
@@ -31,8 +32,8 @@ describe('MastraAuthWorkos', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Reset environment variables
-    delete process.env.WORKOS_API_KEY;
-    delete process.env.WORKOS_CLIENT_ID;
+    delete env.WORKOS_API_KEY;
+    delete env.WORKOS_CLIENT_ID;
   });
 
   describe('constructor', () => {
@@ -48,8 +49,8 @@ describe('MastraAuthWorkos', () => {
     });
 
     it('should initialize with environment variables', () => {
-      process.env.WORKOS_API_KEY = mockApiKey;
-      process.env.WORKOS_CLIENT_ID = mockClientId;
+      env.WORKOS_API_KEY = mockApiKey;
+      env.WORKOS_CLIENT_ID = mockClientId;
 
       new MastraAuthWorkos();
 

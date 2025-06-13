@@ -1,4 +1,5 @@
 import { writeFile } from 'fs/promises';
+import { versions, exit } from 'node:process';
 import { join } from 'path';
 import { Deployer } from '@mastra/deployer';
 import type { analyzeBundle } from '@mastra/deployer/analyze';
@@ -178,7 +179,7 @@ export class CloudflareDeployer extends Deployer {
         virtual({
           '#polyfills': `
 process.versions = process.versions || {};
-process.versions.node = '${process.versions.node}';
+process.versions.node = '${versions.node}';
       `,
         }),
         ...inputOptions.plugins,
@@ -226,7 +227,7 @@ process.versions.node = '${process.versions.node}';
       this.logger.error(
         'Cloudflare Deployer does not support @libsql/client(which may have been installed by @mastra/libsql) as a dependency. Please use Cloudflare D1 instead @mastra/cloudflare-d1',
       );
-      process.exit(1);
+      exit(1);
     }
   }
 }

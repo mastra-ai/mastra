@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { Step, Workflow } from '@mastra/core/workflows';
@@ -118,7 +119,7 @@ const planActivities = new Step({
     let activitiesText = '';
 
     for await (const chunk of response.textStream) {
-      process.stdout.write(chunk);
+      env.stdout.write(chunk);
       activitiesText += chunk;
     }
 

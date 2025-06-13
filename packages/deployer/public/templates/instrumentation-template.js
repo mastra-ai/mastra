@@ -1,3 +1,4 @@
+import { env, on } from 'node:process';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { ExportResultCode } from '@opentelemetry/core';
 import { OTLPTraceExporter as OTLPGrpcExporter } from '@opentelemetry/exporter-trace-otlp-grpc';
@@ -87,8 +88,8 @@ async function getExporters(config) {
   // Add local exporter by default
   if (!config.disableLocalExport) {
     exporters.push(new OTLPHttpExporter({
-      url: `http://localhost:${process.env.PORT ?? 4111}/api/telemetry`,
-      headers: process.env.MASTRA_DEV ? {
+      url: `http://localhost:${env.PORT ?? 4111}/api/telemetry`,
+      headers: env.MASTRA_DEV ? {
         'x-mastra-dev-playground': 'true',
       } : {},
     }));
@@ -129,7 +130,7 @@ const sdk = new NodeSDK({
 sdk.start();
 
 // gracefully shut down the SDK on process exit
-process.on('SIGTERM', () => {
+on('SIGTERM', () => {
   sdk.shutdown().catch(() => {
     // do nothing
   });

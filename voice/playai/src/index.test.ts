@@ -1,5 +1,6 @@
 import { createWriteStream, mkdirSync } from 'fs';
 import { writeFile } from 'fs/promises';
+import { env } from 'node:process';
 import path from 'path';
 import { Readable } from 'stream';
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -10,11 +11,11 @@ describe('PlayAI Voice Integration Tests', () => {
   const voice = new PlayAIVoice({
     speechModel: {
       name: 'PlayDialog',
-      apiKey: process.env.PLAYAI_API_KEY!,
-      userId: process.env.PLAYAI_USER_ID!,
+      apiKey: env.PLAYAI_API_KEY!,
+      userId: env.PLAYAI_USER_ID!,
     },
   });
-  const outputDir = path.join(process.cwd(), 'test-outputs');
+  const outputDir = path.join(cwd!, 'test-outputs');
   let voiceId: string;
 
   beforeEach(async () => {

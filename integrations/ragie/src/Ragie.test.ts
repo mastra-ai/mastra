@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 // @ts-nocheck - Old code
 import {
   describe,
@@ -9,9 +10,9 @@ import { Mastra } from '@mastra/core';
 
 import { RagieIntegration } from '.';
 
-const API_KEY = process.env.API_KEY!;
-const dbUri = process.env.DB_URL!;
-const connectionId = process.env.CONNECTION_ID!;
+const API_KEY = env.API_KEY!;
+const dbUri = env.DB_URL!;
+const connectionId = env.CONNECTION_ID!;
 
 const integrationName = 'RAGIE';
 

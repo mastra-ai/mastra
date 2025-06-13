@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import { readFile } from 'fs/promises';
+import { cwd, env, send } from 'node:process';
 import { join } from 'path/posix';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
@@ -3260,11 +3261,8 @@ ${err.stack.split('\n').slice(1).join('\n')}
 
     if (options?.playground) {
       // For all other routes, serve index.html
-      let indexHtml = await readFile(join(process.cwd(), './playground/index.html'), 'utf-8');
-      indexHtml = indexHtml.replace(
-        `'%%MASTRA_TELEMETRY_DISABLED%%'`,
-        `${Boolean(process.env.MASTRA_TELEMETRY_DISABLED)}`,
-      );
+      let indexHtml = await readFile(join(cwd(), './playground/index.html'), 'utf-8');
+      indexHtml = indexHtml.replace(`'%%MASTRA_TELEMETRY_DISABLED%%'`, `${Boolean(env.MASTRA_TELEMETRY_DISABLED)}`);
       return c.newResponse(indexHtml, 200, { 'Content-Type': 'text/html' });
     }
 
@@ -3278,7 +3276,7 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
   const app = await createHonoServer(mastra, options);
   const serverOptions = mastra.getServer();
 
-  const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
+  const port = serverOptions?.port ?? (Number(env.PORT) || 4111);
 
   const server = serve(
     {
@@ -3295,8 +3293,8 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
         logger.info(`👨‍💻 Playground available at ${playgroundUrl}`);
       }
 
-      if (process.send) {
-        process.send({
+      if (send) {
+        send({
           type: 'server-ready',
           port,
           host,

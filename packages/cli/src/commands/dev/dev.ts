@@ -1,4 +1,5 @@
 import type { ChildProcess } from 'child_process';
+import * as process from 'node:process';
 import { join } from 'path';
 import { FileService } from '@mastra/deployer';
 import { getServerOptions } from '@mastra/deployer/build';

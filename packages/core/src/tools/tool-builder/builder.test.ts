@@ -1,10 +1,11 @@
+import { env } from 'node:process';
 import { openai } from '@ai-sdk/openai';
-import { Agent } from '@mastra/core/agent';
-import { createTool } from '@mastra/core/tools';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import type { LanguageModel } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { Agent } from '@mastra/core/agent';
+import { createTool } from '@mastra/core/tools';
 import 'dotenv/config';
 
 type Result = {
@@ -216,8 +217,8 @@ describe('Tool Schema Compatibility', () => {
   const SUITE_TIMEOUT = 120000; // 2 minutes
   const TEST_TIMEOUT = 60000; // 1 minute
 
-  if (!process.env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY environment variable is required');
-  const openrouter = createOpenRouter({ apiKey: process.env.OPENROUTER_API_KEY });
+  if (!env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY environment variable is required');
+  const openrouter = createOpenRouter({ apiKey: env.OPENROUTER_API_KEY });
 
   const modelsToTest = [
     // Anthropic Models

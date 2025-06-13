@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { exit } from 'node:process';
 import type { ToolsInput } from '@mastra/core/agent';
 import FirecrawlApp from '@mendable/firecrawl-js';
 import type { ScrapeParams, MapParams, CrawlParams, FirecrawlDocument } from '@mendable/firecrawl-js';
@@ -1009,5 +1010,5 @@ function trimResponseText(text: string): string {
 server.startStdio().catch(error => {
   const errorMessage = 'Fatal error running server';
   console.error(errorMessage, error);
-  process.exit(1);
+  exit(1);
 });

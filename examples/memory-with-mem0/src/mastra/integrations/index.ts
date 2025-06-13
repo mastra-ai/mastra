@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import { Mem0Integration } from '@mastra/mem0';
 
 export const mem0 = new Mem0Integration({

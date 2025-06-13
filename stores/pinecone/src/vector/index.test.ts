@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import type { QueryResult } from '@mastra/core/vector';
 import dotenv from 'dotenv';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, afterEach } from 'vitest';
@@ -6,7 +7,7 @@ import { PineconeVector } from './';
 
 dotenv.config();
 
-const PINECONE_API_KEY = process.env.PINECONE_API_KEY!;
+const PINECONE_API_KEY = env.PINECONE_API_KEY!;
 
 // if (!PINECONE_API_KEY) {
 //   throw new Error('Please set PINECONE_API_KEY and PINECONE_ENVIRONMENT in .env file');

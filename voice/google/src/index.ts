@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import { PassThrough } from 'stream';
 
 import { SpeechClient } from '@google-cloud/speech';
@@ -43,7 +44,7 @@ export class GoogleVoice extends MastraVoice {
     speechModel?: GoogleModelConfig;
     speaker?: string;
   } = {}) {
-    const defaultApiKey = process.env.GOOGLE_API_KEY;
+    const defaultApiKey = env.GOOGLE_API_KEY;
     const defaultSpeaker = DEFAULT_VOICE;
 
     super({

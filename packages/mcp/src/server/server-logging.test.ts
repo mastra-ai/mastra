@@ -1,4 +1,5 @@
 import { spawn } from 'child_process';
+import { env } from 'node:process';
 import path from 'path';
 import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import type { LogMessage } from '../client/client';
@@ -16,7 +17,7 @@ describe('MCP Server Logging', () => {
 
     // Start the weather SSE server
     weatherProcess = spawn('npx', ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/weather.ts')], {
-      env: { ...process.env, WEATHER_SERVER_PORT: String(weatherServerPort) },
+      env: { ...env, WEATHER_SERVER_PORT: String(weatherServerPort) },
     });
 
     // Wait for SSE server to be ready

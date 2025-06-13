@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import child_process from 'node:child_process';
+import { chdir, exit } from 'node:process';
 import util from 'node:util';
 import * as p from '@clack/prompts';
 import color from 'picocolors';
@@ -85,7 +86,7 @@ export const createMastraProject = async ({
 
   if (p.isCancel(projectName)) {
     p.cancel('Operation cancelled');
-    process.exit(0);
+    exit(0);
   }
 
   const s = p.spinner();
@@ -97,12 +98,12 @@ export const createMastraProject = async ({
       s.stop(
         `A directory named "${projectName}" already exists. Please choose a different name or delete the existing directory.`,
       );
-      process.exit(1);
+      exit(1);
     }
     throw error;
   }
 
-  process.chdir(projectName);
+  chdir(projectName);
   const pm = getPackageManager();
   const installCommand = getPackageManagerInstallCommand(pm);
 

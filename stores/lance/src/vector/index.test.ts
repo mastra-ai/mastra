@@ -1,9 +1,10 @@
+import { env } from 'node:process';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { LanceVectorStore } from './index';
 
 describe('Lance vector store tests', () => {
   let vectorDB: LanceVectorStore;
-  const connectionString = process.env.DB_URL || 'lancedb-vector';
+  const connectionString = env.DB_URL || 'lancedb-vector';
 
   beforeAll(async () => {
     // Giving directory path to connect to in memory db

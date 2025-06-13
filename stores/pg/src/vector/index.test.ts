@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import type { QueryResult } from '@mastra/core';
 import * as pg from 'pg';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
@@ -8,7 +9,7 @@ describe('PgVector', () => {
   let vectorDB: PgVector;
   const testIndexName = 'test_vectors';
   const testIndexName2 = 'test_vectors1';
-  const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
+  const connectionString = env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
 
   beforeAll(async () => {
     // Initialize PgVector
