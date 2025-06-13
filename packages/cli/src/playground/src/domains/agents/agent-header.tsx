@@ -43,15 +43,8 @@ export function AgentHeader({ agentId }: { agentId: string }) {
   const currentPath = location.pathname.split('/').pop() || 'chat';
   const twoColumns = ['traces', 'evals'].includes(currentPath);
 
-  console.log({ twoColumns });
-
   return (
-    <MainHeader
-      width="full"
-      className={cn('grid', {
-        'col-span-full': twoColumns,
-      })}
-    >
+    <MainHeader variant={twoColumns ? 'twoColsForAgent' : 'oneColForAgent'}>
       <Button as={Link} variant="backLink" to={`/agents`}>
         <ArrowLeftIcon />
         Agents

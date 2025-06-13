@@ -35,7 +35,7 @@ function Workflows() {
 
   return (
     <MainLayout>
-      <MainHeader>
+      <MainHeader variant="forList">
         <WorkflowIcon /> Workflows
       </MainHeader>
 

@@ -60,7 +60,7 @@ export default function RuntimeContext() {
   };
   return (
     <MainLayout>
-      <MainHeader>
+      <MainHeader variant="forList">
         <GlobeIcon /> Runtime Context
       </MainHeader>
 

@@ -108,7 +108,7 @@ const ToolsInner = ({ toolsWithAgents }: { toolsWithAgents: ToolWithAgents[] }) 
   if (filteredTools.length === 0 && !value) {
     return (
       <MainLayout>
-        <MainHeader>
+        <MainHeader variant="forList">
           <ToolsIcon /> Tools
         </MainHeader>
 
@@ -140,7 +140,7 @@ const ToolsInner = ({ toolsWithAgents }: { toolsWithAgents: ToolWithAgents[] }) 
 
   return (
     <MainLayout>
-      <MainHeader>
+      <MainHeader variant="forList">
         <ToolsIcon /> Tools
       </MainHeader>
 

@@ -32,7 +32,7 @@ function Agents() {
 
   return (
     <MainLayout>
-      <MainHeader>
+      <MainHeader variant="forList">
         <AgentIcon /> Agents
       </MainHeader>
 

@@ -3,8 +3,6 @@ import {
   Button,
   DataTable,
   EmptyState,
-  Header,
-  HeaderTitle,
   Icon,
   MainLayout,
   MainContent,
@@ -21,7 +19,7 @@ function Networks() {
 
   return (
     <MainLayout>
-      <MainHeader>
+      <MainHeader variant="forList">
         <NetworkIcon /> Networks
       </MainHeader>
 

@@ -108,7 +108,7 @@ const MCPs = () => {
 
   return (
     <MainLayout>
-      <MainHeader>
+      <MainHeader variant="forList">
         <McpServerIcon /> MCP Servers
       </MainHeader>
 
