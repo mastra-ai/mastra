@@ -5,7 +5,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 
 async function setup() {
-  const fixturePath = await mkdtemp(join(tmpdir(), 'mastra-kitchen-sink-test-'));
+  const fixturePath = await mkdtemp(join(tmpdir(), 'mastra-kitchen-sink-test'));
   const projectPath = join(fixturePath, 'project');
 
   const stopVerdaccio = await setupVerdaccio();
