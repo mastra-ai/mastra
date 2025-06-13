@@ -1,5 +1,11 @@
 # create-mastra
 
+## 0.10.5-alpha.1
+
+### Patch Changes
+
+- fc677d7: For final result for a workflow
+
 ## 0.10.5-alpha.0
 
 ### Patch Changes
