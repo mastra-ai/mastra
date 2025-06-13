@@ -1,4 +1,4 @@
-import { env } from 'node:process';
+import { stdout } from 'node:process';
 import { Agent } from '@mastra/core/agent';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';

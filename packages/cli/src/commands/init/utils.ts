@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import child_process from 'node:child_process';
-import { cwd, exit, stdout } from 'node:process';
+import { cwd, exit } from 'node:process';
 import util from 'node:util';
 import path from 'path';
 import * as p from '@clack/prompts';
@@ -111,6 +111,7 @@ export async function writeWorkflowSample(destPath: string, llmProvider: LLMProv
   const { providerImport, modelItem } = getProviderImportAndModelItem(llmProvider);
 
   const content = `${providerImport}
+import { stdout } from 'node:process';
 import { Agent } from '@mastra/core/agent';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
