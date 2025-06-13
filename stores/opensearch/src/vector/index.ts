@@ -9,6 +9,7 @@ import type {
   UpdateVectorParams,
   UpsertVectorParams,
 } from '@mastra/core';
+import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { MastraVector } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import { Client as OpenSearchClient } from '@opensearch-project/opensearch';
@@ -49,7 +50,13 @@ export class OpenSearchVector extends MastraVector {
    */
   async createIndex({ indexName, dimension, metric = 'cosine' }: CreateIndexParams): Promise<void> {
     if (!Number.isInteger(dimension) || dimension <= 0) {
-      throw new Error('Dimension must be a positive integer');
+      throw new MastraError({
+        id: 'STORAGE_OPENSEARCH_VECTOR_CREATE_INDEX_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Dimension must be a positive integer',
+        details: { indexName, dimension },
+      });
     }
 
     try {
@@ -82,8 +89,15 @@ export class OpenSearchVector extends MastraVector {
         await this.validateExistingIndex(indexName, dimension, metric);
         return;
       }
-      console.error(`Failed to create index ${indexName}:`, error);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'STORAGE_OPENSEARCH_VECTOR_CREATE_INDEX_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, dimension, metric },
+        },
+        error,
+      );
     }
   }
 
@@ -100,9 +114,15 @@ export class OpenSearchVector extends MastraVector {
         .filter((index: string | undefined) => index !== undefined);
 
       return indexes;
-    } catch (error: any) {
-      console.error('Failed to list indexes:', error);
-      throw new Error(`Failed to list indexes: ${error.message}`);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_OPENSEARCH_VECTOR_LIST_INDEXES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -113,18 +133,30 @@ export class OpenSearchVector extends MastraVector {
    * @returns A promise that resolves to the index statistics including dimension, count and metric
    */
   async describeIndex({ indexName }: DescribeIndexParams): Promise<IndexStats> {
-    const { body: indexInfo } = await this.client.indices.get({ index: indexName });
-    const mappings = indexInfo[indexName]?.mappings;
-    const embedding: any = mappings?.properties?.embedding;
-    const spaceType = embedding.method.space_type as keyof typeof REVERSE_METRIC_MAPPING;
+    try {
+      const { body: indexInfo } = await this.client.indices.get({ index: indexName });
+      const mappings = indexInfo[indexName]?.mappings;
+      const embedding: any = mappings?.properties?.embedding;
+      const spaceType = embedding.method.space_type as keyof typeof REVERSE_METRIC_MAPPING;
 
-    const { body: countInfo } = await this.client.count({ index: indexName });
+      const { body: countInfo } = await this.client.count({ index: indexName });
 
-    return {
-      dimension: Number(embedding.dimension),
-      count: Number(countInfo.count),
-      metric: REVERSE_METRIC_MAPPING[spaceType],
-    };
+      return {
+        dimension: Number(embedding.dimension),
+        count: Number(countInfo.count),
+        metric: REVERSE_METRIC_MAPPING[spaceType],
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_OPENSEARCH_VECTOR_DESCRIBE_INDEX_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName },
+        },
+        error,
+      );
+    }
   }
 
   /**
@@ -137,7 +169,15 @@ export class OpenSearchVector extends MastraVector {
     try {
       await this.client.indices.delete({ index: indexName });
     } catch (error) {
-      console.error(`Failed to delete index ${indexName}:`, error);
+      throw new MastraError(
+        {
+          id: 'STORAGE_OPENSEARCH_VECTOR_DELETE_INDEX_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName },
+        },
+        error,
+      );
     }
   }
 
@@ -154,39 +194,46 @@ export class OpenSearchVector extends MastraVector {
     const vectorIds = ids || vectors.map(() => crypto.randomUUID());
     const operations = [];
 
-    // Get index stats to check dimension
-    const indexInfo = await this.describeIndex({ indexName });
-
-    // Validate vector dimensions
-    this.validateVectorDimensions(vectors, indexInfo.dimension);
-
-    for (let i = 0; i < vectors.length; i++) {
-      const operation = {
-        index: {
-          _index: indexName,
-          _id: vectorIds[i],
-        },
-      };
-
-      const document = {
-        id: vectorIds[i],
-        embedding: vectors[i],
-        metadata: metadata[i] || {},
-      };
-
-      operations.push(operation);
-      operations.push(document);
-    }
-
     try {
+      // Get index stats to check dimension
+      const indexInfo = await this.describeIndex({ indexName });
+
+      // Validate vector dimensions
+      this.validateVectorDimensions(vectors, indexInfo.dimension);
+
+      for (let i = 0; i < vectors.length; i++) {
+        const operation = {
+          index: {
+            _index: indexName,
+            _id: vectorIds[i],
+          },
+        };
+
+        const document = {
+          id: vectorIds[i],
+          embedding: vectors[i],
+          metadata: metadata[i] || {},
+        };
+
+        operations.push(operation);
+        operations.push(document);
+      }
+
       if (operations.length > 0) {
         await this.client.bulk({ body: operations, refresh: true });
       }
 
       return vectorIds;
     } catch (error) {
-      console.error('Failed to upsert vectors:', error);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'STORAGE_OPENSEARCH_VECTOR_UPSERT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, vectorCount: vectors?.length || 0 },
+        },
+        error,
+      );
     }
   }
 
@@ -234,9 +281,16 @@ export class OpenSearchVector extends MastraVector {
       });
 
       return results;
-    } catch (error: any) {
-      console.error('Failed to query vectors:', error);
-      throw new Error(`Failed to query vectors for index ${indexName}: ${error.message}`);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_OPENSEARCH_VECTOR_QUERY_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, topK },
+        },
+        error,
+      );
     }
   }
 
@@ -275,13 +329,15 @@ export class OpenSearchVector extends MastraVector {
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
   async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
-    if (!update.vector && !update.metadata) {
-      throw new Error('No updates provided');
-    }
-
+    let existingDoc;
     try {
+      if (!update.vector && !update.metadata) {
+        throw new Error('No updates provided');
+      }
+
       // First get the current document to merge with updates
-      const { body: existingDoc } = await this.client
+      const { body } = await this.client
+
         .get({
           index: indexName,
           id: id,
@@ -290,15 +346,28 @@ export class OpenSearchVector extends MastraVector {
           throw new Error(`Document with ID ${id} not found in index ${indexName}`);
         });
 
-      if (!existingDoc || !existingDoc._source) {
+      if (!body || !body._source) {
         throw new Error(`Document with ID ${id} has no source data in index ${indexName}`);
       }
+      existingDoc = body._source;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_OPENSEARCH_VECTOR_UPDATE_VECTOR_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName, id },
+        },
+        error,
+      );
+    }
 
-      const source = existingDoc._source;
-      const updatedDoc: Record<string, any> = {
-        id: source.id || id,
-      };
+    const source = existingDoc._source;
+    const updatedDoc: Record<string, any> = {
+      id: source.id || id,
+    };
 
+    try {
       // Update vector if provided
       if (update.vector) {
         // Get index stats to check dimension
@@ -327,8 +396,15 @@ export class OpenSearchVector extends MastraVector {
         refresh: true,
       });
     } catch (error) {
-      console.error(`Failed to update document with ID ${id} in index ${indexName}:`, error);
-      throw error;
+      throw new MastraError(
+        {
+          id: 'STORAGE_OPENSEARCH_VECTOR_UPDATE_VECTOR_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, id },
+        },
+        error,
+      );
     }
   }
 
@@ -347,11 +423,19 @@ export class OpenSearchVector extends MastraVector {
         refresh: true,
       });
     } catch (error: unknown) {
-      console.error(`Failed to delete document with ID ${id} from index ${indexName}:`, error);
-      // Don't throw error if document doesn't exist, just log it
-      if (error && typeof error === 'object' && 'statusCode' in error && error.statusCode !== 404) {
-        throw error;
+      // Don't throw error if document doesn't exist (404)
+      if (error && typeof error === 'object' && 'statusCode' in error && error.statusCode === 404) {
+        return;
       }
+      throw new MastraError(
+        {
+          id: 'STORAGE_OPENSEARCH_VECTOR_DELETE_VECTOR_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, id },
+        },
+        error,
+      );
     }
   }
 }

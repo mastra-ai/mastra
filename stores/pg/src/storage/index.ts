@@ -171,7 +171,7 @@ export class PostgresStore extends MastraStorage {
       await this.db.query('COMMIT');
     } catch (error) {
       await this.db.query('ROLLBACK');
-      const mastraError = new MastraError(
+      throw new MastraError(
         {
           id: 'MASTRA_STORAGE_PG_STORE_BATCH_INSERT_FAILED',
           domain: ErrorDomain.STORAGE,
@@ -183,9 +183,6 @@ export class PostgresStore extends MastraStorage {
         },
         error,
       );
-      this.logger.error(mastraError.toString());
-      this.logger.trackException(mastraError);
-      throw mastraError;
     }
   }
 
@@ -275,7 +272,7 @@ export class PostgresStore extends MastraStorage {
       const countResult = await this.db.one(countQuery, queryParams);
       total = parseInt(countResult.count, 10);
     } catch (error) {
-      const mastraError = new MastraError(
+      throw new MastraError(
         {
           id: 'MASTRA_STORAGE_PG_STORE_GET_TRACES_PAGINATED_FAILED_TO_RETRIEVE_TOTAL_COUNT',
           domain: ErrorDomain.STORAGE,
@@ -287,8 +284,6 @@ export class PostgresStore extends MastraStorage {
         },
         error,
       );
-      this.logger.trackException(mastraError);
-      throw mastraError;
     }
 
     if (total === 0) {
@@ -333,7 +328,7 @@ export class PostgresStore extends MastraStorage {
         hasMore: currentOffset + traces.length < total,
       };
     } catch (error) {
-      const mastraError = new MastraError(
+      throw new MastraError(
         {
           id: 'MASTRA_STORAGE_PG_STORE_GET_TRACES_PAGINATED_FAILED_TO_RETRIEVE_TRACES',
           domain: ErrorDomain.STORAGE,
@@ -345,8 +340,6 @@ export class PostgresStore extends MastraStorage {
         },
         error,
       );
-      this.logger.trackException(mastraError);
-      throw mastraError;
     }
   }
 
@@ -445,7 +438,7 @@ export class PostgresStore extends MastraStorage {
 
       await this.db.none(sql);
     } catch (error) {
-      const mastraError = new MastraError(
+      throw new MastraError(
         {
           id: 'MASTRA_STORAGE_PG_STORE_CREATE_TABLE_FAILED',
           domain: ErrorDomain.STORAGE,
@@ -456,9 +449,6 @@ export class PostgresStore extends MastraStorage {
         },
         error,
       );
-      this.logger?.error?.(mastraError.toString());
-      this.logger.trackException(mastraError);
-      throw mastraError;
     }
   }
 
@@ -506,7 +496,7 @@ export class PostgresStore extends MastraStorage {
         }
       }
     } catch (error) {
-      const mastraError = new MastraError(
+      throw new MastraError(
         {
           id: 'MASTRA_STORAGE_PG_STORE_ALTER_TABLE_FAILED',
           domain: ErrorDomain.STORAGE,
@@ -517,9 +507,6 @@ export class PostgresStore extends MastraStorage {
         },
         error,
       );
-      this.logger?.error?.(mastraError.toString());
-      this.logger.trackException(mastraError);
-      throw mastraError;
     }
   }
 
@@ -527,7 +514,7 @@ export class PostgresStore extends MastraStorage {
     try {
       await this.db.none(`TRUNCATE TABLE ${this.getTableName(tableName)} CASCADE`);
     } catch (error) {
-      const mastraError = new MastraError(
+      throw new MastraError(
         {
           id: 'MASTRA_STORAGE_PG_STORE_CLEAR_TABLE_FAILED',
           domain: ErrorDomain.STORAGE,
@@ -538,9 +525,6 @@ export class PostgresStore extends MastraStorage {
         },
         error,
       );
-      this.logger?.error?.(mastraError.toString());
-      this.logger.trackException(mastraError);
-      throw mastraError;
     }
   }
 
@@ -555,7 +539,7 @@ export class PostgresStore extends MastraStorage {
         values,
       );
     } catch (error) {
-      const mastraError = new MastraError(
+      throw new MastraError(
         {
           id: 'MASTRA_STORAGE_PG_STORE_INSERT_FAILED',
           domain: ErrorDomain.STORAGE,
@@ -566,9 +550,6 @@ export class PostgresStore extends MastraStorage {
         },
         error,
       );
-      this.logger?.error?.(mastraError.toString());
-      this.logger.trackException(mastraError);
-      throw mastraError;
     }
   }
 
@@ -598,7 +579,7 @@ export class PostgresStore extends MastraStorage {
 
       return result;
     } catch (error) {
-      const mastraError = new MastraError(
+      throw new MastraError(
         {
           id: 'MASTRA_STORAGE_PG_STORE_LOAD_FAILED',
           domain: ErrorDomain.STORAGE,
@@ -609,9 +590,6 @@ export class PostgresStore extends MastraStorage {
         },
         error,
       );
-      this.logger?.error?.(mastraError.toString());
-      this.logger.trackException(mastraError);
-      throw mastraError;
     }
   }
 
@@ -641,7 +619,7 @@ export class PostgresStore extends MastraStorage {
         updatedAt: thread.updatedAt,
       };
     } catch (error) {
-      const mastraError = new MastraError(
+      throw new MastraError(
         {
           id: 'MASTRA_STORAGE_PG_STORE_GET_THREAD_BY_ID_FAILED',
           domain: ErrorDomain.STORAGE,
@@ -652,9 +630,6 @@ export class PostgresStore extends MastraStorage {
         },
         error,
       );
-      this.logger?.error?.(mastraError.toString());
-      this.logger.trackException(mastraError);
-      throw mastraError;
     }
   }
 
@@ -773,7 +748,7 @@ export class PostgresStore extends MastraStorage {
 
       return thread;
     } catch (error) {
-      const mastraError = new MastraError(
+      throw new MastraError(
         {
           id: 'MASTRA_STORAGE_PG_STORE_SAVE_THREAD_FAILED',
           domain: ErrorDomain.STORAGE,
@@ -784,9 +759,6 @@ export class PostgresStore extends MastraStorage {
         },
         error,
       );
-      this.logger?.error?.(mastraError.toString());
-      this.logger.trackException(mastraError);
-      throw mastraError;
     }
   }
 
@@ -838,7 +810,7 @@ export class PostgresStore extends MastraStorage {
         updatedAt: thread.updatedAt,
       };
     } catch (error) {
-      const mastraError = new MastraError(
+      throw new MastraError(
         {
           id: 'MASTRA_STORAGE_PG_STORE_UPDATE_THREAD_FAILED',
           domain: ErrorDomain.STORAGE,
@@ -850,9 +822,6 @@ export class PostgresStore extends MastraStorage {
         },
         error,
       );
-      this.logger?.error?.(mastraError.toString());
-      this.logger.trackException(mastraError);
-      throw mastraError;
     }
   }
 
@@ -866,7 +835,7 @@ export class PostgresStore extends MastraStorage {
         await t.none(`DELETE FROM ${this.getTableName(TABLE_THREADS)} WHERE id = $1`, [threadId]);
       });
     } catch (error) {
-      const mastraError = new MastraError(
+      throw new MastraError(
         {
           id: 'MASTRA_STORAGE_PG_STORE_DELETE_THREAD_FAILED',
           domain: ErrorDomain.STORAGE,
@@ -877,9 +846,6 @@ export class PostgresStore extends MastraStorage {
         },
         error,
       );
-      this.logger?.error?.(mastraError.toString());
-      this.logger.trackException(mastraError);
-      throw mastraError;
     }
   }
 
@@ -1107,21 +1073,18 @@ export class PostgresStore extends MastraStorage {
 
     const threadId = messages[0]?.threadId;
     if (!threadId) {
-      const mastraError = new MastraError({
+      throw new MastraError({
         id: 'MASTRA_STORAGE_PG_STORE_SAVE_MESSAGES_FAILED',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.THIRD_PARTY,
         text: `Thread ID is required`,
       });
-      this.logger?.error?.(mastraError.toString());
-      this.logger.trackException(mastraError);
-      throw mastraError;
     }
 
     // Check if thread exists
     const thread = await this.getThreadById({ threadId });
     if (!thread) {
-      const mastraError = new MastraError({
+      throw new MastraError({
         id: 'MASTRA_STORAGE_PG_STORE_SAVE_MESSAGES_FAILED',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.THIRD_PARTY,
@@ -1130,9 +1093,6 @@ export class PostgresStore extends MastraStorage {
           threadId,
         },
       });
-      this.logger?.error?.(mastraError.toString());
-      this.logger.trackException(mastraError);
-      throw mastraError;
     }
 
     try {
@@ -1168,7 +1128,7 @@ export class PostgresStore extends MastraStorage {
       if (format === `v2`) return list.get.all.v2();
       return list.get.all.v1();
     } catch (error) {
-      const mastraError = new MastraError(
+      throw new MastraError(
         {
           id: 'MASTRA_STORAGE_PG_STORE_SAVE_MESSAGES_FAILED',
           domain: ErrorDomain.STORAGE,
@@ -1179,9 +1139,6 @@ export class PostgresStore extends MastraStorage {
         },
         error,
       );
-      this.logger?.error?.(mastraError.toString());
-      this.logger.trackException(mastraError);
-      throw mastraError;
     }
   }
 
@@ -1210,7 +1167,7 @@ export class PostgresStore extends MastraStorage {
         [workflowName, runId, JSON.stringify(snapshot), now, now],
       );
     } catch (error) {
-      const mastraError = new MastraError(
+      throw new MastraError(
         {
           id: 'MASTRA_STORAGE_PG_STORE_PERSIST_WORKFLOW_SNAPSHOT_FAILED',
           domain: ErrorDomain.STORAGE,
@@ -1222,9 +1179,6 @@ export class PostgresStore extends MastraStorage {
         },
         error,
       );
-      this.logger?.error?.(mastraError.toString());
-      this.logger.trackException(mastraError);
-      throw mastraError;
     }
   }
 
@@ -1250,7 +1204,7 @@ export class PostgresStore extends MastraStorage {
 
       return (result as any).snapshot;
     } catch (error) {
-      const mastraError = new MastraError(
+      throw new MastraError(
         {
           id: 'MASTRA_STORAGE_PG_STORE_LOAD_WORKFLOW_SNAPSHOT_FAILED',
           domain: ErrorDomain.STORAGE,
@@ -1262,9 +1216,6 @@ export class PostgresStore extends MastraStorage {
         },
         error,
       );
-      this.logger?.error?.(mastraError.toString());
-      this.logger.trackException(mastraError);
-      throw mastraError;
     }
   }
 
@@ -1378,7 +1329,7 @@ export class PostgresStore extends MastraStorage {
       // Use runs.length as total when not paginating
       return { runs, total: total || runs.length };
     } catch (error) {
-      const mastraError = new MastraError(
+      throw new MastraError(
         {
           id: 'MASTRA_STORAGE_PG_STORE_GET_WORKFLOW_RUNS_FAILED',
           domain: ErrorDomain.STORAGE,
@@ -1389,9 +1340,6 @@ export class PostgresStore extends MastraStorage {
         },
         error,
       );
-      this.logger?.error?.(mastraError.toString());
-      this.logger.trackException(mastraError);
-      throw mastraError;
     }
   }
 
@@ -1437,7 +1385,7 @@ export class PostgresStore extends MastraStorage {
 
       return this.parseWorkflowRun(result);
     } catch (error) {
-      const mastraError = new MastraError(
+      throw new MastraError(
         {
           id: 'MASTRA_STORAGE_PG_STORE_GET_WORKFLOW_RUN_BY_ID_FAILED',
           domain: ErrorDomain.STORAGE,
@@ -1449,9 +1397,6 @@ export class PostgresStore extends MastraStorage {
         },
         error,
       );
-      this.logger?.error?.(mastraError.toString());
-      this.logger.trackException(mastraError);
-      throw mastraError;
     }
   }
 
