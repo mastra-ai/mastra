@@ -39,9 +39,9 @@ export function CurrentInstructions({
   return (
     <div>
       <div className="flex items-center justify-between gap-4 pb-1">
-        <Txt as="h3" variant="ui-md" className="text-icon3 pb-1">
+        {/* <Txt as="h3" variant="ui-md" className="text-icon3 pb-1">
           Current Instructions
-        </Txt>
+        </Txt> */}
 
         {enhancedPrompt ? (
           <div className="flex items-center gap-4">
@@ -68,16 +68,17 @@ export function CurrentInstructions({
             </button>
           </div>
         ) : (
-          <button onClick={onShowHistory}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Icon className="hover:bg-surface2 rounded-lg text-icon3 hover:text-icon6">
-                  <FileClock />
-                </Icon>
-              </TooltipTrigger>
-              <TooltipContent>Version history</TooltipContent>
-            </Tooltip>
-          </button>
+          <> </>
+          // <button onClick={onShowHistory}>
+          //   <Tooltip>
+          //     <TooltipTrigger asChild>
+          //       <Icon className="hover:bg-surface2 rounded-lg text-icon3 hover:text-icon6">
+          //         <FileClock />
+          //       </Icon>
+          //     </TooltipTrigger>
+          //     <TooltipContent>Version history</TooltipContent>
+          //   </Tooltip>
+          // </button>
         )}
       </div>
 

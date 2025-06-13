@@ -2,6 +2,8 @@ import { useAgent } from '@/hooks/use-agents';
 import { AgentDetails } from './agent-details';
 import { AgentEndpoints } from './agent-endpoints';
 import { AgentOverview } from './agent-overview';
+import { AgentTools } from './agent-tools';
+import { AgentWorkflows } from './agent-workflows';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Badge,
@@ -12,6 +14,7 @@ import {
   SettingsIcon,
   McpServerIcon,
   OpenAIIcon,
+  ToolsIcon,
 } from '@mastra/playground-ui';
 import { providerMapToIcon } from './table.columns';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
@@ -74,6 +77,14 @@ export function AgentInformation({ agentId }: { agentId: string }) {
         <>
           <MainColumnSection title="Current instructions" icon={<McpServerIcon />}>
             <AgentOverview agent={agent} agentId={agentId} />
+          </MainColumnSection>
+
+          <MainColumnSection title="Agent tools" icon={<ToolsIcon />}>
+            <AgentTools agent={agent} agentId={agentId} />
+          </MainColumnSection>
+
+          <MainColumnSection title="Agent workflows" icon={<McpServerIcon />}>
+            <AgentWorkflows agent={agent} agentId={agentId} />
           </MainColumnSection>
 
           <MainColumnSection title="Model settings" icon={<SettingsIcon />}>

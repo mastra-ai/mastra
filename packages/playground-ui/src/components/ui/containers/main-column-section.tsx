@@ -16,12 +16,12 @@ export function MainColumnSection({
   return (
     <div className={cn('grid gap-4 mb-10 border-b border-border1 pb-9', className)} style={{ ...style }}>
       {title && (
-        <h2 className="items-center gap-2 group [&>svg]:w-[1.5em] [&>svg]:h-[1.5em] text-muted-foreground font-normal text-lg flex">
+        <h2 className="items-center gap-2 group [&>svg]:w-[1.1em] [&>svg]:h-[1.1em] text-muted-foreground font-normal text-lg flex">
           {icon && icon}
           {title}
         </h2>
       )}
-      {children}
+      <div className={cn({ 'pl-7': icon })}>{children}</div>
     </div>
   );
 }

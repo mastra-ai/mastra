@@ -13,7 +13,7 @@ export function MainLayout({
 
   return (
     <main
-      className={cn(`grid grid-rows-[auto_1fr] overflow-y-auto h-full`, className)}
+      className={cn(`grid grid-rows-[auto_1fr] overflow-y-auto h-full px-8`, className)}
       style={{ ...style, ...(devStyleRequested ? { border: '3px dotted red' } : {}) }}
     >
       {children}

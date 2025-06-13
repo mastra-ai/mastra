@@ -5,13 +5,14 @@ import { useNavigate, useLocation, useParams } from 'react-router';
 
 import { AgentHeader } from '@/domains/agents/agent-header';
 import { AgentInformation } from '@/domains/agents/agent-information';
-// import { AgentSidebar } from '@/domains/agents/agent-sidebar';
 import { useAgent } from '@/hooks/use-agents';
 import { useMemory, useMessages, useThreads } from '@/hooks/use-memory';
 import type { Message } from '@/types';
 import { useFeatureFlagEnabled } from 'posthog-js/react';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SelectLabel } from '@radix-ui/react-select';
+import { AgentLogs } from '@/domains/agents/agent-logs';
+import { AgentVersions } from '@/domains/agents/agent-versions';
 
 function Agent() {
   const isCliShowMultiModal = useFeatureFlagEnabled('cli_ShowMultiModal');
@@ -60,8 +61,6 @@ function Agent() {
     return null;
   }
 
-  const withSidebar = Boolean(sidebar && memory?.result);
-
   return (
     <AgentProvider
       agentId={agentId!}
@@ -74,8 +73,8 @@ function Agent() {
             <AgentHeader agentId={agentId!} />
           </MainHeader>
           {content === 'default' && <AgentInformation agentId={agentId!} />}
-          {content === 'log-drains' && <div>Log Drains</div>}
-          {content === 'versions' && <div>Versions</div>}
+          {content === 'log-drains' && <AgentLogs agentId={agentId!} />}
+          {content === 'versions' && <AgentVersions agentId={agentId!} />}
         </MainColumn>
         <MainColumn>
           <div className="h-full grid grid-rows-[auto_1fr]">
@@ -119,26 +118,6 @@ function Agent() {
           </div>
         </MainColumn>
       </MainContent>
-
-      {/* <MainContent isDivided={true} hasLeftServiceColumn={withSidebar} width="full">
-        {withSidebar && (
-          <AgentSidebar agentId={agentId!} threadId={threadId!} threads={threads} isLoading={isThreadsLoading} />
-        )}
-
-        <div className="grid overflow-y-auto relative bg-surface1 py-4">
-          <Chat
-            agentId={agentId!}
-            agentName={agent?.name}
-            threadId={threadId!}
-            initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
-            memory={memory?.result}
-            refreshThreadList={refreshThreads}
-            showFileSupport={isCliShowMultiModal}
-          />
-        </div>
-
-        <AgentInformation agentId={agentId!} />
-      </MainContent> */}
     </AgentProvider>
   );
 }

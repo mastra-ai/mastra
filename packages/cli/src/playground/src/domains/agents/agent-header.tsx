@@ -29,12 +29,12 @@ export function AgentHeader({ agentId }: { agentId: string }) {
       path: 'evals',
     },
     {
-      label: 'Log Drains',
-      path: 'log-drains',
-    },
-    {
       label: 'Versions',
       path: 'versions',
+    },
+    {
+      label: 'Log Drains',
+      path: 'log-drains',
     },
   ];
 

@@ -1,6 +1,8 @@
 import { AgentEvals } from '@mastra/playground-ui';
 import { useParams } from 'react-router';
 import { useEvalsByAgentId } from '@/domains/evals/hooks/use-evals-by-agent-id';
+import { AgentTraces, MainContent, MainHeader, MainLayout } from '@mastra/playground-ui';
+import { AgentHeader } from '@/domains/agents/agent-header';
 
 function AgentEvalsPage() {
   const { agentId } = useParams();
@@ -10,14 +12,19 @@ function AgentEvalsPage() {
   if (isLiveLoading || isCiLoading) return null; // resolves too fast locally
 
   return (
-    <main className="h-full overflow-hidden">
-      <AgentEvals
-        liveEvals={liveEvals?.evals ?? []}
-        ciEvals={ciEvals?.evals ?? []}
-        onRefetchLiveEvals={refetchLiveEvals}
-        onRefetchCiEvals={refetchCiEvals}
-      />
-    </main>
+    <MainLayout>
+      <MainHeader width="full" className="sticky top-0 bg-surface1 z-[100]">
+        <AgentHeader agentId={agentId!} />
+      </MainHeader>
+      <MainContent width="full">
+        <AgentEvals
+          liveEvals={liveEvals?.evals ?? []}
+          ciEvals={ciEvals?.evals ?? []}
+          onRefetchLiveEvals={refetchLiveEvals}
+          onRefetchCiEvals={refetchCiEvals}
+        />
+      </MainContent>
+    </MainLayout>
   );
 }
 
