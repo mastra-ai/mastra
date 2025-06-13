@@ -10,6 +10,7 @@
 import { exec } from 'node:child_process';
 import type { ExecOptions } from 'node:child_process';
 import { dirname, join } from 'node:path';
+import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import open from 'open';
 import type { Options } from 'open';
