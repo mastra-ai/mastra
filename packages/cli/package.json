@@ -62,6 +62,7 @@
     "fs-extra": "^11.3.0",
     "get-port": "^7.1.0",
     "json-schema-to-zod": "^2.6.1",
+    "open": "^10.1.2",
     "picocolors": "^1.1.1",
     "posthog-node": "4.16.0",
     "prettier": "^3.5.3",
