@@ -1,4 +1,4 @@
-import type { WorkflowRunState, StepResult } from '@mastra/core';
+import type { WorkflowRunState, StepResult } from '@mastra/core/workflows';
 
 import { ExtendedWorkflowWatchResult } from '@/hooks/use-workflows';
 
@@ -35,7 +35,7 @@ export function convertWorkflowRunStateToWatchResult(runState: WorkflowRunState)
       workflowState: {
         status,
         steps,
-        output: runState.value,
+        result: runState.value,
         payload: context.input,
         error: undefined,
       },

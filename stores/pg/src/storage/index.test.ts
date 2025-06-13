@@ -173,6 +173,28 @@ describe('PostgresStore', () => {
       const retrievedMessages = await store.getMessages({ threadId: thread.id });
       expect(retrievedMessages).toHaveLength(0);
     });
+
+    it('should update thread updatedAt when a message is saved to it', async () => {
+      const thread = createSampleThread();
+      await store.saveThread({ thread });
+
+      // Get the initial thread to capture the original updatedAt
+      const initialThread = await store.getThreadById({ threadId: thread.id });
+      expect(initialThread).toBeDefined();
+      const originalUpdatedAt = initialThread!.updatedAt;
+
+      // Wait a small amount to ensure different timestamp
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // Create and save a message to the thread
+      const message = createSampleMessageV1({ threadId: thread.id });
+      await store.saveMessages({ messages: [message] });
+
+      // Retrieve the thread again and check that updatedAt was updated
+      const updatedThread = await store.getThreadById({ threadId: thread.id });
+      expect(updatedThread).toBeDefined();
+      expect(updatedThread!.updatedAt.getTime()).toBeGreaterThan(originalUpdatedAt.getTime());
+    });
   });
 
   describe('Message Operations', () => {
@@ -408,6 +430,7 @@ describe('PostgresStore', () => {
         suspendedPaths: {},
         runId,
         timestamp: new Date().getTime(),
+        serializedStepGraph: [],
       } as unknown as WorkflowRunState;
 
       await store.persistWorkflowSnapshot({
@@ -446,6 +469,7 @@ describe('PostgresStore', () => {
         suspendedPaths: {},
         runId,
         timestamp: new Date().getTime(),
+        serializedStepGraph: [],
       };
 
       await store.persistWorkflowSnapshot({
@@ -524,6 +548,8 @@ describe('PostgresStore', () => {
         suspendedPaths: {},
         runId: runId,
         timestamp: Date.now(),
+        serializedStepGraph: [],
+        status: 'running',
       };
 
       await store.persistWorkflowSnapshot({

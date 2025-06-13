@@ -325,6 +325,7 @@ describe('DynamoDBStore Integration Tests', () => {
           suspendedPaths: { test: [1] },
           runId: 'test-run-large', // Use unique runId
           timestamp: now,
+          status: 'success',
         };
 
         await expect(
@@ -442,6 +443,43 @@ describe('DynamoDBStore Integration Tests', () => {
         expect(last3).toHaveLength(3);
         expect(last3.map(m => m.content)).toEqual(['msg-7', 'msg-8', 'msg-9']);
       });
+
+      test('should update thread updatedAt when a message is saved to it', async () => {
+        const thread: StorageThreadType = {
+          id: 'thread-update-test',
+          resourceId: 'resource-update',
+          title: 'Update Test Thread',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: { test: true },
+        };
+        await store.saveThread({ thread });
+
+        // Get the initial thread to capture the original updatedAt
+        const initialThread = await store.getThreadById({ threadId: thread.id });
+        expect(initialThread).toBeDefined();
+        const originalUpdatedAt = initialThread!.updatedAt;
+
+        // Wait a small amount to ensure different timestamp
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Create and save a message to the thread
+        const message: MastraMessageV1 = {
+          id: 'msg-update-test',
+          threadId: thread.id,
+          resourceId: 'resource-update',
+          content: 'Test message for update',
+          createdAt: new Date(),
+          role: 'user',
+          type: 'text',
+        };
+        await store.saveMessages({ messages: [message] });
+
+        // Retrieve the thread again and check that updatedAt was updated
+        const updatedThread = await store.getThreadById({ threadId: thread.id });
+        expect(updatedThread).toBeDefined();
+        expect(updatedThread!.updatedAt.getTime()).toBeGreaterThan(originalUpdatedAt.getTime());
+      });
     });
 
     describe('Batch Operations', () => {
@@ -547,6 +585,7 @@ describe('DynamoDBStore Integration Tests', () => {
           suspendedPaths: { test: [1] },
           runId: 'mixed-run',
           timestamp: Date.now(),
+          status: 'success',
         };
         await store.persistWorkflowSnapshot({ workflowName, runId: 'mixed-run', snapshot: workflowSnapshot });
 
@@ -861,6 +900,7 @@ describe('DynamoDBStore Integration Tests', () => {
         suspendedPaths: {},
         runId: runId,
         timestamp: createdAt.getTime(),
+        status: 'success',
         ...(resourceId && { resourceId: resourceId }), // Conditionally add resourceId to snapshot
       };
       return {

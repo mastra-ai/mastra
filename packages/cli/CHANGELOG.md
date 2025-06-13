@@ -1,5 +1,49 @@
 # mastra
 
+## 0.10.6-alpha.1
+
+### Patch Changes
+
+- 47e7029: Add open browser functionality when running mastra dev
+
+## 0.10.6-alpha.0
+
+### Patch Changes
+
+- 02560d4: lift evals fetching to the playground package instead
+- 63f6b7d: dependencies updates:
+  - Updated dependency [`execa@^9.6.0` ↗︎](https://www.npmjs.com/package/execa/v/9.6.0) (from `^9.5.2`, in `dependencies`)
+  - Updated dependency [`json-schema-to-zod@^2.6.1` ↗︎](https://www.npmjs.com/package/json-schema-to-zod/v/2.6.1) (from `^2.6.0`, in `dependencies`)
+  - Updated dependency [`shell-quote@^1.8.3` ↗︎](https://www.npmjs.com/package/shell-quote/v/1.8.3) (from `^1.8.2`, in `dependencies`)
+  - Updated dependency [`strip-json-comments@^5.0.2` ↗︎](https://www.npmjs.com/package/strip-json-comments/v/5.0.2) (from `^5.0.1`, in `dependencies`)
+  - Updated dependency [`zod@^3.25.57` ↗︎](https://www.npmjs.com/package/zod/v/3.25.57) (from `^3.25.56`, in `dependencies`)
+- 311132e: move useWorkflow to playground instead of playground-ui
+- 906f992: CLI error log
+- 53d3c37: Get workflows from an agent if not found from Mastra instance #5083
+- Updated dependencies [63f6b7d]
+- Updated dependencies [2d12edd]
+- Updated dependencies [63f6b7d]
+- Updated dependencies [63f6b7d]
+- Updated dependencies [36f1c36]
+- Updated dependencies [10d352e]
+- Updated dependencies [53d3c37]
+  - @mastra/core@0.10.6-alpha.0
+  - @mastra/deployer@0.10.6-alpha.0
+  - @mastra/mcp@0.10.4-alpha.0
+
+## 0.10.5
+
+### Patch Changes
+
+- 1ba421d: fix the tools not showing on workflows attached to agents
+- 8725d02: Improve cli by reducing the amount of setups during interactive prompt
+- 13c97f9: Save run status, result and error in storage snapshot
+- Updated dependencies [8725d02]
+- Updated dependencies [13c97f9]
+- Updated dependencies [105f872]
+  - @mastra/deployer@0.10.5
+  - @mastra/core@0.10.5
+
 ## 0.10.4
 
 ### Patch Changes

@@ -833,6 +833,7 @@ describe.skip('CloudflareStore REST API', () => {
         } as unknown as WorkflowRunState['context'],
         activePaths: [],
         suspendedPaths: {},
+        status: 'success',
         serializedStepGraph: [],
       };
 
@@ -880,6 +881,7 @@ describe.skip('CloudflareStore REST API', () => {
         } as unknown as WorkflowRunState['context'],
         activePaths: [],
         suspendedPaths: {},
+        status: 'success',
         serializedStepGraph: [],
       };
 
@@ -943,6 +945,7 @@ describe.skip('CloudflareStore REST API', () => {
         } as unknown as WorkflowRunState['context'],
         activePaths: [],
         suspendedPaths: {},
+        status: 'success',
         serializedStepGraph: [],
       };
 

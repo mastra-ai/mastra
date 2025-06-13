@@ -154,6 +154,7 @@ export const createSampleWorkflowSnapshot = (status: string, createdAt?: Date) =
     suspendedPaths: {},
     runId,
     timestamp: timestamp.getTime(),
+    status: status as WorkflowRunState['status'],
   } as WorkflowRunState;
   return { snapshot, runId, stepId };
 };
@@ -461,6 +462,28 @@ export function createTestSuite(storage: MastraStorage) {
         expect(crossThreadMessages3).toHaveLength(3);
         expect(crossThreadMessages3.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
         expect(crossThreadMessages3.filter(m => m.threadId === `thread-two`)).toHaveLength(0);
+      });
+
+      it('should update thread timestamp when saving messages', async () => {
+        const thread = createSampleThread();
+        await storage.saveThread({ thread });
+
+        const initialThread = await storage.getThreadById({ threadId: thread.id });
+        const initialUpdatedAt = new Date(initialThread!.updatedAt);
+
+        // Wait a bit to ensure timestamp difference
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        const messages = [
+          createSampleMessageV1({ threadId: thread.id }),
+          createSampleMessageV1({ threadId: thread.id }),
+        ];
+        await storage.saveMessages({ messages });
+
+        // Verify thread updatedAt timestamp was updated
+        const updatedThread = await storage.getThreadById({ threadId: thread.id });
+        const newUpdatedAt = new Date(updatedThread!.updatedAt);
+        expect(newUpdatedAt.getTime()).toBeGreaterThan(initialUpdatedAt.getTime());
       });
     });
 
@@ -926,6 +949,7 @@ export function createTestSuite(storage: MastraStorage) {
         suspendedPaths: {},
         serializedStepGraph: [],
         timestamp: Date.now(),
+        status: 'success' as WorkflowRunState['status'],
       };
       await storage.persistWorkflowSnapshot({
         workflowName,
@@ -954,6 +978,7 @@ export function createTestSuite(storage: MastraStorage) {
         suspendedPaths: {},
         serializedStepGraph: [],
         timestamp: Date.now(),
+        status: 'success' as WorkflowRunState['status'],
       };
       await storage.persistWorkflowSnapshot({
         workflowName,

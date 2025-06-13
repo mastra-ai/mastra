@@ -1,5 +1,24 @@
 # @mastra/deployer
 
+## 0.10.6-alpha.0
+
+### Patch Changes
+
+- 53d3c37: Get workflows from an agent if not found from Mastra instance #5083
+- Updated dependencies [63f6b7d]
+- Updated dependencies [36f1c36]
+- Updated dependencies [10d352e]
+- Updated dependencies [53d3c37]
+  - @mastra/core@0.10.6-alpha.0
+
+## 0.10.5
+
+### Patch Changes
+
+- 1ba421d: fix the tools not showing on workflows attached to agents
+- Updated dependencies [13c97f9]
+  - @mastra/core@0.10.5
+
 ## 0.10.4
 
 ### Patch Changes
