@@ -44,3 +44,20 @@ export default defineConfig({
   output: "server"
 });
 ```
+
+## With Astro on Netlify
+
+If you've integrated Mastra with Astro [by following our guide](/docs/frameworks/web-frameworks/astro) and plan to deploy to Vercel, no additional setup is required.
+
+The only thing to verify is that you've added the following to your `astro.config.mjs` and removed any usage of [LibSQLStore](/docs/deployment/deployment#libsqlstore), which is not supported in serverless environments:
+
+```javascript {2,6,7} filename="astro.config.mjs" showLineNumbers copy
+import { defineConfig } from 'astro/config';
+import vercel from '@astrojs/netlify';
+
+export default defineConfig({
+  // ...
+  adapter: netlify(),
+  output: "server"
+});
+```
