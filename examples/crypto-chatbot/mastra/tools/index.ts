@@ -13,7 +13,7 @@ export const searchCryptoCoins = createTool({
       method: 'GET',
       headers: {
         accept: 'application/json',
-        'x-cg-demo-api-key': process.env.COINGECKO_API_KEY!,
+        'x-cg-demo-api-key': env.COINGECKO_API_KEY!,
       },
     };
 
@@ -56,7 +56,7 @@ export const getCryptoPrice = createTool({
       method: 'GET',
       headers: {
         accept: 'application/json',
-        'x-cg-demo-api-key': process.env.COINGECKO_API_KEY!,
+        'x-cg-demo-api-key': env.COINGECKO_API_KEY!,
       },
     };
 
@@ -83,7 +83,7 @@ export const getHistoricalCryptoPrices = createTool({
       method: 'GET',
       headers: {
         accept: 'application/json',
-        'x-cg-demo-api-key': process.env.COINGECKO_API_KEY!,
+        'x-cg-demo-api-key': env.COINGECKO_API_KEY!,
       },
     };
 

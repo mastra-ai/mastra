@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import child_process from 'node:child_process';
-import { cwd, exit } from 'node:process';
+import { cwd, exit, stdout } from 'node:process';
 import util from 'node:util';
 import path from 'path';
 import * as p from '@clack/prompts';
@@ -279,7 +279,7 @@ const planActivities = createStep({
     let activitiesText = '';
 
     for await (const chunk of response.textStream) {
-      console.log(chunk);
+      stdout.write(chunk);
       activitiesText += chunk;
     }
 

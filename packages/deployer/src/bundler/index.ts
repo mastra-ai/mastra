@@ -146,6 +146,7 @@ export abstract class Bundler extends MastraBundler {
   ) {
     const inputOptions: InputOptions = await getInputOptions(mastraEntryFile, analyzedBundleInfo, 'node', {
       'env.NODE_ENV': JSON.stringify('production'),
+      'process.env.NODE_ENV': JSON.stringify('production'),
     });
     const isVirtual = serverFile.includes('\n') || existsSync(serverFile);
 

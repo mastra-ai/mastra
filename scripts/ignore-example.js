@@ -1,3 +1,4 @@
+import { exit } from 'node:process';
 import { spawn as nodeSpawn } from 'child_process';
 import { readFileSync } from 'fs';
 import { dirname, join } from 'path';

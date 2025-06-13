@@ -479,7 +479,7 @@ describe('MCPClient', () => {
               `
             const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
             const server = new Server({ name: 'test', version: '1.0.0' });
-            setTimeout(() => exit(0), 2000); // 2 second delay
+            setTimeout(() => process.exit(0), 2000); // 2 second delay
           `,
             ],
           },
@@ -505,7 +505,7 @@ describe('MCPClient', () => {
               `
             const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
             const server = new Server({ name: 'test', version: '1.0.0' });
-            setTimeout(() => exit(0), 2000); // 2 second delay
+            setTimeout(() => process.exit(0), 2000); // 2 second delay
           `,
             ],
             timeout: 3000, // Server-specific timeout of 3s
@@ -529,7 +529,7 @@ describe('MCPClient', () => {
         servers: {
           slowServer: {
             command: 'node',
-            args: ['-e', 'setTimeout(() => exit(0), 65000)'], // Simulate a server that takes 65 seconds to start
+            args: ['-e', 'setTimeout(() => process.exit(0), 65000)'], // Simulate a server that takes 65 seconds to start
             timeout: 1000,
           },
         },
@@ -546,7 +546,7 @@ describe('MCPClient', () => {
         servers: {
           slowServer: {
             command: 'node',
-            args: ['-e', 'setTimeout(() => exit(0), 1000)'], // Simulate a server that takes 1 second to start
+            args: ['-e', 'setTimeout(() => process.exit(0), 1000)'], // Simulate a server that takes 1 second to start
           },
         },
       });
@@ -564,11 +564,11 @@ describe('MCPClient', () => {
         servers: {
           quickServer: {
             command: 'node',
-            args: ['-e', 'setTimeout(() => exit(0), 2000)'], // Takes 2 seconds to exit
+            args: ['-e', 'setTimeout(() => process.exit(0), 2000)'], // Takes 2 seconds to exit
           },
           slowServer: {
             command: 'node',
-            args: ['-e', 'setTimeout(() => exit(0), 2000)'], // Takes 2 seconds to exit
+            args: ['-e', 'setTimeout(() => process.exit(0), 2000)'], // Takes 2 seconds to exit
             timeout: 3000, // But has a longer timeout
           },
         },
