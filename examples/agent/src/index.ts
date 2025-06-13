@@ -4,11 +4,6 @@ import { mastra } from './mastra';
 const agent = mastra.getAgent('chefAgent');
 const responsesAgent = mastra.getAgent('chefAgentResponses');
 
-try {
-  responsesAgent.generate('What is the weather in San Francisco?');
-} catch (err) {
-  console.log(err);
-}
 async function text() {
   // Query 1: Basic pantry ingredients
   const query1 =
