@@ -29,19 +29,18 @@ When running a workflow, its `status` can be one of the following:
 
 When the state is `suspended`, you can identify any and all steps that have been suspended by looking at the `suspended` array of the workflow.
 
-
 ```typescript {17} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-const cityCoordinatesStep = createStep({
-  id: "city-step",
-  description: "Gets details about a city",
+const step1 = createStep({
+  id: "step-1",
+  description: "Test suspend",
   inputSchema: z.object({
-    suggestions: z.array(z.string())
+    input: z.array(z.string())
   }),
   resumeSchema: z.object({
     city: z.string()
   }),
   outputSchema: z.object({
-    outcome: z.string()
+    output: z.string()
   }),
   execute: async ({ resumeData, suspend }) => {
     const { city } = resumeData ?? {};
@@ -53,31 +52,18 @@ const cityCoordinatesStep = createStep({
       };
     }
 
-    const geocodingResponse = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${city}`);
-    const geocodingData = await geocodingResponse.json();
-
-    const { name, country, timezone } = geocodingData.results[0];
-
     return {
-      outcome: `${name} | ${country} | ${timezone}`
+      output: ""
     };
   }
 });
 
-export const testWorkflow = createWorkflow({
-  id: "test-workflow",
-  description: 'Test workflow',
-  inputSchema: z.object({
-    suggestions: z.array(z.string()),
-  }),
-  outputSchema: z.object({
-    outcome: z.string(),
-  })
-})
-  .then(cityCoordinatesStep)
+export const testWorkflow = createWorkflow({})
+  .then(step1)
   .commit();
-
 ```
+
+> See [Define Suspendable workflow](/examples/workflows/human-in-the-loop#define-suspendable-workflow) for more information.
 
 ## Resume
 
@@ -96,7 +82,7 @@ console.log(JSON.stringify(result, null, 2));
 
 if (result.status === "suspended") {
   const resumedResult = await run.resume({
-    step: 'city-step',
+    step: 'step-1',
     resumeData: { city: "New York" }
   });
 
@@ -130,7 +116,7 @@ if (result.status === "suspended") {
 When using suspend/resume with `RuntimeContext`, you can create the instance yourself, and pass it to the `start` and `resume` functions.
 `RuntimeContext` is not automatically shared on a workflow run.
 
-```typescript {1,9,18} filename="src/test-workflow.ts" showLineNumbers copy
+```typescript {1,4,9,16} filename="src/test-workflow.ts" showLineNumbers copy
 import { RuntimeContext } from "@mastra/core/di";
 import { mastra } from "./mastra";
 
@@ -142,15 +128,11 @@ const result = await run.start({
   runtimeContext
 });
 
-console.log(JSON.stringify(result, null, 2));
-
 if (result.status === "suspended") {
   const resumedResult = await run.resume({
-    step: 'city-step',
+    step: 'step-1',
     resumeData: { city: "New York" },
     runtimeContext
   });
-
-  console.log(JSON.stringify(resumedResult, null, 2));
 }
 ```
