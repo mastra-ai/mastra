@@ -5,8 +5,11 @@ import { fileURLToPath } from 'node:url';
 import getPort from 'get-port';
 import { copyFile, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { createRequire } from 'module';
 import { startRegistry } from '../_local-registry-setup/index.js';
 import { publishPackages } from '../_local-registry-setup/publish.js';
+
+const require = createRequire(import.meta.url);
 
 export default async function setup() {
   const __dirname = dirname(fileURLToPath(import.meta.url));
