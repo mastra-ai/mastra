@@ -49,7 +49,8 @@
     "postgres": "^3.4.7",
     "redis": "^4.7.1",
     "xxhash-wasm": "^1.1.0",
-    "zod": "^3.25.57"
+    "zod": "^3.25.57",
+    "zod-to-json-schema": "^3.24.5"
   },
   "devDependencies": {
     "@ai-sdk/openai": "^1.3.22",
