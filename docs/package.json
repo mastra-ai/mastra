@@ -31,7 +31,7 @@
     "algoliasearch": "5.25.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "flags": "^3.2.0",
+    "flags": "^4.0.0",
     "gt-next": "^5.2.21",
     "gtx-cli": "^1.1.13",
     "lucide-react": "^0.436.0",
