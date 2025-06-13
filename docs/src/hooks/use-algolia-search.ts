@@ -30,6 +30,10 @@ export type AlgoliaSearchOptions = {
    */
   attributesToHighlight?: string[];
   /**
+   * Attributes to snippet
+   */
+  attributesToSnippet?: string[];
+  /**
    * Highlight pre tag
    */
   highlightPreTag?: string;
@@ -37,6 +41,10 @@ export type AlgoliaSearchOptions = {
    * Highlight post tag
    */
   highlightPostTag?: string;
+  /**
+   * Snippet ellipsis text
+   */
+  snippetEllipsisText?: string;
 };
 
 export type AlgoliaResult = {
@@ -49,6 +57,12 @@ export type AlgoliaResult = {
       value: string;
       matchLevel: string;
       matchedWords: string[];
+    };
+  };
+  _snippetResult?: {
+    [key: string]: {
+      value: string;
+      matchLevel: string;
     };
   };
   sub_results: {
@@ -156,8 +170,12 @@ export function useAlgoliaSearch(
               "title",
               "content",
             ],
+            attributesToSnippet: searchOptions?.attributesToSnippet || [
+              "content:15"
+            ],
             highlightPreTag: searchOptions?.highlightPreTag || "<mark>",
             highlightPostTag: searchOptions?.highlightPostTag || "</mark>",
+            snippetEllipsisText: searchOptions?.snippetEllipsisText || "…",
             ...(searchOptions?.filters && { filters: searchOptions.filters }),
             ...(searchOptions?.facetFilters && {
               facetFilters: searchOptions.facetFilters,
@@ -176,13 +194,90 @@ export function useAlgoliaSearch(
           const transformedResults: AlgoliaResult[] = firstResult.hits.map(
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (hit: any) => {
-              // Extract highlighted content for excerpt
-              const excerpt =
-                hit._highlightResult?.content?.value ||
-                hit.content?.substring(0, 200) + "..." ||
-                hit._highlightResult?.title?.value ||
-                hit.title ||
-                "";
+              // Helper function to extract relevant snippet around search terms
+              const extractRelevantSnippet = (content: string, searchTerm: string, maxLength: number = 200): string => {
+                if (!content || !searchTerm) return content?.substring(0, maxLength) + "..." || "";
+
+                const lowerContent = content.toLowerCase();
+                const lowerSearchTerm = searchTerm.toLowerCase();
+                const searchWords = lowerSearchTerm.split(/\s+/).filter(word => word.length > 2);
+
+                // Find the first occurrence of any search word
+                let bestIndex = -1;
+                for (const word of searchWords) {
+                  const index = lowerContent.indexOf(word);
+                  if (index !== -1 && (bestIndex === -1 || index < bestIndex)) {
+                    bestIndex = index;
+                  }
+                }
+
+                if (bestIndex === -1) {
+                  return content.substring(0, maxLength) + "...";
+                }
+
+                // Extract snippet around the found term
+                const start = Math.max(0, bestIndex - 50);
+                const end = Math.min(content.length, bestIndex + maxLength - 50);
+
+                let snippet = content.substring(start, end);
+
+                // Clean up the snippet
+                if (start > 0) snippet = "..." + snippet;
+                if (end < content.length) snippet = snippet + "...";
+
+                return snippet;
+              };
+
+              // Prioritize snippet result, then highlighted content, then fallback
+              let excerpt = "";
+
+              if (hit._snippetResult?.content?.value) {
+                // Use Algolia's snippet if available
+                excerpt = hit._snippetResult.content.value;
+              } else if (hit._highlightResult?.content?.value) {
+                // Use highlighted content and extract relevant snippet
+                const highlightedContent = hit._highlightResult.content.value;
+                excerpt = extractRelevantSnippet(highlightedContent, search, 200);
+              } else if (hit.content) {
+                // Fallback to extracting snippet from raw content
+                excerpt = extractRelevantSnippet(hit.content, search, 200);
+              } else if (hit._highlightResult?.title?.value) {
+                excerpt = hit._highlightResult.title.value;
+              } else {
+                excerpt = hit.title || "";
+              }
+
+              // Create multiple sub_results if we have hierarchy or can detect sections
+              const subResults = [];
+
+              if (hit.hierarchy && Array.isArray(hit.hierarchy)) {
+                // If we have hierarchy information, create sub-results for different sections
+                hit.hierarchy.forEach((section: any, index: number) => {
+                  if (section.content && section.content.toLowerCase().includes(search.toLowerCase())) {
+                    subResults.push({
+                      title: section.title || hit.title || "",
+                      excerpt: extractRelevantSnippet(section.content, search, 180),
+                      url: `${hit.url}${section.anchor ? `#${section.anchor}` : ""}`,
+                    });
+                  }
+                });
+
+                // If no hierarchy sections matched, add the main result
+                if (subResults.length === 0) {
+                  subResults.push({
+                    title: hit.title || "",
+                    excerpt: excerpt,
+                    url: hit.url || "",
+                  });
+                }
+              } else {
+                // Single sub-result with the main excerpt
+                subResults.push({
+                  title: hit.title || "",
+                  excerpt: excerpt,
+                  url: hit.url || "",
+                });
+              }
 
               return {
                 objectID: hit.objectID,
@@ -190,13 +285,8 @@ export function useAlgoliaSearch(
                 excerpt: excerpt,
                 url: hit.url || "",
                 _highlightResult: hit._highlightResult,
-                sub_results: [
-                  {
-                    title: hit.title || "",
-                    excerpt: excerpt,
-                    url: hit.url || "",
-                  },
-                ],
+                _snippetResult: hit._snippetResult,
+                sub_results: subResults,
               };
             },
           );
