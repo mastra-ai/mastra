@@ -1,8 +1,9 @@
 import { randomUUID } from 'crypto';
 import { subscribe } from '@inngest/realtime';
-import type { Mastra, WorkflowRun, WorkflowRuns } from '@mastra/core';
+import { Agent, Tool } from '@mastra/core';
+import type { Mastra, ToolExecutionContext, WorkflowRun, WorkflowRuns } from '@mastra/core';
 import { RuntimeContext } from '@mastra/core/di';
-import { Workflow, createStep, Run, DefaultExecutionEngine, cloneStep } from '@mastra/core/workflows';
+import { Workflow, Run, DefaultExecutionEngine } from '@mastra/core/workflows';
 import type {
   ExecuteFunction,
   ExecutionContext,
@@ -20,7 +21,7 @@ import { EMITTER_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Span } from '@opentelemetry/api';
 import type { Inngest, BaseContext } from 'inngest';
 import { serve as inngestServe } from 'inngest/hono';
-import type { z } from 'zod';
+import { z } from 'zod';
 
 export type InngestEngineType = {
   step: any;
@@ -42,10 +43,11 @@ export function serve({ mastra, inngest }: { mastra: Mastra; inngest: Inngest })
 }
 
 export class InngestRun<
+  TEngineType = InngestEngineType,
   TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
   TInput extends z.ZodType<any> = z.ZodType<any>,
   TOutput extends z.ZodType<any> = z.ZodType<any>,
-> extends Run<TSteps, TInput, TOutput> {
+> extends Run<TEngineType, TSteps, TInput, TOutput> {
   private inngest: Inngest;
   serializedStepGraph: SerializedStepFlowEntry[];
   #mastra: Mastra;
@@ -207,12 +209,13 @@ export class InngestRun<
 }
 
 export class InngestWorkflow<
+  TEngineType = InngestEngineType,
   TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
   TWorkflowId extends string = string,
   TInput extends z.ZodType<any> = z.ZodType<any>,
   TOutput extends z.ZodType<any> = z.ZodType<any>,
   TPrevSchema extends z.ZodType<any> = TInput,
-> extends Workflow<TSteps, TWorkflowId, TInput, TOutput, InngestEngineType, TPrevSchema> {
+> extends Workflow<TEngineType, TSteps, TWorkflowId, TInput, TOutput, TPrevSchema> {
   #mastra: Mastra;
   public inngest: Inngest;
 
@@ -277,11 +280,11 @@ export class InngestWorkflow<
     }
   }
 
-  createRun(options?: { runId?: string }): Run<TSteps, TInput, TOutput> {
+  createRun(options?: { runId?: string }): Run<TEngineType, TSteps, TInput, TOutput> {
     const runIdToUse = options?.runId || randomUUID();
 
     // Return a new Run instance with object parameters
-    const run: Run<TSteps, TInput, TOutput> =
+    const run: Run<TEngineType, TSteps, TInput, TOutput> =
       this.runs.get(runIdToUse) ??
       new InngestRun(
         {
@@ -375,29 +378,185 @@ export class InngestWorkflow<
   }
 }
 
-function cloneWorkflow<
-  TWorkflowId extends string = string,
-  TInput extends z.ZodType<any> = z.ZodType<any>,
-  TOutput extends z.ZodType<any> = z.ZodType<any>,
-  TSteps extends Step<string, any, any, any, any>[] = Step<string, any, any, any, any>[],
->(
-  workflow: InngestWorkflow<TSteps, string, TInput, TOutput>,
-  opts: { id: TWorkflowId },
-): InngestWorkflow<TSteps, TWorkflowId, TInput, TOutput> {
-  const wf = new InngestWorkflow(
-    {
-      id: opts.id,
-      inputSchema: workflow.inputSchema,
-      outputSchema: workflow.outputSchema,
-      steps: workflow.stepDefs,
-      mastra: workflow.mastra,
-    },
-    workflow.inngest,
-  );
+export function createStep<
+  TStepId extends string,
+  TStepInput extends z.ZodType<any>,
+  TStepOutput extends z.ZodType<any>,
+  TResumeSchema extends z.ZodType<any>,
+  TSuspendSchema extends z.ZodType<any>,
+>(params: {
+  id: TStepId;
+  description?: string;
+  inputSchema: TStepInput;
+  outputSchema: TStepOutput;
+  resumeSchema?: TResumeSchema;
+  suspendSchema?: TSuspendSchema;
+  execute: ExecuteFunction<
+    z.infer<TStepInput>,
+    z.infer<TStepOutput>,
+    z.infer<TResumeSchema>,
+    z.infer<TSuspendSchema>,
+    InngestEngineType
+  >;
+}): Step<TStepId, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType>;
 
-  wf.setStepFlow(workflow.stepGraph);
-  wf.commit();
-  return wf;
+export function createStep<
+  TStepId extends string,
+  TStepInput extends z.ZodObject<{ prompt: z.ZodString }>,
+  TStepOutput extends z.ZodObject<{ text: z.ZodString }>,
+  TResumeSchema extends z.ZodType<any>,
+  TSuspendSchema extends z.ZodType<any>,
+>(
+  agent: Agent<TStepId, any, any>,
+): Step<TStepId, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType>;
+
+export function createStep<
+  TSchemaIn extends z.ZodType<any>,
+  TSchemaOut extends z.ZodType<any>,
+  TContext extends ToolExecutionContext<TSchemaIn>,
+>(
+  tool: Tool<TSchemaIn, TSchemaOut, TContext> & {
+    inputSchema: TSchemaIn;
+    outputSchema: TSchemaOut;
+    execute: (context: TContext) => Promise<any>;
+  },
+): Step<string, TSchemaIn, TSchemaOut, z.ZodType<any>, z.ZodType<any>, InngestEngineType>;
+
+export function createStep<
+  TStepId extends string,
+  TStepInput extends z.ZodType<any>,
+  TStepOutput extends z.ZodType<any>,
+  TResumeSchema extends z.ZodType<any>,
+  TSuspendSchema extends z.ZodType<any>,
+>(
+  params:
+    | {
+        id: TStepId;
+        description?: string;
+        inputSchema: TStepInput;
+        outputSchema: TStepOutput;
+        resumeSchema?: TResumeSchema;
+        suspendSchema?: TSuspendSchema;
+        execute: ExecuteFunction<
+          z.infer<TStepInput>,
+          z.infer<TStepOutput>,
+          z.infer<TResumeSchema>,
+          z.infer<TSuspendSchema>,
+          InngestEngineType
+        >;
+      }
+    | Agent<any, any, any>
+    | (Tool<TStepInput, TStepOutput, any> & {
+        inputSchema: TStepInput;
+        outputSchema: TStepOutput;
+        execute: (context: ToolExecutionContext<TStepInput>) => Promise<any>;
+      }),
+): Step<TStepId, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType> {
+  if (params instanceof Agent) {
+    return {
+      id: params.name,
+      // @ts-ignore
+      inputSchema: z.object({
+        prompt: z.string(),
+        // resourceId: z.string().optional(),
+        // threadId: z.string().optional(),
+      }),
+      // @ts-ignore
+      outputSchema: z.object({
+        text: z.string(),
+      }),
+      execute: async ({ inputData, [EMITTER_SYMBOL]: emitter, runtimeContext }) => {
+        let streamPromise = {} as {
+          promise: Promise<string>;
+          resolve: (value: string) => void;
+          reject: (reason?: any) => void;
+        };
+
+        streamPromise.promise = new Promise((resolve, reject) => {
+          streamPromise.resolve = resolve;
+          streamPromise.reject = reject;
+        });
+        const toolData = {
+          name: params.name,
+          args: inputData,
+        };
+        await emitter.emit('watch-v2', {
+          type: 'tool-call-streaming-start',
+          ...toolData,
+        });
+        const { fullStream } = await params.stream(inputData.prompt, {
+          // resourceId: inputData.resourceId,
+          // threadId: inputData.threadId,
+          runtimeContext,
+          onFinish: result => {
+            streamPromise.resolve(result.text);
+          },
+        });
+
+        for await (const chunk of fullStream) {
+          switch (chunk.type) {
+            case 'text-delta':
+              await emitter.emit('watch-v2', {
+                type: 'tool-call-delta',
+                ...toolData,
+                argsTextDelta: chunk.textDelta,
+              });
+              break;
+
+            case 'step-start':
+            case 'step-finish':
+            case 'finish':
+              break;
+
+            case 'tool-call':
+            case 'tool-result':
+            case 'tool-call-streaming-start':
+            case 'tool-call-delta':
+            case 'source':
+            case 'file':
+            default:
+              await emitter.emit('watch-v2', chunk);
+              break;
+          }
+        }
+
+        return {
+          text: await streamPromise.promise,
+        };
+      },
+    };
+  }
+
+  if (params instanceof Tool) {
+    if (!params.inputSchema || !params.outputSchema) {
+      throw new Error('Tool must have input and output schemas defined');
+    }
+
+    return {
+      // TODO: tool probably should have strong id type
+      // @ts-ignore
+      id: params.id,
+      inputSchema: params.inputSchema,
+      outputSchema: params.outputSchema,
+      execute: async ({ inputData, mastra, runtimeContext }) => {
+        return params.execute({
+          context: inputData,
+          mastra,
+          runtimeContext,
+        });
+      },
+    };
+  }
+
+  return {
+    id: params.id,
+    description: params.description,
+    inputSchema: params.inputSchema,
+    outputSchema: params.outputSchema,
+    resumeSchema: params.resumeSchema,
+    suspendSchema: params.suspendSchema,
+    execute: params.execute,
+  };
 }
 
 export function init(inngest: Inngest) {
@@ -406,34 +565,58 @@ export function init(inngest: Inngest) {
       TWorkflowId extends string = string,
       TInput extends z.ZodType<any> = z.ZodType<any>,
       TOutput extends z.ZodType<any> = z.ZodType<any>,
-      TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
-    >(params: WorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>) {
-      return new InngestWorkflow(params, inngest);
-    },
-    createStep<
-      TStepId extends string,
-      TStepInput extends z.ZodType<any>,
-      TStepOutput extends z.ZodType<any>,
-      TResumeSchema extends z.ZodType<any>,
-      TSuspendSchema extends z.ZodType<any>,
-    >(params: {
-      id: TStepId;
-      inputSchema: TStepInput;
-      outputSchema: TStepOutput;
-      resumeSchema?: TResumeSchema;
-      suspendSchema?: TSuspendSchema;
-      execute: ExecuteFunction<
-        z.infer<TStepInput>,
-        z.infer<TStepOutput>,
-        z.infer<TResumeSchema>,
-        z.infer<TSuspendSchema>,
+      TSteps extends Step<string, any, any, any, any, InngestEngineType>[] = Step<
+        string,
+        any,
+        any,
+        any,
+        any,
         InngestEngineType
-      >;
-    }) {
-      return createStep<TStepId, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType>(params);
+      >[],
+    >(params: WorkflowConfig<TWorkflowId, TInput, TOutput, TSteps>) {
+      return new InngestWorkflow<InngestEngineType, TSteps, TWorkflowId, TInput, TOutput, TInput>(params, inngest);
     },
-    cloneStep,
-    cloneWorkflow,
+    createStep,
+    cloneStep<TStepId extends string>(
+      step: Step<string, any, any, any, any, InngestEngineType>,
+      opts: { id: TStepId },
+    ): Step<TStepId, any, any, any, any, InngestEngineType> {
+      return {
+        id: opts.id,
+        description: step.description,
+        inputSchema: step.inputSchema,
+        outputSchema: step.outputSchema,
+        execute: step.execute,
+      };
+    },
+    cloneWorkflow<
+      TWorkflowId extends string = string,
+      TInput extends z.ZodType<any> = z.ZodType<any>,
+      TOutput extends z.ZodType<any> = z.ZodType<any>,
+      TSteps extends Step<string, any, any, any, any, InngestEngineType>[] = Step<
+        string,
+        any,
+        any,
+        any,
+        any,
+        InngestEngineType
+      >[],
+    >(
+      workflow: Workflow<InngestEngineType, TSteps, string, TInput, TOutput, TInput>,
+      opts: { id: TWorkflowId },
+    ): Workflow<InngestEngineType, TSteps, TWorkflowId, TInput, TOutput, TInput> {
+      const wf = new Workflow({
+        id: opts.id,
+        inputSchema: workflow.inputSchema,
+        outputSchema: workflow.outputSchema,
+        steps: workflow.stepDefs,
+        mastra: workflow.mastra,
+      });
+
+      wf.setStepFlow(workflow.stepGraph);
+      wf.commit();
+      return wf;
+    },
   };
 }
 
