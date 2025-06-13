@@ -32,7 +32,11 @@ export const WorkflowLogsContainer = ({ runId }: WorkflowLogsContainerProps) => 
 
   const { fromDate, toDate } = useMemo(() => generateFromToDate(filters.dateRange), [filters.dateRange]);
 
-  const { data: logs = [], isLoading } = useLogsByRunId(runId, {
+  const {
+    data: logs = [],
+    isLoading,
+    setEndOfListElement,
+  } = useLogsByRunId(runId, {
     logLevel: filters.logLevel === 'all' ? undefined : filters.logLevel,
     fromDate,
     toDate,
@@ -41,12 +45,12 @@ export const WorkflowLogsContainer = ({ runId }: WorkflowLogsContainerProps) => 
   return (
     <div
       className={clsx(
-        'z-20 fixed  bg-surface3 border-t-sm border-border1 transition-all duration-300 right-[13px] overflow-hidden rounded-b-lg',
+        'z-20 fixed bg-surface3 border-t-sm border-border1 transition-all duration-300 right-[13px] overflow-hidden rounded-b-lg flex flex-col',
         expanded ? 'translate-y-0 h-1/2 bottom-3' : 'translate-y-[calc(100%-32px)] h-content bottom-5',
         open ? 'left-[173px]' : 'left-14',
       )}
     >
-      <Header>
+      <Header className="shrink-0">
         <LogsIcon />
         <button
           className="text-left w-full h-full flex items-center justify-between"
@@ -60,12 +64,13 @@ export const WorkflowLogsContainer = ({ runId }: WorkflowLogsContainerProps) => 
       </Header>
 
       {expanded ? (
-        <div className="flex items-stretch h-full">
+        <div className="flex items-stretch grow min-h-0">
           <LogsFiltersForm value={filters} onChange={setFilters} />
 
           {hasTransport ? (
-            <div className={'overflow-y-auto h-full'}>
+            <div className={'overflow-y-auto'}>
               <WorkflowLogs logs={logs ?? []} isLoading={isLoading || isLoadingTransports} />
+              <div ref={setEndOfListElement} className="h-20" />
             </div>
           ) : (
             <div className="w-full flex items-center justify-center h-full">
