@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import { Readable } from 'stream';
 
 import { MastraVoice } from '@mastra/core/voice';
@@ -19,12 +20,12 @@ export class SpeechifyVoice extends MastraVoice {
     super({
       speechModel: {
         name: speechModel?.name ?? 'simba-english',
-        apiKey: speechModel?.apiKey ?? process.env.SPEECHIFY_API_KEY,
+        apiKey: speechModel?.apiKey ?? env.SPEECHIFY_API_KEY,
       },
       speaker: speaker ?? 'george',
     });
 
-    const apiKey = speechModel?.apiKey ?? process.env.SPEECHIFY_API_KEY;
+    const apiKey = speechModel?.apiKey ?? env.SPEECHIFY_API_KEY;
     if (!apiKey) {
       throw new Error('SPEECHIFY_API_KEY is not set');
     }

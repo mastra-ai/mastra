@@ -1,4 +1,5 @@
 import { spawn } from 'child_process';
+import { env } from 'node:process';
 import path from 'path';
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
@@ -21,7 +22,7 @@ describe('MCPClient', () => {
     weatherServerPort = 60000 + Math.floor(Math.random() * 1000); // Generate a random port
     // Start the weather SSE server
     weatherProcess = spawn('npx', ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/weather.ts')], {
-      env: { ...process.env, WEATHER_SERVER_PORT: String(weatherServerPort) }, // Pass port as env var
+      env: { ...env, WEATHER_SERVER_PORT: String(weatherServerPort) }, // Pass port as env var
     });
 
     // Wait for SSE server to be ready
@@ -478,7 +479,7 @@ describe('MCPClient', () => {
               `
             const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
             const server = new Server({ name: 'test', version: '1.0.0' });
-            setTimeout(() => process.exit(0), 2000); // 2 second delay
+            setTimeout(() => exit(0), 2000); // 2 second delay
           `,
             ],
           },
@@ -504,7 +505,7 @@ describe('MCPClient', () => {
               `
             const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
             const server = new Server({ name: 'test', version: '1.0.0' });
-            setTimeout(() => process.exit(0), 2000); // 2 second delay
+            setTimeout(() => exit(0), 2000); // 2 second delay
           `,
             ],
             timeout: 3000, // Server-specific timeout of 3s
@@ -528,7 +529,7 @@ describe('MCPClient', () => {
         servers: {
           slowServer: {
             command: 'node',
-            args: ['-e', 'setTimeout(() => process.exit(0), 65000)'], // Simulate a server that takes 65 seconds to start
+            args: ['-e', 'setTimeout(() => exit(0), 65000)'], // Simulate a server that takes 65 seconds to start
             timeout: 1000,
           },
         },
@@ -545,7 +546,7 @@ describe('MCPClient', () => {
         servers: {
           slowServer: {
             command: 'node',
-            args: ['-e', 'setTimeout(() => process.exit(0), 1000)'], // Simulate a server that takes 1 second to start
+            args: ['-e', 'setTimeout(() => exit(0), 1000)'], // Simulate a server that takes 1 second to start
           },
         },
       });
@@ -563,11 +564,11 @@ describe('MCPClient', () => {
         servers: {
           quickServer: {
             command: 'node',
-            args: ['-e', 'setTimeout(() => process.exit(0), 2000)'], // Takes 2 seconds to exit
+            args: ['-e', 'setTimeout(() => exit(0), 2000)'], // Takes 2 seconds to exit
           },
           slowServer: {
             command: 'node',
-            args: ['-e', 'setTimeout(() => process.exit(0), 2000)'], // Takes 2 seconds to exit
+            args: ['-e', 'setTimeout(() => exit(0), 2000)'], // Takes 2 seconds to exit
             timeout: 3000, // But has a longer timeout
           },
         },

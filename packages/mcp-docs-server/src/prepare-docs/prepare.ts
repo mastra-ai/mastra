@@ -1,3 +1,4 @@
+import { env, exit } from 'node:process';
 import { log } from '../utils.js';
 import { prepareCodeExamples } from './code-examples.js';
 import { copyRaw } from './copy-raw.js';
@@ -13,11 +14,11 @@ export async function prepare() {
   log('Documentation preparation complete!');
 }
 
-if (process.env.PREPARE === `true`) {
+if (env.PREPARE === `true`) {
   try {
     await prepare();
   } catch (error) {
     console.error('Error preparing documentation:', error);
-    process.exit(1);
+    exit(1);
   }
 }

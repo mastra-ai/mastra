@@ -1,8 +1,9 @@
+import { env } from 'node:process';
 import { JSDOM } from 'jsdom';
 import { z } from 'zod';
 import { logger } from '../logger';
 
-const BLOG_BASE_URL = process.env.BLOG_URL || 'https://mastra.ai';
+const BLOG_BASE_URL = env.BLOG_URL || 'https://mastra.ai';
 // Helper function to fetch blog posts as markdown
 async function fetchBlogPosts(): Promise<string> {
   void logger.debug('Fetching list of blog posts');

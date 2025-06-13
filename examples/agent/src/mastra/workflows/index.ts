@@ -40,6 +40,8 @@ const step2 = createStep({
   execute: async ({ inputData, mastra }) => {
     const agent = mastra.getAgent('chefAgentResponses');
     const response = await agent.generate(inputData.result);
+    const thread = await mastra.getStorage().getThreadById('123');
+    console.log(thread);
     return {
       result: 'suh',
     };

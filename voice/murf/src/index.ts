@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import { PassThrough } from 'stream';
 
 import { MastraVoice } from '@mastra/core/voice';
@@ -55,7 +56,7 @@ export class MurfVoice extends MastraVoice {
     super({
       speechModel: {
         name: speechModel?.name ?? 'GEN2',
-        apiKey: speechModel?.apiKey ?? process.env.MURF_API_KEY,
+        apiKey: speechModel?.apiKey ?? env.MURF_API_KEY,
       },
       speaker: speaker ?? MURF_VOICES[0],
     });

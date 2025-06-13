@@ -1,5 +1,6 @@
 import { spawn } from 'child_process';
 import fs from 'fs';
+import * as process from 'node:process';
 import { join } from 'path';
 import { isWebContainer } from '@webcontainer/env';
 import { logger } from '../../utils/logger';

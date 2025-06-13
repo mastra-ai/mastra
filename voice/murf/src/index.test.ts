@@ -1,5 +1,6 @@
 import { mkdirSync } from 'fs';
 import { writeFile, stat as fsStat } from 'fs/promises';
+import { cwd } from 'node:process';
 import path, { join } from 'path';
 import { Readable } from 'stream';
 import { describe, expect, it, beforeAll } from 'vitest';
@@ -14,7 +15,7 @@ describe('MurfVoice', () => {
     speaker: 'en-US-natalie',
   });
 
-  const outputDir = path.join(process.cwd(), 'test-outputs');
+  const outputDir = path.join(cwd(), 'test-outputs');
   beforeAll(() => {
     // Create output directory if it doesn't exist
     try {

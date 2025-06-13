@@ -1,5 +1,6 @@
 import { createWriteStream, createReadStream, mkdirSync } from 'fs';
 import { writeFile } from 'fs/promises';
+import { env } from 'node:process';
 import path from 'path';
 import { Readable } from 'stream';
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -11,12 +12,12 @@ describe('Sarvam AI Voice Integration Tests', () => {
   const voice = new SarvamVoice({
     speechModel: {
       model: 'bulbul:v1',
-      apiKey: process.env.SARVAM_API_KEY!,
+      apiKey: env.SARVAM_API_KEY!,
       language: 'en-IN',
     },
   });
 
-  const outputDir = path.join(process.cwd(), 'test-outputs');
+  const outputDir = path.join(cwd!, 'test-outputs');
   let voiceId: SarvamVoiceId;
 
   beforeEach(async () => {
@@ -131,7 +132,7 @@ describe('Sarvam AI Voice Integration Tests', () => {
   });
 
   it('should transcribe audio from fixture file', async () => {
-    const fixturePath = path.join(process.cwd(), '__fixtures__', 'voice-test.m4a');
+    const fixturePath = path.join(cwd!, '__fixtures__', 'voice-test.m4a');
 
     const audioStream = createReadStream(fixturePath);
 

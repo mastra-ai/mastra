@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { env } from 'node:process';
 import {
   createSampleMessageV1,
   createSampleMessageV2,
@@ -30,9 +31,9 @@ dotenv.config();
 vi.setConfig({ testTimeout: 80000, hookTimeout: 80000 });
 
 const TEST_CONFIG: D1StoreConfig = {
-  accountId: process.env.CLOUDFLARE_ACCOUNT_ID || '',
-  apiToken: process.env.CLOUDFLARE_API_TOKEN || '',
-  databaseId: process.env.D1_DATABASE_ID || '',
+  accountId: env.CLOUDFLARE_ACCOUNT_ID || '',
+  apiToken: env.CLOUDFLARE_API_TOKEN || '',
+  databaseId: env.D1_DATABASE_ID || '',
   tablePrefix: 'test_', // Fixed prefix for test isolation
 };
 

@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import { verifyJwks } from '@mastra/auth';
 import type { JwtPayload } from '@mastra/auth';
 import type { MastraAuthProviderOptions } from '@mastra/core/server';
@@ -17,8 +18,8 @@ export class MastraAuthWorkos extends MastraAuthProvider<WorkosUser> {
   constructor(options?: MastraAuthWorkosOptions) {
     super({ name: options?.name ?? 'workos' });
 
-    const apiKey = options?.apiKey ?? process.env.WORKOS_API_KEY;
-    const clientId = options?.clientId ?? process.env.WORKOS_CLIENT_ID;
+    const apiKey = options?.apiKey ?? env.WORKOS_API_KEY;
+    const clientId = options?.clientId ?? env.WORKOS_CLIENT_ID;
 
     if (!apiKey || !clientId) {
       throw new Error(
@@ -34,7 +35,7 @@ export class MastraAuthWorkos extends MastraAuthProvider<WorkosUser> {
   }
 
   async authenticateToken(token: string): Promise<WorkosUser | null> {
-    const jwksUri = this.workos.userManagement.getJwksUrl(process.env.WORKOS_CLIENT_ID!);
+    const jwksUri = this.workos.userManagement.getJwksUrl(env.WORKOS_CLIENT_ID!);
     const user = await verifyJwks(token, jwksUri);
     return user;
   }

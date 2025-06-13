@@ -1,5 +1,6 @@
 'server-only';
 
+import { env } from 'node:process';
 import { genSaltSync, hashSync } from 'bcrypt-ts';
 import { and, asc, desc, eq, gt } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
@@ -20,7 +21,7 @@ import {
 // Optionally, if not using email/pass login, you can
 // use the Drizzle adapter for Auth.js / NextAuth
 // https://authjs.dev/reference/adapter/drizzle
-let client = postgres(`${process.env.POSTGRES_URL!}`);
+let client = postgres(`${env.POSTGRES_URL!}`);
 let db = drizzle(client);
 
 export async function getUser(email: string): Promise<Array<User>> {

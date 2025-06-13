@@ -1,8 +1,9 @@
+import { env } from 'node:process';
 import type { Message } from 'mem0ai';
 import { describe, it, beforeAll, expect } from 'vitest';
 import { Mem0Integration } from '.';
 
-const API_KEY = process.env.MEM0_API_KEY;
+const API_KEY = env.MEM0_API_KEY;
 if (!API_KEY) throw new Error(`MEM0_API_KEY env var is required for this test to run.`);
 
 describe('mem0', () => {

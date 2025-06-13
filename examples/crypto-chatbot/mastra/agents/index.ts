@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { PostgresStore } from '@mastra/pg';
@@ -9,7 +10,7 @@ import {
   searchCryptoCoins,
 } from '../tools';
 
-const connectionString = process.env.POSTGRES_URL!;
+const connectionString = env.POSTGRES_URL!;
 
 const memory = new Memory({
   storage: new PostgresStore({

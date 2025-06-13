@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import { PassThrough } from 'stream';
 
 import { MastraVoice } from '@mastra/core/voice';
@@ -27,13 +28,13 @@ interface SarvamListenOptions {
 
 const defaultSpeechModel = {
   model: 'bulbul:v1' as const,
-  apiKey: process.env.SARVAM_API_KEY,
+  apiKey: env.SARVAM_API_KEY,
   language: 'en-IN' as const,
 };
 
 const defaultListeningModel = {
   model: 'saarika:v2' as const,
-  apiKey: process.env.SARVAM_API_KEY,
+  apiKey: env.SARVAM_API_KEY,
   language_code: 'unknown' as const,
 };
 

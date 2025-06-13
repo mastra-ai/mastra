@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { exit } from 'node:process';
 import { writeErrorLog } from './logger';
 import { runServer } from './index';
 
@@ -15,5 +16,5 @@ runServer().catch(error => {
           }
         : error,
   });
-  process.exit(1);
+  exit(1);
 });

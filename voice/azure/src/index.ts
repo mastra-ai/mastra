@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import { Readable } from 'stream';
 import { MastraVoice } from '@mastra/core/voice';
 import * as Azure from 'microsoft-cognitiveservices-speech-sdk';
@@ -37,17 +38,17 @@ export class AzureVoice extends MastraVoice {
     super({
       speechModel: {
         name: '',
-        apiKey: speechModel?.apiKey ?? process.env.AZURE_API_KEY,
+        apiKey: speechModel?.apiKey ?? env.AZURE_API_KEY,
       },
       listeningModel: {
         name: '',
-        apiKey: listeningModel?.apiKey ?? process.env.AZURE_API_KEY,
+        apiKey: listeningModel?.apiKey ?? env.AZURE_API_KEY,
       },
       speaker,
     });
 
-    const envApiKey = process.env.AZURE_API_KEY;
-    const envRegion = process.env.AZURE_REGION;
+    const envApiKey = env.AZURE_API_KEY;
+    const envRegion = env.AZURE_REGION;
 
     // Configure speech synthesis
     if (speechModel) {

@@ -1,4 +1,5 @@
 import { createReadStream } from 'fs';
+import { cwd } from 'node:process';
 import path from 'path';
 import { describe, it, expect } from 'vitest';
 import { CloudflareVoice } from './index';
@@ -6,7 +7,7 @@ import { CloudflareVoice } from './index';
 describe('Cloudflare AI Voice Integration Tests', () => {
   const voice = new CloudflareVoice();
   it('should transcribe audio from fixture file', async () => {
-    const fixturePath = path.join(process.cwd(), '__fixtures__', 'voice-test.m4a');
+    const fixturePath = path.join(cwd(), '__fixtures__', 'voice-test.m4a');
 
     const audioStream = createReadStream(fixturePath);
 

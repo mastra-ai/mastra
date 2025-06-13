@@ -1,4 +1,5 @@
 import { existsSync } from 'fs';
+import { cwd, platform } from 'node:process';
 import os from 'os';
 import path from 'path';
 import { ensureFile, readJSON, writeJSON } from 'fs-extra/esm';
@@ -9,7 +10,7 @@ const createMcpConfig = (editor: Editor) => {
     return {
       servers: {
         mastra:
-          process.platform === `win32`
+          platform === `win32`
             ? {
                 command: 'cmd',
                 args: ['/c', 'npx', ...args],
@@ -66,12 +67,12 @@ async function writeMergedConfig(configPath: string, editor: Editor) {
 
 export const windsurfGlobalMCPConfigPath = path.join(os.homedir(), '.codeium', 'windsurf', 'mcp_config.json');
 export const cursorGlobalMCPConfigPath = path.join(os.homedir(), '.cursor', 'mcp.json');
-export const vscodeMCPConfigPath = path.join(process.cwd(), '.vscode', 'mcp.json');
+export const vscodeMCPConfigPath = path.join(cwd(), '.vscode', 'mcp.json');
 export const vscodeGlobalMCPConfigPath = path.join(
   os.homedir(),
-  process.platform === 'win32'
+  platform === 'win32'
     ? path.join('AppData', 'Roaming', 'Code', 'User', 'settings.json')
-    : process.platform === 'darwin'
+    : platform === 'darwin'
       ? path.join('Library', 'Application Support', 'Code', 'User', 'settings.json')
       : path.join('.config', 'Code', 'User', 'settings.json'),
 );

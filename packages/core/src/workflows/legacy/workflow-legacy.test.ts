@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { cwd } from 'node:process';
 import path from 'path';
 import { MockLanguageModelV1 } from 'ai/test';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -2452,7 +2453,7 @@ describe('LegacyWorkflow', async () => {
 
   describe('Suspend and Resume', () => {
     afterAll(async () => {
-      const pathToDb = path.join(process.cwd(), 'mastra.db');
+      const pathToDb = path.join(cwd(), 'mastra.db');
 
       if (fs.existsSync(pathToDb)) {
         fs.rmSync(pathToDb);

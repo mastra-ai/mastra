@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import { createClient } from '@supabase/supabase-js';
 import type { User } from '@supabase/supabase-js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -27,8 +28,8 @@ describe('MastraAuthSupabase', () => {
   beforeEach(() => {
     // Reset environment variables
     vi.resetModules();
-    process.env.SUPABASE_URL = mockSupabaseUrl;
-    process.env.SUPABASE_ANON_KEY = mockSupabaseAnonKey;
+    env.SUPABASE_URL = mockSupabaseUrl;
+    env.SUPABASE_ANON_KEY = mockSupabaseAnonKey;
 
     // Setup mock Supabase client
     mockSupabaseClient = {
@@ -58,8 +59,8 @@ describe('MastraAuthSupabase', () => {
     });
 
     it('should throw error when required credentials are missing', () => {
-      delete process.env.SUPABASE_URL;
-      delete process.env.SUPABASE_ANON_KEY;
+      delete env.SUPABASE_URL;
+      delete env.SUPABASE_ANON_KEY;
 
       expect(() => new MastraAuthSupabase()).toThrow('Supabase URL and anon key are required');
     });

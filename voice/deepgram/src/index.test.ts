@@ -1,4 +1,5 @@
 import { writeFileSync, mkdirSync, createReadStream } from 'fs';
+import { cwd } from 'node:process';
 import path from 'path';
 import { PassThrough } from 'stream';
 import { describe, expect, it, beforeAll } from 'vitest';
@@ -7,7 +8,7 @@ import { DeepgramVoice } from './index.js';
 
 describe('DeepgramVoice Integration Tests', () => {
   let voice: DeepgramVoice;
-  const outputDir = path.join(process.cwd(), 'test-outputs');
+  const outputDir = path.join(cwd(), 'test-outputs');
 
   beforeAll(() => {
     try {
@@ -108,7 +109,7 @@ describe('DeepgramVoice Integration Tests', () => {
     }, 15000);
 
     it('should transcribe audio from fixture file', async () => {
-      const fixturePath = path.join(process.cwd(), '__fixtures__', 'voice-test.m4a');
+      const fixturePath = path.join(cwd(), '__fixtures__', 'voice-test.m4a');
       const audioStream = createReadStream(fixturePath);
 
       console.log('listening to audio stream');

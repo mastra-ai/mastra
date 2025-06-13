@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { LegacyStep, LegacyWorkflow } from '@mastra/core/workflows/legacy';

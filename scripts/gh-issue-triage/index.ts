@@ -2,14 +2,14 @@ import { Octokit } from 'octokit';
 import { MCPClient } from '@mastra/mcp';
 import { MastraClient } from '@mastra/client-js';
 
-const GITHUB_PERSONAL_ACCESS_TOKEN = process.env.GITHUB_PERSONAL_ACCESS_TOKEN;
-const OWNER = process.env.OWNER;
-const REPO = process.env.REPO;
-const ISSUE_NUMBER = process.env.ISSUE_NUMBER;
-const MASTRA_BASE_URL = process.env.MASTRA_BASE_URL;
-const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN;
-const SLACK_TEAM_ID = process.env.SLACK_TEAM_ID;
-const CHANNEL_ID = process.env.CHANNEL_ID;
+const GITHUB_PERSONAL_ACCESS_TOKEN = env.GITHUB_PERSONAL_ACCESS_TOKEN;
+const OWNER = env.OWNER;
+const REPO = env.REPO;
+const ISSUE_NUMBER = env.ISSUE_NUMBER;
+const MASTRA_BASE_URL = env.MASTRA_BASE_URL;
+const SLACK_BOT_TOKEN = env.SLACK_BOT_TOKEN;
+const SLACK_TEAM_ID = env.SLACK_TEAM_ID;
+const CHANNEL_ID = env.CHANNEL_ID;
 
 const mappings = {
   abhiaiyer91: 'U06CK1L4Y94',
@@ -30,12 +30,12 @@ const mappings = {
 async function main() {
   if (!GITHUB_PERSONAL_ACCESS_TOKEN || !OWNER || !REPO || !ISSUE_NUMBER) {
     console.error('Missing environment variables');
-    process.exit(1);
+    exit(1);
   }
 
   if (!SLACK_BOT_TOKEN || !SLACK_TEAM_ID || !CHANNEL_ID) {
     console.error('Missing slack environment variables');
-    process.exit(1);
+    exit(1);
   }
 
   const mcpClient = new MCPClient({
@@ -136,9 +136,9 @@ async function main() {
 main()
   .then(() => {
     console.log('Issue triaged successfully');
-    process.exit(0);
+    exit(0);
   })
   .catch(e => {
     console.error(e);
-    process.exit(1);
+    exit(1);
   });
