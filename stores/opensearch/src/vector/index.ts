@@ -133,30 +133,18 @@ export class OpenSearchVector extends MastraVector {
    * @returns A promise that resolves to the index statistics including dimension, count and metric
    */
   async describeIndex({ indexName }: DescribeIndexParams): Promise<IndexStats> {
-    try {
-      const { body: indexInfo } = await this.client.indices.get({ index: indexName });
-      const mappings = indexInfo[indexName]?.mappings;
-      const embedding: any = mappings?.properties?.embedding;
-      const spaceType = embedding.method.space_type as keyof typeof REVERSE_METRIC_MAPPING;
+    const { body: indexInfo } = await this.client.indices.get({ index: indexName });
+    const mappings = indexInfo[indexName]?.mappings;
+    const embedding: any = mappings?.properties?.embedding;
+    const spaceType = embedding.method.space_type as keyof typeof REVERSE_METRIC_MAPPING;
 
-      const { body: countInfo } = await this.client.count({ index: indexName });
+    const { body: countInfo } = await this.client.count({ index: indexName });
 
-      return {
-        dimension: Number(embedding.dimension),
-        count: Number(countInfo.count),
-        metric: REVERSE_METRIC_MAPPING[spaceType],
-      };
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'STORAGE_OPENSEARCH_VECTOR_DESCRIBE_INDEX_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { indexName },
-        },
-        error,
-      );
-    }
+    return {
+      dimension: Number(embedding.dimension),
+      count: Number(countInfo.count),
+      metric: REVERSE_METRIC_MAPPING[spaceType],
+    };
   }
 
   /**
@@ -169,7 +157,7 @@ export class OpenSearchVector extends MastraVector {
     try {
       await this.client.indices.delete({ index: indexName });
     } catch (error) {
-      throw new MastraError(
+      const mastraError = new MastraError(
         {
           id: 'STORAGE_OPENSEARCH_VECTOR_DELETE_INDEX_FAILED',
           domain: ErrorDomain.STORAGE,
@@ -178,6 +166,8 @@ export class OpenSearchVector extends MastraVector {
         },
         error,
       );
+      this.logger?.error(mastraError.toString());
+      this.logger?.trackException(mastraError);
     }
   }
 
@@ -349,7 +339,7 @@ export class OpenSearchVector extends MastraVector {
       if (!body || !body._source) {
         throw new Error(`Document with ID ${id} has no source data in index ${indexName}`);
       }
-      existingDoc = body._source;
+      existingDoc = body;
     } catch (error) {
       throw new MastraError(
         {
@@ -364,20 +354,22 @@ export class OpenSearchVector extends MastraVector {
 
     const source = existingDoc._source;
     const updatedDoc: Record<string, any> = {
-      id: source.id || id,
+      id: source?.id || id,
     };
 
     try {
       // Update vector if provided
       if (update.vector) {
         // Get index stats to check dimension
+        console.log(`1`);
         const indexInfo = await this.describeIndex({ indexName });
 
         // Validate vector dimensions
+        console.log(`2`);
         this.validateVectorDimensions([update.vector], indexInfo.dimension);
 
         updatedDoc.embedding = update.vector;
-      } else if (source.embedding) {
+      } else if (source?.embedding) {
         updatedDoc.embedding = source.embedding;
       }
 
@@ -385,10 +377,11 @@ export class OpenSearchVector extends MastraVector {
       if (update.metadata) {
         updatedDoc.metadata = update.metadata;
       } else {
-        updatedDoc.metadata = source.metadata || {};
+        updatedDoc.metadata = source?.metadata || {};
       }
 
       // Update the document
+      console.log(`3`);
       await this.client.index({
         index: indexName,
         id: id,
