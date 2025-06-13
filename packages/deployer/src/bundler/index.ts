@@ -194,6 +194,7 @@ export abstract class Bundler extends MastraBundler {
     mastraEntryFile: string,
     outputDirectory: string,
     toolsPaths: string[] = [],
+    customExternals: string[] = [],
     bundleLocation: string = join(outputDirectory, this.outputDir),
   ): Promise<void> {
     this.logger.info('Start bundling Mastra');
@@ -204,6 +205,7 @@ export abstract class Bundler extends MastraBundler {
       join(outputDirectory, this.analyzeOutputDir),
       'node',
       this.logger,
+      customExternals,
     );
 
     const { externalDependencies } = await writeTelemetryConfig(mastraEntryFile, join(outputDirectory, this.outputDir));

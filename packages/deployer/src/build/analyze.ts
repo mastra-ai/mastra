@@ -374,17 +374,21 @@ export async function analyzeBundle(
   outputDir: string,
   platform: 'node' | 'browser',
   logger: IMastraLogger,
+  customExternals?: string[],
 ) {
   const isVirtualFile = entry.includes('\n') || !existsSync(entry);
 
   const depsToOptimize = await analyze(entry, mastraEntry, isVirtualFile, platform, logger);
-  const customExternals = (await getBundlerOptions(mastraEntry, outputDir))?.externals;
+  const bundlerOptionsExternals = (await getBundlerOptions(mastraEntry, outputDir))?.externals;
+
+  // Combine customExternals with bundlerOptionsExternals
+  const allCustomExternals = [...(customExternals || []), ...(bundlerOptionsExternals || [])];
 
   const { output, reverseVirtualReferenceMap, usedExternals } = await bundleExternals(
     depsToOptimize,
     outputDir,
     logger,
-    customExternals,
+    allCustomExternals,
   );
   const result = await validateOutput({ output, reverseVirtualReferenceMap, usedExternals, outputDir }, logger);
 

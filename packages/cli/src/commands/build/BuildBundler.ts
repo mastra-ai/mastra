@@ -1,12 +1,38 @@
 import { FileService } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
+import fs from 'fs';
+import path from 'path';
 
 export class BuildBundler extends Bundler {
   private customEnvFile?: string;
+  private userExternal: string[] = [];
 
-  constructor(customEnvFile?: string) {
+  constructor(
+    customEnvFile?: string,
+    private projectRoot: string = process.cwd(),
+  ) {
     super('Build');
     this.customEnvFile = customEnvFile;
+    this.userExternal = this.getUserExternal();
+  }
+
+  /**
+   * Read package.json
+   */
+  private getUserExternal(): string[] {
+    try {
+      const pkgPath = path.resolve(this.projectRoot, 'package.json');
+      if (fs.existsSync(pkgPath)) {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+        if (Array.isArray(pkg.mastraBuildExternal)) {
+          console.log('Mastra External !!', pkg.mastraBuildExternal);
+          return pkg.mastraBuildExternal;
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+    return [];
   }
 
   getEnvFiles(): Promise<string[]> {
@@ -32,7 +58,7 @@ export class BuildBundler extends Bundler {
   }
 
   async bundle(entryFile: string, outputDirectory: string, toolsPaths: string[]): Promise<void> {
-    return this._bundle(this.getEntry(), entryFile, outputDirectory, toolsPaths);
+    return this._bundle(this.getEntry(), entryFile, outputDirectory, toolsPaths, this.userExternal);
   }
 
   protected getEntry(): string {

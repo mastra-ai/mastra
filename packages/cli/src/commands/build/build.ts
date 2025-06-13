@@ -30,7 +30,7 @@ export async function build({
 
     const platformDeployer = await getDeployer(mastraEntryFile, outputDirectory);
     if (!platformDeployer) {
-      const deployer = new BuildBundler(env);
+      const deployer = new BuildBundler(env, rootDir);
       await deployer.prepare(outputDirectory);
       await deployer.bundle(mastraEntryFile, outputDirectory, discoveredTools);
       logger.info(`Build successful, you can now deploy the .mastra/output directory to your target platform.`);
