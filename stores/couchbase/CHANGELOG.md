@@ -1,5 +1,17 @@
 # @mastra/couchbase
 
+## 0.10.3-alpha.0
+
+### Patch Changes
+
+- 63f6b7d: dependencies updates:
+  - Updated dependency [`couchbase@^4.5.0` ↗︎](https://www.npmjs.com/package/couchbase/v/4.5.0) (from `^4.4.5`, in `dependencies`)
+- Updated dependencies [63f6b7d]
+- Updated dependencies [36f1c36]
+- Updated dependencies [10d352e]
+- Updated dependencies [53d3c37]
+  - @mastra/core@0.10.6-alpha.0
+
 ## 0.10.2
 
 ### Patch Changes
