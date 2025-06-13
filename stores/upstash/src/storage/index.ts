@@ -1,3 +1,4 @@
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
 import type { StorageThreadType, MastraMessageV1, MastraMessageV2 } from '@mastra/core/memory';
 import {
@@ -22,7 +23,6 @@ import type {
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { Redis } from '@upstash/redis';
 import { MessageList } from '../../../../packages/core/dist/agent/index.cjs';
-import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 
 export interface UpstashConfig {
   url: string;
