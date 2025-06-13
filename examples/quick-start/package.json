@@ -17,7 +17,7 @@
     "zod": "^3.25.56"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^1.1.15",
+    "@ai-sdk/anthropic": "^1.2.12",
     "@ai-sdk/groq": "latest",
     "@ai-sdk/openai": "latest",
     "@mastra/core": "latest",
