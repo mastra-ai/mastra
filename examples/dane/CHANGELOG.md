@@ -1,5 +1,12 @@
 # @mastra/dane
 
+## 0.0.27-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [704d1ca]
+  - @mastra/upstash@0.11.0-alpha.0
+
 ## 0.0.27-alpha.0
 
 ### Patch Changes

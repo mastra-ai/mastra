@@ -1,5 +1,11 @@
 # mastra
 
+## 0.10.6-alpha.1
+
+### Patch Changes
+
+- 47e7029: Add open browser functionality when running mastra dev
+
 ## 0.10.6-alpha.0
 
 ### Patch Changes
