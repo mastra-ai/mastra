@@ -6,12 +6,14 @@ import { isWebContainer } from '@webcontainer/env';
 import { execa } from 'execa';
 import getPort from 'get-port';
 
+import { openBrowser } from '../../services/browser';
 import { logger } from '../../utils/logger.js';
 
 import { DevBundler } from './DevBundler';
 
 let currentServerProcess: ChildProcess | undefined;
 let isRestarting = false;
+let isInitialServerStart = true;
 const ON_ERROR_MAX_RESTARTS = 3;
 
 const startServer = async (dotMastraPath: string, port: number, env: Map<string, string>, errorRestartCount = 0) => {
@@ -27,17 +29,6 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
       commands.push('--import=./instrumentation.mjs', `--import=${instrumentation}`);
     }
 
-    let portToUse = port.toString() || process.env.PORT;
-    if (!portToUse || isNaN(Number(portToUse))) {
-      const portList = Array.from({ length: 21 }, (_, i) => 4111 + i);
-
-      portToUse = String(
-        await getPort({
-          port: portList,
-        }),
-      );
-    }
-
     commands.push('index.mjs');
     currentServerProcess = execa('node', commands, {
       cwd: dotMastraPath,
@@ -45,7 +36,7 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
         NODE_ENV: 'production',
         ...Object.fromEntries(env),
         MASTRA_DEV: 'true',
-        PORT: portToUse.toString(),
+        PORT: port.toString(),
         MASTRA_DEFAULT_STORAGE_URL: `file:${join(dotMastraPath, '..', 'mastra.db')}`,
       },
       stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
@@ -64,6 +55,11 @@ const startServer = async (dotMastraPath: string, port: number, env: Map<string,
     currentServerProcess.on('message', async (message: any) => {
       if (message?.type === 'server-ready') {
         serverIsReady = true;
+
+        if (isInitialServerStart) {
+          isInitialServerStart = false;
+          void openBrowser(`http://localhost:${port}`, true);
+        }
 
         // Send refresh signal
         try {
@@ -142,11 +138,13 @@ export async function dev({
   dir,
   root,
   tools,
+  env,
 }: {
   dir?: string;
   root?: string;
   port: number | null;
   tools?: string[];
+  env?: string;
 }) {
   const rootDir = root || process.cwd();
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');
@@ -158,23 +156,32 @@ export async function dev({
   const fileService = new FileService();
   const entryFile = fileService.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
 
-  const bundler = new DevBundler();
+  const bundler = new DevBundler(env);
   await bundler.prepare(dotMastraPath);
 
   const watcher = await bundler.watch(entryFile, dotMastraPath, discoveredTools);
 
-  const env = await bundler.loadEnvVars();
+  const loadedEnv = await bundler.loadEnvVars();
 
   const serverOptions = await getServerOptions(entryFile, join(dotMastraPath, 'output'));
 
-  const startPort = port ?? serverOptions?.port ?? 4111;
+  let portToUse = port ?? serverOptions?.port ?? process.env.PORT;
+  if (!portToUse || isNaN(Number(portToUse))) {
+    const portList = Array.from({ length: 21 }, (_, i) => 4111 + i);
 
-  await startServer(join(dotMastraPath, 'output'), startPort, env);
+    portToUse = String(
+      await getPort({
+        port: portList,
+      }),
+    );
+  }
+
+  await startServer(join(dotMastraPath, 'output'), Number(portToUse), loadedEnv);
   watcher.on('event', (event: { code: string }) => {
     if (event.code === 'BUNDLE_END') {
       logger.info('[Mastra Dev] - Bundling finished, restarting server...');
       // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      rebundleAndRestart(dotMastraPath, startPort, bundler);
+      rebundleAndRestart(dotMastraPath, Number(portToUse), bundler);
     }
   });
 

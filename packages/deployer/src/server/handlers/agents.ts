@@ -26,11 +26,13 @@ export async function getAgentByIdHandler(c: Context) {
   const mastra: Mastra = c.get('mastra');
   const agentId = c.req.param('agentId');
   const runtimeContext: RuntimeContext = c.get('runtimeContext');
+  const isPlayground = c.req.header('x-mastra-dev-playground') === 'true';
 
   const result = await getOriginalAgentByIdHandler({
     mastra,
     agentId,
     runtimeContext,
+    isPlayground,
   });
 
   return c.json(result);

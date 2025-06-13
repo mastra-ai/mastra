@@ -66,7 +66,6 @@ describe('Tools Handlers', () => {
           mastra: new Mastra({ logger: false }),
           data: {},
           runtimeContext: new RuntimeContext(),
-          runtimeContextFromRequest: {},
         }),
       ).rejects.toThrow('Tool ID is required');
     });
@@ -78,7 +77,6 @@ describe('Tools Handlers', () => {
           toolId: 'non-existent',
           data: {},
           runtimeContext: new RuntimeContext(),
-          runtimeContextFromRequest: {},
         }),
       ).rejects.toThrow('Tool not found');
     });
@@ -94,7 +92,6 @@ describe('Tools Handlers', () => {
           toolId: nonExecutableTool.id,
           data: {},
           runtimeContext: new RuntimeContext(),
-          runtimeContextFromRequest: {},
         }),
       ).rejects.toThrow('Tool is not executable');
     });
@@ -106,7 +103,6 @@ describe('Tools Handlers', () => {
           toolId: mockTool.id,
           data: null,
           runtimeContext: new RuntimeContext(),
-          runtimeContextFromRequest: {},
         }),
       ).rejects.toThrow('Argument "data" is required');
     });
@@ -125,7 +121,6 @@ describe('Tools Handlers', () => {
         runId: 'test-run',
         runtimeContext: runtimeContext,
         data: context,
-        runtimeContextFromRequest: {},
       });
 
       expect(result).toEqual(mockResult);
@@ -147,7 +142,6 @@ describe('Tools Handlers', () => {
         toolId: `tool`,
         runtimeContext: new RuntimeContext(),
         data: { test: 'data' },
-        runtimeContextFromRequest: {},
       });
 
       expect(result).toEqual(mockResult);
@@ -171,7 +165,6 @@ describe('Tools Handlers', () => {
           toolId: mockTool.id,
           data: {},
           runtimeContext: new RuntimeContext(),
-          runtimeContextFromRequest: {},
         }),
       ).rejects.toThrow('Agent with name non-existent not found');
     });
@@ -187,7 +180,6 @@ describe('Tools Handlers', () => {
           toolId: 'non-existent',
           data: {},
           runtimeContext: new RuntimeContext(),
-          runtimeContextFromRequest: {},
         }),
       ).rejects.toThrow('Tool not found');
     });
@@ -211,7 +203,6 @@ describe('Tools Handlers', () => {
           toolId: nonExecutableTool.id,
           data: {},
           runtimeContext: new RuntimeContext(),
-          runtimeContextFromRequest: {},
         }),
       ).rejects.toThrow('Tool is not executable');
     });
@@ -236,7 +227,6 @@ describe('Tools Handlers', () => {
         toolId: mockTool.id,
         data: context,
         runtimeContext: runtimeContext,
-        runtimeContextFromRequest: {},
       });
 
       expect(result).toEqual(mockResult);
@@ -264,7 +254,6 @@ describe('Tools Handlers', () => {
         toolId: `tool`,
         data: {},
         runtimeContext: new RuntimeContext(),
-        runtimeContextFromRequest: {},
       });
 
       expect(result).toEqual(mockResult);

@@ -16,7 +16,7 @@
     "@ai-sdk/openai": "^1.2.1",
     "@mastra/core": "monorepo-test",
     "@inner/inner-tools": "workspace:*",
-    "zod": "^3.24.3"
+    "zod": "^3.25.56"
   },
   "devDependencies": {
     "mastra": "monorepo-test"
