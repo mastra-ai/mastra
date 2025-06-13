@@ -162,7 +162,7 @@ const planActivities = createStep({
     let activitiesText = '';
 
     for await (const chunk of response.textStream) {
-      env.stdout.write(chunk);
+      stdout.write(chunk);
       activitiesText += chunk;
     }
 

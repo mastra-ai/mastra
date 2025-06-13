@@ -1,6 +1,6 @@
 import { createWriteStream, mkdirSync } from 'fs';
 import { writeFile } from 'fs/promises';
-import { env } from 'node:process';
+import { env, cwd } from 'node:process';
 import path from 'path';
 import { Readable } from 'stream';
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -15,7 +15,7 @@ describe('PlayAI Voice Integration Tests', () => {
       userId: env.PLAYAI_USER_ID!,
     },
   });
-  const outputDir = path.join(cwd!, 'test-outputs');
+  const outputDir = path.join(cwd(), 'test-outputs');
   let voiceId: string;
 
   beforeEach(async () => {
