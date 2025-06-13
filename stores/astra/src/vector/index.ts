@@ -1,7 +1,7 @@
 import type { Db } from '@datastax/astra-db-ts';
 import { DataAPIClient, UUID } from '@datastax/astra-db-ts';
-import { MastraVector } from '@mastra/core/vector';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
+import { MastraVector } from '@mastra/core/vector';
 import type {
   QueryResult,
   IndexStats,

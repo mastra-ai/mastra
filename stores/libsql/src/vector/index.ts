@@ -1,6 +1,7 @@
 import { createClient } from '@libsql/client';
 import type { Client as TursoClient, InValue } from '@libsql/client';
 
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { MastraVector } from '@mastra/core/vector';
 import type {
@@ -17,7 +18,6 @@ import type {
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import { LibSQLFilterTranslator } from './filter';
 import { buildFilterQuery } from './sql-builder';
-import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 
 interface LibSQLQueryVectorParams extends QueryVectorParams {
   minScore?: number;

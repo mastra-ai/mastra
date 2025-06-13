@@ -1,3 +1,4 @@
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { MastraVector } from '@mastra/core/vector';
 import type {
@@ -19,7 +20,6 @@ import xxhash from 'xxhash-wasm';
 import { PGFilterTranslator } from './filter';
 import { buildFilterQuery } from './sql-builder';
 import type { IndexConfig, IndexType } from './types';
-import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 
 export interface PGIndexStats extends IndexStats {
   type: IndexType;

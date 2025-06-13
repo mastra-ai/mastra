@@ -1,5 +1,5 @@
-import { MastraVector } from '@mastra/core/vector';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { MastraVector } from '@mastra/core/vector';
 import type {
   QueryResult,
   IndexStats,

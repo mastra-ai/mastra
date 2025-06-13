@@ -1,7 +1,7 @@
 import { connect } from '@lancedb/lancedb';
-import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { Connection, ConnectionOptions, SchemaLike, FieldLike } from '@lancedb/lancedb';
 import { MessageList } from '@mastra/core/agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraMessageV2, StorageThreadType, TraceType } from '@mastra/core/memory';
 import {
   MastraStorage,

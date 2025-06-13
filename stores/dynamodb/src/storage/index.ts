@@ -1,6 +1,7 @@
 import { DynamoDBClient, DescribeTableCommand } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { MessageList } from '@mastra/core/agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { StorageThreadType, MastraMessageV2, MastraMessageV1 } from '@mastra/core/memory';
 
 import {
@@ -25,7 +26,6 @@ import type { Trace } from '@mastra/core/telemetry';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import type { Service } from 'electrodb';
 import { getElectroDbService } from '../entities';
-import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 
 export interface DynamoDBStoreConfig {
   region?: string;

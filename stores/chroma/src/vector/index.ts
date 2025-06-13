@@ -1,3 +1,4 @@
+import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   QueryResult,
@@ -10,7 +11,6 @@ import type {
   DeleteVectorParams,
   UpdateVectorParams,
 } from '@mastra/core/vector';
-import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import { ChromaClient } from 'chromadb';
 import type { UpdateRecordsParams, Collection } from 'chromadb';

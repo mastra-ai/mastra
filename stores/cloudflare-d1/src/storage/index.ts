@@ -1,5 +1,6 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import { MessageList } from '@mastra/core/agent';
+import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
 import type { StorageThreadType, MastraMessageV1, MastraMessageV2 } from '@mastra/core/memory';
 import {
@@ -24,7 +25,6 @@ import type { WorkflowRunState } from '@mastra/core/workflows';
 import Cloudflare from 'cloudflare';
 import { createSqlBuilder } from './sql-builder';
 import type { SqlParam, SqlQueryOptions } from './sql-builder';
-import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 
 /**
  * Configuration for D1 using the REST API

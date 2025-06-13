@@ -1,3 +1,4 @@
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type {
   CreateIndexParams,
   DeleteIndexParams,
@@ -13,7 +14,6 @@ import { MastraVector } from '@mastra/core/vector';
 import { Turbopuffer } from '@turbopuffer/turbopuffer';
 import type { DistanceMetric, QueryResults, Schema, Vector } from '@turbopuffer/turbopuffer';
 import { TurbopufferFilterTranslator } from './filter';
-import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 
 export interface TurbopufferVectorOptions {
   /** The API key to authenticate with. */
