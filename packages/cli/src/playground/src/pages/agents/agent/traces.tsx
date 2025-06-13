@@ -1,4 +1,4 @@
-import { AgentTraces } from '@mastra/playground-ui';
+import { AgentTraces, MainContent } from '@mastra/playground-ui';
 import { useParams } from 'react-router';
 
 import { Skeleton } from '@/components/ui/skeleton';
@@ -19,7 +19,11 @@ function AgentTracesPage() {
     );
   }
 
-  return <AgentTraces traces={traces || []} error={error} className="h-[calc(100vh-40px)]" />;
+  return (
+    <MainContent width="full" className="items-normal content-normal col-span-full">
+      <AgentTraces traces={traces || []} error={error} />
+    </MainContent>
+  );
 }
 
 export default AgentTracesPage;

@@ -25,5 +25,6 @@ const fonts = {
 };
 
 export const Txt = ({ as: Root = 'p', className, variant = 'ui-md', font, ...props }: TxtProps) => {
+  console.log('-->>', variants?.[variant]);
   return <Root className={clsx(variants[variant], font && fonts[font], className)} {...props} />;
 };

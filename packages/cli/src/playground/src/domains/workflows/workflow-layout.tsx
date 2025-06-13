@@ -1,6 +1,6 @@
 import { useParams } from 'react-router';
 
-import { WorkflowRunProvider, Header, HeaderTitle, MainContentLayout } from '@mastra/playground-ui';
+import { WorkflowRunProvider, Header, HeaderTitle, MainLayout } from '@mastra/playground-ui';
 
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -16,13 +16,13 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
 
   if (isWorkflowLoading) {
     return (
-      <MainContentLayout>
+      <MainLayout>
         <Header>
           <HeaderTitle>
             <Skeleton className="h-6 w-[200px]" />
           </HeaderTitle>
         </Header>
-      </MainContentLayout>
+      </MainLayout>
     );
   }
 
@@ -30,10 +30,10 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <WorkflowRunProvider snapshot={typeof run?.snapshot === 'object' ? run.snapshot : undefined}>
-      <MainContentLayout>
+      <MainLayout>
         <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId!} runId={runId} />
         {children}
-      </MainContentLayout>
+      </MainLayout>
     </WorkflowRunProvider>
   );
 };

@@ -110,10 +110,12 @@ export const DataTable = <TData, TValue>({
   const ths = table.getHeaderGroups()[0];
   const rows = table.getRowModel().rows;
 
+  console.log({ rows });
+
   return (
     <div>
       <Table>
-        <Thead className="sticky top-0 bg-surface2">
+        <Thead className="sticky top-0 bg-surface1">
           {ths.headers.map(header => {
             const size = header.column.getSize();
             const meta = header.column.columnDef.meta as { width?: string };
