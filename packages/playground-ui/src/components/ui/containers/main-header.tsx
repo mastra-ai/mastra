@@ -17,7 +17,7 @@ export function MainHeader({
   if (isNarrow) {
     return (
       <header
-        className={cn(' overflow-y-scroll bg-surface1 w-full', className)}
+        className={cn('overflow-y-scroll bg-surface1 w-full', className)}
         style={{ ...style, ...(devStyleRequested ? { border: '3px dotted orange' } : {}) }}
       >
         <div

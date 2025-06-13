@@ -67,57 +67,52 @@ function Agent() {
       defaultGenerateOptions={agent?.defaultGenerateOptions}
       defaultStreamOptions={agent?.defaultStreamOptions}
     >
-      <MainContent width="full" variant="twoColumns">
-        <MainColumn variant="withHeader">
-          <MainHeader width="full" className="sticky top-0 bg-surface1 z-[100]">
-            <AgentHeader agentId={agentId!} />
-          </MainHeader>
-          {content === 'default' && <AgentInformation agentId={agentId!} />}
-          {content === 'log-drains' && <AgentLogs agentId={agentId!} />}
-          {content === 'versions' && <AgentVersions agentId={agentId!} />}
-        </MainColumn>
-        <MainColumn>
-          <div className="h-full grid grid-rows-[auto_1fr]">
-            <div className="pb-6 grid grid-cols-[2fr_1fr] gap-5">
-              <Select>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a thread" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectLabel>Threads</SelectLabel>
-                    {threads?.map(thread => (
-                      <SelectItem key={thread.id} value={thread.id}>
-                        {thread.title}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              <Button
-                variant="default"
-                size="lg"
-                onClick={() => {
-                  console.log('New chat');
-                }}
-              >
-                New chat
-              </Button>
-            </div>
-            <div className="grid overflow-y-auto relative bg-surface3 py-6 border-sm rounded-lg ">
-              <Chat
-                agentId={agentId!}
-                agentName={agent?.name}
-                threadId={threadId!}
-                initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
-                memory={memory?.result}
-                refreshThreadList={refreshThreads}
-                showFileSupport={isCliShowMultiModal}
-              />
-            </div>
+      <MainColumn style={{ gridRow: 'span 2' }}>
+        <div className="h-full grid grid-rows-[auto_1fr]">
+          <div className="pb-6 grid grid-cols-[2fr_1fr] gap-5">
+            <Select>
+              <SelectTrigger>
+                <SelectValue placeholder="Select a thread" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectLabel>Threads</SelectLabel>
+                  {threads?.map(thread => (
+                    <SelectItem key={thread.id} value={thread.id}>
+                      {thread.title}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <Button
+              variant="default"
+              size="lg"
+              onClick={() => {
+                console.log('New chat');
+              }}
+            >
+              New chat
+            </Button>
           </div>
-        </MainColumn>
-      </MainContent>
+          <div className="grid overflow-y-auto relative bg-surface3 py-6 border-sm rounded-lg ">
+            <Chat
+              agentId={agentId!}
+              agentName={agent?.name}
+              threadId={threadId!}
+              initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
+              memory={memory?.result}
+              refreshThreadList={refreshThreads}
+              showFileSupport={isCliShowMultiModal}
+            />
+          </div>
+        </div>
+      </MainColumn>
+      <MainColumn variant="withHeader">
+        {content === 'default' && <AgentInformation agentId={agentId!} />}
+        {content === 'log-drains' && <AgentLogs agentId={agentId!} />}
+        {content === 'versions' && <AgentVersions agentId={agentId!} />}
+      </MainColumn>
     </AgentProvider>
   );
 }

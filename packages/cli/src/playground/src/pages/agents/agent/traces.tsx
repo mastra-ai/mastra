@@ -1,11 +1,10 @@
-import { AgentTraces, MainContent, MainHeader, MainLayout } from '@mastra/playground-ui';
+import { AgentTraces, MainContent } from '@mastra/playground-ui';
 import { useParams } from 'react-router';
 
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { useAgent } from '@/hooks/use-agents';
 import { useTraces } from '@/domains/traces/hooks/use-traces';
-import { AgentHeader } from '@/domains/agents/agent-header';
 
 function AgentTracesPage() {
   const { agentId } = useParams();
@@ -21,14 +20,9 @@ function AgentTracesPage() {
   }
 
   return (
-    <MainLayout>
-      <MainHeader width="full" className="sticky top-0 bg-surface1 z-[100]">
-        <AgentHeader agentId={agentId!} />
-      </MainHeader>
-      <MainContent width="full" className="items-normal content-normal">
-        <AgentTraces traces={traces || []} error={error} />
-      </MainContent>
-    </MainLayout>
+    <MainContent width="full" className="items-normal content-normal col-span-full">
+      <AgentTraces traces={traces || []} error={error} />
+    </MainContent>
   );
 }
 

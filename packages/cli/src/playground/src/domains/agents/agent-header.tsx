@@ -1,11 +1,12 @@
 import { useAgent } from '@/hooks/use-agents';
 import { useLocation } from 'react-router';
 
-import { MainTitle, Button, InnerNav, Breadcrumb, Crumb } from '@mastra/playground-ui';
+import { MainTitle, Button, InnerNav, MainHeader } from '@mastra/playground-ui';
 import { AgentIcon } from '@mastra/playground-ui';
 import { ArrowLeftIcon } from 'lucide-react';
 
 import { Link } from 'react-router';
+import { cn } from '@/lib/utils';
 
 export function AgentHeader({ agentId }: { agentId: string }) {
   const location = useLocation();
@@ -40,9 +41,17 @@ export function AgentHeader({ agentId }: { agentId: string }) {
 
   const { agent } = useAgent(agentId);
   const currentPath = location.pathname.split('/').pop() || 'chat';
+  const twoColumns = ['traces', 'evals'].includes(currentPath);
+
+  console.log({ twoColumns });
 
   return (
-    <div className="grid gap-5 w-full">
+    <MainHeader
+      width="full"
+      className={cn('grid', {
+        'col-span-full': twoColumns,
+      })}
+    >
       <Button as={Link} variant="backLink" to={`/agents`}>
         <ArrowLeftIcon />
         Agents
@@ -64,6 +73,6 @@ export function AgentHeader({ agentId }: { agentId: string }) {
           </Button>
         ))}
       </InnerNav>
-    </div>
+    </MainHeader>
   );
 }
