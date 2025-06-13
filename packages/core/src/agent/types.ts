@@ -180,7 +180,7 @@ export type AgentStreamOptions<
   telemetry?: TelemetrySettings;
   /** RuntimeContext for dependency injection */
   runtimeContext?: RuntimeContext;
-}  & (
+} & (
   | {
       /**
        * @deprecated Use the `memory` property instead for all memory-related options.
