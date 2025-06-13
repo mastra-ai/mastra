@@ -14,9 +14,9 @@ export function MainColumn({
   return (
     <div
       className={cn(
-        `grid overflow-y-auto h-full p-8 pt-0`,
+        `grid overflow-y-auto h-full p-8 `,
         {
-          'grid-template-rows-[auto_1fr] content-start gap-6': variant === 'withHeader', // always have a header row
+          'grid-template-rows-[auto_1fr] content-start gap-6 pt-0': variant === 'withHeader', // always have a header row
         },
         className,
       )}

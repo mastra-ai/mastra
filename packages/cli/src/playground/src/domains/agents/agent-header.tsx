@@ -1,4 +1,5 @@
 import { useAgent } from '@/hooks/use-agents';
+import { useLocation } from 'react-router';
 
 import { MainTitle, Button, InnerNav, Breadcrumb, Crumb } from '@mastra/playground-ui';
 import { AgentIcon } from '@mastra/playground-ui';
@@ -7,7 +8,38 @@ import { ArrowLeftIcon } from 'lucide-react';
 import { Link } from 'react-router';
 
 export function AgentHeader({ agentId }: { agentId: string }) {
-  const { agent, isLoading } = useAgent(agentId);
+  const location = useLocation();
+
+  type NavButton = {
+    label: string;
+    path: string;
+  };
+
+  const navButtons: NavButton[] = [
+    {
+      label: 'Details',
+      path: 'chat',
+    },
+    {
+      label: 'Traces',
+      path: 'traces',
+    },
+    {
+      label: 'Evals',
+      path: 'evals',
+    },
+    {
+      label: 'Log Drains',
+      path: 'log-drains',
+    },
+    {
+      label: 'Versions',
+      path: 'versions',
+    },
+  ];
+
+  const { agent } = useAgent(agentId);
+  const currentPath = location.pathname.split('/').pop() || 'chat';
 
   return (
     <div className="grid gap-5 w-full">
@@ -21,21 +53,16 @@ export function AgentHeader({ agentId }: { agentId: string }) {
       </MainTitle>
 
       <InnerNav>
-        <Button as={Link} variant="activeNavItem" to={`/agents/${agentId}/chat`}>
-          Details
-        </Button>
-        <Button as={Link} variant="navItem" to={`/agents/${agentId}/traces`}>
-          Traces
-        </Button>
-        <Button as={Link} variant="navItem" to={`/agents/${agentId}/evals`}>
-          Evals
-        </Button>
-        <Button as={Link} variant="navItem" to={`/agents/${agentId}/chat`}>
-          Log Drains
-        </Button>
-        <Button as={Link} variant="navItem" to={`/agents/${agentId}/chat`}>
-          Versions
-        </Button>
+        {navButtons.map(button => (
+          <Button
+            key={button.path}
+            as={Link}
+            variant={button.path === currentPath ? 'activeNavItem' : 'navItem'}
+            to={`/agents/${agentId}/${button.path}`}
+          >
+            {button.label}
+          </Button>
+        ))}
       </InnerNav>
     </div>
   );
