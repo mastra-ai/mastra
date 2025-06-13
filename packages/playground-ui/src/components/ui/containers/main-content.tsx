@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils';
+import { v } from 'node_modules/@mastra/core/dist/base-C4grSZ2V';
 
 export function MainContent({
   children,
@@ -8,6 +9,7 @@ export function MainContent({
   hasLeftServiceColumn = false,
   style,
   width = 'narrow',
+  variant = 'default',
 }: {
   children: React.ReactNode;
   className?: string;
@@ -19,6 +21,7 @@ export function MainContent({
   // used when the left column is a service column (e.g. agent history nav)
   hasLeftServiceColumn?: boolean;
   width?: 'narrow' | 'full';
+  variant?: 'default' | 'twoColumns';
 }) {
   const isNarrow = width === 'narrow';
   const devStyleRequested = devUIStyleRequested('MainContent');
@@ -53,7 +56,8 @@ export function MainContent({
           'grid-cols-[1fr_1fr]': isDivided && !hasLeftServiceColumn,
           'grid-cols-[auto_1fr_1fr]': isDivided && hasLeftServiceColumn,
           'grid-cols-[auto_1fr]': !isDivided && hasLeftServiceColumn,
-          'h-auto w-full max-w-[60rem] mx-auto px-7 pb-[5rem]': width === 'narrow',
+          '': variant === 'default',
+          'grid-cols-[1fr_1fr] grid-rows-[1fr]': variant === 'twoColumns',
         },
         className,
       )}

@@ -1,8 +1,16 @@
-import { AgentProvider, AgentChat as Chat, MainContent } from '@mastra/playground-ui';
+import {
+  AgentProvider,
+  AgentChat as Chat,
+  MainContent,
+  MainColumn,
+  MainHeader,
+  AgentIcon,
+} from '@mastra/playground-ui';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { v4 as uuid } from '@lukeed/uuid';
 
+import { AgentHeader } from '@/domains/agents/agent-header';
 import { AgentInformation } from '@/domains/agents/agent-information';
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
 import { useAgent } from '@/hooks/use-agents';
@@ -49,7 +57,29 @@ function Agent() {
       defaultGenerateOptions={agent?.defaultGenerateOptions}
       defaultStreamOptions={agent?.defaultStreamOptions}
     >
-      <MainContent isDivided={true} hasLeftServiceColumn={withSidebar} width="full">
+      <MainContent width="full" variant="twoColumns">
+        <MainColumn variant="withHeader">
+          <MainHeader width="full" className="sticky top-0 bg-surface1 z-[100]">
+            <AgentHeader agentId={agentId!} />
+          </MainHeader>
+          <AgentInformation agentId={agentId!} />
+        </MainColumn>
+        <MainColumn>
+          <div className="grid overflow-y-auto relative bg-surface3 py-6 border-sm rounded-lg">
+            <Chat
+              agentId={agentId!}
+              agentName={agent?.name}
+              threadId={threadId!}
+              initialMessages={isMessagesLoading ? undefined : (messages as Message[])}
+              memory={memory?.result}
+              refreshThreadList={refreshThreads}
+              showFileSupport={isCliShowMultiModal}
+            />
+          </div>
+        </MainColumn>
+      </MainContent>
+
+      {/* <MainContent isDivided={true} hasLeftServiceColumn={withSidebar} width="full">
         {withSidebar && (
           <AgentSidebar agentId={agentId!} threadId={threadId!} threads={threads} isLoading={isThreadsLoading} />
         )}
@@ -67,7 +97,7 @@ function Agent() {
         </div>
 
         <AgentInformation agentId={agentId!} />
-      </MainContent>
+      </MainContent> */}
     </AgentProvider>
   );
 }

@@ -1,33 +1,42 @@
+import { useAgent } from '@/hooks/use-agents';
+
+import { MainTitle, Button, InnerNav, Breadcrumb, Crumb } from '@mastra/playground-ui';
+import { AgentIcon } from '@mastra/playground-ui';
+import { ArrowLeftIcon } from 'lucide-react';
+
 import { Link } from 'react-router';
 
-import { Header, Breadcrumb, Crumb, HeaderGroup, Button, DividerIcon } from '@mastra/playground-ui';
+export function AgentHeader({ agentId }: { agentId: string }) {
+  const { agent, isLoading } = useAgent(agentId);
 
-export function AgentHeader({ agentName, agentId }: { agentName: string; agentId: string }) {
   return (
-    <Header>
-      <Breadcrumb>
-        <Crumb as={Link} to={`/agents`}>
-          Agents
-        </Crumb>
-        <Crumb as={Link} to={`/agents/${agentId}`} isCurrent>
-          {agentName}
-        </Crumb>
-      </Breadcrumb>
+    <div className="grid gap-5 w-full">
+      <Button as={Link} variant="backLink" to={`/agents`}>
+        <ArrowLeftIcon />
+        Agents
+      </Button>
 
-      <HeaderGroup>
-        <Button as={Link} to={`/agents/${agentId}/chat`}>
-          Chat
+      <MainTitle>
+        <AgentIcon /> {agent?.name}
+      </MainTitle>
+
+      <InnerNav>
+        <Button as={Link} variant="activeNavItem" to={`/agents/${agentId}/chat`}>
+          Details
         </Button>
-
-        <DividerIcon />
-
-        <Button as={Link} to={`/agents/${agentId}/traces`}>
+        <Button as={Link} variant="navItem" to={`/agents/${agentId}/traces`}>
           Traces
         </Button>
-        <Button as={Link} to={`/agents/${agentId}/evals`}>
+        <Button as={Link} variant="navItem" to={`/agents/${agentId}/evals`}>
           Evals
         </Button>
-      </HeaderGroup>
-    </Header>
+        <Button as={Link} variant="navItem" to={`/agents/${agentId}/chat`}>
+          Log Drains
+        </Button>
+        <Button as={Link} variant="navItem" to={`/agents/${agentId}/chat`}>
+          Versions
+        </Button>
+      </InnerNav>
+    </div>
   );
 }

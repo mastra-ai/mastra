@@ -37,7 +37,6 @@ export function MainHeader({
     <header
       className={cn(
         'text-2xl pt-9 pb-6 font-normal flex group [&>svg]:w-[1.2em] [&>svg]:h-[1.2em] items-center gap-3 pl-2',
-        { 'p-7 pt-10 bg-surface1 w-full max-w-[60rem] mx-auto overflow-y-scroll': width === 'narrow' },
         className,
       )}
       style={{ ...style, ...(devStyleRequested ? { border: '3px dotted orange' } : {}) }}
