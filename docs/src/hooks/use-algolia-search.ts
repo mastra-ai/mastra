@@ -65,15 +65,21 @@ interface AlgoliaHit {
   content?: string;
   url?: string;
   hierarchy?: AlgoliaHierarchySection[];
-  _highlightResult?: Record<string, {
-    value: string;
-    matchLevel: string;
-    matchedWords?: string[];
-  }>;
-  _snippetResult?: Record<string, {
-    value: string;
-    matchLevel: string;
-  }>;
+  _highlightResult?: Record<
+    string,
+    {
+      value: string;
+      matchLevel: string;
+      matchedWords?: string[];
+    }
+  >;
+  _snippetResult?: Record<
+    string,
+    {
+      value: string;
+      matchLevel: string;
+    }
+  >;
 }
 
 export type AlgoliaResult = {
@@ -81,15 +87,21 @@ export type AlgoliaResult = {
   title: string;
   url: string;
   objectID: string;
-  _highlightResult?: Record<string, {
-    value: string;
-    matchLevel: string;
-    matchedWords?: string[];
-  }>;
-  _snippetResult?: Record<string, {
-    value: string;
-    matchLevel: string;
-  }>;
+  _highlightResult?: Record<
+    string,
+    {
+      value: string;
+      matchLevel: string;
+      matchedWords?: string[];
+    }
+  >;
+  _snippetResult?: Record<
+    string,
+    {
+      value: string;
+      matchLevel: string;
+    }
+  >;
   sub_results: {
     excerpt: string;
     title: string;
@@ -196,7 +208,7 @@ export function useAlgoliaSearch(
               "content",
             ],
             attributesToSnippet: searchOptions?.attributesToSnippet || [
-              "content:15"
+              "content:15",
             ],
             highlightPreTag: searchOptions?.highlightPreTag || "<mark>",
             highlightPostTag: searchOptions?.highlightPostTag || "</mark>",
@@ -222,12 +234,19 @@ export function useAlgoliaSearch(
               const typedHit = hit as AlgoliaHit;
 
               // Helper function to extract relevant snippet around search terms
-              const extractRelevantSnippet = (content: string, searchTerm: string, maxLength: number = 200): string => {
-                if (!content || !searchTerm) return content?.substring(0, maxLength) + "..." || "";
+              const extractRelevantSnippet = (
+                content: string,
+                searchTerm: string,
+                maxLength: number = 200,
+              ): string => {
+                if (!content || !searchTerm)
+                  return content?.substring(0, maxLength) + "..." || "";
 
                 const lowerContent = content.toLowerCase();
                 const lowerSearchTerm = searchTerm.toLowerCase();
-                const searchWords = lowerSearchTerm.split(/\s+/).filter(word => word.length > 2);
+                const searchWords = lowerSearchTerm
+                  .split(/\s+/)
+                  .filter((word) => word.length > 2);
 
                 // Find the first occurrence of any search word
                 let bestIndex = -1;
@@ -263,8 +282,13 @@ export function useAlgoliaSearch(
                 excerpt = typedHit._snippetResult.content.value;
               } else if (typedHit._highlightResult?.content?.value) {
                 // Use highlighted content and extract relevant snippet
-                const highlightedContent = typedHit._highlightResult.content.value;
-                excerpt = extractRelevantSnippet(highlightedContent, search, 200);
+                const highlightedContent =
+                  typedHit._highlightResult.content.value;
+                excerpt = extractRelevantSnippet(
+                  highlightedContent,
+                  search,
+                  200,
+                );
               } else if (typedHit.content) {
                 // Fallback to extracting snippet from raw content
                 excerpt = extractRelevantSnippet(typedHit.content, search, 200);
@@ -275,19 +299,30 @@ export function useAlgoliaSearch(
               }
 
               // Create multiple sub_results if we have hierarchy or can detect sections
-              const subResults: AlgoliaResult['sub_results'] = [];
+              const subResults: AlgoliaResult["sub_results"] = [];
 
               if (typedHit.hierarchy && Array.isArray(typedHit.hierarchy)) {
                 // If we have hierarchy information, create sub-results for different sections
-                typedHit.hierarchy.forEach((section: AlgoliaHierarchySection) => {
-                  if (section.content && section.content.toLowerCase().includes(search.toLowerCase())) {
-                    subResults.push({
-                      title: section.title || typedHit.title || "",
-                      excerpt: extractRelevantSnippet(section.content, search, 180),
-                      url: `${typedHit.url}${section.anchor ? `#${section.anchor}` : ""}`,
-                    });
-                  }
-                });
+                typedHit.hierarchy.forEach(
+                  (section: AlgoliaHierarchySection) => {
+                    if (
+                      section.content &&
+                      section.content
+                        .toLowerCase()
+                        .includes(search.toLowerCase())
+                    ) {
+                      subResults.push({
+                        title: section.title || typedHit.title || "",
+                        excerpt: extractRelevantSnippet(
+                          section.content,
+                          search,
+                          180,
+                        ),
+                        url: `${typedHit.url}${section.anchor ? `#${section.anchor}` : ""}`,
+                      });
+                    }
+                  },
+                );
 
                 // If no hierarchy sections matched, add the main result
                 if (subResults.length === 0) {
