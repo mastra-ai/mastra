@@ -47,24 +47,49 @@ export type AlgoliaSearchOptions = {
   snippetEllipsisText?: string;
 };
 
+/**
+ * Structure of hierarchy section in Algolia results
+ */
+interface AlgoliaHierarchySection {
+  title?: string;
+  content?: string;
+  anchor?: string;
+}
+
+/**
+ * Structure of raw hit object from Algolia with our specific fields
+ */
+interface AlgoliaHit {
+  objectID: string;
+  title?: string;
+  content?: string;
+  url?: string;
+  hierarchy?: AlgoliaHierarchySection[];
+  _highlightResult?: Record<string, {
+    value: string;
+    matchLevel: string;
+    matchedWords?: string[];
+  }>;
+  _snippetResult?: Record<string, {
+    value: string;
+    matchLevel: string;
+  }>;
+}
+
 export type AlgoliaResult = {
   excerpt: string;
   title: string;
   url: string;
   objectID: string;
-  _highlightResult?: {
-    [key: string]: {
-      value: string;
-      matchLevel: string;
-      matchedWords: string[];
-    };
-  };
-  _snippetResult?: {
-    [key: string]: {
-      value: string;
-      matchLevel: string;
-    };
-  };
+  _highlightResult?: Record<string, {
+    value: string;
+    matchLevel: string;
+    matchedWords?: string[];
+  }>;
+  _snippetResult?: Record<string, {
+    value: string;
+    matchLevel: string;
+  }>;
   sub_results: {
     excerpt: string;
     title: string;
@@ -192,8 +217,10 @@ export function useAlgoliaSearch(
         const firstResult = results[0];
         if ("hits" in firstResult) {
           const transformedResults: AlgoliaResult[] = firstResult.hits.map(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (hit: any) => {
+            (hit) => {
+              // Type assertion to our expected structure
+              const typedHit = hit as AlgoliaHit;
+
               // Helper function to extract relevant snippet around search terms
               const extractRelevantSnippet = (content: string, searchTerm: string, maxLength: number = 200): string => {
                 if (!content || !searchTerm) return content?.substring(0, maxLength) + "..." || "";
@@ -231,33 +258,33 @@ export function useAlgoliaSearch(
               // Prioritize snippet result, then highlighted content, then fallback
               let excerpt = "";
 
-              if (hit._snippetResult?.content?.value) {
+              if (typedHit._snippetResult?.content?.value) {
                 // Use Algolia's snippet if available
-                excerpt = hit._snippetResult.content.value;
-              } else if (hit._highlightResult?.content?.value) {
+                excerpt = typedHit._snippetResult.content.value;
+              } else if (typedHit._highlightResult?.content?.value) {
                 // Use highlighted content and extract relevant snippet
-                const highlightedContent = hit._highlightResult.content.value;
+                const highlightedContent = typedHit._highlightResult.content.value;
                 excerpt = extractRelevantSnippet(highlightedContent, search, 200);
-              } else if (hit.content) {
+              } else if (typedHit.content) {
                 // Fallback to extracting snippet from raw content
-                excerpt = extractRelevantSnippet(hit.content, search, 200);
-              } else if (hit._highlightResult?.title?.value) {
-                excerpt = hit._highlightResult.title.value;
+                excerpt = extractRelevantSnippet(typedHit.content, search, 200);
+              } else if (typedHit._highlightResult?.title?.value) {
+                excerpt = typedHit._highlightResult.title.value;
               } else {
-                excerpt = hit.title || "";
+                excerpt = typedHit.title || "";
               }
 
               // Create multiple sub_results if we have hierarchy or can detect sections
-              const subResults = [];
+              const subResults: AlgoliaResult['sub_results'] = [];
 
-              if (hit.hierarchy && Array.isArray(hit.hierarchy)) {
+              if (typedHit.hierarchy && Array.isArray(typedHit.hierarchy)) {
                 // If we have hierarchy information, create sub-results for different sections
-                hit.hierarchy.forEach((section: any, index: number) => {
+                typedHit.hierarchy.forEach((section: AlgoliaHierarchySection) => {
                   if (section.content && section.content.toLowerCase().includes(search.toLowerCase())) {
                     subResults.push({
-                      title: section.title || hit.title || "",
+                      title: section.title || typedHit.title || "",
                       excerpt: extractRelevantSnippet(section.content, search, 180),
-                      url: `${hit.url}${section.anchor ? `#${section.anchor}` : ""}`,
+                      url: `${typedHit.url}${section.anchor ? `#${section.anchor}` : ""}`,
                     });
                   }
                 });
@@ -265,27 +292,27 @@ export function useAlgoliaSearch(
                 // If no hierarchy sections matched, add the main result
                 if (subResults.length === 0) {
                   subResults.push({
-                    title: hit.title || "",
+                    title: typedHit.title || "",
                     excerpt: excerpt,
-                    url: hit.url || "",
+                    url: typedHit.url || "",
                   });
                 }
               } else {
                 // Single sub-result with the main excerpt
                 subResults.push({
-                  title: hit.title || "",
+                  title: typedHit.title || "",
                   excerpt: excerpt,
-                  url: hit.url || "",
+                  url: typedHit.url || "",
                 });
               }
 
               return {
-                objectID: hit.objectID,
-                title: hit.title || "",
+                objectID: typedHit.objectID,
+                title: typedHit.title || "",
                 excerpt: excerpt,
-                url: hit.url || "",
-                _highlightResult: hit._highlightResult,
-                _snippetResult: hit._snippetResult,
+                url: typedHit.url || "",
+                _highlightResult: typedHit._highlightResult,
+                _snippetResult: typedHit._snippetResult,
                 sub_results: subResults,
               };
             },
