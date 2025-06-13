@@ -1,22 +1,49 @@
-import { execSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { spawn } from 'node:child_process';
 
-function cleanup(monorepoDir, resetChanges = false) {
-  execSync('git checkout .', {
-    cwd: monorepoDir,
-    stdio: ['inherit', 'inherit', 'pipe'],
+function runCommand(command, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command.split(' ')[0], command.split(' ').slice(1), {
+      shell: true,
+      stdio: ['inherit', 'inherit', 'pipe'],
+      ...options,
+    });
+
+    let output = '';
+    if (child.stdout) {
+      child.stdout.on('data', data => {
+        output += data.toString();
+      });
+    }
+
+    let errorOutput = '';
+    if (child.stderr) {
+      child.stderr.on('data', data => {
+        errorOutput += data.toString();
+      });
+    }
+
+    child.on('close', code => {
+      if (code === 0) {
+        resolve(output);
+      } else {
+        reject(new Error(`Command failed with code ${code}: ${errorOutput}`));
+      }
+    });
+
+    child.on('error', err => {
+      reject(err);
+    });
   });
-  execSync('git clean -fd', {
-    cwd: monorepoDir,
-    stdio: ['inherit', 'inherit', 'pipe'],
-  });
+}
+
+async function cleanup(monorepoDir, resetChanges = false) {
+  await runCommand('git checkout .', { cwd: monorepoDir });
+  await runCommand('git clean -fd', { cwd: monorepoDir });
 
   if (resetChanges) {
-    execSync('git reset --soft HEAD~1', {
-      cwd: monorepoDir,
-      stdio: ['inherit', 'inherit', 'pipe'],
-    });
+    await runCommand('git reset --soft HEAD~1', { cwd: monorepoDir });
   }
 }
 
@@ -30,20 +57,15 @@ export async function prepareMonorepo(monorepoDir, glob) {
   let shelvedChanges = false;
 
   try {
-    const gitStatus = execSync('git status --porcelain', {
+    const gitStatus = await runCommand('git status --porcelain', {
       cwd: monorepoDir,
       encoding: 'utf8',
+      stdio: ['inherit', 'pipe', 'pipe'],
     });
 
     if (gitStatus.length > 0) {
-      execSync('git add -A', {
-        cwd: monorepoDir,
-        stdio: ['inherit', 'inherit', 'inherit'],
-      });
-      execSync('git commit -m "SAVEPOINT"', {
-        cwd: monorepoDir,
-        stdio: ['inherit', 'inherit', 'inherit'],
-      });
+      await runCommand('git add -A', { cwd: monorepoDir, stdio: ['inherit', 'inherit', 'inherit'] });
+      await runCommand('git commit -m "SAVEPOINT"', { cwd: monorepoDir, stdio: ['inherit', 'inherit', 'inherit'] });
       shelvedChanges = true;
     }
 
@@ -67,17 +89,10 @@ export async function prepareMonorepo(monorepoDir, glob) {
       }
     })();
 
-    execSync('pnpm changeset pre exit', {
-      cwd: monorepoDir,
-      stdio: ['inherit', 'inherit', 'inherit'],
-    });
-
-    execSync('pnpm changeset version --snapshot create-mastra-e2e-test', {
-      cwd: monorepoDir,
-      stdio: ['inherit', 'inherit', 'inherit'],
-    });
+    await runCommand('pnpm changeset pre exit', { cwd: monorepoDir });
+    await runCommand('pnpm changeset version --snapshot create-mastra-e2e-test', { cwd: monorepoDir });
   } catch (error) {
-    cleanup(monorepoDir, false);
+    await cleanup(monorepoDir, false);
     throw error;
   }
 
