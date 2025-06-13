@@ -13,7 +13,9 @@ export default async function setup() {
   const rootDir = join(__dirname, '..', '..');
   const teardown = await prepareMonorepo(rootDir, globby);
 
+  console.log('actual place', process.cwd());
   const verdaccioPath = require.resolve('verdaccio/bin/verdaccio');
+  console.log('verdaccioPath', verdaccioPath);
   const port = await getPort();
   const registryLocation = await mkdtemp(join(tmpdir(), 'kitchen-sink-test-registry'));
   console.log('registryLocation', registryLocation);
