@@ -1,4 +1,5 @@
 import { writeFileSync, mkdirSync, createReadStream } from 'fs';
+import { cwd } from 'node:process';
 import path from 'path';
 import { PassThrough } from 'stream';
 import { describe, expect, it, beforeAll } from 'vitest';
@@ -7,7 +8,7 @@ import { OpenAIVoice } from './index.js';
 
 describe('OpenAIVoice Integration Tests', () => {
   let voice: OpenAIVoice;
-  const outputDir = path.join(process.cwd(), 'test-outputs');
+  const outputDir = path.join(cwd(), 'test-outputs');
 
   beforeAll(() => {
     try {
@@ -125,7 +126,7 @@ describe('OpenAIVoice Integration Tests', () => {
     });
 
     it('should transcribe audio from fixture file', async () => {
-      const fixturePath = path.join(process.cwd(), '__fixtures__', 'voice-test.m4a');
+      const fixturePath = path.join(cwd(), '__fixtures__', 'voice-test.m4a');
       const audioStream = createReadStream(fixturePath);
 
       const text = await voice.listen(audioStream, {

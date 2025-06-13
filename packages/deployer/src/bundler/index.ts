@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { cwd } from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { MastraBundler } from '@mastra/core/bundler';
 import virtual from '@rollup/plugin-virtual';
@@ -110,7 +111,7 @@ export abstract class Bundler extends MastraBundler {
     return await analyzeBundle(entry, mastraFile, join(outputDirectory, this.analyzeOutputDir), 'node', this.logger);
   }
 
-  protected async installDependencies(outputDirectory: string, rootDir = process.cwd()) {
+  protected async installDependencies(outputDirectory: string, rootDir = cwd()) {
     const deps = new DepsService(rootDir);
     deps.__setLogger(this.logger);
 
@@ -136,6 +137,7 @@ export abstract class Bundler extends MastraBundler {
     toolsPaths: string[],
   ) {
     const inputOptions: InputOptions = await getInputOptions(mastraEntryFile, analyzedBundleInfo, 'node', {
+      'env.NODE_ENV': JSON.stringify('production'),
       'process.env.NODE_ENV': JSON.stringify('production'),
     });
     const isVirtual = serverFile.includes('\n') || existsSync(serverFile);

@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import { CohereClient } from 'cohere-ai';
 
 import type { RelevanceScoreProvider } from '../relevance-score-provider';
@@ -8,7 +9,7 @@ export class CohereRelevanceScorer implements RelevanceScoreProvider {
   private model: string;
   constructor(model: string, apiKey?: string) {
     this.client = new CohereClient({
-      token: apiKey || process.env.COHERE_API_KEY || '',
+      token: apiKey || env.COHERE_API_KEY || '',
     });
 
     this.model = model;

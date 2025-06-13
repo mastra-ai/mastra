@@ -1,4 +1,5 @@
 import { MastraClient } from './client';
+import { stdout } from 'node:process';
 // import type { WorkflowRunResult } from './types';
 
 // Agent
@@ -18,7 +19,7 @@ import { MastraClient } from './client';
 
     response.processDataStream({
       onTextPart: text => {
-        process.stdout.write(text);
+        stdout.write(text);
       },
       onFilePart: file => {
         console.log(file);

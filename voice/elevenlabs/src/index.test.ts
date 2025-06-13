@@ -1,4 +1,5 @@
 import { createWriteStream, writeFileSync, mkdirSync, createReadStream } from 'fs';
+import { cwd } from 'node:process';
 import path from 'path';
 import { describe, expect, it, beforeAll } from 'vitest';
 
@@ -6,7 +7,7 @@ import { ElevenLabsVoice } from './index.js';
 
 describe('ElevenLabsVoice Integration Tests', () => {
   let voice: ElevenLabsVoice;
-  const outputDir = path.join(process.cwd(), 'test-outputs');
+  const outputDir = path.join(cwd(), 'test-outputs');
 
   beforeAll(() => {
     try {

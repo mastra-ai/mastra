@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -52,8 +53,8 @@ describe('MastraAuthFirebase', () => {
     });
 
     it('should initialize with environment variables', () => {
-      process.env.FIREBASE_SERVICE_ACCOUNT = mockServiceAccount;
-      process.env.FIRESTORE_DATABASE_ID = mockDatabaseId;
+      env.FIREBASE_SERVICE_ACCOUNT = mockServiceAccount;
+      env.FIRESTORE_DATABASE_ID = mockDatabaseId;
 
       const auth = new MastraAuthFirebase();
 
@@ -63,8 +64,8 @@ describe('MastraAuthFirebase', () => {
       });
       expect(admin.credential.cert).toHaveBeenCalledWith(mockServiceAccount);
 
-      delete process.env.FIREBASE_SERVICE_ACCOUNT;
-      delete process.env.FIRESTORE_DATABASE_ID;
+      delete env.FIREBASE_SERVICE_ACCOUNT;
+      delete env.FIRESTORE_DATABASE_ID;
     });
   });
 

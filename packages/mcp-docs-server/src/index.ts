@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import { env, exit } from 'node:process';
 import { MCPServer } from '@mastra/mcp';
 
 import { logger, createLogger } from './logger';
@@ -18,7 +19,7 @@ import { fromPackageRoot } from './utils';
 
 let server: MCPServer;
 
-if (process.env.REBUILD_DOCS_ON_START === 'true') {
+if (env.REBUILD_DOCS_ON_START === 'true') {
   void logger.info('Rebuilding docs on start');
   try {
     await prepare();
@@ -53,7 +54,7 @@ async function runServer() {
     void logger.info('Started Mastra Docs MCP Server');
   } catch (error) {
     void logger.error('Failed to start server', error);
-    process.exit(1);
+    exit(1);
   }
 }
 

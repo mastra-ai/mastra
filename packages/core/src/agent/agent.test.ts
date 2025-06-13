@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import { PassThrough } from 'stream';
 import { createOpenAI } from '@ai-sdk/openai';
 import type { CoreMessage } from 'ai';
@@ -31,7 +32,7 @@ const mockFindUser = vi.fn().mockImplementation(async data => {
   return userInfo;
 });
 
-const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = createOpenAI({ apiKey: env.OPENAI_API_KEY });
 
 describe('agent', () => {
   const integration = new TestIntegration();

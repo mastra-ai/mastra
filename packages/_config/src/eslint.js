@@ -42,6 +42,7 @@ export const createConfig = async () =>
     {
       plugins: {
         import: (await import('eslint-plugin-import-x')).default,
+        n: (await import('eslint-plugin-n')).default,
       },
       languageOptions: {
         globals: {
@@ -62,6 +63,7 @@ export const createConfig = async () =>
             groups: ['builtin', 'external', 'internal', 'parent', 'sibling', 'index'],
           },
         ],
+        'n/prefer-global/process': ['error', 'never'],
       },
     },
 
@@ -278,4 +280,9 @@ export const createConfig = async () =>
           },
         }
       : null,
+
+    // Deno runtime checks
+    {
+      files: ['**/*.ts?(x)', '**/*.js?(x)'],
+    },
   ].filter(Boolean);

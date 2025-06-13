@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import { PassThrough } from 'stream';
 
 import { MastraVoice } from '@mastra/core/voice';
@@ -45,7 +46,7 @@ export class OpenAIVoice extends MastraVoice {
     speechModel?: OpenAIConfig;
     speaker?: string;
   } = {}) {
-    const defaultApiKey = process.env.OPENAI_API_KEY;
+    const defaultApiKey = env.OPENAI_API_KEY;
     const defaultSpeechModel = {
       name: 'tts-1',
       apiKey: defaultApiKey,

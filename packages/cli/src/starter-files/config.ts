@@ -1,15 +1,17 @@
+import { env } from 'node:process';
+
 export const config = {
   name: 'PROJECT_NAME',
   integrations: [],
   db: {
     provider: 'postgres',
-    uri: process.env.DB_URL!,
+    uri: env.DB_URL!,
   },
   runner: {
     provider: 'inngest',
-    uri: process.env.INNGEST_URL!,
-    signingKey: process.env.INNGEST_SIGNING_KEY!,
-    eventKey: process.env.INNGEST_EVENT_KEY!,
+    uri: env.INNGEST_URL!,
+    signingKey: env.INNGEST_SIGNING_KEY!,
+    eventKey: env.INNGEST_EVENT_KEY!,
   },
   workflows: {
     blueprintDirPath: '/mastra/blueprints',
@@ -20,6 +22,6 @@ export const config = {
     agentDirPath: '/mastra/agents',
     vectorProvider: [],
   },
-  systemHostURL: process.env.APP_URL!,
+  systemHostURL: env.APP_URL!,
   routeRegistrationPath: '/api/mastra',
 } as const;

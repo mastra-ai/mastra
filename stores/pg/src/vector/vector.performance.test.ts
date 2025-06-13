@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import pg from 'pg';
 import { describe, it, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 
@@ -98,7 +99,7 @@ async function smartWarmup(
   }
 }
 
-const connectionString = process.env.DB_URL || `postgresql://postgres:postgres@localhost:5435/mastra`;
+const connectionString = env.DB_URL || `postgresql://postgres:postgres@localhost:5435/mastra`;
 describe('PostgreSQL Index Performance', () => {
   let vectorDB: PGPerformanceVector;
   const testIndexName = 'test_index_performance';

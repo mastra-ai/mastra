@@ -2,6 +2,7 @@ import { spawn as nodeSpawn } from 'child_process';
 import { readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { env } from 'node:process';
 
 /**
  * Promisified version of Node.js spawn function
@@ -142,6 +143,6 @@ if (linkedDeps.length > 0) {
     cwd: repoRoot,
     shell: true,
     stdio: 'inherit',
-    env: process.env,
+    env,
   });
 }

@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, readdirSync } from 'fs';
+import { exit } from 'node:process';
 import { join } from 'path';
-import process from 'process';
 import { Deployer } from '@mastra/deployer';
 
 interface EnvVar {
@@ -223,7 +223,7 @@ export const HEAD = handle(app);
         `Vercel Deployer does not support @libsql/client(which may have been installed by @mastra/libsql) as a dependency. 
         Use other Mastra Storage options instead e.g @mastra/pg`,
       );
-      process.exit(1);
+      exit(1);
     }
   }
 }

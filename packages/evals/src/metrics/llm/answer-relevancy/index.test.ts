@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import { createOpenAI } from '@ai-sdk/openai';
 import { describe, it, expect } from 'vitest';
 
@@ -94,7 +95,7 @@ const testCases: TestCase[] = [
 const SECONDS = 10000;
 
 const openai = createOpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: env.OPENAI_API_KEY,
 });
 
 const model = openai('gpt-4o');

@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import {
   describe,
   it,
@@ -8,9 +9,9 @@ import { Mastra } from '@mastra/core';
 
 import { FirecrawlIntegration } from '.';
 
-const API_KEY = process.env.API_KEY!;
-const dbUri = process.env.DB_URL!;
-const connectionId = process.env.CONNECTION_ID!;
+const API_KEY = env.API_KEY!;
+const dbUri = env.DB_URL!;
+const connectionId = env.CONNECTION_ID!;
 
 const integrationName = 'FIRECRAWL';
 

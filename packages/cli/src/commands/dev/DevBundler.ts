@@ -1,5 +1,6 @@
 import { writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { env } from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { FileService } from '@mastra/deployer';
 import { createWatcher, getWatcherInputOptions, writeTelemetryConfig } from '@mastra/deployer/build';
@@ -51,7 +52,8 @@ export class DevBundler extends Bundler {
 
     const envFiles = await this.getEnvFiles();
     const inputOptions = await getWatcherInputOptions(entryFile, 'node', {
-      'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
+      'process.env.NODE_ENV': JSON.stringify(env.NODE_ENV || 'development'),
+      'env.NODE_ENV': JSON.stringify(env.NODE_ENV || 'development'),
     });
     const toolsInputOptions = await this.getToolsInputOptions(toolsPaths);
 
@@ -70,7 +72,6 @@ export class DevBundler extends Bundler {
         ...inputOptions,
         plugins: [
           // @ts-ignore - types are good
-          // eslint-disable-next-line @typescript-eslint/no-misused-promises
           ...inputOptions.plugins,
           {
             name: 'env-watcher',

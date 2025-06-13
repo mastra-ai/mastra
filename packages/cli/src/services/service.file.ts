@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { cwd } from 'node:process';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -31,7 +32,7 @@ export class FileService {
   }
 
   public async setupEnvFile({ dbUrl }: { dbUrl: string }) {
-    const envPath = path.join(process.cwd(), '.env.development');
+    const envPath = path.join(cwd(), '.env.development');
 
     await fsExtra.ensureFile(envPath);
 

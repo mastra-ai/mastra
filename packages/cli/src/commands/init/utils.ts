@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import child_process from 'node:child_process';
+import { cwd, exit } from 'node:process';
 import util from 'node:util';
 import path from 'path';
 import * as p from '@clack/prompts';
@@ -71,7 +72,7 @@ export async function writeAgentSample(llmProvider: LLMProvider, destPath: strin
 
       Your primary function is to help users get weather details for specific locations. When responding:
       - Always ask for a location if none is provided
-      - If the location name isn’t in English, please translate it
+      - If the location name isn't in English, please translate it
       - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
       - Include relevant details like humidity, wind conditions, and precipitation
       - Keep responses concise but informative
@@ -110,6 +111,7 @@ export async function writeWorkflowSample(destPath: string, llmProvider: LLMProv
   const { providerImport, modelItem } = getProviderImportAndModelItem(llmProvider);
 
   const content = `${providerImport}
+import { stdout } from 'node:process';
 import { Agent } from '@mastra/core/agent';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
@@ -278,7 +280,7 @@ const planActivities = createStep({
     let activitiesText = '';
 
     for await (const chunk of response.textStream) {
-      process.stdout.write(chunk);
+      stdout.write(chunk);
       activitiesText += chunk;
     }
 
@@ -436,12 +438,12 @@ export async function installCoreDeps(pkg: string) {
 
     if (p.isCancel(confirm)) {
       p.cancel('Installation Cancelled');
-      process.exit(0);
+      exit(0);
     }
 
     if (!confirm) {
       p.cancel('Installation Cancelled');
-      process.exit(0);
+      exit(0);
     }
 
     spinner.start();
@@ -493,7 +495,7 @@ export const createMastraDir = async (directory: string): Promise<{ ok: true; di
     .split('/')
     .filter(item => item !== '');
 
-  const dirPath = path.join(process.cwd(), ...dir, 'mastra');
+  const dirPath = path.join(cwd(), ...dir, 'mastra');
 
   try {
     await fs.access(dirPath);
@@ -638,7 +640,7 @@ export const interactivePrompt = async () => {
     {
       onCancel: () => {
         p.cancel('Operation cancelled.');
-        process.exit(0);
+        exit(0);
       },
     },
   );
@@ -647,8 +649,7 @@ export const interactivePrompt = async () => {
 };
 
 export const checkPkgJson = async () => {
-  const cwd = process.cwd();
-  const pkgJsonPath = path.join(cwd, 'package.json');
+  const pkgJsonPath = path.join(cwd(), 'package.json');
 
   let isPkgJsonPresent = false;
 
@@ -664,5 +665,5 @@ export const checkPkgJson = async () => {
   }
 
   logger.debug('package.json not found, create one or run "mastra create" to create a new project');
-  process.exit(0);
+  exit(0);
 };
