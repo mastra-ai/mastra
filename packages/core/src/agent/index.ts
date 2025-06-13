@@ -8,6 +8,7 @@ import type {
   TextPart,
   UIMessage,
 } from 'ai';
+import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 import type { MastraPrimitives, MastraUnion } from '../action';
@@ -53,6 +54,16 @@ function resolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) 
   }
 
   return cb(value);
+}
+
+// Helper to resolve threadId from args (supports both new and old API)
+function resolveThreadIdFromArgs(args: any): (Partial<StorageThreadType> & { id: string }) | undefined {
+  if (args.memory && args.memory.thread) {
+    if (typeof args.memory.thread === 'string') return { id: args.memory.thread };
+    if (typeof args.memory.thread === 'object' && args.memory.thread.id) return args.memory.thread;
+  }
+  if (args.threadId) return { id: args.threadId };
+  return undefined;
 }
 
 @InstrumentClass({
@@ -1037,7 +1048,7 @@ export class Agent<
     instructions,
     messages,
     context,
-    threadId,
+    thread,
     memoryConfig,
     resourceId,
     runId,
@@ -1050,7 +1061,7 @@ export class Agent<
     toolsets?: ToolsetsInput;
     clientTools?: ToolsInput;
     resourceId?: string;
-    threadId?: string;
+    thread?: (Partial<StorageThreadType> & { id: string }) | undefined;
     memoryConfig?: MemoryConfig;
     context?: CoreMessage[];
     runId?: string;
@@ -1088,20 +1099,20 @@ export class Agent<
         const convertedTools = await this.convertTools({
           toolsets,
           clientTools,
-          threadId,
+          threadId: thread?.id,
           resourceId,
           runId,
           runtimeContext,
         });
 
-        const messageList = new MessageList({ threadId, resourceId, generateMessageId })
+        const messageList = new MessageList({ threadId: thread?.id, resourceId, generateMessageId })
           .addSystem({
             role: 'system',
             content: instructions || `${this.instructions}.`,
           })
           .add(context || [], 'context');
 
-        if (!memory || (!threadId && !resourceId)) {
+        if (!memory || (!thread?.id && !resourceId)) {
           messageList.add(messages, 'user');
           return {
             messageObjects: messageList.get.all.prompt(),
@@ -1109,17 +1120,17 @@ export class Agent<
             messageList,
           };
         }
-        if (!threadId || !resourceId) {
+        if (!thread?.id || !resourceId) {
           const mastraError = new MastraError({
             id: 'AGENT_MEMORY_MISSING_RESOURCE_ID',
             domain: ErrorDomain.AGENT,
             category: ErrorCategory.USER,
             details: {
               agentName: this.name,
-              threadId: threadId || '',
+              threadId: thread?.id || '',
               resourceId: resourceId || '',
             },
-            text: `A resourceId must be provided when passing a threadId and using Memory. Saw threadId ${threadId} but resourceId is ${resourceId}`,
+            text: `A resourceId must be provided when passing a threadId and using Memory. Saw threadId ${thread?.id} but resourceId is ${resourceId}`,
           });
           this.logger.trackException(mastraError);
           this.logger.error(mastraError.toString());
@@ -1131,38 +1142,51 @@ export class Agent<
           {
             runId,
             resourceId,
-            threadId,
+            threadId: thread?.id,
             memoryStore: store,
           },
         );
 
-        const thread =
-          (await memory.getThreadById({ threadId })) ??
-          (await memory.createThread({
-            threadId,
-            resourceId,
+        let threadObject: StorageThreadType | undefined = undefined;
+        const existingThread = await memory.getThreadById({ threadId: thread?.id });
+        if (existingThread) {
+          if (thread.metadata && !deepEqual(existingThread.metadata, thread.metadata)) {
+            threadObject = await memory.saveThread({
+              thread: { ...existingThread, metadata: thread.metadata },
+              memoryConfig,
+            });
+          } else {
+            threadObject = existingThread;
+          }
+        } else {
+          threadObject = await memory.createThread({
+            threadId: thread.id,
+            metadata: thread.metadata,
+            title: thread.title,
             memoryConfig,
-          }));
+            resourceId,
+          });
+        }
 
         let [memoryMessages, memorySystemMessage, userContextMessage] =
-          threadId && memory
+          thread.id && memory
             ? await Promise.all([
                 memory
                   .rememberMessages({
-                    threadId,
+                    threadId: threadObject.id,
                     resourceId,
                     config: memoryConfig,
                     // The new user messages aren't in the list yet cause we add memory messages first to try to make sure ordering is correct (memory comes before new user messages)
                     vectorMessageSearch: new MessageList().add(messages, `user`).getLatestUserContent() || '',
                   })
                   .then(r => r.messagesV2),
-                memory.getSystemMessage({ threadId, memoryConfig }),
-                memory.getUserContextMessage({ threadId }),
+                memory.getSystemMessage({ threadId: threadObject.id, memoryConfig }),
+                memory.getUserContextMessage({ threadId: threadObject.id }),
               ])
             : [[], null, null];
 
         this.logger.debug('Fetched messages from memory', {
-          threadId,
+          threadId: threadObject.id,
           runId,
           fetchedCount: memoryMessages.length,
         });
@@ -1170,7 +1194,7 @@ export class Agent<
         // So the agent doesn't get confused and start replying directly to messages
         // that were added via semanticRecall from a different conversation,
         // we need to pull those out and add to the system message.
-        const resultsFromOtherThreads = memoryMessages.filter(m => m.threadId !== threadId);
+        const resultsFromOtherThreads = memoryMessages.filter(m => m.threadId !== threadObject.id);
         if (resultsFromOtherThreads.length && !memorySystemMessage) {
           memorySystemMessage = ``;
         }
@@ -1191,7 +1215,7 @@ export class Agent<
 
         messageList
           .add(
-            memoryMessages.filter(m => m.threadId === threadId), // filter out messages from other threads. those are added to system message above
+            memoryMessages.filter(m => m.threadId === threadObject.id), // filter out messages from other threads. those are added to system message above
             'memory',
           )
           // add new user messages to the list AFTER remembered messages to make ordering more reliable
@@ -1213,7 +1237,7 @@ export class Agent<
           memorySystemMessage: memorySystemMessage || undefined,
         });
 
-        const processedList = new MessageList({ threadId, resourceId })
+        const processedList = new MessageList({ threadId: threadObject.id, resourceId })
           .addSystem(instructions || `${this.instructions}.`)
           .addSystem(memorySystemMessage)
           .add(context || [], 'context')
@@ -1224,8 +1248,7 @@ export class Agent<
 
         return {
           convertedTools,
-          threadId,
-          thread,
+          thread: threadObject,
           messageList,
           // add old processed messages + new input messages
           messageObjects: processedList,
@@ -1412,8 +1435,8 @@ export class Agent<
   > {
     const {
       context,
-      memoryOptions: memoryConfig,
-      resourceId,
+      memoryOptions: memoryConfigFromArgs,
+      resourceId: resourceIdFromArgs,
       maxSteps,
       onStepFinish,
       output,
@@ -1435,6 +1458,9 @@ export class Agent<
         ? (args.experimental_generateMessageId as IDGenerator)
         : undefined;
 
+    const threadFromArgs = resolveThreadIdFromArgs({ ...args, ...generateOptions });
+    const resourceId = args.memory?.resource || resourceIdFromArgs;
+    const memoryConfig = args.memory?.options || memoryConfigFromArgs;
     const runId = args.runId || randomUUID();
     const instructions = args.instructions || (await this.getInstructions({ runtimeContext }));
     const llm = await this.getLLM({ runtimeContext });
@@ -1443,7 +1469,7 @@ export class Agent<
       messages,
       instructions,
       context,
-      threadId: args.threadId,
+      thread: threadFromArgs,
       memoryConfig,
       resourceId,
       runId,
@@ -1453,7 +1479,7 @@ export class Agent<
       generateMessageId,
     });
 
-    const { threadId, thread, messageObjects, convertedTools, messageList } = await before();
+    const { thread, messageObjects, convertedTools, messageList } = await before();
 
     if (!output && experimental_output) {
       const result = await llm.__text({
@@ -1467,7 +1493,7 @@ export class Agent<
         temperature,
         toolChoice: toolChoice || 'auto',
         experimental_output,
-        threadId,
+        threadId: thread?.id,
         resourceId,
         memory: this.getMemory(),
         runtimeContext,
@@ -1478,7 +1504,7 @@ export class Agent<
 
       await after({
         result,
-        threadId,
+        threadId: thread?.id,
         thread,
         memoryConfig,
         outputText,
@@ -1505,7 +1531,7 @@ export class Agent<
         temperature,
         toolChoice,
         telemetry,
-        threadId,
+        threadId: thread?.id,
         resourceId,
         memory: this.getMemory(),
         runtimeContext,
@@ -1517,7 +1543,7 @@ export class Agent<
       await after({
         result,
         thread,
-        threadId,
+        threadId: thread?.id,
         memoryConfig,
         outputText,
         runId,
@@ -1549,7 +1575,7 @@ export class Agent<
     await after({
       result,
       thread,
-      threadId,
+      threadId: thread?.id,
       memoryConfig,
       outputText,
       runId,
@@ -1606,8 +1632,8 @@ export class Agent<
   > {
     const {
       context,
-      memoryOptions: memoryConfig,
-      resourceId,
+      memoryOptions: memoryConfigFromArgs,
+      resourceId: resourceIdFromArgs,
       maxSteps,
       onFinish,
       onStepFinish,
@@ -1625,6 +1651,11 @@ export class Agent<
       `experimental_generateMessageId` in args && typeof args.experimental_generateMessageId === `function`
         ? (args.experimental_generateMessageId as IDGenerator)
         : undefined;
+
+    const threadFromArgs = resolveThreadIdFromArgs({ ...args, ...streamOptions });
+    const resourceId = args.memory?.resource || resourceIdFromArgs;
+    const memoryConfig = args.memory?.options || memoryConfigFromArgs;
+
     const runId = args.runId || randomUUID();
     const instructions = args.instructions || (await this.getInstructions({ runtimeContext }));
     const llm = await this.getLLM({ runtimeContext });
@@ -1633,7 +1664,7 @@ export class Agent<
       instructions,
       messages,
       context,
-      threadId: args.threadId,
+      thread: threadFromArgs,
       memoryConfig,
       resourceId,
       runId,
@@ -1643,7 +1674,7 @@ export class Agent<
       generateMessageId,
     });
 
-    const { threadId, thread, messageObjects, convertedTools, messageList } = await before();
+    const { thread, messageObjects, convertedTools, messageList } = await before();
 
     if (!output && experimental_output) {
       this.logger.debug(`Starting agent ${this.name} llm stream call`, {
@@ -1663,7 +1694,7 @@ export class Agent<
             await after({
               result,
               thread,
-              threadId,
+              threadId: thread?.id,
               memoryConfig,
               outputText,
               runId,
@@ -1684,7 +1715,7 @@ export class Agent<
         telemetry,
         memory: this.getMemory(),
         runtimeContext,
-        threadId,
+        threadId: thread?.id,
         resourceId,
         ...args,
       });
@@ -1709,7 +1740,7 @@ export class Agent<
             await after({
               result,
               thread,
-              threadId,
+              threadId: thread?.id,
               memoryConfig,
               outputText,
               runId,
@@ -1729,7 +1760,7 @@ export class Agent<
         telemetry,
         memory: this.getMemory(),
         runtimeContext,
-        threadId,
+        threadId: thread?.id,
         resourceId,
         ...args,
       }) as unknown as StreamReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
@@ -1753,7 +1784,7 @@ export class Agent<
           await after({
             result,
             thread,
-            threadId,
+            threadId: thread?.id,
             memoryConfig,
             outputText,
             runId,
@@ -1772,7 +1803,7 @@ export class Agent<
       telemetry,
       memory: this.getMemory(),
       runtimeContext,
-      threadId,
+      threadId: thread?.id,
       resourceId,
       ...args,
     }) as unknown as StreamReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
