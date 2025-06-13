@@ -23,6 +23,7 @@ import type {
   ZodPathType,
   DynamicMapping,
   StreamEvent,
+  WorkflowRunState,
 } from './types';
 
 export type DefaultEngineType = {};
@@ -1052,6 +1053,40 @@ export class Workflow<
       run ??
       (this.#runs.get(runId) ? ({ ...this.#runs.get(runId), workflowName: this.id } as unknown as WorkflowRun) : null)
     );
+  }
+
+  async getWorkflowRunExecutionResult(runId: string): Promise<WatchEvent['payload']['workflowState'] | null> {
+    const storage = this.#mastra?.getStorage();
+    if (!storage) {
+      this.logger.debug('Cannot get workflow run execution result. Mastra storage is not initialized');
+      return null;
+    }
+
+    const run = await storage.getWorkflowRunById({ runId, workflowName: this.id });
+
+    let snapshot: WorkflowRunState | string = run?.snapshot!;
+
+    if (!snapshot) {
+      return null;
+    }
+
+    if (typeof snapshot === 'string') {
+      // this occurs whenever the parsing of snapshot fails in storage
+      try {
+        snapshot = JSON.parse(snapshot);
+      } catch (e) {
+        this.logger.debug('Cannot get workflow run execution result. Snapshot is not a valid JSON string', e);
+        return null;
+      }
+    }
+
+    return {
+      status: (snapshot as WorkflowRunState).status,
+      result: (snapshot as WorkflowRunState).result,
+      error: (snapshot as WorkflowRunState).error,
+      payload: (snapshot as WorkflowRunState).context?.input,
+      steps: (snapshot as WorkflowRunState).context as any,
+    };
   }
 }
 
