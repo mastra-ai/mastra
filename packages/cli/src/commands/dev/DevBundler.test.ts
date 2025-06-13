@@ -51,6 +51,7 @@ describe('DevBundler', () => {
       // Assert
       expect(getWatcherInputOptions).toHaveBeenCalledWith('test-entry.js', 'node', {
         'env.NODE_ENV': JSON.stringify('test-env'),
+        'process.env.NODE_ENV': JSON.stringify('test-env'),
       });
     });
 
@@ -66,6 +67,7 @@ describe('DevBundler', () => {
       // Assert
       expect(getWatcherInputOptions).toHaveBeenCalledWith('test-entry.js', 'node', {
         'env.NODE_ENV': JSON.stringify('development'),
+        'process.env.NODE_ENV': JSON.stringify('development'),
       });
     });
   });
