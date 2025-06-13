@@ -1,4 +1,4 @@
-import { on } from 'node:process';
+import process from 'node:process';
 import { MastraBase } from '@mastra/core/base';
 
 import type { RuntimeContext } from '@mastra/core/di';
@@ -321,7 +321,7 @@ export class InternalMastraMCPClient extends MastraBase {
       { wait: 5000 },
     );
 
-    on('SIGTERM', () => gracefulExit());
+    process.on('SIGTERM', () => gracefulExit());
     this.log('debug', `Successfully connected to MCP server`);
   }
 
