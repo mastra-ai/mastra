@@ -327,7 +327,7 @@ jobs:
 
       - name: Install e2e test dependencies
         working-directory: ./e2e-tests/kitchen-sink
-        run: pnpm install
+        run: pnpm install --ignore-workspace
 
       - name: Test
         working-directory: ./e2e-tests/kitchen-sink
