@@ -72,7 +72,6 @@ export class DevBundler extends Bundler {
         ...inputOptions,
         plugins: [
           // @ts-ignore - types are good
-
           ...inputOptions.plugins,
           {
             name: 'env-watcher',
