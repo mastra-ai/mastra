@@ -1,5 +1,6 @@
 import type { Db } from '@datastax/astra-db-ts';
 import { DataAPIClient, UUID } from '@datastax/astra-db-ts';
+import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   QueryResult,
@@ -48,15 +49,32 @@ export class AstraVector extends MastraVector {
    */
   async createIndex({ indexName, dimension, metric = 'cosine' }: CreateIndexParams): Promise<void> {
     if (!Number.isInteger(dimension) || dimension <= 0) {
-      throw new Error('Dimension must be a positive integer');
+      throw new MastraError({
+        id: 'ASTRA_VECTOR_CREATE_INDEX_INVALID_DIMENSION',
+        text: 'Dimension must be a positive integer',
+        domain: ErrorDomain.MASTRA_VECTOR,
+        category: ErrorCategory.USER,
+      });
     }
-    await this.#db.createCollection(indexName, {
-      vector: {
-        dimension,
-        metric: metricMap[metric],
-      },
-      checkExists: false,
-    });
+    try {
+      await this.#db.createCollection(indexName, {
+        vector: {
+          dimension,
+          metric: metricMap[metric],
+        },
+        checkExists: false,
+      });
+    } catch (error: any) {
+      new MastraError(
+        {
+          id: 'ASTRA_VECTOR_CREATE_INDEX_DB_ERROR',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName },
+        },
+        error,
+      );
+    }
   }
 
   /**
@@ -80,7 +98,19 @@ export class AstraVector extends MastraVector {
       metadata: metadata?.[i] || {},
     }));
 
-    await collection.insertMany(records);
+    try {
+      await collection.insertMany(records);
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: 'ASTRA_VECTOR_UPSERT_DB_ERROR',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName },
+        },
+        error,
+      );
+    }
     return vectorIds;
   }
 
@@ -110,23 +140,35 @@ export class AstraVector extends MastraVector {
 
     const translatedFilter = this.transformFilter(filter);
 
-    const cursor = collection.find(translatedFilter ?? {}, {
-      sort: { $vector: queryVector },
-      limit: topK,
-      includeSimilarity: true,
-      projection: {
-        $vector: includeVector ? true : false,
-      },
-    });
+    try {
+      const cursor = collection.find(translatedFilter ?? {}, {
+        sort: { $vector: queryVector },
+        limit: topK,
+        includeSimilarity: true,
+        projection: {
+          $vector: includeVector ? true : false,
+        },
+      });
 
-    const results = await cursor.toArray();
+      const results = await cursor.toArray();
 
-    return results.map(result => ({
-      id: result.id,
-      score: result.$similarity,
-      metadata: result.metadata,
-      ...(includeVector && { vector: result.$vector }),
-    }));
+      return results.map(result => ({
+        id: result.id,
+        score: result.$similarity,
+        metadata: result.metadata,
+        ...(includeVector && { vector: result.$vector }),
+      }));
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: 'ASTRA_VECTOR_QUERY_DB_ERROR',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName },
+        },
+        error,
+      );
+    }
   }
 
   /**
@@ -134,8 +176,19 @@ export class AstraVector extends MastraVector {
    *
    * @returns {Promise<string[]>} A promise that resolves to an array of collection names.
    */
-  listIndexes(): Promise<string[]> {
-    return this.#db.listCollections({ nameOnly: true });
+  async listIndexes(): Promise<string[]> {
+    try {
+      return await this.#db.listCollections({ nameOnly: true });
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: 'ASTRA_VECTOR_LIST_INDEXES_DB_ERROR',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
   }
 
   /**
@@ -146,17 +199,30 @@ export class AstraVector extends MastraVector {
    */
   async describeIndex({ indexName }: DescribeIndexParams): Promise<IndexStats> {
     const collection = this.#db.collection(indexName);
-    const optionsPromise = collection.options();
-    const countPromise = collection.countDocuments({}, 100);
-    const [options, count] = await Promise.all([optionsPromise, countPromise]);
+    try {
+      const optionsPromise = collection.options();
+      const countPromise = collection.countDocuments({}, 100);
+      const [options, count] = await Promise.all([optionsPromise, countPromise]);
 
-    const keys = Object.keys(metricMap) as (keyof typeof metricMap)[];
-    const metric = keys.find(key => metricMap[key] === options.vector?.metric);
-    return {
-      dimension: options.vector?.dimension!,
-      metric,
-      count: count,
-    };
+      const keys = Object.keys(metricMap) as (keyof typeof metricMap)[];
+      const metric = keys.find(key => metricMap[key] === options.vector?.metric);
+      return {
+        dimension: options.vector?.dimension!,
+        metric,
+        count: count,
+      };
+    } catch (error: any) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: 'ASTRA_VECTOR_DESCRIBE_INDEX_DB_ERROR',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName },
+        },
+        error,
+      );
+    }
   }
 
   /**
@@ -167,7 +233,19 @@ export class AstraVector extends MastraVector {
    */
   async deleteIndex({ indexName }: DeleteIndexParams): Promise<void> {
     const collection = this.#db.collection(indexName);
-    await collection.drop();
+    try {
+      await collection.drop();
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: 'ASTRA_VECTOR_DELETE_INDEX_DB_ERROR',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName },
+        },
+        error,
+      );
+    }
   }
 
   /**
@@ -181,11 +259,17 @@ export class AstraVector extends MastraVector {
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
   async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
-    try {
-      if (!update.vector && !update.metadata) {
-        throw new Error('No updates provided');
-      }
+    if (!update.vector && !update.metadata) {
+      throw new MastraError({
+        id: 'ASTRA_VECTOR_UPDATE_NO_PAYLOAD',
+        text: 'No updates provided for vector',
+        domain: ErrorDomain.MASTRA_VECTOR,
+        category: ErrorCategory.USER,
+        details: { indexName, id },
+      });
+    }
 
+    try {
       const collection = this.#db.collection(indexName);
       const updateDoc: Record<string, any> = {};
 
@@ -199,7 +283,16 @@ export class AstraVector extends MastraVector {
 
       await collection.findOneAndUpdate({ id }, { $set: updateDoc });
     } catch (error: any) {
-      throw new Error(`Failed to update vector by id: ${id} for index name: ${indexName}: ${error.message}`);
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: 'ASTRA_VECTOR_UPDATE_FAILED_UNHANDLED',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, id },
+        },
+        error,
+      );
     }
   }
 
@@ -215,7 +308,16 @@ export class AstraVector extends MastraVector {
       const collection = this.#db.collection(indexName);
       await collection.deleteOne({ id });
     } catch (error: any) {
-      throw new Error(`Failed to delete vector by id: ${id} for index name: ${indexName}: ${error.message}`);
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: 'ASTRA_VECTOR_DELETE_FAILED',
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, id },
+        },
+        error,
+      );
     }
   }
 }

@@ -1,3 +1,4 @@
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { MastraVector } from '@mastra/core/vector';
 import type {
   QueryResult,
@@ -44,28 +45,47 @@ export class CouchbaseVector extends MastraVector {
   constructor({ connectionString, username, password, bucketName, scopeName, collectionName }: CouchbaseVectorParams) {
     super();
 
-    const baseClusterPromise = connect(connectionString, {
-      username,
-      password,
-      configProfile: 'wanDevelopment',
-    });
+    try {
+      const baseClusterPromise = connect(connectionString, {
+        username,
+        password,
+        configProfile: 'wanDevelopment',
+      });
 
-    const telemetry = this.__getTelemetry();
-    this.clusterPromise =
-      telemetry?.traceClass(baseClusterPromise, {
-        spanNamePrefix: 'couchbase-vector',
-        attributes: {
-          'vector.type': 'couchbase',
+      const telemetry = this.__getTelemetry();
+      this.clusterPromise =
+        telemetry?.traceClass(baseClusterPromise, {
+          spanNamePrefix: 'couchbase-vector',
+          attributes: {
+            'vector.type': 'couchbase',
+          },
+        }) ?? baseClusterPromise;
+      this.cluster = null as unknown as Cluster;
+      this.bucketName = bucketName;
+      this.collectionName = collectionName;
+      this.scopeName = scopeName;
+      this.collection = null as unknown as Collection;
+      this.bucket = null as unknown as Bucket;
+      this.scope = null as unknown as Scope;
+      this.vector_dimension = null as unknown as number;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'COUCHBASE_VECTOR_INITIALIZE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            connectionString,
+            username,
+            password,
+            bucketName,
+            scopeName,
+            collectionName,
+          },
         },
-      }) ?? baseClusterPromise;
-    this.cluster = null as unknown as Cluster;
-    this.bucketName = bucketName;
-    this.collectionName = collectionName;
-    this.scopeName = scopeName;
-    this.collection = null as unknown as Collection;
-    this.bucket = null as unknown as Bucket;
-    this.scope = null as unknown as Scope;
-    this.vector_dimension = null as unknown as number;
+        error,
+      );
+    }
   }
 
   async getCollection() {
@@ -83,13 +103,13 @@ export class CouchbaseVector extends MastraVector {
   }
 
   async createIndex({ indexName, dimension, metric = 'dotproduct' as MastraMetric }: CreateIndexParams): Promise<void> {
-    await this.getCollection();
-
-    if (!Number.isInteger(dimension) || dimension <= 0) {
-      throw new Error('Dimension must be a positive integer');
-    }
-
     try {
+      await this.getCollection();
+
+      if (!Number.isInteger(dimension) || dimension <= 0) {
+        throw new Error('Dimension must be a positive integer');
+      }
+
       await this.scope.searchIndexes().upsertIndex({
         name: indexName,
         sourceName: this.bucketName,
@@ -173,88 +193,139 @@ export class CouchbaseVector extends MastraVector {
         await this.validateExistingIndex(indexName, dimension, metric);
         return;
       }
-      throw error;
+      throw new MastraError(
+        {
+          id: 'COUCHBASE_VECTOR_CREATE_INDEX_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+            dimension,
+            metric,
+          },
+        },
+        error,
+      );
     }
   }
 
   async upsert({ vectors, metadata, ids }: UpsertVectorParams): Promise<string[]> {
-    await this.getCollection();
+    try {
+      await this.getCollection();
 
-    if (!vectors || vectors.length === 0) {
-      throw new Error('No vectors provided');
-    }
-    if (this.vector_dimension) {
-      for (const vector of vectors) {
-        if (!vector || this.vector_dimension !== vector.length) {
-          throw new Error('Vector dimension mismatch');
+      if (!vectors || vectors.length === 0) {
+        throw new Error('No vectors provided');
+      }
+      if (this.vector_dimension) {
+        for (const vector of vectors) {
+          if (!vector || this.vector_dimension !== vector.length) {
+            throw new Error('Vector dimension mismatch');
+          }
         }
       }
-    }
 
-    const pointIds = ids || vectors.map(() => crypto.randomUUID());
-    const records = vectors.map((vector, i) => {
-      const metadataObj = metadata?.[i] || {};
-      const record: Record<string, any> = {
-        embedding: vector,
-        metadata: metadataObj,
-      };
-      // If metadata has a text field, save it as content
-      if (metadataObj.text) {
-        record.content = metadataObj.text;
+      const pointIds = ids || vectors.map(() => crypto.randomUUID());
+      const records = vectors.map((vector, i) => {
+        const metadataObj = metadata?.[i] || {};
+        const record: Record<string, any> = {
+          embedding: vector,
+          metadata: metadataObj,
+        };
+        // If metadata has a text field, save it as content
+        if (metadataObj.text) {
+          record.content = metadataObj.text;
+        }
+        return record;
+      });
+
+      const allPromises = [];
+      for (let i = 0; i < records.length; i++) {
+        allPromises.push(this.collection.upsert(pointIds[i]!, records[i]));
       }
-      return record;
-    });
+      await Promise.all(allPromises);
 
-    const allPromises = [];
-    for (let i = 0; i < records.length; i++) {
-      allPromises.push(this.collection.upsert(pointIds[i]!, records[i]));
+      return pointIds;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'COUCHBASE_VECTOR_UPSERT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
-    await Promise.all(allPromises);
-
-    return pointIds;
   }
 
   async query({ indexName, queryVector, topK = 10, includeVector = false }: QueryVectorParams): Promise<QueryResult[]> {
-    await this.getCollection();
+    try {
+      await this.getCollection();
 
-    const index_stats = await this.describeIndex({ indexName });
-    if (queryVector.length !== index_stats.dimension) {
-      throw new Error(`Query vector dimension mismatch. Expected ${index_stats.dimension}, got ${queryVector.length}`);
-    }
-
-    let request = SearchRequest.create(
-      VectorSearch.fromVectorQuery(VectorQuery.create('embedding', queryVector).numCandidates(topK)),
-    );
-    const results = await this.scope.search(indexName, request, {
-      fields: ['*'],
-    });
-
-    if (includeVector) {
-      throw new Error('Including vectors in search results is not yet supported by the Couchbase vector store');
-    }
-    const output = [];
-    for (const match of results.rows) {
-      const cleanedMetadata: Record<string, any> = {};
-      const fields = (match.fields as Record<string, any>) || {}; // Ensure fields is an object
-      for (const key in fields) {
-        if (Object.prototype.hasOwnProperty.call(fields, key)) {
-          const newKey = key.startsWith('metadata.') ? key.substring('metadata.'.length) : key;
-          cleanedMetadata[newKey] = fields[key];
-        }
+      const index_stats = await this.describeIndex({ indexName });
+      if (queryVector.length !== index_stats.dimension) {
+        throw new Error(
+          `Query vector dimension mismatch. Expected ${index_stats.dimension}, got ${queryVector.length}`,
+        );
       }
-      output.push({
-        id: match.id as string,
-        score: (match.score as number) || 0,
-        metadata: cleanedMetadata, // Use the cleaned metadata object
+
+      let request = SearchRequest.create(
+        VectorSearch.fromVectorQuery(VectorQuery.create('embedding', queryVector).numCandidates(topK)),
+      );
+      const results = await this.scope.search(indexName, request, {
+        fields: ['*'],
       });
+
+      if (includeVector) {
+        throw new Error('Including vectors in search results is not yet supported by the Couchbase vector store');
+      }
+      const output = [];
+      for (const match of results.rows) {
+        const cleanedMetadata: Record<string, any> = {};
+        const fields = (match.fields as Record<string, any>) || {}; // Ensure fields is an object
+        for (const key in fields) {
+          if (Object.prototype.hasOwnProperty.call(fields, key)) {
+            const newKey = key.startsWith('metadata.') ? key.substring('metadata.'.length) : key;
+            cleanedMetadata[newKey] = fields[key];
+          }
+        }
+        output.push({
+          id: match.id as string,
+          score: (match.score as number) || 0,
+          metadata: cleanedMetadata, // Use the cleaned metadata object
+        });
+      }
+      return output;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'COUCHBASE_VECTOR_QUERY_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+            topK,
+          },
+        },
+        error,
+      );
     }
-    return output;
   }
 
   async listIndexes(): Promise<string[]> {
-    await this.getCollection();
-    const indexes = await this.scope.searchIndexes().getAllIndexes();
-    return indexes?.map(index => index.name) || [];
+    try {
+      await this.getCollection();
+      const indexes = await this.scope.searchIndexes().getAllIndexes();
+      return indexes?.map(index => index.name) || [];
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'COUCHBASE_VECTOR_LIST_INDEXES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
   }
 
   /**
@@ -264,33 +335,64 @@ export class CouchbaseVector extends MastraVector {
    * @returns A promise that resolves to the index statistics including dimension, count and metric
    */
   async describeIndex({ indexName }: DescribeIndexParams): Promise<IndexStats> {
-    await this.getCollection();
-    if (!(await this.listIndexes()).includes(indexName)) {
-      throw new Error(`Index ${indexName} does not exist`);
+    try {
+      await this.getCollection();
+      if (!(await this.listIndexes()).includes(indexName)) {
+        throw new Error(`Index ${indexName} does not exist`);
+      }
+      const index = await this.scope.searchIndexes().getIndex(indexName);
+      const dimensions =
+        index.params.mapping?.types?.[`${this.scopeName}.${this.collectionName}`]?.properties?.embedding?.fields?.[0]
+          ?.dims;
+      const count = -1; // Not added support yet for adding a count of documents covered by an index
+      const metric = index.params.mapping?.types?.[`${this.scopeName}.${this.collectionName}`]?.properties?.embedding
+        ?.fields?.[0]?.similarity as CouchbaseMetric;
+      return {
+        dimension: dimensions,
+        count: count,
+        metric: Object.keys(DISTANCE_MAPPING).find(
+          key => DISTANCE_MAPPING[key as MastraMetric] === metric,
+        ) as MastraMetric,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'COUCHBASE_VECTOR_DESCRIBE_INDEX_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+          },
+        },
+        error,
+      );
     }
-    const index = await this.scope.searchIndexes().getIndex(indexName);
-    const dimensions =
-      index.params.mapping?.types?.[`${this.scopeName}.${this.collectionName}`]?.properties?.embedding?.fields?.[0]
-        ?.dims;
-    const count = -1; // Not added support yet for adding a count of documents covered by an index
-    const metric = index.params.mapping?.types?.[`${this.scopeName}.${this.collectionName}`]?.properties?.embedding
-      ?.fields?.[0]?.similarity as CouchbaseMetric;
-    return {
-      dimension: dimensions,
-      count: count,
-      metric: Object.keys(DISTANCE_MAPPING).find(
-        key => DISTANCE_MAPPING[key as MastraMetric] === metric,
-      ) as MastraMetric,
-    };
   }
 
   async deleteIndex({ indexName }: DeleteIndexParams): Promise<void> {
-    await this.getCollection();
-    if (!(await this.listIndexes()).includes(indexName)) {
-      throw new Error(`Index ${indexName} does not exist`);
+    try {
+      await this.getCollection();
+      if (!(await this.listIndexes()).includes(indexName)) {
+        throw new Error(`Index ${indexName} does not exist`);
+      }
+      await this.scope.searchIndexes().dropIndex(indexName);
+      this.vector_dimension = null as unknown as number;
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: 'COUCHBASE_VECTOR_DELETE_INDEX_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+          },
+        },
+        error,
+      );
     }
-    await this.scope.searchIndexes().dropIndex(indexName);
-    this.vector_dimension = null as unknown as number;
   }
 
   /**
@@ -304,29 +406,45 @@ export class CouchbaseVector extends MastraVector {
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
   async updateVector({ id, update }: UpdateVectorParams): Promise<void> {
-    if (!update.vector && !update.metadata) {
-      throw new Error('No updates provided');
-    }
-    if (update.vector && this.vector_dimension && update.vector.length !== this.vector_dimension) {
-      throw new Error('Vector dimension mismatch');
-    }
-    const collection = await this.getCollection();
-
-    // Check if document exists
     try {
-      await collection.get(id);
-    } catch (err: any) {
-      if (err.code === 13 || err.message?.includes('document not found')) {
-        throw new Error(`Vector with id ${id} does not exist`);
+      if (!update.vector && !update.metadata) {
+        throw new Error('No updates provided');
       }
-      throw err;
+      if (update.vector && this.vector_dimension && update.vector.length !== this.vector_dimension) {
+        throw new Error('Vector dimension mismatch');
+      }
+      const collection = await this.getCollection();
+
+      // Check if document exists
+      try {
+        await collection.get(id);
+      } catch (err: any) {
+        if (err.code === 13 || err.message?.includes('document not found')) {
+          throw new Error(`Vector with id ${id} does not exist`);
+        }
+        throw err;
+      }
+
+      const specs: MutateInSpec[] = [];
+      if (update.vector) specs.push(MutateInSpec.replace('embedding', update.vector));
+      if (update.metadata) specs.push(MutateInSpec.replace('metadata', update.metadata));
+
+      await collection.mutateIn(id, specs);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'COUCHBASE_VECTOR_UPDATE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            id,
+            hasVectorUpdate: !!update.vector,
+            hasMetadataUpdate: !!update.metadata,
+          },
+        },
+        error,
+      );
     }
-
-    const specs: MutateInSpec[] = [];
-    if (update.vector) specs.push(MutateInSpec.replace('embedding', update.vector));
-    if (update.metadata) specs.push(MutateInSpec.replace('metadata', update.metadata));
-
-    await collection.mutateIn(id, specs);
   }
 
   /**
@@ -337,25 +455,50 @@ export class CouchbaseVector extends MastraVector {
    * @throws Will throw an error if the deletion operation fails.
    */
   async deleteVector({ id }: DeleteVectorParams): Promise<void> {
-    const collection = await this.getCollection();
-
-    // Check if document exists
     try {
-      await collection.get(id);
-    } catch (err: any) {
-      if (err.code === 13 || err.message?.includes('document not found')) {
-        throw new Error(`Vector with id ${id} does not exist`);
-      }
-      throw err;
-    }
+      const collection = await this.getCollection();
 
-    await collection.remove(id);
+      // Check if document exists
+      try {
+        await collection.get(id);
+      } catch (err: any) {
+        if (err.code === 13 || err.message?.includes('document not found')) {
+          throw new Error(`Vector with id ${id} does not exist`);
+        }
+        throw err;
+      }
+
+      await collection.remove(id);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'COUCHBASE_VECTOR_DELETE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            id,
+          },
+        },
+        error,
+      );
+    }
   }
 
   async disconnect() {
-    if (!this.cluster) {
-      return;
+    try {
+      if (!this.cluster) {
+        return;
+      }
+      await this.cluster.close();
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'COUCHBASE_VECTOR_DISCONNECT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
-    await this.cluster.close();
   }
 }

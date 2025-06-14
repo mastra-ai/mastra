@@ -1,6 +1,7 @@
 import { createClient } from '@libsql/client';
 import type { Client as TursoClient, InValue } from '@libsql/client';
 
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { MastraVector } from '@mastra/core/vector';
 import type {
@@ -128,7 +129,18 @@ export class LibSQLVector extends MastraVector {
       if (!Array.isArray(queryVector) || !queryVector.every(x => typeof x === 'number' && Number.isFinite(x))) {
         throw new Error('queryVector must be an array of finite numbers');
       }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_VECTOR_QUERY_INVALID_ARGS',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+        },
+        error,
+      );
+    }
 
+    try {
       const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
 
       const vectorStr = `[${queryVector.join(',')}]`;
@@ -165,13 +177,31 @@ export class LibSQLVector extends MastraVector {
         metadata: JSON.parse((metadata as string) ?? '{}'),
         ...(includeVector && embedding && { vector: JSON.parse(embedding as string) }),
       }));
-    } finally {
-      // client.release()
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_VECTOR_QUERY_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
   public upsert(args: UpsertVectorParams): Promise<string[]> {
-    return this.executeWriteOperationWithRetry(() => this.doUpsert(args), true);
+    try {
+      return this.executeWriteOperationWithRetry(() => this.doUpsert(args), true);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_VECTOR_UPSERT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
   }
 
   private async doUpsert({ indexName, vectors, metadata, ids }: UpsertVectorParams): Promise<string[]> {
@@ -218,7 +248,19 @@ export class LibSQLVector extends MastraVector {
   }
 
   public createIndex(args: CreateIndexParams): Promise<void> {
-    return this.executeWriteOperationWithRetry(() => this.doCreateIndex(args));
+    try {
+      return this.executeWriteOperationWithRetry(() => this.doCreateIndex(args));
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_VECTOR_CREATE_INDEX_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName: args.indexName, dimension: args.dimension },
+        },
+        error,
+      );
+    }
   }
 
   private async doCreateIndex({ indexName, dimension }: CreateIndexParams): Promise<void> {
@@ -247,7 +289,19 @@ export class LibSQLVector extends MastraVector {
   }
 
   public deleteIndex(args: DeleteIndexParams): Promise<void> {
-    return this.executeWriteOperationWithRetry(() => this.doDeleteIndex(args));
+    try {
+      return this.executeWriteOperationWithRetry(() => this.doDeleteIndex(args));
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_VECTOR_DELETE_INDEX_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName: args.indexName },
+        },
+        error,
+      );
+    }
   }
 
   private async doDeleteIndex({ indexName }: DeleteIndexParams): Promise<void> {
@@ -271,7 +325,14 @@ export class LibSQLVector extends MastraVector {
       });
       return result.rows.map(row => row.name as string);
     } catch (error: any) {
-      throw new Error(`Failed to list vector tables: ${error.message}`);
+      throw new MastraError(
+        {
+          id: 'LIBSQL_VECTOR_LIST_INDEXES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -322,7 +383,15 @@ export class LibSQLVector extends MastraVector {
         metric,
       };
     } catch (e: any) {
-      throw new Error(`Failed to describe vector table: ${e.message}`);
+      throw new MastraError(
+        {
+          id: 'LIBSQL_VECTOR_DESCRIBE_INDEX_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName },
+        },
+        e,
+      );
     }
   }
 
@@ -357,7 +426,13 @@ export class LibSQLVector extends MastraVector {
     }
 
     if (updates.length === 0) {
-      throw new Error('No updates provided');
+      throw new MastraError({
+        id: 'LIBSQL_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName, id },
+        text: 'No updates provided',
+      });
     }
     args.push(id);
     const query = `
@@ -365,10 +440,23 @@ export class LibSQLVector extends MastraVector {
         SET ${updates.join(', ')}
         WHERE vector_id = ?;
       `;
-    await this.turso.execute({
-      sql: query,
-      args,
-    });
+
+    try {
+      await this.turso.execute({
+        sql: query,
+        args,
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_VECTOR_UPDATE_VECTOR_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, id },
+        },
+        error,
+      );
+    }
   }
 
   /**
@@ -379,7 +467,19 @@ export class LibSQLVector extends MastraVector {
    * @throws Will throw an error if the deletion operation fails.
    */
   public deleteVector(args: DeleteVectorParams): Promise<void> {
-    return this.executeWriteOperationWithRetry(() => this.doDeleteVector(args));
+    try {
+      return this.executeWriteOperationWithRetry(() => this.doDeleteVector(args));
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_VECTOR_DELETE_VECTOR_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName: args.indexName, id: args.id },
+        },
+        error,
+      );
+    }
   }
 
   private async doDeleteVector({ indexName, id }: DeleteVectorParams): Promise<void> {
@@ -391,7 +491,19 @@ export class LibSQLVector extends MastraVector {
   }
 
   public truncateIndex(args: DeleteIndexParams): Promise<void> {
-    return this.executeWriteOperationWithRetry(() => this._doTruncateIndex(args));
+    try {
+      return this.executeWriteOperationWithRetry(() => this._doTruncateIndex(args));
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'LIBSQL_VECTOR_TRUNCATE_INDEX_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName: args.indexName },
+        },
+        error,
+      );
+    }
   }
 
   private async _doTruncateIndex({ indexName }: DeleteIndexParams): Promise<void> {

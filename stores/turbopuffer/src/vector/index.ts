@@ -1,3 +1,4 @@
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type {
   CreateIndexParams,
   DeleteIndexParams,
@@ -89,30 +90,43 @@ export class TurbopufferVector extends MastraVector {
 
   async createIndex({ indexName, dimension, metric }: CreateIndexParams): Promise<void> {
     metric = metric ?? 'cosine'; // default to cosine distance
-    if (this.createIndexCache.has(indexName)) {
-      // verify that the dimensions and distance metric match what we expect
-      const expected = this.createIndexCache.get(indexName)!;
-      if (dimension !== expected.dimension || metric !== expected.metric) {
-        throw new Error(
-          `createIndex() called more than once with inconsistent inputs. Index ${indexName} expected dimensions=${expected.dimension} and metric=${expected.metric} but got dimensions=${dimension} and metric=${metric}`,
-        );
-      }
-      return;
-    }
-    if (dimension <= 0) {
-      throw new Error('Dimension must be a positive integer');
-    }
     let distanceMetric: DistanceMetric = 'cosine_distance';
-    switch (metric) {
-      case 'cosine':
-        distanceMetric = 'cosine_distance';
-        break;
-      case 'euclidean':
-        distanceMetric = 'euclidean_squared';
-        break;
-      case 'dotproduct':
-        throw new Error('dotproduct is not supported in Turbopuffer');
+    try {
+      if (this.createIndexCache.has(indexName)) {
+        // verify that the dimensions and distance metric match what we expect
+        const expected = this.createIndexCache.get(indexName)!;
+        if (dimension !== expected.dimension || metric !== expected.metric) {
+          throw new Error(
+            `createIndex() called more than once with inconsistent inputs. Index ${indexName} expected dimensions=${expected.dimension} and metric=${expected.metric} but got dimensions=${dimension} and metric=${metric}`,
+          );
+        }
+        return;
+      }
+      if (dimension <= 0) {
+        throw new Error('Dimension must be a positive integer');
+      }
+      switch (metric) {
+        case 'cosine':
+          distanceMetric = 'cosine_distance';
+          break;
+        case 'euclidean':
+          distanceMetric = 'euclidean_squared';
+          break;
+        case 'dotproduct':
+          throw new Error('dotproduct is not supported in Turbopuffer');
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_TURBOBUFFER_VECTOR_CREATE_INDEX_INVALID_ARGS',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName, dimension, metric },
+        },
+        error,
+      );
     }
+
     this.createIndexCache.set(indexName, {
       indexName,
       dimension,
@@ -122,15 +136,31 @@ export class TurbopufferVector extends MastraVector {
   }
 
   async upsert({ indexName, vectors, metadata, ids }: UpsertVectorParams): Promise<string[]> {
+    let index;
+    let createIndex;
     try {
       if (vectors.length === 0) {
         throw new Error('upsert() called with empty vectors');
       }
-      const index = this.client.namespace(indexName);
-      const createIndex = this.createIndexCache.get(indexName);
+
+      index = this.client.namespace(indexName);
+      createIndex = this.createIndexCache.get(indexName);
       if (!createIndex) {
         throw new Error(`createIndex() not called for this index`);
       }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_TURBOBUFFER_VECTOR_UPSERT_INVALID_ARGS',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+        },
+        error,
+      );
+    }
+
+    try {
       const distanceMetric = createIndex.tpufDistanceMetric;
       const vectorIds = ids || vectors.map(() => crypto.randomUUID());
       const records: Vector[] = vectors.map((vector, i) => ({
@@ -170,23 +200,45 @@ export class TurbopufferVector extends MastraVector {
 
       return vectorIds;
     } catch (error) {
-      throw new Error(`Failed to upsert vectors into Turbopuffer namespace ${indexName}: ${error}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_TURBOBUFFER_VECTOR_UPSERT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName },
+        },
+        error,
+      );
     }
   }
 
   async query({ indexName, queryVector, topK, filter, includeVector }: QueryVectorParams): Promise<QueryResult[]> {
-    const schemaConfig = this.opts.schemaConfigForIndex?.(indexName);
-    if (schemaConfig) {
-      if (queryVector.length !== schemaConfig.dimensions) {
-        throw new Error(
-          `Turbopuffer index ${indexName} was configured with dimensions=${schemaConfig.dimensions} but attempting to query with queryVector.length=${queryVector.length}`,
-        );
+    let createIndex;
+    try {
+      const schemaConfig = this.opts.schemaConfigForIndex?.(indexName);
+      if (schemaConfig) {
+        if (queryVector.length !== schemaConfig.dimensions) {
+          throw new Error(
+            `Turbopuffer index ${indexName} was configured with dimensions=${schemaConfig.dimensions} but attempting to query with queryVector.length=${queryVector.length}`,
+          );
+        }
       }
+      createIndex = this.createIndexCache.get(indexName);
+      if (!createIndex) {
+        throw new Error(`createIndex() not called for this index`);
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_TURBOBUFFER_VECTOR_QUERY_INVALID_ARGS',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+        },
+        error,
+      );
     }
-    const createIndex = this.createIndexCache.get(indexName);
-    if (!createIndex) {
-      throw new Error(`createIndex() not called for this index`);
-    }
+
     const distanceMetric = createIndex.tpufDistanceMetric;
     try {
       const index = this.client.namespace(indexName);
@@ -207,7 +259,15 @@ export class TurbopufferVector extends MastraVector {
         ...(includeVector && item.vector ? { vector: item.vector } : {}),
       }));
     } catch (error) {
-      throw new Error(`Failed to query Turbopuffer namespace ${indexName}: ${error}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_TURBOBUFFER_VECTOR_QUERY_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName },
+        },
+        error,
+      );
     }
   }
 
@@ -216,7 +276,14 @@ export class TurbopufferVector extends MastraVector {
       const namespacesResult = await this.client.namespaces({});
       return namespacesResult.namespaces.map(namespace => namespace.id);
     } catch (error) {
-      throw new Error(`Failed to list Turbopuffer namespaces: ${error}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_TURBOBUFFER_VECTOR_LIST_INDEXES_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
     }
   }
 
@@ -242,7 +309,15 @@ export class TurbopufferVector extends MastraVector {
         metric: createIndex.metric,
       };
     } catch (error) {
-      throw new Error(`Failed to describe Turbopuffer namespace ${indexName}: ${error}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_TURBOBUFFER_VECTOR_DESCRIBE_INDEX_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName },
+        },
+        error,
+      );
     }
   }
 
@@ -252,7 +327,15 @@ export class TurbopufferVector extends MastraVector {
       await namespace.deleteAll();
       this.createIndexCache.delete(indexName);
     } catch (error: any) {
-      throw new Error(`Failed to delete Turbopuffer namespace ${indexName}: ${error.message}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_TURBOBUFFER_VECTOR_DELETE_INDEX_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName },
+        },
+        error,
+      );
     }
   }
 
@@ -267,23 +350,46 @@ export class TurbopufferVector extends MastraVector {
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
   async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
+    let namespace;
+    let createIndex;
+    let distanceMetric;
+    let record;
     try {
-      const namespace = this.client.namespace(indexName);
-      const createIndex = this.createIndexCache.get(indexName);
+      namespace = this.client.namespace(indexName);
+      createIndex = this.createIndexCache.get(indexName);
       if (!createIndex) {
         throw new Error(`createIndex() not called for this index`);
       }
-      const distanceMetric = createIndex.tpufDistanceMetric;
-      const record: any = { id };
+      distanceMetric = createIndex.tpufDistanceMetric;
+      record = { id } as Vector;
       if (update.vector) record.vector = update.vector;
       if (update.metadata) record.attributes = update.metadata;
-
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'STORAGE_TURBOBUFFER_VECTOR_UPDATE_VECTOR_INVALID_ARGS',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+        },
+        error,
+      );
+    }
+    try {
       await namespace.upsert({
         vectors: [record],
         distance_metric: distanceMetric,
       });
     } catch (error: any) {
-      throw new Error(`Failed to update Turbopuffer namespace ${indexName}: ${error.message}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_TURBOBUFFER_VECTOR_UPDATE_VECTOR_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName },
+        },
+        error,
+      );
     }
   }
 
@@ -299,7 +405,15 @@ export class TurbopufferVector extends MastraVector {
       const namespace = this.client.namespace(indexName);
       await namespace.delete({ ids: [id] });
     } catch (error: any) {
-      throw new Error(`Failed to delete Turbopuffer namespace ${indexName}: ${error.message}`);
+      throw new MastraError(
+        {
+          id: 'STORAGE_TURBOBUFFER_VECTOR_DELETE_VECTOR_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName },
+        },
+        error,
+      );
     }
   }
 }
