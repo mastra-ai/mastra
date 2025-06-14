@@ -40,6 +40,8 @@
     "test:watch:combined-stores": "pnpm --filter \"./stores/*\" test:watch",
     "test:auth": "pnpm --filter \"./auth/*\" test",
     "test:cli": "pnpm --filter ./packages/cli test",
+    "test:deployer": "pnpm --filter ./packages/deployer test",
+    "test:server": "pnpm --filter ./packages/server test",
     "test:core": "pnpm --filter ./packages/core test --exclude \"./src/tools/tool-builder/**\"",
     "test:mcp": "pnpm --filter ./packages/mcp test",
     "test:rag": "pnpm --filter ./packages/rag test",
