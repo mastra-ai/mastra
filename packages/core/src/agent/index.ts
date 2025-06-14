@@ -1636,6 +1636,8 @@ export class Agent<
         telemetry,
         memory: this.getMemory(),
         runtimeContext,
+        threadId,
+        resourceId,
         ...args,
       });
 
@@ -1679,6 +1681,8 @@ export class Agent<
         telemetry,
         memory: this.getMemory(),
         runtimeContext,
+        threadId,
+        resourceId,
         ...args,
       }) as unknown as StreamReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
     }
@@ -1720,6 +1724,8 @@ export class Agent<
       telemetry,
       memory: this.getMemory(),
       runtimeContext,
+      threadId,
+      resourceId,
       ...args,
     }) as unknown as StreamReturn<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>;
   }
