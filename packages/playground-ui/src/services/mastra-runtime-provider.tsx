@@ -18,6 +18,8 @@ import { CoreUserMessage } from '@mastra/core';
 import { fileToBase64 } from '@/lib/file';
 import { useMastraClient } from '@/contexts/mastra-client-context';
 import { PDFAttachmentAdapter } from '@/components/assistant-ui/attachment-adapters/pdfs-adapter';
+import { callCompletionApi, DefaultChatTransport } from 'ai';
+import { MastraChat, MastraChatState } from './chat';
 
 const convertMessage = (message: ThreadMessageLike): ThreadMessageLike => {
   return message;
@@ -168,7 +170,7 @@ export function MastraRuntimeProvider({
           presencePenalty,
           maxRetries,
           maxSteps,
-          maxTokens,
+          maxOutputTokens: maxTokens,
           temperature,
           topK,
           topP,
@@ -274,13 +276,20 @@ export function MastraRuntimeProvider({
           presencePenalty,
           maxRetries,
           maxSteps,
-          maxTokens,
+          maxOutputTokens: maxTokens,
           temperature,
           topK,
           topP,
           instructions,
           runtimeContext: runtimeContextInstance,
           ...(memory ? { threadId, resourceId: agentId } : {}),
+        });
+
+        const chat = new MastraChat({
+          transport: new DefaultChatTransport({
+            api: '/?',
+          }),
+          state: new MastraChatState(),
         });
 
         if (!response.body) {

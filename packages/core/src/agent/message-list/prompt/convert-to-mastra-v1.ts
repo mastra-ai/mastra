@@ -8,6 +8,10 @@ import type { MastraMessageContentV2, MastraMessageV2 } from '../../message-list
 import { attachmentsToParts } from './attachments-to-parts';
 
 const makePushOrCombine = (v1Messages: MastraMessageV1[]) => (msg: MastraMessageV1) => {
+  msg = { ...msg };
+  if (Array.isArray(msg.content) && msg.content.length === 1 && msg.content[0]?.type === `text`) {
+    msg.content = msg.content[0].text;
+  }
   const previousMessage = v1Messages.at(-1);
   if (
     msg.role === previousMessage?.role &&

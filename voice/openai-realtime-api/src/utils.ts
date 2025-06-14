@@ -1,5 +1,6 @@
 import { Readable } from 'stream';
 import type { ToolsInput } from '@mastra/core/agent';
+import type z from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
 export type OpenAIExecuteFunction = (args: any) => Promise<any>;
@@ -27,10 +28,10 @@ export const transformTools = (tools?: TTools) => {
       }
     } else if ('parameters' in tool) {
       if (isZodObject(tool.parameters)) {
-        parameters = zodToJsonSchema(tool.parameters);
+        parameters = zodToJsonSchema(tool.parameters as z.Schema); // TODO: this is wrong. something is messed up with tool parameters types
         delete parameters.$schema;
       } else {
-        parameters = tool.parameters;
+        parameters = tool.parameters!;
       }
     } else {
       console.warn(`Tool ${name} has neither inputSchema nor parameters, skipping`);

@@ -216,7 +216,7 @@ describe('Network Handlers', () => {
         },
       } as any;
       const mockStream = {
-        toDataStreamResponse: vi.fn().mockReturnValue(mockStreamResult),
+        toUIMessageStreamResponse: vi.fn().mockReturnValue(mockStreamResult),
       };
 
       vi.spyOn(mockNetwork, 'stream').mockResolvedValue(mockStream as any);

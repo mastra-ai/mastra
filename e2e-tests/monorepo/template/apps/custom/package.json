@@ -13,7 +13,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@ai-sdk/openai": "^1.2.1",
+    "@ai-sdk/openai": "2.0.0-alpha.11",
     "@mastra/core": "monorepo-test",
     "@inner/inner-tools": "workspace:*",
     "zod": "^3.25.56"

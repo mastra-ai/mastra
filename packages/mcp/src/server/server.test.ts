@@ -16,7 +16,7 @@ import type {
   GetPromptResult,
   Prompt,
 } from '@modelcontextprotocol/sdk/types.js';
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV2 } from 'ai/test';
 import { Hono } from 'hono';
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
@@ -71,8 +71,7 @@ const createMockAgent = (name: string, generateFn: any, instructionsFn?: any, de
     name: name,
     instructions: instructionsFn,
     description: description || '',
-    model: new MockLanguageModelV1({
-      defaultObjectGenerationMode: 'json',
+    model: new MockLanguageModelV2({
       doGenerate: async options => {
         return generateFn((options.prompt.at(-1)?.content[0] as { text: string }).text);
       },

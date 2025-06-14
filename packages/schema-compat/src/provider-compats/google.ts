@@ -1,4 +1,3 @@
-import type { LanguageModelV1 } from 'ai';
 import type { ZodTypeAny } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
 import {
@@ -11,9 +10,10 @@ import {
   isString,
   isUnion,
 } from '../schema-compatibility';
+import type { SchemaCompatModel } from '../schema-compatibility';
 
 export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
-  constructor(model: LanguageModelV1) {
+  constructor(model: SchemaCompatModel) {
     super(model);
   }
 

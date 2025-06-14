@@ -231,8 +231,7 @@ describe('ClickhouseStore', () => {
 
       // Verify order is maintained
       retrievedMessages.forEach((msg, idx) => {
-        // @ts-expect-error
-        expect(msg.content[0].text).toBe(messages[idx].content[0].text);
+        expect(msg.content).toBe(messages[idx].content);
       });
     }, 10e3);
 

@@ -261,8 +261,6 @@ export async function streamGenerateHandler({
   runtimeContext: RuntimeContext;
   agentId: string;
   body: GetBody<'stream'> & {
-    // @deprecated use resourceId
-    resourceid?: string;
     runtimeContext?: string;
   };
 }): Promise<Response | undefined> {
@@ -273,9 +271,7 @@ export async function streamGenerateHandler({
       throw new HTTPException(404, { message: 'Agent not found' });
     }
 
-    const { messages, resourceId, resourceid, runtimeContext: agentRuntimeContext, ...rest } = body;
-    // Use resourceId if provided, fall back to resourceid (deprecated)
-    const finalResourceId = resourceId ?? resourceid;
+    const { messages, resourceId, runtimeContext: agentRuntimeContext, ...rest } = body;
 
     const finalRuntimeContext = new RuntimeContext<Record<string, unknown>>([
       ...Array.from(runtimeContext.entries()),
@@ -287,18 +283,23 @@ export async function streamGenerateHandler({
     const streamResult = await agent.stream(messages, {
       ...rest,
       // @ts-expect-error TODO fix types
-      resourceId: finalResourceId,
+      resourceId,
       runtimeContext: finalRuntimeContext,
     });
 
     const streamResponse = rest.output
       ? streamResult.toTextStreamResponse()
-      : streamResult.toDataStreamResponse({
-          sendUsage: true,
+      : streamResult.toUIMessageStreamResponse({
+          // sendUsage: true, // <- TODO: this doesn't exist anymore. Why?
           sendReasoning: true,
-          getErrorMessage: (error: any) => {
+          sendSources: true, // TODO: this is false by default. Do we need to make this configurable or what?
+          onError: (error: any) => {
             return `An error occurred while processing your request. ${error instanceof Error ? error.message : JSON.stringify(error)}`;
           },
+          // TODO: do we need to do something with these?
+          // messageMetadata(options) {
+          // },
+          // newMessageId: ""
         });
 
     return streamResponse;

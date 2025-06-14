@@ -91,7 +91,7 @@ export class AGUIAdapter extends AbstractAgent {
           finalMessages.push(assistantMessage);
 
           return processDataStream({
-            stream: response.toDataStreamResponse().body!,
+            stream: response.toUIMessageStreamResponse().body!,
             onTextPart: text => {
               assistantMessage.content += text;
               const event: TextMessageChunkEvent = {

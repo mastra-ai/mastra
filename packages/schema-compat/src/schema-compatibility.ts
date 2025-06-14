@@ -1,9 +1,11 @@
-import type { Schema, LanguageModelV1 } from 'ai';
+import type { Schema, LanguageModel } from 'ai';
 import type { JSONSchema7 } from 'json-schema';
 import { z, ZodOptional, ZodObject, ZodArray, ZodUnion, ZodString, ZodNumber, ZodDate, ZodDefault } from 'zod';
 import type { ZodTypeAny } from 'zod';
 import type { Targets } from 'zod-to-json-schema';
 import { convertZodSchemaToAISDKSchema } from './utils';
+
+export type SchemaCompatModel = Exclude<LanguageModel, string>;
 
 /**
  * All supported string validation check types that can be processed or converted to descriptions.
@@ -181,14 +183,14 @@ type DateConstraints = {
  * ```
  */
 export abstract class SchemaCompatLayer {
-  private model: LanguageModelV1;
+  private model: SchemaCompatModel;
 
   /**
    * Creates a new schema compatibility instance.
    *
    * @param model - The language model this compatibility layer applies to
    */
-  constructor(model: LanguageModelV1) {
+  constructor(model: SchemaCompatModel) {
     this.model = model;
   }
 
@@ -197,7 +199,7 @@ export abstract class SchemaCompatLayer {
    *
    * @returns The language model instance
    */
-  getModel(): LanguageModelV1 {
+  getModel(): SchemaCompatModel {
     return this.model;
   }
 

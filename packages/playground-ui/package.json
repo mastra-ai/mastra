@@ -43,6 +43,7 @@
   "author": "Mastra",
   "license": "Elastic-2.0",
   "dependencies": {
+    "@ai-sdk/provider-utils": "3.0.0-alpha.12",
     "@ai-sdk/ui-utils": "^1.2.11",
     "@assistant-ui/react": "^0.7.91",
     "@assistant-ui/react-markdown": "^0.7.21",
@@ -75,6 +76,7 @@
     "@uiw/codemirror-theme-dracula": "^4.23.13",
     "@uiw/react-codemirror": "^4.23.13",
     "@xyflow/react": "^12.6.4",
+    "ai": "5.0.0-alpha.12",
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
     "json-schema-to-zod": "^2.6.1",

@@ -8,7 +8,7 @@ import {
   applyCompatLayer,
   convertZodSchemaToAISDKSchema,
 } from '@mastra/schema-compat';
-import type { ToolExecutionOptions } from 'ai';
+import type { ToolCallOptions } from 'ai';
 import { z } from 'zod';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
@@ -108,7 +108,7 @@ export class CoreToolBuilder extends MastraBase {
       type: logType,
     });
 
-    const execFunction = async (args: any, execOptions: ToolExecutionOptions) => {
+    const execFunction = async (args: any, execOptions: ToolCallOptions) => {
       if (isVercelTool(tool)) {
         return tool?.execute?.(args, execOptions) ?? undefined;
       }

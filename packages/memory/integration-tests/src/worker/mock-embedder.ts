@@ -5,7 +5,7 @@ import type { EmbeddingModel } from 'ai';
  * but doesn't perform actual embeddings. The main thread's Memory instance will handle real embeddings.
  */
 export const mockEmbedder: EmbeddingModel<string> = {
-  specificationVersion: 'v1', // Or appropriate version
+  specificationVersion: 'v2', // Or appropriate version
   provider: 'mock-provider',
   modelId: 'mock-embedder-model',
   maxEmbeddingsPerCall: 128, // A reasonable default

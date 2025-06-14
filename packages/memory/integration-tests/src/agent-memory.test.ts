@@ -77,8 +77,10 @@ describe('Agent Memory Tests', () => {
 
       // Fetch messages from memory
       const { messages, uiMessages } = await agent.getMemory()!.query({ threadId });
-      const userMessages = messages.filter((m: any) => m.role === 'user').map((m: any) => m.content);
-      const userUiMessages = uiMessages.filter((m: any) => m.role === 'user').map((m: any) => m.content);
+      const userMessages = messages.filter(m => m.role === 'user').map(m => m.content);
+      const userUiMessages = uiMessages
+        .filter(m => m.role === 'user')
+        .map(m => m.parts.find(p => p.type === `text`)?.text);
 
       expect(userMessages).toEqual(expect.arrayContaining(['First message', 'Second message']));
       expect(userUiMessages).toEqual(expect.arrayContaining(['First message', 'Second message']));
@@ -104,10 +106,16 @@ describe('Agent Memory Tests', () => {
 
       // Fetch messages from memory
       const { messages, uiMessages } = await agent.getMemory()!.query({ threadId });
-      const userMessages = messages.filter((m: any) => m.role === 'user').map((m: any) => m.content);
-      const userUiMessages = uiMessages.filter((m: any) => m.role === 'user').map((m: any) => m.content);
-      const assistantMessages = messages.filter((m: any) => m.role === 'assistant').map((m: any) => m.content);
-      const assistantUiMessages = uiMessages.filter((m: any) => m.role === 'assistant').map((m: any) => m.content);
+      const userMessages = messages.filter(m => m.role === 'user').map(m => m.content);
+      const userUiMessages = uiMessages
+        .filter(m => m.role === 'user')
+        .map(m => m.parts.find(p => p.type === `text`)?.text);
+
+      const assistantMessages = messages.filter(m => m.role === 'assistant').map(m => m.content);
+      const assistantUiMessages = uiMessages
+        .filter(m => m.role === 'assistant')
+        .map(m => m.parts.find(p => p.type === `text`)?.text);
+
       expect(userMessages).toEqual(expect.arrayContaining(['What is 2+2?', 'Give me JSON']));
       expect(userUiMessages).toEqual(expect.arrayContaining(['What is 2+2?', 'Give me JSON']));
       function flattenAssistantMessages(messages: any[]) {
@@ -148,12 +156,12 @@ describe('Agent Memory Tests', () => {
 
       // Assert that the context messages are NOT saved
       const savedContextMessages = messages.filter(
-        (m: any) => m.content === contextMessageContent1 || m.content === contextMessageContent2,
+        m => m.content === contextMessageContent1 || m.content === contextMessageContent2,
       );
       expect(savedContextMessages.length).toBe(0);
 
       // Assert that the user message IS saved
-      const savedUserMessages = messages.filter((m: any) => m.role === 'user');
+      const savedUserMessages = messages.filter(m => m.role === 'user');
       expect(savedUserMessages.length).toBe(1);
       expect(savedUserMessages[0].content).toBe(userMessageContent);
     });

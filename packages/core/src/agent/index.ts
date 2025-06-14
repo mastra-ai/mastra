@@ -8,7 +8,7 @@ import type {
   TextPart,
   UIMessage,
 } from 'ai';
-import type { JSONSchema7 } from 'json-schema';
+import type { JSONSchema7, JSONSchema7Type } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraBase } from '../base';
@@ -16,7 +16,6 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { Metric } from '../eval';
 import { AvailableHooks, executeHook } from '../hooks';
 import type { GenerateReturn, StreamReturn } from '../llm';
-import type { MastraLLMBase } from '../llm/model';
 import { MastraLLM } from '../llm/model';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
@@ -24,7 +23,7 @@ import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
 import { RuntimeContext } from '../runtime-context';
 import { InstrumentClass } from '../telemetry';
-import type { CoreTool } from '../tools/types';
+import type { ConvertedCoreTool, CoreTool, ToolParameters } from '../tools/types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties } from '../utils';
 import type { CompositeVoice } from '../voice';
 import { DefaultVoice } from '../voice';
@@ -375,8 +374,8 @@ export class Agent<
    * @returns A promise that resolves to the LLM instance
    */
   public getLLM({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
-    | MastraLLMBase
-    | Promise<MastraLLMBase> {
+    | MastraLLM
+    | Promise<MastraLLM> {
     const model = this.getModel({ runtimeContext });
 
     return resolveMaybePromise(model, model => {
@@ -493,15 +492,15 @@ export class Agent<
     for (const part of message.parts) {
       if (part.type === `text`) {
         partsToGen.push(part);
-      } else if (part.type === `source`) {
+      } else if (part.type === `source-url`) {
         partsToGen.push({
           type: 'text',
-          text: `User added URL: ${part.source.url.substring(0, 100)}`,
+          text: `User added URL: ${part.url.toString().substring(0, 100)}`,
         });
       } else if (part.type === `file`) {
         partsToGen.push({
           type: 'text',
-          text: `User added ${part.mimeType} file: ${part.data.substring(0, 100)}`,
+          text: `User added ${part.mediaType} file: ${part.url.toString().substring(0, 100)}`,
         });
       }
     }
@@ -624,7 +623,7 @@ export class Agent<
     runtimeContext: RuntimeContext;
     mastraProxy?: MastraUnion;
   }) {
-    let convertedMemoryTools: Record<string, CoreTool> = {};
+    let convertedMemoryTools: Record<string, ConvertedCoreTool> = {};
     // Get memory tools if available
     const memory = this.getMemory();
     const memoryTools = memory?.getTools?.();
@@ -693,7 +692,7 @@ export class Agent<
       );
 
       convertedMemoryTools = Object.fromEntries(
-        memoryToolEntries.filter((entry): entry is [string, CoreTool] => Boolean(entry)),
+        memoryToolEntries.filter((entry): entry is [string, ConvertedCoreTool] => Boolean(entry)),
       );
     }
     return convertedMemoryTools;
@@ -712,7 +711,7 @@ export class Agent<
     runtimeContext: RuntimeContext;
     mastraProxy?: MastraUnion;
   }) {
-    let toolsForRequest: Record<string, CoreTool> = {};
+    let toolsForRequest: Record<string, ConvertedCoreTool> = {};
 
     this.logger.debug(`[Agents:${this.name}] - Assembling assigned tools`, { runId, threadId, resourceId });
 
@@ -748,7 +747,7 @@ export class Agent<
     );
 
     const assignedToolEntriesConverted = Object.fromEntries(
-      assignedCoreToolEntries.filter((entry): entry is [string, CoreTool] => Boolean(entry)),
+      assignedCoreToolEntries.filter((entry): entry is [string, ConvertedCoreTool] => Boolean(entry)),
     );
 
     toolsForRequest = {
@@ -773,7 +772,7 @@ export class Agent<
     runtimeContext: RuntimeContext;
     mastraProxy?: MastraUnion;
   }) {
-    let toolsForRequest: Record<string, CoreTool> = {};
+    let toolsForRequest: Record<string, ConvertedCoreTool> = {};
 
     const memory = this.getMemory();
     const toolsFromToolsets = Object.values(toolsets || {});
@@ -797,7 +796,11 @@ export class Agent<
             runtimeContext,
             model: typeof this.model === 'function' ? await this.getModel({ runtimeContext }) : this.model,
           };
-          const convertedToCoreTool = makeCoreTool(toolObj, options, 'toolset');
+          const convertedToCoreTool = makeCoreTool<Exclude<ToolParameters, JSONSchema7Type>>(
+            toolObj,
+            options,
+            'toolset',
+          );
           toolsForRequest[toolName] = convertedToCoreTool;
         }
       }
@@ -821,7 +824,7 @@ export class Agent<
     mastraProxy?: MastraUnion;
     clientTools?: ToolsInput;
   }) {
-    let toolsForRequest: Record<string, CoreTool> = {};
+    let toolsForRequest: Record<string, ConvertedCoreTool> = {};
     const memory = this.getMemory();
     // Convert client tools
     const clientToolsForInput = Object.entries(clientTools || {});
@@ -843,7 +846,11 @@ export class Agent<
           runtimeContext,
           model: typeof this.model === 'function' ? await this.getModel({ runtimeContext }) : this.model,
         };
-        const convertedToCoreTool = makeCoreTool(rest, options, 'client-tool');
+        const convertedToCoreTool = makeCoreTool<Exclude<ToolParameters, JSONSchema7Type>>(
+          rest,
+          options,
+          'client-tool',
+        );
         toolsForRequest[toolName] = convertedToCoreTool;
       }
     }
@@ -862,7 +869,7 @@ export class Agent<
     resourceId?: string;
     runtimeContext: RuntimeContext;
   }) {
-    let convertedWorkflowTools: Record<string, CoreTool> = {};
+    let convertedWorkflowTools: Record<string, ConvertedCoreTool> = {};
     const workflows = await this.getWorkflows({ runtimeContext });
     if (Object.keys(workflows).length > 0) {
       convertedWorkflowTools = Object.entries(workflows).reduce(
@@ -909,10 +916,10 @@ export class Agent<
                 throw mastraError;
               }
             },
-          };
+          } satisfies CoreTool<Exclude<ToolParameters, JSONSchema7Type>>;
           return memo;
         },
-        {} as Record<string, CoreTool>,
+        {} as typeof convertedWorkflowTools,
       );
     }
 
@@ -933,7 +940,7 @@ export class Agent<
     resourceId?: string;
     runId?: string;
     runtimeContext: RuntimeContext;
-  }): Promise<Record<string, CoreTool>> {
+  }): Promise<Record<string, CoreTool<Exclude<ToolParameters, JSONSchema7Type>>>> {
     let mastraProxy = undefined;
     const logger = this.logger;
 
@@ -1253,7 +1260,7 @@ export class Agent<
               }
 
               const config = memory.getMergedThreadConfig(memoryConfig);
-              const userMessage = this.getMostRecentUserMessage(messageList.get.all.ui());
+              const userMessage = this.getMostRecentUserMessage(messageList.get.all.aiV5.ui());
               const title =
                 config?.threads?.generateTitle && userMessage
                   ? await this.genTitle(userMessage, runtimeContext)
@@ -1300,7 +1307,7 @@ export class Agent<
         }
 
         if (Object.keys(this.evals || {}).length > 0) {
-          const userInputMessages = messageList.get.all.ui().filter(m => m.role === 'user');
+          const userInputMessages = messageList.get.all.aiV5.model().filter(m => m.role === 'user');
           const input = userInputMessages
             .map(message => (typeof message.content === 'string' ? message.content : ''))
             .join('\n');

@@ -415,7 +415,7 @@ describe('D1Store', () => {
 
       // Save messages
       const savedMessages = await store.saveMessages({ messages, format: 'v2' });
-      expect(savedMessages).toEqual(messages);
+      expect(savedMessages).toEqual(messages.map(m => expect.objectContaining(m)));
 
       // Retrieve messages
       const retrievedMessages = await store.getMessages({ threadId: thread.id, format: 'v2' });

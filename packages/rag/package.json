@@ -39,17 +39,17 @@
     "ai": "^4.0.0"
   },
   "devDependencies": {
-    "@ai-sdk/cohere": "latest",
-    "@ai-sdk/openai": "latest",
+    "@ai-sdk/cohere": "2.0.0-alpha.11",
+    "@ai-sdk/openai": "2.0.0-alpha.11",
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/big.js": "^6.2.2",
-    "@types/node": "^20.19.0",
-    "ai": "^4.3.16",
+    "ai": "5.0.0-alpha.11",
     "dotenv": "^16.5.0",
     "eslint": "^9.28.0",
     "tsup": "^8.5.0",
+    "@types/node": "^20.19.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.3"
   },

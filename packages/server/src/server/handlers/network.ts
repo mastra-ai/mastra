@@ -151,12 +151,12 @@ export async function streamGenerateHandler({
 
     const streamResponse = output
       ? streamResult.toTextStreamResponse()
-      : streamResult.toDataStreamResponse({
-          sendUsage: true,
-          sendReasoning: true,
-          getErrorMessage: (error: any) => {
+      : streamResult.toUIMessageStreamResponse({
+          onError: (error: any) => {
             return `An error occurred while processing your request. ${error instanceof Error ? error.message : JSON.stringify(error)}`;
           },
+          sendReasoning: true,
+          sendSources: true,
         });
 
     return streamResponse;

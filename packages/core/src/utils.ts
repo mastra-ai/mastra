@@ -1,14 +1,13 @@
 import { createHash } from 'crypto';
-import type { CoreMessage, LanguageModelV1 } from 'ai';
 import jsonSchemaToZod from 'json-schema-to-zod';
 import { z } from 'zod';
 import type { MastraPrimitives } from './action';
-import type { ToolsInput } from './agent';
+import type { MastraLanguageModel, ToolsInput } from './agent';
 import type { IMastraLogger } from './logger';
 import type { Mastra } from './mastra';
-import type { AiMessageType, MastraMemory } from './memory';
+import type { MastraMemory } from './memory';
 import type { RuntimeContext } from './runtime-context';
-import type { CoreTool, ToolAction, VercelTool } from './tools';
+import type { CoreTool, ToolAction, ToolParameters, VercelTool } from './tools';
 import { CoreToolBuilder } from './tools/tool-builder/builder';
 import { isVercelTool } from './tools/toolchecks';
 
@@ -200,7 +199,7 @@ export interface ToolOptions {
   runtimeContext: RuntimeContext;
   memory?: MastraMemory;
   agentName?: string;
-  model?: LanguageModelV1;
+  model?: MastraLanguageModel;
 }
 
 type ToolToConvert = VercelTool | ToolAction<any, any, any>;
@@ -282,12 +281,12 @@ function convertVercelToolParameters(tool: VercelTool): z.ZodType {
  * @param logType - Type of tool to log (tool or toolset)
  * @returns A CoreTool that can be used by the system
  */
-export function makeCoreTool(
+export function makeCoreTool<Parameters = ToolParameters>(
   originalTool: ToolToConvert,
   options: ToolOptions,
   logType?: 'tool' | 'toolset' | 'client-tool',
-): CoreTool {
-  return new CoreToolBuilder({ originalTool, options, logType }).build();
+): CoreTool<Parameters> {
+  return new CoreToolBuilder({ originalTool, options, logType }).build() as CoreTool<Parameters>; // TODO: shouldn't use as here.
 }
 
 /**
@@ -378,50 +377,6 @@ export function checkEvalStorageFields(traceObject: any, logger?: IMastraLogger)
   }
 
   return true;
-}
-
-// lifted from https://github.com/vercel/ai/blob/main/packages/ai/core/prompt/detect-prompt-type.ts#L27
-function detectSingleMessageCharacteristics(
-  message: any,
-): 'has-ui-specific-parts' | 'has-core-specific-parts' | 'message' | 'other' {
-  if (
-    typeof message === 'object' &&
-    message !== null &&
-    (message.role === 'function' || // UI-only role
-      message.role === 'data' || // UI-only role
-      'toolInvocations' in message || // UI-specific field
-      'parts' in message || // UI-specific field
-      'experimental_attachments' in message)
-  ) {
-    return 'has-ui-specific-parts';
-  } else if (
-    typeof message === 'object' &&
-    message !== null &&
-    'content' in message &&
-    (Array.isArray(message.content) || // Core messages can have array content
-      'experimental_providerMetadata' in message ||
-      'providerOptions' in message)
-  ) {
-    return 'has-core-specific-parts';
-  } else if (
-    typeof message === 'object' &&
-    message !== null &&
-    'role' in message &&
-    'content' in message &&
-    typeof message.content === 'string' &&
-    ['system', 'user', 'assistant', 'tool'].includes(message.role)
-  ) {
-    return 'message';
-  } else {
-    return 'other';
-  }
-}
-
-export function isUiMessage(message: CoreMessage | AiMessageType): message is AiMessageType {
-  return detectSingleMessageCharacteristics(message) === `has-ui-specific-parts`;
-}
-export function isCoreMessage(message: CoreMessage | AiMessageType): message is CoreMessage {
-  return [`has-core-specific-parts`, `message`].includes(detectSingleMessageCharacteristics(message));
 }
 
 /** Represents a validated SQL identifier (e.g., table or column name). */
