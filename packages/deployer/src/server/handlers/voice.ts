@@ -37,14 +37,15 @@ export async function speakHandler(c: Context) {
     const mastra: Mastra = c.get('mastra');
     const agentId = c.req.param('agentId');
     const { input, options } = await c.req.json();
+    const { speakerId, ...providerOptions } = options ?? {};
 
     const audioStream = await getOriginalSpeakHandler({
       mastra,
       agentId,
-      body: { text: input, speakerId: options?.speakerId },
+      body: { text: input, speakerId, ...providerOptions },
     });
 
-    c.header('Content-Type', `audio/${options?.filetype ?? 'mp3'}`);
+    c.header('Content-Type', `audio/${options.responseFormat ?? 'mp3'}`);
     c.header('Transfer-Encoding', 'chunked');
 
     return c.body(audioStream as any);
