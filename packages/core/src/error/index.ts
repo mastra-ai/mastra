@@ -9,6 +9,11 @@ export enum ErrorDomain {
   MASTRA_VOICE = 'MASTRA_VOICE',
   MASTRA_VECTOR = 'MASTRA_VECTOR',
   LLM = 'LLM',
+  AUTH = 'AUTH',
+  EVAL = 'EVAL',
+  A2A = 'A2A',
+  MASTRA_INSTANCE = 'MASTRA_INSTANCE',
+  STORAGE = 'STORAGE',
   UNKNOWN = 'UNKNOWN',
 }
 

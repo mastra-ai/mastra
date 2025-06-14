@@ -1,3 +1,4 @@
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 
@@ -34,8 +35,23 @@ export class ServerResourceActions {
       try {
         await this.getSdkServer().sendResourceUpdated({ uri });
       } catch (error) {
-        this.getLogger().error('Failed to send resource updated notification:', { error });
-        throw error;
+        const mastraError = new MastraError(
+          {
+            id: 'MCP_SERVER_RESOURCE_UPDATED_NOTIFICATION_FAILED',
+            domain: ErrorDomain.MCP,
+            category: ErrorCategory.THIRD_PARTY,
+            text: 'Failed to send resource updated notification',
+            details: {
+              uri,
+            },
+          },
+          error,
+        );
+        this.getLogger().trackException(mastraError);
+        this.getLogger().error('Failed to send resource updated notification:', {
+          error: mastraError.toString(),
+        });
+        throw mastraError;
       }
     } else {
       this.getLogger().debug(`Resource ${uri} was updated, but no active subscriptions for it.`);
@@ -55,8 +71,20 @@ export class ServerResourceActions {
     try {
       await this.getSdkServer().sendResourceListChanged();
     } catch (error) {
-      this.getLogger().error('Failed to send resource list changed notification:', { error });
-      throw error;
+      const mastraError = new MastraError(
+        {
+          id: 'MCP_SERVER_RESOURCE_LIST_CHANGED_NOTIFICATION_FAILED',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.THIRD_PARTY,
+          text: 'Failed to send resource list changed notification',
+        },
+        error,
+      );
+      this.getLogger().trackException(mastraError);
+      this.getLogger().error('Failed to send resource list changed notification:', {
+        error: mastraError.toString(),
+      });
+      throw mastraError;
     }
   }
 }

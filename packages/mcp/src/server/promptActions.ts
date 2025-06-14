@@ -1,3 +1,4 @@
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 
@@ -28,10 +29,20 @@ export class ServerPromptActions {
     try {
       await this.getSdkServer().sendPromptListChanged();
     } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: 'MCP_SERVER_PROMPT_LIST_CHANGED_NOTIFICATION_FAILED',
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.THIRD_PARTY,
+          text: 'Failed to send prompt list changed notification',
+        },
+        error,
+      );
       this.getLogger().error('Failed to send prompt list changed notification:', {
-        error: error instanceof Error ? error.message : String(error),
+        error: mastraError.toString(),
       });
-      throw error;
+      this.getLogger().trackException(mastraError);
+      throw mastraError;
     }
   }
 }
