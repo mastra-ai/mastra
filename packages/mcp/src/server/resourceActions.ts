@@ -38,7 +38,7 @@ export class ServerResourceActions {
         const mastraError = new MastraError(
           {
             id: 'MCP_SERVER_RESOURCE_UPDATED_NOTIFICATION_FAILED',
-            domain: ErrorDomain.MASTRA_VECTOR,
+            domain: ErrorDomain.MCP,
             category: ErrorCategory.THIRD_PARTY,
             text: 'Failed to send resource updated notification',
             details: {
@@ -74,7 +74,7 @@ export class ServerResourceActions {
       const mastraError = new MastraError(
         {
           id: 'MCP_SERVER_RESOURCE_LIST_CHANGED_NOTIFICATION_FAILED',
-          domain: ErrorDomain.MASTRA_VECTOR,
+          domain: ErrorDomain.MCP,
           category: ErrorCategory.THIRD_PARTY,
           text: 'Failed to send resource list changed notification',
         },

@@ -32,7 +32,7 @@ export class ServerPromptActions {
       const mastraError = new MastraError(
         {
           id: 'MCP_SERVER_PROMPT_LIST_CHANGED_NOTIFICATION_FAILED',
-          domain: ErrorDomain.MASTRA_VECTOR,
+          domain: ErrorDomain.MCP,
           category: ErrorCategory.THIRD_PARTY,
           text: 'Failed to send prompt list changed notification',
         },
