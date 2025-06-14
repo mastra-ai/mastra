@@ -126,7 +126,7 @@ export class MongoDBStore extends MastraStorage {
           error,
         );
         this.logger.error(matstraError.message);
-        this.logger.trackException(matstraError);
+        this.logger?.trackException(matstraError);
       }
     }
   }
@@ -147,7 +147,7 @@ export class MongoDBStore extends MastraStorage {
           error,
         );
         this.logger.error(matstraError.message);
-        this.logger.trackException(matstraError);
+        this.logger?.trackException(matstraError);
       }
     }
   }

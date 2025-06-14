@@ -280,7 +280,7 @@ export class UpstashStore extends MastraStorage {
         },
         error,
       );
-      this.logger.trackException(mastraError);
+      this.logger?.trackException(mastraError);
       this.logger.error(mastraError.toString());
       return [];
     }
@@ -422,7 +422,7 @@ export class UpstashStore extends MastraStorage {
         },
         error,
       );
-      this.logger.trackException(mastraError);
+      this.logger?.trackException(mastraError);
       this.logger.error(mastraError.toString());
       return {
         traces: [],
@@ -636,7 +636,7 @@ export class UpstashStore extends MastraStorage {
         },
         error,
       );
-      this.logger.trackException(mastraError);
+      this.logger?.trackException(mastraError);
       this.logger.error(mastraError.toString());
       return [];
     }
@@ -679,7 +679,7 @@ export class UpstashStore extends MastraStorage {
         },
         error,
       );
-      this.logger.trackException(mastraError);
+      this.logger?.trackException(mastraError);
       this.logger.error(mastraError.toString());
       return {
         threads: [],
@@ -710,7 +710,7 @@ export class UpstashStore extends MastraStorage {
         },
         error,
       );
-      this.logger.trackException(mastraError);
+      this.logger?.trackException(mastraError);
       this.logger.error(mastraError.toString());
       throw mastraError;
     }
@@ -1141,7 +1141,7 @@ export class UpstashStore extends MastraStorage {
         error,
       );
       this.logger.error(mastraError.toString());
-      this.logger.trackException(mastraError);
+      this.logger?.trackException(mastraError);
       return {
         messages: [],
         total: 0,
@@ -1358,7 +1358,7 @@ export class UpstashStore extends MastraStorage {
         error,
       );
       this.logger.error(mastraError.toString());
-      this.logger.trackException(mastraError);
+      this.logger?.trackException(mastraError);
       return {
         evals: [],
         total: 0,

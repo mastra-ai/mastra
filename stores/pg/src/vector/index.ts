@@ -185,7 +185,7 @@ export class PgVector extends MastraVector {
         },
         error,
       );
-      this.logger.trackException(mastraError);
+      this.logger?.trackException(mastraError);
       throw mastraError;
     }
 
@@ -247,7 +247,7 @@ export class PgVector extends MastraVector {
         },
         error,
       );
-      this.logger.trackException(mastraError);
+      this.logger?.trackException(mastraError);
       throw mastraError;
     } finally {
       client.release();
@@ -301,7 +301,7 @@ export class PgVector extends MastraVector {
             },
             error,
           );
-          this.logger.trackException(mastraError);
+          this.logger?.trackException(mastraError);
           throw mastraError;
         }
       }
@@ -317,7 +317,7 @@ export class PgVector extends MastraVector {
         },
         error,
       );
-      this.logger.trackException(mastraError);
+      this.logger?.trackException(mastraError);
       throw mastraError;
     } finally {
       client.release();
@@ -418,7 +418,7 @@ export class PgVector extends MastraVector {
         },
         error,
       );
-      this.logger.trackException(mastraError);
+      this.logger?.trackException(mastraError);
       throw mastraError;
     }
 
@@ -477,7 +477,7 @@ export class PgVector extends MastraVector {
           },
           error,
         );
-        this.logger.trackException(mastraError);
+        this.logger?.trackException(mastraError);
         throw mastraError;
       });
   }
@@ -498,7 +498,7 @@ export class PgVector extends MastraVector {
         },
         error,
       );
-      this.logger.trackException(mastraError);
+      this.logger?.trackException(mastraError);
       throw mastraError;
     } finally {
       client.release();
@@ -630,7 +630,7 @@ export class PgVector extends MastraVector {
         },
         e,
       );
-      this.logger.trackException(mastraError);
+      this.logger?.trackException(mastraError);
       throw mastraError;
     } finally {
       client.release();
@@ -744,7 +744,7 @@ export class PgVector extends MastraVector {
         },
         e,
       );
-      this.logger.trackException(mastraError);
+      this.logger?.trackException(mastraError);
       throw mastraError;
     } finally {
       client.release();
@@ -771,7 +771,7 @@ export class PgVector extends MastraVector {
         },
         error,
       );
-      this.logger.trackException(mastraError);
+      this.logger?.trackException(mastraError);
       throw mastraError;
     } finally {
       client.release();
@@ -796,7 +796,7 @@ export class PgVector extends MastraVector {
         },
         e,
       );
-      this.logger.trackException(mastraError);
+      this.logger?.trackException(mastraError);
       throw mastraError;
     } finally {
       client.release();
@@ -868,7 +868,7 @@ export class PgVector extends MastraVector {
         },
         error,
       );
-      this.logger.trackException(mastraError);
+      this.logger?.trackException(mastraError);
       throw mastraError;
     } finally {
       client?.release();
@@ -905,7 +905,7 @@ export class PgVector extends MastraVector {
         },
         error,
       );
-      this.logger.trackException(mastraError);
+      this.logger?.trackException(mastraError);
       throw mastraError;
     } finally {
       client?.release();

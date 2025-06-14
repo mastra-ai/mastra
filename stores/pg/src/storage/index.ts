@@ -714,7 +714,7 @@ export class PostgresStore extends MastraStorage {
         error,
       );
       this.logger?.error?.(mastraError.toString());
-      this.logger.trackException(mastraError);
+      this.logger?.trackException(mastraError);
       return { threads: [], total: 0, page, perPage: perPageInput || 100, hasMore: false };
     }
   }
@@ -977,7 +977,7 @@ export class PostgresStore extends MastraStorage {
         error,
       );
       this.logger?.error?.(mastraError.toString());
-      this.logger.trackException(mastraError);
+      this.logger?.trackException(mastraError);
       return [];
     }
   }
@@ -1056,7 +1056,7 @@ export class PostgresStore extends MastraStorage {
         error,
       );
       this.logger?.error?.(mastraError.toString());
-      this.logger.trackException(mastraError);
+      this.logger?.trackException(mastraError);
       return { messages: [], total: 0, page, perPage: perPageInput || 40, hasMore: false };
     }
   }
@@ -1495,7 +1495,7 @@ export class PostgresStore extends MastraStorage {
         error,
       );
       this.logger?.error?.(mastraError.toString());
-      this.logger.trackException(mastraError);
+      this.logger?.trackException(mastraError);
       throw mastraError;
     }
   }
