@@ -15,14 +15,14 @@ importers:
         specifier: link:../../../../packages/core
         version: link:../../../../packages/core
       zod:
-        specifier: ^3.25.56
-        version: 3.25.56
+        specifier: ^3.25.63
+        version: 3.25.64
 
 packages:
 
-  zod@3.25.56:
-    resolution: {integrity: sha512-rd6eEF3BTNvQnR2e2wwolfTmUTnp70aUTqr0oaGbHifzC3BKJsoV+Gat8vxUMR1hwOKBs6El+qWehrHbCpW6SQ==}
+  zod@3.25.64:
+    resolution: {integrity: sha512-hbP9FpSZf7pkS7hRVUrOjhwKJNyampPgtXKc3AN6DsWtoHsg2Sb4SQaS4Tcay380zSwd2VPo9G9180emBACp5g==}
 
 snapshots:
 
-  zod@3.25.56: {}
+  zod@3.25.64: {}
