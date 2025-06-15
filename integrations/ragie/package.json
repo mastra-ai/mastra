@@ -63,7 +63,7 @@
     "husky": "^9.1.7",
     "jest": "^29.7.0",
     "size-limit": "^11.2.0",
-    "ts-jest": "^29.3.4",
+    "ts-jest": "^29.4.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3"
   },
@@ -71,7 +71,7 @@
   "author": "",
   "license": "Elastic-2.0",
   "dependencies": {
-    "@hey-api/client-fetch": "^0.3.4",
+    "@hey-api/client-fetch": "^0.13.1",
     "ts-to-zod": "^3.15.0",
     "zod": "^3.25.57"
   },
