@@ -35,7 +35,7 @@
   "license": "Elastic-2.0",
   "dependencies": {
     "json-schema": "^0.4.0",
-    "zod-from-json-schema": "^0.0.5",
+    "zod-from-json-schema": "^0.4.2",
     "zod-to-json-schema": "^3.24.5"
   },
   "peerDependencies": {
@@ -51,6 +51,6 @@
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.3",
-    "zod": "^3.25.57"
+    "zod": "^3.25.63"
   }
 }
