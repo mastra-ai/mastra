@@ -108,7 +108,7 @@ Create or update ~/.codeium/windsurf/mcp_config.json:
 }
 ```
 
-For more installation option visit [https://www.npmjs.com/package/@mastra/mcp-docs-server](https://www.npmjs.com/package/@mastra/mcp-docs-server)
+For more installation options visit [https://www.npmjs.com/package/@mastra/mcp-docs-server](https://www.npmjs.com/package/@mastra/mcp-docs-server)
 
 ## Contributing
 
