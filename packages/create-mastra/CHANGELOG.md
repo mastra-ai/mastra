@@ -1,5 +1,13 @@
 # create-mastra
 
+## 0.10.5-alpha.1
+
+### Patch Changes
+
+- 44ba52d: Add proper error message when installation of mastra fails
+- 3270d9d: Fix runtime context being undefined
+- fc677d7: For final result for a workflow
+
 ## 0.10.5-alpha.0
 
 ### Patch Changes
