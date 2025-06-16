@@ -23,6 +23,7 @@ export async function setupMonorepo(pathToStoreFiles, tag, pkgManager) {
   spawnSync(pkgManager, ['install'], {
     cwd: newPath,
     stdio: 'inherit',
+    env: process.env,
     shell: true,
   });
 
@@ -30,6 +31,7 @@ export async function setupMonorepo(pathToStoreFiles, tag, pkgManager) {
   spawnSync(pkgManager, ['build'], {
     cwd: join(newPath, 'apps', 'custom'),
     stdio: 'inherit',
-    shell: true,
+    // shell: true,
+    env: process.env,
   });
 }
