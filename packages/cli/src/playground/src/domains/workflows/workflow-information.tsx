@@ -23,12 +23,11 @@ import { useWorkflowRuns } from '@/pages/workflows/workflow/hooks/use-workflow-r
 export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: string; isLegacy?: boolean }) {
   const params = useParams();
   const navigate = useNavigate();
-  const [watchResult, setWatchResult] = useState<ExtendedWorkflowWatchResult | null>(null);
   const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId, !isLegacy);
   const { isLoading: isRunsLoading, data: runs } = useWorkflowRuns({ workflowId });
   const { data: legacyWorkflow, isLoading: isLegacyWorkflowLoading } = useLegacyWorkflow(workflowId, !!isLegacy);
   const { createWorkflowRun, startWorkflowRun } = useExecuteWorkflow();
-  const { watchWorkflow } = useWatchWorkflow();
+  const { watchWorkflow, watchResult } = useWatchWorkflow();
   const { resumeWorkflow } = useResumeWorkflow();
 
   const [runId, setRunId] = useState<string>('');
@@ -110,9 +109,7 @@ export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: stri
                       createWorkflowRun={createWorkflowRun.mutateAsync}
                       startWorkflowRun={startWorkflowRun.mutateAsync}
                       resumeWorkflow={resumeWorkflow.mutateAsync}
-                      watchWorkflow={({ workflowId, runId }) =>
-                        watchWorkflow.mutateAsync({ workflowId, runId, onUpdate: setWatchResult })
-                      }
+                      watchWorkflow={watchWorkflow.mutateAsync}
                       watchResult={watchResult}
                       isWatchingWorkflow={watchWorkflow.isPending}
                       isResumingWorkflow={resumeWorkflow.isPending}
