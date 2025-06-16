@@ -148,8 +148,18 @@ const renovateConfig = {
       groupName: 'Schema',
       commitMessageTopic: 'Schema',
       matchFileNames: ['+(package.json)', '**/package.json'],
-      matchPackageNames: ['zod', 'json-schema', 'zod-to-json-schema', 'zod-from-json-schema'],
+      matchPackageNames: ['zod', 'json-schema', 'zod-to-json-schema'],
       matchUpdateTypes: ['major', 'minor', 'patch'],
+      matchDepTypes: ['dependencies', 'devDependencies'],
+      dependencyDashboardApproval: false,
+      enabled: true,
+    },
+    {
+      groupName: 'Cloudflare',
+      commitMessageTopic: 'Cloudflare',
+      matchFileNames: ['+(package.json)', '**/package.json'],
+      matchPackageNames: ['cloudflare', 'miniflare'],
+      matchUpdateTypes: ['minor', 'patch'],
       matchDepTypes: ['dependencies', 'devDependencies'],
       dependencyDashboardApproval: false,
       enabled: true,
@@ -170,8 +180,9 @@ const ignorePackages = [
   'zod',
   'json-schema',
   'zod-to-json-schema',
-  'zod-from-json-schema',
   '@vitest/*',
+  'cloudflare',
+  'miniflare',
 ];
 
 for (const pkg of listOfPackages) {
