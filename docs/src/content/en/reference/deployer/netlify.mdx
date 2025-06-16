@@ -5,21 +5,27 @@ description: "Documentation for the NetlifyDeployer class, which deploys Mastra 
 
 # NetlifyDeployer
 
-The NetlifyDeployer deploys Mastra applications to Netlify Functions, handling site creation, configuration, and deployment processes. It extends the abstract Deployer class to provide Netlify-specific deployment functionality.
+The NetlifyDeployer deploys standalone Mastra applications to Netlify Functions, handling site creation, configuration, and deployment processes. It extends the abstract Deployer class to provide Netlify-specific deployment functionality.
+
+## Installation
+
+```bash copy
+npm install @mastra/deployer-netlify@latest
+```
 
 ## Usage Example
 
-```typescript
+```typescript filename="src/mastra/index.ts" showLineNumbers copy
 import { Mastra } from "@mastra/core";
 import { NetlifyDeployer } from "@mastra/deployer-netlify";
 
 const mastra = new Mastra({
+  // ...
   deployer: new NetlifyDeployer({
     scope: "your-team-slug",
     projectName: "your-project-name",
     token: "your-netlify-token",
-  }),
-  // ... other Mastra configuration options
+  })
 });
 ```
 

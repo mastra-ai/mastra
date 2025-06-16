@@ -108,15 +108,18 @@ export type VariableReference<
     }
   | { value: any; schema: z.ZodTypeAny };
 
-export type StreamEvent = TextStreamPart<any> & {
-  type: 'step-suspended';
-  payload: any;
-  id: string;
-} & {
-  type: 'step-waiting';
-  payload: any;
-  id: string;
-};
+export type StreamEvent =
+  | TextStreamPart<any>
+  | {
+      type: 'step-suspended';
+      payload: any;
+      id: string;
+    }
+  | {
+      type: 'step-waiting';
+      payload: any;
+      id: string;
+    };
 
 export type WatchEvent = {
   type: 'watch';

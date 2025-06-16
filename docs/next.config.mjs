@@ -307,6 +307,11 @@ export default withGT(
         permanent: true,
       },
       {
+        source: "/docs/deployment/client",
+        destination: "/docs/client-js/overview",
+        permanent: true,
+      },
+      {
         source: "/docs/frameworks/express",
         destination: "/docs/frameworks/servers/express",
         permanent: true,

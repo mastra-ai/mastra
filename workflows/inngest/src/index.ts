@@ -17,6 +17,7 @@ import type {
   SerializedStepFlowEntry,
   StepFailure,
   Emitter,
+  WatchEvent,
 } from '@mastra/core/workflows';
 import { EMITTER_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Span } from '@opentelemetry/api';
@@ -255,7 +256,10 @@ export class InngestWorkflow<
     const storage = this.#mastra?.getStorage();
     if (!storage) {
       this.logger.debug('Cannot get workflow runs. Mastra engine is not initialized');
-      return null;
+      //returning in memory run if no storage is initialized
+      return this.runs.get(runId)
+        ? ({ ...this.runs.get(runId), workflowName: this.id } as unknown as WorkflowRun)
+        : null;
     }
     const run = (await storage.getWorkflowRunById({ runId, workflowName: this.id })) as unknown as WorkflowRun;
 
@@ -263,6 +267,32 @@ export class InngestWorkflow<
       run ??
       (this.runs.get(runId) ? ({ ...this.runs.get(runId), workflowName: this.id } as unknown as WorkflowRun) : null)
     );
+  }
+
+  async getWorkflowRunExecutionResult(runId: string): Promise<WatchEvent['payload']['workflowState'] | null> {
+    const storage = this.#mastra?.getStorage();
+    if (!storage) {
+      this.logger.debug('Cannot get workflow run execution result. Mastra storage is not initialized');
+      return null;
+    }
+
+    const run = await storage.getWorkflowRunById({ runId, workflowName: this.id });
+
+    if (!run?.snapshot) {
+      return null;
+    }
+
+    if (typeof run.snapshot === 'string') {
+      return null;
+    }
+
+    return {
+      status: run.snapshot.status,
+      result: run.snapshot.result,
+      error: run.snapshot.error,
+      payload: run.snapshot.context?.input,
+      steps: run.snapshot.context as any,
+    };
   }
 
   __registerMastra(mastra: Mastra) {
