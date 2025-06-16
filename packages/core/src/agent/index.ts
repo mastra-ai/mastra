@@ -603,8 +603,25 @@ export class Agent<
 
       messageList.add(memoryMessages, 'memory');
 
+      const systemMessage =
+        messageList
+          .getSystemMessages()
+          ?.map(m => m.content)
+          ?.join(`\n`) ?? undefined;
+
+      const processedMemoryMessages = memory.processMessages({
+        // these will be processed
+        messages: messageList.get.remembered.v1() as CoreMessage[],
+        // these are here for inspecting but shouldn't be returned by the processor
+        // - ex TokenLimiter needs to measure all tokens even though it's only processing remembered messages
+        newMessages: messageList.get.input.v1() as CoreMessage[],
+        systemMessage,
+        memorySystemMessage: memorySystemMessage || undefined,
+      });
+
       return {
         threadId: thread.id,
+        messages: processedMemoryMessages,
       };
     }
 
