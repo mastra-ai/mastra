@@ -34,7 +34,6 @@ const execWithTimeout = async (command: string, timeoutMs?: number) => {
       throw error;
     }
   } catch (error: unknown) {
-    // Re-throw the error without console.error to let the caller handle it
     throw error;
   }
 };
