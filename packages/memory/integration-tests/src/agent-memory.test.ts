@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { openai } from '@ai-sdk/openai';
-import { Mastra } from '@mastra/core';
+import { CoreMessage, Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { RuntimeContext } from '@mastra/core/runtime-context';
 import { fastembed } from '@mastra/fastembed';
@@ -9,6 +9,7 @@ import { Memory } from '@mastra/memory';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { weatherTool } from './mastra/tools/weather';
+import { memoryProcessorAgent } from './mastra/agents/weather';
 
 describe('Agent Memory Tests', () => {
   const dbFile = 'file:mastra-agent.db';
@@ -277,4 +278,45 @@ describe('Agent Memory Tests', () => {
       expect(existingThread?.metadata).toMatchObject(metadata);
     });
   });
+});
+
+describe('Agent with message processors', () => {
+  it('should apply processors to filter tool messages from context', async () => {
+    const threadId = randomUUID();
+    const resourceId = 'processor-filter-tool-message';
+
+    // First, ask a question that will trigger a tool call
+    const firstResponse = await memoryProcessorAgent.generate('What is the weather in London?', {
+      threadId,
+      resourceId,
+    });
+
+    // The response should contain the weather.
+    expect(firstResponse.text).toContain('65');
+
+    // Check that tool calls were saved to memory
+    const memory = memoryProcessorAgent.getMemory();
+    const { messages: messagesFromMemory } = await memory!.query({ threadId });
+    const toolMessages = messagesFromMemory.filter(
+      m => m.role === 'tool' || (m.role === 'assistant' && typeof m.content !== 'string'),
+    );
+
+    expect(toolMessages.length).toBeGreaterThan(0);
+
+    // Now, ask a follow-up question. The processor should prevent the tool call history
+    // from being sent to the model.
+    const secondResponse = await memoryProcessorAgent.generate('What was the tool you just used?', {
+      threadId,
+      resourceId,
+    });
+
+    const secondResponseRequestMessages: CoreMessage[] = JSON.parse(secondResponse.request.body as string).messages;
+
+    expect(secondResponseRequestMessages.length).toBe(4);
+    // Filter out tool messages and tool results, should be the same as above.
+    expect(
+      secondResponseRequestMessages.filter(m => m.role !== 'tool' || (m as any)?.tool_calls?.[0]?.type !== 'function')
+        .length,
+    ).toBe(4);
+  }, 30_000);
 });
