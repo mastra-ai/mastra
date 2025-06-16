@@ -30,7 +30,7 @@
   "author": "",
   "license": "Elastic-2.0",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@modelcontextprotocol/sdk": "^1.12.3",
     "uuid": "^11.1.0",
     "zod": "^3.25.57",
     "zod-to-json-schema": "^3.24.5"
@@ -46,7 +46,7 @@
     "eslint": "^9.28.0",
     "hono": "^4.7.11",
     "tsup": "^8.5.0",
-    "tsx": "^4.19.4",
+    "tsx": "^4.20.3",
     "typescript": "^5.8.3",
     "vitest": "^3.2.3"
   },
