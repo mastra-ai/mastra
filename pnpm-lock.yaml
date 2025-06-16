@@ -42,7 +42,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
 
   auth/auth0:
     dependencies:
@@ -70,7 +70,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^2.1.9
-        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(@vitest/ui@3.2.3(vitest@3.2.3))(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
 
   auth/clerk:
     dependencies:
@@ -101,7 +101,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^2.1.9
-        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(@vitest/ui@3.2.3(vitest@3.2.3))(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
 
   auth/firebase:
     dependencies:
@@ -129,7 +129,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^2.1.9
-        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(@vitest/ui@3.2.3(vitest@3.2.3))(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
 
   auth/supabase:
     dependencies:
@@ -157,7 +157,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^2.1.9
-        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(@vitest/ui@3.2.3(vitest@3.2.3))(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
 
   auth/workos:
     dependencies:
@@ -188,7 +188,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^2.1.9
-        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(@vitest/ui@3.2.3(vitest@3.2.3))(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
 
   client-sdks/client-js:
     dependencies:
@@ -240,7 +240,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
 
   deployers/cloudflare:
     dependencies:
@@ -286,7 +286,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
 
   deployers/netlify:
     dependencies:
@@ -329,7 +329,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
 
   deployers/vercel:
     dependencies:
@@ -366,7 +366,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
 
   examples/dane:
     dependencies:
@@ -625,7 +625,7 @@ importers:
         version: 8.34.0(eslint@9.28.0(jiti@2.4.2))(typescript@5.8.3)
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
       zod:
         specifier: ^3.25.57
         version: 3.25.57
@@ -692,7 +692,7 @@ importers:
     dependencies:
       '@vitest/eslint-plugin':
         specifier: ^1.2.2
-        version: 1.2.2(eslint@9.28.0(jiti@2.4.2))(typescript@5.8.3)(vitest@3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0))
+        version: 1.2.2(eslint@9.28.0(jiti@2.4.2))(typescript@5.8.3)(vitest@3.2.3)
       eslint-plugin-import-x:
         specifier: ^4.15.2
         version: 4.15.2(@typescript-eslint/utils@8.34.0(eslint@9.28.0(jiti@2.4.2))(typescript@5.8.3))(eslint-import-resolver-node@0.3.9)(eslint@9.28.0(jiti@2.4.2))
@@ -762,7 +762,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^2.1.9
-        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(@vitest/ui@3.2.3(vitest@3.2.3))(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
 
   packages/auth:
     dependencies:
@@ -796,7 +796,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^2.1.9
-        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(@vitest/ui@3.2.3(vitest@3.2.3))(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
 
   packages/cli:
     dependencies:
@@ -938,7 +938,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
 
   packages/cli/src/playground:
     dependencies:
@@ -1319,7 +1319,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
       zod:
         specifier: ^3.25.57
         version: 3.25.57
@@ -1522,7 +1522,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^2.1.9
-        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(@vitest/ui@3.2.3(vitest@3.2.3))(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
 
   packages/evals:
     dependencies:
@@ -1589,7 +1589,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
 
   packages/fastembed:
     dependencies:
@@ -1614,7 +1614,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
 
   packages/loggers:
     dependencies:
@@ -1648,7 +1648,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
 
   packages/mcp:
     dependencies:
@@ -1718,7 +1718,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
       zod:
         specifier: ^3.25.57
         version: 3.25.57
@@ -1797,7 +1797,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
 
   packages/mcp-registry-registry:
     dependencies:
@@ -1852,7 +1852,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
 
   packages/mcp/integration-tests:
     dependencies:
@@ -1894,8 +1894,8 @@ importers:
         specifier: ^5.8.3
         version: 5.8.3
       vitest:
-        specifier: ^3.2.2
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        specifier: ^3.2.3
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
 
   packages/memory:
     dependencies:
@@ -1959,7 +1959,7 @@ importers:
         version: 8.34.0(eslint@9.28.0(jiti@2.4.2))(typescript@5.8.3)
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
 
   packages/memory/integration-tests:
     dependencies:
@@ -2026,7 +2026,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.2
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
 
   packages/playground-ui:
     dependencies:
@@ -2319,7 +2319,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
 
   packages/schema-compat:
     dependencies:
@@ -2356,7 +2356,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
       zod:
         specifier: ^3.25.57
         version: 3.25.57
@@ -2392,7 +2392,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^2.1.9
-        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(@vitest/ui@3.2.3(vitest@3.2.3))(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
       zod:
         specifier: ^3.25.57
         version: 3.25.57
@@ -2404,7 +2404,7 @@ importers:
     dependencies:
       vitest:
         specifier: '*'
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
     devDependencies:
       '@mastra/core':
         specifier: workspace:*
@@ -2439,7 +2439,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
 
   stores/chroma:
     dependencies:
@@ -2470,7 +2470,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
 
   stores/clickhouse:
     dependencies:
@@ -2504,7 +2504,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
 
   stores/cloudflare:
     dependencies:
@@ -2547,7 +2547,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
 
   stores/cloudflare-d1:
     dependencies:
@@ -2590,7 +2590,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
 
   stores/couchbase:
     dependencies:
@@ -2611,11 +2611,11 @@ importers:
         specifier: ^20.17.57
         version: 20.19.0
       '@vitest/coverage-v8':
-        specifier: 3.2.2
-        version: 3.2.2(vitest@3.2.3)
+        specifier: 3.2.3
+        version: 3.2.3(vitest@3.2.3)
       '@vitest/ui':
-        specifier: 3.2.2
-        version: 3.2.2(vitest@3.2.3)
+        specifier: 3.2.3
+        version: 3.2.3(vitest@3.2.3)
       axios:
         specifier: ^1.9.0
         version: 1.9.0(debug@4.4.1)
@@ -2630,7 +2630,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
 
   stores/dynamodb:
     dependencies:
@@ -2660,11 +2660,11 @@ importers:
         specifier: ^20.17.57
         version: 20.19.0
       '@vitest/coverage-v8':
-        specifier: 3.2.2
-        version: 3.2.2(vitest@3.2.3)
+        specifier: 3.2.3
+        version: 3.2.3(vitest@3.2.3)
       '@vitest/ui':
-        specifier: 3.2.2
-        version: 3.2.2(vitest@3.2.3)
+        specifier: 3.2.3
+        version: 3.2.3(vitest@3.2.3)
       axios:
         specifier: ^1.9.0
         version: 1.9.0(debug@4.4.1)
@@ -2679,7 +2679,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
 
   stores/lance:
     dependencies:
@@ -2716,7 +2716,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
 
   stores/libsql:
     dependencies:
@@ -2750,7 +2750,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
 
   stores/mongodb:
     dependencies:
@@ -2793,7 +2793,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
 
   stores/opensearch:
     dependencies:
@@ -2824,7 +2824,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
 
   stores/pg:
     dependencies:
@@ -2870,7 +2870,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
 
   stores/pinecone:
     dependencies:
@@ -2904,7 +2904,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
 
   stores/qdrant:
     dependencies:
@@ -2935,7 +2935,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
 
   stores/turbopuffer:
     dependencies:
@@ -2969,7 +2969,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
 
   stores/upstash:
     dependencies:
@@ -3009,7 +3009,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
 
   stores/vectorize:
     dependencies:
@@ -3043,7 +3043,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^3.2.3
-        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+        version: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
 
   voice/azure:
     dependencies:
@@ -3074,7 +3074,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^2.1.9
-        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@5.0.10))(lightningcss@1.29.2)(terser@5.39.0)
+        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(@vitest/ui@3.2.3(vitest@3.2.3))(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@5.0.10))(lightningcss@1.29.2)(terser@5.39.0)
 
   voice/cloudflare:
     dependencies:
@@ -3111,7 +3111,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^2.1.9
-        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(@vitest/ui@3.2.3(vitest@3.2.3))(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
 
   voice/deepgram:
     dependencies:
@@ -3145,7 +3145,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^2.1.9
-        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(@vitest/ui@3.2.3(vitest@3.2.3))(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
 
   voice/elevenlabs:
     dependencies:
@@ -3179,7 +3179,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^2.1.9
-        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(@vitest/ui@3.2.3(vitest@3.2.3))(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
 
   voice/gladia:
     dependencies:
@@ -3247,7 +3247,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^2.1.9
-        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(@vitest/ui@3.2.3(vitest@3.2.3))(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
 
   voice/murf:
     dependencies:
@@ -3281,7 +3281,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^2.1.9
-        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(@vitest/ui@3.2.3(vitest@3.2.3))(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
 
   voice/openai:
     dependencies:
@@ -3315,7 +3315,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^2.1.9
-        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(@vitest/ui@3.2.3(vitest@3.2.3))(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
 
   voice/openai-realtime-api:
     dependencies:
@@ -3355,7 +3355,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^2.1.9
-        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(@vitest/ui@3.2.3(vitest@3.2.3))(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
       zod:
         specifier: ^3.25.57
         version: 3.25.57
@@ -3389,7 +3389,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^2.1.9
-        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(@vitest/ui@3.2.3(vitest@3.2.3))(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
 
   voice/sarvam:
     dependencies:
@@ -3420,7 +3420,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^2.1.9
-        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(@vitest/ui@3.2.3(vitest@3.2.3))(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
 
   voice/speechify:
     dependencies:
@@ -3454,7 +3454,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^2.1.9
-        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(@vitest/ui@3.2.3(vitest@3.2.3))(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
 
   workflows/inngest:
     dependencies:
@@ -3518,7 +3518,7 @@ importers:
         version: 5.8.3
       vitest:
         specifier: ^2.1.9
-        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
+        version: 2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(@vitest/ui@3.2.3(vitest@3.2.3))(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)
 
 packages:
 
@@ -9957,11 +9957,11 @@ packages:
     peerDependencies:
       vite: ^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0-beta.0
 
-  '@vitest/coverage-v8@3.2.2':
-    resolution: {integrity: sha512-RVAi5xnqedSKvaoQyCTWvncMk8eYZcTTOsLK7XmnfOEvdGP/O/upA0/MA8Ss+Qs++mj0GcSRi/whR0S5iBPpTQ==}
+  '@vitest/coverage-v8@3.2.3':
+    resolution: {integrity: sha512-D1QKzngg8PcDoCE8FHSZhREDuEy+zcKmMiMafYse41RZpBE5EDJyKOTdqK3RQfsV2S2nyKor5KCs8PyPRFqKPg==}
     peerDependencies:
-      '@vitest/browser': 3.2.2
-      vitest: 3.2.2
+      '@vitest/browser': 3.2.3
+      vitest: 3.2.3
     peerDependenciesMeta:
       '@vitest/browser':
         optional: true
@@ -10009,9 +10009,6 @@ packages:
   '@vitest/pretty-format@2.1.9':
     resolution: {integrity: sha512-KhRIdGV2U9HOUzxfiHmY8IFHTdqtOhIzCpd8WRdJiE7D/HUcZVD0EgQCVjm+Q9gkUXWgBvMmTtZgIG48wq7sOQ==}
 
-  '@vitest/pretty-format@3.2.2':
-    resolution: {integrity: sha512-FY4o4U1UDhO9KMd2Wee5vumwcaHw7Vg4V7yR4Oq6uK34nhEJOmdRYrk3ClburPRUA09lXD/oXWZ8y/Sdma0aUQ==}
-
   '@vitest/pretty-format@3.2.3':
     resolution: {integrity: sha512-yFglXGkr9hW/yEXngO+IKMhP0jxyFw2/qys/CK4fFUZnSltD+MU7dVYGrH8rvPcK/O6feXQA+EU33gjaBBbAng==}
 
@@ -10033,16 +10030,13 @@ packages:
   '@vitest/spy@3.2.3':
     resolution: {integrity: sha512-JHu9Wl+7bf6FEejTCREy+DmgWe+rQKbK+y32C/k5f4TBIAlijhJbRBIRIOCEpVevgRsCQR2iHRUH2/qKVM/plw==}
 
-  '@vitest/ui@3.2.2':
-    resolution: {integrity: sha512-xHif5tkQOZK4YjA44rrzmvXMI1cb1Qato3P+NL/gwyoK5LdZx0f5Q59Il25JtuhN/htBvrT+Copt3Q4Ma4gJbg==}
+  '@vitest/ui@3.2.3':
+    resolution: {integrity: sha512-9aR2tY/WT7GRHGEH/9sSIipJqeA21Eh3C6xmiOVmfyBCFmezUSUFLalpaSmRHlRzWCKQU10yz3AHhKuYcdnZGQ==}
     peerDependencies:
-      vitest: 3.2.2
+      vitest: 3.2.3
 
   '@vitest/utils@2.1.9':
     resolution: {integrity: sha512-v0psaMSkNJ3A2NMrUEHFRzJtDPFn+/VWZ5WxImB21T9fjucJRmS7xCS3ppEnARb9y11OAzaD+P2Ps+b+BGX5iQ==}
-
-  '@vitest/utils@3.2.2':
-    resolution: {integrity: sha512-qJYMllrWpF/OYfWHP32T31QCaLa3BAzT/n/8mNGhPdVcjY+JYazQFO1nsJvXU12Kp1xMpNY4AGuljPTNjQve6A==}
 
   '@vitest/utils@3.2.3':
     resolution: {integrity: sha512-4zFBCU5Pf+4Z6v+rwnZ1HU1yzOKKvDkMXZrymE2PBlbjKJRlrOxbvpfPSvJTGRIwGoahaOGvp+kbCoxifhzJ1Q==}
@@ -25811,7 +25805,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@vitest/coverage-v8@3.2.2(vitest@3.2.3)':
+  '@vitest/coverage-v8@3.2.3(vitest@3.2.3)':
     dependencies:
       '@ampproject/remapping': 2.3.0
       '@bcoe/v8-coverage': 1.0.2
@@ -25826,17 +25820,17 @@ snapshots:
       std-env: 3.9.0
       test-exclude: 7.0.1
       tinyrainbow: 2.0.0
-      vitest: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+      vitest: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
     transitivePeerDependencies:
       - supports-color
 
-  '@vitest/eslint-plugin@1.2.2(eslint@9.28.0(jiti@2.4.2))(typescript@5.8.3)(vitest@3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0))':
+  '@vitest/eslint-plugin@1.2.2(eslint@9.28.0(jiti@2.4.2))(typescript@5.8.3)(vitest@3.2.3)':
     dependencies:
       '@typescript-eslint/utils': 8.34.0(eslint@9.28.0(jiti@2.4.2))(typescript@5.8.3)
       eslint: 9.28.0(jiti@2.4.2)
     optionalDependencies:
       typescript: 5.8.3
-      vitest: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+      vitest: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
     transitivePeerDependencies:
       - supports-color
 
@@ -25875,10 +25869,6 @@ snapshots:
     dependencies:
       tinyrainbow: 1.2.0
 
-  '@vitest/pretty-format@3.2.2':
-    dependencies:
-      tinyrainbow: 2.0.0
-
   '@vitest/pretty-format@3.2.3':
     dependencies:
       tinyrainbow: 2.0.0
@@ -25914,28 +25904,22 @@ snapshots:
     dependencies:
       tinyspy: 4.0.3
 
-  '@vitest/ui@3.2.2(vitest@3.2.3)':
+  '@vitest/ui@3.2.3(vitest@3.2.3)':
     dependencies:
-      '@vitest/utils': 3.2.2
+      '@vitest/utils': 3.2.3
       fflate: 0.8.2
       flatted: 3.3.3
       pathe: 2.0.3
       sirv: 3.0.1
       tinyglobby: 0.2.14
       tinyrainbow: 2.0.0
-      vitest: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
+      vitest: 3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0)
 
   '@vitest/utils@2.1.9':
     dependencies:
       '@vitest/pretty-format': 2.1.9
       loupe: 3.1.3
       tinyrainbow: 1.2.0
-
-  '@vitest/utils@3.2.2':
-    dependencies:
-      '@vitest/pretty-format': 3.2.2
-      loupe: 3.1.3
-      tinyrainbow: 2.0.0
 
   '@vitest/utils@3.2.3':
     dependencies:
@@ -35172,7 +35156,7 @@ snapshots:
       tsx: 4.19.4
       yaml: 2.8.0
 
-  vitest@2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@5.0.10))(lightningcss@1.29.2)(terser@5.39.0):
+  vitest@2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(@vitest/ui@3.2.3(vitest@3.2.3))(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@5.0.10))(lightningcss@1.29.2)(terser@5.39.0):
     dependencies:
       '@vitest/expect': 2.1.9
       '@vitest/mocker': 2.1.9(vite@5.4.19(@types/node@20.19.0)(lightningcss@1.29.2)(terser@5.39.0))
@@ -35197,6 +35181,7 @@ snapshots:
     optionalDependencies:
       '@edge-runtime/vm': 3.2.0
       '@types/node': 20.19.0
+      '@vitest/ui': 3.2.3(vitest@3.2.3)
       jsdom: 26.1.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
     transitivePeerDependencies:
       - less
@@ -35209,7 +35194,7 @@ snapshots:
       - supports-color
       - terser
 
-  vitest@2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0):
+  vitest@2.1.9(@edge-runtime/vm@3.2.0)(@types/node@20.19.0)(@vitest/ui@3.2.3(vitest@3.2.3))(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0):
     dependencies:
       '@vitest/expect': 2.1.9
       '@vitest/mocker': 2.1.9(vite@5.4.19(@types/node@20.19.0)(lightningcss@1.29.2)(terser@5.39.0))
@@ -35234,6 +35219,7 @@ snapshots:
     optionalDependencies:
       '@edge-runtime/vm': 3.2.0
       '@types/node': 20.19.0
+      '@vitest/ui': 3.2.3(vitest@3.2.3)
       jsdom: 26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)
     transitivePeerDependencies:
       - less
@@ -35246,7 +35232,7 @@ snapshots:
       - supports-color
       - terser
 
-  vitest@3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.2)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0):
+  vitest@3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(@vitest/ui@3.2.3)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0):
     dependencies:
       '@types/chai': 5.2.2
       '@vitest/expect': 3.2.3
@@ -35275,7 +35261,7 @@ snapshots:
       '@edge-runtime/vm': 3.2.0
       '@types/debug': 4.1.12
       '@types/node': 20.19.0
-      '@vitest/ui': 3.2.2(vitest@3.2.3)
+      '@vitest/ui': 3.2.3(vitest@3.2.3)
       jsdom: 26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5)
     transitivePeerDependencies:
       - jiti
