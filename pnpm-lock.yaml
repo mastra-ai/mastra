@@ -488,7 +488,7 @@ importers:
         version: 7.52.8(@types/node@20.19.0)
       '@rollup/plugin-image':
         specifier: ^3.0.3
-        version: 3.0.3(rollup@3.29.5)
+        version: 3.0.3(rollup@4.43.0)
       '@size-limit/preset-small-lib':
         specifier: ^11.2.0
         version: 11.2.0(size-limit@11.2.0)
@@ -552,7 +552,7 @@ importers:
         version: 7.52.8(@types/node@20.19.0)
       '@rollup/plugin-image':
         specifier: ^3.0.3
-        version: 3.0.3(rollup@4.43.0)
+        version: 3.0.3(rollup@3.29.5)
       '@size-limit/preset-small-lib':
         specifier: ^11.2.0
         version: 11.2.0(size-limit@11.2.0)
@@ -691,8 +691,8 @@ importers:
   packages/_config:
     dependencies:
       '@vitest/eslint-plugin':
-        specifier: ^1.2.2
-        version: 1.2.2(eslint@9.28.0(jiti@2.4.2))(typescript@5.8.3)(vitest@3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0))
+        specifier: ^1.2.4
+        version: 1.2.5(eslint@9.28.0(jiti@2.4.2))(typescript@5.8.3)(vitest@3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0))
       eslint-plugin-import-x:
         specifier: ^4.15.1
         version: 4.15.1(@typescript-eslint/utils@8.34.0(eslint@9.28.0(jiti@2.4.2))(typescript@5.8.3))(eslint-import-resolver-node@0.3.9)(eslint@9.28.0(jiti@2.4.2))
@@ -5688,6 +5688,7 @@ packages:
 
   '@hey-api/client-fetch@0.3.4':
     resolution: {integrity: sha512-2iEXxLNf3HQWPJC04XYaZZSqtx+gLg2dxi8oEgrYDhoBGPlaEgpao73rVjdng0YzlB4YkCkZV8p8VkhVnIaKHQ==}
+    deprecated: Starting with v0.73.0, this package is bundled directly inside @hey-api/openapi-ts.
 
   '@hono/node-server@1.14.4':
     resolution: {integrity: sha512-DnxpshhYewr2q9ZN8ez/M5mmc3sucr8CT1sIgIy1bkeUXut9XWDkqHoFHRhWIQgkYnKpVRxunyhK7WzpJeJ6qQ==}
@@ -6277,6 +6278,7 @@ packages:
   '@lancedb/lancedb@0.18.2':
     resolution: {integrity: sha512-mWrijjkUVmf7HseX2SnZVh5M1tYAnO+pB1f81AVMKiSMfR4OqpA/6lQ2hk6qeQqJ6NNc/8pIgjkvwfGyp1QOag==}
     engines: {node: '>= 18'}
+    cpu: [x64, arm64]
     os: [darwin, linux, win32]
     peerDependencies:
       apache-arrow: '>=15.0.0 <=18.1.0'
@@ -9920,8 +9922,8 @@ packages:
       '@vitest/browser':
         optional: true
 
-  '@vitest/eslint-plugin@1.2.2':
-    resolution: {integrity: sha512-R8NwW+VxyKqVGcMfYsUbdThQyMbtNcoeg+jJeTgMHqWdFdcS0nrODAQXhkplvWzgd7jIJ+GQeydGqFLibsxMxg==}
+  '@vitest/eslint-plugin@1.2.5':
+    resolution: {integrity: sha512-cfmXz++mkqYpssrKymd7KJumxaZBsfFji2y22QV04kDYKRbiaZ+s4WZL/bzAkcefVKj4KkFctVALHdDZhFhHGg==}
     peerDependencies:
       eslint: '>= 8.57.0'
       typescript: ^5.8.3
@@ -14040,6 +14042,7 @@ packages:
 
   libsql@0.5.13:
     resolution: {integrity: sha512-5Bwoa/CqzgkTwySgqHA5TsaUDRrdLIbdM4egdPcaAnqO3aC+qAgS6BwdzuZwARA5digXwiskogZ8H7Yy4XfdOg==}
+    cpu: [x64, arm64, wasm32, arm]
     os: [darwin, linux, win32]
 
   light-my-request@5.14.0:
@@ -25772,7 +25775,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@vitest/eslint-plugin@1.2.2(eslint@9.28.0(jiti@2.4.2))(typescript@5.8.3)(vitest@3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0))':
+  '@vitest/eslint-plugin@1.2.5(eslint@9.28.0(jiti@2.4.2))(typescript@5.8.3)(vitest@3.2.3(@edge-runtime/vm@3.2.0)(@types/debug@4.1.12)(@types/node@20.19.0)(jiti@2.4.2)(jsdom@26.1.0(bufferutil@4.0.9)(utf-8-validate@6.0.5))(lightningcss@1.29.2)(terser@5.39.0)(tsx@4.19.4)(yaml@2.8.0))':
     dependencies:
       '@typescript-eslint/utils': 8.34.0(eslint@9.28.0(jiti@2.4.2))(typescript@5.8.3)
       eslint: 9.28.0(jiti@2.4.2)
@@ -27740,7 +27743,7 @@ snapshots:
       eslint-config-prettier: 8.10.0(eslint@8.57.1)
       eslint-plugin-flowtype: 8.0.3(@babel/plugin-syntax-flow@7.26.0(@babel/core@7.27.4))(@babel/plugin-transform-react-jsx@7.25.9(@babel/core@7.27.4))(eslint@8.57.1)
       eslint-plugin-import: 2.31.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1)
-      eslint-plugin-jest: 27.9.0(@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@9.28.0(jiti@2.4.2))(typescript@5.8.3))(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1)(jest@29.7.0(@types/node@20.19.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.11.10(@swc/helpers@0.5.17))(@types/node@20.19.0)(typescript@5.8.3)))(typescript@5.8.3)
+      eslint-plugin-jest: 27.9.0(@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1)(jest@29.7.0(@types/node@20.19.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.11.10(@swc/helpers@0.5.17))(@types/node@20.19.0)(typescript@5.8.3)))(typescript@5.8.3)
       eslint-plugin-jsx-a11y: 6.10.2(eslint@8.57.1)
       eslint-plugin-prettier: 4.2.1(eslint-config-prettier@8.10.0(eslint@8.57.1))(eslint@8.57.1)(prettier@2.8.8)
       eslint-plugin-react: 7.37.5(eslint@8.57.1)
@@ -28309,7 +28312,7 @@ snapshots:
       - eslint-import-resolver-webpack
       - supports-color
 
-  eslint-plugin-jest@27.9.0(@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@9.28.0(jiti@2.4.2))(typescript@5.8.3))(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1)(jest@29.7.0(@types/node@20.19.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.11.10(@swc/helpers@0.5.17))(@types/node@20.19.0)(typescript@5.8.3)))(typescript@5.8.3):
+  eslint-plugin-jest@27.9.0(@typescript-eslint/eslint-plugin@5.62.0(@typescript-eslint/parser@5.62.0(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1)(jest@29.7.0(@types/node@20.19.0)(babel-plugin-macros@3.1.0)(ts-node@10.9.2(@swc/core@1.11.10(@swc/helpers@0.5.17))(@types/node@20.19.0)(typescript@5.8.3)))(typescript@5.8.3):
     dependencies:
       '@typescript-eslint/utils': 5.62.0(eslint@8.57.1)(typescript@5.8.3)
       eslint: 8.57.1
