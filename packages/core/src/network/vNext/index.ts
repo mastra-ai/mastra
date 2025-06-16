@@ -527,7 +527,7 @@ export class NewAgentNetwork extends MastraBase {
           resourceId: result.object.resourceId,
           resourceType: result.object.resourceType,
           prompt: result.object.prompt,
-          isComplete: false,
+          isComplete: result.object.resourceId === 'none' && result.object.resourceType === 'none' ? true : false,
           selectionReason: result.object.selectionReason,
           iteration: inputData.iteration + 1,
         };
