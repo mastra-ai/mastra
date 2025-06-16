@@ -4432,7 +4432,7 @@ describe('Workflow', () => {
       expect(firstResumeResult.steps.runtimeContextAction.output).toEqual(['first message', 'promptAgentAction']);
     });
 
-    it.only('should be handle basic suspend and resume in a dountil workflow', async () => {
+    it('should be handle basic suspend and resume in a dountil workflow', async () => {
       const resumeStep = createStep({
         id: 'resume',
         inputSchema: z.object({ value: z.number() }),
