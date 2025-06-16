@@ -105,12 +105,11 @@ describe('changesTool', () => {
       expect(hasPreReleaseVersion).toBe(true);
     });
 
-    // TODO: this is not working properly for alpha tags in headers
-    it.skip('should handle well-structured changelog entries', async () => {
+    it('should handle well-structured changelog entries', async () => {
       const result = await callTool(tools.mastra_mastraChanges, { package: '@mastra/core' });
 
       // Split into version sections
-      const sections = result.split(/##\s+v?\d+\.\d+\.\d+/);
+      const sections = result.split(/##\s+v?\d+\.\d+\.\d+\n/);
       sections.slice(1).forEach(section => {
         if (!section.includes('more lines hidden')) {
           // Each section should have at least one category and entry
@@ -118,7 +117,7 @@ describe('changesTool', () => {
           expect(section).toMatch(/- .+/); // Entry
 
           // Entries should be properly formatted
-          const entries = section.match(/- .+/g) || [];
+          const entries = section.match(/^- .+/g) || [];
           entries.forEach(entry => {
             // Skip the truncation message if it exists
             expect(entry).toMatch(/- [a-f0-9]+: .+/i); // Should match commit hash format

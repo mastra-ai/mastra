@@ -14,27 +14,16 @@ When you build a workflow, you typically break down operations into smaller task
 
 Chain steps to execute in sequence using `.then()`:
 
-```typescript {18,19,20} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {8-9} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
 const step1 = createStep({...});
 const step2 = createStep({...});
-const step3 = createStep({...});
 
-export const testWorkflow = createWorkflow({
-  id: "test-workflow",
-  description: 'Test workflow',
-  inputSchema: z.object({
-    number: z.number()
-  }),
-  outputSchema: z.object({
-    number: z.number()
-  })
-})
+export const testWorkflow = createWorkflow({...})
   .then(step1)
   .then(step2)
-  .then(step3)
   .commit();
 ```
 
@@ -42,55 +31,34 @@ export const testWorkflow = createWorkflow({
 
 Execute steps in parallel using `.parallel()`:
 
-
-```typescript {18} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {8} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
 const step1 = createStep({...});
 const step2 = createStep({...});
-const step3 = createStep({...});
 
-export const testWorkflow = createWorkflow({
-  id: "test-workflow",
-  description: 'Test workflow',
-  inputSchema: z.object({
-    number: z.number()
-  }),
-  outputSchema: z.object({
-    number: z.number()
-  })
-})
+export const testWorkflow = createWorkflow({...})
   .parallel([step1, step2])
-  .then(step3)
   .commit();
 ```
 
 This executes all steps in the array concurrently, then continues to the next step after all parallel steps complete.
 
+> See [Parallel Execution with Steps](/examples/workflows/parallel-steps) for more information.
+
 ## Branch
 
 Create conditional branches using `.branch()`:
 
-```typescript {19-22} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {8-11} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
-const step1 = createStep({...});
 const lessThanStep = createStep({...});
 const greaterThanStep = createStep({...});
 
-export const testWorkflow = createWorkflow({
-  id: "test-workflow",
-  description: 'Test workflow',
-  inputSchema: z.object({
-    number: z.number()
-  }),
-  outputSchema: z.object({
-    number: z.number()
-  })
-})
-  .then(step1)
+export const testWorkflow = createWorkflow({...})
   .branch([
     [async ({ inputData: { some_value } }) => some_value <= 9, lessThanStep],
     [async ({ inputData: { some_value } }) => some_value >= 10, greaterThanStep]
@@ -99,6 +67,8 @@ export const testWorkflow = createWorkflow({
 ```
 
 Branch conditions are evaluated sequentially, but steps with matching conditions are executed in parallel.
+
+> See [Workflow with Conditional Branching](/examples/workflows/conditional-branching) for more information.
 
 ## Loops
 
@@ -114,27 +84,14 @@ To ensure compatibility, the loop’s initial input must either:
 
 Executes a step repeatedly while a condition is true.
 
-```typescript {19} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
-const step1 = createStep({...});
 const counterStep = createStep({...});
-const finalStep = createStep({...});
 
-export const testWorkflow = createWorkflow({
-  id: "test-workflow",
-  description: 'Test workflow',
-  inputSchema: z.object({
-    number: z.number()
-  }),
-  outputSchema: z.object({
-    number: z.number()
-  })
-})
-  .then(step1)
+export const testWorkflow = createWorkflow({...})
   .dowhile(counterStep, async ({ inputData: { number } }) => number < 10)
-  .then(finalStep)
   .commit();
 ```
 
@@ -142,62 +99,29 @@ export const testWorkflow = createWorkflow({
 
 Executes a step repeatedly until a condition becomes true.
 
-```typescript {19} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
-const step1 = createStep({...});
 const counterStep = createStep({...});
-const finalStep = createStep({...});
 
-export const testWorkflow = createWorkflow({
-  id: "test-workflow",
-  description: 'Test workflow',
-  inputSchema: z.object({
-    number: z.number()
-  }),
-  outputSchema: z.object({
-    number: z.number()
-  })
-})
-  .then(step1)
+export const testWorkflow = createWorkflow({...})
   .dountil(counterStep, async ({ inputData: { number } }) => number > 10)
-  .then(finalStep)
   .commit();
 ```
 
 
 ### Foreach
 
-Sequentially executes the same step for each item in the `inputData` array.
+Sequentially executes the same step for each item from the `inputSchema`.
 
-```typescript {27} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-const mapStep = createStep({
-  id: "map-step",
-  description: "Adds 100 on the input number",
-  inputSchema: z.object({
-    number: z.number()
-  }),
-  outputSchema: z.object({
-    number: z.number()
-  }),
-  execute: async ({ inputData }) => {
-    const { number } = inputData;
+```typescript {7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
 
-    return {
-      number: number + 100
-    };
-  }
-});
+const mapStep = createStep({...});
 
-export const testWorkflow = createWorkflow({
-  id: "test-workflow",
-  description: 'Test workflow',
-  inputSchema: z.array(z.object({ number: z.number() })),
-  outputSchema: z.object({
-    number: z.number()
-  })
-})
+export const testWorkflow = createWorkflow({...})
   .foreach(mapStep)
   .commit();
 ```
@@ -226,17 +150,13 @@ npx tsx src/test-workflow.ts
 
 Optionally, using `concurrency` allows you to execute steps in parallel with a limit on the number of concurrent executions.
 
-```typescript {11} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
+
 const mapStep = createStep({...})
 
-export const testWorkflow = createWorkflow({
-  id: "test-workflow",
-  description: 'Test workflow',
-  inputSchema: z.array(z.object({ number: z.number() })),
-  outputSchema: z.object({
-    number: z.number()
-  })
-})
+export const testWorkflow = createWorkflow({...})
   .foreach(mapStep, { concurrency: 2 })
   .commit();
 ```
@@ -245,26 +165,15 @@ export const testWorkflow = createWorkflow({
 
 Workflows themselves can also be executed in parallel.
 
-```typescript {4,5,18} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {4-5,8} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod";
 
 const workflow1 = createWorkflow({...});
 const workflow2 = createWorkflow({...});
-const finalStep = createStep({...});
 
-export const testWorkflow = createWorkflow({
-  id: "test-workflow",
-  description: 'Test workflow',
-  inputSchema: z.object({
-    number: z.number()
-  }),
-  outputSchema: z.object({
-    number: z.number()
-  })
-})
+export const testWorkflow = createWorkflow({...})
   .parallel([workflow1, workflow2])
-  .then(finalStep)
   .commit();
 ```
 
@@ -275,35 +184,13 @@ Parallel steps receive previous step results as input. Their outputs are passed 
 In the example below, `nestedWorkflow` is used as a step within `testWorkflow`. The `testWorkflow` uses `step1` whilst the `nestedWorkflow` composes `step2` and `step3`
 
 
-```typescript {5,29} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-const step1 = createStep({...});
-const step2 = createStep({...});
-const step3 = createStep({...});
+```typescript {4,7} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep } from "@mastra/core/workflows";
+import { z } from "zod";
 
-export const nestedWorkflow = createWorkflow({
-  id: "nested-workflow",
-  inputSchema: z.object({
-    number: z.number()
-  }),
-  outputSchema: z.object({
-    number: z.number()
-  })
-})
-  .then(step2)
-  .then(step3)
-  .commit();
+export const nestedWorkflow = createWorkflow({...})
 
-export const testWorkflow = createWorkflow({
-  id: "test-workflow",
-  description: 'Test workflow',
-  inputSchema: z.object({
-    number: z.number()
-  }),
-  outputSchema: z.object({
-    number: z.number()
-  })
-})
-  .then(step1)
+export const testWorkflow = createWorkflow({...})
   .then(nestedWorkflow)
   .commit();
 ```
@@ -315,28 +202,15 @@ When using `.branch()` or `.parallel()` to build more complex control flows, exe
 
 In the example below, `clonedWorkflow` is a clone of `workflow1` and is used as a step within `testWorkflow`. The `clonedWorkflow` is run sequentially after `step1`.
 
-```typescript {6,20} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { createWorkflow, createStep } from "@mastra/core/workflows";
+```typescript {5,9} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+import { createWorkflow, createStep, cloneWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
 
 const step1 = createStep({...});
-const workflow1 = createWorkflow({...});
-const clonedWorkflow = cloneWorkflow(workflow1, { id: "cloned-workflow" });
-const finalStep = createStep({...});
+const clonedWorkflow = cloneWorkflow(step1, { id: "cloned-workflow" });
 
-export const testWorkflow = createWorkflow({
-  id: "test-workflow",
-  description: 'Test workflow',
-  inputSchema: z.object({
-    number: z.number()
-  }),
-  outputSchema: z.object({
-    number: z.number()
-  })
-})
+export const testWorkflow = createWorkflow({...})
   .then(step1)
   .then(clonedWorkflow)
-  .then(finalStep)
   .commit();
 ```
-

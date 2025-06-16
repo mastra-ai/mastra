@@ -1,4 +1,5 @@
 import type { ToolsInput } from '../agent';
+import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import { MastraVoice } from './voice';
 import type { VoiceEventType, VoiceEventMap } from '.';
 
@@ -48,7 +49,12 @@ export class CompositeVoice extends MastraVoice<unknown, unknown, unknown, Tools
       return this.speakProvider.speak(input, options);
     }
 
-    throw new Error('No speak provider or realtime provider configured');
+    throw new MastraError({
+      id: 'VOICE_COMPOSITE_NO_SPEAK_PROVIDER',
+      text: 'No speak provider or realtime provider configured',
+      domain: ErrorDomain.MASTRA_VOICE,
+      category: ErrorCategory.USER,
+    });
   }
 
   async listen(audioStream: NodeJS.ReadableStream, options?: any) {
@@ -58,7 +64,12 @@ export class CompositeVoice extends MastraVoice<unknown, unknown, unknown, Tools
       return await this.listenProvider.listen(audioStream, options);
     }
 
-    throw new Error('No listen provider or realtime provider configured');
+    throw new MastraError({
+      id: 'VOICE_COMPOSITE_NO_LISTEN_PROVIDER',
+      text: 'No listen provider or realtime provider configured',
+      domain: ErrorDomain.MASTRA_VOICE,
+      category: ErrorCategory.USER,
+    });
   }
 
   async getSpeakers() {
@@ -68,7 +79,12 @@ export class CompositeVoice extends MastraVoice<unknown, unknown, unknown, Tools
       return this.speakProvider.getSpeakers();
     }
 
-    throw new Error('No speak provider or realtime provider configured');
+    throw new MastraError({
+      id: 'VOICE_COMPOSITE_NO_SPEAKERS_PROVIDER',
+      text: 'No speak provider or realtime provider configured',
+      domain: ErrorDomain.MASTRA_VOICE,
+      category: ErrorCategory.USER,
+    });
   }
 
   async getListener() {
@@ -78,7 +94,12 @@ export class CompositeVoice extends MastraVoice<unknown, unknown, unknown, Tools
       return this.listenProvider.getListener();
     }
 
-    throw new Error('No listener provider or realtime provider configured');
+    throw new MastraError({
+      id: 'VOICE_COMPOSITE_NO_LISTENER_PROVIDER',
+      text: 'No listener provider or realtime provider configured',
+      domain: ErrorDomain.MASTRA_VOICE,
+      category: ErrorCategory.USER,
+    });
   }
 
   updateConfig(options: Record<string, unknown>): void {
@@ -94,7 +115,12 @@ export class CompositeVoice extends MastraVoice<unknown, unknown, unknown, Tools
    */
   connect(options?: Record<string, unknown>): Promise<void> {
     if (!this.realtimeProvider) {
-      throw new Error('No realtime provider configured');
+      throw new MastraError({
+        id: 'VOICE_COMPOSITE_NO_REALTIME_PROVIDER_CONNECT',
+        text: 'No realtime provider configured',
+        domain: ErrorDomain.MASTRA_VOICE,
+        category: ErrorCategory.USER,
+      });
     }
     return this.realtimeProvider.connect(options);
   }
@@ -105,7 +131,12 @@ export class CompositeVoice extends MastraVoice<unknown, unknown, unknown, Tools
    */
   send(audioData: NodeJS.ReadableStream | Int16Array): Promise<void> {
     if (!this.realtimeProvider) {
-      throw new Error('No realtime provider configured');
+      throw new MastraError({
+        id: 'VOICE_COMPOSITE_NO_REALTIME_PROVIDER_SEND',
+        text: 'No realtime provider configured',
+        domain: ErrorDomain.MASTRA_VOICE,
+        category: ErrorCategory.USER,
+      });
     }
     return this.realtimeProvider.send(audioData);
   }
@@ -115,7 +146,12 @@ export class CompositeVoice extends MastraVoice<unknown, unknown, unknown, Tools
    */
   answer(options?: Record<string, unknown>): Promise<void> {
     if (!this.realtimeProvider) {
-      throw new Error('No realtime provider configured');
+      throw new MastraError({
+        id: 'VOICE_COMPOSITE_NO_REALTIME_PROVIDER_ANSWER',
+        text: 'No realtime provider configured',
+        domain: ErrorDomain.MASTRA_VOICE,
+        category: ErrorCategory.USER,
+      });
     }
     return this.realtimeProvider.answer(options);
   }
@@ -147,7 +183,12 @@ export class CompositeVoice extends MastraVoice<unknown, unknown, unknown, Tools
    */
   close(): void {
     if (!this.realtimeProvider) {
-      throw new Error('No realtime provider configured');
+      throw new MastraError({
+        id: 'VOICE_COMPOSITE_NO_REALTIME_PROVIDER_CLOSE',
+        text: 'No realtime provider configured',
+        domain: ErrorDomain.MASTRA_VOICE,
+        category: ErrorCategory.USER,
+      });
     }
     this.realtimeProvider.close();
   }
@@ -162,7 +203,12 @@ export class CompositeVoice extends MastraVoice<unknown, unknown, unknown, Tools
     callback: (data: E extends keyof VoiceEventMap ? VoiceEventMap[E] : unknown) => void,
   ): void {
     if (!this.realtimeProvider) {
-      throw new Error('No realtime provider configured');
+      throw new MastraError({
+        id: 'VOICE_COMPOSITE_NO_REALTIME_PROVIDER_ON',
+        text: 'No realtime provider configured',
+        domain: ErrorDomain.MASTRA_VOICE,
+        category: ErrorCategory.USER,
+      });
     }
     this.realtimeProvider.on(event, callback);
   }
@@ -177,7 +223,12 @@ export class CompositeVoice extends MastraVoice<unknown, unknown, unknown, Tools
     callback: (data: E extends keyof VoiceEventMap ? VoiceEventMap[E] : unknown) => void,
   ): void {
     if (!this.realtimeProvider) {
-      throw new Error('No realtime provider configured');
+      throw new MastraError({
+        id: 'VOICE_COMPOSITE_NO_REALTIME_PROVIDER_OFF',
+        text: 'No realtime provider configured',
+        domain: ErrorDomain.MASTRA_VOICE,
+        category: ErrorCategory.USER,
+      });
     }
     this.realtimeProvider.off(event, callback);
   }

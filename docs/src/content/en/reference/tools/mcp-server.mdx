@@ -358,21 +358,21 @@ Here are the details for the values needed by the `startHonoSSE` method:
 
 ### startHTTP()
 
-This method helps you integrate the MCP server with an existing web server to use Server-Sent Events (SSE) for communication. You'll call this from your web server's code when it receives a request for the SSE or message paths.
+This method helps you integrate the MCP server with an existing web server to use streamable HTTP for communication. You'll call this from your web server's code when it receives HTTP requests.
 
 ```typescript
 async startHTTP({
   url,
-  ssePath,
-  messagePath,
+  httpPath,
   req,
   res,
+  options = { sessionIdGenerator: () => randomUUID() },
 }: {
   url: URL;
-  ssePath: string;
-  messagePath: string;
-  req: any;
-  res: any;
+  httpPath: string;
+  req: http.IncomingMessage;
+  res: http.ServerResponse<http.IncomingMessage>;
+  options?: StreamableHTTPServerTransportOptions;
 }): Promise<void>
 ```
 
@@ -383,11 +383,13 @@ import http from "http";
 
 const httpServer = http.createServer(async (req, res) => {
   await server.startHTTP({
-    url: new URL(req.url || "", `http://localhost:1234`),
-    ssePath: "/http",
-    messagePath: "/message",
+    url: new URL(req.url || '', 'http://localhost:1234'),
+    httpPath: `/mcp`,
     req,
     res,
+    options: {
+      sessionIdGenerator: undefined,
+    },
   });
 });
 
@@ -401,32 +403,67 @@ Here are the details for the values needed by the `startHTTP` method:
 <PropertiesTable
   content={[
     {
-      name: "url",
-      type: "URL",
-      description: "The web address the user is requesting.",
+      name: 'url',
+      type: 'URL',
+      description: 'The web address the user is requesting.',
     },
     {
-      name: "ssePath",
-      type: "string",
+      name: 'httpPath',
+      type: 'string',
       description:
-        "The specific part of the URL where clients will connect for SSE (e.g., '/http').",
+        "The specific part of the URL where the MCP server will handle HTTP requests (e.g., '/mcp').",
     },
     {
-      name: "messagePath",
-      type: "string",
+      name: 'req',
+      type: 'http.IncomingMessage',
+      description: 'The incoming request object from your web server.',
+    },
+    {
+      name: 'res',
+      type: 'http.ServerResponse',
       description:
-        "The specific part of the URL where clients will send messages (e.g., '/message').",
+        'The response object from your web server, used to send data back.',
     },
     {
-      name: "req",
-      type: "any",
-      description: "The incoming request object from your web server.",
-    },
-    {
-      name: "res",
-      type: "any",
+      name: 'options',
+      type: 'StreamableHTTPServerTransportOptions',
       description:
-        "The response object from your web server, used to send data back.",
+        'Optional configuration for the HTTP transport. See the options table below for more details.',
+      optional: true,
+    },
+  ]}
+/>
+
+The `StreamableHTTPServerTransportOptions` object allows you to customize the behavior of the HTTP transport. Here are the available options:
+
+<PropertiesTable
+  content={[
+    {
+      name: 'sessionIdGenerator',
+      type: '(() => string) | undefined',
+      description:
+        'A function that generates a unique session ID. This should be a cryptographically secure, globally unique string. Return `undefined` to disable session management.',
+    },
+    {
+      name: 'onsessioninitialized',
+      type: '(sessionId: string) => void',
+      description:
+        'A callback that is invoked when a new session is initialized. This is useful for tracking active MCP sessions.',
+      optional: true,
+    },
+    {
+      name: 'enableJsonResponse',
+      type: 'boolean',
+      description:
+        'If `true`, the server will return plain JSON responses instead of using Server-Sent Events (SSE) for streaming. Defaults to `false`.',
+      optional: true,
+    },
+    {
+      name: 'eventStore',
+      type: 'EventStore',
+      description:
+        'An event store for message resumability. Providing this enables clients to reconnect and resume message streams.',
+      optional: true,
     },
   ]}
 />

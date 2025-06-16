@@ -111,9 +111,8 @@ async function runSingleOutputsTest(
   try {
     const agent = new Agent({
       name: `test-agent-${model.modelId}`,
-      instructions: `You are a test agent. Your task is to call the tool named '${toolName}' with any valid arguments. This is very important as it's your primary purpose`,
+      instructions: `You are a test agent. Your task is to make sure that the output returned is in the right shape. This is very important as it's your primary purpose`,
       model: model,
-      tools: { [toolName]: testTool },
     });
 
     const response = await agent.generate(`Please output some example data in the right schema shape.`, {
@@ -135,6 +134,9 @@ async function runSingleOutputsTest(
     let status: Result['status'] = 'error';
     if (e.message.includes('does not support zod type:')) {
       status = 'expected-error';
+    }
+    if (e.name === 'AI_NoObjectGeneratedError') {
+      status = 'failure';
     }
     return {
       modelName: model.modelId,
@@ -327,9 +329,14 @@ describe('Tool Schema Compatibility', () => {
         });
       });
     });
-    describe.skip(`Output Schema Compatibility: ${provider} Models`, { timeout: SUITE_TIMEOUT }, () => {
+
+    // Skipping these tests for now as LLM's seem to be flakier with output schemas than tool input schemas
+    // The compability layer still fixes things in the same way, output schemas and input schemas fail in a similar way for a model
+    // but the LLM sometimes makes silly mistakes with output schemas, like returning a json string instead of an object or not returning anything.
+    // Skipping this also saves us a lot of cost in CI for running tests. I'll keep the tests here for now if we ever want to test it manually.
+    describe(`Output Schema Compatibility: ${provider} Models`, { timeout: SUITE_TIMEOUT }, () => {
       models.forEach(model => {
-        describe.concurrent(`${model.modelId}`, { timeout: SUITE_TIMEOUT }, () => {
+        describe.skip(`${model.modelId}`, { timeout: SUITE_TIMEOUT }, () => {
           testTools.forEach(testTool => {
             const schemaName = testTool.id.replace('testTool_', '');
 
@@ -338,7 +345,7 @@ describe('Tool Schema Compatibility', () => {
               async () => {
                 let result = await runSingleOutputsTest(model, testTool, crypto.randomUUID(), testTool.id);
 
-                // Sometimes models are flaky, if it's not an API error, run it again
+                // Sometimes models are flaky, run it again if it fails
                 if (result.status === 'failure') {
                   console.log(`Possibly flake from model ${model.modelId}, running ${schemaName} again`);
                   result = await runSingleOutputsTest(model, testTool, crypto.randomUUID(), testTool.id);

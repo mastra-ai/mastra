@@ -1,7 +1,8 @@
 import { DynamoDBClient, DescribeTableCommand } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import type { StorageThreadType, WorkflowRunState, MastraMessageV1, MastraMessageV2 } from '@mastra/core';
 import { MessageList } from '@mastra/core/agent';
+import type { StorageThreadType, MastraMessageV2, MastraMessageV1 } from '@mastra/core/memory';
+
 import {
   MastraStorage,
   TABLE_THREADS,
@@ -10,7 +11,18 @@ import {
   TABLE_EVALS,
   TABLE_TRACES,
 } from '@mastra/core/storage';
-import type { EvalRow, StorageGetMessagesArg, WorkflowRun, WorkflowRuns, TABLE_NAMES } from '@mastra/core/storage';
+import type {
+  EvalRow,
+  StorageGetMessagesArg,
+  WorkflowRun,
+  WorkflowRuns,
+  TABLE_NAMES,
+  StorageGetTracesArg,
+  PaginationInfo,
+  StorageColumn,
+} from '@mastra/core/storage';
+import type { Trace } from '@mastra/core/telemetry';
+import type { WorkflowRunState } from '@mastra/core/workflows';
 import type { Service } from 'electrodb';
 import { getElectroDbService } from '../entities';
 
@@ -201,6 +213,14 @@ export class DynamoDBStore extends MastraStorage {
     }
 
     return processed;
+  }
+
+  async alterTable(_args: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void> {
+    // Nothing to do here, DynamoDB has a flexible schema and handles new attributes automatically upon insertion/update.
   }
 
   /**
@@ -402,6 +422,9 @@ export class DynamoDBStore extends MastraStorage {
       const data = result.data;
       return {
         ...data,
+        // Convert date strings back to Date objects for consistency
+        createdAt: typeof data.createdAt === 'string' ? new Date(data.createdAt) : data.createdAt,
+        updatedAt: typeof data.updatedAt === 'string' ? new Date(data.updatedAt) : data.updatedAt,
         // metadata: data.metadata ? JSON.parse(data.metadata) : undefined, // REMOVED by AI
         // metadata is already transformed by the entity's getter
       } as StorageThreadType;
@@ -423,6 +446,9 @@ export class DynamoDBStore extends MastraStorage {
       // ElectroDB handles the transformation with attribute getters
       return result.data.map((data: any) => ({
         ...data,
+        // Convert date strings back to Date objects for consistency
+        createdAt: typeof data.createdAt === 'string' ? new Date(data.createdAt) : data.createdAt,
+        updatedAt: typeof data.updatedAt === 'string' ? new Date(data.updatedAt) : data.updatedAt,
         // metadata: data.metadata ? JSON.parse(data.metadata) : undefined, // REMOVED by AI
         // metadata is already transformed by the entity's getter
       })) as StorageThreadType[];
@@ -594,6 +620,11 @@ export class DynamoDBStore extends MastraStorage {
       return [];
     }
 
+    const threadId = messages[0]?.threadId;
+    if (!threadId) {
+      throw new Error('Thread ID is required');
+    }
+
     // Ensure 'entity' is added and complex fields are handled
     const messagesToSave = messages.map(msg => {
       const now = new Date().toISOString();
@@ -624,19 +655,27 @@ export class DynamoDBStore extends MastraStorage {
         batches.push(batch);
       }
 
-      // Process each batch
-      for (const batch of batches) {
-        // Try creating each item individually instead of passing the whole batch
-        for (const messageData of batch) {
-          // Ensure each item has the entity property before sending
-          if (!messageData.entity) {
-            this.logger.error('Missing entity property in message data for create', { messageData });
-            throw new Error('Internal error: Missing entity property during saveMessages');
+      // Process each batch and update thread's updatedAt in parallel for better performance
+      await Promise.all([
+        // Process message batches
+        ...batches.map(async batch => {
+          for (const messageData of batch) {
+            // Ensure each item has the entity property before sending
+            if (!messageData.entity) {
+              this.logger.error('Missing entity property in message data for create', { messageData });
+              throw new Error('Internal error: Missing entity property during saveMessages');
+            }
+            await this.service.entities.message.create(messageData).go();
           }
-          await this.service.entities.message.create(messageData).go();
-        }
-        // Original batch call: await this.service.entities.message.create(batch).go();
-      }
+        }),
+        // Update thread's updatedAt timestamp
+        this.service.entities.thread
+          .update({ entity: 'thread', id: threadId })
+          .set({
+            updatedAt: new Date().toISOString(),
+          })
+          .go(),
+      ]);
 
       const list = new MessageList().add(messages, 'memory');
       if (format === `v1`) return list.get.all.v1();
@@ -757,8 +796,8 @@ export class DynamoDBStore extends MastraStorage {
         updatedAt: now,
         resourceId,
       };
-      // Pass the data including 'entity'
-      await this.service.entities.workflowSnapshot.create(data).go();
+      // Use upsert instead of create to handle both create and update cases
+      await this.service.entities.workflowSnapshot.upsert(data).go();
     } catch (error) {
       this.logger.error('Failed to persist workflow snapshot', { workflowName, runId, error });
       throw error;
@@ -1061,6 +1100,24 @@ export class DynamoDBStore extends MastraStorage {
       this.logger.error('Failed to get evals by agent name', { agentName, type, error });
       throw error;
     }
+  }
+
+  async getTracesPaginated(_args: StorageGetTracesArg): Promise<PaginationInfo & { traces: Trace[] }> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getThreadsByResourceIdPaginated(_args: {
+    resourceId: string;
+    page?: number;
+    perPage?: number;
+  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getMessagesPaginated(
+    _args: StorageGetMessagesArg,
+  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
+    throw new Error('Method not implemented.');
   }
 
   /**

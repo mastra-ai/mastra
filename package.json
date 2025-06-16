@@ -3,15 +3,15 @@
   "version": "0.1.11",
   "type": "module",
   "devDependencies": {
-    "@changesets/cli": "^2.29.3",
-    "@types/node": "^20.17.57",
+    "@changesets/cli": "^2.29.4",
+    "@types/node": "^20.19.0",
     "husky": "^9.1.7",
-    "lint-staged": "^15.5.0",
+    "lint-staged": "^15.5.2",
     "npm-run-all2": "^7.0.2",
     "prettier": "^3.5.3",
     "turbo": "^2.5.4",
-    "typescript": "^5.8.2",
-    "vitest": "^3.1.2"
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.3"
   },
   "scripts": {
     "ci:publish": "pnpm publish -r",
@@ -58,6 +58,7 @@
     "prettier:format": "prettier --write .",
     "prettier:format:check": "prettier --check .",
     "typecheck": "pnpm -r typecheck",
+    "format": "pnpm turbo --filter \"!./examples/**/*\" --filter \"!./docs/**/*\" --filter \"!./integrations/**/*\" --filter \"!@mastra/playground\" lint -- --fix",
     "dev:services:up": "docker compose -f .dev/docker-compose.yaml up -d",
     "dev:services:down": "docker compose -f .dev/docker-compose.yaml down",
     "setup": "pnpm install --ignore-scripts && pnpm run build:cli && pnpm install --shamefully-hoist"

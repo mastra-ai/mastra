@@ -13,6 +13,7 @@ import type { ZodSchema } from 'zod';
 import { Agent } from '../agent';
 import type { AgentGenerateOptions, AgentStreamOptions } from '../agent';
 import { MastraBase } from '../base';
+import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
@@ -212,9 +213,14 @@ export class AgentNetwork extends MastraBase {
       const agent = this.#agents.find(agent => this.formatAgentId(agent.name) === agentId);
 
       if (!agent) {
-        throw new Error(
-          `Agent "${agentId}" not found. Available agents: ${this.#agents.map(a => this.formatAgentId(a.name)).join(', ')}`,
-        );
+        const error = new MastraError({
+          id: 'AGENT_NETWORK_EXECUTE_UNKNOWN_AGENT',
+          domain: ErrorDomain.AGENT_NETWORK,
+          category: ErrorCategory.USER,
+          text: `Agent "${agentId}" not found.`,
+        });
+        this.logger.trackException?.(error);
+        throw error;
       }
 
       // If requested, include relevant history from other agents
