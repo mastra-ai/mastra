@@ -156,6 +156,11 @@ export const docsInputSchema = z.object({
     .array(z.string())
     .min(1)
     .describe(`One or more documentation paths to fetch\nAvailable paths:\n${availablePaths}`),
+  queryKeywords: z
+    .array(z.string())
+    .describe(
+      'Keywords from user query to use for matching documentation. Each keyword should be a single word or short phrase; any whitespace-separated keywords will be split automatically.',
+    ),
 });
 
 export type DocsInput = z.infer<typeof docsInputSchema>;
@@ -165,6 +170,7 @@ export const docsTool = {
   description: `Get Mastra.ai documentation. 
     Request paths to explore the docs. References contain API docs. 
     Other paths contain guides. The user doesn\'t know about files and directories. 
+    You can also use keywords from the user query to find relevant documentation, but prioritize paths. 
     This is your internal knowledge the user can\'t read. 
     If the user asks about a feature check general docs as well as reference docs for that feature. 
     Ex: with evals check in evals/ and in reference/evals/. 
@@ -192,7 +198,7 @@ export const docsTool = {
               };
             }
             const directorySuggestions = await findNearestDirectory(path, availablePaths);
-            const contentBasedSuggestions = await getMatchingPaths(path, docsBaseDir);
+            const contentBasedSuggestions = await getMatchingPaths(path, args.queryKeywords, docsBaseDir);
             return {
               path,
               content: null,

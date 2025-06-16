@@ -180,13 +180,19 @@ function extractKeywordsFromPath(path: string): string[] {
   return Array.from(keywords);
 }
 
-export async function getMatchingPaths(path: string, baseDir: string): Promise<string> {
-  const keywords = extractKeywordsFromPath(path);
-  if (keywords.length === 0) {
+function normalizeKeywords(keywords: string[]): string[] {
+  return Array.from(new Set(keywords.flatMap(k => k.split(/\s+/).filter(Boolean)).map(k => k.toLowerCase())));
+}
+
+export async function getMatchingPaths(path: string, queryKeywords: string[], baseDir: string): Promise<string> {
+  const pathKeywords = extractKeywordsFromPath(path);
+  const allKeywords = normalizeKeywords([...pathKeywords, ...(queryKeywords || [])]);
+
+  if (allKeywords.length === 0) {
     return '';
   }
 
-  const suggestedPaths = await searchDocumentContent(keywords, baseDir);
+  const suggestedPaths = await searchDocumentContent(allKeywords, baseDir);
   if (suggestedPaths.length === 0) {
     return '';
   }
