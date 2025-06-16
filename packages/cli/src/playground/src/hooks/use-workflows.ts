@@ -1,10 +1,8 @@
 import { client } from '@/lib/client';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useDebouncedCallback } from 'use-debounce';
-// import { toast } from 'sonner';
 import { LegacyWorkflowRunResult, WorkflowWatchResult } from '@mastra/client-js';
 import { RuntimeContext } from '@mastra/core/runtime-context';
-import type { LegacyWorkflow } from '@mastra/core/workflows/legacy';
 import { useState } from 'react';
 
 export type ExtendedLegacyWorkflowRunResult = LegacyWorkflowRunResult & {
@@ -34,13 +32,13 @@ const sanitizeWorkflowWatchResult = (record: WorkflowWatchResult) => {
             _acc[_key] = val.type?.toLowerCase() === 'buffer' ? { type: 'Buffer', data: `[...buffered data]` } : val;
             return _acc;
           },
-          {} as Record<string, any>,
+          {} as Record<string, unknown>,
         );
       }
       acc[key] = { ...value, output };
       return acc;
     },
-    {} as Record<string, any>,
+    {} as Record<string, unknown>,
   );
   const sanitizedRecord: ExtendedWorkflowWatchResult = {
     ...record,
@@ -117,7 +115,15 @@ export const useExecuteWorkflow = () => {
   });
 
   const startLegacyWorkflowRun = useMutation({
-    mutationFn: async ({ workflowId, runId, input }: { workflowId: string; runId: string; input: any }) => {
+    mutationFn: async ({
+      workflowId,
+      runId,
+      input,
+    }: {
+      workflowId: string;
+      runId: string;
+      input: Record<string, unknown>;
+    }) => {
       try {
         const workflow = client.getLegacyWorkflow(workflowId);
         await workflow.start({ runId, triggerData: input || {} });
@@ -137,8 +143,8 @@ export const useExecuteWorkflow = () => {
     }: {
       workflowId: string;
       runId: string;
-      input: any;
-      runtimeContext: Record<string, any>;
+      input: Record<string, unknown>;
+      runtimeContext: Record<string, unknown>;
     }) => {
       try {
         const runtimeContext = new RuntimeContext();
@@ -165,8 +171,8 @@ export const useExecuteWorkflow = () => {
     }: {
       workflowId: string;
       runId?: string;
-      input: any;
-      runtimeContext: Record<string, any>;
+      input: Record<string, unknown>;
+      runtimeContext: Record<string, unknown>;
     }) => {
       try {
         const runtimeContext = new RuntimeContext();
@@ -196,99 +202,37 @@ export const useWatchWorkflow = () => {
   const [watchResult, setWatchResult] = useState<ExtendedWorkflowWatchResult | null>(null);
 
   // Debounce the state update to prevent too frequent renders
-  const debouncedSetLegacyWorkflowWatchResult = useDebouncedCallback((record: ExtendedLegacyWorkflowRunResult) => {
-    // Sanitize and limit the size of large data fields
-    const formattedResults = Object.entries(record.results || {}).reduce(
-      (acc, [key, value]) => {
-        let output = value.status === 'success' ? value.output : undefined;
-        if (output) {
-          output = Object.entries(output).reduce(
-            (_acc, [_key, _value]) => {
-              const val = _value as { type: string; data: unknown };
-              _acc[_key] = val.type?.toLowerCase() === 'buffer' ? { type: 'Buffer', data: `[...buffered data]` } : val;
-              return _acc;
-            },
-            {} as Record<string, any>,
-          );
-        }
-        acc[key] = { ...value, output };
-        return acc;
-      },
-      {} as Record<string, any>,
-    );
-    const sanitizedRecord: ExtendedLegacyWorkflowRunResult = {
-      ...record,
-      sanitizedOutput: record
-        ? JSON.stringify({ ...record, results: formattedResults }, null, 2).slice(0, 50000) // Limit to 50KB
-        : null,
-    };
-    setLegacyWatchResult(sanitizedRecord);
-  }, 100);
-
-  const watchLegacyWorkflow = async ({ workflowId, runId }: { workflowId: string; runId: string }) => {
-    try {
-      setIsWatchingLegacyWorkflow(true);
-
-      const workflow = client.getLegacyWorkflow(workflowId);
-
-      await workflow.watch({ runId }, record => {
-        try {
-          debouncedSetLegacyWorkflowWatchResult(record);
-        } catch (err) {
-          console.error('Error processing workflow record:', err);
-          // Set a minimal error state if processing fails
-          setLegacyWatchResult({
-            ...record,
-          });
-        }
-      });
-    } catch (error) {
-      console.error('Error watching workflow:', error);
-
-      throw error;
-    } finally {
-      setIsWatchingLegacyWorkflow(false);
-    }
-  };
-
-  // Debounce the state update to prevent too frequent renders
   const debouncedSetWorkflowWatchResult = useDebouncedCallback((record: ExtendedWorkflowWatchResult) => {
     const sanitizedRecord = sanitizeWorkflowWatchResult(record);
     setWatchResult(sanitizedRecord);
   }, 100);
 
-  const watchWorkflow = async ({ workflowId, runId }: { workflowId: string; runId: string }) => {
-    try {
-      setIsWatchingWorkflow(true);
+  const watchWorkflow = useMutation({
+    mutationFn: async ({ workflowId, runId }: { workflowId: string; runId: string }) => {
+      try {
+        const workflow = client.getWorkflow(workflowId);
 
-      const workflow = client.getWorkflow(workflowId);
+        await workflow.watch({ runId }, record => {
+          try {
+            debouncedSetWorkflowWatchResult(record);
+          } catch (err) {
+            console.error('Error processing workflow record:', err);
+            // Set a minimal error state if processing fails
+            setWatchResult({
+              ...record,
+            });
+          }
+        });
+      } catch (error) {
+        console.error('Error watching workflow:', error);
 
-      await workflow.watch({ runId }, record => {
-        try {
-          debouncedSetWorkflowWatchResult(record);
-        } catch (err) {
-          console.error('Error processing workflow record:', err);
-          // Set a minimal error state if processing fails
-          setWatchResult({
-            ...record,
-          });
-        }
-      });
-    } catch (error) {
-      console.error('Error watching workflow:', error);
-
-      throw error;
-    } finally {
-      setIsWatchingWorkflow(false);
-    }
-  };
+        throw error;
+      }
+    },
+  });
 
   return {
-    watchLegacyWorkflow,
-    isWatchingLegacyWorkflow,
-    legacyWatchResult,
     watchWorkflow,
-    isWatchingWorkflow,
     watchResult,
   };
 };
@@ -309,13 +253,13 @@ export const useWatchLegacyWorkflow = () => {
               _acc[_key] = val.type?.toLowerCase() === 'buffer' ? { type: 'Buffer', data: `[...buffered data]` } : val;
               return _acc;
             },
-            {} as Record<string, any>,
+            {} as Record<string, unknown>,
           );
         }
         acc[key] = { ...value, output };
         return acc;
       },
-      {} as Record<string, any>,
+      {} as Record<string, unknown>,
     );
     const sanitizedRecord: ExtendedLegacyWorkflowRunResult = {
       ...record,
@@ -361,7 +305,7 @@ export const useResumeWorkflow = () => {
       workflowId: string;
       stepId: string;
       runId: string;
-      context: any;
+      context: Record<string, unknown>;
     }) => {
       try {
         const response = await client.getLegacyWorkflow(workflowId).resume({ stepId, runId, context });
@@ -385,8 +329,8 @@ export const useResumeWorkflow = () => {
       workflowId: string;
       step: string | string[];
       runId: string;
-      resumeData: any;
-      runtimeContext: Record<string, any>;
+      resumeData: Record<string, unknown>;
+      runtimeContext: Record<string, unknown>;
     }) => {
       try {
         const runtimeContext = new RuntimeContext();

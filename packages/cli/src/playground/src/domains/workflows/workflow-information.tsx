@@ -4,7 +4,13 @@ import { Badge, Icon, Txt, LegacyWorkflowTrigger, WorkflowIcon, WorkflowTrigger 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 import { WorkflowLogs } from './workflow-logs';
-import { useLegacyWorkflow, useWorkflow } from '@/hooks/use-workflows';
+import {
+  useLegacyWorkflow,
+  useWorkflow,
+  useExecuteWorkflow,
+  useWatchWorkflow,
+  useResumeWorkflow,
+} from '@/hooks/use-workflows';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CopyIcon } from 'lucide-react';
@@ -19,6 +25,9 @@ export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: stri
   const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId, !isLegacy);
   const { isLoading: isRunsLoading, data: runs } = useWorkflowRuns({ workflowId });
   const { data: legacyWorkflow, isLoading: isLegacyWorkflowLoading } = useLegacyWorkflow(workflowId, !!isLegacy);
+  const { createWorkflowRun, startWorkflowRun } = useExecuteWorkflow();
+  const { watchWorkflow, watchResult } = useWatchWorkflow();
+  const { resumeWorkflow } = useResumeWorkflow();
 
   const [runId, setRunId] = useState<string>('');
   const { handleCopy } = useCopyToClipboard({ text: workflowId });
@@ -96,6 +105,13 @@ export function WorkflowInformation({ workflowId, isLegacy }: { workflowId: stri
                       setRunId={setRunId}
                       workflow={workflow}
                       isLoading={isWorkflowLoading}
+                      createWorkflowRun={createWorkflowRun.mutateAsync}
+                      startWorkflowRun={startWorkflowRun.mutateAsync}
+                      resumeWorkflow={resumeWorkflow.mutateAsync}
+                      watchWorkflow={watchWorkflow.mutateAsync}
+                      watchResult={watchResult}
+                      isWatchingWorkflow={watchWorkflow.isPending}
+                      isResumingWorkflow={resumeWorkflow.isPending}
                     />
                   )}
                 </>
