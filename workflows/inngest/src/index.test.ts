@@ -5701,5 +5701,66 @@ describe('MastraInngestWorkflow', () => {
     });
   });
 
-  describe('Access to inngest step primitives', () => {});
+  describe('Access to inngest step primitives', () => {
+    it('should inject inngest step primitives into steps during run', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const step = createStep({
+        id: 'step1',
+        execute: async ({ engine }) => {
+          return {
+            hasEngine: !!engine.step,
+          };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+      const workflow = createWorkflow({
+        id: 'test-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({
+          hasEngine: z.boolean(),
+        }),
+      });
+      workflow.then(step).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          url: ':memory:',
+        }),
+        workflows: {
+          'test-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      });
+
+      const run = workflow.createRun();
+      const result = await run.start({});
+
+      srv.close();
+
+      // @ts-ignore
+      expect(result?.steps.step1.output.hasEngine).toBe(true);
+    });
+  });
 }, 40e3);
