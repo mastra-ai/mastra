@@ -125,8 +125,13 @@ export class PgVector extends MastraVector {
 
   private getTableName(indexName: string) {
     const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
-    const parsedSchemaName = this.schema ? parseSqlIdentifier(this.schema, 'schema name') : undefined;
-    return parsedSchemaName ? `${parsedSchemaName}.${parsedIndexName}` : parsedIndexName;
+    const quotedIndexName = `"${parsedIndexName}"`;
+    const quotedSchemaName = this.schema ? `"${parseSqlIdentifier(this.schema, 'schema name')}"` : undefined;
+    const quotedVectorName = `"${parsedIndexName}_vector_idx"`;
+    return {
+      tableName: quotedSchemaName ? `${quotedSchemaName}.${quotedIndexName}` : quotedIndexName,
+      vectorIndexName: quotedVectorName,
+    };
   }
 
   transformFilter(filter?: VectorFilter) {
@@ -179,7 +184,7 @@ export class PgVector extends MastraVector {
         await client.query(`SET LOCAL ivfflat.probes = ${probes}`);
       }
 
-      const tableName = this.getTableName(indexName);
+      const { tableName } = this.getTableName(indexName);
 
       const query = `
         WITH vector_scores AS (
@@ -210,7 +215,7 @@ export class PgVector extends MastraVector {
   }
 
   async upsert({ indexName, vectors, metadata, ids }: UpsertVectorParams): Promise<string[]> {
-    const tableName = this.getTableName(indexName);
+    const { tableName } = this.getTableName(indexName);
 
     // Start a transaction
     const client = await this.pool.connect();
@@ -324,7 +329,7 @@ export class PgVector extends MastraVector {
     indexConfig = {},
     buildIndex = true,
   }: PgCreateIndexParams): Promise<void> {
-    const tableName = this.getTableName(indexName);
+    const { tableName } = this.getTableName(indexName);
 
     // Validate inputs
     if (!indexName.match(/^[a-zA-Z_][a-zA-Z0-9_]*$/)) {
@@ -335,7 +340,7 @@ export class PgVector extends MastraVector {
     }
 
     const indexCacheKey = await this.getIndexCacheKey({ indexName, dimension, type: indexConfig.type, metric });
-    if (this.cachedIndexExists(indexName, indexCacheKey)) {
+    if (this.cachedIndexExists(tableName, indexCacheKey)) {
       // we already saw this index get created since the process started, no need to recreate it
       return;
     }
@@ -343,7 +348,7 @@ export class PgVector extends MastraVector {
     const mutex = this.getMutexByName(`create-${indexName}`);
     // Use async-mutex instead of advisory lock for perf (over 2x as fast)
     await mutex.runExclusive(async () => {
-      if (this.cachedIndexExists(indexName, indexCacheKey)) {
+      if (this.cachedIndexExists(tableName, indexCacheKey)) {
         // this may have been created while we were waiting to acquire a lock
         return;
       }
@@ -391,10 +396,10 @@ export class PgVector extends MastraVector {
     const mutex = this.getMutexByName(`build-${indexName}`);
     // Use async-mutex instead of advisory lock for perf (over 2x as fast)
     await mutex.runExclusive(async () => {
-      const tableName = this.getTableName(indexName);
+      const { tableName, vectorIndexName } = this.getTableName(indexName);
 
       if (this.createdIndexes.has(indexName)) {
-        await client.query(`DROP INDEX IF EXISTS ${tableName}_vector_idx`);
+        await client.query(`DROP INDEX IF EXISTS ${vectorIndexName}`);
       }
 
       if (indexConfig.type === 'flat') {
@@ -411,7 +416,7 @@ export class PgVector extends MastraVector {
         const efConstruction = indexConfig.hnsw?.efConstruction ?? 32;
 
         indexSQL = `
-          CREATE INDEX IF NOT EXISTS ${indexName}_vector_idx 
+          CREATE INDEX IF NOT EXISTS ${vectorIndexName} 
           ON ${tableName} 
           USING hnsw (embedding ${metricOp})
           WITH (
@@ -428,7 +433,7 @@ export class PgVector extends MastraVector {
           lists = Math.max(100, Math.min(4000, Math.floor(Math.sqrt(size) * 2)));
         }
         indexSQL = `
-          CREATE INDEX IF NOT EXISTS ${indexName}_vector_idx
+          CREATE INDEX IF NOT EXISTS ${vectorIndexName}
           ON ${tableName}
           USING ivfflat (embedding ${metricOp})
           WITH (lists = ${lists});
@@ -517,7 +522,7 @@ export class PgVector extends MastraVector {
   async describeIndex({ indexName }: DescribeIndexParams): Promise<PGIndexStats> {
     const client = await this.pool.connect();
     try {
-      const tableName = this.getTableName(indexName);
+      const { tableName } = this.getTableName(indexName);
 
       // Check if table exists with a vector column
       const tableExistsQuery = `
@@ -613,7 +618,7 @@ export class PgVector extends MastraVector {
   async deleteIndex({ indexName }: DeleteIndexParams): Promise<void> {
     const client = await this.pool.connect();
     try {
-      const tableName = this.getTableName(indexName);
+      const { tableName } = this.getTableName(indexName);
       // Drop the table
       await client.query(`DROP TABLE IF EXISTS ${tableName} CASCADE`);
       this.createdIndexes.delete(indexName);
@@ -628,7 +633,7 @@ export class PgVector extends MastraVector {
   async truncateIndex({ indexName }: DeleteIndexParams): Promise<void> {
     const client = await this.pool.connect();
     try {
-      const tableName = this.getTableName(indexName);
+      const { tableName } = this.getTableName(indexName);
       await client.query(`TRUNCATE ${tableName}`);
     } catch (e: any) {
       await client.query('ROLLBACK');
@@ -678,7 +683,7 @@ export class PgVector extends MastraVector {
         return;
       }
 
-      const tableName = this.getTableName(indexName);
+      const { tableName } = this.getTableName(indexName);
 
       // query looks like this:
       // UPDATE table SET embedding = $2::vector, metadata = $3::jsonb WHERE id = $1
@@ -706,7 +711,7 @@ export class PgVector extends MastraVector {
   async deleteVector({ indexName, id }: DeleteVectorParams): Promise<void> {
     const client = await this.pool.connect();
     try {
-      const tableName = this.getTableName(indexName);
+      const { tableName } = this.getTableName(indexName);
       const query = `
         DELETE FROM ${tableName}
         WHERE vector_id = $1

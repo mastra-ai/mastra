@@ -96,9 +96,10 @@ export class PostgresStore extends MastraStorage {
   }
 
   private getTableName(indexName: string) {
-    const parsedIndexName = parseSqlIdentifier(indexName, 'table name');
-    const parsedSchemaName = this.schema ? parseSqlIdentifier(this.schema, 'schema name') : undefined;
-    return parsedSchemaName ? `${parsedSchemaName}."${parsedIndexName}"` : `"${parsedIndexName}"`;
+    const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
+    const quotedIndexName = `"${parsedIndexName}"`;
+    const quotedSchemaName = this.schema ? `"${parseSqlIdentifier(this.schema, 'schema name')}"` : undefined;
+    return quotedSchemaName ? `${quotedSchemaName}.${quotedIndexName}` : quotedIndexName;
   }
 
   /** @deprecated use getEvals instead */
