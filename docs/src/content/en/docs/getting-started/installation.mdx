@@ -7,17 +7,12 @@ import { Callout, Steps } from "nextra/components";
 import YouTube from "@/components/youtube";
 import { Tabs, Tab } from "@/components/tabs";
 
-# Installing Mastra Locally
+# Installing Mastra
 
-To run Mastra, you need access to an LLM. Typically, you'll want to get an API key from an LLM provider such as:
+To use Mastra, you need access to a large language model (LLM). By default, Mastra is configured to work with [OpenAI](https://platform.openai.com/), and you'll need an API key to get started.
 
-- [OpenAI](https://platform.openai.com/)
-- [Anthropic](https://console.anthropic.com/settings/keys)
-- [Google Gemini](https://ai.google.dev/gemini-api/docs)
+Mastra also supports other LLM providers. For details on compatible providers and how to configure them, see [Model Providers](/docs/getting-started/model-providers).
 
-You can also run Mastra with a local LLM using:
-
-- [Ollama](https://ollama.ai/).
 
 ## What You'll Build
 
@@ -32,6 +27,8 @@ By the end of this guide, you'll have built a Weather Agent that generates weath
 - Node.js `v20.0` or higher
 - Access to a [supported large language model (LLM)](/docs/frameworks/ai-sdk)
 
+<Tabs items={["Automatic Installation", "Manual Installation"]}>
+<Tab>
 ## Automatic Installation
 
 <YouTube id="spGlcTEjuXY" />
@@ -90,8 +87,10 @@ After the prompts, `create-mastra` will:
 
 1. Set up your project directory with TypeScript
 2. Install dependencies
-3. Configure your selected components and LLM provider
-4. Configure the MCP server in your IDE (if selected) for instant access to docs, examples, and help while you code
+3. Create an example agent, tool` and workflow
+4. Configure agents to use `openai` as the LLM provider from `@ai-sdk`
+5. Create a `.env` file with an `OPENAI_API_KEY` variable
+6. Configure the MCP server in your IDE (if selected) for instant access to docs, examples, and help while you code
 
 > If you're using a different IDE, you can install the MCP server manually by following the instructions in the [MCP server docs](/docs/getting-started/mcp-docs-server). **Also** note that there are additional steps for [Cursor and Windsurf](/docs/getting-started/mcp-docs-server#after-configuration) to activate the MCP server.
 
@@ -116,7 +115,8 @@ OPENAI_API_KEY=<your-api-key>
 > Replace `your-api-key` with your API key.
 
 </Steps>
-
+</Tab>
+<Tab>
 ## Manual Installation
 
 If you prefer to set up your Mastra project manually, follow these steps:
@@ -608,6 +608,8 @@ export const mastra = new Mastra({
 > This registers your agent with Mastra so that `mastra dev` can discover and serve it.
 
 </Steps>
+</Tab>
+</Tabs>
 
 ## Start the Mastra Server
 
@@ -682,23 +684,23 @@ Install `dotenv` to load environment variables (e.g. your API keys):
 
 <Tabs items={["npm", "pnpm", "yarn", "bun"]}>
   <Tab>
-  ```bash copy 
-  npm install dotenv --save-dev 
+  ```bash copy
+  npm install dotenv --save-dev
   ```
   </Tab>
   <Tab>
-  ```bash copy 
-  pnpm add dotenv --save-dev 
+  ```bash copy
+  pnpm add dotenv --save-dev
   ```
   </Tab>
   <Tab>
-  ```bash copy 
-  yarn add dotenv --dev 
+  ```bash copy
+  yarn add dotenv --dev
   ```
   </Tab>
   <Tab>
-  ```bash copy 
-  bun add dotenv --dev 
+  ```bash copy
+  bun add dotenv --dev
   ```
   </Tab>
 </Tabs>
