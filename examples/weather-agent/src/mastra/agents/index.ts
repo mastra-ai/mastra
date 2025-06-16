@@ -26,5 +26,4 @@ export const weatherReporterAgent = new Agent({
   You are a weather explainer. You have access to input that will help you get weather-specific activities for any city. 
   The tool uses agents to plan the activities, you just need to provide the city. Explain the weather report like a weather reporter.
   `,
-  // description: 'A weather reporter agent that explains the weather report like a weather reporter.',
 });
