@@ -199,8 +199,6 @@ export const useExecuteWorkflow = () => {
 };
 
 export const useWatchWorkflow = () => {
-  // const [watchResult, setWatchResult] = useState<ExtendedWorkflowWatchResult | null>(null);
-
   // Debounce the state update to prevent too frequent renders
   const debouncedSetWorkflowWatchResult = useDebouncedCallback(
     (record: ExtendedWorkflowWatchResult, onUpdate: (result: ExtendedWorkflowWatchResult) => void) => {
@@ -244,7 +242,6 @@ export const useWatchWorkflow = () => {
 
   return {
     watchWorkflow,
-    // watchResult,
   };
 };
 

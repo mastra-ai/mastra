@@ -10,6 +10,7 @@ import {
   useExecuteWorkflow,
   useWatchWorkflow,
   useResumeWorkflow,
+  ExtendedWorkflowWatchResult,
 } from '@/hooks/use-workflows';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Skeleton } from '@/components/ui/skeleton';
