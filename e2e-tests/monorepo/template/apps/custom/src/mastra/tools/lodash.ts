@@ -9,6 +9,6 @@ export const lodashTool = createTool({
     date: z.string(),
   }),
   execute: async context => {
-    return get(context.data, 'date');
+    return get('date', context.data);
   },
 });

@@ -1,4 +1,4 @@
-import { extname } from 'path';
+import { dirname, extname, relative } from 'path';
 import resolveFrom from 'resolve-from';
 import type { Plugin } from 'rollup';
 
@@ -8,6 +8,16 @@ function safeResolve(id: string, importer: string) {
   } catch {
     return null;
   }
+}
+
+function getPackageName(id: string) {
+  const parts = id.split('/');
+
+  if (id.startsWith('@')) {
+    return parts.slice(0, 2).join('/');
+  }
+
+  return parts[0];
 }
 
 // we only need this for dev, so we can resolve the js extension of the module as we do not use node-resolve
@@ -43,7 +53,23 @@ export function nodeModulesExtensionResolver(): Plugin {
         for (const ext of ['.mjs', '.js', '.cjs']) {
           const resolved = safeResolve(id + ext, importer);
           if (resolved) {
-            return resolved;
+            const pkgName = getPackageName(id);
+            if (!pkgName) {
+              return null;
+            }
+
+            const pkgJsonPath = safeResolve(`${pkgName}/package.json`, importer);
+            console.log(pkgName, pkgJsonPath);
+            if (!pkgJsonPath) {
+              return null;
+            }
+
+            const newImportWithExtension = resolved.replace(dirname(pkgJsonPath), pkgName);
+
+            return {
+              id: newImportWithExtension,
+              // external: true,
+            };
           }
         }
       }
