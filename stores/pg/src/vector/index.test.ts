@@ -1647,6 +1647,75 @@ describe('PgVector', () => {
       });
     });
 
+    describe('PgVector Table Name Quoting', () => {
+      const camelCaseIndex = 'TestCamelCaseIndex';
+      const snakeCaseIndex = 'test_snake_case_index';
+
+      beforeEach(async () => {
+        // Clean up any existing indexes
+        try {
+          await vectorDB.deleteIndex({ indexName: camelCaseIndex });
+        } catch {
+          // Ignore if doesn't exist
+        }
+        try {
+          await vectorDB.deleteIndex({ indexName: snakeCaseIndex });
+        } catch {
+          // Ignore if doesn't exist
+        }
+      });
+
+      afterEach(async () => {
+        // Clean up indexes after each test
+        try {
+          await vectorDB.deleteIndex({ indexName: camelCaseIndex });
+        } catch {
+          // Ignore if doesn't exist
+        }
+        try {
+          await vectorDB.deleteIndex({ indexName: snakeCaseIndex });
+        } catch {
+          // Ignore if doesn't exist
+        }
+      });
+
+      it('should create and query a camelCase index without quoting errors', async () => {
+        await expect(
+          vectorDB.createIndex({
+            indexName: camelCaseIndex,
+            dimension: 3,
+            metric: 'cosine',
+            indexConfig: { type: 'hnsw' },
+          }),
+        ).resolves.not.toThrow();
+
+        const results = await vectorDB.query({
+          indexName: camelCaseIndex,
+          queryVector: [1, 0, 0],
+          topK: 1,
+        });
+        expect(Array.isArray(results)).toBe(true);
+      });
+
+      it('should create and query a snake_case index without quoting errors', async () => {
+        await expect(
+          vectorDB.createIndex({
+            indexName: snakeCaseIndex,
+            dimension: 3,
+            metric: 'cosine',
+            indexConfig: { type: 'hnsw' },
+          }),
+        ).resolves.not.toThrow();
+
+        const results = await vectorDB.query({
+          indexName: snakeCaseIndex,
+          queryVector: [1, 0, 0],
+          topK: 1,
+        });
+        expect(Array.isArray(results)).toBe(true);
+      });
+    });
+
     // Regex Operator Tests
     describe('Regex Operators', () => {
       it('should handle $regex with case sensitivity', async () => {
@@ -1878,7 +1947,7 @@ describe('PgVector', () => {
   });
 
   describe('Schema Support', () => {
-    const customSchema = 'mastra_test';
+    const customSchema = 'mastraTest';
     let vectorDB: PgVector;
     let customSchemaVectorDB: PgVector;
 
