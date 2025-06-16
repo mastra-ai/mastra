@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { subscribe } from '@inngest/realtime';
-import type { Mastra, ToolExecutionContext, WorkflowRun, WorkflowRuns } from '@mastra/core';
+import type { Agent, Mastra, ToolExecutionContext, WorkflowRun, WorkflowRuns } from '@mastra/core';
 import { RuntimeContext } from '@mastra/core/di';
 import { Tool } from '@mastra/core/tools';
 import { Workflow, Run, DefaultExecutionEngine } from '@mastra/core/workflows';
