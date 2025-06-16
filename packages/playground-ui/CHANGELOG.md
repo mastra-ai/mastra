@@ -1,5 +1,13 @@
 # @mastra/playground-ui
 
+## 5.1.6-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [4b0f8a6]
+  - @mastra/core@0.10.6-alpha.2
+  - @mastra/client-js@0.10.5-alpha.2
+
 ## 5.1.6-alpha.1
 
 ### Patch Changes

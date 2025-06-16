@@ -1,5 +1,15 @@
 # @mastra/dynamodb
 
+## 0.11.0-alpha.2
+
+### Patch Changes
+
+- fdfed6c: dependencies updates:
+  - Updated dependency [`@aws-sdk/client-dynamodb@^3.828.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/client-dynamodb/v/3.828.0) (from `^3.826.0`, in `dependencies`)
+  - Updated dependency [`@aws-sdk/lib-dynamodb@^3.828.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/lib-dynamodb/v/3.828.0) (from `^3.826.0`, in `dependencies`)
+- Updated dependencies [4b0f8a6]
+  - @mastra/core@0.10.6-alpha.2
+
 ## 0.11.0-alpha.1
 
 ### Minor Changes
