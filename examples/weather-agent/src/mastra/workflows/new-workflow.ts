@@ -190,6 +190,26 @@ weatherWorkflow.commit();
 const weatherStepFromTool = createStep(weatherTool);
 const weatherStepFromAgent = createStep(weatherReporterAgent);
 
+const weatherStepUsingTool = createStep({
+  id: 'weather-step-using-tool',
+  description: 'This is a test step using the weather tool',
+  inputSchema: z.object({
+    location: z.string().describe('City name'),
+  }),
+  outputSchema: z.object({
+    temperature: z.number(),
+    feelsLike: z.number(),
+    humidity: z.number(),
+    windSpeed: z.number(),
+    windGust: z.number(),
+    conditions: z.string(),
+    location: z.string(),
+  }),
+  execute: async ({ inputData, runtimeContext }) => {
+    return await weatherTool.execute({ context: { location: inputData.location }, runtimeContext });
+  },
+});
+
 const weatherWorkflow2 = createWorkflow({
   id: 'weather-workflow-with-tool-and-agent',
   inputSchema: z.object({
@@ -198,6 +218,7 @@ const weatherWorkflow2 = createWorkflow({
   outputSchema: z.object({
     text: z.string(),
   }),
+  steps: [weatherStepFromTool, weatherStepFromAgent],
 })
   .then(weatherStepFromTool)
   .map({
