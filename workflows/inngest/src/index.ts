@@ -375,6 +375,15 @@ export class InngestWorkflow<
               this.logger.error('Error emitting event: ' + (err?.stack ?? err?.message ?? err));
             }
           },
+          on: (_event: string, _callback: (data: any) => void) => {
+            // no-op
+          },
+          off: (_event: string, _callback: (data: any) => void) => {
+            // no-op
+          },
+          once: (_event: string, _callback: (data: any) => void) => {
+            // no-op
+          },
         };
 
         const engine = new InngestExecutionEngine(this.#mastra, step, attempt);
