@@ -76,7 +76,7 @@ An optional object that can include configuration for output structure, memory m
           parameters: [{
               name: "thread",
               type: "string | { id: string; metadata?: Record<string, any>, title?: string }",
-              isOptional: true,
+              isOptional: false,
               description: "The conversation thread, as a string ID or an object with an `id` and optional `metadata`."
           }]
         },
@@ -84,7 +84,7 @@ An optional object that can include configuration for output structure, memory m
           parameters: [{
               name: "resource",
               type: "string",
-              isOptional: true,
+              isOptional: false,
               description: "Identifier for the user or resource associated with the thread."
           }]
         },

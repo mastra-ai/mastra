@@ -42,6 +42,7 @@ import type {
   ToolsetsInput,
   ToolsInput,
   DynamicArgument,
+  AgentMemoryOption,
 } from './types';
 
 export { MessageList };
@@ -57,12 +58,15 @@ function resolveMaybePromise<T, R = void>(value: T | Promise<T>, cb: (value: T) 
 }
 
 // Helper to resolve threadId from args (supports both new and old API)
-function resolveThreadIdFromArgs(args: any): (Partial<StorageThreadType> & { id: string }) | undefined {
-  if (args.memory?.thread) {
+function resolveThreadIdFromArgs(args: {
+  memory?: AgentMemoryOption;
+  threadId?: string;
+}): (Partial<StorageThreadType> & { id: string }) | undefined {
+  if (args?.memory?.thread) {
     if (typeof args.memory.thread === 'string') return { id: args.memory.thread };
     if (typeof args.memory.thread === 'object' && args.memory.thread.id) return args.memory.thread;
   }
-  if (args.threadId) return { id: args.threadId };
+  if (args?.threadId) return { id: args.threadId };
   return undefined;
 }
 
@@ -1152,7 +1156,10 @@ export class Agent<
         let threadObject: StorageThreadType | undefined = undefined;
         const existingThread = await memory.getThreadById({ threadId });
         if (existingThread) {
-          if (thread.metadata && !deepEqual(existingThread.metadata, thread.metadata)) {
+          if (
+            (!existingThread.metadata && thread.metadata) ||
+            (thread.metadata && !deepEqual(existingThread.metadata, thread.metadata))
+          ) {
             threadObject = await memory.saveThread({
               thread: { ...existingThread, metadata: thread.metadata },
               memoryConfig,
