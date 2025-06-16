@@ -1947,7 +1947,7 @@ describe('PgVector', () => {
   });
 
   describe('Schema Support', () => {
-    const customSchema = 'mastra_test';
+    const customSchema = 'mastraTest';
     let vectorDB: PgVector;
     let customSchemaVectorDB: PgVector;
 

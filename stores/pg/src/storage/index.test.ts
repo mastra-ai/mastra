@@ -1016,7 +1016,7 @@ describe('PostgresStore', () => {
   });
 
   describe('Schema Support', () => {
-    const customSchema = 'mastra_test';
+    const customSchema = 'mastraTest';
     let customSchemaStore: PostgresStore;
 
     beforeAll(async () => {
@@ -1570,7 +1570,7 @@ describe('PostgresStore', () => {
   describe('Permission Handling', () => {
     const schemaRestrictedUser = 'mastra_schema_restricted_storage';
     const restrictedPassword = 'test123';
-    const testSchema = 'test_schema';
+    const testSchema = 'testSchema';
     let adminDb: pgPromise.IDatabase<{}>;
     let pgpAdmin: pgPromise.IMain;
 

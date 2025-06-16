@@ -126,12 +126,16 @@ export class PgVector extends MastraVector {
   private getTableName(indexName: string) {
     const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
     const quotedIndexName = `"${parsedIndexName}"`;
-    const quotedSchemaName = this.schema ? `"${parseSqlIdentifier(this.schema, 'schema name')}"` : undefined;
+    const quotedSchemaName = this.getSchemaName();
     const quotedVectorName = `"${parsedIndexName}_vector_idx"`;
     return {
       tableName: quotedSchemaName ? `${quotedSchemaName}.${quotedIndexName}` : quotedIndexName,
       vectorIndexName: quotedVectorName,
     };
+  }
+
+  private getSchemaName() {
+    return this.schema ? `"${parseSqlIdentifier(this.schema, 'schema name')}"` : undefined;
   }
 
   transformFilter(filter?: VectorFilter) {
@@ -287,14 +291,14 @@ export class PgVector extends MastraVector {
               WHERE schema_name = $1
             )
           `,
-            [this.schema],
+            [this.getSchemaName()],
           );
 
           const schemaExists = schemaCheck.rows[0].exists;
 
           if (!schemaExists) {
             try {
-              await client.query(`CREATE SCHEMA IF NOT EXISTS ${this.schema}`);
+              await client.query(`CREATE SCHEMA IF NOT EXISTS ${this.getSchemaName()}`);
               this.logger.info(`Schema "${this.schema}" created successfully`);
             } catch (error) {
               this.logger.error(`Failed to create schema "${this.schema}"`, { error });
