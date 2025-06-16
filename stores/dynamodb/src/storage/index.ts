@@ -1,6 +1,8 @@
 import { DynamoDBClient, DescribeTableCommand } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import type { StorageThreadType, MessageType, WorkflowRunState } from '@mastra/core';
+import { MessageList } from '@mastra/core/agent';
+import type { StorageThreadType, MastraMessageV2, MastraMessageV1 } from '@mastra/core/memory';
+
 import {
   MastraStorage,
   TABLE_THREADS,
@@ -9,7 +11,18 @@ import {
   TABLE_EVALS,
   TABLE_TRACES,
 } from '@mastra/core/storage';
-import type { EvalRow, StorageGetMessagesArg, WorkflowRun, WorkflowRuns, TABLE_NAMES } from '@mastra/core/storage';
+import type {
+  EvalRow,
+  StorageGetMessagesArg,
+  WorkflowRun,
+  WorkflowRuns,
+  TABLE_NAMES,
+  StorageGetTracesArg,
+  PaginationInfo,
+  StorageColumn,
+} from '@mastra/core/storage';
+import type { Trace } from '@mastra/core/telemetry';
+import type { WorkflowRunState } from '@mastra/core/workflows';
 import type { Service } from 'electrodb';
 import { getElectroDbService } from '../entities';
 
@@ -180,6 +193,37 @@ export class DynamoDBStore extends MastraStorage {
   }
 
   /**
+   * Pre-processes a record to ensure Date objects are converted to ISO strings
+   * This is necessary because ElectroDB validation happens before setters are applied
+   */
+  private preprocessRecord(record: Record<string, any>): Record<string, any> {
+    const processed = { ...record };
+
+    // Convert Date objects to ISO strings for date fields
+    // This prevents ElectroDB validation errors that occur when Date objects are passed
+    // to string-typed attributes, even when the attribute has a setter that converts dates
+    if (processed.createdAt instanceof Date) {
+      processed.createdAt = processed.createdAt.toISOString();
+    }
+    if (processed.updatedAt instanceof Date) {
+      processed.updatedAt = processed.updatedAt.toISOString();
+    }
+    if (processed.created_at instanceof Date) {
+      processed.created_at = processed.created_at.toISOString();
+    }
+
+    return processed;
+  }
+
+  async alterTable(_args: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void> {
+    // Nothing to do here, DynamoDB has a flexible schema and handles new attributes automatically upon insertion/update.
+  }
+
+  /**
    * Clear all items from a logical "table" (entity type)
    */
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
@@ -274,8 +318,8 @@ export class DynamoDBStore extends MastraStorage {
     }
 
     try {
-      // Add the entity type to the record before creating
-      const dataToSave = { entity: entityName, ...record };
+      // Add the entity type to the record and preprocess before creating
+      const dataToSave = { entity: entityName, ...this.preprocessRecord(record) };
       await this.service.entities[entityName].create(dataToSave).go();
     } catch (error) {
       this.logger.error('Failed to insert record', { tableName, error });
@@ -294,8 +338,8 @@ export class DynamoDBStore extends MastraStorage {
       throw new Error(`No entity defined for ${tableName}`);
     }
 
-    // Add entity type to each record
-    const recordsToSave = records.map(rec => ({ entity: entityName, ...rec }));
+    // Add entity type and preprocess each record
+    const recordsToSave = records.map(rec => ({ entity: entityName, ...this.preprocessRecord(rec) }));
 
     // ElectroDB has batch limits of 25 items, so we need to chunk
     const batchSize = 25;
@@ -378,6 +422,9 @@ export class DynamoDBStore extends MastraStorage {
       const data = result.data;
       return {
         ...data,
+        // Convert date strings back to Date objects for consistency
+        createdAt: typeof data.createdAt === 'string' ? new Date(data.createdAt) : data.createdAt,
+        updatedAt: typeof data.updatedAt === 'string' ? new Date(data.updatedAt) : data.updatedAt,
         // metadata: data.metadata ? JSON.parse(data.metadata) : undefined, // REMOVED by AI
         // metadata is already transformed by the entity's getter
       } as StorageThreadType;
@@ -399,6 +446,9 @@ export class DynamoDBStore extends MastraStorage {
       // ElectroDB handles the transformation with attribute getters
       return result.data.map((data: any) => ({
         ...data,
+        // Convert date strings back to Date objects for consistency
+        createdAt: typeof data.createdAt === 'string' ? new Date(data.createdAt) : data.createdAt,
+        updatedAt: typeof data.updatedAt === 'string' ? new Date(data.updatedAt) : data.updatedAt,
         // metadata: data.metadata ? JSON.parse(data.metadata) : undefined, // REMOVED by AI
         // metadata is already transformed by the entity's getter
       })) as StorageThreadType[];
@@ -514,8 +564,14 @@ export class DynamoDBStore extends MastraStorage {
   }
 
   // Message operations
-  async getMessages(args: StorageGetMessagesArg): Promise<MessageType[]> {
-    const { threadId, selectBy } = args;
+  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
+  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
+  public async getMessages({
+    threadId,
+    resourceId,
+    selectBy,
+    format,
+  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     this.logger.debug('Getting messages', { threadId, selectBy });
 
     try {
@@ -525,30 +581,48 @@ export class DynamoDBStore extends MastraStorage {
 
       // Apply the 'last' limit if provided
       if (selectBy?.last && typeof selectBy.last === 'number') {
-        // Use ElectroDB's limit parameter (descending sort assumed on GSI SK)
-        // Ensure GSI sk (createdAt) is sorted descending for 'last' to work correctly
-        // Assuming default sort is ascending on SK, use reverse: true for descending
-        const results = await query.go({ limit: selectBy.last, reverse: true });
+        // Use ElectroDB's limit parameter
+        // DDB GSIs are sorted in ascending order
+        // Use ElectroDB's order parameter to sort in descending order to retrieve 'latest' messages
+        const results = await query.go({ limit: selectBy.last, order: 'desc' });
         // Use arrow function in map to preserve 'this' context for parseMessageData
-        return results.data.map((data: any) => this.parseMessageData(data)) as MessageType[];
+        const list = new MessageList({ threadId, resourceId }).add(
+          results.data.map((data: any) => this.parseMessageData(data)),
+          'memory',
+        );
+        if (format === `v2`) return list.get.all.v2();
+        return list.get.all.v1();
       }
 
       // If no limit specified, get all messages (potentially paginated by ElectroDB)
       // Consider adding default limit or handling pagination if needed
       const results = await query.go();
-      // Use arrow function in map to preserve 'this' context for parseMessageData
-      return results.data.map((data: any) => this.parseMessageData(data)) as MessageType[];
+      const list = new MessageList({ threadId, resourceId }).add(
+        results.data.map((data: any) => this.parseMessageData(data)),
+        'memory',
+      );
+      if (format === `v2`) return list.get.all.v2();
+      return list.get.all.v1();
     } catch (error) {
       this.logger.error('Failed to get messages', { threadId, error });
       throw error;
     }
   }
-
-  async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
+  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
+  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
+  async saveMessages(
+    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
+  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
+    const { messages, format = 'v1' } = args;
     this.logger.debug('Saving messages', { count: messages.length });
 
     if (!messages.length) {
       return [];
+    }
+
+    const threadId = messages[0]?.threadId;
+    if (!threadId) {
+      throw new Error('Thread ID is required');
     }
 
     // Ensure 'entity' is added and complex fields are handled
@@ -563,10 +637,10 @@ export class DynamoDBStore extends MastraStorage {
         resourceId: msg.resourceId,
         // Ensure complex fields are stringified if not handled by attribute setters
         content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
-        toolCallArgs: msg.toolCallArgs ? JSON.stringify(msg.toolCallArgs) : undefined,
-        toolCallIds: msg.toolCallIds ? JSON.stringify(msg.toolCallIds) : undefined,
-        toolNames: msg.toolNames ? JSON.stringify(msg.toolNames) : undefined,
-        createdAt: msg.createdAt?.toISOString() || now,
+        toolCallArgs: `toolCallArgs` in msg && msg.toolCallArgs ? JSON.stringify(msg.toolCallArgs) : undefined,
+        toolCallIds: `toolCallIds` in msg && msg.toolCallIds ? JSON.stringify(msg.toolCallIds) : undefined,
+        toolNames: `toolNames` in msg && msg.toolNames ? JSON.stringify(msg.toolNames) : undefined,
+        createdAt: msg.createdAt instanceof Date ? msg.createdAt.toISOString() : msg.createdAt || now,
         updatedAt: now, // Add updatedAt
       };
     });
@@ -581,21 +655,31 @@ export class DynamoDBStore extends MastraStorage {
         batches.push(batch);
       }
 
-      // Process each batch
-      for (const batch of batches) {
-        // Try creating each item individually instead of passing the whole batch
-        for (const messageData of batch) {
-          // Ensure each item has the entity property before sending
-          if (!messageData.entity) {
-            this.logger.error('Missing entity property in message data for create', { messageData });
-            throw new Error('Internal error: Missing entity property during saveMessages');
+      // Process each batch and update thread's updatedAt in parallel for better performance
+      await Promise.all([
+        // Process message batches
+        ...batches.map(async batch => {
+          for (const messageData of batch) {
+            // Ensure each item has the entity property before sending
+            if (!messageData.entity) {
+              this.logger.error('Missing entity property in message data for create', { messageData });
+              throw new Error('Internal error: Missing entity property during saveMessages');
+            }
+            await this.service.entities.message.create(messageData).go();
           }
-          await this.service.entities.message.create(messageData).go();
-        }
-        // Original batch call: await this.service.entities.message.create(batch).go();
-      }
+        }),
+        // Update thread's updatedAt timestamp
+        this.service.entities.thread
+          .update({ entity: 'thread', id: threadId })
+          .set({
+            updatedAt: new Date().toISOString(),
+          })
+          .go(),
+      ]);
 
-      return messages; // Return original message objects
+      const list = new MessageList().add(messages, 'memory');
+      if (format === `v1`) return list.get.all.v1();
+      return list.get.all.v2();
     } catch (error) {
       this.logger.error('Failed to save messages', { error });
       throw error;
@@ -603,7 +687,7 @@ export class DynamoDBStore extends MastraStorage {
   }
 
   // Helper function to parse message data (handle JSON fields)
-  private parseMessageData(data: any): MessageType {
+  private parseMessageData(data: any): MastraMessageV2 | MastraMessageV1 {
     // Removed try/catch and JSON.parse logic - now handled by entity 'get' attributes
     // This function now primarily ensures correct typing and Date conversion.
     return {
@@ -613,7 +697,7 @@ export class DynamoDBStore extends MastraStorage {
       updatedAt: data.updatedAt ? new Date(data.updatedAt) : undefined,
       // Other fields like content, toolCallArgs etc. are assumed to be correctly
       // transformed by the ElectroDB entity getters.
-    } as MessageType; // Add explicit type assertion
+    };
   }
 
   // Trace operations
@@ -712,8 +796,8 @@ export class DynamoDBStore extends MastraStorage {
         updatedAt: now,
         resourceId,
       };
-      // Pass the data including 'entity'
-      await this.service.entities.workflowSnapshot.create(data).go();
+      // Use upsert instead of create to handle both create and update cases
+      await this.service.entities.workflowSnapshot.upsert(data).go();
     } catch (error) {
       this.logger.error('Failed to persist workflow snapshot', { workflowName, runId, error });
       throw error;
@@ -1016,6 +1100,24 @@ export class DynamoDBStore extends MastraStorage {
       this.logger.error('Failed to get evals by agent name', { agentName, type, error });
       throw error;
     }
+  }
+
+  async getTracesPaginated(_args: StorageGetTracesArg): Promise<PaginationInfo & { traces: Trace[] }> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getThreadsByResourceIdPaginated(_args: {
+    resourceId: string;
+    page?: number;
+    perPage?: number;
+  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getMessagesPaginated(
+    _args: StorageGetMessagesArg,
+  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
+    throw new Error('Method not implemented.');
   }
 
   /**

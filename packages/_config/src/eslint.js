@@ -50,6 +50,7 @@ export const createConfig = async () =>
         },
       },
       rules: {
+        'no-restricted-globals': ['error', 'global'],
         'no-unexpected-multiline': ERROR,
         'no-warning-comments': [ERROR, { terms: ['FIXME'], location: 'anywhere' }],
         'import/no-duplicates': [ERROR, { 'prefer-inline': false }],
@@ -270,6 +271,7 @@ export const createConfig = async () =>
             vitest: (await import('@vitest/eslint-plugin')).default,
           },
           rules: {
+            'no-restricted-globals': 'off',
             // you don't want the editor to autofix this, but we do want to be
             // made aware of it
             'vitest/no-focused-tests': [WARN, { fixable: false }],

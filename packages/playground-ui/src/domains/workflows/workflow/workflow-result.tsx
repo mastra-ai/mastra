@@ -24,7 +24,7 @@ export const WorkflowResult = ({ jsonResult, sanitizedJsonResult }: WorkflowResu
             <Icon>
               <DeploymentIcon />
             </Icon>
-            Results
+            Workflow Execution (JSON)
           </Txt>
 
           <Tooltip>

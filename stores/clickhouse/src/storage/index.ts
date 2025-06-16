@@ -1,8 +1,8 @@
 import type { ClickHouseClient } from '@clickhouse/client';
 import { createClient } from '@clickhouse/client';
-import type { MastraMessageV2 } from '@mastra/core/agent';
+import { MessageList } from '@mastra/core/agent';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
-import type { StorageThreadType } from '@mastra/core/memory';
+import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
 import {
   MastraStorage,
   TABLE_EVALS,
@@ -14,12 +14,15 @@ import {
 } from '@mastra/core/storage';
 import type {
   EvalRow,
+  PaginationInfo,
   StorageColumn,
   StorageGetMessagesArg,
   TABLE_NAMES,
   WorkflowRun,
   WorkflowRuns,
+  StorageGetTracesArg,
 } from '@mastra/core/storage';
+import type { Trace } from '@mastra/core/telemetry';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 
 function safelyParseJSON(jsonString: string): any {
@@ -370,6 +373,73 @@ export class ClickhouseStore extends MastraStorage {
     }
   }
 
+  protected getSqlType(type: StorageColumn['type']): string {
+    switch (type) {
+      case 'text':
+        return 'String';
+      case 'timestamp':
+        return 'DateTime64(3)';
+      case 'integer':
+      case 'bigint':
+        return 'Int64';
+      case 'jsonb':
+        return 'String';
+      default:
+        return super.getSqlType(type); // fallback to base implementation
+    }
+  }
+
+  /**
+   * Alters table schema to add columns if they don't exist
+   * @param tableName Name of the table
+   * @param schema Schema of the table
+   * @param ifNotExists Array of column names to add if they don't exist
+   */
+  async alterTable({
+    tableName,
+    schema,
+    ifNotExists,
+  }: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void> {
+    try {
+      // 1. Get existing columns
+      const describeSql = `DESCRIBE TABLE ${tableName}`;
+      const result = await this.db.query({
+        query: describeSql,
+      });
+      const rows = await result.json();
+      const existingColumnNames = new Set(rows.data.map((row: any) => row.name.toLowerCase()));
+
+      // 2. Add missing columns
+      for (const columnName of ifNotExists) {
+        if (!existingColumnNames.has(columnName.toLowerCase()) && schema[columnName]) {
+          const columnDef = schema[columnName];
+          let sqlType = this.getSqlType(columnDef.type);
+          if (columnDef.nullable !== false) {
+            sqlType = `Nullable(${sqlType})`;
+          }
+          const defaultValue = columnDef.nullable === false ? this.getDefaultValue(columnDef.type) : '';
+          // Use backticks or double quotes as needed for identifiers
+          const alterSql =
+            `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS "${columnName}" ${sqlType} ${defaultValue}`.trim();
+
+          await this.db.query({
+            query: alterSql,
+          });
+          this.logger?.debug?.(`Added column ${columnName} to table ${tableName}`);
+        }
+      }
+    } catch (error) {
+      this.logger?.error?.(
+        `Error altering table ${tableName}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw new Error(`Failed to alter table ${tableName}: ${error}`);
+    }
+  }
+
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     try {
       await this.db.query({
@@ -600,15 +670,18 @@ export class ClickhouseStore extends MastraStorage {
 
       await this.db.insert({
         table: TABLE_THREADS,
+        format: 'JSONEachRow',
         values: [
           {
-            ...updatedThread,
+            id: updatedThread.id,
+            resourceId: updatedThread.resourceId,
+            title: updatedThread.title,
+            metadata: updatedThread.metadata,
+            createdAt: updatedThread.createdAt,
             updatedAt: updatedThread.updatedAt.toISOString(),
           },
         ],
-        format: 'JSONEachRow',
         clickhouse_settings: {
-          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
           date_time_input_format: 'best_effort',
           use_client_time_zone: 1,
           output_format_json_quote_64bit_integers: 0,
@@ -647,7 +720,14 @@ export class ClickhouseStore extends MastraStorage {
     }
   }
 
-  async getMessages<T = unknown>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T[]> {
+  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
+  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
+  public async getMessages({
+    threadId,
+    resourceId,
+    selectBy,
+    format,
+  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     try {
       const messages: any[] = [];
       const limit = typeof selectBy?.last === `number` ? selectBy.last : 40;
@@ -752,21 +832,28 @@ export class ClickhouseStore extends MastraStorage {
             // If parsing fails, leave as string
           }
         }
-        if (message.type === `v2`) delete message.type;
       });
 
-      return messages as T[];
+      const list = new MessageList({ threadId, resourceId }).add(messages, 'memory');
+      if (format === `v2`) return list.get.all.v2();
+      return list.get.all.v1();
     } catch (error) {
       console.error('Error getting messages:', error);
       throw error;
     }
   }
 
-  async saveMessages({ messages }: { messages: MastraMessageV2[] }): Promise<MastraMessageV2[]> {
+  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
+  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
+  async saveMessages(
+    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
+  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
+    const { messages, format = 'v1' } = args;
     if (messages.length === 0) return messages;
 
     try {
       const threadId = messages[0]?.threadId;
+      const resourceId = messages[0]?.resourceId;
       if (!threadId) {
         throw new Error('Thread ID is required');
       }
@@ -777,26 +864,52 @@ export class ClickhouseStore extends MastraStorage {
         throw new Error(`Thread ${threadId} not found`);
       }
 
-      await this.db.insert({
-        table: TABLE_MESSAGES,
-        format: 'JSONEachRow',
-        values: messages.map(message => ({
-          id: message.id,
-          thread_id: threadId,
-          content: typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
-          createdAt: message.createdAt.toISOString(),
-          role: message.role,
-          type: message.type || 'v2',
-        })),
-        clickhouse_settings: {
-          // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
-          date_time_input_format: 'best_effort',
-          use_client_time_zone: 1,
-          output_format_json_quote_64bit_integers: 0,
-        },
-      });
+      // Execute message inserts and thread update in parallel for better performance
+      await Promise.all([
+        // Insert messages
+        this.db.insert({
+          table: TABLE_MESSAGES,
+          format: 'JSONEachRow',
+          values: messages.map(message => ({
+            id: message.id,
+            thread_id: threadId,
+            content: typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
+            createdAt: message.createdAt.toISOString(),
+            role: message.role,
+            type: message.type || 'v2',
+          })),
+          clickhouse_settings: {
+            // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
+            date_time_input_format: 'best_effort',
+            use_client_time_zone: 1,
+            output_format_json_quote_64bit_integers: 0,
+          },
+        }),
+        // Update thread's updatedAt timestamp
+        this.db.insert({
+          table: TABLE_THREADS,
+          format: 'JSONEachRow',
+          values: [
+            {
+              id: thread.id,
+              resourceId: thread.resourceId,
+              title: thread.title,
+              metadata: thread.metadata,
+              createdAt: thread.createdAt,
+              updatedAt: new Date().toISOString(),
+            },
+          ],
+          clickhouse_settings: {
+            date_time_input_format: 'best_effort',
+            use_client_time_zone: 1,
+            output_format_json_quote_64bit_integers: 0,
+          },
+        }),
+      ]);
 
-      return messages;
+      const list = new MessageList({ threadId, resourceId }).add(messages, 'memory');
+      if (format === `v2`) return list.get.all.v2();
+      return list.get.all.v1();
     } catch (error) {
       console.error('Error saving messages:', error);
       throw error;
@@ -1050,6 +1163,24 @@ export class ClickhouseStore extends MastraStorage {
     });
     const columns = (await result.json()) as { name: string }[];
     return columns.some(c => c.name === column);
+  }
+
+  async getTracesPaginated(_args: StorageGetTracesArg): Promise<PaginationInfo & { traces: Trace[] }> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getThreadsByResourceIdPaginated(_args: {
+    resourceId: string;
+    page?: number;
+    perPage?: number;
+  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getMessagesPaginated(
+    _args: StorageGetMessagesArg,
+  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
+    throw new Error('Method not implemented.');
   }
 
   async close(): Promise<void> {

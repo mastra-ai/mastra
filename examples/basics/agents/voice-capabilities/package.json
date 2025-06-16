@@ -19,7 +19,7 @@
     "@mastra/voice-openai": "latest",
     "@mastra/voice-playai": "latest",
     "mastra": "latest",
-    "zod": "^3.24.3"
+    "zod": "^3.25.56"
   },
   "pnpm": {
     "overrides": {
@@ -31,7 +31,7 @@
     }
   },
   "devDependencies": {
-    "@types/node": "^20.17.27",
+    "@types/node": "^20.17.57",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2"
   },

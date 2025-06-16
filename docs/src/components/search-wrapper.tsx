@@ -60,6 +60,17 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
     setSearchQuery(searchQuery);
   }
 
+  // Configure Algolia search options
+  const searchOptions = {
+    indexName: "crawler_mastra crawler",
+    hitsPerPage: 20,
+    attributesToRetrieve: ["title", "content", "url", "hierarchy"],
+    attributesToHighlight: ["title", "content"],
+    attributesToSnippet: ["content:15"],
+    filters: `locale:${locale}`,
+    snippetEllipsisText: "…",
+  };
+
   return (
     <>
       <div className="hidden md:block absolute inset-0 m-auto w-[460px] h-fit">
@@ -99,6 +110,7 @@ export const SearchWrapper = ({ locale }: { locale: string }) => {
                   <div className="p-[10px]">
                     <CustomSearch
                       placeholder={getSearchPlaceholder(locale)}
+                      searchOptions={searchOptions}
                       onUseAgent={handleUseAgent}
                       closeModal={close}
                     />

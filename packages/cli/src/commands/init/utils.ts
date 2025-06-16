@@ -242,6 +242,7 @@ const fetchWeather = createStep({
         (acc, curr) => Math.max(acc, curr),
         0
       ),
+      location: name
     }
 
     return forecast;
@@ -275,7 +276,7 @@ const planActivities = createStep({
     ]);
 
     let activitiesText = '';
-    
+
     for await (const chunk of response.textStream) {
       process.stdout.write(chunk);
       activitiesText += chunk;
@@ -519,7 +520,7 @@ export const writeCodeSample = async (
 };
 
 export const interactivePrompt = async () => {
-  p.intro(color.inverse('Mastra Init'));
+  p.intro(color.inverse(' Mastra Init '));
   const mastraProject = await p.group(
     {
       directory: () =>
@@ -527,22 +528,6 @@ export const interactivePrompt = async () => {
           message: 'Where should we create the Mastra files? (default: src/)',
           placeholder: 'src/',
           defaultValue: 'src/',
-        }),
-      components: () =>
-        p.multiselect({
-          message: 'Choose components to install:',
-          options: [
-            { value: 'agents', label: 'Agents', hint: 'recommended' },
-            {
-              value: 'workflows',
-              label: 'Workflows',
-            },
-          ],
-        }),
-      shouldAddTools: () =>
-        p.confirm({
-          message: 'Add tools?',
-          initialValue: false,
         }),
       llmProvider: () =>
         p.select({
@@ -573,11 +558,6 @@ export const interactivePrompt = async () => {
         }
         return undefined;
       },
-      addExample: () =>
-        p.confirm({
-          message: 'Add example',
-          initialValue: false,
-        }),
       configureEditorWithDocsMCP: async () => {
         const windsurfIsAlreadyInstalled = await globalMCPIsAlreadyInstalled(`windsurf`);
         const cursorIsAlreadyInstalled = await globalMCPIsAlreadyInstalled(`cursor`);
@@ -663,10 +643,7 @@ export const interactivePrompt = async () => {
     },
   );
 
-  const { shouldAddTools, components, ...rest } = mastraProject;
-  const mastraComponents = shouldAddTools ? [...components, 'tools'] : components;
-
-  return { ...rest, components: mastraComponents };
+  return mastraProject;
 };
 
 export const checkPkgJson = async () => {

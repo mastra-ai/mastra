@@ -7,10 +7,15 @@ Create or update your `src/mastra/agents/index.ts` file:
 ```typescript
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
+import { LibSQLStore } from "@mastra/libsql";
 import { openai } from "@ai-sdk/openai";
 
 // Create a basic memory instance
-const memory = new Memory();
+const memory = new Memory({
+  storage: new LibSQLStore({
+    url: "../../memory.db",
+  }),
+});
 
 // Create an agent with memory
 export const memoryAgent = new Agent({

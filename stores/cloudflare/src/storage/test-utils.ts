@@ -1,6 +1,5 @@
 import { randomUUID } from 'crypto';
-import type { MessageType, WorkflowRunState } from '@mastra/core';
-import { expect } from 'vitest';
+import type { WorkflowRunState } from '@mastra/core';
 
 export const createSampleTrace = (name: string, scope?: string, attributes?: Record<string, string>) => ({
   id: `trace-${randomUUID()}`,
@@ -19,26 +18,6 @@ export const createSampleTrace = (name: string, scope?: string, attributes?: Rec
   createdAt: new Date().toISOString(),
 });
 
-// Sample test data factory functions
-export const createSampleThread = () => ({
-  id: `thread-${randomUUID()}`,
-  resourceId: `resource-${randomUUID()}`,
-  title: 'Test Thread',
-  createdAt: new Date(),
-  updatedAt: new Date(),
-  metadata: { key: 'value' },
-});
-
-export const createSampleMessage = (threadId: string): MessageType =>
-  ({
-    id: `msg-${randomUUID()}`,
-    role: 'user',
-    threadId,
-    content: { format: 2, parts: [{ type: 'text' as const, text: 'Hello' }] },
-    createdAt: new Date(),
-    resourceId: `resource-${randomUUID()}`,
-  }) satisfies MessageType;
-
 export const createSampleWorkflowSnapshot = (threadId: string, status: string, createdAt?: Date) => {
   const runId = `run-${randomUUID()}`;
   const stepId = `step-${randomUUID()}`;
@@ -55,9 +34,11 @@ export const createSampleWorkflowSnapshot = (threadId: string, status: string, c
       },
       input: {},
     } as WorkflowRunState['context'],
+    serializedStepGraph: [],
     activePaths: [],
     suspendedPaths: {},
     runId,
+    status: status as WorkflowRunState['status'],
     timestamp: timestamp.getTime(),
   };
   return { snapshot, runId, stepId };
@@ -81,11 +62,4 @@ export const retryUntil = async <T>(
     await new Promise(resolve => setTimeout(resolve, interval));
   }
   throw new Error('Timeout waiting for condition');
-};
-
-export const checkWorkflowSnapshot = (snapshot: WorkflowRunState | string, stepId: string, status: string) => {
-  if (typeof snapshot === 'string') {
-    throw new Error('Expected WorkflowRunState, got string');
-  }
-  expect(snapshot.context?.[stepId]?.status).toBe(status);
 };

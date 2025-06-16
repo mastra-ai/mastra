@@ -26,7 +26,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(input, 'user');
 
-      const messages = list.get.all.mastra();
+      const messages = list.get.all.v2();
       expect(messages.length).toBe(1);
 
       expect(messages[0]).toEqual({
@@ -54,7 +54,7 @@ describe('MessageList', () => {
         resourceId,
       }).add(input, 'user');
 
-      const messages = list.get.all.mastra();
+      const messages = list.get.all.v2();
       expect(messages.length).toBe(1);
 
       expect(messages[0]).toEqual({
@@ -148,7 +148,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputV1Message, 'response');
 
-      expect(list.get.all.mastra()).toEqual([
+      expect(list.get.all.v2()).toEqual([
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
@@ -188,7 +188,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputV1Message, 'user');
 
-      expect(list.get.all.mastra()).toEqual([
+      expect(list.get.all.v2()).toEqual([
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
@@ -220,7 +220,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'user');
 
-      expect(list.get.all.mastra()).toEqual([
+      expect(list.get.all.v2()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
@@ -345,7 +345,7 @@ describe('MessageList', () => {
           resourceId,
         },
       ];
-      expect(new MessageList({ threadId, resourceId }).add(messageSequence, 'user').get.all.mastra()).toEqual(
+      expect(new MessageList({ threadId, resourceId }).add(messageSequence, 'user').get.all.v2()).toEqual(
         expected.map(m => ({ ...m, createdAt: expect.any(Date) })),
       );
 
@@ -400,7 +400,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'user');
 
-      expect(list.get.all.mastra()).toEqual([
+      expect(list.get.all.v2()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
@@ -411,7 +411,7 @@ describe('MessageList', () => {
               { type: 'step-start' },
               {
                 type: 'reasoning',
-                reasoning: 'Step 1: Analyze',
+                reasoning: '',
                 details: [{ type: 'text', text: 'Step 1: Analyze', signature: 'sig-a' }],
               },
               { type: 'reasoning', reasoning: '', details: [{ type: 'redacted', data: 'sensitive data' }] },
@@ -435,7 +435,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'user');
 
-      expect(list.get.all.mastra()).toEqual([
+      expect(list.get.all.v2()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
@@ -470,7 +470,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputV1Message, 'response');
 
-      expect(list.get.all.mastra()).toEqual([
+      expect(list.get.all.v2()).toEqual([
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
@@ -481,7 +481,7 @@ describe('MessageList', () => {
               { type: 'step-start' },
               {
                 type: 'reasoning',
-                reasoning: 'Analyzing data...',
+                reasoning: '',
                 details: [{ type: 'text', text: 'Analyzing data...', signature: 'sig-b' }],
               },
               { type: 'reasoning', reasoning: '', details: [{ type: 'redacted', data: 'more sensitive data' }] },
@@ -510,7 +510,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputV1Message, 'user');
 
-      expect(list.get.all.mastra()).toEqual([
+      expect(list.get.all.v2()).toEqual([
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
@@ -560,7 +560,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'memory');
 
-      expect(list.get.all.mastra()).toEqual([
+      expect(list.get.all.v2()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
@@ -676,9 +676,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'memory');
 
-      console.log(JSON.stringify(list.get.all.mastra(), null, 2));
-
-      expect(list.get.all.mastra()).toEqual([
+      expect(list.get.all.v2()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
@@ -701,7 +699,7 @@ describe('MessageList', () => {
               { type: 'step-start' },
               {
                 type: 'reasoning',
-                reasoning: 'First, I need to gather some data.',
+                reasoning: '',
                 details: [{ type: 'text', text: 'First, I need to gather some data.', signature: 'sig-gather' }],
               },
               { type: 'text', text: 'Calling data tool...' },
@@ -739,7 +737,7 @@ describe('MessageList', () => {
               { type: 'step-start' },
               {
                 type: 'reasoning',
-                reasoning: 'Data gathered, now processing.',
+                reasoning: '',
                 details: [{ type: 'text', text: 'Data gathered, now processing.', signature: 'sig-process' }],
               },
               { type: 'text', text: 'Task completed successfully with gathered data.' },
@@ -772,19 +770,19 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputV1Message, 'memory');
 
-      expect(list.get.all.mastra()).toEqual([
+      expect(list.get.all.v2()).toEqual([
         {
           id: inputV1Message.id,
           role: inputV1Message.role,
           createdAt: expect.any(Date),
           content: {
             format: 2,
-            parts: [{ type: 'text', text: 'Here is an image URL:' }],
-            experimental_attachments: [
+            parts: [
+              { type: 'text', text: 'Here is an image URL:' },
               {
-                name: 'image.jpg',
-                url: 'https://example.com/image.jpg',
-                contentType: 'image/jpeg',
+                data: 'https://example.com/image.jpg',
+                mimeType: 'image/jpeg',
+                type: 'file',
               },
             ],
           },
@@ -810,19 +808,19 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'user');
 
-      expect(list.get.all.mastra()).toEqual([
+      expect(list.get.all.v2()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
           createdAt: expect.any(Date),
           content: {
             format: 2,
-            parts: [{ type: 'text', text: 'Here is another image URL:' }],
-            experimental_attachments: [
+            parts: [
+              { type: 'text', text: 'Here is another image URL:' },
               {
-                name: 'another-image.png',
-                url: 'https://example.com/another-image.png',
-                contentType: 'image/png',
+                type: 'file',
+                data: 'https://example.com/another-image.png',
+                mimeType: 'image/png',
               },
             ],
           },
@@ -850,7 +848,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(input, 'user');
 
-      const messages = list.get.all.mastra();
+      const messages = list.get.all.v2();
       expect(messages.length).toBe(1);
 
       expect(messages[0]).toEqual({
@@ -891,7 +889,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(input, 'user');
 
-      const messages = list.get.all.mastra();
+      const messages = list.get.all.v2();
       expect(messages.length).toBe(1);
 
       expect(messages[0]).toEqual({
@@ -963,7 +961,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'memory');
 
-      expect(list.get.all.mastra()).toEqual([
+      expect(list.get.all.v2()).toEqual([
         {
           id: userMsgV1.id,
           role: 'user',
@@ -1062,7 +1060,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'memory');
 
-      expect(list.get.all.mastra()).toEqual([
+      expect(list.get.all.v2()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
@@ -1132,13 +1130,13 @@ describe('MessageList', () => {
             type: 'file',
             mimeType: 'image/gif',
             data: new URL('data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=='),
-          }, // 1x1 transparent GIF
+          },
         ],
       } satisfies VercelCoreMessage;
 
       const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'user');
 
-      expect(list.get.all.mastra()).toEqual([
+      expect(list.get.all.v2()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
@@ -1147,7 +1145,11 @@ describe('MessageList', () => {
             format: 2,
             parts: [
               { type: 'text', text: 'Here is an embedded image:' },
-              { type: 'file', mimeType: 'image/gif', data: 'R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==' }, // Base64 data
+              {
+                type: 'file',
+                mimeType: 'image/gif',
+                data: 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==',
+              },
             ],
           },
           threadId,
@@ -1169,7 +1171,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'memory');
 
-      expect(list.get.all.mastra()).toEqual([
+      expect(list.get.all.v2()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
@@ -1180,7 +1182,7 @@ describe('MessageList', () => {
               { type: 'step-start' },
               {
                 type: 'reasoning',
-                reasoning: 'First, I need to gather some data.',
+                reasoning: '',
                 details: [{ type: 'text', text: 'First, I need to gather some data.', signature: 'sig-gather' }],
               },
               { type: 'text', text: 'Gathering data...' },
@@ -1195,7 +1197,7 @@ describe('MessageList', () => {
               },
               {
                 type: 'reasoning',
-                reasoning: 'Data gathered, now I will process it.',
+                reasoning: '',
                 details: [{ type: 'text', text: 'Data gathered, now I will process it.', signature: 'sig-process' }],
               },
             ],
@@ -1247,7 +1249,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(messageSequence, 'memory');
 
-      expect(list.get.all.mastra()).toEqual([
+      expect(list.get.all.v2()).toEqual([
         {
           id: expect.any(String),
           role: 'user',
@@ -1342,7 +1344,7 @@ describe('MessageList', () => {
 
       const list = new MessageList({ threadId, resourceId }).add(inputCoreMessage, 'memory');
 
-      expect(list.get.all.mastra()).toEqual([
+      expect(list.get.all.v2()).toEqual([
         {
           id: expect.any(String),
           role: 'assistant',
@@ -1353,13 +1355,13 @@ describe('MessageList', () => {
               { type: 'step-start' },
               {
                 type: 'reasoning',
-                reasoning: 'Thinking step 1...',
+                reasoning: '',
                 details: [{ type: 'text', text: 'Thinking step 1...', signature: 'sig-1' }],
               },
               { type: 'reasoning', reasoning: '', details: [{ type: 'redacted', data: 'some hidden data' }] },
               {
                 type: 'reasoning',
-                reasoning: 'Final thought.',
+                reasoning: '',
                 details: [{ type: 'text', text: 'Final thought.', signature: 'sig-2' }],
               },
             ],
@@ -1753,7 +1755,7 @@ describe('MessageList', () => {
         expect(systemMessages[0]?.role).toBe('system');
         expect(systemMessages[0]?.content).toBe(systemMsgContent);
 
-        expect(list.get.all.mastra().length).toBe(0); // Should not be in MastraMessageV2 list
+        expect(list.get.all.v2().length).toBe(0); // Should not be in MastraMessageV2 list
         expect(list.get.all.ui().length).toBe(0); // Should not be in UI messages
       });
 
@@ -1793,7 +1795,7 @@ describe('MessageList', () => {
         expect(systemMessages.find(m => m.content === 'System setup complete.')).toBeDefined();
         expect(systemMessages.find(m => m.content === 'Another system note.')).toBeDefined();
 
-        expect(list.get.all.mastra().length).toBe(2); // user and assistant
+        expect(list.get.all.v2().length).toBe(2); // user and assistant
         expect(list.get.all.ui().length).toBe(2); // user and assistant
       });
     });

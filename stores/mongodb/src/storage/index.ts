@@ -1,6 +1,15 @@
+import { MessageList } from '@mastra/core/agent';
 import type { MetricResult, TestInfo } from '@mastra/core/eval';
-import type { MessageType, StorageThreadType } from '@mastra/core/memory';
-import type { EvalRow, StorageGetMessagesArg, TABLE_NAMES, WorkflowRun } from '@mastra/core/storage';
+import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
+import type {
+  EvalRow,
+  PaginationInfo,
+  StorageColumn,
+  StorageGetMessagesArg,
+  StorageGetTracesArg,
+  TABLE_NAMES,
+  WorkflowRun,
+} from '@mastra/core/storage';
 import {
   MastraStorage,
   TABLE_EVALS,
@@ -9,6 +18,7 @@ import {
   TABLE_TRACES,
   TABLE_WORKFLOW_SNAPSHOT,
 } from '@mastra/core/storage';
+import type { Trace } from '@mastra/core/telemetry';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import type { Db, MongoClientOptions } from 'mongodb';
 import { MongoClient } from 'mongodb';
@@ -70,6 +80,20 @@ export class MongoDBStore extends MastraStorage {
   }
 
   async createTable(): Promise<void> {
+    // Nothing to do here, MongoDB is schemaless
+  }
+
+  /**
+   * No-op: This backend is schemaless and does not require schema changes.
+   * @param tableName Name of the table
+   * @param schema Schema of the table
+   * @param ifNotExists Array of column names to add if they don't exist
+   */
+  async alterTable(_args: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void> {
     // Nothing to do here, MongoDB is schemaless
   }
 
@@ -231,12 +255,20 @@ export class MongoDBStore extends MastraStorage {
     }
   }
 
-  async getMessages<T = unknown>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T[]> {
+  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
+  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
+  public async getMessages({
+    threadId,
+    selectBy,
+    format,
+  }: StorageGetMessagesArg & {
+    format?: 'v1' | 'v2';
+  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     try {
       const limit = typeof selectBy?.last === 'number' ? selectBy.last : 40;
       const include = selectBy?.include || [];
-      let messages: MessageType[] = [];
-      let allMessages: MessageType[] = [];
+      let messages: MastraMessageV2[] = [];
+      let allMessages: MastraMessageV2[] = [];
       const collection = await this.getCollection(TABLE_MESSAGES);
       // Get all messages from the thread ordered by creation date descending
       allMessages = (await collection.find({ thread_id: threadId }).sort({ createdAt: -1 }).toArray()).map((row: any) =>
@@ -270,7 +302,7 @@ export class MongoDBStore extends MastraStorage {
         messages.push(
           ...Array.from(selectedIndexes)
             .map(i => allMessages[i])
-            .filter((m): m is MessageType => !!m),
+            .filter((m): m is MastraMessageV2 => !!m),
         );
       }
 
@@ -286,14 +318,23 @@ export class MongoDBStore extends MastraStorage {
       // Sort all messages by creation date ascending
       messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
-      return messages.slice(0, limit) as T[];
+      const list = new MessageList().add(messages.slice(0, limit), 'memory');
+      if (format === `v2`) return list.get.all.v2();
+      return list.get.all.v1();
     } catch (error) {
       this.logger.error('Error getting messages:', error as Error);
       throw error;
     }
   }
 
-  async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
+  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
+  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
+  async saveMessages({
+    messages,
+    format,
+  }:
+    | { messages: MastraMessageV1[]; format?: undefined | 'v1' }
+    | { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[] | MastraMessageV1[]> {
     if (!messages.length) {
       return messages;
     }
@@ -303,6 +344,7 @@ export class MongoDBStore extends MastraStorage {
       this.logger.error('Thread ID is required to save messages');
       throw new Error('Thread ID is required');
     }
+
     try {
       // Prepare batch statements for all messages
       const messagesToInsert = messages.map(message => {
@@ -318,10 +360,18 @@ export class MongoDBStore extends MastraStorage {
         };
       });
 
-      // Execute all inserts in a single batch
+      // Execute message inserts and thread update in parallel for better performance
       const collection = await this.getCollection(TABLE_MESSAGES);
-      await collection.insertMany(messagesToInsert);
-      return messages;
+      const threadsCollection = await this.getCollection(TABLE_THREADS);
+
+      await Promise.all([
+        collection.insertMany(messagesToInsert),
+        threadsCollection.updateOne({ id: threadId }, { $set: { updatedAt: new Date() } }),
+      ]);
+
+      const list = new MessageList().add(messages, 'memory');
+      if (format === `v2`) return list.get.all.v2();
+      return list.get.all.v1();
     } catch (error) {
       this.logger.error('Failed to save messages in database: ' + (error as { message: string })?.message);
       throw error;
@@ -628,7 +678,7 @@ export class MongoDBStore extends MastraStorage {
     };
   }
 
-  private parseRow(row: any): MessageType {
+  private parseRow(row: any): MastraMessageV2 {
     let content = row.content;
     try {
       content = JSON.parse(row.content);
@@ -642,7 +692,8 @@ export class MongoDBStore extends MastraStorage {
       type: row.type,
       createdAt: new Date(row.createdAt as string),
       threadId: row.thread_id,
-    } as MessageType;
+      resourceId: row.resourceId,
+    } as MastraMessageV2;
   }
 
   private transformEvalRow(row: Record<string, any>): EvalRow {
@@ -667,6 +718,24 @@ export class MongoDBStore extends MastraStorage {
       runId: row.run_id as string,
       createdAt: row.created_at as string,
     };
+  }
+
+  async getTracesPaginated(_args: StorageGetTracesArg): Promise<PaginationInfo & { traces: Trace[] }> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getThreadsByResourceIdPaginated(_args: {
+    resourceId: string;
+    page?: number;
+    perPage?: number;
+  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getMessagesPaginated(
+    _args: StorageGetMessagesArg,
+  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
+    throw new Error('Method not implemented.');
   }
 
   async close(): Promise<void> {

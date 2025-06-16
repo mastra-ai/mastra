@@ -315,7 +315,7 @@ export function getAGUINetwork({
   }) as AbstractAgent;
 }
 
-export function registerCopilotKit({
+export function registerCopilotKit<T extends Record<string, any> | unknown = unknown>({
   path,
   resourceId,
   serviceAdapter = new ExperimentalEmptyAdapter(),
@@ -332,7 +332,7 @@ export function registerCopilotKit({
         mastra: Mastra;
       };
     }>,
-    runtimeContext: RuntimeContext,
+    runtimeContext: RuntimeContext<T>,
   ) => void | Promise<void>;
 }) {
   return registerApiRoute(path, {
@@ -340,7 +340,7 @@ export function registerCopilotKit({
     handler: async c => {
       const mastra = c.get('mastra');
 
-      const runtimeContext = new RuntimeContext();
+      const runtimeContext = new RuntimeContext<T>();
 
       if (setContext) {
         await setContext(c, runtimeContext);

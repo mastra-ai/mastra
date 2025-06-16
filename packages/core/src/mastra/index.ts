@@ -6,7 +6,7 @@ import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory/memory';
 import type { AgentNetwork } from '../network';
-import type { ServerConfig } from '../server/types';
+import type { Middleware, ServerConfig } from '../server/types';
 import type { MastraStorage } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import { InstrumentClass, Telemetry } from '../telemetry';
@@ -196,6 +196,7 @@ export class Mastra<
         }
 
         server.__registerMastra(this);
+        server.__setLogger(this.getLogger());
       });
     }
 
@@ -532,6 +533,35 @@ do:
     return this.#serverMiddleware;
   }
 
+  public setServerMiddleware(serverMiddleware: Middleware | Middleware[]) {
+    if (typeof serverMiddleware === 'function') {
+      this.#serverMiddleware = [
+        {
+          handler: serverMiddleware,
+          path: '/api/*',
+        },
+      ];
+      return;
+    }
+
+    if (!Array.isArray(serverMiddleware)) {
+      throw new Error(`Invalid middleware: expected a function or array, received ${typeof serverMiddleware}`);
+    }
+
+    this.#serverMiddleware = serverMiddleware.map(m => {
+      if (typeof m === 'function') {
+        return {
+          handler: m,
+          path: '/api/*',
+        };
+      }
+      return {
+        handler: m.handler,
+        path: m.path || '/api/*',
+      };
+    });
+  }
+
   public getNetworks() {
     return Object.values(this.#networks || {});
   }
@@ -557,7 +587,25 @@ do:
     });
   }
 
-  public async getLogsByRunId({ runId, transportId }: { runId: string; transportId: string }) {
+  public async getLogsByRunId({
+    runId,
+    transportId,
+    fromDate,
+    toDate,
+    logLevel,
+    filters,
+    page,
+    perPage,
+  }: {
+    runId: string;
+    transportId: string;
+    fromDate?: Date;
+    toDate?: Date;
+    logLevel?: LogLevel;
+    filters?: Record<string, any>;
+    page?: number;
+    perPage?: number;
+  }) {
     if (!transportId) {
       throw new Error('Transport ID is required');
     }
@@ -566,10 +614,29 @@ do:
       throw new Error('Logger is not set');
     }
 
-    return await this.#logger.getLogsByRunId({ runId, transportId });
+    return await this.#logger.getLogsByRunId({
+      runId,
+      transportId,
+      fromDate,
+      toDate,
+      logLevel,
+      filters,
+      page,
+      perPage,
+    });
   }
 
-  public async getLogs(transportId: string) {
+  public async getLogs(
+    transportId: string,
+    params?: {
+      fromDate?: Date;
+      toDate?: Date;
+      logLevel?: LogLevel;
+      filters?: Record<string, any>;
+      page?: number;
+      perPage?: number;
+    },
+  ) {
     if (!transportId) {
       throw new Error('Transport ID is required');
     }
@@ -578,9 +645,7 @@ do:
       throw new Error('Logger is not set');
     }
 
-    console.log(this.#logger);
-
-    return await this.#logger.getLogs(transportId);
+    return await this.#logger.getLogs(transportId, params);
   }
 
   /**

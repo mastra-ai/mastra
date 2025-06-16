@@ -1,5 +1,6 @@
 import type { KVNamespace } from '@cloudflare/workers-types';
-import type { StorageThreadType, MessageType } from '@mastra/core/memory';
+import { MessageList } from '@mastra/core/agent';
+import type { StorageThreadType, MastraMessageV1, MastraMessageV2 } from '@mastra/core/memory';
 import {
   MastraStorage,
   TABLE_MESSAGES,
@@ -15,7 +16,10 @@ import type {
   EvalRow,
   WorkflowRuns,
   WorkflowRun,
+  StorageGetTracesArg,
+  PaginationInfo,
 } from '@mastra/core/storage';
+import type { Trace } from '@mastra/core/telemetry';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import Cloudflare from 'cloudflare';
 import { isWorkersConfig } from './types';
@@ -441,7 +445,7 @@ export class CloudflareStore extends MastraStorage {
     }
   }
 
-  private async updateSorting(threadMessages: (MessageType & { _index?: number })[]) {
+  private async updateSorting(threadMessages: (MastraMessageV1 & { _index?: number })[]) {
     // Sort messages by index or timestamp
     return threadMessages
       .map(msg => ({
@@ -502,7 +506,7 @@ export class CloudflareStore extends MastraStorage {
   private async fetchAndParseMessages(
     threadId: string,
     messageIds: string[],
-  ): Promise<(MessageType & { _index?: number })[]> {
+  ): Promise<(MastraMessageV1 & { _index?: number })[]> {
     const messages = await Promise.all(
       messageIds.map(async id => {
         try {
@@ -517,7 +521,7 @@ export class CloudflareStore extends MastraStorage {
         }
       }),
     );
-    return messages.filter((msg): msg is MessageType & { _index?: number } => msg !== null);
+    return messages.filter((msg): msg is MastraMessageV1 & { _index?: number } => msg !== null);
   }
 
   /**
@@ -754,17 +758,6 @@ export class CloudflareStore extends MastraStorage {
     }
   }
 
-  private ensureDate(date: Date | string | undefined): Date | undefined {
-    if (!date) return undefined;
-    return date instanceof Date ? date : new Date(date);
-  }
-
-  private serializeDate(date: Date | string | undefined): string | undefined {
-    if (!date) return undefined;
-    const dateObj = this.ensureDate(date);
-    return dateObj?.toISOString();
-  }
-
   private ensureMetadata(metadata: Record<string, unknown> | string | undefined): Record<string, unknown> | undefined {
     if (!metadata) return {};
     return typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
@@ -789,6 +782,20 @@ export class CloudflareStore extends MastraStorage {
       this.logger.error(`Failed to store schema for ${tableName}:`, error);
       throw new Error(`Failed to store schema: ${error.message}`);
     }
+  }
+
+  /**
+   * No-op: This backend is schemaless and does not require schema changes.
+   * @param tableName Name of the table
+   * @param schema Schema of the table
+   * @param ifNotExists Array of column names to add if they don't exist
+   */
+  async alterTable(_args: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    ifNotExists: string[];
+  }): Promise<void> {
+    // Nothing to do here, Cloudflare KV is schemaless
   }
 
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
@@ -996,7 +1003,12 @@ export class CloudflareStore extends MastraStorage {
     }
   }
 
-  async saveMessages({ messages }: { messages: MessageType[] }): Promise<MessageType[]> {
+  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
+  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
+  async saveMessages(
+    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
+  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
+    const { messages, format = 'v1' } = args;
     if (!Array.isArray(messages) || messages.length === 0) return [];
 
     try {
@@ -1023,12 +1035,14 @@ export class CloudflareStore extends MastraStorage {
 
       // Group messages by thread for batch processing
       const messagesByThread = validatedMessages.reduce((acc, message) => {
-        if (!acc.has(message.threadId)) {
+        if (message.threadId && !acc.has(message.threadId)) {
           acc.set(message.threadId, []);
         }
-        acc.get(message.threadId)!.push(message as MessageType & { _index?: number });
+        if (message.threadId) {
+          acc.get(message.threadId)!.push(message as MastraMessageV1 & { _index?: number });
+        }
         return acc;
-      }, new Map<string, (MessageType & { _index?: number })[]>());
+      }, new Map<string, (MastraMessageV1 & { _index?: number })[]>());
 
       // Process each thread's messages
       await Promise.all(
@@ -1043,7 +1057,7 @@ export class CloudflareStore extends MastraStorage {
             // Save messages with serialized dates
             await Promise.all(
               threadMessages.map(async message => {
-                const key = await this.getMessageKey(threadId, message.id);
+                const key = this.getMessageKey(threadId, message.id);
                 // Strip _index and serialize dates before saving
                 const { _index, ...cleanMessage } = message;
                 const serializedMessage = {
@@ -1067,10 +1081,13 @@ export class CloudflareStore extends MastraStorage {
       );
 
       // Remove _index from returned messages
-      return validatedMessages.map(
+      const prepared = validatedMessages.map(
         ({ _index, ...message }) =>
-          ({ ...message, type: message.type !== 'v2' ? message.type : undefined }) as MessageType,
+          ({ ...message, type: message.type !== 'v2' ? message.type : undefined }) as MastraMessageV1,
       );
+      const list = new MessageList().add(prepared, 'memory');
+      if (format === `v2`) return list.get.all.v2();
+      return list.get.all.v1();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error(`Error saving messages: ${errorMessage}`);
@@ -1078,7 +1095,14 @@ export class CloudflareStore extends MastraStorage {
     }
   }
 
-  async getMessages<T extends MessageType = MessageType>({ threadId, selectBy }: StorageGetMessagesArg): Promise<T[]> {
+  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
+  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
+  public async getMessages({
+    threadId,
+    resourceId,
+    selectBy,
+    format,
+  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
     if (!threadId) throw new Error('threadId is required');
 
     // Handle selectBy.last type safely - it can be number or false
@@ -1127,11 +1151,15 @@ export class CloudflareStore extends MastraStorage {
       }
 
       // Remove _index and ensure dates before returning, just like Upstash
-      return messages.map(({ _index, ...message }) => ({
+      const prepared = messages.map(({ _index, ...message }) => ({
         ...message,
-        type: message.type === `v2` ? undefined : message.type,
+        type: message.type === (`v2` as `text`) ? undefined : message.type,
         createdAt: this.ensureDate(message.createdAt)!,
-      })) as T[];
+      }));
+      const list = new MessageList({ threadId, resourceId }).add(prepared as MastraMessageV1[], 'memory');
+
+      if (format === `v1`) return list.get.all.v1();
+      return list.get.all.v2();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error(`Error retrieving messages for thread ${threadId}: ${errorMessage}`);
@@ -1185,9 +1213,13 @@ export class CloudflareStore extends MastraStorage {
       runId: data.runId,
       value: data.value,
       context: data.context,
+      serializedStepGraph: data.serializedStepGraph,
       suspendedPaths: data.suspendedPaths || {},
       activePaths: data.activePaths || [],
       timestamp: data.timestamp || Date.now(),
+      status: data.status,
+      result: data.result,
+      error: data.error,
     };
   }
 
@@ -1544,6 +1576,24 @@ export class CloudflareStore extends MastraStorage {
       this.logger.error('Error in getWorkflowRunById:', { message });
       return null;
     }
+  }
+
+  async getTracesPaginated(_args: StorageGetTracesArg): Promise<PaginationInfo & { traces: Trace[] }> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getThreadsByResourceIdPaginated(_args: {
+    resourceId: string;
+    page?: number;
+    perPage?: number;
+  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
+    throw new Error('Method not implemented.');
+  }
+
+  async getMessagesPaginated(
+    _args: StorageGetMessagesArg,
+  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
+    throw new Error('Method not implemented.');
   }
 
   async close(): Promise<void> {

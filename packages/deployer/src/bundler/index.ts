@@ -55,14 +55,26 @@ export abstract class Bundler extends MastraBundler {
     const dependenciesMap = new Map();
     for (const [key, value] of dependencies.entries()) {
       if (key.startsWith('@')) {
+        // Handle scoped packages (e.g. @org/package)
         const pkgChunks = key.split('/');
         dependenciesMap.set(`${pkgChunks[0]}/${pkgChunks[1]}`, value);
-        continue;
+      } else {
+        // For non-scoped packages, take only the first part before any slash
+        const pkgName = key.split('/')[0] || key;
+        dependenciesMap.set(pkgName, value);
       }
-      dependenciesMap.set(key, value);
     }
 
-    dependenciesMap.set('@opentelemetry/instrumentation', 'latest');
+    // add telemetry dependencies
+    dependenciesMap.set('@opentelemetry/core', '^2.0.1');
+    dependenciesMap.set('@opentelemetry/auto-instrumentations-node', '^0.59.0');
+    dependenciesMap.set('@opentelemetry/exporter-trace-otlp-grpc', '^0.201.0');
+    dependenciesMap.set('@opentelemetry/exporter-trace-otlp-http', '^0.201.0');
+    dependenciesMap.set('@opentelemetry/resources', '^2.0.1');
+    dependenciesMap.set('@opentelemetry/sdk-node', '^0.201.0');
+    dependenciesMap.set('@opentelemetry/sdk-trace-base', '^2.0.1');
+    dependenciesMap.set('@opentelemetry/semantic-conventions', '^1.33.0');
+    dependenciesMap.set('@opentelemetry/instrumentation', '^0.202.0');
 
     await writeFile(
       pkgPath,
@@ -74,7 +86,7 @@ export abstract class Bundler extends MastraBundler {
           type: 'module',
           main: 'index.mjs',
           scripts: {
-            start: 'node ./index.mjs',
+            start: 'node --import=./instrumentation.mjs --import=@opentelemetry/instrumentation/hook.mjs ./index.mjs',
           },
           author: 'Mastra',
           license: 'ISC',
@@ -247,14 +259,6 @@ export abstract class Bundler extends MastraBundler {
       }
     }
 
-    // temporary fix for mastra-memory and fastembed
-    if (
-      analyzedBundleInfo.externalDependencies.has('@mastra/memory') ||
-      analyzedBundleInfo.dependencies.has('@mastra/memory')
-    ) {
-      dependenciesToInstall.set('fastembed', 'latest');
-    }
-
     await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall, resolutions);
     await this.writeInstrumentationFile(join(outputDirectory, this.outputDir));
 
@@ -286,6 +290,7 @@ export abstract class Bundler extends MastraBundler {
 
     this.logger.info('Installing dependencies');
     await this.installDependencies(outputDirectory);
+
     this.logger.info('Done installing dependencies');
   }
 

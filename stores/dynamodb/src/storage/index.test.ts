@@ -11,7 +11,8 @@ import {
   waitUntilTableExists,
   waitUntilTableNotExists,
 } from '@aws-sdk/client-dynamodb';
-import type { MessageType, StorageThreadType, WorkflowRun, WorkflowRunState } from '@mastra/core';
+import type { MastraMessageV1, StorageThreadType, WorkflowRun, WorkflowRunState } from '@mastra/core';
+import type { MastraMessageV2 } from '@mastra/core/agent';
 import { TABLE_EVALS, TABLE_THREADS, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
 import { DynamoDBStore } from '..';
@@ -319,10 +320,12 @@ describe('DynamoDBStore Integration Tests', () => {
             input: { source: 'test' },
             step1: { status: 'success', output: { data: 'test' } },
           } as unknown as WorkflowRunState['context'],
+          serializedStepGraph: [],
           activePaths: [{ stepPath: ['test'], stepId: 'step1', status: 'success' }],
           suspendedPaths: { test: [1] },
           runId: 'test-run-large', // Use unique runId
           timestamp: now,
+          status: 'success',
         };
 
         await expect(
@@ -385,20 +388,112 @@ describe('DynamoDBStore Integration Tests', () => {
         expect(retrieved?.title).toBe('Updated Thread 2');
         expect(retrieved?.metadata?.update).toBe(2);
       });
+
+      test('getMessages should return the N most recent messages [v2 storage]', async () => {
+        const threadId = 'last-selector-thread';
+        const start = Date.now();
+
+        // Insert 10 messages with increasing timestamps
+        const messages: MastraMessageV2[] = Array.from({ length: 10 }, (_, i) => ({
+          id: `m-${i}`,
+          threadId,
+          resourceId: 'r',
+          content: { format: 2, parts: [{ type: 'text', text: `msg-${i}` }] },
+          createdAt: new Date(start + i), // 0..9 ms apart
+          role: 'user',
+          type: 'text',
+        }));
+        await store.saveMessages({ messages, format: 'v2' });
+
+        const last3 = await store.getMessages({
+          format: 'v2',
+          threadId,
+          selectBy: { last: 3 },
+        });
+
+        expect(last3).toHaveLength(3);
+        expect(last3.map(m => (m.content.parts[0] as { type: string; text: string }).text)).toEqual([
+          'msg-7',
+          'msg-8',
+          'msg-9',
+        ]);
+      });
+
+      test('getMessages should return the N most recent messages [v1 storage]', async () => {
+        const threadId = 'last-selector-thread';
+        const start = Date.now();
+
+        // Insert 10 messages with increasing timestamps
+        const messages: MastraMessageV1[] = Array.from({ length: 10 }, (_, i) => ({
+          id: `m-${i}`,
+          threadId,
+          resourceId: 'r',
+          content: `msg-${i}`,
+          createdAt: new Date(start + i), // 0..9 ms apart
+          role: 'user',
+          type: 'text',
+        }));
+        await store.saveMessages({ messages });
+
+        const last3 = await store.getMessages({
+          threadId,
+          selectBy: { last: 3 },
+        });
+
+        expect(last3).toHaveLength(3);
+        expect(last3.map(m => m.content)).toEqual(['msg-7', 'msg-8', 'msg-9']);
+      });
+
+      test('should update thread updatedAt when a message is saved to it', async () => {
+        const thread: StorageThreadType = {
+          id: 'thread-update-test',
+          resourceId: 'resource-update',
+          title: 'Update Test Thread',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: { test: true },
+        };
+        await store.saveThread({ thread });
+
+        // Get the initial thread to capture the original updatedAt
+        const initialThread = await store.getThreadById({ threadId: thread.id });
+        expect(initialThread).toBeDefined();
+        const originalUpdatedAt = initialThread!.updatedAt;
+
+        // Wait a small amount to ensure different timestamp
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Create and save a message to the thread
+        const message: MastraMessageV1 = {
+          id: 'msg-update-test',
+          threadId: thread.id,
+          resourceId: 'resource-update',
+          content: 'Test message for update',
+          createdAt: new Date(),
+          role: 'user',
+          type: 'text',
+        };
+        await store.saveMessages({ messages: [message] });
+
+        // Retrieve the thread again and check that updatedAt was updated
+        const updatedThread = await store.getThreadById({ threadId: thread.id });
+        expect(updatedThread).toBeDefined();
+        expect(updatedThread!.updatedAt.getTime()).toBeGreaterThan(originalUpdatedAt.getTime());
+      });
     });
 
     describe('Batch Operations', () => {
-      test('should handle batch message inserts efficiently (up to 25 items)', async () => {
+      test('should handle batch message inserts efficiently (up to 25 items) [v1 storage]', async () => {
         const startTime = Date.now(); // Get a base time
         const threadId = 'batch-thread';
-        const messages: MessageType[] = Array.from({ length: 25 }, (_, i) => ({
+        const messages: MastraMessageV1[] = Array.from({ length: 25 }, (_, i) => ({
           id: `msg-${i}`,
           threadId,
           resourceId: 'test-resource',
           content: `Message ${i}`,
           // Increment timestamp slightly for each message to ensure order
           createdAt: new Date(startTime + i),
-          role: 'user',
+          role: i % 2 === 0 ? 'user' : 'assistant',
           type: 'text',
         }));
 
@@ -412,10 +507,36 @@ describe('DynamoDBStore Integration Tests', () => {
         expect(retrieved[24]?.content).toBe('Message 24');
       });
 
+      test('should handle batch message inserts efficiently (up to 25 items) [v2 storage]', async () => {
+        const startTime = Date.now(); // Get a base time
+        const threadId = 'batch-thread';
+        const messages: MastraMessageV2[] = Array.from({ length: 25 }, (_, i) => ({
+          id: `msg-${i}`,
+          threadId,
+          resourceId: 'test-resource',
+          content: { format: 2, parts: [{ type: 'text', text: `Message ${i}` }] },
+          // Increment timestamp slightly for each message to ensure order
+          createdAt: new Date(startTime + i),
+          role: i % 2 === 0 ? 'user' : 'assistant',
+          type: 'text',
+        }));
+
+        // Assuming saveMessages uses BatchWriteItem internally
+        await expect(store.saveMessages({ messages, format: 'v2' })).resolves.not.toThrow();
+
+        const retrieved = await store.getMessages({ threadId, format: 'v2' });
+        expect(retrieved).toHaveLength(25);
+        // Now the order should be guaranteed by the ascending createdAt timestamp
+        if (retrieved[0]?.content?.parts[0]?.type !== `text`) throw new Error(`Expected text part`);
+        expect(retrieved[0].content.parts[0].text).toBe('Message 0');
+        if (retrieved[24]?.content?.parts?.[0]?.type !== `text`) throw new Error(`Expected text part`);
+        expect(retrieved[24].content.parts[0].text).toBe('Message 24');
+      });
+
       test('should handle batch inserts exceeding 25 items (if saveMessages chunks)', async () => {
         const startTime = Date.now(); // Get a base time
         const threadId = 'batch-thread-large';
-        const messages: MessageType[] = Array.from({ length: 30 }, (_, i) => ({
+        const messages: MastraMessageV1[] = Array.from({ length: 30 }, (_, i) => ({
           id: `msg-large-${i}`,
           threadId,
           resourceId: 'test-resource-large',
@@ -459,10 +580,12 @@ describe('DynamoDBStore Integration Tests', () => {
             step1: { status: 'success', output: { data: 'test' } },
             input: { source: 'test' },
           } as unknown as WorkflowRunState['context'],
+          serializedStepGraph: [],
           activePaths: [{ stepPath: ['test'], stepId: 'step1', status: 'success' }],
           suspendedPaths: { test: [1] },
           runId: 'mixed-run',
           timestamp: Date.now(),
+          status: 'success',
         };
         await store.persistWorkflowSnapshot({ workflowName, runId: 'mixed-run', snapshot: workflowSnapshot });
 
@@ -560,6 +683,37 @@ describe('DynamoDBStore Integration Tests', () => {
       expect(allTraces.length).toBe(3);
     });
 
+    test('should handle Date objects for createdAt/updatedAt fields in batchTraceInsert', async () => {
+      // This test specifically verifies the bug from the issue where Date objects
+      // were passed instead of ISO strings and ElectroDB validation failed
+      const now = new Date();
+      const traceWithDateObjects = {
+        id: `trace-${randomUUID()}`,
+        parentSpanId: `span-${randomUUID()}`,
+        traceId: `traceid-${randomUUID()}`,
+        name: 'test-trace-with-dates',
+        scope: 'default-tracer',
+        kind: 1,
+        startTime: now.getTime(),
+        endTime: now.getTime() + 100,
+        status: JSON.stringify({ code: 0 }),
+        attributes: JSON.stringify({ key: 'value' }),
+        events: JSON.stringify([]),
+        links: JSON.stringify([]),
+        // These are Date objects, not ISO strings - this should be handled by ElectroDB attribute setters
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      // This should not throw a validation error due to Date object type
+      await expect(store.batchTraceInsert({ records: [traceWithDateObjects] })).resolves.not.toThrow();
+
+      // Verify the trace was saved correctly
+      const allTraces = await store.getTraces({ name: 'test-trace-with-dates', page: 1, perPage: 10 });
+      expect(allTraces.length).toBe(1);
+      expect(allTraces[0].name).toBe('test-trace-with-dates');
+    });
+
     test('should retrieve traces filtered by name using GSI', async () => {
       const trace1 = sampleTrace('trace-filter-name', 'scope-X');
       const trace2 = sampleTrace('trace-filter-name', 'scope-Y', Date.now() + 10);
@@ -641,6 +795,40 @@ describe('DynamoDBStore Integration Tests', () => {
       };
     };
 
+    test('should handle Date objects for createdAt/updatedAt fields in eval batchInsert', async () => {
+      // Test that eval entity properly handles Date objects in createdAt/updatedAt fields
+      const now = new Date();
+      const evalWithDateObjects = {
+        entity: 'eval',
+        agent_name: 'test-agent-dates',
+        input: 'Test input',
+        output: 'Test output',
+        result: JSON.stringify({ score: 0.95 }),
+        metric_name: 'test-metric',
+        instructions: 'Test instructions',
+        global_run_id: `global-${randomUUID()}`,
+        run_id: `run-${randomUUID()}`,
+        created_at: now, // Date object instead of ISO string
+        // These are Date objects, not ISO strings - should be handled by ElectroDB attribute setters
+        createdAt: now,
+        updatedAt: now,
+        metadata: JSON.stringify({ test: 'meta' }),
+      };
+
+      // This should not throw a validation error due to Date object type
+      await expect(
+        store.batchInsert({
+          tableName: TABLE_EVALS,
+          records: [evalWithDateObjects],
+        }),
+      ).resolves.not.toThrow();
+
+      // Verify the eval was saved correctly
+      const evals = await store.getEvalsByAgentName('test-agent-dates');
+      expect(evals.length).toBe(1);
+      expect(evals[0].agentName).toBe('test-agent-dates');
+    });
+
     test('should retrieve evals by agent name using GSI and filter by type', async () => {
       const agent1 = 'eval-agent-1';
       const agent2 = 'eval-agent-2';
@@ -707,10 +895,12 @@ describe('DynamoDBStore Integration Tests', () => {
           step1: { status: 'success', output: { data: 'test' } },
           input: { source: 'test' },
         } as unknown as WorkflowRunState['context'],
+        serializedStepGraph: [],
         activePaths: [],
         suspendedPaths: {},
         runId: runId,
         timestamp: createdAt.getTime(),
+        status: 'success',
         ...(resourceId && { resourceId: resourceId }), // Conditionally add resourceId to snapshot
       };
       return {
@@ -749,6 +939,53 @@ describe('DynamoDBStore Integration Tests', () => {
       expect(loadedSnapshot?.runId).toEqual(snapshot.runId);
       expect(loadedSnapshot?.value).toEqual(snapshot.value);
       expect(loadedSnapshot?.context).toEqual(snapshot.context);
+    });
+
+    test('should allow updating an existing workflow snapshot', async () => {
+      const wfName = 'update-test-wf';
+      const runId = `run-${randomUUID()}`;
+
+      // Create initial snapshot
+      const { snapshot: initialSnapshot } = sampleWorkflowSnapshot(wfName, runId);
+
+      await expect(
+        store.persistWorkflowSnapshot({
+          workflowName: wfName,
+          runId: runId,
+          snapshot: initialSnapshot,
+        }),
+      ).resolves.not.toThrow();
+
+      // Create updated snapshot with different data
+      const updatedSnapshot: WorkflowRunState = {
+        ...initialSnapshot,
+        value: { currentState: 'completed' },
+        context: {
+          step1: { status: 'success', output: { data: 'updated-test' } },
+          step2: { status: 'success', output: { data: 'new-step' } },
+          input: { source: 'updated-test' },
+        } as unknown as WorkflowRunState['context'],
+        timestamp: Date.now(),
+      };
+
+      // This should succeed (update existing snapshot)
+      await expect(
+        store.persistWorkflowSnapshot({
+          workflowName: wfName,
+          runId: runId,
+          snapshot: updatedSnapshot,
+        }),
+      ).resolves.not.toThrow();
+
+      // Verify the snapshot was updated
+      const loadedSnapshot = await store.loadWorkflowSnapshot({
+        workflowName: wfName,
+        runId: runId,
+      });
+
+      expect(loadedSnapshot?.runId).toEqual(updatedSnapshot.runId);
+      expect(loadedSnapshot?.value).toEqual(updatedSnapshot.value);
+      expect(loadedSnapshot?.context).toEqual(updatedSnapshot.context);
     });
 
     test('getWorkflowRunById should retrieve correct run', async () => {
@@ -980,6 +1217,32 @@ describe('DynamoDBStore Integration Tests', () => {
         expect(loaded.title).toBe('Generic Test Thread');
         expect(loaded.metadata).toEqual({ generic: true });
       }
+    });
+
+    test('insert() should handle Date objects for createdAt/updatedAt fields', async () => {
+      // Test that individual insert method properly handles Date objects in date fields
+      const now = new Date();
+      const recordWithDates = {
+        id: `thread-${randomUUID()}`,
+        resourceId: `resource-${randomUUID()}`,
+        title: 'Thread with Date Objects',
+        // These are Date objects, not ISO strings - should be handled by preprocessing
+        createdAt: now,
+        updatedAt: now,
+        metadata: JSON.stringify({ test: 'with-dates' }),
+      };
+
+      // This should not throw a validation error due to Date object type
+      await expect(genericStore.insert({ tableName: TABLE_THREADS, record: recordWithDates })).resolves.not.toThrow();
+
+      // Verify the record was saved correctly
+      const loaded = await genericStore.load<StorageThreadType>({
+        tableName: TABLE_THREADS,
+        keys: { id: recordWithDates.id },
+      });
+      expect(loaded).not.toBeNull();
+      expect(loaded?.id).toBe(recordWithDates.id);
+      expect(loaded?.title).toBe('Thread with Date Objects');
     });
 
     test('load() should return null for non-existent record', async () => {

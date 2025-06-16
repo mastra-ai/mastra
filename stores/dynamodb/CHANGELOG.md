@@ -1,5 +1,177 @@
 # @mastra/dynamodb
 
+## 0.11.0-alpha.1
+
+### Minor Changes
+
+- 704d1ca: Thread Timestamp Auto-Update Enhancement
+  Added automatic thread updatedAt timestamp updates when messages are saved across all storage providers
+  Enhanced user experience: Threads now accurately reflect their latest activity with automatic timestamp updates when new messages are added
+  Universal implementation: Consistent behavior across all 7 storage backends (ClickHouse, Cloudflare D1, DynamoDB, MongoDB, PostgreSQL, Upstash, LibSQL)
+  Performance optimized: Updates execute in parallel with message saving operations for minimal performance impact
+  Backwards compatible: No breaking changes - existing code continues to work unchanged
+  Improved conversation ordering: Chat interfaces can now properly sort threads by actual last activity
+  This enhancement resolves the issue where active conversations appeared stale due to outdated thread timestamps, providing better conversation management and user experience in chat applications.
+
+## 0.10.5-alpha.0
+
+### Patch Changes
+
+- 63f6b7d: dependencies updates:
+  - Updated dependency [`@aws-sdk/client-dynamodb@^3.826.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/client-dynamodb/v/3.826.0) (from `^3.823.0`, in `dependencies`)
+  - Updated dependency [`@aws-sdk/lib-dynamodb@^3.826.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/lib-dynamodb/v/3.826.0) (from `^3.823.0`, in `dependencies`)
+  - Updated dependency [`electrodb@^3.4.3` ↗︎](https://www.npmjs.com/package/electrodb/v/3.4.3) (from `^3.4.1`, in `dependencies`)
+- Updated dependencies [63f6b7d]
+- Updated dependencies [36f1c36]
+- Updated dependencies [10d352e]
+- Updated dependencies [53d3c37]
+  - @mastra/core@0.10.6-alpha.0
+
+## 0.10.4
+
+### Patch Changes
+
+- 35c2bac: dependencies updates:
+  - Updated dependency [`@aws-sdk/client-dynamodb@^3.823.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/client-dynamodb/v/3.823.0) (from `^3.0.0`, in `dependencies`)
+  - Updated dependency [`@aws-sdk/lib-dynamodb@^3.823.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/lib-dynamodb/v/3.823.0) (from `^3.0.0`, in `dependencies`)
+- dffb67b: updated stores to add alter table and change tests
+- 925ab94: added paginated functions to base class and added boilerplate and updated imports
+- 66f4424: Update peerdeps
+- c218b1c: fix(dynamodb): use upsert instead of create for persistWorkflowSnapshot
+- Updated dependencies [d1ed912]
+- Updated dependencies [f6fd25f]
+- Updated dependencies [dffb67b]
+- Updated dependencies [f1f1f1b]
+- Updated dependencies [925ab94]
+- Updated dependencies [f9816ae]
+- Updated dependencies [82090c1]
+- Updated dependencies [1b443fd]
+- Updated dependencies [ce97900]
+- Updated dependencies [f1309d3]
+- Updated dependencies [14a2566]
+- Updated dependencies [f7f8293]
+- Updated dependencies [48eddb9]
+  - @mastra/core@0.10.4
+
+## 0.10.4-alpha.2
+
+### Patch Changes
+
+- 66f4424: Update peerdeps
+
+## 0.10.4-alpha.1
+
+### Patch Changes
+
+- 925ab94: added paginated functions to base class and added boilerplate and updated imports
+- c218b1c: fix(dynamodb): use upsert instead of create for persistWorkflowSnapshot
+- Updated dependencies [925ab94]
+  - @mastra/core@0.10.4-alpha.3
+
+## 0.10.4-alpha.0
+
+### Patch Changes
+
+- 35c2bac: dependencies updates:
+  - Updated dependency [`@aws-sdk/client-dynamodb@^3.823.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/client-dynamodb/v/3.823.0) (from `^3.0.0`, in `dependencies`)
+  - Updated dependency [`@aws-sdk/lib-dynamodb@^3.823.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/lib-dynamodb/v/3.823.0) (from `^3.0.0`, in `dependencies`)
+- dffb67b: updated stores to add alter table and change tests
+- Updated dependencies [f6fd25f]
+- Updated dependencies [dffb67b]
+- Updated dependencies [f1309d3]
+- Updated dependencies [f7f8293]
+  - @mastra/core@0.10.4-alpha.1
+
+## 0.10.3
+
+### Patch Changes
+
+- 786362a: fix(dynamodb): handle Date objects in createdAt/updatedAt fields
+- Updated dependencies [2b0fc7e]
+  - @mastra/core@0.10.3
+
+## 0.10.3-alpha.0
+
+### Patch Changes
+
+- 786362a: fix(dynamodb): handle Date objects in createdAt/updatedAt fields
+- Updated dependencies [2b0fc7e]
+  - @mastra/core@0.10.3-alpha.0
+
+## 0.10.2
+
+### Patch Changes
+
+- d980a1b: Fix getMessages to correctly return last n messages when `limit` is passed
+
+## 0.10.2-alpha.0
+
+### Patch Changes
+
+- d980a1b: Fix getMessages to correctly return last n messages when `limit` is passed
+
+## 0.10.1
+
+### Patch Changes
+
+- ee77e78: Type fixes for dynamodb and MessageList
+- 05d3c89: Dynamo db type fix
+- c5bf1ce: Add backwards compat code for new MessageList in storage
+- f0d559f: Fix peerdeps for alpha channel
+- Updated dependencies [ee77e78]
+- Updated dependencies [592a2db]
+- Updated dependencies [e5dc18d]
+- Updated dependencies [ab5adbe]
+- Updated dependencies [1e8bb40]
+- Updated dependencies [1b5fc55]
+- Updated dependencies [195c428]
+- Updated dependencies [f73e11b]
+- Updated dependencies [37643b8]
+- Updated dependencies [99fd6cf]
+- Updated dependencies [c5bf1ce]
+- Updated dependencies [add596e]
+- Updated dependencies [8dc94d8]
+- Updated dependencies [ecebbeb]
+- Updated dependencies [79d5145]
+- Updated dependencies [12b7002]
+- Updated dependencies [2901125]
+  - @mastra/core@0.10.2
+
+## 0.10.1-alpha.3
+
+### Patch Changes
+
+- 05d3c89: Dynamo db type fix
+- Updated dependencies [37643b8]
+- Updated dependencies [79d5145]
+  - @mastra/core@0.10.2-alpha.8
+
+## 0.10.1-alpha.2
+
+### Patch Changes
+
+- c5bf1ce: Add backwards compat code for new MessageList in storage
+- Updated dependencies [c5bf1ce]
+- Updated dependencies [12b7002]
+  - @mastra/core@0.10.2-alpha.4
+
+## 0.10.1-alpha.1
+
+### Patch Changes
+
+- f0d559f: Fix peerdeps for alpha channel
+- Updated dependencies [1e8bb40]
+  - @mastra/core@0.10.2-alpha.2
+
+## 0.10.1-alpha.0
+
+### Patch Changes
+
+- ee77e78: Type fixes for dynamodb and MessageList
+- Updated dependencies [ee77e78]
+- Updated dependencies [2901125]
+  - @mastra/core@0.10.2-alpha.1
+
 ## 0.10.0
 
 ### Patch Changes
