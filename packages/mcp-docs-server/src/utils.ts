@@ -1,7 +1,6 @@
-import { spawn } from 'child_process';
+import fs from 'fs/promises';
 import path, { dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { rgPath } from '@vscode/ripgrep';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -15,47 +14,51 @@ export function fromPackageRoot(relative: string) {
 // can't use console.log() because it writes to stdout which will interfere with the MCP Stdio protocol
 export const log = console.error;
 
+async function* walkMdxFiles(dir: string): AsyncGenerator<string> {
+  const entries = await fs.readdir(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      yield* walkMdxFiles(fullPath);
+    } else if (entry.isFile() && entry.name.endsWith('.mdx')) {
+      yield fullPath;
+    }
+  }
+}
+
 async function searchDocumentContent(keywords: string[], baseDir: string): Promise<string[]> {
   if (keywords.length === 0) return [];
 
-  // Create a pattern that matches any of our keywords
-  const keywordPattern = keywords.join('|');
-
-  const args = ['--json', '--glob', '*.mdx', '--ignore-case', '--line-number', keywordPattern, baseDir];
-
-  const grepResults = await runRipgrep(args);
-
-  // Score each file based on keyword matches
   const fileScores = new Map<string, FileScore>();
 
-  for (const match of grepResults.matches || []) {
-    if (!match.file) continue;
-
-    // Use path.relative for cross-platform path handling
-    const relativePath = path.relative(baseDir, match.file).replace(/\\/g, '/'); // Normalize to forward slashes
-
-    if (!fileScores.has(relativePath)) {
-      fileScores.set(relativePath, {
-        path: relativePath,
-        keywordMatches: new Set(),
-        totalMatches: 0,
-        titleMatches: 0,
-        pathRelevance: calculatePathRelevance(relativePath, keywords),
-      });
+  for await (const filePath of walkMdxFiles(baseDir)) {
+    let content: string;
+    try {
+      content = await fs.readFile(filePath, 'utf-8');
+    } catch {
+      continue;
     }
-
-    const score = fileScores.get(relativePath)!;
-
-    // Check which keywords this line contains
-    const lineText = match.text?.toLowerCase() || '';
-    keywords.forEach(keyword => {
-      if (lineText.includes(keyword.toLowerCase())) {
-        score.keywordMatches.add(keyword);
-        score.totalMatches++;
-
-        // Boost score if keyword appears in headers
-        if (lineText.includes('#') || lineText.includes('title')) {
-          score.titleMatches++;
+    const lines = content.split('\n');
+    lines.forEach(lineText => {
+      const lowerLine = lineText.toLowerCase();
+      for (const keyword of keywords) {
+        if (lowerLine.includes(keyword.toLowerCase())) {
+          const relativePath = path.relative(baseDir, filePath).replace(/\\/g, '/');
+          if (!fileScores.has(relativePath)) {
+            fileScores.set(relativePath, {
+              path: relativePath,
+              keywordMatches: new Set(),
+              totalMatches: 0,
+              titleMatches: 0,
+              pathRelevance: calculatePathRelevance(relativePath, keywords),
+            });
+          }
+          const score = fileScores.get(relativePath)!;
+          score.keywordMatches.add(keyword);
+          score.totalMatches++;
+          if (lowerLine.includes('#') || lowerLine.includes('title')) {
+            score.titleMatches++;
+          }
         }
       }
     });
@@ -64,59 +67,9 @@ async function searchDocumentContent(keywords: string[], baseDir: string): Promi
   // Filter to only files that contain ALL keywords, then rank
   const validFiles = Array.from(fileScores.values())
     .sort((a, b) => calculateFinalScore(b, keywords.length) - calculateFinalScore(a, keywords.length))
-    .slice(0, 10); // Limit to top 5 results
+    .slice(0, 10); // Limit to top 10 results
 
   return validFiles.map(score => score.path);
-}
-
-async function runRipgrep(args: string[]): Promise<{ matches: Array<{ file: string; text: string; line: number }> }> {
-  return new Promise((resolve, reject) => {
-    const rg = spawn(rgPath, args);
-    let output = '';
-    let errorOutput = '';
-
-    rg.stdout.on('data', data => {
-      output += data.toString();
-    });
-
-    rg.stderr.on('data', data => {
-      errorOutput += data.toString();
-    });
-
-    rg.on('close', code => {
-      if (code !== 0 && code !== 1) {
-        // 1 is "no matches found", which is ok
-        reject(new Error(`Ripgrep failed: ${errorOutput}`));
-        return;
-      }
-
-      const matches = output
-        .split('\n')
-        .filter(line => line.trim())
-        .map(line => {
-          try {
-            const parsed = JSON.parse(line);
-            if (parsed.type === 'match') {
-              return {
-                file: parsed.data.path.text,
-                line: parsed.data.line_number,
-                text: parsed.data.lines.text,
-              };
-            }
-            return null;
-          } catch {
-            return null;
-          }
-        })
-        .filter(Boolean);
-
-      resolve({ matches: matches as Array<{ file: string; text: string; line: number }> });
-    });
-
-    rg.on('error', err => {
-      reject(err);
-    });
-  });
 }
 
 interface FileScore {
