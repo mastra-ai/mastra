@@ -21,11 +21,11 @@ async function main() {
 
   contentWorkflow.step(crawlWebpage).commit();
 
-  const { runId, start } = contentWorkflow.createRun();
+  const run = await contentWorkflow.createRun();
 
-  console.log('Run', runId);
+  console.log('Run', run.runId);
 
-  const res = await start();
+  const res = await run.start();
 
   console.log(res.results);
 }

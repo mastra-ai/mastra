@@ -45,7 +45,7 @@ import { MastraClient } from './client';
 //     const workflowId = 'myWorkflow';
 //     const workflow = client.getWorkflow(workflowId);
 
-//     const { runId } = await workflow.createRun();
+//     const { runId } =  await workflow.createRun();
 
 //     workflow.watch({ runId }, record => {
 //       console.log(new Date().toTimeString(), record);

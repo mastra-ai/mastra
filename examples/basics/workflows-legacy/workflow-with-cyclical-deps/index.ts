@@ -59,11 +59,11 @@ async function main() {
     })
     .commit();
 
-  const { runId, start } = cyclicalWorkflow.createRun();
+  const run = await cyclicalWorkflow.createRun();
 
-  console.log('Run', runId);
+  console.log('Run', run.runId);
 
-  const res = await start({ triggerData: { firstValue: 6 } });
+  const res = await run.start({ triggerData: { firstValue: 6 } });
 
   console.log(res.results);
 }

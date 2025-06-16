@@ -47,6 +47,6 @@ const myWorkflow = new LegacyWorkflow({
 
 myWorkflow.step(stepOne).then(stepTwo).after(stepOne).step(stepThree).then(stepFour).commit();
 
-const { start } = myWorkflow.createRun();
+const run = await myWorkflow.createRun();
 
-const result = await start({ triggerData: { inputValue: 3 } });
+const result = await run.start({ triggerData: { inputValue: 3 } });

@@ -8,9 +8,9 @@ export async function changelog() {
 
   const workflow = mastra.getWorkflow('changelog');
 
-  const { start } = workflow.createRun();
+  const run = await workflow.createRun();
 
-  const res = await start({
+  const res = await run.start({
     triggerData: {
       channelId: process.env.CHANNEL_ID!,
     },

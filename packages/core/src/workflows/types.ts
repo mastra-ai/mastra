@@ -3,6 +3,8 @@ import type { z } from 'zod';
 import type { ExecuteFunction, Step } from './step';
 import type { SerializedStepFlowEntry } from './workflow';
 
+export type WorkflowRunStatus = 'pending' | 'running' | 'success' | 'failed' | 'suspended';
+
 export type StepSuccess<P, R, S, T> = {
   status: 'success';
   output: T;
@@ -105,18 +107,18 @@ export type WatchEvent = {
   payload: {
     currentStep?: {
       id: string;
-      status: 'running' | 'success' | 'failed' | 'suspended';
+      status: WorkflowRunStatus;
       output?: Record<string, any>;
       resumePayload?: Record<string, any>;
       payload?: Record<string, any>;
       error?: string | Error;
     };
     workflowState: {
-      status: 'running' | 'success' | 'failed' | 'suspended';
+      status: WorkflowRunStatus;
       steps: Record<
         string,
         {
-          status: 'running' | 'success' | 'failed' | 'suspended';
+          status: WorkflowRunStatus;
           output?: Record<string, any>;
           payload?: Record<string, any>;
           resumePayload?: Record<string, any>;
@@ -152,7 +154,7 @@ export type ZodPathType<T extends z.ZodTypeAny, P extends string> =
 export interface WorkflowRunState {
   // Core state info
   runId: string;
-  status: 'success' | 'failed' | 'suspended' | 'running';
+  status: WorkflowRunStatus;
   result?: Record<string, any>;
   error?: string | Error;
   value: Record<string, string>;

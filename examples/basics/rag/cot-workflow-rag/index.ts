@@ -214,11 +214,11 @@ const prompt = `
     Please base your answer only on the context provided in the tool. If the context doesn't contain enough information to fully answer the question, please state that explicitly.
     `;
 
-const { runId, start } = ragWorkflow.createRun();
+const run = await ragWorkflow.createRun();
 
-console.log('Run:', runId);
+console.log('Run:', run.runId);
 
-const workflowResult = await start({
+const workflowResult = await run.start({
   triggerData: {
     query: prompt,
   },

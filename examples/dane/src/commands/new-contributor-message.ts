@@ -13,10 +13,10 @@ export async function newContributorMessage() {
       process.exit(1);
     }
 
-    const { start } = workflow.createRun();
+    const run = await workflow.createRun();
 
-    const result = await start({
-      triggerData: {
+    const result = await run.start({
+      inputData: {
         pr_number: parseInt(process.env.PR_NUMBER!, 10),
         owner: process.env.OWNER!,
         repo: normalizeRepo(process.env.REPO!),

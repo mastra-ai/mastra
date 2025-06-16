@@ -310,7 +310,7 @@ export class InngestWorkflow<
     }
   }
 
-  createRun(options?: { runId?: string }): Run<TEngineType, TSteps, TInput, TOutput> {
+  async createRun(options?: { runId?: string }): Promise<Run<TEngineType, TSteps, TInput, TOutput>> {
     const runIdToUse = options?.runId || randomUUID();
 
     // Return a new Run instance with object parameters

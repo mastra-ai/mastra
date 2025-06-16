@@ -881,7 +881,7 @@ export class Agent<
                   resourceId,
                 });
 
-                const run = workflow.createRun();
+                const run = await workflow.createRun();
 
                 const result = await run.start({
                   inputData: args,

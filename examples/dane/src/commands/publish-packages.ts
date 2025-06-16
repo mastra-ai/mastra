@@ -8,9 +8,9 @@ export async function publishPackages() {
 
   const workflow = mastra.getWorkflow('packagePublisher');
 
-  const { start } = workflow.createRun();
+  const run = await workflow.createRun();
 
-  const result = await start();
+  const result = await run.start();
 
   console.log(result);
 

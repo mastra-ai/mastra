@@ -2,10 +2,10 @@ import { mastra } from './mastra';
 
 async function main() {
   const myWorkflow = mastra.getWorkflow('myWorkflow');
-  const { start } = myWorkflow.createRun();
+  const run = await myWorkflow.createRun();
   try {
-    const res = await start({
-      triggerData: {
+    const res = await run.start({
+      inputData: {
         inputValue: 30,
       },
     });

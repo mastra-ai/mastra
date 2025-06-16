@@ -27,9 +27,9 @@ async function main() {
     )
     .commit();
 
-  const { runId, start } = myWorkflow.createRun();
+  const run = await myWorkflow.createRun();
 
-  console.log('Run', runId);
+  console.log('Run', run.runId);
 
   const res = await start({ triggerData: { inputValue: 90 } });
 

@@ -52,8 +52,8 @@ export const myWorkflow = new Workflow({
 
 myWorkflow.step(stepOne).then(stepTwo).step(stepThree).then(stepFour).commit();
 
-const { start } = myWorkflow.createRun();
+const run = await myWorkflow.createRun();
 
-const result = await start({ triggerData: { inputValue: 3 } });
+const result = await run.start({ inputData: { inputValue: 3 } });
 
 console.log(result);
