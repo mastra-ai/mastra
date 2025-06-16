@@ -34,7 +34,6 @@ const execWithTimeout = async (command: string, timeoutMs?: number) => {
       throw error;
     }
   } catch (error: unknown) {
-    console.error(error);
     throw error;
   }
 };
@@ -55,12 +54,18 @@ async function installMastraDependency(
   try {
     await execWithTimeout(`${pm} ${installCommand} ${dependency}${versionTag}`, timeout);
   } catch (err) {
-    console.log('err', err);
     if (versionTag === '@latest') {
-      throw err;
+      throw new Error(
+        `Failed to install ${dependency}@latest: ${err instanceof Error ? err.message : 'Unknown error'}`,
+      );
     }
-
-    await execWithTimeout(`${pm} ${installCommand} ${dependency}@latest`, timeout);
+    try {
+      await execWithTimeout(`${pm} ${installCommand} ${dependency}@latest`, timeout);
+    } catch (fallbackErr) {
+      throw new Error(
+        `Failed to install ${dependency} (tried ${versionTag} and @latest): ${fallbackErr instanceof Error ? fallbackErr.message : 'Unknown error'}`,
+      );
+    }
   }
 }
 
@@ -89,41 +94,49 @@ export const createMastraProject = async ({
   }
 
   const s = p.spinner();
-  s.start('Creating project');
+
   try {
-    await fs.mkdir(projectName);
-  } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === 'EEXIST') {
-      s.stop(
-        `A directory named "${projectName}" already exists. Please choose a different name or delete the existing directory.`,
+    s.start('Creating project');
+    try {
+      await fs.mkdir(projectName);
+    } catch (error) {
+      if (error instanceof Error && 'code' in error && error.code === 'EEXIST') {
+        s.stop(`A directory named "${projectName}" already exists. Please choose a different name.`);
+        process.exit(1);
+      }
+      throw new Error(
+        `Failed to create project directory: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
-      process.exit(1);
     }
-    throw error;
-  }
 
-  process.chdir(projectName);
-  const pm = getPackageManager();
-  const installCommand = getPackageManagerInstallCommand(pm);
+    process.chdir(projectName);
+    const pm = getPackageManager();
+    const installCommand = getPackageManagerInstallCommand(pm);
 
-  s.message('Creating project');
-  // use npm not ${pm} because this just creates a package.json - compatible with all PMs, each PM has a slightly different init command, ex pnpm does not have a -y flag. Use npm here for simplicity
-  await exec(`npm init -y`);
-  await exec(`npm pkg set type="module"`);
-  await exec(`npm pkg set engines.node=">=20.9.0"`);
-  const depsService = new DepsService();
-  await depsService.addScriptsToPackageJson({
-    dev: 'mastra dev',
-    build: 'mastra build',
-    start: 'mastra start',
-  });
+    s.message('Initializing project structure');
+    try {
+      await exec(`npm init -y`);
+      await exec(`npm pkg set type="module"`);
+      await exec(`npm pkg set engines.node=">=20.9.0"`);
+      const depsService = new DepsService();
+      await depsService.addScriptsToPackageJson({
+        dev: 'mastra dev',
+        build: 'mastra build',
+        start: 'mastra start',
+      });
+    } catch (error) {
+      throw new Error(
+        `Failed to initialize project structure: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    }
 
-  s.stop('Project created');
+    s.stop('Project structure created');
 
-  s.start(`Installing ${pm} dependencies`);
-  await exec(`${pm} ${installCommand} zod`);
-  await exec(`${pm} ${installCommand} typescript @types/node --save-dev`);
-  await exec(`echo '{
+    s.start(`Installing ${pm} dependencies`);
+    try {
+      await exec(`${pm} ${installCommand} zod`);
+      await exec(`${pm} ${installCommand} typescript @types/node --save-dev`);
+      await exec(`echo '{
   "compilerOptions": {
     "target": "ES2022",
     "module": "ES2022",
@@ -139,32 +152,61 @@ export const createMastraProject = async ({
     "src/**/*"
   ]
 }' > tsconfig.json`);
+    } catch (error) {
+      throw new Error(
+        `Failed to install basic dependencies: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    }
 
-  s.stop(`${pm} dependencies installed`);
-  s.start('Installing mastra');
-  const versionTag = createVersionTag ? `@${createVersionTag}` : '@latest';
-  await installMastraDependency(pm, 'mastra', versionTag, true, timeout);
-  s.stop('mastra installed');
+    s.stop(`${pm} dependencies installed`);
 
-  s.start('Installing dependencies');
-  await installMastraDependency(pm, '@mastra/core', versionTag, false, timeout);
-  await installMastraDependency(pm, '@mastra/libsql', versionTag, false, timeout);
-  await installMastraDependency(pm, '@mastra/memory', versionTag, false, timeout);
-  s.stop('Dependencies installed');
+    s.start('Installing mastra');
+    const versionTag = createVersionTag ? `@${createVersionTag}` : '@latest';
 
-  s.start('Adding .gitignore');
-  await exec(`echo output.txt >> .gitignore`);
-  await exec(`echo node_modules >> .gitignore`);
-  await exec(`echo dist >> .gitignore`);
-  await exec(`echo .mastra >> .gitignore`);
-  await exec(`echo .env.development >> .gitignore`);
-  await exec(`echo .env >> .gitignore`);
-  await exec(`echo *.db >> .gitignore`);
-  await exec(`echo *.db-* >> .gitignore`);
-  s.stop('.gitignore added');
+    try {
+      await installMastraDependency(pm, 'mastra', versionTag, true, timeout);
+    } catch (error) {
+      throw new Error(`Failed to install Mastra CLI: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+    s.stop('mastra installed');
 
-  p.outro('Project created successfully');
-  console.log('');
+    s.start('Installing dependencies');
+    try {
+      await installMastraDependency(pm, '@mastra/core', versionTag, false, timeout);
+      await installMastraDependency(pm, '@mastra/libsql', versionTag, false, timeout);
+      await installMastraDependency(pm, '@mastra/memory', versionTag, false, timeout);
+    } catch (error) {
+      throw new Error(
+        `Failed to install Mastra dependencies: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    }
+    s.stop('Mastra dependencies installed');
 
-  return { projectName };
+    s.start('Adding .gitignore');
+    try {
+      await exec(`echo output.txt >> .gitignore`);
+      await exec(`echo node_modules >> .gitignore`);
+      await exec(`echo dist >> .gitignore`);
+      await exec(`echo .mastra >> .gitignore`);
+      await exec(`echo .env.development >> .gitignore`);
+      await exec(`echo .env >> .gitignore`);
+      await exec(`echo *.db >> .gitignore`);
+      await exec(`echo *.db-* >> .gitignore`);
+    } catch (error) {
+      throw new Error(`Failed to create .gitignore: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+    s.stop('.gitignore added');
+
+    p.outro('Project created successfully');
+    console.log('');
+
+    return { projectName };
+  } catch (error) {
+    s.stop();
+
+    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
+    p.cancel(`Project creation failed: ${errorMessage}`);
+
+    process.exit(1);
+  }
 };

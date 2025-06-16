@@ -180,22 +180,19 @@ await store.upsert({
   ```ts filename="vector-store.ts" showLineNumbers copy
   import { UpstashVector } from '@mastra/upstash'
 
+  // In upstash they refer to the store as an index
   const store = new UpstashVector({
     url: process.env.UPSTASH_URL,
     token: process.env.UPSTASH_TOKEN
   })
 
-  await store.createIndex({
-    indexName: "myCollection",
-    dimension: 1536,
-  });
-
+  // There is no store.createIndex call here, Upstash creates indexes (known as namespaces in Upstash) automatically
+  // when you upsert if that namespace does not exist yet.
   await store.upsert({
-    indexName: "myCollection",
+    indexName: "myCollection", // the namespace name in Upstash
     vectors: embeddings,
     metadata: chunks.map(chunk => ({ text: chunk.text })),
   });
-
 ```
 </Tabs.Tab>
 
