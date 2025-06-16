@@ -9,16 +9,18 @@ import { WorkflowGraphInner } from './workflow-graph-inner';
 import { WorkflowNestedGraphProvider } from '../context/workflow-nested-graph-context';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { useContext } from 'react';
-import { GetWorkflowResponse } from '@mastra/client-js';
+
+import { useDataHooks } from '@/services/data-hooks-context/use-data-hooks';
 
 export interface WorkflowGraphProps {
   workflowId: string;
-  isLoading?: boolean;
-  workflow?: GetWorkflowResponse;
   onShowTrace: ({ runId, stepName }: { runId: string; stepName: string }) => void;
 }
 
-export function WorkflowGraph({ workflowId, onShowTrace, workflow, isLoading }: WorkflowGraphProps) {
+export function WorkflowGraph({ workflowId, onShowTrace }: WorkflowGraphProps) {
+  const { useWorkflow } = useDataHooks();
+  const { data: workflow, isLoading } = useWorkflow(workflowId);
+
   const { snapshot } = useContext(WorkflowRunContext);
 
   if (isLoading) {

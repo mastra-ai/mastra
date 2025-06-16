@@ -28,26 +28,17 @@ import { GetWorkflowResponse } from '@mastra/client-js';
 import { SyntaxHighlighter } from '@/components/ui/syntax-highlighter';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogPortal, DialogTitle, DialogContent } from '@/components/ui/dialog';
+import { useDataHooks } from '@/services/data-hooks-context/use-data-hooks';
 
 interface SuspendedStep {
   stepId: string;
   runId: string;
   suspendPayload: any;
-  workflow?: GetWorkflowResponse;
-  isLoading: boolean;
 }
 
-export function WorkflowTrigger({
-  workflowId,
-  setRunId,
-  workflow,
-  isLoading,
-}: {
-  workflowId: string;
-  setRunId?: (runId: string) => void;
-  workflow?: GetWorkflowResponse;
-  isLoading?: boolean;
-}) {
+export function WorkflowTrigger({ workflowId, setRunId }: { workflowId: string; setRunId?: (runId: string) => void }) {
+  const { useWorkflow } = useDataHooks();
+  const { data: workflow, isLoading } = useWorkflow(workflowId);
   const { runtimeContext } = usePlaygroundStore();
   const { result, setResult, payload, setPayload } = useContext(WorkflowRunContext);
 
