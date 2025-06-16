@@ -31,6 +31,7 @@ import { DefaultVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import { agentToStep, LegacyStep as Step } from '../workflows/legacy';
 import { MessageList } from './message-list';
+import type { MessageInput } from './message-list';
 import type {
   AgentConfig,
   MastraLanguageModel,
@@ -483,14 +484,19 @@ export class Agent<
     message,
     runtimeContext = new RuntimeContext(),
   }: {
-    message: UIMessage;
+    message: string | MessageInput;
     runtimeContext?: RuntimeContext;
   }) {
     // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
     const llm = await this.getLLM({ runtimeContext });
 
+    const normMessage = new MessageList().add(message, 'user').get.all.ui().at(-1);
+    if (!normMessage) {
+      throw new Error(`Could not generate title from input ${JSON.stringify(message)}`);
+    }
+
     const partsToGen: TextPart[] = [];
-    for (const part of message.parts) {
+    for (const part of normMessage.parts) {
       if (part.type === `text`) {
         partsToGen.push(part);
       } else if (part.type === `source`) {
@@ -535,17 +541,20 @@ export class Agent<
     return userMessages.at(-1);
   }
 
-  async genTitle(userMessage: UIMessage | undefined, runtimeContext: RuntimeContext) {
+  async genTitle(userMessage: string | MessageInput | undefined, runtimeContext: RuntimeContext) {
     let title = `New Thread ${new Date().toISOString()}`;
     try {
       if (userMessage) {
-        title = await this.generateTitleFromUserMessage({
-          message: userMessage,
-          runtimeContext,
-        });
+        const normMessage = new MessageList().add(userMessage, 'user').get.all.ui().at(-1);
+        if (normMessage) {
+          title = await this.generateTitleFromUserMessage({
+            message: normMessage,
+            runtimeContext,
+          });
+        }
       }
     } catch (e) {
-      console.error('Error generating title:', e);
+      this.logger.error('Error generating title:', e);
     }
     return title;
   }
