@@ -1,5 +1,4 @@
 const meta = {
-  overview: "Overview",
   "mastra-dev": "Development Environment",
 };
 
