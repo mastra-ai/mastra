@@ -1,5 +1,15 @@
 # @mastra/deployer
 
+## 0.10.6-alpha.2
+
+### Patch Changes
+
+- ec7f824: Add support to improve lodash imports
+- Updated dependencies [5f67b6f]
+- Updated dependencies [4b0f8a6]
+  - @mastra/server@0.10.6-alpha.2
+  - @mastra/core@0.10.6-alpha.2
+
 ## 0.10.6-alpha.1
 
 ### Patch Changes
