@@ -1165,8 +1165,8 @@ export class Run<
    */
   #mastra?: Mastra;
 
-  #closeStreamAction?: () => Promise<void>;
-  #executionResults?: Promise<WorkflowResult<TOutput, TSteps>>;
+  protected closeStreamAction?: () => Promise<void>;
+  protected executionResults?: Promise<WorkflowResult<TOutput, TSteps>>;
 
   protected cleanup?: () => void;
 
@@ -1263,7 +1263,7 @@ export class Run<
       } catch {}
     }, 'watch-v2');
 
-    this.#closeStreamAction = async () => {
+    this.closeStreamAction = async () => {
       this.emitter.emit('watch-v2', {
         type: 'finish',
         payload: { runId: this.runId },
@@ -1283,9 +1283,9 @@ export class Run<
       type: 'start',
       payload: { runId: this.runId },
     });
-    this.#executionResults = this.start({ inputData, runtimeContext }).then(result => {
+    this.executionResults = this.start({ inputData, runtimeContext }).then(result => {
       if (result.status !== 'suspended') {
-        this.#closeStreamAction?.().catch(() => {});
+        this.closeStreamAction?.().catch(() => {});
       }
 
       return result;
@@ -1293,7 +1293,7 @@ export class Run<
 
     return {
       stream: readable,
-      getWorkflowState: () => this.#executionResults!,
+      getWorkflowState: () => this.executionResults!,
     };
   }
 
@@ -1397,13 +1397,13 @@ export class Run<
       })
       .then(result => {
         if (result.status !== 'suspended') {
-          this.#closeStreamAction?.().catch(() => {});
+          this.closeStreamAction?.().catch(() => {});
         }
 
         return result;
       });
 
-    this.#executionResults = executionResultPromise;
+    this.executionResults = executionResultPromise;
 
     return executionResultPromise;
   }

@@ -18,6 +18,7 @@ import type {
   StepFailure,
   Emitter,
   WatchEvent,
+  StreamEvent,
 } from '@mastra/core/workflows';
 import { EMITTER_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { Span } from '@opentelemetry/api';
@@ -193,14 +194,15 @@ export class InngestRun<
     return result;
   }
 
-  watch(cb: (event: any) => void): () => void {
+  watch(cb: (event: WatchEvent) => void, type: 'watch' | 'watch-v2' = 'watch'): () => void {
     const streamPromise = subscribe(
       {
         channel: `workflow:${this.workflowId}:${this.runId}`,
-        topics: ['watch'],
+        topics: [type],
         app: this.inngest,
       },
       (message: any) => {
+        console.log('message', message.data);
         cb(message.data);
       },
     );
@@ -213,6 +215,54 @@ export class InngestRun<
         .catch(err => {
           console.error(err);
         });
+    };
+  }
+
+  stream({ inputData, runtimeContext }: { inputData?: z.infer<TInput>; runtimeContext?: RuntimeContext } = {}): {
+    stream: ReadableStream<StreamEvent>;
+    getWorkflowState: () => Promise<WorkflowResult<TOutput, TSteps>>;
+  } {
+    const { readable, writable } = new TransformStream<StreamEvent, StreamEvent>();
+
+    const writer = writable.getWriter();
+    const unwatch = this.watch(async event => {
+      try {
+        // watch-v2 events are data stream events, so we need to cast them to the correct type
+        await writer.write(event as any);
+      } catch {}
+    }, 'watch-v2');
+
+    this.closeStreamAction = async () => {
+      this.emitter.emit('watch-v2', {
+        type: 'finish',
+        payload: { runId: this.runId },
+      });
+      unwatch();
+
+      try {
+        await writer.close();
+      } catch (err) {
+        console.error('Error closing stream:', err);
+      } finally {
+        writer.releaseLock();
+      }
+    };
+
+    this.emitter.emit('watch-v2', {
+      type: 'start',
+      payload: { runId: this.runId },
+    });
+    this.executionResults = this.start({ inputData, runtimeContext }).then(result => {
+      if (result.status !== 'suspended') {
+        this.closeStreamAction?.().catch(() => {});
+      }
+
+      return result;
+    });
+
+    return {
+      stream: readable,
+      getWorkflowState: () => this.executionResults!,
     };
   }
 }
@@ -368,7 +418,7 @@ export class InngestWorkflow<
             try {
               await publish({
                 channel: `workflow:${this.id}:${runId}`,
-                topic: 'watch',
+                topic: event,
                 data,
               });
             } catch (err: any) {
