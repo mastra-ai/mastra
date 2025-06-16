@@ -27,7 +27,7 @@ importers:
         specifier: ^10.2.2
         version: 10.2.2
       vitest:
-        specifier: ^3.2.2
+        specifier: ^3.2.3
         version: 3.2.3
 
 packages:
