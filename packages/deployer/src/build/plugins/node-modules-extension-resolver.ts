@@ -1,6 +1,20 @@
-import { dirname, extname, relative } from 'path';
+import { dirname, extname } from 'path';
 import resolveFrom from 'resolve-from';
 import type { Plugin } from 'rollup';
+import { builtinModules } from 'node:module';
+
+/**
+ * Check if a module is a Node.js builtin module
+ * @param specifier - Module specifier
+ * @returns True if it's a builtin module
+ */
+function isBuiltinModule(specifier: string): boolean {
+  return (
+    builtinModules.includes(specifier) ||
+    specifier.startsWith('node:') ||
+    builtinModules.includes(specifier.replace(/^node:/, ''))
+  );
+}
 
 function safeResolve(id: string, importer: string) {
   try {
@@ -26,7 +40,11 @@ export function nodeModulesExtensionResolver(): Plugin {
     name: 'node-modules-extension-resolver',
     resolveId(id, importer) {
       // if is relative, skip
-      if (id.startsWith('.') || !importer) {
+      if (id.startsWith('.') || id.startsWith('/') || !importer) {
+        return null;
+      }
+
+      if (isBuiltinModule(id)) {
         return null;
       }
 
@@ -47,7 +65,12 @@ export function nodeModulesExtensionResolver(): Plugin {
 
       try {
         // if we cannot resolve it, it means it's a legacy module
-        import.meta.resolve(id);
+        const resolved = import.meta.resolve(id);
+
+        if (!extname(resolved)) {
+          throw new Error(`Cannot resolve ${id} from ${importer}`);
+        }
+
         return null;
       } catch (e) {
         for (const ext of ['.mjs', '.js', '.cjs']) {
@@ -59,7 +82,6 @@ export function nodeModulesExtensionResolver(): Plugin {
             }
 
             const pkgJsonPath = safeResolve(`${pkgName}/package.json`, importer);
-            console.log(pkgName, pkgJsonPath);
             if (!pkgJsonPath) {
               return null;
             }
@@ -68,7 +90,7 @@ export function nodeModulesExtensionResolver(): Plugin {
 
             return {
               id: newImportWithExtension,
-              // external: true,
+              external: true,
             };
           }
         }
