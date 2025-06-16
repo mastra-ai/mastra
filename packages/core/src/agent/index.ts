@@ -554,7 +554,7 @@ export class Agent<
         }
       }
     } catch (e) {
-      console.error('Error generating title:', e);
+      this.logger.error('Error generating title:', e);
     }
     return title;
   }
