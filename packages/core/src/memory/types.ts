@@ -47,6 +47,7 @@ export type MemoryConfig = {
     | {
         topK: number;
         messageRange: number | { before: number; after: number };
+        scope?: 'thread' | 'resource';
       };
   workingMemory?: {
     enabled: boolean;
@@ -69,4 +70,21 @@ export type SharedMemoryConfig = {
   embedder?: EmbeddingModel<string>;
 
   processors?: MemoryProcessor[];
+};
+
+export type TraceType = {
+  id: string;
+  parentSpanId: string | null;
+  name: string;
+  traceId: string;
+  scope: string;
+  kind: number;
+  attributes: Record<string, unknown> | null;
+  status: Record<string, unknown> | null;
+  events: Record<string, unknown> | null;
+  links: Record<string, unknown> | null;
+  other: Record<string, unknown> | null;
+  startTime: number;
+  endTime: number;
+  createdAt: Date;
 };

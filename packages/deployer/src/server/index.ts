@@ -24,7 +24,7 @@ import {
   setAgentInstructionsHandler,
   streamGenerateHandler,
 } from './handlers/agents';
-import { authorizationMiddleware, authenticationMiddleware } from './handlers/auth';
+import { authenticationMiddleware, authorizationMiddleware } from './handlers/auth';
 import { handleClientsRefresh, handleTriggerClientsRefresh } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import {
@@ -40,13 +40,13 @@ import {
 } from './handlers/legacyWorkflows.js';
 import { getLogsByRunIdHandler, getLogsHandler, getLogTransports } from './handlers/logs';
 import {
+  executeMcpServerToolHandler,
+  getMcpRegistryServerDetailHandler,
   getMcpServerMessageHandler,
   getMcpServerSseHandler,
-  listMcpRegistryServersHandler,
-  getMcpRegistryServerDetailHandler,
-  listMcpServerToolsHandler,
   getMcpServerToolDetailHandler,
-  executeMcpServerToolHandler,
+  listMcpRegistryServersHandler,
+  listMcpServerToolsHandler,
 } from './handlers/mcp';
 import {
   createThreadHandler,
@@ -69,17 +69,19 @@ import { rootHandler } from './handlers/root';
 import { getTelemetryHandler, storeTelemetryHandler } from './handlers/telemetry';
 import { executeAgentToolHandler, executeToolHandler, getToolByIdHandler, getToolsHandler } from './handlers/tools';
 import { createIndex, deleteIndex, describeIndex, listIndexes, queryVectors, upsertVectors } from './handlers/vector';
-import { getSpeakersHandler, getListenerHandler, listenHandler, speakHandler } from './handlers/voice';
+import { getListenerHandler, getSpeakersHandler, listenHandler, speakHandler } from './handlers/voice';
 import {
   createWorkflowRunHandler,
   getWorkflowByIdHandler,
+  getWorkflowRunByIdHandler,
+  getWorkflowRunExecutionResultHandler,
   getWorkflowRunsHandler,
   getWorkflowsHandler,
-  streamWorkflowHandler,
   resumeAsyncWorkflowHandler,
   resumeWorkflowHandler,
   startAsyncWorkflowHandler,
   startWorkflowRunHandler,
+  streamWorkflowHandler,
   watchWorkflowHandler,
 } from './handlers/workflows.js';
 import type { ServerBundleOptions } from './types';
@@ -120,8 +122,14 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
       });
       return acc;
     }, {});
-  } catch {
-    console.error('Failed to import tools');
+  } catch (err: any) {
+    console.error(
+      `Failed to import tools
+reason: ${err.message}
+${err.stack.split('\n').slice(1).join('\n')}
+    `,
+      err,
+    );
   }
 
   // Middleware
@@ -150,21 +158,25 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
   app.onError(errorHandler);
 
   // Add Mastra to context
-  app.use('*', function setContext(c, next) {
-    const runtimeContext = new RuntimeContext();
-    const proxyRuntimeContext = new Proxy(runtimeContext, {
-      get(target, prop) {
-        if (prop === 'get') {
-          return function (key: string) {
-            const value = target.get(key);
-            return value ?? `<${key}>`;
-          };
-        }
-        return Reflect.get(target, prop);
-      },
-    });
+  app.use('*', async function setContext(c, next) {
+    let runtimeContext = new RuntimeContext();
+    if (c.req.method === 'POST' || c.req.method === 'PUT') {
+      const contentType = c.req.header('content-type');
+      if (contentType?.includes('application/json')) {
+        try {
+          const clonedReq = c.req.raw.clone();
+          const body = (await clonedReq.json()) as { runtimeContext?: Record<string, any> };
 
-    c.set('runtimeContext', proxyRuntimeContext);
+          if (body.runtimeContext) {
+            runtimeContext = new RuntimeContext(Object.entries(body.runtimeContext));
+          }
+        } catch {
+          // Body parsing failed, continue without body
+        }
+      }
+    }
+
+    c.set('runtimeContext', runtimeContext);
     c.set('mastra', mastra);
     c.set('tools', tools);
     c.set('playground', options.playground === true);
@@ -1358,6 +1370,31 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
     getMcpServerMessageHandler,
   );
 
+  app.get(
+    '/api/mcp/:serverId/mcp',
+    describeRoute({
+      description: 'Send a message to an MCP server using Streamable HTTP',
+      tags: ['mcp'],
+      parameters: [
+        {
+          name: 'serverId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Streamable HTTP connection processed',
+        },
+        404: {
+          description: 'MCP server not found',
+        },
+      },
+    }),
+    getMcpServerMessageHandler,
+  );
+
   // New MCP server routes for SSE
   const mcpSseBasePath = '/api/mcp/:serverId/sse';
   const mcpSseMessagePath = '/api/mcp/:serverId/messages';
@@ -2300,54 +2337,6 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
     watchLegacyWorkflowHandler,
   );
 
-  app.post(
-    '/api/workflows/:workflowId/stream',
-    describeRoute({
-      description: 'Stream workflow in real-time',
-      parameters: [
-        {
-          name: 'workflowId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-        {
-          name: 'runId',
-          in: 'query',
-          required: false,
-          schema: { type: 'string' },
-        },
-      ],
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: {
-              type: 'object',
-              properties: {
-                inputData: { type: 'object' },
-                runtimeContext: {
-                  type: 'object',
-                  description: 'Runtime context for the workflow execution',
-                },
-              },
-            },
-          },
-        },
-      },
-      responses: {
-        200: {
-          description: 'vNext workflow run started',
-        },
-        404: {
-          description: 'vNext workflow not found',
-        },
-      },
-      tags: ['vNextWorkflows'],
-    }),
-    streamWorkflowHandler,
-  );
-
   // Workflow routes
   app.get(
     '/api/workflows',
@@ -2413,6 +2402,68 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
       },
     }),
     getWorkflowRunsHandler,
+  );
+
+  app.get(
+    '/api/workflows/:workflowId/runs/:runId/execution-result',
+    describeRoute({
+      description: 'Get execution result for a workflow run',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Workflow run execution result',
+        },
+        404: {
+          description: 'Workflow run execution result not found',
+        },
+      },
+    }),
+    getWorkflowRunExecutionResultHandler,
+  );
+
+  app.get(
+    '/api/workflows/:workflowId/runs/:runId',
+    describeRoute({
+      description: 'Get workflow run by ID',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Workflow run by ID',
+        },
+        404: {
+          description: 'Workflow run not found',
+        },
+      },
+    }),
+    getWorkflowRunByIdHandler,
   );
 
   app.post(
@@ -2502,6 +2553,54 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
       },
     }),
     resumeAsyncWorkflowHandler,
+  );
+
+  app.post(
+    '/api/workflows/:workflowId/stream',
+    describeRoute({
+      description: 'Stream workflow in real-time',
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                inputData: { type: 'object' },
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the workflow execution',
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'workflow run started',
+        },
+        404: {
+          description: 'workflow not found',
+        },
+      },
+      tags: ['workflows'],
+    }),
+    streamWorkflowHandler,
   );
 
   app.post(
@@ -2670,10 +2769,46 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
           required: true,
           schema: { type: 'string' },
         },
+        {
+          name: 'fromDate',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'toDate',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'logLevel',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'filters',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'page',
+          in: 'query',
+          required: false,
+          schema: { type: 'number' },
+        },
+        {
+          name: 'perPage',
+          in: 'query',
+          required: false,
+          schema: { type: 'number' },
+        },
       ],
       responses: {
         200: {
-          description: 'List of all logs',
+          description: 'Paginated list of all logs',
         },
       },
     }),
@@ -2712,10 +2847,46 @@ export async function createHonoServer(mastra: Mastra, options: ServerBundleOpti
           required: true,
           schema: { type: 'string' },
         },
+        {
+          name: 'fromDate',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'toDate',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'logLevel',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'filters',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'page',
+          in: 'query',
+          required: false,
+          schema: { type: 'number' },
+        },
+        {
+          name: 'perPage',
+          in: 'query',
+          required: false,
+          schema: { type: 'number' },
+        },
       ],
       responses: {
         200: {
-          description: 'List of logs for run ID',
+          description: 'Paginated list of logs for run ID',
         },
       },
     }),
@@ -3119,14 +3290,17 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
       const logger = mastra.getLogger();
       const host = serverOptions?.host ?? 'localhost';
       logger.info(` Mastra API running on port http://${host}:${port}/api`);
-      if (options?.isDev) {
-        logger.info(`🔗 Open API documentation available at http://${host}:${port}/openapi.json`);
-      }
-      if (options?.isDev) {
-        logger.info(`🧪 Swagger UI available at http://${host}:${port}/swagger-ui`);
-      }
       if (options?.playground) {
-        logger.info(`👨‍💻 Playground available at http://${host}:${port}/`);
+        const playgroundUrl = `http://${host}:${port}`;
+        logger.info(`👨‍💻 Playground available at ${playgroundUrl}`);
+      }
+
+      if (process.send) {
+        process.send({
+          type: 'server-ready',
+          port,
+          host,
+        });
       }
     },
   );

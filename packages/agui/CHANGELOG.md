@@ -1,5 +1,44 @@
 # @mastra/agui
 
+## 1.0.3-alpha.0
+
+### Patch Changes
+
+- 63f6b7d: dependencies updates:
+  - Updated dependency [`@ai-sdk/ui-utils@^1.2.11` ↗︎](https://www.npmjs.com/package/@ai-sdk/ui-utils/v/1.2.11) (from `^1.1.19`, in `dependencies`)
+  - Updated dependency [`@copilotkit/runtime@^1.8.14` ↗︎](https://www.npmjs.com/package/@copilotkit/runtime/v/1.8.14) (from `^1.8.13`, in `dependencies`)
+  - Updated dependency [`hono@^4.7.11` ↗︎](https://www.npmjs.com/package/hono/v/4.7.11) (from `^4.5.1`, in `dependencies`)
+- Updated dependencies [63f6b7d]
+- Updated dependencies [36f1c36]
+- Updated dependencies [10d352e]
+- Updated dependencies [53d3c37]
+  - @mastra/core@0.10.6-alpha.0
+
+## 1.0.2
+
+### Patch Changes
+
+- 187b17d: Bump for runtimecontext
+- f0d559f: Fix peerdeps for alpha channel
+- Updated dependencies [ee77e78]
+- Updated dependencies [592a2db]
+- Updated dependencies [e5dc18d]
+- Updated dependencies [ab5adbe]
+- Updated dependencies [1e8bb40]
+- Updated dependencies [1b5fc55]
+- Updated dependencies [195c428]
+- Updated dependencies [f73e11b]
+- Updated dependencies [37643b8]
+- Updated dependencies [99fd6cf]
+- Updated dependencies [c5bf1ce]
+- Updated dependencies [add596e]
+- Updated dependencies [8dc94d8]
+- Updated dependencies [ecebbeb]
+- Updated dependencies [79d5145]
+- Updated dependencies [12b7002]
+- Updated dependencies [2901125]
+  - @mastra/core@0.10.2
+
 ## 1.0.2-alpha.2
 
 ### Patch Changes

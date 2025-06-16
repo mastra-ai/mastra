@@ -46,7 +46,7 @@ program
 program
   .command('create [project-name]')
   .description('Create a new Mastra project')
-  .option('--default', 'Quick start with defaults(src, OpenAI, no examples)')
+  .option('--default', 'Quick start with defaults(src, OpenAI, examples)')
   .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows)')
   .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, groq, google, or cerebras))')
   .option('-k, --llm-api-key <api-key>', 'API key for the model provider')
@@ -95,7 +95,7 @@ program
 program
   .command('init')
   .description('Initialize Mastra in your project')
-  .option('--default', 'Quick start with defaults(src, OpenAI, no examples)')
+  .option('--default', 'Quick start with defaults(src, OpenAI, examples)')
   .option('-d, --dir <directory>', 'Directory for Mastra files to (defaults to src/)')
   .option('-c, --components <components>', 'Comma-separated list of components (agents, tools, workflows)')
   .option('-l, --llm <model-provider>', 'Default model provider (openai, anthropic, groq, google or cerebras))')
@@ -116,6 +116,8 @@ program
           await init({
             ...result,
             llmApiKey: result?.llmApiKey as string,
+            components: ['agents', 'tools', 'workflows'],
+            addExample: true,
           });
           return;
         }
@@ -170,6 +172,7 @@ program
   .option('-r, --root <root>', 'Path to your root folder')
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
   .option('-p, --port <port>', 'deprecated: Port number for the development server (defaults to 4111)')
+  .option('-e, --env <env>', 'Custom env file to include in the dev server')
   .action(args => {
     analytics.trackCommand({
       command: 'dev',
@@ -185,6 +188,7 @@ program
       dir: args?.dir,
       root: args?.root,
       tools: args?.tools ? args.tools.split(',') : [],
+      env: args?.env,
     }).catch(err => {
       logger.error(err.message);
     });
@@ -196,6 +200,7 @@ program
   .option('-d, --dir <path>', 'Path to your Mastra Folder')
   .option('-r, --root <path>', 'Path to your root folder')
   .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
+  .option('-e, --env <env>', 'Custom env file to include in the build')
   .action(async args => {
     await analytics.trackCommandExecution({
       command: 'mastra build',
@@ -205,6 +210,7 @@ program
           dir: args?.dir,
           root: args?.root,
           tools: args?.tools ? args.tools.split(',') : [],
+          env: args?.env,
         });
       },
       origin,

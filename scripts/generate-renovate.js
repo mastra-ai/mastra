@@ -141,14 +141,14 @@ const renovateConfig = {
       matchFileNames: ['+(package.json)', '**/package.json'],
       matchUpdateTypes: ['major', 'minor', 'patch'],
       matchDepTypes: ['devDependencies'],
-      matchPackageNames: ['vitest'],
+      matchPackageNames: ['vitest', '@vitest/*'],
       enabled: true,
     },
     {
       groupName: 'Schema',
       commitMessageTopic: 'Schema',
       matchFileNames: ['+(package.json)', '**/package.json'],
-      matchPackageNames: ['zod', 'json-schema', 'zod-to-json-schema'],
+      matchPackageNames: ['zod', 'json-schema', 'zod-to-json-schema', 'zod-from-json-schema'],
       matchUpdateTypes: ['major', 'minor', 'patch'],
       matchDepTypes: ['dependencies', 'devDependencies'],
       dependencyDashboardApproval: false,
@@ -170,6 +170,8 @@ const ignorePackages = [
   'zod',
   'json-schema',
   'zod-to-json-schema',
+  'zod-from-json-schema',
+  '@vitest/*',
 ];
 
 for (const pkg of listOfPackages) {

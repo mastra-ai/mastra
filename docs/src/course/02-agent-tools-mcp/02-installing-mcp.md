@@ -3,7 +3,7 @@
 First, let's install the Mastra MCP package:
 
 ```bash
-npm install @mastra/mcp
+npm install @mastra/mcp@latest
 ```
 
 The `@mastra/mcp` package provides the necessary infrastructure to connect your Mastra agent to various MCP servers. This package handles the communication between your agent and the MCP servers, allowing your agent to access the tools and services provided by those servers.

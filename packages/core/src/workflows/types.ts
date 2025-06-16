@@ -1,3 +1,4 @@
+import type { TextStreamPart } from 'ai';
 import type { z } from 'zod';
 import type { ExecuteFunction, Step } from './step';
 import type { SerializedStepFlowEntry } from './workflow';
@@ -55,7 +56,7 @@ export type StepsRecord<T extends readonly Step<any, any, any>[]> = {
 };
 
 export type DynamicMapping<TPrevSchema extends z.ZodTypeAny, TSchemaOut extends z.ZodTypeAny> = {
-  fn: ExecuteFunction<z.infer<TPrevSchema>, z.infer<TSchemaOut>, any, any>;
+  fn: ExecuteFunction<z.infer<TPrevSchema>, z.infer<TSchemaOut>, any, any, any>;
   schema: TSchemaOut;
 };
 
@@ -91,6 +92,14 @@ export type VariableReference<
     }
   | { value: any; schema: z.ZodTypeAny };
 
+export type StreamEvent =
+  | TextStreamPart<any>
+  | {
+      type: 'step-suspended';
+      payload: any;
+      id: string;
+    };
+
 export type WatchEvent = {
   type: 'watch';
   payload: {
@@ -118,7 +127,7 @@ export type WatchEvent = {
           resumedAt?: number;
         }
       >;
-      output?: Record<string, any>;
+      result?: Record<string, any>;
       payload?: Record<string, any>;
       error?: string | Error;
     };
@@ -143,6 +152,9 @@ export type ZodPathType<T extends z.ZodTypeAny, P extends string> =
 export interface WorkflowRunState {
   // Core state info
   runId: string;
+  status: 'success' | 'failed' | 'suspended' | 'running';
+  result?: Record<string, any>;
+  error?: string | Error;
   value: Record<string, string>;
   context: { input?: Record<string, any> } & Record<string, StepResult<any, any, any, any>>;
   serializedStepGraph: SerializedStepFlowEntry[];

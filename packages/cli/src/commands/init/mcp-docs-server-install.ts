@@ -3,7 +3,7 @@ import os from 'os';
 import path from 'path';
 import { ensureFile, readJSON, writeJSON } from 'fs-extra/esm';
 
-const args = ['-y', '@mastra/mcp-docs-server@latest'];
+const args = ['-y', '@mastra/mcp-docs-server'];
 const createMcpConfig = (editor: Editor) => {
   if (editor === 'vscode') {
     return {
@@ -25,16 +25,10 @@ const createMcpConfig = (editor: Editor) => {
   }
   return {
     mcpServers: {
-      mastra:
-        process.platform === `win32`
-          ? {
-              command: 'cmd',
-              args: ['/c', 'npx', ...args],
-            }
-          : {
-              command: 'npx',
-              args,
-            },
+      mastra: {
+        command: 'npx',
+        args,
+      },
     },
   };
 };
@@ -126,8 +120,10 @@ export async function globalMCPIsAlreadyInstalled(editor: Editor) {
   try {
     const configContents = await readJSON(configPath);
 
+    if (!configContents) return false;
+
     if (editor === 'vscode') {
-      if (!configContents?.servers) return false;
+      if (!configContents.servers) return false;
       const hasMastraMCP = Object.values(configContents.servers).some((server?: any) =>
         server?.args?.find((arg?: string) => arg?.includes(`@mastra/mcp-docs-server`)),
       );
@@ -140,8 +136,7 @@ export async function globalMCPIsAlreadyInstalled(editor: Editor) {
     );
 
     return hasMastraMCP;
-  } catch (e) {
-    console.error(e);
+  } catch {
     return false;
   }
 }

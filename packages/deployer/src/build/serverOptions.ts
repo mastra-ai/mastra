@@ -101,6 +101,7 @@ export async function getServerOptions(entryFile: string, outputDir: string): Pr
     dir: outputDir,
     format: 'es',
     entryFileNames: '[name].mjs',
+    sourcemap: true,
   });
 
   if (result.hasCustomConfig) {

@@ -1,7 +1,16 @@
 import { randomUUID } from 'crypto';
 import type { D1Database } from '@cloudflare/workers-types';
-import type { MastraMessageV2, WorkflowRunState } from '@mastra/core';
-import type { TABLE_NAMES } from '@mastra/core/storage';
+import {
+  createSampleEval,
+  createSampleMessageV2,
+  createSampleTraceForDB,
+  createSampleThread,
+  createSampleThreadWithParams,
+  createSampleWorkflowSnapshot,
+  checkWorkflowSnapshot,
+} from '@internal/storage-test-utils';
+import type { MastraMessageV2, WorkflowRunState, StorageThreadType } from '@mastra/core';
+import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import {
   TABLE_MESSAGES,
   TABLE_THREADS,
@@ -12,15 +21,7 @@ import {
 import dotenv from 'dotenv';
 import { Miniflare } from 'miniflare';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi, afterEach } from 'vitest';
-
-import {
-  checkWorkflowSnapshot,
-  createSampleMessage,
-  createSampleThread,
-  createSampleThreadWithParams,
-  createSampleTrace,
-  createSampleWorkflowSnapshot,
-} from './test-utils';
+import { createSampleTrace } from './test-utils';
 import { D1Store } from '.';
 
 dotenv.config();
@@ -355,12 +356,34 @@ describe('D1Store', () => {
       expect(retrieved?.metadata).toEqual(expect.objectContaining(updatedMetadata));
     });
 
+    it('should update thread updatedAt when a message is saved to it', async () => {
+      const thread = createSampleThread();
+      await store.saveThread({ thread });
+
+      // Get the initial thread to capture the original updatedAt
+      const initialThread = await store.getThreadById({ threadId: thread.id });
+      expect(initialThread).toBeDefined();
+      const originalUpdatedAt = initialThread!.updatedAt;
+
+      // Wait a small amount to ensure different timestamp
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Create and save a message to the thread
+      const message = createSampleMessageV2({ threadId: thread.id });
+      await store.saveMessages({ messages: [message], format: 'v2' });
+
+      // Retrieve the thread again and check that updatedAt was updated
+      const updatedThread = await store.getThreadById({ threadId: thread.id });
+      expect(updatedThread).toBeDefined();
+      expect(updatedThread!.updatedAt.getTime()).toBeGreaterThan(originalUpdatedAt.getTime());
+    });
+
     it('should delete thread and its messages', async () => {
       const thread = createSampleThread();
       await store.saveThread({ thread });
 
       // Add some messages
-      const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
+      const messages = [createSampleMessageV2({ threadId: thread.id }), createSampleMessageV2({ threadId: thread.id })];
       await store.saveMessages({ messages, format: 'v2' });
 
       await store.deleteThread({ threadId: thread.id });
@@ -388,7 +411,7 @@ describe('D1Store', () => {
       const thread = createSampleThread();
       await store.saveThread({ thread });
 
-      const messages = [createSampleMessage(thread.id), createSampleMessage(thread.id)];
+      const messages = [createSampleMessageV2({ threadId: thread.id }), createSampleMessageV2({ threadId: thread.id })];
 
       // Save messages
       const savedMessages = await store.saveMessages({ messages, format: 'v2' });
@@ -413,10 +436,10 @@ describe('D1Store', () => {
       await store.saveThread({ thread });
 
       const messages = [
-        createSampleMessage(thread.id, [{ type: 'text' as const, text: 'First' }]),
-        createSampleMessage(thread.id, [{ type: 'text' as const, text: 'Second' }]),
-        createSampleMessage(thread.id, [{ type: 'text' as const, text: 'Third' }]),
-      ] satisfies MastraMessageV2[];
+        createSampleMessageV2({ threadId: thread.id, content: 'First' }),
+        createSampleMessageV2({ threadId: thread.id, content: 'Second' }),
+        createSampleMessageV2({ threadId: thread.id, content: 'Third' }),
+      ];
 
       await store.saveMessages({ messages, format: 'v2' });
 
@@ -434,8 +457,8 @@ describe('D1Store', () => {
       await store.saveThread({ thread });
 
       const messages = [
-        createSampleMessage(thread.id),
-        { ...createSampleMessage(thread.id), id: null }, // This will cause an error
+        createSampleMessageV2({ threadId: thread.id }),
+        { ...createSampleMessageV2({ threadId: thread.id }), id: null }, // This will cause an error
       ] as any as MastraMessageV2[];
 
       await expect(store.saveMessages({ messages, format: 'v2' })).rejects.toThrow();
@@ -444,6 +467,100 @@ describe('D1Store', () => {
       const savedMessages = await store.getMessages({ threadId: thread.id, format: 'v2' });
       expect(savedMessages).toHaveLength(0);
     });
+
+    // it('should retrieve messages w/ next/prev messages by message id + resource id', async () => {
+    //   const messages: MastraMessageV2[] = [
+    //     createSampleMessage({ threadId: 'thread-one', content: 'First', resourceId: 'cross-thread-resource' }),
+    //     createSampleMessage({ threadId: 'thread-one', content: 'Second', resourceId: 'cross-thread-resource' }),
+    //     createSampleMessage({ threadId: 'thread-one', content: 'Third', resourceId: 'cross-thread-resource' }),
+
+    //     createSampleMessage({ threadId: 'thread-two', content: 'Fourth', resourceId: 'cross-thread-resource' }),
+    //     createSampleMessage({ threadId: 'thread-two', content: 'Fifth', resourceId: 'cross-thread-resource' }),
+    //     createSampleMessage({ threadId: 'thread-two', content: 'Sixth', resourceId: 'cross-thread-resource' }),
+
+    //     createSampleMessage({ threadId: 'thread-three', content: 'Seventh', resourceId: 'other-resource' }),
+    //     createSampleMessage({ threadId: 'thread-three', content: 'Eighth', resourceId: 'other-resource' }),
+    //   ];
+
+    //   await store.saveMessages({ messages: messages, format: 'v2' });
+
+    //   const retrievedMessages = await store.getMessages({ threadId: 'thread-one', format: 'v2' });
+    //   expect(retrievedMessages).toHaveLength(3);
+    //   expect(retrievedMessages.map((m: any) => m.content.parts[0].text)).toEqual(['First', 'Second', 'Third']);
+
+    //   const retrievedMessages2 = await store.getMessages({ threadId: 'thread-two', format: 'v2' });
+    //   expect(retrievedMessages2).toHaveLength(3);
+    //   expect(retrievedMessages2.map((m: any) => m.content.parts[0].text)).toEqual(['Fourth', 'Fifth', 'Sixth']);
+
+    //   const retrievedMessages3 = await store.getMessages({ threadId: 'thread-three', format: 'v2' });
+    //   expect(retrievedMessages3).toHaveLength(2);
+    //   expect(retrievedMessages3.map((m: any) => m.content.parts[0].text)).toEqual(['Seventh', 'Eighth']);
+
+    //   const crossThreadMessages = await store.getMessages({
+    //     threadId: 'thread-doesnt-exist',
+    //     resourceId: 'cross-thread-resource',
+    //     format: 'v2',
+    //     selectBy: {
+    //       last: 0,
+    //       include: [
+    //         {
+    //           id: messages[1].id,
+    //           withNextMessages: 2,
+    //           withPreviousMessages: 2,
+    //         },
+    //         {
+    //           id: messages[4].id,
+    //           withPreviousMessages: 2,
+    //           withNextMessages: 2,
+    //         },
+    //       ],
+    //     },
+    //   });
+
+    //   expect(crossThreadMessages).toHaveLength(6);
+    //   expect(crossThreadMessages.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
+    //   expect(crossThreadMessages.filter(m => m.threadId === `thread-two`)).toHaveLength(3);
+
+    //   const crossThreadMessages2 = await store.getMessages({
+    //     threadId: 'thread-one',
+    //     resourceId: 'cross-thread-resource',
+    //     format: 'v2',
+    //     selectBy: {
+    //       last: 0,
+    //       include: [
+    //         {
+    //           id: messages[4].id,
+    //           withPreviousMessages: 1,
+    //           withNextMessages: 30,
+    //         },
+    //       ],
+    //     },
+    //   });
+
+    //   expect(crossThreadMessages2).toHaveLength(3);
+    //   expect(crossThreadMessages2.filter(m => m.threadId === `thread-one`)).toHaveLength(0);
+    //   expect(crossThreadMessages2.filter(m => m.threadId === `thread-two`)).toHaveLength(3);
+
+    //   const crossThreadMessages3 = await store.getMessages({
+    //     threadId: 'thread-two',
+    //     resourceId: 'cross-thread-resource',
+    //     format: 'v2',
+    //     selectBy: {
+    //       last: 0,
+    //       include: [
+    //         {
+    //           id: messages[1].id,
+    //           withNextMessages: 1,
+    //           withPreviousMessages: 1,
+    //         },
+    //       ],
+    //     },
+    //   });
+
+    //   expect(crossThreadMessages3).toHaveLength(3);
+    //   expect(crossThreadMessages3.filter(m => m.threadId === `thread-one`)).toHaveLength(3);
+    //   expect(crossThreadMessages3.filter(m => m.threadId === `thread-two`)).toHaveLength(0);
+    // });
   });
 
   describe('Workflow Operations', () => {
@@ -461,8 +578,7 @@ describe('D1Store', () => {
       });
     });
     it('should save and retrieve workflow snapshots', async () => {
-      const thread = createSampleThread();
-      const { snapshot, runId } = createSampleWorkflowSnapshot(thread.id, 'success');
+      const { snapshot, runId } = createSampleWorkflowSnapshot('success');
 
       await store.persistWorkflowSnapshot({
         workflowName: 'test-workflow',
@@ -487,8 +603,7 @@ describe('D1Store', () => {
     });
 
     it('should update workflow snapshot status', async () => {
-      const thread = createSampleThread();
-      const { snapshot, runId } = createSampleWorkflowSnapshot(thread.id, 'success');
+      const { snapshot, runId } = createSampleWorkflowSnapshot('success');
 
       await store.persistWorkflowSnapshot({
         workflowName: 'test-workflow',
@@ -564,10 +679,9 @@ describe('D1Store', () => {
 
       // Create messages with identical timestamps
       const timestamp = new Date();
-      const messages = Array.from({ length: 3 }, () => ({
-        ...createSampleMessage(thread.id),
-        createdAt: timestamp,
-      }));
+      const messages = Array.from({ length: 3 }, () =>
+        createSampleMessageV2({ threadId: thread.id, createdAt: timestamp }),
+      );
 
       await store.saveMessages({ messages, format: 'v2' });
 
@@ -586,10 +700,9 @@ describe('D1Store', () => {
 
       // Create messages with different timestamps
       const now = Date.now();
-      const messages = Array.from({ length: 3 }, (_, i) => ({
-        ...createSampleMessage(thread.id),
-        createdAt: new Date(now - (2 - i) * 1000), // timestamps: oldest -> newest
-      }));
+      const messages = Array.from({ length: 3 }, (_, i) =>
+        createSampleMessageV2({ threadId: thread.id, createdAt: new Date(now - (2 - i) * 1000) }),
+      );
 
       // Save messages in reverse order to verify write order is preserved
       const reversedMessages = [...messages].reverse(); // newest -> oldest
@@ -611,19 +724,10 @@ describe('D1Store', () => {
       // Create messages with explicit timestamps to test chronological ordering
       const baseTime = new Date('2025-03-14T23:30:20.930Z').getTime();
       const messages = [
-        {
-          ...createSampleMessage(thread.id, [{ type: 'text', text: 'First' }]),
-          createdAt: new Date(baseTime),
-        },
-        {
-          ...createSampleMessage(thread.id, [{ type: 'text', text: 'Second' }]),
-          createdAt: new Date(baseTime + 1000),
-        },
-        {
-          ...createSampleMessage(thread.id, [{ type: 'text', text: 'Third' }]),
-          createdAt: new Date(baseTime + 2000),
-        },
-      ] as MastraMessageV2[];
+        createSampleMessageV2({ threadId: thread.id, content: 'First', createdAt: new Date(baseTime) }),
+        createSampleMessageV2({ threadId: thread.id, content: 'Second', createdAt: new Date(baseTime + 1000) }),
+        createSampleMessageV2({ threadId: thread.id, content: 'Third', createdAt: new Date(baseTime + 2000) }),
+      ];
 
       await store.saveMessages({ messages, format: 'v2' });
 
@@ -642,8 +746,7 @@ describe('D1Store', () => {
     });
 
     it('should persist and load workflow snapshots', async () => {
-      const thread = createSampleThread();
-      const { snapshot, runId } = createSampleWorkflowSnapshot(thread.id, 'running');
+      const { snapshot, runId } = createSampleWorkflowSnapshot('running');
 
       await store.persistWorkflowSnapshot({
         workflowName: 'test-workflow',
@@ -670,8 +773,7 @@ describe('D1Store', () => {
     });
 
     it('should update existing workflow snapshot', async () => {
-      const thread = createSampleThread();
-      const { snapshot, runId } = createSampleWorkflowSnapshot(thread.id, 'running');
+      const { snapshot, runId } = createSampleWorkflowSnapshot('running');
 
       await store.persistWorkflowSnapshot({
         workflowName: 'test-workflow',
@@ -732,6 +834,8 @@ describe('D1Store', () => {
         },
         activePaths: [],
         suspendedPaths: {},
+        status: 'success',
+        serializedStepGraph: [],
       } as unknown as WorkflowRunState;
 
       await store.persistWorkflowSnapshot({
@@ -762,14 +866,9 @@ describe('D1Store', () => {
     it('returns all workflows by default', async () => {
       const workflowName1 = 'default_test_1';
       const workflowName2 = 'default_test_2';
-      const thread = createSampleThread();
 
-      const {
-        snapshot: workflow1,
-        runId: runId1,
-        stepId: stepId1,
-      } = createSampleWorkflowSnapshot(thread.id, 'success');
-      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot(thread.id, 'failed');
+      const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = createSampleWorkflowSnapshot('success');
+      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot('failed');
 
       await store.persistWorkflowSnapshot({ workflowName: workflowName1, runId: runId1, snapshot: workflow1 });
       await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
@@ -789,14 +888,9 @@ describe('D1Store', () => {
     it('filters by workflow name', async () => {
       const workflowName1 = 'filter_test_1';
       const workflowName2 = 'filter_test_2';
-      const thread = createSampleThread();
 
-      const {
-        snapshot: workflow1,
-        runId: runId1,
-        stepId: stepId1,
-      } = createSampleWorkflowSnapshot(thread.id, 'success');
-      const { snapshot: workflow2, runId: runId2 } = createSampleWorkflowSnapshot(thread.id, 'failed');
+      const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = createSampleWorkflowSnapshot('success');
+      const { snapshot: workflow2, runId: runId2 } = createSampleWorkflowSnapshot('failed');
 
       await store.persistWorkflowSnapshot({ workflowName: workflowName1, runId: runId1, snapshot: workflow1 });
       await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
@@ -817,15 +911,10 @@ describe('D1Store', () => {
       const workflowName1 = 'date_test_1';
       const workflowName2 = 'date_test_2';
       const workflowName3 = 'date_test_3';
-      const thread = createSampleThread();
 
-      const { snapshot: workflow1, runId: runId1 } = createSampleWorkflowSnapshot(thread.id, 'success');
-      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot(thread.id, 'failed');
-      const {
-        snapshot: workflow3,
-        runId: runId3,
-        stepId: stepId3,
-      } = createSampleWorkflowSnapshot(thread.id, 'suspended');
+      const { snapshot: workflow1, runId: runId1 } = createSampleWorkflowSnapshot('success');
+      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot('failed');
+      const { snapshot: workflow3, runId: runId3, stepId: stepId3 } = createSampleWorkflowSnapshot('suspended');
 
       await store.insert({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
@@ -876,19 +965,10 @@ describe('D1Store', () => {
       const workflowName1 = 'page_test_1';
       const workflowName2 = 'page_test_2';
       const workflowName3 = 'page_test_3';
-      const thread = createSampleThread();
 
-      const {
-        snapshot: workflow1,
-        runId: runId1,
-        stepId: stepId1,
-      } = createSampleWorkflowSnapshot(thread.id, 'success');
-      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot(thread.id, 'failed');
-      const {
-        snapshot: workflow3,
-        runId: runId3,
-        stepId: stepId3,
-      } = createSampleWorkflowSnapshot(thread.id, 'suspended');
+      const { snapshot: workflow1, runId: runId1, stepId: stepId1 } = createSampleWorkflowSnapshot('success');
+      const { snapshot: workflow2, runId: runId2, stepId: stepId2 } = createSampleWorkflowSnapshot('failed');
+      const { snapshot: workflow3, runId: runId3, stepId: stepId3 } = createSampleWorkflowSnapshot('suspended');
 
       await store.persistWorkflowSnapshot({ workflowName: workflowName1, runId: runId1, snapshot: workflow1 });
       await new Promise(resolve => setTimeout(resolve, 10)); // Small delay to ensure different timestamps
@@ -924,8 +1004,7 @@ describe('D1Store', () => {
 
     beforeEach(async () => {
       // Insert a workflow run for positive test
-      const thread = createSampleThread();
-      const sample = createSampleWorkflowSnapshot(thread.id, 'success');
+      const sample = createSampleWorkflowSnapshot('success');
       runId = sample.runId;
       stepId = sample.stepId;
       await store.insert({
@@ -965,11 +1044,10 @@ describe('D1Store', () => {
     let runIds: string[] = [];
 
     beforeEach(async () => {
-      const thread = createSampleThread();
       // Insert multiple workflow runs for the same resourceId
       resourceId = 'resource-shared';
       for (const status of ['success', 'failed']) {
-        const sample = createSampleWorkflowSnapshot(thread.id, status);
+        const sample = createSampleWorkflowSnapshot(status);
         runIds.push(sample.runId);
         await store.insert({
           tableName: TABLE_WORKFLOW_SNAPSHOT,
@@ -984,7 +1062,7 @@ describe('D1Store', () => {
         });
       }
       // Insert a run with a different resourceId
-      const other = createSampleWorkflowSnapshot(thread.id, 'waiting');
+      const other = createSampleWorkflowSnapshot('waiting');
       await store.insert({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         record: {
@@ -1069,7 +1147,11 @@ describe('D1Store', () => {
 
     it('should sanitize and handle special characters', async () => {
       const thread = createSampleThread();
-      const message = createSampleMessage(thread.id, [{ type: 'text' as const, text: '特殊字符 !@#$%^&*()' }]);
+      const message = createSampleMessageV2({
+        threadId: thread.id,
+        content: '特殊字符 !@#$%^&*()',
+        createdAt: new Date(),
+      });
 
       await store.saveThread({ thread });
       await store.saveMessages({ messages: [message], format: 'v2' });
@@ -1088,10 +1170,9 @@ describe('D1Store', () => {
 
       // Create messages with sequential timestamps (but write order will be preserved)
       const now = Date.now();
-      const messages = Array.from({ length: 5 }, (_, i) => ({
-        ...createSampleMessage(thread.id),
-        createdAt: new Date(now + i * 1000),
-      }));
+      const messages = Array.from({ length: 5 }, (_, i) =>
+        createSampleMessageV2({ threadId: thread.id, createdAt: new Date(now + i * 1000) }),
+      );
 
       // Save messages in parallel - write order should be preserved
       await Promise.all(messages.map(msg => store.saveMessages({ messages: [msg], format: 'v2' })));
@@ -1113,7 +1194,7 @@ describe('D1Store', () => {
   describe('Resource Management', () => {
     it('should clean up orphaned messages when thread is deleted', async () => {
       const thread = createSampleThread();
-      const messages = Array.from({ length: 3 }, () => createSampleMessage(thread.id));
+      const messages = Array.from({ length: 3 }, () => createSampleMessageV2({ threadId: thread.id }));
 
       await store.saveThread({ thread });
       await store.saveMessages({ messages, format: 'v2' });
@@ -1182,7 +1263,7 @@ describe('D1Store', () => {
 
       // Try to save invalid message
       const invalidMessage = {
-        ...createSampleMessage(thread.id),
+        ...createSampleMessageV2({ threadId: thread.id }),
         content: undefined,
       };
 
@@ -1194,7 +1275,7 @@ describe('D1Store', () => {
     });
 
     it('should handle missing thread gracefully', async () => {
-      const message = createSampleMessage('non-existent-thread');
+      const message = createSampleMessageV2({ threadId: 'non-existent-thread' });
       await expect(
         store.saveMessages({
           messages: [message],
@@ -1208,9 +1289,7 @@ describe('D1Store', () => {
       await store.saveThread({ thread });
 
       // Test with various malformed data
-      const malformedMessage = createSampleMessage(thread.id, [
-        { type: 'text' as const, text: ''.padStart(1024 * 1024, 'x') },
-      ]);
+      const malformedMessage = createSampleMessageV2({ threadId: thread.id, content: ''.padStart(1024 * 1024, 'x') });
 
       await store.saveMessages({ messages: [malformedMessage], format: 'v2' });
 
@@ -1248,6 +1327,542 @@ describe('D1Store', () => {
       const retrieved = await store.getThreadById({ threadId: thread.id });
 
       expect(retrieved?.title).toBe(thread.title);
+    });
+  });
+
+  describe('alterTable', () => {
+    const TEST_TABLE = 'test_alter_table';
+    const BASE_SCHEMA = {
+      id: { type: 'integer', primaryKey: true, nullable: false },
+      name: { type: 'text', nullable: true },
+    } as Record<string, StorageColumn>;
+
+    beforeEach(async () => {
+      await store.createTable({ tableName: TEST_TABLE as TABLE_NAMES, schema: BASE_SCHEMA });
+    });
+
+    afterEach(async () => {
+      await store.clearTable({ tableName: TEST_TABLE as TABLE_NAMES });
+    });
+
+    it('adds a new column to an existing table', async () => {
+      await store.alterTable({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        schema: { ...BASE_SCHEMA, age: { type: 'integer', nullable: true } },
+        ifNotExists: ['age'],
+      });
+
+      await store.insert({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        record: { id: 1, name: 'Alice', age: 42 },
+      });
+
+      const row = await store.load<{ id: string; name: string; age?: number }>({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        keys: { id: '1' },
+      });
+      expect(row?.age).toBe(42);
+    });
+
+    it('is idempotent when adding an existing column', async () => {
+      await store.alterTable({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        schema: { ...BASE_SCHEMA, foo: { type: 'text', nullable: true } },
+        ifNotExists: ['foo'],
+      });
+      // Add the column again (should not throw)
+      await expect(
+        store.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, foo: { type: 'text', nullable: true } },
+          ifNotExists: ['foo'],
+        }),
+      ).resolves.not.toThrow();
+    });
+
+    it('should add a default value to a column when using not null', async () => {
+      await store.insert({
+        tableName: TEST_TABLE as TABLE_NAMES,
+        record: { id: 1, name: 'Bob' },
+      });
+
+      await expect(
+        store.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, text_column: { type: 'text', nullable: false } },
+          ifNotExists: ['text_column'],
+        }),
+      ).resolves.not.toThrow();
+
+      await expect(
+        store.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, timestamp_column: { type: 'timestamp', nullable: false } },
+          ifNotExists: ['timestamp_column'],
+        }),
+      ).resolves.not.toThrow();
+
+      await expect(
+        store.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, bigint_column: { type: 'bigint', nullable: false } },
+          ifNotExists: ['bigint_column'],
+        }),
+      ).resolves.not.toThrow();
+
+      await expect(
+        store.alterTable({
+          tableName: TEST_TABLE as TABLE_NAMES,
+          schema: { ...BASE_SCHEMA, jsonb_column: { type: 'jsonb', nullable: false } },
+          ifNotExists: ['jsonb_column'],
+        }),
+      ).resolves.not.toThrow();
+    });
+  });
+});
+
+describe('D1Store Pagination Features', () => {
+  let store: D1Store;
+
+  beforeAll(async () => {
+    const mf = new Miniflare({
+      modules: true,
+      script: 'export default {};',
+      d1Databases: { PAGINATION_TEST_DB: ':memory:' },
+    });
+    const d1PaginationDb = await mf.getD1Database('PAGINATION_TEST_DB');
+    store = new D1Store({
+      binding: d1PaginationDb,
+      tablePrefix: 'pgtest_',
+    });
+    await store.init();
+  });
+
+  beforeEach(async () => {
+    await store.clearTable({ tableName: TABLE_EVALS });
+    await store.clearTable({ tableName: TABLE_TRACES });
+    await store.clearTable({ tableName: TABLE_MESSAGES });
+    await store.clearTable({ tableName: TABLE_THREADS });
+  });
+
+  describe('getEvals with pagination', () => {
+    it('should return paginated evals with total count (page/perPage)', async () => {
+      const agentName = 'd1-pagination-agent-evals';
+      const evalRecords = Array.from({ length: 25 }, (_, i) => createSampleEval(agentName, i % 2 === 0));
+      // D1Store's batchInsert expects records to be processed (dates to ISO strings, objects to JSON strings)
+      const processedRecords = evalRecords.map(r => store['processRecord'](r as any));
+      await store.batchInsert({ tableName: TABLE_EVALS, records: await Promise.all(processedRecords) });
+
+      const page1 = await store.getEvals({ agentName, page: 0, perPage: 10 });
+      expect(page1.evals).toHaveLength(10);
+      expect(page1.total).toBe(25);
+      expect(page1.page).toBe(0);
+      expect(page1.perPage).toBe(10);
+      expect(page1.hasMore).toBe(true);
+
+      const page3 = await store.getEvals({ agentName, page: 2, perPage: 10 });
+      expect(page3.evals).toHaveLength(5);
+      expect(page3.total).toBe(25);
+      expect(page3.page).toBe(2);
+      expect(page3.perPage).toBe(10);
+      expect(page3.hasMore).toBe(false);
+    });
+
+    it('should support page/perPage pagination for getEvals', async () => {
+      const agentName = 'd1-pagination-lo-evals';
+      const evalRecords = Array.from({ length: 15 }, () => createSampleEval(agentName));
+      const processedRecords = evalRecords.map(r => store['processRecord'](r as any));
+      await store.batchInsert({ tableName: TABLE_EVALS, records: await Promise.all(processedRecords) });
+
+      // page 2 with 5 per page (0-indexed) would be records 10-14
+      const result = await store.getEvals({ agentName, page: 2, perPage: 5 });
+      expect(result.evals).toHaveLength(5);
+      expect(result.total).toBe(15);
+      expect(result.page).toBe(2);
+      expect(result.perPage).toBe(5);
+      expect(result.hasMore).toBe(false); // total is 15, 2*5+5 = 15, no more records
+    });
+
+    it('should filter by type with pagination for getEvals', async () => {
+      const agentName = 'd1-pagination-type-evals';
+      const testEvals = Array.from({ length: 10 }, () => createSampleEval(agentName, true));
+      const liveEvals = Array.from({ length: 8 }, () => createSampleEval(agentName, false));
+      const processedTestEvals = testEvals.map(r => store['processRecord'](r as any));
+      const processedLiveEvals = liveEvals.map(r => store['processRecord'](r as any));
+      await store.batchInsert({
+        tableName: TABLE_EVALS,
+        records: await Promise.all([...processedTestEvals, ...processedLiveEvals]),
+      });
+
+      const testResults = await store.getEvals({ agentName, type: 'test', page: 0, perPage: 5 });
+      expect(testResults.evals).toHaveLength(5);
+      expect(testResults.total).toBe(10);
+      expect(testResults.hasMore).toBe(true);
+
+      const liveResults = await store.getEvals({ agentName, type: 'live', page: 1, perPage: 3 });
+      expect(liveResults.evals).toHaveLength(3); // 8 total, page 0 gets 3, page 1 gets 3, page 2 gets 2
+      expect(liveResults.total).toBe(8);
+      expect(liveResults.hasMore).toBe(true); // 3*1 + 3 < 8
+
+      const liveResultsPage2 = await store.getEvals({ agentName, type: 'live', page: 2, perPage: 3 });
+      expect(liveResultsPage2.evals).toHaveLength(2);
+      expect(liveResultsPage2.total).toBe(8);
+      expect(liveResultsPage2.hasMore).toBe(false);
+    });
+
+    it('should filter by date with pagination for getEvals', async () => {
+      const agentName = 'd1-pagination-date-evals';
+      const now = new Date();
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const dayBeforeYesterday = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+
+      const recordsToInsert = [
+        createSampleEval(agentName, false, dayBeforeYesterday),
+        createSampleEval(agentName, false, dayBeforeYesterday),
+        createSampleEval(agentName, false, yesterday),
+        createSampleEval(agentName, false, yesterday),
+        createSampleEval(agentName, false, now),
+        createSampleEval(agentName, false, now),
+      ];
+      const processedRecords = recordsToInsert.map(r => store['processRecord'](r as any));
+      await store.batchInsert({ tableName: TABLE_EVALS, records: await Promise.all(processedRecords) });
+
+      const fromYesterday = await store.getEvals({ agentName, fromDate: yesterday, page: 0, perPage: 3 });
+      expect(fromYesterday.total).toBe(4); // 2 from now, 2 from yesterday
+      expect(fromYesterday.evals).toHaveLength(3);
+      fromYesterday.evals.forEach(
+        e =>
+          expect(new Date(e.createdAt).getTime()).toBeGreaterThanOrEqual(
+            new Date(yesterday.toISOString().split('T')[0]).getTime(),
+          ), // Compare date part only for safety with TZ
+      );
+      if (fromYesterday.evals.length > 0) {
+        expect(new Date(fromYesterday.evals[0].createdAt).toISOString().slice(0, 10)).toEqual(
+          now.toISOString().slice(0, 10),
+        );
+      }
+
+      const onlyDayBefore = await store.getEvals({
+        agentName,
+        toDate: new Date(yesterday.getTime() - 1), //  Should only include dayBeforeYesterday
+        page: 0,
+        perPage: 5,
+      });
+      expect(onlyDayBefore.total).toBe(2);
+      expect(onlyDayBefore.evals).toHaveLength(2);
+      onlyDayBefore.evals.forEach(e =>
+        expect(new Date(e.createdAt).toISOString().slice(0, 10)).toEqual(dayBeforeYesterday.toISOString().slice(0, 10)),
+      );
+    });
+  });
+
+  describe('getTraces with pagination', () => {
+    it('should return paginated traces with total count', async () => {
+      const scope = 'd1-test-scope-traces';
+      const traceRecords = Array.from({ length: 18 }, (_, i) => createSampleTraceForDB(`test-trace-${i}`, scope)); // Using createSampleTraceForDB
+      const processedRecords = traceRecords.map(r => store['processRecord'](r as any));
+      await store.batchInsert({ tableName: TABLE_TRACES, records: await Promise.all(processedRecords) });
+
+      const page1 = await store.getTracesPaginated({
+        scope,
+        page: 0,
+        perPage: 8,
+      });
+      expect(page1.traces).toHaveLength(8);
+      expect(page1.total).toBe(18);
+      expect(page1.page).toBe(0);
+      expect(page1.perPage).toBe(8);
+      expect(page1.hasMore).toBe(true);
+
+      const page3 = await store.getTracesPaginated({
+        scope,
+        page: 2, // 0-indexed, so this is the 3rd page
+        perPage: 8,
+      });
+      expect(page3.traces).toHaveLength(2); // 18 items, 8 per page. Page 0: 8, Page 1: 8, Page 2: 2
+
+      console.log(page3.traces);
+      expect(page3.total).toBe(18);
+      expect(page3.page).toBe(2);
+      expect(page3.perPage).toBe(8);
+      expect(page3.hasMore).toBe(false);
+    });
+
+    it('should return an array of traces for the non-paginated method', async () => {
+      const scope = 'd1-array-traces';
+      const traceRecords = [createSampleTraceForDB('trace-arr-1', scope), createSampleTraceForDB('trace-arr-2', scope)];
+      const processedRecords = traceRecords.map(r => store['processRecord'](r as any));
+      await store.batchInsert({ tableName: TABLE_TRACES, records: await Promise.all(processedRecords) });
+
+      const tracesDefault = await store.getTraces({
+        scope,
+        page: 0,
+        perPage: 5,
+      });
+      expect(Array.isArray(tracesDefault)).toBe(true);
+      expect(tracesDefault.length).toBe(2);
+      // @ts-expect-error Ensure no pagination properties on the array
+      expect(tracesDefault.total).toBeUndefined();
+    });
+
+    it('should filter by attributes with pagination for getTracesPaginated', async () => {
+      const scope = 'd1-attr-traces';
+      const tracesWithAttr = Array.from({ length: 8 }, (_, i) =>
+        createSampleTraceForDB(`trace-prod-${i}`, scope, { environment: 'prod' }),
+      );
+      const tracesWithoutAttr = Array.from({ length: 5 }, (_, i) =>
+        createSampleTraceForDB(`trace-dev-${i}`, scope, { environment: 'dev' }),
+      );
+      const processedWithAttr = tracesWithAttr.map(r => store['processRecord'](r as any));
+      const processedWithoutAttr = tracesWithoutAttr.map(r => store['processRecord'](r as any));
+      await store.batchInsert({
+        tableName: TABLE_TRACES,
+        records: await Promise.all([...processedWithAttr, ...processedWithoutAttr]),
+      });
+
+      const prodTraces = await store.getTracesPaginated({
+        scope,
+        attributes: { environment: 'prod' },
+        page: 0,
+        perPage: 5,
+      });
+      expect(prodTraces.traces).toHaveLength(5);
+      expect(prodTraces.total).toBe(8);
+      expect(prodTraces.hasMore).toBe(true);
+    });
+
+    it('should filter by date with pagination for getTracesPaginated', async () => {
+      const scope = 'd1-date-traces';
+      const now = new Date();
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const dayBeforeYesterday = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+
+      const recordsToInsert = [
+        createSampleTraceForDB('t_dbf1', scope, undefined, dayBeforeYesterday),
+        createSampleTraceForDB('t_dbf2', scope, undefined, dayBeforeYesterday),
+        createSampleTraceForDB('t_y1', scope, undefined, yesterday),
+        createSampleTraceForDB('t_y3', scope, undefined, yesterday),
+        createSampleTraceForDB('t_n1', scope, undefined, now),
+        createSampleTraceForDB('t_n2', scope, undefined, now),
+      ];
+      const processedRecords = recordsToInsert.map(r => store['processRecord'](r as any));
+      await store.batchInsert({ tableName: TABLE_TRACES, records: await Promise.all(processedRecords) });
+
+      const fromYesterday = await store.getTracesPaginated({
+        scope,
+        fromDate: yesterday,
+        page: 0,
+        perPage: 3,
+      });
+      expect(fromYesterday.total).toBe(4); // 2 from now, 2 from yesterday
+      expect(fromYesterday.traces).toHaveLength(3); // Should get 2 from 'now', 1 from 'yesterday' (DESC order)
+      fromYesterday.traces.forEach(t =>
+        expect(new Date(t.createdAt).getTime()).toBeGreaterThanOrEqual(
+          new Date(yesterday.toISOString().split('T')[0]).getTime(),
+        ),
+      );
+      if (fromYesterday.traces.length > 0) {
+        // startTime is used for ordering, createdAt for filtering generally
+        expect(new Date(fromYesterday.traces[0].createdAt).toISOString().slice(0, 10)).toEqual(
+          now.toISOString().slice(0, 10),
+        );
+      }
+
+      const onlyNow = await store.getTracesPaginated({
+        scope,
+        fromDate: now,
+        toDate: now, // Ensure toDate is inclusive of the 'now' timestamp for D1
+        page: 0,
+        perPage: 5,
+      });
+      expect(onlyNow.total).toBe(2);
+      expect(onlyNow.traces).toHaveLength(2);
+      onlyNow.traces.forEach(t =>
+        expect(new Date(t.createdAt).toISOString().slice(0, 10)).toEqual(now.toISOString().slice(0, 10)),
+      );
+    });
+  });
+
+  describe('getMessages with pagination', () => {
+    it('should return paginated messages with total count', async () => {
+      const threadData = createSampleThread();
+      const thread = await store.saveThread({ thread: threadData as StorageThreadType });
+      const now = new Date();
+      const yesterday = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() - 1,
+        now.getHours(),
+        now.getMinutes(),
+        now.getSeconds(),
+      );
+      const dayBeforeYesterday = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() - 2,
+        now.getHours(),
+        now.getMinutes(),
+        now.getSeconds(),
+      );
+
+      // Ensure timestamps are distinct for reliable sorting by creating them with a slight delay for testing clarity
+      const messagesToSave: MastraMessageV2[] = [];
+      messagesToSave.push({
+        ...createSampleMessageV2({ threadId: thread.id, content: 'dayBefore1', createdAt: dayBeforeYesterday }),
+        role: 'user',
+      });
+      await new Promise(r => setTimeout(r, 5));
+      messagesToSave.push({
+        ...createSampleMessageV2({
+          threadId: thread.id,
+          content: 'dayBefore2',
+          createdAt: new Date(dayBeforeYesterday.getTime() + 1),
+        }),
+        role: 'user',
+      });
+      await new Promise(r => setTimeout(r, 5));
+      messagesToSave.push({
+        ...createSampleMessageV2({ threadId: thread.id, content: 'yesterday1', createdAt: yesterday }),
+        role: 'user',
+      });
+      await new Promise(r => setTimeout(r, 5));
+      messagesToSave.push({
+        ...createSampleMessageV2({
+          threadId: thread.id,
+          content: 'yesterday2',
+          createdAt: new Date(yesterday.getTime() + 1),
+        }),
+        role: 'user',
+      });
+      await new Promise(r => setTimeout(r, 5));
+      messagesToSave.push({
+        ...createSampleMessageV2({ threadId: thread.id, content: 'now1', createdAt: now }),
+        role: 'user',
+      });
+      await new Promise(r => setTimeout(r, 5));
+      messagesToSave.push({
+        ...createSampleMessageV2({ threadId: thread.id, content: 'now2', createdAt: new Date(now.getTime() + 1) }),
+        role: 'user',
+      });
+
+      await store.saveMessages({ messages: messagesToSave, format: 'v2' });
+      // Total 6 messages: 2 now, 2 yesterday, 2 dayBeforeYesterday (oldest to newest)
+
+      const fromYesterdayResult = await store.getMessagesPaginated({
+        threadId: thread.id,
+        selectBy: {
+          pagination: {
+            dateRange: {
+              start: yesterday,
+            },
+            page: 0,
+            perPage: 3,
+          },
+        },
+        format: 'v2',
+      });
+      expect(fromYesterdayResult.total).toBe(4); // 2 from now, 2 from yesterday
+      expect(fromYesterdayResult.messages).toHaveLength(3);
+      // DB (DESC): now2, now1, yesterday2. (yesterday1 is next page if limit 3)
+      // MessageList sorts ASC: yesterday2, now1, now2.
+      expect(new Date(fromYesterdayResult.messages[0].createdAt).toISOString().slice(0, 10)).toEqual(
+        yesterday.toISOString().slice(0, 10),
+      );
+      expect(new Date(fromYesterdayResult.messages[1].createdAt).toISOString().slice(0, 10)).toEqual(
+        now.toISOString().slice(0, 10),
+      );
+      expect(new Date(fromYesterdayResult.messages[2].createdAt).toISOString().slice(0, 10)).toEqual(
+        now.toISOString().slice(0, 10),
+      );
+
+      const onlyDayBefore = await store.getMessagesPaginated({
+        threadId: thread.id,
+        selectBy: {
+          pagination: {
+            dateRange: {
+              end: new Date(yesterday.getTime() - 1),
+            },
+            page: 0,
+            perPage: 5,
+          },
+        },
+        format: 'v2',
+      });
+      expect(onlyDayBefore.total).toBe(2);
+      expect(onlyDayBefore.messages).toHaveLength(2);
+      onlyDayBefore.messages.forEach(m =>
+        expect(new Date(m.createdAt).toISOString().slice(0, 10)).toEqual(dayBeforeYesterday.toISOString().slice(0, 10)),
+      );
+    });
+
+    it('should maintain backward compatibility for getMessages (no pagination params)', async () => {
+      const threadData = createSampleThread();
+      const thread = await store.saveThread({ thread: threadData as StorageThreadType });
+      const msg1 = createSampleMessageV2({ threadId: thread.id, createdAt: new Date(Date.now() - 1000) });
+      const msg2 = createSampleMessageV2({ threadId: thread.id, createdAt: new Date() });
+      await store.saveMessages({ messages: [msg1, msg2] as any as MastraMessageV2[], format: 'v2' });
+
+      const messages = await store.getMessages({ threadId: thread.id, format: 'v2' });
+      expect(Array.isArray(messages)).toBe(true);
+      expect(messages.length).toBe(2);
+      // Non-paginated path sorts ASC by createdAt
+      expect(messages[0].id).toBe(msg1.id);
+      expect(messages[1].id).toBe(msg2.id);
+      // @ts-expect-error
+      expect(messages.total).toBeUndefined();
+    });
+  });
+
+  describe('getThreadsByResourceId with pagination', () => {
+    it('should return paginated threads with total count', async () => {
+      const resourceId = `d1-paginated-resource-${randomUUID()}`;
+      const threadRecords: StorageThreadType[] = [];
+      for (let i = 0; i < 17; i++) {
+        // Introduce a small delay to ensure createdAt timestamps are distinct
+        await new Promise(resolve => setTimeout(resolve, 5));
+        const threadData = createSampleThread();
+        threadData.resourceId = resourceId;
+        threadRecords.push(threadData as StorageThreadType);
+      }
+      // Save threads one by one, which should also help with timestamp distinctness
+      for (const tr of threadRecords) {
+        await store.saveThread({ thread: tr });
+      }
+
+      const page1 = await store.getThreadsByResourceIdPaginated({ resourceId, page: 0, perPage: 7 });
+      expect(page1.threads).toHaveLength(7);
+      expect(page1.total).toBe(17);
+      expect(page1.page).toBe(0);
+      expect(page1.perPage).toBe(7);
+      expect(page1.hasMore).toBe(true);
+      expect(page1.threads[0].id).toBe(threadRecords[16].id);
+
+      const page3 = await store.getThreadsByResourceIdPaginated({ resourceId, page: 2, perPage: 7 });
+      expect(page3.threads).toHaveLength(3);
+      expect(page3.total).toBe(17);
+      expect(page3.page).toBe(2);
+      expect(page3.perPage).toBe(7);
+      expect(page3.hasMore).toBe(false);
+      expect(page3.threads[0].id).toBe(threadRecords[2].id);
+    });
+
+    it('should return array when no pagination params for getThreadsByResourceId (backward compatibility)', async () => {
+      const resourceId = `d1-non-paginated-resource-${randomUUID()}`;
+      const threadData = createSampleThread();
+      threadData.resourceId = resourceId;
+      await store.saveThread({ thread: threadData as StorageThreadType });
+
+      const threads = await store.getThreadsByResourceId({ resourceId });
+      expect(Array.isArray(threads)).toBe(true);
+      expect(threads.length).toBe(1);
+      // @ts-expect-error
+      expect(threads.total).toBeUndefined();
+      // @ts-expect-error
+      expect(threads.page).toBeUndefined();
+      // @ts-expect-error
+      expect(threads.perPage).toBeUndefined();
+      // @ts-expect-error
+      expect(threads.hasMore).toBeUndefined();
     });
   });
 });

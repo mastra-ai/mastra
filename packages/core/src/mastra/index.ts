@@ -196,6 +196,7 @@ export class Mastra<
         }
 
         server.__registerMastra(this);
+        server.__setLogger(this.getLogger());
       });
     }
 
@@ -586,7 +587,25 @@ do:
     });
   }
 
-  public async getLogsByRunId({ runId, transportId }: { runId: string; transportId: string }) {
+  public async getLogsByRunId({
+    runId,
+    transportId,
+    fromDate,
+    toDate,
+    logLevel,
+    filters,
+    page,
+    perPage,
+  }: {
+    runId: string;
+    transportId: string;
+    fromDate?: Date;
+    toDate?: Date;
+    logLevel?: LogLevel;
+    filters?: Record<string, any>;
+    page?: number;
+    perPage?: number;
+  }) {
     if (!transportId) {
       throw new Error('Transport ID is required');
     }
@@ -595,10 +614,29 @@ do:
       throw new Error('Logger is not set');
     }
 
-    return await this.#logger.getLogsByRunId({ runId, transportId });
+    return await this.#logger.getLogsByRunId({
+      runId,
+      transportId,
+      fromDate,
+      toDate,
+      logLevel,
+      filters,
+      page,
+      perPage,
+    });
   }
 
-  public async getLogs(transportId: string) {
+  public async getLogs(
+    transportId: string,
+    params?: {
+      fromDate?: Date;
+      toDate?: Date;
+      logLevel?: LogLevel;
+      filters?: Record<string, any>;
+      page?: number;
+      perPage?: number;
+    },
+  ) {
     if (!transportId) {
       throw new Error('Transport ID is required');
     }
@@ -607,9 +645,7 @@ do:
       throw new Error('Logger is not set');
     }
 
-    console.log(this.#logger);
-
-    return await this.#logger.getLogs(transportId);
+    return await this.#logger.getLogs(transportId, params);
   }
 
   /**

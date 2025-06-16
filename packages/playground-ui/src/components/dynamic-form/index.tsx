@@ -11,10 +11,12 @@ import { Icon } from '@/ds/icons';
 
 interface DynamicFormProps<T extends z.ZodSchema> {
   schema: T;
-  onSubmit: (values: z.infer<T>) => void | Promise<void>;
+  onSubmit?: (values: z.infer<T>) => void | Promise<void>;
   defaultValues?: z.infer<T>;
   isSubmitLoading?: boolean;
   submitButtonLabel?: string;
+  className?: string;
+  readOnly?: boolean;
 }
 
 function isEmptyZodObject(schema: unknown): boolean {
@@ -30,6 +32,8 @@ export function DynamicForm<T extends z.ZodSchema>({
   defaultValues,
   isSubmitLoading,
   submitButtonLabel,
+  className,
+  readOnly,
 }: DynamicFormProps<T>) {
   if (!schema) {
     console.error('no form schema found');
@@ -51,24 +55,25 @@ export function DynamicForm<T extends z.ZodSchema>({
   const formProps: ExtendableAutoFormProps<z.infer<T>> = {
     schema: schemaProvider,
     onSubmit: async values => {
-      await onSubmit(values?.['\u200B'] || {});
+      await onSubmit?.(values?.['\u200B'] || {});
     },
     defaultValues: defaultValues ? { '\u200B': defaultValues } : undefined,
     formProps: {
       className: '',
     },
     uiComponents: {
-      SubmitButton: ({ children }) => (
-        <Button variant="light" className="w-full" size="lg" disabled={isSubmitLoading}>
-          {isSubmitLoading ? (
-            <Icon>
-              <Loader2 className="animate-spin" />
-            </Icon>
-          ) : (
-            submitButtonLabel || children
-          )}
-        </Button>
-      ),
+      SubmitButton: ({ children }) =>
+        onSubmit ? (
+          <Button variant="light" className="w-full" size="lg" disabled={isSubmitLoading}>
+            {isSubmitLoading ? (
+              <Icon>
+                <Loader2 className="animate-spin" />
+              </Icon>
+            ) : (
+              submitButtonLabel || children
+            )}
+          </Button>
+        ) : null,
     },
     formComponents: {
       Label: ({ value }) => <Label className="text-sm font-normal">{value}</Label>,
@@ -76,9 +81,5 @@ export function DynamicForm<T extends z.ZodSchema>({
     withSubmit: true,
   };
 
-  return (
-    <div className="h-full w-full">
-      <AutoForm {...formProps} />
-    </div>
-  );
+  return <AutoForm {...formProps} readOnly={readOnly} />;
 }

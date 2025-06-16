@@ -1,8 +1,9 @@
 import { processDataStream } from '@ai-sdk/ui-utils';
-import type { GenerateReturn } from '@mastra/core';
+import { type GenerateReturn } from '@mastra/core';
 import type { JSONSchema7 } from 'json-schema';
 import { ZodSchema } from 'zod';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
+import { processClientTools } from '../utils/process-client-tools';
 
 import type {
   GenerateParams,
@@ -105,6 +106,15 @@ export class Agent extends BaseResource {
    * @returns Promise containing the generated response
    */
   generate<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
+    params: GenerateParams<T> & { output?: never; experimental_output?: never },
+  ): Promise<GenerateReturn<T>>;
+  generate<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
+    params: GenerateParams<T> & { output: T; experimental_output?: never },
+  ): Promise<GenerateReturn<T>>;
+  generate<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
+    params: GenerateParams<T> & { output?: never; experimental_output: T },
+  ): Promise<GenerateReturn<T>>;
+  generate<T extends JSONSchema7 | ZodSchema | undefined = undefined>(
     params: GenerateParams<T>,
   ): Promise<GenerateReturn<T>> {
     const processedParams = {
@@ -112,6 +122,7 @@ export class Agent extends BaseResource {
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
       runtimeContext: parseClientRuntimeContext(params.runtimeContext),
+      clientTools: processClientTools(params.clientTools),
     };
 
     return this.request(`/api/agents/${this.agentId}/generate`, {
@@ -137,6 +148,7 @@ export class Agent extends BaseResource {
       output: params.output ? zodToJsonSchema(params.output) : undefined,
       experimental_output: params.experimental_output ? zodToJsonSchema(params.experimental_output) : undefined,
       runtimeContext: parseClientRuntimeContext(params.runtimeContext),
+      clientTools: processClientTools(params.clientTools),
     };
 
     const response: Response & {
