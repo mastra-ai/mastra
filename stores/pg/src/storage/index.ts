@@ -311,7 +311,7 @@ export class PostgresStore extends MastraStorage {
               WHERE schema_name = $1
             )
           `,
-            [this.getSchemaName()],
+            [this.schema],
           );
 
           if (!schemaExists?.exists) {

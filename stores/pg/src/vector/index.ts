@@ -291,7 +291,7 @@ export class PgVector extends MastraVector {
               WHERE schema_name = $1
             )
           `,
-            [this.getSchemaName()],
+            [this.schema],
           );
 
           const schemaExists = schemaCheck.rows[0].exists;
@@ -344,7 +344,7 @@ export class PgVector extends MastraVector {
     }
 
     const indexCacheKey = await this.getIndexCacheKey({ indexName, dimension, type: indexConfig.type, metric });
-    if (this.cachedIndexExists(tableName, indexCacheKey)) {
+    if (this.cachedIndexExists(indexName, indexCacheKey)) {
       // we already saw this index get created since the process started, no need to recreate it
       return;
     }
@@ -352,7 +352,7 @@ export class PgVector extends MastraVector {
     const mutex = this.getMutexByName(`create-${indexName}`);
     // Use async-mutex instead of advisory lock for perf (over 2x as fast)
     await mutex.runExclusive(async () => {
-      if (this.cachedIndexExists(tableName, indexCacheKey)) {
+      if (this.cachedIndexExists(indexName, indexCacheKey)) {
         // this may have been created while we were waiting to acquire a lock
         return;
       }
