@@ -9,7 +9,7 @@ importers:
   .:
     devDependencies:
       globby:
-        specifier: ^14.0.1
+        specifier: ^14.1.0
         version: 14.1.0
       resolve.exports:
         specifier: ^2.0.3

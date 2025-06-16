@@ -18,7 +18,7 @@
   "major": {
     "dependencyDashboardApproval": true
   },
-  "ignorePaths": ["docs/**", "packages/memory/integration-tests/**", "explorations/**"],
+  "ignorePaths": ["docs/**", "packages/memory/integration-tests/**", "explorations/**", ".github/scripts"],
   "packageRules": [
     {
       "matchDepTypes": ["engines"],
@@ -58,6 +58,7 @@
       "matchFileNames": ["e2e-tests/**/package.json"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "dependencyDashboardApproval": false,
+      "automerge": true,
       "enabled": true
     },
     {
@@ -78,6 +79,7 @@
       "matchUpdateTypes": ["major", "minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "dependencyDashboardApproval": false,
+      "automerge": true,
       "enabled": true
     },
     {
@@ -96,6 +98,7 @@
       "matchUpdateTypes": ["major", "minor", "patch"],
       "matchDepTypes": ["devDependencies"],
       "matchPackageNames": ["vitest", "@vitest/*"],
+      "automerge": true,
       "enabled": true
     },
     {
@@ -142,6 +145,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -177,6 +181,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -212,6 +217,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -247,6 +253,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -282,6 +289,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -317,6 +325,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -352,6 +361,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -387,6 +397,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -422,6 +433,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -457,6 +469,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -492,6 +505,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -527,6 +541,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -562,6 +577,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -597,6 +613,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -632,6 +649,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -667,6 +685,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -702,6 +721,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -737,6 +757,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -772,6 +793,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -807,6 +829,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -842,6 +865,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -877,6 +901,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -912,6 +937,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -947,6 +973,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -982,6 +1009,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1017,6 +1045,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1052,6 +1081,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1087,6 +1117,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1122,6 +1153,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1157,6 +1189,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1192,6 +1225,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1227,6 +1261,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1262,6 +1297,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1297,6 +1333,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1332,6 +1369,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1367,6 +1405,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1402,6 +1441,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1437,6 +1477,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1472,6 +1513,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1507,6 +1549,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1542,6 +1585,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1577,6 +1621,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1612,6 +1657,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1647,6 +1693,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1659,6 +1706,42 @@
       "dependencyDashboardApproval": true
     },
     {
+      "groupName": "Mastra voice-gladia",
+      "commitMessageTopic": "Mastra voice-gladia",
+      "matchFileNames": ["voice/gladia/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchPackageNames": [
+        "*",
+        "!@microsoft/api-extractor",
+        "!tsup",
+        "!rollup",
+        "!eslint",
+        "!prettier",
+        "!typescript",
+        "!vitest",
+        "!@types/node",
+        "!dotenv",
+        "!zod",
+        "!json-schema",
+        "!zod-to-json-schema",
+        "!@vitest/*",
+        "!cloudflare",
+        "!miniflare"
+      ],
+      "matchCurrentVersion": "!/^0/",
+      "enabled": true
+    },
+    {
+      "groupName": "Mastra voice-gladia",
+      "commitMessageTopic": "Mastra voice-gladia",
+      "matchFileNames": ["voice/gladia/package.json"],
+      "matchUpdateTypes": ["major"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "enabled": true,
+      "dependencyDashboardApproval": true
+    },
+    {
       "groupName": "Mastra voice-google",
       "commitMessageTopic": "Mastra voice-google",
       "matchFileNames": ["voice/google/package.json"],
@@ -1682,6 +1765,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1717,6 +1801,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1752,6 +1837,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1787,6 +1873,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1822,6 +1909,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1857,6 +1945,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1892,6 +1981,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1927,6 +2017,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1962,6 +2053,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -1997,6 +2089,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2032,6 +2125,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2067,6 +2161,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2102,6 +2197,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2137,6 +2233,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2172,6 +2269,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2207,6 +2305,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2242,6 +2341,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2277,6 +2377,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2312,6 +2413,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2347,6 +2449,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2382,6 +2485,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2417,6 +2521,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2452,6 +2557,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2487,6 +2593,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2522,6 +2629,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2557,6 +2665,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2592,6 +2701,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2627,6 +2737,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2662,6 +2773,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2697,6 +2809,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2732,6 +2845,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2767,6 +2881,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2802,6 +2917,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2837,6 +2953,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2872,6 +2989,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2907,6 +3025,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2942,6 +3061,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -2977,6 +3097,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -3012,6 +3133,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
@@ -3047,6 +3169,7 @@
         "!cloudflare",
         "!miniflare"
       ],
+      "matchCurrentVersion": "!/^0/",
       "enabled": true
     },
     {
