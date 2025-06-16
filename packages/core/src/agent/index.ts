@@ -557,12 +557,16 @@ export class Agent<
     memoryConfig,
     resourceId,
     runId,
+    userMessages,
+    systemMessage,
     messageList = new MessageList({ threadId, resourceId }),
   }: {
     resourceId: string;
     threadId: string;
     thread?: StorageThreadType;
     memoryConfig?: MemoryConfig;
+    userMessages?: CoreMessage[];
+    systemMessage?: CoreMessage;
     runId?: string;
     messageList: MessageList;
   }) {
@@ -574,6 +578,14 @@ export class Agent<
         // If no thread, nothing to fetch from memory.
         // The messageList already contains the current user messages and system message.
         return { threadId: threadId || '' };
+      }
+
+      if (userMessages) {
+        messageList.add(userMessages, 'memory');
+      }
+
+      if (systemMessage && systemMessage.role === 'system') {
+        messageList.addSystem(systemMessage, 'memory');
       }
 
       const [memoryMessages, memorySystemMessage] =
@@ -603,25 +615,29 @@ export class Agent<
 
       messageList.add(memoryMessages, 'memory');
 
-      const systemMessage =
+      const systemMessages =
         messageList
           .getSystemMessages()
           ?.map(m => m.content)
           ?.join(`\n`) ?? undefined;
+
+      const newMessages = messageList.get.input.v1() as CoreMessage[];
 
       const processedMemoryMessages = memory.processMessages({
         // these will be processed
         messages: messageList.get.remembered.v1() as CoreMessage[],
         // these are here for inspecting but shouldn't be returned by the processor
         // - ex TokenLimiter needs to measure all tokens even though it's only processing remembered messages
-        newMessages: messageList.get.input.v1() as CoreMessage[],
-        systemMessage,
+        newMessages,
+        systemMessage: systemMessages,
         memorySystemMessage: memorySystemMessage || undefined,
       });
 
       return {
         threadId: thread.id,
-        messages: processedMemoryMessages,
+        messages: [...systemMessages, ...processedMemoryMessages, ...newMessages].filter(
+          (message): message is NonNullable<typeof message> => Boolean(message),
+        ),
       };
     }
 
