@@ -292,12 +292,19 @@ export async function streamGenerateHandler({
     });
 
     const streamResponse = rest.output
-      ? streamResult.toTextStreamResponse()
+      ? streamResult.toTextStreamResponse({
+          headers: {
+            'Transfer-Encoding': 'chunked',
+          },
+        })
       : streamResult.toDataStreamResponse({
           sendUsage: true,
           sendReasoning: true,
           getErrorMessage: (error: any) => {
             return `An error occurred while processing your request. ${error instanceof Error ? error.message : JSON.stringify(error)}`;
+          },
+          headers: {
+            'Transfer-Encoding': 'chunked',
           },
         });
 

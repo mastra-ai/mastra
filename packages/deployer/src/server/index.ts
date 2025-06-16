@@ -73,6 +73,8 @@ import { getListenerHandler, getSpeakersHandler, listenHandler, speakHandler } f
 import {
   createWorkflowRunHandler,
   getWorkflowByIdHandler,
+  getWorkflowRunByIdHandler,
+  getWorkflowRunExecutionResultHandler,
   getWorkflowRunsHandler,
   getWorkflowsHandler,
   resumeAsyncWorkflowHandler,
@@ -2335,54 +2337,6 @@ ${err.stack.split('\n').slice(1).join('\n')}
     watchLegacyWorkflowHandler,
   );
 
-  app.post(
-    '/api/workflows/:workflowId/stream',
-    describeRoute({
-      description: 'Stream workflow in real-time',
-      parameters: [
-        {
-          name: 'workflowId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-        {
-          name: 'runId',
-          in: 'query',
-          required: false,
-          schema: { type: 'string' },
-        },
-      ],
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: {
-              type: 'object',
-              properties: {
-                inputData: { type: 'object' },
-                runtimeContext: {
-                  type: 'object',
-                  description: 'Runtime context for the workflow execution',
-                },
-              },
-            },
-          },
-        },
-      },
-      responses: {
-        200: {
-          description: 'vNext workflow run started',
-        },
-        404: {
-          description: 'vNext workflow not found',
-        },
-      },
-      tags: ['vNextWorkflows'],
-    }),
-    streamWorkflowHandler,
-  );
-
   // Workflow routes
   app.get(
     '/api/workflows',
@@ -2448,6 +2402,68 @@ ${err.stack.split('\n').slice(1).join('\n')}
       },
     }),
     getWorkflowRunsHandler,
+  );
+
+  app.get(
+    '/api/workflows/:workflowId/runs/:runId/execution-result',
+    describeRoute({
+      description: 'Get execution result for a workflow run',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Workflow run execution result',
+        },
+        404: {
+          description: 'Workflow run execution result not found',
+        },
+      },
+    }),
+    getWorkflowRunExecutionResultHandler,
+  );
+
+  app.get(
+    '/api/workflows/:workflowId/runs/:runId',
+    describeRoute({
+      description: 'Get workflow run by ID',
+      tags: ['workflows'],
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: {
+          description: 'Workflow run by ID',
+        },
+        404: {
+          description: 'Workflow run not found',
+        },
+      },
+    }),
+    getWorkflowRunByIdHandler,
   );
 
   app.post(
@@ -2537,6 +2553,54 @@ ${err.stack.split('\n').slice(1).join('\n')}
       },
     }),
     resumeAsyncWorkflowHandler,
+  );
+
+  app.post(
+    '/api/workflows/:workflowId/stream',
+    describeRoute({
+      description: 'Stream workflow in real-time',
+      parameters: [
+        {
+          name: 'workflowId',
+          in: 'path',
+          required: true,
+          schema: { type: 'string' },
+        },
+        {
+          name: 'runId',
+          in: 'query',
+          required: false,
+          schema: { type: 'string' },
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                inputData: { type: 'object' },
+                runtimeContext: {
+                  type: 'object',
+                  description: 'Runtime context for the workflow execution',
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: 'workflow run started',
+        },
+        404: {
+          description: 'workflow not found',
+        },
+      },
+      tags: ['workflows'],
+    }),
+    streamWorkflowHandler,
   );
 
   app.post(

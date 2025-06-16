@@ -1,5 +1,29 @@
 # @mastra/deployer
 
+## 0.10.6-alpha.2
+
+### Patch Changes
+
+- ec7f824: Add support to improve lodash imports
+- Updated dependencies [5f67b6f]
+- Updated dependencies [4b0f8a6]
+  - @mastra/server@0.10.6-alpha.2
+  - @mastra/core@0.10.6-alpha.2
+
+## 0.10.6-alpha.1
+
+### Patch Changes
+
+- ee9af57: Add api for polling run execution result and get run by id
+- 3270d9d: Fix runtime context being undefined
+- Updated dependencies [ee9af57]
+- Updated dependencies [3270d9d]
+- Updated dependencies [751c894]
+- Updated dependencies [577ce3a]
+- Updated dependencies [9260b3a]
+  - @mastra/server@0.10.6-alpha.1
+  - @mastra/core@0.10.6-alpha.1
+
 ## 0.10.6-alpha.0
 
 ### Patch Changes
