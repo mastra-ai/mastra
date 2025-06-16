@@ -230,6 +230,8 @@ To fix this you have three different options:
     const exists = this.mcpClientsById.has(name);
     const existingClient = this.mcpClientsById.get(name);
 
+    this.logger.debug(`getConnectedClient ${name} exists: ${exists}`);
+    
     if (exists) {
       // This is just to satisfy Typescript since technically you could have this.mcpClientsById.set('someKey', undefined);
       // Should never reach this point basically we always create a new MastraMCPClient instance when we add to the Map.
@@ -248,6 +250,8 @@ To fix this you have three different options:
       server: config,
       timeout: config.timeout ?? this.defaultTimeout,
     });
+
+    mcpClient.__setLogger(this.logger);
 
     this.mcpClientsById.set(name, mcpClient);
 

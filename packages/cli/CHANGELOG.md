@@ -1,5 +1,61 @@
 # mastra
 
+## 0.10.6-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [4b0f8a6]
+- Updated dependencies [ec7f824]
+  - @mastra/core@0.10.6-alpha.2
+  - @mastra/deployer@0.10.6-alpha.2
+
+## 0.10.6-alpha.2
+
+### Patch Changes
+
+- 143b4e4: Fix globbing of tools to only capture js/ts files
+- 44ba52d: Add proper error message when installation of mastra fails
+- 3270d9d: Fix runtime context being undefined
+- fc677d7: For final result for a workflow
+- Updated dependencies [ee9af57]
+- Updated dependencies [3270d9d]
+- Updated dependencies [751c894]
+- Updated dependencies [577ce3a]
+- Updated dependencies [9260b3a]
+  - @mastra/deployer@0.10.6-alpha.1
+  - @mastra/core@0.10.6-alpha.1
+
+## 0.10.6-alpha.1
+
+### Patch Changes
+
+- 47e7029: Add open browser functionality when running mastra dev
+
+## 0.10.6-alpha.0
+
+### Patch Changes
+
+- 02560d4: lift evals fetching to the playground package instead
+- 63f6b7d: dependencies updates:
+  - Updated dependency [`execa@^9.6.0` ↗︎](https://www.npmjs.com/package/execa/v/9.6.0) (from `^9.5.2`, in `dependencies`)
+  - Updated dependency [`json-schema-to-zod@^2.6.1` ↗︎](https://www.npmjs.com/package/json-schema-to-zod/v/2.6.1) (from `^2.6.0`, in `dependencies`)
+  - Updated dependency [`shell-quote@^1.8.3` ↗︎](https://www.npmjs.com/package/shell-quote/v/1.8.3) (from `^1.8.2`, in `dependencies`)
+  - Updated dependency [`strip-json-comments@^5.0.2` ↗︎](https://www.npmjs.com/package/strip-json-comments/v/5.0.2) (from `^5.0.1`, in `dependencies`)
+  - Updated dependency [`zod@^3.25.57` ↗︎](https://www.npmjs.com/package/zod/v/3.25.57) (from `^3.25.56`, in `dependencies`)
+- 311132e: move useWorkflow to playground instead of playground-ui
+- 906f992: CLI error log
+- 53d3c37: Get workflows from an agent if not found from Mastra instance #5083
+- Updated dependencies [63f6b7d]
+- Updated dependencies [2d12edd]
+- Updated dependencies [63f6b7d]
+- Updated dependencies [63f6b7d]
+- Updated dependencies [36f1c36]
+- Updated dependencies [10d352e]
+- Updated dependencies [53d3c37]
+  - @mastra/core@0.10.6-alpha.0
+  - @mastra/deployer@0.10.6-alpha.0
+  - @mastra/mcp@0.10.4-alpha.0
+
 ## 0.10.5
 
 ### Patch Changes

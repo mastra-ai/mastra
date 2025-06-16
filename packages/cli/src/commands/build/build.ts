@@ -21,7 +21,7 @@ export async function build({
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(rootDir, dir)) : join(rootDir, 'src', 'mastra');
   const outputDirectory = join(rootDir, '.mastra');
 
-  const defaultToolsPath = join(mastraDir, 'tools/**/*');
+  const defaultToolsPath = join(mastraDir, 'tools/**/*.{js,ts}');
   const discoveredTools = [defaultToolsPath, ...(tools ?? [])];
 
   try {
@@ -47,7 +47,7 @@ export async function build({
     logger.info('You can now deploy the .mastra/output directory to your target platform.');
   } catch (error) {
     if (error instanceof Error) {
-      logger.error(`Mastra Build failed`);
+      logger.error(`Mastra Build failed`, { error });
     }
     process.exit(1);
   }

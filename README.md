@@ -58,6 +58,58 @@ npm run dev
 
 If you're using Anthropic, set the `ANTHROPIC_API_KEY`. If you're using Gemini, set the `GOOGLE_GENERATIVE_AI_API_KEY`.
 
+# MCP Server ([@mastra/mcp-docs-server](https://www.npmjs.com/package/@mastra/mcp-docs-server))
+
+Use our MCP server [@mastra/mcp-docs-server](https://www.npmjs.com/package/@mastra/mcp-docs-server) to teach your LLM how to use Mastra.
+
+This is a Model Context Protocol (MCP) server that provides AI assistants with direct access to Mastra.ai's complete knowledge base. 
+
+## In Cursor
+Create or update .cursor/mcp.json in your project root:
+
+### MacOS/Linux
+```
+{
+  "mcpServers": {
+    "mastra": {
+      "command": "npx",
+      "args": ["-y", "@mastra/mcp-docs-server"]
+    }
+  }
+}
+```
+### Windows
+```
+{
+  "mcpServers": {
+    "mastra": {
+      "command": "cmd",
+      "args": ["/c", "npx", "-y", "@mastra/mcp-docs-server"]
+    }
+  }
+}
+```
+
+This will make all Mastra documentation tools available in your Cursor workspace. Note that the MCP server wont be enabled by default. You'll need to go to Cursor settings -> MCP settings and click "enable" on the Mastra MCP server.
+
+## In Windsurf
+Create or update ~/.codeium/windsurf/mcp_config.json:
+
+### MacOS/Linux
+
+```
+{
+  "mcpServers": {
+    "mastra": {
+      "command": "npx",
+      "args": ["-y", "@mastra/mcp-docs-server"]
+    }
+  }
+}
+```
+
+For more installation options visit [https://www.npmjs.com/package/@mastra/mcp-docs-server](https://www.npmjs.com/package/@mastra/mcp-docs-server)
+
 ## Contributing
 
 Looking to contribute? All types of help are appreciated, from coding to testing and feature specification.

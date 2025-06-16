@@ -1,5 +1,20 @@
 # @mastra/firecrawl
 
+## 1.2.4-alpha.0
+
+### Patch Changes
+
+- 63f6b7d: dependencies updates:
+  - Updated dependency [`zod@^3.25.57` ↗︎](https://www.npmjs.com/package/zod/v/3.25.57) (from `^3.25.56`, in `dependencies`)
+- Updated dependencies [63f6b7d]
+- Updated dependencies [63f6b7d]
+- Updated dependencies [36f1c36]
+- Updated dependencies [10d352e]
+- Updated dependencies [53d3c37]
+- Updated dependencies [75136cd]
+  - @mastra/core@0.10.6-alpha.0
+  - @mastra/rag@1.0.0-alpha.0
+
 ## 1.2.3
 
 ### Patch Changes

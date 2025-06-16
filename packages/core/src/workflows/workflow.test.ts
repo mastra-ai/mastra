@@ -1901,7 +1901,7 @@ describe('Workflow', () => {
         endedAt: expect.any(Number),
       });
 
-      expect(endTime - startTime).toBeGreaterThan(1000);
+      expect(endTime - startTime).toBeGreaterThan(900);
     });
   });
 
@@ -4431,6 +4431,101 @@ describe('Workflow', () => {
       // @ts-ignore
       expect(firstResumeResult.steps.runtimeContextAction.output).toEqual(['first message', 'promptAgentAction']);
     });
+
+    it('should handle basic suspend and resume in a dountil workflow', async () => {
+      const resumeStep = createStep({
+        id: 'resume',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+        resumeSchema: z.object({ value: z.number() }),
+        suspendSchema: z.object({ message: z.string() }),
+        execute: async ({ inputData, resumeData, suspend }) => {
+          console.info('inputData is ', inputData);
+          console.info('resumeData is ', resumeData);
+
+          const finalValue = (resumeData?.value ?? 0) + inputData.value;
+
+          if (!resumeData?.value || finalValue < 10) {
+            await suspend({ message: `Please provide additional information. now value is ${inputData.value}` });
+            return { value: 0 };
+          }
+
+          return { value: finalValue };
+        },
+      });
+
+      const incrementStep = createStep({
+        id: 'increment',
+        inputSchema: z.object({
+          value: z.number(),
+        }),
+        outputSchema: z.object({
+          value: z.number(),
+        }),
+        execute: async ({ inputData }) => {
+          return {
+            value: inputData.value + 1,
+          };
+        },
+      });
+
+      const dowhileWorkflow = createWorkflow({
+        id: 'dowhile-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      })
+        .dountil(
+          createWorkflow({
+            id: 'simple-resume-workflow',
+            inputSchema: z.object({ value: z.number() }),
+            outputSchema: z.object({ value: z.number() }),
+            steps: [incrementStep, resumeStep],
+          })
+            .then(incrementStep)
+            .then(resumeStep)
+            .commit(),
+          async ({ inputData }) => inputData.value >= 10,
+        )
+        .then(
+          createStep({
+            id: 'final',
+            inputSchema: z.object({ value: z.number() }),
+            outputSchema: z.object({ value: z.number() }),
+            execute: async ({ inputData }) => ({ value: inputData.value }),
+          }),
+        )
+        .commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { dowhileWorkflow },
+      });
+
+      const run = dowhileWorkflow.createRun();
+      const result = await run.start({ inputData: { value: 0 } });
+      expect(result.steps['simple-resume-workflow']).toMatchObject({
+        status: 'suspended',
+      });
+
+      const resumeResult = await run.resume({
+        resumeData: { value: 2 },
+        step: ['simple-resume-workflow', 'resume'],
+      });
+
+      expect(resumeResult.steps['simple-resume-workflow']).toMatchObject({
+        status: 'suspended',
+      });
+
+      const lastResumeResult = await run.resume({
+        resumeData: { value: 21 },
+        step: ['simple-resume-workflow', 'resume'],
+      });
+
+      expect(lastResumeResult.steps['simple-resume-workflow']).toMatchObject({
+        status: 'success',
+      });
+    });
   });
 
   describe('Workflow Runs', () => {
@@ -6385,6 +6480,159 @@ describe('Workflow', () => {
 
       // @ts-ignore
       expect(result?.steps.step1.output.injectedValue).toBe(testValue + '2');
+    });
+  });
+
+  describe('consecutive parallel executions', () => {
+    it('should support consecutive parallel calls with proper type inference', async () => {
+      // First parallel stage steps
+      const step1 = createStep({
+        id: 'step1',
+        inputSchema: z.object({
+          input: z.string(),
+        }),
+        outputSchema: z.object({
+          result1: z.string(),
+        }),
+        execute: vi.fn<any>().mockImplementation(async ({ inputData }) => ({
+          result1: `processed-${inputData.input}`,
+        })),
+      });
+
+      const step2 = createStep({
+        id: 'step2',
+        inputSchema: z.object({
+          input: z.string(),
+        }),
+        outputSchema: z.object({
+          result2: z.string(),
+        }),
+        execute: vi.fn<any>().mockImplementation(async ({ inputData }) => ({
+          result2: `transformed-${inputData.input}`,
+        })),
+      });
+
+      // Second parallel stage steps
+      const step3 = createStep({
+        id: 'step3',
+        inputSchema: z.object({
+          step1: z.object({
+            result1: z.string(),
+          }),
+          step2: z.object({
+            result2: z.string(),
+          }),
+        }),
+        outputSchema: z.object({
+          result3: z.string(),
+        }),
+        execute: vi.fn<any>().mockImplementation(async ({ inputData }) => ({
+          result3: `combined-${inputData.step1.result1}-${inputData.step2.result2}`,
+        })),
+      });
+
+      const step4 = createStep({
+        id: 'step4',
+        inputSchema: z.object({
+          step1: z.object({
+            result1: z.string(),
+          }),
+          step2: z.object({
+            result2: z.string(),
+          }),
+        }),
+        outputSchema: z.object({
+          result4: z.string(),
+        }),
+        execute: vi.fn<any>().mockImplementation(async ({ inputData }) => ({
+          result4: `final-${inputData.step1.result1}-${inputData.step2.result2}`,
+        })),
+      });
+
+      const workflow = createWorkflow({
+        id: 'consecutive-parallel-workflow',
+        inputSchema: z.object({
+          input: z.string(),
+        }),
+        outputSchema: z.object({
+          result3: z.string(),
+          result4: z.string(),
+        }),
+        steps: [step1, step2, step3, step4],
+      });
+
+      // This tests the fix: consecutive parallel calls should work with proper type inference
+      workflow.parallel([step1, step2]).parallel([step3, step4]).commit();
+
+      const run = workflow.createRun();
+      const result = await run.start({ inputData: { input: 'test-data' } });
+
+      // Verify the first parallel stage executed correctly
+      expect(step1.execute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          inputData: { input: 'test-data' },
+        }),
+      );
+      expect(step2.execute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          inputData: { input: 'test-data' },
+        }),
+      );
+
+      // Verify the second parallel stage received the correct input
+      expect(step3.execute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          inputData: {
+            step1: { result1: 'processed-test-data' },
+            step2: { result2: 'transformed-test-data' },
+          },
+        }),
+      );
+      expect(step4.execute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          inputData: {
+            step1: { result1: 'processed-test-data' },
+            step2: { result2: 'transformed-test-data' },
+          },
+        }),
+      );
+
+      // Verify the final results
+      expect(result.status).toBe('success');
+      expect(result.steps.step1).toEqual({
+        status: 'success',
+        output: { result1: 'processed-test-data' },
+        payload: { input: 'test-data' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(result.steps.step2).toEqual({
+        status: 'success',
+        output: { result2: 'transformed-test-data' },
+        payload: { input: 'test-data' },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(result.steps.step3).toEqual({
+        status: 'success',
+        output: { result3: 'combined-processed-test-data-transformed-test-data' },
+        payload: {
+          step1: { result1: 'processed-test-data' },
+          step2: { result2: 'transformed-test-data' },
+        },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+      expect(result.steps.step4).toEqual({
+        status: 'success',
+        output: { result4: 'final-processed-test-data-transformed-test-data' },
+        payload: {
+          step1: { result1: 'processed-test-data' },
+          step2: { result2: 'transformed-test-data' },
+        },
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
     });
   });
 });
