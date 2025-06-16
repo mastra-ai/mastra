@@ -1,5 +1,13 @@
 # @mastra/deployer
 
+## 0.10.6-alpha.2
+
+### Patch Changes
+
+- 5f67b6f: Transfer-Encoding chunked header for agent stream hono route
+- Updated dependencies [4b0f8a6]
+  - @mastra/core@0.10.6-alpha.2
+
 ## 0.10.6-alpha.1
 
 ### Patch Changes
