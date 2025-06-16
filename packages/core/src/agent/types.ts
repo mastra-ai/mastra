@@ -59,8 +59,8 @@ export interface AgentConfig<
 }
 
 export type AgentMemoryOption = {
-  thread?: string | (Partial<StorageThreadType> & { id: string });
-  resource?: string;
+  thread: string | (Partial<StorageThreadType> & { id: string });
+  resource: string;
   options?: MemoryConfig;
 };
 
