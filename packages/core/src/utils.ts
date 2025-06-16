@@ -286,7 +286,7 @@ export function makeCoreTool<Parameters = ToolParameters>(
   options: ToolOptions,
   logType?: 'tool' | 'toolset' | 'client-tool',
 ): CoreTool<Parameters> {
-  return new CoreToolBuilder({ originalTool, options, logType }).build() as CoreTool<Parameters>; // TODO: shouldn't use as here.
+  return new CoreToolBuilder({ originalTool, options, logType }).build<Parameters>();
 }
 
 /**
