@@ -1,8 +1,8 @@
 import { randomUUID } from 'crypto';
 import { subscribe } from '@inngest/realtime';
-import { Agent, Tool } from '@mastra/core';
 import type { Mastra, ToolExecutionContext, WorkflowRun, WorkflowRuns } from '@mastra/core';
 import { RuntimeContext } from '@mastra/core/di';
+import { Tool } from '@mastra/core/tools';
 import { Workflow, Run, DefaultExecutionEngine } from '@mastra/core/workflows';
 import type {
   ExecuteFunction,
@@ -425,6 +425,14 @@ export class InngestWorkflow<
   }
 }
 
+function isAgent(params: any): params is Agent<any, any, any> {
+  return params?.component === 'AGENT';
+}
+
+function isTool(params: any): params is Tool<any, any, any> {
+  return params instanceof Tool;
+}
+
 export function createStep<
   TStepId extends string,
   TStepInput extends z.ZodType<any>,
@@ -468,7 +476,6 @@ export function createStep<
     execute: (context: TContext) => Promise<any>;
   },
 ): Step<string, TSchemaIn, TSchemaOut, z.ZodType<any>, z.ZodType<any>, InngestEngineType>;
-
 export function createStep<
   TStepId extends string,
   TStepInput extends z.ZodType<any>,
@@ -499,7 +506,7 @@ export function createStep<
         execute: (context: ToolExecutionContext<TStepInput>) => Promise<any>;
       }),
 ): Step<TStepId, TStepInput, TStepOutput, TResumeSchema, TSuspendSchema, InngestEngineType> {
-  if (params instanceof Agent) {
+  if (isAgent(params)) {
     return {
       id: params.name,
       // @ts-ignore
@@ -574,7 +581,8 @@ export function createStep<
     };
   }
 
-  if (params instanceof Tool) {
+  console.log('params', params);
+  if (isTool(params)) {
     if (!params.inputSchema || !params.outputSchema) {
       throw new Error('Tool must have input and output schemas defined');
     }
