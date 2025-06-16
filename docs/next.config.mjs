@@ -307,6 +307,16 @@ export default withGT(
         permanent: true,
       },
       {
+        source: "/docs/local-dev/creating-a-new-project",
+        destination: "/docs/getting-started/installation",
+        permanent: true,
+      },
+      {
+        source: "/docs/local-dev/creating-a-new-project",
+        destination: "/docs/local-dev/add-to-existing-project",
+        permanent: true,
+      },
+      {
         source: "/docs/deployment/client",
         destination: "/docs/client-js/overview",
         permanent: true,
