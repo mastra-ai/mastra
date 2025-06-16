@@ -581,7 +581,6 @@ export function createStep<
     };
   }
 
-  console.log('params', params);
   if (isTool(params)) {
     if (!params.inputSchema || !params.outputSchema) {
       throw new Error('Tool must have input and output schemas defined');
