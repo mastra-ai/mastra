@@ -12,12 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 
-import {
-  useExecuteWorkflow,
-  useWatchWorkflow,
-  useResumeWorkflow,
-  ExtendedWorkflowWatchResult,
-} from '@/hooks/use-workflows';
+import { ExtendedWorkflowWatchResult } from '@/hooks/use-workflows';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { toast } from 'sonner';
 import { usePlaygroundStore } from '@/store/playground-store';
@@ -93,9 +88,6 @@ export function WorkflowTrigger({
   const { runtimeContext } = usePlaygroundStore();
   const { result, setResult, payload, setPayload } = useContext(WorkflowRunContext);
 
-  // const { createWorkflowRun, startWorkflowRun } = useExecuteWorkflow();
-  // const { watchWorkflow, watchResult, isWatchingWorkflow } = useWatchWorkflow();
-  // const { resumeWorkflow, isResumingWorkflow } = useResumeWorkflow();
   const [suspendedSteps, setSuspendedSteps] = useState<SuspendedStep[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const triggerSchema = workflow?.inputSchema;

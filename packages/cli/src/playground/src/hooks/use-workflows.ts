@@ -199,26 +199,39 @@ export const useExecuteWorkflow = () => {
 };
 
 export const useWatchWorkflow = () => {
-  const [watchResult, setWatchResult] = useState<ExtendedWorkflowWatchResult | null>(null);
+  // const [watchResult, setWatchResult] = useState<ExtendedWorkflowWatchResult | null>(null);
 
   // Debounce the state update to prevent too frequent renders
-  const debouncedSetWorkflowWatchResult = useDebouncedCallback((record: ExtendedWorkflowWatchResult) => {
-    const sanitizedRecord = sanitizeWorkflowWatchResult(record);
-    setWatchResult(sanitizedRecord);
-  }, 100);
+  const debouncedSetWorkflowWatchResult = useDebouncedCallback(
+    (record: ExtendedWorkflowWatchResult, onUpdate: (result: ExtendedWorkflowWatchResult) => void) => {
+      const sanitizedRecord = sanitizeWorkflowWatchResult(record);
+      console.log('sanitizedRecord===', sanitizedRecord);
+      onUpdate(sanitizedRecord);
+    },
+    100,
+  );
 
   const watchWorkflow = useMutation({
-    mutationFn: async ({ workflowId, runId }: { workflowId: string; runId: string }) => {
+    mutationFn: async ({
+      workflowId,
+      runId,
+      onUpdate,
+    }: {
+      workflowId: string;
+      runId: string;
+      onUpdate: (result: ExtendedWorkflowWatchResult) => void;
+    }) => {
       try {
         const workflow = client.getWorkflow(workflowId);
 
         await workflow.watch({ runId }, record => {
+          console.log('record===', record, Date.now());
           try {
-            debouncedSetWorkflowWatchResult(record);
+            debouncedSetWorkflowWatchResult(record, onUpdate);
           } catch (err) {
             console.error('Error processing workflow record:', err);
             // Set a minimal error state if processing fails
-            setWatchResult({
+            onUpdate({
               ...record,
             });
           }
@@ -233,7 +246,7 @@ export const useWatchWorkflow = () => {
 
   return {
     watchWorkflow,
-    watchResult,
+    // watchResult,
   };
 };
 
