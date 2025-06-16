@@ -66,7 +66,7 @@ const memoryWithProcessor = new Memory({
 
 export const memoryProcessorAgent = new Agent({
   name: 'test-processor',
-  instructions: 'You are a test agent that uses a memory processor to filter out all messages.',
+  instructions: 'You are a test agent that uses a memory processor to filter out tool call messages.',
   model: openai('gpt-4o'),
   memory: memoryWithProcessor,
   tools: {
