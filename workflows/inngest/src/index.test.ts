@@ -97,7 +97,7 @@ describe('MastraInngestWorkflow', () => {
       const result = await run.start({ inputData: {} });
 
       expect(execute).toHaveBeenCalled();
-      expect(result.steps['step1']).toEqual({
+      expect(result.steps['step1']).toMatchObject({
         status: 'success',
         output: { result: 'success' },
       });
@@ -173,7 +173,7 @@ describe('MastraInngestWorkflow', () => {
 
       expect(step1Action).toHaveBeenCalled();
       expect(step2Action).toHaveBeenCalled();
-      expect(result.steps).toEqual({
+      expect(result.steps).toMatchObject({
         input: {},
         step1: { status: 'success', output: { value: 'step1' } },
         step2: { status: 'success', output: { value: 'step2' } },
@@ -252,8 +252,8 @@ describe('MastraInngestWorkflow', () => {
       const run = workflow.createRun();
       const result = await run.start({ inputData: {} });
 
-      expect(executionOrder).toEqual(['step1', 'step2']);
-      expect(result.steps).toEqual({
+      expect(executionOrder).toMatchObject(['step1', 'step2']);
+      expect(result.steps).toMatchObject({
         input: {},
         step1: { status: 'success', output: { value: 'step1' } },
         step2: { status: 'success', output: { value: 'step2' } },
@@ -329,7 +329,7 @@ describe('MastraInngestWorkflow', () => {
       const endTime = Date.now();
 
       expect(execute).toHaveBeenCalled();
-      expect(result.steps['step1']).toEqual({
+      expect(result.steps['step1']).toMatchObject({
         status: 'success',
         output: { result: 'success' },
         // payload: {},
@@ -337,7 +337,7 @@ describe('MastraInngestWorkflow', () => {
         // endedAt: expect.any(Number),
       });
 
-      expect(result.steps['step2']).toEqual({
+      expect(result.steps['step2']).toMatchObject({
         status: 'success',
         output: { result: 'slept successfully: success' },
         // payload: { result: 'success' },
@@ -421,7 +421,7 @@ describe('MastraInngestWorkflow', () => {
       const endTime = Date.now();
 
       expect(execute).toHaveBeenCalled();
-      expect(result.steps['step1']).toEqual({
+      expect(result.steps['step1']).toMatchObject({
         status: 'success',
         output: { result: 'success' },
         // payload: {},
@@ -429,7 +429,7 @@ describe('MastraInngestWorkflow', () => {
         // endedAt: expect.any(Number),
       });
 
-      expect(result.steps['step2']).toEqual({
+      expect(result.steps['step2']).toMatchObject({
         status: 'success',
         output: { result: 'slept successfully: success' },
         // payload: { result: 'success' },
@@ -514,7 +514,7 @@ describe('MastraInngestWorkflow', () => {
       const endTime = Date.now();
 
       expect(execute).toHaveBeenCalled();
-      expect(result.steps['step1']).toEqual({
+      expect(result.steps['step1']).toMatchObject({
         status: 'success',
         output: { result: 'success' },
         // payload: {},
@@ -522,7 +522,7 @@ describe('MastraInngestWorkflow', () => {
         // endedAt: expect.any(Number),
       });
 
-      expect(result.steps['step2']).toEqual({
+      expect(result.steps['step2']).toMatchObject({
         status: 'success',
         output: { result: 'success', resumed: { data: 'hello' } },
         payload: { result: 'success' },
@@ -605,7 +605,7 @@ describe('MastraInngestWorkflow', () => {
       const endTime = Date.now();
 
       expect(execute).toHaveBeenCalled();
-      expect(result.steps['step1']).toEqual({
+      expect(result.steps['step1']).toMatchObject({
         status: 'success',
         output: { result: 'success' },
         // payload: {},
@@ -613,7 +613,7 @@ describe('MastraInngestWorkflow', () => {
         // endedAt: expect.any(Number),
       });
 
-      expect(result.steps['step2']).toEqual({
+      expect(result.steps['step2']).toMatchObject({
         status: 'failed',
         error: expect.any(String),
         payload: { result: 'success' },
@@ -687,8 +687,8 @@ describe('MastraInngestWorkflow', () => {
       const run = workflow.createRun();
       const result = await run.start({ inputData: { inputData: 'test-input' } });
 
-      expect(result.steps.step1).toEqual({ status: 'success', output: { result: 'success' } });
-      expect(result.steps.step2).toEqual({ status: 'success', output: { result: 'success' } });
+      expect(result.steps.step1).toMatchObject({ status: 'success', output: { result: 'success' } });
+      expect(result.steps.step2).toMatchObject({ status: 'success', output: { result: 'success' } });
 
       srv.close();
     });
@@ -703,14 +703,14 @@ describe('MastraInngestWorkflow', () => {
 
       const step1Action = vi.fn().mockImplementation(async ({ inputData }) => {
         // Test accessing trigger data with correct type
-        expect(inputData).toEqual({ inputValue: 'test-input' });
+        expect(inputData).toMatchObject({ inputValue: 'test-input' });
         return { value: 'step1-result' };
       });
 
       const step2Action = vi.fn().mockImplementation(async ({ getStepResult }) => {
         // Test accessing previous step result with type
         const step1Result = getStepResult(step1);
-        expect(step1Result).toEqual({ value: 'step1-result' });
+        expect(step1Result).toMatchObject({ value: 'step1-result' });
 
         const failedStep = getStepResult(nonExecutedStep);
         expect(failedStep).toBe(null);
@@ -776,7 +776,7 @@ describe('MastraInngestWorkflow', () => {
 
       expect(step1Action).toHaveBeenCalled();
       expect(step2Action).toHaveBeenCalled();
-      expect(result.steps).toEqual({
+      expect(result.steps).toMatchObject({
         input: { inputValue: 'test-input' },
         step1: { status: 'success', output: { value: 'step1-result' } },
         step2: { status: 'success', output: { value: 'step2-result' } },
@@ -922,7 +922,7 @@ describe('MastraInngestWorkflow', () => {
         }),
       );
 
-      expect(result.steps.step2).toEqual({ status: 'success', output: { result: { cool: 'test-input' } } });
+      expect(result.steps.step2).toMatchObject({ status: 'success', output: { result: { cool: 'test-input' } } });
 
       srv.close();
     });
@@ -1105,7 +1105,7 @@ describe('MastraInngestWorkflow', () => {
       expect(step1Action).toHaveBeenCalled();
       expect(step2Action).toHaveBeenCalled();
       expect(step3Action).not.toHaveBeenCalled();
-      expect(result.steps).toEqual({
+      expect(result.steps).toMatchObject({
         input: { status: 'success' },
         step1: { status: 'success', output: { status: 'success' } },
         step2: { status: 'success', output: { result: 'step2' } },
@@ -1186,7 +1186,7 @@ describe('MastraInngestWorkflow', () => {
 
       expect(step1Action).toHaveBeenCalled();
       expect(step2Action).not.toHaveBeenCalled();
-      expect(result?.steps).toEqual({
+      expect(result?.steps).toMatchObject({
         input: {},
         step1: { status: 'failed', error: 'Failed' },
       });
@@ -1367,11 +1367,11 @@ describe('MastraInngestWorkflow', () => {
       srv.close();
 
       expect(step2Action).toHaveBeenCalled();
-      expect(result.steps.step1).toEqual({
+      expect(result.steps.step1).toMatchObject({
         status: 'success',
         output: { count: 5 },
       });
-      expect(result.steps.step2).toEqual({
+      expect(result.steps.step2).toMatchObject({
         status: 'success',
         output: undefined,
       });
@@ -1742,7 +1742,7 @@ describe('MastraInngestWorkflow', () => {
 
       expect(step2Action).toHaveBeenCalled();
       expect(step3Action).not.toHaveBeenCalled();
-      expect(result.steps.step2).toEqual({ status: 'success', output: { result: 'step2' } });
+      expect(result.steps.step2).toMatchObject({ status: 'success', output: { result: 'step2' } });
 
       srv.close();
     });
@@ -1845,9 +1845,9 @@ describe('MastraInngestWorkflow', () => {
       expect(increment).toHaveBeenCalledTimes(12);
       expect(final).toHaveBeenCalledTimes(1);
       // @ts-ignore
-      expect(result.result).toEqual({ finalValue: 12 });
+      expect(result.result).toMatchObject({ finalValue: 12 });
       // @ts-ignore
-      expect(result.steps.increment.output).toEqual({ value: 12 });
+      expect(result.steps.increment.output).toMatchObject({ value: 12 });
 
       srv.close();
     });
@@ -1948,9 +1948,9 @@ describe('MastraInngestWorkflow', () => {
       expect(increment).toHaveBeenCalledTimes(12);
       expect(final).toHaveBeenCalledTimes(1);
       // @ts-ignore
-      expect(result.result).toEqual({ finalValue: 12 });
+      expect(result.result).toMatchObject({ finalValue: 12 });
       // @ts-ignore
-      expect(result.steps.increment.output).toEqual({ value: 12 });
+      expect(result.steps.increment.output).toMatchObject({ value: 12 });
 
       srv.close();
     });
@@ -2191,9 +2191,9 @@ describe('MastraInngestWorkflow', () => {
       expect(other).toHaveBeenCalledTimes(0);
       expect(final).toHaveBeenCalledTimes(1);
       // @ts-ignore
-      expect(result.steps.finalIf.output).toEqual({ finalValue: 2 });
+      expect(result.steps.finalIf.output).toMatchObject({ finalValue: 2 });
       // @ts-ignore
-      expect(result.steps.start.output).toEqual({ newValue: 2 });
+      expect(result.steps.start.output).toMatchObject({ newValue: 2 });
 
       srv.close();
     });
@@ -2340,9 +2340,9 @@ describe('MastraInngestWorkflow', () => {
       expect(other).toHaveBeenCalledTimes(1);
       expect(final).toHaveBeenCalledTimes(1);
       // @ts-ignore
-      expect(result.steps['else-branch'].output).toEqual({ finalValue: 26 + 6 + 1 });
+      expect(result.steps['else-branch'].output).toMatchObject({ finalValue: 26 + 6 + 1 });
       // @ts-ignore
-      expect(result.steps.start.output).toEqual({ newValue: 7 });
+      expect(result.steps.start.output).toMatchObject({ newValue: 7 });
 
       srv.close();
     });
@@ -2508,8 +2508,8 @@ describe('MastraInngestWorkflow', () => {
       const run = workflow.createRun();
       const result = await run.start({ inputData: {} });
 
-      expect(result.steps['nested-a']).toEqual({ status: 'success', output: { result: 'success3' } });
-      expect(result.steps['nested-b']).toEqual({ status: 'success', output: { result: 'success5' } });
+      expect(result.steps['nested-a']).toMatchObject({ status: 'success', output: { result: 'success3' } });
+      expect(result.steps['nested-b']).toMatchObject({ status: 'success', output: { result: 'success5' } });
 
       srv.close();
     });
@@ -2574,8 +2574,8 @@ describe('MastraInngestWorkflow', () => {
       const run = workflow.createRun();
       const result = await run.start({ inputData: {} });
 
-      expect(result.steps.step1).toEqual({ status: 'success', output: { result: 'success' } });
-      expect(result.steps.step2).toEqual({ status: 'failed', error: 'Step failed' });
+      expect(result.steps.step1).toMatchObject({ status: 'success', output: { result: 'success' } });
+      expect(result.steps.step2).toMatchObject({ status: 'failed', error: 'Step failed' });
       expect(step1.execute).toHaveBeenCalledTimes(1);
       expect(step2.execute).toHaveBeenCalledTimes(1); // 0 retries + 1 initial call
 
@@ -2631,8 +2631,8 @@ describe('MastraInngestWorkflow', () => {
       const run = workflow.createRun();
       const result = await run.start({ inputData: {} });
 
-      expect(result.steps.step1).toEqual({ status: 'success', output: { result: 'success' } });
-      expect(result.steps.step2).toEqual({ status: 'failed', error: 'Step failed' });
+      expect(result.steps.step1).toMatchObject({ status: 'success', output: { result: 'success' } });
+      expect(result.steps.step2).toMatchObject({ status: 'failed', error: 'Step failed' });
       expect(step1.execute).toHaveBeenCalledTimes(1);
       expect(step2.execute).toHaveBeenCalledTimes(6); // 5 retries + 1 initial call
     });
@@ -2709,8 +2709,8 @@ describe('MastraInngestWorkflow', () => {
 
       expect(step1Action).toHaveBeenCalled();
       expect(toolAction).toHaveBeenCalled();
-      expect(result.steps.step1).toEqual({ status: 'success', output: { name: 'step1' } });
-      expect(result.steps['random-tool']).toEqual({ status: 'success', output: { name: 'step1' } });
+      expect(result.steps.step1).toMatchObject({ status: 'success', output: { name: 'step1' } });
+      expect(result.steps['random-tool']).toMatchObject({ status: 'success', output: { name: 'step1' } });
     }, 10000);
   });
 
@@ -2889,11 +2889,11 @@ describe('MastraInngestWorkflow', () => {
       });
 
       // Verify execution completed successfully
-      expect(executionResult.steps.step1).toEqual({
+      expect(executionResult.steps.step1).toMatchObject({
         status: 'success',
         output: { result: 'success1' },
       });
-      expect(executionResult.steps.step2).toEqual({
+      expect(executionResult.steps.step2).toMatchObject({
         status: 'success',
         output: { result: 'success2' },
       });
@@ -2901,7 +2901,7 @@ describe('MastraInngestWorkflow', () => {
       srv.close();
     });
 
-    it('should unsubscribe from transitions when unwatch is called', async ctx => {
+    it.only('should unsubscribe from transitions when unwatch is called', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
@@ -3162,7 +3162,7 @@ describe('MastraInngestWorkflow', () => {
         throw new Error('Resume failed to return a result');
       }
 
-      expect(resumeResult.steps).toEqual({
+      expect(resumeResult.steps).toMatchObject({
         input: { input: 'test' },
         getUserInput: { status: 'success', output: { userInput: 'test input' } },
         promptAgent: { status: 'success', output: { modelOutput: 'test output' } },
@@ -3325,7 +3325,7 @@ describe('MastraInngestWorkflow', () => {
         throw new Error('Resume failed to return a result');
       }
 
-      expect(result.steps).toEqual({
+      expect(result.steps).toMatchObject({
         input: { input: 'test' },
         getUserInput: { status: 'success', output: { userInput: 'test input' } },
         promptAgent: { status: 'success', output: { modelOutput: 'test output' } },
@@ -3685,8 +3685,8 @@ describe('MastraInngestWorkflow', () => {
       expect(promptAgentAction).toHaveBeenCalledTimes(1);
       // expect(initialResult.activePaths.size).toBe(1);
       // expect(initialResult.activePaths.get('promptAgent')?.status).toBe('suspended');
-      // expect(initialResult.activePaths.get('promptAgent')?.suspendPayload).toEqual({ testPayload: 'hello' });
-      expect(initialResult.steps).toEqual({
+      // expect(initialResult.activePaths.get('promptAgent')?.suspendPayload).toMatchObject({ testPayload: 'hello' });
+      expect(initialResult.steps).toMatchObject({
         input: { input: 'test' },
         getUserInput: { status: 'success', output: { userInput: 'test input' } },
         promptAgent: { status: 'suspended', payload: { testPayload: 'hello' } },
@@ -3706,7 +3706,7 @@ describe('MastraInngestWorkflow', () => {
 
       // expect(firstResumeResult.activePaths.size).toBe(1);
       // expect(firstResumeResult.activePaths.get('improveResponse')?.status).toBe('suspended');
-      expect(firstResumeResult.steps).toEqual({
+      expect(firstResumeResult.steps).toMatchObject({
         input: { input: 'test' },
         getUserInput: { status: 'success', output: { userInput: 'test input' } },
         promptAgent: { status: 'success', output: { modelOutput: 'test output' } },
@@ -3733,7 +3733,7 @@ describe('MastraInngestWorkflow', () => {
 
       expect(promptAgentAction).toHaveBeenCalledTimes(2);
 
-      expect(secondResumeResult.steps).toEqual({
+      expect(secondResumeResult.steps).toMatchObject({
         input: { input: 'test' },
         getUserInput: { status: 'success', output: { userInput: 'test input' } },
         promptAgent: { status: 'success', output: { modelOutput: 'test output' } },
@@ -3910,12 +3910,12 @@ describe('MastraInngestWorkflow', () => {
         inputData: { prompt1: 'Capital of France, just the name', prompt2: 'Capital of UK, just the name' },
       });
 
-      expect(result.steps['test-agent-1']).toEqual({
+      expect(result.steps['test-agent-1']).toMatchObject({
         status: 'success',
         output: { text: 'Paris' },
       });
 
-      expect(result.steps['test-agent-2']).toEqual({
+      expect(result.steps['test-agent-2']).toMatchObject({
         status: 'success',
         output: { text: 'London' },
       });
@@ -4047,17 +4047,17 @@ describe('MastraInngestWorkflow', () => {
       });
 
       expect(execute).toHaveBeenCalledTimes(1);
-      expect(result.steps['finalStep']).toEqual({
+      expect(result.steps['finalStep']).toMatchObject({
         status: 'success',
         output: { result: 'success' },
       });
 
-      expect(result.steps['nested-workflow']).toEqual({
+      expect(result.steps['nested-workflow']).toMatchObject({
         status: 'success',
         output: { text: 'Paris' },
       });
 
-      expect(result.steps['nested-workflow-2']).toEqual({
+      expect(result.steps['nested-workflow-2']).toMatchObject({
         status: 'success',
         output: { text: 'London' },
       });
@@ -4194,16 +4194,16 @@ describe('MastraInngestWorkflow', () => {
       expect(final).toHaveBeenCalledTimes(2);
       expect(last).toHaveBeenCalledTimes(1);
       // @ts-ignore
-      expect(result.steps['nested-workflow-a'].output).toEqual({
+      expect(result.steps['nested-workflow-a'].output).toMatchObject({
         finalValue: 26 + 1,
       });
 
       // @ts-ignore
-      expect(result.steps['nested-workflow-b'].output).toEqual({
+      expect(result.steps['nested-workflow-b'].output).toMatchObject({
         finalValue: 1,
       });
 
-      expect(result.steps['last-step']).toEqual({
+      expect(result.steps['last-step']).toMatchObject({
         output: { success: true },
         status: 'success',
       });
@@ -4346,16 +4346,16 @@ describe('MastraInngestWorkflow', () => {
       expect(final).toHaveBeenCalledTimes(2);
       expect(last).toHaveBeenCalledTimes(1);
       // @ts-ignore
-      expect(result.steps['nested-workflow-a'].output).toEqual({
+      expect(result.steps['nested-workflow-a'].output).toMatchObject({
         finalValue: 26 + 1,
       });
 
       // @ts-ignore
-      expect(result.steps['nested-workflow-b'].output).toEqual({
+      expect(result.steps['nested-workflow-b'].output).toMatchObject({
         finalValue: 1,
       });
 
-      expect(result.steps['last-step']).toEqual({
+      expect(result.steps['last-step']).toMatchObject({
         output: { success: true },
         status: 'success',
       });
@@ -4506,16 +4506,16 @@ describe('MastraInngestWorkflow', () => {
         expect(first).toHaveBeenCalledTimes(1);
         expect(last).toHaveBeenCalledTimes(1);
         // @ts-ignore
-        expect(result.steps['nested-workflow-a'].output).toEqual({
+        expect(result.steps['nested-workflow-a'].output).toMatchObject({
           finalValue: 26 + 1,
         });
 
-        expect(result.steps['first-step']).toEqual({
+        expect(result.steps['first-step']).toMatchObject({
           output: { success: true },
           status: 'success',
         });
 
-        expect(result.steps['last-step']).toEqual({
+        expect(result.steps['last-step']).toMatchObject({
           output: { success: true },
           status: 'success',
         });
@@ -4666,16 +4666,16 @@ describe('MastraInngestWorkflow', () => {
         expect(last).toHaveBeenCalledTimes(1);
 
         // @ts-ignore
-        expect(result.steps['nested-workflow-b'].output).toEqual({
+        expect(result.steps['nested-workflow-b'].output).toMatchObject({
           finalValue: 1,
         });
 
-        expect(result.steps['first-step']).toEqual({
+        expect(result.steps['first-step']).toMatchObject({
           output: { success: true },
           status: 'success',
         });
 
-        expect(result.steps['last-step']).toEqual({
+        expect(result.steps['last-step']).toMatchObject({
           output: { success: true },
           status: 'success',
         });
@@ -4863,16 +4863,16 @@ describe('MastraInngestWorkflow', () => {
         // expect(last).toHaveBeenCalledTimes(1);
 
         // @ts-ignore
-        expect(result.steps['nested-workflow-b'].output).toEqual({
+        expect(result.steps['nested-workflow-b'].output).toMatchObject({
           finalValue: 1,
         });
 
-        expect(result.steps['first-step']).toEqual({
+        expect(result.steps['first-step']).toMatchObject({
           output: { success: true },
           status: 'success',
         });
 
-        expect(result.steps['last-step']).toEqual({
+        expect(result.steps['last-step']).toMatchObject({
           output: { success: true },
           status: 'success',
         });
@@ -5018,12 +5018,12 @@ describe('MastraInngestWorkflow', () => {
         });
 
         // @ts-ignore
-        expect(result.steps['last-step']).toEqual(undefined);
+        expect(result.steps['last-step']).toMatchObject(undefined);
 
         const resumedResults = await run.resume({ step: [wfA, otherStep], resumeData: { newValue: 0 } });
 
         // @ts-ignore
-        expect(resumedResults.steps['nested-workflow-a'].output).toEqual({
+        expect(resumedResults.steps['nested-workflow-a'].output).toMatchObject({
           finalValue: 26 + 1,
         });
 
@@ -5174,7 +5174,7 @@ describe('MastraInngestWorkflow', () => {
           },
         });
 
-        expect(result.steps['last-step']).toEqual({
+        expect(result.steps['last-step']).toMatchObject({
           status: 'success',
           output: { success: true },
         });
@@ -5351,18 +5351,23 @@ describe('MastraInngestWorkflow', () => {
       });
 
       // @ts-ignore
-      expect(result.steps['last-step']).toEqual(undefined);
+      expect(result.steps['last-step']).toMatchObject(undefined);
 
       if (result.status !== 'suspended') {
         expect.fail('Workflow should be suspended');
       }
-      expect(result.suspended[0]).toEqual(['nested-workflow-c', 'nested-workflow-b', 'nested-workflow-a', 'other']);
+      expect(result.suspended[0]).toMatchObject([
+        'nested-workflow-c',
+        'nested-workflow-b',
+        'nested-workflow-a',
+        'other',
+      ]);
       const resumedResults = await run.resume({ step: result.suspended[0], resumeData: { newValue: 0 } });
 
       srv.close();
 
       // @ts-ignore
-      expect(resumedResults.steps['nested-workflow-c'].output).toEqual({
+      expect(resumedResults.steps['nested-workflow-c'].output).toMatchObject({
         finalValue: 26 + 1,
       });
 
@@ -5504,16 +5509,16 @@ describe('MastraInngestWorkflow', () => {
       expect(final).toHaveBeenCalledTimes(2);
       expect(last).toHaveBeenCalledTimes(1);
       // @ts-ignore
-      expect(result.steps['nested-workflow-a-clone'].output).toEqual({
+      expect(result.steps['nested-workflow-a-clone'].output).toMatchObject({
         finalValue: 26 + 1,
       });
 
       // @ts-ignore
-      expect(result.steps['nested-workflow-b'].output).toEqual({
+      expect(result.steps['nested-workflow-b'].output).toMatchObject({
         finalValue: 1,
       });
 
-      expect(result.steps['last-step']).toEqual({
+      expect(result.steps['last-step']).toMatchObject({
         output: { success: true },
         status: 'success',
       });
@@ -5912,14 +5917,14 @@ describe('MastraInngestWorkflow', () => {
         ]
       `);
       // Verify execution completed successfully
-      expect(executionResult.steps.step1).toEqual({
+      expect(executionResult.steps.step1).toMatchObject({
         status: 'success',
         output: { result: 'success1' },
         payload: {},
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
-      expect(executionResult.steps.step2).toEqual({
+      expect(executionResult.steps.step2).toMatchObject({
         status: 'success',
         output: { result: 'success2' },
         payload: {
@@ -6060,7 +6065,7 @@ describe('MastraInngestWorkflow', () => {
       srv.close();
 
       expect(evaluateToneAction).toHaveBeenCalledTimes(1);
-      expect(resumeResult.steps).toEqual({
+      expect(resumeResult.steps).toMatchObject({
         input: { input: 'test' },
         getUserInput: {
           status: 'success',

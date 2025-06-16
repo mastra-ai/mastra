@@ -230,8 +230,8 @@ export class InngestRun<
 
     return () => {
       streamPromise
-        .then((stream: any) => {
-          stream.cancel();
+        .then(async (stream: Awaited<typeof streamPromise>) => {
+          return stream.cancel();
         })
         .catch(err => {
           console.error(err);
