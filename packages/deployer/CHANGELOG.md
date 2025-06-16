@@ -1,5 +1,19 @@
 # @mastra/deployer
 
+## 0.10.6-alpha.3
+
+### Patch Changes
+
+- 4051477: dependencies updates:
+  - Updated dependency [`@rollup/plugin-commonjs@^28.0.5` ↗︎](https://www.npmjs.com/package/@rollup/plugin-commonjs/v/28.0.5) (from `^28.0.3`, in `dependencies`)
+- c28ed65: dependencies updates:
+  - Updated dependency [`@rollup/plugin-commonjs@^28.0.5` ↗︎](https://www.npmjs.com/package/@rollup/plugin-commonjs/v/28.0.5) (from `^28.0.3`, in `dependencies`)
+- Updated dependencies [d70c420]
+- Updated dependencies [2a16996]
+- Updated dependencies [2002c59]
+  - @mastra/core@0.10.6-alpha.3
+  - @mastra/server@0.10.6-alpha.3
+
 ## 0.10.6-alpha.2
 
 ### Patch Changes
