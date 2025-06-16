@@ -161,8 +161,9 @@ export const createMastraProject = async ({
     s.stop(`${pm} dependencies installed`);
 
     s.start('Installing mastra');
+    const versionTag = createVersionTag ? `@${createVersionTag}` : '@latest';
+
     try {
-      const versionTag = createVersionTag ? `@${createVersionTag}` : '@latest';
       await installMastraDependency(pm, 'mastra', versionTag, true, timeout);
     } catch (error) {
       throw new Error(`Failed to install Mastra CLI: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -171,7 +172,6 @@ export const createMastraProject = async ({
 
     s.start('Installing dependencies');
     try {
-      const versionTag = createVersionTag ? `@${createVersionTag}` : '@latest';
       await installMastraDependency(pm, '@mastra/core', versionTag, false, timeout);
       await installMastraDependency(pm, '@mastra/libsql', versionTag, false, timeout);
       await installMastraDependency(pm, '@mastra/memory', versionTag, false, timeout);
