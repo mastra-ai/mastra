@@ -158,6 +158,7 @@ export const docsInputSchema = z.object({
     .describe(`One or more documentation paths to fetch\nAvailable paths:\n${availablePaths}`),
   queryKeywords: z
     .array(z.string())
+    .optional()
     .describe(
       'Keywords from user query to use for matching documentation. Each keyword should be a single word or short phrase; any whitespace-separated keywords will be split automatically.',
     ),
@@ -198,7 +199,7 @@ export const docsTool = {
               };
             }
             const directorySuggestions = await findNearestDirectory(path, availablePaths);
-            const contentBasedSuggestions = await getMatchingPaths(path, args.queryKeywords, docsBaseDir);
+            const contentBasedSuggestions = await getMatchingPaths(path, args.queryKeywords ?? [], docsBaseDir);
             return {
               path,
               content: null,

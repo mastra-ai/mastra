@@ -55,6 +55,7 @@ export const examplesInputSchema = z.object({
     ),
   queryKeywords: z
     .array(z.string())
+    .optional()
     .describe(
       'Keywords from user query to use for matching examples. Each keyword should be a single word or short phrase; any whitespace-separated keywords will be split automatically.',
     ),
@@ -78,7 +79,7 @@ export const examplesTool = {
       }
 
       const filename = args.example.endsWith('.md') ? args.example : `${args.example}.md`;
-      const result = await readCodeExample(filename, args.queryKeywords);
+      const result = await readCodeExample(filename, args.queryKeywords || []);
       return result;
     } catch (error) {
       void logger.error('Failed to execute mastraExamples tool', error);
