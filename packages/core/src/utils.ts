@@ -270,7 +270,7 @@ export function ensureToolProperties(tools: ToolsInput): ToolsInput {
 function convertVercelToolParameters(tool: VercelTool): z.ZodType {
   // If the tool is a Vercel Tool, check if the parameters are already a zod object
   // If not, convert the parameters to a zod object using jsonSchemaToZod
-  const schema = tool.parameters ?? z.object({});
+  const schema = `parameters` in tool && tool.parameters ? tool.parameters : z.object({});
   return isZodType(schema) ? schema : resolveSerializedZodOutput(jsonSchemaToZod(schema));
 }
 

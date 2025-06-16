@@ -1,8 +1,8 @@
 import { AbstractChat, ChatState, ChatStatus, UIMessage } from 'ai';
 
-export class MastraChat extends AbstractChat {}
+export class MastraChat extends AbstractChat<any> {}
 
-export class MastraChatState implements ChatState<any, any> {
+export class MastraChatState implements ChatState<any> {
   status: ChatStatus = 'ready';
   error: Error | undefined;
   messages: UIMessage<any, any>[] = [];

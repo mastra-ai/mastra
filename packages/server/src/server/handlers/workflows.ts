@@ -1,7 +1,8 @@
 import { ReadableStream } from 'node:stream/web';
-import type { RuntimeContext } from '@mastra/core/di';
+import { RuntimeContext } from '@mastra/core/di';
+import type { RuntimeContext as RuntimeContextType } from '@mastra/core/di';
 import type { WorkflowRuns } from '@mastra/core/storage';
-import type { Workflow, SerializedStepFlowEntry } from '@mastra/core/workflows';
+import type { Workflow, SerializedStepFlowEntry, WatchEvent } from '@mastra/core/workflows';
 import { stringify } from 'superjson';
 import zodToJsonSchema from 'zod-to-json-schema';
 import { HTTPException } from '../http-exception';
@@ -169,6 +170,40 @@ export async function getWorkflowRunByIdHandler({
   }
 }
 
+export async function getWorkflowRunExecutionResultHandler({
+  mastra,
+  workflowId,
+  runId,
+}: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'>): Promise<WatchEvent['payload']['workflowState']> {
+  try {
+    if (!workflowId) {
+      throw new HTTPException(400, { message: 'Workflow ID is required' });
+    }
+
+    if (!runId) {
+      throw new HTTPException(400, { message: 'Run ID is required' });
+    }
+
+    const workflow = mastra.getWorkflow(workflowId);
+
+    if (!workflow) {
+      throw new HTTPException(404, { message: 'Workflow not found' });
+    }
+
+    const executionResult = await workflow.getWorkflowRunExecutionResult(runId);
+
+    if (!executionResult) {
+      throw new HTTPException(404, { message: 'Workflow run execution result not found' });
+    }
+
+    return executionResult;
+  } catch (error) {
+    throw new HTTPException(500, {
+      message: (error as Error)?.message || 'Error getting workflow run execution result',
+    });
+  }
+}
+
 export async function createWorkflowRunHandler({
   mastra,
   workflowId,
@@ -195,13 +230,13 @@ export async function createWorkflowRunHandler({
 
 export async function startAsyncWorkflowHandler({
   mastra,
-  runtimeContext,
+  runtimeContext: payloadRuntimeContext,
   workflowId,
   runId,
   inputData,
 }: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
   inputData?: unknown;
-  runtimeContext?: RuntimeContext;
+  runtimeContext?: Record<string, any>;
 }) {
   try {
     if (!workflowId) {
@@ -212,6 +247,16 @@ export async function startAsyncWorkflowHandler({
 
     if (!workflow) {
       throw new HTTPException(404, { message: 'Workflow not found' });
+    }
+
+    let runtimeContext: RuntimeContextType | undefined;
+
+    if (payloadRuntimeContext) {
+      runtimeContext = new RuntimeContext();
+
+      Object.entries(payloadRuntimeContext || {}).forEach(([key, value]) => {
+        (runtimeContext as RuntimeContextType).set(key, value);
+      });
     }
 
     const _run = workflow.createRun({ runId });
@@ -227,13 +272,13 @@ export async function startAsyncWorkflowHandler({
 
 export async function startWorkflowRunHandler({
   mastra,
-  runtimeContext,
+  runtimeContext: payloadRuntimeContext,
   workflowId,
   runId,
   inputData,
 }: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
   inputData?: unknown;
-  runtimeContext?: RuntimeContext;
+  runtimeContext?: Record<string, any>;
 }) {
   try {
     if (!workflowId) {
@@ -254,6 +299,16 @@ export async function startWorkflowRunHandler({
 
     if (!run) {
       throw new HTTPException(404, { message: 'Workflow run not found' });
+    }
+
+    let runtimeContext: RuntimeContextType | undefined;
+
+    if (payloadRuntimeContext) {
+      runtimeContext = new RuntimeContext();
+
+      Object.entries(payloadRuntimeContext || {}).forEach(([key, value]) => {
+        (runtimeContext as RuntimeContextType).set(key, value);
+      });
     }
 
     const _run = workflow.createRun({ runId });
@@ -330,13 +385,13 @@ export async function watchWorkflowHandler({
 
 export async function streamWorkflowHandler({
   mastra,
-  runtimeContext,
+  runtimeContext: payloadRuntimeContext,
   workflowId,
   runId,
   inputData,
 }: Pick<WorkflowContext, 'mastra' | 'workflowId' | 'runId'> & {
   inputData?: unknown;
-  runtimeContext?: RuntimeContext;
+  runtimeContext?: Record<string, any>;
 }) {
   try {
     if (!workflowId) {
@@ -351,6 +406,16 @@ export async function streamWorkflowHandler({
 
     if (!workflow) {
       throw new HTTPException(404, { message: 'Workflow not found' });
+    }
+
+    let runtimeContext: RuntimeContextType | undefined;
+
+    if (payloadRuntimeContext) {
+      runtimeContext = new RuntimeContext();
+
+      Object.entries(payloadRuntimeContext || {}).forEach(([key, value]) => {
+        (runtimeContext as RuntimeContextType).set(key, value);
+      });
     }
 
     const run = workflow.createRun({ runId });
@@ -369,10 +434,10 @@ export async function resumeAsyncWorkflowHandler({
   workflowId,
   runId,
   body,
-  runtimeContext,
+  runtimeContext: payloadRuntimeContext,
 }: WorkflowContext & {
   body: { step: string | string[]; resumeData?: unknown };
-  runtimeContext?: RuntimeContext;
+  runtimeContext?: Record<string, any>;
 }) {
   try {
     if (!workflowId) {
@@ -397,6 +462,16 @@ export async function resumeAsyncWorkflowHandler({
 
     if (!run) {
       throw new HTTPException(404, { message: 'Workflow run not found' });
+    }
+
+    let runtimeContext: RuntimeContextType | undefined;
+
+    if (payloadRuntimeContext) {
+      runtimeContext = new RuntimeContext();
+
+      Object.entries(payloadRuntimeContext || {}).forEach(([key, value]) => {
+        (runtimeContext as RuntimeContextType).set(key, value);
+      });
     }
 
     const _run = workflow.createRun({ runId });
@@ -417,10 +492,10 @@ export async function resumeWorkflowHandler({
   workflowId,
   runId,
   body,
-  runtimeContext,
+  runtimeContext: payloadRuntimeContext,
 }: WorkflowContext & {
   body: { step: string | string[]; resumeData?: unknown };
-  runtimeContext?: RuntimeContext;
+  runtimeContext?: Record<string, any>;
 }) {
   try {
     if (!workflowId) {
@@ -445,6 +520,16 @@ export async function resumeWorkflowHandler({
 
     if (!run) {
       throw new HTTPException(404, { message: 'Workflow run not found' });
+    }
+
+    let runtimeContext: RuntimeContextType | undefined;
+
+    if (payloadRuntimeContext) {
+      runtimeContext = new RuntimeContext();
+
+      Object.entries(payloadRuntimeContext || {}).forEach(([key, value]) => {
+        (runtimeContext as RuntimeContextType).set(key, value);
+      });
     }
 
     const _run = workflow.createRun({ runId });

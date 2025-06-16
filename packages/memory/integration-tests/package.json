@@ -44,7 +44,7 @@
     "@mastra/core": "workspace:*",
     "@testing-library/react": "^16.2.0",
     "@types/node": "^20.17.27",
-    "ai": "5.0.0-alpha.11",
+    "ai": "5.0.0-alpha.14",
     "jsdom": "^26.0.0",
     "mastra": "workspace:*",
     "next": "^15.2.4",

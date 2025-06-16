@@ -53,7 +53,7 @@ export type MastraMessageV1 = {
   type: 'text' | 'tool-call' | 'tool-result';
 };
 
-type MessageInput =
+export type MessageInput =
   | AIV5.UIMessage
   | AIV5.ModelMessage
   // db messages in AIV4.CoreMessage format
@@ -193,10 +193,10 @@ export class MessageList {
         if (m.parts.length === 0) return false;
         const safeParts = m.parts.filter(
           p =>
-            p.type !== `tool-invocation` ||
+            !AIV5.isToolUIPart(p) ||
             // calls and partial-calls should be updated to be results at this point
             // if they haven't we can't send them back to the llm and need to remove them.
-            (p.toolInvocation.state !== `call` && p.toolInvocation.state !== `partial-call`),
+            (p.state !== `input-available` && p.state !== `input-streaming`),
         );
 
         // fully remove this message if it has an empty parts array after stripping out incomplete tool calls.
@@ -292,9 +292,7 @@ ${JSON.stringify(message, null, 2)}`,
     if (
       singleToolResult &&
       (latestMessage?.role !== `assistant` ||
-        !latestMessage.content.parts.some(
-          p => p.type === `tool-invocation` && p.toolInvocation.toolCallId === singleToolResult.toolCallId,
-        ))
+        !latestMessage.content.parts.some(p => AIV5.isToolUIPart(p) && p.toolCallId === singleToolResult.toolCallId))
     ) {
       // remove any tool results that aren't updating a tool call for ModelMessages
       return;
@@ -311,7 +309,8 @@ ${JSON.stringify(message, null, 2)}`,
     // If the last message is an assistant message and the new message is also an assistant message, merge them together and update tool calls with results
     const latestMessagePartType = latestMessage?.content?.parts?.filter(p => p.type !== `step-start`)?.at?.(-1)?.type;
 
-    const newMessageFirstPartType = messageV3.content.parts.filter(p => p.type !== `step-start`).at(0)?.type;
+    const newMessageFirstPart = messageV3.content.parts.filter(p => p.type !== `step-start`).at(0);
+    const newMessageFirstPartType = newMessageFirstPart?.type;
     const shouldAppendToLastAssistantMessage =
       latestMessage?.role === 'assistant' &&
       messageV3.role === 'assistant' &&
@@ -320,7 +319,7 @@ ${JSON.stringify(message, null, 2)}`,
     const shouldAppendToLastAssistantMessageParts =
       shouldAppendToLastAssistantMessage &&
       newMessageFirstPartType &&
-      ((newMessageFirstPartType === `tool-invocation` && latestMessagePartType !== `text`) ||
+      ((AIV5.isToolUIPart(newMessageFirstPart) && latestMessagePartType !== `text`) ||
         newMessageFirstPartType === latestMessagePartType);
 
     if (
@@ -340,17 +339,17 @@ ${JSON.stringify(message, null, 2)}`,
 
       for (const [index, part] of messageV3.content.parts.entries()) {
         // If the incoming part is a tool-invocation result, find the corresponding call in the latest message
-        if (part.type === 'tool-invocation' && part.toolInvocation.state === 'result') {
+        if (AIV5.isToolUIPart(part) && part.state === 'output-available') {
           const existingCallPart = [...latestMessage.content.parts]
             .reverse()
-            .find(p => p.type === 'tool-invocation' && p.toolInvocation.toolCallId === part.toolInvocation.toolCallId);
+            .find(p => AIV5.isToolUIPart(p) && p.toolCallId === part.toolCallId);
 
-          if (existingCallPart && existingCallPart.type === 'tool-invocation') {
+          if (existingCallPart && AIV5.isToolUIPart(existingCallPart)) {
             // Update the existing tool-call part with the result
-            existingCallPart.toolInvocation = {
-              ...existingCallPart.toolInvocation,
-              state: 'result',
-              result: part.toolInvocation.result,
+            latestMessage.content.parts[latestMessage.content.parts.findIndex(p => p === existingCallPart)] = {
+              ...existingCallPart,
+              state: 'output-available',
+              output: part.output,
             };
           }
         } else if (
@@ -510,8 +509,26 @@ ${JSON.stringify(message, null, 2)}`,
       switch (part.type) {
         case 'step-start':
         case 'text':
-        case 'tool-invocation':
           parts.push(part);
+          break;
+
+        case 'tool-invocation':
+          if (part.toolInvocation.state === `result`) {
+            parts.push({
+              type: `tool-${part.toolInvocation.toolName}`,
+              toolCallId: part.toolInvocation.toolCallId,
+              state: 'output-available',
+              input: part.toolInvocation.args,
+              output: part.toolInvocation.result,
+            });
+          } else {
+            parts.push({
+              type: `tool-${part.toolInvocation.toolName}`,
+              toolCallId: part.toolInvocation.toolCallId,
+              state: part.toolInvocation.state === `call` ? `input-available` : `input-streaming`,
+              input: part.toolInvocation.args,
+            });
+          }
           break;
 
         case 'source':
@@ -521,7 +538,7 @@ ${JSON.stringify(message, null, 2)}`,
             url: part.source.url,
             title: part.source.title,
             providerMetadata: part.source.providerMetadata,
-          } satisfies Extract<AIV5.UIMessagePart<any>, { type: 'source-url' }>);
+          } satisfies Extract<AIV5.UIMessagePart<any, any>, { type: 'source-url' }>);
           break;
 
         case 'reasoning':
@@ -537,7 +554,7 @@ ${JSON.stringify(message, null, 2)}`,
           parts.push({
             type: 'reasoning',
             text,
-          } satisfies Extract<AIV5.UIMessagePart<any>, { type: 'reasoning' }>);
+          } satisfies Extract<AIV5.UIMessagePart<any, any>, { type: 'reasoning' }>);
           break;
 
         case 'file':
@@ -545,7 +562,7 @@ ${JSON.stringify(message, null, 2)}`,
             type: 'file',
             url: part.data,
             mediaType: part.mimeType,
-          } satisfies Extract<AIV5.UIMessagePart<any>, { type: 'file' }>);
+          } satisfies Extract<AIV5.UIMessagePart<any, any>, { type: 'file' }>);
           fileUrls.add(part.data);
           break;
       }
@@ -559,7 +576,7 @@ ${JSON.stringify(message, null, 2)}`,
           url: attachment.url,
           mediaType: attachment.contentType || 'unknown',
           type: 'file',
-        } satisfies Extract<AIV5.UIMessagePart<any>, { type: 'file' }>);
+        } satisfies Extract<AIV5.UIMessagePart<any, any>, { type: 'file' }>);
       }
     }
 
@@ -584,23 +601,23 @@ ${JSON.stringify(message, null, 2)}`,
     };
   }
   private static mastraMessageV3ToV2(message: MastraMessageV3): MastraMessageV2 {
-    const toolInvocationParts = message.content.parts.filter(p => p.type === `tool-invocation`);
+    const toolInvocationParts = message.content.parts.filter(p => AIV5.isToolUIPart(p));
     const toolInvocations = toolInvocationParts.length
       ? toolInvocationParts.map(p => {
-          if (p.toolInvocation.state === `result`) {
+          if (p.state === `output-available`) {
             return {
-              args: p.toolInvocation.args,
-              result: p.toolInvocation.result,
-              toolCallId: p.toolInvocation.toolCallId,
-              toolName: p.toolInvocation.toolName,
+              args: p.input,
+              result: p.output,
+              toolCallId: p.toolCallId,
+              toolName: AIV5.getToolName(p),
               state: 'result',
             } satisfies AIV4.ToolInvocation;
           }
           return {
-            args: p.toolInvocation.args,
+            args: p.input,
             state: 'call',
-            toolName: p.toolInvocation.toolName,
-            toolCallId: p.toolInvocation.toolCallId,
+            toolName: AIV5.getToolName(p),
+            toolCallId: p.toolCallId,
           } satisfies AIV4.ToolInvocation;
         })
       : undefined;
@@ -615,6 +632,27 @@ ${JSON.stringify(message, null, 2)}`,
         format: 2,
         parts: message.content.parts
           .map((p): MastraMessageV2['content']['parts'][0] | null => {
+            if (AIV5.isToolUIPart(p)) {
+              const shared = { state: p.state, args: p.input, toolCallId: p.toolCallId, toolName: AIV5.getToolName(p) };
+
+              if (p.state === `output-available`) {
+                return {
+                  type: 'tool-invocation',
+                  toolInvocation: {
+                    ...shared,
+                    state: 'result',
+                    result: p.output,
+                  },
+                };
+              }
+              return {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  ...shared,
+                  state: p.state === `input-available` ? `call` : `partial-call`,
+                },
+              };
+            }
             switch (p.type) {
               case 'text':
                 return p;
@@ -641,8 +679,6 @@ ${JSON.stringify(message, null, 2)}`,
                   },
                 };
               case 'step-start':
-                return p;
-              case 'tool-invocation':
                 return p;
             }
             return null;
@@ -701,7 +737,6 @@ ${JSON.stringify(message, null, 2)}`,
   ): MastraMessageV3 {
     const id = `id` in coreMessage ? (coreMessage.id as string) : this.newMessageId();
     const parts: AIV5.UIMessage['parts'] = [];
-    const toolInvocations: AIV5.ToolInvocation[] = [];
 
     if (typeof coreMessage.content === 'string') {
       parts.push({
@@ -720,29 +755,21 @@ ${JSON.stringify(message, null, 2)}`,
 
           case 'tool-call':
             parts.push({
-              type: 'tool-invocation',
-              toolInvocation: {
-                state: 'call',
-                toolCallId: part.toolCallId,
-                toolName: part.toolName,
-                args: part.args,
-              },
+              type: `tool-${part.toolName}`,
+              state: 'input-available',
+              toolCallId: part.toolCallId,
+              input: part.input,
             });
             break;
 
           case 'tool-result':
-            const invocation = {
-              state: 'result' as const,
-              toolCallId: part.toolCallId,
-              toolName: part.toolName,
-              result: part.result ?? '', // undefined will cause AI SDK to throw an error, but for client side tool calls this really could be undefined
-              args: {}, // when we combine this invocation onto the existing tool-call part it will have args already
-            };
             parts.push({
-              type: 'tool-invocation',
-              toolInvocation: invocation,
+              type: `tool-${part.toolName}`,
+              state: 'output-available',
+              toolCallId: part.toolCallId,
+              output: part.output ?? '', // undefined will cause AI SDK to throw an error, but for client side tool calls this really could be undefined
+              input: {}, // when we combine this invocation onto the existing tool-call part it will have args already
             });
-            toolInvocations.push(invocation);
             break;
 
           case 'reasoning':
@@ -801,7 +828,7 @@ ${JSON.stringify(message, null, 2)}`,
     const id = `id` in coreMessage ? (coreMessage.id as string) : this.newMessageId();
     const parts: AIV4.UIMessage['parts'] = [];
     const experimentalAttachments: AIV4.UIMessage['experimental_attachments'] = [];
-    const toolInvocations: AIV5.ToolInvocation[] = [];
+    const toolInvocations: AIV4.ToolInvocation[] = [];
 
     if (typeof coreMessage.content === 'string') {
       parts.push({
@@ -1003,9 +1030,9 @@ ${JSON.stringify(message, null, 2)}`,
         // for 99.999% of cases this will be fine though because we're comparing messages that have the same ID already.
         key += part.text.length;
       }
-      if (part.type === `tool-invocation`) {
-        key += part.toolInvocation.toolCallId;
-        key += part.toolInvocation.state;
+      if (AIV5.isToolUIPart(part)) {
+        key += part.toolCallId;
+        key += part.state;
       }
       if (part.type === `reasoning`) {
         // TODO: we may need to hash this with something like xxhash instead of using length

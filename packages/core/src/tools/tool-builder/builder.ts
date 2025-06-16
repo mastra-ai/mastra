@@ -45,10 +45,6 @@ export class CoreToolBuilder extends MastraBase {
 
   // Helper to get parameters based on tool type
   private getParameters = () => {
-    if (isVercelTool(this.originalTool)) {
-      return this.originalTool.parameters ?? z.object({});
-    }
-
     return this.originalTool.inputSchema ?? z.object({});
   };
 
@@ -56,17 +52,17 @@ export class CoreToolBuilder extends MastraBase {
   private buildProviderTool<T>(tool: ToolToConvert): (CoreTool<T> & { id: `${string}.${string}` }) | undefined {
     if (
       'type' in tool &&
-      tool.type === 'provider-defined' &&
+      tool.type === 'provider-defined-server' &&
       'id' in tool &&
       typeof tool.id === 'string' &&
       tool.id.includes('.')
     ) {
       return {
-        type: 'provider-defined' as const,
+        type: 'provider-defined-server' as const,
         id: tool.id,
         args: ('args' in this.originalTool ? this.originalTool.args : {}) as Record<string, unknown>,
         description: tool.description,
-        parameters: convertZodSchemaToAISDKSchema(this.getParameters()),
+        inputSchema: convertZodSchemaToAISDKSchema(this.getParameters()),
         execute: this.originalTool.execute
           ? this.createExecute(
               this.originalTool,
@@ -164,7 +160,7 @@ export class CoreToolBuilder extends MastraBase {
     const definition = {
       type: 'function' as const,
       description: this.originalTool.description,
-      parameters: this.getParameters(),
+      inputSchema: this.getParameters(),
       execute: this.originalTool.execute
         ? this.createExecute(
             this.originalTool,
@@ -197,7 +193,7 @@ export class CoreToolBuilder extends MastraBase {
 
     return {
       ...definition,
-      parameters: processedSchema,
+      inputSchema: processedSchema,
     };
   }
 }

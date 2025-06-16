@@ -234,7 +234,7 @@ export function MastraRuntimeProvider({
                 if (toolResult) {
                   const newContent = _content.map(c => {
                     if (c.type === 'tool-call' && c.toolCallId === toolResult?.toolCallId) {
-                      return { ...c, result: toolResult.result };
+                      return { ...c, result: toolResult.output };
                     }
                     return c;
                   });
@@ -246,7 +246,7 @@ export function MastraRuntimeProvider({
                       ? newContent
                       : [
                           ..._content,
-                          { type: 'tool-result', toolCallId: toolResult.toolCallId, result: toolResult.result },
+                          { type: 'tool-result', toolCallId: toolResult.toolCallId, result: toolResult.output },
                         ],
                   } as ThreadMessageLike;
                 }

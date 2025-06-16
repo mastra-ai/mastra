@@ -287,9 +287,14 @@ export async function streamGenerateHandler({
       runtimeContext: finalRuntimeContext,
     });
 
+    const headers = {
+      'Transfer-Encoding': 'chunked',
+    };
+
     const streamResponse = rest.output
-      ? streamResult.toTextStreamResponse()
+      ? streamResult.toTextStreamResponse({ headers })
       : streamResult.toUIMessageStreamResponse({
+          headers,
           // sendUsage: true, // <- TODO: this doesn't exist anymore. Why?
           sendReasoning: true,
           sendSources: true, // TODO: this is false by default. Do we need to make this configurable or what?

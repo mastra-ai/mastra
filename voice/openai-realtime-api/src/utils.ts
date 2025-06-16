@@ -51,19 +51,14 @@ export const transformTools = (tools?: TTools) => {
           if (!tool.execute) {
             throw new Error(`Tool ${name} has no execute function`);
           }
-
+          // Create a minimal ToolExecutionOptions object with required properties
+          const options = {
+            toolCallId: 'unknown',
+            messages: [],
+          };
           // For ToolAction, the first argument is a context object with the args in a 'context' property
           if ('inputSchema' in tool) {
-            return await tool.execute({ context: args });
-          }
-          // For VercelTool, pass args directly
-          else {
-            // Create a minimal ToolExecutionOptions object with required properties
-            const options = {
-              toolCallId: 'unknown',
-              messages: [],
-            };
-            return await tool.execute(args, options);
+            return await tool.execute({ context: args }, options);
           }
         } catch (error) {
           console.error(`Error executing tool ${name}:`, error);

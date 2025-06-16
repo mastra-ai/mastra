@@ -72,7 +72,7 @@
   },
   "peerDependencies": {
     "@mastra/core": "^0.10.1-alpha.0",
-    "ai": "^4.0.0"
+    "ai": "5.0.0-alpha.14"
   },
   "devDependencies": {
     "@ai-sdk/openai": "latest",
@@ -83,7 +83,7 @@
     "@types/fs-extra": "^11.0.4",
     "@types/sentiment": "^5.0.4",
     "@types/string-similarity": "^4.0.2",
-    "ai": "^4.3.16",
+    "ai": "5.0.0-alpha.14",
     "dotenv": "^16.5.0",
     "eslint": "^9.28.0",
     "tsup": "^8.5.0",

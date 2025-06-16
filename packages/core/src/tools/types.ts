@@ -19,7 +19,7 @@ export type CoreTool<Parameters = ToolParameters> =
   | ({
       id?: string;
       description?: string;
-      parameters: Parameters;
+      inputSchema: Parameters;
       execute?: (params: any, options: ToolCallOptions) => Promise<any>;
       // TODO: do we need this?
       // experimental_toToolResultContent?: (result: any) => any;
@@ -29,7 +29,12 @@ export type CoreTool<Parameters = ToolParameters> =
           id?: string;
         }
       | {
-          type: 'provider-defined';
+          type: 'provider-defined-server';
+          id: `${string}.${string}`;
+          args: Record<string, unknown>;
+        }
+      | {
+          type: 'provider-defined-client';
           id: `${string}.${string}`;
           args: Record<string, unknown>;
         }
@@ -57,7 +62,12 @@ export type InternalCoreTool = {
       id?: string;
     }
   | {
-      type: 'provider-defined';
+      type: 'provider-defined-server';
+      id: `${string}.${string}`;
+      args: Record<string, unknown>;
+    }
+  | {
+      type: 'provider-defined-client';
       id: `${string}.${string}`;
       args: Record<string, unknown>;
     }

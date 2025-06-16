@@ -44,7 +44,7 @@
   "devDependencies": {
     "@ai-sdk/openai": "2.0.0-alpha.10",
     "@internal/lint": "workspace:*",
-    "ai": "5.0.0-alpha.10",
+    "ai": "5.0.0-alpha.14",
     "@ai-sdk/anthropic": "^1.2.12",
     "@hono/node-server": "^1.14.4",
     "@mastra/core": "workspace:*",

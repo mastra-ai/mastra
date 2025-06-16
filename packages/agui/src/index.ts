@@ -215,7 +215,7 @@ export function convertMessagesToMastraMessages(messages: Message[]): CoreMessag
             type: 'tool-result',
             toolCallId: message.toolCallId,
             toolName: toolName,
-            result: message.content,
+            output: message.content,
           },
         ],
       });

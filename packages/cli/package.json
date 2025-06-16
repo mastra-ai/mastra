@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "0.10.6-alpha.0",
+  "version": "0.10.6-alpha.2",
   "license": "Elastic-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -62,6 +62,7 @@
     "fs-extra": "^11.3.0",
     "get-port": "^7.1.0",
     "json-schema-to-zod": "^2.6.1",
+    "open": "^10.1.2",
     "picocolors": "^1.1.1",
     "posthog-node": "4.16.0",
     "prettier": "^3.5.3",

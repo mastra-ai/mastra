@@ -36,20 +36,20 @@
   },
   "peerDependencies": {
     "@mastra/core": "^0.10.0-alpha.0",
-    "ai": "^4.0.0"
+    "ai": "5.0.0-alpha.14"
   },
   "devDependencies": {
-    "@ai-sdk/cohere": "2.0.0-alpha.11",
-    "@ai-sdk/openai": "2.0.0-alpha.11",
+    "@ai-sdk/cohere": "2.0.0-alpha.14",
+    "@ai-sdk/openai": "2.0.0-alpha.14",
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
     "@microsoft/api-extractor": "^7.52.8",
     "@types/big.js": "^6.2.2",
-    "ai": "5.0.0-alpha.11",
+    "@types/node": "^20.19.0",
+    "ai": "5.0.0-alpha.14",
     "dotenv": "^16.5.0",
     "eslint": "^9.28.0",
     "tsup": "^8.5.0",
-    "@types/node": "^20.19.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.3"
   },

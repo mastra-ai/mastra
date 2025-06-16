@@ -5,7 +5,7 @@ import type { MastraMessageV2 } from '@mastra/core/agent';
 import { MastraMemory } from '@mastra/core/memory';
 import type { MemoryConfig, SharedMemoryConfig, StorageThreadType } from '@mastra/core/memory';
 import type { StorageGetMessagesArg } from '@mastra/core/storage';
-import { embedMany } from 'ai';
+import { embedMany, getToolName, isToolUIPart } from 'ai';
 import type { CoreMessage, TextPart, UIMessage } from 'ai';
 
 import xxhash from 'xxhash-wasm';
@@ -544,8 +544,8 @@ export class Memory extends MastraMemory {
     if (newMessage.content.parts) {
       newMessage.content.parts = newMessage.content.parts
         .filter(part => {
-          if (part.type === 'tool-invocation') {
-            return part.toolInvocation.toolName !== 'updateWorkingMemory';
+          if (isToolUIPart(part)) {
+            return getToolName(part) !== 'updateWorkingMemory';
           }
           return true;
         })

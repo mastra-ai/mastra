@@ -41,7 +41,7 @@
   "author": "",
   "license": "Elastic-2.0",
   "dependencies": {
-    "ai": "5.0.0-alpha.11",
+    "ai": "5.0.0-alpha.14",
     "@upstash/redis": "^1.35.0",
     "js-tiktoken": "^1.0.20",
     "pg": "^8.16.0",
