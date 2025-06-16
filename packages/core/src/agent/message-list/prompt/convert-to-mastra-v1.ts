@@ -2,10 +2,24 @@
  * This file is an adaptation of https://github.com/vercel/ai/blob/e14c066bf4d02c5ee2180c56a01fa0e5216bc582/packages/ai/core/prompt/convert-to-core-messages.ts
  * But has been modified to work with Mastra storage adapter messages (MastraMessageV1)
  */
-import type { AssistantContent, ToolResultPart } from 'ai';
+import type { AssistantContent, FilePart, ImagePart, TextPart, ToolCallPart, ToolResultPart } from 'ai';
 import type { MastraMessageV1 } from '../../../memory/types';
 import type { MastraMessageContentV2, MastraMessageV2 } from '../../message-list';
+import type { ReasoningPart, RedactedReasoningPart } from '../ai-sdk-4/core/prompt/content-part';
 import { attachmentsToParts } from './attachments-to-parts';
+
+type MessagePart =
+  | TextPart
+  | ImagePart
+  | FilePart
+  | ReasoningPart
+  | RedactedReasoningPart
+  | ToolCallPart
+  | ToolResultPart;
+
+function isMessagePartArray(content: unknown): content is MessagePart[] {
+  return Array.isArray(content) && content.every(part => typeof part === 'object' && 'type' in part);
+}
 
 const makePushOrCombine = (v1Messages: MastraMessageV1[]) => (msg: MastraMessageV1) => {
   msg = { ...msg };
@@ -15,15 +29,13 @@ const makePushOrCombine = (v1Messages: MastraMessageV1[]) => (msg: MastraMessage
   const previousMessage = v1Messages.at(-1);
   if (
     msg.role === previousMessage?.role &&
-    Array.isArray(previousMessage.content) &&
+    isMessagePartArray(previousMessage.content) &&
     Array.isArray(msg.content) &&
     // we were creating new messages for tool calls before and not appending to the assistant message
     // so don't append here so everything works as before
     (msg.role !== `assistant` || (msg.role === `assistant` && msg.content.at(-1)?.type !== `tool-call`))
   ) {
     for (const part of msg.content) {
-      // @ts-ignore needs type gymnastics? msg.content and previousMessage.content are the same type here since both are arrays
-      // I'm not sure what's adding `never` to the union but this code definitely works..
       previousMessage.content.push(part);
     }
   } else {

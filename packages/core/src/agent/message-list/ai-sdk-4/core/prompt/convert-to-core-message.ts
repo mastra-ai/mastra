@@ -33,9 +33,8 @@ export function convertToCoreMessages<TOOLS extends ToolSet = never>(
         if (message?.parts == null) {
           coreMessages.push({
             role: 'user',
-            // @ts-ignore
             content: experimental_attachments
-              ? [{ type: 'text', text: content }, ...attachmentsToParts(experimental_attachments)]
+              ? [{ type: 'text', text: content || '' }, ...attachmentsToParts(experimental_attachments)]
               : content || '',
           });
         } else {
