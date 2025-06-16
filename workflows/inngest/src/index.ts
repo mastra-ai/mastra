@@ -89,7 +89,8 @@ export class InngestRun<
 
   async getRunOutput(eventId: string) {
     let runs = await this.getRuns(eventId);
-    while (runs?.[0]?.status !== 'Completed') {
+
+    while (runs?.[0]?.status !== 'Completed' || runs?.[0]?.event_id !== eventId) {
       await new Promise(resolve => setTimeout(resolve, 1000));
       runs = await this.getRuns(eventId);
       if (runs?.[0]?.status === 'Failed' || runs?.[0]?.status === 'Cancelled') {
@@ -158,6 +159,27 @@ export class InngestRun<
       | string[];
     runtimeContext?: RuntimeContext;
   }): Promise<WorkflowResult<TOutput, TSteps>> {
+    const p = this._resume(params).then(result => {
+      if (result.status !== 'suspended') {
+        this.closeStreamAction?.().catch(() => {});
+      }
+
+      return result;
+    });
+
+    this.executionResults = p;
+    return p;
+  }
+
+  async _resume<TResumeSchema extends z.ZodType<any>>(params: {
+    resumeData?: z.infer<TResumeSchema>;
+    step:
+      | Step<string, any, any, TResumeSchema, any>
+      | [...Step<string, any, any, any, any>[], Step<string, any, any, TResumeSchema, any>]
+      | string
+      | string[];
+    runtimeContext?: RuntimeContext;
+  }): Promise<WorkflowResult<TOutput, TSteps>> {
     const steps: string[] = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
       typeof step === 'string' ? step : step?.id,
     );
@@ -202,7 +224,6 @@ export class InngestRun<
         app: this.inngest,
       },
       (message: any) => {
-        console.log('message', message.data);
         cb(message.data);
       },
     );
@@ -233,10 +254,6 @@ export class InngestRun<
     }, 'watch-v2');
 
     this.closeStreamAction = async () => {
-      this.emitter.emit('watch-v2', {
-        type: 'finish',
-        payload: { runId: this.runId },
-      });
       unwatch();
 
       try {
@@ -248,10 +265,6 @@ export class InngestRun<
       }
     };
 
-    this.emitter.emit('watch-v2', {
-      type: 'start',
-      payload: { runId: this.runId },
-    });
     this.executionResults = this.start({ inputData, runtimeContext }).then(result => {
       if (result.status !== 'suspended') {
         this.closeStreamAction?.().catch(() => {});
@@ -734,6 +747,41 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     this.inngestAttempts = inngestAttempts;
   }
 
+  async execute<TInput, TOutput>(params: {
+    workflowId: string;
+    runId: string;
+    graph: ExecutionGraph;
+    serializedStepGraph: SerializedStepFlowEntry[];
+    input?: TInput;
+    resume?: {
+      // TODO: add execute path
+      steps: string[];
+      stepResults: Record<string, StepResult<any, any, any, any>>;
+      resumePayload: any;
+      resumePath: number[];
+    };
+    emitter: Emitter;
+    retryConfig?: {
+      attempts?: number;
+      delay?: number;
+    };
+    runtimeContext: RuntimeContext;
+  }): Promise<TOutput> {
+    await params.emitter.emit('watch-v2', {
+      type: 'start',
+      payload: { runId: params.runId },
+    });
+
+    const result = await super.execute<TInput, TOutput>(params);
+
+    await params.emitter.emit('watch-v2', {
+      type: 'finish',
+      payload: { runId: params.runId },
+    });
+
+    return result;
+  }
+
   protected async fmtReturnValue<TOutput>(
     executionSpan: Span | undefined,
     emitter: Emitter,
@@ -913,6 +961,13 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           },
           eventTimestamp: Date.now(),
         });
+
+        await emitter.emit('watch-v2', {
+          type: 'step-start',
+          payload: {
+            id: step.id,
+          },
+        });
       },
     );
 
@@ -979,6 +1034,15 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               eventTimestamp: Date.now(),
             });
 
+            await emitter.emit('watch-v2', {
+              type: 'step-result',
+              payload: {
+                id: step.id,
+                status: 'failed',
+                output: undefined,
+              },
+            });
+
             return { executionContext, result: { status: 'failed', error: result?.error } };
           } else if (result.status === 'suspended') {
             const suspendedSteps = Object.entries(result.steps).filter(([_stepName, stepResult]) => {
@@ -1007,6 +1071,14 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                   },
                 },
                 eventTimestamp: Date.now(),
+              });
+
+              await emitter.emit('watch-v2', {
+                type: 'step-suspended',
+                payload: {
+                  id: step.id,
+                  output: undefined,
+                },
               });
 
               return {
@@ -1065,6 +1137,14 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             eventTimestamp: Date.now(),
           });
 
+          await emitter.emit('watch-v2', {
+            type: 'step-finish',
+            payload: {
+              id: step.id,
+              metadata: {},
+            },
+          });
+
           return { executionContext, result: { status: 'success', output: result?.result } };
         },
       );
@@ -1076,7 +1156,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     const stepRes = await this.inngestStep.run(`workflow.${executionContext.workflowId}.step.${step.id}`, async () => {
       let execResults: any;
       let suspended: { payload: any } | undefined;
+
       try {
+        const startedAt = Date.now();
         const result = await step.execute({
           runId: executionContext.runId,
           mastra: this.mastra!,
@@ -1107,14 +1189,28 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             step: this.inngestStep,
           },
         });
+        const endedAt = Date.now();
 
-        execResults = { status: 'success', output: result };
+        execResults = {
+          status: 'success',
+          output: result,
+          startedAt,
+          endedAt,
+          payload: prevOutput,
+          resumedAt: resume?.steps[0] === step.id ? Date.now() : undefined,
+          resumePayload: resume?.steps[0] === step.id ? resume?.resumePayload : undefined,
+        };
       } catch (e) {
         execResults = { status: 'failed', error: e instanceof Error ? e.message : String(e) };
       }
 
       if (suspended) {
-        execResults = { status: 'suspended', payload: suspended.payload };
+        execResults = {
+          status: 'suspended',
+          payload: suspended.payload,
+          output: prevOutput,
+          suspendedAt: Date.now(),
+        };
       }
 
       if (execResults.status === 'failed') {
@@ -1140,6 +1236,34 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         },
         eventTimestamp: Date.now(),
       });
+
+      if (execResults.status === 'suspended') {
+        await emitter.emit('watch-v2', {
+          type: 'step-suspended',
+          payload: {
+            id: step.id,
+            status: execResults.status,
+            output: execResults.status === 'success' ? execResults?.output : undefined,
+          },
+        });
+      } else {
+        await emitter.emit('watch-v2', {
+          type: 'step-result',
+          payload: {
+            id: step.id,
+            status: execResults.status,
+            output: execResults.status === 'success' ? execResults?.output : undefined,
+          },
+        });
+
+        await emitter.emit('watch-v2', {
+          type: 'step-finish',
+          payload: {
+            id: step.id,
+            metadata: {},
+          },
+        });
+      }
 
       return { result: execResults, executionContext, stepResults };
     });
@@ -1303,7 +1427,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     if (hasFailed) {
       execResults = { status: 'failed', error: hasFailed.result.error };
     } else if (hasSuspended) {
-      execResults = { status: 'suspended', payload: hasSuspended.result.payload };
+      execResults = { status: 'suspended', payload: hasSuspended.result.payload, suspendedAt: Date.now() };
     } else {
       execResults = {
         status: 'success',

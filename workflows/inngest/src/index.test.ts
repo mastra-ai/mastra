@@ -5767,7 +5767,7 @@ describe('MastraInngestWorkflow', () => {
   });
 
   describe('Streaming', () => {
-    it.only('should generate a stream', async ctx => {
+    it('should generate a stream', async ctx => {
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
@@ -5831,17 +5831,20 @@ describe('MastraInngestWorkflow', () => {
         runId,
       });
 
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
       const { stream, getWorkflowState } = run.stream({ inputData: {} });
 
       // Start watching the workflow
       const collectedStreamData: StreamEvent[] = [];
       for await (const data of stream) {
-        console.log('data', data);
         collectedStreamData.push(JSON.parse(JSON.stringify(data)));
       }
       watchData = collectedStreamData;
 
       const executionResult = await getWorkflowState();
+
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
       srv.close();
 
@@ -6032,6 +6035,8 @@ describe('MastraInngestWorkflow', () => {
         port: (ctx as any).handlerPort,
       });
 
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
       const run = promptEvalWorkflow.createRun();
 
       const { stream, getWorkflowState } = run.stream({ inputData: { input: 'test' } });
@@ -6049,6 +6054,7 @@ describe('MastraInngestWorkflow', () => {
         }
       }
 
+      await new Promise(resolve => setTimeout(resolve, 5000));
       const resumeResult = await getWorkflowState();
 
       srv.close();
@@ -6098,6 +6104,19 @@ describe('MastraInngestWorkflow', () => {
     });
 
     it('should be able to use an agent as a step', async ctx => {
+      vi.mock('crypto', () => {
+        return {
+          randomUUID: vi.fn(() => 'mock-uuid-1'),
+        };
+      });
+
+      vi.resetAllMocks();
+
+      let counter = 0;
+      (randomUUID as vi.Mock).mockImplementation(() => {
+        return `mock-uuid-${++counter}`;
+      });
+
       const inngest = new Inngest({
         id: 'mastra',
         baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
