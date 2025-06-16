@@ -1,5 +1,21 @@
 # mastra
 
+## 0.10.6-alpha.2
+
+### Patch Changes
+
+- 143b4e4: Fix globbing of tools to only capture js/ts files
+- 44ba52d: Add proper error message when installation of mastra fails
+- 3270d9d: Fix runtime context being undefined
+- fc677d7: For final result for a workflow
+- Updated dependencies [ee9af57]
+- Updated dependencies [3270d9d]
+- Updated dependencies [751c894]
+- Updated dependencies [577ce3a]
+- Updated dependencies [9260b3a]
+  - @mastra/deployer@0.10.6-alpha.1
+  - @mastra/core@0.10.6-alpha.1
+
 ## 0.10.6-alpha.1
 
 ### Patch Changes
