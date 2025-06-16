@@ -205,7 +205,6 @@ export const useWatchWorkflow = () => {
   const debouncedSetWorkflowWatchResult = useDebouncedCallback(
     (record: ExtendedWorkflowWatchResult, onUpdate: (result: ExtendedWorkflowWatchResult) => void) => {
       const sanitizedRecord = sanitizeWorkflowWatchResult(record);
-      console.log('sanitizedRecord===', sanitizedRecord);
       onUpdate(sanitizedRecord);
     },
     100,
@@ -225,7 +224,6 @@ export const useWatchWorkflow = () => {
         const workflow = client.getWorkflow(workflowId);
 
         await workflow.watch({ runId }, record => {
-          console.log('record===', record, Date.now());
           try {
             debouncedSetWorkflowWatchResult(record, onUpdate);
           } catch (err) {
