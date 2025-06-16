@@ -14,70 +14,30 @@ Input data mapping allows explicit mapping of values for the inputs of the next 
 
 ## Map
 
-In this example the `output` from `cityCoordinatesStep` is transformed to match the `inputSchema` required for the `locationDetailsStep`. The values from the `cityCoordinatesStep` are available using the `inputData` parameter of the `.map` function.
+In this example the `output` from `step1` is transformed to match the `inputSchema` required for the `step2`. The value from `step1` is available using the `inputData` parameter of the `.map` function.
 
-```typescript {7-10,31,54,58} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-const cityCoordinatesStep = createStep({
-  id: "city-step",
-  description: "Gets details about a city",
-  inputSchema: z.object({
-    city: z.string()
-  }),
-  outputSchema: z.object({
-    city_name: z.string(),
-    country_name: z.string(),
-    country_timezone: z.string()
-  }),
-  execute: async ({ inputData }) => {
-    const { city } = inputData;
-    const geocodingResponse = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${city}`);
-    const geocodingData = await geocodingResponse.json();
-
-    const { name, country, timezone } = geocodingData.results[0];
-
-    return {
-      city_name: name,
-      country_name: country,
-      country_timezone: timezone
-    };
-  }
-});
-
-const locationDetailsStep = createStep({
-  id: "location-step",
-  description: "Display location details",
-  inputSchema: z.object({
-    details: z.string()
-  }),
-  outputSchema: z.object({
-    outcome: z.string()
-  }),
-  execute: async ({ inputData }) => {
-    const { details } = inputData;
-    return {
-      outcome: details
-    };
-  }
-});
+```typescript {18} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+const step1 = createStep({...});
+const step2 = createStep({...});
 
 export const testWorkflow = createWorkflow({
   id: "test-workflow",
   description: 'Test workflow',
   inputSchema: z.object({
-    city: z.string()
+    input: z.number()
   }),
   outputSchema: z.object({
-    outcome: z.string()
+    output: z.string()
   })
 })
-  .then(cityCoordinatesStep)
+  .then(step1)
   .map(({ inputData }) => {
-    const { city_name, country_name, country_timezone } = inputData;
+    const { value } = inputData;
     return {
-      details: `${city_name}, ${country_name}, ${country_timezone}`
+      output: `${value}`
     };
   })
-  .then(locationDetailsStep)
+  .then(step2)
   .commit();
 ```
 
@@ -87,7 +47,7 @@ Use `inputData` to access the full output of the previous step:
 
 ```typescript {2} showLineNumbers
   .map(({ inputData }) => {
-    const { city_name, country_name, country_timezone } = inputData;
+    const { value} = inputData;
     ...
   })
 ```
@@ -97,21 +57,11 @@ Use `inputData` to access the full output of the previous step:
 Use `getStepResult` to access the full output of a specific step by referencing the step's instance:
 
 ```typescript {3} showLineNumbers
-  .then(cityCoordinatesStep)
+  .then(step1)
   .map(({ getStepResult }) => {
-    console.log(getStepResult(cityCoordinatesStep));
+    console.log(getStepResult(step1));
     ...
   })
-```
-
-The above log would produce an output similar to the below:
-
-```typescript showLineNumbers
-{
-  city_name: 'London',
-  country_name: 'United Kingdom',
-  country_timezone: 'Europe/London'
-}
 ```
 
 ### getInitData
@@ -119,38 +69,27 @@ The above log would produce an output similar to the below:
 Use `getInitData` to access the initial input data provided to the workflow:
 
 ```typescript {3} showLineNumbers
-  .then(cityCoordinatesStep)
+  .then(step1)
   .map(({ getInitData }) => {
       console.log(getInitData());
     ...
   })
 ```
 
-The above log would produce an output similar to the below:
-
-```typescript showLineNumbers
-{ city: 'London' }
-```
 ## Renaming Outputs
 
 ### Step Outputs
 
-You can rename step outputs using the object syntax in `.map()`. In the example below, the `city_name` output from `cityCoordinatesStep` is renamed to `details`:
+You can rename step outputs using the object syntax in `.map()`. In the example below, the `value` output from `step1` is renamed to `details`:
 
 ```typescript {3} showLineNumbers
-  .then(cityCoordinatesStep)
+  .then(step)
   .map({
     details: {
-      step: cityCoordinatesStep,
-      path: "city_name"
+      step: step,
+      path: "value"
     }
   })
-```
-
-The output would be similar to the below:
-
-```typescript showLineNumbers
-{ details: 'London' }
 ```
 
 ### Workflow Outputs
@@ -162,10 +101,10 @@ export const testWorkflow = createWorkflow({
   id: "test-workflow",
   description: 'Test workflow',
   inputSchema: z.object({
-    city: z.string()
+    input: z.string()
   }),
   outputSchema: z.object({
-    outcome: z.string()
+    output: z.string()
   })
 });
 
@@ -174,13 +113,7 @@ testWorkflow
   .map({
     details: {
       initData: testWorkflow,
-      path: "city"
+      path: "value"
     }
   })
-```
-
-The output would be similar to the below:
-
-```typescript showLineNumbers
-{ details: 'London' }
 ```

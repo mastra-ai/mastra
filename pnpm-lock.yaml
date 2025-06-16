@@ -839,6 +839,9 @@ importers:
       json-schema-to-zod:
         specifier: ^2.6.1
         version: 2.6.1
+      open:
+        specifier: ^10.1.2
+        version: 10.1.2
       picocolors:
         specifier: ^1.1.1
         version: 1.1.1
