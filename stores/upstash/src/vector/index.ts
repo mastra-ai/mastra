@@ -137,7 +137,7 @@ export class UpstashVector extends MastraVector {
     try {
       await this.client.deleteNamespace(namespace);
     } catch (error) {
-      console.error('Failed to delete namespace:', error);
+      this.logger.error('Failed to delete namespace:', error);
     }
   }
 
