@@ -433,18 +433,12 @@ export class MCPServer extends MCPServerBase {
 
         this.logger.debug(`CallTool: Invoking '${request.params.name}' with arguments:`, request.params.arguments);
 
-        const validation = tool.parameters.validate?.(request.params.arguments ?? {});
-        // TODO: need to fix tool types!!!
-        // @ts-expect-error
+        const validation = await tool.parameters.validate?.(request.params.arguments ?? {});
         if (validation && !validation.success) {
           this.logger.warn(`CallTool: Invalid tool arguments for '${request.params.name}'`, {
-            // TODO: need to fix tool types!!!
-            // @ts-expect-error
             errors: validation.error,
           });
           return {
-            // TODO: need to fix tool types!!!
-            // @ts-expect-error
             content: [{ type: 'text', text: `Invalid tool arguments: ${JSON.stringify(validation.error)}` }],
             isError: true,
           };
@@ -457,8 +451,6 @@ export class MCPServer extends MCPServerBase {
           };
         }
 
-        // TODO: need to fix tool types!!!
-        // @ts-expect-error
         const result = await tool.execute(validation?.value, { messages: [], toolCallId: '' });
         const duration = Date.now() - startTime;
         this.logger.info(`Tool '${request.params.name}' executed successfully in ${duration}ms.`);

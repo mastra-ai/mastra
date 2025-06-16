@@ -28,7 +28,7 @@ export const transformTools = (tools?: TTools) => {
       }
     } else if ('parameters' in tool) {
       if (isZodObject(tool.parameters)) {
-        parameters = zodToJsonSchema(tool.parameters as z.Schema); // TODO: this is wrong. something is messed up with tool parameters types
+        parameters = zodToJsonSchema(tool.parameters);
         delete parameters.$schema;
       } else {
         parameters = tool.parameters!;
@@ -88,12 +88,12 @@ export const isReadableStream = (obj: unknown) => {
   );
 };
 
-function isZodObject(schema: unknown) {
+function isZodObject(schema: unknown): schema is z.ZodObject<any> {
   return (
     !!schema &&
     typeof schema === 'object' &&
     '_def' in schema &&
-    schema._def &&
+    !!schema._def &&
     typeof schema._def === 'object' &&
     'typeName' in schema._def &&
     schema._def.typeName === 'ZodObject'
