@@ -1,8 +1,5 @@
 const meta = {
-  overview: "Overview",
-  installation: "Automatic Install",
-  "manual-installation": "Manual Install",
-  "existing-install": "Add to Project",
+  installation: "Installation",
   "project-structure": "Project Structure",
   "mcp-docs-server": "MCP Docs Server",
   "model-providers": "Model Providers",
