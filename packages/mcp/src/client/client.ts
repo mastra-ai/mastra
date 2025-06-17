@@ -471,12 +471,16 @@ export class InternalMastraMCPClient extends MastraBase {
           errorDetails = String(error);
         }
       }
-      this.log('error', 'Failed to convert JSON schema to Zod schema using zodFromJsonSchema', {
+
+      // Log as warning instead of error, since we have a fallback
+      this.log('warn', 'Schema conversion failed, using permissive fallback', {
         error: errorDetails,
         originalJsonSchema: inputSchema,
+        fallbackUsed: true,
       });
 
-      throw new Error(errorDetails);
+      // Return a permissive schema that accepts any object instead of throwing
+      return z.object({}).passthrough();
     }
   }
 
@@ -495,11 +499,21 @@ export class InternalMastraMCPClient extends MastraBase {
             const previousContext = this.currentOperationContext;
             this.currentOperationContext = runtimeContext || null; // Set current context
             try {
-              this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: context });
+              // Validate that we have parameters to send
+              if (context === undefined || context === null) {
+                this.log('warn', `No parameters provided for tool: ${tool.name}`);
+              }
+
+              this.log('debug', `Executing tool: ${tool.name}`, {
+                toolArgs: context,
+                hasArgs: context !== undefined,
+                argType: typeof context
+              });
+
               const res = await this.client.callTool(
                 {
                   name: tool.name,
-                  arguments: context,
+                  arguments: context || {}, // Ensure we never send undefined
                 },
                 CallToolResultSchema,
                 {
@@ -512,6 +526,7 @@ export class InternalMastraMCPClient extends MastraBase {
               this.log('error', `Error calling tool: ${tool.name}`, {
                 error: e instanceof Error ? e.stack : JSON.stringify(e, null, 2),
                 toolArgs: context,
+                hasArgs: context !== undefined,
               });
               throw e;
             } finally {
