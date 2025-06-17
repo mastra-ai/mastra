@@ -105,8 +105,8 @@ export class Agent<
   #mastra?: Mastra;
   #memory?: MastraMemory;
   #workflows?: DynamicArgument<Record<string, Workflow>>;
-  #defaultGenerateOptions: AgentGenerateOptions;
-  #defaultStreamOptions: AgentStreamOptions;
+  #defaultGenerateOptions: DynamicArgument<AgentGenerateOptions>;
+  #defaultStreamOptions: DynamicArgument<AgentStreamOptions>;
   #tools: DynamicArgument<TTools>;
   /** @deprecated This property is deprecated. Use evals instead. */
   metrics: TMetrics;
@@ -306,12 +306,60 @@ export class Agent<
     return this.#description ?? '';
   }
 
-  public getDefaultGenerateOptions(): AgentGenerateOptions {
-    return this.#defaultGenerateOptions;
+  public getDefaultGenerateOptions({
+    runtimeContext = new RuntimeContext(),
+  }: { runtimeContext?: RuntimeContext } = {}): AgentGenerateOptions | Promise<AgentGenerateOptions> {
+    if (typeof this.#defaultGenerateOptions !== 'function') {
+      return this.#defaultGenerateOptions;
+    }
+
+    const result = this.#defaultGenerateOptions({ runtimeContext });
+    return resolveMaybePromise(result, options => {
+      if (!options) {
+        const mastraError = new MastraError({
+          id: 'AGENT_GET_DEFAULT_GENERATE_OPTIONS_FUNCTION_EMPTY_RETURN',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: this.name,
+          },
+          text: `[Agent:${this.name}] - Function-based default generate options returned empty value`,
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
+      }
+
+      return options;
+    });
   }
 
-  public getDefaultStreamOptions(): AgentStreamOptions {
-    return this.#defaultStreamOptions;
+  public getDefaultStreamOptions({ runtimeContext = new RuntimeContext() }: { runtimeContext?: RuntimeContext } = {}):
+    | AgentStreamOptions
+    | Promise<AgentStreamOptions> {
+    if (typeof this.#defaultStreamOptions !== 'function') {
+      return this.#defaultStreamOptions;
+    }
+
+    const result = this.#defaultStreamOptions({ runtimeContext });
+    return resolveMaybePromise(result, options => {
+      if (!options) {
+        const mastraError = new MastraError({
+          id: 'AGENT_GET_DEFAULT_STREAM_OPTIONS_FUNCTION_EMPTY_RETURN',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: this.name,
+          },
+          text: `[Agent:${this.name}] - Function-based default stream options returned empty value`,
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
+      }
+
+      return options;
+    });
   }
 
   get tools() {
@@ -1442,6 +1490,9 @@ export class Agent<
     | GenerateTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
     | GenerateObjectResult<OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
   > {
+    const defaultGenerateOptions = await this.getDefaultGenerateOptions({
+      runtimeContext: generateOptions.runtimeContext,
+    });
     const {
       context,
       memoryOptions: memoryConfigFromArgs,
@@ -1457,11 +1508,7 @@ export class Agent<
       telemetry,
       runtimeContext = new RuntimeContext(),
       ...args
-    }: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = Object.assign(
-      {},
-      this.#defaultGenerateOptions,
-      generateOptions,
-    );
+    }: AgentGenerateOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = Object.assign({}, defaultGenerateOptions, generateOptions);
     const generateMessageId =
       `experimental_generateMessageId` in args && typeof args.experimental_generateMessageId === `function`
         ? (args.experimental_generateMessageId as IDGenerator)
@@ -1641,6 +1688,7 @@ export class Agent<
     | StreamTextResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown>
     | StreamObjectResult<any, OUTPUT extends ZodSchema ? z.infer<OUTPUT> : unknown, any>
   > {
+    const defaultStreamOptions = await this.getDefaultStreamOptions({ runtimeContext: streamOptions.runtimeContext });
     const {
       context,
       memoryOptions: memoryConfigFromArgs,
@@ -1657,7 +1705,7 @@ export class Agent<
       telemetry,
       runtimeContext = new RuntimeContext(),
       ...args
-    }: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = Object.assign({}, this.#defaultStreamOptions, streamOptions);
+    }: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> = Object.assign({}, defaultStreamOptions, streamOptions);
     const generateMessageId =
       `experimental_generateMessageId` in args && typeof args.experimental_generateMessageId === `function`
         ? (args.experimental_generateMessageId as IDGenerator)
