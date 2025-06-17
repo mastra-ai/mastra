@@ -390,7 +390,6 @@ export async function analyzeBundle(
       }
     }
   }
-  console.log(depsToOptimize);
   const customExternals = (await getBundlerOptions(mastraEntry, outputDir))?.externals;
 
   const { output, reverseVirtualReferenceMap, usedExternals } = await bundleExternals(
