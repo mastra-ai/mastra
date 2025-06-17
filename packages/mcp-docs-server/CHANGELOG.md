@@ -1,5 +1,15 @@
 # @mastra/mcp-docs-server
 
+## 0.13.1-alpha.1
+
+### Patch Changes
+
+- 57675ee: [MASTRA-3679] MCP Docs Server Content Based Matching and Ranking
+- Updated dependencies [12a95fc]
+- Updated dependencies [51264a5]
+- Updated dependencies [8e6f677]
+  - @mastra/core@0.10.6-alpha.5
+
 ## 0.13.1-alpha.0
 
 ### Patch Changes
